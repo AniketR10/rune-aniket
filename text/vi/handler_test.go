@@ -212,30 +212,284 @@ func TestCellAtCursor(t *testing.T) {
 	}
 }
 
-func TestNormalModeMacroRecorderStartAndStop(t *testing.T) {
-	recorder := new(testMacroRecorder)
-	vi := setupVi(t, "", 2, WithMacroRecorder(recorder))
+func TestMacroRecorder(t *testing.T) {
+	key := func(ch rune) term.Event {
+		return term.Event{Type: term.EventKey, Ch: ch}
+	}
 
-	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
-	require.True(t, handled)
-	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
-	require.True(t, handled)
-	require.Equal(t, []string{"q"}, recorder.started)
-	require.True(t, recorder.recording)
+	tests := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "q is unhandled without a macro recorder",
+			run: func(t *testing.T) {
+				vi := setupVi(t, "", 2)
+				before := vi.cursorAtScroll()
 
-	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
-	require.True(t, handled)
-	require.Equal(t, 1, recorder.stopped)
-	require.False(t, recorder.recording)
-}
+				_, handled := vi.Handle(key('q'))
+				require.False(t, handled, "q should be unhandled when no recorder is set")
+				require.Equal(t, before, vi.cursorAtScroll())
+			},
+		},
+		{
+			name: "qa starts recording into register a",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
 
-func TestNormalModeQIsNoopWithoutMacroRecorder(t *testing.T) {
-	vi := setupVi(t, "", 2)
-	before := vi.cursorAtScroll()
+				_, handled := vi.Handle(key('q'))
+				require.True(t, handled)
+				require.False(t, rec.recording, "not recording yet, waiting for register key")
 
-	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
-	require.False(t, handled)
-	require.Equal(t, before, vi.cursorAtScroll())
+				_, handled = vi.Handle(key('a'))
+				require.True(t, handled)
+				require.True(t, rec.recording)
+				require.Equal(t, []string{"a"}, rec.started)
+			},
+		},
+		{
+			name: "q stops an active recording",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				vi.Handle(key('a'))
+				require.True(t, rec.recording)
+
+				_, handled := vi.Handle(key('q'))
+				require.True(t, handled)
+				require.False(t, rec.recording)
+				require.Equal(t, 1, rec.stopped)
+			},
+		},
+		{
+			name: "start and stop leaves handler in normal mode",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				vi.Handle(key('b'))
+				vi.Handle(key('q'))
+
+				require.Equal(t, normalMode, vi.mode())
+			},
+		},
+		{
+			name: "uppercase register is normalized to lowercase",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				vi.Handle(key('Z'))
+				require.True(t, rec.recording)
+				require.Equal(t, []string{"z"}, rec.started,
+					"uppercase Z should normalize to register z")
+			},
+		},
+		{
+			name: "multiple different registers can be recorded sequentially",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				// Record into a.
+				vi.Handle(key('q'))
+				vi.Handle(key('a'))
+				vi.Handle(key('q'))
+				require.Equal(t, 1, rec.stopped)
+
+				// Record into b.
+				vi.Handle(key('q'))
+				vi.Handle(key('b'))
+				vi.Handle(key('q'))
+				require.Equal(t, 2, rec.stopped)
+
+				require.Equal(t, []string{"a", "b"}, rec.started)
+			},
+		},
+		{
+			name: "q followed by invalid register aborts without starting",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				// Space is not a valid register.
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeySpace})
+				require.True(t, handled, "invalid register key still consumed")
+				require.False(t, rec.recording, "should not start recording for invalid register")
+				require.Empty(t, rec.started)
+			},
+		},
+		{
+			name: "q followed by ctrl-modified key aborts without starting",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'a', Mod: term.ModCtrl})
+				require.True(t, handled)
+				require.False(t, rec.recording, "ctrl-modified key is not a valid register")
+				require.Empty(t, rec.started)
+			},
+		},
+		{
+			name: "keys between start and stop are dispatched normally",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "hello", 2, WithMacroRecorder(rec))
+				vi.Resize(20, 5)
+
+				vi.Handle(key('q'))
+				vi.Handle(key('a'))
+				require.True(t, rec.recording)
+
+				// Move cursor right while recording.
+				vi.Handle(key('l'))
+				vi.Handle(key('l'))
+
+				require.Equal(t, term.Coordinates{X: 2}, vi.cursorAtScroll(),
+					"cursor should have moved during recording")
+
+				vi.Handle(key('q'))
+				require.False(t, rec.recording)
+			},
+		},
+		{
+			name: "insert mode during recording works and q stops after Esc",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+				vi.Resize(20, 5)
+
+				// Start recording register a.
+				vi.Handle(key('q'))
+				vi.Handle(key('a'))
+				require.True(t, rec.recording)
+
+				// Enter insert, type, Esc.
+				vi.Handle(key('i'))
+				require.Equal(t, insertMode, vi.mode())
+				vi.Handle(key('x'))
+				vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+				require.Equal(t, normalMode, vi.mode())
+
+				require.Equal(t, "x", vi.less.Buffer().String())
+
+				// Stop recording.
+				vi.Handle(key('q'))
+				require.False(t, rec.recording)
+				require.Equal(t, 1, rec.stopped)
+			},
+		},
+		{
+			name: "recording into unnamed register uses default register ID",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				vi.Handle(key('"'))
+				require.True(t, rec.recording)
+				require.Equal(t, []string{clipboard.DefaultRegisterID}, rec.started)
+			},
+		},
+		{
+			name: "recording into special registers",
+			run: func(t *testing.T) {
+				for _, tt := range []struct {
+					register rune
+					wantID   string
+				}{
+					{register: '0', wantID: registerset.Normalize("0")},
+					{register: '+', wantID: registerset.Normalize("+")},
+					{register: '_', wantID: registerset.Normalize("_")},
+					{register: '/', wantID: registerset.Normalize("/")},
+					{register: '.', wantID: registerset.Normalize(".")},
+					{register: '-', wantID: registerset.Normalize("-")},
+				} {
+					t.Run(string(tt.register), func(t *testing.T) {
+						rec := new(testMacroRecorder)
+						vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+						vi.Handle(key('q'))
+						vi.Handle(key(tt.register))
+						require.True(t, rec.recording)
+						require.Equal(t, []string{tt.wantID}, rec.started)
+					})
+				}
+			},
+		},
+		{
+			name: "stop on q does not leave pending macro state",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "hello world", 2, WithMacroRecorder(rec))
+				vi.Resize(20, 5)
+
+				// Record qa ... q.
+				vi.Handle(key('q'))
+				vi.Handle(key('a'))
+				vi.Handle(key('l'))
+				vi.Handle(key('q'))
+				require.False(t, rec.recording)
+
+				// The next 'l' should be a normal cursor movement, not
+				// consumed by a stale pending-macro state.
+				before := vi.cursorAtScroll()
+				vi.Handle(key('l'))
+				require.Equal(t, term.Coordinates{X: before.X + 1}, vi.cursorAtScroll())
+			},
+		},
+		{
+			name: "count is preserved while entering register name",
+			run: func(t *testing.T) {
+				// The vi handler sets doResetCount = false for q so
+				// the count survives from the digit keys through q.
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "hello world", 2, WithMacroRecorder(rec))
+				vi.Resize(20, 5)
+
+				// Build up count "3", then q.
+				vi.Handle(key('3'))
+				vi.Handle(key('q'))
+
+				// The count 3 should still be active while waiting for
+				// the register name.
+				require.Equal(t, 3, vi.count)
+			},
+		},
+		{
+			name: "q after stop can begin a new recording immediately",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				// First recording: qa ... q.
+				vi.Handle(key('q'))
+				vi.Handle(key('a'))
+				vi.Handle(key('q'))
+				require.Equal(t, 1, rec.stopped)
+
+				// Immediately start a new recording: qb.
+				vi.Handle(key('q'))
+				vi.Handle(key('b'))
+				require.True(t, rec.recording)
+				require.Equal(t, []string{"a", "b"}, rec.started)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.run(t)
+		})
+	}
 }
 
 type testMacroRecorder struct {

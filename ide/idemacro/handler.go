@@ -76,6 +76,7 @@ func (h *Recorder) Start(registerID string) {
 
 // Stop ends the current recording and reports errors via notifications.
 func (h *Recorder) Stop() {
+	h.discardCurrentEvent()
 	if err := h.finish(); err != nil {
 		h.notify(browserapi.LevelError, "%v", err)
 	}

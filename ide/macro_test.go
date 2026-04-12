@@ -73,8 +73,13 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
 				handleKeys(t, tc, "qqabound<esc>q@q")
 				tc.drainPublishedEvents(t)
-
 				require.Equal(t, "boundbound", editorString(t, tc.ide))
+
+				// After replay, further editing must not be affected by a
+				// stale pendingMacro state (which would happen if the stop
+				// q was recorded and replayed).
+				handleKeys(t, tc, "atwo<esc>")
+				require.Equal(t, "boundboundtwo", editorString(t, tc.ide))
 			},
 		},
 		{
