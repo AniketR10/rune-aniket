@@ -26,7 +26,6 @@ package ide
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -180,10 +179,20 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	})
 
 	t.Run("init shader is run when passed WithInitShader option", func(t *testing.T) {
-		_, config := makeTestFiles(t)
+		configFile, _ := makeTestFiles(t)
 		initShader := new(mockShader)
+
+		dataDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dataDir)
+		})
+
 		i := new(IDE)
-		err := i.init("", "not-empty", filepath.Dir(config.Name()),
+		err = i.init("", configFile.Name(), dataDir,
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(new(sync.Mutex)),
 			WithInitShader(
 				func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
 					return initShader
@@ -212,7 +221,10 @@ func TestOpen(t *testing.T) {
 	t.Run("empty workspace", func(t *testing.T) {
 		t.Parallel()
 		file, config := makeTestFiles(t)
-		i, err := New("", config.Name(), filepath.Dir(config.Name()))
+		dataDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
+		i, err := New("", config.Name(), dataDir)
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -227,7 +239,10 @@ func TestOpen(t *testing.T) {
 	t.Run("a workspace", func(t *testing.T) {
 		t.Parallel()
 		file, config := makeTestFiles(t)
-		i, err := New(os.TempDir(), config.Name(), filepath.Dir(config.Name()))
+		dataDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
+		i, err := New(os.TempDir(), config.Name(), dataDir)
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -250,8 +265,11 @@ func TestOpen(t *testing.T) {
 			},
 		)
 		file, config := makeTestFiles(t)
+		dataDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		i, err := New("", config.Name(), filepath.Dir(config.Name()), WithReleaseManager(rm))
+		i, err := New("", config.Name(), dataDir, WithReleaseManager(rm))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)

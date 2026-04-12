@@ -1952,8 +1952,8 @@ func TestNoBar(t *testing.T) {
 }
 
 func TestSwitchToWorkspaceComplete(t *testing.T) {
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "/tmp",
-		nopShutdownShaderConfig())
+	m := newTestWorkspaceManagerHandlerWithDirs(t, defaultConfigWithWrap(false),
+		"/tmp", "", nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
 		{":wofo ",
@@ -1985,8 +1985,8 @@ func TestSwitchToWorkspaceComplete(t *testing.T) {
 }
 
 func TestMoveWorkspace(t *testing.T) {
-	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "/tmp",
-		nopShutdownShaderConfig())
+	m := newTestWorkspaceManagerHandlerWithDirs(t, defaultConfigWithWrap(false),
+		"/tmp", "", nopShutdownShaderConfig())
 
 	cases := []handlertest.SequenceTestCase{
 		{":womo ",
@@ -3067,6 +3067,40 @@ func newTestWorkspaceManagerHandlerWithDir(
 			os.RemoveAll(dir)
 		})
 		dataDir = dir
+	}
+	runner := FuncExtensionsRunner(testRunnerFn)
+	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		uri, cc, runner, nil, dataDir, nil, shutdownShaderCfg)
+}
+
+// newTestWorkspaceManagerHandlerWithDirs is like newTestWorkspaceManagerHandlerWithDir
+// but allows the workspace dir and the pkgmanager dataDir to be specified
+// independently. This is useful for tests that need the workspace URI to be a
+// stable path (e.g. "/tmp") but must not share the system temp dir as the
+// pkgmanager data dir, to avoid interfering with other tests and stale
+// package-manager state.
+func newTestWorkspaceManagerHandlerWithDirs(
+	t *testing.T, cc ideConfig, dir, dataDir string,
+	shutdownShaderCfg shutdownShaderConfig,
+) *testWorkspaceManagerHandler {
+	manager := workspace.NewManager(config.NopConfig())
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	var uri *workspaceapi.URI
+	if dir != "" {
+		var err error
+		uri = new(workspaceapi.URI)
+		*uri, err = workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
+		require.NoError(t, err)
+	}
+	if dataDir == "" {
+		d, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(d) })
+		dataDir = d
 	}
 	runner := FuncExtensionsRunner(testRunnerFn)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,

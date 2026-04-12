@@ -1093,6 +1093,10 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	showManual bool, notificationsWidth int,
 ) *testWorkspaceManagerHandler {
 	cfg := defaultCfg()
+	// disable progress hint animation to avoid flaky assertion on spinner frame
+	updatedCommandCfg := cfg.cfg["command"].(map[string]any)
+	updatedCommandCfg["show_progress_hint"] = false
+
 	homeURI, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
 
