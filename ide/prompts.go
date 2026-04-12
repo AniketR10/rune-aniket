@@ -288,6 +288,43 @@ func (ex *ex) openSurePrompt(
 	)
 }
 
+func (ex *ex) openCloseDirtyTabsPrompt(message string, close func() error) {
+	promptHandler := &closeDirtyTabsPrompt{ex: ex, close: close}
+	promptWindow := ex.comp.Prompt(
+		message,
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
+		promptHandler,
+	)
+	promptHandler.promptWindow = promptWindow
+}
+
+type closeDirtyTabsPrompt struct {
+	ex           *ex
+	close        func() error
+	promptWindow browser.Window
+}
+
+func (h *closeDirtyTabsPrompt) OnSelect(idx int, option string) {
+	switch option {
+	case yesOpt:
+		if h.promptWindow != nil {
+			_ = h.promptWindow.Close()
+		}
+		if err := h.close(); err != nil {
+			_, _ = h.ex.comp.Notify(browserapi.LevelError, "failed to close tab: %v", err)
+		}
+	case noOpt:
+		if h.promptWindow != nil {
+			_ = h.promptWindow.Close()
+		}
+	}
+}
+
+func (h *closeDirtyTabsPrompt) OnClose() error {
+	return nil
+}
+
 type fileChangedPrompt struct {
 	ex     *ex
 	uri    workspaceapi.URI

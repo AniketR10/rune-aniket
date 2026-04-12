@@ -1248,6 +1248,123 @@ func TestExTabIntegration(t *testing.T) {
 	}
 }
 
+func TestExTabclosePromptsForDirtyTab(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	defer b.Close()
+
+	uri, err := workspaceapi.ParseURI("file:///dirty.go")
+	require.NoError(t, err)
+	_, err = b.editFileURI(uri, b.invokeWindow(), false)
+	require.NoError(t, err)
+	editBuffer(t, b.ex, uri, "ABC")
+
+	require.NoError(t, b.tabclose(context.Background()))
+
+	assert.Len(t, b.comp.Tabs(), 1)
+	dirty, ok := b.comp.IsDirty(uri)
+	require.True(t, ok)
+	assert.True(t, dirty)
+	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Empty(t, b.comp.Tabs())
+	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+}
+
+func TestExTabcloseDirtyTabNoKeepsTabOpen(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	defer b.Close()
+
+	uri, err := workspaceapi.ParseURI("file:///dirty.go")
+	require.NoError(t, err)
+	_, err = b.editFileURI(uri, b.invokeWindow(), false)
+	require.NoError(t, err)
+	editBuffer(t, b.ex, uri, "ABC")
+
+	require.NoError(t, b.tabclose(context.Background()))
+
+	assert.Len(t, b.comp.Tabs(), 1)
+	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Len(t, b.comp.Tabs(), 1)
+	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+}
+
+func TestExTabcloseallPromptsForDirtyTabs(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	defer b.Close()
+
+	dirtyURI, err := workspaceapi.ParseURI("file:///dirty.go")
+	require.NoError(t, err)
+	_, err = b.editFileURI(dirtyURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+	editBuffer(t, b.ex, dirtyURI, "ABC")
+	cleanURI, err := workspaceapi.ParseURI("file:///clean.go")
+	require.NoError(t, err)
+	_, err = b.editFileURI(cleanURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+
+	require.NoError(t, b.tabcloseall(context.Background()))
+
+	assert.Len(t, b.comp.Tabs(), 2)
+	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Empty(t, b.comp.Tabs())
+	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+}
+
+func TestExTabcloseinactivePromptsForDirtyInactiveTabs(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	defer b.Close()
+
+	inactiveURI, err := workspaceapi.ParseURI("file:///inactive.go")
+	require.NoError(t, err)
+	inactiveTab, err := b.editFileURI(inactiveURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+	editBuffer(t, b.ex, inactiveURI, "ABC")
+	activeURI, err := workspaceapi.ParseURI("file:///active.go")
+	require.NoError(t, err)
+	activeTab, err := b.editFileURI(activeURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+	_, active := activeTab.Window()
+	require.True(t, active)
+	_, inactive := inactiveTab.Window()
+	require.False(t, inactive)
+
+	require.NoError(t, b.tabcloseinactive(context.Background()))
+
+	assert.Len(t, b.comp.Tabs(), 2)
+	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	tabs := b.comp.Tabs()
+	require.Len(t, tabs, 1)
+	assert.True(t, tabs[0].URI().Equal(activeURI))
+	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+}
+
 func TestExExit(t *testing.T) {
 	commands := []string{
 		"writequit",

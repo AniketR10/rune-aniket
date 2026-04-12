@@ -482,6 +482,21 @@ func (e *ex) tabclose(_ context.Context, args ...string) error {
 	if win == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
 	}
+	content, err := win.Content()
+	if err != nil {
+		return fmt.Errorf("get window content: %w", err)
+	}
+	if tab, ok := content.(*browser.Tab); ok && e.tabIsDirty(tab) {
+		e.openCloseDirtyTabsPrompt(
+			fmt.Sprintf("File '%s' has changes pending to be written. "+
+				"Close and discard changes?", tab.URI().Name()),
+			func() error {
+				b.RemoveWindowContent(win)
+				return nil
+			},
+		)
+		return nil
+	}
 	// on focus dispatch to vte.Handler via Close
 	b.RemoveWindowContent(win)
 	return nil
@@ -489,6 +504,18 @@ func (e *ex) tabclose(_ context.Context, args ...string) error {
 
 func (e *ex) tabcloseall(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
+	dirty := e.dirtyTabCount(e.comp.Tabs())
+	if dirty > 0 {
+		e.openCloseDirtyTabsPrompt(
+			fmt.Sprintf("There are %d tabs with changes pending to be written. "+
+				"Close and discard changes?", dirty),
+			func() error {
+				b.RemoveAllTabs()
+				return nil
+			},
+		)
+		return nil
+	}
 	// on focus dispatch to vte.Handler via Close
 	b.RemoveAllTabs()
 	return nil
@@ -496,11 +523,52 @@ func (e *ex) tabcloseall(_ context.Context, args ...string) error {
 
 func (e *ex) tabcloseinactive(_ context.Context, args ...string) error {
 	b := e.comp.Browser()
+	inactive := e.inactiveTabs()
+	dirty := e.dirtyTabCount(inactive)
+	if dirty > 0 {
+		e.openCloseDirtyTabsPrompt(
+			fmt.Sprintf("There are %d inactive tabs with changes pending to be written. "+
+				"Close and discard changes?", dirty),
+			func() error {
+				if removed := b.RemoveInactiveTabs(); !removed {
+					return errors.New("no inactive tabs left")
+				}
+				return nil
+			},
+		)
+		return nil
+	}
 	if removed := b.RemoveInactiveTabs(); !removed {
 		return errors.New("no inactive tabs left")
 
 	}
 	return nil
+}
+
+func (e *ex) tabIsDirty(tab *browser.Tab) bool {
+	dirty, ok := e.comp.IsDirty(tab.URI())
+	return ok && dirty
+}
+
+func (e *ex) dirtyTabCount(tabs []*browser.Tab) int {
+	var dirty int
+	for _, tab := range tabs {
+		if e.tabIsDirty(tab) {
+			dirty++
+		}
+	}
+	return dirty
+}
+
+func (e *ex) inactiveTabs() []*browser.Tab {
+	var inactive []*browser.Tab
+	for _, tab := range e.comp.Tabs() {
+		if _, ok := tab.Window(); ok {
+			continue
+		}
+		inactive = append(inactive, tab)
+	}
+	return inactive
 }
 
 func (e *ex) closeFocusWindow(_ context.Context, args ...string) error {
