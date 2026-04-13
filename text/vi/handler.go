@@ -909,7 +909,13 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case 'L':
 			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: vi.less.Scroll().SizeHeight() - vi.count})
 		case 'G':
-			vi.cursor.MoveLastLine()
+			vi.cursor.MoveToScroll(vi.anchor)
+			if vi.countDigits == "" {
+				vi.cursor.MoveLastLine()
+			} else {
+				target := max(0, min(vi.count-1, vi.less.Buffer().Rows()-1))
+				vi.setCursorAtScroll(term.Coordinates{Y: target})
+			}
 		case 'j':
 			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.count == 1 {

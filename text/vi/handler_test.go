@@ -4253,6 +4253,99 @@ func TestVigg(t *testing.T) {
 	}
 }
 
+func TestViG(t *testing.T) {
+	code := `11111111111
+222222
+333333333333
+
+ 5
+6
+7777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777
+   88888888
+9999
+`
+
+	suite := []struct {
+		name         string
+		fileText     string
+		narrowWrap   bool
+		moveCursorFn func(*viHandlerImpl)
+		events       string
+		expectCoord  term.Coordinates
+	}{
+		{
+			name:        "G goes to last line",
+			fileText:    code,
+			events:      "G",
+			expectCoord: term.Coordinates{X: 0, Y: 8},
+		},
+		{
+			name:     "G from middle goes to last line",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDownLines(3)
+			},
+			events:      "G",
+			expectCoord: term.Coordinates{X: 0, Y: 8},
+		},
+		{
+			name:        "1G goes to first line",
+			fileText:    code,
+			events:      "1G",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "5G goes to line 5",
+			fileText:    code,
+			events:      "5G",
+			expectCoord: term.Coordinates{X: 0, Y: 4},
+		},
+		{
+			name:     "6G goes to line 6",
+			fileText: code,
+			events:      "6G",
+			expectCoord: term.Coordinates{X: 0, Y: 5},
+		},
+		{
+			name:        "999G beyond limits clamps to last line",
+			fileText:    code,
+			events:      "999G",
+			expectCoord: term.Coordinates{X: 0, Y: 8},
+		},
+		{
+			name:        "3G in single char file",
+			fileText:    "a",
+			events:      "3G",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "3G in empty file",
+			fileText:    "",
+			events:      "3G",
+			expectCoord: term.Coordinates{X: 0, Y: 0},
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.fileText, 2, WithWrap(tcase.narrowWrap))
+			scrollWidth := 100
+			if tcase.narrowWrap {
+				scrollWidth = 4
+			}
+			vi.Resize(scrollWidth, 9)
+			vi.Draw(term.NoopWriter{})
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+			for _, eventChar := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+			}
+			assert.Equal(t, tcase.expectCoord, vi.cursor.Coordinates())
+		})
+	}
+}
+
 func TestViGoUnderscore(t *testing.T) {
 	// Content with trailing whitespace:
 	// Line 0: "hello   " (last non-blank 'o' at x=4)
