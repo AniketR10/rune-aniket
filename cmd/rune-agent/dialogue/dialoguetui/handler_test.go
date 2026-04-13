@@ -637,7 +637,7 @@ func TestHandlerBusyQueuesUserMessageUntilIdle(t *testing.T) {
 	w = term.NewStringWriter(20, 9)
 	h.Draw(w)
 	_ = w.Flush()
-	assert.NotContains(t, w.String(), "󰄝 hello")
+	assert.NotContains(t, w.String(), "󰄝  hello")
 	assert.Contains(t, w.String(), "hello")
 
 	mu.Lock()
