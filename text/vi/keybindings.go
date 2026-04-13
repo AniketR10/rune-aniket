@@ -43,6 +43,10 @@ func KeyBindings() (ret map[handler.Sequence][][]string) {
 		ret[seq] = [][]string{
 			{text.CommandLocationJump, "next", string(ch)},
 		}
+		seq = handler.Sequence{First: term.KeyComb{Ch: '\''}, Last: term.KeyComb{Ch: ch}}
+		ret[seq] = [][]string{
+			{text.CommandLocationJumpLine, "next", string(ch)},
+		}
 	}
 	return ret
 }

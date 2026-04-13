@@ -431,6 +431,83 @@ func TestCustomLocations(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+func TestApostropheMarkJump(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+
+	uri1, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
+		nopShutdownShaderConfig())
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+
+	h := newSafeHandler(m)
+	cases := []handlertest.SequenceTestCase{
+		// Create file with leading spaces on a line, set mark at column 6
+		{InputSequence: "<c-\\\\>edit<space>test.md<enter>i<space><space><space>hello<enter>world<esc><c-\\\\>write<enter>k$ma",
+			Expected: `┌────────────────────────────┐
+│o test.md                   │
+├────────────────────────────┤
+│   hell▐                    │
+│world                       │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		// Move to next line
+		{InputSequence: "j",
+			Expected: `┌────────────────────────────┐
+│o test.md                   │
+├────────────────────────────┤
+│   hello                    │
+│worl▐                       │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		// 'a jumps to first non-blank character on marked line
+		{InputSequence: "'a",
+			Expected: `┌────────────────────────────┐
+│o test.md                   │
+├────────────────────────────┤
+│   ▐ello                    │
+│world                       │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		// Move away again
+		{InputSequence: "j",
+			Expected: `┌────────────────────────────┐
+│o test.md                   │
+├────────────────────────────┤
+│   hello                    │
+│wor▐d                       │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+		// `a jumps to exact mark position (column 6)
+		{InputSequence: "`a",
+			Expected: `┌────────────────────────────┐
+│o test.md                   │
+├────────────────────────────┤
+│   hell▐                    │
+│world                       │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+	}
+	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), "",
 		nopShutdownShaderConfig())

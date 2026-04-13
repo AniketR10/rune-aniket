@@ -65,6 +65,9 @@ func SubscribeLocationCommands(
 const (
 	// CommandLocationJump is the command name for jumping to locations.
 	CommandLocationJump = "jumptolocation"
+	// CommandLocationJumpLine is the command name for jumping to the line
+	// of a location and positioning at the first non-blank character.
+	CommandLocationJumpLine = "jumptolocationline"
 	// CommandCreateLocation is the command name for creating locations.
 	CommandCreateLocation = "locationcreate"
 	// CommandDeleteAllLocations is the command name for deleting all locations on a list.
@@ -88,6 +91,23 @@ var locationCommands = []textapi.CommandManual{
 			{
 				Name:     "previous",
 				Summary:  "Jumps to the previous location.",
+				Synopsis: "<location-list>",
+			},
+		},
+	},
+	{
+		Name:     CommandLocationJumpLine,
+		Summary:  "Jumps to the line of a location and positions at the first non-blank character.",
+		Synopsis: "(next|prev) <location-list>",
+		Commands: []textapi.CommandManual{
+			{
+				Name:     "next",
+				Summary:  "Jumps to the line of the next location.",
+				Synopsis: "<location-list>",
+			},
+			{
+				Name:     "previous",
+				Summary:  "Jumps to the line of the previous location.",
 				Synopsis: "<location-list>",
 			},
 		},
@@ -147,6 +167,8 @@ func (u locationCommandHandler) HandleCommand(
 	switch cmd.Name {
 	case CommandLocationJump:
 		err = u.handleLocationJump(cmd)
+	case CommandLocationJumpLine:
+		err = u.handleLocationJumpLine(cmd)
 	case CommandCreateLocation:
 		err = u.handleCreateLocation(cmd)
 	case commandDeleteLocation:
@@ -169,6 +191,8 @@ func (u locationCommandHandler) Complete(ctx context.Context, cmd textapi.Comman
 ) {
 	switch cmd.Name {
 	case CommandLocationJump:
+		ret, err = u.completeLocationJump(cmd)
+	case CommandLocationJumpLine:
 		ret, err = u.completeLocationJump(cmd)
 	case CommandCreateLocation, commandToggleLocation:
 		ret, err = u.completeCreateLocation(cmd)
@@ -211,6 +235,30 @@ func (u locationCommandHandler) handleLocationJump(cmd textapi.Command) error {
 		return errors.New("only 'next' or 'previous' is accepted")
 	}
 	return errors.New("location list does not exist")
+}
+
+func (u locationCommandHandler) handleLocationJumpLine(cmd textapi.Command) error {
+	if err := u.handleLocationJump(cmd); err != nil {
+		return err
+	}
+	u.moveToFirstNonBlank()
+	return nil
+}
+
+func (u locationCommandHandler) moveToFirstNonBlank() {
+	pos := u.Handler.CursorAtScroll()
+	cells := u.Handler.CellView().RawCells()
+	if pos.Y < 0 || pos.Y >= len(cells) {
+		return
+	}
+	line := cells[pos.Y]
+	for x, c := range line {
+		ch := c.Ch
+		if ch != 0 && ch != ' ' && ch != '\t' {
+			u.Handler.SetCursorAtScroll(term.Coordinates{X: x, Y: pos.Y})
+			return
+		}
+	}
 }
 
 func (u locationCommandHandler) completeLocationJump(
