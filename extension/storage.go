@@ -25,6 +25,7 @@ package extension
 
 import (
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 	"sync"
@@ -48,7 +49,7 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 	return ret
 }
 
-func (s *storageResourceServer) setupStorage(lock sync.Locker) storageapi.Service {
+func (s *storageResourceServer) setupStorage() storageapi.Service {
 	path := filepath.Join(s.storageDir, ".dbextension")
 	svc := localstorage.New(context.Background(), path, doctoml.Marshaler())
 	return svc
@@ -57,14 +58,26 @@ func (s *storageResourceServer) setupStorage(lock sync.Locker) storageapi.Servic
 func (s *storageResourceServer) Register(
 	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	svc := s.setupStorage(lock)
+	svc := s.setupStorage()
 	server := new(storagerpc.Server)
 	server.Init(svc, doctoml.Marshaler())
 	docpb.RegisterDocumentStoreServer(registrar, server)
-	// doc server stops grpc.Server, which is not something storageResourceserver
-	// should be concerned about. Close storage resources created
-	// within this call to register.
-	return svc, nil
+	return storageServerCloser{server: server, svc: svc}, nil
+}
+
+type storageServerCloser struct {
+	server *storagerpc.Server
+	svc    storageapi.Service
+}
+
+func (c storageServerCloser) Close() (err error) {
+	if c.server != nil {
+		err = errors.Join(err, c.server.Close())
+	}
+	if c.svc != nil {
+		err = errors.Join(err, c.svc.Close())
+	}
+	return err
 }
 
 // StorageResources returns a map of Permission to a ResourceServer

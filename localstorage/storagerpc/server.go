@@ -26,6 +26,9 @@ package storagerpc
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
@@ -39,7 +42,14 @@ import (
 type Server struct {
 	marshaler docmarshal.Marshaler
 	other     storageapi.Service
+	mu        sync.Mutex
+	cache     map[string]*cachedPartition
 	docpb.UnimplementedDocumentStoreServer
+}
+
+type cachedPartition struct {
+	svc     storageapi.Service
+	created []storageapi.Service
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -54,18 +64,68 @@ func NewServer(other storageapi.Service, m docmarshal.Marshaler) *Server {
 func (s *Server) Init(other storageapi.Service, m docmarshal.Marshaler) {
 	s.other = other
 	s.marshaler = m
+	s.cache = make(map[string]*cachedPartition)
 }
 
 func (s *Server) serviceForContext(ctx context.Context) (storageapi.Service, error) {
+	partitions := sdkstoragerpc.PartitionsFromIncomingContext(ctx)
+	if len(partitions) == 0 {
+		return s.other, nil
+	}
+	key := partitionCacheKey(partitions)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cached := s.cache[key]; cached != nil {
+		return cached.svc, nil
+	}
+
 	svc := s.other
-	for _, partition := range sdkstoragerpc.PartitionsFromIncomingContext(ctx) {
+	var created []storageapi.Service
+	closeCreated := func() (err error) {
+		for i := len(created) - 1; i >= 0; i-- {
+			err = errors.Join(err, created[i].Close())
+		}
+		return err
+	}
+
+	for _, partition := range partitions {
 		var err error
 		svc, err = svc.Partition(partition)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(err, closeCreated())
+		}
+		created = append(created, svc)
+	}
+	s.cache[key] = &cachedPartition{svc: svc, created: created}
+	return svc, nil
+}
+
+func partitionCacheKey(partitions []string) string {
+	var b strings.Builder
+	for _, partition := range partitions {
+		b.WriteString(strconv.Itoa(len(partition)))
+		b.WriteByte(':')
+		b.WriteString(partition)
+	}
+	return b.String()
+}
+
+// Close closes cached partition services created by this server. It does not
+// close the underlying service passed to Init; that service remains owned by
+// the caller that created the server.
+func (s *Server) Close() (err error) {
+	s.mu.Lock()
+	cache := s.cache
+	s.cache = make(map[string]*cachedPartition)
+	s.mu.Unlock()
+
+	for _, cached := range cache {
+		for i := len(cached.created) - 1; i >= 0; i-- {
+			err = errors.Join(err, cached.created[i].Close())
 		}
 	}
-	return svc, nil
+	return err
 }
 
 // Create satisfies proto.DocumentStoreServer
@@ -131,7 +191,7 @@ func (s *Server) Set(
 // Update satisfies proto.DocumentStoreServer
 func (s *Server) Update(
 	ctx context.Context, req *docpb.UpdateDocumentRequest,
-) (*docpb.UpdateDocumentResponse, error) {
+) (res *docpb.UpdateDocumentResponse, err error) {
 	updates, err := makeModelUpdates(s.marshaler, req.GetUpdates())
 	if err != nil {
 		return nil, err
@@ -251,7 +311,7 @@ func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.I
 // List satisfies proto.DocumentStoreServer
 func (s *Server) List(
 	req *docpb.ListDocumentRequest, list docpb.DocumentStore_ListServer,
-) error {
+) (err error) {
 	ctx := list.Context()
 	filters, err := makeModelFilters(s.marshaler, req.GetFilters())
 	if err != nil {
@@ -268,6 +328,9 @@ func (s *Server) List(
 		}
 		return err
 	}
+	defer func() {
+		err = errors.Join(err, it.Close())
+	}()
 
 	return s.streamList(list, it, req.GetFields())
 }

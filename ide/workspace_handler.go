@@ -106,6 +106,7 @@ type workspaceManagerHandler struct {
 	confirmedForceExit bool
 	notifications      *notisManager
 	storage            storageapi.Service
+	partitionedStorage []storageapi.Service
 	workspace          workspace.WorkspaceManager
 	clip               clipboard.Register
 	macro              *idemacro.Recorder
@@ -272,7 +273,8 @@ func (h *workspaceManagerHandler) init(
 	ctx := context.Background()
 
 	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
-	notiStorage := storageapi.WithPartition(h.storage, "noti")
+	h.partitionedStorage = nil
+	notiStorage := h.newStoragePartition("noti")
 	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
 		payload, _ := term.PayloadFromContext(ctx)
 		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
@@ -377,7 +379,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 	h.workspaceBarKind = cfg.workspaceBarKind()
-	historyStorge := storageapi.WithPartition(h.storage, "history")
+	historyStorge := h.newStoragePartition("history")
 	h.history = newHistory(historyStorge)
 
 	// best effort
@@ -849,29 +851,33 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return fmt.Errorf("new ex: %w", err)
 	}
 	apibrowser := newBrowserAdapter(ex.Browser())
-	if err := idecursor.WithHistory(
+	cursorHistoryCloser, err := idecursor.WithHistory(
 		ex.Editor(), h.storage, apibrowser, apibrowser, ex.workspace,
 		syntax.NewParser(ex.workspace, h.pkgmanager, uri), visibleManager, uri,
 		h.scheduleNextTick,
-	); err != nil {
+	)
+	if err != nil {
 		cancel()
 		return fmt.Errorf("install cursor history: %w", err)
 	}
 	tm.tm = ex.Browser()
 	if err := h.subscribeAllCommands(ex); err != nil {
+		_ = cursorHistoryCloser.Close()
 		cancel()
 		return err
 	}
 	if err = h.subscribeAllEvents(ex); err != nil {
+		_ = cursorHistoryCloser.Close()
 		cancel()
 		return err
 	}
 
 	wh := &workspaceHandler{
-		vctrlService: vctrlService,
-		cancelCtx:    cancel,
-		uri:          uri,
-		ex:           ex,
+		vctrlService:        vctrlService,
+		cursorHistoryCloser: cursorHistoryCloser,
+		cancelCtx:           cancel,
+		uri:                 uri,
+		ex:                  ex,
 	}
 	tm.workspace = wh
 
@@ -1287,6 +1293,16 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
+	if h.pkgmanager != nil {
+		if err := h.pkgmanager.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	for i := len(h.partitionedStorage) - 1; i >= 0; i-- {
+		if err := h.partitionedStorage[i].Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
 	if err := h.storage.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
@@ -1295,12 +1311,13 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
-	tabname       string
-	attentionAttr term.Attributes
-	vctrlService  vctrl.Service
-	cancelCtx     func()
-	uri           workspaceapi.URI
-	Extensions    atomic.Value
+	tabname             string
+	attentionAttr       term.Attributes
+	vctrlService        vctrl.Service
+	cursorHistoryCloser io.Closer
+	cancelCtx           func()
+	uri                 workspaceapi.URI
+	Extensions          atomic.Value
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
@@ -1317,11 +1334,22 @@ func (hm *workspaceHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
+	if hm.cursorHistoryCloser != nil {
+		if err := hm.cursorHistoryCloser.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
 	// cancel at the end, so fs event processing is not
 	// vacated before everything else is still potentially
 	// sending events (i.e. mem scheme)
 	hm.cancelCtx()
 	return
+}
+
+func (h *workspaceManagerHandler) newStoragePartition(name string) storageapi.Service {
+	partitioned := storageapi.WithPartition(h.storage, name)
+	h.partitionedStorage = append(h.partitionedStorage, partitioned)
+	return partitioned
 }
 
 func (h *workspaceManagerHandler) initTabs(
@@ -1673,7 +1701,6 @@ func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 
 func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
 	notifications := h.notifications.current()
-	pkgStorage := storageapi.WithPartition(h.storage, "idepkg")
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
 		// do this once only when initializing pgmanager for the first time
@@ -1700,7 +1727,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	wm := currentWorkspaceWindowManager{root: h}
 	parser := &lazyParser{root: h}
 	h.pkgmanager.init(notifications, releaseManager, wm,
-		pkgStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
+		h.storage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }

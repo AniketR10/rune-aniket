@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -57,7 +58,7 @@ func WithHistory(
 	workspaceManager workspace.WorkspaceManager,
 	workspaceURI workspaceapi.URI,
 	scheduleNextTick func(func()) bool,
-) error {
+) (io.Closer, error) {
 	store := storageapi.WithPartition(storage, storagePartition)
 	h := &handler{
 		editor:           ed,
@@ -73,12 +74,27 @@ func WithHistory(
 		doc:              newHistoryDocument(workspaceURI),
 	}
 	if err := h.load(context.Background()); err != nil {
-		return err
+		_ = store.Close()
+		return nil, err
 	}
 	if err := ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeCursor}, h); err != nil {
-		return err
+		_ = store.Close()
+		return nil, err
 	}
-	return ed.SubscribeCommand(manual(), h)
+	if err := ed.SubscribeCommand(manual(), h); err != nil {
+		_, _ = ed.UnsubscribeEvents(h)
+		_ = store.Close()
+		return nil, err
+	}
+	return historyCloser{store: store}, nil
+}
+
+type historyCloser struct {
+	store storageapi.Service
+}
+
+func (h historyCloser) Close() error {
+	return h.store.Close()
 }
 
 type handler struct {

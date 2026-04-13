@@ -27,6 +27,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"unstable.build/go-tui/localstorage/bluestore"
 )
 
@@ -67,6 +69,7 @@ func runDatastoreServerOverListener(
 	require.NoError(t, err)
 
 	teardown := func() {
+		require.NoError(t, srv.Close())
 		gsrv.Stop()
 		lis.Close()
 	}
@@ -438,4 +441,116 @@ func TestRPCPartitionIsolation(t *testing.T) {
 	require.NoError(t, itB.NextTo(&listedB))
 	assert.Equal(t, "B", listedB["name"])
 	assert.False(t, itB.HasNext())
+}
+
+func TestRPCCachesAndClosesRequestPartitions(t *testing.T) {
+	base := &partitionCloseCountingService{Service: storagestub.NewInMemoryServiceWithMarshaler(doctoml.Marshaler())}
+	addr, teardown := runDatastoreServer(t, base, doctoml.Marshaler())
+
+	store, err := storagerpc.NewClient(addr, doctoml.Marshaler(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+
+	part, err := store.Partition("suite")
+	require.NoError(t, err)
+	nested, err := part.Partition("nested")
+	require.NoError(t, err)
+
+	require.NoError(t, nested.Create(context.Background(), "doc", map[string]any{"name": "Ada"}))
+	require.Equal(t, int32(2), base.partitionCount.Load())
+	require.Equal(t, int32(0), base.partitionCloseCount.Load())
+
+	require.NoError(t, nested.Set(context.Background(), "doc", map[string]any{"name": "Grace"}))
+	require.Equal(t, int32(2), base.partitionCount.Load())
+	require.Equal(t, int32(0), base.partitionCloseCount.Load())
+
+	require.NoError(t, nested.Update(context.Background(), "doc", []storageapi.Update{
+		{FieldPath: []string{"name"}, Value: "Katherine"},
+	}))
+	require.Equal(t, int32(2), base.partitionCount.Load())
+	require.Equal(t, int32(0), base.partitionCloseCount.Load())
+
+	var got map[string]any
+	require.NoError(t, nested.Get(context.Background(), "doc", &got))
+	require.Equal(t, int32(2), base.partitionCount.Load())
+	require.Equal(t, int32(0), base.partitionCloseCount.Load())
+
+	it, err := nested.List(context.Background(), nil)
+	require.NoError(t, err)
+	require.True(t, it.HasNext())
+	require.NoError(t, it.NextTo(&got))
+	require.NoError(t, it.Close())
+	require.Equal(t, int32(2), base.partitionCount.Load())
+	require.Equal(t, int32(0), base.partitionCloseCount.Load())
+
+	require.NoError(t, nested.Delete(context.Background(), "doc"))
+	require.Equal(t, int32(2), base.partitionCount.Load())
+	require.Equal(t, int32(0), base.partitionCloseCount.Load())
+
+	require.NoError(t, store.Close())
+	teardown()
+	require.Equal(t, int32(2), base.partitionCloseCount.Load())
+}
+
+func TestServerPartitionCacheKeyDistinguishesEmbeddedSeparators(t *testing.T) {
+	base := &partitionCloseCountingService{Service: storagestub.NewInMemoryServiceWithMarshaler(doctoml.Marshaler())}
+	srv := NewServer(base, doctoml.Marshaler())
+
+	ctxA := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		storagerpc.PartitionMetadataKey, "a\x00b",
+		storagerpc.PartitionMetadataKey, "c",
+	))
+	ctxB := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		storagerpc.PartitionMetadataKey, "a",
+		storagerpc.PartitionMetadataKey, "b\x00c",
+	))
+
+	svcA, err := srv.serviceForContext(ctxA)
+	require.NoError(t, err)
+	svcB, err := srv.serviceForContext(ctxB)
+	require.NoError(t, err)
+	require.NotSame(t, svcA, svcB)
+	require.Equal(t, int32(4), base.partitionCount.Load())
+
+	svcAAgain, err := srv.serviceForContext(ctxA)
+	require.NoError(t, err)
+	require.Same(t, svcA, svcAAgain)
+	require.Equal(t, int32(4), base.partitionCount.Load())
+
+	require.NoError(t, srv.Close())
+	require.Equal(t, int32(4), base.partitionCloseCount.Load())
+}
+
+type partitionCloseCountingService struct {
+	storageapi.Service
+	partitionCount      atomic.Int32
+	partitionCloseCount atomic.Int32
+}
+
+func (s *partitionCloseCountingService) Partition(name string) (storageapi.Service, error) {
+	s.partitionCount.Add(1)
+	partitioned, err := s.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &countedPartitionService{Service: partitioned, parent: s}, nil
+}
+
+type countedPartitionService struct {
+	storageapi.Service
+	parent *partitionCloseCountingService
+}
+
+func (s *countedPartitionService) Partition(name string) (storageapi.Service, error) {
+	s.parent.partitionCount.Add(1)
+	partitioned, err := s.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &countedPartitionService{Service: partitioned, parent: s.parent}, nil
+}
+
+func (s *countedPartitionService) Close() error {
+	s.parent.partitionCloseCount.Add(1)
+	return s.Service.Close()
 }

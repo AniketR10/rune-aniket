@@ -119,13 +119,14 @@ type installStorageValue struct {
 func (m *pkgManager) init(
 	n browserapi.Notifications, rm release.Manager,
 	wm browserapi.WindowManager,
-	storage storageapi.Service, scheme schemeapi.Scheme,
+	rootStorage storageapi.Service, scheme schemeapi.Scheme,
 	dataDir, configPath string,
 	fcs component.FrameCharSet,
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser,
 ) {
+	storage := storageapi.WithPartition(rootStorage, "idepkg")
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
 		configPath, wm, scheduleNextTick, interrupter,
 		idepkg.WithCrashReportPackage(debug.Package),
@@ -598,7 +599,11 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 }
 
 func (m *pkgManager) Close() error {
-	return m.uc.Close()
+	ret := m.uc.Close()
+	if m.storage != nil {
+		ret = multierror.Append(ret, m.storage.Close())
+	}
+	return ret
 }
 
 type pkgManagerIterator struct {

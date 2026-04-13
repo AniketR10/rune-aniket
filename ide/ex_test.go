@@ -36,6 +36,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -1813,6 +1814,54 @@ func TestCommandHistory(t *testing.T) {
 	defer b.Close()
 
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestCommandPromptClosesCreatedStoragePartition(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	store := &closeCountingPartitionStore{Service: storagestub.NewInMemoryService()}
+	b.ex.storage = store
+
+	b.ex.openCommandPrompt()
+	require.NotNil(t, b.ex.cmdWin)
+	require.NoError(t, b.ex.cmdWin.Close())
+	assert.Equal(t, int32(1), store.partitionCloseCount.Load())
+	assert.Nil(t, b.ex.cmd)
+
+	b.ex.openCommandPrompt()
+	require.NotNil(t, b.ex.cmd)
+	require.NoError(t, b.ex.Close())
+	assert.Equal(t, int32(2), store.partitionCloseCount.Load())
+}
+
+type closeCountingPartitionStore struct {
+	storageapi.Service
+	partitionCloseCount atomic.Int32
+}
+
+func (s *closeCountingPartitionStore) Partition(name string) (storageapi.Service, error) {
+	partitioned, err := s.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &closeCountingPartition{Service: partitioned, parent: s}, nil
+}
+
+type closeCountingPartition struct {
+	storageapi.Service
+	parent *closeCountingPartitionStore
+}
+
+func (s *closeCountingPartition) Partition(name string) (storageapi.Service, error) {
+	partitioned, err := s.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &closeCountingPartition{Service: partitioned, parent: s.parent}, nil
+}
+
+func (s *closeCountingPartition) Close() error {
+	s.parent.partitionCloseCount.Add(1)
+	return s.Service.Close()
 }
 
 func TestCloseOtherWindows(t *testing.T) {

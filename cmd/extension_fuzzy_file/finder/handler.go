@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -597,7 +598,7 @@ func (h *fuzzyFinderHandler) Cursor() (
 	return h.listHandler.Cursor()
 }
 
-func (h *fuzzyFinderHandler) Close() error {
+func (h *fuzzyFinderHandler) Close() (ret error) {
 	h.cancelCtx()
 
 	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
@@ -609,5 +610,13 @@ func (h *fuzzyFinderHandler) Close() error {
 	if h.cancelScan != nil {
 		h.cancelScan()
 	}
-	return h.list.Close()
+	if err := h.list.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if h.s != nil {
+		if err := h.s.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	return ret
 }

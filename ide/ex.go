@@ -1879,6 +1879,9 @@ func (e *ex) openCommandPrompt() {
 				),
 			), func() error {
 				err := cmd.Close()
+				if closeErr := promptStorage.Close(); closeErr != nil {
+					err = multierror.Append(err, closeErr)
+				}
 				if cmd == e.cmd {
 					e.cmd = nil
 				}
@@ -2037,7 +2040,13 @@ func (e *ex) Close() (ret error) {
 		e.companionShellURI = workspaceapi.URI{}
 	}
 	if e.cmd != nil {
-		if err := e.cmd.Close(); err != nil {
+		var err error
+		if e.cmdWin != nil && !e.cmdWin.Closed() {
+			err = e.cmdWin.Close()
+		} else {
+			err = e.cmd.Close()
+		}
+		if err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}

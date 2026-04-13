@@ -66,6 +66,7 @@ type Client struct {
 	httpEndpointURL      *url.URL
 	notifications        browserapi.Notifications
 	tokenSource          *auth.CachedTokenSource
+	storage              storageapi.Service
 	ctx                  context.Context
 	ctxCancel            func()
 	isLogin              atomic.Bool
@@ -88,15 +89,16 @@ func New(
 		httpEndpointURL: httpEndpointURL,
 		notifications:   n,
 	}
-	storage = storageapi.WithPartition(storage, "auth")
-	ret.tokenSource = auth.NewCachedTokenSource(ret, storage, n)
+	authStorage := storageapi.WithPartition(storage, "auth")
+	ret.storage = authStorage
+	ret.tokenSource = auth.NewCachedTokenSource(ret, authStorage, n)
 	// for telemetry we only want to use the cached token, if there's any
 	// or refresh token
 	refreshOnlySourcer := auth.FuncTokenSourcer(
 		func(ctx context.Context, t *oauth2.Token) (oauth2.TokenSource, error) {
 			return ret.tokenSourceRefresh(ctx, t, true)
 		})
-	ret.telemetryTokenSource = auth.NewCachedTokenSource(refreshOnlySourcer, storage, n)
+	ret.telemetryTokenSource = auth.NewCachedTokenSource(refreshOnlySourcer, authStorage, n)
 	ret.ctx, ret.ctxCancel = context.WithCancel(context.Background())
 	ret.telemetry = newTelemetry(ret.telemetryTokenSource,
 		ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag)
@@ -210,6 +212,11 @@ func (a *Client) Dial() (*grpc.ClientConn, error) {
 func (a *Client) Close() (ret error) {
 	if err := a.telemetry.Close(); err != nil {
 		ret = multierror.Append(ret, err)
+	}
+	if a.storage != nil {
+		if err := a.storage.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	a.ctxCancel()
 	return

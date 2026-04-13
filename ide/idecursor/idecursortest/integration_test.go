@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,6 +284,7 @@ type fixture struct {
 	component    *text.Component
 	browser      testBrowserAdapter
 	store        storageapi.Service
+	closer       io.Closer
 }
 
 func newFixture(t *testing.T, dir string, store storageapi.Service) *fixture {
@@ -300,7 +302,7 @@ func newFixture(t *testing.T, dir string, store storageapi.Service) *fixture {
 
 	adapter := testBrowserAdapter{component: c}
 	manager := testWorkspaceManager{workspaceURI: workspaceURI, workspace: ws}
-	err = idecursor.WithHistory(
+	closer, err := idecursor.WithHistory(
 		c, store, adapter, adapter, ws, testParser{}, manager, workspaceURI,
 		func(fn func()) bool {
 			go fn()
@@ -315,6 +317,7 @@ func newFixture(t *testing.T, dir string, store storageapi.Service) *fixture {
 		component:    c,
 		browser:      adapter,
 		store:        store,
+		closer:       closer,
 	}
 }
 

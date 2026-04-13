@@ -63,7 +63,7 @@ func (s *stubOpener) Open(uri workspaceapi.URI) (browserapi.Handler, error) {
 
 type stubWM struct{ set bool }
 
-func (stubWM) Focus() (browserapi.Window, error)                          { return stubWindow(1), nil }
+func (stubWM) Focus() (browserapi.Window, error) { return stubWindow(1), nil }
 func (stubWM) Split(browserapi.Orientation, browserapi.Window, browserapi.Handler) (browserapi.Window, error) {
 	return nil, nil
 }
@@ -74,8 +74,11 @@ func (stubWM) Bar(browserapi.BarConfig, tui.Handler) error { return nil }
 func (stubWM) Tab(workspaceapi.URI, rune, string, browserapi.Handler) (browserapi.Handler, error) {
 	return nil, nil
 }
-func (s *stubWM) SetWindowContent(browserapi.Window, browserapi.Handler) error { s.set = true; return nil }
-func (stubWM) CloseWindow(browserapi.Window) error                              { return nil }
+func (s *stubWM) SetWindowContent(browserapi.Window, browserapi.Handler) error {
+	s.set = true
+	return nil
+}
+func (stubWM) CloseWindow(browserapi.Window) error { return nil }
 
 type stubWindow uint64
 
@@ -83,22 +86,25 @@ func (s stubWindow) WindowID() uint64 { return uint64(s) }
 
 type stubFS struct{}
 
-func (stubFS) URI(path string) (workspaceapi.URI, error) { return workspaceapi.ParseURI("file://" + path) }
+func (stubFS) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file://" + path)
+}
 func (stubFS) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
 	return nil, assert.AnError
 }
-func (stubFS) Remove(string) error                        { return nil }
-func (stubFS) Stat(string) (os.FileInfo, error)           { return nil, nil }
-func (stubFS) ReadDir(string) ([]os.DirEntry, error)      { return nil, nil }
-func (stubFS) MkdirAll(string, os.FileMode) error         { return nil }
+func (stubFS) Remove(string) error                   { return nil }
+func (stubFS) Stat(string) (os.FileInfo, error)      { return nil, nil }
+func (stubFS) ReadDir(string) ([]os.DirEntry, error) { return nil, nil }
+func (stubFS) MkdirAll(string, os.FileMode) error    { return nil }
 
 func TestWithHistorySubscribes(t *testing.T) {
 	var subscribed bool
 	ed := texttest.NopEditorWithCallback(func() { subscribed = true })
 	ws, err := workspaceapi.ParseURI("file:///workspace")
 	require.NoError(t, err)
-	err = WithHistory(ed, storagestub.NewInMemoryService(), &stubOpener{}, &stubWM{}, stubFS{}, nil, stubWorkspaceManager{}, ws, func(fn func()) bool { fn(); return true })
+	closer, err := WithHistory(ed, storagestub.NewInMemoryService(), &stubOpener{}, &stubWM{}, stubFS{}, nil, stubWorkspaceManager{}, ws, func(fn func()) bool { fn(); return true })
 	require.NoError(t, err)
+	require.NoError(t, closer.Close())
 	assert.True(t, subscribed)
 }
 
