@@ -40,12 +40,13 @@ var (
 )
 
 type tab struct {
-	name    string
-	defName string
-	icon    rune
-	focus   bool
-	defAttr term.Attributes
-	attr    term.Attributes
+	name     string
+	defName  string
+	icon     rune
+	iconAttr term.Attributes
+	focus    bool
+	defAttr  term.Attributes
+	attr     term.Attributes
 }
 
 // Tabs is a simple component that draws a list of component
@@ -191,6 +192,13 @@ func (t *Tabs) SetFocus(idx int) {
 // this method will panic.
 func (t *Tabs) SetTabAttr(idx int, attr term.Attributes) {
 	t.tabs[idx].attr = attr
+	t.dirty = true
+}
+
+// SetIconAttr sets the attributes of the icon at idx. If the tab at idx does
+// not exist, this method will panic.
+func (t *Tabs) SetIconAttr(idx int, attr term.Attributes) {
+	t.tabs[idx].iconAttr = attr
 	t.dirty = true
 }
 
@@ -394,7 +402,7 @@ func (t *Tabs) prepareFileList() {
 		}
 
 		if tab.icon != 0 {
-			next = t.fileListBuf.Insert(next, tab.icon)
+			next = t.fileListBuf.InsertWithAttr(next, tab.icon, tab.iconAttr)
 			next = t.fileListBuf.Insert(next, ' ')
 		}
 		_, next = t.fileListBuf.InsertStringWithAttr(

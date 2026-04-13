@@ -39,12 +39,18 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
 	thandler "unstable.build/go-tui/handler"
 )
 
 var _ browserapi.Handler = (*Component)(nil)
+
+var defaultFocusWindowTabIconAttr = term.Attributes{
+	Fg:    tcell.ColorSilver,
+	Attrs: tcell.AttrBold,
+}
 
 // Component renders a browser-like tui.Compontent and exposes an API
 // to open new windows, add new tabs, and switch between tabs.
@@ -61,12 +67,13 @@ type Component struct {
 	height    int
 	nextSplit browserapi.Orientation
 
-	dirtyTabs   bool
-	focusWindow thandler.Window
-	config      Config
-	buffers     []*Tab
-	windows     map[uint64]*browserWindow
-	prompts     map[string]Window
+	dirtyTabs              bool
+	focusWindow            thandler.Window
+	focusWindowTabIconAttr term.Attributes
+	config                 Config
+	buffers                []*Tab
+	windows                map[uint64]*browserWindow
+	prompts                map[string]Window
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -79,6 +86,7 @@ func NewComponent(config Config) *Component {
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
+	c.focusWindowTabIconAttr = defaultFocusWindowTabIconAttr
 	c.windows = make(map[uint64]*browserWindow)
 
 	c.nextSplit = browserapi.OrientationRight
@@ -571,8 +579,19 @@ func (c *Component) Draw(w term.Writer) {
 	if c.dirtyTabs {
 		c.tabs.ResetFocus()
 		for id, t := range c.buffers {
+			c.tabs.SetIconAttr(id, term.Attributes{})
 			if !t.free {
 				c.tabs.SetFocus(id)
+			}
+		}
+
+		if c.focusWindow != (thandler.Window{}) {
+			win, ok := c.findWindow(c.focusWindow.ID())
+			if ok {
+				t, ok := browserTabAtWindow(win)
+				if ok {
+					c.tabs.SetIconAttr(c.findTabID(t), c.focusWindowTabIconAttr)
+				}
 			}
 		}
 		c.dirtyTabs = false
@@ -1449,4 +1468,5 @@ type wmSubscriber Component
 func (s *wmSubscriber) OnFocus(prev, focus thandler.Window) {
 	c := (*Component)(s)
 	c.focusWindow = focus
+	c.dirtyTabs = true
 }

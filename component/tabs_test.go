@@ -31,6 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestTabsDraw(t *testing.T) {
@@ -236,6 +237,38 @@ func TestTabsDraw(t *testing.T) {
 	}
 
 	comptest.TestComponent(t, l, w, tests)
+}
+
+func TestTabsDrawIconAttr(t *testing.T) {
+	l := NewTabs()
+	l.SetBorder(false)
+	l.Resize(30, 1)
+
+	focusAttr := term.Attributes{Fg: tcell.ColorWhite}
+	nonFocusAttr := term.Attributes{Fg: tcell.ColorBlue}
+	iconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+	l.SetAttr(focusAttr, nonFocusAttr, term.Attributes{}, term.Attributes{})
+
+	l.Add('A', "alpha")
+	l.Add('B', "beta")
+	l.ResetFocus()
+	l.SetFocus(0)
+	l.SetIconAttr(1, iconAttr)
+
+	w := term.NewStringWriter(30, 1)
+	l.Draw(w)
+	cells := w.Cells()
+
+	assert.Equal(t, 'A', cells[0].Ch)
+	assert.Equal(t, term.Attributes{}, cells[0].Attributes)
+	assert.Equal(t, 'a', cells[2].Ch)
+	assert.Equal(t, focusAttr, cells[2].Attributes)
+
+	assert.Equal(t, 'B', cells[9].Ch)
+	assert.Equal(t, iconAttr, cells[9].Attributes)
+	assert.Equal(t, term.Attributes{}, cells[10].Attributes)
+	assert.Equal(t, 'b', cells[11].Ch)
+	assert.Equal(t, nonFocusAttr, cells[11].Attributes)
 }
 
 func TestTabsDrawCustomSeparator(t *testing.T) {

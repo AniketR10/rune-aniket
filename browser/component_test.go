@@ -256,8 +256,18 @@ func TestWindowDraw(t *testing.T) {
 			// and it matches Draw, then DrawWindow is correct.
 			b.tabs.ResetFocus()
 			for id, t := range b.buffers {
+				b.tabs.SetIconAttr(id, term.Attributes{})
 				if !t.free {
 					b.tabs.SetFocus(id)
+				}
+			}
+			if b.focusWindow != (thandler.Window{}) {
+				win, ok := b.findWindow(b.focusWindow.ID())
+				if ok {
+					tab, ok := browserTabAtWindow(win)
+					if ok {
+						b.tabs.SetIconAttr(b.findTabID(tab), b.focusWindowTabIconAttr)
+					}
 				}
 			}
 			b.union.Draw(writer2)
@@ -272,6 +282,58 @@ func TestWindowDraw(t *testing.T) {
 			assert.Equal(t, writer1.String(), writer2.String())
 		})
 	}
+}
+
+func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+
+	b := NewComponent(cfg)
+	windowFocusIconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+	b.focusWindowTabIconAttr = windowFocusIconAttr
+
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 'A', "a", newTestHandler(), nil)
+	b.Focus().SetContent(tabA)
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 'B', "b", newTestHandler(), nil)
+	_, ok := b.Split(browserapi.OrientationRight, b.Focus(), tabB)
+	require.True(t, ok)
+
+	width, height := 20, 5
+	b.Resize(width, height)
+	writer := term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells := writer.Cells()
+
+	expectedIconAttr := windowFocusIconAttr
+	assert.Equal(t, 'A', cells[0].Ch)
+	assert.Equal(t, term.Attributes{}, cells[0].Attributes)
+	assert.Equal(t, 'a', cells[2].Ch)
+	assert.Equal(t, cfg.FocusTabAttr, cells[2].Attributes)
+	assert.Equal(t, 'B', cells[5].Ch)
+	assert.Equal(t, expectedIconAttr, cells[5].Attributes)
+	assert.Equal(t, 'b', cells[7].Ch)
+	assert.Equal(t, cfg.FocusTabAttr, cells[7].Attributes)
+
+	require.True(t, b.FocusLeft())
+	writer = term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells = writer.Cells()
+
+	assert.Equal(t, 'A', cells[0].Ch)
+	assert.Equal(t, expectedIconAttr, cells[0].Attributes)
+	assert.Equal(t, 'a', cells[2].Ch)
+	assert.Equal(t, cfg.FocusTabAttr, cells[2].Attributes)
+	assert.Equal(t, 'B', cells[5].Ch)
+	assert.Equal(t, term.Attributes{}, cells[5].Attributes)
+	assert.Equal(t, 'b', cells[7].Ch)
+	assert.Equal(t, cfg.FocusTabAttr, cells[7].Attributes)
 }
 
 func TestWindowClosedOnClose(t *testing.T) {
