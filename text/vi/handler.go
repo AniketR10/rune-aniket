@@ -1562,6 +1562,9 @@ func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) 
 		case 'k':
 			vi.cursor.MoveDisplayUp()
 			handled = true
+		case '_':
+			vi.cursor.MoveEndLineNonBlank()
+			handled = true
 		}
 	}
 
@@ -1617,6 +1620,14 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 				return quit, true
 			case 'k':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'k'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelection()
+				vi.setNormalMode()
+				return quit, true
+			case '_':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: '_'})
 				if !done {
 					return quit, handled
 				}
@@ -1713,6 +1724,14 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 				return quit, true
 			case 'k':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'k'})
+				if !done {
+					return quit, handled
+				}
+				vi.caseChangeFn()
+				vi.setNormalMode()
+				return quit, true
+			case '_':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: '_'})
 				if !done {
 					return quit, handled
 				}
@@ -1851,6 +1870,19 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 					vi.setNormalMode()
 				}
 				return quit, true
+			case '_':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: '_'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelectionForDelete()
+				vi.cursor.DeleteSelection()
+				if vi.deleteInsert {
+					vi.setInsertMode()
+				} else {
+					vi.setNormalMode()
+				}
+				return quit, true
 			default:
 				vi.setNormalMode()
 				return false, true
@@ -1965,6 +1997,9 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			handled = vi.pasteClipboardLeaveCursorAfter(true)
 		case 'P':
 			handled = vi.pasteClipboardLeaveCursorAfter(false)
+		case '_':
+			vi.cursor.MoveEndLineNonBlank()
+			handled = true
 		default:
 		}
 	}

@@ -2540,6 +2540,297 @@ func TestCursorMove(t *testing.T) {
 	}
 }
 
+func TestCursorMoveEndLineNonBlank(t *testing.T) {
+	suite := []struct {
+		desc    string
+		content string
+		width   int
+		height  int
+		wrap    bool
+		startX  int
+		startY  int
+		wantOK  bool
+		wantX   int
+		wantY   int
+	}{
+		// ===== Basic cases (no wrap) =====
+		{
+			desc:    "trailing spaces: moves to last non-blank",
+			content: "hello   \nworld",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 4, wantY: 0,
+		},
+		{
+			desc:    "no trailing spaces: moves to last char",
+			content: "hello   \nworld",
+			width:   1000, height: 1000,
+			startX: 0, startY: 1,
+			wantOK: true, wantX: 4, wantY: 1,
+		},
+		{
+			desc:    "all-blank line: returns false, cursor at x=0",
+			content: "hello\n   \nworld",
+			width:   1000, height: 1000,
+			startX: 0, startY: 1,
+			wantOK: false, wantX: 0, wantY: 1,
+		},
+		{
+			desc:    "empty line: returns false, cursor at x=0",
+			content: "hello\n\nworld",
+			width:   1000, height: 1000,
+			startX: 0, startY: 1,
+			wantOK: false, wantX: 0, wantY: 1,
+		},
+		{
+			desc:    "leading and trailing spaces",
+			content: "  foo  ",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 4, wantY: 0,
+		},
+		{
+			desc:    "already at last non-blank: stays put",
+			content: "hello   ",
+			width:   1000, height: 1000,
+			startX: 4, startY: 0,
+			wantOK: true, wantX: 4, wantY: 0,
+		},
+		{
+			desc:    "from middle of line",
+			content: "hello   ",
+			width:   1000, height: 1000,
+			startX: 2, startY: 0,
+			wantOK: true, wantX: 4, wantY: 0,
+		},
+
+		// ===== Cursor past end of line =====
+		{
+			desc:    "cursor X beyond line length: still finds last non-blank",
+			content: "hello   ",
+			width:   1000, height: 1000,
+			startX: 100, startY: 0,
+			wantOK: true, wantX: 4, wantY: 0,
+		},
+		{
+			desc:    "cursor X beyond line length on short line",
+			content: "ab",
+			width:   1000, height: 1000,
+			startX: 50, startY: 0,
+			wantOK: true, wantX: 1, wantY: 0,
+		},
+		{
+			desc:    "cursor in trailing whitespace region",
+			content: "hello   ",
+			width:   1000, height: 1000,
+			startX: 6, startY: 0,
+			wantOK: true, wantX: 4, wantY: 0,
+		},
+
+		// ===== Y out of bounds =====
+		{
+			desc:    "Y beyond content rows: returns false, cursor unchanged",
+			content: "hello",
+			width:   1000, height: 1000,
+			startX: 0, startY: 99,
+			wantOK: false, wantX: 0, wantY: 99,
+		},
+
+		// ===== Single character lines =====
+		{
+			desc:    "single char line: cursor on the char",
+			content: "a",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 0, wantY: 0,
+		},
+		{
+			desc:    "single char with trailing space",
+			content: "a ",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 0, wantY: 0,
+		},
+		{
+			desc:    "single space: all blank returns false",
+			content: " ",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: false, wantX: 0, wantY: 0,
+		},
+
+		// ===== Null characters (treated as blank) =====
+		{
+			desc:    "trailing nulls: finds last non-blank before nulls",
+			content: "abc\x00\x00\x00",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 2, wantY: 0,
+		},
+		{
+			desc:    "all nulls: returns false",
+			content: "\x00\x00\x00",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: false, wantX: 0, wantY: 0,
+		},
+		{
+			desc:    "mixed nulls and spaces: all blank",
+			content: "\x00 \x00 ",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: false, wantX: 0, wantY: 0,
+		},
+		{
+			desc:    "non-blank between nulls",
+			content: "\x00a\x00",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 1, wantY: 0,
+		},
+		{
+			desc:    "trailing null after text and spaces",
+			content: "hi \x00",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 1, wantY: 0,
+		},
+
+		// ===== Tab characters (treated as blank) =====
+		{
+			desc:    "tab only line: all blank",
+			content: "\t\t",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: false, wantX: 0, wantY: 0,
+		},
+		{
+			desc:    "text with trailing tab",
+			content: "abc\t",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 2, wantY: 0,
+		},
+		{
+			desc:    "tab then text then tab",
+			content: "\tx\t",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 1, wantY: 0,
+		},
+
+		// ===== Mixed blank types =====
+		{
+			desc:    "mixed spaces tabs and nulls trailing",
+			content: "xy \t\x00",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 1, wantY: 0,
+		},
+		{
+			desc:    "mixed leading blanks then text then trailing blanks",
+			content: " \t\x00abc \t\x00",
+			width:   1000, height: 1000,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 5, wantY: 0,
+		},
+
+		// ===== Multiline navigation =====
+		{
+			desc:    "second line with trailing spaces",
+			content: "aaa\nbbb   ",
+			width:   1000, height: 1000,
+			startX: 0, startY: 1,
+			wantOK: true, wantX: 2, wantY: 1,
+		},
+		{
+			desc:    "last line no trailing",
+			content: "aaa\nbbb\nccc",
+			width:   1000, height: 1000,
+			startX: 0, startY: 2,
+			wantOK: true, wantX: 2, wantY: 2,
+		},
+		{
+			desc:    "multiline: cursor on middle empty line",
+			content: "aaa\n\nccc",
+			width:   1000, height: 1000,
+			startX: 0, startY: 1,
+			wantOK: false, wantX: 0, wantY: 1,
+		},
+
+		// ===== Wrap mode =====
+		{
+			desc:    "wrap: short line within width, trailing spaces",
+			content: "ab   ",
+			width:   10, height: 10,
+			wrap:   true,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 1, wantY: 0,
+		},
+		{
+			desc:    "wrap: line wraps, last non-blank on first visual row",
+			content: "abcd   ",
+			width:   4, height: 10,
+			wrap:   true,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 3, wantY: 0,
+		},
+		{
+			desc:    "wrap: line wraps, last non-blank on second visual row",
+			content: "abcdefg   ",
+			width:   4, height: 10,
+			wrap:   true,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 6, wantY: 0,
+		},
+		{
+			desc:    "wrap: cursor on second visual row, finds last non-blank",
+			content: "abcdefg   ",
+			width:   4, height: 10,
+			wrap:   true,
+			startX: 4, startY: 0,
+			wantOK: true, wantX: 6, wantY: 0,
+		},
+		{
+			desc:    "wrap: multiline, second logical line wraps",
+			content: "ab\nefghijkl  ",
+			width:   4, height: 10,
+			wrap:   true,
+			startX: 0, startY: 1,
+			wantOK: true, wantX: 7, wantY: 1,
+		},
+		{
+			desc:    "wrap: all-blank line in wrapped content",
+			content: "abcd\n    \nij",
+			width:   4, height: 20,
+			wrap:   true,
+			startX: 0, startY: 1,
+			wantOK: false, wantX: 0, wantY: 1,
+		},
+		{
+			desc:    "wrap: single char line doesn't wrap",
+			content: "a",
+			width:   4, height: 10,
+			wrap:   true,
+			startX: 0, startY: 0,
+			wantOK: true, wantX: 0, wantY: 0,
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			e := setupCursorContent(t, tcase.width, tcase.height, tcase.content, tcase.wrap)
+			e.cursor = term.Coordinates{X: tcase.startX, Y: tcase.startY}
+
+			ok := e.MoveEndLineNonBlank()
+			assert.Equal(t, tcase.wantOK, ok, "MoveEndLineNonBlank return value")
+
+			coord := e.CursorAtScroll()
+			assert.Equal(t, term.Coordinates{X: tcase.wantX, Y: tcase.wantY}, coord, "cursor scroll position")
+		})
+	}
+}
+
 func TestCursorMultiMovePublish(t *testing.T) {
 	suite := []struct {
 		initialScrollPos term.Coordinates

@@ -589,6 +589,49 @@ func (c *Cursor) MoveEndLine() (ok bool) {
 	return
 }
 
+// MoveEndLineNonBlank moves the cursor to the last non-blank character
+// of the current line. If the line is empty or all blanks, the cursor
+// stays at position 0.
+func (c *Cursor) MoveEndLineNonBlank() bool {
+	enable := c.disablePublishing()
+	defer enable()
+
+	initialScrollPos := c.cursorAtScroll()
+	cells := c.view().RawCells()
+	if initialScrollPos.Y < 0 || initialScrollPos.Y >= len(cells) {
+		return false
+	}
+	line := cells[initialScrollPos.Y]
+
+	lastNonBlank := -1
+	for x := range len(line) {
+		pos, _ := c.scroll.ScrollToWindowCoordinates(
+			term.Coordinates{X: x, Y: initialScrollPos.Y})
+		c.setCursor(pos, false)
+
+		cell, ok := c.cellAtCursor()
+		if !ok {
+			break
+		}
+		if !isOneOf(cell, blankCharacters) {
+			lastNonBlank = x
+		}
+	}
+
+	if lastNonBlank < 0 {
+		// All blank or empty line — move to start of line
+		pos, _ := c.scroll.ScrollToWindowCoordinates(
+			term.Coordinates{X: 0, Y: initialScrollPos.Y})
+		c.setCursor(pos, false)
+		return false
+	}
+
+	pos, _ := c.scroll.ScrollToWindowCoordinates(
+		term.Coordinates{X: lastNonBlank, Y: initialScrollPos.Y})
+	c.setCursor(pos, false)
+	return true
+}
+
 // MoveFirstLine moves the cursor to the first line, scrolling the content
 // if appplicable.
 func (c *Cursor) MoveFirstLine() (ok bool) {

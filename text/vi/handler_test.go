@@ -4253,6 +4253,301 @@ func TestVigg(t *testing.T) {
 	}
 }
 
+func TestViGoUnderscore(t *testing.T) {
+	// Content with trailing whitespace:
+	// Line 0: "hello   " (last non-blank 'o' at x=4)
+	// Line 1: "world" (last non-blank 'd' at x=4)
+	// Line 2: "   " (all blanks)
+	// Line 3: "" (empty)
+	// Line 4: "  foo  " (last non-blank 'o' at x=4)
+	code := "hello   \nworld\n   \n\n  foo  "
+
+	suite := []struct {
+		name         string
+		fileText     string
+		narrowWrap   bool
+		moveCursorFn func(*viHandlerImpl)
+		events       string
+		expectCoord  *term.Coordinates
+		expectContent string
+	}{
+		// ===== Basic g_ motion =====
+		{
+			name:        "g_ from start of line with trailing spaces",
+			fileText:    code,
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:     "g_ on line without trailing spaces",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 4, Y: 1},
+		},
+		{
+			name:     "g_ on all-blank line stays at x=0",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 0, Y: 2},
+		},
+		{
+			name:     "g_ on empty line stays at x=0",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 0, Y: 3},
+		},
+		{
+			name:     "g_ on line with leading and trailing spaces",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 4, Y: 4},
+		},
+
+		// ===== Cursor starting positions =====
+		{
+			name:     "g_ from middle of line",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(2)
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:     "g_ already at last non-blank",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(4)
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 4, Y: 0},
+		},
+		{
+			name:     "g_ from trailing whitespace region",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveEndLine()
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 4, Y: 0},
+		},
+
+		// ===== Null characters =====
+		{
+			name:        "g_ skips trailing nulls",
+			fileText:    "abc\x00\x00\x00",
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 2, Y: 0},
+		},
+		{
+			name:        "g_ on all-null line",
+			fileText:    "\x00\x00\x00",
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "g_ finds char between nulls",
+			fileText:    "\x00a\x00",
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 1, Y: 0},
+		},
+
+		// ===== Single character and short lines =====
+		{
+			name:        "g_ on single char line",
+			fileText:    "a",
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "g_ on single char with trailing space",
+			fileText:    "a ",
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 0, Y: 0},
+		},
+		{
+			name:        "g_ on two chars no trailing",
+			fileText:    "ab",
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 1, Y: 0},
+		},
+
+		// ===== Wrap mode =====
+		{
+			name:        "g_ wrap: short line within width",
+			fileText:    "ab   ",
+			narrowWrap:  true,
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 1, Y: 0},
+		},
+		{
+			name:        "g_ wrap: line wraps, last non-blank on first visual row",
+			fileText:    "abcd   ",
+			narrowWrap:  true,
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			name:        "g_ wrap: line wraps, last non-blank on second visual row",
+			fileText:    "abcdefg   ",
+			narrowWrap:  true,
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 2, Y: 1},
+		},
+		{
+			name:       "g_ wrap: cursor on second visual row finds last non-blank",
+			fileText:   "abcdefg   ",
+			narrowWrap: true,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(4)
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 2, Y: 1},
+		},
+		{
+			name:       "g_ wrap: multiline, second line wraps",
+			fileText:   "ab\nefghijkl  ",
+			narrowWrap: true,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+			},
+			events:      "g_",
+			expectCoord: &term.Coordinates{X: 3, Y: 2},
+		},
+
+		// ===== Delete operator: dg_ =====
+		{
+			name:     "dg_ from start of line deletes to last non-blank",
+			fileText: "hello   \nworld",
+			events:   "dg_",
+			expectCoord:  &term.Coordinates{X: 0, Y: 0},
+			expectContent: "   \nworld",
+		},
+		{
+			name:     "dg_ from middle of line",
+			fileText: "hello   \nworld",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(2)
+			},
+			events:        "dg_",
+			expectCoord:   &term.Coordinates{X: 2, Y: 0},
+			expectContent: "he   \nworld",
+		},
+		{
+			name:     "dg_ on all-blank line is no-op (cursor doesn't move)",
+			fileText: "hello\n   \nworld",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+			},
+			events:        "dg_",
+			expectContent: "hello\n   \nworld",
+		},
+		{
+			name:     "dg_ on line with leading spaces from first non-blank",
+			fileText: "  foo  \nbar",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(2)
+			},
+			events:        "dg_",
+			expectCoord:   &term.Coordinates{X: 2, Y: 0},
+			expectContent: "    \nbar",
+		},
+
+		// ===== Yank operator: yg_ =====
+		{
+			name:     "yg_ from middle does not modify buffer",
+			fileText: code,
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(2)
+			},
+			events:        "yg_",
+			expectCoord:   &term.Coordinates{X: 2, Y: 0},
+			expectContent: code,
+		},
+		{
+			name:     "yg_ from start does not modify buffer",
+			fileText: code,
+			events:   "yg_",
+			expectContent: code,
+		},
+
+		// ===== Case change operators =====
+		{
+			name:          "gug_ lowercases from cursor to last non-blank",
+			fileText:      "HELLO   \nworld",
+			events:        "gug_",
+			expectContent: "hello   \nworld",
+		},
+		{
+			name:     "gUg_ uppercases from cursor to last non-blank",
+			fileText: "hello   \nworld",
+			events:   "gUg_",
+			expectContent: "HELLO   \nworld",
+		},
+		{
+			name:     "g~g_ toggles case from cursor to last non-blank",
+			fileText: "Hello   \nworld",
+			events:   "g~g_",
+			expectContent: "hELLO   \nworld",
+		},
+		{
+			name:     "gug_ from middle lowercases partial",
+			fileText: "HELLO   ",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.cursor.MoveRightColumns(2)
+			},
+			events:        "gug_",
+			expectContent: "HEllo   ",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			fileText := tcase.fileText
+			if fileText == "" {
+				fileText = code
+			}
+			vi := setupVi(t, fileText, 2, WithWrap(tcase.narrowWrap))
+			scrollWidth := 100
+			if tcase.narrowWrap {
+				scrollWidth = 4
+			}
+			vi.Resize(scrollWidth, 30)
+			vi.Draw(term.NoopWriter{})
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+			for _, eventChar := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+			}
+			if tcase.expectCoord != nil {
+				assert.Equal(t, *tcase.expectCoord, vi.cursor.Coordinates(), "cursor position")
+			}
+			if tcase.expectContent != "" {
+				assert.Equal(t, tcase.expectContent, vi.less.Buffer().String(), "buffer content")
+			}
+		})
+	}
+}
+
 func TestViggBeyondContent(t *testing.T) {
 	t.Run("discrepancy between visual cursor and actual cursor", func(t *testing.T) {
 		fileText := "a\nb\nc\nd"
