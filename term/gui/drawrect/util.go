@@ -32,8 +32,8 @@ import (
 )
 
 var (
-	whiteImage        = ebiten.NewImage(3, 3)
-	whiteSubImage     = whiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
+	whiteImage        *ebiten.Image
+	whiteSubImage     *ebiten.Image
 	whiteSubImageOnce sync.Once
 )
 
@@ -55,6 +55,9 @@ var defaultDrawTrianglesOptions = ebiten.DrawTrianglesOptions{
 // any of the other functions in this package
 func Init() {
 	whiteSubImageOnce.Do(func() {
+		whiteImage = ebiten.NewImage(3, 3)
+		whiteSubImage = whiteImage.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
+
 		b := whiteImage.Bounds()
 		pix := make([]byte, 4*b.Dx()*b.Dy())
 		for i := range pix {
