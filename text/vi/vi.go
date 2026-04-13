@@ -148,7 +148,7 @@ func isEditMode(mode viMode) bool {
 	case normalMode, zMode, gMode, yankMode, searchMode, caseChangeMode,
 		visualMode, visualLineMode, visualBlockMode:
 		return false
-	case insertMode, deleteMode, replaceMode, replaceOneMode:
+	case insertMode, deleteMode, replaceMode, replaceOneMode, shiftMode:
 		return true
 	default:
 		panic(fmt.Sprintf("unknown vi mode: %v", mode))

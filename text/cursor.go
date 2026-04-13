@@ -2768,6 +2768,26 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 	return
 }
 
+// ReindentSelection reindents all lines in the current selection using the indent service.
+// It unselects after the operation.
+func (c *Cursor) ReindentSelection() {
+	from, to := c.getShiftSelection()
+	c.Unselect()
+
+	svc := c.getIndentService()
+	for y := from.Y; y <= to.Y; y++ {
+		target, ok := svc.IndentationAt(y)
+		if !ok {
+			continue
+		}
+		pos := term.Coordinates{Y: y}
+		if _, ok := c.doTryIndent(c.ctx, pos, target); ok {
+			continue
+		}
+		c.doTryDedent(c.ctx, pos, target)
+	}
+}
+
 // LocationsAtCursor returns the set of locations by location list ID set by SetLocationList,
 // at the current cursor position, if there's any. The returned slice is only valid
 // until this method is called again.

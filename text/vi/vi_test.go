@@ -635,19 +635,19 @@ func testViHandleSize(t *testing.T, width, height int) {
 			want: "jrlrlrl",
 		},
 		{
-			desc: "repeats normal update events upon call to repeat",
-			in:   ">...",
-			want: ">>>>",
+			desc: "repeats shift-line operator upon call to repeat",
+			in:   ">>...",
+			want: ">>>>>>>>",
 		},
 		{
 			desc: "does no repeat undo",
-			in:   ">u...",
-			want: ">>>>",
+			in:   ">>u...",
+			want: ">>>>>>>>",
 		},
 		{
 			desc: "does not repeat search events",
-			in:   ">/hello#.",
-			want: ">/hello#>",
+			in:   ">>/hello#.",
+			want: ">>/hello#>>",
 		},
 		{
 			desc: "repeats select + insert events upon call to repeat",
@@ -661,23 +661,23 @@ func testViHandleSize(t *testing.T, width, height int) {
 		},
 		{
 			desc: "does not capture combination if there was no update",
-			in:   "jjj>i#.",
-			want: "jjj>i#>",
+			in:   "jjj>>i#.",
+			want: "jjj>>i#>>",
 		},
 		{
 			desc: "handles search mode correctly",
-			in:   "/put&>i#/put&.",
-			want: "/put&>i#/put&>",
+			in:   "/put&>>i#/put&.",
+			want: "/put&>>i#/put&>>",
 		},
 		{
 			desc: "propagates '.' in search mode",
-			in:   "/.&>i#/.&.",
-			want: "/.&>i#/.&>",
+			in:   "/.&>>i#/.&.",
+			want: "/.&>>i#/.&>>",
 		},
 		{
 			desc: "does not repeat select events that did not wind up updating",
-			in:   ">jjvlllll#..ihell#.",
-			want: ">jjvlllll#>>ihell#ihell#",
+			in:   ">>jjvlllll#..ihell#.",
+			want: ">>jjvlllll#>>>>ihell#ihell#",
 		},
 		{
 			desc: "has infinite loop repeat protection",

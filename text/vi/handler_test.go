@@ -1718,6 +1718,89 @@ func TestViCaseChangeOperators(t *testing.T) {
 	}
 }
 
+func TestViShiftOperators(t *testing.T) {
+	type testCase struct {
+		name          string
+		content       string
+		events        string
+		expectContent string
+		expectMode    viMode
+	}
+
+	suite := []testCase{
+		// ===== >> indent current line =====
+		{">> indents current line", "hello", ">>", "\thello", normalMode},
+		{">> on empty line adds tab", "", ">>", "\t", normalMode},
+		{">> on already indented line adds another tab", "\thello", ">>", "\t\thello", normalMode},
+
+		// ===== << dedent current line =====
+		{"<< dedents current line", "\thello", "<<", "hello", normalMode},
+		{"<< on non-indented line is no-op", "hello", "<<", "hello", normalMode},
+		{"<< removes space if leading char is space", " hello", "<<", "hello", normalMode},
+
+		// ===== >motion indent motion range =====
+		{">j indents two lines down", "hello\nworld", ">j", "\thello\n\tworld", normalMode},
+		{">k indents two lines up", "hello\nworld", "j>k", "\thello\n\tworld", normalMode},
+		{">G indents to end of file", "one\ntwo\nthree", ">G", "\tone\n\ttwo\n\tthree", normalMode},
+
+		// ===== <motion dedent motion range =====
+		{"<j dedents two lines down", "\thello\n\tworld", "<j", "hello\nworld", normalMode},
+		{"<k dedents two lines up", "\thello\n\tworld", "j<k", "hello\nworld", normalMode},
+
+		// ===== count + >> =====
+		{"2>> indents 2 lines", "hello\nworld\ntest", "2>>", "\thello\n\tworld\ntest", normalMode},
+		{"3>> indents 3 lines", "one\ntwo\nthree", "3>>", "\tone\n\ttwo\n\tthree", normalMode},
+
+		// ===== count + << =====
+		{"2<< dedents 2 lines", "\thello\n\tworld\ntest", "2<<", "hello\nworld\ntest", normalMode},
+
+		// ===== visual mode > and < =====
+		{"v> indents visual selection", "hello\nworld", "Vj>", "\thello\n\tworld", normalMode},
+		{"v< dedents visual selection", "\thello\n\tworld", "Vj<", "hello\nworld", normalMode},
+
+		// ===== visual mode = (reindent) =====
+		// Note: without an indent service, reindent is a no-op
+		{"v= reindent is no-op without indent service", "hello\nworld", "Vj=", "hello\nworld", normalMode},
+
+		// ===== == reindent current line =====
+		// Note: without an indent service, reindent is a no-op
+		{"== reindent is no-op without indent service", "hello", "==", "hello", normalMode},
+
+		// ===== Invalid sequences cancel operator =====
+		{"> followed by invalid key returns to normal", "hello", ">Z", "hello", normalMode},
+		{"< followed by invalid key returns to normal", "hello", "<Z", "hello", normalMode},
+		{"= followed by invalid key returns to normal", "hello", "=Z", "hello", normalMode},
+
+		// ===== Text objects =====
+		{">ib indents inner parens block", "if (\nhello\n)", "j>ib", "\tif (\n\thello\n\t)", normalMode},
+		{"<ib dedents inner parens block", "\tif (\n\thello\n\t)", "j<ib", "if (\nhello\n)", normalMode},
+
+		// ===== g-sub motions =====
+		{">gj indents two lines via go-motion", "hello\nworld", ">gj", "\thello\n\tworld", normalMode},
+		{">gk indents two lines via go-motion up", "hello\nworld", "j>gk", "\thello\n\tworld", normalMode},
+
+		// ===== >w indent word motion =====
+		{">w indents current line for single-line word motion", "hello world", ">w", "\thello world", normalMode},
+
+		// ===== >$ indent to end of line =====
+		{">$ indents current line", "hello", ">$", "\thello", normalMode},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.content, 2)
+			vi.Resize(40, 10)
+
+			for _, ch := range tcase.events {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+
+			assert.Equal(t, tcase.expectContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.expectMode, vi.mode())
+		})
+	}
+}
+
 func TestViCaseChangeTextObjects(t *testing.T) {
 	type caseChangeTextObjectCase struct {
 		name       string
@@ -4301,8 +4384,8 @@ func TestViG(t *testing.T) {
 			expectCoord: term.Coordinates{X: 0, Y: 4},
 		},
 		{
-			name:     "6G goes to line 6",
-			fileText: code,
+			name:        "6G goes to line 6",
+			fileText:    code,
 			events:      "6G",
 			expectCoord: term.Coordinates{X: 0, Y: 5},
 		},
@@ -4356,12 +4439,12 @@ func TestViGoUnderscore(t *testing.T) {
 	code := "hello   \nworld\n   \n\n  foo  "
 
 	suite := []struct {
-		name         string
-		fileText     string
-		narrowWrap   bool
-		moveCursorFn func(*viHandlerImpl)
-		events       string
-		expectCoord  *term.Coordinates
+		name          string
+		fileText      string
+		narrowWrap    bool
+		moveCursorFn  func(*viHandlerImpl)
+		events        string
+		expectCoord   *term.Coordinates
 		expectContent string
 	}{
 		// ===== Basic g_ motion =====
@@ -4528,10 +4611,10 @@ func TestViGoUnderscore(t *testing.T) {
 
 		// ===== Delete operator: dg_ =====
 		{
-			name:     "dg_ from start of line deletes to last non-blank",
-			fileText: "hello   \nworld",
-			events:   "dg_",
-			expectCoord:  &term.Coordinates{X: 0, Y: 0},
+			name:          "dg_ from start of line deletes to last non-blank",
+			fileText:      "hello   \nworld",
+			events:        "dg_",
+			expectCoord:   &term.Coordinates{X: 0, Y: 0},
 			expectContent: "   \nworld",
 		},
 		{
@@ -4576,9 +4659,9 @@ func TestViGoUnderscore(t *testing.T) {
 			expectContent: code,
 		},
 		{
-			name:     "yg_ from start does not modify buffer",
-			fileText: code,
-			events:   "yg_",
+			name:          "yg_ from start does not modify buffer",
+			fileText:      code,
+			events:        "yg_",
 			expectContent: code,
 		},
 
@@ -4590,15 +4673,15 @@ func TestViGoUnderscore(t *testing.T) {
 			expectContent: "hello   \nworld",
 		},
 		{
-			name:     "gUg_ uppercases from cursor to last non-blank",
-			fileText: "hello   \nworld",
-			events:   "gUg_",
+			name:          "gUg_ uppercases from cursor to last non-blank",
+			fileText:      "hello   \nworld",
+			events:        "gUg_",
 			expectContent: "HELLO   \nworld",
 		},
 		{
-			name:     "g~g_ toggles case from cursor to last non-blank",
-			fileText: "Hello   \nworld",
-			events:   "g~g_",
+			name:          "g~g_ toggles case from cursor to last non-blank",
+			fileText:      "Hello   \nworld",
+			events:        "g~g_",
 			expectContent: "hELLO   \nworld",
 		},
 		{
