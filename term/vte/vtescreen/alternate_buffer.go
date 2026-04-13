@@ -99,6 +99,46 @@ func (b *AltBuffer) Init() {
 	b.ctx = NewContext(context.Background())
 }
 
+// restore replaces this buffer's rendered cells and cursor with a saved
+// snapshot while keeping the buffer usable for subsequent VTE writes.
+func (b *AltBuffer) restore(cells [][]term.Cell, cursor term.Coordinates, width, height int) {
+	if width <= 0 {
+		width = max(1, maxColumns(cells))
+	}
+	if height <= 0 {
+		height = max(1, len(cells))
+	}
+	if len(cells) == 0 {
+		cells = [][]term.Cell{{}}
+	}
+
+	b.width = width
+	b.height = height
+	b.topScrollableRegion = 0
+	b.bottomScrollableRegion = height
+	b.Cells = *cell.CellsToBuffer(cells)
+	b.Cells.ResetCapacity(width)
+	b.scroll.InitPerformance(&b.Cells)
+	b.scroll.SetTabspaces(1)
+	b.scroll.InvertOffset = true
+	b.scroll.Resize(width, height)
+	b.cursor.position = cursor
+	if b.cursor.Charsets == nil {
+		b.cursor.Charsets = make(map[vteparser.CharsetIndex]vteparser.StandardCharset)
+	}
+	if b.savedCursor.Charsets == nil {
+		b.savedCursor.Charsets = make(map[vteparser.CharsetIndex]vteparser.StandardCharset)
+	}
+	b.ctx = NewContext(context.Background())
+}
+
+func maxColumns(cells [][]term.Cell) (ret int) {
+	for _, row := range cells {
+		ret = max(ret, len(row))
+	}
+	return ret
+}
+
 // Resize resizes this AltBuffer and resets the vertical margins.
 func (b *AltBuffer) Resize(width, height int) {
 	b.width = width

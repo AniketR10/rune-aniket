@@ -87,13 +87,14 @@ type macroRecorder interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config    text.Config
-	comp      text.Component
-	clip      clipboard.Register
-	executor  schemeapi.Executor
-	ed        text.Editor
-	storage   storageapi.Service
-	reservoir *vtereservoir.Facility
+	config               text.Config
+	comp                 text.Component
+	clip                 clipboard.Register
+	executor             schemeapi.Executor
+	ed                   text.Editor
+	storage              storageapi.Service
+	terminalSessionStore storageapi.Service
+	reservoir            *vtereservoir.Facility
 	// do not use directly, use notifications below instead
 	// which is able to dispatch cross-workspace cues.
 	container            *notifications.Container
@@ -309,6 +310,10 @@ func (e *ex) doInit(
 	e.notifications = n.new(uri, e.container)
 	e.publishEvent = publishEvent
 	e.storage = storage
+	e.terminalSessionStore, err = storage.Partition(terminalSessionPartition)
+	if err != nil {
+		return fmt.Errorf("terminal session storage partition: %w", err)
+	}
 	e.emulatorConfig = emulatorConfig
 
 	e.config = text.DefaultConfig()
@@ -596,11 +601,37 @@ func (e *ex) flushClose(_ context.Context, args ...string) error {
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) flush(_ context.Context, args ...string) error {
+func (e *ex) flush(ctx context.Context, args ...string) error {
+	if h, ok := e.terminalInFocus(); ok {
+		var name string
+		var err error
+		if len(args) == 0 {
+			name, err = e.nextTerminalSessionName(ctx, h)
+		} else {
+			name, err = normalizeTerminalSessionName(args)
+		}
+		if err != nil {
+			return err
+		}
+		return e.saveTerminalSession(ctx, name, h)
+	}
 	return e.comp.Flush(e.invokeWindow())
 }
 
-func (e *ex) forceFlush(_ context.Context, args ...string) error {
+func (e *ex) forceFlush(ctx context.Context, args ...string) error {
+	if h, ok := e.terminalInFocus(); ok {
+		var name string
+		var err error
+		if len(args) == 0 {
+			name, err = e.nextTerminalSessionName(ctx, h)
+		} else {
+			name, err = normalizeTerminalSessionName(args)
+		}
+		if err != nil {
+			return err
+		}
+		return e.saveTerminalSession(ctx, name, h)
+	}
 	return e.comp.ForceFlush(e.invokeWindow())
 }
 
@@ -1984,6 +2015,12 @@ func (e *ex) Close() (ret error) {
 		if err := e.reservoir.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
+	}
+	if e.terminalSessionStore != nil {
+		if err := e.terminalSessionStore.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+		e.terminalSessionStore = nil
 	}
 	if e.cancelPartialReissue != nil {
 		e.cancelPartialReissue()

@@ -59,6 +59,13 @@ func (b *PrimaryBuffer) Init(minWidth int, maxHistory int) {
 	b.minWidth = minWidth
 }
 
+// Restore replaces this primary buffer's rendered cells and cursor with a
+// saved snapshot while preserving primary-buffer configuration.
+func (b *PrimaryBuffer) Restore(cells [][]term.Cell, cursor term.Coordinates, width, height int) {
+	b.AltBuffer.restore(cells, cursor, max(b.minWidth, width), height)
+	b.cursor.position, _ = b.scroll.ScrollToWindowCoordinates(cursor)
+}
+
 const wrapMarker uint8 = 1 << 7
 
 // MarkWrapAtCursor marks the current line/column of the cursor
@@ -127,7 +134,7 @@ func (b *PrimaryBuffer) shrinkLines(height int) {
 	}
 }
 
-func (b *PrimaryBuffer) growColumns(width, height int) (wraps int) {
+func (b *PrimaryBuffer) growColumns(width, _ int) (wraps int) {
 	if width == 0 {
 		return
 	}

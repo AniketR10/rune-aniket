@@ -174,6 +174,28 @@ func (e *Handler) Component() *Component {
 	return e.comp
 }
 
+// Snapshot returns a durable snapshot of the terminal's rendered
+// buffers. It captures output/history, not the live pty process.
+func (e *Handler) Snapshot() (Snapshot, error) {
+	return e.comp.Snapshot()
+}
+
+// RestoreFromSnapshot restores a saved terminal snapshot into this live
+// terminal emulator.
+func (e *Handler) RestoreFromSnapshot(snapshot Snapshot) error {
+	cursor, err := e.comp.RestoreFromSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	if e.modalEnabled {
+		e.vi.restorePrimaryScroll()
+		if e.viMode {
+			e.vi.setCursorAtScroll(cursor)
+		}
+	}
+	return nil
+}
+
 // ClearPrimaryBuffer resets the primary buffer.
 func (e *Handler) ClearPrimaryBuffer() (ok bool) {
 	if e.comp.IsAltBuffer() {

@@ -395,6 +395,28 @@ var (
 			},
 			handler: (*ex).terminalneworsplit,
 		},
+		"terminalsave": {
+			man: textapi.CommandManual{
+				Summary: "Save the current terminal buffer and scrollback under the given session name. " +
+					"The saved session stores terminal output for later recovery, but does not preserve " +
+					"or resume the live pty process.",
+				Synopsis: "session-name",
+			},
+			handler: (*ex).terminalsave,
+		},
+		"terminalresume": {
+			man: textapi.CommandManual{
+				Summary: "Open a previously saved terminal session by name in a functioning " +
+					"terminal, restoring its saved output and scrollback. This starts a new " +
+					"pty process; it does not resume the original process.",
+				Synopsis: "session-name",
+			},
+			handler: (*ex).terminalresume,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
+			) (iterator.Iterator[string], string, error) {
+				return e.completeTerminalSessions(ctx, cmd)
+			},
+		},
 		"edit": {
 			man: textapi.CommandManual{
 				Summary: "Open the file at the given URI for editing in the current active " +

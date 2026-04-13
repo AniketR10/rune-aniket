@@ -607,6 +607,71 @@ func (t *Component) PrimaryScroll() *component.Scroll {
 	return t.parserHandler.sync.primBuf.Scroll()
 }
 
+// Snapshot returns a durable snapshot of the terminal's primary rendered
+// buffer. It captures primary history plus visible screen, but it does not
+// attempt to persist the live pty process or alternate-screen program state.
+func (t *Component) Snapshot() (Snapshot, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return Snapshot{
+		Version:      terminalSnapshotVersion,
+		Title:        t.parserHandler.title,
+		Width:        t.width,
+		Height:       t.height,
+		ScrollOffset: t.scroll.Offset(),
+		Primary: ScreenSnapshot{
+			Cells:  term.CloneCells(t.parserHandler.sync.primBuf.Cells.RawCells()),
+			Cursor: t.parserHandler.sync.primBuf.CursorAtScroll(),
+		},
+	}, nil
+}
+
+// RestoreFromSnapshot restores a previously captured terminal snapshot
+// into this live terminal emulator's primary buffer. It restores rendered
+// buffer contents, cursor position, title and scroll offset while leaving the
+// currently running pty process intact.
+func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordinates, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	width, height := t.width, t.height
+	if width <= 0 {
+		width = snapshot.Width
+	}
+	if height <= 0 {
+		height = snapshot.Height
+	}
+	if width <= 0 {
+		width = 1
+	}
+	if height <= 0 {
+		height = 1
+	}
+
+	t.parserHandler.sync.primBuf.Restore(
+		term.CloneCells(snapshot.Primary.Cells), snapshot.Primary.Cursor, width, height)
+	t.parserHandler.useAlt = false
+	t.parserHandler.sync.buf = t.parserHandler.sync.primBuf
+	if snapshot.Title != "" {
+		t.parserHandler.title = snapshot.Title
+	}
+	t.width = width
+	t.height = height
+	t.parserHandler.tabs.resize(width)
+	t.scroll.InitPerformance(&t.parserHandler.sync.primBuf.Cells)
+	t.scroll.InvertOffset = true
+	t.scroll.SetTabspaces(1)
+	t.scroll.Resize(width, height)
+	offset := snapshot.ScrollOffset
+	maxOffset := t.scroll.MaxOffset()
+	offset.X = max(0, min(offset.X, maxOffset.X))
+	offset.Y = max(0, min(offset.Y, maxOffset.Y))
+	t.scroll.SetOffset(offset)
+	cursor = t.parserHandler.sync.primBuf.CursorAtScroll()
+	return cursor, nil
+}
+
 // Locker returns the underlying sync.Locker used by this Component
 // to synchronize access to the internal state.
 func (t *Component) Locker() sync.Locker {

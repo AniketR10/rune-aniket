@@ -100,6 +100,15 @@ func TestPrimaryCoordinates(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 4, X: 4}, b.CursorAtScreen())
 }
 
+func TestPrimaryRestorePreservesCursorAtScroll(t *testing.T) {
+	b := NewPrimaryBuffer(0, testHistory)
+	b.Restore(term.StringToCells("0\n1\n2\n3\n4\n5\n6\n7\n8\n9"),
+		term.Coordinates{Y: 7, X: 1}, 5, 5)
+
+	assert.Equal(t, term.Coordinates{Y: 7, X: 1}, b.CursorAtScroll())
+	assert.Equal(t, term.Coordinates{Y: 2, X: 1}, b.CursorAtScreen())
+}
+
 func TestPrimarySelection(t *testing.T) {
 	t.Run("select with scroll", func(t *testing.T) {
 		b := makePrimaryBufferForTesting(1, 5)

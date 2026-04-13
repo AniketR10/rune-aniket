@@ -45,6 +45,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -2224,6 +2225,108 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestTerminalWriteOpensSavePrompt(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+
+	require.NoError(t, b.ex.terminalnew(context.Background(), "terminal output"))
+	require.NoError(t, b.ex.flush(context.Background()))
+	require.Nil(t, b.ex.cmd)
+
+	var doc terminalSessionDocument
+	require.NoError(t, b.ex.terminalSessionStore.Get(context.Background(), "terminal-saved", &doc))
+	require.Equal(t, "terminal-saved", doc.Name)
+	require.Contains(t, term.CellsToString(doc.Snapshot.ActiveCells()), "terminal output")
+}
+
+func TestTerminalWriteUsesNextAvailableName(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+
+	require.NoError(t, b.ex.terminalnew(context.Background(), "terminal output"))
+	require.NoError(t, b.ex.flush(context.Background()))
+	require.NoError(t, b.ex.flush(context.Background()))
+
+	var doc terminalSessionDocument
+	require.NoError(t, b.ex.terminalSessionStore.Get(context.Background(), "terminal-saved-1", &doc))
+	require.Equal(t, "terminal-saved-1", doc.Name)
+}
+
+func TestTerminalSaveAndResume(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+
+	require.NoError(t, b.ex.terminalnew(context.Background(), "terminal output"))
+	require.NoError(t, b.ex.terminalsave(context.Background(), "demo"))
+	require.NoError(t, b.ex.terminalresume(context.Background(), "demo"))
+
+	content, err := b.ex.invokeWindow().Content()
+	require.NoError(t, err)
+	tab, ok := content.(*browser.Tab)
+	require.True(t, ok)
+	session, ok := tab.Handler().(*testVte)
+	require.True(t, ok)
+	require.True(t, session.restoredSnapshot)
+	require.Contains(t, session.initialCmd, "terminal output")
+	cursor, _, _ := session.Cursor()
+	require.Equal(t, term.Coordinates{X: 4, Y: 1}, cursor)
+	require.Equal(t, 2, session.SeekOffset())
+}
+
+func TestTerminalSaveCommandRequiresTerminal(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+
+	err := b.ex.terminalsave(context.Background(), "demo")
+	require.EqualError(t, err, "not a terminal")
+}
+
+type closeCountingStorage struct {
+	storageapi.Service
+	partitionCalls int
+	partition      *closeCountingPartitionStorage
+}
+
+func (s *closeCountingStorage) Partition(name string) (storageapi.Service, error) {
+	s.partitionCalls++
+	svc, err := s.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	s.partition = &closeCountingPartitionStorage{Service: svc}
+	return s.partition, nil
+}
+
+type closeCountingPartitionStorage struct {
+	storageapi.Service
+	closeCalls int
+}
+
+func (s *closeCountingPartitionStorage) Close() error {
+	s.closeCalls++
+	return s.Service.Close()
+}
+
+func TestTerminalSessionStorageInitializedAndClosed(t *testing.T) {
+	storage := &closeCountingStorage{Service: storagestub.NewInMemoryService()}
+	workspace := &testLoader{}
+	ex := new(ex)
+	ex.syncCommandPrompt = true
+	notifications := newWorkspaceNotifications(storagestub.NewInMemoryService(),
+		notificationsConfig(), &workspaceManagerMock{workspace: ex})
+	uri, err := workspace.URI(".")
+	require.NoError(t, err)
+	require.NoError(t, ex.init(texttest.NopEditor(), workspace, storage,
+		notifications, uri, vte.DefaultConfig(), plugin.DefaultBarConfig(),
+		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil))
+
+	require.Equal(t, 1, storage.partitionCalls)
+	require.Same(t, storage.partition, ex.terminalSessionStore)
+
+	require.NoError(t, ex.Close())
+	require.Equal(t, 1, storage.partition.closeCalls)
+}
+
 func TestFullScreen(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowsplit>:edit aaa>:edit bbb>:windowtogglemaximize>",
@@ -4148,10 +4251,13 @@ func testCommandOverlayConfig() text.CommandOverlayConfig {
 type testVte struct {
 	component.String
 
-	initialCmd    string
-	calledClose   bool
-	defAttr       term.Attributes
-	onFocusChange []bool
+	initialCmd       string
+	calledClose      bool
+	defAttr          term.Attributes
+	onFocusChange    []bool
+	restoredSnapshot bool
+	cursor           term.Coordinates
+	seekOffset       int
 
 	isComplete bool
 	uri        workspaceapi.URI
@@ -4182,7 +4288,7 @@ func (t *testVte) SeekDown() bool {
 }
 
 func (t *testVte) SeekOffset() int {
-	return 0
+	return t.seekOffset
 }
 
 func (t *testVte) MaxSeekOffset() int {
@@ -4197,8 +4303,41 @@ func (v *testVte) ClearPrimaryBuffer() bool {
 	return true
 }
 
+func (v *testVte) TerminalSnapshot() (vte.Snapshot, error) {
+	title := v.title
+	if title == "" {
+		title = "terminal"
+	}
+	return vte.Snapshot{
+		Version: 1,
+		Title:   title,
+		Width:   10,
+		Height:  10,
+		ScrollOffset: term.Coordinates{
+			Y: 2,
+		},
+		Primary: vte.ScreenSnapshot{
+			Cells:  term.StringToCells(v.initialCmd),
+			Cursor: term.Coordinates{X: 4, Y: 1},
+		},
+	}, nil
+}
+
+func (v *testVte) RestoreTerminalSnapshot(snapshot vte.Snapshot) error {
+	v.restoredSnapshot = true
+	v.initialCmd = term.CellsToString(snapshot.ActiveCells())
+	v.String = component.NewString(v.initialCmd)
+	v.cursor = snapshot.Primary.Cursor
+	v.seekOffset = snapshot.ScrollOffset.Y
+	return nil
+}
+
 func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show bool) {
 	show = true
+	if t.restoredSnapshot {
+		ret = t.cursor
+		return
+	}
 	ret = term.Coordinates{X: len(t.initialCmd)}
 	return
 }

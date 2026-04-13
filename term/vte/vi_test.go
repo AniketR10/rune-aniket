@@ -670,6 +670,34 @@ func TestViEditUnit(t *testing.T) {
 		assert.Equal(t, "b\nb", comp.scroll.Buffer().String())
 	})
 
+	t.Run("restore primary scroll refreshes editable buffers", func(t *testing.T) {
+		t.Parallel()
+		comp := newTestParentComponent("$ stale ", term.Coordinates{X: 2})
+		var vi viHandler
+		cfg := DefaultConfig()
+		var actualBellsRung int
+		cfg.RingBell = func() {
+			actualBellsRung++
+		}
+		vi.doInit(comp, cfg)
+		vi.remote = newTestRemote(comp.scroll, comp.cursor)
+		vi.Resize(18, 18)
+
+		restored := newTestParentComponent("$ restored ", term.Coordinates{X: 11})
+		comp.scroll = restored.scroll
+		comp.cursor = restored.cursor
+		vi.restorePrimaryScroll()
+		vi.remote = newTestRemote(comp.scroll, comp.cursor)
+
+		from, to, old := vi.Edit(context.Background(), comp.cursor, comp.cursor, "X")
+
+		assert.Equal(t, "$ restored X", comp.scroll.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 11}, from)
+		assert.Equal(t, term.Coordinates{X: 12}, to)
+		assert.Equal(t, "", old)
+		assert.Equal(t, 0, actualBellsRung)
+	})
+
 	suite := []struct {
 		description    string
 		initialContent string
