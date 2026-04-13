@@ -3454,6 +3454,60 @@ func (c *Cursor) tryMoveDownWindowRow() bool {
 	return ok
 }
 
+// MoveDisplayDown moves the cursor one display (window) row down.
+// When wrap is enabled, this moves within the same buffer line if it
+// spans multiple display rows, rather than jumping to the next buffer line.
+// Without wrap, this behaves the same as MoveDown.
+func (c *Cursor) MoveDisplayDown() bool {
+	if !c.scroll.Wrap {
+		return c.MoveDown()
+	}
+	atScroll := c.cursorAtScroll()
+	win, _ := c.scroll.ScrollToWindowCoordinates(atScroll)
+	win.Y++
+	atScroll = c.scroll.WindowToScrollCoordinates(win)
+	if atScroll.Y >= c.rows() {
+		if c.scroll.SeekDown() {
+			return c.MoveDisplayDown()
+		}
+		return false
+	}
+	_, ok := c.MoveToScroll(atScroll)
+	return ok
+}
+
+// MoveDisplayUp moves the cursor one display (window) row up.
+// When wrap is enabled, this moves within the same buffer line if it
+// spans multiple display rows, rather than jumping to the previous buffer line.
+// Without wrap, this behaves the same as MoveUp.
+func (c *Cursor) MoveDisplayUp() bool {
+	if !c.scroll.Wrap {
+		return c.MoveUp()
+	}
+	atScroll := c.cursorAtScroll()
+	win, _ := c.scroll.ScrollToWindowCoordinates(atScroll)
+	if win.Y <= 0 {
+		if c.scroll.SeekUp() {
+			return c.MoveDisplayUp()
+		}
+		return false
+	}
+	win.Y--
+	atScroll = c.scroll.WindowToScrollCoordinates(win)
+	_, ok := c.MoveToScroll(atScroll)
+	return ok
+}
+
+// MoveDisplayDownLines moves the cursor "n" display rows down.
+func (c *Cursor) MoveDisplayDownLines(n int) bool {
+	return c.multiplyMove(n, c.MoveDisplayDown)
+}
+
+// MoveDisplayUpLines moves the cursor "n" display rows up.
+func (c *Cursor) MoveDisplayUpLines(n int) bool {
+	return c.multiplyMove(n, c.MoveDisplayUp)
+}
+
 func (c *Cursor) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return

@@ -6080,3 +6080,125 @@ func TestScreenRelativeMotionsWrap(t *testing.T) {
 		})
 	}
 }
+
+func TestGjGk(t *testing.T) {
+	// Content: "123456789" wraps at width 3 into:
+	//   row 0: "123"
+	//   row 1: "456"
+	//   row 2: "789"
+	// Then "ab" on buffer line 1, "c" on buffer line 2.
+	fileContent := "123456789\nab\nc"
+
+	t.Run("gj moves down one display row within wrapped line", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(true))
+		vi.Resize(3, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// Cursor starts at (0,0) = "1". gj should move to display row 1 = "4"
+		handlertest.RunHandlerSequence(t, vi, 3, 5, []handlertest.SequenceTestCase{{
+			InputSequence: "gj",
+			Expected:      "123\n▐56\n789\nab \nc  ",
+		}})
+	})
+
+	t.Run("gk moves up one display row within wrapped line", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(true))
+		vi.Resize(3, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// Move to display row 1 with gj, then gk back to row 0
+		handlertest.RunHandlerSequence(t, vi, 3, 5, []handlertest.SequenceTestCase{{
+			InputSequence: "gjgk",
+			Expected:      "▐23\n456\n789\nab \nc  ",
+		}})
+	})
+
+	t.Run("gj twice crosses from wrapped line to next buffer line", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(true))
+		vi.Resize(3, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// From display row 0, gj gj goes to display row 2 = "789"
+		handlertest.RunHandlerSequence(t, vi, 3, 5, []handlertest.SequenceTestCase{{
+			InputSequence: "gjgj",
+			Expected:      "123\n456\n▐89\nab \nc  ",
+		}})
+	})
+
+	t.Run("3gj moves 3 display rows down", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(true))
+		vi.Resize(3, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// From row 0, 3gj should land on row 3 = "ab" (buffer line 1)
+		handlertest.RunHandlerSequence(t, vi, 3, 5, []handlertest.SequenceTestCase{{
+			InputSequence: "3gj",
+			Expected:      "123\n456\n789\n▐b \nc  ",
+		}})
+	})
+
+	t.Run("2gk from display row 2 moves up to row 0", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(true))
+		vi.Resize(3, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// Move down 2 display rows, then up 2
+		handlertest.RunHandlerSequence(t, vi, 3, 5, []handlertest.SequenceTestCase{{
+			InputSequence: "2gj2gk",
+			Expected:      "▐23\n456\n789\nab \nc  ",
+		}})
+	})
+
+	t.Run("gj in non-wrap mode behaves like j", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(false))
+		vi.Resize(20, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// gj without wrap = j, moves to next buffer line
+		for _, eventChar := range "gj" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+		}
+		assert.Equal(t, term.Coordinates{X: 0, Y: 1}, vi.cursor.CursorAtScroll())
+	})
+
+	t.Run("gk in non-wrap mode behaves like k", func(t *testing.T) {
+		vi := setupVi(t, fileContent, 2, WithWrap(false))
+		vi.Resize(20, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// Move down first, then gk should go back up
+		for _, eventChar := range "jgk" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+		}
+		assert.Equal(t, term.Coordinates{X: 0, Y: 0}, vi.cursor.CursorAtScroll())
+	})
+
+	t.Run("gj at bottom of content does not move", func(t *testing.T) {
+		vi := setupVi(t, "ab\ncd", 2, WithWrap(true))
+		vi.Resize(10, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// Move to last line, then gj should not move further
+		for _, eventChar := range "j" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+		}
+		pos := vi.cursor.CursorAtScroll()
+		for _, eventChar := range "gj" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+		}
+		assert.Equal(t, pos, vi.cursor.CursorAtScroll())
+	})
+
+	t.Run("gk at top of content does not move", func(t *testing.T) {
+		vi := setupVi(t, "ab\ncd", 2, WithWrap(true))
+		vi.Resize(10, 5)
+		vi.Draw(term.NoopWriter{})
+
+		// gk from first position should not move
+		pos := vi.cursor.CursorAtScroll()
+		for _, eventChar := range "gk" {
+			vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+		}
+		assert.Equal(t, pos, vi.cursor.CursorAtScroll())
+	})
+}

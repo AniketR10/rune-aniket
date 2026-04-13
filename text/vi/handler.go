@@ -1556,6 +1556,12 @@ func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) 
 		case 'E':
 			vi.cursor.MoveLeftEndWordGroup()
 			handled = true
+		case 'j':
+			vi.cursor.MoveDisplayDown()
+			handled = true
+		case 'k':
+			vi.cursor.MoveDisplayUp()
+			handled = true
 		}
 	}
 
@@ -1595,6 +1601,22 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 				return quit, true
 			case 'E':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'E'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelection()
+				vi.setNormalMode()
+				return quit, true
+			case 'j':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'j'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelection()
+				vi.setNormalMode()
+				return quit, true
+			case 'k':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'k'})
 				if !done {
 					return quit, handled
 				}
@@ -1675,6 +1697,22 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 				return quit, true
 			case 'E':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'E'})
+				if !done {
+					return quit, handled
+				}
+				vi.caseChangeFn()
+				vi.setNormalMode()
+				return quit, true
+			case 'j':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'j'})
+				if !done {
+					return quit, handled
+				}
+				vi.caseChangeFn()
+				vi.setNormalMode()
+				return quit, true
+			case 'k':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'k'})
 				if !done {
 					return quit, handled
 				}
@@ -1787,6 +1825,32 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 					vi.setNormalMode()
 				}
 				return quit, true
+			case 'j':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'j'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelectionForDelete()
+				vi.cursor.DeleteSelection()
+				if vi.deleteInsert {
+					vi.setInsertMode()
+				} else {
+					vi.setNormalMode()
+				}
+				return quit, true
+			case 'k':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'k'})
+				if !done {
+					return quit, handled
+				}
+				vi.copySelectionForDelete()
+				vi.cursor.DeleteSelection()
+				if vi.deleteInsert {
+					vi.setInsertMode()
+				} else {
+					vi.setNormalMode()
+				}
+				return quit, true
 			default:
 				vi.setNormalMode()
 				return false, true
@@ -1876,6 +1940,24 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			} else {
 				target := max(0, min(vi.count-1, vi.less.Buffer().Rows()-1))
 				vi.setCursorAtScroll(term.Coordinates{Y: target})
+			}
+			vi.resetCount()
+			handled = true
+		case 'j':
+			vi.cursor.MoveToScroll(vi.anchor)
+			if vi.count == 1 {
+				vi.cursor.MoveDisplayDown()
+			} else {
+				vi.cursor.MoveDisplayDownLines(vi.count)
+			}
+			vi.resetCount()
+			handled = true
+		case 'k':
+			vi.cursor.MoveToScroll(vi.anchor)
+			if vi.count == 1 {
+				vi.cursor.MoveDisplayUp()
+			} else {
+				vi.cursor.MoveDisplayUpLines(vi.count)
 			}
 			vi.resetCount()
 			handled = true
