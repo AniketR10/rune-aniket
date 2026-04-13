@@ -93,27 +93,29 @@ type viHandler interface {
 // viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
 // and tui.Component.
 type viHandlerImpl struct {
-	config            viConfig
-	less              handler.Less // used for search capabilities
-	statusBar         statusBar
-	anchor            term.Coordinates
-	cursor            text.Cursor
-	repeater          text.Repeater // used for block repeat only
-	currMode          viMode
-	moveMode          moveMode
-	lastMoveMode      moveMode // stores the mode of the last f/F/t/T for ;/, repeat
-	searchMode        moveMode
-	moveChar          rune
-	pendingRegister   bool
-	pendingMacro      bool
-	selectedRegister  rune
-	pendingGoMotion   bool
-	textObjectPending bool
-	textObjectAround  bool
-	deleteInsert      bool
-	caseChangeFn      func() bool
-	caseChangeRepeat  rune
-	blockRepeat       struct {
+	config             viConfig
+	less               handler.Less // used for search capabilities
+	statusBar          statusBar
+	anchor             term.Coordinates
+	cursor             text.Cursor
+	repeater           text.Repeater // used for block repeat only
+	currMode           viMode
+	moveMode           moveMode
+	lastMoveMode       moveMode // stores the mode of the last f/F/t/T for ;/, repeat
+	searchMode         moveMode
+	moveChar           rune
+	pendingRegister    bool
+	pendingMacro       bool
+	pendingPlayback    bool
+	selectedRegister   rune
+	lastPlayedRegister rune
+	pendingGoMotion    bool
+	textObjectPending  bool
+	textObjectAround   bool
+	deleteInsert       bool
+	caseChangeFn       func() bool
+	caseChangeRepeat   rune
+	blockRepeat        struct {
 		From term.Coordinates
 		To   term.Coordinates
 	}
@@ -294,6 +296,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.setMode(normalMode)
 	vi.moveMode = moveNone
 	vi.pendingRegister = false
+	vi.pendingPlayback = false
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	return true
@@ -537,6 +540,10 @@ func (vi *viHandlerImpl) logError(err error) {
 	log.WithField(logging.KeyClass, "vi.handler").Error(err)
 }
 
+func (vi *viHandlerImpl) macroPlaybackActive() bool {
+	return vi.config.macroPlayer != nil && vi.config.macroPlayer.IsPlaying()
+}
+
 func (vi *viHandlerImpl) activeRegister() rune {
 	if vi.selectedRegister != 0 {
 		return vi.selectedRegister
@@ -706,6 +713,9 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	}
 
 	if vi.pendingRegister {
+		if ev.Ch == 0 && ev.Key == 0 {
+			return false, true
+		}
 		if ev.Mod == 0 && validRegisterName(ev.Ch) {
 			vi.selectedRegister = normalizedRegisterName(ev.Ch)
 			vi.pendingRegister = false
@@ -719,9 +729,34 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	}
 
 	if vi.pendingMacro {
+		if ev.Ch == 0 && ev.Key == 0 {
+			return false, true
+		}
 		vi.pendingMacro = false
 		if ev.Mod == 0 && validRegisterName(ev.Ch) && vi.config.macroRecorder != nil {
 			vi.config.macroRecorder.Start(registerNameToID(normalizedRegisterName(ev.Ch)))
+			return false, true
+		}
+		return false, true
+	}
+
+	if vi.pendingPlayback {
+		if ev.Ch == 0 && ev.Key == 0 {
+			return false, true
+		}
+		vi.pendingPlayback = false
+		reg := ev.Ch
+		if reg == '@' {
+			// @@ replays the last-used register.
+			reg = vi.lastPlayedRegister
+		}
+		if vi.config.macroPlayer != nil && ev.Mod == 0 && reg != 0 && validRegisterName(reg) {
+			reg = normalizedRegisterName(reg)
+			vi.lastPlayedRegister = reg
+			count := max(1, vi.count)
+			if err := vi.config.macroPlayer.Play(registerNameToID(reg), count); err != nil {
+				vi.logError(fmt.Errorf("macro playback: %s", err))
+			}
 			return false, true
 		}
 		return false, true
@@ -782,11 +817,21 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			if vi.config.macroRecorder == nil {
 				return false, false
 			}
+			if vi.macroPlaybackActive() {
+				return false, true
+			}
 			if vi.config.macroRecorder.IsRecording() {
 				vi.config.macroRecorder.Stop()
 				return false, true
 			}
 			vi.pendingMacro = true
+			doResetCount = false
+		case '@':
+			if vi.config.macroPlayer == nil {
+				handled = false
+				break
+			}
+			vi.pendingPlayback = true
 			doResetCount = false
 		case 'R':
 			vi.setReplaceMode()

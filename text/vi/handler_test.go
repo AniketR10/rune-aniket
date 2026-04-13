@@ -512,6 +512,237 @@ func (r *testMacroRecorder) IsRecording() bool {
 	return r.recording
 }
 
+type testMacroPlayer struct {
+	plays   []testPlay
+	err     error
+	playing bool
+}
+
+type testPlay struct {
+	registerID string
+	count      int
+}
+
+func (p *testMacroPlayer) Play(registerID string, count int) error {
+	p.plays = append(p.plays, testPlay{registerID: registerID, count: count})
+	return p.err
+}
+
+func (p *testMacroPlayer) IsPlaying() bool {
+	return p.playing
+}
+
+func TestMacroPlayback(t *testing.T) {
+	key := func(ch rune) term.Event {
+		return term.Event{Type: term.EventKey, Ch: ch}
+	}
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "@ is unhandled without a macro player",
+			run: func(t *testing.T) {
+				vi := setupVi(t, "", 2)
+				_, handled := vi.Handle(key('@'))
+				require.False(t, handled, "@ should be unhandled when no player is set")
+			},
+		},
+		{
+			name: "@a triggers playback of register a",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				_, handled := vi.Handle(key('@'))
+				require.True(t, handled)
+				require.Empty(t, player.plays, "not yet played, waiting for register key")
+
+				_, handled = vi.Handle(key('a'))
+				require.True(t, handled)
+				require.Equal(t, []testPlay{{registerID: "a", count: 1}}, player.plays)
+			},
+		},
+		{
+			name: "@@ replays the last used register",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				// First play @a.
+				vi.Handle(key('@'))
+				vi.Handle(key('a'))
+				require.Len(t, player.plays, 1)
+
+				// @@ should replay register a.
+				vi.Handle(key('@'))
+				vi.Handle(key('@'))
+				require.Len(t, player.plays, 2)
+				require.Equal(t, "a", player.plays[1].registerID)
+			},
+		},
+		{
+			name: "@@ with no prior register is no-op",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				// @@ with no previous register (lastPlayedRegister == 0).
+				vi.Handle(key('@'))
+				_, handled := vi.Handle(key('@'))
+				require.True(t, handled, "consumed but no play triggered")
+				require.Empty(t, player.plays)
+			},
+		},
+		{
+			name: "count prefix is passed to Play",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('5'))
+				vi.Handle(key('@'))
+				vi.Handle(key('b'))
+				require.Equal(t, []testPlay{{registerID: "b", count: 5}}, player.plays)
+			},
+		},
+		{
+			name: "count is reset after playback",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "hello", 2, WithMacroPlayer(player))
+				vi.Resize(20, 5)
+
+				vi.Handle(key('3'))
+				vi.Handle(key('@'))
+				vi.Handle(key('a'))
+
+				// Count should be reset to default after playback.
+				require.Equal(t, 1, vi.count)
+			},
+		},
+		{
+			name: "uppercase register is normalized",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('@'))
+				vi.Handle(key('Z'))
+				require.Equal(t, []testPlay{{registerID: "z", count: 1}}, player.plays)
+			},
+		},
+		{
+			name: "count is preserved while entering register name",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('7'))
+				vi.Handle(key('@'))
+				// Count should still be preserved after @.
+				require.Equal(t, 7, vi.count)
+			},
+		},
+		{
+			name: "@ followed by invalid register aborts without playing",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('@'))
+				// Space is not a valid register.
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeySpace})
+				require.True(t, handled, "invalid register key still consumed")
+				require.Empty(t, player.plays)
+			},
+		},
+		{
+			name: "@ followed by ctrl-modified key aborts without playing",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('@'))
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'a', Mod: term.ModCtrl})
+				require.True(t, handled)
+				require.Empty(t, player.plays)
+			},
+		},
+		{
+			name: "@ does not leave pending state after abort",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "hello", 2, WithMacroPlayer(player))
+				vi.Resize(20, 5)
+
+				vi.Handle(key('@'))
+				// Invalid register: space.
+				vi.Handle(term.Event{Type: term.EventKey, Key: term.KeySpace})
+
+				// The next 'l' should be normal cursor movement.
+				before := vi.cursorAtScroll()
+				vi.Handle(key('l'))
+				require.Equal(t, term.Coordinates{X: before.X + 1}, vi.cursorAtScroll())
+			},
+		},
+		{
+			name: "@@ after @a remembers a",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('@'))
+				vi.Handle(key('a'))
+
+				// Clear plays to isolate.
+				player.plays = nil
+
+				// 3@@ should repeat last register (a) three times.
+				vi.Handle(key('3'))
+				vi.Handle(key('@'))
+				vi.Handle(key('@'))
+				require.Equal(t, []testPlay{{registerID: "a", count: 3}}, player.plays)
+			},
+		},
+		{
+			name: "null key event does not consume pendingPlayback",
+			run: func(t *testing.T) {
+				player := new(testMacroPlayer)
+				vi := setupVi(t, "", 2, WithMacroPlayer(player))
+
+				vi.Handle(key('@'))
+				// Null event (e.g. from releasing Shift after typing @).
+				vi.Handle(term.Event{Type: term.EventKey})
+				// The real register key should still trigger playback.
+				vi.Handle(key('a'))
+				require.Equal(t, []testPlay{{registerID: "a", count: 1}}, player.plays)
+			},
+		},
+		{
+			name: "null key event does not consume pendingMacro",
+			run: func(t *testing.T) {
+				rec := new(testMacroRecorder)
+				vi := setupVi(t, "", 2, WithMacroRecorder(rec))
+
+				vi.Handle(key('q'))
+				// Null event (e.g. from releasing Shift).
+				vi.Handle(term.Event{Type: term.EventKey})
+				// The real register key should still start recording.
+				vi.Handle(key('a'))
+				require.Equal(t, []string{"a"}, rec.started)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.run(t)
+		})
+	}
+}
+
 func TestMatchingRuneHighlight(t *testing.T) {
 	t.Run("normal movement", func(t *testing.T) {
 		width, height := 20, 10

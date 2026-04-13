@@ -846,39 +846,6 @@ command:
     <s-m-7>: workspacemove 7
     <s-m-8>: workspacemove 8
     <s-m-9>: workspacemove 9
-    '@a': echo {register}a
-    '@b': echo {register}b
-    '@c': echo {register}c
-    '@d': echo {register}d
-    '@e': echo {register}e
-    '@f': echo {register}f
-    '@g': echo {register}g
-    '@h': echo {register}h
-    '@i': echo {register}i
-    '@j': echo {register}j
-    '@k': echo {register}k
-    '@l': echo {register}l
-    '@m': echo {register}m
-    '@n': echo {register}n
-    '@o': echo {register}o
-    '@p': echo {register}p
-    '@q': echo {register}q
-    '@r': echo {register}r
-    '@s': echo {register}s
-    '@t': echo {register}t
-    '@u': echo {register}u
-    '@v': echo {register}v
-    '@w': echo {register}w
-    '@x': echo {register}x
-    '@y': echo {register}y
-    '@z': echo {register}z
-    '@"': echo {register}"
-    '@0': echo {register}0
-    '@+': echo {register}+
-    '@_': echo {register}_
-    '@/': echo {register}/
-    '@.': echo {register}.
-    '@-': echo {register}-
   # Colors
   element_attr:
     fg: default

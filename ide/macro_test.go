@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/handler/handlertest"
@@ -218,6 +219,197 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				handleKeys(t, tc, ":record<space>q<enter>")
 			},
 		},
+		{
+			name: "reissued sequencer q after vi stop does not start recording",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Record via vi qq...q. The qq binding means the key
+				// sequencer holds the first q and reissues it after timeout.
+				handleKeys(t, tc, "qqio<esc>nnq")
+				require.False(t, tc.ide.workspaceHandler.macro.IsRecording())
+
+				// Verify register contents are clean (no trailing q).
+				withLockedIDE(t, tc.mu, func() {
+					data, err := tc.ide.workspaceHandler.clip.Paste("q")
+					require.NoError(t, err)
+					require.Equal(t, "io<esc>nn", data.Text,
+						"register q must not contain the stop key")
+				})
+
+				// Replay 3 times (enough to trigger the bug).
+				handleKeys(t, tc, "3@q")
+				tc.drainPublishedEvents(t)
+
+				// The reissued q from the sequencer must not leave pendingMacro.
+				handleKeys(t, tc, "j")
+				require.False(t, tc.ide.workspaceHandler.macro.IsRecording(),
+					"j after replay must not start recording")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tc := newMacroIntegrationHarness(t)
+			test.run(t, tc)
+		})
+	}
+}
+
+func TestNativeMacroPlaybackIntegration(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*testing.T, *macroIntegrationHarness)
+	}{
+		{
+			name: "@q replays recorded macro natively",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Record "hello" into register q via vi qq...q.
+				handleKeys(t, tc, "qqahello<esc>q")
+				require.Equal(t, "hello", editorString(t, tc.ide))
+
+				// Native @q should replay the macro.
+				handleKeys(t, tc, "@q")
+				tc.drainPublishedEvents(t)
+				require.Equal(t, "hellohello", editorString(t, tc.ide))
+			},
+		},
+		{
+			name: "count prefix with @ replays N times",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Record appending "x" into register a.
+				handleKeys(t, tc, "qqax<esc>q")
+				require.Equal(t, "x", editorString(t, tc.ide))
+
+				// 3@q should replay 3 times.
+				handleKeys(t, tc, "3@q")
+				tc.drainPublishedEvents(t)
+				require.Equal(t, "xxxx", editorString(t, tc.ide))
+			},
+		},
+		{
+			name: "@@ replays the last used register",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Record appending "hi" into register a.
+				handleKeys(t, tc, "qqahi<esc>q")
+				require.Equal(t, "hi", editorString(t, tc.ide))
+
+				// @q plays register q.
+				handleKeys(t, tc, "@q")
+				tc.drainPublishedEvents(t)
+				require.Equal(t, "hihi", editorString(t, tc.ide))
+
+				// @@ replays q again.
+				handleKeys(t, tc, "@@")
+				tc.drainPublishedEvents(t)
+				require.Equal(t, "hihihi", editorString(t, tc.ide))
+			},
+		},
+		{
+			name: "@ during active recording of same register is rejected",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Store something in q first.
+				handleKeys(t, tc, "qqaone<esc>q")
+				require.Equal(t, "one", editorString(t, tc.ide))
+
+				// Start recording into q again, then try @q.
+				handleKeys(t, tc, "qq@q")
+				tc.drainPublishedEvents(t)
+
+				// Should not have replayed (recursive guard).
+				// Stop recording.
+				handleKeys(t, tc, "q")
+
+				require.Equal(t, "one", editorString(t, tc.ide))
+			},
+		},
+		{
+			name: "externally populated self-referential register is rejected",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				withLockedIDE(t, tc.mu, func() {
+					require.NoError(t, tc.ide.workspaceHandler.clip.Copy("q", clipboard.Data{Text: "@q"}))
+				})
+
+				// @q publishes @q from register q. The nested @q must be rejected
+				// instead of repeatedly publishing itself forever.
+				handleKeys(t, tc, "@q")
+				tc.drainPublishedEvents(t)
+
+				require.Equal(t, "", editorString(t, tc.ide))
+			},
+		},
+		{
+			name: "stale trailing q does not start recording on next key",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				withLockedIDE(t, tc.mu, func() {
+					require.NoError(t, tc.ide.workspaceHandler.clip.Copy("q", clipboard.Data{Text: "aworld<esc>q"}))
+				})
+
+				handleKeys(t, tc, "@q")
+				tc.drainPublishedEvents(t)
+				require.Equal(t, "world", editorString(t, tc.ide))
+
+				// The trailing q from the replayed macro used to leave the vi handler
+				// waiting for a macro register, so this j would start recording into j.
+				handleKeys(t, tc, "j")
+				require.False(t, tc.ide.workspaceHandler.macro.IsRecording())
+			},
+		},
+		{
+			name: "normal editing works after @ playback",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				handleKeys(t, tc, "qqaworld<esc>q")
+				require.Equal(t, "world", editorString(t, tc.ide))
+
+				handleKeys(t, tc, "@q")
+				tc.drainPublishedEvents(t)
+				require.Equal(t, "worldworld", editorString(t, tc.ide))
+
+				// Normal editing should work fine after playback.
+				handleKeys(t, tc, "a!<esc>")
+				require.Equal(t, "worldworld!", editorString(t, tc.ide))
+			},
+		},
+		{
+			name: "100@q with io esc nn macro does not leave pendingMacro",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Exact user repro: record io<esc>nn into q, play 100 times, then press j.
+				handleKeys(t, tc, "qqio<esc>nnq")
+				require.False(t, tc.ide.workspaceHandler.macro.IsRecording(),
+					"recording must have stopped")
+
+				withLockedIDE(t, tc.mu, func() {
+					data, err := tc.ide.workspaceHandler.clip.Paste("q")
+					require.NoError(t, err)
+					require.Equal(t, "io<esc>nn", data.Text,
+						"register must not contain trailing stop q")
+				})
+
+				handleKeys(t, tc, "100@q")
+				tc.drainPublishedEvents(t)
+
+				handleKeys(t, tc, "j")
+				require.False(t, tc.ide.workspaceHandler.macro.IsRecording(),
+					"j after 100@q replay must not start recording")
+			},
+		},
+		{
+			name: "register with trailing q still works after 100x replay",
+			run: func(t *testing.T, tc *macroIntegrationHarness) {
+				// Simulate a register that has a trailing q (as if the stop
+				// key was recorded). This is the most likely production scenario.
+				withLockedIDE(t, tc.mu, func() {
+					require.NoError(t, tc.ide.workspaceHandler.clip.Copy("q",
+						clipboard.Data{Text: "io<esc>nnq"}))
+				})
+
+				handleKeys(t, tc, "100@q")
+				tc.drainPublishedEvents(t)
+
+				handleKeys(t, tc, "j")
+				require.False(t, tc.ide.workspaceHandler.macro.IsRecording(),
+					"j after replay of register with trailing q must not start recording")
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -289,7 +481,7 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 		WithLocker(mu),
 		WithScheduleNextTick(scheduler.ScheduleNextTick),
 		WithPublishEvent(func(ev term.Event) bool {
-			if ev.Type == term.EventInterrupt {
+			if ev.Type == term.EventInterrupt && ev.UserFunc == nil {
 				return true
 			}
 			select {
@@ -334,7 +526,6 @@ command:
   key: ":"
   key_bindings:
     qq: record q
-    '@q': echo {register}q
 `), 0666))
 	return name
 }

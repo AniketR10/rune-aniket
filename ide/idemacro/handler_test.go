@@ -177,6 +177,27 @@ func TestHandlerNotifiesWhenRecordingStartsAndStops(t *testing.T) {
 	}, notis.notifications)
 }
 
+func TestPlayerRejectsSelfReferentialRegister(t *testing.T) {
+	clip := clipboard.NewInMemory()
+	require.NoError(t, clip.Copy("q", clipboard.Data{Text: "@q"}))
+
+	var events []term.Event
+	player := NewPlayer(clip, nil, func(ev term.Event) bool {
+		events = append(events, ev)
+		return true
+	})
+
+	require.NoError(t, player.Play("q", 1))
+	require.Len(t, events, 3)
+
+	// Simulate the vi handler consuming @q from the published events. This
+	// second Play call should be rejected because q is still being replayed.
+	err := player.Play("q", 1)
+	require.Error(t, err)
+	require.ErrorContains(t, err, `already replaying register "q"`)
+	require.Len(t, events, 3, "recursive playback should not publish more events")
+}
+
 func handleKeys(t *testing.T, h *Recorder, seq string) {
 	t.Helper()
 	keys, err := term.ParseKeys(seq)

@@ -109,6 +109,7 @@ type workspaceManagerHandler struct {
 	workspace          workspace.WorkspaceManager
 	clip               clipboard.Register
 	macro              *idemacro.Recorder
+	macroPlayer        *idemacro.Player
 	publishEvent       func(term.Event) bool
 	tabsClickCallback  func(int) bool
 	extensionRunner    ExtensionsRunner
@@ -222,6 +223,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithHideInitialFolds(cfg.initialFolds()),
 		vi.WithClipboard(h.clip),
 		vi.WithMacroRecorder(h.macro),
+		vi.WithMacroPlayer(h.macroPlayer),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithAutoCenter(true),
 	)
@@ -294,6 +296,7 @@ func (h *workspaceManagerHandler) init(
 	h.workspace = manager
 	h.clip = cfg.clipboard()
 	h.macro = idemacro.New(h.clip, h.notifications.current(), cfg.commandKey())
+	h.macroPlayer = idemacro.NewPlayer(h.clip, h.macro, h.publishEvent)
 	h.sixDir = sixDir
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions

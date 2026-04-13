@@ -57,6 +57,7 @@ type viConfig struct {
 	enableGitIcons     bool
 	notifications      browserapi.Notifications
 	macroRecorder      MacroRecorder
+	macroPlayer        MacroPlayer
 }
 
 // MacroRecorder is a cross-editor recorder used to expose Vim-style macro
@@ -65,6 +66,13 @@ type MacroRecorder interface {
 	Start(registerID string)
 	Stop()
 	IsRecording() bool
+}
+
+// MacroPlayer triggers macro playback from a clipboard register.
+// The count parameter specifies how many times to replay the register.
+type MacroPlayer interface {
+	Play(registerID string, count int) error
+	IsPlaying() bool
 }
 
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -113,6 +121,13 @@ func WithNotifications(noti browserapi.Notifications) Option {
 func WithMacroRecorder(recorder MacroRecorder) Option {
 	return func(cfg *viConfig) {
 		cfg.macroRecorder = recorder
+	}
+}
+
+// WithMacroPlayer installs a cross-editor macro player for Vim-like @ flows.
+func WithMacroPlayer(player MacroPlayer) Option {
+	return func(cfg *viConfig) {
+		cfg.macroPlayer = player
 	}
 }
 
