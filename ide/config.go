@@ -74,6 +74,7 @@ const (
 	editorModeModeless = "modeless"
 	keyCommandAliases  = "aliases"
 	keyCommandKey      = "key"
+	keyCommandHistoryKey = "history_key"
 )
 
 var (
@@ -248,6 +249,28 @@ func (c ideConfig) commandMaxHistory() (ret int) {
 		return
 	}
 	ret = height
+	return
+}
+
+func (c ideConfig) commandHistoryKey() (ret term.KeyComb) {
+	ret = text.DefaultConfig().CommandHistoryKey
+	cfg, ok := c.command()
+	if !ok {
+		return
+	}
+	cfgKey, err := cfg.GetString(keyCommandHistoryKey)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors[fmt.Sprintf("command.%s", keyCommandHistoryKey)] = err
+		}
+		return
+	}
+	key, err := term.ParseKey(cfgKey)
+	if err != nil {
+		c.errors[fmt.Sprintf("command.%s", keyCommandHistoryKey)] = err
+		return
+	}
+	ret = key
 	return
 }
 

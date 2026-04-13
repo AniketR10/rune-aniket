@@ -33,8 +33,13 @@ import (
 
 // Config represents the configuration needed to initialize a Handler.
 type Config struct {
-	// HistoryKey is the key used to trigger scrolling through history.
-	HistoryKey       term.KeyComb
+	// HistoryCycleKey is the key used to cycle through previously executed
+	// commands one at a time, replacing the input buffer with each entry.
+	HistoryCycleKey  term.KeyComb
+	// HistoryToggleKey is the key used to toggle the entire prompt list
+	// between the available commands and the command history. Pressing it
+	// once shows history entries; pressing it again restores the command list.
+	HistoryToggleKey term.KeyComb
 	MatchedTextAttr  term.Attributes
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
@@ -69,7 +74,8 @@ func DefaultConfig() Config {
 	return Config{
 		NoMarkdown:       true,
 		MaxHistory:       100,
-		HistoryKey:       term.KeyComb{Ch: ':'},
+		HistoryCycleKey:  term.KeyComb{Ch: ':'},
+		HistoryToggleKey: term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
 		MatchedTextAttr:  term.Attributes{Fg: tcell.ColorRed},
 		FocusElementAttr: term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline, Fg: tcell.ColorRed},
 		ElementAttr:      term.Attributes{},

@@ -1849,10 +1849,24 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 }
 
 func (e *ex) openCommandPrompt() {
+	e.newCommandPrompt(func(cmd *command.Prompt) {
+		e.resetCommandList(cmd)
+	})
+}
+
+func (e *ex) openCommandHistoryPrompt(_ context.Context, _ ...string) error {
+	e.newCommandPrompt(func(cmd *command.Prompt) {
+		cmd.ResetHistory()
+	})
+	return nil
+}
+
+func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	commandCfg := command.DefaultConfig()
 	commandCfg.NoMarkdown = false
 	commandCfg.MaxHistory = e.config.CommandMaxHistory
-	commandCfg.HistoryKey = e.config.CommandEvent
+	commandCfg.HistoryCycleKey = e.config.CommandEvent
+	commandCfg.HistoryToggleKey = e.config.CommandHistoryKey
 	commandCfg.MatchedTextAttr = e.config.CommandOverlay.MatchedTextAttr
 	commandCfg.FocusElementAttr = e.config.CommandOverlay.FocusElementAttr
 	commandCfg.ElementAttr = e.config.CommandOverlay.ElementAttr
@@ -1889,7 +1903,7 @@ func (e *ex) openCommandPrompt() {
 			}),
 		cmd.Dimensions,
 	)
-	e.resetCommandList(cmd)
+	reset(cmd)
 
 	e.cmdWin = e.cmdV.C.Floating(commandHandler,
 		browserapi.FloatingConfig{

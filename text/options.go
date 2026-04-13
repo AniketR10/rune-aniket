@@ -75,6 +75,7 @@ type Config struct {
 	Tabspaces               int
 	CommandEvent            term.KeyComb
 	CommandMaxHistory       int
+	CommandHistoryKey       term.KeyComb
 	CommandKeyBindings      map[term.KeyComb][][]string
 	CommandSequenceBindings map[handler.Sequence][][]string
 	CommandAliases          map[string]CommandAlias
@@ -126,6 +127,7 @@ func DefaultConfig() Config {
 		Tabspaces:               4,
 		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       2000,
+		CommandHistoryKey:       term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
 		Config:                  browser.DefaultConfig(),
 		DirtyTabAttr:            term.Attributes{Attrs: tcell.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][][]string),
@@ -193,6 +195,14 @@ func WithPackageManager(pkg syntax.PkgManager) Option {
 func WithCommandKey(event term.KeyComb) Option {
 	return func(cfg *Config) {
 		cfg.CommandEvent = event
+	}
+}
+
+// WithCommandHistoryKey returns an Option that defines what key toggles
+// the command prompt between the command list and the command history.
+func WithCommandHistoryKey(event term.KeyComb) Option {
+	return func(cfg *Config) {
+		cfg.CommandHistoryKey = event
 	}
 }
 

@@ -55,6 +55,12 @@ var (
 			},
 			handler: (*ex).keydump,
 		},
+		"history": {
+			man: textapi.CommandManual{
+				Summary: "Open the command prompt showing previously executed commands.",
+			},
+			handler: (*ex).openCommandHistoryPrompt,
+		},
 		"tabrename": {
 			man: textapi.CommandManual{
 				Summary:  "Rename the current tab in focus. Optionally set the colors of the tab title.",

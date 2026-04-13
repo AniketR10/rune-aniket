@@ -45,7 +45,7 @@ import (
 func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ShowManualAfter = 0
-	cfg.HistoryKey = term.KeyComb{Ch: '@'}
+	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.FrameCharSet = component.FrameCharSetDefault()
 	cfg.Sync = true
 
@@ -167,7 +167,7 @@ func TestCommandHandlerPreview(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := DefaultConfig()
 		cfg.ShowManualAfter = 1 * time.Hour
-		cfg.HistoryKey = term.KeyComb{Ch: '@'}
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
 		dispatchFn := func(cmd string, args ...string) bool {
@@ -269,7 +269,7 @@ arg2
 		storage := storagestub.NewInMemoryService()
 		cfg := DefaultConfig()
 		cfg.ShowManualAfter = 1 * time.Hour
-		cfg.HistoryKey = term.KeyComb{Ch: '@'}
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
 		var state string
@@ -338,7 +338,7 @@ kotomichi
 		storage := storagestub.NewInMemoryService()
 		cfg := DefaultConfig()
 		cfg.ShowManualAfter = 0
-		cfg.HistoryKey = term.KeyComb{Ch: '@'}
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
 		dispatchFn := func(cmd string, args ...string) bool {
@@ -453,7 +453,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	cfg := DefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
-	cfg.HistoryKey = term.KeyComb{Ch: '@'}
+	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
 
 	tsuite := []struct {
@@ -576,7 +576,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 func TestCommandHandlerDraw(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
-	cfg.HistoryKey = term.KeyComb{Ch: '@'}
+	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
 
 	tsuite := []struct {
@@ -1378,6 +1378,146 @@ func TestCommandHandlerHistory(t *testing.T) {
 		close(startingPistol)
 		wg.Wait()
 	})
+}
+
+func TestCommandHandlerResetHistory(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.HistoryCycleKey = term.KeyComb{Ch: ':'}
+	cfg.Sync = true
+
+	dispatched := make([]string, 0)
+	dispatchFn := func(command string, args ...string) bool {
+		dispatched = append(dispatched, command)
+		return true
+	}
+
+	completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+		return iterator.FromSlice[string](nil), "", nil
+	}
+
+	commands := testNoManualCommands([]string{"edit", "quit", "write"})
+
+	b := NewPrompt(
+		storagestub.NewInMemoryService(),
+		FuncCompleter(completeFn),
+		FuncDispatcher(dispatchFn),
+		term.NopInterrupter(),
+		commands,
+		cfg,
+	)
+	defer b.Close()
+
+	// Dispatch some commands via Handle to populate history.
+	// Type "edit" + Enter, then reopen prompt, type "write" + Enter,
+	// then reopen prompt, type "quit" + Enter.
+	for _, cmd := range []string{"edit", "write", "quit"} {
+		b.Reset(commands)
+		for _, ch := range cmd {
+			b.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		}
+		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	}
+
+	require.Equal(t, []string{"edit", "write", "quit"}, dispatched)
+
+	// Now call ResetHistory — the list should contain the history entries newest-first.
+	b.ResetHistory()
+
+	require.Equal(t, 3, b.list.TotalCount())
+
+	// Check the order is newest-first: quit, write, edit
+	ok := b.list.FocusStart()
+	require.True(t, ok)
+
+	match, ok := b.list.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "quit", string(match.Data()))
+
+	ok = b.list.FocusDown()
+	require.True(t, ok)
+	match, ok = b.list.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "write", string(match.Data()))
+
+	ok = b.list.FocusDown()
+	require.True(t, ok)
+	match, ok = b.list.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "edit", string(match.Data()))
+}
+
+func TestCommandHandlerHistoryToggleKey(t *testing.T) {
+	toggleKey := term.KeyComb{Mod: term.ModMeta, Ch: 'r'}
+
+	cfg := DefaultConfig()
+	cfg.HistoryCycleKey = term.KeyComb{Ch: ':'}
+	cfg.HistoryToggleKey = toggleKey
+	cfg.Sync = true
+
+	dispatched := make([]string, 0)
+	dispatchFn := func(command string, args ...string) bool {
+		dispatched = append(dispatched, command)
+		return true
+	}
+
+	completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+		return iterator.FromSlice[string](nil), "", nil
+	}
+
+	commands := testNoManualCommands([]string{"edit", "quit", "write"})
+
+	b := NewPrompt(
+		storagestub.NewInMemoryService(),
+		FuncCompleter(completeFn),
+		FuncDispatcher(dispatchFn),
+		term.NopInterrupter(),
+		commands,
+		cfg,
+	)
+	defer b.Close()
+
+	// Dispatch commands to populate history.
+	for _, cmd := range []string{"edit", "write"} {
+		b.Reset(commands)
+		for _, ch := range cmd {
+			b.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		}
+		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	}
+	require.Equal(t, []string{"edit", "write"}, dispatched)
+
+	// Reset prompt to show commands.
+	b.Reset(commands)
+	require.Equal(t, 3, b.list.TotalCount())
+	assert.False(t, b.showingHistory)
+
+	// Press toggle key — should switch to history.
+	b.Handle(term.Event{Type: term.EventKey, Mod: toggleKey.Mod, Ch: toggleKey.Ch})
+	assert.True(t, b.showingHistory)
+	require.Equal(t, 2, b.list.TotalCount())
+
+	ok := b.list.FocusStart()
+	require.True(t, ok)
+	match, ok := b.list.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "write", string(match.Data()))
+
+	ok = b.list.FocusDown()
+	require.True(t, ok)
+	match, ok = b.list.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "edit", string(match.Data()))
+
+	// Press toggle key again — should switch back to commands.
+	b.Handle(term.Event{Type: term.EventKey, Mod: toggleKey.Mod, Ch: toggleKey.Ch})
+	assert.False(t, b.showingHistory)
+	require.Equal(t, 3, b.list.TotalCount())
+
+	ok = b.list.FocusStart()
+	require.True(t, ok)
+	match, ok = b.list.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "edit", string(match.Data()))
 }
 
 type testCommandHandler struct {

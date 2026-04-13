@@ -1816,6 +1816,44 @@ func TestCommandHistory(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
 }
 
+func TestCommandHistoryPrompt(t *testing.T) {
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+	b.Resize(30, 12)
+
+	// Execute some commands to build history by driving events directly.
+	// In the legacy handleTestCase encoding: ':' => command key (Ctrl+\),
+	// ' ' => space, '>' => Enter.
+	for _, seq := range []string{":echo a>", ":echo b>"} {
+		for _, r := range seq {
+			switch r {
+			case ':':
+				b.Handle(term.Event{Mod: term.ModCtrl, Ch: '\\', Type: term.EventKey})
+			case ' ':
+				b.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
+			case '>':
+				b.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
+			default:
+				b.Handle(term.Event{Ch: r, Type: term.EventKey})
+			}
+		}
+	}
+
+	// Now open the history prompt programmatically.
+	require.Nil(t, b.ex.cmd)
+	err := b.ex.openCommandHistoryPrompt(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, b.ex.cmd)
+
+	// Close the history prompt.
+	require.NotNil(t, b.ex.cmdWin)
+	require.NoError(t, b.ex.cmdWin.Close())
+	assert.Nil(t, b.ex.cmd)
+}
+
 func TestCommandPromptClosesCreatedStoragePartition(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
 	store := &closeCountingPartitionStore{Service: storagestub.NewInMemoryService()}

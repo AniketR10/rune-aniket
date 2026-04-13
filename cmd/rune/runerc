@@ -669,6 +669,8 @@ extensions:
 command:
   # Key to open the command prompt.
   key: ":" # if editor.mode = "modal"
+  # Key to toggle between command list and command history in the prompt.
+  history_key: "<m-r>"
   # Max number of commands stored in history.
   max_history: 20000
   # Configure arbitrary command alises.
@@ -744,6 +746,7 @@ command:
       completer: '! $SHELL -c ''git worktree list | tail -n +2 | cut -d" " -f1 | xargs -n1 basename'''
   # Configure bindings from key combinations to commands.
   key_bindings:
+    <m-r>: history
     <m-,>: config
     <m-q>: quit
     <m-=>: guifontsize increase

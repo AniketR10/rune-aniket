@@ -740,6 +740,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithTabsClickCallback(h.tabsClickCallback),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
+		text.WithCommandHistoryKey(cfg.commandHistoryKey()),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
 		text.WithWallpaper(cfg.wallpaper()),

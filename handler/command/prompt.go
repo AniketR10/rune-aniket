@@ -90,6 +90,9 @@ type Prompt struct {
 	// when command key is a character that could be interpreted
 	// as a character to be inserted in command input buffer
 	prevCommandCycle bool
+	// showingHistory tracks whether the prompt is currently
+	// showing the command history list (toggled via HistoryToggleKey).
+	showingHistory bool
 
 	inputString atomic.Value
 	mu          sync.Mutex
@@ -454,9 +457,15 @@ func (h *Prompt) handle(ev term.Event, sync bool) (quit, handled bool) {
 
 func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 	key := ev.KeyComb()
-	if (key == h.config.HistoryKey && h.config.HistoryKey.Ch == 0) ||
-		(key == h.config.HistoryKey && h.buf.Columns(0) == 0) ||
-		(key == h.config.HistoryKey && h.prevCommandCycle) {
+
+	if h.config.HistoryToggleKey != (term.KeyComb{}) && key == h.config.HistoryToggleKey {
+		h.toggleHistoryList()
+		return false, true
+	}
+
+	if (key == h.config.HistoryCycleKey && h.config.HistoryCycleKey.Ch == 0) ||
+		(key == h.config.HistoryCycleKey && h.buf.Columns(0) == 0) ||
+		(key == h.config.HistoryCycleKey && h.prevCommandCycle) {
 		h.handleLastCommand()
 		h.prevCommandCycle = true
 		return false, true
@@ -1008,7 +1017,42 @@ func (h *Prompt) Reset(commands []Manual) {
 	h.buf.Reset()
 	h.list.Buffer().Reset()
 	h.commandsBackup = commands
+	h.showingHistory = false
 	h.resetListWith(commands)
+}
+
+// ResetHistory resets the prompt list with entries from the
+// command history, showing previously executed commands.
+func (h *Prompt) ResetHistory() {
+	h.setCommandMode()
+	h.buf.Reset()
+	h.list.Buffer().Reset()
+	h.showingHistory = true
+	h.resetListWith(h.historyManuals())
+}
+
+// toggleHistoryList toggles the prompt between showing
+// the regular command list and the command history list.
+func (h *Prompt) toggleHistoryList() {
+	h.setCommandMode()
+	h.buf.Reset()
+	h.list.Buffer().Reset()
+	if h.showingHistory {
+		h.showingHistory = false
+		h.resetListWith(h.commandsBackup)
+	} else {
+		h.showingHistory = true
+		h.resetListWith(h.historyManuals())
+	}
+}
+
+func (h *Prompt) historyManuals() []Manual {
+	entries := h.history.Slice()
+	manuals := make([]Manual, len(entries))
+	for i, entry := range entries {
+		manuals[i] = Manual{Name: entry}
+	}
+	return manuals
 }
 
 // assumes holding lock
