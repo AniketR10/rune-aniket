@@ -304,13 +304,22 @@ func (i *input) handleChars(curr map[rune]struct{}, now time.Time, mod term.Modi
 	clear(curr)
 	// key-processed chars take preference over raw chars
 	if len(i.keyChars) == 0 {
-		i.chars = i.input.AppendInputChars(i.chars[:0])
-		// if we are using chars directly, then shift modifier is omitted
-		// as they have already been processed. Note that in theory on MacOS the alt
-		// modifier is also pre-processed; in practice when a pre-processed alt and char
-		// is dispatched, ebiten also dispatches an ebiten.Key so keyChars forces the correct
-		// interpretation.
-		_, mod = removeShiftModifier(0, 0, mod)
+		// Only fall back to raw AppendInputChars when no character key is
+		// currently held. When a character key is held but hasn't reached
+		// its repeat delay, keyChars is empty yet the key is still tracked
+		// in keyState. Falling back here would let the OS report a
+		// different char for the same physical key (e.g. '2' after
+		// releasing Shift while holding Digit2 that originally produced
+		// '@'), causing a spurious event.
+		if len(i.keyState) == 0 {
+			i.chars = i.input.AppendInputChars(i.chars[:0])
+			// if we are using chars directly, then shift modifier is omitted
+			// as they have already been processed. Note that in theory on MacOS the alt
+			// modifier is also pre-processed; in practice when a pre-processed alt and char
+			// is dispatched, ebiten also dispatches an ebiten.Key so keyChars forces the correct
+			// interpretation.
+			_, mod = removeShiftModifier(0, 0, mod)
+		}
 	} else {
 		i.chars = append(i.chars, i.keyChars...)
 	}

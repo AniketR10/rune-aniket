@@ -331,6 +331,12 @@ func TestInputFireOnce(t *testing.T) {
 				Raw: []byte("\x1b[1;3A"),
 			},
 		},
+		{
+			description:   "shift+2 dispatches @",
+			pressedKeys:   []ebiten.Key{ebiten.KeyShift, ebiten.KeyDigit2},
+			pressedChars:  []rune{},
+			expectedEvent: term.Event{Type: term.EventKey, Ch: '@', Raw: []byte("@")},
+		},
 	}
 
 	for _, test := range suite {
@@ -520,6 +526,18 @@ func TestInputFireDelay(t *testing.T) {
 				{Ch: 'B'}, {}, {}, {}, {Mod: term.ModCtrl, Ch: 'C'},
 				{}, {},
 			},
+		},
+		{
+			description: "releasing shift while digit key held does not dispatch spurious char",
+			pressedKeys: [][]ebiten.Key{
+				{ebiten.KeyShift, ebiten.KeyDigit2}, // frame 1: Shift+2 → @
+				{ebiten.KeyDigit2},                   // frame 2: Shift released, 2 held
+			},
+			// In frame 2, keyChars is empty (Digit2 repeat not due),
+			// so handleChars falls back to AppendInputChars. The OS may
+			// report '2' as a new char. This must not dispatch.
+			pressedChars:   [][]rune{{}, {'2'}},
+			expectedEvents: []term.Event{{Ch: '@'}, {}},
 		},
 	}
 
