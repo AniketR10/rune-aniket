@@ -126,6 +126,7 @@ type viHandlerImpl struct {
 	setLocations     bool
 	countDigits      string
 	count            int
+	operatorCount    int
 	insertRegister   strings.Builder
 	zRange           term.Range
 	zRangeOK         bool
@@ -308,6 +309,12 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	return true
 }
 
+func (vi *viHandlerImpl) beginOperatorPending() {
+	vi.operatorCount = max(1, vi.count)
+	vi.count = 1
+	vi.countDigits = ""
+}
+
 func (vi *viHandlerImpl) setInsertMode() {
 	vi.repeater.Clear()
 	vi.insertRegister.Reset()
@@ -320,6 +327,7 @@ func (vi *viHandlerImpl) setInsertMode() {
 }
 
 func (vi *viHandlerImpl) setDeleteMode(thenInsert bool) {
+	vi.beginOperatorPending()
 	vi.setMode(deleteMode)
 	vi.deleteInsert = thenInsert
 	vi.pendingGoMotion = false
@@ -378,12 +386,14 @@ func (vi *viHandlerImpl) selectZRange() bool {
 }
 
 func (vi *viHandlerImpl) setYankMode() {
+	vi.beginOperatorPending()
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.setMode(yankMode)
 }
 
 func (vi *viHandlerImpl) setCaseChangeMode(fn func() bool, repeat rune) {
+	vi.beginOperatorPending()
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.caseChangeFn = fn
@@ -392,6 +402,7 @@ func (vi *viHandlerImpl) setCaseChangeMode(fn func() bool, repeat rune) {
 }
 
 func (vi *viHandlerImpl) setShiftMode(fn func(), repeat rune) {
+	vi.beginOperatorPending()
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.shiftFn = fn
@@ -437,14 +448,14 @@ func (vi *viHandlerImpl) selectTextObject(ch rune) bool {
 	switch ch {
 	case 'w':
 		if around {
-			return vi.cursor.SelectAWords(vi.count)
+			return vi.cursor.SelectAWords(vi.motionCount())
 		}
-		return vi.cursor.SelectInnerWords(vi.count)
+		return vi.cursor.SelectInnerWords(vi.motionCount())
 	case 'W':
 		if around {
-			return vi.cursor.SelectAWordGroups(vi.count)
+			return vi.cursor.SelectAWordGroups(vi.motionCount())
 		}
-		return vi.cursor.SelectInnerWordGroups(vi.count)
+		return vi.cursor.SelectInnerWordGroups(vi.motionCount())
 	case 's':
 		if around {
 			return vi.cursor.SelectASentence()
@@ -871,12 +882,16 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.handleMoveToCharacter(vi.lastMoveMode, event)
 		case 'f':
 			vi.setMoveToCharacterMode(moveToNext)
+			doResetCount = false
 		case 'F':
 			vi.setMoveToCharacterMode(moveToPrev)
+			doResetCount = false
 		case 't':
 			vi.setMoveToCharacterMode(moveTillNext)
+			doResetCount = false
 		case 'T':
 			vi.setMoveToCharacterMode(moveTillPrev)
+			doResetCount = false
 		case 'g':
 			vi.setGMode()
 			doResetCount = false
@@ -922,11 +937,13 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case '$':
 			vi.cursor.MoveEndLine()
 		case 'H':
-			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: vi.count - 1})
+			count := vi.motionCount()
+			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: count - 1})
 		case 'M':
 			vi.cursor.MoveToWindowMiddle()
 		case 'L':
-			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: vi.less.Scroll().SizeHeight() - vi.count})
+			count := vi.motionCount()
+			vi.cursor.MoveToWindow(term.Coordinates{X: vi.cursor.Coordinates().X, Y: vi.less.Scroll().SizeHeight() - count})
 		case 'G':
 			vi.cursor.MoveToScroll(vi.anchor)
 			if vi.countDigits == "" {
@@ -936,47 +953,51 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.setCursorAtScroll(term.Coordinates{Y: target})
 			}
 		case 'j':
+			count := vi.motionCount()
 			vi.cursor.MoveToScroll(vi.anchor)
-			if vi.count == 1 {
+			if count == 1 {
 				vi.cursor.MoveDown()
 			} else {
 				pos := vi.cursor.CursorAtScroll()
 				maxY := vi.less.Buffer().Rows() - 1
-				if vi.count > maxY-pos.Y {
+				if count > maxY-pos.Y {
 					pos.Y = maxY
 				} else {
-					pos.Y += vi.count
+					pos.Y += count
 				}
 				vi.setCursorAtScroll(pos)
 			}
 		case 'k':
+			count := vi.motionCount()
 			vi.cursor.MoveToScroll(vi.anchor)
-			if vi.count == 1 {
+			if count == 1 {
 				vi.cursor.MoveUp()
 			} else {
 				pos := vi.cursor.CursorAtScroll()
-				pos.Y = max(0, pos.Y-vi.count)
+				pos.Y = max(0, pos.Y-count)
 				vi.setCursorAtScroll(pos)
 			}
 		case 'h':
-			if vi.count == 1 {
+			count := vi.motionCount()
+			if count == 1 {
 				vi.cursor.MoveLeft()
 			} else {
 				pos := vi.cursor.CursorAtScroll()
-				pos.X = max(0, pos.X-vi.count)
+				pos.X = max(0, pos.X-count)
 				vi.cursor.MoveToScroll(pos)
 			}
 		case 'l':
-			if vi.count == 1 {
+			count := vi.motionCount()
+			if count == 1 {
 				vi.cursor.MoveRight()
 			} else {
 				pos := vi.cursor.CursorAtScroll()
 				if pos.Y < vi.less.Buffer().Rows() {
 					maxX := vi.less.Buffer().Columns(pos.Y)
-					if vi.count > maxX-pos.X {
+					if count > maxX-pos.X {
 						pos.X = maxX
 					} else {
-						pos.X += vi.count
+						pos.X += count
 					}
 				}
 				vi.cursor.MoveToScroll(pos)
@@ -1044,17 +1065,17 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.MoveDownLines(vi.count - 1)
 			}
 		case 'w':
-			vi.cursor.MoveRightStartWord()
+			vi.repeatMotion(vi.cursor.MoveRightStartWord)
 		case 'W':
-			vi.cursor.MoveRightStartWordGroup()
+			vi.repeatMotion(vi.cursor.MoveRightStartWordGroup)
 		case 'e':
-			vi.cursor.MoveRightEndWord()
+			vi.repeatMotion(vi.cursor.MoveRightEndWord)
 		case 'E':
-			vi.cursor.MoveRightEndWordGroup()
+			vi.repeatMotion(vi.cursor.MoveRightEndWordGroup)
 		case 'b':
-			vi.cursor.MoveLeftStartWord()
+			vi.repeatMotion(vi.cursor.MoveLeftStartWord)
 		case 'B':
-			vi.cursor.MoveLeftStartWordGroup()
+			vi.repeatMotion(vi.cursor.MoveLeftStartWordGroup)
 		case '{':
 			vi.cursor.MovePrevParagraphs(vi.count)
 		case '}':
@@ -1099,20 +1120,8 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			default:
 				if ev.Ch == '0' && vi.countDigits == "" {
 					vi.cursor.MoveStartLine()
-				} else if unicode.IsDigit(ev.Ch) {
-					vi.countDigits += string(ev.Ch)
-					parsedCount, err := strconv.Atoi(vi.countDigits)
-					if err == nil {
-						vi.count = parsedCount
-						doResetCount = false
-					} else {
-						if errors.Is(err, strconv.ErrRange) {
-							vi.count = math.MaxInt
-							doResetCount = false
-						} else {
-							vi.logError(fmt.Errorf("count digits parse: %s %v", err, parsedCount))
-						}
-					}
+				} else if vi.parseCountDigit(ev.Ch) {
+					doResetCount = false
 					return
 				}
 				handled = false
@@ -1126,6 +1135,68 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 func (vi *viHandlerImpl) resetCount() {
 	vi.count = 1
 	vi.countDigits = ""
+	vi.operatorCount = 0
+}
+
+func (vi *viHandlerImpl) parseOperatorCountDigit(ev term.Event) bool {
+	if ev.Type != term.EventKey || ev.Mod != 0 {
+		return false
+	}
+	if ev.Ch == '0' && vi.countDigits == "" {
+		return false
+	}
+	return vi.parseCountDigit(ev.Ch)
+}
+
+func (vi *viHandlerImpl) parseCountDigit(ch rune) bool {
+	if !unicode.IsDigit(ch) {
+		return false
+	}
+	vi.countDigits += string(ch)
+	parsedCount, err := strconv.Atoi(vi.countDigits)
+	if err == nil {
+		vi.count = parsedCount
+		return true
+	}
+	if errors.Is(err, strconv.ErrRange) {
+		vi.count = math.MaxInt
+		return true
+	}
+	vi.logError(fmt.Errorf("count digits parse: %s %v", err, parsedCount))
+	return false
+}
+
+func (vi *viHandlerImpl) motionCount() int {
+	operatorCount := max(1, vi.operatorCount)
+	motionCount := max(1, vi.count)
+	if operatorCount > math.MaxInt/motionCount {
+		return math.MaxInt
+	}
+	return operatorCount * motionCount
+}
+
+func (vi *viHandlerImpl) repeatMotion(fn func() bool) bool {
+	var ok bool
+	for range vi.motionCount() {
+		before := vi.cursor.CursorAtScroll()
+		if !fn() {
+			if vi.cursor.CursorAtScroll() == before {
+				break
+			}
+		}
+		ok = true
+	}
+	return ok
+}
+
+func (vi *viHandlerImpl) selectLineCount() bool {
+	if !vi.cursor.SelectLine() {
+		return false
+	}
+	count := vi.motionCount()
+	for i := 1; i < count && vi.cursor.MoveLineDown(); i++ {
+	}
+	return true
 }
 
 func (vi *viHandlerImpl) search(text string) {
@@ -1466,23 +1537,26 @@ func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (ex
 	case 0:
 		switch ev.Type {
 		case term.EventKey:
+			var ok bool
 			switch mode {
 			case moveToNext:
-				vi.cursor.MoveToNextChar(ev.Ch)
+				ok = vi.repeatMotion(func() bool { return vi.cursor.MoveToNextChar(ev.Ch) })
 			case moveToPrev:
-				vi.cursor.MoveToPrevChar(ev.Ch)
+				ok = vi.repeatMotion(func() bool { return vi.cursor.MoveToPrevChar(ev.Ch) })
 			case moveTillNext:
-				if vi.cursor.MoveToNextChar(ev.Ch) {
+				if ok = vi.repeatMotion(func() bool { return vi.cursor.MoveToNextChar(ev.Ch) }); ok {
 					vi.cursor.MoveLeft()
 				}
 			case moveTillPrev:
-				if vi.cursor.MoveToPrevChar(ev.Ch) {
+				if ok = vi.repeatMotion(func() bool { return vi.cursor.MoveToPrevChar(ev.Ch) }); ok {
 					vi.cursor.MoveRight()
 				}
 			case moveNone:
 				return
 			}
-			vi.moveChar = ev.Ch
+			if ok {
+				vi.moveChar = ev.Ch
+			}
 			vi.setNormalMode()
 			handled = true
 		default:
@@ -1530,13 +1604,13 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 }
 
 func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bool) {
-	before := vi.cursor.Coordinates()
+	before := vi.cursor.CursorAtScroll()
 	vi.cursor.Select()
 
 	prevMode := vi.moveMode
 	quit, handled = vi.handleNormal(ev)
 	isMoveSwitch := prevMode == moveNone && vi.moveMode != moveNone
-	after := vi.cursor.Coordinates()
+	after := vi.cursor.CursorAtScroll()
 
 	if before == after {
 		vi.cursor.Unselect()
@@ -1550,7 +1624,7 @@ func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bo
 	done = true
 
 	// handle <op>wWeEbB idiosyncrasies
-	after = vi.cursor.Coordinates()
+	after = vi.cursor.CursorAtScroll()
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
@@ -1574,23 +1648,23 @@ func (vi *viHandlerImpl) handleMetaNormal(ev term.Event) (quit, handled, done bo
 }
 
 func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) {
-	before := vi.cursor.Coordinates()
+	before := vi.cursor.CursorAtScroll()
 	vi.cursor.Select()
 
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
 		case 'e':
-			vi.cursor.MoveLeftEndWord()
+			vi.repeatMotion(vi.cursor.MoveLeftEndWord)
 			handled = true
 		case 'E':
-			vi.cursor.MoveLeftEndWordGroup()
+			vi.repeatMotion(vi.cursor.MoveLeftEndWordGroup)
 			handled = true
 		case 'j':
-			vi.cursor.MoveDisplayDown()
+			vi.repeatMotion(vi.cursor.MoveDisplayDown)
 			handled = true
 		case 'k':
-			vi.cursor.MoveDisplayUp()
+			vi.repeatMotion(vi.cursor.MoveDisplayUp)
 			handled = true
 		case '_':
 			vi.cursor.MoveEndLineNonBlank()
@@ -1598,7 +1672,7 @@ func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) 
 		}
 	}
 
-	after := vi.cursor.Coordinates()
+	after := vi.cursor.CursorAtScroll()
 	if before == after {
 		vi.cursor.Unselect()
 		handled = false
@@ -1612,12 +1686,15 @@ func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) 
 
 func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 	if ev.Ch == 'y' && ev.Mod == 0 {
-		if vi.cursor.SelectLine() {
+		if vi.selectLineCount() {
 			vi.copySelection()
 			handled = true
 		}
 		vi.setNormalMode()
 		return
+	}
+	if vi.parseOperatorCountDigit(ev) {
+		return false, true
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
@@ -1718,14 +1795,18 @@ func (vi *viHandlerImpl) handleShift(ev term.Event) (quit, handled bool) {
 			vi.setNormalMode()
 			return
 		}
-		if vi.count > 1 {
-			for i := 1; i < vi.count && vi.cursor.MoveLineDown(); i++ {
+		count := vi.motionCount()
+		if count > 1 {
+			for i := 1; i < count && vi.cursor.MoveLineDown(); i++ {
 			}
 		}
 		vi.shiftFn()
 		vi.setNormalMode()
 		handled = true
 		return
+	}
+	if vi.parseOperatorCountDigit(ev) {
+		return false, true
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
@@ -1831,6 +1912,9 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 		vi.setNormalMode()
 		return
 	}
+	if vi.parseOperatorCountDigit(ev) {
+		return false, true
+	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
 		if vi.pendingGoMotion {
@@ -1928,8 +2012,9 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		if !vi.cursor.SelectLine() {
 			return
 		}
-		if vi.count > 1 {
-			for i := 0; i < vi.count && vi.cursor.MoveLineDown(); i++ {
+		count := vi.motionCount()
+		if count > 1 {
+			for i := 0; i < count && vi.cursor.MoveLineDown(); i++ {
 			}
 		}
 		vi.copySelectionForDelete()
@@ -1950,6 +2035,9 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		vi.setInsertMode()
 		handled = true
 		return
+	}
+	if vi.parseOperatorCountDigit(ev) {
+		return false, true
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
@@ -2095,10 +2183,10 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			handled = true
 			return
 		case 'e':
-			vi.cursor.MoveLeftEndWord()
+			vi.repeatMotion(vi.cursor.MoveLeftEndWord)
 			handled = true
 		case 'E':
-			vi.cursor.MoveLeftEndWordGroup()
+			vi.repeatMotion(vi.cursor.MoveLeftEndWordGroup)
 			handled = true
 		case 'J':
 			vi.cursor.Conflate()

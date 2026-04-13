@@ -1675,10 +1675,10 @@ func TestViCaseChangeOperators(t *testing.T) {
 		{"g~w on digits mixed", "a1B2c3", "g~w", "A1b2C3", normalMode},
 
 		// ===== Count + operator =====
-		{"2guw lowercases 2 words", "HELLO WORLD TEST", "2guw", "hello WORLD TEST", normalMode},
-		{"2gUw uppercases 2 words", "hello world test", "2gUw", "HELLO world test", normalMode},
-		{"3guw lowercases 3 words (count does not propagate to motion)", "ONE TWO THREE FOUR", "3guw", "one TWO THREE FOUR", normalMode},
-		{"2gUe uppercases word end (count does not propagate)", "hello world test", "2gUe", "HELLO world test", normalMode},
+		{"2guw lowercases 2 words", "HELLO WORLD TEST", "2guw", "hello world TEST", normalMode},
+		{"2gUw uppercases 2 words", "hello world test", "2gUw", "HELLO WORLD test", normalMode},
+		{"3guw lowercases 3 words", "ONE TWO THREE FOUR", "3guw", "one two three FOUR", normalMode},
+		{"2gUe uppercases through second word end", "hello world test", "2gUe", "HELLO WORLD test", normalMode},
 		{"guj lowercases 2 lines from first line", "HELLO\nWORLD\nTEST", "guj", "hello\nworld\nTEST", normalMode},
 
 		// ===== Visual mode case change =====
@@ -2122,6 +2122,355 @@ func TestViCount(t *testing.T) {
 					assert.Equal(t, vi.cursor.Coordinates(), term.Coordinates{X: 15, Y: 3})
 				}
 			})
+	}
+
+	t.Run("word motions honor counts", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			seq  string
+			want term.Coordinates
+		}{
+			{name: "2w", seq: "2w", want: term.Coordinates{X: len("one two ")}},
+			{name: "3e", seq: "3e", want: term.Coordinates{X: len("one two three") - 1}},
+			{name: "2b", seq: "www2b", want: term.Coordinates{X: len("one ")}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				vi := setupVi(t, "one two three four", 2)
+				vi.Resize(80, 5)
+				vi.Draw(term.NoopWriter{})
+				for _, eventChar := range tc.seq {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				}
+
+				assert.Equal(t, tc.want, vi.cursor.Coordinates())
+				assert.Equal(t, normalMode, vi.mode())
+				assert.Equal(t, 1, vi.count)
+				assert.Equal(t, "", vi.countDigits)
+			})
+		}
+	})
+
+	t.Run("character find motions honor counts", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			seq  string
+			want term.Coordinates
+		}{
+			{name: "2fx", seq: "2fx", want: term.Coordinates{X: len("ax b")}},
+			{name: "2tx", seq: "2tx", want: term.Coordinates{X: len("ax ")}},
+			{name: "2Fx", seq: "$2Fx", want: term.Coordinates{X: len("a")}},
+			{name: "2Tx", seq: "$2Tx", want: term.Coordinates{X: len("ax")}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				vi := setupVi(t, "ax bx cx", 2)
+				vi.Resize(80, 5)
+				vi.Draw(term.NoopWriter{})
+				for _, eventChar := range tc.seq {
+					vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				}
+
+				assert.Equal(t, tc.want, vi.cursor.Coordinates())
+				assert.Equal(t, normalMode, vi.mode())
+				assert.Equal(t, 1, vi.count)
+				assert.Equal(t, "", vi.countDigits)
+			})
+		}
+	})
+}
+
+func TestViOperatorCounts(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		content       string
+		seq           string
+		wantContent   string
+		wantMode      viMode
+		wantClipboard string
+		wantMetadata  text.SelectMode
+	}{
+		{
+			name:        "2dw deletes two words",
+			content:     "one two three four",
+			seq:         "2dw",
+			wantContent: "three four",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d2w deletes two words",
+			content:     "one two three four",
+			seq:         "d2w",
+			wantContent: "three four",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "2d2w multiplies operator and motion counts",
+			content:     "one two three four five",
+			seq:         "2d2w",
+			wantContent: "five",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "2cw changes two words",
+			content:     "one two three four",
+			seq:         "2cw",
+			wantContent: "three four",
+			wantMode:    insertMode,
+		},
+		{
+			name:          "2yy yanks two lines",
+			content:       "one\ntwo\nthree\n",
+			seq:           "2yy",
+			wantContent:   "one\ntwo\nthree\n",
+			wantMode:      normalMode,
+			wantClipboard: "one\ntwo\n",
+			wantMetadata:  text.LineSelection,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2)
+			vi.Resize(80, 5)
+			vi.Draw(term.NoopWriter{})
+			for _, eventChar := range tc.seq {
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				require.True(t, handled, "event %q", eventChar)
+			}
+
+			assert.Equal(t, tc.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, term.Coordinates{}, vi.cursor.Coordinates())
+			assert.Equal(t, tc.wantMode, vi.mode())
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			if tc.wantClipboard != "" {
+				paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantClipboard, paste.Text)
+				assert.Equal(t, tc.wantMetadata, paste.Metadata)
+			}
+		})
+	}
+}
+
+func TestViCountedMotionScenarios(t *testing.T) {
+	type testCase struct {
+		name        string
+		content     string
+		seq         string
+		wrap        bool
+		width       int
+		setup       func(*viHandlerImpl)
+		wantContent string
+		wantScroll  *term.Coordinates
+		wantMode    viMode
+	}
+
+	coord := func(x, y int) *term.Coordinates {
+		return &term.Coordinates{X: x, Y: y}
+	}
+
+	moveEnd := func(vi *viHandlerImpl) {
+		vi.cursor.MoveEndLine()
+	}
+	pastLastColumn := func(vi *viHandlerImpl) {
+		vi.setCursorAtScroll(term.Coordinates{X: len("one two"), Y: 0})
+	}
+	pastLastLine := func(vi *viHandlerImpl) {
+		vi.config.cursorCorrections = false
+		vi.cursor.SetCursorAtScroll(term.Coordinates{Y: 10})
+	}
+
+	cases := []testCase{
+		// Happy-path counted word motions, non-wrap.
+		{name: "2w moves to second next word", content: "one two three four", seq: "2w", wantScroll: coord(len("one two "), 0)},
+		{name: "3w moves to third next word", content: "one two three four", seq: "3w", wantScroll: coord(len("one two three "), 0)},
+		{name: "2W treats punctuation as part of WORD", content: "one-two three four", seq: "2W", wantScroll: coord(len("one-two three "), 0)},
+		{name: "3e moves through third word end", content: "one two three four", seq: "3e", wantScroll: coord(len("one two three")-1, 0)},
+		{name: "2E moves through second WORD end", content: "one-two three four", seq: "2E", wantScroll: coord(len("one-two three")-1, 0)},
+		{name: "2b moves back two word starts", content: "one two three four", seq: "www2b", wantScroll: coord(len("one "), 0)},
+		{name: "2B moves back two WORD starts", content: "one-two three four", seq: "WW2B", wantScroll: coord(0, 0)},
+		{name: "2ge moves back two word ends", content: "one two three four", seq: "$2ge", wantScroll: coord(len("one two")-1, 0)},
+		{name: "2gE moves back two WORD ends", content: "one-two three four", seq: "$2gE", wantScroll: coord(len("one-two")-1, 0)},
+
+		// The same generic motion paths should behave the same in wrap mode.
+		{name: "wrap 2w moves to second next word", content: "one two three four", seq: "2w", wrap: true, width: 5, wantScroll: coord(len("one two "), 0)},
+		{name: "wrap 3e moves through third word end", content: "one two three four", seq: "3e", wrap: true, width: 5, wantScroll: coord(len("one two three")-1, 0)},
+		{name: "wrap 2b moves back two word starts", content: "one two three four", seq: "www2b", wrap: true, width: 5, wantScroll: coord(len("one "), 0)},
+
+		// Counted f/F/t/T motions and counted ; repeat.
+		{name: "2fx finds second matching char", content: "ax bx cx", seq: "2fx", wantScroll: coord(len("ax b"), 0)},
+		{name: "3fx finds third matching char", content: "ax bx cx", seq: "3fx", wantScroll: coord(len("ax bx c"), 0)},
+		{name: "2tx stops before second matching char", content: "ax bx cx", seq: "2tx", wantScroll: coord(len("ax "), 0)},
+		{name: "2Fx finds second previous matching char", content: "ax bx cx", seq: "$2Fx", wantScroll: coord(len("a"), 0)},
+		{name: "2Tx stops after second previous matching char", content: "ax bx cx", seq: "$2Tx", wantScroll: coord(len("ax"), 0)},
+		{name: "2 semicolon repeats last find twice", content: "ax bx cx dx", seq: "fx2;", wantScroll: coord(len("ax bx c"), 0)},
+		{name: "wrap 2fx finds second matching char", content: "ax bx cx", seq: "2fx", wrap: true, width: 4, wantScroll: coord(len("ax b"), 0)},
+		{name: "wrap 2tx stops before second matching char", content: "ax bx cx", seq: "2tx", wrap: true, width: 4, wantScroll: coord(len("ax "), 0)},
+
+		// Not-so-happy motion paths should be handled and reset counts without editing.
+		{name: "counted word motion in empty buffer", content: "", seq: "2w", wantScroll: coord(0, 0)},
+		{name: "counted char find in empty buffer", content: "", seq: "2fx", wantScroll: coord(0, 0)},
+		{name: "counted word motion from past last column", content: "one two", seq: "2w", setup: pastLastColumn, wantScroll: coord(len("one two")-1, 0)},
+		{name: "counted char find from end of line does not move", content: "ax bx", seq: "2fx", setup: moveEnd, wantScroll: coord(len("ax bx")-1, 0)},
+		{name: "counted word motion from past last line is a no-op", content: "one two", seq: "2w", setup: pastLastLine, wantScroll: coord(0, 10)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := []Option{WithWrap(tc.wrap)}
+			vi := setupVi(t, tc.content, 2, opts...)
+			width := tc.width
+			if width == 0 {
+				width = 80
+			}
+			vi.Resize(width, 8)
+			vi.Draw(term.NoopWriter{})
+			if tc.setup != nil {
+				tc.setup(vi)
+			}
+
+			for _, eventChar := range tc.seq {
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				require.True(t, handled, "event %q", eventChar)
+			}
+
+			wantContent := tc.wantContent
+			if wantContent == "" {
+				wantContent = tc.content
+			}
+			assert.Equal(t, wantContent, vi.less.Buffer().String())
+			if tc.wantScroll != nil {
+				assert.Equal(t, *tc.wantScroll, vi.cursor.CursorAtScroll())
+			}
+			wantMode := tc.wantMode
+			if wantMode == 0 {
+				wantMode = normalMode
+			}
+			assert.Equal(t, wantMode, vi.mode())
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			assert.Equal(t, 0, vi.operatorCount)
+		})
+	}
+}
+
+func TestViCountedOperatorScenarios(t *testing.T) {
+	type testCase struct {
+		name           string
+		content        string
+		seq            string
+		wrap           bool
+		width          int
+		setup          func(*viHandlerImpl)
+		wantContent    string
+		wantScroll     *term.Coordinates
+		wantMode       viMode
+		allowUnhandled bool
+		wantClipboard  bool
+		clipboardText  string
+		clipboardMode  text.SelectMode
+	}
+
+	coord := func(x, y int) *term.Coordinates {
+		return &term.Coordinates{X: x, Y: y}
+	}
+	startSecondLine := func(vi *viHandlerImpl) {
+		vi.setCursorAtScroll(term.Coordinates{Y: 1})
+	}
+	pastLastColumn := func(vi *viHandlerImpl) {
+		vi.setCursorAtScroll(term.Coordinates{X: len("one two"), Y: 0})
+	}
+	pastLastLine := func(vi *viHandlerImpl) {
+		vi.config.cursorCorrections = false
+		vi.cursor.SetCursorAtScroll(term.Coordinates{Y: 10})
+	}
+
+	cases := []testCase{
+		// Delete/change counts before the operator, after the operator, and on both sides.
+		{name: "2dw deletes two words", content: "one two three four", seq: "2dw", wantContent: "three four", wantScroll: coord(0, 0)},
+		{name: "d2w deletes two words", content: "one two three four", seq: "d2w", wantContent: "three four", wantScroll: coord(0, 0)},
+		{name: "2d2w multiplies operator and motion counts", content: "one two three four five", seq: "2d2w", wantContent: "five", wantScroll: coord(0, 0)},
+		{name: "2de deletes through second word end", content: "one two three", seq: "2de", wantContent: " three", wantScroll: coord(0, 0)},
+		{name: "d2e deletes through second word end", content: "one two three", seq: "d2e", wantContent: " three", wantScroll: coord(0, 0)},
+		{name: "2cw changes two words", content: "one two three four", seq: "2cw", wantContent: "three four", wantMode: insertMode, wantScroll: coord(0, 0)},
+		{name: "c2w changes two words", content: "one two three four", seq: "c2w", wantContent: "three four", wantMode: insertMode, wantScroll: coord(0, 0)},
+		{name: "2c2w changes four words", content: "one two three four five", seq: "2c2w", wantContent: "five", wantMode: insertMode, wantScroll: coord(0, 0)},
+		{name: "wrap 2dw deletes two words", content: "one two three four", seq: "2dw", wrap: true, width: 5, wantContent: "three four", wantScroll: coord(0, 0)},
+		{name: "wrap d2w deletes two words", content: "one two three four", seq: "d2w", wrap: true, width: 5, wantContent: "three four", wantScroll: coord(0, 0)},
+		{name: "wrap 2cw changes two words", content: "one two three four", seq: "2cw", wrap: true, width: 5, wantContent: "three four", wantMode: insertMode, wantScroll: coord(0, 0)},
+
+		// Counted character-find motions in operator-pending mode.
+		{name: "d2fx deletes through second x", content: "ax bx cx", seq: "d2fx", wantContent: " cx", wantScroll: coord(0, 0)},
+		{name: "2dfx deletes through second x", content: "ax bx cx", seq: "2dfx", wantContent: " cx", wantScroll: coord(0, 0)},
+		{name: "d2tx deletes until before second x", content: "ax bx cx", seq: "d2tx", wantContent: "x cx", wantScroll: coord(0, 0)},
+		{name: "c2fx changes through second x", content: "ax bx cx", seq: "c2fx", wantContent: " cx", wantMode: insertMode, wantScroll: coord(0, 0)},
+		{name: "wrap d2fx deletes through second x", content: "ax bx cx", seq: "d2fx", wrap: true, width: 4, wantContent: " cx", wantScroll: coord(0, 0)},
+
+		// Yank counts and metadata for character-wise and line-wise selections.
+		{name: "2yw yanks two words", content: "one two three", seq: "2yw", wantClipboard: true, clipboardText: "one two ", clipboardMode: text.StandardSelection, wantScroll: coord(0, 0)},
+		{name: "y2w yanks two words", content: "one two three", seq: "y2w", wantClipboard: true, clipboardText: "one two ", clipboardMode: text.StandardSelection, wantScroll: coord(0, 0)},
+		{name: "2y2w yanks four words", content: "one two three four five", seq: "2y2w", wantClipboard: true, clipboardText: "one two three four ", clipboardMode: text.StandardSelection, wantScroll: coord(0, 0)},
+		{name: "2yy yanks two lines", content: "one\ntwo\nthree\n", seq: "2yy", wantClipboard: true, clipboardText: "one\ntwo\n", clipboardMode: text.LineSelection, wantScroll: coord(0, 0)},
+		{name: "y2y yanks two lines", content: "one\ntwo\nthree\n", seq: "y2y", wantClipboard: true, clipboardText: "one\ntwo\n", clipboardMode: text.LineSelection, wantScroll: coord(0, 0)},
+		{name: "2yy from second line yanks remaining two lines", content: "one\ntwo\nthree\n", seq: "2yy", setup: startSecondLine, wantClipboard: true, clipboardText: "two\nthree\n", clipboardMode: text.LineSelection, wantScroll: coord(0, 1)},
+		{name: "wrap 2yy yanks two lines", content: "one\ntwo\nthree\n", seq: "2yy", wrap: true, width: 2, wantClipboard: true, clipboardText: "one\ntwo\n", clipboardMode: text.LineSelection, wantScroll: coord(0, 0)},
+
+		// Case-change and shift operators use the same counted meta-motion path.
+		{name: "2guw lowercases two words", content: "ONE TWO THREE", seq: "2guw", wantContent: "one two THREE", wantScroll: coord(len("one two"), 0)},
+		{name: "gu2w lowercases two words", content: "ONE TWO THREE", seq: "gu2w", wantContent: "one two THREE", wantScroll: coord(len("one two"), 0)},
+		{name: "2gUe uppercases through second word end", content: "one two three", seq: "2gUe", wantContent: "ONE TWO three", wantScroll: coord(len("ONE TWO")-1, 0)},
+		{name: "2g~w toggles two words", content: "One Two Three", seq: "2g~w", wantContent: "oNE tWO Three", wantScroll: coord(len("oNE tWO"), 0)},
+		{name: "2>w shifts two lines via operator count", content: "one\ntwo\nthree", seq: "2>j", wantContent: "\tone\n\ttwo\n\tthree", wantScroll: coord(0, 2)},
+		{name: ">2j shifts two lines via motion count", content: "one\ntwo\nthree", seq: ">2j", wantContent: "\tone\n\ttwo\n\tthree", wantScroll: coord(0, 2)},
+
+		// Boundary and no-op operator paths.
+		{name: "2dw in empty buffer is a no-op", content: "", seq: "2dw", wantScroll: coord(0, 0), allowUnhandled: true},
+		{name: "2yy in empty buffer is a no-op", content: "", seq: "2yy", wantScroll: coord(0, 0)},
+		{name: "2dw from past last column does not edit", content: "one two", seq: "2dw", setup: pastLastColumn, wantScroll: coord(len("one two")-1, 0), allowUnhandled: true},
+		{name: "2dw from past last line does not edit", content: "one two", seq: "2dw", setup: pastLastLine, wantScroll: coord(0, 10), allowUnhandled: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2, WithWrap(tc.wrap))
+			width := tc.width
+			if width == 0 {
+				width = 80
+			}
+			vi.Resize(width, 8)
+			vi.Draw(term.NoopWriter{})
+			if tc.setup != nil {
+				tc.setup(vi)
+			}
+
+			for _, eventChar := range tc.seq {
+				_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				if !tc.allowUnhandled {
+					require.True(t, handled, "event %q", eventChar)
+				}
+			}
+
+			wantContent := tc.wantContent
+			if wantContent == "" {
+				wantContent = tc.content
+			}
+			assert.Equal(t, wantContent, vi.less.Buffer().String())
+			if tc.wantScroll != nil {
+				assert.Equal(t, *tc.wantScroll, vi.cursor.CursorAtScroll())
+			}
+			wantMode := tc.wantMode
+			if wantMode == 0 {
+				wantMode = normalMode
+			}
+			assert.Equal(t, wantMode, vi.mode())
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			assert.Equal(t, 0, vi.operatorCount)
+			if tc.wantClipboard {
+				paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+				require.NoError(t, err)
+				assert.Equal(t, tc.clipboardText, paste.Text)
+				assert.Equal(t, tc.clipboardMode, paste.Metadata)
+			}
+		})
 	}
 }
 
