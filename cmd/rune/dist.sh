@@ -29,6 +29,30 @@ if [[ -z "${BLUE_TARGET_ARCH}" ]]; then
     exit 1
 fi
 
+# Safety check: ensure the artifact does not contain source code.
+case "$BLUE_RELEASE_TAR" in
+	*.tar.gz)
+		if tar -tzf "$BLUE_RELEASE_TAR" | grep -q '\.go$'; then
+			echo "ERROR: artifact contains .go source files — aborting upload."
+			tar -tzf "$BLUE_RELEASE_TAR" | grep '\.go$'
+			exit 1
+		fi
+		;;
+	*.dmg)
+		temp_mount="$(mktemp -d "${TMPDIR:-/tmp}/dist-check-XXXXXX")"
+		hdiutil attach -quiet -readonly "$BLUE_RELEASE_TAR" -mountpoint "$temp_mount"
+		if find "$temp_mount" -name '*.go' -print -quit | grep -q .; then
+			echo "ERROR: artifact contains .go source files — aborting upload."
+			find "$temp_mount" -name '*.go'
+			hdiutil detach -quiet "$temp_mount"
+			rm -rf "$temp_mount"
+			exit 1
+		fi
+		hdiutil detach -quiet "$temp_mount"
+		rm -rf "$temp_mount"
+		;;
+esac
+
 # Publish to public GCS bucket.
 gcs_arch="${BLUE_TARGET_OS}-${BLUE_TARGET_ARCH}"
 gcs_dir="${DOWNLOADS_BUCKET}/${gcs_arch}"
