@@ -112,6 +112,8 @@ func TestPickerHandle(t *testing.T) {
 		{"unknown key ignored", term.Event{Type: term.EventKey, Key: term.KeyTab}, false, false},
 		{"ctrl-j handled", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'j'}, false, true},
 		{"ctrl-k handled", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'k'}, false, true},
+		{"ctrl-n handled", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'n'}, false, true},
+		{"ctrl-p handled", term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'p'}, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

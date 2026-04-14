@@ -166,11 +166,11 @@ func (l *Picker) Handle(ev term.Event) (exit, handled bool) {
 	}
 	if ev.Mod == term.ModCtrl {
 		switch ev.Ch {
-		case 'j':
+		case 'j', 'n':
 			l.list.FocusDown()
 			l.loadPreview()
 			return false, true
-		case 'k':
+		case 'k', 'p':
 			l.list.FocusUp()
 			l.loadPreview()
 			return false, true
