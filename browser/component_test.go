@@ -336,6 +336,53 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	assert.Equal(t, cfg.FocusTabAttr, cells[7].Attributes)
 }
 
+func TestComponentRestoreTileLayout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	b := NewComponent(cfg)
+	root := b.Focus()
+	right, ok := b.Split(browserapi.OrientationRight, root, newTestHandler())
+	require.True(t, ok)
+	bottom, ok := b.Split(browserapi.OrientationBottom, right, newTestHandler())
+	require.True(t, ok)
+
+	uri, err := workspaceapi.ParseURI("file:///restored")
+	require.NoError(t, err)
+	tabHandler := newTestHandlerURI(uri)
+	tab := b.NewTab(uri, 'r', "restored", tabHandler, tabHandler)
+	tab.Subscribe(tabHandler)
+	layout := b.TileLayout()
+	restored := b.RestoreTileLayout(layout, func(windowID uint64) browserapi.Handler {
+		switch windowID {
+		case root.WindowID():
+			return newTestHandler()
+		case right.WindowID():
+			return tab
+		case bottom.WindowID():
+			return nil
+		default:
+			return nil
+		}
+	})
+
+	require.Len(t, restored, 3)
+	for _, oldID := range []uint64{root.WindowID(), right.WindowID(), bottom.WindowID()} {
+		require.Contains(t, restored, oldID)
+		require.NotEqual(t, oldID, restored[oldID].WindowID())
+	}
+	content, err := restored[right.WindowID()].Content()
+	require.NoError(t, err)
+	require.Equal(t, tab, content)
+	tabWin, ok := tab.Window()
+	require.True(t, ok)
+	require.Equal(t, restored[right.WindowID()], tabWin)
+	require.Equal(t, 1, tabHandler.onFocus)
+
+	content, err = restored[bottom.WindowID()].Content()
+	require.NoError(t, err)
+	require.NotNil(t, content)
+}
+
 func TestWindowClosedOnClose(t *testing.T) {
 	b := NewComponent(DefaultConfig())
 	h := newTestHandler()

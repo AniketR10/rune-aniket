@@ -34,7 +34,8 @@ import (
 
 const (
 	commandName       = "cursorhistory"
-	storagePartition  = "idecursor"
+	documentIDPrefix  = "cursor-history:"
+	documentKind      = "cursor-history"
 	defaultMaxEntries = 100
 	minJumpLines      = 10
 )
@@ -47,6 +48,7 @@ type location struct {
 }
 
 type historyDocument struct {
+	Kind         string
 	WorkspaceURI string
 	Entries      []location
 	Index        int
@@ -55,6 +57,7 @@ type historyDocument struct {
 
 func newHistoryDocument(workspaceURI workspaceapi.URI) historyDocument {
 	return historyDocument{
+		Kind:         documentKind,
 		WorkspaceURI: workspaceURI.String(),
 		Index:        -1,
 		Version:      1,
@@ -62,7 +65,7 @@ func newHistoryDocument(workspaceURI workspaceapi.URI) historyDocument {
 }
 
 func documentID(workspaceURI workspaceapi.URI) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(workspaceURI.String()))
+	return documentIDPrefix + base64.RawURLEncoding.EncodeToString([]byte(workspaceURI.String()))
 }
 
 func sameLocation(a, b location) bool {

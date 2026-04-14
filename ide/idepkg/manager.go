@@ -217,7 +217,7 @@ func (m *Manager) InstallPackageVersion(
 	}
 
 	key := m.makeDownloadKey(pkgID, version)
-	err = m.storage.Create(ctx, key, pkgVersionValue{Package: pkgID, Version: version})
+	err = m.storage.Create(ctx, key, newPkgVersionValue(pkgID, version))
 	if err != nil {
 		if errors.Is(err, storageapi.ErrAlreadyExists) {
 			var existing pkgVersionValue
@@ -225,7 +225,7 @@ func (m *Manager) InstallPackageVersion(
 				_ = m.storage.Delete(ctx, key)
 				_ = os.RemoveAll(makePackageVersionDirname(m.dataDir, pkgID, version))
 				_ = os.RemoveAll(makeStagingDirname(m.dataDir, pkgID, version))
-				err = m.storage.Create(ctx, key, pkgVersionValue{Package: pkgID, Version: version})
+				err = m.storage.Create(ctx, key, newPkgVersionValue(pkgID, version))
 			}
 			if err != nil {
 				m.cleanupFile(tarfile)
@@ -432,15 +432,13 @@ func (m *Manager) ListInstalledPackageVersions(ctx context.Context, pkgID string
 		return nil, errors.New("package must not be empty")
 	}
 	pkgID = escapeString(pkgID)
-	dit, err := m.storage.List(ctx, []storageapi.Filter{
-		{
-			Field: storageapi.Field{
-				FieldPath: []string{"Package"},
-				Value:     pkgID,
-			},
-			Op: storageapi.OpEqual,
+	dit, err := m.storage.List(ctx, []storageapi.Filter{{
+		Field: storageapi.Field{
+			FieldPath: []string{"Package"},
+			Value:     pkgID,
 		},
-	})
+		Op: storageapi.OpEqual,
+	}})
 	if err != nil {
 		return nil, err
 	}
@@ -578,6 +576,10 @@ func (m *Manager) cleanupFile(file *os.File) {
 
 func (m *Manager) makeDownloadKey(pkgID string, version release.Version) string {
 	return fmt.Sprintf("%s:%s", pkgID, version)
+}
+
+func newPkgVersionValue(pkgID string, version release.Version) pkgVersionValue {
+	return pkgVersionValue{Package: pkgID, Version: version}
 }
 
 func (m *Manager) download(

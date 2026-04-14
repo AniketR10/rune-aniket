@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	_ "net/http/pprof"
@@ -54,11 +55,15 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/idetask"
+	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func TestFileCommandRegistryIntegration(t *testing.T) {
@@ -1943,6 +1948,335 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
+	t.Run("workspace close and reopen restores terminal tabs and windows", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+		manager := workspace.NewManager(config.NopConfig())
+		require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+			workspace.NewMemoryScheme))
+		const terminalWorkspaceScheme = "terminaltest"
+		require.NoError(t, manager.RegisterScheme(terminalWorkspaceScheme,
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
+				return newTerminalSessionTestScheme(ctx, cfg, uri)
+			}))
+		uri, err := workspaceapi.ParseURI(terminalWorkspaceScheme + ":///workspace")
+		require.NoError(t, err)
+		runner := FuncExtensionsRunner(testRunnerFn)
+		cfg := defaultConfigWithWrap(false)
+		cfg.cfg["workspace"] = map[string]any{"auto_restore": true}
+		cfg.ringBell = func() {}
+
+		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+		ex1 := m.exHandler(m.focusHandler())
+		fileURI, err := ex1.workspace.URI("restored.txt")
+		require.NoError(t, err)
+		fileTab, err := ex1.editFileURI(fileURI, ex1.invokeWindow(), false)
+		require.NoError(t, err)
+		_, ok := fileTab.Handler().(text.Handler)
+		require.True(t, ok)
+		require.NoError(t, ex1.newTask(context.Background(), "persisted-task", "right", "--", "echo", "ok"))
+		require.NoError(t, ex1.windownew(context.Background(), "right"))
+		require.NoError(t, ex1.terminalnewtab(context.Background(), "tab terminal"))
+		require.NoError(t, ex1.windownew(context.Background(), "down"))
+		require.NoError(t, ex1.terminalnew(context.Background(), "window terminal"))
+		require.Len(t, ex1.comp.Tabs(), 2)
+		require.NoError(t, m.commandCloseWorkspace())
+		require.Equal(t, 0, m.workspaceCount)
+
+		require.NoError(t, m.addWorkspace(uri, true, false, -1))
+		m.Resize(80, 24)
+		ex2 := m.exHandler(m.focusHandler())
+		tabs := ex2.comp.Tabs()
+		require.Len(t, tabs, 2)
+		var terminalTabs int
+		for _, tab := range tabs {
+			if _, ok := tab.Handler().(vtereservoir.VTE); ok {
+				terminalTabs++
+			}
+		}
+		require.Equal(t, 1, terminalTabs)
+
+		var terminalWindows, tabTerminalWindows, ephemeralTerminalWindows, fileWindows int
+		var taskWindows, minimizedTaskWindows int
+		ex2.comp.Browser().IterateWindows(func(win browser.Window) {
+			content, err := win.Content()
+			require.NoError(t, err)
+			switch content := content.(type) {
+			case vtereservoir.VTE:
+				ephemeralTerminalWindows++
+				terminalWindows++
+			case *browser.Tab:
+				if _, ok := content.Handler().(vtereservoir.VTE); ok {
+					tabTerminalWindows++
+					terminalWindows++
+				} else if _, ok := content.Handler().(text.Handler); ok {
+					fileWindows++
+				}
+			case *idetask.Task:
+				taskWindows++
+				_, minimized := win.IsMinimized()
+				if minimized {
+					minimizedTaskWindows++
+				}
+			}
+		})
+		require.Equal(t, 1, tabTerminalWindows)
+		require.Equal(t, 1, ephemeralTerminalWindows)
+		require.Equal(t, 2, terminalWindows)
+		require.Equal(t, 1, fileWindows)
+		require.Equal(t, 1, taskWindows)
+		require.Equal(t, 1, minimizedTaskWindows)
+		require.Equal(t, tcomponent.SplitOrientationVertical,
+			ex2.comp.Browser().TileLayout().Split)
+		require.Len(t, ex2.comp.Browser().TileLayout().Children, 2)
+		require.Equal(t, tcomponent.SplitOrientationHorizontal,
+			ex2.comp.Browser().TileLayout().Children[1].Split)
+		require.Len(t, ex2.comp.Browser().TileLayout().Children[1].Children, 2)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("workspace reload preserves deep layout with minimized task", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+		manager := workspace.NewManager(config.NopConfig())
+		require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+			workspace.NewMemoryScheme))
+		const terminalWorkspaceScheme = "terminaltest"
+		require.NoError(t, manager.RegisterScheme(terminalWorkspaceScheme,
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
+				return newTerminalSessionTestScheme(ctx, cfg, uri)
+			}))
+		uri, err := workspaceapi.ParseURI(terminalWorkspaceScheme + ":///workspace")
+		require.NoError(t, err)
+		runner := FuncExtensionsRunner(testRunnerFn)
+
+		cfg := defaultConfigWithWrap(false)
+		cfg.cfg["workspace"] = map[string]any{"auto_restore": true}
+		cfg.ringBell = func() {}
+		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+		m.forceSyncCommandPrompt = true
+
+		wantLayout := `┌──────────────────────────────────────────────────────────────────────────────┐
+│o nested.txt  o middle.txt                                                    │
+├┌────────────────────────┐┌────────────────────────┐┌─────────────────────────┤
+││                        ││▐                       ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        │└─────────────────────────┘
+││                        ││                        │┌───────────┐┌────────────┐
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                  NORMAL││           ││      NORMAL│
+└└────────────────────────┘└────────────────────────┘└───────────┘└────────────┘`
+		wantTaskFocus := `┌──────────────────────────────────────────────────────────────────────────────┐
+│o nested.txt  o middle.txt                                                    │
+├────────────────────────┐┌─────────────────────────┐┌─────────────────────────┤
+│                        ││                         ││                         │
+┌──────────────────────────────┐                    ││                         │
+│ ▀        sleep 1000        0s│                    ││                         │
+│                              │                    ││                         │
+│                              │                    ││                         │
+│                              │                    ││                         │
+│                              │                    ││                         │
+│                              │                    ││                         │
+│                              │                    ││                         │
+│                              │                    │└─────────────────────────┘
+│                              │                    │┌───────────┐┌────────────┐
+│                              │                    ││           ││            │
+│                              │                    ││           ││            │
+│                              │                    ││           ││            │
+│                              │                    ││           ││            │
+│                              │                    ││           ││            │
+│                              │                    ││           ││            │
+└──────────────────────────────┘                    ││           ││            │
+│                        ││                         ││           ││            │
+│                        ││                   NORMAL││           ││      NORMAL│
+└────────────────────────┘└─────────────────────────┘└───────────┘└────────────┘`
+		cases := []handlertest.SequenceTestCase{
+			{
+				InputSequence: "<c-\\\\>tasknew<space>sleeper<space>left<space>--<space>sleep<space>1000<enter>" +
+					"<c-\\\\>windownew<space>right<enter>" +
+					"<c-\\\\>windownew<space>right<enter>" +
+					"<c-\\\\>windownew<space>down<enter>" +
+					"<c-\\\\>windownew<space>right<enter>" +
+					"<c-\\\\>edit<space>nested.txt<enter>" +
+					"<c-\\\\>windowfocus<space>left<enter>" +
+					"<c-\\\\>windowfocus<space>left<enter>" +
+					"<c-\\\\>edit<space>middle.txt<enter>",
+				Expected: wantLayout,
+			},
+			{
+				InputSequence: "<c-\\\\>workspacereload<enter>",
+				Expected:      wantLayout,
+			},
+			{
+				InputSequence: "<c-\\\\>taskfocus<space>sleeper<enter>",
+				Expected:      wantTaskFocus,
+			},
+		}
+
+		h := newSafeHandler(m)
+		handlertest.RunHandlerSequence(t, h, 80, 24, cases)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("workspace reload skips empty floating windows", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+
+		cfg := defaultConfigWithWrap(false)
+		cfg.cfg["workspace"] = map[string]any{"auto_restore": true}
+		cfg.ringBell = func() {}
+		m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir, nopShutdownShaderConfig())
+
+		ex1 := m.exHandler(m.focusHandler())
+		fileURI, err := ex1.workspace.URI("restored-with-floating.txt")
+		require.NoError(t, err)
+		_, err = ex1.editFileURI(fileURI, ex1.invokeWindow(), false)
+		require.NoError(t, err)
+		_, err = ex1.comp.Floating(
+			browser.NopFloatingHandler(handler.StaticFloating(handler.Nop(), 10, 4)),
+			browserapi.FloatingConfig{Alignment: component.AlignmentCentered},
+		)
+		require.NoError(t, err)
+		require.Equal(t, 1, ex1.comp.Browser().FloatingWindows())
+
+		require.NoError(t, m.commandReloadWorkspace())
+		m.Resize(80, 24)
+		ex2 := m.exHandler(m.focusHandler())
+		require.Equal(t, 0, ex2.comp.Browser().FloatingWindows())
+		tabs := ex2.comp.Tabs()
+		require.Len(t, tabs, 1)
+		require.Equal(t, "restored-with-floating.txt", tabs[0].URI().Name())
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("manager close and reopen restores terminal tab", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+		manager := workspace.NewManager(config.NopConfig())
+		require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+			workspace.NewMemoryScheme))
+		const terminalWorkspaceScheme = "terminaltest"
+		require.NoError(t, manager.RegisterScheme(terminalWorkspaceScheme,
+			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
+				return newTerminalSessionTestScheme(ctx, cfg, uri)
+			}))
+		uri, err := workspaceapi.ParseURI(terminalWorkspaceScheme + ":///workspace")
+		require.NoError(t, err)
+		runner := FuncExtensionsRunner(testRunnerFn)
+		cfg := defaultConfigWithWrap(false)
+		cfg.cfg["workspace"] = map[string]any{"auto_restore": true}
+		cfg.ringBell = func() {}
+
+		m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+		ex1 := m1.exHandler(m1.focusHandler())
+		require.NoError(t, ex1.terminalnewtab(context.Background()))
+		require.Len(t, ex1.comp.Tabs(), 1)
+		require.NoError(t, m1.Close())
+
+		m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+		defer m2.Close()
+		ex2 := m2.exHandler(m2.focusHandler())
+		tabs := ex2.comp.Tabs()
+		require.Len(t, tabs, 1)
+		_, ok := tabs[0].Handler().(vtereservoir.VTE)
+		require.True(t, ok)
+	})
+}
+
+type terminalSessionTestScheme struct {
+	schemeapi.Scheme
+	uri workspaceapi.URI
+}
+
+func newTerminalSessionTestScheme(
+	ctx context.Context,
+	cfg config.Config,
+	uri workspaceapi.URI,
+) (schemeapi.Scheme, error) {
+	memURI, err := workspaceapi.ParseURI("memory://" + uri.Path())
+	if err != nil {
+		return nil, err
+	}
+	base, err := workspace.NewMemoryScheme(ctx, cfg, memURI)
+	if err != nil {
+		return nil, err
+	}
+	return &terminalSessionTestScheme{Scheme: base, uri: uri}, nil
+}
+
+func (s *terminalSessionTestScheme) URI(path string) (workspaceapi.URI, error) {
+	return s.Scheme.URI(path)
+}
+
+func (s *terminalSessionTestScheme) Root() string {
+	return s.Scheme.Root()
+}
+
+func (s *terminalSessionTestScheme) Chroot(path string) (schemeapi.Scheme, error) {
+	base, err := s.Scheme.Chroot(path)
+	if err != nil {
+		return nil, err
+	}
+	uri, err := s.URI(path)
+	if err != nil {
+		return nil, err
+	}
+	return &terminalSessionTestScheme{Scheme: base, uri: uri}, nil
+}
+
+func (s *terminalSessionTestScheme) NewPty(context.Context) (workspaceapi.Pty, error) {
+	return workspaceapi.Pty{
+		Master: workspacetest.NewFile(),
+		Slave:  workspacetest.NewFile(),
+	}, nil
+}
+
+func (s *terminalSessionTestScheme) SetPtySize(workspaceapi.Pty, int, int) error {
+	return nil
+}
+
+func (s *terminalSessionTestScheme) StartCommand(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return 0, nil
+}
+
+func (s *terminalSessionTestScheme) Signal(workspaceapi.Pid, syscall.Signal) error {
+	return nil
 }
 
 func TestInitializeNoCwd(t *testing.T) {

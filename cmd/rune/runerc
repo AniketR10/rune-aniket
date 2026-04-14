@@ -934,8 +934,8 @@ workspace:
     # insecure, and timeout are ignored.
     # command: ssh -q %h
 
-  # Whether to automatically restore the previous session's files.
-  # If set to false, the user is asked via a prompt.
+  # Whether to automatically restore the previous session's files, terminal sessions
+  # and window layout. If set to false, the user is asked via a prompt.
   auto_restore: true
 
   # Workspace wallpaper

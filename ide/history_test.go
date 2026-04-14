@@ -26,6 +26,7 @@ package ide
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,6 +40,16 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
+
+func TestHistoryDocumentIDEscapesWorkspaceURI(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///tmp/workspace:name")
+	require.NoError(t, err)
+
+	id := historyDocumentID(uri)
+	require.True(t, strings.HasPrefix(id, historyDocumentPrefix))
+	require.NotContains(t, strings.TrimPrefix(id, historyDocumentPrefix), "/")
+	require.Contains(t, id, "memory%3A%2F%2F%2Ftmp%2Fworkspace%3Aname")
+}
 
 func TestHistory(t *testing.T) {
 	testuri, err := workspaceapi.ParseURI("memory:///tmp")
@@ -156,7 +167,7 @@ func TestHistory(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///tmp")
 		require.NoError(t, err)
 		svc := storagestub.NewInMemoryService()
-		require.NoError(t, svc.Set(context.Background(), uri.String(),
+		require.NoError(t, svc.Set(context.Background(), historyDocumentID(uri),
 			map[string]any{"Files": "yikes"}))
 
 		ed := texttest.NopEditor()
@@ -272,6 +283,6 @@ func assertFilesInCache(t *testing.T, h *history, wuri workspaceapi.URI, n int) 
 
 func assertFilesInStorage(t *testing.T, h *history, wuri workspaceapi.URI, n int) {
 	var cache cache
-	require.NoError(t, h.svc.Get(context.Background(), wuri.String(), &cache))
+	require.NoError(t, h.svc.Get(context.Background(), historyDocumentID(wuri), &cache))
 	assert.Len(t, cache.Files, n)
 }

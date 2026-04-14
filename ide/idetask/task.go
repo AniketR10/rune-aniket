@@ -116,11 +116,15 @@ type Task struct {
 
 // TaskInfo is an immutable snapshot of the status of a task.
 type TaskInfo struct {
-	Name        string
-	Filter      string
-	CmdAndArgs  []string
-	Running     bool
-	LastSuccess bool
+	Name                     string
+	Filter                   string
+	CmdAndArgs               []string
+	MinimizeAlignment        component.Alignment
+	WindowID                 uint64
+	WindowMinimized          bool
+	WindowMinimizedAlignment component.Alignment
+	Running                  bool
+	LastSuccess              bool
 	// Runs represents the number of times this task has been run.
 	Runs         int
 	LastDuration time.Duration
@@ -130,15 +134,20 @@ type TaskInfo struct {
 func (t *Task) Info() TaskInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	minimizedAlignment, minimized := t.win.IsMinimized()
 
 	return TaskInfo{
-		Name:         t.Name,
-		Filter:       t.Filter,
-		CmdAndArgs:   t.cmdAndArgs,
-		Running:      t.running,
-		Runs:         t.runs,
-		LastSuccess:  t.lastExit == nil,
-		LastDuration: t.lastDuration,
+		Name:                     t.Name,
+		Filter:                   t.Filter,
+		CmdAndArgs:               append([]string(nil), t.cmdAndArgs...),
+		MinimizeAlignment:        t.MinimizeAlignment,
+		WindowID:                 t.win.WindowID(),
+		WindowMinimized:          minimized,
+		WindowMinimizedAlignment: minimizedAlignment,
+		Running:                  t.running,
+		Runs:                     t.runs,
+		LastSuccess:              t.lastExit == nil,
+		LastDuration:             t.lastDuration,
 	}
 }
 

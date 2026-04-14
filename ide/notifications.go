@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -83,11 +84,21 @@ type workspaceManagerIfc interface {
 
 func (r *notisRouter) focusNotifications() browserapi.Notifications {
 	focus := r.parent.focusHandler()
+	if focus == nil {
+		return nopNotifications{}
+	}
 	if h, ok := focus.(*workspaceHandler); ok {
+		if h == nil || h.ex == nil || h.ex.notifications == nil {
+			return nopNotifications{}
+		}
 		return h.ex.notifications
 	}
 	// empty workspace
-	return focus.(*ex).notifications
+	ex, ok := focus.(*ex)
+	if !ok || ex == nil || ex.notifications == nil {
+		return nopNotifications{}
+	}
+	return ex.notifications
 }
 
 func (r *notisRouter) Notify(
@@ -109,6 +120,26 @@ func (r *notisRouter) UpdateNotificationProgress(
 		UpdateNotificationProgress(id, message, progress, total)
 }
 
+type nopNotifications struct{}
+
+func (nopNotifications) Notify(
+	browserapi.NotificationLevel, string, ...any,
+) (string, error) {
+	return "", nil
+}
+
+func (nopNotifications) NotifyOnce(
+	browserapi.NotificationLevel, string, ...any,
+) (string, error) {
+	return "", nil
+}
+
+func (nopNotifications) UpdateNotificationProgress(
+	string, string, int64, int64,
+) error {
+	return nil
+}
+
 type notifier interface {
 	Notify(level notifications.Level, msg string) string
 	ID(level notifications.Level, msg string) string
@@ -126,7 +157,17 @@ type notis struct {
 
 // stand-in type for NotifyOnce
 type storedNotification struct {
-	ID string
+	Kind string
+	ID   string
+}
+
+const (
+	notificationDocumentKind   = "notification"
+	notificationDocumentPrefix = "notifications:"
+)
+
+func notificationDocumentID(id string) string {
+	return notificationDocumentPrefix + url.QueryEscape(id)
 }
 
 // Notify formats the given msg and args and displays it on next Draw.
@@ -148,8 +189,9 @@ func (c *notis) NotifyOnce(
 	ctx := context.Background()
 	id := c.root.ID(notifications.Level(level), fmt.Sprintf(msg, args...))
 	var value storedNotification
+	value.Kind = notificationDocumentKind
 	value.ID = id
-	err := c.storage.Create(ctx, id, value)
+	err := c.storage.Create(ctx, notificationDocumentID(id), value)
 	if err == storageapi.ErrAlreadyExists {
 		return "", nil
 	}

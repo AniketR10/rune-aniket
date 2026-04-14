@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"net/url"
 	"sort"
 	"time"
 
@@ -47,15 +48,26 @@ var (
 	}
 )
 
+const (
+	historyDocumentKind   = "history"
+	historyDocumentPrefix = "history:"
+)
+
 type file struct {
 	Dirty     bool
 	OpenAt    time.Time
 	Cursor    term.Coordinates
 	URIString string
+	WindowID  uint64
 }
 
 type cache struct {
+	Kind  string
 	Files map[string]file
+}
+
+func historyDocumentID(uri workspaceapi.URI) string {
+	return historyDocumentPrefix + url.QueryEscape(uri.String())
 }
 
 type history struct {
@@ -87,7 +99,7 @@ func (h *history) loadWorkspaceData(uri workspaceapi.URI, restore bool) {
 	uriStr := uri.String()
 
 	var workspace cache
-	err := h.svc.Get(ctx, uriStr, &workspace)
+	err := h.svc.Get(ctx, historyDocumentID(uri), &workspace)
 	if err != nil && err != storageapi.ErrNotFound {
 		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
 			Warnf("could not persist updated cache to durable storage: %v", err)
@@ -129,6 +141,25 @@ func (h *history) recordAddWorkspace(
 	return ret
 }
 
+func (h *history) recordWorkspaceFileWindows(
+	workspaceURI workspaceapi.URI,
+	fileWindows map[string]uint64,
+) {
+	workspaceCache, ok := h.cache[workspaceURI.String()]
+	if !ok {
+		return
+	}
+	for uri, windowID := range fileWindows {
+		f, ok := workspaceCache.Files[uri]
+		if !ok {
+			continue
+		}
+		f.WindowID = windowID
+		workspaceCache.Files[uri] = f
+	}
+	h.cache[workspaceURI.String()] = workspaceCache
+}
+
 func (h *history) recordCloseWorkspace(uri workspaceapi.URI) {
 	for uri, cache := range h.cache {
 		persistUpdateCache(h.svc, uri, cache)
@@ -155,10 +186,10 @@ func (h *history) resetWorkspaceCache(uri workspaceapi.URI) {
 	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
 	defer cancel()
 
-	fresh := cache{Files: make(map[string]file)}
+	fresh := cache{Kind: historyDocumentKind, Files: make(map[string]file)}
 	h.cache[uri.String()] = fresh
 
-	err := h.svc.Set(ctx, uri.String(), fresh)
+	err := h.svc.Set(ctx, historyDocumentID(uri), fresh)
 	if err != nil {
 		h.log(log.WarnLevel, "could not persist new cache to durable storage: %v", err)
 		return
@@ -189,7 +220,7 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 	switch ev.Type {
 	case textapi.EventTypeOpen:
 		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, prev.Cursor, false, time.Now())
+			evUriStr, prev.Cursor, false, time.Now(), prev.WindowID)
 		persistUpdateCache(h.svc, h.uri, workspaceCache)
 	case textapi.EventTypeClose:
 		delete(workspaceCache.Files, evUriStr)
@@ -201,28 +232,35 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 		// that were never open.
 		if ok {
 			workspaceCache.Files[evUriStr] = makeFile(
-				evUriStr, prev.Cursor, false, prev.OpenAt)
+				evUriStr, prev.Cursor, false, prev.OpenAt, prev.WindowID)
 			persistUpdateCache(h.svc, h.uri, workspaceCache)
 		}
 	case textapi.EventTypeCursor:
 		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, ev.From, prev.Dirty, prev.OpenAt)
+			evUriStr, ev.From, prev.Dirty, prev.OpenAt, prev.WindowID)
 		// do not store on cursor, as it could significantly impact performance
 	case textapi.EventTypeEdit:
 		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, prev.Cursor, true, prev.OpenAt)
+			evUriStr, prev.Cursor, true, prev.OpenAt, prev.WindowID)
 		// do not store on edit, as it could significantly impact performance
 	}
 
 	return false
 }
 
-func makeFile(uri string, cursor term.Coordinates, dirty bool, updated time.Time) file {
+func makeFile(
+	uri string,
+	cursor term.Coordinates,
+	dirty bool,
+	updated time.Time,
+	windowID uint64,
+) file {
 	return file{
 		Dirty:     dirty,
 		URIString: uri,
 		Cursor:    cursor,
 		OpenAt:    updated,
+		WindowID:  windowID,
 	}
 }
 
@@ -231,7 +269,14 @@ func persistUpdateCache(svc storageapi.Service, uri string, cache cache) {
 	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
 	defer cancel()
 
-	err := svc.Set(ctx, uri, cache)
+	workspaceURI, err := workspaceapi.ParseURI(uri)
+	if err != nil {
+		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
+			Warnf("could not persist updated cache: parse workspace uri %q: %v", uri, err)
+		return
+	}
+	cache.Kind = historyDocumentKind
+	err = svc.Set(ctx, historyDocumentID(workspaceURI), cache)
 	if err != nil {
 		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
 			Warnf("could not persist updated cache to durable storage: %v", err)

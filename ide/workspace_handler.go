@@ -58,6 +58,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
@@ -106,7 +107,7 @@ type workspaceManagerHandler struct {
 	confirmedForceExit bool
 	notifications      *notisManager
 	storage            storageapi.Service
-	partitionedStorage []storageapi.Service
+	ideStorage         storageapi.Service
 	workspace          workspace.WorkspaceManager
 	clip               clipboard.Register
 	macro              *idemacro.Recorder
@@ -137,21 +138,21 @@ type workspaceManagerHandler struct {
 	frame        bool
 	reloadConfig func() (ideConfig, error)
 
-	union            handler.FrameUnion
-	bar              handler.Tabs
-	focusProxy       handler.Proxy
-	width, height    int
-	workspaces       [workspaceSlots]*workspaceHandler
-	workspaceCount   int
-	focus            int
-	homeURI          workspaceapi.URI
-	homeWorkspace    workspace.Workspace
-	empty            *ex
-	homeRunner       extension.Runner
-	openPrevFiles    []file
-	openPrevFilesEx  *ex
-	openPrevFilesWin browser.Window
-	shaderRunner     *shaderRunner
+	union           handler.FrameUnion
+	bar             handler.Tabs
+	focusProxy      handler.Proxy
+	width, height   int
+	workspaces      [workspaceSlots]*workspaceHandler
+	workspaceCount  int
+	focus           int
+	homeURI         workspaceapi.URI
+	homeWorkspace   workspace.Workspace
+	empty           *ex
+	homeRunner      extension.Runner
+	openPrevFiles   []file
+	openPrevFilesEx *ex
+	openPrevWindows map[uint64]browser.Window
+	shaderRunner    *shaderRunner
 }
 
 type openFileTarget struct {
@@ -273,8 +274,7 @@ func (h *workspaceManagerHandler) init(
 	ctx := context.Background()
 
 	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
-	h.partitionedStorage = nil
-	notiStorage := h.newStoragePartition("noti")
+	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
 	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
 		payload, _ := term.PayloadFromContext(ctx)
 		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
@@ -284,7 +284,7 @@ func (h *workspaceManagerHandler) init(
 	})
 	h.frameCharSet = cfg.windowFrameCharset()
 	notiConfig.Interrupter = interrupter
-	h.notifications = newWorkspaceNotifications(notiStorage, notiConfig, h)
+	h.notifications = newWorkspaceNotifications(h.ideStorage, notiConfig, h)
 	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
@@ -332,7 +332,7 @@ func (h *workspaceManagerHandler) init(
 
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	h.empty, err = newEx(ed, homeWorkspace, h.storage, h.notifications, h.homeURI,
+	h.empty, err = newEx(ed, homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.publishEvent, 0 /* vte capacity */, h.clip, h.macro,
 		h.dispatchOnPreview, tm, globalOpts...)
@@ -379,8 +379,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 	h.workspaceBarKind = cfg.workspaceBarKind()
-	historyStorge := h.newStoragePartition("history")
-	h.history = newHistory(historyStorge)
+	h.history = newHistory(h.ideStorage)
 
 	// best effort
 	user, err := user.Current()
@@ -596,14 +595,14 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 		h.union.Resize(h.width, h.height)
 	}
 	if h.openPrevFiles != nil && h.width != 0 && h.height != 0 {
-		err := h.openPrevSessionFiles(h.openPrevFilesEx, h.openPrevFiles, h.openPrevFilesWin)
+		err := h.openPrevSessionFiles(h.openPrevFilesEx, h.openPrevFiles, h.openPrevWindows)
 		if err != nil {
 			// do not notify during a call to Resize
 			log.Errorf("restore prev session: %v", err)
 		}
 		h.openPrevFiles = nil
 		h.openPrevFilesEx = nil
-		h.openPrevFilesWin = nil
+		h.openPrevWindows = nil
 	}
 
 }
@@ -844,7 +843,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	multicwd := workspace.Multi(ctx, visibleManager, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	ex, err := newEx(ed, multicwd, h.storage, h.notifications, uri,
+	ex, err := newEx(ed, multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
 		h.clip, h.macro, h.dispatchOnPreview, tm, textOpts...)
 	if err != nil {
@@ -853,7 +852,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 	apibrowser := newBrowserAdapter(ex.Browser())
 	cursorHistoryCloser, err := idecursor.WithHistory(
-		ex.Editor(), h.storage, apibrowser, apibrowser, ex.workspace,
+		ex.Editor(), h.ideStorage, apibrowser, apibrowser, ex.workspace,
 		syntax.NewParser(ex.workspace, h.pkgmanager, uri), visibleManager, uri,
 		h.scheduleNextTick,
 	)
@@ -943,25 +942,41 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.logNonFatalErrs(wh.Browser(), configErr, cfg.errors)
 
 	prevSessionFiles := h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
-	if !shouldRestore || len(prevSessionFiles) == 0 {
+	hasOpenTerminalSessions := false
+	hasOpenTaskSessions := false
+	var workspaceLayout tcomponent.TileLayout
+	var hasWorkspaceLayout bool
+	if shouldRestore {
+		hasOpenTerminalSessions, err = ex.hasOpenTerminalSessions(context.Background())
+		if err != nil {
+			return fmt.Errorf("load open terminal sessions: %w", err)
+		}
+		hasOpenTaskSessions, err = ex.hasOpenTaskSessions(context.Background())
+		if err != nil {
+			return fmt.Errorf("load open task sessions: %w", err)
+		}
+		workspaceLayout, hasWorkspaceLayout, err = ex.loadWorkspaceLayout(context.Background())
+		if err != nil {
+			return fmt.Errorf("load workspace layout: %w", err)
+		}
+	} else if err := ex.clearOpenTerminalSessions(context.Background()); err != nil {
+		return fmt.Errorf("clear open terminal sessions: %w", err)
+	} else if err := ex.clearOpenTaskSessions(context.Background()); err != nil {
+		return fmt.Errorf("clear open task sessions: %w", err)
+	} else if err := ex.clearWorkspaceLayout(context.Background()); err != nil {
+		return fmt.Errorf("clear workspace layout: %w", err)
+	}
+	if !shouldRestore || (len(prevSessionFiles) == 0 && !hasOpenTerminalSessions && !hasOpenTaskSessions) {
 		return nil
 	}
 
 	if promptRecommended && !cfg.autoRestore() {
-		h.openRestorePrompt(ex, uri, prevSessionFiles)
+		h.openRestorePrompt(ex, uri, prevSessionFiles, hasOpenTerminalSessions,
+			hasOpenTaskSessions, workspaceLayout, hasWorkspaceLayout)
 		return nil
 	}
-
-	if h.width == 0 || h.height == 0 {
-		// if restoreSession is called on an size 0,0 handler
-		// then cursor is not properly set.
-		h.openPrevFiles = prevSessionFiles
-		h.openPrevFilesWin = ex.invokeWindow()
-		h.openPrevFilesEx = ex
-		return nil
-	}
-
-	return h.openPrevSessionFiles(ex, prevSessionFiles, ex.invokeWindow())
+	return h.restorePreviousSession(ex, prevSessionFiles, hasOpenTerminalSessions,
+		hasOpenTaskSessions, workspaceLayout, hasWorkspaceLayout)
 }
 
 func lspConfig(cfg ideConfig) config.Config {
@@ -1065,8 +1080,9 @@ func (h *workspaceManagerHandler) addOrCreateWorkspace(
 }
 
 func (h *workspaceManagerHandler) openPrevSessionFiles(
-	ex *ex, files []file, invokeWindow browser.Window,
+	ex *ex, files []file, windows map[uint64]browser.Window,
 ) (err error) {
+	invokeWindow := ex.invokeWindow()
 	for _, f := range files {
 		uri, uerr := workspaceapi.ParseURI(f.URIString)
 		// do not hard error, otherwise changes to storage representation
@@ -1075,7 +1091,13 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 			log.Warnf("parse uri from previous session file: %v", uerr)
 			continue
 		}
-		t, ferr := ex.editFileURI(uri, invokeWindow, false)
+		win := invokeWindow
+		if f.WindowID != 0 {
+			if mappedWin, ok := windows[f.WindowID]; ok {
+				win = mappedWin
+			}
+		}
+		t, ferr := ex.editFileURI(uri, win, false)
 		if ferr != nil {
 			err = multierror.Append(err, ferr)
 			continue
@@ -1086,6 +1108,58 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 	return err
 }
 
+func (h *workspaceManagerHandler) restorePreviousSession(
+	ex *ex,
+	files []file,
+	restoreTerminals bool,
+	restoreTasks bool,
+	layout tcomponent.TileLayout,
+	hasLayout bool,
+) error {
+	ret := new(multierror.Error)
+	layout.Floating = nil
+	windows := h.restoreWorkspaceWindows(ex, files, restoreTerminals,
+		layout, hasLayout)
+	if restoreTerminals {
+		ret = multierror.Append(ret,
+			ex.restoreOpenTerminalSessions(context.Background(), windows))
+	}
+	if restoreTasks {
+		ret = multierror.Append(ret,
+			ex.restoreOpenTaskSessions(context.Background()))
+	}
+	if len(files) == 0 {
+		return ret.ErrorOrNil()
+	}
+	if h.width == 0 || h.height == 0 {
+		// if restoreSession is called on an size 0,0 handler
+		// then cursor is not properly set.
+		h.openPrevFiles = files
+		h.openPrevWindows = windows
+		h.openPrevFilesEx = ex
+		return ret.ErrorOrNil()
+	}
+	ret = multierror.Append(ret, h.openPrevSessionFiles(ex, files, windows))
+	return ret.ErrorOrNil()
+}
+
+func (h *workspaceManagerHandler) restoreWorkspaceWindows(
+	ex *ex,
+	files []file,
+	restoreTerminals bool,
+	layout tcomponent.TileLayout,
+	hasLayout bool,
+) map[uint64]browser.Window {
+	if !hasLayout {
+		return nil
+	}
+	if len(files) == 0 && !restoreTerminals {
+		return nil
+	}
+	return ex.comp.Browser().RestoreTileLayout(layout, func(windowID uint64) browserapi.Handler {
+		return nil
+	})
+}
 func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
 	for i := h.focus; i >= 0 && i < len(h.workspaces); i++ {
 		if h.workspaces[i] == nil {
@@ -1189,6 +1263,7 @@ func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspac
 		}
 	}
 
+	h.history.recordWorkspaceFileWindows(uri, hm.ex.fileWindowIDs())
 	h.history.recordCloseWorkspace(uri)
 	err := hm.Close()
 	if err != nil {
@@ -1282,6 +1357,8 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		if hm == nil {
 			continue
 		}
+		h.history.recordWorkspaceFileWindows(hm.uri, hm.ex.fileWindowIDs())
+		h.history.recordCloseWorkspace(hm.uri)
 		if err := hm.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
@@ -1299,15 +1376,16 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
-	for i := len(h.partitionedStorage) - 1; i >= 0; i-- {
-		if err := h.partitionedStorage[i].Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
+	if err := h.ideStorage.Close(); err != nil {
+		ret = multierror.Append(ret, err)
 	}
 	if err := h.storage.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	return
+	if merr, ok := ret.(*multierror.Error); ok {
+		return merr.ErrorOrNil()
+	}
+	return ret
 }
 
 type workspaceHandler struct {
@@ -1344,13 +1422,7 @@ func (hm *workspaceHandler) Close() (ret error) {
 	// vacated before everything else is still potentially
 	// sending events (i.e. mem scheme)
 	hm.cancelCtx()
-	return
-}
-
-func (h *workspaceManagerHandler) newStoragePartition(name string) storageapi.Service {
-	partitioned := storageapi.WithPartition(h.storage, name)
-	h.partitionedStorage = append(h.partitionedStorage, partitioned)
-	return partitioned
+	return ret
 }
 
 func (h *workspaceManagerHandler) initTabs(
@@ -1728,7 +1800,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	wm := currentWorkspaceWindowManager{root: h}
 	parser := &lazyParser{root: h}
 	h.pkgmanager.init(notifications, releaseManager, wm,
-		h.storage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
+		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }

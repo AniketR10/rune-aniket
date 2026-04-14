@@ -163,6 +163,16 @@ func (w *floatingNode) Close() {
 	wm.closeFloatingWindow(w)
 }
 
+func (w *floatingNode) layout() FloatingLayout {
+	return FloatingLayout{
+		WindowID:           w.ID(),
+		Alignment:          w.alignment,
+		Offset:             w.desiredOffset,
+		MinimizedAlignment: w.minimized,
+		MinimizedPadding:   w.minimizedPadding,
+	}
+}
+
 func (w *floatingNode) Position() term.Coordinates {
 	if w.minimized == 0 {
 		return w.realOffset

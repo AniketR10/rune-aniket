@@ -64,7 +64,7 @@ import (
 )
 
 const (
-	commandHistoryDocumentID = "ex-command-history"
+	commandHistoryDocumentID = "command-history:ex-command-history"
 	reissuePadding           = 10 * time.Millisecond
 )
 
@@ -87,14 +87,15 @@ type macroRecorder interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config               text.Config
-	comp                 text.Component
-	clip                 clipboard.Register
-	executor             schemeapi.Executor
-	ed                   text.Editor
-	storage              storageapi.Service
-	terminalSessionStore storageapi.Service
-	reservoir            *vtereservoir.Facility
+	config       text.Config
+	comp         text.Component
+	clip         clipboard.Register
+	executor     schemeapi.Executor
+	ed           text.Editor
+	storage      storageapi.Service
+	workspaceURI workspaceapi.URI
+	closed       bool
+	reservoir    *vtereservoir.Facility
 	// do not use directly, use notifications below instead
 	// which is able to dispatch cross-workspace cues.
 	container            *notifications.Container
@@ -310,10 +311,7 @@ func (e *ex) doInit(
 	e.notifications = n.new(uri, e.container)
 	e.publishEvent = publishEvent
 	e.storage = storage
-	e.terminalSessionStore, err = storage.Partition(terminalSessionPartition)
-	if err != nil {
-		return fmt.Errorf("terminal session storage partition: %w", err)
-	}
+	e.workspaceURI = uri
 	e.emulatorConfig = emulatorConfig
 
 	e.config = text.DefaultConfig()
@@ -1392,6 +1390,16 @@ func (e *ex) stopTask(_ context.Context, args ...string) error {
 	return e.tasks.StopTask(args[0])
 }
 
+func (e *ex) focusTask(_ context.Context, args ...string) error {
+	if len(args) != 1 {
+		return errors.New("expected one argument with the name of the task to focus")
+	}
+	if !e.tasks.FocusTask(args[0]) {
+		return fmt.Errorf("task %q does not exist", args[0])
+	}
+	return nil
+}
+
 func (e *ex) completeTasks(
 	ctx context.Context, cmd textapi.Command,
 ) (iterator.Iterator[string], string, error) {
@@ -1877,8 +1885,7 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
-	promptStorage := storageapi.WithPartition(e.storage, "cprompt")
-	cmd := command.NewPrompt(promptStorage, e, e, e, []command.Manual{}, commandCfg)
+	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(
 		browser.FuncHandler(
@@ -1893,9 +1900,6 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 				),
 			), func() error {
 				err := cmd.Close()
-				if closeErr := promptStorage.Close(); closeErr != nil {
-					err = multierror.Append(err, closeErr)
-				}
 				if cmd == e.cmd {
 					e.cmd = nil
 				}
@@ -2024,7 +2028,20 @@ func (e *ex) Browser() browser.Browser {
 
 // Close closes the resources associated with this browser.
 func (e *ex) Close() (ret error) {
+	if e.closed {
+		return nil
+	}
+	e.closed = true
 	e.sequencer.Reset()
+	if err := e.saveWorkspaceLayout(context.Background()); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if err := e.saveOpenTaskSessions(context.Background()); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	if err := e.saveOpenTerminalSessions(context.Background()); err != nil {
+		ret = multierror.Append(ret, err)
+	}
 	if err := e.comp.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
@@ -2032,12 +2049,6 @@ func (e *ex) Close() (ret error) {
 		if err := e.reservoir.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
-	}
-	if e.terminalSessionStore != nil {
-		if err := e.terminalSessionStore.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-		e.terminalSessionStore = nil
 	}
 	if e.cancelPartialReissue != nil {
 		e.cancelPartialReissue()
@@ -2067,7 +2078,7 @@ func (e *ex) Close() (ret error) {
 	if err := e.container.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	return
+	return ret
 }
 
 func (e *ex) cleanPartialReissueState() {
@@ -2197,6 +2208,7 @@ func (v vteAdapter) ClearPrimaryBuffer() bool {
 }
 
 var _ component.Scrollable = companionTerminalHandler{}
+var _ vtereservoir.VTE = companionTerminalHandler{}
 
 // Aids in ensure that Close is not called when window is closed:
 // session should remain open as long as this workspace is not closed.
@@ -2225,6 +2237,42 @@ func (c companionTerminalHandler) SeekOffset() int {
 // MaxSeekOffset satisfies component.Scrollable.
 func (c companionTerminalHandler) MaxSeekOffset() int {
 	return c.vth.MaxSeekOffset()
+}
+
+func (c companionTerminalHandler) OnFocusChange(inFocus bool) {
+	c.vth.OnFocusChange(inFocus)
+}
+
+func (c companionTerminalHandler) SetDefaultAttributes(attr term.Attributes) {
+	c.vth.SetDefaultAttributes(attr)
+}
+
+func (c companionTerminalHandler) Snapshot() (vte.Snapshot, error) {
+	return c.vth.Snapshot()
+}
+
+func (c companionTerminalHandler) RestoreFromSnapshot(snapshot vte.Snapshot) error {
+	return c.vth.RestoreFromSnapshot(snapshot)
+}
+
+func (c companionTerminalHandler) IsComplete() bool {
+	return c.vth.IsComplete()
+}
+
+func (c companionTerminalHandler) URI() workspaceapi.URI {
+	return c.vth.URI()
+}
+
+func (c companionTerminalHandler) Title() string {
+	return c.vth.Title()
+}
+
+func (c companionTerminalHandler) UsedAlternateBuffer() bool {
+	return c.vth.UsedAlternateBuffer()
+}
+
+func (c companionTerminalHandler) ClearPrimaryBuffer() bool {
+	return c.vth.ClearPrimaryBuffer()
 }
 
 func (c companionTerminalHandler) Close() error {

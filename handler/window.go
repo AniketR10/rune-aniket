@@ -46,6 +46,9 @@ func (w Window) Content() tui.Handler {
 		panic(errCalledZeroValuedWin)
 	}
 	c := w.Window.Content()
+	if f, ok := c.(interface{ Content() tui.Handler }); ok {
+		return f.Content()
+	}
 	return c.(tui.Handler)
 }
 
@@ -65,7 +68,11 @@ func (w Window) setContentResize(h tui.Handler, resize bool) (
 	prev tui.Handler,
 ) {
 	comp := w.Window.Content()
-	prev = comp.(tui.Handler)
+	if f, ok := comp.(interface{ Content() tui.Handler }); ok {
+		prev = f.Content()
+	} else {
+		prev = comp.(tui.Handler)
+	}
 	w.Window.SetContentResize(h, resize)
 	// SetContent creates a new frame if necessary
 	// make sure that the frame created is set with

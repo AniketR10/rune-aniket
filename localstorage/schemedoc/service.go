@@ -345,11 +345,10 @@ func (d *docIter) HasNext() (ok bool) {
 		err = d.svc.read(f, &proto)
 		if err != nil {
 			if cerr := f.Close(); cerr != nil {
-				d.doneErr = multierr.Append(err, cerr)
+				d.doneErr = cerr
 				return true
 			}
-			d.doneErr = err
-			return true
+			continue
 		}
 
 		if storageapi.MatchesAllFilters(d.svc.marshaler, proto, d.filters) {

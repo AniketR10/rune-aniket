@@ -41,9 +41,9 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
-	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -1498,10 +1498,8 @@ func createStaleEntry(
 	t *testing.T, s document.Service, pkgID string, version release.Version,
 ) {
 	t.Helper()
-	key := fmt.Sprintf("%s:%s", pkgID, version)
-	err := s.Create(context.Background(), key, pkgVersionValue{
-		Package: pkgID, Version: version,
-	})
+	key := idepkgTestStorageKey(pkgID, version)
+	err := s.Create(context.Background(), key, newPkgVersionValue(pkgID, version))
 	require.NoError(t, err)
 }
 
@@ -1509,10 +1507,10 @@ func createCompleteEntry(
 	t *testing.T, s document.Service, pkgID string, version release.Version,
 ) {
 	t.Helper()
-	key := fmt.Sprintf("%s:%s", pkgID, version)
-	err := s.Create(context.Background(), key, pkgVersionValue{
-		Package: pkgID, Version: version, Complete: true,
-	})
+	key := idepkgTestStorageKey(pkgID, version)
+	val := newPkgVersionValue(pkgID, version)
+	val.Complete = true
+	err := s.Create(context.Background(), key, val)
 	require.NoError(t, err)
 }
 
@@ -1520,7 +1518,7 @@ func assertStorageEntryComplete(
 	t *testing.T, s document.Service, pkgID string, version release.Version,
 ) {
 	t.Helper()
-	key := fmt.Sprintf("%s:%s", pkgID, version)
+	key := idepkgTestStorageKey(pkgID, version)
 	var val pkgVersionValue
 	err := s.Get(context.Background(), key, &val)
 	require.NoError(t, err, "storage entry should exist")
@@ -1531,11 +1529,15 @@ func assertStorageEntryNotExists(
 	t *testing.T, s document.Service, pkgID string, version release.Version,
 ) {
 	t.Helper()
-	key := fmt.Sprintf("%s:%s", pkgID, version)
+	key := idepkgTestStorageKey(pkgID, version)
 	var val pkgVersionValue
 	err := s.Get(context.Background(), key, &val)
 	assert.True(t, errors.Is(err, document.ErrNotFound),
 		"storage entry should not exist, got: %v", err)
+}
+
+func idepkgTestStorageKey(pkgID string, version release.Version) string {
+	return fmt.Sprintf("%s:%s", pkgID, version)
 }
 
 // newTestManagerWithStorage is like newTestManager but returns the storage service too.

@@ -45,6 +45,8 @@ type VTE interface {
 	component.Scrollable
 	OnFocusChange(bool)
 	SetDefaultAttributes(attr term.Attributes)
+	Snapshot() (vte.Snapshot, error)
+	RestoreFromSnapshot(vte.Snapshot) error
 	IsComplete() bool
 	URI() workspaceapi.URI
 	Title() string

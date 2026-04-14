@@ -506,6 +506,138 @@ func TestWindowManagerSplit(t *testing.T) {
 	comptest.TestComponent(t, wm, w, tests)
 }
 
+func TestWindowManagerRestoreTileLayout(t *testing.T) {
+	tests := []struct {
+		name        string
+		frame       bool
+		layout      TileLayout
+		content     map[uint64]rune
+		wantMapped  []uint64
+		wantFloats  int
+		assertExtra func(*testing.T, *WindowManager, map[uint64]Window)
+	}{
+		{
+			name:       "single leaf no frame",
+			layout:     TileLayout{WindowID: 1},
+			content:    map[uint64]rune{1: 'A'},
+			wantMapped: []uint64{1},
+		},
+		{
+			name:       "single leaf with frame",
+			frame:      true,
+			layout:     TileLayout{WindowID: 1},
+			content:    map[uint64]rune{1: 'B'},
+			wantMapped: []uint64{1},
+		},
+		{
+			name: "deep nested layout",
+			layout: TileLayout{
+				Split: SplitOrientationVertical,
+				Children: []TileLayout{
+					{WindowID: 1},
+					{
+						Split: SplitOrientationHorizontal,
+						Children: []TileLayout{
+							{WindowID: 2},
+							{
+								Split:    SplitOrientationVertical,
+								Children: []TileLayout{{WindowID: 3}, {WindowID: 4}},
+							},
+						},
+					},
+				},
+			},
+			content:    map[uint64]rune{1: 'A', 2: 'B', 3: 'C', 4: 'D'},
+			wantMapped: []uint64{1, 2, 3, 4},
+		},
+		{
+			name: "nil content fallback is drawable",
+			layout: TileLayout{
+				Split:    SplitOrientationHorizontal,
+				Children: []TileLayout{{WindowID: 1}, {WindowID: 2}},
+			},
+			content:    map[uint64]rune{2: 'Z'},
+			wantMapped: []uint64{1, 2},
+			assertExtra: func(t *testing.T, wm *WindowManager, restored map[uint64]Window) {
+				assert.NotPanics(t, func() {
+					writer := term.NewStringWriter(20, 8)
+					wm.Draw(writer)
+				})
+				assertEqualTile(t, restored[2], 'Z')
+			},
+		},
+		{
+			name: "floating windows cleared",
+			layout: TileLayout{
+				Split:    SplitOrientationHorizontal,
+				Children: []TileLayout{{WindowID: 1}, {WindowID: 2}},
+			},
+			content:    map[uint64]rune{1: 'L', 2: 'R'},
+			wantMapped: []uint64{1, 2},
+			wantFloats: 2,
+			assertExtra: func(t *testing.T, wm *WindowManager, restored map[uint64]Window) {
+				require.Equal(t, 0, wm.SizeFloating())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testWindowManagerConfig()
+			cfg.Frame = tt.frame
+			wm, _ := NewWindowManager(&component.TestComponent{Ch: 'O'}, cfg)
+			wm.Resize(20, 8)
+			for i := 0; i < tt.wantFloats; i++ {
+				wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'F'}, 4, 4),
+					FloatingConfig{Alignment: component.AlignmentCentered})
+			}
+
+			restored := wm.RestoreTileLayout(tt.layout, func(windowID uint64) tui.Component {
+				ch, ok := tt.content[windowID]
+				if !ok {
+					return nil
+				}
+				return &component.TestComponent{Ch: ch}
+			})
+
+			require.Len(t, restored, len(tt.wantMapped))
+			for _, id := range tt.wantMapped {
+				require.Contains(t, restored, id)
+				require.NotEqual(t, id, restored[id].ID())
+				if ch, ok := tt.content[id]; ok {
+					assertEqualTile(t, restored[id], ch)
+				}
+			}
+			assertWindowManagerLayoutShape(t, tt.layout, wm.TileLayout(), restored)
+			if tt.assertExtra != nil {
+				tt.assertExtra(t, wm, restored)
+			}
+		})
+	}
+}
+
+func assertWindowManagerLayoutShape(
+	t *testing.T,
+	want TileLayout,
+	got TileLayout,
+	restored map[uint64]Window,
+) {
+	t.Helper()
+	require.Equal(t, want.Split, got.Split)
+	require.Len(t, got.Children, len(want.Children))
+	if len(want.Children) == 0 {
+		if want.WindowID == 0 {
+			require.Equal(t, uint64(0), got.WindowID)
+			return
+		}
+		require.Equal(t, restored[want.WindowID].ID(), got.WindowID)
+		return
+	}
+	for i := range want.Children {
+		assertWindowManagerLayoutShape(t, want.Children[i], got.Children[i], restored)
+	}
+}
+
 func TestWindowManagerMinimize(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 

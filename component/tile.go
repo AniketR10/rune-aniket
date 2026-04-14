@@ -57,6 +57,37 @@ type TileNode struct {
 	dirty         bool
 }
 
+// TileLayout is a serializable representation of a TileTree's structure.
+// Nodes with children represent split stems; nodes without children represent
+// leaf windows and carry the corresponding window ID.
+type TileLayout struct {
+	WindowID      uint64
+	FocusWindowID uint64
+	Split         SplitOrientation
+	Children      []TileLayout
+	Floating      []FloatingLayout
+}
+
+// FloatingLayout is a serializable representation of a floating window's
+// restored position and minimized state.
+type FloatingLayout struct {
+	WindowID           uint64
+	Alignment          component.Alignment
+	Offset             term.Coordinates
+	MinimizedAlignment component.Alignment
+	MinimizedPadding   int
+}
+
+// SplitOrientation identifies how a TileLayout stem splits its children.
+type SplitOrientation uint8
+
+const (
+	// SplitOrientationVertical is a vertical split.
+	SplitOrientationVertical SplitOrientation = iota
+	// SplitOrientationHorizontal is a horizontal split.
+	SplitOrientationHorizontal
+)
+
 // Init initializes a TileTree or resets it if already initialied.
 func (t *TileTree) Init(content tui.Component) (n *TileNode) {
 	n = new(TileNode)
@@ -88,6 +119,94 @@ func (t *TileTree) Draw(w term.Writer) {
 // DrawTile draws only node on w.
 func (t *TileTree) DrawTile(node *TileNode, w term.Writer) {
 	t.root.drawTile(node, w)
+}
+
+// Layout returns a tree of window IDs with the same shape and split
+// orientations as the underlying tile tree.
+func (t *TileTree) Layout() TileLayout {
+	if len(t.root.children) == 1 {
+		return t.root.children[0].C.layout()
+	}
+	return t.root.layout()
+}
+
+// RestoreLayout replaces the tree with layout and returns a map from old
+// layout window IDs to the newly allocated tile nodes.
+func (t *TileTree) RestoreLayout(
+	layout TileLayout,
+	content func(windowID uint64) tui.Component,
+) map[uint64]*TileNode {
+	ret := make(map[uint64]*TileNode)
+	t.root = TileNode{tree: t, childSplit: splitDirFromLayout(layout.Split)}
+	if len(layout.Children) == 0 {
+		child := t.restoreLayoutNode(layout, &t.root, content, ret)
+		t.root.childSplit = vertical
+		t.root.children = []*component.Virtual[*TileNode]{{C: child}}
+		return ret
+	}
+	t.root.children = make([]*component.Virtual[*TileNode], 0, len(layout.Children))
+	for _, childLayout := range layout.Children {
+		child := t.restoreLayoutNode(childLayout, &t.root, content, ret)
+		t.root.children = append(t.root.children, &component.Virtual[*TileNode]{C: child})
+	}
+	return ret
+}
+
+func (t *TileTree) restoreLayoutNode(
+	layout TileLayout,
+	parent *TileNode,
+	content func(windowID uint64) tui.Component,
+	leafs map[uint64]*TileNode,
+) *TileNode {
+	node := new(TileNode)
+	node.tree = t
+	node.parent = parent
+	if len(layout.Children) == 0 {
+		node.content = content(layout.WindowID)
+		if node.content == nil {
+			node.content = component.Nop()
+		}
+		node.children = []*component.Virtual[*TileNode]{}
+		if layout.WindowID != 0 {
+			leafs[layout.WindowID] = node
+		}
+		return node
+	}
+	node.childSplit = splitDirFromLayout(layout.Split)
+	node.children = make([]*component.Virtual[*TileNode], 0, len(layout.Children))
+	for _, childLayout := range layout.Children {
+		child := t.restoreLayoutNode(childLayout, node, content, leafs)
+		node.children = append(node.children, &component.Virtual[*TileNode]{C: child})
+	}
+	return node
+}
+
+func splitDirFromLayout(split SplitOrientation) splitDir {
+	switch split {
+	case SplitOrientationHorizontal:
+		return horizontal
+	default:
+		return vertical
+	}
+}
+
+func (t *TileNode) layout() TileLayout {
+	ret := TileLayout{WindowID: t.ID()}
+	switch t.childSplit {
+	case vertical:
+		ret.Split = SplitOrientationVertical
+	case horizontal:
+		ret.Split = SplitOrientationHorizontal
+	}
+	if len(t.children) == 0 {
+		return ret
+	}
+	ret.WindowID = 0
+	ret.Children = make([]TileLayout, 0, len(t.children))
+	for _, child := range t.children {
+		ret.Children = append(ret.Children, child.C.layout())
+	}
+	return ret
 }
 
 func (t *TileNode) initNode(content tui.Component, parent *TileNode) {

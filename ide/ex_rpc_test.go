@@ -71,6 +71,7 @@ type safeHandler struct {
 	mu        sync.Locker
 	Handler   browserapi.Handler
 	Component tui.Component
+	close     func()
 }
 
 func (h *safeHandler) Resize(width, height int) {
@@ -106,6 +107,10 @@ func (h *safeHandler) Selection() (string, bool) {
 }
 
 func (h *safeHandler) Close() error {
+	if h.close != nil {
+		h.close()
+		return nil
+	}
 	return h.Handler.Close()
 }
 
@@ -157,15 +162,19 @@ func newTestRPCBrowser(t *testing.T,
 		require.NoError(t, err)
 
 		bc := browserrpc.NewClient(context.Background(), conn)
-		h := &safeHandler{Component: ex, Handler: ex, mu: &serverMutex}
-		*destructor = func() {
-			serverMutex.Lock()
-			defer serverMutex.Unlock()
-			bc.Close()
-			server.Stop()
-			grpcServer.Stop()
-			ex.Close()
+		var closeOnce sync.Once
+		close := func() {
+			closeOnce.Do(func() {
+				serverMutex.Lock()
+				defer serverMutex.Unlock()
+				bc.Close()
+				server.Stop()
+				grpcServer.Stop()
+				ex.Close()
+			})
 		}
+		h := &safeHandler{Component: ex, Handler: ex, mu: &serverMutex, close: close}
+		*destructor = close
 		return h, browsertest.BrowserFromAPIBrowser(bc), nil
 	}
 }

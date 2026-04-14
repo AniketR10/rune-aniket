@@ -1854,7 +1854,7 @@ func TestCommandHistoryPrompt(t *testing.T) {
 	assert.Nil(t, b.ex.cmd)
 }
 
-func TestCommandPromptClosesCreatedStoragePartition(t *testing.T) {
+func TestCommandPromptUsesSharedStoragePartition(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
 	store := &closeCountingPartitionStore{Service: storagestub.NewInMemoryService()}
 	b.ex.storage = store
@@ -1862,13 +1862,13 @@ func TestCommandPromptClosesCreatedStoragePartition(t *testing.T) {
 	b.ex.openCommandPrompt()
 	require.NotNil(t, b.ex.cmdWin)
 	require.NoError(t, b.ex.cmdWin.Close())
-	assert.Equal(t, int32(1), store.partitionCloseCount.Load())
+	assert.Equal(t, int32(0), store.partitionCloseCount.Load())
 	assert.Nil(t, b.ex.cmd)
 
 	b.ex.openCommandPrompt()
 	require.NotNil(t, b.ex.cmd)
 	require.NoError(t, b.ex.Close())
-	assert.Equal(t, int32(2), store.partitionCloseCount.Load())
+	assert.Equal(t, int32(0), store.partitionCloseCount.Load())
 }
 
 type closeCountingPartitionStore struct {
@@ -2321,7 +2321,8 @@ func TestTerminalWriteOpensSavePrompt(t *testing.T) {
 	require.Nil(t, b.ex.cmd)
 
 	var doc terminalSessionDocument
-	require.NoError(t, b.ex.terminalSessionStore.Get(context.Background(), "terminal-saved", &doc))
+	require.NoError(t, b.ex.storage.Get(context.Background(),
+		terminalSessionDocumentID("terminal-saved"), &doc))
 	require.Equal(t, "terminal-saved", doc.Name)
 	require.Contains(t, term.CellsToString(doc.Snapshot.ActiveCells()), "terminal output")
 }
@@ -2335,7 +2336,8 @@ func TestTerminalWriteUsesNextAvailableName(t *testing.T) {
 	require.NoError(t, b.ex.flush(context.Background()))
 
 	var doc terminalSessionDocument
-	require.NoError(t, b.ex.terminalSessionStore.Get(context.Background(), "terminal-saved-1", &doc))
+	require.NoError(t, b.ex.storage.Get(context.Background(),
+		terminalSessionDocumentID("terminal-saved-1"), &doc))
 	require.Equal(t, "terminal-saved-1", doc.Name)
 }
 
@@ -2360,6 +2362,103 @@ func TestTerminalSaveAndResume(t *testing.T) {
 	require.Equal(t, 2, session.SeekOffset())
 }
 
+func TestOpenTerminalSessionsPersistAndRestore(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+	var terminalID int
+	b.ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
+		terminalID++
+		h := newTestVteWithConfig(args)
+		uri, err := workspaceapi.ParseURI(fmt.Sprintf("terminaltest:///%d", terminalID))
+		if err != nil {
+			return nil, err
+		}
+		h.uri = uri
+		return h, nil
+	}
+
+	require.NoError(t, b.ex.terminalnewtab(context.Background(), "first terminal"))
+	require.NoError(t, b.ex.terminalnewtab(context.Background(), "second terminal"))
+	require.NoError(t, b.ex.saveOpenTerminalSessions(context.Background()))
+
+	var first terminalSessionDocument
+	require.NoError(t, b.ex.storage.Get(context.Background(),
+		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)), &first))
+	require.Equal(t, terminalSessionAutoName(b.ex.workspaceURI, 0), first.Name)
+	require.Contains(t, term.CellsToString(first.Snapshot.ActiveCells()), "first terminal")
+
+	var second terminalSessionDocument
+	require.NoError(t, b.ex.storage.Get(context.Background(),
+		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 1)), &second))
+	require.Equal(t, terminalSessionAutoName(b.ex.workspaceURI, 1), second.Name)
+	require.Contains(t, term.CellsToString(second.Snapshot.ActiveCells()), "second terminal")
+
+	restored := newExForTesting(t, texttest.NopEditor())
+	defer restored.Close()
+	restored.ex.storage = b.ex.storage
+	require.NoError(t, restored.ex.restoreOpenTerminalSessions(context.Background(), nil))
+
+	tabs := restored.ex.comp.Tabs()
+	require.Len(t, tabs, 2)
+
+	var restoredCommands []string
+	for _, tab := range tabs {
+		session, ok := tab.Handler().(*testVte)
+		require.True(t, ok)
+		require.True(t, session.restoredSnapshot)
+		restoredCommands = append(restoredCommands, session.initialCmd)
+	}
+	require.ElementsMatch(t, []string{"first terminal", "second terminal"}, restoredCommands)
+}
+
+func TestOpenTerminalSessionsClearedWhenNoTerminalTabsAreOpen(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+
+	require.NoError(t, b.ex.storage.Set(context.Background(),
+		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)), terminalSessionDocument{
+			Kind: terminalSessionDocumentKind,
+			Name: terminalSessionAutoName(b.ex.workspaceURI, 0),
+		}))
+
+	require.NoError(t, b.ex.saveOpenTerminalSessions(context.Background()))
+
+	var doc terminalSessionDocument
+	err := b.ex.storage.Get(context.Background(),
+		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)), &doc)
+	require.ErrorIs(t, err, storageapi.ErrNotFound)
+}
+
+func TestTerminalSessionCompletionSkipsOpenSessionSnapshots(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+
+	require.NoError(t, b.ex.storage.Set(context.Background(), terminalSessionDocumentID("manual"),
+		terminalSessionDocument{Kind: terminalSessionDocumentKind, Name: "manual"}))
+	require.NoError(t, b.ex.storage.Set(context.Background(),
+		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)),
+		terminalSessionDocument{
+			Kind: terminalSessionDocumentKind,
+			Name: terminalSessionAutoName(b.ex.workspaceURI, 0),
+		}))
+
+	it, _, err := b.ex.completeTerminalSessions(context.Background(), textapi.Command{})
+	require.NoError(t, err)
+	defer it.Close()
+
+	var names []string
+	for {
+		name, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+		names = append(names, name)
+	}
+	require.NoError(t, it.Err())
+
+	require.Equal(t, []string{"manual"}, names)
+}
+
 func TestTerminalSaveCommandRequiresTerminal(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor())
 	defer b.Close()
@@ -2371,17 +2470,26 @@ func TestTerminalSaveCommandRequiresTerminal(t *testing.T) {
 type closeCountingStorage struct {
 	storageapi.Service
 	partitionCalls int
-	partition      *closeCountingPartitionStorage
+	closeCalls     int
+	partitions     map[string]*closeCountingPartitionStorage
 }
 
 func (s *closeCountingStorage) Partition(name string) (storageapi.Service, error) {
 	s.partitionCalls++
+	if s.partitions == nil {
+		s.partitions = make(map[string]*closeCountingPartitionStorage)
+	}
 	svc, err := s.Service.Partition(name)
 	if err != nil {
 		return nil, err
 	}
-	s.partition = &closeCountingPartitionStorage{Service: svc}
-	return s.partition, nil
+	s.partitions[name] = &closeCountingPartitionStorage{Service: svc}
+	return s.partitions[name], nil
+}
+
+func (s *closeCountingStorage) Close() error {
+	s.closeCalls++
+	return s.Service.Close()
 }
 
 type closeCountingPartitionStorage struct {
@@ -2394,7 +2502,7 @@ func (s *closeCountingPartitionStorage) Close() error {
 	return s.Service.Close()
 }
 
-func TestTerminalSessionStorageInitializedAndClosed(t *testing.T) {
+func TestExUsesSharedIDEStorage(t *testing.T) {
 	storage := &closeCountingStorage{Service: storagestub.NewInMemoryService()}
 	workspace := &testLoader{}
 	ex := new(ex)
@@ -2407,11 +2515,13 @@ func TestTerminalSessionStorageInitializedAndClosed(t *testing.T) {
 		notifications, uri, vte.DefaultConfig(), plugin.DefaultBarConfig(),
 		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil))
 
-	require.Equal(t, 1, storage.partitionCalls)
-	require.Same(t, storage.partition, ex.terminalSessionStore)
+	require.Equal(t, 0, storage.partitionCalls)
+	require.Same(t, storage, ex.storage)
 
 	require.NoError(t, ex.Close())
-	require.Equal(t, 1, storage.partition.closeCalls)
+	require.Equal(t, 0, storage.closeCalls)
+	require.NoError(t, ex.Close())
+	require.Equal(t, 0, storage.closeCalls)
 }
 
 func TestFullScreen(t *testing.T) {
@@ -3009,6 +3119,10 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex.Resize(100, 100)
 
 		ex.executePlugin(context.Background())
+		content, err := ex.invokeWindow().Content()
+		require.NoError(t, err)
+		_, ok := content.(vtereservoir.VTE)
+		require.True(t, ok)
 
 		require.Len(t, tvte.onFocusChange, 2)
 		assert.False(t, tvte.onFocusChange[0])
@@ -4390,7 +4504,7 @@ func (v *testVte) ClearPrimaryBuffer() bool {
 	return true
 }
 
-func (v *testVte) TerminalSnapshot() (vte.Snapshot, error) {
+func (v *testVte) Snapshot() (vte.Snapshot, error) {
 	title := v.title
 	if title == "" {
 		title = "terminal"
@@ -4410,7 +4524,7 @@ func (v *testVte) TerminalSnapshot() (vte.Snapshot, error) {
 	}, nil
 }
 
-func (v *testVte) RestoreTerminalSnapshot(snapshot vte.Snapshot) error {
+func (v *testVte) RestoreFromSnapshot(snapshot vte.Snapshot) error {
 	v.restoredSnapshot = true
 	v.initialCmd = term.CellsToString(snapshot.ActiveCells())
 	v.String = component.NewString(v.initialCmd)

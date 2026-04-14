@@ -338,6 +338,14 @@ func (t *testVte) OnFocusChange(inFocus bool) {
 func (t *testVte) SetDefaultAttributes(attr term.Attributes) {
 }
 
+func (t *testVte) Snapshot() (vte.Snapshot, error) {
+	return vte.Snapshot{}, nil
+}
+
+func (t *testVte) RestoreFromSnapshot(vte.Snapshot) error {
+	return nil
+}
+
 func (t *testVte) IsComplete() bool {
 	return false
 }

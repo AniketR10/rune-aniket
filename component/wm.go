@@ -77,6 +77,97 @@ func (wm *WindowManager) TileTree() *TileTree {
 	return &wm.tree
 }
 
+// TileLayout returns the current tiled window tree layout.
+func (wm *WindowManager) TileLayout() TileLayout {
+	layout := wm.tree.Layout()
+	layout.Floating = make([]FloatingLayout, 0, len(wm.float))
+	for _, win := range wm.float {
+		layout.Floating = append(layout.Floating, win.layout())
+	}
+	return layout
+}
+
+// RestoreTileLayout replaces the current tiled layout and returns a map from
+// old layout window IDs to newly allocated windows.
+func (wm *WindowManager) RestoreTileLayout(
+	layout TileLayout,
+	content func(windowID uint64) tui.Component,
+) map[uint64]Window {
+	wm.tree.Iterate(func(node *TileNode) {
+		closeTileLayoutContent(node.content)
+	})
+	for _, win := range wm.float {
+		closeTileLayoutContent(win.Content())
+		win.wm = nil
+	}
+	wm.float = make([]*floatingNode, 0)
+	nodes := wm.tree.RestoreLayout(layout, func(windowID uint64) tui.Component {
+		c := content(windowID)
+		if c == nil {
+			c = component.Nop()
+		}
+		if wm.config.Frame {
+			c = wm.withFrame(c)
+		}
+		return c
+	})
+	ret := make(map[uint64]Window, len(nodes))
+	for id, node := range nodes {
+		ret[id] = wm.nodeToWindow(node)
+	}
+	for _, floatingLayout := range layout.Floating {
+		c := content(floatingLayout.WindowID)
+		if c == nil {
+			c = component.Nop()
+		}
+		floating, ok := c.(component.Floating)
+		if !ok {
+			if h, ok := c.(tui.Handler); ok {
+				floating = staticFloatingHandler{Handler: h, width: wm.width, height: wm.height}
+			} else {
+				floating = component.StaticFloating(c, wm.width, wm.height)
+			}
+		}
+		if wm.config.Frame {
+			floating = wm.withFrame(floating)
+		}
+		win := newFloatingNode(wm, floating, FloatingConfig{
+			Alignment: floatingLayout.Alignment,
+			Offset:    floatingLayout.Offset,
+		}, wm.minimizedWidth, wm.minimizedHeight)
+		wm.float = append(wm.float, win)
+		ret[floatingLayout.WindowID] = wm.nodeToWindow(win)
+		if floatingLayout.MinimizedAlignment != 0 {
+			win.minimized = floatingLayout.MinimizedAlignment
+			win.minimizedPadding = floatingLayout.MinimizedPadding
+		}
+	}
+	wm.Resize(wm.width, wm.height)
+	return ret
+}
+
+type staticFloatingHandler struct {
+	tui.Handler
+	width, height int
+}
+
+func (s staticFloatingHandler) Dimensions() (int, int) {
+	return s.width, s.height
+}
+
+func (s staticFloatingHandler) Content() tui.Handler {
+	return s.Handler
+}
+
+func closeTileLayoutContent(c tui.Component) {
+	if frame, ok := c.(*component.Frame); ok {
+		c = frame.Content()
+	}
+	if closer, ok := c.(interface{ Close() error }); ok {
+		_ = closer.Close()
+	}
+}
+
 // DrawWindow can be used to arbitrarily draw floating windows returned
 // by FloatingWindows. If win is not a floating window, this method will panic.
 func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {

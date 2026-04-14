@@ -446,6 +446,43 @@ func (c *Component) Window(id uint64) (Window, bool) {
 	return ret, ok
 }
 
+// IterateWindows applies fn to each open browser window.
+func (c *Component) IterateWindows(fn func(Window)) {
+	c.wm.Iterate(func(w thandler.Window) {
+		fn(&browserWindow{parent: c, win: w})
+	})
+}
+
+// TileLayout returns the current tiled browser window tree layout.
+func (c *Component) TileLayout() tcomponent.TileLayout {
+	return c.wm.TileLayout()
+}
+
+// RestoreTileLayout replaces the current tiled layout and returns a map from
+// old layout window IDs to newly allocated browser windows.
+func (c *Component) RestoreTileLayout(
+	layout tcomponent.TileLayout,
+	content func(windowID uint64) browserapi.Handler,
+) map[uint64]Window {
+	c.windows = make(map[uint64]*browserWindow)
+	windows := c.wm.RestoreTileLayout(layout, func(windowID uint64) tui.Handler {
+		h := content(windowID)
+		wrapped, _ := c.newWindowContent(h)
+		return wrapped
+	})
+	ret := make(map[uint64]Window, len(windows))
+	for id, win := range windows {
+		bwin := c.newWindow(win)
+		ret[id] = bwin
+		if tab, ok := bwin.win.Content().(*Tab); ok {
+			tab.setWindow(nil, bwin)
+			tab.callOnFocus()
+		}
+	}
+	c.dirtyTabs = true
+	return ret
+}
+
 // RemoveWindowContent removes the content at win. It returns false
 // if content was replaced with start handler because the content at win
 // was the last content in this Component.

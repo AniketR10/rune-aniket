@@ -478,6 +478,54 @@ func (wm *WindowManager) SizeFloating() int {
 	return wm.comp.SizeFloating()
 }
 
+// TileLayout returns the current tiled window tree layout.
+func (wm *WindowManager) TileLayout() component.TileLayout {
+	layout := wm.comp.TileLayout()
+	layout.FocusWindowID = wm.focus.ID()
+	return layout
+}
+
+// RestoreTileLayout replaces the current tiled layout and returns a map from
+// old layout window IDs to newly allocated windows.
+func (wm *WindowManager) RestoreTileLayout(
+	layout component.TileLayout,
+	content func(windowID uint64) tui.Handler,
+) map[uint64]Window {
+	components := wm.comp.RestoreTileLayout(layout, func(windowID uint64) tui.Component {
+		return content(windowID)
+	})
+	ret := make(map[uint64]Window, len(components))
+	for id, win := range components {
+		ret[id] = wm.newNode(win)
+	}
+	var focus Window
+	if layout.FocusWindowID != 0 {
+		focus = ret[layout.FocusWindowID]
+	}
+	if focus == (Window{}) {
+		id, ok := tileLayoutFirstLeaf(layout)
+		if ok {
+			focus = ret[id]
+		}
+	}
+	if focus != (Window{}) {
+		wm.SetFocus(focus)
+	}
+	return ret
+}
+
+func tileLayoutFirstLeaf(layout component.TileLayout) (uint64, bool) {
+	if len(layout.Children) == 0 {
+		return layout.WindowID, layout.WindowID != 0
+	}
+	for _, child := range layout.Children {
+		if id, ok := tileLayoutFirstLeaf(child); ok {
+			return id, true
+		}
+	}
+	return 0, false
+}
+
 // Iterate applies op to the content of all widnows of this WindowManager.
 func (wm *WindowManager) Iterate(fn func(Window)) {
 	wm.comp.Iterate(func(c component.Window) {

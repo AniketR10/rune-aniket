@@ -59,10 +59,9 @@ func WithHistory(
 	workspaceURI workspaceapi.URI,
 	scheduleNextTick func(func()) bool,
 ) (io.Closer, error) {
-	store := storageapi.WithPartition(storage, storagePartition)
 	h := &handler{
 		editor:           ed,
-		store:            store,
+		store:            storage,
 		opener:           opener,
 		wm:               wm,
 		fs:               fs,
@@ -74,27 +73,22 @@ func WithHistory(
 		doc:              newHistoryDocument(workspaceURI),
 	}
 	if err := h.load(context.Background()); err != nil {
-		_ = store.Close()
 		return nil, err
 	}
 	if err := ed.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen, textapi.EventTypeCursor}, h); err != nil {
-		_ = store.Close()
 		return nil, err
 	}
 	if err := ed.SubscribeCommand(manual(), h); err != nil {
 		_, _ = ed.UnsubscribeEvents(h)
-		_ = store.Close()
 		return nil, err
 	}
-	return historyCloser{store: store}, nil
+	return historyCloser{}, nil
 }
 
-type historyCloser struct {
-	store storageapi.Service
-}
+type historyCloser struct{}
 
 func (h historyCloser) Close() error {
-	return h.store.Close()
+	return nil
 }
 
 type handler struct {

@@ -647,6 +647,145 @@ func TestWindowManagerSubscribe(t *testing.T) {
 	assert.Zero(t, mock.lastFocus)
 }
 
+func TestWindowManagerRestoreTileLayout(t *testing.T) {
+	tests := []struct {
+		name        string
+		frame       bool
+		layout      component.TileLayout
+		content     map[uint64]rune
+		wantMapped  []uint64
+		assertExtra func(*testing.T, *WindowManager, map[uint64]Window, *testWindowSubscriber)
+	}{
+		{
+			name:       "single leaf",
+			layout:     component.TileLayout{WindowID: 1},
+			content:    map[uint64]rune{1: 'A'},
+			wantMapped: []uint64{1},
+		},
+		{
+			name:       "single leaf framed",
+			frame:      true,
+			layout:     component.TileLayout{WindowID: 1},
+			content:    map[uint64]rune{1: 'B'},
+			wantMapped: []uint64{1},
+		},
+		{
+			name: "deep mixed layout",
+			layout: component.TileLayout{
+				Split: component.SplitOrientationVertical,
+				Children: []component.TileLayout{
+					{WindowID: 1},
+					{
+						Split: component.SplitOrientationHorizontal,
+						Children: []component.TileLayout{
+							{WindowID: 2},
+							{WindowID: 3},
+							{
+								Split:    component.SplitOrientationVertical,
+								Children: []component.TileLayout{{WindowID: 4}, {WindowID: 5}},
+							},
+						},
+					},
+				},
+			},
+			content:    map[uint64]rune{1: 'A', 2: 'B', 3: 'C', 4: 'D', 5: 'E'},
+			wantMapped: []uint64{1, 2, 3, 4, 5},
+		},
+		{
+			name: "nil content fallback",
+			layout: component.TileLayout{
+				Split:    component.SplitOrientationHorizontal,
+				Children: []component.TileLayout{{WindowID: 1}, {WindowID: 2}},
+			},
+			content:    map[uint64]rune{2: 'Z'},
+			wantMapped: []uint64{1, 2},
+			assertExtra: func(t *testing.T, wm *WindowManager, restored map[uint64]Window, sub *testWindowSubscriber) {
+				assert.NotPanics(t, func() {
+					writer := term.NewStringWriter(20, 8)
+					wm.Draw(writer)
+				})
+				require.IsType(t, &handler.TestHandler{}, restored[2].Content())
+			},
+		},
+		{
+			name: "restore sets focus and notifies subscribers",
+			layout: component.TileLayout{
+				Split:    component.SplitOrientationVertical,
+				Children: []component.TileLayout{{WindowID: 1}, {WindowID: 2}},
+			},
+			content:    map[uint64]rune{1: 'L', 2: 'R'},
+			wantMapped: []uint64{1, 2},
+			assertExtra: func(t *testing.T, wm *WindowManager, restored map[uint64]Window, sub *testWindowSubscriber) {
+				require.Contains(t, restored, uint64(1))
+				require.Equal(t, restored[uint64(1)].ID(), wm.Focus().ID())
+				require.Equal(t, restored[uint64(1)].ID(), sub.lastFocus.ID())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultWindowManagerConfig()
+			cfg.Frame = tt.frame
+			wm := NewWindowManager(handler.NewTestHandler(), cfg)
+			wm.Resize(20, 8)
+			sub := new(testWindowSubscriber)
+			wm.Subscribe(sub)
+			sub.reset()
+
+			restored := wm.RestoreTileLayout(tt.layout, func(windowID uint64) tui.Handler {
+				ch, ok := tt.content[windowID]
+				if !ok {
+					return nil
+				}
+				return &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: ch}}
+			})
+
+			require.Len(t, restored, len(tt.wantMapped))
+			for _, id := range tt.wantMapped {
+				require.Contains(t, restored, id)
+				require.NotEqual(t, id, restored[id].ID())
+				if ch, ok := tt.content[id]; ok {
+					assertHandlerWindowTile(t, restored[id], ch)
+				}
+			}
+			assertHandlerWindowManagerLayoutShape(t, tt.layout, wm.TileLayout(), restored)
+			if tt.assertExtra != nil {
+				tt.assertExtra(t, wm, restored, sub)
+			}
+		})
+	}
+}
+
+func assertHandlerWindowTile(t *testing.T, win Window, expected rune) {
+	t.Helper()
+	h, ok := win.Content().(*handler.TestHandler)
+	require.True(t, ok)
+	require.Equal(t, string(expected), string(h.Ch))
+}
+
+func assertHandlerWindowManagerLayoutShape(
+	t *testing.T,
+	want component.TileLayout,
+	got component.TileLayout,
+	restored map[uint64]Window,
+) {
+	t.Helper()
+	require.Equal(t, want.Split, got.Split)
+	require.Len(t, got.Children, len(want.Children))
+	if len(want.Children) == 0 {
+		if want.WindowID == 0 {
+			require.Equal(t, uint64(0), got.WindowID)
+			return
+		}
+		require.Equal(t, restored[want.WindowID].ID(), got.WindowID)
+		return
+	}
+	for i := range want.Children {
+		assertHandlerWindowManagerLayoutShape(t, want.Children[i], got.Children[i], restored)
+	}
+}
+
 func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 

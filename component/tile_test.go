@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -198,6 +199,152 @@ func TestResizeSimple(t *testing.T) {
 	assertTilePos(t, tree, m, 0, 0)
 	assertTilePos(t, tree, w1, 0, 25)
 	assertTilePos(t, tree, w2, 25, 25)
+}
+
+func TestTileTreeLayoutRoundTrip(t *testing.T) {
+	t.Run("layout extraction ignores artificial root", func(t *testing.T) {
+		tree, m, w1, w2 := setupTestCase(t, 100, 100)
+		require.Equal(t, TileLayout{
+			Split: SplitOrientationHorizontal,
+			Children: []TileLayout{
+				{WindowID: m.ID()},
+				{
+					Split: SplitOrientationVertical,
+					Children: []TileLayout{
+						{WindowID: w1.ID()},
+						{WindowID: w2.ID()},
+					},
+				},
+			},
+		}, tree.Layout())
+	})
+
+	tests := []struct {
+		name       string
+		layout     TileLayout
+		wantLeaves []uint64
+		wantShape  TileLayout
+	}{
+		{
+			name:       "single leaf",
+			layout:     TileLayout{WindowID: 1},
+			wantLeaves: []uint64{1},
+			wantShape:  TileLayout{WindowID: 1},
+		},
+		{
+			name: "two horizontal leaves",
+			layout: TileLayout{
+				Split: SplitOrientationHorizontal,
+				Children: []TileLayout{
+					{WindowID: 1},
+					{WindowID: 2},
+				},
+			},
+			wantLeaves: []uint64{1, 2},
+		},
+		{
+			name: "three vertical siblings",
+			layout: TileLayout{
+				Split: SplitOrientationVertical,
+				Children: []TileLayout{
+					{WindowID: 1},
+					{WindowID: 2},
+					{WindowID: 3},
+				},
+			},
+			wantLeaves: []uint64{1, 2, 3},
+		},
+		{
+			name: "deep mixed nesting",
+			layout: TileLayout{
+				Split: SplitOrientationVertical,
+				Children: []TileLayout{
+					{WindowID: 1},
+					{
+						Split: SplitOrientationHorizontal,
+						Children: []TileLayout{
+							{WindowID: 2},
+							{
+								Split: SplitOrientationVertical,
+								Children: []TileLayout{
+									{WindowID: 3},
+									{WindowID: 4},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantLeaves: []uint64{1, 2, 3, 4},
+		},
+		{
+			name: "zero window leaf uses nop and is not mapped",
+			layout: TileLayout{
+				Split: SplitOrientationHorizontal,
+				Children: []TileLayout{
+					{WindowID: 0},
+					{WindowID: 2},
+				},
+			},
+			wantLeaves: []uint64{2},
+		},
+		{
+			name: "empty stem normalizes to fallback leaf",
+			layout: TileLayout{
+				Split:    SplitOrientationHorizontal,
+				Children: []TileLayout{},
+			},
+			wantLeaves: []uint64{},
+			wantShape:  TileLayout{Children: []TileLayout{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			restored := new(TileTree)
+			mapping := restored.RestoreLayout(tt.layout, func(windowID uint64) tui.Component {
+				if windowID == 0 {
+					return nil
+				}
+				return &component.TestComponent{Ch: rune('A' + windowID)}
+			})
+			restored.Resize(120, 60)
+
+			require.Len(t, mapping, len(tt.wantLeaves))
+			for _, oldID := range tt.wantLeaves {
+				require.Contains(t, mapping, oldID)
+				require.NotZero(t, mapping[oldID].ID())
+				require.NotEqual(t, oldID, mapping[oldID].ID())
+			}
+			wantShape := tt.layout
+			if tt.wantShape.WindowID != 0 || tt.wantShape.Children != nil {
+				wantShape = tt.wantShape
+			}
+			assertLayoutShape(t, wantShape, restored.Layout(), mapping)
+		})
+	}
+}
+
+func assertLayoutShape(
+	t *testing.T,
+	want TileLayout,
+	got TileLayout,
+	mapping map[uint64]*TileNode,
+) {
+	t.Helper()
+	require.Equal(t, want.Split, got.Split)
+	require.Len(t, got.Children, len(want.Children))
+	if len(want.Children) == 0 {
+		if want.WindowID == 0 {
+			require.NotZero(t, got.WindowID)
+			return
+		}
+		require.Equal(t, mapping[want.WindowID].ID(), got.WindowID)
+		return
+	}
+	for i := range want.Children {
+		assertLayoutShape(t, want.Children[i], got.Children[i], mapping)
+	}
 }
 
 func TestResizeRounding(t *testing.T) {

@@ -577,6 +577,14 @@ var (
 			handler:   (*ex).stopTask,
 			completer: (*ex).completeTasks,
 		},
+		"taskfocus": {
+			man: textapi.CommandManual{
+				Summary:  "Focus a task previously created via `tasknew`.",
+				Synopsis: "<name>",
+			},
+			handler:   (*ex).focusTask,
+			completer: (*ex).completeTasks,
+		},
 		"loglevel": {
 			man: textapi.CommandManual{
 				Summary:  "Update the log level, overriding the level set in the config.",
