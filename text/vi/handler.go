@@ -34,8 +34,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	sdkcomp "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
@@ -122,16 +124,19 @@ type viHandlerImpl struct {
 		From term.Coordinates
 		To   term.Coordinates
 	}
-	pendingSetCursor *term.Coordinates
-	setLocations     bool
-	countDigits      string
-	count            int
-	operatorCount    int
-	insertRegister   strings.Builder
-	zRange           term.Range
-	zRangeOK         bool
-	pasteBuf         strings.Builder
-	pasteStarted     bool
+	pendingSetCursor      *term.Coordinates
+	setLocations          bool
+	countDigits           string
+	count                 int
+	operatorCount         int
+	insertRegister        strings.Builder
+	zRange                term.Range
+	zRangeOK              bool
+	pasteBuf              strings.Builder
+	pasteStarted          bool
+	pendingInsertRegister bool
+	pendingInsertNormal   bool
+	insertCompletion      insertCompletionState
 }
 
 type statusBar interface {
@@ -321,6 +326,9 @@ func (vi *viHandlerImpl) setInsertMode() {
 	vi.blockRepeat.From = term.Coordinates{}
 	vi.blockRepeat.To = term.Coordinates{}
 	vi.textObjectPending = false
+	vi.pendingInsertRegister = false
+	vi.pendingInsertNormal = false
+	vi.resetInsertCompletion()
 	vi.setMode(insertMode)
 	vi.less.SetMessage("")
 	vi.resetCount()
@@ -1132,6 +1140,186 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 	return
 }
 
+// --- Insert completion ---
+
+type insertCompletionState struct {
+	active     bool
+	prefix     string
+	start      term.Coordinates
+	candidates []string
+	index      int
+	win        browserapi.Window
+}
+
+func (vi *viHandlerImpl) resetInsertCompletion() {
+	if vi.insertCompletion.active {
+		vi.closeInsertCompletionWindow()
+	}
+	vi.insertCompletion = insertCompletionState{}
+}
+
+func (vi *viHandlerImpl) closeInsertCompletionWindow() {
+	wm := vi.config.windowManager
+	if wm == nil || vi.insertCompletion.win == nil {
+		return
+	}
+	if err := wm.CloseWindow(vi.insertCompletion.win); err != nil {
+		vi.logError(err)
+	}
+	vi.insertCompletion.win = nil
+}
+
+func (vi *viHandlerImpl) openInsertCompletionWindow(candidates []string, focusIdx int) {
+	wm := vi.config.windowManager
+	if wm == nil {
+		return
+	}
+
+	floating := newInsertCompletionFloating(candidates, focusIdx, func(candidate string) {
+		vi.applyInsertCompletion(candidate)
+	})
+
+	pos := vi.cursorAtScroll()
+	winCoords, _ := vi.cursor.WindowCoordinates(pos)
+
+	win, err := wm.Floating(floating, browserapi.FloatingConfig{
+		Alignment: sdkcomp.AlignmentLeft | sdkcomp.AlignmentTop,
+		Offset:    term.Coordinates{X: winCoords.X + 1, Y: winCoords.Y + 2},
+	})
+	if err != nil {
+		vi.logError(err)
+		return
+	}
+	vi.insertCompletion.win = win
+}
+
+func isInsertCompletionRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func (vi *viHandlerImpl) bufferLine(y int) string {
+	buf := vi.less.Buffer()
+	if y < 0 || y >= buf.Rows() {
+		return ""
+	}
+
+	var line strings.Builder
+	for x := range buf.Columns(y) {
+		c, ok := buf.Cell(term.Coordinates{X: x, Y: y})
+		if !ok {
+			continue
+		}
+		line.WriteRune(c.Ch)
+	}
+	return line.String()
+}
+
+func (vi *viHandlerImpl) insertCompletionPrefix() (string, term.Coordinates, bool) {
+	pos := vi.cursorAtScroll()
+	line := []rune(vi.bufferLine(pos.Y))
+	x := min(max(pos.X, 0), len(line))
+	startX := x
+	for startX > 0 && isInsertCompletionRune(line[startX-1]) {
+		startX--
+	}
+	if startX == x {
+		return "", term.Coordinates{}, false
+	}
+	return string(line[startX:x]), term.Coordinates{X: startX, Y: pos.Y}, true
+}
+
+func (vi *viHandlerImpl) insertCompletionCandidates(prefix string) []string {
+	if prefix == "" {
+		return nil
+	}
+
+	var candidates []string
+	seen := make(map[string]bool)
+	buf := vi.less.Buffer()
+	for y := range buf.Rows() {
+		line := []rune(vi.bufferLine(y))
+		for x := 0; x < len(line); {
+			if !isInsertCompletionRune(line[x]) {
+				x++
+				continue
+			}
+
+			start := x
+			for x < len(line) && isInsertCompletionRune(line[x]) {
+				x++
+			}
+			word := string(line[start:x])
+			if word == prefix || !strings.HasPrefix(word, prefix) || seen[word] {
+				continue
+			}
+			seen[word] = true
+			candidates = append(candidates, word)
+		}
+	}
+	return candidates
+}
+
+func (vi *viHandlerImpl) applyInsertCompletion(candidate string) bool {
+	state := vi.insertCompletion
+	end := vi.cursorAtScroll()
+	if !vi.cursor.SelectRange(state.start, end) {
+		return false
+	}
+	if !vi.cursor.DeleteSelection() {
+		return false
+	}
+	vi.cursor.InsertString(candidate)
+	return true
+}
+
+func (vi *viHandlerImpl) completeInsert(direction int) bool {
+	if direction == 0 {
+		return false
+	}
+
+	if !vi.insertCompletion.active {
+		prefix, start, ok := vi.insertCompletionPrefix()
+		if !ok {
+			vi.less.SetMessage("Pattern Not Found")
+			return false
+		}
+		candidates := vi.insertCompletionCandidates(prefix)
+		if len(candidates) == 0 {
+			vi.less.SetMessage("Pattern Not Found")
+			return false
+		}
+
+		index := 0
+		if direction < 0 {
+			index = len(candidates) - 1
+		}
+		vi.insertCompletion = insertCompletionState{
+			active:     true,
+			prefix:     prefix,
+			start:      start,
+			candidates: candidates,
+			index:      index,
+		}
+		ok = vi.applyInsertCompletion(candidates[index])
+		if ok && len(candidates) > 1 {
+			vi.openInsertCompletionWindow(candidates, index)
+		}
+		if ok && len(candidates) == 1 {
+			vi.insertCompletion = insertCompletionState{}
+		}
+		return ok
+	}
+
+	state := &vi.insertCompletion
+	state.index = (state.index + direction + len(state.candidates)) % len(state.candidates)
+	vi.closeInsertCompletionWindow()
+	ok := vi.applyInsertCompletion(state.candidates[state.index])
+	if ok {
+		vi.openInsertCompletionWindow(state.candidates, state.index)
+	}
+	return ok
+}
+
 func (vi *viHandlerImpl) resetCount() {
 	vi.count = 1
 	vi.countDigits = ""
@@ -1221,6 +1409,42 @@ func (vi *viHandlerImpl) searchWord(text string) {
 	}
 }
 
+func (vi *viHandlerImpl) insertRegisterContents(name rune) bool {
+	data, err := vi.readRegister(normalizedRegisterName(name))
+	if err != nil {
+		vi.logError(fmt.Errorf("clipboard.Get: %s", err))
+		return false
+	}
+	vi.cursor.InsertString(data.Text)
+	vi.insertRegister.WriteString(data.Text)
+	return true
+}
+
+func (vi *viHandlerImpl) startInsertNormalCommand() {
+	vi.pendingInsertNormal = true
+	vi.resetInsertCompletion()
+	vi.setMode(normalMode)
+}
+
+func (vi *viHandlerImpl) insertNormalCommandComplete() bool {
+	return vi.mode() == normalMode &&
+		vi.countDigits == "" &&
+		!vi.pendingRegister &&
+		!vi.pendingMacro &&
+		!vi.pendingPlayback &&
+		vi.moveMode == moveNone &&
+		!vi.pendingGoMotion &&
+		!vi.textObjectPending
+}
+
+func (vi *viHandlerImpl) returnToInsertAfterNormalCommand() {
+	vi.pendingInsertNormal = false
+	vi.resetInsertCompletion()
+	vi.setMode(insertMode)
+	vi.less.SetMessage("")
+	vi.resetCount()
+}
+
 func (vi *viHandlerImpl) exitInsert() {
 	vi.writeDotRegister()
 	vi.cursor.MoveLeft()
@@ -1239,6 +1463,24 @@ func (vi *viHandlerImpl) writeDotRegister() {
 }
 
 func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
+	if vi.pendingInsertRegister {
+		vi.pendingInsertRegister = false
+		if ev.Ch == 0 && ev.Key == 0 {
+			return false, true
+		}
+		if ev.Mod == 0 && validRegisterName(ev.Ch) {
+			return false, vi.insertRegisterContents(ev.Ch)
+		}
+		return false, true
+	}
+
+	keepCompletion := false
+	defer func() {
+		if !keepCompletion {
+			vi.resetInsertCompletion()
+		}
+	}()
+
 	switch ev.Mod {
 	case 0:
 		switch ev.Key {
@@ -1303,6 +1545,20 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			handled = true
 		case 'd':
 			vi.cursor.ShiftLineLeft()
+			handled = true
+		case 'n':
+			keepCompletion = true
+			vi.completeInsert(1)
+			handled = true
+		case 'p':
+			keepCompletion = true
+			vi.completeInsert(-1)
+			handled = true
+		case 'r':
+			vi.pendingInsertRegister = true
+			handled = true
+		case 'o':
+			vi.startInsertNormalCommand()
 			handled = true
 		}
 	}
@@ -2299,6 +2555,14 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		vi.setNormalMode()
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
+	}
+
+	if vi.pendingInsertNormal && handled && mode != insertMode {
+		if vi.insertNormalCommandComplete() {
+			vi.returnToInsertAfterNormalCommand()
+		} else if vi.mode() == insertMode {
+			vi.pendingInsertNormal = false
+		}
 	}
 
 	return

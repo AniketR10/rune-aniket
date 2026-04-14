@@ -58,6 +58,15 @@ type viConfig struct {
 	notifications      browserapi.Notifications
 	macroRecorder      MacroRecorder
 	macroPlayer        MacroPlayer
+	windowManager      InsertCompletionWindowManager
+}
+
+// InsertCompletionWindowManager provides floating window management for
+// the insert-mode word completion popup. When nil, completion works
+// without a visible popup.
+type InsertCompletionWindowManager interface {
+	Floating(h browserapi.Floating, cfg browserapi.FloatingConfig) (browserapi.Window, error)
+	CloseWindow(browserapi.Window) error
 }
 
 // MacroRecorder is a cross-editor recorder used to expose Vim-style macro
@@ -235,6 +244,15 @@ func WithAutoCenter(enabled bool) Option {
 func WithHideInitialFolds(enabled bool) Option {
 	return func(cfg *viConfig) {
 		cfg.enableInitialFolds = enabled
+	}
+}
+
+// WithWindowManager sets the window manager used to display a floating
+// completion popup during insert-mode word completion (Ctrl+n / Ctrl+p).
+// When not set, completion still works but without a visual popup.
+func WithWindowManager(wm InsertCompletionWindowManager) Option {
+	return func(cfg *viConfig) {
+		cfg.windowManager = wm
 	}
 }
 

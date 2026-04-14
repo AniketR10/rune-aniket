@@ -228,6 +228,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithMacroPlayer(h.macroPlayer),
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithAutoCenter(true),
+		vi.WithWindowManager(currentWorkspaceWindowManager{root: h}),
 	)
 	return vi.Editor(viOpts...)
 }

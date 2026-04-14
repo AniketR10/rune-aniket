@@ -4181,6 +4181,846 @@ func TestInsertModeCtrlShortcuts(t *testing.T) {
 	}
 }
 
+type insertModeCommandStep struct {
+	name                 string
+	event                term.Event
+	wantHandled          bool
+	wantBuffer           *string
+	wantCursor           *term.Coordinates
+	wantMode             *viMode
+	wantPendingRegister  *bool
+	wantPendingNormal    *bool
+	wantCompletionActive *bool
+}
+
+func insertTestKey(ch rune) term.Event {
+	return term.Event{Type: term.EventKey, Ch: ch}
+}
+
+func insertTestCtrl(ch rune) term.Event {
+	return term.Event{Type: term.EventKey, Ch: ch, Mod: term.ModCtrl}
+}
+
+func runInsertModeCommandSteps(t *testing.T, vi *viHandlerImpl, steps []insertModeCommandStep) {
+	t.Helper()
+
+	for _, step := range steps {
+		t.Run(step.name, func(t *testing.T) {
+			quit, handled := vi.Handle(step.event)
+			require.False(t, quit)
+			assert.Equal(t, step.wantHandled, handled)
+			if step.wantBuffer != nil {
+				assert.Equal(t, *step.wantBuffer, vi.less.Buffer().String())
+			}
+			if step.wantCursor != nil {
+				assert.Equal(t, *step.wantCursor, vi.cursor.CursorAtScroll())
+			}
+			if step.wantMode != nil {
+				assert.Equal(t, *step.wantMode, vi.mode())
+			}
+			if step.wantPendingRegister != nil {
+				assert.Equal(t, *step.wantPendingRegister, vi.pendingInsertRegister)
+			}
+			if step.wantPendingNormal != nil {
+				assert.Equal(t, *step.wantPendingNormal, vi.pendingInsertNormal)
+			}
+			if step.wantCompletionActive != nil {
+				assert.Equal(t, *step.wantCompletionActive, vi.insertCompletion.active)
+			}
+		})
+	}
+}
+
+func TestInsertModeCompletionPatternNotFound(t *testing.T) {
+	const width, height = 30, 4
+
+	suite := []struct {
+		name          string
+		content       string
+		cursor        term.Coordinates
+		inputSequence string
+		expected      string
+	}{
+		{
+			name:          "ctrl+n with no word prefix",
+			content:       ".",
+			cursor:        term.Coordinates{X: 1, Y: 0},
+			inputSequence: "<c-n>",
+			expected:      ".▐                            \n                              \n                              \n             Pattern Not Found",
+		},
+		{
+			name:          "ctrl+p with no word prefix",
+			content:       ".",
+			cursor:        term.Coordinates{X: 1, Y: 0},
+			inputSequence: "<c-p>",
+			expected:      ".▐                            \n                              \n                              \n             Pattern Not Found",
+		},
+		{
+			name:          "ctrl+n with no matching candidates",
+			content:       "alpha\nzz",
+			cursor:        term.Coordinates{X: 2, Y: 1},
+			inputSequence: "<c-n>",
+			expected:      "alpha                         \nzz▐                           \n                              \n             Pattern Not Found",
+		},
+		{
+			name:          "ctrl+p with no matching candidates",
+			content:       "alpha\nzz",
+			cursor:        term.Coordinates{X: 2, Y: 1},
+			inputSequence: "<c-p>",
+			expected:      "alpha                         \nzz▐                           \n                              \n             Pattern Not Found",
+		},
+		{
+			name:          "successful ctrl+n does not show pattern not found",
+			content:       "alpha alpine\nal",
+			cursor:        term.Coordinates{X: 2, Y: 1},
+			inputSequence: "<c-n>",
+			expected:      "alpha alpine                  \nalpha▐                        \n                              \n                              ",
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2)
+			vi.Resize(width, height)
+			vi.setCursorAtScroll(tc.cursor)
+			vi.setInsertMode()
+
+			handlertest.RunHandlerSequence(t, vi, width, height, []handlertest.SequenceTestCase{{
+				InputSequence: tc.inputSequence,
+				Expected:      tc.expected,
+			}})
+		})
+	}
+}
+
+func TestInsertModeCompletion(t *testing.T) {
+	type completionCase struct {
+		name    string
+		content string
+		cursor  term.Coordinates
+		steps   []insertModeCommandStep
+	}
+
+	for _, tc := range []completionCase{
+		{
+			name:    "ctrl+n with no word prefix is handled as a no-op",
+			content: ".",
+			cursor:  term.Coordinates{X: 1, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "no prefix",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("."),
+					wantCursor:           new(term.Coordinates{X: 1, Y: 0}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(false),
+				},
+			},
+		},
+		{
+			name:    "ctrl+n with no matching candidates is handled as a no-op",
+			content: "alpha\nzz",
+			cursor:  term.Coordinates{X: 2, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "no candidates",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha\nzz"),
+					wantCursor:           new(term.Coordinates{X: 2, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(false),
+				},
+			},
+		},
+		{
+			name:    "ctrl+n cycles forward through candidates and wraps",
+			content: "alpha alpine altar\nal",
+			cursor:  term.Coordinates{X: 2, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "first next completion",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\nalpha"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "second next completion",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\nalpine"),
+					wantCursor:           new(term.Coordinates{X: 6, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "third next completion",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\naltar"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "next wraps to first completion",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\nalpha"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+			},
+		},
+		{
+			name:    "ctrl+p starts from the previous candidate and cycles backward",
+			content: "alpha alpine altar\nal",
+			cursor:  term.Coordinates{X: 2, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "previous starts at last completion",
+					event:                insertTestCtrl('p'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\naltar"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "previous cycles backward",
+					event:                insertTestCtrl('p'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\nalpine"),
+					wantCursor:           new(term.Coordinates{X: 6, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+			},
+		},
+		{
+			name:    "ctrl+p wraps from the first active candidate to the last",
+			content: "alpha alpine altar\nal",
+			cursor:  term.Coordinates{X: 2, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "start with first completion",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\nalpha"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "previous wraps to last completion",
+					event:                insertTestCtrl('p'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine altar\naltar"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+			},
+		},
+		{
+			name:    "editing after completion resets the active completion session",
+			content: "alpha alpine\nal",
+			cursor:  term.Coordinates{X: 2, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "complete prefix",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine\nalpha"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "type resets completion",
+					event:                insertTestKey('x'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine\nalphax"),
+					wantCursor:           new(term.Coordinates{X: 6, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(false),
+				},
+				{
+					name:                 "stale candidates are not reused",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("alpha alpine\nalphax"),
+					wantCursor:           new(term.Coordinates{X: 6, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(false),
+				},
+			},
+		},
+		{
+			name:    "single candidate is inserted directly without activating completion",
+			content: "unique_word\nuni",
+			cursor:  term.Coordinates{X: 3, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "ctrl+n inserts the only candidate",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("unique_word\nunique_word"),
+					wantCursor:           new(term.Coordinates{X: 11, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(false),
+				},
+			},
+		},
+		{
+			name:    "completion treats underscores and digits as word characters and deduplicates candidates",
+			content: "foo_1 foo_2 foo_1\nfoo_",
+			cursor:  term.Coordinates{X: 4, Y: 1},
+			steps: []insertModeCommandStep{
+				{
+					name:                 "first underscore digit completion",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("foo_1 foo_2 foo_1\nfoo_1"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+				{
+					name:                 "duplicate candidate is skipped",
+					event:                insertTestCtrl('n'),
+					wantHandled:          true,
+					wantBuffer:           new("foo_1 foo_2 foo_1\nfoo_2"),
+					wantCursor:           new(term.Coordinates{X: 5, Y: 1}),
+					wantMode:             new(insertMode),
+					wantCompletionActive: new(true),
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2)
+			vi.Resize(80, 24)
+			require.True(t, vi.setCursorAtScroll(tc.cursor))
+			vi.setInsertMode()
+
+			runInsertModeCommandSteps(t, vi, tc.steps)
+		})
+	}
+}
+
+func TestInsertModeCtrlRInsertsRegister(t *testing.T) {
+	type registerCase struct {
+		name              string
+		content           string
+		cursor            term.Coordinates
+		registers         map[rune]clipboard.Data
+		externalClipboard *clipboard.Data
+		steps             []insertModeCommandStep
+		wantRegisters     map[rune]string
+		wantExternal      *string
+	}
+
+	for _, tc := range []registerCase{
+		{
+			name:    "named register inserts and returns to insert mode",
+			content: "hello ",
+			cursor:  term.Coordinates{X: 6, Y: 0},
+			registers: map[rune]clipboard.Data{
+				'a': {Text: "world"},
+			},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantBuffer:          new("hello "),
+					wantCursor:          new(term.Coordinates{X: 6, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "insert named register",
+					event:               insertTestKey('a'),
+					wantHandled:         true,
+					wantBuffer:          new("hello world"),
+					wantCursor:          new(term.Coordinates{X: 11, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:    "unnamed register inserts through the default register",
+			content: "hello ",
+			cursor:  term.Coordinates{X: 6, Y: 0},
+			registers: map[rune]clipboard.Data{
+				unnamedRegister: {Text: "default"},
+			},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "insert unnamed register",
+					event:               insertTestKey(unnamedRegister),
+					wantHandled:         true,
+					wantBuffer:          new("hello default"),
+					wantCursor:          new(term.Coordinates{X: 13, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:              "clipboard register reads from the configured external clipboard",
+			content:           "hello ",
+			cursor:            term.Coordinates{X: 6, Y: 0},
+			externalClipboard: &clipboard.Data{Text: "clip", Metadata: text.NoSelection},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "insert clipboard register",
+					event:               insertTestKey(clipboardRegister),
+					wantHandled:         true,
+					wantBuffer:          new("hello clip"),
+					wantCursor:          new(term.Coordinates{X: 10, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:    "multiline register contents insert at the cursor",
+			content: "hello ",
+			cursor:  term.Coordinates{X: 6, Y: 0},
+			registers: map[rune]clipboard.Data{
+				'b': {Text: "one\ntwo"},
+			},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "insert multiline register",
+					event:               insertTestKey('b'),
+					wantHandled:         true,
+					wantBuffer:          new("hello one\ntwo"),
+					wantCursor:          new(term.Coordinates{X: 3, Y: 1}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:    "invalid register name is swallowed and clears pending register state",
+			content: "hello ",
+			cursor:  term.Coordinates{X: 6, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "invalid register is ignored",
+					event:               insertTestKey('?'),
+					wantHandled:         true,
+					wantBuffer:          new("hello "),
+					wantCursor:          new(term.Coordinates{X: 6, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+				{
+					name:                "next key inserts normally",
+					event:               insertTestKey('Z'),
+					wantHandled:         true,
+					wantBuffer:          new("hello Z"),
+					wantCursor:          new(term.Coordinates{X: 7, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:    "empty register-key event is swallowed and clears pending register state",
+			content: "hello ",
+			cursor:  term.Coordinates{X: 6, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "empty event is ignored",
+					event:               term.Event{Type: term.EventKey},
+					wantHandled:         true,
+					wantBuffer:          new("hello "),
+					wantCursor:          new(term.Coordinates{X: 6, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+				{
+					name:                "next key inserts normally",
+					event:               insertTestKey('Z'),
+					wantHandled:         true,
+					wantBuffer:          new("hello Z"),
+					wantCursor:          new(term.Coordinates{X: 7, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:    "modified register-key event is swallowed and clears pending register state",
+			content: "hello ",
+			cursor:  term.Coordinates{X: 6, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "modified register key is ignored",
+					event:               insertTestCtrl('a'),
+					wantHandled:         true,
+					wantBuffer:          new("hello "),
+					wantCursor:          new(term.Coordinates{X: 6, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+			},
+		},
+		{
+			name:    "inserted register contents are recorded in the dot register on insert exit",
+			content: "",
+			cursor:  term.Coordinates{},
+			registers: map[rune]clipboard.Data{
+				'a': {Text: "again"},
+			},
+			steps: []insertModeCommandStep{
+				{
+					name:                "start register read",
+					event:               insertTestCtrl('r'),
+					wantHandled:         true,
+					wantPendingRegister: new(true),
+				},
+				{
+					name:                "insert register",
+					event:               insertTestKey('a'),
+					wantHandled:         true,
+					wantBuffer:          new("again"),
+					wantCursor:          new(term.Coordinates{X: 5, Y: 0}),
+					wantMode:            new(insertMode),
+					wantPendingRegister: new(false),
+				},
+				{
+					name:        "exit insert writes dot register",
+					event:       term.Event{Type: term.EventKey, Key: term.KeyEsc},
+					wantHandled: true,
+					wantBuffer:  new("again"),
+					wantMode:    new(normalMode),
+				},
+			},
+			wantRegisters: map[rune]string{
+				'.': "again",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []Option
+			var clip *mockClip
+			if tc.externalClipboard != nil {
+				clip = new(mockClip)
+				clip.data = *tc.externalClipboard
+				opts = append(opts, WithClipboard(registerset.New(clip)))
+			}
+
+			vi := setupVi(t, tc.content, 2, opts...)
+			vi.Resize(80, 24)
+			if tc.cursor != (term.Coordinates{}) {
+				require.True(t, vi.setCursorAtScroll(tc.cursor))
+			}
+			for name, data := range tc.registers {
+				require.NoError(t, vi.writeRegister(name, data))
+			}
+			vi.setInsertMode()
+
+			runInsertModeCommandSteps(t, vi, tc.steps)
+
+			for name, want := range tc.wantRegisters {
+				data, err := vi.readRegister(name)
+				require.NoError(t, err)
+				assert.Equalf(t, want, data.Text, "register %q", string(name))
+			}
+			if tc.wantExternal != nil {
+				require.NotNil(t, clip)
+				assert.Equal(t, *tc.wantExternal, clip.data.Text)
+			}
+		})
+	}
+}
+
+func TestInsertModeCtrlOExecutesOneNormalCommand(t *testing.T) {
+	type normalCommandCase struct {
+		name    string
+		content string
+		cursor  term.Coordinates
+		steps   []insertModeCommandStep
+	}
+
+	for _, tc := range []normalCommandCase{
+		{
+			name:    "single motion command returns to insert and subsequent key inserts text",
+			content: "abc\ndef",
+			cursor:  term.Coordinates{X: 1, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantBuffer:        new("abc\ndef"),
+					wantCursor:        new(term.Coordinates{X: 1, Y: 0}),
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "execute motion and return to insert",
+					event:             insertTestKey('j'),
+					wantHandled:       true,
+					wantBuffer:        new("abc\ndef"),
+					wantCursor:        new(term.Coordinates{X: 1, Y: 1}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+				{
+					name:              "next key is inserted in insert mode",
+					event:             insertTestKey('X'),
+					wantHandled:       true,
+					wantBuffer:        new("abc\ndXef"),
+					wantCursor:        new(term.Coordinates{X: 2, Y: 1}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+		{
+			name:    "count prefix remains pending until the counted motion is complete",
+			content: "one\ntwo\nthree",
+			cursor:  term.Coordinates{},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "type count digit",
+					event:             insertTestKey('2'),
+					wantHandled:       true,
+					wantBuffer:        new("one\ntwo\nthree"),
+					wantCursor:        new(term.Coordinates{}),
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "complete counted motion",
+					event:             insertTestKey('j'),
+					wantHandled:       true,
+					wantBuffer:        new("one\ntwo\nthree"),
+					wantCursor:        new(term.Coordinates{X: 0, Y: 2}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+		{
+			name:    "find-character motion remains pending until the target character is typed",
+			content: "abcdef",
+			cursor:  term.Coordinates{},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "start find-character motion",
+					event:             insertTestKey('f'),
+					wantHandled:       true,
+					wantBuffer:        new("abcdef"),
+					wantCursor:        new(term.Coordinates{}),
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "complete find-character motion",
+					event:             insertTestKey('d'),
+					wantHandled:       true,
+					wantBuffer:        new("abcdef"),
+					wantCursor:        new(term.Coordinates{X: 3, Y: 0}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+		{
+			name:    "replace-one command returns after the replacement character",
+			content: "abc",
+			cursor:  term.Coordinates{X: 1, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "start replace-one command",
+					event:             insertTestKey('r'),
+					wantHandled:       true,
+					wantBuffer:        new("abc"),
+					wantCursor:        new(term.Coordinates{X: 1, Y: 0}),
+					wantMode:          new(replaceOneMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "complete replace-one command",
+					event:             insertTestKey('X'),
+					wantHandled:       true,
+					wantBuffer:        new("aXc"),
+					wantCursor:        new(term.Coordinates{X: 1, Y: 0}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+		{
+			name:    "delete operator command returns after its motion",
+			content: "one\ntwo\n",
+			cursor:  term.Coordinates{},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "start delete operator",
+					event:             insertTestKey('d'),
+					wantHandled:       true,
+					wantBuffer:        new("one\ntwo\n"),
+					wantMode:          new(deleteMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "complete line delete operator",
+					event:             insertTestKey('d'),
+					wantHandled:       true,
+					wantBuffer:        new("two\n"),
+					wantCursor:        new(term.Coordinates{}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+		{
+			name:    "normal command that enters insert mode clears one-shot state",
+			content: "abc",
+			cursor:  term.Coordinates{},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "normal insert command consumes one-shot command",
+					event:             insertTestKey('i'),
+					wantHandled:       true,
+					wantBuffer:        new("abc"),
+					wantCursor:        new(term.Coordinates{}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+				{
+					name:              "subsequent key inserts normally",
+					event:             insertTestKey('X'),
+					wantHandled:       true,
+					wantBuffer:        new("Xabc"),
+					wantCursor:        new(term.Coordinates{X: 1, Y: 0}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+		{
+			name:    "escape can be the one normal command and returns to insert",
+			content: "abc",
+			cursor:  term.Coordinates{X: 1, Y: 0},
+			steps: []insertModeCommandStep{
+				{
+					name:              "start one-shot normal command",
+					event:             insertTestCtrl('o'),
+					wantHandled:       true,
+					wantMode:          new(normalMode),
+					wantPendingNormal: new(true),
+				},
+				{
+					name:              "escape returns to insert",
+					event:             term.Event{Type: term.EventKey, Key: term.KeyEsc},
+					wantHandled:       true,
+					wantBuffer:        new("abc"),
+					wantCursor:        new(term.Coordinates{X: 1, Y: 0}),
+					wantMode:          new(insertMode),
+					wantPendingNormal: new(false),
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2)
+			vi.Resize(80, 24)
+			if tc.cursor != (term.Coordinates{}) {
+				require.True(t, vi.setCursorAtScroll(tc.cursor))
+			}
+			vi.setInsertMode()
+
+			runInsertModeCommandSteps(t, vi, tc.steps)
+		})
+	}
+}
+
 func TestExitVisualMode(t *testing.T) {
 	t.Run("escape and control-c exit visual mode into normal", func(t *testing.T) {
 		vi := setupVi(t, "aaaa\nbbbb\ncccc\ndddd", 2)
