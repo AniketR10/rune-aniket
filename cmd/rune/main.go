@@ -288,40 +288,22 @@ func main() {
 	flag.Parse()
 
 	exec, _ := os.Executable()
-	// if not manual tui/gui flag setting, assume running as macos app
-	if !*flagGUI && !*flagTUI && runtime.GOOS == "darwin" &&
-		filepath.Base(exec) != "rune-extension" {
-		go initPATH(*flagDataPath)
+	// If no manual tui/gui flag was set, assume we were launched as a desktop
+	// app and inject the same defaults the platform launcher would normally pass.
+	if !*flagGUI && !*flagTUI && *flagExtension == "" && *flagWorkspaceServer == "" {
+		defaults, ok := appLaunchArgs(runtime.GOOS, exec)
+		if ok {
+			go initPATH(*flagDataPath)
+			os.Args = append(os.Args[:1], append(defaults, os.Args[1:]...)...)
 
-		macosDir := filepath.Dir(exec)
-		contentsDir := filepath.Dir(macosDir)
-		resourcesDir := filepath.Join(contentsDir, "Resources")
-
-		defaults := []string{
-			"--rune-extension-runner=" + filepath.Join(resourcesDir, "rune-extension"),
-			"--rune-zdotdir=" + filepath.Join(resourcesDir, "zdot"),
-			"-G", "-w", "",
-		}
-		os.Args = append(os.Args[:1], append(defaults, os.Args[1:]...)...)
-
-		// best effort redirect stdout/err to /tmp/rune_launch.log
-		logPath := filepath.Join(os.TempDir(), "rune_launch.log")
-		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err == nil {
-			fd := int(f.Fd())
-			_ = syscall.Dup2(fd, int(os.Stderr.Fd()))
-		}
-		flag.Parse()
-	}
-
-	// On Linux, if zdotdir was not explicitly set and we're inside a rune.app
-	// layout (rune.app/bin/rune), auto-discover zdot at rune.app/share/zdot.
-	if runtime.GOOS == "linux" && *flagZdotDir == "" {
-		binDir := filepath.Dir(exec)
-		appDir := filepath.Dir(binDir)
-		zdot := filepath.Join(appDir, "share", "zdot")
-		if info, err := os.Stat(zdot); err == nil && info.IsDir() {
-			*flagZdotDir = zdot
+			// best effort redirect stdout/err to /tmp/rune_launch.log
+			logPath := filepath.Join(os.TempDir(), "rune_launch.log")
+			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err == nil {
+				fd := int(f.Fd())
+				_ = syscall.Dup2(fd, int(os.Stderr.Fd()))
+			}
+			flag.Parse()
 		}
 	}
 
@@ -352,6 +334,54 @@ func main() {
 		log.Errorf("fatal error: %v", err)
 	}
 	os.Exit(4)
+}
+
+func appLaunchArgs(goos, execPath string) ([]string, bool) {
+	switch goos {
+	case "darwin":
+		if filepath.Base(execPath) == "rune-extension" {
+			return nil, false
+		}
+
+		macosDir := filepath.Dir(execPath)
+		contentsDir := filepath.Dir(macosDir)
+		resourcesDir := filepath.Join(contentsDir, "Resources")
+		return []string{
+			"--rune-extension-runner=" + filepath.Join(resourcesDir, "rune-extension"),
+			"--rune-zdotdir=" + filepath.Join(resourcesDir, "zdot"),
+			"-G", "-w", "",
+		}, true
+	case "linux":
+		args := []string{
+			"--rune-extension-runner=" + execPath,
+		}
+
+		appDir, ok := linuxAppDir(execPath)
+		if ok {
+			args = []string{
+				"--rune-extension-runner=" + filepath.Join(appDir, "bin", "rune"),
+				"--rune-zdotdir=" + filepath.Join(appDir, "share", "zdot"),
+			}
+		}
+
+		return append(args, "-G", "-w", ""), true
+	default:
+		return nil, false
+	}
+}
+
+func linuxAppDir(execPath string) (string, bool) {
+	binDir := filepath.Dir(execPath)
+	if filepath.Base(binDir) != "bin" {
+		return "", false
+	}
+
+	appDir := filepath.Dir(binDir)
+	if filepath.Base(appDir) != "rune.app" {
+		return "", false
+	}
+
+	return appDir, true
 }
 
 func run() int {
