@@ -221,11 +221,6 @@ install_desktop() {
             cp "$src_icon" "$dest_dir/rune.png"
         fi
     done
-
-    # Update the icon cache if the tool is available.
-    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-        gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
-    fi
 }
 
 info() { printf '\033[1;32m%s\033[0m\n' "$*"; }
