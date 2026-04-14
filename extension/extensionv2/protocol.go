@@ -165,9 +165,6 @@ func validateMetadata(extensionID string, meta extensionapi.Metadata) error {
 	if meta.ExtensionName == "" {
 		return errors.New("extension name must not be missing")
 	}
-	if meta.ExtensionVersion == "" {
-		return errors.New("extension version must not be missing")
-	}
 	if len(meta.Permissions) == 0 {
 		return errors.New("extension must request some permissions")
 	}

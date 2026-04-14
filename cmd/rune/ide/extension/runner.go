@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	colorPalette "unstable.build/go-tui/cmd/extension_color_palette/extension"
@@ -68,7 +69,6 @@ func NewRunner(
 	builtinExtensions := map[string]func() (
 		extensionapi.WorkspaceExtension, extensionapi.Metadata){}
 
-	grantor := extension.GrantAll()
 	extensionOpts := []extensionv2.Option{
 		extensionv2.WithPackageName(debug.Package),
 		extensionv2.WithPackageVersion(debug.Tag),
@@ -78,7 +78,7 @@ func NewRunner(
 		extensionv2.WithAuthTokenEnv("RUNE_TOKEN"),
 	}
 	runner, err := extensionv2.NewRunner(ctx, locker,
-		grantor, dataDir, extensionOpts...)
+		dataDir, extensionOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("new extension runner: %v", err)
 	}
@@ -109,8 +109,12 @@ func (p *Extensions) WorkspaceExtensionsRunner(
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, notifications browser.Notifications,
 	exec schemeapi.Executor,
+	grantor extension.Grantor,
+	promptOpener ide.ExtensionPromptOpener, storage storageapi.Service,
+	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
-	other, err := p.runner.WorkspaceExtensionsRunner(uri, res, dataDir, notifications, exec)
+	other, err := p.runner.WorkspaceExtensionsRunner(uri, res, dataDir, notifications, exec,
+		grantor, promptOpener, storage, scheduleNextTick)
 	if err != nil {
 		return nil, err
 	}

@@ -46,6 +46,7 @@ import (
 	"github.com/unstablebuild/blue/retry"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -60,14 +61,12 @@ import (
 // initially exchanges metadata and secrets over stdin/stdout and secures
 // resources via TLS and per rpc authentication/authorization.
 func NewRunner(
-	ctx context.Context, locker sync.Locker,
-	grantor extension.Grantor, dataDir string, opts ...Option,
+	ctx context.Context, locker sync.Locker, dataDir string, opts ...Option,
 ) (ide.ExtensionsRunner, error) {
 	authorizer := newAuthorizer()
 	ret := &runner{
 		authorizer: authorizer,
 		locker:     locker,
-		grantor:    grantor,
 		dataDir:    dataDir,
 		opts:       opts,
 	}
@@ -90,7 +89,6 @@ type runner struct {
 	locker     sync.Locker
 	keys       auth.Keys
 	authorizer auth.Authorizer[Extension]
-	grantor    extension.Grantor
 	dataDir    string
 }
 
@@ -98,6 +96,9 @@ func (r *runner) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, notifications browser.Notifications,
 	executor schemeapi.Executor,
+	grantor extension.Grantor,
+	promptOpener ide.ExtensionPromptOpener, storage storageapi.Service,
+	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
 	var ret wrapCloser
 	ret.URI = uri
@@ -176,7 +177,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		_ = ret.srv.Serve(listener)
 	})
 
-	ret.workspaceRunner = newWorkspaceRunner(executor, r.grantor, uri,
+	ret.workspaceRunner = newWorkspaceRunner(executor, grantor, uri,
 		socket, r.dataDir, cert, r.keys, r.opts...)
 	if err != nil {
 		err = fmt.Errorf("new workspace runner: %w", err)

@@ -32,7 +32,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/cmd/rune-agent/agentshell"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/debug"
 )
 
 // NewExtension returns an extension and its metadata.
@@ -44,12 +43,11 @@ func NewExtension(
 			defaultModel: defaultModel,
 			registry:     registry,
 		}, extensionapi.Metadata{
-			DeveloperID:      "ernestrc",
-			DeveloperEmail:   "ernest@unstable.build",
-			DeveloperKey:     "064D4ABCFA6D9338",
-			ExtensionID:      "rune-agent",
-			ExtensionName:    "Rune Agent",
-			ExtensionVersion: debug.Tag,
+			DeveloperID:    "Unstable Build",
+			DeveloperEmail: "it@unstable.build",
+			DeveloperKey:   "064D4ABCFA6D9338",
+			ExtensionID:    "rune-agent",
+			ExtensionName:  "Rune Agent",
 			Permissions: extensionapi.NewPermissions(
 				permissions...,
 			),

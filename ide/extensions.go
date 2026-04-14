@@ -26,10 +26,22 @@ package ide
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
 )
+
+// ExtensionPromptOpener opens a browser prompt for extension host decisions.
+type ExtensionPromptOpener interface {
+	Prompt(
+		message string, options []string,
+		bindings []term.KeyComb,
+		promptHandler handler.PromptHandler,
+	) browser.Window
+}
 
 // ExtensionsRunner abstracts the ability to construct extension.Runner.
 type ExtensionsRunner interface {
@@ -37,6 +49,9 @@ type ExtensionsRunner interface {
 		uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 		dataDir string, notifications browser.Notifications,
 		executor schemeapi.Executor,
+		grantor extension.Grantor,
+		promptOpener ExtensionPromptOpener, storage storageapi.Service,
+		scheduleNextTick func(func()) bool,
 	) (extension.Runner, error)
 }
 
@@ -44,7 +59,10 @@ type ExtensionsRunner interface {
 func FuncExtensionsRunner(
 	fn func(workspaceapi.URI,
 		map[extensionapi.Permission]extension.ResourceRegistrar, string,
-		browser.Notifications, schemeapi.Executor) (extension.Runner, error),
+		browser.Notifications, schemeapi.Executor,
+		extension.Grantor,
+		ExtensionPromptOpener, storageapi.Service,
+		func(func()) bool) (extension.Runner, error),
 ) ExtensionsRunner {
 	return fnExtensions{fn: fn}
 }
@@ -52,13 +70,19 @@ func FuncExtensionsRunner(
 type fnExtensions struct {
 	fn func(workspaceapi.URI,
 		map[extensionapi.Permission]extension.ResourceRegistrar, string,
-		browser.Notifications, schemeapi.Executor) (extension.Runner, error)
+		browser.Notifications, schemeapi.Executor,
+		extension.Grantor,
+		ExtensionPromptOpener, storageapi.Service,
+		func(func()) bool) (extension.Runner, error)
 }
 
 func (f fnExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, n browser.Notifications, exec schemeapi.Executor,
+	grantor extension.Grantor,
+	promptOpener ExtensionPromptOpener, storage storageapi.Service,
+	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
-	return f.fn(uri, res, dataDir, n, exec)
+	return f.fn(uri, res, dataDir, n, exec, grantor, promptOpener, storage, scheduleNextTick)
 }

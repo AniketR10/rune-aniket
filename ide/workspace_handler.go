@@ -1060,8 +1060,13 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
+	browser := ex.Browser()
+	promptOpener := &ex.comp
+	promptStorage := storageapi.WithPartition(h.storage, "extension-permissions")
+	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res,
-		dataDir, ex.Browser(), cwd)
+		dataDir, browser, cwd, grantor,
+		promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
 		return nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}

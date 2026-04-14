@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide"
@@ -129,7 +128,7 @@ command:
 
 		var mu sync.Mutex
 		runner, err := extensionv2.NewRunner(context.Background(),
-			&mu, extension.GrantAll(), dir,
+			&mu, dir,
 			extensionv2.WithSocketEnv("IDETEST_SOCKET"),
 			extensionv2.WithDataDirEnv("IDETEST_DATADIR"),
 			extensionv2.WithAuthCertEnv("IDETEST_CERT"),
@@ -195,7 +194,7 @@ command:
 
 		var mu sync.Mutex
 		runner, err := extensionv2.NewRunner(context.Background(),
-			&mu, extension.GrantAll(), dir,
+			&mu, dir,
 		)
 		require.NoError(t, err)
 		i, err := ide.New(dir, config.Name(), dir,

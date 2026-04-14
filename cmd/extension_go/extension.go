@@ -37,12 +37,11 @@ import (
 func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 	ext := &goExtension{}
 	meta := extensionapi.Metadata{
-		DeveloperID:      "ernestrc",
-		DeveloperEmail:   "ernest@unstable.build",
-		DeveloperKey:     "064D4ABCFA6D9338",
-		ExtensionID:      "go",
-		ExtensionName:    "Go Language Extension",
-		ExtensionVersion: "v0.0.1",
+		DeveloperID:    "Unstable Build",
+		DeveloperEmail: "it@unstable.build",
+		DeveloperKey:   "064D4ABCFA6D9338",
+		ExtensionID:    "go",
+		ExtensionName:  "Go Language Extension",
 		Permissions: extensionapi.NewPermissions(
 			extensionapi.PermissionLSP,
 			extensionapi.PermissionEditor,

@@ -601,7 +601,9 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 func (m *pkgManager) Close() error {
 	ret := m.uc.Close()
 	if m.storage != nil {
-		ret = multierror.Append(ret, m.storage.Close())
+		if err := m.storage.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	return ret
 }

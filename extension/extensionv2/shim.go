@@ -56,8 +56,8 @@ func NewGranteeShim(
 ) (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 	permissions := extensionapi.NewPermissions(perms...)
 	cfg := extensionapi.Metadata{
-		DeveloperID:      "ox.dev",
-		DeveloperEmail:   "ernest@unstable.build",
+		DeveloperID:      "Unstable Build",
+		DeveloperEmail:   "it@unstable.build",
 		DeveloperKey:     "064D4ABCFA6D9338",
 		ExtensionID:      id,
 		ExtensionName:    name,

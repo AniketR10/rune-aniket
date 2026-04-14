@@ -48,6 +48,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -1037,6 +1038,11 @@ func TestWorkspaceExtensions(t *testing.T) {
 		require.NoError(t, err)
 
 		// extension.Runner.Run is called asynchronously
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		var uris [2]string
 		var i atomic.Int32
 		var wg sync.WaitGroup
@@ -1045,8 +1051,19 @@ func TestWorkspaceExtensions(t *testing.T) {
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications,
 				exec schemeapi.Executor,
+				grantor extension.Grantor,
+				promptOpener ExtensionPromptOpener, storage storageapi.Service,
+				scheduleNextTick func(func()) bool,
 			) (extension.Runner, error) {
 				defer wg.Done()
+				assert.NotNil(t, res)
+				assert.Equal(t, dir, s)
+				assert.NotNil(t, noti)
+				assert.NotNil(t, exec)
+				assert.NotNil(t, grantor)
+				assert.NotNil(t, promptOpener)
+				assert.NotNil(t, storage)
+				assert.NotNil(t, scheduleNextTick)
 				i := i.Add(1)
 				uris[i-1] = _uri.String()
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
@@ -1057,11 +1074,6 @@ func TestWorkspaceExtensions(t *testing.T) {
 				},
 				}, nil
 			})
-		dir, err := os.MkdirTemp("", "")
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			_ = os.RemoveAll(dir)
-		})
 		wg.Add(2)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
@@ -1102,8 +1114,19 @@ func TestWorkspaceExtensions(t *testing.T) {
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications,
-				executor schemeapi.Executor) (extension.Runner, error) {
+				executor schemeapi.Executor,
+				grantor extension.Grantor,
+				promptOpener ExtensionPromptOpener, storage storageapi.Service,
+				scheduleNextTick func(func()) bool) (extension.Runner, error) {
 				defer wg.Done()
+				assert.NotNil(t, res)
+				assert.Equal(t, dir, s)
+				assert.NotNil(t, noti)
+				assert.NotNil(t, executor)
+				assert.NotNil(t, grantor)
+				assert.NotNil(t, promptOpener)
+				assert.NotNil(t, storage)
+				assert.NotNil(t, scheduleNextTick)
 				i := i.Add(1)
 				uris[i-1] = _uri.String()
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
