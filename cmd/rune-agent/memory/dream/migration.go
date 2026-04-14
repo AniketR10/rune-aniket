@@ -56,7 +56,7 @@ After fixing all files:
 	},
 	3: {
 		From: 2, To: 3,
-		FixPrompt:   `You are a code migration agent. A new file claude.go was added to the workspace providing FetchClaudeDialogue. No existing files need changes — just verify everything compiles.
+		FixPrompt: `You are a code migration agent. A new file claude.go was added to the workspace providing FetchClaudeDialogue. No existing files need changes — just verify everything compiles.
 
 After checking:
 1. Run: run_command go build ./...

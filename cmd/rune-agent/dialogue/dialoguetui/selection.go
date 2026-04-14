@@ -105,7 +105,7 @@ func (s *Selection) Height(width int) int {
 		return 0
 	}
 	h := max(wrappedLines(s.title, width, 0), 1) // title lines (wrapped)
-	h++                                            // blank line after title
+	h++                                          // blank line after title
 	for _, opt := range s.options {
 		h++ // label line
 		if opt.Description != "" {

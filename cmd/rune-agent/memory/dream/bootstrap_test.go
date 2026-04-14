@@ -204,7 +204,7 @@ func (osFileSystem) OpenFile(path string, flag int, mode os.FileMode) (workspace
 	return os.OpenFile(path, flag, mode)
 }
 
-func (osFileSystem) Remove(path string) error                      { return os.Remove(path) }
-func (osFileSystem) Stat(path string) (os.FileInfo, error)         { return os.Stat(path) }
-func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error)    { return os.ReadDir(name) }
-func (osFileSystem) MkdirAll(path string, perm os.FileMode) error  { return os.MkdirAll(path, perm) }
+func (osFileSystem) Remove(path string) error                     { return os.Remove(path) }
+func (osFileSystem) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error)   { return os.ReadDir(name) }
+func (osFileSystem) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }

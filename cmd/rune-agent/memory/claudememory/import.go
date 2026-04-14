@@ -26,8 +26,8 @@ package claudememory
 import (
 	"context"
 
-	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 )
 
 // Import scans Claude Code conversations at claudeHome and runs the

@@ -531,7 +531,7 @@ func TestInputFireDelay(t *testing.T) {
 			description: "releasing shift while digit key held does not dispatch spurious char",
 			pressedKeys: [][]ebiten.Key{
 				{ebiten.KeyShift, ebiten.KeyDigit2}, // frame 1: Shift+2 → @
-				{ebiten.KeyDigit2},                   // frame 2: Shift released, 2 held
+				{ebiten.KeyDigit2},                  // frame 2: Shift released, 2 held
 			},
 			// In frame 2, keyChars is empty (Digit2 repeat not due),
 			// so handleChars falls back to AppendInputChars. The OS may

@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	maxSessions = 64
+	maxSessions  = 64
 	minSessionID = 1000
 	maxSessionID = 100000
 )
@@ -46,16 +46,16 @@ const (
 // Session represents a persistent command execution session.
 type Session struct {
 	ID       int
-	stdin    io.WriteCloser      // pipeWriter (non-PTY) or pty.Master (PTY)
+	stdin    io.WriteCloser // pipeWriter (non-PTY) or pty.Master (PTY)
 	buf      *HeadTailBuffer
-	done     chan struct{}        // closed on process exit
+	done     chan struct{} // closed on process exit
 	exitCode int
 	exitErr  error
 	pid      workspaceapi.Pid
-	pty      *workspaceapi.Pty   // nil for non-PTY
-	cancel   context.CancelFunc  // cancels session context
+	pty      *workspaceapi.Pty  // nil for non-PTY
+	cancel   context.CancelFunc // cancels session context
 	started  time.Time
-	clock    func() time.Time    // if set, used by WallTime instead of time.Now
+	clock    func() time.Time // if set, used by WallTime instead of time.Now
 	mu       sync.Mutex
 }
 
@@ -120,7 +120,7 @@ func (s *Session) Output() string {
 type SessionManager struct {
 	mu       sync.Mutex
 	sessions map[int]*Session
-	ctx      context.Context    // long-lived lifecycle context
+	ctx      context.Context // long-lived lifecycle context
 	cancel   context.CancelFunc
 	exec     workspaceapi.Executor
 	term     workspaceapi.Terminal // may be nil if PTY not available

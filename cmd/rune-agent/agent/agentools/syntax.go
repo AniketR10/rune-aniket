@@ -29,11 +29,11 @@ import (
 	"fmt"
 	"strings"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // SyntaxTools returns all syntax (tree-sitter) backed agent tools.

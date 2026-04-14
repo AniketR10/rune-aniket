@@ -58,7 +58,7 @@ type streamIterator struct {
 	pendingCalls map[int64]*llm.ToolCall
 
 	// Usage from message_start and message_delta events.
-	usage    ant.Usage
+	usage      ant.Usage
 	usageDelta ant.MessageDeltaUsage
 
 	// Stop reason from message_delta.

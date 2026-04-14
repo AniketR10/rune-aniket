@@ -87,14 +87,14 @@ type toolNode struct {
 	summary       string
 	done          bool
 	isError       bool
-	dropped       bool              // true when the tool result was dropped from history
-	header        *toolCallHeader   // non-nil after CompleteToolCall (for dropped-attr updates)
-	prompt        bool              // true for ask_user_question (different icon/no animation)
-	isMemory      bool              // true for memory recall entries (different icon/no animation)
-	isResult      bool              // true for sub-agent result leaf nodes (different icon)
-	startTime     time.Time         // when the tool call was announced (for live elapsed display)
-	duration      time.Duration     // final execution duration (set on completion)
-	childTurn     *Turn             // non-nil for sub-agent tool calls with children
+	dropped       bool            // true when the tool result was dropped from history
+	header        *toolCallHeader // non-nil after CompleteToolCall (for dropped-attr updates)
+	prompt        bool            // true for ask_user_question (different icon/no animation)
+	isMemory      bool            // true for memory recall entries (different icon/no animation)
+	isResult      bool            // true for sub-agent result leaf nodes (different icon)
+	startTime     time.Time       // when the tool call was announced (for live elapsed display)
+	duration      time.Duration   // final execution duration (set on completion)
+	childTurn     *Turn           // non-nil for sub-agent tool calls with children
 }
 
 // NewTurn creates a new Turn. The interrupter is used to drive
@@ -548,15 +548,15 @@ func (t *Turn) Draw(w term.Writer) {
 }
 
 var (
-	defaultTreeAttr     = term.Attributes{Fg: tcell.ColorGray}
-	defaultSuccessAttr  = term.Attributes{Fg: tcell.ColorGreen}
-	defaultErrorAttr    = term.Attributes{Fg: tcell.ColorRed}
-	defaultToolNameAttr = term.Attributes{Attrs: tcell.AttrBold, Fg: tcell.ColorFuchsia}
-	defaultToolArgsAttr = term.Attributes{Fg: tcell.ColorGray}
-	defaultPromptAttr   = term.Attributes{Fg: tcell.ColorAqua}
-	defaultDroppedAttr  = term.Attributes{Fg: tcell.ColorGray}
-	defaultMemoryAttr   = term.Attributes{Fg: tcell.ColorPurple}
-	defaultResultAttr   = term.Attributes{Fg: tcell.ColorGreen}
+	defaultTreeAttr      = term.Attributes{Fg: tcell.ColorGray}
+	defaultSuccessAttr   = term.Attributes{Fg: tcell.ColorGreen}
+	defaultErrorAttr     = term.Attributes{Fg: tcell.ColorRed}
+	defaultToolNameAttr  = term.Attributes{Attrs: tcell.AttrBold, Fg: tcell.ColorFuchsia}
+	defaultToolArgsAttr  = term.Attributes{Fg: tcell.ColorGray}
+	defaultPromptAttr    = term.Attributes{Fg: tcell.ColorAqua}
+	defaultDroppedAttr   = term.Attributes{Fg: tcell.ColorGray}
+	defaultMemoryAttr    = term.Attributes{Fg: tcell.ColorPurple}
+	defaultResultAttr    = term.Attributes{Fg: tcell.ColorGreen}
 	defaultResultErrAttr = term.Attributes{Fg: tcell.ColorRed}
 )
 
@@ -700,7 +700,6 @@ func (t *Turn) drawCollapsedAt(w term.Writer, width int) {
 	}
 }
 
-
 // writeCollapsedStatus writes the status icon for a collapsed tool node
 // and returns the new x position.
 func (t *Turn) writeCollapsedStatus(w term.Writer, x, y int, tn *toolNode, frame, maxWidth int) int {
@@ -799,16 +798,15 @@ func (t *Turn) writeCollapsedDuration(w term.Writer, x, y int, tn *toolNode, max
 	return writeRuneLineAttr(w, x, y, " "+durStr, maxWidth, attr)
 }
 
-
 const (
-	runningPrefix  = "⚙ "
-	donePrefix     = "✓ "
-	errorPrefix    = "✗ "
-	promptPrefix   = "? "
-	memoryPrefix   = "󰍛 "
+	runningPrefix   = "⚙ "
+	donePrefix      = "✓ "
+	errorPrefix     = "✗ "
+	promptPrefix    = "? "
+	memoryPrefix    = "󰍛 "
 	resultPrefix    = "󰆈 "
 	resultErrPrefix = "󰅽 "
-	expandHintText = "Press <ctrl-o> to expand"
+	expandHintText  = "Press <ctrl-o> to expand"
 )
 
 var (
@@ -821,10 +819,10 @@ var (
 	}
 
 	taskToolNames = map[string]bool{
-		"TaskCreate": true,
-		"TaskUpdate": true,
-		"TaskGet":    true,
-		"TaskList":   true,
+		"TaskCreate":  true,
+		"TaskUpdate":  true,
+		"TaskGet":     true,
+		"TaskList":    true,
 		"update_plan": true,
 	}
 )
@@ -878,8 +876,8 @@ type toolCallHeader struct {
 	width      int
 }
 
-func (h *toolCallHeader) Height(int) int        { return 1 }
-func (h *toolCallHeader) Resize(w, _ int)       { h.width = w }
+func (h *toolCallHeader) Height(int) int  { return 1 }
+func (h *toolCallHeader) Resize(w, _ int) { h.width = w }
 func (h *toolCallHeader) Draw(w term.Writer) {
 	x := writeRuneLineAttr(w, 0, 0, h.prefix, h.width, h.prefixAttr)
 	writeRuneLineAttr(w, x, 0, h.rest, h.width, h.restAttr)

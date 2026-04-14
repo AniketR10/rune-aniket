@@ -35,27 +35,27 @@ const LLMProvider = "anthropic"
 
 const (
 	// ClaudeOpus4Dot6 is Anthropic's Claude Opus 4.6 model.
-	ClaudeOpus4Dot6   = "claude-opus-4-6"
+	ClaudeOpus4Dot6 = "claude-opus-4-6"
 	// ClaudeSonnet4Dot6 is Anthropic's Claude Sonnet 4.6 model.
 	ClaudeSonnet4Dot6 = "claude-sonnet-4-6"
 	// ClaudeHaiku4Dot5 is Anthropic's Claude Haiku 4.5 model.
-	ClaudeHaiku4Dot5  = "claude-haiku-4-5"
+	ClaudeHaiku4Dot5 = "claude-haiku-4-5"
 	// ClaudeOpus4Dot5 is Anthropic's Claude Opus 4.5 model.
-	ClaudeOpus4Dot5   = "claude-opus-4-5"
+	ClaudeOpus4Dot5 = "claude-opus-4-5"
 	// ClaudeSonnet4Dot5 is Anthropic's Claude Sonnet 4.5 model.
 	ClaudeSonnet4Dot5 = "claude-sonnet-4-5"
 	// ClaudeOpus4Dot1 is Anthropic's Claude Opus 4.1 model.
-	ClaudeOpus4Dot1   = "claude-opus-4-1"
+	ClaudeOpus4Dot1 = "claude-opus-4-1"
 	// ClaudeSonnet4 is Anthropic's Claude Sonnet 4.0 model.
-	ClaudeSonnet4     = "claude-sonnet-4-0"
+	ClaudeSonnet4 = "claude-sonnet-4-0"
 	// ClaudeOpus4 is Anthropic's Claude Opus 4.0 model.
-	ClaudeOpus4       = "claude-opus-4-0"
+	ClaudeOpus4 = "claude-opus-4-0"
 	// ClaudeOpus3 is Anthropic's Claude 3 Opus model.
-	ClaudeOpus3   = "claude-3-opus"
+	ClaudeOpus3 = "claude-3-opus"
 	// ClaudeSonnet3 is Anthropic's Claude 3 Sonnet model.
 	ClaudeSonnet3 = "claude-3-sonnet"
 	// ClaudeHaiku3 is Anthropic's Claude 3 Haiku model.
-	ClaudeHaiku3  = "claude-3-haiku"
+	ClaudeHaiku3 = "claude-3-haiku"
 )
 
 // AvailableModels returns a map from model identifier -> nominal maximum

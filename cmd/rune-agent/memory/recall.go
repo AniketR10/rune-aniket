@@ -34,8 +34,8 @@ import (
 	"strings"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 )
 
 const recallTimeout = 30 * time.Second

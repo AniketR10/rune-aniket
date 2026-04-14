@@ -65,21 +65,21 @@ const (
 
 // MessageEvent is a structured event sent through the display channel.
 type MessageEvent struct {
-	Type             MessageEventType
-	Text             string // MessageEventText: text chunk
-	ToolCallID       string // MessageEventToolCall / MessageEventToolResult: unique call identifier
-	ToolName         string // MessageEventToolCall / MessageEventToolResult
-	ToolArgs         string // MessageEventToolCall: JSON arguments
-	ToolSummary      string // MessageEventToolCall / MessageEventToolResult: short human-readable args summary
-	ToolOutput       string // MessageEventToolResult: execution output
-	IsError          bool          // MessageEventToolResult: whether the tool errored
-	ToolStartTime    time.Time     // MessageEventToolCall: when the tool call was announced
-	ToolDuration     time.Duration // MessageEventToolResult: how long the tool took
-	ParentToolCallID   string        // if set, this is a child event nested under this parent tool call
-	DroppedToolCallIDs []string      // MessageEventToolsDropped: tool call IDs removed from history
+	Type               MessageEventType
+	Text               string              // MessageEventText: text chunk
+	ToolCallID         string              // MessageEventToolCall / MessageEventToolResult: unique call identifier
+	ToolName           string              // MessageEventToolCall / MessageEventToolResult
+	ToolArgs           string              // MessageEventToolCall: JSON arguments
+	ToolSummary        string              // MessageEventToolCall / MessageEventToolResult: short human-readable args summary
+	ToolOutput         string              // MessageEventToolResult: execution output
+	IsError            bool                // MessageEventToolResult: whether the tool errored
+	ToolStartTime      time.Time           // MessageEventToolCall: when the tool call was announced
+	ToolDuration       time.Duration       // MessageEventToolResult: how long the tool took
+	ParentToolCallID   string              // if set, this is a child event nested under this parent tool call
+	DroppedToolCallIDs []string            // MessageEventToolsDropped: tool call IDs removed from history
 	Memories           []MemoryRecallEntry // MessageEventMemoryRecall: recalled memories
-	MemoryDuration     time.Duration      // MessageEventMemoryRecall: how long recall took
-	TaskProgress       ProgressTaskEntry  // MessageEventTaskProgress: single task update
+	MemoryDuration     time.Duration       // MessageEventMemoryRecall: how long recall took
+	TaskProgress       ProgressTaskEntry   // MessageEventTaskProgress: single task update
 
 	// Prompt fields (MessageEventPrompt)
 	PromptTitle       string

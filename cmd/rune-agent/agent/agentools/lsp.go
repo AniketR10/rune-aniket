@@ -30,10 +30,10 @@ import (
 	"sort"
 	"strings"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // LSPTools returns all LSP-backed agent tools. The tracker should be
@@ -260,8 +260,8 @@ search_content for navigating to definitions.`,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-				"symbol": map[string]any{
-						"type":        "string",
+					"symbol": map[string]any{
+						"type": "string",
 						"description": `The symbol name to find the definition of. Use the package-qualified
 name for functions and types (e.g. "mypackage.MyFunc") or the
 receiver-qualified name for methods (e.g. "MyType.Method").`,
@@ -324,8 +324,8 @@ Prefer over search_content for finding implementors.`,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-				"symbol": map[string]any{
-						"type":        "string",
+					"symbol": map[string]any{
+						"type": "string",
 						"description": `The interface name to find implementations of. Use the
 package-qualified name (e.g. "io.Reader") when the interface is not
 unique across the workspace.`,
@@ -390,8 +390,8 @@ matches. Prefer over search_content for finding usages of a symbol.`,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-				"symbol": map[string]any{
-						"type":        "string",
+					"symbol": map[string]any{
+						"type": "string",
 						"description": `The symbol name to find references of. Use the package-qualified
 name for functions and types (e.g. "mypackage.MyFunc") or the
 receiver-qualified name for methods (e.g. "MyType.Method").`,
@@ -710,7 +710,7 @@ func (t *searchSymbolsTool) Execute(ctx context.Context, arguments string) agent
 // --- describe_symbol ---
 
 type describeSymbolTool struct {
-	lsp           semanticapi.LSP
+	lsp semanticapi.LSP
 	cwd workspaceapi.URI
 }
 
@@ -727,8 +727,8 @@ documentation — without reading its source file.`,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-				"symbol": map[string]any{
-						"type":        "string",
+					"symbol": map[string]any{
+						"type": "string",
 						"description": `The symbol name to describe. Use the package-qualified name for
 functions and types (e.g. "mypackage.MyFunc") or the receiver-qualified
 name for methods (e.g. "MyType.Method").`,

@@ -29,8 +29,8 @@ import (
 	"runtime"
 	"testing"
 
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // benchFixtures returns the shared test data used by both benchmarks:

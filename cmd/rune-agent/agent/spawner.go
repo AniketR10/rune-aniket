@@ -55,6 +55,7 @@ type RunHandle struct {
 }
 
 // AgentSummary describes an agent for listing purposes.
+//
 //nolint:revive // Preserved imported API name for compatibility and clarity.
 type AgentSummary struct {
 	ID   string `json:"id"`

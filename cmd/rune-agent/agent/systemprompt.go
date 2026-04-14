@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"strings"
 
-	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 )
 
 // DefaultSystemPrompt returns the system prompt for the coding agent.

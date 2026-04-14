@@ -296,7 +296,7 @@ func (t *taskListTool) Definition() llm.Tool {
 			Description: "List all tasks and their statuses.",
 			Parameters: map[string]any{
 				"type":                 "object",
-				"properties":          map[string]any{},
+				"properties":           map[string]any{},
 				"additionalProperties": false,
 			},
 		},

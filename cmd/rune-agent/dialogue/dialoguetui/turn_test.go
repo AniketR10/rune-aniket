@@ -463,7 +463,6 @@ func TestTurnCollapsedDrawBashShowsCommand(t *testing.T) {
 	})
 }
 
-
 func TestTurnCollapsedDrawNested(t *testing.T) {
 	turn := newTestTurn()
 	turn.AddToolCall("c1", "read_file", `{}`, "a.go")
@@ -522,7 +521,6 @@ func TestTurnCollapsedDrawDeepNest(t *testing.T) {
 	// 3 levels: root → child → grandchild
 	assert.Equal(t, 3, turn.collapsedHeight())
 }
-
 
 func TestTurnCollapseModeCycle(t *testing.T) {
 	assert.Equal(t, collapseModeExpanded, collapseModeCollapsed.next())

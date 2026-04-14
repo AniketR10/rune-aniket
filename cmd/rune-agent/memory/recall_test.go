@@ -35,8 +35,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 )
 
 // stubFileSystem implements workspaceapi.FileSystem for testing Available.
@@ -57,9 +57,9 @@ func (s *stubFileSystem) URI(string) (workspaceapi.URI, error) {
 func (s *stubFileSystem) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
 	return nil, nil
 }
-func (s *stubFileSystem) Remove(string) error                       { return nil }
-func (s *stubFileSystem) ReadDir(string) ([]os.DirEntry, error)     { return nil, nil }
-func (s *stubFileSystem) MkdirAll(string, os.FileMode) error        { return nil }
+func (s *stubFileSystem) Remove(string) error                   { return nil }
+func (s *stubFileSystem) ReadDir(string) ([]os.DirEntry, error) { return nil, nil }
+func (s *stubFileSystem) MkdirAll(string, os.FileMode) error    { return nil }
 
 func TestAvailable(t *testing.T) {
 	t.Run("true when go.mod exists", func(t *testing.T) {

@@ -31,10 +31,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
 // ServiceFactory creates an LLM service for the given model.

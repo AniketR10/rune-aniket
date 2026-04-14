@@ -84,7 +84,7 @@ type Component struct {
 	reasoningAnnotation *component.ListNode  // annotation node ("ctrl-o to ...")
 
 	// collapse mode for tool turns
-	collapseMode collapseMode
+	collapseMode       collapseMode
 	toggleAnchor       component.ListNode
 	toggleAnchorOffset int
 	toggleAnchorValid  bool

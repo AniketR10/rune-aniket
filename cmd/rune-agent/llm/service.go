@@ -82,19 +82,19 @@ type ReasoningEffort string
 
 const (
 	// ReasoningEffortNone disables explicit reasoning effort.
-	ReasoningEffortNone    ReasoningEffort = "none"
+	ReasoningEffortNone ReasoningEffort = "none"
 	// ReasoningEffortMinimal requests minimal reasoning effort.
 	ReasoningEffortMinimal ReasoningEffort = "minimal"
 	// ReasoningEffortLow requests low reasoning effort.
-	ReasoningEffortLow     ReasoningEffort = "low"
+	ReasoningEffortLow ReasoningEffort = "low"
 	// ReasoningEffortMedium requests medium reasoning effort.
-	ReasoningEffortMedium  ReasoningEffort = "medium"
+	ReasoningEffortMedium ReasoningEffort = "medium"
 	// ReasoningEffortHigh requests high reasoning effort.
-	ReasoningEffortHigh    ReasoningEffort = "high"
+	ReasoningEffortHigh ReasoningEffort = "high"
 	// ReasoningEffortXHigh requests extra-high reasoning effort.
-	ReasoningEffortXHigh   ReasoningEffort = "xhigh"
+	ReasoningEffortXHigh ReasoningEffort = "xhigh"
 	// ReasoningEffortMax requests the maximum supported reasoning effort.
-	ReasoningEffortMax     ReasoningEffort = "max"
+	ReasoningEffortMax ReasoningEffort = "max"
 )
 
 // ReasoningSummary controls the level of reasoning summary output.
@@ -102,9 +102,9 @@ type ReasoningSummary string
 
 const (
 	// ReasoningSummaryAuto lets the provider choose the summary level.
-	ReasoningSummaryAuto     ReasoningSummary = "auto"
+	ReasoningSummaryAuto ReasoningSummary = "auto"
 	// ReasoningSummaryConcise requests a concise reasoning summary.
-	ReasoningSummaryConcise  ReasoningSummary = "concise"
+	ReasoningSummaryConcise ReasoningSummary = "concise"
 	// ReasoningSummaryDetailed requests a detailed reasoning summary.
 	ReasoningSummaryDetailed ReasoningSummary = "detailed"
 	// ReasoningSummaryDisabled disables reasoning summaries.
@@ -311,7 +311,7 @@ type ResponseFormatType string
 
 const (
 	// ResponseFormatTypeText requests plain text output.
-	ResponseFormatTypeText       ResponseFormatType = "text"
+	ResponseFormatTypeText ResponseFormatType = "text"
 	// ResponseFormatTypeJSONObject requests JSON object output.
 	ResponseFormatTypeJSONObject ResponseFormatType = "json_object"
 	// ResponseFormatTypeJSONSchema requests JSON schema-constrained output.

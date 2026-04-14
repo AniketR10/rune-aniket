@@ -42,8 +42,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	idelsp "unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/handler/locationpicker"
+	idelsp "unstable.build/go-tui/ide/idelsp"
 )
 
 // collectIter drains an iterator into a string slice.

@@ -60,7 +60,7 @@ func (t *writeStdinTool) Definition() llm.Tool {
 	return llm.Tool{
 		Type: llm.ToolTypeFunction,
 		Function: llm.FunctionDefinition{
-			Name: "write_stdin",
+			Name:        "write_stdin",
 			Description: "Writes characters to an existing unified exec session and returns recent output.",
 			Parameters: map[string]any{
 				"type": "object",

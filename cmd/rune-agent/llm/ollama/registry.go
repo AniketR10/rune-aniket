@@ -30,8 +30,8 @@ import (
 	"net/http"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 )
 
 // LLMProvider identifies the Ollama provider in the model registry.

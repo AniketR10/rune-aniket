@@ -35,11 +35,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/mock/gomock"
-	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
+	"unstable.build/go-tui/rpc/rpctest"
 )
 
 func disconnectedTestLSP(t *testing.T) *semanticrpc.Client {

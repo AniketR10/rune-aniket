@@ -31,9 +31,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // maxImageBytes is the maximum file size for image reads (20 MB).
@@ -63,7 +63,7 @@ func (t *readFileTool) Definition() llm.Tool {
 	return llm.Tool{
 		Type: llm.ToolTypeFunction,
 		Function: llm.FunctionDefinition{
-			Name:        "read_file",
+			Name: "read_file",
 			Description: `Read the contents of a file. Returns each line prefixed with its 1-based
 line number (e.g. "L1: hello world").
 

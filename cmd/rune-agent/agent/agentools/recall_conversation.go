@@ -28,10 +28,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/memory"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 type recallConversationTool struct {

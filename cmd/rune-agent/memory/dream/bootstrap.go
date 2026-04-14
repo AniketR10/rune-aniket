@@ -128,7 +128,6 @@ func writeTemplates(fsys workspaceapi.FileSystem, dataPath string) error {
 	})
 }
 
-
 // readVersion reads the template version from the version
 // file. Returns 0 if the file is missing or unparseable.
 func readVersion(fsys workspaceapi.FileSystem, dataPath string) int {

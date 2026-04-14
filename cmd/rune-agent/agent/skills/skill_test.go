@@ -157,18 +157,18 @@ body`,
 			},
 		},
 		{
-			name: "name exceeds 64 chars loads with warning",
+			name:  "name exceeds 64 chars loads with warning",
 			input: "---\nname: " + strings.Repeat("a", 65) + "\ndescription: Too long name\n---\nbody",
-			dir:  "/skills/long",
+			dir:   "/skills/long",
 			want: Skill{
 				Name: strings.Repeat("a", 65), Description: "Too long name",
 				Body: "body", Dir: "/skills/long",
 			},
 		},
 		{
-			name: "long description loads with warning",
+			name:  "long description loads with warning",
 			input: "---\nname: long-desc\ndescription: " + strings.Repeat("x", 1025) + "\n---\nbody",
-			dir:  "/skills/long-desc",
+			dir:   "/skills/long-desc",
 			want: Skill{
 				Name: "long-desc", Description: strings.Repeat("x", 1025),
 				Body: "body", Dir: "/skills/long-desc",

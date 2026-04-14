@@ -33,10 +33,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // minimalSSEResponse returns a valid SSE response that the OpenAI SDK can parse.

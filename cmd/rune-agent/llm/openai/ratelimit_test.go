@@ -678,10 +678,10 @@ func TestIsRetryableError(t *testing.T) {
 // openaiError simulates the SDK's error type for testing isRetryableError.
 // It implements the statusCoder, apiErrorCoder, and shouldRetryer interfaces.
 type openaiError struct {
-	statusCode   int
-	message      string
-	code         string
-	shouldRetry  *bool // nil = header absent, non-nil = header present
+	statusCode  int
+	message     string
+	code        string
+	shouldRetry *bool // nil = header absent, non-nil = header present
 }
 
 func (e *openaiError) Error() string {

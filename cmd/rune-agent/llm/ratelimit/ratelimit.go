@@ -37,8 +37,8 @@ import (
 	"strings"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/retry"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // MaxStreamRetries is the maximum number of retry attempts for retryable

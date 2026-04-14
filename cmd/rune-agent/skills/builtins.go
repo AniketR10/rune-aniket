@@ -25,10 +25,12 @@ package builtins
 
 import _ "embed"
 
-//go:embed explore/SKILL.md
 // Explore contains the embedded builtin explore skill definition.
+//
+//go:embed explore/SKILL.md
 var Explore []byte
 
-//go:embed plan/SKILL.md
 // Plan contains the embedded builtin plan skill definition.
+//
+//go:embed plan/SKILL.md
 var Plan []byte

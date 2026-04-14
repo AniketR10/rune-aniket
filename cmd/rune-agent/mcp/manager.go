@@ -43,9 +43,9 @@ type ServerStatus string
 
 const (
 	// StatusConnected indicates that the MCP server is connected.
-	StatusConnected    ServerStatus = "connected"
+	StatusConnected ServerStatus = "connected"
 	// StatusError indicates that the MCP server encountered an error.
-	StatusError        ServerStatus = "error"
+	StatusError ServerStatus = "error"
 	// StatusDisconnected indicates that the MCP server is disconnected.
 	StatusDisconnected ServerStatus = "disconnected"
 )

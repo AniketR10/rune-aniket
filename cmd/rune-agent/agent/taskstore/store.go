@@ -45,14 +45,14 @@ type Task struct {
 // UpdateOpts holds optional fields for updating a task.
 // Pointer fields are only applied when non-nil.
 type UpdateOpts struct {
-	Subject     *string
-	Description *string
-	ActiveForm  *string
-	Status      *string
-	AddBlocks   []string
+	Subject      *string
+	Description  *string
+	ActiveForm   *string
+	Status       *string
+	AddBlocks    []string
 	AddBlockedBy []string
-	Owner       *string
-	Metadata    map[string]any
+	Owner        *string
+	Metadata     map[string]any
 }
 
 // Store is a thread-safe in-memory task store.

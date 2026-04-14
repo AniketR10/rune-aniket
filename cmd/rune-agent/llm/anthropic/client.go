@@ -34,10 +34,10 @@ import (
 	ant "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/ratelimit"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/ratelimit"
 )
 
 // Config holds the configuration for the Anthropic client.

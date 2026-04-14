@@ -33,11 +33,11 @@ type OpType int
 
 const (
 	// OpAdd creates a new file.
-	OpAdd    OpType = iota // Create a new file
+	OpAdd OpType = iota // Create a new file
 	// OpDelete deletes an existing file.
-	OpDelete               // Delete an existing file
+	OpDelete // Delete an existing file
 	// OpUpdate modifies an existing file.
-	OpUpdate               // Modify an existing file
+	OpUpdate // Modify an existing file
 )
 
 // LineKind describes whether a diff line is context, added, or removed.
@@ -47,9 +47,9 @@ const (
 	// LineContext marks an unchanged line (prefix " ").
 	LineContext LineKind = iota // Unchanged line (prefix " ")
 	// LineAdd marks an added line (prefix "+").
-	LineAdd                    // Added line (prefix "+")
+	LineAdd // Added line (prefix "+")
 	// LineRemove marks a removed line (prefix "-").
-	LineRemove                 // Removed line (prefix "-")
+	LineRemove // Removed line (prefix "-")
 )
 
 // Line is a single diff line within a hunk.

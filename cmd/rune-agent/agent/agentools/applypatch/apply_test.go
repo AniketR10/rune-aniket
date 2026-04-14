@@ -56,9 +56,9 @@ func (f osFS) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.Fi
 	return os.OpenFile(path, flag, mode)
 }
 
-func (f osFS) Remove(path string) error        { return os.Remove(path) }
-func (f osFS) Stat(path string) (os.FileInfo, error) { return os.Stat(path) }
-func (f osFS) ReadDir(name string) ([]os.DirEntry, error) { return os.ReadDir(name) }
+func (f osFS) Remove(path string) error                     { return os.Remove(path) }
+func (f osFS) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (f osFS) ReadDir(name string) ([]os.DirEntry, error)   { return os.ReadDir(name) }
 func (f osFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
 
 func TestApply(t *testing.T) {
@@ -281,7 +281,7 @@ func TestApply(t *testing.T) {
 			}},
 			wantApply: 0,
 			wantErrs:  1,
-			verify: func(t *testing.T, dir string) {},
+			verify:    func(t *testing.T, dir string) {},
 		},
 		{
 			name: "hunk not found error includes divergence details",
@@ -306,7 +306,7 @@ func TestApply(t *testing.T) {
 			}},
 			wantApply: 0,
 			wantErrs:  1,
-			verify: func(t *testing.T, dir string) {},
+			verify:    func(t *testing.T, dir string) {},
 		},
 		{
 			name: "hunk not found error includes context hint",
@@ -332,7 +332,7 @@ func TestApply(t *testing.T) {
 			}},
 			wantApply: 0,
 			wantErrs:  1,
-			verify: func(t *testing.T, dir string) {},
+			verify:    func(t *testing.T, dir string) {},
 		},
 		{
 			name: "update with move to",

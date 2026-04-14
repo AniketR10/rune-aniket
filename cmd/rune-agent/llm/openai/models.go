@@ -35,59 +35,59 @@ const LLMProvider = "openai"
 
 const (
 	// GPT5Dot4 is the GPT-5.4 model.
-	GPT5Dot4         = "gpt-5.4"
+	GPT5Dot4 = "gpt-5.4"
 	// GPT5Dot4Pro is the GPT-5.4 Pro model.
-	GPT5Dot4Pro      = "gpt-5.4-pro"
+	GPT5Dot4Pro = "gpt-5.4-pro"
 	// GPT5Dot4Mini is the GPT-5.4 Mini model.
-	GPT5Dot4Mini     = "gpt-5.4-mini"
+	GPT5Dot4Mini = "gpt-5.4-mini"
 	// GPT5Dot4Nano is the GPT-5.4 Nano model.
-	GPT5Dot4Nano     = "gpt-5.4-nano"
+	GPT5Dot4Nano = "gpt-5.4-nano"
 	// GPT5Dot3Codex is the GPT-5.3 Codex model.
-	GPT5Dot3Codex    = "gpt-5.3-codex"
+	GPT5Dot3Codex = "gpt-5.3-codex"
 	// GPT5Dot3Instant is the GPT-5.3 Instant model.
-	GPT5Dot3Instant  = "gpt-5.3-instant"
+	GPT5Dot3Instant = "gpt-5.3-instant"
 	// GPT5Dot2 is the GPT-5.2 model.
-	GPT5Dot2         = "gpt-5.2"
+	GPT5Dot2 = "gpt-5.2"
 	// GPT5Dot2Chat is the GPT-5.2 chat-latest model.
-	GPT5Dot2Chat     = "gpt-5.2-chat-latest"
+	GPT5Dot2Chat = "gpt-5.2-chat-latest"
 	// GPT5Dot2Pro is the GPT-5.2 Pro model.
-	GPT5Dot2Pro      = "gpt-5.2-pro"
+	GPT5Dot2Pro = "gpt-5.2-pro"
 	// GPT5Dot1 is the GPT-5.1 model.
-	GPT5Dot1         = "gpt-5.1"
+	GPT5Dot1 = "gpt-5.1"
 	// GPT5 is the base GPT-5 model.
-	GPT5             = "gpt-5"
+	GPT5 = "gpt-5"
 	// GPT5Mini is the GPT-5 Mini model.
-	GPT5Mini         = "gpt-5-mini"
+	GPT5Mini = "gpt-5-mini"
 	// GPT5Nano is the GPT-5 Nano model.
-	GPT5Nano         = "gpt-5-nano"
+	GPT5Nano = "gpt-5-nano"
 	// GPT4Dot1 is the GPT-4.1 model.
-	GPT4Dot1         = "gpt-4.1"
+	GPT4Dot1 = "gpt-4.1"
 	// GPT4Dot1Mini is the GPT-4.1 Mini model.
-	GPT4Dot1Mini     = "gpt-4.1-mini"
+	GPT4Dot1Mini = "gpt-4.1-mini"
 	// GPT4Dot1Nano is the GPT-4.1 Nano model.
-	GPT4Dot1Nano     = "gpt-4.1-nano"
+	GPT4Dot1Nano = "gpt-4.1-nano"
 	// GPT4o is the GPT-4o model.
-	GPT4o            = "gpt-4o"
+	GPT4o = "gpt-4o"
 	// GPT4Turbo is the GPT-4 Turbo model.
-	GPT4Turbo        = "gpt-4-turbo"
+	GPT4Turbo = "gpt-4-turbo"
 	// GPT4 is the GPT-4 model.
-	GPT4             = "gpt-4"
+	GPT4 = "gpt-4"
 	// GPT3Dot5Turbo is the GPT-3.5 Turbo model.
-	GPT3Dot5Turbo    = "gpt-3.5-turbo"
+	GPT3Dot5Turbo = "gpt-3.5-turbo"
 	// GPT3Dot5Turbo16K is the GPT-3.5 Turbo 16K model.
 	GPT3Dot5Turbo16K = "gpt-3.5-turbo-16k"
 	// O1 is the o1 reasoning model.
-	O1               = "o1"
+	O1 = "o1"
 	// O1Mini is the o1-mini reasoning model.
-	O1Mini           = "o1-mini"
+	O1Mini = "o1-mini"
 	// O3 is the o3 reasoning model.
-	O3               = "o3"
+	O3 = "o3"
 	// O3Mini is the o3-mini reasoning model.
-	O3Mini           = "o3-mini"
+	O3Mini = "o3-mini"
 	// O3Pro is the o3-pro reasoning model.
-	O3Pro            = "o3-pro"
+	O3Pro = "o3-pro"
 	// O4Mini is the o4-mini reasoning model.
-	O4Mini           = "o4-mini"
+	O4Mini = "o4-mini"
 
 	// OpenAICompatibleURL indicates use of the default OpenAI API endpoint.
 	OpenAICompatibleURL = "" // indicates to underlying client to use the default openai api

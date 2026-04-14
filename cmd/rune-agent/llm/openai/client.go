@@ -40,9 +40,9 @@ import (
 	"github.com/openai/openai-go/v2/shared"
 	"github.com/pkoukk/tiktoken-go"
 	tiktokenLoader "github.com/pkoukk/tiktoken-go-loader"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // Config represents the default parameters used for chat completions
@@ -337,7 +337,7 @@ func (p *prefixWarningIterator) Next(ctx context.Context) (llm.Event, bool) {
 	return p.inner.Next(ctx)
 }
 
-func (p *prefixWarningIterator) Err() error  { return p.inner.Err() }
+func (p *prefixWarningIterator) Err() error   { return p.inner.Err() }
 func (p *prefixWarningIterator) Close() error { return p.inner.Close() }
 
 // createResponsesCompletion uses the /v1/responses endpoint for models
@@ -635,16 +635,16 @@ type completionStreamIterator struct {
 	err              error
 
 	// Rate limit support.
-	pendingWarnings []llm.Event   // warnings buffered during retries
-	warningIdx      int           // index into pendingWarnings
-	capturedHeaders http.Header   // response headers from the last HTTP response
-	isAnthropic     bool          // true when base URL contains "anthropic.com"
+	pendingWarnings []llm.Event // warnings buffered during retries
+	warningIdx      int         // index into pendingWarnings
+	capturedHeaders http.Header // response headers from the last HTTP response
+	isAnthropic     bool        // true when base URL contains "anthropic.com"
 
 	// Mid-stream retry support.
-	newStream       func() *ssestream.Stream[openai.ChatCompletionChunk] // factory to recreate stream
-	midStreamRetries int          // remaining mid-stream retry attempts
-	retryEvents      []llm.Event // buffered events emitted during a mid-stream retry
-	retryEventIdx    int         // index into retryEvents
+	newStream        func() *ssestream.Stream[openai.ChatCompletionChunk] // factory to recreate stream
+	midStreamRetries int                                                  // remaining mid-stream retry attempts
+	retryEvents      []llm.Event                                          // buffered events emitted during a mid-stream retry
+	retryEventIdx    int                                                  // index into retryEvents
 }
 
 func (s *completionStreamIterator) Next(ctx context.Context) (llm.Event, bool) {

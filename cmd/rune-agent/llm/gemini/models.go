@@ -30,21 +30,21 @@ const LLMProvider = "gemini"
 
 const (
 	// Gemini_3_1_Pro_Preview is the Gemini 3.1 Pro preview model.
-	Gemini_3_1_Pro_Preview      = "gemini-3.1-pro-preview"
+	Gemini_3_1_Pro_Preview = "gemini-3.1-pro-preview"
 	// Gemini_3_Flash_Preview is the Gemini 3 Flash preview model.
-	Gemini_3_Flash_Preview      = "gemini-3-flash-preview"
+	Gemini_3_Flash_Preview = "gemini-3-flash-preview"
 	// Gemini_3_1_FlashLite_Preview is the Gemini 3.1 Flash Lite preview model.
 	Gemini_3_1_FlashLite_Preview = "gemini-3.1-flash-lite-preview"
 	// Gemini_2_5_Pro is the Gemini 2.5 Pro model.
-	Gemini_2_5_Pro              = "gemini-2.5-pro"
+	Gemini_2_5_Pro = "gemini-2.5-pro"
 	// Gemini_2_5_Flash is the Gemini 2.5 Flash model.
-	Gemini_2_5_Flash            = "gemini-2.5-flash"
+	Gemini_2_5_Flash = "gemini-2.5-flash"
 	// Gemini_2_5_FlashLite is the Gemini 2.5 Flash Lite model.
-	Gemini_2_5_FlashLite        = "gemini-2.5-flash-lite"
+	Gemini_2_5_FlashLite = "gemini-2.5-flash-lite"
 	// Gemini_2_0_Flash is the Gemini 2.0 Flash model.
-	Gemini_2_0_Flash            = "gemini-2.0-flash"
+	Gemini_2_0_Flash = "gemini-2.0-flash"
 	// Gemini_2_0_FlashLite is the Gemini 2.0 Flash Lite model.
-	Gemini_2_0_FlashLite        = "gemini-2.0-flash-lite"
+	Gemini_2_0_FlashLite = "gemini-2.0-flash-lite"
 
 	// OpenAICompatibleURL is the OpenAI-compatible Gemini endpoint.
 	OpenAICompatibleURL = "https://generativelanguage.googleapis.com/v1beta/openai/"

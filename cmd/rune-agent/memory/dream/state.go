@@ -34,6 +34,7 @@ import (
 const dreamStateID = "dream-state"
 
 // DreamState tracks which dialogues have been processed by the dream system.
+//
 //nolint:revive // Preserved imported API name for compatibility and clarity.
 type DreamState struct {
 	SchemaVersion int              // template version memories were last processed under

@@ -94,23 +94,23 @@ type IconKey string
 
 const (
 	// IconDiagnosticError is the icon for LSP error diagnostics.
-	IconDiagnosticError       IconKey = "error"
+	IconDiagnosticError IconKey = "error"
 	// IconDiagnosticWarning is the icon for LSP warning diagnostics.
-	IconDiagnosticWarning     IconKey = "warning"
+	IconDiagnosticWarning IconKey = "warning"
 	// IconDiagnosticInformation is the icon for LSP information diagnostics.
 	IconDiagnosticInformation IconKey = "information"
 	// IconDiagnosticHint is the icon for LSP hint diagnostics.
-	IconDiagnosticHint        IconKey = "hint"
+	IconDiagnosticHint IconKey = "hint"
 	// IconCompilerInline is the icon for compiler inlining diagnostics.
-	IconCompilerInline        IconKey = "inline"
+	IconCompilerInline IconKey = "inline"
 	// IconCompilerEscape is the icon for compiler escape diagnostics.
-	IconCompilerEscape        IconKey = "escape"
+	IconCompilerEscape IconKey = "escape"
 	// IconCompilerBounds is the icon for compiler bounds diagnostics.
-	IconCompilerBounds        IconKey = "bounds"
+	IconCompilerBounds IconKey = "bounds"
 	// IconCompilerNilcheck is the icon for compiler nilcheck diagnostics.
-	IconCompilerNilcheck      IconKey = "nilcheck"
+	IconCompilerNilcheck IconKey = "nilcheck"
 	// IconCompilerDefault is the icon for unclassified compiler diagnostics.
-	IconCompilerDefault       IconKey = "compiler"
+	IconCompilerDefault IconKey = "compiler"
 )
 
 // IconSet configures the icons used by CallbackHandler.

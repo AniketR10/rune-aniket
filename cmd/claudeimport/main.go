@@ -48,15 +48,15 @@ import (
 
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
-	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
-	"unstable.build/go-tui/cmd/rune-agent/memory/claudememory"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"golang.org/x/oauth2"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"golang.org/x/oauth2"
+	"unstable.build/go-tui/cmd/rune-agent/memory/claudememory"
+	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 )
 
 var errNotInRune = errors.New(

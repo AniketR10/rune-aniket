@@ -459,7 +459,7 @@ func subscribeGUICommands(
 				if len(launchCmd) == 0 {
 					return errors.New("unable to spawn new window: launch command not captured")
 				}
-			c := exec.Command(launchCmd[0], launchCmd[1:]...)
+				c := exec.Command(launchCmd[0], launchCmd[1:]...)
 				c.Env = append(os.Environ(), "EBITENGINE_COCOA_HIDE_DOCK=1")
 				if err := c.Start(); err != nil {
 					return fmt.Errorf("spawn new window: %w", err)

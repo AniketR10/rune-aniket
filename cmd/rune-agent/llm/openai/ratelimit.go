@@ -30,9 +30,9 @@ import (
 	"time"
 
 	oai "github.com/openai/openai-go/v2"
+	"github.com/unstablebuild/rune-go-sdk/retry"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/ratelimit"
-	"github.com/unstablebuild/rune-go-sdk/retry"
 )
 
 // Re-export shared constants so existing call sites within this package compile.

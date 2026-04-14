@@ -478,7 +478,7 @@ func TestComponentToggleContractedPreservesVisibleAnchor(t *testing.T) {
 	w := term.NewStringWriter(41, 13)
 	comptest.TestComponent(t, comp, w, []comptest.TestCase{
 		{
-			Action:   func() {},
+			Action: func() {},
 			Expected: "file data                                \n" +
 				"...                                      \n" +
 				"✓ read_file c3.go                        \n" +

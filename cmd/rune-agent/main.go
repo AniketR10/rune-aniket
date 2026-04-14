@@ -30,13 +30,13 @@ import (
 	_ "net/http/pprof"
 	"os"
 
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/cmd/rune-agent/extension"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
 	"unstable.build/go-tui/cmd/rune-agent/llm/gemini"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/llm/ollama"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 )
 
 var (

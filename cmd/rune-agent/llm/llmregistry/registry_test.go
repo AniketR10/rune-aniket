@@ -29,8 +29,8 @@ import (
 	"sync"
 	"testing"
 
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 )
 
 func collectModels(t *testing.T, it iterator.Iterator[llmregistry.ModelEntry]) []llmregistry.ModelEntry {
