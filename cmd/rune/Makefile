@@ -24,7 +24,6 @@ APP_BINARY_DIR := $(APP_DIR)/$(APP_NAME)/Contents/MacOS
 APP_EXTRAS_DIR := $(APP_DIR)/$(APP_NAME)/Contents/Resources
 APP_PLIST := $(APP_DIR)/$(APP_NAME)/Contents/Info.plist
 APP_ICON := $(APP_EXTRAS_DIR)/rune.icns
-APP_CLAUDEIMPORT := $(APP_EXTRAS_DIR)/claudeimport
 DMG_NAME := Rune.dmg
 DMG_DIR := $(RUNE_RELEASE_DIR)
 SED_INPLACE = ''
@@ -34,7 +33,9 @@ SED_INPLACE = ''
 endif
 
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-notarize release-all \
-	docker-build docker-run docker-build-gcp docker-push-gcp linux-cross-compile
+	docker-build docker-run docker-build-gcp docker-push-gcp linux-cross-compile \
+	release-linux-amd64 release-linux-arm64 dist-linux-amd64 dist-linux-arm64 \
+	dist-darwin-arm64
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
@@ -81,14 +82,13 @@ release:
 	@TARGET_OS=darwin TARGET_ARCH=amd64 $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_arm64 rune_darwin_amd64
 
-app-amd64: release-amd64
+app-amd64:
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
-	@cp -fp $(TARGET)/rune_darwin_amd64/rune $(APP_BINARY)
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=amd64 GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
-	@cp -fp $(TARGET)/rune_darwin_amd64/claudeimport $(APP_CLAUDEIMPORT)
 	@ibtool --compile $(APP_EXTRAS_DIR)/MainMenu.nib $(APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@echo "injecting version $(VERSION) ($(COMMIT))"
 	@sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(APP_PLIST)
@@ -97,19 +97,17 @@ app-amd64: release-amd64
 	@mv $(ROOT_DIR)/extra/icon.icns $(APP_ICON)
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@rm -f $(APP_BINARY)
-	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_CLAUDEIMPORT)"
 	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_EXTRAS_DIR)/rune-extension"
 	@codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 
-app-arm64: release-arm64
+app-arm64:
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
-	@cp -fp $(TARGET)/rune_darwin_arm64/rune $(APP_BINARY)
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=arm64 GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
-	@cp -fp $(TARGET)/rune_darwin_arm64/claudeimport $(APP_CLAUDEIMPORT)
 	@ibtool --compile $(APP_EXTRAS_DIR)/MainMenu.nib $(APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@echo "injecting version $(VERSION) ($(COMMIT))"
 	@sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(APP_PLIST)
@@ -118,7 +116,6 @@ app-arm64: release-arm64
 	@mv $(ROOT_DIR)/extra/icon.icns $(APP_ICON)
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@rm -f $(APP_BINARY)
-	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_CLAUDEIMPORT)"
 	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_EXTRAS_DIR)/rune-extension"
 	@codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
@@ -180,6 +177,35 @@ linux-cross-compile:
 		--build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" \
 		--output type=local,dest=$(RUNE_LINUX_OUTPUT_DIR) \
 		.
+
+release-linux-amd64:
+	@RUNE_LINUX_TARGET_ARCH=amd64 $(MAKE) linux-cross-compile
+	@cd $(TARGET)/rune_linux_amd64 && tar -czvf $(TARGET)/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz rune.app
+
+release-linux-arm64:
+	@RUNE_LINUX_TARGET_ARCH=arm64 $(MAKE) linux-cross-compile
+	@cd $(TARGET)/rune_linux_arm64 && tar -czvf $(TARGET)/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz rune.app
+
+dist-linux-amd64: release-linux-amd64
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=amd64 \
+		./cmd/rune/dist.sh
+
+dist-linux-arm64: release-linux-arm64
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=arm64 \
+		./cmd/rune/dist.sh
+
+dist-darwin-arm64: dmg-notarize
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME) \
+		BLUE_TARGET_OS=darwin \
+		BLUE_TARGET_ARCH=arm64 \
+		./cmd/rune/dist.sh
 
 clean:
 	@rm -rf $(RUNE_RELEASE_DIR)

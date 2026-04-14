@@ -24,6 +24,7 @@
 package oxapi
 
 import (
+	_ "embed"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -44,6 +45,9 @@ import (
 	"unstable.build/go-tui/cmd/rune/auth"
 	"unstable.build/go-tui/localstorage/bluestore"
 )
+
+//go:embed install.sh
+var installScript []byte
 
 // SupportedArchitectures lists all OS-architecture combinations that the
 // release system supports.
@@ -114,6 +118,13 @@ func (a HTTPAPI) serveHealthRouter(
 	a.serveHealth(w, r)
 }
 
+func serveInstallScript(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	if _, err := w.Write(installScript); err != nil {
+		log.WithError(err).Warn("failed to write install script response")
+	}
+}
+
 // Auth0SecretID is the secret identifier used to initialize the Auth0 store.
 const Auth0SecretID = "auth0-ox-api-prod"
 
@@ -157,6 +168,10 @@ func NewHTTPApi(
 	ret.Handle("/telemetry", NewTelemetryHandler(logger, verifyKeys))
 
 	ret.HandleFunc("/health", ret.serveHealth)
+
+	// Serve the installer script at /install.sh — unauthenticated so that
+	// `curl -fsSL https://rune.unstable.build/install.sh | sh` works.
+	ret.HandleFunc("/install.sh", serveInstallScript)
 
 	accStore := account.NewDocumentStore(bluestore.AdaptTo(accDB), userStore)
 	// There are two different authorizers, and so two different oauth2 tokens used

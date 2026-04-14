@@ -34,7 +34,10 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-dmg rune-dmg-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
 	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
-	notary-credentials runectl
+	notary-credentials runectl \
+	rune-release-linux-amd64 rune-release-linux-arm64 \
+	rune-dist-linux-amd64 rune-dist-linux-arm64 \
+	rune-dist-darwin-arm64
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -183,6 +186,21 @@ rune-docker-push-gcp:
 
 rune-linux-cross-compile:
 	@$(MAKE) -C cmd/rune linux-cross-compile
+
+rune-release-linux-amd64:
+	@$(MAKE) -C cmd/rune release-linux-amd64
+
+rune-release-linux-arm64:
+	@$(MAKE) -C cmd/rune release-linux-arm64
+
+rune-dist-linux-amd64:
+	@$(MAKE) -C cmd/rune dist-linux-amd64
+
+rune-dist-linux-arm64:
+	@$(MAKE) -C cmd/rune dist-linux-arm64
+
+rune-dist-darwin-arm64:
+	@$(MAKE) -C cmd/rune dist-darwin-arm64
 
 rune-app-amd64:
 	@$(MAKE) -C cmd/rune app-amd64

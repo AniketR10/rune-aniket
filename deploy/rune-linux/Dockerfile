@@ -16,12 +16,33 @@ COPY . .
 ENV GOPRIVATE=github.com/unstablebuild,unstable.build/* \
 	CGO_ENABLED=1
 
-# Linux-native builder image used to cross-compile Rune for linux/amd64 while
-# the Go toolchain itself runs natively on the builder platform. The amd64 cross
-# compiler and amd64 Linux GUI development packages are installed in the build
-# stage, then cmd/rune is cross-compiled to $TARGETOS/$TARGETARCH in Docker.
+# Linux-native builder image used to cross-compile Rune for the requested
+# linux/$TARGETARCH while the Go toolchain itself runs natively on the builder
+# platform. The appropriate cross compiler and target-arch Linux GUI development
+# packages are installed in the build stage, then cmd/rune is cross-compiled to
+# $TARGETOS/$TARGETARCH in Docker.
+#
+# Supported targets: linux/amd64, linux/arm64
 RUN set -eux; \
-	dpkg --add-architecture amd64; \
+	if [ "$TARGETOS" != "linux" ]; then \
+		echo "unsupported target OS: $TARGETOS (expected linux)"; \
+		exit 1; \
+	fi; \
+	case "$TARGETARCH" in \
+		amd64) \
+			DPKG_ARCH=amd64; \
+			CROSS_ESSENTIAL=crossbuild-essential-amd64; \
+			;; \
+		arm64) \
+			DPKG_ARCH=arm64; \
+			CROSS_ESSENTIAL=crossbuild-essential-arm64; \
+			;; \
+		*) \
+			echo "unsupported target arch: $TARGETARCH (expected amd64 or arm64)"; \
+			exit 1; \
+			;; \
+	esac; \
+	dpkg --add-architecture "$DPKG_ARCH"; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
 		pkg-config \
@@ -31,21 +52,16 @@ RUN set -eux; \
 		openssh-client \
 		ca-certificates \
 		file \
-		crossbuild-essential-amd64 \
-		libasound2-dev:amd64 \
-		libx11-dev:amd64 \
-		libxrandr-dev:amd64 \
-		libxcursor-dev:amd64 \
-		libxinerama-dev:amd64 \
-		libxi-dev:amd64 \
-		libgl1-mesa-dev:amd64 \
-		libxxf86vm-dev:amd64; \
+		"$CROSS_ESSENTIAL" \
+		"libasound2-dev:$DPKG_ARCH" \
+		"libx11-dev:$DPKG_ARCH" \
+		"libxrandr-dev:$DPKG_ARCH" \
+		"libxcursor-dev:$DPKG_ARCH" \
+		"libxinerama-dev:$DPKG_ARCH" \
+		"libxi-dev:$DPKG_ARCH" \
+		"libgl1-mesa-dev:$DPKG_ARCH" \
+		"libxxf86vm-dev:$DPKG_ARCH"; \
 	rm -rf /var/lib/apt/lists/*
-
-RUN if [ "$TARGETOS" != "linux" ] || [ "$TARGETARCH" != "amd64" ]; then \
-		echo "unsupported target: $TARGETOS/$TARGETARCH (expected linux/amd64)"; \
-		exit 1; \
-	fi
 
 RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
 RUN mkdir -p ~/.ssh && \
@@ -55,44 +71,74 @@ RUN mkdir -p ~/.ssh && \
 RUN ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
 RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 
+# Select the cross-compiler toolchain and pkg-config path based on TARGETARCH.
+# Output layout mirrors Zed's convention:
+#   rune.app/bin/rune
+#   rune.app/lib/*.so.*
+#   rune.app/share/applications/rune.desktop
+#   rune.app/share/icons/hicolor/{512x512,1024x1024}/apps/rune.png
 RUN --mount=type=cache,target=/root/.cache/go-build \
-	CC=x86_64-linux-gnu-gcc \
-	CXX=x86_64-linux-gnu-g++ \
-	PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
+	set -eux; \
+	case "$TARGETARCH" in \
+		amd64) \
+			CC=x86_64-linux-gnu-gcc; \
+			CXX=x86_64-linux-gnu-g++; \
+			PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig; \
+			OBJDUMP=x86_64-linux-gnu-objdump; \
+			TRIPLET=x86_64-linux-gnu; \
+			;; \
+		arm64) \
+			CC=aarch64-linux-gnu-gcc; \
+			CXX=aarch64-linux-gnu-g++; \
+			PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig; \
+			OBJDUMP=aarch64-linux-gnu-objdump; \
+			TRIPLET=aarch64-linux-gnu; \
+			;; \
+	esac; \
+	export CC CXX PKG_CONFIG_PATH; \
+	mkdir -p /out/rune.app/bin /out/rune.app/lib; \
+	CGO_LDFLAGS='-Wl,-rpath,$ORIGIN/../lib' \
 	GOOS=$TARGETOS \
 	GOARCH=$TARGETARCH \
-	/usr/local/go/bin/go build -tags=ebitensinglethread -o /out/rune ./cmd/rune
+	/usr/local/go/bin/go build -tags=ebitensinglethread -o /out/rune.app/bin/rune ./cmd/rune; \
+	\
+	echo "--- artifact validation ---"; \
+	file /out/rune.app/bin/rune | grep 'ELF 64-bit LSB'; \
+	"$OBJDUMP" -p /out/rune.app/bin/rune | awk '$1 == "NEEDED" {print $2}' > /tmp/runtime-needed.txt; \
+	\
+	echo "--- bundling runtime libraries into rune.app/lib/ (rpath=\$ORIGIN/../lib) ---"; \
+	cp /tmp/runtime-needed.txt /tmp/lib-queue.txt; \
+	while [ -s /tmp/lib-queue.txt ]; do \
+		: > /tmp/lib-next.txt; \
+		while IFS= read -r soname; do \
+			case "$soname" in \
+				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+			esac; \
+			[ -f "/out/rune.app/lib/$soname" ] && continue; \
+			src=""; \
+			for d in /usr/lib/$TRIPLET /lib/$TRIPLET; do \
+				if [ -e "$d/$soname" ]; then src="$d/$soname"; break; fi; \
+			done; \
+			if [ -z "$src" ]; then \
+				echo "WARN: $soname not found"; continue; \
+			fi; \
+			cp -L "$src" "/out/rune.app/lib/$soname"; \
+			echo "  bundled: $soname"; \
+			"$OBJDUMP" -p "$src" 2>/dev/null | awk '$1 == "NEEDED" {print $2}' >> /tmp/lib-next.txt; \
+		done < /tmp/lib-queue.txt; \
+		mv /tmp/lib-next.txt /tmp/lib-queue.txt; \
+	done; \
+	echo "--- bundled libraries ---"; \
+	ls -la /out/rune.app/lib/ || true
 
-RUN file /out/rune | grep 'ELF 64-bit LSB executable'
-RUN x86_64-linux-gnu-objdump -p /out/rune | awk '$1 == "NEEDED" {print $2}' > /out/runtime-needed.txt
-RUN cat > /out/README.runtime.md <<'EOF'
-# Rune linux/amd64 runtime dependencies
-
-This binary is built for linux/amd64 with CGO enabled because Rune's GUI path
-imports Ebiten/GLFW/X11 code.
-
-Direct ELF dependencies captured from the built binary:
-
-- libX11.so.6
-- libm.so.6
-- libc.so.6
-
-In practice, Rune's GUI runtime also requires the standard Linux desktop/OpenGL
-stack used by GLFW/Ebiten. On Debian/Ubuntu, install at least:
-
-- libasound2
-- libx11-6
-- libxrandr2
-- libxcursor1
-- libxinerama1
-- libxi6
-- libxxf86vm1
-- libgl1
-- libc6
-
-Headless servers without X11/OpenGL libraries are not supported for Rune's GUI
-binary.
-EOF
+# Bundle .desktop file and icons into the app directory.
+RUN set -eux; \
+	mkdir -p /out/rune.app/share/applications \
+		/out/rune.app/share/icons/hicolor/512x512/apps \
+		/out/rune.app/share/icons/hicolor/1024x1024/apps; \
+	cp /src/deploy/rune-linux/rune.desktop /out/rune.app/share/applications/rune.desktop; \
+	cp /src/extra/icon.iconset/icon_512x512.png /out/rune.app/share/icons/hicolor/512x512/apps/rune.png; \
+	cp /src/extra/icon.iconset/icon_512x512@2x.png /out/rune.app/share/icons/hicolor/1024x1024/apps/rune.png
 
 FROM scratch AS artifact
-COPY --from=build /out/ /
+COPY --from=build /out/rune.app/ /rune.app/
