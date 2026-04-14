@@ -116,8 +116,9 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 	if args.Path != "" {
 		root = resolvePath(t.cwd, args.Path)
 	}
+	walkCtx := boundedWalkdirContext(ctx)
 
-	paths, err := walkdir.ListFiles(ctx, t.fs, root)
+	paths, err := walkdir.ListFiles(walkCtx, t.fs, root)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: listing files: %v", err), IsError: true}
 	}

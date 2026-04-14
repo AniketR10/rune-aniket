@@ -24,14 +24,18 @@
 package walkdir
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -123,3 +127,185 @@ func TestReadLines_close_does_not_hang(t *testing.T) {
 		t.Fatal("Close() hung — likely deadlock in readFile workers")
 	}
 }
+
+func TestWorkerCountFromContext(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want int
+	}{
+		{
+			name: "no context value",
+			ctx:  context.Background(),
+			want: defaultWorkers,
+		},
+		{
+			name: "positive context value",
+			ctx:  ContextWithWorkerCount(context.Background(), 2),
+			want: 2,
+		},
+		{
+			name: "zero falls back to default",
+			ctx:  ContextWithWorkerCount(context.Background(), 0),
+			want: defaultWorkers,
+		},
+		{
+			name: "negative falls back to default",
+			ctx:  ContextWithWorkerCount(context.Background(), -1),
+			want: defaultWorkers,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := workerCountFromContext(tt.ctx); got != tt.want {
+				t.Fatalf("workerCountFromContext() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadLines_contextWorkerCountLimitsConcurrency(t *testing.T) {
+	for _, workers := range []int{1, 2} {
+		t.Run(fmt.Sprintf("workers_%d", workers), func(t *testing.T) {
+			paths := []string{"a.txt", "b.txt", "c.txt", "d.txt"}
+			fs := &concurrencyReader{
+				files: map[string]string{
+					"a.txt": "a\n",
+					"b.txt": "b\n",
+					"c.txt": "c\n",
+					"d.txt": "d\n",
+				},
+				started: make(chan struct{}, len(paths)),
+				release: make(chan struct{}),
+			}
+
+			ctx := ContextWithWorkerCount(context.Background(), workers)
+			lines, err := ReadLines(ctx, fs, newStringIterator(paths))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for range workers {
+				select {
+				case <-fs.started:
+				case <-time.After(time.Second):
+					t.Fatalf("timed out waiting for %d workers to start", workers)
+				}
+			}
+
+			select {
+			case <-fs.started:
+				t.Fatalf("OpenFile concurrency exceeded %d", workers)
+			case <-time.After(20 * time.Millisecond):
+			}
+
+			close(fs.release)
+			for {
+				_, ok := lines.Next(context.Background())
+				if !ok {
+					break
+				}
+			}
+
+			if err := lines.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if err := lines.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if got := fs.maxConcurrent.Load(); got > int64(workers) {
+				t.Fatalf("max concurrent OpenFile calls = %d, want <= %d", got, workers)
+			}
+		})
+	}
+}
+
+type stringIterator struct {
+	values []string
+	idx    int
+}
+
+func newStringIterator(values []string) iterator.Iterator[string] {
+	return &stringIterator{values: values}
+}
+
+func (s *stringIterator) Next(context.Context) (string, bool) {
+	if s.idx >= len(s.values) {
+		return "", false
+	}
+	value := s.values[s.idx]
+	s.idx++
+	return value, true
+}
+
+func (s *stringIterator) Close() error { return nil }
+
+func (s *stringIterator) Err() error { return nil }
+
+type concurrencyReader struct {
+	files map[string]string
+
+	active        atomic.Int64
+	maxConcurrent atomic.Int64
+	started       chan struct{}
+	release       chan struct{}
+}
+
+func (r *concurrencyReader) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file:///" + path)
+}
+
+func (r *concurrencyReader) OpenFile(path string, _ int, _ os.FileMode) (workspaceapi.File, error) {
+	content, ok := r.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+
+	active := r.active.Add(1)
+	for {
+		maxConcurrent := r.maxConcurrent.Load()
+		if active <= maxConcurrent || r.maxConcurrent.CompareAndSwap(maxConcurrent, active) {
+			break
+		}
+	}
+	r.started <- struct{}{}
+	<-r.release
+	r.active.Add(-1)
+
+	return nopFile{Reader: bytes.NewBufferString(content)}, nil
+}
+
+func (r *concurrencyReader) Stat(string) (os.FileInfo, error) {
+	return nil, os.ErrNotExist
+}
+
+func (r *concurrencyReader) ReadDir(string) ([]os.DirEntry, error) {
+	return nil, os.ErrNotExist
+}
+
+type nopFile struct {
+	io.Reader
+	io.Seeker
+	io.ReaderAt
+	io.Writer
+	io.Closer
+}
+
+func (n nopFile) Close() error { return nil }
+
+func (n nopFile) Fd() uintptr { return 0 }
+
+func (n nopFile) Name() string { return "" }
+
+func (n nopFile) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
+
+func (n nopFile) Seek(int64, int) (int64, error) { return 0, nil }
+
+func (n nopFile) Stat() (os.FileInfo, error) { return nil, os.ErrInvalid }
+
+func (n nopFile) Sync() error { return nil }
+
+func (n nopFile) Truncate(int64) error { return nil }
+
+func (n nopFile) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

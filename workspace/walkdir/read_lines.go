@@ -40,15 +40,16 @@ import (
 func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	iterator.Iterator[string], error,
 ) {
+	workers := workerCountFromContext(ctx)
 	files := make(chan string)
 	lines := make(chan string)
 	closeWaitCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(defaultWorkers)
-	errors := make([]error, defaultWorkers)
-	for i := 0; i < defaultWorkers; i++ {
+	wg.Add(workers)
+	errors := make([]error, workers)
+	for i := range workers {
 		err := &errors[i]
 		go func() {
 			defer wg.Done()

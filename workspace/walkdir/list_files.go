@@ -54,11 +54,12 @@ type Reader interface {
 func ListFiles(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
+	workers := workerCountFromContext(ctx)
 	var wg sync.WaitGroup
 	iterCh := make(chan string)
 	workerCh := make(chan string)
 	closeWaitCh := make(chan struct{})
-	allErrors := make([]error, defaultWorkers)
+	allErrors := make([]error, workers)
 
 	workspaceURI, err := w.URI(".")
 	if err != nil {
@@ -78,7 +79,7 @@ func ListFiles(
 	iterator.cancel = cancel
 	iterator.closeWaitCh = closeWaitCh
 
-	for i := range defaultWorkers {
+	for i := range workers {
 		go func() {
 			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
 				workspaceURI.Path(), &iterator.mu, &allErrors[i], false)

@@ -130,9 +130,10 @@ func (t *listDirTool) Execute(ctx context.Context, arguments string) agent.ToolR
 	if !info.IsDir() {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %s is not a directory", root), IsError: true}
 	}
+	walkCtx := boundedWalkdirContext(ctx)
 
 	// List all files under root.
-	fileIter, err := walkdir.ListFiles(ctx, t.fs, root)
+	fileIter, err := walkdir.ListFiles(walkCtx, t.fs, root)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: listing files: %v", err), IsError: true}
 	}

@@ -186,7 +186,8 @@ func (t *searchConversationsTool) Execute(ctx context.Context, arguments string)
 		}
 	}
 
-	paths, err := walkdir.ListFiles(ctx, t.fs, t.sessionsDir)
+	walkCtx := boundedWalkdirContext(ctx)
+	paths, err := walkdir.ListFiles(walkCtx, t.fs, t.sessionsDir)
 	if err != nil {
 		return agent.ToolResult{
 			Content: fmt.Sprintf("error: listing files: %v", err),
@@ -208,7 +209,7 @@ func (t *searchConversationsTool) Execute(ctx context.Context, arguments string)
 		return true
 	})
 
-	lines, err := walkdir.ReadLines(ctx, t.fs, filtered)
+	lines, err := walkdir.ReadLines(walkCtx, t.fs, filtered)
 	if err != nil {
 		return agent.ToolResult{
 			Content: fmt.Sprintf("error: reading files: %v", err),
