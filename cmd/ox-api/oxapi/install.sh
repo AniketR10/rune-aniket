@@ -14,6 +14,7 @@
 #     lib/*.so.*        — bundled shared libraries
 #     share/applications/rune.desktop
 #     share/icons/hicolor/{512x512,1024x1024}/apps/rune.png
+#     share/zdot/.z{login,profile,shenv,shrc}
 #
 # macOS DMG layout:
 #   Rune.dmg containing Rune.app (signed + notarized)

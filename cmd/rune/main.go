@@ -314,6 +314,17 @@ func main() {
 		flag.Parse()
 	}
 
+	// On Linux, if zdotdir was not explicitly set and we're inside a rune.app
+	// layout (rune.app/bin/rune), auto-discover zdot at rune.app/share/zdot.
+	if runtime.GOOS == "linux" && *flagZdotDir == "" {
+		binDir := filepath.Dir(exec)
+		appDir := filepath.Dir(binDir)
+		zdot := filepath.Join(appDir, "share", "zdot")
+		if info, err := os.Stat(zdot); err == nil && info.IsDir() {
+			*flagZdotDir = zdot
+		}
+	}
+
 	// ensure that data path exists
 	if _, err := os.Stat(*flagDataPath); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

@@ -171,7 +171,7 @@ docker-push-gcp:
 linux-cross-compile:
 	@rm -rf $(RUNE_LINUX_OUTPUT_DIR)
 	@mkdir -p $(RUNE_LINUX_OUTPUT_DIR)
-	@cd $(ROOT_DIR) && docker buildx build \
+	@cd $(ROOT_DIR) && docker buildx build --rm \
 		-f deploy/rune-linux/Dockerfile \
 		--platform $(RUNE_LINUX_TARGET_OS)/$(RUNE_LINUX_TARGET_ARCH) \
 		--build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" \
