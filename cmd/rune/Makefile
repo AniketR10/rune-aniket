@@ -9,6 +9,7 @@ RUNE_LINUX_TARGET_OS ?= linux
 RUNE_LINUX_TARGET_ARCH ?= amd64
 RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TARGET_ARCH)
 RUNE_LINUX_RELEASE_TAR ?= rune-release-$(RUNE_LINUX_TARGET_OS)-$(RUNE_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
+DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64" CGO_CFLAGS="-arch x86_64" CGO_CXXFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64"
 
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
 GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
@@ -71,7 +72,7 @@ endif
 ifeq ($(UNAME),Darwin)
 release-amd64:
 	@rm -rf $(TARGET)/rune_darwin_amd64
-	@TARGET_OS=darwin TARGET_ARCH=amd64 $(MAKE) make-release
+	@TARGET_OS=darwin TARGET_ARCH=amd64 TARGET_ARCH_FLAGS='$(DARWIN_AMD64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_amd64
 
 release-arm64:
@@ -82,13 +83,13 @@ release-arm64:
 release:
 	@rm -rf $(TARGET)/rune_darwin_arm64 $(TARGET)/rune_darwin_amd64
 	@TARGET_OS=darwin TARGET_ARCH=arm64 $(MAKE) make-release
-	@TARGET_OS=darwin TARGET_ARCH=amd64 $(MAKE) make-release
+	@TARGET_OS=darwin TARGET_ARCH=amd64 TARGET_ARCH_FLAGS='$(DARWIN_AMD64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_arm64 rune_darwin_amd64
 
 app-amd64:
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
-	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=amd64 GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=amd64 $(DARWIN_AMD64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_PLIST_AMD64) $(APP_PLIST)
