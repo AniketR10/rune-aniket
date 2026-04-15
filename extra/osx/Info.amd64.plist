@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>rune</string>
+  <key>CFBundleIdentifier</key>
+  <string>dev.rune</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Rune</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>{{VERSION}}</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array>
+    <string>MacOSX</string>
+  </array>
+  <key>CFBundleVersion</key>
+  <string>{{COMMIT}}</string>
+  <key>CFBundleIconFile</key>
+  <string>rune.icns</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSMainNibFile</key>
+  <string>MainMenu.nib</string>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+  <key>CFBundleDisplayName</key>
+  <string>Rune</string>
+  <key>NSRequiresAquaSystemAppearance</key>
+  <string>NO</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>An extension in Rune would like to access AppleScript.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>An extension in Rune would like to access calendar data.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>An extension in Rune would like to access the camera.</string>
+  <key>NSContactsUsageDescription</key>
+  <string>An extension in Rune wants to access your contacts.</string>
+  <key>NSLocationAlwaysUsageDescription</key>
+  <string>An extension in Rune would like to access your location information, even in the background.</string>
+  <key>NSLocationUsageDescription</key>
+  <string>An extension in Rune would like to access your location information.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>An extension in Rune would like to access your location information while active.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>An extension in Rune would like to access your microphone.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>An extension in Rune would like to access your reminders.</string>
+  <key>NSSystemAdministrationUsageDescription</key>
+  <string>An extension in Rune requires elevated permissions.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2023-2024 Unstable Build LLC. All Rights Reserved.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>CFBundleURLName</key>
+      <string>dev.rune</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>file</string>
+        <string>ssh</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

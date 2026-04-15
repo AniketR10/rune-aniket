@@ -24,8 +24,10 @@ APP_BINARY := $(RUNE_RELEASE_DIR)/rune
 APP_BINARY_DIR := $(APP_DIR)/$(APP_NAME)/Contents/MacOS
 APP_EXTRAS_DIR := $(APP_DIR)/$(APP_NAME)/Contents/Resources
 APP_PLIST := $(APP_DIR)/$(APP_NAME)/Contents/Info.plist
+APP_PLIST_AMD64 := $(abspath $(ROOT_DIR)/extra/osx/Info.amd64.plist)
 APP_ICON := $(APP_EXTRAS_DIR)/rune.icns
 DMG_NAME := Rune.dmg
+DMG_NAME_AMD64 := Rune-amd64.dmg
 DMG_DIR := $(RUNE_RELEASE_DIR)
 SED_INPLACE = ''
 
@@ -33,10 +35,10 @@ ifeq ($(OS),Darwin)
 SED_INPLACE = ''
 endif
 
-.PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-notarize release-all \
+.PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
 	docker-build docker-run docker-build-gcp docker-push-gcp linux-cross-compile \
 	release-linux-amd64 release-linux-arm64 dist-linux-amd64 dist-linux-arm64 \
-	dist-darwin-arm64
+	dist-darwin-arm64 dist-darwin-amd64
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
@@ -89,6 +91,7 @@ app-amd64:
 	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=amd64 GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
+	@cp -fp $(APP_PLIST_AMD64) $(APP_PLIST)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
 	@ibtool --compile $(APP_EXTRAS_DIR)/MainMenu.nib $(APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@echo "injecting version $(VERSION) ($(COMMIT))"
@@ -134,6 +137,19 @@ dmg: app-arm64
 	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" $(DMG_DIR)/$(DMG_NAME)
 	@echo "Packed $(DMG_DIR)/$(DMG_NAME)"
 
+dmg-amd64: app-amd64
+	@echo "Packing amd64 disk image..."
+	@mkdir -p $(DMG_DIR)
+	@ln -sf /Applications $(DMG_DIR)/Applications
+	@hdiutil create $(DMG_DIR)/$(DMG_NAME_AMD64) \
+		-volname "Rune" \
+		-fs HFS+ \
+		-srcfolder $(APP_DIR) \
+		-ov -format UDZO
+	@echo "Signing amd64 disk image..."
+	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" $(DMG_DIR)/$(DMG_NAME_AMD64)
+	@echo "Packed $(DMG_DIR)/$(DMG_NAME_AMD64)"
+
 dmg-notarize: dmg
 	@echo "Notarizing disk image..."
 	@set -e; \
@@ -153,6 +169,26 @@ dmg-notarize: dmg
 	@echo "Validating staple..."
 	@xcrun stapler validate $(DMG_DIR)/$(DMG_NAME)
 	@echo "Notarization completed: $(DMG_DIR)/$(DMG_NAME)"
+
+dmg-amd64-notarize: dmg-amd64
+	@echo "Notarizing amd64 disk image..."
+	@set -e; \
+	RESULT=$$(xcrun notarytool submit $(DMG_DIR)/$(DMG_NAME_AMD64) --keychain-profile "$(NOTARY_PROFILE)" --wait --output-format json); \
+	echo "$$RESULT"; \
+	ID=$$(printf '%s\n' "$$RESULT" | plutil -extract id raw -o - -); \
+	STATUS=$$(printf '%s\n' "$$RESULT" | plutil -extract status raw -o - -); \
+	echo "Submission ID: $$ID"; \
+	echo "Status: $$STATUS"; \
+	if [ "$$STATUS" != "Accepted" ]; then \
+		echo "Fetching notarization log..."; \
+		xcrun notarytool log "$$ID" --keychain-profile "$(NOTARY_PROFILE)"; \
+		exit 1; \
+	fi
+	@echo "Stapling amd64 ticket..."
+	@xcrun stapler staple $(DMG_DIR)/$(DMG_NAME_AMD64)
+	@echo "Validating amd64 staple..."
+	@xcrun stapler validate $(DMG_DIR)/$(DMG_NAME_AMD64)
+	@echo "Notarization completed: $(DMG_DIR)/$(DMG_NAME_AMD64)"
 
 release-all: dmg-notarize
 endif
@@ -207,6 +243,13 @@ dist-darwin-arm64: dmg-notarize
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME) \
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=arm64 \
+		./cmd/rune/dist.sh
+
+dist-darwin-amd64: dmg-amd64-notarize
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME_AMD64) \
+		BLUE_TARGET_OS=darwin \
+		BLUE_TARGET_ARCH=amd64 \
 		./cmd/rune/dist.sh
 
 clean:
