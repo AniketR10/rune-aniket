@@ -4317,6 +4317,95 @@ func TestCopyPath(t *testing.T) {
 
 }
 
+func TestCopyPathNestedWorkspaceRelative(t *testing.T) {
+	clip := clipboard.NewInMemory()
+	e, fileScheme, tempDir := newExForTestingFileWorkspace(t, clip)
+	defer func() { require.NoError(t, e.Close()) }()
+	defer func() { require.NoError(t, fileScheme.Close()) }()
+
+	relPath := filepath.Join("nested", "hello.go")
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "nested"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, relPath), []byte("hello\n"), 0o644))
+
+	uri, err := e.workspace.URI(relPath)
+	require.NoError(t, err)
+	_, err = e.editFileURI(uri, e.invokeWindow(), false)
+	require.NoError(t, err)
+	e.Resize(20, 10)
+	require.NoError(t, e.tabcopypath(context.Background()))
+
+	data, err := clip.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.ToSlash(relPath), data.Text)
+}
+
+func TestCopyLocation(t *testing.T) {
+	ts := []struct {
+		name   string
+		cmd    string
+		expect func(tempDir, relPath string) string
+	}{
+		{
+			name: "relative",
+			cmd:  ":tabcopylocation",
+			expect: func(tempDir, relPath string) string {
+				return filepath.ToSlash(relPath) + ":2"
+			},
+		},
+		{
+			name: "absolute",
+			cmd:  ":tabcopylocation absolute",
+			expect: func(tempDir, relPath string) string {
+				return filepath.Join(tempDir, relPath) + ":2"
+			},
+		},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.name, func(t *testing.T) {
+			clip := clipboard.NewInMemory()
+			e, fileScheme, tempDir := newExForTestingFileWorkspace(t, clip)
+			defer func() { require.NoError(t, e.Close()) }()
+			defer func() { require.NoError(t, fileScheme.Close()) }()
+
+			relPath := filepath.Join("nested", "hello.go")
+			require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "nested"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(tempDir, relPath), []byte("one\ntwo\n"), 0o644))
+
+			uri, err := e.workspace.URI(relPath)
+			require.NoError(t, err)
+			_, err = e.editFileURI(uri, e.invokeWindow(), false)
+			require.NoError(t, err)
+			e.Resize(20, 10)
+			require.NoError(t, e.moveFocusCursor(1))
+			args := strings.TrimPrefix(tc.cmd, ":tabcopylocation")
+			require.NoError(t, e.tabcopylocation(context.Background(), strings.Fields(args)...))
+
+			data, err := clip.Paste(clipboard.DefaultRegisterID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expect(tempDir, relPath), data.Text)
+		})
+	}
+}
+
+func newExForTestingFileWorkspace(
+	t *testing.T, clip clipboard.Register,
+) (testEx, schemeapi.Scheme, string) {
+	t.Helper()
+	tempDir := t.TempDir()
+	ctx := context.Background()
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	e := newExForTestingWithWorkspace(t, workspace, vi.Editor(),
+		vte.DefaultConfig(), nopPublishEvent, clip,
+		text.WithCommandKey(testCommandKey),
+	)
+	return e, fileScheme, tempDir
+}
+
 func TestCopyToClipboard(t *testing.T) {
 	clip := clipboard.NewInMemory()
 	testCopyToClipboard(t, clip, func(ed text.Editor, opts ...text.Option) (

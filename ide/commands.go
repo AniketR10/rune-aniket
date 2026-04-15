@@ -471,6 +471,21 @@ var (
 				return iterator.FromSlice[string](nil), "", nil
 			},
 		},
+		"tabcopylocation": {
+			man: textapi.CommandManual{
+				Summary:  "Copy the location of the file in focus to the clipboard.",
+				Synopsis: "[absolute]",
+			},
+			handler: (*ex).tabcopylocation,
+			completer: func(
+				e *ex, ctx context.Context, cmd textapi.Command,
+			) (iterator.Iterator[string], string, error) {
+				if len(cmd.Args) <= 1 {
+					return iterator.FromSlice([]string{"absolute"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
+		},
 		"!": {
 			man: textapi.CommandManual{
 				Summary: "Open a new plugin terminal with the given executable " +

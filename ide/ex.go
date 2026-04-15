@@ -779,12 +779,7 @@ func (e *ex) tabcopypath(_ context.Context, args ...string) error {
 	}
 
 	uri := t.URI()
-	var path string
-	if absolute {
-		path = uri.Path()
-	} else {
-		path = uri.Name()
-	}
+	path := e.copyPath(uri, absolute)
 
 	err := e.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: path})
 	if err != nil {
@@ -795,6 +790,36 @@ func (e *ex) tabcopypath(_ context.Context, args ...string) error {
 		"file path copied to clipboard")
 
 	return nil
+}
+
+func (e *ex) tabcopylocation(_ context.Context, args ...string) error {
+	absolute := len(args) > 0 && args[0] == "absolute"
+	uri, h, ok := e.handlerInFocus()
+	if !ok {
+		return errors.New("not a file")
+	}
+
+	location := fmt.Sprintf("%s:%d", e.copyPath(uri, absolute), h.CursorAtScroll().Y+1)
+	err := e.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: location})
+	if err != nil {
+		return fmt.Errorf("clipboard copy: %v", err)
+	}
+
+	_, _ = e.notifications.Notify(browserapi.LevelSuccess,
+		"file location copied to clipboard")
+
+	return nil
+}
+
+func (e *ex) copyPath(uri workspaceapi.URI, absolute bool) string {
+	if absolute {
+		return uri.Path()
+	}
+	path := workspaceapi.RelPath(e.workspaceURI, uri)
+	if path == "" || path == "." || path == uri.String() {
+		path = uri.Path()
+	}
+	return path
 }
 
 func (e *ex) reloadfile(_ context.Context, args ...string) error {
