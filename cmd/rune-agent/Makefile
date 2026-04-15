@@ -19,7 +19,7 @@ $(BIN)/rune-agent:
 	@$(MAKE) -C $(ROOT_DIR) $(notdir $@)
 
 clean:
-	@rm -rf $(PKG) $(TAR) $(NOTARIZE_ZIP)
+	@rm -rf $(PKG) $(TAR) $(NOTARIZE_ZIP) $(BIN)/rune-agent
 
 pkg: $(BIN)/rune-agent
 	@mkdir -p $(PKG)/bin

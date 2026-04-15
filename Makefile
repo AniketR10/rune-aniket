@@ -27,7 +27,7 @@ RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
 .PHONY: debug clean test coverage generate sixdev rune rune-agent ox-api claudeimport \
-	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license \
+	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-docker-build rune-docker-run rune-docker-build-gcp rune-docker-push-gcp \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
@@ -150,7 +150,7 @@ release: default
 	@ cd $(TARGET) && tar -czvf six-release-`git describe --tags --dirty`.tar.gz *
 endif
 
-dist: release
+dist: clean release
 	@ git fetch origin --tags
 	@ ./dist.sh
 
@@ -193,16 +193,16 @@ rune-release-linux-amd64:
 rune-release-linux-arm64:
 	@$(MAKE) -C cmd/rune release-linux-arm64
 
-rune-dist-linux-amd64:
+rune-dist-linux-amd64: clean
 	@$(MAKE) -C cmd/rune dist-linux-amd64
 
-rune-dist-linux-arm64:
+rune-dist-linux-arm64: clean
 	@$(MAKE) -C cmd/rune dist-linux-arm64
 
-rune-dist-darwin-arm64:
+rune-dist-darwin-arm64: clean
 	@$(MAKE) -C cmd/rune dist-darwin-arm64
 
-rune-dist-darwin-amd64:
+rune-dist-darwin-amd64: clean
 	@$(MAKE) -C cmd/rune dist-darwin-amd64
 
 rune-app-amd64:
@@ -238,10 +238,10 @@ rune-agent-sign:
 rune-agent-notarize:
 	@$(MAKE) -C cmd/rune-agent notarize
 
-rune-agent-dist:
+rune-agent-dist: clean
 	@$(MAKE) -C cmd/rune-agent dist
 
-rune-agent-dist-notarized:
+rune-agent-dist-notarized: clean
 	@$(MAKE) -C cmd/rune-agent dist-notarized
 
 runectl-pkg:
@@ -253,10 +253,10 @@ runectl-sign:
 runectl-notarize:
 	@$(MAKE) -C cmd/runectl notarize
 
-runectl-dist:
+runectl-dist: clean
 	@$(MAKE) -C cmd/runectl dist
 
-runectl-dist-notarized:
+runectl-dist-notarized: clean
 	@$(MAKE) -C cmd/runectl dist-notarized
 
 notary-credentials:

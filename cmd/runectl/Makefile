@@ -20,7 +20,7 @@ $(BIN)/runectl:
 	@GOBIN="$(BIN)" $(GO) install github.com/unstablebuild/rune-go-sdk/cmd/runectl
 
 clean:
-	@rm -rf $(PKG) $(TAR) $(NOTARIZE_ZIP)
+	@rm -rf $(PKG) $(TAR) $(NOTARIZE_ZIP) $(BIN)/runectl
 
 pkg: $(BIN)/runectl
 	@mkdir -p $(PKG)/bin
