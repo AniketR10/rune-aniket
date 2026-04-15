@@ -7221,6 +7221,169 @@ func TestVisualBlockChange(t *testing.T) {
 	}
 }
 
+func TestVisualBlockReplace(t *testing.T) {
+	suite := []struct {
+		content      string
+		name         string
+		moveCursorFn func(*viHandlerImpl)
+		selectKeys   string // keys after Ctrl-V; default "lljj"
+		replaceKey   term.Event
+		expect       string
+	}{
+		{
+			name:       "replaces rectangular block",
+			selectKeys: "lljj", // cols 0-2, rows 0-2
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'X'},
+			expect:     "XXXdef\nXXXjkl\nXXXpqr\nstuvwx",
+		},
+		{
+			name: "replaces reversed horizontal block",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			selectKeys: "hhjj", // cols 1-3, rows 0-2
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'Y'},
+			expect:     "aYYYef\ngYYYkl\nmYYYqr\nstuvwx",
+		},
+		{
+			name:       "replaces reversed vertical block",
+			selectKeys: "kkll", // start on row 2, select rows 0-2 and cols 0-2
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'Z'},
+			expect:     "ZZZdef\nZZZjkl\nZZZpqr\nstuvwx",
+		},
+		{
+			name:       "space key replaces selected cells with spaces",
+			selectKeys: "lj", // cols 0-1, rows 0-1
+			replaceKey: term.Event{Type: term.EventKey, Key: term.KeySpace},
+			expect:     "  cdef\n  ijkl\nmnopqr\nstuvwx",
+		},
+		{
+			name:       "ragged block skips columns missing from shorter lines",
+			content:    "abcdef\ngh\nmnopqr\nstuvwx",
+			selectKeys: "lljj", // cols 0-2, rows 0-2; row 1 only has cols 0-1
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'R'},
+			expect:     "RRRdef\nRR\nRRRpqr\nstuvwx",
+		},
+		{
+			name:       "ragged block leaves longer unselected columns intact",
+			content:    "abcd\nefghijkl\nmnopqr\nstuvwx",
+			selectKeys: "llj", // cols 0-2, rows 0-1
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'L'},
+			expect:     "LLLd\nLLLhijkl\nmnopqr\nstuvwx",
+		},
+		{
+			name:       "ragged block skips blank lines",
+			content:    "abcdef\n\nmnopqr\nstuvwx",
+			selectKeys: "lljj", // cols 0-2, rows 0-2; row 1 has no cells
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'B'},
+			expect:     "BBBdef\n\nBBBpqr\nstuvwx",
+		},
+		{
+			name:       "high-column ragged block skips shorter intermediate rows",
+			content:    "abcdef\ngh\nmnopqr\nstuvwx",
+			selectKeys: "lllljj", // cols 0-4, rows 0-2; row 1 only has cols 0-1
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'H'},
+			expect:     "HHHHHf\nHH\nHHHHHr\nstuvwx",
+		},
+		{
+			name:       "block containing nul cells replaces them like any other cell",
+			content:    "ab\x00de\nf\x00hij\nklmno",
+			selectKeys: "llj", // cols 0-2, rows 0-1; each row contains one NUL in the block
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'N'},
+			expect:     "NNNde\nNNNij\nklmno",
+		},
+		{
+			name:       "selection ending at line end does not append cells",
+			content:    "abc\ndefg\nhijkl",
+			selectKeys: "$$j", // cols 0-3 after clamping, rows 0-1; row 0 has cols 0-2
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'E'},
+			expect:     "EEE\nEEEE\nhijkl",
+		},
+		{
+			name:    "selection starting at last cell replaces matching column on each line",
+			content: "abc\ndefgh\nijklm",
+			moveCursorFn: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: '$'})
+			},
+			selectKeys: "j", // normal-mode cursor correction leaves $ on the last real cell
+			replaceKey: term.Event{Type: term.EventKey, Ch: 'T'},
+			expect:     "abT\ndeTgh\nijklm",
+		},
+		{
+			name:       "zero rune replacement key is ignored until a character arrives",
+			selectKeys: "lj", // cols 0-1, rows 0-1
+			replaceKey: term.Event{Type: term.EventKey},
+			expect:     "abcdef\nghijkl\nmnopqr\nstuvwx",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			content := tcase.content
+			if content == "" {
+				content = "abcdef\nghijkl\nmnopqr\nstuvwx"
+			}
+			vi := setupVi(t, content, 2)
+			vi.Resize(20, 10)
+
+			if tcase.moveCursorFn != nil {
+				tcase.moveCursorFn(vi)
+			}
+
+			selectKeys := tcase.selectKeys
+			if selectKeys == "" {
+				selectKeys = "lljj"
+			}
+
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+			for _, ch := range selectKeys {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+			vi.Handle(term.Event{Type: term.EventKey, Ch: 'r'})
+			vi.Handle(tcase.replaceKey)
+
+			if tcase.replaceKey.Ch == 0 && tcase.replaceKey.Key == 0 {
+				assert.Equal(t, replaceOneMode, vi.mode())
+			} else {
+				assert.Equal(t, normalMode, vi.mode())
+			}
+			assert.Equal(t, tcase.expect, vi.less.Buffer().String())
+		})
+	}
+}
+
+func TestVisualBlockReplaceRepeat(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.Init()
+	_, err := buf.ReadFrom(strings.NewReader("abcdef\nghijkl\nmnopqr\nstuvwx"))
+	require.NoError(t, err)
+
+	vi := New(buf, uri, WithTabspaces(2))
+	vi.Resize(20, 10)
+
+	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'v', Mod: term.ModCtrl})
+	require.True(t, handled)
+	for _, ch := range "lljjrX" {
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		require.True(t, handled, "event %q should be handled", string(ch))
+	}
+	assert.Equal(t, "XXXdef\nXXXjkl\nXXXpqr\nstuvwx", buf.String())
+
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+	require.True(t, handled)
+	_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: '.'})
+	require.True(t, handled)
+
+	assert.Equal(t, "XXXdef\nXXXjkl\nXXXpqr\nXXXvwx", buf.String())
+	assert.Equal(t, normalMode, vi.handler.mode())
+}
+
 func TestVisualBlockSwapCorner(t *testing.T) {
 	type testCase struct {
 		name                    string

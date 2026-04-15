@@ -1652,6 +1652,35 @@ func (vi *viHandlerImpl) handleVisualBlockChangeStart() {
 	vi.setCursorAtScroll(blockFrom)
 }
 
+func (vi *viHandlerImpl) replaceVisualBlockSelection(ch rune) bool {
+	mode, ok := vi.cursor.SelectionMode()
+	if !ok || mode != text.BlockSelection {
+		return false
+	}
+	anchor, ok := vi.cursor.SelectionFrom()
+	if !ok {
+		return false
+	}
+	cursor := vi.cursor.CursorAtScroll()
+	blockFrom, blockTo := term.CoordinatesBlockSort(anchor, cursor)
+
+	vi.cursor.Unselect()
+	buf := vi.less.Buffer()
+	replacement := string(ch)
+	for y := blockFrom.Y; y <= blockTo.Y && y < buf.Rows(); y++ {
+		columns := buf.Columns(y)
+		fromX := min(blockFrom.X, columns)
+		toX := min(blockTo.X+1, columns)
+		for x := fromX; x < toX; x++ {
+			from := term.Coordinates{X: x, Y: y}
+			to := term.Coordinates{X: x + 1, Y: y}
+			buf.Edit(context.Background(), from, to, replacement)
+		}
+	}
+	vi.setCursorAtScroll(blockFrom)
+	return true
+}
+
 func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
@@ -1765,6 +1794,14 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			default:
 				handled = false
 			}
+		case 'r':
+			switch vi.mode() {
+			case visualBlockMode:
+				vi.setReplaceOneMode()
+				return false, true
+			default:
+				handled = false
+			}
 		default:
 			handled = false
 		}
@@ -1843,8 +1880,14 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 		vi.cursor.MoveLeft()
 		vi.setNormalMode()
 	}
+	if ev.Ch == 0 && ev.Key == 0 {
+		return false, false
+	}
 
 	if ev.Ch != 0 {
+		if vi.replaceVisualBlockSelection(ev.Ch) {
+			return
+		}
 		// do not delete column == len(row); it contains a newline
 		// and that would conflate the current row with the next
 		if vi.cursor.Column() < vi.less.Buffer().Columns(vi.cursor.Line()) {
@@ -2552,7 +2595,9 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		quit, handled = vi.handleReplace(ev)
 	case replaceOneMode:
 		quit, handled = vi.handleReplace(ev)
-		vi.setNormalMode()
+		if handled {
+			vi.setNormalMode()
+		}
 	default:
 		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
