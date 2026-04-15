@@ -66,6 +66,10 @@ type Vi struct {
 	currEdits   []term.Event
 	repeatEdits []term.Event
 
+	changeList          *changeList
+	pendingChange       term.Coordinates
+	pendingChangeExists bool
+
 	resetting bool
 }
 
@@ -119,6 +123,7 @@ func (vi *Vi) init(
 
 	vi.repeatEdits = make([]term.Event, 0)
 	vi.currEdits = make([]term.Event, 0)
+	vi.changeList = newChangeList()
 	vi.oob = true
 
 	vi.snapshotContent()
@@ -159,6 +164,43 @@ func isSelectMode(mode viMode) bool {
 	return mode == visualMode || mode == visualLineMode || mode == visualBlockMode
 }
 
+type changeList struct {
+	locations []term.Coordinates
+	cursor    int
+}
+
+func newChangeList() *changeList {
+	return &changeList{cursor: -1}
+}
+
+func (l *changeList) append(pos term.Coordinates) {
+	if l.cursor >= 0 && l.cursor < len(l.locations)-1 {
+		l.locations = l.locations[:l.cursor+1]
+	}
+	if len(l.locations) > 0 && l.locations[len(l.locations)-1] == pos {
+		l.cursor = len(l.locations) - 1
+		return
+	}
+	l.locations = append(l.locations, pos)
+	l.cursor = len(l.locations) - 1
+}
+
+func (l *changeList) older() (term.Coordinates, bool) {
+	if l.cursor <= 0 {
+		return term.Coordinates{}, false
+	}
+	l.cursor--
+	return l.locations[l.cursor], true
+}
+
+func (l *changeList) newer() (term.Coordinates, bool) {
+	if l.cursor < 0 || l.cursor+1 >= len(l.locations) {
+		return term.Coordinates{}, false
+	}
+	l.cursor++
+	return l.locations[l.cursor], true
+}
+
 func (vi *Vi) resetEdits() {
 	vi.currEdits = vi.currEdits[:0]
 	vi.currEdited = false
@@ -174,6 +216,38 @@ func (vi *Vi) copyRepeat() {
 	}
 	vi.repeatEdits = vi.repeatEdits[:0]
 	vi.repeatEdits = append(vi.repeatEdits, vi.currEdits...)
+}
+
+func (vi *Vi) beginChange(pos term.Coordinates) {
+	if vi.pendingChangeExists {
+		return
+	}
+	vi.pendingChange = pos
+	vi.pendingChangeExists = true
+}
+
+func (vi *Vi) commitChange() {
+	if !vi.pendingChangeExists {
+		return
+	}
+	vi.changeList.append(vi.pendingChange)
+	vi.pendingChangeExists = false
+}
+
+func (vi *Vi) moveToOlderChange() bool {
+	pos, ok := vi.changeList.older()
+	if !ok {
+		return false
+	}
+	return vi.handler.setCursorAtScroll(pos)
+}
+
+func (vi *Vi) moveToNewerChange() bool {
+	pos, ok := vi.changeList.newer()
+	if !ok {
+		return false
+	}
+	return vi.handler.setCursorAtScroll(pos)
 }
 
 // Paste satisfies text.Clipboard. See Copy.
@@ -222,6 +296,21 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 						handled = vi.redo()
 						return
 					}
+				}
+			}
+		case gMode:
+			if ev.Type == term.EventKey && ev.Mod == 0 {
+				switch ev.Ch {
+				case ';':
+					vi.moveToOlderChange()
+					vi.handler.setNormalMode()
+					handled = true
+					return
+				case ',':
+					vi.moveToNewerChange()
+					vi.handler.setNormalMode()
+					handled = true
+					return
 				}
 			}
 		}
@@ -456,6 +545,7 @@ func (vi *Vi) setStatusBar(bar statusBar) {
 }
 
 func (vi *Vi) snapshotContent() {
+	vi.commitChange()
 	vi.buf.GroupUndo()
 }
 
@@ -468,6 +558,9 @@ func (vi *cellSubscriber) OnWillEdit(
 	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
 		vi.buf.MarkStartUndo()
 	}
+	if !vi.resetting {
+		vi.beginChange(from)
+	}
 }
 
 // OnDidEdit satisfies cell.Subscriber.
@@ -477,6 +570,15 @@ func (vi *cellSubscriber) OnDidEdit(
 	if !vi.resetting {
 		vi.evEdited = true
 		vi.currEdited = true
+		if vi.pendingChangeExists && vi.pendingChange.Y < start.Y {
+			vi.pendingChange = start
+		}
+		// Record last edit position for `. and '. marks.
+		vi.handler.setLocationList(textapi.LocationPriorityInfo, lastChangeLocationListID,
+			textapi.LocationSlice([]textapi.Location{{
+				From: start,
+				To:   term.Coordinates{X: start.X + 1, Y: start.Y},
+			}}))
 	}
 	vi.oobEdited = vi.oob
 }

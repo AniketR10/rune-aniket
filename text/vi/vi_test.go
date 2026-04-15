@@ -1096,3 +1096,525 @@ func (m *mockClip) Copy(registerID string, data clipboard.Data) error {
 	m.data = data
 	return nil
 }
+
+func testKey(ch rune) term.Event {
+	return term.Event{Type: term.EventKey, Ch: ch}
+}
+
+func testEsc() term.Event {
+	return term.Event{Type: term.EventKey, Key: term.KeyEsc}
+}
+
+func handleRunes(t *testing.T, vi *Vi, keys string) {
+	t.Helper()
+	for _, ch := range keys {
+		quit, handled := vi.Handle(testKey(ch))
+		require.False(t, quit)
+		require.True(t, handled, "key %q should be handled", ch)
+	}
+}
+
+func handleInsert(t *testing.T, vi *Vi, text string) {
+	t.Helper()
+	for _, ch := range text {
+		quit, handled := vi.Handle(testKey(ch))
+		require.False(t, quit)
+		require.True(t, handled, "insert key %q should be handled", ch)
+	}
+	quit, handled := vi.Handle(testEsc())
+	require.False(t, quit)
+	require.True(t, handled)
+}
+
+func assertCursorAtScroll(t *testing.T, vi *Vi, want term.Coordinates) {
+	t.Helper()
+	assert.Equal(t, want, vi.CursorAtScroll())
+}
+
+func currentLocation(t *testing.T, vi *Vi, id string) textapi.Location {
+	t.Helper()
+	list, ok := vi.cursor.LocationList(id)
+	require.True(t, ok, "location list %q should exist", id)
+	loc, ok := list.Current()
+	require.True(t, ok, "location list %q should have a current location", id)
+	return loc
+}
+
+func seedChangeList(vi *Vi, locs []term.Coordinates, cursor int) {
+	vi.changeList.locations = append([]term.Coordinates(nil), locs...)
+	vi.changeList.cursor = cursor
+	vi.pendingChangeExists = false
+}
+
+func editBufferWithoutChangeRecord(vi *Vi, edit func()) {
+	vi.resetting = true
+	edit()
+	vi.resetting = false
+	vi.pendingChangeExists = false
+	vi.oobEdited = false
+	vi.currEdited = false
+	vi.evEdited = false
+}
+
+func TestLastChangeMark(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, vi *Vi)
+	}{
+		{
+			name: "insert records dot mark",
+			run: func(t *testing.T, vi *Vi) {
+				handleRunes(t, vi, "j")
+				assertCursorAtScroll(t, vi, term.Coordinates{Y: 1})
+
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "X")
+
+				loc := currentLocation(t, vi, lastChangeLocationListID)
+				assert.Equal(t, term.Coordinates{Y: 1}, loc.From)
+			},
+		},
+		{
+			name: "undo does not update dot mark",
+			run: func(t *testing.T, vi *Vi) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "X")
+				before := currentLocation(t, vi, lastChangeLocationListID)
+
+				quit, handled := vi.Handle(testKey('u'))
+				require.False(t, quit)
+				require.True(t, handled)
+
+				after := currentLocation(t, vi, lastChangeLocationListID)
+				assert.Equal(t, before, after)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader("hello\nworld\nfoo"))
+			vi := New(buf, uri)
+			vi.Resize(20, 10)
+
+			tc.run(t, vi)
+		})
+	}
+}
+
+func TestChangeListOperations(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, l *changeList)
+	}{
+		{
+			name: "zero value has null data and no navigation",
+			run: func(t *testing.T, l *changeList) {
+				_, ok := l.older()
+				assert.False(t, ok)
+				_, ok = l.newer()
+				assert.False(t, ok)
+				assert.Empty(t, l.locations)
+			},
+		},
+		{
+			name: "single entry has no older or newer entry",
+			run: func(t *testing.T, l *changeList) {
+				l.append(term.Coordinates{Y: 1})
+				_, ok := l.older()
+				assert.False(t, ok)
+				_, ok = l.newer()
+				assert.False(t, ok)
+				assert.Equal(t, []term.Coordinates{{Y: 1}}, l.locations)
+				assert.Equal(t, 0, l.cursor)
+			},
+		},
+		{
+			name: "older and newer traverse in order with boundary no-ops",
+			run: func(t *testing.T, l *changeList) {
+				l.append(term.Coordinates{})
+				l.append(term.Coordinates{Y: 1})
+				l.append(term.Coordinates{Y: 2})
+
+				pos, ok := l.older()
+				require.True(t, ok)
+				assert.Equal(t, term.Coordinates{Y: 1}, pos)
+				pos, ok = l.older()
+				require.True(t, ok)
+				assert.Equal(t, term.Coordinates{}, pos)
+				_, ok = l.older()
+				assert.False(t, ok)
+
+				pos, ok = l.newer()
+				require.True(t, ok)
+				assert.Equal(t, term.Coordinates{Y: 1}, pos)
+				pos, ok = l.newer()
+				require.True(t, ok)
+				assert.Equal(t, term.Coordinates{Y: 2}, pos)
+				_, ok = l.newer()
+				assert.False(t, ok)
+			},
+		},
+		{
+			name: "duplicate latest append does not add an entry",
+			run: func(t *testing.T, l *changeList) {
+				l.append(term.Coordinates{X: 2, Y: 3})
+				l.append(term.Coordinates{X: 2, Y: 3})
+				assert.Equal(t, []term.Coordinates{{X: 2, Y: 3}}, l.locations)
+				assert.Equal(t, 0, l.cursor)
+			},
+		},
+		{
+			name: "append after going older truncates future entries",
+			run: func(t *testing.T, l *changeList) {
+				l.append(term.Coordinates{})
+				l.append(term.Coordinates{Y: 1})
+				l.append(term.Coordinates{Y: 2})
+				_, ok := l.older()
+				require.True(t, ok)
+
+				l.append(term.Coordinates{Y: 9})
+				assert.Equal(t, []term.Coordinates{{}, {Y: 1}, {Y: 9}}, l.locations)
+				assert.Equal(t, 2, l.cursor)
+			},
+		},
+		{
+			name: "append same as current after going older truncates future without duplicate",
+			run: func(t *testing.T, l *changeList) {
+				l.append(term.Coordinates{})
+				l.append(term.Coordinates{Y: 1})
+				l.append(term.Coordinates{Y: 2})
+				_, ok := l.older()
+				require.True(t, ok)
+
+				l.append(term.Coordinates{Y: 1})
+				assert.Equal(t, []term.Coordinates{{}, {Y: 1}}, l.locations)
+				assert.Equal(t, 1, l.cursor)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.run(t, newChangeList())
+		})
+	}
+}
+
+func TestChangeListNavigation(t *testing.T) {
+	type commandAssertion struct {
+		keys string
+		want term.Coordinates
+	}
+
+	tests := []struct {
+		name      string
+		content   string
+		arrange   func(t *testing.T, vi *Vi, buf *cell.Buffer)
+		wantList  []term.Coordinates
+		commands  []commandAssertion
+		wantFinal []term.Coordinates
+	}{
+		{
+			name:    "normal edits move older then newer through history",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "B")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "C")
+			},
+			wantList: []term.Coordinates{{}, {Y: 1}, {Y: 2}},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{Y: 1}},
+				{keys: "g;", want: term.Coordinates{}},
+				{keys: "g;", want: term.Coordinates{}},
+				{keys: "g,", want: term.Coordinates{Y: 1}},
+				{keys: "g,", want: term.Coordinates{Y: 2}},
+				{keys: "g,", want: term.Coordinates{Y: 2}},
+			},
+		},
+		{
+			name:    "insert mode edits are grouped into one change entry",
+			content: "alpha\nbravo",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "ABC")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "D")
+			},
+			wantList: []term.Coordinates{{}, {X: 2, Y: 1}},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{}},
+				{keys: "g,", want: term.Coordinates{X: 2, Y: 1}},
+			},
+		},
+		{
+			name:    "dot repeat edits create change entries",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "j.")
+			},
+			wantList: []term.Coordinates{{}, {Y: 1}},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{}},
+				{keys: "g,", want: term.Coordinates{Y: 1}},
+			},
+		},
+		{
+			name:    "open line below records inserted text start",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "o")
+				handleInsert(t, vi, "//hello")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "C")
+			},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{Y: 2}},
+			},
+		},
+		{
+			name:    "open line above records inserted text start",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "jj")
+				handleRunes(t, vi, "O")
+				handleInsert(t, vi, "//above")
+				handleRunes(t, vi, "jj")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "D")
+			},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{Y: 2}},
+			},
+		},
+		{
+			name:    "enter in insert mode records split line start",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				require.False(t, quit)
+				require.True(t, handled)
+				handleInsert(t, vi, "//split")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "D")
+			},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{Y: 2}},
+			},
+		},
+		{
+			name:    "out-of-band edits are captured on the next event",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				buf.Edit(context.Background(), term.Coordinates{Y: 2}, term.Coordinates{Y: 2}, "C")
+
+				// The next event snapshots the out-of-band edit.
+				handleRunes(t, vi, "j")
+			},
+			wantList: []term.Coordinates{{}, {Y: 2}},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{}},
+				{keys: "g,", want: term.Coordinates{Y: 2}},
+			},
+		},
+		{
+			name:    "empty change list handles commands as no-ops",
+			content: "alpha\nbravo",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "j")
+			},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{Y: 1}},
+				{keys: "g,", want: term.Coordinates{Y: 1}},
+			},
+		},
+		{
+			name:    "single change entry has older and newer boundary no-ops",
+			content: "alpha\nbravo",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "j")
+			},
+			wantList: []term.Coordinates{{}},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{Y: 1}},
+				{keys: "g,", want: term.Coordinates{Y: 1}},
+			},
+		},
+		{
+			name:    "undo does not append or rewrite change entries",
+			content: "alpha\nbravo\ncharlie",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "A")
+				handleRunes(t, vi, "j")
+				handleRunes(t, vi, "i")
+				handleInsert(t, vi, "B")
+
+				quit, handled := vi.Handle(testKey('u'))
+				require.False(t, quit)
+				require.True(t, handled)
+			},
+			wantList: []term.Coordinates{{}, {Y: 1}},
+			commands: []commandAssertion{
+				{keys: "g;", want: term.Coordinates{}},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tc.content))
+			vi := New(buf, uri)
+			vi.Resize(20, 10)
+
+			if tc.arrange != nil {
+				tc.arrange(t, vi, buf)
+			}
+			if tc.wantList != nil {
+				assert.Equal(t, tc.wantList, vi.changeList.locations)
+			}
+
+			for _, cmd := range tc.commands {
+				handleRunes(t, vi, cmd.keys)
+				assertCursorAtScroll(t, vi, cmd.want)
+				assert.Equal(t, normalMode, vi.handler.mode())
+			}
+			if tc.wantFinal != nil {
+				assert.Equal(t, tc.wantFinal, vi.changeList.locations)
+			}
+		})
+	}
+}
+
+func TestChangeListNavigationWithStaleLocations(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		arrange func(t *testing.T, vi *Vi, buf *cell.Buffer)
+		seed    []term.Coordinates
+		cursor  int
+		start   term.Coordinates
+		keys    string
+		want    func(vi *Vi) term.Coordinates
+	}{
+		{
+			name:    "older location past last line clamps after text was deleted",
+			content: "zero\none\ntwo\nthree",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				editBufferWithoutChangeRecord(vi, func() {
+					buf.Edit(context.Background(), term.Coordinates{Y: 2}, term.Coordinates{X: 5, Y: 3}, "")
+				})
+				require.Less(t, buf.Rows(), 4)
+			},
+			seed:   []term.Coordinates{{Y: 3}, {}},
+			cursor: 1,
+			keys:   "g;",
+			want: func(vi *Vi) term.Coordinates {
+				return term.Coordinates{Y: vi.buf.Rows() - 1}
+			},
+		},
+		{
+			name:    "newer location past last column clamps to line end",
+			content: "zero\nab",
+			seed:    []term.Coordinates{{}, {X: 999, Y: 1}},
+			cursor:  0,
+			keys:    "g,",
+			want: func(vi *Vi) term.Coordinates {
+				return term.Coordinates{X: vi.buf.Columns(1), Y: 1}
+			},
+		},
+		{
+			name:    "newer location past last column clamps after line was shortened",
+			content: "zero\nabcdef",
+			arrange: func(t *testing.T, vi *Vi, buf *cell.Buffer) {
+				editBufferWithoutChangeRecord(vi, func() {
+					buf.Edit(context.Background(), term.Coordinates{X: 2, Y: 1}, term.Coordinates{X: 6, Y: 1}, "")
+				})
+				require.Equal(t, 2, buf.Columns(1))
+			},
+			seed:   []term.Coordinates{{}, {X: 6, Y: 1}},
+			cursor: 0,
+			keys:   "g,",
+			want: func(vi *Vi) term.Coordinates {
+				return term.Coordinates{X: 2, Y: 1}
+			},
+		},
+		{
+			name:    "negative stale location clamps to origin",
+			content: "zero\none",
+			seed:    []term.Coordinates{{X: -10, Y: -10}, {Y: 1}},
+			cursor:  1,
+			start:   term.Coordinates{Y: 1},
+			keys:    "g;",
+			want: func(vi *Vi) term.Coordinates {
+				return term.Coordinates{}
+			},
+		},
+		{
+			name:    "nil locations are handled as no-op null data",
+			content: "zero\none",
+			cursor:  -1,
+			start:   term.Coordinates{Y: 1},
+			keys:    "g;g,",
+			want: func(vi *Vi) term.Coordinates {
+				return term.Coordinates{Y: 1}
+			},
+		},
+		{
+			name:    "one stale entry cannot move older or newer",
+			content: "zero\none",
+			seed:    []term.Coordinates{{X: 99, Y: 99}},
+			cursor:  0,
+			start:   term.Coordinates{Y: 1},
+			keys:    "g;g,",
+			want: func(vi *Vi) term.Coordinates {
+				return term.Coordinates{Y: 1}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tc.content))
+			vi := New(buf, uri)
+			vi.Resize(20, 10)
+
+			if tc.arrange != nil {
+				tc.arrange(t, vi, buf)
+			}
+			seedChangeList(vi, tc.seed, tc.cursor)
+			vi.SetCursorAtScroll(tc.start)
+
+			handleRunes(t, vi, tc.keys)
+			assertCursorAtScroll(t, vi, tc.want(vi))
+			assert.Equal(t, normalMode, vi.handler.mode())
+		})
+	}
+}
