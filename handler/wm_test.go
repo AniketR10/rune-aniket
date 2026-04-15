@@ -492,6 +492,30 @@ func TestWindowManagerCloseFloatingFocusesFrontmostRemainingFloating(t *testing.
 	assert.NotEqual(t, f1.ID(), wm.Focus().ID())
 }
 
+func TestWindowManagerCloseFloatingSkipsMinimizedFloatingFocus(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(20, 8)
+	tile := wm.Focus()
+
+	minimized := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 4, 4),
+		component.FloatingConfig{Alignment: compapi.AlignmentCentered},
+	)
+	require.True(t, minimized.MinimizeRight(0))
+
+	focus := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 4, 4),
+		component.FloatingConfig{Alignment: compapi.AlignmentCentered},
+	)
+	wm.SetFocus(focus)
+	require.NoError(t, focus.Close())
+
+	assert.Equal(t, tile.ID(), wm.Focus().ID())
+	_, ok := minimized.IsMinimized()
+	assert.True(t, ok)
+}
+
 func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame

@@ -254,6 +254,9 @@ func (wm *WindowManager) findOtherFloatingWindow(w Window) (Window, bool) {
 		if !candidate.IsFloating() || candidate.ID() == w.ID() {
 			return
 		}
+		if _, minimized := candidate.IsMinimized(); minimized {
+			return
+		}
 		// Floating windows are iterated in draw order, so the last matching
 		// candidate is the frontmost remaining floating window.
 		focus = candidate
