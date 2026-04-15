@@ -24,8 +24,6 @@
 package gui
 
 import (
-	"time"
-
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 )
 
@@ -35,15 +33,12 @@ var _ mouseManager = ebitenInputManager{}
 type ebitenInputManager struct {
 }
 
-func (e ebitenInputManager) IsKeyPressed(key ebiten.Key) bool {
-	return ebiten.IsKeyPressed(key)
-}
-
 func (e ebitenInputManager) AppendInputChars(buf []rune) []rune {
 	return ebiten.AppendInputChars(buf)
 }
-func (e ebitenInputManager) Now() time.Time {
-	return time.Now()
+
+func (e ebitenInputManager) AppendKeyEvents(buf []ebiten.KeyEvent) []ebiten.KeyEvent {
+	return ebiten.AppendKeyEvents(buf)
 }
 
 func (e ebitenInputManager) Wheel() (float64, float64) {

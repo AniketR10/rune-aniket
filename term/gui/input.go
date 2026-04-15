@@ -25,400 +25,285 @@ package gui
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/gui/font"
 )
 
-const (
-	defaultKeyPressDelay  = 500 * time.Millisecond
-	defaultKeyPressRepeat = 30 * time.Millisecond
-)
-
 // abstracts ebiten* input methods
 type keysManager interface {
-	IsKeyPressed(ebiten.Key) bool
 	AppendInputChars([]rune) []rune
-	Now() time.Time
+	AppendKeyEvents([]ebiten.KeyEvent) []ebiten.KeyEvent
 }
 
 type input struct {
 	fontManager *font.Manager
+	keyEvents   []ebiten.KeyEvent
 	chars       []rune
-	// ebiten sometimes sends a char on frame N, and a key
-	// for the same char on frame N+1; this field helps coalesce to
-	// chars when that's the case so we don't miss-fire char keys
-	// on frame N+1
-	keyChars       []rune
-	input          keysManager
-	keyPressDelay  time.Duration
-	keyPressRepeat time.Duration
-
-	keyState    map[ebiten.Key]press
-	charState   map[rune]press
-	modState    map[term.Modifier]press
-	charCurrent map[rune]struct{}
-	modCurrent  map[term.Modifier]struct{}
-}
-
-type press struct {
-	at        time.Time
-	repeating bool
+	input       keysManager
 }
 
 func newInput(fontManager *font.Manager) *input {
-	ret := new(input)
-	ret.keyState = make(map[ebiten.Key]press)
-	ret.charState = make(map[rune]press)
-	ret.modState = make(map[term.Modifier]press)
-	ret.modCurrent = make(map[term.Modifier]struct{})
-	ret.charCurrent = make(map[rune]struct{})
-	ret.fontManager = fontManager
-	ret.input = ebitenInputManager{}
-	ret.keyPressDelay = defaultKeyPressDelay
-	ret.keyPressRepeat = defaultKeyPressRepeat
-	return ret
+	return &input{
+		fontManager: fontManager,
+		input:       ebitenInputManager{},
+	}
 }
 
-func (i *input) processEvents() (ev term.Event, ok bool) {
-	now := i.input.Now()
-	defer clearPressedCache(i.charState, i.charCurrent)
-	defer clearPressedCache(i.modState, i.modCurrent)
+// processEvents collects discrete key events and fallback chars from Ebiten,
+// converts them to term.Events, and appends them to dst.
+func (i *input) processEvents(dst []term.Event) []term.Event {
+	i.keyEvents = i.input.AppendKeyEvents(i.keyEvents[:0])
+	i.chars = i.input.AppendInputChars(i.chars[:0])
 
-	var mod term.Modifier
-	mod = i.processModifiers()
+	// Track whether any key event produced a terminal event, so we
+	// know whether to use the fallback chars from AppendInputChars.
+	keyEventFired := false
 
-	// process all first so shouldFire populates the cache in any case
-	keyEv, mod, keyOk := i.handleKeys(now, mod)
-	chEv, chOk := i.handleChars(i.charCurrent, now, mod)
-
-	if keyOk {
-		ev = keyEv
-		ok = true
-		return
-	}
-
-	if chOk {
-		ev = chEv
-		ok = true
-		return
-	}
-	return
-}
-
-func (i *input) processModifiers() (mod term.Modifier) {
-	isMetaPressed := i.input.IsKeyPressed(ebiten.KeyMeta)
-	isCtrlPressed := i.input.IsKeyPressed(ebiten.KeyControl)
-	isAltPressed := i.input.IsKeyPressed(ebiten.KeyAlt)
-	isShiftPressed := i.input.IsKeyPressed(ebiten.KeyShift)
-
-	// handle modifiers separately first, so keys below can be interpreted
-	// already taking modifiers into consideration.
-	if isCtrlPressed && isShiftPressed && isAltPressed {
-		mod = term.ModCtrlShiftAlt
-	} else if isCtrlPressed && isShiftPressed && isMetaPressed {
-		mod = term.ModCtrlShiftMeta
-	} else if isCtrlPressed && isAltPressed && isMetaPressed {
-		mod = term.ModCtrlAltMeta
-	} else if isAltPressed && isShiftPressed && isMetaPressed {
-		mod = term.ModAltShiftMeta
-	} else if isCtrlPressed && isShiftPressed {
-		mod = term.ModCtrlShift
-	} else if isCtrlPressed && isAltPressed {
-		mod = term.ModCtrlAlt
-	} else if isCtrlPressed && isMetaPressed {
-		mod = term.ModCtrlMeta
-	} else if isShiftPressed && isMetaPressed {
-		mod = term.ModShiftMeta
-	} else if isAltPressed && isMetaPressed {
-		mod = term.ModAltMeta
-	} else if isAltPressed && isShiftPressed {
-		mod = term.ModAltShift
-	} else if isAltPressed {
-		mod = term.ModAlt
-	} else if isShiftPressed {
-		mod = term.ModShift
-	} else if isMetaPressed {
-		mod = term.ModMeta
-	} else if isCtrlPressed {
-		mod = term.ModCtrl
-	}
-	return
-}
-
-func (i *input) handleKeys(now time.Time, mod term.Modifier) (
-	ev term.Event, retMod term.Modifier, ok bool,
-) {
-	retMod = mod
-	i.keyChars = i.keyChars[:0]
-	// We need to iterate over them all so shouldFire* can clear
-	// state of keys that are no longer pressed.
-	for key := range ebiten.KeyAlt {
-		switch key {
-		case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight,
-			ebiten.KeyAlt, ebiten.KeyAltLeft, ebiten.KeyAltRight,
-			ebiten.KeyShift, ebiten.KeyShiftLeft, ebiten.KeyShiftRight,
-			ebiten.KeyControl, ebiten.KeyControlLeft, ebiten.KeyControlRight:
-		case ebiten.KeyA:
-			i.charPressedMap(now, ebiten.KeyA, 'a', 'A', &retMod)
-		case ebiten.KeyB:
-			i.charPressedMap(now, ebiten.KeyB, 'b', 'B', &retMod)
-		case ebiten.KeyC:
-			i.charPressedMap(now, ebiten.KeyC, 'c', 'C', &retMod)
-		case ebiten.KeyD:
-			i.charPressedMap(now, ebiten.KeyD, 'd', 'D', &retMod)
-		case ebiten.KeyE:
-			i.charPressedMap(now, ebiten.KeyE, 'e', 'E', &retMod)
-		case ebiten.KeyF:
-			i.charPressedMap(now, ebiten.KeyF, 'f', 'F', &retMod)
-		case ebiten.KeyG:
-			i.charPressedMap(now, ebiten.KeyG, 'g', 'G', &retMod)
-		case ebiten.KeyH:
-			i.charPressedMap(now, ebiten.KeyH, 'h', 'H', &retMod)
-		case ebiten.KeyI:
-			i.charPressedMap(now, ebiten.KeyI, 'i', 'I', &retMod)
-		case ebiten.KeyJ:
-			i.charPressedMap(now, ebiten.KeyJ, 'j', 'J', &retMod)
-		case ebiten.KeyK:
-			i.charPressedMap(now, ebiten.KeyK, 'k', 'K', &retMod)
-		case ebiten.KeyL:
-			i.charPressedMap(now, ebiten.KeyL, 'l', 'L', &retMod)
-		case ebiten.KeyM:
-			i.charPressedMap(now, ebiten.KeyM, 'm', 'M', &retMod)
-		case ebiten.KeyN:
-			i.charPressedMap(now, ebiten.KeyN, 'n', 'N', &retMod)
-		case ebiten.KeyO:
-			i.charPressedMap(now, ebiten.KeyO, 'o', 'O', &retMod)
-		case ebiten.KeyP:
-			i.charPressedMap(now, ebiten.KeyP, 'p', 'P', &retMod)
-		case ebiten.KeyQ:
-			i.charPressedMap(now, ebiten.KeyQ, 'q', 'Q', &retMod)
-		case ebiten.KeyR:
-			i.charPressedMap(now, ebiten.KeyR, 'r', 'R', &retMod)
-		case ebiten.KeyS:
-			i.charPressedMap(now, ebiten.KeyS, 's', 'S', &retMod)
-		case ebiten.KeyT:
-			i.charPressedMap(now, ebiten.KeyT, 't', 'T', &retMod)
-		case ebiten.KeyU:
-			i.charPressedMap(now, ebiten.KeyU, 'u', 'U', &retMod)
-		case ebiten.KeyV:
-			i.charPressedMap(now, ebiten.KeyV, 'v', 'V', &retMod)
-		case ebiten.KeyW:
-			i.charPressedMap(now, ebiten.KeyW, 'w', 'W', &retMod)
-		case ebiten.KeyX:
-			i.charPressedMap(now, ebiten.KeyX, 'x', 'X', &retMod)
-		case ebiten.KeyY:
-			i.charPressedMap(now, ebiten.KeyY, 'y', 'Y', &retMod)
-		case ebiten.KeyZ:
-			i.charPressedMap(now, ebiten.KeyZ, 'z', 'Z', &retMod)
-		case ebiten.KeyMinus:
-			i.charPressedMap(now, ebiten.KeyMinus, '-', '_', &retMod)
-		case ebiten.KeyDigit0:
-			i.charPressedMap(now, ebiten.KeyDigit0, '0', ')', &retMod)
-		case ebiten.KeyDigit1:
-			i.charPressedMap(now, ebiten.KeyDigit1, '1', '!', &retMod)
-		case ebiten.KeyDigit2:
-			i.charPressedMap(now, ebiten.KeyDigit2, '2', '@', &retMod)
-		case ebiten.KeyDigit3:
-			i.charPressedMap(now, ebiten.KeyDigit3, '3', '#', &retMod)
-		case ebiten.KeyDigit4:
-			i.charPressedMap(now, ebiten.KeyDigit4, '4', '$', &retMod)
-		case ebiten.KeyDigit5:
-			i.charPressedMap(now, ebiten.KeyDigit5, '5', '%', &retMod)
-		case ebiten.KeyDigit6:
-			i.charPressedMap(now, ebiten.KeyDigit6, '6', '^', &retMod)
-		case ebiten.KeyDigit7:
-			i.charPressedMap(now, ebiten.KeyDigit7, '7', '&', &retMod)
-		case ebiten.KeyDigit8:
-			i.charPressedMap(now, ebiten.KeyDigit8, '8', '*', &retMod)
-		case ebiten.KeyDigit9:
-			i.charPressedMap(now, ebiten.KeyDigit9, '9', '(', &retMod)
-		case ebiten.KeyEqual:
-			i.charPressedMap(now, ebiten.KeyEqual, '=', '+', &retMod)
-		case ebiten.KeyNumpadAdd:
-			i.charPressed(now, ebiten.KeyNumpadAdd, '+')
-		case ebiten.KeyNumpadDecimal:
-			i.charPressed(now, ebiten.KeyNumpadDecimal, '.')
-		case ebiten.KeyNumpadDivide:
-			i.charPressed(now, ebiten.KeyNumpadDivide, '/')
-		case ebiten.KeyNumpadEqual:
-			i.charPressed(now, ebiten.KeyNumpadEqual, '=')
-		case ebiten.KeyNumpadMultiply:
-			i.charPressed(now, ebiten.KeyNumpadMultiply, '*')
-		case ebiten.KeyNumpadSubtract:
-			i.charPressed(now, ebiten.KeyNumpadSubtract, '-')
-		case ebiten.KeyNumpad0:
-			i.charPressed(now, ebiten.KeyNumpad0, '0')
-		case ebiten.KeyNumpad1:
-			i.charPressed(now, ebiten.KeyNumpad1, '1')
-		case ebiten.KeyNumpad2:
-			i.charPressed(now, ebiten.KeyNumpad2, '2')
-		case ebiten.KeyNumpad3:
-			i.charPressed(now, ebiten.KeyNumpad3, '3')
-		case ebiten.KeyNumpad4:
-			i.charPressed(now, ebiten.KeyNumpad4, '4')
-		case ebiten.KeyNumpad5:
-			i.charPressed(now, ebiten.KeyNumpad5, '5')
-		case ebiten.KeyNumpad6:
-			i.charPressed(now, ebiten.KeyNumpad6, '6')
-		case ebiten.KeyNumpad7:
-			i.charPressed(now, ebiten.KeyNumpad7, '7')
-		case ebiten.KeyNumpad8:
-			i.charPressed(now, ebiten.KeyNumpad8, '8')
-		case ebiten.KeyNumpad9:
-			i.charPressed(now, ebiten.KeyNumpad9, '9')
-		case ebiten.KeyComma:
-			i.charPressedMap(now, ebiten.KeyComma, ',', '<', &retMod)
-		case ebiten.KeyBracketLeft:
-			i.charPressedMap(now, ebiten.KeyBracketLeft, '[', '{', &retMod)
-		case ebiten.KeyBracketRight:
-			i.charPressedMap(now, ebiten.KeyBracketRight, ']', '}', &retMod)
-		case ebiten.KeyBackquote:
-			i.charPressedMap(now, ebiten.KeyBackquote, '`', '~', &retMod)
-		case ebiten.KeyBackslash:
-			i.charPressedMap(now, ebiten.KeyBackslash, '\\', '|', &retMod)
-		case ebiten.KeySlash:
-			i.charPressedMap(now, ebiten.KeySlash, '/', '?', &retMod)
-		case ebiten.KeyIntlBackslash:
-			i.charPressedMap(now, ebiten.KeyIntlBackslash, '\\', '|', &retMod)
-		case ebiten.KeyPeriod:
-			i.charPressedMap(now, ebiten.KeyPeriod, '.', '>', &retMod)
-		case ebiten.KeyQuote:
-			i.charPressedMap(now, ebiten.KeyQuote, '\'', '"', &retMod)
-		case ebiten.KeySemicolon:
-			i.charPressedMap(now, ebiten.KeySemicolon, ';', ':', &retMod)
-		default:
-			if i.shouldFireKey(now, key) {
-				ev, ok = mapEbitenKey(key, mod)
-			}
+	for _, ke := range i.keyEvents {
+		// Skip releases — they don't produce terminal events.
+		if ke.Action == ebiten.KeyActionRelease {
+			continue
 		}
-	}
-	return
-}
-
-func (i *input) handleChars(curr map[rune]struct{}, now time.Time, mod term.Modifier) (
-	ev term.Event, ok bool,
-) {
-	clear(curr)
-	// key-processed chars take preference over raw chars
-	if len(i.keyChars) == 0 {
-		// Only fall back to raw AppendInputChars when no character key is
-		// currently held. When a character key is held but hasn't reached
-		// its repeat delay, keyChars is empty yet the key is still tracked
-		// in keyState. Falling back here would let the OS report a
-		// different char for the same physical key (e.g. '2' after
-		// releasing Shift while holding Digit2 that originally produced
-		// '@'), causing a spurious event.
-		if len(i.keyState) == 0 {
-			i.chars = i.input.AppendInputChars(i.chars[:0])
-			// if we are using chars directly, then shift modifier is omitted
-			// as they have already been processed. Note that in theory on MacOS the alt
-			// modifier is also pre-processed; in practice when a pre-processed alt and char
-			// is dispatched, ebiten also dispatches an ebiten.Key so keyChars forces the correct
-			// interpretation.
-			_, mod = removeShiftModifier(0, 0, mod)
+		// Skip modifier-only keys.
+		if isModifierKey(ke.Key) {
+			continue
 		}
-	} else {
-		i.chars = append(i.chars, i.keyChars...)
-	}
-	for _, ch := range i.chars {
-		curr[ch] = struct{}{}
-		shouldFire := shouldFireKey(
-			i.charState, now, i.keyPressDelay, i.keyPressRepeat, ch)
-		if shouldFire {
-			ev = term.Event{
+
+		mod := ebitenModToTermMod(ke.Mods)
+
+		// Try character-producing key first.
+		if base, shift, ok := keyToBaseAndShift(ke.Key); ok {
+			keyEventFired = true
+			ch, mod := resolveCharKey(base, shift, mod)
+			dst = append(dst, term.Event{
 				Type: term.EventKey,
 				Mod:  mod,
 				Ch:   ch,
 				Raw:  getCharEscapeSequence(ch, mod),
-			}
-			ok = true
+			})
+			continue
+		}
+
+		// Non-character key (arrows, F-keys, Enter, etc.)
+		if ev, ok := mapEbitenKey(ke.Key, mod); ok {
+			keyEventFired = true
+			dst = append(dst, ev)
 		}
 	}
-	return
+
+	// Fallback: if no key events produced terminal events this frame,
+	// use AppendInputChars for IME / paste / other text input.
+	//
+	// Limitation: fallback chars carry no modifier information. If a
+	// modifier (e.g. Alt) is held while a char arrives here without a
+	// corresponding key event, the modifier is lost. In practice this
+	// does not happen on desktop/GLFW because the key callback always
+	// fires for physical key presses, so modifier+char combos are
+	// handled by the key-event path above.
+	if !keyEventFired {
+		for _, ch := range i.chars {
+			dst = append(dst, term.Event{
+				Type: term.EventKey,
+				Ch:   ch,
+				Raw:  getCharEscapeSequence(ch, 0),
+			})
+		}
+	}
+
+	return dst
 }
 
-func (i *input) charPressed(now time.Time, key ebiten.Key, ch rune) {
-	if i.shouldFireKey(now, key) {
-		i.keyChars = append(i.keyChars, ch)
+// ebitenModToTermMod converts an Ebiten modifier bitmask to a term.Modifier.
+func ebitenModToTermMod(mods ebiten.KeyModifier) term.Modifier {
+	var m term.Modifier
+	if mods&ebiten.KeyModControl != 0 {
+		m |= term.ModCtrl
+	}
+	if mods&ebiten.KeyModShift != 0 {
+		m |= term.ModShift
+	}
+	if mods&ebiten.KeyModAlt != 0 {
+		m |= term.ModAlt
+	}
+	if mods&ebiten.KeyModSuper != 0 {
+		m |= term.ModMeta
+	}
+	return m
+}
+
+// isModifierKey returns true for keys that are pure modifiers.
+func isModifierKey(key ebiten.Key) bool {
+	switch key {
+	case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight,
+		ebiten.KeyAlt, ebiten.KeyAltLeft, ebiten.KeyAltRight,
+		ebiten.KeyShift, ebiten.KeyShiftLeft, ebiten.KeyShiftRight,
+		ebiten.KeyControl, ebiten.KeyControlLeft, ebiten.KeyControlRight:
+		return true
+	}
+	return false
+}
+
+// keyToBaseAndShift returns the base and shift characters for a
+// character-producing key. Returns false for non-character keys.
+func keyToBaseAndShift(key ebiten.Key) (base, shift rune, ok bool) {
+	switch key {
+	case ebiten.KeyA:
+		return 'a', 'A', true
+	case ebiten.KeyB:
+		return 'b', 'B', true
+	case ebiten.KeyC:
+		return 'c', 'C', true
+	case ebiten.KeyD:
+		return 'd', 'D', true
+	case ebiten.KeyE:
+		return 'e', 'E', true
+	case ebiten.KeyF:
+		return 'f', 'F', true
+	case ebiten.KeyG:
+		return 'g', 'G', true
+	case ebiten.KeyH:
+		return 'h', 'H', true
+	case ebiten.KeyI:
+		return 'i', 'I', true
+	case ebiten.KeyJ:
+		return 'j', 'J', true
+	case ebiten.KeyK:
+		return 'k', 'K', true
+	case ebiten.KeyL:
+		return 'l', 'L', true
+	case ebiten.KeyM:
+		return 'm', 'M', true
+	case ebiten.KeyN:
+		return 'n', 'N', true
+	case ebiten.KeyO:
+		return 'o', 'O', true
+	case ebiten.KeyP:
+		return 'p', 'P', true
+	case ebiten.KeyQ:
+		return 'q', 'Q', true
+	case ebiten.KeyR:
+		return 'r', 'R', true
+	case ebiten.KeyS:
+		return 's', 'S', true
+	case ebiten.KeyT:
+		return 't', 'T', true
+	case ebiten.KeyU:
+		return 'u', 'U', true
+	case ebiten.KeyV:
+		return 'v', 'V', true
+	case ebiten.KeyW:
+		return 'w', 'W', true
+	case ebiten.KeyX:
+		return 'x', 'X', true
+	case ebiten.KeyY:
+		return 'y', 'Y', true
+	case ebiten.KeyZ:
+		return 'z', 'Z', true
+	case ebiten.KeyDigit0:
+		return '0', ')', true
+	case ebiten.KeyDigit1:
+		return '1', '!', true
+	case ebiten.KeyDigit2:
+		return '2', '@', true
+	case ebiten.KeyDigit3:
+		return '3', '#', true
+	case ebiten.KeyDigit4:
+		return '4', '$', true
+	case ebiten.KeyDigit5:
+		return '5', '%', true
+	case ebiten.KeyDigit6:
+		return '6', '^', true
+	case ebiten.KeyDigit7:
+		return '7', '&', true
+	case ebiten.KeyDigit8:
+		return '8', '*', true
+	case ebiten.KeyDigit9:
+		return '9', '(', true
+	case ebiten.KeyMinus:
+		return '-', '_', true
+	case ebiten.KeyEqual:
+		return '=', '+', true
+	case ebiten.KeyComma:
+		return ',', '<', true
+	case ebiten.KeyPeriod:
+		return '.', '>', true
+	case ebiten.KeySlash:
+		return '/', '?', true
+	case ebiten.KeyBackslash:
+		return '\\', '|', true
+	case ebiten.KeyIntlBackslash:
+		return '\\', '|', true
+	case ebiten.KeyBracketLeft:
+		return '[', '{', true
+	case ebiten.KeyBracketRight:
+		return ']', '}', true
+	case ebiten.KeyBackquote:
+		return '`', '~', true
+	case ebiten.KeyQuote:
+		return '\'', '"', true
+	case ebiten.KeySemicolon:
+		return ';', ':', true
+	case ebiten.KeyNumpadAdd:
+		return '+', '+', true
+	case ebiten.KeyNumpadDecimal:
+		return '.', '.', true
+	case ebiten.KeyNumpadDivide:
+		return '/', '/', true
+	case ebiten.KeyNumpadEqual:
+		return '=', '=', true
+	case ebiten.KeyNumpadMultiply:
+		return '*', '*', true
+	case ebiten.KeyNumpadSubtract:
+		return '-', '-', true
+	case ebiten.KeyNumpad0:
+		return '0', '0', true
+	case ebiten.KeyNumpad1:
+		return '1', '1', true
+	case ebiten.KeyNumpad2:
+		return '2', '2', true
+	case ebiten.KeyNumpad3:
+		return '3', '3', true
+	case ebiten.KeyNumpad4:
+		return '4', '4', true
+	case ebiten.KeyNumpad5:
+		return '5', '5', true
+	case ebiten.KeyNumpad6:
+		return '6', '6', true
+	case ebiten.KeyNumpad7:
+		return '7', '7', true
+	case ebiten.KeyNumpad8:
+		return '8', '8', true
+	case ebiten.KeyNumpad9:
+		return '9', '9', true
+	default:
+		return 0, 0, false
 	}
 }
 
-func (i *input) charPressedMap(
-	now time.Time, key ebiten.Key,
-	char, shiftChar rune, mod *term.Modifier,
-) {
-	if i.shouldFireKey(now, key) {
-		char, *mod = removeShiftModifier(char, shiftChar, *mod)
-		i.keyChars = append(i.keyChars, char)
-	}
-}
-
-func (i *input) shouldFireKey(now time.Time, key ebiten.Key) bool {
-	if !i.input.IsKeyPressed(key) {
-		delete(i.keyState, key)
-		return false
-	}
-
-	return shouldFireKey(i.keyState, now,
-		i.keyPressDelay, i.keyPressRepeat, key)
-}
-
-func removeShiftModifier(char, shiftChar rune, mod term.Modifier) (rune, term.Modifier) {
+// resolveCharKey picks the correct character (base vs shift) and
+// strips the Shift modifier from mod when Shift is consumed by
+// the character mapping.
+func resolveCharKey(base, shift rune, mod term.Modifier) (rune, term.Modifier) {
 	switch mod {
 	case term.ModShift:
-		return shiftChar, 0
+		return shift, 0
 	case term.ModCtrlShift:
-		return shiftChar, term.ModCtrl
+		return shift, term.ModCtrl
 	case term.ModCtrlShiftAlt:
-		return shiftChar, term.ModCtrlAlt
+		return shift, term.ModCtrlAlt
 	case term.ModCtrlShiftMeta:
-		return shiftChar, term.ModCtrlMeta
+		return shift, term.ModCtrlMeta
 	case term.ModShiftMeta:
-		return shiftChar, term.ModMeta
+		return shift, term.ModMeta
 	case term.ModAltShiftMeta:
-		return shiftChar, term.ModAltMeta
+		return shift, term.ModAltMeta
 	case term.ModAltShift:
-		return shiftChar, term.ModAlt
+		return shift, term.ModAlt
 	default:
-		return char, mod
+		return base, mod
 	}
-}
-
-func clearPressedCache[T comparable](
-	cache map[T]press, curr map[T]struct{},
-) {
-	// clear all chars that are not pressed now
-	for k := range cache {
-		if _, ok := curr[k]; !ok {
-			delete(cache, k)
-		}
-	}
-}
-
-func shouldFireKey[T comparable](
-	cache map[T]press, now time.Time,
-	keyPressDelay, keyPressRepeat time.Duration,
-	cacheKey T,
-) bool {
-	event, ok := cache[cacheKey]
-	if !ok {
-		cache[cacheKey] = press{at: now}
-		return true
-	}
-
-	since := now.Sub(event.at)
-	if !event.repeating && since > keyPressDelay {
-		cache[cacheKey] = press{at: now, repeating: true}
-		return true
-	} else if event.repeating && since > keyPressRepeat {
-		cache[cacheKey] = press{at: now, repeating: true}
-		return true
-	}
-
-	return false
 }
 
 func mapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) {

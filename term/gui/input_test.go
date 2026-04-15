@@ -25,7 +25,6 @@ package gui
 
 import (
 	"testing"
-	"time"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/stretchr/testify/assert"
@@ -34,584 +33,682 @@ import (
 	"unstable.build/go-tui/term/gui/font"
 )
 
-func TestInputFireOnce(t *testing.T) {
-	suite := []struct {
-		description   string
-		pressedKeys   []ebiten.Key
-		pressedChars  []rune
-		expectedEvent term.Event
-	}{
-		{
-			description:   "dispatches a single non-char key",
-			pressedKeys:   []ebiten.Key{ebiten.KeyEnter},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte{0x0d, 0x0a}},
-		},
-		{
-			description:   "dispatches a single key char, via key",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
-		},
-		{
-			description:   "dispatches a single key char, via char",
-			pressedKeys:   []ebiten.Key{},
-			pressedChars:  []rune{'a'},
-			expectedEvent: term.Event{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
-		},
-		{
-			description:   "dispatches a space key",
-			pressedKeys:   []ebiten.Key{ebiten.KeySpace},
-			pressedChars:  []rune{' '},
-			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")},
-		},
-		{
-			description:   "dispatches a shift+space like a space key",
-			pressedKeys:   []ebiten.Key{ebiten.KeySpace, ebiten.KeyShift},
-			pressedChars:  []rune{' '},
-			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")},
-		},
-		{
-			// this tests the (rest of) modifiers
-			description:   "dispatches a meta+space as meta+space key",
-			pressedKeys:   []ebiten.Key{ebiten.KeySpace, ebiten.KeyShift},
-			pressedChars:  []rune{' '},
-			expectedEvent: term.Event{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")},
-		},
-		{
-			description:   "dispatches a single key ctrl + char",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyControl},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a', Raw: []byte{0x01}},
-		},
-		{
-			description:   "dispatches a single key shift + ctrl + char",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyShift, ebiten.KeyControl},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'A', Raw: []byte{0x01}},
-		},
-		{
-			description:   "dispatches a single key meta + char",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyMeta},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModMeta, Ch: 'a'},
-		},
-		{
-			description:   "dispatches a single key alt + char, via char",
-			pressedKeys:   []ebiten.Key{ebiten.KeyAlt},
-			pressedChars:  []rune{'a'},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}},
-		},
-		{
-			description:   "dispatches a single key alt + char, via key",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyAlt},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}},
-		},
-		{
-			description:   "dispatches a single key alt + char, undoes macos special chars",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyAlt, ebiten.KeyAltLeft},
-			pressedChars:  []rune{'å'},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}},
-		},
-		{
-			description:   "omits shift modifier for shift + char, via char",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyShift},
-			pressedChars:  []rune{'A'},
-			expectedEvent: term.Event{Type: term.EventKey, Ch: 'A', Raw: []byte("A")},
-		},
-		{
-			description:   "omits shift modifier for shift + char, via key",
-			pressedKeys:   []ebiten.Key{ebiten.KeyA, ebiten.KeyShift},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Ch: 'A', Raw: []byte("A")},
-		},
-		{
-			description:  "dispatches a single key ctrl + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrl,
-				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x50}},
-		},
-		{
-			description:  "dispatches a single key meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModMeta,
-				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x39, 0x50}},
-		},
-		{
-			description:  "dispatches a single key alt + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyAlt},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAlt,
-				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x33, 0x50}},
-		},
-		{
-			description:  "unhandled key dispatches no event",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF24},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "dispatches a single key ctrl + alt + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl, ebiten.KeyAlt},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrlAlt,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;7P")},
-		},
-		{
-			description:  "dispatches a single key ctrl + meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrlMeta,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;13P")},
-		},
-		{
-			description:  "dispatches a single key ctrl + shift + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl, ebiten.KeyShift},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrlShift,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;6P")},
-		},
-		{
-			description:  "dispatches a single key ctrl + alt + shift + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl, ebiten.KeyAlt, ebiten.KeyShift},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrlShiftAlt,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;8P")},
-		},
-		{
-			description:  "dispatches a single key ctrl + shift + meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl, ebiten.KeyMeta, ebiten.KeyShift},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrlShiftMeta,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;14P")},
-		},
-		{
-			description:  "dispatches a single key ctrl + alt + meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl, ebiten.KeyMeta, ebiten.KeyAlt},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrlAltMeta,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;15P")},
-		},
-		{
-			description:  "dispatches a single key shift + meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyShift, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModShiftMeta,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;10P")},
-		},
-		{
-			description:  "dispatches a single key alt + meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyAlt, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAltMeta,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;11P")},
-		},
-		{
-			description:  "dispatches a single key alt + shift + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyAlt, ebiten.KeyShift},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAltShift,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;4P")},
-		},
-		{
-			description:  "dispatches a single key alt + shift + meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyAlt, ebiten.KeyShift, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAltShiftMeta,
-				Key: term.KeyF1, Raw: []byte("\x1b[1;12P")},
-		},
-		{
-			description:   "does not dispatch event with raw for meta + enter",
-			pressedKeys:   []ebiten.Key{ebiten.KeyEnter, ebiten.KeyMeta},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModMeta, Key: term.KeyEnter},
-		},
-		{
-			description:  "dispatches modifier ctrl + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyControl},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModCtrl,
-				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x50}},
-		},
-		{
-			description:  "dispatches modifier meta + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModMeta,
-				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x39, 0x50}},
-		},
-		{
-			description:  "dispatches modifier alt + key",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF1, ebiten.KeyAlt},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Mod: term.ModAlt,
-				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x33, 0x50}},
-		},
-		{
-			description:  "unhandled key dispatches no event",
-			pressedKeys:  []ebiten.Key{ebiten.KeyF24},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier ctrl + alt",
-			pressedKeys:  []ebiten.Key{ebiten.KeyControl, ebiten.KeyAlt},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier ctrl + meta",
-			pressedKeys:  []ebiten.Key{ebiten.KeyControl, ebiten.KeyMeta},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier ctrl + shift",
-			pressedKeys:  []ebiten.Key{ebiten.KeyControl, ebiten.KeyShift},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier ctrl + alt + shift",
-			pressedKeys:  []ebiten.Key{ebiten.KeyControl, ebiten.KeyAlt, ebiten.KeyShift},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier ctrl + shift + meta",
-			pressedKeys:  []ebiten.Key{ebiten.KeyControl, ebiten.KeyMeta, ebiten.KeyShift},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier ctrl + alt + meta",
-			pressedKeys:  []ebiten.Key{ebiten.KeyControl, ebiten.KeyMeta, ebiten.KeyAlt},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier shift + meta",
-			pressedKeys:  []ebiten.Key{ebiten.KeyShift, ebiten.KeyMeta},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier alt + meta",
-			pressedKeys:  []ebiten.Key{ebiten.KeyAlt, ebiten.KeyMeta},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier alt + shift",
-			pressedKeys:  []ebiten.Key{ebiten.KeyAlt, ebiten.KeyShift},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "does not dispatch modifier alt + shift + meta",
-			pressedKeys:  []ebiten.Key{ebiten.KeyAlt, ebiten.KeyShift, ebiten.KeyMeta},
-			pressedChars: []rune{},
-		},
-		{
-			description:  "dispatches non-alt modifier with arrow key with raw set",
-			pressedKeys:  []ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyShift, ebiten.KeyMeta},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{
-				Type: term.EventKey, Key: term.KeyArrowUp, Mod: term.ModShiftMeta,
-				Raw: []byte("\x1b[1;10A"),
-			},
-		},
-		{
-			description:  "dispatches arrow key with raw set",
-			pressedKeys:  []ebiten.Key{ebiten.KeyArrowUp},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{
-				Type: term.EventKey, Key: term.KeyArrowUp,
-				Raw: []byte("\x1b[A"),
-			},
-		},
-		{
-			description:  "dispatches alt arrow key with raw set",
-			pressedKeys:  []ebiten.Key{ebiten.KeyAlt, ebiten.KeyArrowUp},
-			pressedChars: []rune{},
-			expectedEvent: term.Event{
-				Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyArrowUp,
-				Raw: []byte("\x1b[1;3A"),
-			},
-		},
-		{
-			description:   "shift+2 dispatches @",
-			pressedKeys:   []ebiten.Key{ebiten.KeyShift, ebiten.KeyDigit2},
-			pressedChars:  []rune{},
-			expectedEvent: term.Event{Type: term.EventKey, Ch: '@', Raw: []byte("@")},
-		},
+func press(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.KeyEvent {
+	var m ebiten.KeyModifier
+	for _, mod := range mods {
+		m |= mod
 	}
-
-	for _, test := range suite {
-		t.Run(test.description, func(t *testing.T) {
-			mock, input := newTestInput(t)
-			for _, key := range test.pressedKeys {
-				mock.pressedKeys[key] = struct{}{}
-			}
-			mock.pressedChars = test.pressedChars
-
-			ev, ok := input.processEvents()
-			if test.expectedEvent.Type == 0 {
-				require.False(t, ok)
-			} else {
-				require.True(t, ok)
-			}
-			assert.Equal(t, test.expectedEvent, ev)
-		})
-	}
+	return ebiten.KeyEvent{Key: key, Action: ebiten.KeyActionPress, Mods: m}
 }
 
-func TestInputFireDelay(t *testing.T) {
+func repeat(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.KeyEvent {
+	var m ebiten.KeyModifier
+	for _, mod := range mods {
+		m |= mod
+	}
+	return ebiten.KeyEvent{Key: key, Action: ebiten.KeyActionRepeat, Mods: m}
+}
+
+func release(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.KeyEvent {
+	var m ebiten.KeyModifier
+	for _, mod := range mods {
+		m |= mod
+	}
+	return ebiten.KeyEvent{Key: key, Action: ebiten.KeyActionRelease, Mods: m}
+}
+
+func TestInputFireOnce(t *testing.T) {
 	suite := []struct {
 		description    string
-		pressedKeys    [][]ebiten.Key
-		pressedChars   [][]rune
+		keyEvents      []ebiten.KeyEvent
+		chars          []rune
 		expectedEvents []term.Event
 	}{
 		{
-			description:    "multiple unhandled key dispatches no events",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyF24}, {ebiten.KeyF24}},
-			pressedChars:   [][]rune{{}, {}},
-			expectedEvents: []term.Event{{}, {}},
+			description:    "dispatches a single non-char key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte{0x0d, 0x0a}}},
 		},
 		{
-			description:    "dispatches once a repeated non-char key, only once",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyEnter}, {ebiten.KeyEnter}},
-			pressedChars:   [][]rune{{}, {}},
-			expectedEvents: []term.Event{{Key: term.KeyEnter}, {}},
+			description:    "dispatches a single key char, via key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}},
 		},
 		{
-			description: "dispatches once a repeated non-char key, " +
-				"different key dismisses dispatches new event",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyEnter}, {ebiten.KeyEnter}, {ebiten.KeySpace}},
-			pressedChars:   [][]rune{{}, {}, {}},
-			expectedEvents: []term.Event{{Key: term.KeyEnter}, {}, {Key: term.KeySpace}},
+			description:    "dispatches a single key char, via char",
+			chars:          []rune{'a'},
+			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}},
 		},
 		{
-			description:    "dispatches once a repeated key char, via key, only once",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyA}, {ebiten.KeyA}},
-			pressedChars:   [][]rune{{}, {}},
-			expectedEvents: []term.Event{{Ch: 'a'}, {}},
+			description:    "dispatches a space key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
-			description: "dispatches once a repeated key char, via key, " +
-				"different char key dispatches new event",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyA}, {ebiten.KeyA}, {ebiten.KeyB}},
-			pressedChars:   [][]rune{{}, {}, {}},
-			expectedEvents: []term.Event{{Ch: 'a'}, {}, {Ch: 'b'}},
+			description:    "dispatches only one space when OS sends both key event and char",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace)},
+			chars:          []rune{' '},
+			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
-			description: "dispatches once a repeated key char, via char, " +
-				"different char dispatches new event",
-			pressedKeys:    [][]ebiten.Key{{}, {}, {}, {}},
-			pressedChars:   [][]rune{{'a'}, {'b'}, {'a'}, {'b'}},
-			expectedEvents: []term.Event{{Ch: 'a'}, {Ch: 'b'}, {Ch: 'a'}, {Ch: 'b'}},
+			description:    "dispatches a shift+space like a space key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
-			description: "dispatches once a repeated key ctrl + char",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyA, ebiten.KeyControl},
-				{ebiten.KeyA, ebiten.KeyControl},
-			},
-			pressedChars:   [][]rune{{}, {}},
-			expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}, {}},
+			description:    "dispatches a meta+space as meta+space key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
-			description: "alternating modifiers",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyControl},
-				{ebiten.KeyMeta},
-				{ebiten.KeyControl},
-				{ebiten.KeyMeta},
-			},
-			pressedChars:   [][]rune{{}, {}, {}, {}},
-			expectedEvents: []term.Event{{}, {}, {}, {}},
+			description:    "dispatches a single key ctrl + char",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a', Raw: []byte{0x01}}},
 		},
 		{
-			description: "dispatches once a repeated key ctrl + char, a " +
-				"different ctrl+char dispatches a new event",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyA, ebiten.KeyControl},
-				{ebiten.KeyA, ebiten.KeyControl},
-				{ebiten.KeyB, ebiten.KeyControl},
-			},
-			pressedChars:   [][]rune{{}, {}, {}},
-			expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}, {}, {Mod: term.ModCtrl, Ch: 'b'}},
+			description:    "dispatches a single key shift + ctrl + char",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'A', Raw: []byte{0x01}}},
 		},
 		{
-			description: "dispatches once a repeated key shift + ctrl + char",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyA, ebiten.KeyShift, ebiten.KeyControl},
-				{ebiten.KeyA, ebiten.KeyShift, ebiten.KeyControl},
-			},
-			pressedChars:   [][]rune{{}, {}},
-			expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'A'}, {}},
+			description:    "dispatches a single key meta + char",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta, Ch: 'a'}},
 		},
 		{
-			description: "dispatches once a repeated key shift + ctrl + char," +
-				" a new char key dispatches a new event",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyA, ebiten.KeyShift, ebiten.KeyControl},
-				{ebiten.KeyA, ebiten.KeyShift, ebiten.KeyControl},
-				{ebiten.KeyB, ebiten.KeyShift, ebiten.KeyControl},
-			},
-			pressedChars:   [][]rune{{}, {}, {}},
-			expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'A'}, {}, {Mod: term.ModCtrl, Ch: 'B'}},
-		},
-		{
-			description: "dispatches once a repeated key alt + char, first via" +
-				" lower case char, then via key",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyAlt}, {ebiten.KeyAlt, ebiten.KeyA}},
-			pressedChars:   [][]rune{{'a'}, {}},
-			expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}, {}},
-		},
-		{
-			description: "dispatches once a repeated key alt + char, first via key," +
-				" then via lower case char",
-			pressedKeys:    [][]ebiten.Key{{ebiten.KeyAlt, ebiten.KeyA}, {ebiten.KeyAlt}},
-			pressedChars:   [][]rune{{}, {'a'}},
-			expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}, {}},
-		},
-		{
-			description: "dispatches once a repeated key alt + char, first via upper case char," +
-				" then via shift + key",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyAlt},
-				{ebiten.KeyAlt, ebiten.KeyA, ebiten.KeyShift},
-			},
-			pressedChars:   [][]rune{{'A'}, {}},
-			expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'A'}, {}},
-		},
-		{
-			description: "dispatches once a repeated key alt + char, first via shift + key, " +
-				"then via upper case char",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyAlt, ebiten.KeyA, ebiten.KeyShift},
-				{ebiten.KeyAlt},
-			},
-			pressedChars:   [][]rune{{}, {'A'}},
-			expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'A'}, {}},
-		},
-		{
-			description: "dispatches only new keys when joining keys together",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyA},
-				{ebiten.KeyA},
-				{ebiten.KeyA},
-				{ebiten.KeyA, ebiten.KeyB},
-				{ebiten.KeyA, ebiten.KeyB},
-				{ebiten.KeyB},
-				{ebiten.KeyB},
-				{ebiten.KeyC, ebiten.KeyB},
-				{ebiten.KeyC},
-				{ebiten.KeyC},
-			},
-			pressedChars:   [][]rune{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}},
-			expectedEvents: []term.Event{{Ch: 'a'}, {}, {}, {Ch: 'b'}, {}, {}, {}, {Ch: 'c'}, {}, {}},
-		},
-		{
-			description: "dispatches only new keys when joining keys with modifiers together",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyShift},
-				{ebiten.KeyShift},
-				{ebiten.KeyA, ebiten.KeyShift},
-				{ebiten.KeyA, ebiten.KeyB, ebiten.KeyShift},
-				{ebiten.KeyShift, ebiten.KeyB},
-				{ebiten.KeyB, ebiten.KeyShift, ebiten.KeyControl},
-				{ebiten.KeyB, ebiten.KeyShift, ebiten.KeyControl},
-				{ebiten.KeyC, ebiten.KeyShift, ebiten.KeyControl},
-				{ebiten.KeyControl, ebiten.KeyShift},
-				{ebiten.KeyControl},
-			},
-			pressedChars: [][]rune{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}},
+			// NOTE: The fallback char path has no modifier information.
+			// If Alt is held but only a char arrives (no key event), the
+			// Alt modifier is lost. On desktop/GLFW the key callback
+			// always fires so this path is only hit for IME/paste input
+			// where modifiers aren't relevant.
+			description: "fallback char carries no modifier even if one was held",
+			keyEvents:   nil,
+			chars:       []rune{'a'},
 			expectedEvents: []term.Event{
-				{}, {}, {Ch: 'A'},
-				{Ch: 'B'}, {}, {}, {}, {Mod: term.ModCtrl, Ch: 'C'},
-				{}, {},
+				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
 			},
 		},
 		{
-			description: "releasing shift while digit key held does not dispatch spurious char",
-			pressedKeys: [][]ebiten.Key{
-				{ebiten.KeyShift, ebiten.KeyDigit2}, // frame 1: Shift+2 → @
-				{ebiten.KeyDigit2},                  // frame 2: Shift released, 2 held
+			description:    "dispatches a single key alt + char, via key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
+		},
+		{
+			description:    "dispatches a single key alt + char, undoes macos special chars",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+			chars:          []rune{'å'},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
+		},
+		{
+			description:    "omits shift modifier for shift + char, via key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'A', Raw: []byte("A")}},
+		},
+		{
+			description: "dispatches a single key ctrl + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl,
+				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x50}}},
+		},
+		{
+			description: "dispatches a single key meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta,
+				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x39, 0x50}}},
+		},
+		{
+			description:    "dispatches a single key alt + char, via key",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
+		},
+		{
+			description: "unhandled key dispatches no event",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF24)},
+		},
+		{
+			description: "dispatches a single key ctrl + alt + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModAlt)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlAlt,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;7P")}},
+		},
+		{
+			description: "dispatches a single key ctrl + meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlMeta,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;13P")}},
+		},
+		{
+			description: "dispatches a single key ctrl + shift + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlShift,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;6P")}},
+		},
+		{
+			description: "dispatches a single key ctrl + alt + shift + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModAlt, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlShiftAlt,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;8P")}},
+		},
+		{
+			description: "dispatches a single key ctrl + shift + meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlShiftMeta,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;14P")}},
+		},
+		{
+			description: "dispatches a single key ctrl + alt + meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper, ebiten.KeyModAlt)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlAltMeta,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;15P")}},
+		},
+		{
+			description: "dispatches a single key shift + meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModShift, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModShiftMeta,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;10P")}},
+		},
+		{
+			description: "dispatches a single key alt + meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAltMeta,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;11P")}},
+		},
+		{
+			description: "dispatches a single key alt + shift + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAltShift,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;4P")}},
+		},
+		{
+			description: "dispatches a single key alt + shift + meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModShift, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAltShiftMeta,
+				Key: term.KeyF1, Raw: []byte("\x1b[1;12P")}},
+		},
+		{
+			description: "does not dispatch event with raw for meta + enter",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyEnter, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModMeta, Key: term.KeyEnter},
 			},
-			// In frame 2, keyChars is empty (Digit2 repeat not due),
-			// so handleChars falls back to AppendInputChars. The OS may
-			// report '2' as a new char. This must not dispatch.
-			pressedChars:   [][]rune{{}, {'2'}},
-			expectedEvents: []term.Event{{Ch: '@'}, {}},
+		},
+		{
+			description: "dispatches modifier ctrl + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl,
+				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x50}}},
+		},
+		{
+			description: "dispatches modifier meta + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta,
+				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x39, 0x50}}},
+		},
+		{
+			description: "dispatches modifier alt + key",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt,
+				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x33, 0x50}}},
+		},
+		{
+			description: "unhandled key dispatches no event (duplicate)",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF24)},
+		},
+		{
+			description: "does not dispatch modifier ctrl + alt",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyAlt)},
+		},
+		{
+			description: "does not dispatch modifier ctrl + meta",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyMeta)},
+		},
+		{
+			description: "does not dispatch modifier ctrl + shift",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyShift)},
+		},
+		{
+			description: "does not dispatch modifier ctrl + alt + shift",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyAlt), press(ebiten.KeyShift)},
+		},
+		{
+			description: "does not dispatch modifier ctrl + shift + meta",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyMeta), press(ebiten.KeyShift)},
+		},
+		{
+			description: "does not dispatch modifier ctrl + alt + meta",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyMeta), press(ebiten.KeyAlt)},
+		},
+		{
+			description: "does not dispatch modifier shift + meta",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyShift), press(ebiten.KeyMeta)},
+		},
+		{
+			description: "does not dispatch modifier alt + meta",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyAlt), press(ebiten.KeyMeta)},
+		},
+		{
+			description: "does not dispatch modifier alt + shift",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyAlt), press(ebiten.KeyShift)},
+		},
+		{
+			description: "does not dispatch modifier alt + shift + meta",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyAlt), press(ebiten.KeyShift), press(ebiten.KeyMeta)},
+		},
+		{
+			description: "dispatches non-alt modifier with arrow key with raw set",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyArrowUp, ebiten.KeyModShift, ebiten.KeyModSuper)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyArrowUp, Mod: term.ModShiftMeta,
+					Raw: []byte("\x1b[1;10A")},
+			},
+		},
+		{
+			description: "dispatches arrow key with raw set",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyArrowUp)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyArrowUp,
+					Raw: []byte("\x1b[A")},
+			},
+		},
+		{
+			description: "dispatches alt arrow key with raw set",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyArrowUp, ebiten.KeyModAlt)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyArrowUp,
+					Raw: []byte("\x1b[1;3A")},
+			},
+		},
+		{
+			description:    "shift+2 dispatches @",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyDigit2, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Ch: '@', Raw: []byte("@")}},
+		},
+		{
+			description:    "OS repeat dispatches event",
+			keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}},
+		},
+		{
+			description: "does not dispatch releases",
+			keyEvents:   []ebiten.KeyEvent{release(ebiten.KeyA)},
 		},
 	}
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
 			mock, input := newTestInput(t)
-			if len(test.pressedKeys) != len(test.pressedChars) || len(test.pressedChars) != len(test.expectedEvents) {
-				t.Fatalf("incorrectly setup test case: pressedChars, pressedKeys " +
-					"and expectedEvents must be of the same length")
-			}
-			input.keyPressDelay = 4 * time.Second
-			input.keyPressRepeat = 4 * time.Second
-			for i, keys := range test.pressedKeys {
-				mock.pressedKeys = make(map[ebiten.Key]struct{})
-				pressedChars := test.pressedChars[i]
-				expectedEvent := test.expectedEvents[i]
-				for _, key := range keys {
-					mock.pressedKeys[key] = struct{}{}
-				}
-				mock.pressedChars = pressedChars
+			mock.keyEvents = test.keyEvents
+			mock.chars = test.chars
 
-				actualEvent, ok := input.processEvents()
-				if expectedEvent.Key == 0 && expectedEvent.Ch == 0 && expectedEvent.Mod == 0 {
-					assert.False(t, ok, i)
-				} else {
-					assert.True(t, ok, i)
-				}
-				// Note this test omits asserting Raw and Type.
-				// These fields should be tested in TestInputFireOnce
-				actualEvent.Raw = nil
-				actualEvent.Type = 0
-				assert.Equal(t, expectedEvent, actualEvent, i)
+			events := input.processEvents(nil)
+			if len(test.expectedEvents) == 0 {
+				assert.Empty(t, events)
+				return
 			}
+			require.Equal(t, len(test.expectedEvents), len(events))
+			assert.Equal(t, test.expectedEvents, events)
 		})
 	}
 }
 
-func TestInputFireRepeatKey(t *testing.T) {
-	for _, key := range []ebiten.Key{ebiten.KeyA, ebiten.KeyB} {
-		mock, input := newTestInput(t)
-		input.keyPressDelay = 1 * time.Second
-		input.keyPressRepeat = 500 * time.Millisecond
+// frame represents one frame of input for multi-frame tests.
+type frame struct {
+	keyEvents      []ebiten.KeyEvent
+	chars          []rune
+	expectedEvents []term.Event
+}
 
-		mock.pressedKeys[key] = struct{}{}
-		actualEvent, ok := input.processEvents()
-		require.True(t, ok)
-		assert.NotZero(t, actualEvent)
+func TestInputMultiFrame(t *testing.T) {
+	suite := []struct {
+		description string
+		frames      []frame
+	}{
+		{
+			description: "multiple unhandled key dispatches no events",
+			frames: []frame{
+				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyF24)}},
+				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyF24)}},
+			},
+		},
+		{
+			description: "press dispatches once, held key with no repeat produces nothing",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+					expectedEvents: []term.Event{{Key: term.KeyEnter}},
+				},
+				{
+					// Key held, no OS repeat yet → no events
+				},
+			},
+		},
+		{
+			description: "different key on next frame dispatches new event",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+					expectedEvents: []term.Event{{Key: term.KeyEnter}},
+				},
+				{
+					// Key held, no OS repeat yet
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace)},
+					expectedEvents: []term.Event{{Key: term.KeySpace}},
+				},
+			},
+		},
+		{
+			description: "char key press dispatches once, held key with no repeat produces nothing",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					// Key held, no OS repeat yet
+				},
+			},
+		},
+		{
+			description: "different char key dispatches new event",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					// Key held, no OS repeat yet
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB)},
+					expectedEvents: []term.Event{{Ch: 'b'}},
+				},
+			},
+		},
+		{
+			description: "different fallback char dispatches new event each frame",
+			frames: []frame{
+				{chars: []rune{'a'}, expectedEvents: []term.Event{{Ch: 'a'}}},
+				{chars: []rune{'b'}, expectedEvents: []term.Event{{Ch: 'b'}}},
+				{chars: []rune{'a'}, expectedEvents: []term.Event{{Ch: 'a'}}},
+				{chars: []rune{'b'}, expectedEvents: []term.Event{{Ch: 'b'}}},
+			},
+		},
+		{
+			description: "ctrl + char dispatches once, held produces nothing",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}},
+				},
+				{
+					// Key held, no OS repeat yet
+				},
+			},
+		},
+		{
+			description: "alternating modifier-only events produce nothing",
+			frames: []frame{
+				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyControl)}},
+				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyMeta)}},
+				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyControl)}},
+				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyMeta)}},
+			},
+		},
+		{
+			description: "different ctrl+char dispatches a new event",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}},
+				},
+				{
+					// Key held
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'b'}},
+				},
+			},
+		},
+		{
+			description: "shift + ctrl + char dispatches once, held produces nothing",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'A'}},
+				},
+				{
+					// Key held
+				},
+			},
+		},
+		{
+			description: "different shift+ctrl+char dispatches a new event",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'A'}},
+				},
+				{
+					// Key held
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModShift, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'B'}},
+				},
+			},
+		},
+		{
+			description: "alt + char via key on both frames",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}},
+				},
+				{
+					// Key held
+				},
+			},
+		},
+		{
+			description: "alt + shift + char via key on both frames",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt, ebiten.KeyModShift)},
+					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'A'}},
+				},
+				{
+					// Key held
+				},
+			},
+		},
+		{
+			description: "dispatches only new keys when joining keys together",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					// Key A still held, no OS repeat
+				},
+				{
+					// Key A still held, no OS repeat
+				},
+				{
+					// A still held, B pressed in same frame
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB)},
+					expectedEvents: []term.Event{{Ch: 'b'}},
+				},
+				{
+					// Both held, no OS repeat
+				},
+				{
+					// A released, B still held
+				},
+				{
+					// B still held, no OS repeat
+				},
+				{
+					// B still held, C pressed
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyC)},
+					expectedEvents: []term.Event{{Ch: 'c'}},
+				},
+				{
+					// C held, no OS repeat
+				},
+				{
+					// C held, no OS repeat
+				},
+			},
+		},
+		{
+			description: "dispatches only new keys when joining keys with modifiers together",
+			frames: []frame{
+				{
+					// Shift only → no event
+					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyShift)},
+				},
+				{
+					// Shift still held
+				},
+				{
+					// A pressed with shift
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
+					expectedEvents: []term.Event{{Ch: 'A'}},
+				},
+				{
+					// A held, B pressed with shift
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModShift)},
+					expectedEvents: []term.Event{{Ch: 'B'}},
+				},
+				{
+					// A released, B held with shift, no repeat
+				},
+				{
+					// Ctrl added, B still held with shift+ctrl
+					// (no new press event from OS, just modifier change)
+				},
+				{
+					// B held with shift+ctrl, no repeat
+				},
+				{
+					// C pressed with shift+ctrl
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyC, ebiten.KeyModShift, ebiten.KeyModControl)},
+					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'C'}},
+				},
+				{
+					// Modifiers held, no char keys
+				},
+				{
+					// All released
+				},
+			},
+		},
+		{
+			description: "fast typed second char dispatches even when first key still held",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyS)},
+					expectedEvents: []term.Event{{Ch: 's'}},
+				},
+				{
+					// S still held, T pressed — both arrive as discrete events
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyT)},
+					expectedEvents: []term.Event{{Ch: 't'}},
+				},
+				{
+					// Both released
+				},
+			},
+		},
+		{
+			description: "multiple keys in same frame all dispatch",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA), press(ebiten.KeyB)},
+					expectedEvents: []term.Event{{Ch: 'a'}, {Ch: 'b'}},
+				},
+			},
+		},
+		{
+			description: "OS repeat generates events on each frame",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					// No events: key held but OS hasn't sent repeat yet
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+			},
+		},
+		{
+			description: "release between presses does not produce terminal event",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyA)},
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+			},
+		},
+		{
+			description: "key event suppresses fallback chars in same frame",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+					chars:          []rune{'å'}, // macOS composed char ignored
+					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}},
+				},
+			},
+		},
+	}
 
-		_, ok = input.processEvents()
-		require.False(t, ok)
-		_, ok = input.processEvents()
-		require.False(t, ok)
-		_, ok = input.processEvents()
-		require.False(t, ok)
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			mock, input := newTestInput(t)
+			for fi, f := range test.frames {
+				mock.keyEvents = f.keyEvents
+				mock.chars = f.chars
 
-		time.Sleep(time.Duration(input.keyPressDelay) + 1)
-
-		actualEvent, ok = input.processEvents()
-		require.True(t, ok)
-		assert.NotZero(t, actualEvent)
-
-		_, ok = input.processEvents()
-		require.False(t, ok)
-
-		time.Sleep(time.Duration(input.keyPressRepeat) + 1)
-
-		actualEvent, ok = input.processEvents()
-		require.True(t, ok)
-		assert.NotZero(t, actualEvent)
+				events := input.processEvents(nil)
+				if len(f.expectedEvents) == 0 {
+					assert.Empty(t, events, "frame %d", fi)
+				} else {
+					require.Equal(t, len(f.expectedEvents), len(events), "frame %d", fi)
+					for ei, expected := range f.expectedEvents {
+						actual := events[ei]
+						// Strip Raw and Type for multi-frame tests;
+						// those are covered in TestInputFireOnce.
+						actual.Raw = nil
+						actual.Type = 0
+						assert.Equal(t, expected, actual, "frame %d event %d", fi, ei)
+					}
+				}
+			}
+		})
 	}
 }
 
 func newTestInput(t *testing.T) (*mockInputManager, *input) {
-	mock := &mockInputManager{pressedKeys: map[ebiten.Key]struct{}{}}
+	mock := &mockInputManager{}
 	f, err := font.NewManager(1, 1)
 	require.NoError(t, err)
 	f.SetFontByFamilyName("")
@@ -622,23 +719,14 @@ func newTestInput(t *testing.T) (*mockInputManager, *input) {
 }
 
 type mockInputManager struct {
-	pressedKeys  map[ebiten.Key]struct{}
-	pressedChars []rune
-	now          *time.Time
+	keyEvents []ebiten.KeyEvent
+	chars     []rune
 }
 
-func (m *mockInputManager) IsKeyPressed(key ebiten.Key) bool {
-	_, ok := m.pressedKeys[key]
-	return ok
+func (m *mockInputManager) AppendKeyEvents(buf []ebiten.KeyEvent) []ebiten.KeyEvent {
+	return append(buf, m.keyEvents...)
 }
 
-func (m *mockInputManager) AppendInputChars([]rune) []rune {
-	return m.pressedChars
-}
-
-func (m *mockInputManager) Now() time.Time {
-	if m.now == nil {
-		return time.Now()
-	}
-	return *m.now
+func (m *mockInputManager) AppendInputChars(buf []rune) []rune {
+	return append(buf, m.chars...)
 }

@@ -100,18 +100,16 @@ func TestUpdate(t *testing.T) {
 		}
 		gui, input := newTestGUI(t, &mock)
 
-		input.pressedKeys[ebiten.KeyEnter] = struct{}{}
+		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter)}
 		require.NoError(t, gui.Update())
 		require.Equal(t, 1, called)
 
 		expectedIterationID++
-		input.pressedKeys[ebiten.KeyEnter] = struct{}{}
-		input.pressedKeys[ebiten.KeyMeta] = struct{}{}
+		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter, ebiten.KeyModSuper)}
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 
-		delete(input.pressedKeys, ebiten.KeyMeta)
-		delete(input.pressedKeys, ebiten.KeyEnter)
+		input.keyEvents = nil
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 	})
@@ -134,18 +132,16 @@ func TestUpdate(t *testing.T) {
 		}
 		gui, input := newTestGUI(t, &mock)
 
-		input.pressedKeys[ebiten.KeyEnter] = struct{}{}
+		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter)}
 		require.NoError(t, gui.Update())
 		require.Equal(t, 1, called)
 
 		expectedIterationID++
-		input.pressedKeys[ebiten.KeyEnter] = struct{}{}
-		input.pressedKeys[ebiten.KeyMeta] = struct{}{}
+		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter, ebiten.KeyModSuper)}
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 
-		delete(input.pressedKeys, ebiten.KeyMeta)
-		delete(input.pressedKeys, ebiten.KeyEnter)
+		input.keyEvents = nil
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 	})
@@ -310,7 +306,7 @@ func TestUpdate(t *testing.T) {
 		}
 		gui, input := newTestGUI(t, &mock)
 
-		input.pressedKeys[ebiten.KeyEnter] = struct{}{}
+		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter)}
 		require.Equal(t, ErrHandlerExited, gui.Update())
 	})
 }
@@ -421,10 +417,8 @@ func newTestGUI(t *testing.T, mock *mockHandler) (*GUI, *mockInputManager) {
 	gui, err := New(mock)
 	require.NoError(t, err)
 
-	ret := &mockInputManager{pressedKeys: make(map[ebiten.Key]struct{})}
+	ret := &mockInputManager{}
 	gui.input.input = ret
-	gui.input.keyPressDelay = 0
-	gui.input.keyPressRepeat = 0
 
 	return gui, ret
 }

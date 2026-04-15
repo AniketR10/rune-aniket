@@ -388,8 +388,8 @@ github.com/tree-sitter/tree-sitter-rust v0.23.2 h1:6AtoooCW5GqNrRpfnvl0iUhxTAZEo
 github.com/tree-sitter/tree-sitter-rust v0.23.2/go.mod h1:hfeGWic9BAfgTrc7Xf6FaOAguCFJRo3RBbs7QJ6D7MI=
 github.com/unstablebuild/blue v1.79.0 h1:Dj9gywgUJd/62xGLUu+uhkPawGHQUdW/w1LfS2vBBQg=
 github.com/unstablebuild/blue v1.79.0/go.mod h1:9yTwjlRwKO9rBPFiHCPb91jwM1GKf/+x5MJXS6tRN5I=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub.13 h1:8P9FY45P/nI49elvw+Zwupb+r+vNoNRkWJFN11LLxLQ=
-github.com/unstablebuild/ebiten/v2 v2.7.5-ub.13/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
+github.com/unstablebuild/ebiten/v2 v2.7.5-ub.14 h1:A/+Cgys38Sv99+lhp8IrCGQuIldMizrgmmrFJ/XlXV4=
+github.com/unstablebuild/ebiten/v2 v2.7.5-ub.14/go.mod h1:ktenNSafDcraZPupfeBBts/GZ9uP9oDbB4IXMJweNwk=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1 h1:pPmxLsBLNuZv+LWeytIcvwzxeUAMYzeY2MDKmSWXMTA=
 github.com/unstablebuild/go-billy/v6 v6.0.0-ub.1/go.mod h1:E3VhlS+AKkrq6ZNn1axE2/nDRJ87l1FJk9r5HT2vPX0=
 github.com/unstablebuild/go-git/v6 v6.0.1-ub.1 h1:xBomYWGQkSIm023lhJxu+F1uU4YjZlIZaKpnm+7nIak=
