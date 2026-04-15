@@ -26,6 +26,7 @@ package text
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -410,6 +411,39 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 6, X: 1},
+				Attr: abcAttr,
+			},
+		}
+
+		abcList := LocationSlice(locations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
+
+		w := cell.NewBufferWriter(context.Background(), 1, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
+
+	t.Run("draws partial location that starts above viewport", func(t *testing.T) {
+		var content strings.Builder
+		for i := range 15 {
+			content.WriteString(strconv.Itoa(i))
+			content.WriteString("\n")
+		}
+		c := setupCursorContent(t, 1, 5, content.String(), false)
+		c.scroll.SetOffset(term.Coordinates{Y: 10})
+
+		expected := [][]term.Cell{
+			{{Attributes: abcAttr}},
+			{{Attributes: abcAttr}},
+			{{Attributes: abcAttr}},
+			{{}},
+			{{}},
+		}
+		locations := []textapi.Location{
+			{
+				From: term.Coordinates{Y: 5},
+				To:   term.Coordinates{Y: 12, X: 1},
 				Attr: abcAttr,
 			},
 		}

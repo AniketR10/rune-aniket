@@ -170,11 +170,15 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 	for _, loc := range locations {
 		fromAtScroll := loc.From
 		toAtScroll := loc.To
-		if fromAtScroll.Y >= maxY || fromAtScroll.Y < minY {
+		if fromAtScroll.Y >= maxY || toAtScroll.Y < minY {
 			continue
 		}
 
 		fromAtScrollX := fromAtScroll.X
+		if fromAtScroll.Y < minY {
+			fromAtScroll.Y = minY
+			fromAtScrollX = 0
+		}
 		toAtScroll.Y = int(math.Min(float64(buffer.Rows()-1), float64(toAtScroll.Y)))
 		for y := fromAtScroll.Y; y < toAtScroll.Y; y++ {
 			toX := buffer.Columns(y)
