@@ -204,14 +204,36 @@ func (m *Manager) SetOffset(x, y float64) error {
 	return nil
 }
 
+// SetOffsetX sets the x offset of the configured font while preserving
+// the current y offset.
+func (m *Manager) SetOffsetX(x float64) error {
+	return m.SetOffset(x, fixedToFloat64(m.offset.Y))
+}
+
+// SetOffsetY sets the y offset of the configured font while preserving
+// the current x offset.
+func (m *Manager) SetOffsetY(y float64) error {
+	return m.SetOffset(fixedToFloat64(m.offset.X), y)
+}
+
+// IncreaseCellWidth increases the cell width of the font by 1 pixel.
+func (m *Manager) IncreaseCellWidth() error {
+	return m.SetOffsetX(fixedToFloat64(m.offset.X) + 1)
+}
+
+// DecreaseCellWidth decreases the cell width of the font by 1 pixel.
+func (m *Manager) DecreaseCellWidth() error {
+	return m.SetOffsetX(fixedToFloat64(m.offset.X) - 1)
+}
+
 // IncreaseLineHeight increases the line height of the font by 1 pixel.
 func (m *Manager) IncreaseLineHeight() error {
-	return m.SetOffset(fixedToFloat64(m.offset.X), fixedToFloat64(m.offset.Y)+1)
+	return m.SetOffsetY(fixedToFloat64(m.offset.Y) + 1)
 }
 
 // DecreaseLineHeight decreases the line height of the font by 1 pixel.
 func (m *Manager) DecreaseLineHeight() error {
-	return m.SetOffset(fixedToFloat64(m.offset.X), fixedToFloat64(m.offset.Y)-1)
+	return m.SetOffsetY(fixedToFloat64(m.offset.Y) - 1)
 }
 
 // ReloadFont reloads the font. This can be used

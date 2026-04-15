@@ -650,6 +650,7 @@ func runGUI(
 		gui.WithFontDPI(getGUIFontDPI(browser, cfg)),
 		gui.WithFontSize(getGUIFontSize(browser, cfg)),
 		gui.WithFontFamily(getGUIFontFamily(browser, cfg)),
+		gui.WithColumnWidthOffset(getGUIColumnWidthOffset(browser, cfg)),
 		gui.WithLineHeightOffset(getGUILineHeightOffset(browser, cfg)),
 		gui.WithRenderOffset(offsetx, offsety),
 		gui.WithLigatures(getGUILigatures(browser, cfg)),

@@ -82,6 +82,20 @@ func getGUILineHeightOffset(browser browser.Browser, cfg config.Config) (ret flo
 	return
 }
 
+func getGUIColumnWidthOffset(browser browser.Browser, cfg config.Config) (ret float64) {
+	ret = 0
+	size, err := cfg.GetFloat("column-width-offset")
+	if err != nil {
+		if err != config.ErrNotFound {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"Could not load 'gui.column-width-offset' from config: %v", err)
+		}
+		return
+	}
+	ret = size
+	return
+}
+
 func getGUIFontDPI(browser browser.Browser, cfg config.Config) (ret float64) {
 	ret = 0 // signals that it must be calculated automatically
 	dpi, err := cfg.GetFloat("dpi")

@@ -423,6 +423,35 @@ func subscribeGUICommands(
 		},
 		{
 			cmd: textapi.CommandManual{
+				Name: "guicellwidth",
+				Summary: "Increases or decreases the cell width of the rendered font. " +
+					"To make changes permanent, update the 'gui.column-width-offset' configuration.",
+				Synopsis: "(increase|decrease)",
+			},
+			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
+				if len(cmd.Args) != 1 {
+					return errors.New("expected exactly one argument " +
+						"with 'increase' or 'decrease'")
+				}
+				switch cmd.Args[0] {
+				case "increase":
+					err = g.IncreaseCellWidth()
+				case "decrease":
+					err = g.DecreaseCellWidth()
+				default:
+					return errors.New("expected exactly one argument " +
+						"with 'increase' or 'decrease'")
+				}
+				return
+			},
+			completer: func(ctx context.Context, cmd textapi.Command) (
+				iterator.Iterator[string], string, error,
+			) {
+				return iterator.FromSlice([]string{"increase", "decrease"}), "", nil
+			},
+		},
+		{
+			cmd: textapi.CommandManual{
 				Name: "guilineheight",
 				Summary: "Increases or decreases the line height of the rendered font. " +
 					"To make changes permanent, update the 'gui.line-height-offset' configuration.",

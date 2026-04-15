@@ -23,6 +23,12 @@ gui:
   # Set the font size.
   #font-size: 13
 
+  # Add or remove pixels from the font's default column width.
+  column-width-offset: -1
+
+  # Add or remove pixels from the font's default line height.
+  line-height-offset: 0
+
   # Define the theme to use, from the list of available themes
   # in `themes` below. Leave empty to use the default colors.
   default_theme: "romero"

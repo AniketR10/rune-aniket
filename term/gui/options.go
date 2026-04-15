@@ -152,7 +152,16 @@ func WithLocker(mu sync.Locker) Option {
 // See font.Manager.SetOffset for more details.
 func WithLineHeightOffset(offset float64) Option {
 	return func(g *GUI) error {
-		return g.fontManager.SetOffset(0, offset)
+		return g.fontManager.SetOffsetY(offset)
+	}
+}
+
+// WithColumnWidthOffset defines positive or negative offset given
+// to the font's default column width.
+// See font.Manager.SetOffset for more details.
+func WithColumnWidthOffset(offset float64) Option {
+	return func(g *GUI) error {
+		return g.fontManager.SetOffsetX(offset)
 	}
 }
 

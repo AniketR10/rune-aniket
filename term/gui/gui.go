@@ -375,6 +375,24 @@ func (g *GUI) DecreaseFontSize() error {
 	return err
 }
 
+// IncreaseCellWidth increases the width of the rendered font cells.
+func (g *GUI) IncreaseCellWidth() error {
+	err := g.fontManager.IncreaseCellWidth()
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
+}
+
+// DecreaseCellWidth decreases the width of the rendered font cells.
+func (g *GUI) DecreaseCellWidth() error {
+	err := g.fontManager.DecreaseCellWidth()
+	if err == nil {
+		g.resize(g.width, g.height, g.fontManager.DeviceScale())
+	}
+	return err
+}
+
 // IncreaseLineHeight increases the size of the rendered font,
 // making the interface appear bigger.
 func (g *GUI) IncreaseLineHeight() error {

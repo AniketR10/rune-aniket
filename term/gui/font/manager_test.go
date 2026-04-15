@@ -88,6 +88,38 @@ func TestSetOffsetXYMixup(t *testing.T) {
 		"SetOffset must store the y argument in offset.Y")
 }
 
+func TestSetOffsetAxisPreservesOtherAxis(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	// ensure font is loaded so SetOffset's ReloadFont path is exercised.
+	require.NotNil(t, m.RegularFontFace())
+
+	require.NoError(t, m.SetOffset(3, 7))
+	require.NoError(t, m.SetOffsetX(5))
+	assert.Equal(t, 5.0, fixedToFloat64(m.offset.X))
+	assert.Equal(t, 7.0, fixedToFloat64(m.offset.Y))
+
+	require.NoError(t, m.SetOffsetY(9))
+	assert.Equal(t, 5.0, fixedToFloat64(m.offset.X))
+	assert.Equal(t, 9.0, fixedToFloat64(m.offset.Y))
+}
+
+func TestCellWidthOffsetPreservesLineHeightOffset(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	// ensure font is loaded so SetOffset's ReloadFont path is exercised.
+	require.NotNil(t, m.RegularFontFace())
+
+	require.NoError(t, m.SetOffset(3, 7))
+	require.NoError(t, m.IncreaseCellWidth())
+	assert.Equal(t, 4.0, fixedToFloat64(m.offset.X))
+	assert.Equal(t, 7.0, fixedToFloat64(m.offset.Y))
+
+	require.NoError(t, m.DecreaseCellWidth())
+	assert.Equal(t, 3.0, fixedToFloat64(m.offset.X))
+	assert.Equal(t, 7.0, fixedToFloat64(m.offset.Y))
+}
+
 // TestSetOffsetInvalidMetricsRollsBack is a regression test for RUNE-51.
 // When the new offset produces degenerate glyph metrics (charSize.X <= 0),
 // SetOffset must return an error and restore the previous offset by
