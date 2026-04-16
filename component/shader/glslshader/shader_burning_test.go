@@ -32,6 +32,7 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
@@ -57,6 +58,30 @@ func TestBurning(t *testing.T) {
 		4.0, 30,
 	)
 	shadertest.TestShader(t, sh)
+}
+
+func TestBurningIgnoresInvalidWallpaperBounds(t *testing.T) {
+	t.Parallel()
+
+	params := DefaultBurningParams(openTestLogo(), component.FrameCharSetDefault())
+	sh := Burning(params, term.Attributes{}, 4.0, 30)
+	grid := make([][]term.Cell, 55)
+	for y := range grid {
+		grid[y] = make([]term.Cell, 55)
+	}
+	grid[54][0].Ch = params.Logo.WallpaperInvisibleChar
+	grid[0][54].Ch = params.Logo.WallpaperInvisibleChar
+	// hasExpectedWallpaper scans diagonally from the middle with a Y step adjusted
+	// by the terminal cell aspect ratio, so keep these points contiguous on that
+	// sampling path while making the discovered bounds invalid.
+	grid[27][27].Ch = params.Logo.WallpaperInvisibleChar
+	grid[27][28].Ch = params.Logo.WallpaperInvisibleChar
+	grid[28][29].Ch = params.Logo.WallpaperInvisibleChar
+	grid[28][30].Ch = params.Logo.WallpaperInvisibleChar
+
+	require.NotPanics(t, func() {
+		sh.Shade(7, 90, grid)
+	})
 }
 
 func BenchmarkBurning(b *testing.B) {

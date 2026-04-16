@@ -1030,6 +1030,11 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 
 	wallpaperWidth := bounds.bottomRightX - bounds.topLeftX
 	wallpaperHeight := bounds.bottomRightY - bounds.topLeftY
+	if wallpaperWidth <= 0 || wallpaperHeight <= 0 {
+		log.Warn("Skipping Burning because wallpaper bounds are invalid")
+		s.skipRenders = true
+		return
+	}
 
 	// STEP 3: Encode wallpaper logo into the wallpaper bounds.
 	asciiart.Encode(s.imgBuf, wallpaperWidth, wallpaperHeight, s.Logo.Image, s.asciiartConfig)
