@@ -139,6 +139,8 @@ func NewHTTPApi(
 	authConfig auth.Config,
 	archReleases []ArchRelease,
 	rpcAuthorizer blueauth.Authorizer[auth.RPCUser],
+	reportStore ReportStore,
+	reportCfg ReportConfig,
 ) (HTTPAPI, error) {
 	if len(archReleases) == 0 {
 		panic("oxapi.NewHTTPApi: archReleases must not be empty")
@@ -205,6 +207,12 @@ func NewHTTPApi(
 		VerifyKeys: verifyKeys,
 		Authorizer: rpcAuthorizer,
 	}
+
+	// Mount report handler with RPC auth.
+	var reportHandler = newReportHandler(logger, reportStore, reportCfg)
+	reportHandler = blueauth.WithMiddleware(reportHandler, rpcMiddlewareConfig)
+	ret.Handle("/api/reports", reportHandler)
+
 	for _, ar := range archReleases {
 		if ar.Manager == nil {
 			panic(fmt.Sprintf("oxapi.NewHTTPApi: release manager for %s must not be nil", ar.Arch))

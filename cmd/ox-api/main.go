@@ -93,6 +93,11 @@ var (
 	releaseCollectionBase = flag.String("r", "rune-release", "Firestore base collection for managing packages; the runtime architecture suffix is appended automatically")
 	gcsBucketBase         = flag.String("b", "rune-release", "GCS base bucket for release binary storage; the runtime architecture suffix is appended automatically")
 
+	reportBucket          = flag.String("report-bucket", "rune-reports", "GCS bucket for report storage")
+	reportPrefix          = flag.String("report-prefix", "reports/", "Object name prefix within the report GCS bucket")
+	reportMaxBytes        = flag.Int64("report-max-bytes", int64(oxapi.DefaultReportMaxBytes), "Maximum report payload size in bytes")
+	reportRateLimitWindow = flag.Duration("report-rate-limit-window", oxapi.DefaultReportRateLimitWindow, "Time window for bucketing duplicate report fingerprints")
+
 	// refreshCredsEvery = flag.Duration("R", time.Hour, "Cadence at which to refresh GRPC transport credentials")
 	tlsCert     = flag.String("C", "", "TLS certificate used for grpc credentials.")
 	tlsKey      = flag.String("K", "", "TLS key used for grpc credentials.")
@@ -269,10 +274,21 @@ func main() {
 		log.Fatalf("url parse signup url: %v", err)
 	}
 	authConfig.SignupURL = *signupURLStr
+
+	// Setup report store (GCS-backed).
+	reportBkt := gcsClient.Bucket(*reportBucket)
+	var rptStore oxapi.ReportStore = oxapi.NewGCSReportStore(reportBkt)
+	rptCfg := oxapi.ReportConfig{
+		MaxBytes:        *reportMaxBytes,
+		Prefix:          *reportPrefix,
+		RateLimitWindow: *reportRateLimitWindow,
+	}
+
 	var httpHandler http.Handler
 	httpHandler, err = oxapi.NewHTTPApi(accountDB, signKeys, verifyKeys,
 		secretStore, *tokenExpiry, signupURL, apiURL, authConfig,
-		archReleases, rpcApiAuthorizer)
+		archReleases, rpcApiAuthorizer,
+		rptStore, rptCfg)
 	if err != nil {
 		log.Fatalf("http api: %v", err)
 	}

@@ -315,9 +315,18 @@ func main() {
 		}
 	}
 
+	// Set up the crash report directory under the data path so reports
+	// are stored durably rather than in the OS temp dir.
+	reportsDir := filepath.Join(*flagDataPath, "reports")
+	if err := os.MkdirAll(reportsDir, 0777); err != nil {
+		fmt.Fprintf(os.Stderr, "mkdir reports %q: %s", reportsDir, err)
+	} else {
+		debug.ReportsDir = reportsDir
+	}
+
 	var code int
 	_, err, ok := debug.CapturePanicReportWith(
-		debug.ReportsDir, debug.Package, debug.Tag, func() {
+		reportsDir, debug.Package, debug.Tag, func() {
 			code = run()
 		})
 	if ok {
@@ -473,6 +482,11 @@ func runTUI(
 	}
 
 	openFiles(i, filenames)
+
+	scheduleCrashReportCheck(i, client, *flagDataPath,
+		func(fn func()) bool {
+			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
+		})
 
 	var ret error
 	if err := doRunTUI(mu, i); err != nil {
@@ -681,6 +695,11 @@ func runGUI(
 	}
 
 	openFiles(i, filenames)
+
+	scheduleCrashReportCheck(i, client, *flagDataPath,
+		func(fn func()) bool {
+			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
+		})
 
 	err = g.Run("Rune")
 	if err != nil && !errors.Is(err, gui.ErrHandlerExited) {

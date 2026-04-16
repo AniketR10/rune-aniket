@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
@@ -171,6 +172,19 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 // of browserapi.Notifications.
 func (i *IDE) Notifications() browserapi.Notifications {
 	return i.workspaceHandler.notifications.current()
+}
+
+// Prompt opens a yes/no floating prompt in the currently focused workspace.
+// It returns the prompt window that can be closed by the caller.
+func (i *IDE) Prompt(
+	message string,
+	options []string,
+	bindings []term.KeyComb,
+	h handler.PromptHandler,
+) browser.Window {
+	return i.workspaceHandler.focusEx().comp.Prompt(
+		message, options, bindings, h,
+	)
 }
 
 // Close satisfies io.Closer by closing this all ide's resources, including

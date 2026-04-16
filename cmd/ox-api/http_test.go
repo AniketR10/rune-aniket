@@ -230,7 +230,8 @@ func TestAuth(t *testing.T) {
 					Arch:    "darwin-arm64",
 					Manager: stubReleaseManager{},
 					Signer:  stubSigner{},
-				}}, oxapi.RPCAuthorizer("issues", []string{"releases"}))
+				}}, oxapi.RPCAuthorizer("issues", []string{"releases"}),
+				stubReportStore{}, oxapi.ReportConfig{})
 			require.NoError(t, err)
 
 			if test.url != "/api/account" {
@@ -346,4 +347,10 @@ func newTCPListener() (net.Listener, error) {
 func testBase64Encode(userID string) string {
 	str := base64.StdEncoding.EncodeToString([]byte(userID))
 	return str
+}
+
+type stubReportStore struct{}
+
+func (stubReportStore) Store(_ context.Context, _ string, _ []byte, _ string, _ map[string]string) error {
+	return nil
 }

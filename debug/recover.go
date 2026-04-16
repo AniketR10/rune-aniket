@@ -53,7 +53,7 @@ func CapturePanicReportWith(dir, pkg, version string, run func()) (
 			return
 		}
 		var f *os.File
-		f, err = os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
+		f, err = os.CreateTemp(dir, fmt.Sprintf("%s_crash_report_", pkg))
 		if err != nil {
 			log.Errorf("temp file: %v", err)
 			return

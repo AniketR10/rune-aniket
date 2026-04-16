@@ -142,6 +142,7 @@ func TestReleaseInstallE2E(t *testing.T) {
 			Signer:  releaseManager,
 		}},
 		oxapi.RPCAuthorizer("issues", []string{"releases"}),
+		stubReportStore{}, oxapi.ReportConfig{},
 	)
 	require.NoError(t, err)
 
@@ -306,4 +307,10 @@ func newTCPListener() (net.Listener, error) {
 		return nil, fmt.Errorf("listen: %w", err)
 	}
 	return listener, nil
+}
+
+type stubReportStore struct{}
+
+func (stubReportStore) Store(_ context.Context, _ string, _ []byte, _ string, _ map[string]string) error {
+	return nil
 }
