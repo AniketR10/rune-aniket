@@ -26,18 +26,23 @@ package textrpc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	gomock "go.uber.org/mock/gomock"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
@@ -259,6 +264,113 @@ func TestServerSetCursor(t *testing.T) {
 	})
 }
 
+func TestServerSubscribeCommandStopsNotificationHelperOnDisconnect(t *testing.T) {
+	ed := newRecordingCommandEditor()
+	notifications := &recordingNotifications{notified: make(chan string, 1)}
+	s := NewServer(notifications, ed, nopLocker{})
+	stream := newTestSubscribeCommandServer()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.SubscribeCommand(stream)
+	}()
+
+	select {
+	case <-ed.subscribed:
+	case <-time.After(time.Second):
+		t.Fatal("SubscribeCommand did not register command handler")
+	}
+
+	stream.recv <- &textrpc.ClientCommandMessage{
+		Type:   textrpc.ClientCommandMessage_Handle,
+		Handle: &textrpc.HandleCommandResponse{Error: "first error"},
+	}
+
+	select {
+	case errMsg := <-notifications.notified:
+		assert.Equal(t, "first error", errMsg)
+	case <-time.After(time.Second):
+		t.Fatal("SubscribeCommand helper did not process command response")
+	}
+
+	stream.closeRecv()
+
+	select {
+	case err := <-done:
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "receive stream message")
+	case <-time.After(time.Second):
+		t.Fatal("SubscribeCommand did not return after client disconnect")
+	}
+
+	select {
+	case ed.handler.handleCommand <- "late error":
+		t.Fatal("SubscribeCommand helper still receives command responses after disconnect")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestServerSubscribeEventCleansUpOnUnsubscribeEOFAndClose(t *testing.T) {
+	t.Run("normal unsubscribe", func(t *testing.T) {
+		ed := texttest.NopEditor()
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
+		stream := newTestSubscribeEventServer(
+			&textrpc.SubscribeEventRequest{Type: []textrpc.EditorEvent_Type{textrpc.EditorEvent_TypeOpen}},
+			&textrpc.SubscribeEventRequest{Unsubscribe: true},
+		)
+
+		err := s.SubscribeEvent(stream)
+		require.NoError(t, err)
+		assert.Empty(t, ed.Subscribers()[textapi.EventTypeOpen])
+	})
+
+	t.Run("client eof without unsubscribe", func(t *testing.T) {
+		ed := texttest.NopEditor()
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
+		stream := newTestSubscribeEventServer(
+			&textrpc.SubscribeEventRequest{Type: []textrpc.EditorEvent_Type{textrpc.EditorEvent_TypeOpen}},
+		)
+
+		err := s.SubscribeEvent(stream)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "stream receive")
+		assert.Empty(t, ed.Subscribers()[textapi.EventTypeOpen])
+	})
+
+	t.Run("server close stops sender", func(t *testing.T) {
+		subscribed := make(chan struct{})
+		ed := texttest.NopEditorWithCallback(func() {
+			close(subscribed)
+		})
+		s := NewServer(nopNotifications{}, ed, nopLocker{})
+		stream := newBlockingTestSubscribeEventServer(
+			&textrpc.SubscribeEventRequest{Type: []textrpc.EditorEvent_Type{textrpc.EditorEvent_TypeOpen}},
+		)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- s.SubscribeEvent(stream)
+		}()
+
+		select {
+		case <-subscribed:
+		case <-time.After(time.Second):
+			t.Fatal("SubscribeEvent did not register event handler")
+		}
+
+		require.NoError(t, s.Close())
+		stream.cancel()
+		select {
+		case err := <-done:
+			require.Error(t, err)
+			assert.ErrorContains(t, err, "stream receive")
+		case <-time.After(time.Second):
+			t.Fatal("SubscribeEvent did not return after server close")
+		}
+		assert.Empty(t, ed.Subscribers()[textapi.EventTypeOpen])
+	})
+}
+
 func TestServerCursor(t *testing.T) {
 	t.Run("calls underlying editor Cursor", func(t *testing.T) {
 		ctx := context.Background()
@@ -284,3 +396,197 @@ func TestServerCursor(t *testing.T) {
 		assert.Equal(t, pos, res.GetPos().ToModel())
 	})
 }
+
+type recordingCommandEditor struct {
+	texttest.TestEditor
+	subscribed chan struct{}
+	once       sync.Once
+	handler    *commandClientStream
+}
+
+func newRecordingCommandEditor() *recordingCommandEditor {
+	return &recordingCommandEditor{
+		subscribed: make(chan struct{}),
+	}
+}
+
+func (e *recordingCommandEditor) SubscribeCommand(_ textapi.CommandManual, h text.CommandHandler) error {
+	if stream, ok := h.(*commandClientStream); ok {
+		e.handler = stream
+	}
+	e.once.Do(func() {
+		close(e.subscribed)
+	})
+	return nil
+}
+
+func (e *recordingCommandEditor) UnsubscribeCommand(string) error {
+	return nil
+}
+
+type recordingNotifications struct {
+	notified chan string
+}
+
+func (n *recordingNotifications) Notify(_ browserapi.NotificationLevel, msg string, args ...any) (string, error) {
+	message := fmt.Sprintf(msg, args...)
+	select {
+	case n.notified <- message:
+	default:
+	}
+	return "", nil
+}
+
+func (n *recordingNotifications) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
+	return n.Notify(level, msg, args...)
+}
+
+func (n *recordingNotifications) UpdateNotificationProgress(id, message string, progress, total int64) error {
+	return nil
+}
+
+type testSubscribeCommandServer struct {
+	ctx  context.Context
+	recv chan *textrpc.ClientCommandMessage
+	sent chan *textrpc.ServerCommandMessage
+}
+
+func newTestSubscribeCommandServer() *testSubscribeCommandServer {
+	stream := &testSubscribeCommandServer{
+		ctx:  context.Background(),
+		recv: make(chan *textrpc.ClientCommandMessage, 1),
+		sent: make(chan *textrpc.ServerCommandMessage, 1),
+	}
+	stream.recv <- &textrpc.ClientCommandMessage{
+		Type: textrpc.ClientCommandMessage_Request,
+		Request: &textrpc.SubscribeCommandRequest{Command: &textrpc.CommandManual{
+			Name: "test-command",
+		}},
+	}
+	return stream
+}
+
+func (s *testSubscribeCommandServer) closeRecv() {
+	close(s.recv)
+}
+
+func (s *testSubscribeCommandServer) Recv() (*textrpc.ClientCommandMessage, error) {
+	msg, ok := <-s.recv
+	if !ok {
+		return nil, io.EOF
+	}
+	return msg, nil
+}
+
+func (s *testSubscribeCommandServer) Send(msg *textrpc.ServerCommandMessage) error {
+	s.sent <- msg
+	return nil
+}
+
+func (s *testSubscribeCommandServer) Context() context.Context {
+	return s.ctx
+}
+
+func (s *testSubscribeCommandServer) SendMsg(msg any) error {
+	serverMsg := msg.(*textrpc.ServerCommandMessage)
+	return s.Send(serverMsg)
+}
+
+func (s *testSubscribeCommandServer) RecvMsg(msg any) error {
+	next, err := s.Recv()
+	if err != nil {
+		return err
+	}
+	clientMsg := msg.(*textrpc.ClientCommandMessage)
+	proto.Merge(clientMsg, next)
+	return nil
+}
+
+func (s *testSubscribeCommandServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *testSubscribeCommandServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *testSubscribeCommandServer) SetTrailer(metadata.MD) {}
+
+type testSubscribeEventServer struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	recv   chan *textrpc.SubscribeEventRequest
+	sent   chan *textrpc.EditorEvent
+}
+
+func newTestSubscribeEventServer(msgs ...*textrpc.SubscribeEventRequest) *testSubscribeEventServer {
+	return newTestSubscribeEventServerWithClose(true, msgs...)
+}
+
+func newBlockingTestSubscribeEventServer(msgs ...*textrpc.SubscribeEventRequest) *testSubscribeEventServer {
+	return newTestSubscribeEventServerWithClose(false, msgs...)
+}
+
+func newTestSubscribeEventServerWithClose(closeRecv bool, msgs ...*textrpc.SubscribeEventRequest) *testSubscribeEventServer {
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &testSubscribeEventServer{
+		ctx:    ctx,
+		cancel: cancel,
+		recv:   make(chan *textrpc.SubscribeEventRequest, len(msgs)),
+		sent:   make(chan *textrpc.EditorEvent, 1),
+	}
+	for _, msg := range msgs {
+		stream.recv <- msg
+	}
+	if closeRecv {
+		close(stream.recv)
+	}
+	return stream
+}
+
+func (s *testSubscribeEventServer) Recv() (*textrpc.SubscribeEventRequest, error) {
+	select {
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
+	case msg, ok := <-s.recv:
+		if !ok {
+			return nil, io.EOF
+		}
+		return msg, nil
+	}
+}
+
+func (s *testSubscribeEventServer) Send(msg *textrpc.EditorEvent) error {
+	s.sent <- msg
+	return nil
+}
+
+func (s *testSubscribeEventServer) Context() context.Context {
+	return s.ctx
+}
+
+func (s *testSubscribeEventServer) SendMsg(msg any) error {
+	event := msg.(*textrpc.EditorEvent)
+	return s.Send(event)
+}
+
+func (s *testSubscribeEventServer) RecvMsg(msg any) error {
+	next, err := s.Recv()
+	if err != nil {
+		return err
+	}
+	req := msg.(*textrpc.SubscribeEventRequest)
+	proto.Reset(req)
+	proto.Merge(req, next)
+	return nil
+}
+
+func (s *testSubscribeEventServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *testSubscribeEventServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *testSubscribeEventServer) SetTrailer(metadata.MD) {}
