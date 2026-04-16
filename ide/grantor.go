@@ -41,14 +41,12 @@ var _ extension.Grantor = (*permissionGrantor)(nil)
 
 const (
 	permissionDecisionAllow = "allow"
-	permissionDecisionDeny  = "deny"
 )
 
 const (
 	permissionPromptAllowOnce   = "   Once   "
 	permissionPromptAllowAlways = "   Always   "
 	permissionPromptDenyOnce    = "   No   "
-	permissionPromptDenyNever   = "   Never   "
 )
 
 type permissionDecision struct {
@@ -85,8 +83,6 @@ func (g *permissionGrantor) Grant(meta extensionapi.Metadata) (bool, error) {
 		switch stored.Decision {
 		case permissionDecisionAllow:
 			return true, nil
-		case permissionDecisionDeny:
-			return false, nil
 		default:
 			return false, fmt.Errorf("unknown stored extension "+
 				"permission decision %q", stored.Decision)
@@ -106,12 +102,6 @@ func (g *permissionGrantor) Grant(meta extensionapi.Metadata) (bool, error) {
 		return true, nil
 	case permissionPromptAllowOnce:
 		return true, nil
-	case permissionPromptDenyNever:
-		err := g.storage.Set(ctx, key, permissionDecision{Decision: permissionDecisionDeny})
-		if err != nil {
-			return false, fmt.Errorf("set extension permission decision: %w", err)
-		}
-		return false, nil
 	case permissionPromptDenyOnce:
 		return false, nil
 	default:
@@ -127,9 +117,8 @@ func (g *permissionGrantor) prompt(meta extensionapi.Metadata) string {
 		permissionPromptAllowOnce,
 		permissionPromptAllowAlways,
 		permissionPromptDenyOnce,
-		permissionPromptDenyNever,
 	}
-	bindings := []term.KeyComb{{Ch: 'o'}, {Ch: 'a'}, {Ch: 'n'}, {Ch: 'v'}}
+	bindings := []term.KeyComb{{Ch: 'o'}, {Ch: 'a'}, {Ch: 'n'}}
 	scheduled := g.scheduleNextTick(func() {
 		g.promptOpener.Prompt(message, options, bindings, handler.FuncPromptHandler(
 			func(i int, opt string) {

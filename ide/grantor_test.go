@@ -43,6 +43,7 @@ type fakePromptOpener struct {
 	close   bool
 	calls   int
 	message string
+	options []string
 }
 
 func (f *fakePromptOpener) Prompt(
@@ -52,6 +53,7 @@ func (f *fakePromptOpener) Prompt(
 ) browser.Window {
 	f.calls++
 	f.message = message
+	f.options = append([]string(nil), options...)
 	if f.close {
 		if err := promptHandler.OnClose(); err != nil {
 			panic(err)
@@ -98,21 +100,10 @@ func TestPermissionGrantor(t *testing.T) {
 			wantPrompt:   true,
 		},
 		{
-			name:         "deny never denies and persists",
-			promptOption: permissionPromptDenyNever,
-			wantPrompt:   true,
-			wantStored:   permissionDecisionDeny,
-		},
-		{
 			name:           "stored allow bypasses prompt",
 			promptOption:   permissionPromptDenyOnce,
 			storedDecision: permissionDecisionAllow,
 			wantGrant:      true,
-		},
-		{
-			name:           "stored deny bypasses prompt",
-			promptOption:   permissionPromptAllowOnce,
-			storedDecision: permissionDecisionDeny,
 		},
 		{
 			name:         "prompt close denies once",
@@ -141,6 +132,7 @@ func TestPermissionGrantor(t *testing.T) {
 			assert.Equal(t, tc.wantGrant, ok)
 			if tc.wantPrompt {
 				assert.Equal(t, 1, prompt.calls)
+				assert.NotContains(t, prompt.options, "   Never   ")
 				assert.Contains(t, prompt.message,
 					"Allow extension **Test Extension** (v1.2.3) by **dev-id** to run?")
 				assert.NotContains(t, prompt.message, "Access the editor")
