@@ -31,6 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/ideshell"
 )
 
@@ -129,7 +130,8 @@ func (e *Executor) Start(
 	s.starts++
 	e.mu.Unlock()
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		exitErr := <-ch
 		e.mu.Lock()
 		if s := e.stats[key]; s != nil {
@@ -138,7 +140,8 @@ func (e *Executor) Start(
 		}
 		delete(e.processes, pid)
 		e.mu.Unlock()
-	}()
+
+	})
 
 	return pid, nil
 }

@@ -39,8 +39,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
@@ -182,11 +182,11 @@ func (h *testCmd) HandleCommand(
 
 	// Close pw when the process exits so the scanner on pr gets EOF.
 	exitErrCh := make(chan error, 1)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		exitErr := <-doneCh
 		_ = pw.Close()
 		exitErrCh <- exitErr
-	}()
+	})
 
 	go debug.CapturePanicReport(func() {
 		h.processTestOutput(testName, pr, &stderr, exitErrCh)

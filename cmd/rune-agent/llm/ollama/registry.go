@@ -32,6 +32,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	"unstable.build/go-tui/debug"
 )
 
 // LLMProvider identifies the Ollama provider in the model registry.
@@ -83,10 +84,12 @@ func (r *Registry) Models() iterator.Iterator[llmregistry.ModelEntry] {
 	}
 	fetchCtx, cancelFetch := context.WithCancel(context.Background())
 	ch := make(chan result, 1)
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		entries, err := r.fetchCtx(fetchCtx)
 		ch <- result{entries, err}
-	}()
+
+	})
 
 	var entries []llmregistry.ModelEntry
 	fetched := false

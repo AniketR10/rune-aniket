@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 const (
@@ -231,9 +232,11 @@ func (m *SessionManager) Create(
 		_ = pty.Slave.Close()
 
 		// Read master output into buffer.
-		go func() {
+		go debug.CapturePanicReport(func() {
+
 			_, _ = io.Copy(buf, pty.Master)
-		}()
+
+		})
 	} else {
 		// Non-PTY: use OS pipes for stdin. os.Pipe returns *os.File
 		// objects which exec.Cmd can pass directly to the child
@@ -260,7 +263,8 @@ func (m *SessionManager) Create(
 	}
 
 	// Watch for process exit.
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		procErr := <-watcher.WatchProcess()
 		sess.mu.Lock()
 		sess.exitErr = procErr
@@ -274,7 +278,8 @@ func (m *SessionManager) Create(
 		if sess.pty != nil {
 			_ = sess.pty.Master.Close()
 		}
-	}()
+
+	})
 
 	m.sessions[id] = sess
 	return sess, nil

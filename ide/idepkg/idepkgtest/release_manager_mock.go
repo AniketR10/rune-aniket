@@ -30,6 +30,7 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"unstable.build/go-tui/debug"
 )
 
 // ReleaseManager is a release.Manager for testing idepkg.Manager.
@@ -152,7 +153,8 @@ func (t *ReleaseManager) Get(
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer wg.Done()
 		if t.missProgressComplete {
 			return
@@ -163,10 +165,12 @@ func (t *ReleaseManager) Get(
 			writer.Progress(i, n, t.progressUnits)
 			t.mu.Unlock()
 		}
-	}()
+
+	})
 
 	var err error
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer wg.Done()
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -184,7 +188,8 @@ func (t *ReleaseManager) Get(
 				_, err = writer.Write(configPkgTar)
 			}
 		}
-	}()
+
+	})
 
 	t.mu.Unlock()
 	wg.Wait()

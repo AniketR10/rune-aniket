@@ -70,7 +70,7 @@ var (
 	authConfig = auth.DefaultConfig()
 
 	version          = flag.Bool("v", false, "Print version information to stdout")
-	debug            = flag.Bool("V", false, "Enable verbose logging")
+	verbose          = flag.Bool("V", false, "Enable verbose logging")
 	jsonLogFormatter = flag.Bool("J", false, "Enable JSON log formatter for structured logs.")
 	httpPort         = flag.Int("P", 3001, "Listening HTTP port")
 	grpcPort         = flag.Int("G", 4001, "Listening GRCP port")
@@ -119,7 +119,7 @@ func parseFlags() {
 		os.Exit(0)
 	}
 
-	logging.SetDefaults(*debug)
+	logging.SetDefaults(*verbose)
 	if *jsonLogFormatter {
 		log.SetFormatter(logging.LogrusGCPFormatter{})
 	}

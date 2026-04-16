@@ -34,6 +34,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 // ListDirs traverses the workspace directory and returns
@@ -71,10 +72,11 @@ func ListDirs(
 	iterator.closeWaitCh = closeWaitCh
 
 	for i := range workers {
-		go func() {
+		go debug.CapturePanicReport(func() {
 			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
 				workspaceURI.Path(), &iterator.mu, &allErrors[i], true)
-		}()
+
+		})
 	}
 
 	for {
@@ -91,7 +93,8 @@ func ListDirs(
 	wg.Add(1)
 	workerCh <- root
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(closeWaitCh)
 		defer close(iterCh)
 		defer close(workerCh)
@@ -104,7 +107,8 @@ func ListDirs(
 				iterator.err = multierr.Append(iterator.err, err)
 			}
 		}
-	}()
+
+	})
 
 	return iterator, nil
 }

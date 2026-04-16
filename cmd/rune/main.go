@@ -287,7 +287,9 @@ func main() {
 	if !*flagGUI && !*flagTUI && *flagWorkspaceServer == "" {
 		defaults, ok := appLaunchArgs(runtime.GOOS, exec)
 		if ok {
-			go initPATH(*flagDataPath)
+			go debug.CapturePanicReport(func() {
+				initPATH(*flagDataPath)
+			})
 			os.Args = append(os.Args[:1], append(defaults, os.Args[1:]...)...)
 
 			// best effort redirect stdout/err to /tmp/rune_launch.log

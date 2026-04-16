@@ -33,6 +33,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 const (
@@ -1073,28 +1074,30 @@ func (m *Manager) WorkspaceDiagnostic(
 	var wg sync.WaitGroup
 	wg.Add(len(servers))
 	for i, srv := range servers {
-		go func(i int, srv *langServer) {
-			defer wg.Done()
-			p := params
-			token := semanticapi.NewWorkDoneToken()
-			if err := m.callback.WorkDoneProgressCreate(
-				ctx,
-				semanticapi.WorkDoneProgressCreateParams{
-					Token: *token,
-				},
-			); err != nil {
-				m.log.Warn("workspace diagnostic: create progress token",
-					"error", err,
+		go debug.CapturePanicReport(func() {
+			func(i int, srv *langServer) {
+				defer wg.Done()
+				p := params
+				token := semanticapi.NewWorkDoneToken()
+				if err := m.callback.WorkDoneProgressCreate(
+					ctx,
+					semanticapi.WorkDoneProgressCreateParams{
+						Token: *token,
+					},
+				); err != nil {
+					m.log.Warn("workspace diagnostic: create progress token",
+						"error", err,
+					)
+				}
+				p.WorkDoneToken = token
+				var report semanticapi.WorkspaceDiagnosticReport
+				err := srv.call(
+					ctx, "workspace/diagnostic",
+					p, &report,
 				)
-			}
-			p.WorkDoneToken = token
-			var report semanticapi.WorkspaceDiagnosticReport
-			err := srv.call(
-				ctx, "workspace/diagnostic",
-				p, &report,
-			)
-			results[i] = result{report: report, err: err}
-		}(i, srv)
+				results[i] = result{report: report, err: err}
+			}(i, srv)
+		})
 	}
 	wg.Wait()
 
@@ -1126,17 +1129,19 @@ func (m *Manager) WorkspaceSymbol(
 	var wg sync.WaitGroup
 	wg.Add(len(servers))
 	for i, srv := range servers {
-		go func(i int, srv *langServer) {
-			defer wg.Done()
-			p := params
-			p.WorkDoneToken = m.tokenFor(p.WorkDoneToken)
-			var syms []semanticapi.SymbolInformation
-			err := srv.call(
-				ctx, "workspace/symbol",
-				p, &syms,
-			)
-			results[i] = result{syms: syms, err: err}
-		}(i, srv)
+		go debug.CapturePanicReport(func() {
+			func(i int, srv *langServer) {
+				defer wg.Done()
+				p := params
+				p.WorkDoneToken = m.tokenFor(p.WorkDoneToken)
+				var syms []semanticapi.SymbolInformation
+				err := srv.call(
+					ctx, "workspace/symbol",
+					p, &syms,
+				)
+				results[i] = result{syms: syms, err: err}
+			}(i, srv)
+		})
 	}
 	wg.Wait()
 

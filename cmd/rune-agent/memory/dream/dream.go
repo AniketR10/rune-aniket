@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/debug"
 )
 
 // ProgressType describes the kind of progress being reported.
@@ -233,10 +234,12 @@ func Dream(ctx context.Context, deps Deps) (iterator.Iterator[Progress], error) 
 	ch := make(chan Progress, 1)
 	it := &progressIterator{ch: ch}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(ch)
 		it.runErr = runDream(ctx, ch, deps)
-	}()
+
+	})
 
 	return it, nil
 }

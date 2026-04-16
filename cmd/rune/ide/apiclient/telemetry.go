@@ -37,6 +37,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
+	"unstable.build/go-tui/debug"
 )
 
 const telemetryPath = "/telemetry"
@@ -92,7 +93,9 @@ func newTelemetry(
 }
 
 func (t *telemetry) start() {
-	go t.periodicPostData(t.period)
+	go debug.CapturePanicReport(func() {
+		t.periodicPostData(t.period)
+	})
 }
 
 func (t *telemetry) periodicPostData(period time.Duration) {

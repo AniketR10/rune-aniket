@@ -31,6 +31,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unstable.build/go-tui/debug"
 )
 
 // Listener is implemented by protocols to accept new inbound connections.
@@ -97,7 +98,9 @@ func NewServer(ctx context.Context, listener Listener, binder Binder) *Server {
 		binder:   binder,
 		async:    newAsync(),
 	}
-	go server.run(ctx)
+	go debug.CapturePanicReport(func() {
+		server.run(ctx)
+	})
 	return server
 }
 

@@ -41,7 +41,7 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/debug"
+	bluedebug "github.com/unstablebuild/blue/debug"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -54,6 +54,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"gopkg.in/yaml.v3"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -126,7 +127,7 @@ type Manager struct {
 }
 
 func (m *Manager) capturePanicReport(f func()) {
-	debug.CapturePanic(log.StandardLogger(), m.crashReportPkg, m.crashReportVersion, f)
+	bluedebug.CapturePanic(log.StandardLogger(), m.crashReportPkg, m.crashReportVersion, f)
 }
 
 // LibDir returns an iterator to the lib directory of the given package.
@@ -250,8 +251,10 @@ func (m *Manager) InstallPackageVersion(
 	m.iterators.m[pkgID] = mu
 
 	mu.Lock() // block calls to iterator
-	go m.capturePanicReport(func() {
-		m.download(pkgID, version, tarfile, notificationID, key)
+	go debug.CapturePanicReport(func() {
+		m.capturePanicReport(func() {
+			m.download(pkgID, version, tarfile, notificationID, key)
+		})
 	})
 
 	return err
@@ -343,10 +346,12 @@ func (m *Manager) DeletePackage(
 	wg.Add(len(versions))
 	for i := 0; i < len(versions); i++ {
 		i := i
-		go m.capturePanicReport(func() {
-			version := versions[i]
-			defer wg.Done()
-			errs[i] = m.DeletePackageVersion(ctx, pkgID, version, true)
+		go debug.CapturePanicReport(func() {
+			m.capturePanicReport(func() {
+				version := versions[i]
+				defer wg.Done()
+				errs[i] = m.DeletePackageVersion(ctx, pkgID, version, true)
+			})
 		})
 	}
 	wg.Wait()
@@ -523,13 +528,15 @@ func (m *Manager) PackageVersionInUse(
 	wg.Add(len(versions))
 	for i := 0; i < len(versions); i++ {
 		version := versions[i]
-		go m.capturePanicReport(func() {
-			defer wg.Done()
-			var isInUse bool
-			_, _, isInUse, errs[i] = m.isPackageVersionInUse(pkgID, version)
-			if isInUse { // only one will be in use
-				inUse.Store(version)
-			}
+		go debug.CapturePanicReport(func() {
+			m.capturePanicReport(func() {
+				defer wg.Done()
+				var isInUse bool
+				_, _, isInUse, errs[i] = m.isPackageVersionInUse(pkgID, version)
+				if isInUse { // only one will be in use
+					inUse.Store(version)
+				}
+			})
 		})
 	}
 	wg.Wait()

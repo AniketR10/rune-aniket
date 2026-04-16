@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"mvdan.cc/sh/v3/shell"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -205,13 +206,15 @@ func OutputLinesCompleter(w schemeapi.Executor, cmdAndArgs []string) Completer {
 			return nil, "", err
 		}
 
-		go func() {
+		go debug.CapturePanicReport(func() {
+
 			select {
 			case <-ctx.Done():
 			case <-ch:
 			}
 			_ = pr.Close()
-		}()
+
+		})
 		return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
 			if scanner.Scan() {
 				return scanner.Text(), true, nil

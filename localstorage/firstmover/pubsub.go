@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/localstorage/firstmover/pubsubpb"
 )
 
@@ -220,7 +221,8 @@ func (p *pubsub) subscribe(
 
 	// stream messages until until srv stream is done,
 	// broken or pubsub is closed
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()
@@ -269,7 +271,8 @@ func (p *pubsub) subscribe(
 				return
 			}
 		}
-	}()
+
+	})
 
 	return quitCtx, stream, nil
 }
@@ -339,47 +342,49 @@ func (p *pubsub) Publish(
 	var wg sync.WaitGroup
 	wg.Add(len(subscribers))
 	for i, sub := range subscribers {
-		go func(sub *subscriber, i int) {
-			defer wg.Done()
+		go debug.CapturePanicReport(func() {
+			func(sub *subscriber, i int) {
+				defer wg.Done()
 
-			sub.mu.Lock()
-			defer sub.mu.Unlock()
+				sub.mu.Lock()
+				defer sub.mu.Unlock()
 
-			var req pubsubpb.ReceiveMessage
-			var data pubsubpb.ReceiveMessage_Data
-			data.Data = msg
-			req.Data = &data
-			if serr := sub.stream.Send(&req); serr != nil {
-				// cancel offending stream, but also return
-				// an error to this rpc so we provide at least once semantics
-				select {
-				case sub.errors <- fmt.Errorf("stream send data: %w", serr):
-				default:
+				var req pubsubpb.ReceiveMessage
+				var data pubsubpb.ReceiveMessage_Data
+				data.Data = msg
+				req.Data = &data
+				if serr := sub.stream.Send(&req); serr != nil {
+					// cancel offending stream, but also return
+					// an error to this rpc so we provide at least once semantics
+					select {
+					case sub.errors <- fmt.Errorf("stream send data: %w", serr):
+					default:
+					}
+
+					errors[i] = serr
+					return
 				}
 
-				errors[i] = serr
-				return
-			}
-
-			var ack pubsubpb.ReceiveMessage
-			if serr := sub.stream.RecvMsg(&ack); serr != nil {
-				select {
-				case sub.errors <- fmt.Errorf("stream receive ack: %w", serr):
-				default:
+				var ack pubsubpb.ReceiveMessage
+				if serr := sub.stream.RecvMsg(&ack); serr != nil {
+					select {
+					case sub.errors <- fmt.Errorf("stream receive ack: %w", serr):
+					default:
+					}
+					errors[i] = serr
+					return
 				}
-				errors[i] = serr
-				return
-			}
 
-			if ack.GetAck() == nil {
-				err := fmt.Errorf("protocol error: received non ack: %+v", &ack)
-				select {
-				case sub.errors <- err:
-				default:
+				if ack.GetAck() == nil {
+					err := fmt.Errorf("protocol error: received non ack: %+v", &ack)
+					select {
+					case sub.errors <- err:
+					default:
+					}
+					errors[i] = err
 				}
-				errors[i] = err
-			}
-		}(sub, i)
+			}(sub, i)
+		})
 	}
 
 	p.mu.Unlock()

@@ -33,6 +33,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
+	"unstable.build/go-tui/debug"
 )
 
 // ReadLines takes an iterator of file paths, i.e. return of ListFiles
@@ -51,10 +52,12 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	errors := make([]error, workers)
 	for i := range workers {
 		err := &errors[i]
-		go func() {
+		go debug.CapturePanicReport(func() {
+
 			defer wg.Done()
 			readFileWorker(ctx, w, lines, files, err)
-		}()
+
+		})
 	}
 
 	it := &listFilesIterator{
@@ -65,7 +68,8 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	it.closeWaitCh = closeWaitCh
 
 	var itErr error
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(closeWaitCh)
 		defer close(lines)
 		defer paths.Close() //nolint:errcheck
@@ -97,7 +101,8 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 				it.err = multierr.Append(it.err, err)
 			}
 		}
-	}()
+
+	})
 	return it, nil
 }
 

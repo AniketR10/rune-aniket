@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/debug"
 )
 
 // Update represents an available package update.
@@ -158,8 +159,10 @@ func (uc *UpdateChecker) checkPackage(ctx context.Context, pkgID string) (*Updat
 // Use Close to cancel the check if it's still running.
 func (uc *UpdateChecker) Start(ctx context.Context) {
 	ctx, uc.cancel = context.WithCancel(ctx)
-	go uc.m.capturePanicReport(func() {
-		uc.run(ctx)
+	go debug.CapturePanicReport(func() {
+		uc.m.capturePanicReport(func() {
+			uc.run(ctx)
+		})
 	})
 }
 

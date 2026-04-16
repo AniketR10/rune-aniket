@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/debug"
 )
 
 // Entry is a single row in the location picker.
@@ -312,7 +313,9 @@ func (l *Picker) loadPreview() {
 	if l.parser != nil {
 		baseCells := term.CloneCells(l.previewCells)
 		fileURI := entry.URI
-		go l.loadHighlights(fileURI, content, baseCells)
+		go debug.CapturePanicReport(func() {
+			l.loadHighlights(fileURI, content, baseCells)
+		})
 	}
 }
 

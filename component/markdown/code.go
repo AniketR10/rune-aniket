@@ -22,6 +22,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/languages"
 )
 
@@ -60,7 +61,8 @@ func newCodeBlock(language, code string, cfg *Config) *codeBlock {
 	parser := cfg.Parser
 	codeBlock := cfg.CodeBlock
 	schedule := cfg.ScheduleNextTick
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		hls := collectHighlights(ctx, parser, language, code)
 		if len(hls) == 0 {
 			return
@@ -68,7 +70,8 @@ func newCodeBlock(language, code string, cfg *Config) *codeBlock {
 		schedule(func() {
 			applyHighlights(cb.cells, hls, codeBlock)
 		})
-	}()
+
+	})
 
 	return cb
 }

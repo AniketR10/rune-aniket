@@ -29,9 +29,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
+	"unstable.build/go-tui/debug"
 )
 
 // ErrNoServer is returned when no debug server is
@@ -123,7 +123,9 @@ func New(
 		evs: make(chan textapi.Event, 1),
 	}
 	ret.wg.Add(1)
-	go ret.handleEvs()
+	go debug.CapturePanicReport(func() {
+		ret.handleEvs()
+	})
 	return ret
 }
 

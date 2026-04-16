@@ -31,6 +31,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/cmd/extension_rtc/extension"
+	"unstable.build/go-tui/debug"
 )
 
 var (
@@ -47,9 +48,9 @@ func init() {
 }
 
 func main() {
-	go func() {
+	go debug.CapturePanicReport(func() {
 		log.Println(http.ListenAndServe("localhost:2869", nil))
-	}()
+	})
 
 	ext, meta := extension.NewExtension()
 	meta.ExtensionVersion = Version

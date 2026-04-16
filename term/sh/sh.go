@@ -31,6 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/debug"
 )
 
 // New returns a repl.CommandHandler that interprets
@@ -80,12 +81,14 @@ func (h *commandHandler) HandleCommand(
 	}
 
 	var runErr error
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(ch)
 		runErr = runner.Run(ctx, file)
 		outW.flush()
 		errW.flush()
-	}()
+
+	})
 
 	return iterator.FromFunc(func(ctx context.Context) (component.Responsive, bool, error) {
 		select {

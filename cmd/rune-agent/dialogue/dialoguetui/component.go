@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/debug"
 	mdhandler "unstable.build/go-tui/handler/markdown"
 )
 
@@ -616,7 +617,8 @@ func (c *Component) AddCommand(ctx context.Context, it iterator.Iterator[compone
 	c.mu.Unlock()
 	_ = c.interrupter.Interrupt(ctx)
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer func() { _ = it.Close() }()
 		defer func() {
 			c.mu.Lock()
@@ -642,7 +644,8 @@ func (c *Component) AddCommand(ctx context.Context, it iterator.Iterator[compone
 			c.mu.Unlock()
 			_ = c.interrupter.Interrupt(ctx)
 		}
-	}()
+
+	})
 }
 
 // AddCommandOutput adds a single command output item to the message list.

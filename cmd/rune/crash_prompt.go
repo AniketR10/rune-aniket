@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cmd/rune/crashreport"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
 )
 
@@ -117,7 +118,9 @@ func (h *crashReportPromptHandler) OnSelect(idx int, option string) {
 
 	switch option {
 	case sendOpt:
-		go h.sendReports()
+		go debug.CapturePanicReport(func() {
+			h.sendReports()
+		})
 	case dontSendOpt:
 		ctx := context.Background()
 		h.mgr.DeclineReports(ctx, h.pending)
@@ -152,7 +155,9 @@ func scheduleCrashReportCheck(
 	dataDir string,
 	scheduleNextTick func(func()) bool,
 ) {
-	go checkCrashReports(i, uploader, dataDir, scheduleNextTick)
+	go debug.CapturePanicReport(func() {
+		checkCrashReports(i, uploader, dataDir, scheduleNextTick)
+	})
 }
 
 // noopPromptHandler satisfies handler.PromptHandler for compile reference.

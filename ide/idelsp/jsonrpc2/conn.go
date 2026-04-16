@@ -32,6 +32,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unstable.build/go-tui/debug"
 )
 
 // Binder builds a connection configuration.
@@ -298,7 +299,9 @@ func (c *Connection) start(ctx context.Context, reader Reader, preempter Preempt
 		// (If the Binder closed the Connection already, this should error out and
 		// return almost immediately.)
 		s.reading = true
-		go c.readIncoming(ctx, reader, preempter)
+		go debug.CapturePanicReport(func() {
+			c.readIncoming(ctx, reader, preempter)
+		})
 	})
 }
 
@@ -640,7 +643,9 @@ func (c *Connection) acceptRequest(ctx context.Context, msg *Request, preempter 
 			// when idle seems simpler than trying to implement either of those
 			// alternatives correctly.
 			s.handlerRunning = true
-			go c.handleAsync()
+			go debug.CapturePanicReport(func() {
+				c.handleAsync()
+			})
 		}
 	})
 	if err != nil {

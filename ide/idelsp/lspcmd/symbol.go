@@ -35,8 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/locationpicker"
 )
 
@@ -393,12 +393,14 @@ func completeReferencedSymbol(
 	ch := make(chan string)
 	errc := make(chan error, 1)
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(ch)
 		if err := produceReferencedSymbols(ctx, parser, ch); err != nil {
 			errc <- err
 		}
-	}()
+
+	})
 
 	seen := make(map[string]bool)
 	return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {

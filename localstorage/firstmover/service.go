@@ -52,6 +52,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/localstorage/firstmover/pubsubpb"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/localstorage/storagerpc"
@@ -155,7 +156,9 @@ func (s *Service) Init(svc storageapi.Service, lockFile string, cfg Config) {
 	s.quitCh = make(chan struct{})
 	s.closeWaitCh = make(chan struct{})
 
-	go s.leadOrFollow()
+	go debug.CapturePanicReport(func() {
+		s.leadOrFollow()
+	})
 }
 
 func normalizedLockFile(lockFile string) string {
@@ -548,7 +551,8 @@ func (s *Service) monitorLeader(ctx context.Context, conn *grpc.ClientConn) {
 		return
 	}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		for {
 			data, err := s.pubsub.receive(ctx, internalTopic)
 			if err != nil {
@@ -579,7 +583,8 @@ func (s *Service) monitorLeader(ctx context.Context, conn *grpc.ClientConn) {
 					string(data))
 			}
 		}
-	}()
+
+	})
 }
 
 func (s *Service) setActiveAndUnlock(svc storageapi.Service) {
@@ -606,12 +611,14 @@ func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bo
 	done := make(chan error)
 	ready := make(chan struct{})
 	quitCh := s.quitCh
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		select {
 		case done <- gsrv.Serve(&unlockListener{ready: ready, root: listener}):
 		case <-quitCh:
 		}
-	}()
+
+	})
 
 	// wait for grpcserver to be listening
 	// before we initialize pubsub as leader
@@ -668,10 +675,12 @@ func (s *Service) leadOrFollow() {
 	quitCh := s.quitCh
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer cancel()
 		<-quitCh
-	}()
+
+	})
 
 	fn := func(ctx context.Context) (bool, error) {
 		var cfg net.ListenConfig

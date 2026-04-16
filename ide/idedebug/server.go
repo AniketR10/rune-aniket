@@ -29,6 +29,7 @@ import (
 	"github.com/google/go-dap"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 type debugServer struct {
@@ -134,10 +135,14 @@ func (s *debugServer) start(ctx context.Context) error {
 	s.mu.Unlock()
 
 	s.wg.Add(1)
-	go s.readLoop()
+	go debug.CapturePanicReport(
 
-	// initialize is called without s.mu held because it
-	// calls sendRequest which also acquires s.mu.
+		// initialize is called without s.mu held because it
+		// calls sendRequest which also acquires s.mu.
+		func() {
+			s.readLoop()
+		})
+
 	caps, err := s.initialize(ctx)
 	if err != nil {
 		s.closeConn()

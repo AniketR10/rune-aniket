@@ -41,9 +41,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
+	"unstable.build/go-tui/debug"
 )
 
 // ErrNoServer is returned when no language server is
@@ -151,7 +151,9 @@ func New(
 		cancel:        cancel,
 		evs:           make(chan textapi.Event, eventsBufferSize),
 	}
-	go ret.handleEvs()
+	go debug.CapturePanicReport(func() {
+		ret.handleEvs()
+	})
 	return ret
 }
 

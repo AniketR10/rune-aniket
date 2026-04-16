@@ -42,6 +42,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/debug"
 )
 
 // Config holds agent configuration.
@@ -279,10 +280,12 @@ func (a *Agent) Run(
 	ch := make(chan Event, 16)
 	it := &channelIterator{ch: ch}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(ch)
 		a.run(ctx, ch, dialogueID, message, options)
-	}()
+
+	})
 
 	return it
 }
@@ -788,36 +791,41 @@ func (a *Agent) run(
 			var wg sync.WaitGroup
 			for i, info := range infos {
 				wg.Add(1)
-				go func(i int, info toolCallInfo) {
-					defer wg.Done()
-					var result ToolResult
-					var dur time.Duration
-					if !info.found {
-						log.Warn("unknown tool", "name", info.call.Function.Name)
-						result = ToolResult{
-							Content: fmt.Sprintf("error: unknown tool %q", info.call.Function.Name),
-							IsError: true,
+				go debug.CapturePanicReport(func() {
+					func(i int, info toolCallInfo) {
+						defer wg.Done()
+						var result ToolResult
+						var dur time.Duration
+						if !info.found {
+							log.Warn("unknown tool", "name", info.call.Function.Name)
+							result = ToolResult{
+								Content: fmt.Sprintf("error: unknown tool %q", info.call.Function.Name),
+								IsError: true,
+							}
+						} else {
+							toolCtx := WithCurrentModel(ctx, a.Model())
+							toolCtx = WithParentToolCallID(toolCtx, info.call.ID)
+							toolStart := time.Now()
+							result = info.tool.Execute(toolCtx, info.call.Function.Arguments)
+							dur = time.Since(toolStart)
+							log.Debug("executed tool",
+								"name", info.call.Function.Name,
+								"error", result.IsError,
+								"output", len(result.Content),
+								"duration", dur,
+							)
 						}
-					} else {
-						toolCtx := WithCurrentModel(ctx, a.Model())
-						toolCtx = WithParentToolCallID(toolCtx, info.call.ID)
-						toolStart := time.Now()
-						result = info.tool.Execute(toolCtx, info.call.Function.Arguments)
-						dur = time.Since(toolStart)
-						log.Debug("executed tool",
-							"name", info.call.Function.Name,
-							"error", result.IsError,
-							"output", len(result.Content),
-							"duration", dur,
-						)
-					}
-					if !result.IsError {
-						result.Content = truncateMiddle(result.Content, maxOutput)
-					}
-					results <- executedToolCall{index: i, info: info, result: result, duration: dur}
-				}(i, info)
+						if !result.IsError {
+							result.Content = truncateMiddle(result.Content, maxOutput)
+						}
+						results <- executedToolCall{index: i, info: info, result: result, duration: dur}
+					}(i, info)
+				})
 			}
-			go func() { wg.Wait(); close(results) }()
+			go debug.CapturePanicReport(func() {
+				wg.Wait()
+				close(results)
+			})
 
 			// 3. Fan in: collect results in completion order, emit EventToolResult.
 			toolMsgs = slices.Grow(toolMsgs[:0], len(infos))[:len(infos)]

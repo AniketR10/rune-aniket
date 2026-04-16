@@ -45,6 +45,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/text/modeless"
 )
@@ -152,7 +153,9 @@ func NewV2(
 
 	log.Debugf("useWorkspaceFallback set to %v", h.useWorkspaceFallback)
 
-	go h.scanData()
+	go debug.CapturePanicReport(func() {
+		h.scanData()
+	})
 
 	return h, nil
 }
@@ -417,14 +420,16 @@ func (h *fuzzyFinderHandler) scanData() {
 	h.pid = exec
 	h.mu.Unlock()
 
-	go h.readCommand(ctx, datachan, stdout, cancelScan)
-	go func() {
+	go debug.CapturePanicReport(func() {
+		h.readCommand(ctx, datachan, stdout, cancelScan)
+	})
+	go debug.CapturePanicReport(func() {
 		data, err := io.ReadAll(stderr)
 		if err != nil {
 			log.Errorf("failed to read from stderr: %v", err)
 		}
 		log.Debugf("stderr: %s", string(data))
-	}()
+	})
 
 	log.Debugf("waiting for command to be done")
 	err = <-h.waitChan

@@ -37,6 +37,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/llm/ollama"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
+	"unstable.build/go-tui/debug"
 )
 
 var (
@@ -53,12 +54,14 @@ func init() {
 }
 
 func main() {
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		err := http.ListenAndServe("localhost:6669", nil)
 		if err != nil {
 			slog.Warn("pprof server listen and serve", "error", err)
 		}
-	}()
+
+	})
 
 	// Build the composite model registry from all providers.
 	static := llmregistry.NewStatic()

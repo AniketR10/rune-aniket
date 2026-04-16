@@ -32,6 +32,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/debug"
 	tworkspacerpc "unstable.build/go-tui/workspace/workspacerpc"
 )
 
@@ -46,7 +47,9 @@ func StartSchemeServer(
 		true, /* use stdio instead of reader and writer */
 		func() {
 			logger.Debugf("connection closed unexpectedly")
-			go grpcServer.Stop()
+			go debug.CapturePanicReport(func() {
+				grpcServer.Stop()
+			})
 		})
 	workspacerpc.RegisterSchemeServer(grpcServer, server)
 	workspacerpc.RegisterFilesServer(grpcServer, server)

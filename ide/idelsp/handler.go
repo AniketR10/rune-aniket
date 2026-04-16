@@ -48,6 +48,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/html"
 )
 
@@ -724,13 +725,15 @@ func (h *CallbackHandler) WaitFileProcessed(ctx context.Context, uri string) err
 	}
 
 	done := make(chan struct{})
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		select {
 		case <-ctx.Done():
 			h.versionCond.Broadcast()
 		case <-done:
 		}
-	}()
+
+	})
 	defer close(done)
 
 	for {

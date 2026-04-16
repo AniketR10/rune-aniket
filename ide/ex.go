@@ -1288,15 +1288,19 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 		}
 	}
 
-	go func() {
-		defer h.Close() //nolint:errcheck
+	go debug.CapturePanicReport(func
+	//nolint:errcheck
+	() {
+
+		defer h.Close()
 		err := <-ch
 		err = handleError(err)
 		if err != nil {
 			_, _ = e.notifications.Notify(browserapi.LevelError,
 				fmt.Sprintf("%s: %s", args[0], err))
 		}
-	}()
+
+	})
 	return nil
 }
 

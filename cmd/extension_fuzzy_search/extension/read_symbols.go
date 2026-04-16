@@ -73,11 +73,11 @@ func readSymbols(
 	validErrors := make([]map[string]*expectedError, defaultWorkers)
 	for i := range defaultWorkers {
 		validErrors[i] = make(map[string]*expectedError)
-		go func(err *error, missingLanguage map[string]*expectedError) {
+		go debug.CapturePanicReport(func() {
 			defer wg.Done()
-			readSymbolsWorker(ctx, w, dataDir, uri, queryFile, results, files, err,
-				missingLanguage, query)
-		}(&errors[i], validErrors[i])
+			readSymbolsWorker(ctx, w, dataDir, uri, queryFile, results, files, &errors[i],
+				validErrors[i], query)
+		})
 	}
 
 	it := &listSymbolsIterator{ctx: ctx, ch: results}

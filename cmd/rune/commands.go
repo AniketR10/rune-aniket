@@ -493,7 +493,9 @@ func subscribeGUICommands(
 				if err := c.Start(); err != nil {
 					return fmt.Errorf("spawn new window: %w", err)
 				}
-				go func() { _ = c.Wait() }()
+				go debug.CapturePanicReport(func() {
+					_ = c.Wait()
+				})
 				return nil
 			},
 		},

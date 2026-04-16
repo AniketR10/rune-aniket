@@ -75,6 +75,7 @@ import (
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/cmd/rune-agent/memory"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/debug"
 	mdhandler "unstable.build/go-tui/handler/markdown"
 )
 
@@ -1231,8 +1232,10 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	h.openChatAgents.Store(d.ID, chatAgent)
 
 	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
-	go createAgentCompletions(ctx, cancel, tx, msgRx, chatAgent, spawner, childEvents, h.skillRegistry, d.ID, syncComp, h.n,
-		makeOnCompacted(h.dialogueStore, adapter.compactFn))
+	go debug.CapturePanicReport(func() {
+		createAgentCompletions(ctx, cancel, tx, msgRx, chatAgent, spawner, childEvents, h.skillRegistry, d.ID, syncComp, h.n,
+			makeOnCompacted(h.dialogueStore, adapter.compactFn))
+	})
 
 	bhandler := browserapi.FuncHandler(handler, func() error {
 		cancel()
@@ -1285,28 +1288,31 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 
 	// wrap rx to enable sending query and so get
 	// context cancelation for free
-	go func() {
+	go debug.CapturePanicReport(
 		// do not store queries in store after user is done
-		defer h.dialogueStore.Delete(ctx, queryID) //nolint:errcheck
+		func() {
 
-		select {
-		case qrx <- dialoguetui.SubmitMessage{Text: query}:
-		case <-ctx.Done():
-			return
-		}
-		for {
+			defer h.dialogueStore.Delete(ctx, queryID) //nolint:errcheck
+
 			select {
-			case msg := <-rx:
-				select {
-				case qrx <- msg:
-				case <-ctx.Done():
-					return
-				}
+			case qrx <- dialoguetui.SubmitMessage{Text: query}:
 			case <-ctx.Done():
 				return
 			}
-		}
-	}()
+			for {
+				select {
+				case msg := <-rx:
+					select {
+					case qrx <- msg:
+					case <-ctx.Done():
+						return
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+
+		})
 
 	serviceFactory := func(model string) (llm.Service, string, error) {
 		entry, ok := h.modelRegistry.Get(h.ctx, model)
@@ -1331,8 +1337,10 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	spawner.GenerateDialogueID = h.generateDialogueID
 	childEvents := make(chan agent.ChildEvent, 64)
 
-	go createAgentCompletions(ctx, cancel, tx, msgRx,
-		h.queryAgent, spawner, childEvents, h.skillRegistry, queryID, syncComp, h.n, nil)
+	go debug.CapturePanicReport(func() {
+		createAgentCompletions(ctx, cancel, tx, msgRx,
+			h.queryAgent, spawner, childEvents, h.skillRegistry, queryID, syncComp, h.n, nil)
+	})
 
 	var err error
 	var win browserapi.Window
@@ -1469,7 +1477,8 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 	var cancel func()
 	mu := new(sync.Mutex)
 
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -1486,7 +1495,8 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 				}
 			}
 		}
-	}()
+
+	})
 
 	// wrap it for ctrl-c cancelation of context
 	return handler.Wrap(dhandler, func(ev term.Event) (exit bool, handled bool) {
@@ -1747,68 +1757,70 @@ func createAgentCompletions(
 	// sending on a closed channel.
 	var childWg sync.WaitGroup
 	childWg.Go(func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case cev, ok := <-childEvents:
-				if !ok {
-					return
-				}
-				var msg dialoguetui.MessageEvent
-				switch cev.Event.Type {
-				case agent.EventToolCall:
-					msg = dialoguetui.MessageEvent{
-						Type:             dialoguetui.MessageEventToolCall,
-						ToolCallID:       cev.Event.ToolCallID,
-						ToolName:         cev.Event.ToolName,
-						ToolArgs:         cev.Event.ToolArgs,
-						ToolSummary:      cev.Event.ToolSummary,
-						ToolStartTime:    cev.Event.ToolStartTime,
-						ParentToolCallID: cev.ParentToolCallID,
-					}
-				case agent.EventToolResult:
-					msg = dialoguetui.MessageEvent{
-						Type:             dialoguetui.MessageEventToolResult,
-						ToolCallID:       cev.Event.ToolCallID,
-						ToolName:         cev.Event.ToolName,
-						ToolArgs:         cev.Event.ToolArgs,
-						ToolSummary:      cev.Event.ToolSummary,
-						ToolOutput:       cev.Event.ToolOutput,
-						IsError:          cev.Event.IsError,
-						ToolDuration:     cev.Event.ToolDuration,
-						ParentToolCallID: cev.ParentToolCallID,
-					}
-				case agent.EventToolsDropped:
-					msg = dialoguetui.MessageEvent{
-						Type:               dialoguetui.MessageEventToolsDropped,
-						DroppedToolCallIDs: cev.Event.DroppedToolCallIDs,
-					}
-				case agent.EventMemoryRecall:
-					msg = agentMemoriesToTUI(cev.Event)
-				case agent.EventCompacted:
-					if cev.Event.ArchivedDialogueID != "" && onCompacted != nil {
-						dialogueID := baseDialogueID(cev.Event.ArchivedDialogueID)
-						onCompacted(dialogueID)
-					}
-					continue
-				case agent.EventDone:
-					msg = dialoguetui.MessageEvent{
-						Type:             dialoguetui.MessageEventChildResult,
-						ParentToolCallID: cev.ParentToolCallID,
-						ToolOutput:       cev.Event.Text,
-						IsError:          cev.Event.IsError,
-					}
-				default:
-					continue
-				}
+		debug.CapturePanicReport(func() {
+			for {
 				select {
-				case tx <- msg:
 				case <-ctx.Done():
 					return
+				case cev, ok := <-childEvents:
+					if !ok {
+						return
+					}
+					var msg dialoguetui.MessageEvent
+					switch cev.Event.Type {
+					case agent.EventToolCall:
+						msg = dialoguetui.MessageEvent{
+							Type:             dialoguetui.MessageEventToolCall,
+							ToolCallID:       cev.Event.ToolCallID,
+							ToolName:         cev.Event.ToolName,
+							ToolArgs:         cev.Event.ToolArgs,
+							ToolSummary:      cev.Event.ToolSummary,
+							ToolStartTime:    cev.Event.ToolStartTime,
+							ParentToolCallID: cev.ParentToolCallID,
+						}
+					case agent.EventToolResult:
+						msg = dialoguetui.MessageEvent{
+							Type:             dialoguetui.MessageEventToolResult,
+							ToolCallID:       cev.Event.ToolCallID,
+							ToolName:         cev.Event.ToolName,
+							ToolArgs:         cev.Event.ToolArgs,
+							ToolSummary:      cev.Event.ToolSummary,
+							ToolOutput:       cev.Event.ToolOutput,
+							IsError:          cev.Event.IsError,
+							ToolDuration:     cev.Event.ToolDuration,
+							ParentToolCallID: cev.ParentToolCallID,
+						}
+					case agent.EventToolsDropped:
+						msg = dialoguetui.MessageEvent{
+							Type:               dialoguetui.MessageEventToolsDropped,
+							DroppedToolCallIDs: cev.Event.DroppedToolCallIDs,
+						}
+					case agent.EventMemoryRecall:
+						msg = agentMemoriesToTUI(cev.Event)
+					case agent.EventCompacted:
+						if cev.Event.ArchivedDialogueID != "" && onCompacted != nil {
+							dialogueID := baseDialogueID(cev.Event.ArchivedDialogueID)
+							onCompacted(dialogueID)
+						}
+						continue
+					case agent.EventDone:
+						msg = dialoguetui.MessageEvent{
+							Type:             dialoguetui.MessageEventChildResult,
+							ParentToolCallID: cev.ParentToolCallID,
+							ToolOutput:       cev.Event.Text,
+							IsError:          cev.Event.IsError,
+						}
+					default:
+						continue
+					}
+					select {
+					case tx <- msg:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
-		}
+		})
 	})
 	defer func() {
 		cancel()
@@ -1876,6 +1888,7 @@ func createAgentCompletions(
 		func() {
 			defer it.Close() //nolint:errcheck
 			breakSent := false
+			eventErrorSent := false
 			// Always signal turn completion to the TUI when we
 			// exit, even on context cancellation or abnormal agent
 			// exit. AddReceiveMessageBreak is idempotent; a
@@ -2040,6 +2053,7 @@ func createAgentCompletions(
 					}
 				case agent.EventError:
 					if ev.Error != nil && !errors.Is(ev.Error, context.Canceled) {
+						eventErrorSent = true
 						outcome = turnOutcomeError
 						outcomeReason = ev.Error.Error()
 						errMsg := fmt.Sprintf("agent: %v", ev.Error)
@@ -2052,7 +2066,8 @@ func createAgentCompletions(
 				}
 			}
 			if err := it.Err(); err != nil {
-				if !errors.Is(err, context.Canceled) {
+				if !errors.Is(err, context.Canceled) &&
+					!(eventErrorSent && strings.HasPrefix(err.Error(), "stream:")) {
 					if outcome == turnOutcomeNone || outcome == turnOutcomeCompleted {
 						outcome = turnOutcomeError
 						outcomeReason = err.Error()
@@ -2895,7 +2910,9 @@ func newStatusHint(interrupter term.Interrupter, attr term.Attributes, durationP
 		cancel:            cancel,
 		activeFormFn:      activeFormFn,
 	}
-	go h.tick(ctx)
+	go debug.CapturePanicReport(func() {
+		h.tick(ctx)
+	})
 	return h
 }
 

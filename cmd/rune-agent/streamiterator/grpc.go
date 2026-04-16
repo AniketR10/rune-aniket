@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/debug"
 )
 
 // Stream abstract a GRPC protoc-generated wrapper of grpc.ClientStream.
@@ -123,7 +124,8 @@ func fromValueStreamWithAck[T any, S ValueStream[T]](
 	}
 
 	ch := make(chan msg)
-	go func() {
+	go debug.CapturePanicReport(func() {
+
 		defer close(ch)
 		for {
 			data, err := stream.Recv()
@@ -147,7 +149,8 @@ func fromValueStreamWithAck[T any, S ValueStream[T]](
 				return
 			}
 		}
-	}()
+
+	})
 
 	return iterator.FromFunc(func(ctx context.Context) (ret T, ok bool, err error) {
 		var m msg

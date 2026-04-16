@@ -99,7 +99,9 @@ func (h *Handler) Init(
 	if err != nil {
 		return err
 	}
-	go h.bar.initElapsedTicker()
+	go debug.CapturePanicReport(func() {
+		h.bar.initElapsedTicker()
+	})
 	return err
 }
 

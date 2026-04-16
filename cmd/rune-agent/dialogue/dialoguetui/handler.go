@@ -30,12 +30,12 @@ import (
 	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/debug"
 )
 
 // SubmitMessage is a user message sent through the tx channel.
@@ -309,7 +309,9 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 					s.comp.Input().AppendHistory(item)
 					handled = true
 					name, args := parseCommand(item)
-					go s.executeCommand(name, args)
+					go debug.CapturePanicReport(func() {
+						s.executeCommand(name, args)
+					})
 				}
 			} else {
 				text := s.comp.Input().Text()
