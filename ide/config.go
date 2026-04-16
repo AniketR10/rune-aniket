@@ -61,19 +61,20 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/registerhistory"
 	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/workspace"
 )
 
 const (
-	inputEsc           = "esc"
-	inputAlt           = "alt"
-	inputMouse         = "mouse"
-	inputCurrent       = "current"
-	editorModeModal    = "modal"
-	editorModeModeless = "modeless"
-	keyCommandAliases  = "aliases"
-	keyCommandKey      = "key"
+	inputEsc             = "esc"
+	inputAlt             = "alt"
+	inputMouse           = "mouse"
+	inputCurrent         = "current"
+	editorModeModal      = "modal"
+	editorModeModeless   = "modeless"
+	keyCommandAliases    = "aliases"
+	keyCommandKey        = "key"
 	keyCommandHistoryKey = "history_key"
 )
 
@@ -1572,7 +1573,7 @@ func (c ideConfig) clipboard() clipboard.Register {
 		}
 		ret = clipboard.NewInMemory()
 	}
-	return registerset.New(ret)
+	return registerhistory.NewClipboard(registerset.New(ret))
 }
 
 func (c ideConfig) modelessResultAttr() (attr term.Attributes) {

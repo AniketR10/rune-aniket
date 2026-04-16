@@ -39,6 +39,8 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/registerhistory"
+	"unstable.build/go-tui/text/registerset"
 )
 
 type testSelectionService struct {
@@ -368,7 +370,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		{"Cut (cuts entire line when nothing selected)", "<meta-x>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Copy+Paste", "<shift-right><meta-c><meta-v>", new("aa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Copy+Paste and indent correctly", "<shift-right><meta-c><down><shift-meta-v>", new("a\nab\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}, nil},
-		// {"Paste from clipboard history", "<shift-right><meta-c><meta-v><meta-v><alt-meta-v>", sp("aaa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}},
+		{"Paste from clipboard history", "<shift-right><meta-c><meta-v><meta-v><alt-meta-v>", new("aaa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 2}, nil},
 		{"Undo", "<meta-x><meta-z>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Redo", "<meta-x><meta-z><shift-meta-z>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		// {"Redo or repeat last command", "<meta-x><meta-z><meta-y>", sp("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}},
@@ -510,9 +512,10 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			require.NoError(t, err)
 
 			clip := clipboard.NewInMemory()
+			reg := registerhistory.NewClipboard(registerset.New(clip))
 			buf := cell.NewBuffer()
 			buf.ReadFrom(strings.NewReader(snippet))
-			handler := NewHandler(buf, uri, WithClipboard(clip))
+			handler := NewHandler(buf, uri, WithClipboard(reg))
 			handler.Resize(10, 3)
 			for _, key := range seq {
 				ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}
@@ -528,6 +531,156 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 				assert.Equal(t, *test.clipboard, paste.Text)
 			}
 			assert.Equal(t, test.coordinates, handler.CursorAtScroll())
+		})
+	}
+}
+
+func TestPasteFromClipboardHistory(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///myfile")
+	require.NoError(t, err)
+
+	type pasteHistoryStep struct {
+		input       string
+		wantHandled bool
+		wantContent string
+		wantCursor  *term.Coordinates
+	}
+
+	type pasteHistoryTest struct {
+		name        string
+		content     string
+		history     []string
+		wrapHistory bool
+		steps       []pasteHistoryStep
+	}
+
+	coords := func(pos term.Coordinates) *term.Coordinates { return &pos }
+
+	runKeys := func(t *testing.T, h text.Handler, keys string, wantHandled bool) {
+		t.Helper()
+		seq, err := term.ParseKeys(keys)
+		require.NoError(t, err)
+		for _, key := range seq {
+			ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}
+			_, ok := h.Handle(ev)
+			require.Equal(t, wantHandled, ok, "input %q", keys)
+		}
+	}
+
+	tests := []pasteHistoryTest{
+		{
+			name:        "cycles through multiple history entries",
+			content:     "z",
+			history:     []string{"a", "b", "c"},
+			wrapHistory: true,
+			steps: []pasteHistoryStep{
+				{input: "<end><meta-v>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+			},
+		},
+		{
+			name:        "regular paste restarts history cycle",
+			content:     "z",
+			history:     []string{"a", "b", "c"},
+			wrapHistory: true,
+			steps: []pasteHistoryStep{
+				{input: "<end><meta-v>", wantHandled: true, wantContent: "zc"},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb"},
+				{input: "<meta-v>", wantHandled: true, wantContent: "zbc"},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbb"},
+			},
+		},
+		{
+			name:        "typing after paste starts a new history paste",
+			content:     "z",
+			history:     []string{"a", "b"},
+			wrapHistory: true,
+			steps: []pasteHistoryStep{
+				{input: "<end><meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "x", wantHandled: true, wantContent: "zbx", wantCursor: coords(term.Coordinates{X: 3})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbxb", wantCursor: coords(term.Coordinates{X: 4})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbxa", wantCursor: coords(term.Coordinates{X: 4})},
+			},
+		},
+		{
+			name:        "cursor movement after paste starts a new history paste",
+			content:     "z",
+			history:     []string{"a", "b"},
+			wrapHistory: true,
+			steps: []pasteHistoryStep{
+				{input: "<end><meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<left>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 1})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zab", wantCursor: coords(term.Coordinates{X: 2})},
+			},
+		},
+		{
+			name:        "clipboard without history support consumes in paste context",
+			content:     "z",
+			history:     []string{"a", "b"},
+			wrapHistory: false,
+			steps: []pasteHistoryStep{
+				{input: "<end><meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+			},
+		},
+		{
+			name:        "alt-meta-v before paste initiates history paste",
+			content:     "z",
+			history:     []string{"a", "b", "c"},
+			wrapHistory: true,
+			steps: []pasteHistoryStep{
+				{input: "<end><alt-meta-v>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+			},
+		},
+		{
+			name:        "alt-meta-v without history support before paste is not handled",
+			content:     "z",
+			history:     []string{"a", "b"},
+			wrapHistory: false,
+			steps: []pasteHistoryStep{
+				{input: "<alt-meta-v>", wantHandled: false, wantContent: "z", wantCursor: coords(term.Coordinates{})},
+			},
+		},
+		{
+			name:        "modeless copy operations populate shared history",
+			content:     "ab\ncd",
+			wrapHistory: true,
+			steps: []pasteHistoryStep{
+				{input: "<shift-right><meta-c><right><shift-right><meta-c><end><meta-v>", wantHandled: true, wantContent: "abb\ncd"},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "aba\ncd"},
+				{input: "<alt-meta-v>", wantHandled: true, wantContent: "aba\ncd"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clip := clipboard.NewInMemory()
+			var reg clipboard.Register = registerset.New(clip)
+			if test.wrapHistory {
+				reg = registerhistory.NewClipboard(reg)
+			}
+			for _, entry := range test.history {
+				require.NoError(t, reg.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: entry, Metadata: text.StandardSelection}))
+			}
+
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(test.content))
+			h := NewHandler(buf, uri, WithClipboard(reg))
+			h.Resize(10, 3)
+
+			for _, step := range test.steps {
+				runKeys(t, h, step.input, step.wantHandled)
+				assert.Equal(t, step.wantContent, buf.String(), "input %q", step.input)
+				if step.wantCursor != nil {
+					assert.Equal(t, *step.wantCursor, h.CursorAtScroll(), "input %q", step.input)
+				}
+			}
 		})
 	}
 }
@@ -560,15 +713,15 @@ func TestPasteAndReindent(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name        string
-		content     string          // initial buffer content
-		clipText    string          // text to place in clipboard before paste
-		clipMeta    any             // metadata for clipboard data
-		indents     map[int]int     // per-line target indentation (nil = no indent view)
-		cursorAt    term.Coordinates // cursor position before paste
-		wantHandled bool
-		wantContent string
-		wantCursor  term.Coordinates
+		name         string
+		content      string           // initial buffer content
+		clipText     string           // text to place in clipboard before paste
+		clipMeta     any              // metadata for clipboard data
+		indents      map[int]int      // per-line target indentation (nil = no indent view)
+		cursorAt     term.Coordinates // cursor position before paste
+		wantHandled  bool
+		wantContent  string
+		wantCursor   term.Coordinates
 		useErrorClip bool // use errorClipboard instead of normal one
 	}{
 		{

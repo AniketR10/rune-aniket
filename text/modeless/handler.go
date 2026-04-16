@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/registerhistory"
 )
 
 var _ component.Scrollable = (*editorHandler)(nil)
@@ -61,6 +62,8 @@ type editorHandler struct {
 	lastIterateWord  term.Coordinates
 	setLocations     bool
 	metaK            bool
+	lastPaste        bool
+	historyIdx       int
 }
 
 // NewHandler returns a modeless, simple-to-use text.Handler.
@@ -178,6 +181,16 @@ func (h *editorHandler) handleMetaK(ev term.Event) (handled bool) {
 func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	ctx := context.Background()
 
+	// Track whether the current event is a paste-related action.
+	// Reset lastPaste at the end unless the handler explicitly sets it.
+	pastedThisTurn := false
+	defer func() {
+		if !pastedThisTurn {
+			h.lastPaste = false
+			h.historyIdx = 0
+		}
+	}()
+
 	// only a user event clears a pending set cursor
 	h.pendingSetCursor = nil
 
@@ -263,6 +276,10 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.CollapseFold(context.Background())
 			case ']':
 				handled = h.cursor.ExpandFold(context.Background())
+			case 'v':
+				if handled = h.pasteFromHistory(); handled {
+					pastedThisTurn = true
+				}
 			}
 		}
 	case term.ModCtrlMeta:
@@ -381,6 +398,9 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 					mode, _ := paste.Metadata.(text.SelectMode)
 					h.cursor.Paste(str, mode, false)
 					handled = true
+					h.lastPaste = true
+					h.historyIdx = 0
+					pastedThisTurn = true
 				}
 			case 'V':
 				handled = h.pasteAndReindent()
@@ -757,6 +777,36 @@ func (h *editorHandler) pasteAndReindent() (handled bool) {
 	}
 	h.cursor.ReindentSelection()
 	h.cursor.MoveToScroll(endPos)
+	return
+}
+
+// pasteFromHistory pastes from clipboard history. If the last action was a
+// paste, it replaces that paste with the next older history entry.
+func (h *editorHandler) pasteFromHistory() (handled bool) {
+	history, ok := registerhistory.AsHistory(h.clipboard)
+	if !ok {
+		return h.lastPaste
+	}
+	next := 0
+	if h.lastPaste {
+		next = h.historyIdx + 1
+	}
+	if next >= history.HistoryLen() {
+		return h.lastPaste
+	}
+	data, ok := history.HistoryAt(next)
+	if !ok {
+		return h.lastPaste
+	}
+	if h.lastPaste {
+		// Undo the previous paste before replacing it with an older entry.
+		h.cursor.Undo()
+	}
+	mode, _ := data.Metadata.(text.SelectMode)
+	h.cursor.Paste(data.Text, mode, false)
+	h.historyIdx = next
+	h.lastPaste = true
+	handled = true
 	return
 }
 
