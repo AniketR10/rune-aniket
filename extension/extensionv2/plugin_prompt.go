@@ -44,10 +44,10 @@ type pluginPermissionPrompter struct {
 	scheduleNextTick func(func()) bool
 }
 
-func newPluginPermissionPrompter(
+func newPermissionPrompter(
 	promptOpener ide.ExtensionPromptOpener,
 	scheduleNextTick func(func()) bool,
-) PluginPermissionPrompter {
+) PermissionPrompter {
 	if promptOpener == nil || scheduleNextTick == nil {
 		return nil
 	}
@@ -57,10 +57,10 @@ func newPluginPermissionPrompter(
 	}
 }
 
-func (p *pluginPermissionPrompter) PromptPluginPermission(
-	ctx context.Context, req PluginPermissionRequest,
-) (PluginPermissionDecision, error) {
-	result := make(chan PluginPermissionDecision, 1)
+func (p *pluginPermissionPrompter) PromptPermission(
+	ctx context.Context, req PermissionRequest,
+) (PermissionDecision, error) {
+	result := make(chan PermissionDecision, 1)
 	message := pluginPermissionPromptMessage(req)
 	options := []string{
 		pluginPermissionPromptYes,
@@ -79,48 +79,52 @@ func (p *pluginPermissionPrompter) PromptPluginPermission(
 			},
 			func() error {
 				select {
-				case result <- PluginPermissionDenyOnce:
+				case result <- PermissionDenyOnce:
 				default:
 				}
 				return nil
 			}))
 	})
 	if !scheduled {
-		return PluginPermissionDenyOnce, nil
+		return PermissionDenyOnce, nil
 	}
 
 	select {
 	case decision := <-result:
 		return decision, nil
 	case <-ctx.Done():
-		return PluginPermissionDenyOnce, ctx.Err()
+		return PermissionDenyOnce, ctx.Err()
 	}
 }
 
-func pluginPermissionPromptMessage(req PluginPermissionRequest) string {
+func pluginPermissionPromptMessage(req PermissionRequest) string {
+	action := fmt.Sprintf("**%s**", PermissionActionText(req.Permission))
+	if req.ExtensionID != "" && req.ExtensionName != "" {
+		return fmt.Sprintf("Extension %s by %s wants to %s.",
+			req.ExtensionName, req.DeveloperID, action)
+	}
 	message := fmt.Sprintf("Program %s with args %v wants to %s.",
-		req.Path, req.Args, PluginPermissionActionText(req.Permission))
+		req.Path, req.Args, action)
 	if req.LauncherPath != "" {
 		message = fmt.Sprintf("Program %s with args %v running inside %s %v wants to %s.",
-			req.Path, req.Args, req.LauncherPath, req.LauncherArgs,
-			PluginPermissionActionText(req.Permission))
+			req.Path, req.Args, req.LauncherPath, req.LauncherArgs, action)
 	}
 	return message
 }
 
-func pluginPromptDecision(opt string) PluginPermissionDecision {
+func pluginPromptDecision(opt string) PermissionDecision {
 	switch opt {
 	case pluginPermissionPromptYes:
-		return PluginPermissionAllowOnce
+		return PermissionAllowOnce
 	case pluginPermissionPromptYesAlways:
-		return PluginPermissionAllowAlways
+		return PermissionAllowAlways
 	case pluginPermissionPromptNoNever:
-		return PluginPermissionDenyAlways
+		return PermissionDenyAlways
 	case pluginPermissionPromptNo:
 		fallthrough
 	default:
-		return PluginPermissionDenyOnce
+		return PermissionDenyOnce
 	}
 }
 
-var _ PluginPermissionPrompter = (*pluginPermissionPrompter)(nil)
+var _ PermissionPrompter = (*pluginPermissionPrompter)(nil)

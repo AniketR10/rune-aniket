@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -43,66 +44,72 @@ type Extension struct {
 	Args   []string
 }
 
-// PluginPermissionRequest describes a single permission requested by an
-// ad-hoc program.
-type PluginPermissionRequest struct {
-	Path         string
-	Args         []string
-	LauncherPath string
-	LauncherArgs []string
-	Permission   extensionapi.Permission
-	Resource     string
+// PermissionRequest describes a single permission requested by an extension or
+// ad-hoc plugin program.
+type PermissionRequest struct {
+	Path          string
+	Args          []string
+	LauncherPath  string
+	LauncherArgs  []string
+	ExtensionID   string
+	ExtensionName string
+	DeveloperID   string
+	Permission    extensionapi.Permission
+	Resource      string
 }
 
-// PluginPermissionDecision is the user's decision for an ad-hoc program
-// permission request.
-type PluginPermissionDecision string
+// PermissionDecision is the user's decision for an extension permission request.
+type PermissionDecision string
 
 const (
-	// PluginPermissionAllowOnce allows the requested permission for the current
-	// plugin process identity only.
-	PluginPermissionAllowOnce PluginPermissionDecision = "allow-once"
-	// PluginPermissionAllowAlways persists an allow decision for the plugin
-	// program identity and requested permission.
-	PluginPermissionAllowAlways PluginPermissionDecision = "allow-always"
-	// PluginPermissionDenyOnce denies the requested permission for the current
-	// plugin process identity only.
-	PluginPermissionDenyOnce PluginPermissionDecision = "deny-once"
-	// PluginPermissionDenyAlways persists a deny decision for the plugin program
-	// identity and requested permission.
-	PluginPermissionDenyAlways PluginPermissionDecision = "deny-always"
+	// PermissionAllowOnce allows the requested permission temporarily.
+	PermissionAllowOnce PermissionDecision = "allow-once"
+	// PermissionAllowAlways persists an allow decision for the extension identity
+	// and requested permission.
+	PermissionAllowAlways PermissionDecision = "allow-always"
+	// PermissionDenyOnce denies the requested permission temporarily.
+	PermissionDenyOnce PermissionDecision = "deny-once"
+	// PermissionDenyAlways persists a deny decision for the extension identity and
+	// requested permission.
+	PermissionDenyAlways PermissionDecision = "deny-always"
 )
 
-// PluginPermissionPrompter prompts for an ad-hoc program permission.
-type PluginPermissionPrompter interface {
-	PromptPluginPermission(
-		context.Context, PluginPermissionRequest,
-	) (PluginPermissionDecision, error)
+// PermissionPrompter prompts for an extension permission.
+type PermissionPrompter interface {
+	PromptPermission(
+		context.Context, PermissionRequest,
+	) (PermissionDecision, error)
 }
 
 // newAuthorizer returns an auth.Authorizer of Extension. It uses the permissions
 // in the granted claims to authorize access to a resource.
 func newAuthorizer(
-	prompter PluginPermissionPrompter, storage storageapi.Service,
+	prompter PermissionPrompter, storage storageapi.Service,
 	editor text.Editor,
 ) (blueauth.Authorizer[Extension], error) {
 	if editor == nil {
 		return nil, errors.New("editor is required")
 	}
-	plugin := newPluginPermissionAuthorizer(prompter, storage)
-	if err := registerAuthorizerREPLCommand(editor, plugin); err != nil {
+	a := &authorizer{
+		prompter: prompter,
+		storage:  storage,
+		once:     make(map[string]pluginPermissionOnceDecision),
+	}
+	if err := registerAuthorizerREPLCommand(editor, a); err != nil {
 		return nil, fmt.Errorf("register authorizer repl command: %w", err)
 	}
-	return authorizer{
-		plugin: plugin,
-	}, nil
+	return a, nil
 }
 
 type authorizer struct {
-	plugin *pluginPermissionAuthorizer
+	prompter PermissionPrompter
+	storage  storageapi.Service
+
+	onceMu sync.Mutex
+	once   map[string]pluginPermissionOnceDecision
 }
 
-func (a authorizer) Authorize(
+func (a *authorizer) Authorize(
 	ctx context.Context, claims blueauth.UserClaims[Extension], resource string,
 ) (err error) {
 	perm, ok := extensionapi.PermissionForResource(resource)
@@ -111,11 +118,11 @@ func (a authorizer) Authorize(
 		return
 	}
 	if claims.Extra.Plugin {
-		return a.plugin.Authorize(ctx, claims.Extra, perm, resource)
+		return a.authorizePlugin(ctx, claims.Extra, perm, resource)
 	}
 	if _, ok := claims.Extra.Permissions[perm]; !ok {
 		err = blueauth.ErrForbidden
 		return
 	}
-	return nil
+	return a.authorizeExtension(ctx, claims.Extra, perm, resource)
 }

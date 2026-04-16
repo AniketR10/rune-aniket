@@ -44,7 +44,7 @@ const (
 )
 
 func registerAuthorizerREPLCommand(
-	editor text.Editor, authorizer *pluginPermissionAuthorizer,
+	editor text.Editor, authorizer *authorizer,
 ) error {
 	return editor.RegisterREPLCommand(textapi.CommandManual{
 		Name:     authorizerREPLCommand,
@@ -65,7 +65,7 @@ func registerAuthorizerREPLCommand(
 }
 
 type authorizerREPLHandler struct {
-	authorizer *pluginPermissionAuthorizer
+	authorizer *authorizer
 }
 
 func (h authorizerREPLHandler) HandleCommand(
@@ -138,10 +138,10 @@ func (h authorizerREPLHandler) handleList(
 		return nil, err
 	}
 	if len(entries) == 0 {
-		return authorizerREPLLines("No plugin permission decisions."), nil
+		return authorizerREPLLines("No extension permission decisions."), nil
 	}
 	lines := make([]string, 0, len(entries)+1)
-	lines = append(lines, "Plugin permission decisions:")
+	lines = append(lines, "Extension permission decisions:")
 	for _, entry := range entries {
 		lines = append(lines, fmt.Sprintf("- %s — %s", entry.ID(), entry.Display()))
 	}
@@ -160,7 +160,7 @@ func (h authorizerREPLHandler) handleRevoke(
 		return nil, err
 	}
 	if !ok {
-		if strings.HasPrefix(selected, pluginPermissionStoragePrefix) {
+		if isPermissionStorageKey(selected) {
 			if err := h.authorizer.deleteStoredDecision(ctx, selected); err != nil {
 				return nil, err
 			}
@@ -177,7 +177,7 @@ func (h authorizerREPLHandler) handleRevoke(
 func authorizerREPLHelp() iterator.Iterator[component.Responsive] {
 	return authorizerREPLLines(
 		"Usage: authorizer <list|revoke>",
-		"Lists or revokes persisted plugin permission decisions.",
+		"Lists or revokes persisted extension permission decisions.",
 	)
 }
 
@@ -280,7 +280,7 @@ func shortPluginPermissionKey(key string) string {
 	return sanitizePluginPermissionIDPart(key[:8])
 }
 
-func (a *pluginPermissionAuthorizer) permissionDecisions(
+func (a *authorizer) permissionDecisions(
 	ctx context.Context, now time.Time,
 ) ([]pluginPermissionStoredDecisionEntry, error) {
 	entries, err := a.storedDecisions(ctx)
@@ -294,7 +294,7 @@ func (a *pluginPermissionAuthorizer) permissionDecisions(
 	return entries, nil
 }
 
-func (a *pluginPermissionAuthorizer) storedDecisions(
+func (a *authorizer) storedDecisions(
 	ctx context.Context,
 ) ([]pluginPermissionStoredDecisionEntry, error) {
 	if a == nil || a.storage == nil {
@@ -307,11 +307,11 @@ func (a *pluginPermissionAuthorizer) storedDecisions(
 	defer it.Close()
 	var ret []pluginPermissionStoredDecisionEntry
 	for it.HasNext() {
-		var stored storedPluginPermissionDecision
+		var stored storedPermissionDecision
 		if err := it.NextTo(&stored); err != nil {
 			return nil, fmt.Errorf("read plugin permission decision: %w", err)
 		}
-		if stored.Key == "" || !strings.HasPrefix(stored.Key, pluginPermissionStoragePrefix) {
+		if stored.Key == "" || !isPermissionStorageKey(stored.Key) {
 			continue
 		}
 		ret = append(ret, pluginPermissionStoredDecisionEntry{
@@ -329,7 +329,7 @@ func (a *pluginPermissionAuthorizer) storedDecisions(
 	return ret, nil
 }
 
-func (a *pluginPermissionAuthorizer) transientDecisions(
+func (a *authorizer) transientDecisions(
 	now time.Time,
 ) []pluginPermissionStoredDecisionEntry {
 	if a == nil {
@@ -356,7 +356,7 @@ func (a *pluginPermissionAuthorizer) transientDecisions(
 	return ret
 }
 
-func (a *pluginPermissionAuthorizer) findStoredDecision(
+func (a *authorizer) findStoredDecision(
 	ctx context.Context, selected string,
 ) (pluginPermissionStoredDecisionEntry, bool, error) {
 	entries, err := a.storedDecisions(ctx)
@@ -371,7 +371,12 @@ func (a *pluginPermissionAuthorizer) findStoredDecision(
 	return pluginPermissionStoredDecisionEntry{}, false, nil
 }
 
-func (a *pluginPermissionAuthorizer) deleteStoredDecision(
+func isPermissionStorageKey(key string) bool {
+	return strings.HasPrefix(key, pluginPermissionStoragePrefix) ||
+		strings.HasPrefix(key, extensionPermissionStoragePrefix)
+}
+
+func (a *authorizer) deleteStoredDecision(
 	ctx context.Context, key string,
 ) error {
 	if a == nil || a.storage == nil {

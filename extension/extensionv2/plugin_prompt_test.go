@@ -65,25 +65,25 @@ func (f *fakePluginPromptOpener) Prompt(
 	panic("test prompt option was not provided")
 }
 
-func TestPluginPermissionPrompter(t *testing.T) {
+func TestPermissionPrompter(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name         string
 		option       string
 		close        bool
-		wantDecision PluginPermissionDecision
+		wantDecision PermissionDecision
 	}{
 		{name: "yes", option: pluginPermissionPromptYes,
-			wantDecision: PluginPermissionAllowOnce},
+			wantDecision: PermissionAllowOnce},
 		{name: "yes always", option: pluginPermissionPromptYesAlways,
-			wantDecision: PluginPermissionAllowAlways},
+			wantDecision: PermissionAllowAlways},
 		{name: "no", option: pluginPermissionPromptNo,
-			wantDecision: PluginPermissionDenyOnce},
+			wantDecision: PermissionDenyOnce},
 		{name: "no never", option: pluginPermissionPromptNoNever,
-			wantDecision: PluginPermissionDenyAlways},
+			wantDecision: PermissionDenyAlways},
 		{name: "close", option: pluginPermissionPromptYes, close: true,
-			wantDecision: PluginPermissionDenyOnce},
+			wantDecision: PermissionDenyOnce},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,13 +93,13 @@ func TestPluginPermissionPrompter(t *testing.T) {
 				option: tc.option,
 				close:  tc.close,
 			}
-			prompter := newPluginPermissionPrompter(promptOpener, func(fn func()) bool {
+			prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 				fn()
 				return true
 			})
 
-			decision, err := prompter.PromptPluginPermission(context.Background(),
-				PluginPermissionRequest{
+			decision, err := prompter.PromptPermission(context.Background(),
+				PermissionRequest{
 					Path:       "/bin/test",
 					Args:       []string{"--flag"},
 					Permission: extensionapi.PermissionBrowserWindowManager,
@@ -108,7 +108,7 @@ func TestPluginPermissionPrompter(t *testing.T) {
 			assert.Equal(t, tc.wantDecision, decision)
 			assert.Equal(t, 1, promptOpener.calls)
 			assert.Contains(t, promptOpener.message,
-				"Program /bin/test with args [--flag] wants to manage the Window Manager.")
+				"Program /bin/test with args [--flag] wants to **manage the Window Manager**.")
 		})
 	}
 }
@@ -116,7 +116,7 @@ func TestPluginPermissionPrompter(t *testing.T) {
 func TestPluginPermissionPromptMessageWithLauncher(t *testing.T) {
 	t.Parallel()
 
-	message := pluginPermissionPromptMessage(PluginPermissionRequest{
+	message := pluginPermissionPromptMessage(PermissionRequest{
 		Path:         "/usr/local/bin/trusted-cli",
 		Args:         []string{"run"},
 		LauncherPath: "/bin/zsh",
@@ -124,53 +124,67 @@ func TestPluginPermissionPromptMessageWithLauncher(t *testing.T) {
 		Permission:   extensionapi.PermissionBrowserWindowManager,
 	})
 	assert.Contains(t, message,
-		"Program /usr/local/bin/trusted-cli with args [run] running inside /bin/zsh [--login] wants to manage the Window Manager.")
+		"Program /usr/local/bin/trusted-cli with args [run] running inside /bin/zsh [--login] wants to **manage the Window Manager**.")
 }
 
-func TestNewPluginPermissionPrompterNilDependencies(t *testing.T) {
+func TestPermissionPromptMessageHighlightsExtensionIntent(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		ExtensionID:   "test-extension",
+		ExtensionName: "Test Extension",
+		DeveloperID:   "dev-id",
+		Permission:    extensionapi.PermissionLSP,
+	})
+	assert.Equal(t,
+		"Extension Test Extension by dev-id wants to **communicate with LSP servers**.",
+		message)
+}
+
+func TestNewPermissionPrompterNilDependencies(t *testing.T) {
 	t.Parallel()
 
 	promptOpener := &fakePluginPromptOpener{option: pluginPermissionPromptYes}
 	schedule := func(fn func()) bool { return true }
 
-	assert.Nil(t, newPluginPermissionPrompter(nil, schedule))
-	assert.Nil(t, newPluginPermissionPrompter(promptOpener, nil))
-	assert.NotNil(t, newPluginPermissionPrompter(promptOpener, schedule))
+	assert.Nil(t, newPermissionPrompter(nil, schedule))
+	assert.Nil(t, newPermissionPrompter(promptOpener, nil))
+	assert.NotNil(t, newPermissionPrompter(promptOpener, schedule))
 }
 
-func TestPluginPermissionPrompterUnscheduledDeniesOnce(t *testing.T) {
+func TestPermissionPrompterUnscheduledDeniesOnce(t *testing.T) {
 	t.Parallel()
 
 	promptOpener := &fakePluginPromptOpener{option: pluginPermissionPromptYes}
-	prompter := newPluginPermissionPrompter(promptOpener, func(fn func()) bool {
+	prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 		return false
 	})
 
-	decision, err := prompter.PromptPluginPermission(context.Background(),
-		PluginPermissionRequest{
+	decision, err := prompter.PromptPermission(context.Background(),
+		PermissionRequest{
 			Path:       "/bin/test",
 			Permission: extensionapi.PermissionBrowserWindowManager,
 		})
 	require.NoError(t, err)
-	assert.Equal(t, PluginPermissionDenyOnce, decision)
+	assert.Equal(t, PermissionDenyOnce, decision)
 	assert.Zero(t, promptOpener.calls)
 }
 
-func TestPluginPermissionPrompterContextCancellation(t *testing.T) {
+func TestPermissionPrompterContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	promptOpener := &fakePluginPromptOpener{option: "not selected"}
-	prompter := newPluginPermissionPrompter(promptOpener, func(fn func()) bool {
+	prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 		return true
 	})
 
-	decision, err := prompter.PromptPluginPermission(ctx, PluginPermissionRequest{
+	decision, err := prompter.PromptPermission(ctx, PermissionRequest{
 		Path:       "/bin/test",
 		Permission: extensionapi.PermissionBrowserWindowManager,
 	})
-	assert.Equal(t, PluginPermissionDenyOnce, decision)
+	assert.Equal(t, PermissionDenyOnce, decision)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Zero(t, promptOpener.calls)
 }
@@ -178,7 +192,7 @@ func TestPluginPermissionPrompterContextCancellation(t *testing.T) {
 func TestPluginPromptDecisionUnknownOptionDeniesOnce(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, PluginPermissionDenyOnce, pluginPromptDecision("something else"))
+	assert.Equal(t, PermissionDenyOnce, pluginPromptDecision("something else"))
 }
 
 var _ browser.Window = browsertest.NopWindow()

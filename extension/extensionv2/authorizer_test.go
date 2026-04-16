@@ -43,17 +43,17 @@ import (
 
 const testWindowManagerResource = "/browser.WindowManager/NewWindow"
 
-type stubPluginPermissionPrompter struct {
-	decision PluginPermissionDecision
+type stubPermissionPrompter struct {
+	decision PermissionDecision
 	err      error
 	mutate   bool
 	calls    int
-	requests []PluginPermissionRequest
+	requests []PermissionRequest
 }
 
-func (s *stubPluginPermissionPrompter) PromptPluginPermission(
-	ctx context.Context, req PluginPermissionRequest,
-) (PluginPermissionDecision, error) {
+func (s *stubPermissionPrompter) PromptPermission(
+	ctx context.Context, req PermissionRequest,
+) (PermissionDecision, error) {
 	s.calls++
 	if s.mutate && len(req.Args) > 0 {
 		req.Args[0] = "mutated"
@@ -82,25 +82,43 @@ func (s errorStorage) Set(ctx context.Context, ID string, doc any) error {
 	return s.Service.Set(ctx, ID, doc)
 }
 
-func TestAuthorizerRegularExtension(t *testing.T) {
+func TestAuthorizerRegularExtensionPromptsForClaimedPermission(t *testing.T) {
 	t.Parallel()
 
-	a := mustNewAuthorizer(t, nil, nil, texttest.NopEditor())
-	ctx := context.Background()
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
+	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
+	ext := testRegularExtension(extensionapi.NewPermissions(
+		extensionapi.PermissionBrowserWindowManager,
+	))
 
-	err := a.Authorize(ctx, blueauth.UserClaims[Extension]{Extra: Extension{
-		Metadata: extensionapi.Metadata{Permissions: extensionapi.NewPermissions(
-			extensionapi.PermissionBrowserWindowManager,
-		)},
-	}}, testWindowManagerResource)
+	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource)
 	require.NoError(t, err)
+	require.Equal(t, 1, prompter.calls)
+	assert.Equal(t, "test-extension", prompter.requests[0].ExtensionID)
+	assert.Equal(t, "Test Extension", prompter.requests[0].ExtensionName)
+	assert.Equal(t, "dev-id", prompter.requests[0].DeveloperID)
+	assert.Equal(t, extensionapi.PermissionBrowserWindowManager,
+		prompter.requests[0].Permission)
+	assert.Equal(t, "test-extension", prompter.requests[0].Path)
 
-	err = a.Authorize(ctx, blueauth.UserClaims[Extension]{Extra: Extension{
-		Metadata: extensionapi.Metadata{Permissions: extensionapi.NewPermissions(
-			extensionapi.PermissionStorage,
-		)},
-	}}, testWindowManagerResource)
+	err = a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource)
+	require.NoError(t, err)
+	assert.Equal(t, 1, prompter.calls)
+}
+
+func TestAuthorizerRegularExtensionMissingClaimForbiddenWithoutPrompt(t *testing.T) {
+	t.Parallel()
+
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
+	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
+	ext := testRegularExtension(extensionapi.NewPermissions(extensionapi.PermissionStorage))
+
+	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource)
 	assert.ErrorIs(t, err, blueauth.ErrForbidden)
+	assert.Zero(t, prompter.calls)
 }
 
 func TestAuthorizerUnknownResourceForbidden(t *testing.T) {
@@ -115,8 +133,8 @@ func TestAuthorizerUnknownResourceForbidden(t *testing.T) {
 func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPluginPermissionPrompter{
-		decision: PluginPermissionAllowOnce,
+	prompter := &stubPermissionPrompter{
+		decision: PermissionAllowOnce,
 	}
 	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 	ext := testPluginExtension(extensionapi.NewPermissions(extensionapi.PermissionStorage))
@@ -138,7 +156,7 @@ func TestAuthorizerPluginUsesPeerProcessForPromptAndStorageKey(t *testing.T) {
 	t.Parallel()
 
 	storage := storagestub.NewInMemoryService()
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionAllowAlways}
+	prompter := &stubPermissionPrompter{decision: PermissionAllowAlways}
 	a := mustNewAuthorizer(t, prompter, storage, texttest.NopEditor())
 	ext := Extension{
 		Metadata: extensionapi.Metadata{Permissions: extensionapi.AllPermissions()},
@@ -165,7 +183,7 @@ func TestAuthorizerPluginUsesPeerProcessForPromptAndStorageKey(t *testing.T) {
 
 	peerKey := pluginPermissionStorageKey("/usr/local/bin/trusted-cli",
 		[]string{"run", "--verbose"}, extensionapi.PermissionBrowserWindowManager)
-	var stored storedPluginPermissionDecision
+	var stored storedPermissionDecision
 	require.NoError(t, storage.Get(context.Background(), peerKey, &stored))
 	assert.Equal(t, pluginPermissionDecisionAllow, stored.Decision)
 
@@ -178,7 +196,7 @@ func TestAuthorizerPluginUsesPeerProcessForPromptAndStorageKey(t *testing.T) {
 func TestAuthorizerPluginOmitsLauncherWhenPeerMatchesClaim(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionAllowOnce}
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
 	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 	ext := Extension{
 		Plugin: true,
@@ -212,8 +230,8 @@ func TestAuthorizerPluginPeerDecisionIsIndependentFromLauncherDecision(t *testin
 	launcherKey := pluginPermissionStorageKey(ext.Path, ext.Args,
 		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, storage.Set(context.Background(), launcherKey,
-		storedPluginPermissionDecision{Decision: pluginPermissionDecisionAllow}))
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionDenyOnce}
+		storedPermissionDecision{Decision: pluginPermissionDecisionAllow}))
+	prompter := &stubPermissionPrompter{decision: PermissionDenyOnce}
 	a := mustNewAuthorizer(t, prompter, storage, texttest.NopEditor())
 	ctx := contextWithPeerProcess(context.Background(), peerprocess.Process{
 		Exe:  "/usr/local/bin/untrusted-cli",
@@ -248,8 +266,8 @@ func TestAuthorizerPluginFallsBackWhenPeerProcessUnavailable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			prompter := &stubPluginPermissionPrompter{
-				decision: PluginPermissionAllowOnce,
+			prompter := &stubPermissionPrompter{
+				decision: PermissionAllowOnce,
 			}
 			a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 			ext := testPluginExtension(nil)
@@ -268,8 +286,8 @@ func TestAuthorizerPluginFallsBackWhenPeerProcessUnavailable(t *testing.T) {
 func TestAuthorizerPluginPromptArgsAreCopied(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPluginPermissionPrompter{
-		decision: PluginPermissionAllowOnce,
+	prompter := &stubPermissionPrompter{
+		decision: PermissionAllowOnce,
 		mutate:   true,
 	}
 	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
@@ -284,7 +302,7 @@ func TestAuthorizerPluginPromptArgsAreCopied(t *testing.T) {
 func TestAuthorizerPluginPromptDenialForbidden(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionDenyOnce}
+	prompter := &stubPermissionPrompter{decision: PermissionDenyOnce}
 	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{
 		Extra: testPluginExtension(extensionapi.AllPermissions()),
@@ -297,18 +315,18 @@ func TestAuthorizerPluginCachesOnceDecisionsForPeerProcess(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		decision  PluginPermissionDecision
+		decision  PermissionDecision
 		wantError error
 	}{
-		{name: "allow once", decision: PluginPermissionAllowOnce},
-		{name: "deny once", decision: PluginPermissionDenyOnce,
+		{name: "allow once", decision: PermissionAllowOnce},
+		{name: "deny once", decision: PermissionDenyOnce,
 			wantError: blueauth.ErrForbidden},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			prompter := &stubPluginPermissionPrompter{decision: tc.decision}
+			prompter := &stubPermissionPrompter{decision: tc.decision}
 			a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 			ext := testPluginExtension(nil)
 			ctx := contextWithPeerProcess(context.Background(), peerprocess.Process{
@@ -335,7 +353,7 @@ func TestAuthorizerPluginCachesOnceDecisionsForPeerProcess(t *testing.T) {
 func TestAuthorizerPluginOnceDecisionCacheIncludesPeerPID(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionAllowOnce}
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
 	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 	ext := testPluginExtension(nil)
 	ctxA := contextWithPeerProcess(context.Background(), peerprocess.Process{
@@ -361,7 +379,7 @@ func TestAuthorizerPluginOnceDecisionCacheIncludesPeerPID(t *testing.T) {
 func TestAuthorizerPluginOnceDecisionCacheRequiresPeerPID(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionAllowOnce}
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
 	a := mustNewAuthorizer(t, prompter, storagestub.NewInMemoryService(), texttest.NopEditor())
 	ext := testPluginExtension(nil)
 
@@ -375,7 +393,7 @@ func TestAuthorizerPluginOnceDecisionCacheRequiresPeerPID(t *testing.T) {
 func TestPluginPermissionOnceDecisionExpires(t *testing.T) {
 	t.Parallel()
 
-	a := newPluginPermissionAuthorizer(nil, nil)
+	a := newTestAuthorizerCore(nil, nil)
 	now := time.Now()
 	key := "once-key"
 	a.setOnceDecision(key, pluginPermissionIdentity{Path: "/bin/test"},
@@ -435,9 +453,9 @@ func TestAuthorizerPluginPersistedDecisionsSkipPrompt(t *testing.T) {
 			key := pluginPermissionStorageKey(ext.Path, ext.Args,
 				extensionapi.PermissionBrowserWindowManager)
 			require.NoError(t, storage.Set(context.Background(), key,
-				storedPluginPermissionDecision{Decision: tc.stored}))
-			prompter := &stubPluginPermissionPrompter{
-				decision: PluginPermissionDenyOnce,
+				storedPermissionDecision{Decision: tc.stored}))
+			prompter := &stubPermissionPrompter{
+				decision: PermissionDenyOnce,
 			}
 			a := mustNewAuthorizer(t, prompter, storage, texttest.NopEditor())
 
@@ -462,8 +480,8 @@ func TestAuthorizerPluginStoredUnknownDecisionReturnsError(t *testing.T) {
 	key := pluginPermissionStorageKey(ext.Path, ext.Args,
 		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, storage.Set(context.Background(), key,
-		storedPluginPermissionDecision{Decision: "maybe"}))
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionAllowOnce}
+		storedPermissionDecision{Decision: "maybe"}))
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
 	a := mustNewAuthorizer(t, prompter, storage, texttest.NopEditor())
 
 	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
@@ -477,7 +495,7 @@ func TestAuthorizerPluginStorageGetErrorReturnsError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("get failed")
-	prompter := &stubPluginPermissionPrompter{decision: PluginPermissionAllowOnce}
+	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
 	a := mustNewAuthorizer(t, prompter, errorStorage{
 		Service: storagestub.NewInMemoryService(),
 		getErr:  wantErr,
@@ -495,13 +513,13 @@ func TestAuthorizerPluginPersistsAlwaysDecisions(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		decision   PluginPermissionDecision
+		decision   PermissionDecision
 		wantStored string
 		wantErrIs  error
 	}{
-		{name: "allow always", decision: PluginPermissionAllowAlways,
+		{name: "allow always", decision: PermissionAllowAlways,
 			wantStored: pluginPermissionDecisionAllow},
-		{name: "deny always", decision: PluginPermissionDenyAlways,
+		{name: "deny always", decision: PermissionDenyAlways,
 			wantStored: pluginPermissionDecisionDeny, wantErrIs: blueauth.ErrForbidden},
 	}
 	for _, tc := range cases {
@@ -510,7 +528,7 @@ func TestAuthorizerPluginPersistsAlwaysDecisions(t *testing.T) {
 
 			storage := storagestub.NewInMemoryService()
 			ext := testPluginExtension(nil)
-			a := mustNewAuthorizer(t, &stubPluginPermissionPrompter{decision: tc.decision}, storage, texttest.NopEditor())
+			a := mustNewAuthorizer(t, &stubPermissionPrompter{decision: tc.decision}, storage, texttest.NopEditor())
 
 			err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
 				testWindowManagerResource)
@@ -522,7 +540,7 @@ func TestAuthorizerPluginPersistsAlwaysDecisions(t *testing.T) {
 
 			key := pluginPermissionStorageKey(ext.Path, ext.Args,
 				extensionapi.PermissionBrowserWindowManager)
-			var stored storedPluginPermissionDecision
+			var stored storedPermissionDecision
 			require.NoError(t, storage.Get(context.Background(), key, &stored))
 			assert.Equal(t, tc.wantStored, stored.Decision)
 		})
@@ -533,15 +551,15 @@ func TestAuthorizerPluginPersistSetErrorReturnsError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("set failed")
-	cases := []PluginPermissionDecision{
-		PluginPermissionAllowAlways,
-		PluginPermissionDenyAlways,
+	cases := []PermissionDecision{
+		PermissionAllowAlways,
+		PermissionDenyAlways,
 	}
 	for _, decision := range cases {
 		t.Run(string(decision), func(t *testing.T) {
 			t.Parallel()
 
-			a := mustNewAuthorizer(t, &stubPluginPermissionPrompter{decision: decision},
+			a := mustNewAuthorizer(t, &stubPermissionPrompter{decision: decision},
 				errorStorage{
 					Service: storagestub.NewInMemoryService(),
 					setErr:  wantErr,
@@ -557,9 +575,9 @@ func TestAuthorizerPluginPersistSetErrorReturnsError(t *testing.T) {
 func TestAuthorizerPluginDoesNotPersistOnceDecisions(t *testing.T) {
 	t.Parallel()
 
-	cases := []PluginPermissionDecision{
-		PluginPermissionAllowOnce,
-		PluginPermissionDenyOnce,
+	cases := []PermissionDecision{
+		PermissionAllowOnce,
+		PermissionDenyOnce,
 	}
 	for _, decision := range cases {
 		t.Run(string(decision), func(t *testing.T) {
@@ -567,13 +585,13 @@ func TestAuthorizerPluginDoesNotPersistOnceDecisions(t *testing.T) {
 
 			storage := storagestub.NewInMemoryService()
 			ext := testPluginExtension(nil)
-			a := mustNewAuthorizer(t, &stubPluginPermissionPrompter{decision: decision}, storage, texttest.NopEditor())
+			a := mustNewAuthorizer(t, &stubPermissionPrompter{decision: decision}, storage, texttest.NopEditor())
 
 			_ = a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
 				testWindowManagerResource)
 			key := pluginPermissionStorageKey(ext.Path, ext.Args,
 				extensionapi.PermissionBrowserWindowManager)
-			var stored storedPluginPermissionDecision
+			var stored storedPermissionDecision
 			err := storage.Get(context.Background(), key, &stored)
 			assert.ErrorIs(t, err, storageapi.ErrNotFound)
 		})
@@ -585,18 +603,18 @@ func TestAuthorizerPluginWithoutStorage(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		decision  PluginPermissionDecision
+		decision  PermissionDecision
 		wantError error
 	}{
-		{name: "allow always without storage", decision: PluginPermissionAllowAlways},
-		{name: "deny always without storage", decision: PluginPermissionDenyAlways,
+		{name: "allow always without storage", decision: PermissionAllowAlways},
+		{name: "deny always without storage", decision: PermissionDenyAlways,
 			wantError: blueauth.ErrForbidden},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			a := mustNewAuthorizer(t, &stubPluginPermissionPrompter{decision: tc.decision}, nil, texttest.NopEditor())
+			a := mustNewAuthorizer(t, &stubPermissionPrompter{decision: tc.decision}, nil, texttest.NopEditor())
 			err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{
 				Extra: testPluginExtension(nil),
 			}, testWindowManagerResource)
@@ -624,7 +642,7 @@ func TestAuthorizerPluginUnknownPromptDecisionForbidden(t *testing.T) {
 
 	storage := storagestub.NewInMemoryService()
 	ext := testPluginExtension(nil)
-	a := mustNewAuthorizer(t, &stubPluginPermissionPrompter{decision: "unknown"}, storage, texttest.NopEditor())
+	a := mustNewAuthorizer(t, &stubPermissionPrompter{decision: "unknown"}, storage, texttest.NopEditor())
 
 	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
 		testWindowManagerResource)
@@ -632,7 +650,7 @@ func TestAuthorizerPluginUnknownPromptDecisionForbidden(t *testing.T) {
 
 	key := pluginPermissionStorageKey(ext.Path, ext.Args,
 		extensionapi.PermissionBrowserWindowManager)
-	var stored storedPluginPermissionDecision
+	var stored storedPermissionDecision
 	err = storage.Get(context.Background(), key, &stored)
 	assert.ErrorIs(t, err, storageapi.ErrNotFound)
 }
@@ -671,7 +689,7 @@ func TestAuthorizerPluginPromptError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("prompt failed")
-	a := mustNewAuthorizer(t, &stubPluginPermissionPrompter{err: wantErr},
+	a := mustNewAuthorizer(t, &stubPermissionPrompter{err: wantErr},
 		storagestub.NewInMemoryService(), texttest.NopEditor())
 	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{
 		Extra: testPluginExtension(nil),
@@ -688,12 +706,24 @@ func testPluginExtension(perms extensionapi.Permissions) Extension {
 	}
 }
 
+func testRegularExtension(perms extensionapi.Permissions) Extension {
+	return Extension{Metadata: extensionapi.Metadata{
+		DeveloperID:      "dev-id",
+		DeveloperEmail:   "dev@example.com",
+		DeveloperKey:     "dev-key",
+		ExtensionID:      "test-extension",
+		ExtensionName:    "Test Extension",
+		ExtensionVersion: "v1.2.3",
+		Permissions:      perms,
+	}}
+}
+
 func contextWithPeerProcess(ctx context.Context, process peerprocess.Process) context.Context {
 	return peer.NewContext(ctx, &peer.Peer{Addr: peerProcessAddr{process: process}})
 }
 
 func mustNewAuthorizer(
-	t *testing.T, prompter PluginPermissionPrompter,
+	t *testing.T, prompter PermissionPrompter,
 	storage storageapi.Service, editor text.Editor,
 ) blueauth.Authorizer[Extension] {
 	t.Helper()
@@ -702,4 +732,14 @@ func mustNewAuthorizer(
 	return a
 }
 
-var _ PluginPermissionPrompter = (*stubPluginPermissionPrompter)(nil)
+func newTestAuthorizerCore(
+	prompter PermissionPrompter, storage storageapi.Service,
+) *authorizer {
+	return &authorizer{
+		prompter: prompter,
+		storage:  storage,
+		once:     make(map[string]pluginPermissionOnceDecision),
+	}
+}
+
+var _ PermissionPrompter = (*stubPermissionPrompter)(nil)

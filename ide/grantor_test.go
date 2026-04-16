@@ -142,9 +142,9 @@ func TestPermissionGrantor(t *testing.T) {
 			if tc.wantPrompt {
 				assert.Equal(t, 1, prompt.calls)
 				assert.Contains(t, prompt.message,
-					"Allow extension **Test Extension** (v1.2.3) by **dev-id**")
-				assert.Contains(t, prompt.message, "- Access the editor")
-				assert.Contains(t, prompt.message, "- Persistent storage")
+					"Allow extension **Test Extension** (v1.2.3) by **dev-id** to run?")
+				assert.NotContains(t, prompt.message, "Access the editor")
+				assert.NotContains(t, prompt.message, "Persistent storage")
 			} else {
 				assert.Zero(t, prompt.calls)
 			}

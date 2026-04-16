@@ -32,7 +32,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	blueauth "github.com/unstablebuild/blue/auth"
@@ -41,26 +40,19 @@ import (
 )
 
 const (
-	pluginPermissionDecisionAllow = "allow"
-	pluginPermissionDecisionDeny  = "deny"
-	pluginPermissionOnceTTL       = 10 * time.Minute
-	pluginPermissionStoragePrefix = "extensionv2:plugin-permissions:"
+	pluginPermissionDecisionAllow    = "allow"
+	pluginPermissionDecisionDeny     = "deny"
+	pluginPermissionOnceTTL          = 10 * time.Minute
+	pluginPermissionStoragePrefix    = "extensionv2:plugin-permissions:"
+	extensionPermissionStoragePrefix = "extensionv2:extension-permissions:"
 )
 
-type storedPluginPermissionDecision struct {
+type storedPermissionDecision struct {
 	Key        string
 	Decision   string
 	Path       string
 	Args       []string
 	Permission extensionapi.Permission
-}
-
-type pluginPermissionAuthorizer struct {
-	prompter PluginPermissionPrompter
-	storage  storageapi.Service
-
-	onceMu sync.Mutex
-	once   map[string]pluginPermissionOnceDecision
 }
 
 type pluginPermissionOnceDecision struct {
@@ -80,24 +72,33 @@ type pluginPermissionIdentity struct {
 	LauncherArgs []string
 }
 
-func newPluginPermissionAuthorizer(
-	prompter PluginPermissionPrompter,
-	storage storageapi.Service,
-) *pluginPermissionAuthorizer {
-	return &pluginPermissionAuthorizer{
-		prompter: prompter,
-		storage:  storage,
-		once:     make(map[string]pluginPermissionOnceDecision),
-	}
-}
-
-func (a *pluginPermissionAuthorizer) Authorize(
+func (a *authorizer) authorizePlugin(
 	ctx context.Context, ext Extension, perm extensionapi.Permission, resource string,
 ) error {
 	identity := pluginPermissionIdentityFromContext(ctx, ext)
 	key := pluginPermissionStorageKey(identity.Path, identity.Args, perm)
+	onceKey := pluginPermissionOnceKey(identity, perm)
+	return a.authorizePermission(ctx, ext, identity, key, onceKey, perm, resource)
+}
+
+func (a *authorizer) authorizeExtension(
+	ctx context.Context, ext Extension, perm extensionapi.Permission, resource string,
+) error {
+	identity := pluginPermissionIdentity{
+		Path: ext.ExtensionID,
+		Args: []string{ext.DeveloperID, ext.DeveloperKey, ext.ExtensionName},
+	}
+	key := extensionPermissionStorageKey(ext, perm)
+	onceKey := stablePermissionOnceKey(identity, perm)
+	return a.authorizePermission(ctx, ext, identity, key, onceKey, perm, resource)
+}
+
+func (a *authorizer) authorizePermission(
+	ctx context.Context, ext Extension, identity pluginPermissionIdentity,
+	key, onceKey string, perm extensionapi.Permission, resource string,
+) error {
 	if a.storage != nil {
-		var stored storedPluginPermissionDecision
+		var stored storedPermissionDecision
 		err := a.storage.Get(ctx, key, &stored)
 		if err == nil {
 			switch stored.Decision {
@@ -115,7 +116,6 @@ func (a *pluginPermissionAuthorizer) Authorize(
 		}
 	}
 
-	onceKey := pluginPermissionOnceKey(identity, perm)
 	if decision, ok := a.getOnceDecision(onceKey, time.Now()); ok {
 		switch decision {
 		case pluginPermissionDecisionAllow:
@@ -130,28 +130,34 @@ func (a *pluginPermissionAuthorizer) Authorize(
 	if a.prompter == nil {
 		return blueauth.ErrForbidden
 	}
-	decision, err := a.prompter.PromptPluginPermission(ctx, PluginPermissionRequest{
+	req := PermissionRequest{
 		Path:         identity.Path,
 		Args:         append([]string(nil), identity.Args...),
 		LauncherPath: identity.LauncherPath,
 		LauncherArgs: append([]string(nil), identity.LauncherArgs...),
 		Permission:   perm,
 		Resource:     resource,
-	})
+	}
+	if !ext.Plugin {
+		req.ExtensionID = ext.ExtensionID
+		req.ExtensionName = ext.ExtensionName
+		req.DeveloperID = ext.DeveloperID
+	}
+	decision, err := a.prompter.PromptPermission(ctx, req)
 	if err != nil {
 		return err
 	}
 
 	switch decision {
-	case PluginPermissionAllowOnce:
+	case PermissionAllowOnce:
 		a.setOnceDecision(onceKey, identity, perm, pluginPermissionDecisionAllow, time.Now())
 		return nil
-	case PluginPermissionAllowAlways:
+	case PermissionAllowAlways:
 		return a.setStoredDecision(ctx, key, identity, perm, pluginPermissionDecisionAllow)
-	case PluginPermissionDenyOnce:
+	case PermissionDenyOnce:
 		a.setOnceDecision(onceKey, identity, perm, pluginPermissionDecisionDeny, time.Now())
 		return blueauth.ErrForbidden
-	case PluginPermissionDenyAlways:
+	case PermissionDenyAlways:
 		err := a.setStoredDecision(ctx, key, identity, perm, pluginPermissionDecisionDeny)
 		if err != nil {
 			return err
@@ -188,7 +194,7 @@ func pluginPermissionIdentityFromContext(
 	return ret
 }
 
-func (a *pluginPermissionAuthorizer) getOnceDecision(
+func (a *authorizer) getOnceDecision(
 	key string, now time.Time,
 ) (string, bool) {
 	if key == "" {
@@ -207,7 +213,7 @@ func (a *pluginPermissionAuthorizer) getOnceDecision(
 	return decision.Decision, true
 }
 
-func (a *pluginPermissionAuthorizer) setOnceDecision(
+func (a *authorizer) setOnceDecision(
 	key string, identity pluginPermissionIdentity,
 	perm extensionapi.Permission, decision string, now time.Time,
 ) {
@@ -226,7 +232,7 @@ func (a *pluginPermissionAuthorizer) setOnceDecision(
 	}
 }
 
-func (a *pluginPermissionAuthorizer) purgeExpiredOnceDecisionsLocked(now time.Time) {
+func (a *authorizer) purgeExpiredOnceDecisionsLocked(now time.Time) {
 	for key, decision := range a.once {
 		if !now.Before(decision.Expires) {
 			delete(a.once, key)
@@ -246,14 +252,14 @@ func sameStringSlice(a, b []string) bool {
 	return true
 }
 
-func (a *pluginPermissionAuthorizer) setStoredDecision(
+func (a *authorizer) setStoredDecision(
 	ctx context.Context, key string, identity pluginPermissionIdentity,
 	perm extensionapi.Permission, decision string,
 ) error {
 	if a.storage == nil {
 		return nil
 	}
-	err := a.storage.Set(ctx, key, storedPluginPermissionDecision{
+	err := a.storage.Set(ctx, key, storedPermissionDecision{
 		Key:        key,
 		Decision:   decision,
 		Path:       identity.Path,
@@ -278,6 +284,20 @@ func pluginPermissionStorageKey(
 	return strings.Join(parts, ":")
 }
 
+func extensionPermissionStorageKey(ext Extension, perm extensionapi.Permission) string {
+	parts := []string{
+		"extensionv2",
+		"extension-permissions",
+		pluginProgramHash(ext.ExtensionID, []string{
+			ext.DeveloperID,
+			ext.DeveloperKey,
+			ext.ExtensionName,
+		}),
+		url.PathEscape(string(perm)),
+	}
+	return strings.Join(parts, ":")
+}
+
 func pluginPermissionOnceKey(
 	identity pluginPermissionIdentity, perm extensionapi.Permission,
 ) string {
@@ -288,6 +308,21 @@ func pluginPermissionOnceKey(
 		"extensionv2",
 		"plugin-permission-once",
 		pluginProgramHashWithProcess(identity.PID, identity.UID, identity.Path, identity.Args),
+		url.PathEscape(string(perm)),
+	}
+	return strings.Join(parts, ":")
+}
+
+func stablePermissionOnceKey(
+	identity pluginPermissionIdentity, perm extensionapi.Permission,
+) string {
+	if identity.Path == "" {
+		return ""
+	}
+	parts := []string{
+		"extensionv2",
+		"extension-permission-once",
+		pluginProgramHash(identity.Path, identity.Args),
 		url.PathEscape(string(perm)),
 	}
 	return strings.Join(parts, ":")
@@ -322,9 +357,9 @@ type hashWriter interface {
 	Write([]byte) (int, error)
 }
 
-// PluginPermissionActionText returns the phrase used to describe the action
+// PermissionActionText returns the phrase used to describe the action
 // requested by an ad-hoc program.
-func PluginPermissionActionText(permission extensionapi.Permission) string {
+func PermissionActionText(permission extensionapi.Permission) string {
 	switch permission {
 	case extensionapi.PermissionFileSystem:
 		return "access workspace files"

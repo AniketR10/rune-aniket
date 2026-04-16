@@ -128,7 +128,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 	}
 	var cert, key []byte
-	prompter := newPluginPermissionPrompter(promptOpener, scheduleNextTick)
+	prompter := newPermissionPrompter(promptOpener, scheduleNextTick)
 	authorizer, err := newAuthorizer(prompter, storage, editor)
 	if err != nil {
 		if cerr := listener.Close(); cerr != nil {

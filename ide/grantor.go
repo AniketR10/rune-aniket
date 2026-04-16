@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -122,9 +121,8 @@ func (g *permissionGrantor) Grant(meta extensionapi.Metadata) (bool, error) {
 
 func (g *permissionGrantor) prompt(meta extensionapi.Metadata) string {
 	result := make(chan string, 1)
-	message := fmt.Sprintf("Allow extension **%s** (%s) by **%s** to access the following:\n\n%s",
-		meta.ExtensionName, meta.ExtensionVersion,
-		meta.DeveloperID, requestedPermissionsList(meta.Permissions))
+	message := fmt.Sprintf("Allow extension **%s** (%s) by **%s** to run?",
+		meta.ExtensionName, meta.ExtensionVersion, meta.DeveloperID)
 	options := []string{
 		permissionPromptAllowOnce,
 		permissionPromptAllowAlways,
@@ -152,53 +150,6 @@ func (g *permissionGrantor) prompt(meta extensionapi.Metadata) string {
 		return permissionPromptDenyOnce
 	}
 	return <-result
-}
-
-func requestedPermissionsList(permissions extensionapi.Permissions) string {
-	list := make([]string, 0, len(permissions))
-	for permission := range permissions {
-		list = append(list, permissionLabel(permission))
-	}
-	slices.Sort(list)
-	for i, permission := range list {
-		list[i] = fmt.Sprintf("- %s", permission)
-	}
-	return strings.Join(list, "\n")
-}
-
-func permissionLabel(permission extensionapi.Permission) string {
-	switch permission {
-	case extensionapi.PermissionFileSystem:
-		return "Workspace Files"
-	case extensionapi.PermissionExecute:
-		return "Execute commands"
-	case extensionapi.PermissionTerminal:
-		return "Manage terminals"
-	case extensionapi.PermissionBrowserWindowManager:
-		return "Window Manager"
-	case extensionapi.PermissionBrowserResourceOpener:
-		return "Manage File Tabs"
-	case extensionapi.PermissionNotifications:
-		return "Show notifications"
-	case extensionapi.PermissionInterrupt:
-		return "Interrupt the event loop"
-	case extensionapi.PermissionEditor:
-		return "Access the editor"
-	case extensionapi.PermissionCommands:
-		return "Register prompt commands"
-	case extensionapi.PermissionStorage:
-		return "Persistent storage"
-	case extensionapi.PermissionSyntaxTree:
-		return "Inspect syntax trees"
-	case extensionapi.PermissionConfig:
-		return "Read user configuration"
-	case extensionapi.PermissionLSP:
-		return "Communicate with LSP servers"
-	case extensionapi.PermissionDebugger:
-		return "Communicate with DAP servers"
-	default:
-		return fmt.Sprintf("Unknown permission (%s)", permission)
-	}
 }
 
 func permissionStorageKey(meta extensionapi.Metadata) string {
