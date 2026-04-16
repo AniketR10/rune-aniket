@@ -406,6 +406,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.pasteAndReindent()
 			case 'z':
 				handled = h.cursor.Undo()
+			case 'y':
+				handled = h.cursor.Redo()
 			case 'Z':
 				handled = h.cursor.Redo()
 			case 'K':

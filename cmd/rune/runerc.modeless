@@ -67,7 +67,6 @@ command:
     <m-n>: windownew
     <m-c>: clipboardcopy
     <m-v>: clipboardpaste
-    <m-y>: echolastcmd
     #<c-_>: jumpback
     #<c-_>: jumpforward
     <s-m-h>: windowfocus left
