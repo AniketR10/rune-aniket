@@ -105,10 +105,12 @@ type Task struct {
 	height          int
 	running         bool
 	paused          bool
+	restartPending  bool
 	lastExit        error
 	lastStart       time.Time
 	lastDuration    time.Duration
 	handler         browser.ScrollableFloating
+	scheme          schemeapi.Scheme
 	// don't use mu to check if closed, so StopTask, followed by
 	// browser close handler doesn't deadlock
 	closed *atomic.Bool
@@ -153,8 +155,13 @@ func (t *Task) Info() TaskInfo {
 
 // Handle satisfies tui.Handler.
 func (t *Task) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Ch == 'c' && ev.Mod == term.ModCtrl {
+	if isCtrlC(ev) {
 		t.pause()
+		return
+	}
+	if isCtrlR(ev) {
+		t.restart()
+		handled = true
 		return
 	}
 	_, handled = t.handler.Handle(ev)
@@ -276,6 +283,7 @@ func (t *Task) init(
 ) (context.Context, func(), error) {
 	t.closeHook = closeHook
 	t.b = b
+	t.scheme = scheme
 	t.watchID = watchID
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)
@@ -331,13 +339,17 @@ func (t *Task) init(
 			case err := <-t.donech:
 				t.mu.Lock()
 				paused := t.paused
+				restarting := t.restartPending
+				t.restartPending = false
 				t.mu.Unlock()
 				if err != nil {
 					t.setError(err)
 				} else {
 					t.setSuccess()
 				}
-				if paused {
+				if restarting {
+					t.tryRunning(t.b, t.scheme, "  task")
+				} else if paused {
 					t.setPause()
 				}
 			case <-t.ctx.Done():
@@ -398,6 +410,7 @@ func (t *Task) setRunning(h browser.ScrollableFloating) {
 	t.lastStart = time.Now()
 	t.running = true
 	t.paused = false
+	t.restartPending = false
 	t.handler = h
 	t.barColor = colorRunning
 	t.setBarColor(t.barColor, isFirst)
@@ -452,6 +465,14 @@ func (t *Task) pause() {
 	t.paused = true
 }
 
+func (t *Task) restart() {
+	t.mu.Lock()
+	t.restartPending = true
+	t.mu.Unlock()
+	t.pause()
+	t.tryRunning(t.b, t.scheme, "  task")
+}
+
 func (t *Task) setPause() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -484,6 +505,16 @@ func (t *Task) OnFocus(tab *browser.Tab) {
 
 // OnFree satisfies browser.TabSubscriber.
 func (t *Task) OnFree(tab *browser.Tab) {
+}
+
+func isCtrlC(ev term.Event) bool {
+	return ev.Type == term.EventKey &&
+		(ev.Ch == 'c' || ev.Ch == 'C') && ev.Mod == term.ModCtrl
+}
+
+func isCtrlR(ev term.Event) bool {
+	return ev.Type == term.EventKey &&
+		(ev.Ch == 'r' || ev.Ch == 'R') && ev.Mod == term.ModCtrl
 }
 
 func (t *Task) setMaxWidthHeight(width, height int) {

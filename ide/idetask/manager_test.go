@@ -471,6 +471,118 @@ func TestManager(t *testing.T) {
 				return true
 			})
 	})
+
+	t.Run("ctrl-r restarts a running task", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "job", Cmd: "run", Args: []string{"serve"}}))
+
+		taskIfc, ok := m.tasks.Load("job")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+
+		// Press ctrl-r while running; should set restartPending.
+		exit, handled := task.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		// Complete the old run; the donech goroutine should auto-restart.
+		assertTaskRunsWithin(t, m, 1*time.Second, "job", nil,
+			func(info TaskInfo) bool {
+				return info.Running && info.Runs == 2
+			})
+
+		cmds := exec.StartedCmds()
+		require.GreaterOrEqual(t, len(cmds), 2)
+		assert.Equal(t, "run", cmds[0].Path)
+		assert.Equal(t, "run", cmds[1].Path)
+		assert.Equal(t, []string{"serve"}, cmds[0].Args)
+		assert.Equal(t, []string{"serve"}, cmds[1].Args)
+	})
+
+	t.Run("ctrl-r on idle task starts it immediately", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "job", Cmd: "build"}))
+
+		// Complete the initial run so task becomes idle.
+		assertTaskRunsWithin(t, m, 1*time.Second, "job", nil,
+			func(info TaskInfo) bool {
+				return !info.Running && info.Runs == 1
+			})
+
+		taskIfc, ok := m.tasks.Load("job")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+
+		// Press ctrl-r while idle; should start immediately.
+		exit, handled := task.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'r'})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		assertTaskWithin(t, m, 1*time.Second, "job",
+			func(info TaskInfo) bool {
+				return info.Running && info.Runs == 2
+			})
+	})
+
+	t.Run("ctrl-r uppercase R also restarts", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "job", Cmd: "build"}))
+
+		// Complete the initial run.
+		assertTaskRunsWithin(t, m, 1*time.Second, "job", nil,
+			func(info TaskInfo) bool {
+				return !info.Running && info.Runs == 1
+			})
+
+		taskIfc, ok := m.tasks.Load("job")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+
+		// Press ctrl-R (uppercase).
+		exit, handled := task.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'R'})
+		assert.False(t, exit)
+		assert.True(t, handled)
+
+		assertTaskWithin(t, m, 1*time.Second, "job",
+			func(info TaskInfo) bool {
+				return info.Running && info.Runs == 2
+			})
+	})
+
+	t.Run("ctrl-c still pauses without scheduling a restart", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "job", Cmd: "run"}))
+
+		taskIfc, ok := m.tasks.Load("job")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+
+		// Press ctrl-c while running.
+		exit, _ := task.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+		assert.False(t, exit)
+
+		// Complete the run; should NOT restart (paused, not restarting).
+		assertTaskRunsWithin(t, m, 1*time.Second, "job", nil,
+			func(info TaskInfo) bool {
+				if info.Running {
+					return false
+				}
+				assert.Equal(t, 1, info.Runs)
+				return true
+			})
+	})
 }
 
 func sendEvent(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename string) {
