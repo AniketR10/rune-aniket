@@ -25,6 +25,7 @@ package modeless
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/text"
 )
 
 type testSelectionService struct {
@@ -365,7 +367,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		// General editing
 		{"Cut (cuts entire line when nothing selected)", "<meta-x>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Copy+Paste", "<shift-right><meta-c><meta-v>", new("aa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		// {"Copy+Paste and indent correctly", "<shift-right><meta-c><down><meta-home><shift-meta-v>", sp("a\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}},
+		{"Copy+Paste and indent correctly", "<shift-right><meta-c><down><shift-meta-v>", new("a\nab\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}, nil},
 		// {"Paste from clipboard history", "<shift-right><meta-c><meta-v><meta-v><alt-meta-v>", sp("aaa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}},
 		{"Undo", "<meta-x><meta-z>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Redo", "<meta-x><meta-z><shift-meta-z>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
@@ -530,5 +532,153 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 	}
 }
 
-//go:fix inline
-func sp(s string) *string { return new(s) }
+// testIndentView wraps a cell.View and provides an IndentationAt method
+// so that ReindentSelection actually adjusts indentation in tests.
+type testIndentView struct {
+	cell.View
+	indents map[int]int // line -> target indentation level
+}
+
+func (v testIndentView) IndentationAt(line int) (int, bool) {
+	target, ok := v.indents[line]
+	return target, ok
+}
+
+// errorClipboard is a clipboard.Register that always returns an error on Paste.
+type errorClipboard struct{}
+
+func (errorClipboard) Paste(string) (clipboard.Data, error) {
+	return clipboard.Data{}, errors.New("clipboard error")
+}
+
+func (errorClipboard) Copy(string, clipboard.Data) error {
+	return errors.New("clipboard error")
+}
+
+func TestPasteAndReindent(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///reindent.go")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		content     string          // initial buffer content
+		clipText    string          // text to place in clipboard before paste
+		clipMeta    any             // metadata for clipboard data
+		indents     map[int]int     // per-line target indentation (nil = no indent view)
+		cursorAt    term.Coordinates // cursor position before paste
+		wantHandled bool
+		wantContent string
+		wantCursor  term.Coordinates
+		useErrorClip bool // use errorClipboard instead of normal one
+	}{
+		{
+			name:        "under-indented adds tab",
+			content:     "hello",
+			clipText:    "x",
+			clipMeta:    text.StandardSelection,
+			indents:     map[int]int{0: 1},
+			cursorAt:    term.Coordinates{},
+			wantHandled: true,
+			wantContent: "\txhello",
+			wantCursor:  term.Coordinates{X: 1},
+		},
+		{
+			name:        "over-indented removes tab",
+			content:     "\t\thello",
+			clipText:    "x",
+			clipMeta:    text.StandardSelection,
+			indents:     map[int]int{0: 1},
+			cursorAt:    term.Coordinates{X: 2},
+			wantHandled: true,
+			wantContent: "\txhello",
+			wantCursor:  term.Coordinates{X: 3},
+		},
+		{
+			name:        "already indented is unchanged",
+			content:     "\thello",
+			clipText:    "x",
+			clipMeta:    text.StandardSelection,
+			indents:     map[int]int{0: 1},
+			cursorAt:    term.Coordinates{X: 1},
+			wantHandled: true,
+			wantContent: "\txhello",
+			wantCursor:  term.Coordinates{X: 2},
+		},
+		{
+			name:        "metadata is not SelectMode defaults to StandardSelection",
+			content:     "hello\nworld",
+			clipText:    "x",
+			clipMeta:    "not a SelectMode",
+			indents:     nil,
+			cursorAt:    term.Coordinates{},
+			wantHandled: true,
+			wantContent: "xhello\nworld",
+			wantCursor:  term.Coordinates{X: 1},
+		},
+		{
+			name:        "startY at last line",
+			content:     "a\nb\nc",
+			clipText:    "x",
+			clipMeta:    text.StandardSelection,
+			indents:     map[int]int{2: 1},
+			cursorAt:    term.Coordinates{Y: 2},
+			wantHandled: true,
+			wantContent: "a\nb\n\txc",
+			wantCursor:  term.Coordinates{Y: 2, X: 1},
+		},
+		{
+			name:         "clipboard error returns false",
+			content:      "hello\nworld",
+			useErrorClip: true,
+			wantHandled:  false,
+			wantContent:  "hello\nworld",
+			wantCursor:   term.Coordinates{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tt.content))
+
+			var clip clipboard.Register
+			if tt.useErrorClip {
+				clip = errorClipboard{}
+			} else {
+				clip = clipboard.NewInMemory()
+				require.NoError(t, clip.Copy(
+					clipboard.DefaultRegisterID,
+					clipboard.Data{Text: tt.clipText, Metadata: tt.clipMeta},
+				))
+			}
+
+			handler := NewHandler(buf, uri,
+				WithClipboard(clip),
+				WithTabspaces(1),
+			)
+			handler.Resize(80, 10)
+
+			if tt.indents != nil {
+				buf.WithView(testIndentView{
+					View:    buf.View(),
+					indents: tt.indents,
+				})
+			}
+
+			if tt.cursorAt.X != 0 || tt.cursorAt.Y != 0 {
+				require.True(t, handler.SetCursorAtScroll(tt.cursorAt))
+			}
+
+			ev := term.Event{
+				Type: term.EventKey,
+				Mod:  term.ModMeta,
+				Ch:   'V',
+			}
+			_, handled := handler.Handle(ev)
+
+			assert.Equal(t, tt.wantHandled, handled, "handled")
+			assert.Equal(t, tt.wantContent, buf.String(), "buffer content")
+			assert.Equal(t, tt.wantCursor, handler.CursorAtScroll(), "cursor position")
+		})
+	}
+}

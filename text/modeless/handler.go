@@ -382,6 +382,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 					h.cursor.Paste(str, mode, false)
 					handled = true
 				}
+			case 'V':
+				handled = h.pasteAndReindent()
 			case 'z':
 				handled = h.cursor.Undo()
 			case 'Z':
@@ -731,6 +733,30 @@ func (h *editorHandler) duplicateLine(up bool) (handled bool) {
 		h.cursor.Paste(str, text.StandardSelection, false)
 		h.cursor.MoveToScroll(curr)
 	}
+	return
+}
+
+func (h *editorHandler) pasteAndReindent() (handled bool) {
+	paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+	if err != nil {
+		h.log(log.ErrorLevel, "clipboard paste: %v", err)
+		return
+	}
+	str := paste.Text
+	mode, _ := paste.Metadata.(text.SelectMode)
+	startY := h.cursor.CursorAtScroll().Y
+	h.cursor.Paste(str, mode, false)
+	handled = true
+	endPos := h.cursor.CursorAtScroll()
+	if !h.cursor.SelectRange(
+		term.Coordinates{Y: startY},
+		term.Coordinates{Y: endPos.Y},
+	) {
+		h.cursor.MoveToScroll(endPos)
+		return
+	}
+	h.cursor.ReindentSelection()
+	h.cursor.MoveToScroll(endPos)
 	return
 }
 
