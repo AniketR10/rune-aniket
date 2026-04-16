@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/ide/idelsp/jsonrpc2"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 type langServer struct {
@@ -121,9 +122,11 @@ func (s *langServer) start(ctx context.Context) error {
 		Watcher: watcher,
 	}
 
-	// do not use context passed to start as it sould only be used
-	// for initial protocol exchange
-	lifecycleContext := s.ctx
+	// Do not use ctx for lifecycle cancellation: it is scoped to the initial
+	// protocol exchange. Copy logical process metadata from ctx into the server
+	// lifecycle context so LSP server processes remain associated with the
+	// extension that requested them.
+	lifecycleContext := processctx.DeriveCommandContext(s.ctx, ctx)
 
 	s.log.Info("starting server", "path", cmd.Path, "args", cmd.Args)
 	pid, err := s.executor.StartCommand(lifecycleContext, cmd)

@@ -71,6 +71,7 @@ import (
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 	"unstable.build/go-tui/ide/idemacro"
+	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
@@ -348,7 +349,10 @@ func (h *workspaceManagerHandler) init(
 		return err
 	}
 
-	runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
+	wsExec := workspaceshell.NewExecutor(
+		workspaceExecutorAdapter{e: h.homeWorkspace})
+	trackedCwd := &trackedWorkspace{Workspace: h.homeWorkspace, exec: wsExec}
+	runner, err := h.buildExtensions(cfg, homeDirUri, trackedCwd, h.empty)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -356,7 +360,7 @@ func (h *workspaceManagerHandler) init(
 	} else {
 		exec, isExecutor := runner.(schemeapi.Executor)
 		if isExecutor {
-			h.empty.setExecutor(exec)
+			h.empty.setExecutor(exec, wsExec)
 		}
 		h.homeRunner = runner
 		// speed up initialization by initializing extensions asynchronously
@@ -910,7 +914,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 		dispatchFilesystemEvents(ctx, ex, h.mu, ch, ignores)
 	})
 
-	runner, err := h.buildExtensions(cfg, uri, cwd, ex)
+	wsExec := workspaceshell.NewExecutor(
+		workspaceExecutorAdapter{e: cwd})
+	trackedCwd := &trackedWorkspace{Workspace: cwd, exec: wsExec}
+	runner, err := h.buildExtensions(cfg, uri, trackedCwd, ex)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -918,7 +925,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	} else {
 		exec, isExecutor := runner.(schemeapi.Executor)
 		if isExecutor {
-			ex.setExecutor(exec)
+			ex.setExecutor(exec, wsExec)
 		}
 		wh.Extensions.Store(runner)
 		// load async to speed up workspace initialization
@@ -1030,10 +1037,10 @@ func (h *workspaceManagerHandler) buildExtensions(
 		MaxRetries:         5,
 		WorkDoneProgress:   true,
 	}
-	lsp := idelsp.New(uri, ex.workspace,
-		ex.workspace, h.pkgmanager, notifications,
+	lsp := idelsp.New(uri, cwd,
+		cwd, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
-	dap := idedebug.New(uri, ex.workspace, h.pkgmanager, idedebug.Config{MaxRetries: 5})
+	dap := idedebug.New(uri, cwd, h.pkgmanager, idedebug.Config{MaxRetries: 5})
 	err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)

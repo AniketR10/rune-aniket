@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 var _ extension.Runner = (*workspaceRunner)(nil)
@@ -65,6 +66,11 @@ type workspaceRunner struct {
 	ctx       context.Context
 	cancelCtx func()
 	pids      sync.Map
+}
+
+type extensionProcess struct {
+	cancel context.CancelFunc
+	pid    workspaceapi.Pid
 }
 
 var _ schemeapi.Executor = (*workspaceRunner)(nil)
@@ -135,6 +141,7 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 	}
 
 	ctx, cancel := context.WithCancel(m.ctx)
+	ctx = processctx.ContextWithExtensionID(ctx, id)
 	cmd, err := m.makeCommand(ctx, id, cmdAndArgs, config)
 	if err != nil {
 		cancel()
@@ -150,7 +157,7 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 	m.log(log.DebugLevel, "running extension with name %q at path %q, pid: %d",
 		id, cmdAndArgs, pid)
 
-	m.pids.Store(id, cancel)
+	m.pids.Store(id, extensionProcess{cancel: cancel, pid: pid})
 
 	return nil
 }
@@ -232,15 +239,18 @@ func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []s
 		return nil, fmt.Errorf("get sign key: %w", err)
 	}
 	name := fmt.Sprintf("%s_%s", path, strings.Join(args, "_"))
-	id := uuid.New()
+	id := uuid.New().String()
+	if extensionID, ok := processctx.ExtensionIDFromContext(ctx); ok {
+		id = extensionID
+	}
 	permissions := extensionapi.AllPermissions()
 	m.log(log.DebugLevel, "creating one shot authentication for "+
-		"command %s, id: %d, permissions: %v", name, id, permissions)
+		"command %s, id: %s, permissions: %v", name, id, permissions)
 	claimsExtra := Extension{
 		Metadata: extensionapi.Metadata{
 			DeveloperID:   "you",
 			DeveloperKey:  "",
-			ExtensionID:   id.String(),
+			ExtensionID:   id,
 			ExtensionName: name,
 			Permissions:   permissions,
 		},
@@ -270,11 +280,11 @@ func (m *workspaceRunner) makeProtocolExchange(extensionID string, cfg config.Co
 
 func (m *workspaceRunner) stopExtension(extensionID string, reason error) {
 	m.log(log.WarnLevel, "stopping extension %q: reason: %v", extensionID, reason)
-	cancelIfc, ok := m.pids.LoadAndDelete(extensionID)
+	processIfc, ok := m.pids.LoadAndDelete(extensionID)
 	if !ok {
 		return
 	}
-	cancelIfc.(context.CancelFunc)()
+	processIfc.(extensionProcess).cancel()
 }
 
 func makeLogLevelEnv(l log.Level) string {

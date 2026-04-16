@@ -30,6 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 type debugServer struct {
@@ -109,9 +110,11 @@ func (s *debugServer) start(ctx context.Context) error {
 		Watcher: watcher,
 	}
 
-	// do not use context passed to start as it should
-	// only be used for initial protocol exchange
-	lifecycleCtx := s.ctx
+	// Do not use ctx for lifecycle cancellation: it is scoped to the initial
+	// protocol exchange. Copy logical process metadata from ctx into the server
+	// lifecycle context so debug adapter processes remain associated with the
+	// extension that requested them.
+	lifecycleCtx := processctx.DeriveCommandContext(s.ctx, ctx)
 
 	s.log.Info("starting server", "path", cmd.Path, "args", cmd.Args)
 	pid, err := s.executor.StartCommand(lifecycleCtx, cmd)
@@ -135,14 +138,12 @@ func (s *debugServer) start(ctx context.Context) error {
 	s.mu.Unlock()
 
 	s.wg.Add(1)
-	go debug.CapturePanicReport(
+	go debug.CapturePanicReport(func() {
+		s.readLoop()
+	})
 
-		// initialize is called without s.mu held because it
-		// calls sendRequest which also acquires s.mu.
-		func() {
-			s.readLoop()
-		})
-
+	// initialize is called without s.mu held because it
+	// calls sendRequest which also acquires s.mu.
 	caps, err := s.initialize(ctx)
 	if err != nil {
 		s.closeConn()

@@ -32,19 +32,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 type recordingExecutor struct {
+	ctx context.Context
 	cmd workspaceapi.Cmd
 }
 
 var _ schemeapi.Executor = (*recordingExecutor)(nil)
 
-func (r *recordingExecutor) StartCommand(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+func (r *recordingExecutor) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	r.ctx = ctx
 	r.cmd = cmd
 	return 1, nil
 }
@@ -134,6 +139,70 @@ func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
 	assert.Equal(t, "/bin/zsh", claims.Extra.Path)
 	assert.Equal(t, []string{"--login", "-i"}, claims.Extra.Args)
 	assert.Equal(t, extensionapi.AllPermissions(), claims.Extra.Permissions)
+}
+
+func TestWorkspaceRunnerRunCarriesExtensionID(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("file:///tmp")
+	require.NoError(t, err)
+
+	exec := &recordingExecutor{}
+	runner := newWorkspaceRunner(
+		exec,
+		nil, // grantor is not used before process execution in this test
+		uri,
+		"/tmp/ext.sock",
+		"/tmp/ext-data",
+		[]byte("cert"),
+		keys,
+	)
+	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
+
+	extensionID, ok := processctx.ExtensionIDFromContext(exec.ctx)
+	require.True(t, ok)
+	assert.Equal(t, "test-extension", extensionID)
+
+	processIfc, ok := runner.pids.Load("test-extension")
+	require.True(t, ok)
+	process := processIfc.(extensionProcess)
+	assert.Equal(t, workspaceapi.Pid(1), process.pid)
+	require.NotNil(t, process.cancel)
+}
+
+type testServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s testServerStream) Context() context.Context {
+	return s.ctx
+}
+
+func TestExtensionIDStreamInterceptorTagsContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := auth.ContextWithClaims(context.Background(), auth.UserClaims[Extension]{
+		Extra: Extension{Metadata: extensionapi.Metadata{
+			ExtensionID: "test-extension",
+		}},
+	})
+	stream := testServerStream{ctx: ctx}
+
+	called := false
+	err := extensionIDStreamInterceptor()(nil, stream, &grpc.StreamServerInfo{},
+		func(_ any, stream grpc.ServerStream) error {
+			called = true
+			extensionID, ok := processctx.ExtensionIDFromContext(stream.Context())
+			require.True(t, ok)
+			assert.Equal(t, "test-extension", extensionID)
+			return nil
+		})
+	require.NoError(t, err)
+	assert.True(t, called)
 }
 
 var _ extension.Runner = (*workspaceRunner)(nil)

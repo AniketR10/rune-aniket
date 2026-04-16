@@ -30,6 +30,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ernestrc/go-multierror"
@@ -54,6 +55,7 @@ import (
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/ideshell"
+	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/plugin"
 	tterm "unstable.build/go-tui/term"
@@ -92,6 +94,7 @@ type ex struct {
 	clip         clipboard.Register
 	executor     schemeapi.Executor
 	ed           text.Editor
+	wsExecutor   *workspaceshell.Executor
 	storage      storageapi.Service
 	workspaceURI workspaceapi.URI
 	closed       bool
@@ -261,8 +264,9 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
-func (e *ex) setExecutor(exe schemeapi.Executor) {
+func (e *ex) setExecutor(exe schemeapi.Executor, wsExec *workspaceshell.Executor) {
 	e.executor = exe
+	e.wsExecutor = wsExec
 	if e.reservoir != nil {
 		_ = e.reservoir.Close()
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
@@ -1515,6 +1519,10 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
 	if e.companionShell == nil {
 		h, registry := ideshell.New(e.emulatorConfig.ScheduleNextTick, e)
+		if e.wsExecutor != nil {
+			e.wsExecutor.RegisterCommands(registry)
+		}
+
 		router := text.NewREPLHandler(&e.comp)
 		for _, cmd := range e.comp.REPLCommands() {
 			if err := registry.RegisterREPLCommand(cmd, router); err != nil {
@@ -2125,6 +2133,26 @@ func (e *ex) focusHandler() tui.Handler {
 type pluginAdapter struct {
 	pluginHandler
 	win browser.Window
+}
+
+type workspaceExecutorAdapter struct {
+	e schemeapi.Executor
+}
+
+func (a workspaceExecutorAdapter) Start(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return a.e.StartCommand(ctx, cmd)
+}
+
+func (a workspaceExecutorAdapter) Signal(
+	pid workspaceapi.Pid, sig syscall.Signal,
+) error {
+	return a.e.Signal(pid, sig)
+}
+
+func (a workspaceExecutorAdapter) Close() error {
+	return a.e.Close()
 }
 
 func (h *pluginAdapter) Close() error {

@@ -25,8 +25,10 @@ import (
 
 	"github.com/google/go-dap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 func TestCloseConnLeavesAliveTrue(t *testing.T) {
@@ -119,6 +121,32 @@ func TestWatchServerNotRetainsDeadServer(t *testing.T) {
 		"dead server should be removed from m.servers after failed retries")
 }
 
+func TestDebugServerStartCarriesProcessContext(t *testing.T) {
+	startErr := errors.New("start failed")
+	exec := &recordingDebugExecutor{err: startErr}
+	srv := newDebugServer(
+		context.Background(),
+		debugConfig{id: "go", command: "dlv", args: []string{"dap", "--listen", "{addr}"}},
+		"dlv",
+		exec,
+		"file:///workspace",
+		nopEventSubscriber{},
+	)
+
+	ctx := processctx.ContextWithExtensionID(context.Background(), "go")
+	err := srv.start(ctx)
+	require.ErrorIs(t, err, startErr)
+
+	extensionID, ok := processctx.ExtensionIDFromContext(exec.ctx)
+	require.True(t, ok)
+	assert.Equal(t, "go", extensionID)
+	assert.Equal(t, "dlv", exec.cmd.Path)
+	assert.Len(t, exec.cmd.Args, 3)
+	assert.Equal(t, "dap", exec.cmd.Args[0])
+	assert.Equal(t, "--listen", exec.cmd.Args[1])
+	assert.NotEqual(t, "{addr}", exec.cmd.Args[2])
+}
+
 // failingExecutor always fails to start commands.
 // Used to force retry failure in watchServer tests.
 type failingExecutor struct{}
@@ -138,5 +166,29 @@ func (failingExecutor) Signal(
 }
 
 func (failingExecutor) Close() error {
+	return nil
+}
+
+type recordingDebugExecutor struct {
+	ctx context.Context
+	cmd workspaceapi.Cmd
+	err error
+}
+
+func (e *recordingDebugExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	e.ctx = ctx
+	e.cmd = cmd
+	return 0, e.err
+}
+
+func (e *recordingDebugExecutor) Signal(
+	workspaceapi.Pid, syscall.Signal,
+) error {
+	return nil
+}
+
+func (e *recordingDebugExecutor) Close() error {
 	return nil
 }

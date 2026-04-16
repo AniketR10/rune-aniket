@@ -13,8 +13,8 @@
 // See <https://www.gnu.org/licenses/> for a copy of the license.
 
 // Package workspaceshell provides a workspaceapi.Executor wrapper
-// that tracks running processes and exposes "ps" and "kill"
-// shell commands via ideshell.CommandHandler.
+// that tracks running processes and exposes a "process" shell
+// command via ideshell.CommandHandler.
 package workspaceshell
 
 import (
@@ -27,29 +27,35 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/ideshell"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 var (
 	_ workspaceapi.Executor   = (*Executor)(nil)
+	_ schemeapi.Executor      = (*Executor)(nil)
 	_ ideshell.CommandHandler = (*Executor)(nil)
 )
 
 // Executor wraps a workspaceapi.Executor, tracking every
-// started process so it can be listed ("ps") or signalled
-// ("kill") from a repl.Handler. It implements both
+// started process so it can be listed, signalled, or stopped
+// from a repl.Handler. It implements both
 // workspaceapi.Executor and ideshell.CommandHandler.
 type Executor struct {
 	mu         sync.RWMutex
 	underlying workspaceapi.Executor
 	processes  map[workspaceapi.Pid]processInfo
+	history    map[workspaceapi.Pid]processInfo
 	stats      map[cmdKey]*cmdStats
+	extensions map[string]workspaceapi.Pid
 	now        func() time.Time // for testing
+	stopGrace  time.Duration    // grace period for stop
 }
 
 type processInfo struct {
@@ -59,11 +65,15 @@ type processInfo struct {
 	dir     string
 	env     []string
 	started time.Time
+	ended   time.Time
 	key     cmdKey
+	parent  workspaceapi.Pid // 0 means no parent
+	done    chan struct{}    // closed when process exits
+	lastErr error            // set on exit for audit history
 }
 
 // cmdKey identifies a command by its path and arguments,
-// used to aggregate stats across restarts.
+// used to aggregate stats across process lifetimes.
 type cmdKey string
 
 func makeCmdKey(path string, args []string) cmdKey {
@@ -71,12 +81,12 @@ func makeCmdKey(path string, args []string) cmdKey {
 }
 
 // cmdStats tracks aggregate statistics for a command
-// across process restarts.
+// across process lifetimes.
 type cmdStats struct {
-	starts  int
-	exits   int
 	lastErr error
 }
+
+const defaultStopGrace = 3 * time.Second
 
 // NewExecutor returns an Executor that delegates to
 // underlying while tracking running processes.
@@ -84,8 +94,11 @@ func NewExecutor(underlying workspaceapi.Executor) *Executor {
 	return &Executor{
 		underlying: underlying,
 		processes:  make(map[workspaceapi.Pid]processInfo),
+		history:    make(map[workspaceapi.Pid]processInfo),
 		stats:      make(map[cmdKey]*cmdStats),
+		extensions: make(map[string]workspaceapi.Pid),
 		now:        time.Now,
+		stopGrace:  defaultStopGrace,
 	}
 }
 
@@ -119,26 +132,50 @@ func (e *Executor) Start(
 		env:     append([]string{}, cmd.Env...),
 		started: e.now(),
 		key:     key,
+		done:    make(chan struct{}),
 	}
+
+	if parent, ok := ParentPidFromContext(ctx); ok {
+		info.parent = parent
+	}
+
 	e.mu.Lock()
-	e.processes[pid] = info
-	s := e.stats[key]
-	if s == nil {
-		s = &cmdStats{}
-		e.stats[key] = s
+	if info.parent == 0 {
+		if extensionID, ok := processctx.ExtensionIDFromContext(ctx); ok {
+			info.parent = e.extensions[extensionID]
+		}
 	}
-	s.starts++
+	e.processes[pid] = info
+	e.history[pid] = info
+	if extensionID, ok := processctx.ExtensionIDFromContext(ctx); ok && info.parent == 0 {
+		e.extensions[extensionID] = pid
+	}
 	e.mu.Unlock()
 
 	go debug.CapturePanicReport(func() {
 
 		exitErr := <-ch
 		e.mu.Lock()
-		if s := e.stats[key]; s != nil {
-			s.exits++
-			s.lastErr = exitErr
+		s := e.stats[key]
+		if s == nil {
+			s = &cmdStats{}
+			e.stats[key] = s
+		}
+		s.lastErr = exitErr
+		if p, ok := e.processes[pid]; ok {
+			close(p.done)
 		}
 		delete(e.processes, pid)
+		for extensionID, extensionPid := range e.extensions {
+			if extensionPid == pid {
+				delete(e.extensions, extensionID)
+			}
+		}
+		if h, ok := e.history[pid]; ok {
+			h.ended = e.now()
+			h.lastErr = exitErr
+			e.history[pid] = h
+		}
 		e.mu.Unlock()
 
 	})
@@ -158,70 +195,91 @@ func (e *Executor) Close() error {
 	return e.underlying.Close()
 }
 
-// RegisterCommands registers "ps" and "kill" in the given
-// registry with the executor as their handler.
-func (e *Executor) RegisterCommands(r *ideshell.CommandRegistry) {
-	r.Register("ps", "List running processes", e)
-	r.Register("kill", "Send a signal to a process", e)
+// StartCommand implements schemeapi.Executor by delegating to Start.
+func (e *Executor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return e.Start(ctx, cmd)
 }
 
-// HandleCommand dispatches "ps" and "kill" commands.
+// RegisterCommands registers the "process" command in the
+// given registry with the executor as its handler.
+func (e *Executor) RegisterCommands(r *ideshell.CommandRegistry) {
+	r.Register("process", "Process management", e)
+}
+
+// HandleCommand dispatches process subcommands.
 func (e *Executor) HandleCommand(
 	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
-	switch cmd.Name {
-	case "ps":
-		return e.handlePS(), nil
-	case "kill":
-		return e.handleKill(cmd.Args)
-	default:
+	if cmd.Name != "process" {
 		return nil, repl.ErrNotFound
+	}
+	if len(cmd.Args) == 0 {
+		return e.Help(ctx, nil)
+	}
+	switch cmd.Args[0] {
+	case "status":
+		return e.handleStatus(), nil
+	case "tree":
+		return e.handleTree(), nil
+	case "audit":
+		return e.handleAudit(), nil
+	case "info":
+		return e.handleInfo(cmd.Args[1:])
+	case "signal":
+		return e.handleSignal(cmd.Args[1:])
+	case "stop":
+		return e.handleStop(cmd.Args[1:])
+	default:
+		return nil, fmt.Errorf("unknown process subcommand: %s", cmd.Args[0])
 	}
 }
 
-// Complete returns PID completions for "kill" and nothing
-// for "ps".
+// Complete returns process subcommand and PID completions.
 func (e *Executor) Complete(
 	_ context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
-	if cmd != "kill" || len(args) == 0 {
+	if cmd != "process" {
 		return iterator.Empty[string](), nil
 	}
-	prefix := args[len(args)-1]
-	e.mu.RLock()
-	pids := make([]string, 0, len(e.processes))
-	for pid := range e.processes {
-		s := strconv.Itoa(int(pid))
-		if strings.HasPrefix(s, prefix) {
-			pids = append(pids, s)
-		}
+	if len(args) == 0 {
+		return iterator.FromSlice(processSubcommands()), nil
 	}
-	e.mu.RUnlock()
-	sort.Strings(pids)
-	return iterator.FromSlice(pids), nil
+	if len(args) == 1 {
+		return completeStrings(processSubcommands(), args[0]), nil
+	}
+	if completesPID(args[0]) {
+		return e.completePids(args[len(args)-1]), nil
+	}
+	return iterator.Empty[string](), nil
 }
 
-// Help returns usage information for ps and kill.
+// Help returns usage information for process subcommands.
 func (e *Executor) Help(
 	_ context.Context, _ []string,
 ) (iterator.Iterator[component.Responsive], error) {
 	return toLines(
 		"Process management commands:",
 		"",
-		"  ps             List running processes with uptime and restart count",
-		"  kill <pid>     Send SIGTERM to a process",
-		"  kill -N <pid>  Send signal N to a process",
+		"  process status             List running processes",
+		"  process audit              List all processes (including exited)",
+		"  process tree               Show process tree (parent→child)",
+		"  process info <pid>         Show detailed process information",
+		"  process signal <pid> [N]   Send signal N to a process (default: SIGTERM)",
+		"  process signal -N <pid>    Send signal N to a process",
+		"  process stop <pid>         Gracefully stop a process (SIGTERM, then SIGKILL)",
 	), nil
 }
 
 type psEntry struct {
-	pid      workspaceapi.Pid
-	uptime   time.Duration
-	restarts int
-	command  string
+	pid     workspaceapi.Pid
+	uptime  time.Duration
+	lastErr string
+	command string
 }
 
-func (e *Executor) handlePS() iterator.Iterator[component.Responsive] {
+func (e *Executor) handleStatus() iterator.Iterator[component.Responsive] {
 	now := e.now()
 	e.mu.RLock()
 	entries := make([]psEntry, 0, len(e.processes))
@@ -230,35 +288,185 @@ func (e *Executor) handlePS() iterator.Iterator[component.Responsive] {
 		if len(info.args) > 0 {
 			cmd += " " + strings.Join(info.args, " ")
 		}
-		restarts := 0
+		lastErr := "—"
 		if s := e.stats[info.key]; s != nil {
-			restarts = s.starts - 1
+			lastErr = formatLastErr(s.lastErr)
 		}
 		entries = append(entries, psEntry{
-			pid:      info.pid,
-			uptime:   now.Sub(info.started),
-			restarts: restarts,
-			command:  cmd,
+			pid:     info.pid,
+			uptime:  now.Sub(info.started),
+			lastErr: lastErr,
+			command: cmd,
 		})
 	}
 	e.mu.RUnlock()
+	return renderProcessTable(entries)
+}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].pid < entries[j].pid
+func (e *Executor) handleAudit() iterator.Iterator[component.Responsive] {
+	now := e.now()
+	e.mu.RLock()
+	entries := make([]psEntry, 0, len(e.history))
+	for _, info := range e.history {
+		cmd := info.path
+		if len(info.args) > 0 {
+			cmd += " " + strings.Join(info.args, " ")
+		}
+		uptime := now.Sub(info.started)
+		if !info.ended.IsZero() {
+			uptime = info.ended.Sub(info.started)
+		}
+		lastErr := "—"
+		if info.lastErr != nil {
+			lastErr = formatLastErr(info.lastErr)
+		} else if s := e.stats[info.key]; s != nil {
+			lastErr = formatLastErr(s.lastErr)
+		}
+		entries = append(entries, psEntry{
+			pid:     info.pid,
+			uptime:  uptime,
+			lastErr: lastErr,
+			command: cmd,
+		})
+	}
+	e.mu.RUnlock()
+	return renderProcessTable(entries)
+}
+
+func (e *Executor) handleTree() iterator.Iterator[component.Responsive] {
+	now := e.now()
+	e.mu.RLock()
+	infos := make([]processInfo, 0, len(e.processes))
+	for _, info := range e.processes {
+		infos = append(infos, info)
+	}
+	e.mu.RUnlock()
+
+	// Build children map and find roots.
+	children := make(map[workspaceapi.Pid][]processInfo)
+	var roots []processInfo
+	for _, info := range infos {
+		if info.parent == 0 {
+			roots = append(roots, info)
+		} else {
+			children[info.parent] = append(
+				children[info.parent], info)
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		return roots[i].pid < roots[j].pid
 	})
+	for k := range children {
+		c := children[k]
+		sort.Slice(c, func(i, j int) bool {
+			return c[i].pid < c[j].pid
+		})
+	}
 
-	lines := make([]component.Responsive, 0, len(entries)+1)
+	lines := make([]component.Responsive, 0, len(infos)+1)
 	lines = append(lines, toResponsive(
-		fmt.Sprintf("  %-8s %-10s %-10s %s", "PID", "UPTIME", "RESTARTS", "COMMAND"),
+		fmt.Sprintf("  %-8s %-8s %-10s %s",
+			"PID", "PPID", "UPTIME", "COMMAND"),
 	))
-	for _, ent := range entries {
+
+	var walk func(info processInfo, depth int)
+	walk = func(info processInfo, depth int) {
+		cmd := info.path
+		if len(info.args) > 0 {
+			cmd += " " + strings.Join(info.args, " ")
+		}
+		indent := strings.Repeat("  ", depth)
+		ppidStr := "—"
+		if info.parent != 0 {
+			ppidStr = strconv.Itoa(int(info.parent))
+		}
 		lines = append(lines, toResponsive(
-			fmt.Sprintf("  %-8d %-10s %-10d %s",
-				ent.pid, formatDuration(ent.uptime),
-				ent.restarts, ent.command),
+			fmt.Sprintf("  %-8d %-8s %-10s %s%s",
+				info.pid, ppidStr,
+				formatDuration(now.Sub(info.started)), indent, cmd),
 		))
+		for _, child := range children[info.pid] {
+			walk(child, depth+1)
+		}
+	}
+
+	for _, root := range roots {
+		walk(root, 0)
 	}
 	return iterator.FromSlice(lines)
+}
+
+func (e *Executor) handleInfo(
+	args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("usage: process info <pid>")
+	}
+	pidVal, err := strconv.Atoi(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid pid: %s", args[0])
+	}
+	pid := workspaceapi.Pid(pidVal)
+
+	now := e.now()
+	e.mu.RLock()
+	info, ok := e.processes[pid]
+	var stats *cmdStats
+	if ok {
+		stats = e.stats[info.key]
+	}
+	e.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("process %d not found", pid)
+	}
+
+	cmd := info.path
+	if len(info.args) > 0 {
+		cmd += " " + strings.Join(info.args, " ")
+	}
+
+	lastErr := "—"
+	if stats != nil {
+		lastErr = formatLastErr(stats.lastErr)
+	}
+
+	ppidStr := "—"
+	if info.parent != 0 {
+		ppidStr = strconv.Itoa(int(info.parent))
+	}
+
+	infoLines := []string{
+		fmt.Sprintf("  PID:        %d", info.pid),
+		fmt.Sprintf("  Parent PID: %s", ppidStr),
+		fmt.Sprintf("  Command:    %s", cmd),
+		fmt.Sprintf("  Directory:  %s", info.dir),
+		fmt.Sprintf("  Started:    %s", info.started.Format(time.RFC3339)),
+		fmt.Sprintf("  Uptime:     %s", formatDuration(now.Sub(info.started))),
+		fmt.Sprintf("  Last Error: %s", lastErr),
+	}
+
+	if len(info.env) > 0 {
+		infoLines = append(infoLines, "  Environment:")
+		for _, envVar := range info.env {
+			infoLines = append(infoLines,
+				fmt.Sprintf("    %s", redactEnv(envVar)))
+		}
+	}
+
+	return toLines(infoLines...), nil
+}
+
+func formatLastErr(err error) string {
+	if err == nil {
+		return "—"
+	}
+	const maxLen = 30
+	s := err.Error()
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-1] + "…"
 }
 
 func formatDuration(d time.Duration) string {
@@ -280,11 +488,11 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
-func (e *Executor) handleKill(
+func (e *Executor) handleSignal(
 	args []string,
 ) (iterator.Iterator[component.Responsive], error) {
 	if len(args) == 0 {
-		return nil, fmt.Errorf("usage: kill [-signal] <pid>")
+		return nil, fmt.Errorf("usage: process signal [-signal] <pid>")
 	}
 
 	sig := syscall.SIGTERM
@@ -297,6 +505,12 @@ func (e *Executor) handleKill(
 		}
 		sig = syscall.Signal(n)
 		pidStr = args[1]
+	} else if len(args) > 1 {
+		n, err := strconv.Atoi(args[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid signal: %s", args[1])
+		}
+		sig = syscall.Signal(n)
 	}
 
 	pid, err := strconv.Atoi(pidStr)
@@ -311,6 +525,85 @@ func (e *Executor) handleKill(
 	return iterator.Empty[component.Responsive](), nil
 }
 
+func (e *Executor) handleStop(
+	args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("usage: process stop <pid>")
+	}
+	pidVal, err := strconv.Atoi(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid pid: %s", args[0])
+	}
+	pid := workspaceapi.Pid(pidVal)
+
+	// Look up the done channel while holding the lock.
+	e.mu.RLock()
+	info, tracked := e.processes[pid]
+	e.mu.RUnlock()
+
+	// Send SIGTERM first.
+	if err := e.Signal(pid, syscall.SIGTERM); err != nil {
+		return nil, err
+	}
+
+	if !tracked {
+		// Process not tracked; fall through to SIGKILL.
+		if err := e.Signal(pid, syscall.SIGKILL); err != nil {
+			return nil, err
+		}
+		return toLines("  sent SIGKILL (untracked process)"), nil
+	}
+
+	// Wait for graceful exit or timeout.
+	select {
+	case <-info.done:
+		return toLines(
+			fmt.Sprintf("  process %d stopped", pid),
+		), nil
+	case <-time.After(e.stopGrace):
+		if err := e.Signal(pid, syscall.SIGKILL); err != nil {
+			return nil, err
+		}
+		return toLines(
+			fmt.Sprintf("  process %d killed (SIGTERM timed out)", pid),
+		), nil
+	}
+}
+
+func processSubcommands() []string {
+	return []string{"status", "audit", "tree", "info", "signal", "stop"}
+}
+
+func completesPID(subcommand string) bool {
+	return subcommand == "signal" || subcommand == "stop" ||
+		subcommand == "info"
+}
+
+func completeStrings(values []string, prefix string) iterator.Iterator[string] {
+	matches := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			matches = append(matches, value)
+		}
+	}
+	return iterator.FromSlice(matches)
+}
+
+func (e *Executor) completePids(prefix string) iterator.Iterator[string] {
+	e.mu.RLock()
+	pids := make([]string, 0, len(e.processes))
+	for pid := range e.processes {
+		s := strconv.Itoa(int(pid))
+		if strings.HasPrefix(s, prefix) {
+			pids = append(pids, s)
+		}
+	}
+	e.mu.RUnlock()
+	sort.Strings(pids)
+	return iterator.FromSlice(pids)
+}
+
 func toLines(ss ...string) iterator.Iterator[component.Responsive] {
 	out := make([]component.Responsive, len(ss))
 	for i, s := range ss {
@@ -319,8 +612,64 @@ func toLines(ss ...string) iterator.Iterator[component.Responsive] {
 	return iterator.FromSlice(out)
 }
 
+func renderProcessTable(entries []psEntry) iterator.Iterator[component.Responsive] {
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].pid < entries[j].pid
+	})
+	lines := make([]component.Responsive, 0, len(entries)+1)
+	lines = append(lines, toResponsive(
+		fmt.Sprintf("  %-8s %-10s %-30s %s", "PID", "UPTIME", "LAST ERR", "COMMAND"),
+	))
+	for _, ent := range entries {
+		lines = append(lines, toResponsive(
+			fmt.Sprintf("  %-8d %-10s %-30s %s",
+				ent.pid, formatDuration(ent.uptime),
+				ent.lastErr, ent.command),
+		))
+	}
+	return iterator.FromSlice(lines)
+}
+
 func toResponsive(s string) component.Responsive {
 	return component.NewResponsiveString(
 		s, component.StringResponsiveConfig{},
 	)
+}
+
+// ContextWithParentPid returns a context carrying the given
+// parent PID. When a process is started with this context, the
+// executor records it as a child of the specified parent.
+func ContextWithParentPid(
+	ctx context.Context, pid workspaceapi.Pid,
+) context.Context {
+	return processctx.ContextWithParentPid(ctx, pid)
+}
+
+// ParentPidFromContext extracts a parent PID previously stored
+// via ContextWithParentPid. Returns 0, false when absent.
+func ParentPidFromContext(ctx context.Context) (workspaceapi.Pid, bool) {
+	return processctx.ParentPidFromContext(ctx)
+}
+
+// secretEnvKeys lists environment variable names whose values
+// must be redacted in process info output.
+var secretEnvKeys = map[string]bool{
+	"RUNE_CERT":  true,
+	"RUNE_TOKEN": true,
+	"IDE_CERT":   true,
+	"IDE_TOKEN":  true,
+}
+
+// redactEnv replaces the value portion of sensitive environment
+// variables with "****". Non-sensitive variables and entries
+// without an "=" are returned unchanged.
+func redactEnv(envVar string) string {
+	key, _, ok := strings.Cut(envVar, "=")
+	if !ok {
+		return envVar
+	}
+	if secretEnvKeys[key] {
+		return key + "=****"
+	}
+	return envVar
 }

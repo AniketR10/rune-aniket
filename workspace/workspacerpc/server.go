@@ -41,6 +41,7 @@ import (
 	grpc "google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 var (
@@ -90,6 +91,7 @@ func (s *Server) StartCommand(stream workspacerpc.Executor_StartCommandServer) e
 	}
 	start := req.Start
 	ctx, cancelCtx := context.WithCancel(s.ctx)
+	ctx = processctx.DeriveCommandContext(ctx, stream.Context())
 	streamer, err := newServerCommandStreamer(
 		ctx, cancelCtx, stream, start.GetName(), start.GetDir(), start.GetArgs(), start.GetEnv(),
 		start.GetStdin(), start.GetStdout(), start.GetStderr(),

@@ -56,6 +56,7 @@ import (
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace/processctx"
 )
 
 // NewRunner returns an ide.ExtensionsRunner with a simple protocol that
@@ -111,6 +112,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 
 	streamInterceptors := []grpc.StreamServerInterceptor{
 		rpc.StreamReportRecoveryInterceptor(),
+		extensionIDStreamInterceptor(),
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		rpc.UnaryReportRecoveryInterceptor(),
@@ -196,6 +198,30 @@ func (r *runner) WorkspaceExtensionsRunner(
 		return nil, err
 	}
 	return ret, nil
+}
+
+func extensionIDStreamInterceptor() grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler) error {
+		claims, ok := auth.ClaimsFromContext[Extension](stream.Context())
+		if ok && claims.Extra.ExtensionID != "" {
+			stream = contextServerStream{
+				ServerStream: stream,
+				ctx: processctx.ContextWithExtensionID(
+					stream.Context(), claims.Extra.ExtensionID),
+			}
+		}
+		return handler(srv, stream)
+	}
+}
+
+type contextServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s contextServerStream) Context() context.Context {
+	return s.ctx
 }
 
 func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
