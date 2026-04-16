@@ -26,6 +26,7 @@ package syntax
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -34,7 +35,70 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
+
+type countingPkgManager struct {
+	mu    sync.Mutex
+	calls int
+	files []string
+}
+
+func (m *countingPkgManager) LibDir(context.Context, string) (iterator.Iterator[string], error) {
+	m.mu.Lock()
+	m.calls++
+	files := append([]string(nil), m.files...)
+	m.mu.Unlock()
+	return iterator.FromSlice(files), nil
+}
+
+func (m *countingPkgManager) Calls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
+}
+
+func TestCachingPkgManagerReturnsCachedFiles(t *testing.T) {
+	root := &countingPkgManager{files: []string{"tree-sitter.so", "highlights.scm"}}
+	pkg := newCachingPkgManager(root)
+	pkg.cache("go", root.files)
+
+	it, err := pkg.LibDir(context.Background(), "go")
+	require.NoError(t, err)
+	files, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"tree-sitter.so", "highlights.scm"}, files)
+	assert.Equal(t, 0, root.Calls())
+}
+
+func TestNewParserCachesPackageFilesOnlyAfterRequiredFilesFound(t *testing.T) {
+	dir := t.TempDir()
+	root := &countingPkgManager{files: []string{
+		filepath.Join(dir, "go", ParserFilename),
+	}}
+	pkg := newCachingPkgManager(root)
+
+	_, err := newParser(context.Background(), "go", pkg, HighlightsFilename, "")
+	require.ErrorIs(t, err, errNotInstalled)
+	_, ok := pkg.files.Load("go")
+	assert.False(t, ok, "missing query file should not populate the package cache")
+	assert.Equal(t, 1, root.Calls())
+
+	root.files = append(root.files, filepath.Join(dir, "go", HighlightsFilename))
+	_, err = newParser(context.Background(), "go", pkg, HighlightsFilename, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open lib query file")
+	assert.Equal(t, 2, root.Calls())
+	files, ok := pkg.files.Load("go")
+	require.True(t, ok)
+	assert.Equal(t, root.files, files)
+
+	_, err = newParser(context.Background(), "go", pkg, HighlightsFilename, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open lib query file")
+	assert.Equal(t, 2, root.Calls(), "cached package files should skip LibDir")
+}
 
 func TestListSymbolsIteratorNext(t *testing.T) {
 	tests := []struct {

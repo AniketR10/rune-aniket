@@ -55,7 +55,7 @@ import (
 func NewParser(
 	w workspaceapi.FileSystem, pkg PkgManager, uri workspaceapi.URI,
 ) syntaxapi.Parser {
-	return parserSearcher{w: w, uri: uri, pkg: pkg}
+	return parserSearcher{w: w, uri: uri, pkg: newCachingPkgManager(pkg)}
 }
 
 var defaultWorkers = runtime.NumCPU()
@@ -571,6 +571,9 @@ func newParser(
 	if langfile == "" || (queryFile != "" && queryFileAbsPath == "") {
 		err = errNotInstalled
 		return
+	}
+	if cacheableIt, ok := it.(cacheablePkgFilesIterator); ok {
+		cacheableIt.cache(files)
 	}
 
 	if queryFileAbsPath != "" && queryFile != "" {
