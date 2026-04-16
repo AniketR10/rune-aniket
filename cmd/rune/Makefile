@@ -37,7 +37,7 @@ SED_INPLACE = ''
 endif
 
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
-	docker-build docker-run docker-build-gcp docker-push-gcp linux-cross-compile \
+	docker-build docker-run linux-cross-compile \
 	release-linux-amd64 release-linux-arm64 dist-linux-amd64 dist-linux-arm64 \
 	dist-darwin-arm64 dist-darwin-amd64
 
@@ -199,12 +199,6 @@ docker-build:
 
 docker-run:
 	@docker run -ti --rm -e PORT=80 -p 8080:80 unstable.build/ox-api:$(VERSION)
-
-docker-build-gcp:
-	@cd $(ROOT_DIR) && docker buildx build -f deploy/ox-api/Dockerfile --platform linux/amd64 -t us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/ox-api:$(VERSION) --build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" .
-
-docker-push-gcp:
-	@docker push us-central1-docker.pkg.dev/unstable-build-blue-dev/docker/ox-api:$(VERSION)
 
 linux-cross-compile:
 	@rm -rf $(RUNE_LINUX_OUTPUT_DIR)

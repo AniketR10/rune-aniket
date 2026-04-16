@@ -29,7 +29,7 @@ RELEASE_FILES=$(wildcard release/*)
 .PHONY: debug clean test coverage generate sixdev rune rune-agent ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
-	rune-docker-build rune-docker-run rune-docker-build-gcp rune-docker-push-gcp \
+	rune-docker-build rune-docker-run ox-api-docker-build-gcp ox-api-docker-push-gcp \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
@@ -180,11 +180,11 @@ rune-docker-build:
 rune-docker-run:
 	@$(MAKE) -C cmd/rune docker-run
 
-rune-docker-build-gcp:
-	@$(MAKE) -C cmd/rune docker-build-gcp
+ox-api-docker-build-gcp:
+	@$(MAKE) -C cmd/ox-api docker-build-gcp
 
-rune-docker-push-gcp:
-	@$(MAKE) -C cmd/rune docker-push-gcp
+ox-api-docker-push-gcp:
+	@$(MAKE) -C cmd/ox-api docker-push-gcp
 
 rune-linux-cross-compile:
 	@$(MAKE) -C cmd/rune linux-cross-compile
