@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/text"
 )
 
 // ExtensionPromptOpener opens a browser prompt for extension host decisions.
@@ -50,6 +51,7 @@ type ExtensionsRunner interface {
 		dataDir string, notifications browser.Notifications,
 		executor schemeapi.Executor,
 		grantor extension.Grantor,
+		editor text.Editor,
 		promptOpener ExtensionPromptOpener, storage storageapi.Service,
 		scheduleNextTick func(func()) bool,
 	) (extension.Runner, error)
@@ -61,6 +63,7 @@ func FuncExtensionsRunner(
 		map[extensionapi.Permission]extension.ResourceRegistrar, string,
 		browser.Notifications, schemeapi.Executor,
 		extension.Grantor,
+		text.Editor,
 		ExtensionPromptOpener, storageapi.Service,
 		func(func()) bool) (extension.Runner, error),
 ) ExtensionsRunner {
@@ -72,6 +75,7 @@ type fnExtensions struct {
 		map[extensionapi.Permission]extension.ResourceRegistrar, string,
 		browser.Notifications, schemeapi.Executor,
 		extension.Grantor,
+		text.Editor,
 		ExtensionPromptOpener, storageapi.Service,
 		func(func()) bool) (extension.Runner, error)
 }
@@ -81,8 +85,10 @@ func (f fnExtensions) WorkspaceExtensionsRunner(
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, n browser.Notifications, exec schemeapi.Executor,
 	grantor extension.Grantor,
+	editor text.Editor,
 	promptOpener ExtensionPromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
-	return f.fn(uri, res, dataDir, n, exec, grantor, promptOpener, storage, scheduleNextTick)
+	return f.fn(uri, res, dataDir, n, exec, grantor, editor,
+		promptOpener, storage, scheduleNextTick)
 }

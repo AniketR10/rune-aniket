@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/text"
 )
 
 // Option is a configuration option for an IDE.
@@ -324,6 +325,7 @@ func (n nopExtensions) WorkspaceExtensionsRunner(
 	dataDir string, notifications browser.Notifications,
 	exec schemeapi.Executor,
 	grantor extension.Grantor,
+	editor text.Editor,
 	promptOpener ExtensionPromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool) (extension.Runner, error) {
 	return nopExtensionsRunner{}, nil

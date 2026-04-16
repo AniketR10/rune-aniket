@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/text"
 )
 
 // NewRunner returns an extension runner for Rune workspace extensions.
@@ -78,11 +79,12 @@ func (p *Extensions) WorkspaceExtensionsRunner(
 	dataDir string, notifications browser.Notifications,
 	exec schemeapi.Executor,
 	grantor extension.Grantor,
+	editor text.Editor,
 	promptOpener ide.ExtensionPromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
 	other, err := p.runner.WorkspaceExtensionsRunner(uri, res, dataDir, notifications, exec,
-		grantor, promptOpener, storage, scheduleNextTick)
+		grantor, editor, promptOpener, storage, scheduleNextTick)
 	if err != nil {
 		return nil, err
 	}

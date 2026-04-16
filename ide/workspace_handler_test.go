@@ -1052,6 +1052,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				s string, noti browser.Notifications,
 				exec schemeapi.Executor,
 				grantor extension.Grantor,
+				editor text.Editor,
 				promptOpener ExtensionPromptOpener, storage storageapi.Service,
 				scheduleNextTick func(func()) bool,
 			) (extension.Runner, error) {
@@ -1116,6 +1117,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				s string, noti browser.Notifications,
 				executor schemeapi.Executor,
 				grantor extension.Grantor,
+				editor text.Editor,
 				promptOpener ExtensionPromptOpener, storage storageapi.Service,
 				scheduleNextTick func(func()) bool) (extension.Runner, error) {
 				defer wg.Done()

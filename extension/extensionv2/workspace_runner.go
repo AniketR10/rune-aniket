@@ -233,18 +233,21 @@ func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []s
 	}
 	name := fmt.Sprintf("%s_%s", path, strings.Join(args, "_"))
 	id := uuid.New()
-	// TODO refactor authorizer to prompt user rather than hardcoding permissions
-	// on client
 	permissions := extensionapi.AllPermissions()
 	m.log(log.DebugLevel, "creating one shot authentication for "+
 		"command %s, id: %d, permissions: %v", name, id, permissions)
-	claimsExtra := Extension{Metadata: extensionapi.Metadata{
-		DeveloperID:   "you",
-		DeveloperKey:  "",
-		ExtensionID:   id.String(),
-		ExtensionName: name,
-		Permissions:   permissions,
-	}}
+	claimsExtra := Extension{
+		Metadata: extensionapi.Metadata{
+			DeveloperID:   "you",
+			DeveloperKey:  "",
+			ExtensionID:   id.String(),
+			ExtensionName: name,
+			Permissions:   permissions,
+		},
+		Plugin: true,
+		Path:   path,
+		Args:   append([]string(nil), args...),
+	}
 	accessToken, err := auth.SignToken(signKey,
 		claimsExtra.DeveloperID, claimsExtra.DeveloperEmail, claimsExtra,
 		tokenExpiresIn)

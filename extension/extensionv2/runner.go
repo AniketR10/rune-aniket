@@ -55,6 +55,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/rpc"
+	"unstable.build/go-tui/text"
 )
 
 // NewRunner returns an ide.ExtensionsRunner with a simple protocol that
@@ -63,12 +64,10 @@ import (
 func NewRunner(
 	ctx context.Context, locker sync.Locker, dataDir string, opts ...Option,
 ) (ide.ExtensionsRunner, error) {
-	authorizer := newAuthorizer()
 	ret := &runner{
-		authorizer: authorizer,
-		locker:     locker,
-		dataDir:    dataDir,
-		opts:       opts,
+		locker:  locker,
+		dataDir: dataDir,
+		opts:    opts,
 	}
 	var err error
 	ret.keys, err = auth.GenerateKeys()
@@ -84,12 +83,11 @@ func NewRunner(
 const certExpiresIn = 10 * 24 * 365 * time.Hour
 
 type runner struct {
-	opts       []Option
-	cfg        runnerConfig
-	locker     sync.Locker
-	keys       auth.Keys
-	authorizer auth.Authorizer[Extension]
-	dataDir    string
+	opts    []Option
+	cfg     runnerConfig
+	locker  sync.Locker
+	keys    auth.Keys
+	dataDir string
 }
 
 func (r *runner) WorkspaceExtensionsRunner(
@@ -97,6 +95,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 	dataDir string, notifications browser.Notifications,
 	executor schemeapi.Executor,
 	grantor extension.Grantor,
+	editor text.Editor,
 	promptOpener ide.ExtensionPromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
@@ -108,6 +107,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		return nil, fmt.Errorf("create unix listener: %w", err)
 	}
 	socket := listener.Addr().String()
+	listener = newPeerProcessListener(listener)
 
 	streamInterceptors := []grpc.StreamServerInterceptor{
 		rpc.StreamReportRecoveryInterceptor(),
@@ -128,8 +128,16 @@ func (r *runner) WorkspaceExtensionsRunner(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 	}
 	var cert, key []byte
+	prompter := newPluginPermissionPrompter(promptOpener, scheduleNextTick)
+	authorizer, err := newAuthorizer(prompter, storage, editor)
+	if err != nil {
+		if cerr := listener.Close(); cerr != nil {
+			err = multierror.Append(err, cerr)
+		}
+		return nil, fmt.Errorf("new authorizer: %w", err)
+	}
 	if r.cfg.insecureTransport && !r.cfg.insecureAuth {
-		opts = append(opts, grpcauth.GRPCServerWithInsecureOauth2(r.keys, r.authorizer)...)
+		opts = append(opts, grpcauth.GRPCServerWithInsecureOauth2(r.keys, authorizer)...)
 	} else if !r.cfg.insecureTransport {
 		cert, key, err = auth.GenerateSelfSignedCert(
 			[]string{socket}, pkix.Name{CommonName: "ox"}, certExpiresIn)
@@ -154,7 +162,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		if r.cfg.insecureAuth {
 			opts = append(opts, grpc.Creds(creds))
 		} else {
-			opts = append(opts, grpcauth.GRPCServerWithOauth2(r.keys, r.authorizer, creds)...)
+			opts = append(opts, grpcauth.GRPCServerWithOauth2(r.keys, authorizer, creds)...)
 		}
 	}
 	ret.srv = grpc.NewServer(opts...)

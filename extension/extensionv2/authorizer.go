@@ -25,25 +25,82 @@ package extensionv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"unstable.build/go-tui/text"
 )
 
 // Extension represents an authenticated extension which is
 // associated with some access to some resources.
 type Extension struct {
 	extensionapi.Metadata
+	Plugin bool
+	Path   string
+	Args   []string
+}
+
+// PluginPermissionRequest describes a single permission requested by an
+// ad-hoc program.
+type PluginPermissionRequest struct {
+	Path         string
+	Args         []string
+	LauncherPath string
+	LauncherArgs []string
+	Permission   extensionapi.Permission
+	Resource     string
+}
+
+// PluginPermissionDecision is the user's decision for an ad-hoc program
+// permission request.
+type PluginPermissionDecision string
+
+const (
+	// PluginPermissionAllowOnce allows the requested permission for the current
+	// plugin process identity only.
+	PluginPermissionAllowOnce PluginPermissionDecision = "allow-once"
+	// PluginPermissionAllowAlways persists an allow decision for the plugin
+	// program identity and requested permission.
+	PluginPermissionAllowAlways PluginPermissionDecision = "allow-always"
+	// PluginPermissionDenyOnce denies the requested permission for the current
+	// plugin process identity only.
+	PluginPermissionDenyOnce PluginPermissionDecision = "deny-once"
+	// PluginPermissionDenyAlways persists a deny decision for the plugin program
+	// identity and requested permission.
+	PluginPermissionDenyAlways PluginPermissionDecision = "deny-always"
+)
+
+// PluginPermissionPrompter prompts for an ad-hoc program permission.
+type PluginPermissionPrompter interface {
+	PromptPluginPermission(
+		context.Context, PluginPermissionRequest,
+	) (PluginPermissionDecision, error)
 }
 
 // newAuthorizer returns an auth.Authorizer of Extension. It uses the permissions
 // in the granted claims to authorize access to a resource.
-func newAuthorizer() blueauth.Authorizer[Extension] {
-	return authorizer{}
+func newAuthorizer(
+	prompter PluginPermissionPrompter, storage storageapi.Service,
+	editor text.Editor,
+) (blueauth.Authorizer[Extension], error) {
+	if editor == nil {
+		return nil, errors.New("editor is required")
+	}
+	plugin := newPluginPermissionAuthorizer(prompter, storage)
+	if err := registerAuthorizerREPLCommand(editor, plugin); err != nil {
+		return nil, fmt.Errorf("register authorizer repl command: %w", err)
+	}
+	return authorizer{
+		plugin: plugin,
+	}, nil
 }
 
-type authorizer struct{}
+type authorizer struct {
+	plugin *pluginPermissionAuthorizer
+}
 
 func (a authorizer) Authorize(
 	ctx context.Context, claims blueauth.UserClaims[Extension], resource string,
@@ -52,6 +109,9 @@ func (a authorizer) Authorize(
 	if !ok {
 		err = fmt.Errorf("extraneous rpc resource %s: %w", resource, blueauth.ErrForbidden)
 		return
+	}
+	if claims.Extra.Plugin {
+		return a.plugin.Authorize(ctx, claims.Extra, perm, resource)
 	}
 	if _, ok := claims.Extra.Permissions[perm]; !ok {
 		err = blueauth.ErrForbidden

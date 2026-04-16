@@ -25,12 +25,14 @@ package extensionv2
 
 import (
 	"context"
+	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/extension"
@@ -89,6 +91,49 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 	assert.NotEmpty(t, exec.cmd.Dir)
 	assert.Equal(t, "/bin/zsh", exec.cmd.Path)
 	assert.Equal(t, []string{"--login", "-i"}, exec.cmd.Args)
+}
+
+func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+	verifyKeys, err := keys.Verify(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, verifyKeys)
+
+	uri, err := workspaceapi.ParseURI("file:///tmp")
+	require.NoError(t, err)
+
+	runner := newWorkspaceRunner(
+		&recordingExecutor{},
+		nil, // grantor is not used by StartCommand
+		uri,
+		"/tmp/ext.sock",
+		"/tmp/ext-data",
+		[]byte("cert"),
+		keys,
+	)
+
+	env, err := runner.commandEnvs(context.Background(), "/bin/zsh",
+		[]string{"--login", "-i"})
+	require.NoError(t, err)
+
+	var token string
+	for _, e := range env {
+		if value, ok := strings.CutPrefix(e, runner.cfg.authTokenEnv+"="); ok {
+			token = value
+			break
+		}
+	}
+	require.NotEmpty(t, token)
+
+	claims, err := auth.VerifyToken[Extension](verifyKeys[0], token)
+	require.NoError(t, err)
+	assert.True(t, claims.Extra.Plugin)
+	assert.Equal(t, "/bin/zsh", claims.Extra.Path)
+	assert.Equal(t, []string{"--login", "-i"}, claims.Extra.Args)
+	assert.Equal(t, extensionapi.AllPermissions(), claims.Extra.Permissions)
 }
 
 var _ extension.Runner = (*workspaceRunner)(nil)

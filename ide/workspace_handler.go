@@ -1067,7 +1067,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res,
 		dataDir, browser, cwd, grantor,
-		promptOpener, promptStorage, cfg.scheduleNextTick)
+		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
 		return nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}
