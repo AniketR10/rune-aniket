@@ -42,6 +42,8 @@ command:
     <m-f>: searchtext
     <m-g>: jumptolocation next search
     <s-m-g>: jumptolocation prev search
+    <m-u>: cursorhistory prev
+    <s-m-u>: cursorhistory next
     <m-,>: config
     <a-m-h>: windowcloseall
     <s-m-]>: tabnext
