@@ -40,16 +40,19 @@ import (
 )
 
 type workspaceResourceServer struct {
-	b workspace.Workspace
-	p extensionapi.Permission
+	b                 workspace.Workspace
+	p                 extensionapi.Permission
+	commandAuthorizer tworkspacerpc.CommandAuthorizer
 }
 
 func newWorkspaceResourceServer(
 	b workspace.Workspace, p extensionapi.Permission,
+	commandAuthorizer tworkspacerpc.CommandAuthorizer,
 ) *workspaceResourceServer {
 	ret := new(workspaceResourceServer)
 	ret.p = p
 	ret.b = b
+	ret.commandAuthorizer = commandAuthorizer
 	return ret
 }
 
@@ -63,7 +66,7 @@ func (s *workspaceResourceServer) Register(
 		Workspace: s.b,
 	}
 	w.ctx, w.cancelCtx = context.WithCancel(context.Background())
-	server := tworkspacerpc.NewServer(w, lock)
+	server := tworkspacerpc.NewServer(w, lock, s.commandAuthorizer)
 	switch s.p {
 	case extensionapi.PermissionFileSystem:
 		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {
@@ -84,14 +87,16 @@ func (s *workspaceResourceServer) Register(
 
 // WorkspaceResources returns a map of Permission to a ResourceServer
 // capable of serving each of the b Workspace's resources.
-func WorkspaceResources(b workspace.Workspace) map[extensionapi.Permission]ResourceRegistrar {
+func WorkspaceResources(
+	b workspace.Workspace, commandAuthorizer tworkspacerpc.CommandAuthorizer,
+) map[extensionapi.Permission]ResourceRegistrar {
 	return map[extensionapi.Permission]ResourceRegistrar{
 		extensionapi.PermissionFileSystem: newWorkspaceResourceServer(
-			b, extensionapi.PermissionFileSystem),
+			b, extensionapi.PermissionFileSystem, commandAuthorizer),
 		extensionapi.PermissionTerminal: newWorkspaceResourceServer(
-			b, extensionapi.PermissionTerminal),
+			b, extensionapi.PermissionTerminal, commandAuthorizer),
 		extensionapi.PermissionExecute: newWorkspaceResourceServer(
-			b, extensionapi.PermissionExecute),
+			b, extensionapi.PermissionExecute, commandAuthorizer),
 	}
 }
 

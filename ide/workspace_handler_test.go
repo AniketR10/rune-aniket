@@ -60,6 +60,7 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
@@ -1053,7 +1054,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				exec schemeapi.Executor,
 				grantor extension.Grantor,
 				editor text.Editor,
-				promptOpener ExtensionPromptOpener, storage storageapi.Service,
+				promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 				scheduleNextTick func(func()) bool,
 			) (extension.Runner, error) {
 				defer wg.Done()
@@ -1118,7 +1119,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				executor schemeapi.Executor,
 				grantor extension.Grantor,
 				editor text.Editor,
-				promptOpener ExtensionPromptOpener, storage storageapi.Service,
+				promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 				scheduleNextTick func(func()) bool) (extension.Runner, error) {
 				defer wg.Done()
 				assert.NotNil(t, res)

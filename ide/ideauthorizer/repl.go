@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionv2
+package ideauthorizer
 
 import (
 	"context"
@@ -44,7 +44,7 @@ const (
 )
 
 func registerAuthorizerREPLCommand(
-	editor text.Editor, authorizer *authorizer,
+	editor text.Editor, authorizer *Authorizer,
 ) error {
 	return editor.RegisterREPLCommand(textapi.CommandManual{
 		Name:     authorizerREPLCommand,
@@ -65,7 +65,7 @@ func registerAuthorizerREPLCommand(
 }
 
 type authorizerREPLHandler struct {
-	authorizer *authorizer
+	authorizer *Authorizer
 }
 
 func (h authorizerREPLHandler) HandleCommand(
@@ -280,7 +280,7 @@ func shortPluginPermissionKey(key string) string {
 	return sanitizePluginPermissionIDPart(key[:8])
 }
 
-func (a *authorizer) permissionDecisions(
+func (a *Authorizer) permissionDecisions(
 	ctx context.Context, now time.Time,
 ) ([]pluginPermissionStoredDecisionEntry, error) {
 	entries, err := a.storedDecisions(ctx)
@@ -294,7 +294,7 @@ func (a *authorizer) permissionDecisions(
 	return entries, nil
 }
 
-func (a *authorizer) storedDecisions(
+func (a *Authorizer) storedDecisions(
 	ctx context.Context,
 ) ([]pluginPermissionStoredDecisionEntry, error) {
 	if a == nil || a.storage == nil {
@@ -329,7 +329,7 @@ func (a *authorizer) storedDecisions(
 	return ret, nil
 }
 
-func (a *authorizer) transientDecisions(
+func (a *Authorizer) transientDecisions(
 	now time.Time,
 ) []pluginPermissionStoredDecisionEntry {
 	if a == nil {
@@ -356,7 +356,7 @@ func (a *authorizer) transientDecisions(
 	return ret
 }
 
-func (a *authorizer) findStoredDecision(
+func (a *Authorizer) findStoredDecision(
 	ctx context.Context, selected string,
 ) (pluginPermissionStoredDecisionEntry, bool, error) {
 	entries, err := a.storedDecisions(ctx)
@@ -376,7 +376,7 @@ func isPermissionStorageKey(key string) bool {
 		strings.HasPrefix(key, extensionPermissionStoragePrefix)
 }
 
-func (a *authorizer) deleteStoredDecision(
+func (a *Authorizer) deleteStoredDecision(
 	ctx context.Context, key string,
 ) error {
 	if a == nil || a.storage == nil {

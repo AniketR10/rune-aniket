@@ -41,7 +41,6 @@ import (
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/auth"
-	"github.com/unstablebuild/blue/auth/grpcauth"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/retry"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -53,19 +52,19 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace/processctx"
 )
 
-// NewRunner returns an ide.ExtensionsRunner with a simple protocol that
+// NewRunner returns a Runner with a simple protocol that
 // initially exchanges metadata and secrets over stdin/stdout and secures
 // resources via TLS and per rpc authentication/authorization.
 func NewRunner(
 	ctx context.Context, locker sync.Locker, dataDir string, opts ...Option,
-) (ide.ExtensionsRunner, error) {
-	ret := &runner{
+) (*Runner, error) {
+	ret := &Runner{
 		locker:  locker,
 		dataDir: dataDir,
 		opts:    opts,
@@ -83,7 +82,8 @@ func NewRunner(
 
 const certExpiresIn = 10 * 24 * 365 * time.Hour
 
-type runner struct {
+// Runner implements the extension host gRPC server lifecycle.
+type Runner struct {
 	opts    []Option
 	cfg     runnerConfig
 	locker  sync.Locker
@@ -91,13 +91,17 @@ type runner struct {
 	dataDir string
 }
 
-func (r *runner) WorkspaceExtensionsRunner(
+// WorkspaceExtensionsRunner creates an extension runner for a workspace. It
+// starts a gRPC server that hosts the extension resources and returns a runner
+// that can launch extensions and execute commands in the workspace.
+func (r *Runner) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
+	authorizer *ideauthorizer.Authorizer,
 	dataDir string, notifications browser.Notifications,
 	executor schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
-	promptOpener ide.ExtensionPromptOpener, storage storageapi.Service,
+	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
 	var ret wrapCloser
@@ -130,17 +134,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 	}
 	var cert, key []byte
-	prompter := newPermissionPrompter(promptOpener, scheduleNextTick)
-	authorizer, err := newAuthorizer(prompter, storage, editor)
-	if err != nil {
-		if cerr := listener.Close(); cerr != nil {
-			err = multierror.Append(err, cerr)
-		}
-		return nil, fmt.Errorf("new authorizer: %w", err)
-	}
-	if r.cfg.insecureTransport && !r.cfg.insecureAuth {
-		opts = append(opts, grpcauth.GRPCServerWithInsecureOauth2(r.keys, authorizer)...)
-	} else if !r.cfg.insecureTransport {
+	if !r.cfg.insecureTransport {
 		cert, key, err = auth.GenerateSelfSignedCert(
 			[]string{socket}, pkix.Name{CommonName: "ox"}, certExpiresIn)
 		if err != nil {
@@ -164,8 +158,10 @@ func (r *runner) WorkspaceExtensionsRunner(
 		if r.cfg.insecureAuth {
 			opts = append(opts, grpc.Creds(creds))
 		} else {
-			opts = append(opts, grpcauth.GRPCServerWithOauth2(r.keys, authorizer, creds)...)
+			opts = append(opts, authorizer.GRPCAuthServerOptions(r.keys, creds)...)
 		}
+	} else if !r.cfg.insecureAuth {
+		opts = append(opts, authorizer.GRPCAuthServerOptions(r.keys, nil)...)
 	}
 	ret.srv = grpc.NewServer(opts...)
 	for _, registrar := range res {
@@ -203,7 +199,7 @@ func (r *runner) WorkspaceExtensionsRunner(
 func extensionIDStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler) error {
-		claims, ok := auth.ClaimsFromContext[Extension](stream.Context())
+		claims, ok := auth.ClaimsFromContext[ideauthorizer.Extension](stream.Context())
 		if ok && claims.Extra.ExtensionID != "" {
 			stream = contextServerStream{
 				ServerStream: stream,
@@ -224,7 +220,7 @@ func (s contextServerStream) Context() context.Context {
 	return s.ctx
 }
 
-func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
+func (r *Runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
 	ctx := context.Background()
 	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", debug.Package))
 	err = retry.Retry(ctx, retrySocketStrategy, func(context.Context) (bool, error) {

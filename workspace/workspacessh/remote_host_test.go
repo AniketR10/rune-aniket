@@ -109,7 +109,9 @@ func TestReaderWriterListener(t *testing.T) {
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		server := tworkspacerpc.NewServer(scheme, new(sync.Mutex))
+		server := tworkspacerpc.NewServer(scheme, new(sync.Mutex),
+			tworkspacerpc.CommandAuthorizerFunc(
+				func(context.Context, workspaceapi.Cmd) error { return nil }))
 		workspacerpc.RegisterSchemeServer(grpcServer, server)
 		go func() {
 			inWrite.Close()

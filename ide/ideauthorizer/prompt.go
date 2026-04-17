@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionv2
+package ideauthorizer
 
 import (
 	"context"
@@ -29,44 +29,44 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/ide"
 )
 
+// Permission prompt option labels shown in permission prompts.
 const (
-	pluginPermissionPromptYes       = "   Yes   "
-	pluginPermissionPromptYesAlways = "   Yes, Always   "
-	pluginPermissionPromptNo        = "   No   "
-	pluginPermissionPromptNoNever   = "   No, Never   "
+	PromptOptionYes       = "   Yes   "
+	PromptOptionYesAlways = "   Yes, Always   "
+	PromptOptionNo        = "   No   "
+	PromptOptionNoNever   = "   No, Never   "
 )
 
-type pluginPermissionPrompter struct {
-	promptOpener     ide.ExtensionPromptOpener
+type permissionPrompter struct {
+	promptOpener     PromptOpener
 	scheduleNextTick func(func()) bool
 }
 
 func newPermissionPrompter(
-	promptOpener ide.ExtensionPromptOpener,
+	promptOpener PromptOpener,
 	scheduleNextTick func(func()) bool,
-) PermissionPrompter {
+) *permissionPrompter {
 	if promptOpener == nil || scheduleNextTick == nil {
 		return nil
 	}
-	return &pluginPermissionPrompter{
+	return &permissionPrompter{
 		promptOpener:     promptOpener,
 		scheduleNextTick: scheduleNextTick,
 	}
 }
 
-func (p *pluginPermissionPrompter) PromptPermission(
+func (p *permissionPrompter) PromptPermission(
 	ctx context.Context, req PermissionRequest,
 ) (PermissionDecision, error) {
 	result := make(chan PermissionDecision, 1)
 	message := pluginPermissionPromptMessage(req)
 	options := []string{
-		pluginPermissionPromptYes,
-		pluginPermissionPromptYesAlways,
-		pluginPermissionPromptNo,
-		pluginPermissionPromptNoNever,
+		PromptOptionYes,
+		PromptOptionYesAlways,
+		PromptOptionNo,
+		PromptOptionNoNever,
 	}
 	bindings := []term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}}
 	scheduled := p.scheduleNextTick(func() {
@@ -98,10 +98,30 @@ func (p *pluginPermissionPrompter) PromptPermission(
 }
 
 func pluginPermissionPromptMessage(req PermissionRequest) string {
-	action := fmt.Sprintf("**%s**", PermissionActionText(req.Permission))
+	action := fmt.Sprintf("**%s**", permissionActionText(req.Permission))
+	if req.CommandPath != "" && req.ExtensionID != "" && req.ExtensionName != "" {
+		command := fmt.Sprintf("run **%s** with args **%v**", req.CommandPath, req.CommandArgs)
+		if req.CommandDir != "" {
+			command = fmt.Sprintf("%s in **%s**", command, req.CommandDir)
+		}
+		return fmt.Sprintf("Extension %s by %s wants to %s.",
+			req.ExtensionName, req.DeveloperID, command)
+	}
 	if req.ExtensionID != "" && req.ExtensionName != "" {
 		return fmt.Sprintf("Extension %s by %s wants to %s.",
 			req.ExtensionName, req.DeveloperID, action)
+	}
+	if req.CommandPath != "" {
+		command := fmt.Sprintf("run **%s** with args **%v**", req.CommandPath, req.CommandArgs)
+		if req.CommandDir != "" {
+			command = fmt.Sprintf("%s in **%s**", command, req.CommandDir)
+		}
+		if req.LauncherPath != "" {
+			return fmt.Sprintf("Program **%s** with args **%v** running inside **%s** **%v** wants to %s.",
+				req.Path, req.Args, req.LauncherPath, req.LauncherArgs, command)
+		}
+		return fmt.Sprintf("Program **%s** with args **%v** wants to %s.",
+			req.Path, req.Args, command)
 	}
 	message := fmt.Sprintf("Program %s with args %v wants to %s.",
 		req.Path, req.Args, action)
@@ -114,17 +134,15 @@ func pluginPermissionPromptMessage(req PermissionRequest) string {
 
 func pluginPromptDecision(opt string) PermissionDecision {
 	switch opt {
-	case pluginPermissionPromptYes:
+	case PromptOptionYes:
 		return PermissionAllowOnce
-	case pluginPermissionPromptYesAlways:
+	case PromptOptionYesAlways:
 		return PermissionAllowAlways
-	case pluginPermissionPromptNoNever:
+	case PromptOptionNoNever:
 		return PermissionDenyAlways
-	case pluginPermissionPromptNo:
+	case PromptOptionNo:
 		fallthrough
 	default:
 		return PermissionDenyOnce
 	}
 }
-
-var _ PermissionPrompter = (*pluginPermissionPrompter)(nil)

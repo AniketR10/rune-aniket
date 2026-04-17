@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionv2
+package ideauthorizer
 
 import (
 	"context"
@@ -74,15 +74,15 @@ func TestPermissionPrompter(t *testing.T) {
 		close        bool
 		wantDecision PermissionDecision
 	}{
-		{name: "yes", option: pluginPermissionPromptYes,
+		{name: "yes", option: PromptOptionYes,
 			wantDecision: PermissionAllowOnce},
-		{name: "yes always", option: pluginPermissionPromptYesAlways,
+		{name: "yes always", option: PromptOptionYesAlways,
 			wantDecision: PermissionAllowAlways},
-		{name: "no", option: pluginPermissionPromptNo,
+		{name: "no", option: PromptOptionNo,
 			wantDecision: PermissionDenyOnce},
-		{name: "no never", option: pluginPermissionPromptNoNever,
+		{name: "no never", option: PromptOptionNoNever,
 			wantDecision: PermissionDenyAlways},
-		{name: "close", option: pluginPermissionPromptYes, close: true,
+		{name: "close", option: PromptOptionYes, close: true,
 			wantDecision: PermissionDenyOnce},
 	}
 	for _, tc := range cases {
@@ -127,6 +127,58 @@ func TestPluginPermissionPromptMessageWithLauncher(t *testing.T) {
 		"Program /usr/local/bin/trusted-cli with args [run] running inside /bin/zsh [--login] wants to **manage the Window Manager**.")
 }
 
+func TestPluginPermissionPromptMessageWithCommand(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		Path:        "/usr/local/bin/plugin-cli",
+		Args:        []string{"run"},
+		Permission:  extensionapi.PermissionExecute,
+		CommandPath: "/bin/grep",
+		CommandArgs: []string{"foo", "/tmp/workspace"},
+		CommandDir:  "/tmp/workspace",
+	})
+	assert.Contains(t, message, "Program **/usr/local/bin/plugin-cli** with args **[run]**")
+	assert.Contains(t, message, "wants to run **/bin/grep**")
+	assert.Contains(t, message, "with args **[foo /tmp/workspace]**")
+	assert.Contains(t, message, "in **/tmp/workspace**")
+}
+
+func TestPluginPermissionPromptMessageWithLauncherAndCommand(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		Path:         "/usr/local/bin/plugin-cli",
+		Args:         []string{"run"},
+		LauncherPath: "/bin/zsh",
+		LauncherArgs: []string{"--login"},
+		Permission:   extensionapi.PermissionExecute,
+		CommandPath:  "/bin/rm",
+		CommandArgs:  []string{"-rf", "foo"},
+	})
+	assert.Contains(t, message,
+		"Program **/usr/local/bin/plugin-cli** with args **[run]** running inside **/bin/zsh** **[--login]**")
+	assert.Contains(t, message, "wants to run **/bin/rm**")
+	assert.Contains(t, message, "with args **[-rf foo]**")
+}
+
+func TestPermissionPromptMessageHighlightsExtensionCommand(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		ExtensionID:   "test-extension",
+		ExtensionName: "Test Extension",
+		DeveloperID:   "dev-id",
+		Permission:    extensionapi.PermissionExecute,
+		CommandPath:   "/bin/grep",
+		CommandArgs:   []string{"foo"},
+		CommandDir:    "/tmp/workspace",
+	})
+	assert.Equal(t,
+		"Extension Test Extension by dev-id wants to run **/bin/grep** with args **[foo]** in **/tmp/workspace**.",
+		message)
+}
+
 func TestPermissionPromptMessageHighlightsExtensionIntent(t *testing.T) {
 	t.Parallel()
 
@@ -144,7 +196,7 @@ func TestPermissionPromptMessageHighlightsExtensionIntent(t *testing.T) {
 func TestNewPermissionPrompterNilDependencies(t *testing.T) {
 	t.Parallel()
 
-	promptOpener := &fakePluginPromptOpener{option: pluginPermissionPromptYes}
+	promptOpener := &fakePluginPromptOpener{option: PromptOptionYes}
 	schedule := func(fn func()) bool { return true }
 
 	assert.Nil(t, newPermissionPrompter(nil, schedule))
@@ -155,7 +207,7 @@ func TestNewPermissionPrompterNilDependencies(t *testing.T) {
 func TestPermissionPrompterUnscheduledDeniesOnce(t *testing.T) {
 	t.Parallel()
 
-	promptOpener := &fakePluginPromptOpener{option: pluginPermissionPromptYes}
+	promptOpener := &fakePluginPromptOpener{option: PromptOptionYes}
 	prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 		return false
 	})

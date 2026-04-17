@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/ide/ideauthorizer"
 )
 
 func TestPeerProcessListenerAttributesUnixConnections(t *testing.T) {
@@ -68,9 +69,9 @@ func TestPeerProcessListenerAttributesUnixConnections(t *testing.T) {
 	}
 	defer server.Close()
 
-	addr, ok := server.RemoteAddr().(peerProcessAddr)
+	addr, ok := server.RemoteAddr().(ideauthorizer.PeerProcessAddr)
 	require.True(t, ok)
-	require.NoError(t, addr.err)
-	assert.Equal(t, os.Getpid(), addr.process.PID)
-	assert.NotEmpty(t, addr.process.ProgramPath())
+	require.NoError(t, addr.Err)
+	assert.Equal(t, os.Getpid(), addr.Process.PID)
+	assert.NotEmpty(t, addr.Process.ProgramPath())
 }

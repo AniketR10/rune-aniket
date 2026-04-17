@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 )
 
 func TestProtocolGrantorGatesRunButKeepsRequestedPermissions(t *testing.T) {
@@ -69,7 +70,7 @@ func TestProtocolGrantorGatesRunButKeepsRequestedPermissions(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, &cfg))
 	require.NotNil(t, cfg.Token)
-	claims, err := auth.VerifyToken[Extension](verifyKeys[0], cfg.Token.AccessToken)
+	claims, err := auth.VerifyToken[ideauthorizer.Extension](verifyKeys[0], cfg.Token.AccessToken)
 	require.NoError(t, err)
 
 	assert.False(t, claims.Extra.Plugin)

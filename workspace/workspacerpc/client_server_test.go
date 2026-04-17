@@ -85,13 +85,20 @@ func setupClientServerTest(
 	}
 }
 
-func setupClientServerUnitTest(t *testing.T) (*workspacerpc.Client, *Server, *workspaceapitest.MockFile, func()) {
+func setupClientServerUnitTest(
+	t *testing.T, authorizer CommandAuthorizer,
+) (*workspacerpc.Client, *Server, *workspaceapitest.MockFile, func()) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mock := workspaceapitest.NewMockFile(ctrl)
 	mockExecutor := workspacetest.NewMockWorkspace(ctrl)
-	server := NewServer(mockExecutor, new(sync.Mutex))
+	if authorizer == nil {
+		authorizer = CommandAuthorizerFunc(func(context.Context, workspaceapi.Cmd) error {
+			return nil
+		})
+	}
+	server := NewServer(mockExecutor, new(sync.Mutex), authorizer)
 	client, cleanup := setupClientServerTest(t, server)
 	return client, server, mock, cleanup
 }
@@ -403,17 +410,62 @@ func TestClientServer(t *testing.T) {
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.description, func(t *testing.T) {
-			client, server, mock, cleanup := setupClientServerUnitTest(t)
+			client, server, mock, cleanup := setupClientServerUnitTest(t, nil)
 			defer cleanup()
 			tcase.do(t, mock, client, server)
 		})
 	}
 }
 
+func TestServerStartCommandAuthorizer(t *testing.T) {
+	t.Run("receives command and allows", func(t *testing.T) {
+		calls := 0
+		client, server, _, cleanup := setupClientServerUnitTest(t, CommandAuthorizerFunc(
+			func(ctx context.Context, cmd workspaceapi.Cmd) error {
+				calls++
+				assert.Equal(t, "six", cmd.Path)
+				assert.Equal(t, []string{"arg1"}, cmd.Args)
+				assert.Equal(t, "/tmp", cmd.Dir)
+				return nil
+			}))
+		defer cleanup()
+
+		server.s.(*workspacetest.MockWorkspace).EXPECT().
+			StartCommand(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+				assert.Equal(t, "six", cmd.Path)
+				return workspaceapi.Pid(1), nil
+			})
+
+		pid, err := client.StartCommand(context.Background(), workspaceapi.Cmd{
+			Path: "six",
+			Args: []string{"arg1"},
+			Dir:  "/tmp",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, workspaceapi.Pid(1), pid)
+		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("denies before start", func(t *testing.T) {
+		client, _, _, cleanup := setupClientServerUnitTest(t, CommandAuthorizerFunc(
+			func(ctx context.Context, cmd workspaceapi.Cmd) error {
+				assert.Equal(t, "six", cmd.Path)
+				return errors.New("denied")
+			}))
+		defer cleanup()
+
+		_, err := client.StartCommand(context.Background(), workspaceapi.Cmd{Path: "six"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "denied")
+	})
+}
+
 func setupClientServerIntegrationTest(
 	t *testing.T, scheme schemeapi.Scheme,
 ) (*workspacerpc.Client, func()) {
-	server := NewServer(scheme, new(sync.Mutex))
+	server := NewServer(scheme, new(sync.Mutex), CommandAuthorizerFunc(
+		func(context.Context, workspaceapi.Cmd) error { return nil }))
 	return setupClientServerTest(t, server)
 }
 

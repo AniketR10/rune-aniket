@@ -66,6 +66,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	handlermarkdown "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idecursor"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
@@ -1008,12 +1009,19 @@ func (h *workspaceManagerHandler) buildExtensions(
 	cwd workspace.Workspace, ex *ex,
 ) (extension.Runner, error) {
 	notifications := h.notifications.new(uri, ex.container)
-	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
 	ed := ex.Editor()
+	promptOpener := &ex.comp
+	promptStorage := storageapi.WithPartition(h.storage, "extension-permissions")
+	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
+		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
+	if err != nil {
+		return nil, fmt.Errorf("new command authorizer: %w", err)
+	}
+	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
 	res = extension.MergeResourceMap(res,
 		extension.EditorResources(ex.Browser(), ed, h.publishEvent))
 	res = extension.MergeResourceMap(res,
-		extension.WorkspaceResources(cwd))
+		extension.WorkspaceResources(cwd, cmdAuthorizer))
 	res = extension.MergeResourceMap(res,
 		extension.StorageResources(h.sixDir))
 	res = extension.MergeResourceMap(res,
@@ -1041,7 +1049,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		cwd, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
 	dap := idedebug.New(uri, cwd, h.pkgmanager, idedebug.Config{MaxRetries: 5})
-	err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
+	err = ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)
 	}
@@ -1069,10 +1077,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 		return nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
 	browser := ex.Browser()
-	promptOpener := &ex.comp
-	promptStorage := storageapi.WithPartition(h.storage, "extension-permissions")
 	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
-	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res,
+	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, cmdAuthorizer,
 		dataDir, browser, cwd, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {

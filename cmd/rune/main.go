@@ -230,7 +230,9 @@ func startWorkspaceServer() int {
 	}
 	defer scheme.Close()
 
-	server := workspacerpc.NewServer(scheme, new(sync.Mutex))
+	server := workspacerpc.NewServer(scheme, new(sync.Mutex),
+		workspacerpc.CommandAuthorizerFunc(
+			func(context.Context, workspaceapi.Cmd) error { return nil }))
 	defer func() {
 		_ = server.Stop()
 	}()

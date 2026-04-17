@@ -46,7 +46,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
 )
@@ -131,17 +131,27 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			prompt := newE2EPromptOpener(pluginPermissionPromptYes)
+			prompt := newE2EPromptOpener(ideauthorizer.PromptOptionYes)
+			storage := storagestub.NewInMemoryService()
+			authorizer, err := ideauthorizer.NewAuthorizer(
+				texttest.NopEditor(), prompt, storage,
+				func(fn func()) bool {
+					fn()
+					return true
+				},
+			)
+			require.NoError(t, err)
 			runner, err := baseRunner.WorkspaceExtensionsRunner(
 				uri,
 				extension.BrowserResources(e2eBrowser{}, func(term.Event) bool { return true }),
+				authorizer,
 				dataDir,
 				e2eBrowser{},
 				execScheme,
 				extension.GrantAll(),
 				texttest.NopEditor(),
 				prompt,
-				storagestub.NewInMemoryService(),
+				storage,
 				func(fn func()) bool {
 					fn()
 					return true
@@ -230,6 +240,12 @@ type e2eBrowser struct{}
 
 func (e2eBrowser) Focus() (browser.Window, error) { return browsertest.NopWindow(), nil }
 
+func (e2eBrowser) SetFocus(browser.Window) (browser.Window, error) {
+	return browsertest.NopWindow(), nil
+}
+
+func (e2eBrowser) Window(uint64) (browser.Window, bool) { return browsertest.NopWindow(), true }
+
 func (e2eBrowser) Split(
 	browserapi.Orientation, browser.Window, browserapi.Handler,
 ) (browser.Window, error) {
@@ -244,6 +260,8 @@ func (e2eBrowser) Floating(
 
 func (e2eBrowser) Bar(browserapi.BarConfig, tui.Handler) error { return nil }
 
+func (e2eBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error { return nil }
+
 func (e2eBrowser) Tab(
 	workspaceapi.URI, rune, string, browserapi.Handler,
 ) (browserapi.Handler, error) {
@@ -253,30 +271,6 @@ func (e2eBrowser) Tab(
 func (e2eBrowser) SetWindowContent(browser.Window, browserapi.Handler) error { return nil }
 
 func (e2eBrowser) CloseWindow(browser.Window) error { return nil }
-
-func (e2eBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error { return nil }
-
-func (e2eBrowser) Window(uint64) (browser.Window, bool) { return browsertest.NopWindow(), true }
-
-func (e2eBrowser) SetFocus(browser.Window) (browser.Window, error) {
-	return browsertest.NopWindow(), nil
-}
-
-func (e2eBrowser) Notify(
-	browserapi.NotificationLevel, string, ...any,
-) (string, error) {
-	return "", nil
-}
-
-func (e2eBrowser) NotifyOnce(
-	browserapi.NotificationLevel, string, ...any,
-) (string, error) {
-	return "", nil
-}
-
-func (e2eBrowser) UpdateNotificationProgress(string, string, int64, int64) error {
-	return nil
-}
 
 func (e2eBrowser) Open(workspaceapi.URI) (browserapi.Handler, error) {
 	return browsertest.NewTestHandler(), nil
@@ -290,5 +284,14 @@ func (e2eBrowser) PublishEvent(term.Event) error { return nil }
 
 func (e2eBrowser) Close() error { return nil }
 
-var _ ide.ExtensionPromptOpener = (*e2ePromptOpener)(nil)
-var _ browser.Browser = e2eBrowser{}
+func (e2eBrowser) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "", nil
+}
+
+func (e2eBrowser) NotifyOnce(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "", nil
+}
+
+func (e2eBrowser) UpdateNotificationProgress(string, string, int64, int64) error {
+	return nil
+}

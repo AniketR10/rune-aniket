@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/workspace/processctx"
 )
 
@@ -133,7 +134,7 @@ func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
 	}
 	require.NotEmpty(t, token)
 
-	claims, err := auth.VerifyToken[Extension](verifyKeys[0], token)
+	claims, err := auth.VerifyToken[ideauthorizer.Extension](verifyKeys[0], token)
 	require.NoError(t, err)
 	assert.True(t, claims.Extra.Plugin)
 	assert.Equal(t, "/bin/zsh", claims.Extra.Path)
@@ -185,8 +186,8 @@ func (s testServerStream) Context() context.Context {
 func TestExtensionIDStreamInterceptorTagsContext(t *testing.T) {
 	t.Parallel()
 
-	ctx := auth.ContextWithClaims(context.Background(), auth.UserClaims[Extension]{
-		Extra: Extension{Metadata: extensionapi.Metadata{
+	ctx := auth.ContextWithClaims(context.Background(), auth.UserClaims[ideauthorizer.Extension]{
+		Extra: ideauthorizer.Extension{Metadata: extensionapi.Metadata{
 			ExtensionID: "test-extension",
 		}},
 	})

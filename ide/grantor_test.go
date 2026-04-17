@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
+	"unstable.build/go-tui/ide/ideauthorizer"
 )
 
 type fakePromptOpener struct {
@@ -202,4 +203,4 @@ func assertNoStoredPermissionDecision(
 	assert.ErrorIs(t, err, storageapi.ErrNotFound)
 }
 
-var _ ExtensionPromptOpener = (*fakePromptOpener)(nil)
+var _ ideauthorizer.PromptOpener = (*fakePromptOpener)(nil)

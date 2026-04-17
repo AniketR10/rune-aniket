@@ -21,46 +21,67 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionv2
+package ideauthorizer
 
 import (
+	"context"
 	"net"
 
+	"google.golang.org/grpc/peer"
 	"unstable.build/go-tui/extension/extensionv2/peerprocess"
-	"unstable.build/go-tui/ide/ideauthorizer"
 )
 
-type peerProcessListener struct {
-	net.Listener
+// PeerProcessAddr is a net.Addr that carries information about the process on
+// the other end of a Unix-domain socket. The extension runner's listener wraps
+// each accepted connection's remote address in a PeerProcessAddr so the
+// authorizer can identify the calling plugin by its program path/args/PID.
+type PeerProcessAddr struct {
+	Addr    net.Addr
+	Process peerprocess.Process
+	Err     error
 }
 
-func newPeerProcessListener(listener net.Listener) net.Listener {
-	return peerProcessListener{Listener: listener}
-}
-
-func (l peerProcessListener) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if err != nil {
-		return nil, err
+// Network returns the network of the underlying address, or "unix" if none.
+func (a PeerProcessAddr) Network() string {
+	if a.Addr != nil {
+		return a.Addr.Network()
 	}
-	remoteAddr := conn.RemoteAddr()
-	unixConn, ok := conn.(*net.UnixConn)
-	if ok {
-		process, perr := peerprocess.Identify(unixConn)
-		remoteAddr = ideauthorizer.PeerProcessAddr{
-			Addr:    remoteAddr,
-			Process: process,
-			Err:     perr,
+	return "unix"
+}
+
+// String returns the peer process's program path when available, falling back
+// to the underlying address.
+func (a PeerProcessAddr) String() string {
+	if path := a.Process.ProgramPath(); path != "" {
+		return path
+	}
+	if a.Addr != nil {
+		return a.Addr.String()
+	}
+	return ""
+}
+
+func peerProcessFromContext(ctx context.Context) (peerprocess.Process, bool) {
+	p, ok := peer.FromContext(ctx)
+	if !ok || p.Addr == nil {
+		return peerprocess.Process{}, false
+	}
+	switch addr := p.Addr.(type) {
+	case PeerProcessAddr:
+		return usablePeerProcess(addr.Process, addr.Err)
+	case *PeerProcessAddr:
+		if addr == nil {
+			return peerprocess.Process{}, false
 		}
+		return usablePeerProcess(addr.Process, addr.Err)
+	default:
+		return peerprocess.Process{}, false
 	}
-	return peerProcessConn{Conn: conn, remoteAddr: remoteAddr}, nil
 }
 
-type peerProcessConn struct {
-	net.Conn
-	remoteAddr net.Addr
-}
-
-func (c peerProcessConn) RemoteAddr() net.Addr {
-	return c.remoteAddr
+func usablePeerProcess(process peerprocess.Process, err error) (peerprocess.Process, bool) {
+	if err != nil || process.ProgramPath() == "" {
+		return peerprocess.Process{}, false
+	}
+	return process, true
 }

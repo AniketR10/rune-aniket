@@ -44,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/processctx"
 )
@@ -246,7 +247,7 @@ func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []s
 	permissions := extensionapi.AllPermissions()
 	m.log(log.DebugLevel, "creating one shot authentication for "+
 		"command %s, id: %s, permissions: %v", name, id, permissions)
-	claimsExtra := Extension{
+	claimsExtra := ideauthorizer.Extension{
 		Metadata: extensionapi.Metadata{
 			DeveloperID:   "you",
 			DeveloperKey:  "",

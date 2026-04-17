@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/text"
 )
 
@@ -322,11 +323,12 @@ type nopExtensions struct {
 func (n nopExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
+	authorizer *ideauthorizer.Authorizer,
 	dataDir string, notifications browser.Notifications,
 	exec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
-	promptOpener ExtensionPromptOpener, storage storageapi.Service,
+	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool) (extension.Runner, error) {
 	return nopExtensionsRunner{}, nil
 }

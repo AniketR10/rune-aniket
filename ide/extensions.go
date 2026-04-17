@@ -28,31 +28,22 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/handler"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/text"
 )
-
-// ExtensionPromptOpener opens a browser prompt for extension host decisions.
-type ExtensionPromptOpener interface {
-	Prompt(
-		message string, options []string,
-		bindings []term.KeyComb,
-		promptHandler handler.PromptHandler,
-	) browser.Window
-}
 
 // ExtensionsRunner abstracts the ability to construct extension.Runner.
 type ExtensionsRunner interface {
 	WorkspaceExtensionsRunner(
 		uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
+		authorizer *ideauthorizer.Authorizer,
 		dataDir string, notifications browser.Notifications,
 		executor schemeapi.Executor,
 		grantor extension.Grantor,
 		editor text.Editor,
-		promptOpener ExtensionPromptOpener, storage storageapi.Service,
+		promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 		scheduleNextTick func(func()) bool,
 	) (extension.Runner, error)
 }
@@ -64,7 +55,7 @@ func FuncExtensionsRunner(
 		browser.Notifications, schemeapi.Executor,
 		extension.Grantor,
 		text.Editor,
-		ExtensionPromptOpener, storageapi.Service,
+		ideauthorizer.PromptOpener, storageapi.Service,
 		func(func()) bool) (extension.Runner, error),
 ) ExtensionsRunner {
 	return fnExtensions{fn: fn}
@@ -76,17 +67,18 @@ type fnExtensions struct {
 		browser.Notifications, schemeapi.Executor,
 		extension.Grantor,
 		text.Editor,
-		ExtensionPromptOpener, storageapi.Service,
+		ideauthorizer.PromptOpener, storageapi.Service,
 		func(func()) bool) (extension.Runner, error)
 }
 
 func (f fnExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
+	authorizer *ideauthorizer.Authorizer,
 	dataDir string, n browser.Notifications, exec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
-	promptOpener ExtensionPromptOpener, storage storageapi.Service,
+	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
 	return f.fn(uri, res, dataDir, n, exec, grantor, editor,

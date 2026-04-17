@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 )
 
 var _ io.Writer = (*protocol)(nil)
@@ -119,7 +120,7 @@ func (p *protocol) Write(data []byte) (int, error) {
 		if err != nil {
 			return n, fmt.Errorf("get sign key: %w", err)
 		}
-		claimsExtra := Extension{Metadata: meta}
+		claimsExtra := ideauthorizer.Extension{Metadata: meta}
 		accessToken, err := auth.SignToken(signKey,
 			meta.DeveloperID, meta.DeveloperEmail, claimsExtra, extensionTokenExpiresIn)
 		if err != nil {

@@ -57,15 +57,39 @@ type Server struct {
 	ctx       context.Context
 	cancelCtx func()
 
-	locker      sync.Locker
-	s           schemeapi.Scheme
-	watchpoints map[int]func()
+	locker            sync.Locker
+	s                 schemeapi.Scheme
+	watchpoints       map[int]func()
+	commandAuthorizer CommandAuthorizer
+}
+
+// CommandAuthorizer authorizes an Executor StartCommand request after the
+// command payload has been received, but before the command is started.
+type CommandAuthorizer interface {
+	AuthorizeCommand(context.Context, workspaceapi.Cmd) error
+}
+
+// CommandAuthorizerFunc adapts a function to CommandAuthorizer.
+type CommandAuthorizerFunc func(context.Context, workspaceapi.Cmd) error
+
+// AuthorizeCommand calls f(ctx, cmd).
+func (f CommandAuthorizerFunc) AuthorizeCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) error {
+	return f(ctx, cmd)
 }
 
 // NewServer allocates storage for a new server and initializes it with wp.
-func NewServer(wp schemeapi.Scheme, locker sync.Locker) *Server {
+func NewServer(
+	wp schemeapi.Scheme, locker sync.Locker,
+	commandAuthorizer CommandAuthorizer,
+) *Server {
+	if commandAuthorizer == nil {
+		panic("workspacerpc: CommandAuthorizer is required")
+	}
 	ret := new(Server)
 	ret.Init(wp, locker)
+	ret.commandAuthorizer = commandAuthorizer
 	return ret
 }
 
@@ -106,8 +130,15 @@ func (s *Server) StartCommand(stream workspacerpc.Executor_StartCommandServer) e
 	}
 	defer streamer.Close()
 
+	cmd := streamer.command()
+	if err := s.commandAuthorizer.AuthorizeCommand(stream.Context(), cmd); err != nil {
+		cancelCtx()
+		s.log(log.WarnLevel, "authorize start command error: %v", err)
+		return fmt.Errorf("authorize start command: %w", err)
+	}
+
 	s.locker.Lock()
-	pid, err := s.s.StartCommand(ctx, streamer.command())
+	pid, err := s.s.StartCommand(ctx, cmd)
 	s.locker.Unlock()
 	if err != nil {
 		cancelCtx()

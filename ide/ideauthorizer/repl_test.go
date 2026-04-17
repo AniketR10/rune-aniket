@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package extensionv2
+package ideauthorizer
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func TestAuthorizerRegistersRevokeREPLCommand(t *testing.T) {
 	t.Parallel()
 
 	editor := newCapturingEditor()
-	_, err := newAuthorizer(nil, storagestub.NewInMemoryService(), editor)
+	_, err := NewAuthorizer(editor, nil, storagestub.NewInMemoryService(), syncScheduleNextTick)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, editor.calls)
@@ -82,7 +82,7 @@ func TestAuthorizerRegistersRevokeREPLCommand(t *testing.T) {
 func TestAuthorizerRequiresEditor(t *testing.T) {
 	t.Parallel()
 
-	_, err := newAuthorizer(nil, storagestub.NewInMemoryService(), nil)
+	_, err := NewAuthorizer(nil, nil, storagestub.NewInMemoryService(), syncScheduleNextTick)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "editor is required")
 }
@@ -95,9 +95,9 @@ func TestAuthorizerListREPLListsPersistedDecisions(t *testing.T) {
 	authorizer := newTestAuthorizerCore(nil, storage)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(),
 		pluginPermissionStorageKey(ext.Path, ext.Args,
-			extensionapi.PermissionBrowserWindowManager),
+			extensionapi.PermissionBrowserWindowManager, nil),
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
-		extensionapi.PermissionBrowserWindowManager, pluginPermissionDecisionAllow))
+		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionAllow))
 	handler := authorizerREPLHandler{authorizer: authorizer}
 
 	it, err := handler.HandleCommand(context.Background(), repl.Command{
@@ -121,7 +121,7 @@ func TestAuthorizerListREPLListsPersistedDecisions(t *testing.T) {
 func TestAuthorizerListREPLListsTransientOnceDecisions(t *testing.T) {
 	t.Parallel()
 
-	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
+	prompter := &stubPromptOpener{decision: PermissionAllowOnce}
 	authorizer := newTestAuthorizerCore(prompter, storagestub.NewInMemoryService())
 	ext := testPluginExtension(nil)
 	ctx := contextWithPeerProcess(context.Background(), peerprocess.Process{
@@ -198,9 +198,9 @@ func TestAuthorizerRevokeREPLCompletesPersistedDecisions(t *testing.T) {
 	authorizer := newTestAuthorizerCore(nil, storage)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(),
 		pluginPermissionStorageKey(ext.Path, ext.Args,
-			extensionapi.PermissionBrowserWindowManager),
+			extensionapi.PermissionBrowserWindowManager, nil),
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
-		extensionapi.PermissionBrowserWindowManager, pluginPermissionDecisionAllow))
+		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionAllow))
 	require.NoError(t, storage.Set(context.Background(), "unrelated",
 		storedPermissionDecision{Key: "unrelated", Decision: pluginPermissionDecisionAllow}))
 	handler := authorizerREPLHandler{authorizer: authorizer}
@@ -224,10 +224,10 @@ func TestAuthorizerRevokeREPLDeletesPersistedDecisionByID(t *testing.T) {
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
 	key := pluginPermissionStorageKey(ext.Path, ext.Args,
-		extensionapi.PermissionBrowserWindowManager)
+		extensionapi.PermissionBrowserWindowManager, nil)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(), key,
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
-		extensionapi.PermissionBrowserWindowManager, pluginPermissionDecisionDeny))
+		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionDeny))
 	entries, err := authorizer.storedDecisions(context.Background())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
@@ -251,10 +251,10 @@ func TestAuthorizerRevokeREPLDeletesPersistedDecision(t *testing.T) {
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
 	key := pluginPermissionStorageKey(ext.Path, ext.Args,
-		extensionapi.PermissionBrowserWindowManager)
+		extensionapi.PermissionBrowserWindowManager, nil)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(), key,
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
-		extensionapi.PermissionBrowserWindowManager, pluginPermissionDecisionDeny))
+		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionDeny))
 	entries, err := authorizer.storedDecisions(context.Background())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
@@ -276,7 +276,7 @@ func TestAuthorizerRevokeREPLResurrectsNeverDecision(t *testing.T) {
 
 	storage := storagestub.NewInMemoryService()
 	ext := testPluginExtension(nil)
-	authorizer := newTestAuthorizerCore(&stubPermissionPrompter{
+	authorizer := newTestAuthorizerCore(&stubPromptOpener{
 		decision: PermissionDenyAlways,
 	}, storage)
 	err := authorizer.authorizePlugin(context.Background(), ext,
@@ -296,7 +296,7 @@ func TestAuthorizerRevokeREPLResurrectsNeverDecision(t *testing.T) {
 		}, repl.NopProgressWriter())
 	require.NoError(t, err)
 
-	prompter := &stubPermissionPrompter{decision: PermissionAllowOnce}
+	prompter := &stubPromptOpener{decision: PermissionAllowOnce}
 	afterRevoke := newTestAuthorizerCore(prompter, storage)
 	err = afterRevoke.authorizePlugin(context.Background(), ext,
 		extensionapi.PermissionBrowserWindowManager, testWindowManagerResource)

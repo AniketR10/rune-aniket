@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide/ideauthorizer"
 )
 
 var _ extension.Grantor = (*permissionGrantor)(nil)
@@ -54,13 +55,13 @@ type permissionDecision struct {
 }
 
 type permissionGrantor struct {
-	promptOpener     ExtensionPromptOpener
+	promptOpener     ideauthorizer.PromptOpener
 	storage          storageapi.Service
 	scheduleNextTick func(func()) bool
 }
 
 func newExtensionPromptGrantor(
-	promptOpener ExtensionPromptOpener,
+	promptOpener ideauthorizer.PromptOpener,
 	storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) extension.Grantor {
