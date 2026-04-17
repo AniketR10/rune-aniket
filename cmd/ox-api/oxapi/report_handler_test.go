@@ -49,6 +49,16 @@ type inMemoryReportStore struct {
 	err          error
 }
 
+type recordingPager struct {
+	pages []Page
+	err   error
+}
+
+func (p *recordingPager) Page(_ context.Context, page Page) error {
+	p.pages = append(p.pages, page)
+	return p.err
+}
+
 func newInMemoryReportStore() *inMemoryReportStore {
 	return &inMemoryReportStore{
 		objects:      make(map[string][]byte),
@@ -223,6 +233,88 @@ func TestReportHandler_DuplicateReportIsRateLimited(t *testing.T) {
 	require.NoError(t, json.NewDecoder(second.Body).Decode(&resp))
 	assert.Equal(t, "duplicate", resp["status"])
 	require.Len(t, store.objects, 1)
+}
+
+func TestReportHandler_DuplicateReportDoesNotPage(t *testing.T) {
+	store := newInMemoryReportStore()
+	store.err = ErrReportAlreadyExists
+	pager := &recordingPager{}
+	h := testReportHandler(store, ReportConfig{
+		Prefix:          "reports/",
+		RateLimitWindow: time.Hour,
+		Pager:           pager,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/reports",
+		strings.NewReader(validReportYAML("panic: already stored")))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]string
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, "duplicate", resp["status"])
+	assert.Empty(t, pager.pages)
+}
+
+func TestReportHandler_PagesAfterNewReportIsStored(t *testing.T) {
+	store := newInMemoryReportStore()
+	pager := &recordingPager{}
+	h := testReportHandler(store, ReportConfig{
+		Bucket:          "rune-reports",
+		Prefix:          "reports/",
+		RateLimitWindow: time.Hour,
+		Pager:           pager,
+	})
+	body := validReportYAML("panic: report me")
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/api/reports", strings.NewReader(body))
+	first := httptest.NewRecorder()
+	h.ServeHTTP(first, firstReq)
+	require.Equal(t, http.StatusCreated, first.Code)
+
+	require.Len(t, pager.pages, 1)
+	page := pager.pages[0]
+	assert.Equal(t, "Rune crash report: panic: report me", page.Summary)
+	assert.Equal(t, PageSeverityError, page.Severity)
+	assert.Equal(t, "ox-api", page.Component)
+	assert.Equal(t, "rune", page.Group)
+	assert.Equal(t, "crash-report", page.Class)
+	assert.Contains(t, page.Source, "gs://rune-reports/reports/")
+	assert.Contains(t, page.DedupKey, "rune-crash:reports/")
+	assert.Equal(t, "rune-reports", page.Details["bucket"])
+	assert.Equal(t, "rune", page.Details["package"])
+	assert.Equal(t, "1.0.0", page.Details["version"])
+	assert.Equal(t, "panic: report me", page.Details["subject"])
+
+	reportMetadata, ok := page.Details["report_metadata"].(map[string]string)
+	require.True(t, ok)
+	assert.Equal(t, "panic: report me", reportMetadata["error"])
+	assert.NotContains(t, reportMetadata, "stack")
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/api/reports", strings.NewReader(body))
+	second := httptest.NewRecorder()
+	h.ServeHTTP(second, secondReq)
+	require.Equal(t, http.StatusOK, second.Code)
+	require.Len(t, pager.pages, 1, "duplicate reports should not page")
+}
+
+func TestReportHandler_PagerFailureDoesNotFailUpload(t *testing.T) {
+	store := newInMemoryReportStore()
+	pager := &recordingPager{err: errors.New("pager unavailable")}
+	h := testReportHandler(store, ReportConfig{
+		Prefix:          "reports/",
+		RateLimitWindow: time.Hour,
+		Pager:           pager,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/reports", strings.NewReader(validReportYAML("panic: still store")))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.Len(t, store.objects, 1)
+	require.Len(t, pager.pages, 1)
 }
 
 func TestReportHandler_LogsCreateAttemptForEachFingerprintAttempt(t *testing.T) {

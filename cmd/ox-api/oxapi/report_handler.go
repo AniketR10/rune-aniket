@@ -76,6 +76,10 @@ type ReportConfig struct {
 	// If zero, DefaultReportMaxBytes is used.
 	MaxBytes int64
 
+	// Bucket is the GCS bucket reports are stored in. It is used only for
+	// pager context, so tests and non-GCS stores may leave it empty.
+	Bucket string
+
 	// Prefix is a path prefix for GCS object names (e.g. "reports/").
 	Prefix string
 
@@ -83,6 +87,10 @@ type ReportConfig struct {
 	// a single object for this duration. If zero, DefaultReportRateLimitWindow
 	// is used.
 	RateLimitWindow time.Duration
+
+	// Pager is notified after a new report object is successfully created.
+	// Pager errors are logged but do not fail report uploads.
+	Pager Pager
 }
 
 // newReportHandler returns the report endpoint handler.
@@ -97,6 +105,9 @@ func newReportHandler(
 	}
 	if cfg.RateLimitWindow == 0 {
 		cfg.RateLimitWindow = DefaultReportRateLimitWindow
+	}
+	if cfg.Pager == nil {
+		panic("pager cannot be nil")
 	}
 
 	return &reportHandler{
@@ -226,6 +237,8 @@ func (h *reportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"object":      objectName,
 	}).Info("report stored")
 
+	h.pageReportCreated(r.Context(), objectName, fingerprint, report, metadata)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -233,6 +246,80 @@ func (h *reportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"object":      objectName,
 		"fingerprint": fingerprint,
 	})
+}
+
+func (h *reportHandler) pageReportCreated(
+	ctx context.Context,
+	objectName string,
+	fingerprint string,
+	report reportDocument,
+	objectMetadata map[string]string,
+) {
+	details := map[string]any{
+		"object":      objectName,
+		"fingerprint": fingerprint,
+		"package":     report.Package,
+		"version":     report.Version,
+		"subject":     report.Subject,
+	}
+	if h.cfg.Bucket != "" {
+		details["bucket"] = h.cfg.Bucket
+	}
+	if len(objectMetadata) > 0 {
+		details["object_metadata"] = objectMetadata
+	}
+	if reportMetadata := sanitizedReportMetadata(report.Metadata); len(reportMetadata) > 0 {
+		details["report_metadata"] = reportMetadata
+	}
+
+	page := Page{
+		Summary:   fmt.Sprintf("Rune crash report: %s", report.Subject),
+		Source:    reportSource(h.cfg.Bucket, objectName),
+		Severity:  PageSeverityError,
+		Component: "ox-api",
+		Group:     report.Package,
+		Class:     "crash-report",
+		DedupKey:  fmt.Sprintf("rune-crash:%s", objectName),
+		Details:   details,
+	}
+	if err := h.cfg.Pager.Page(ctx, page); err != nil {
+		h.logger.WithError(err).WithFields(log.Fields{
+			"class":       reportClass,
+			"call_type":   reportCallType,
+			"fingerprint": fingerprint,
+			"package":     report.Package,
+			"version":     report.Version,
+			"object":      objectName,
+		}).Error("page report created")
+		return
+	}
+
+	h.logger.WithFields(log.Fields{
+		"class":       reportClass,
+		"call_type":   reportCallType,
+		"fingerprint": fingerprint,
+		"package":     report.Package,
+		"version":     report.Version,
+		"object":      objectName,
+	}).Info("report page sent")
+}
+
+func reportSource(bucket string, objectName string) string {
+	if bucket == "" {
+		return objectName
+	}
+	return fmt.Sprintf("gs://%s/%s", bucket, objectName)
+}
+
+func sanitizedReportMetadata(metadata map[string]string) map[string]string {
+	ret := make(map[string]string, len(metadata))
+	for k, v := range metadata {
+		if strings.EqualFold(k, "stack") {
+			continue
+		}
+		ret[k] = v
+	}
+	return ret
 }
 
 func reportFingerprint(report reportDocument) string {

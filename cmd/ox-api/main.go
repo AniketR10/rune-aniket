@@ -47,6 +47,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"unstable.build/go-tui/cmd/ox-api/oxapi"
+	"unstable.build/go-tui/cmd/ox-api/oxapi/pagerduty"
 	"unstable.build/go-tui/cmd/rune/api"
 	"unstable.build/go-tui/cmd/rune/auth"
 )
@@ -278,10 +279,13 @@ func main() {
 	// Setup report store (GCS-backed).
 	reportBkt := gcsClient.Bucket(*reportBucket)
 	var rptStore oxapi.ReportStore = oxapi.NewGCSReportStore(reportBkt)
+	pager := pagerduty.New(secretStore)
 	rptCfg := oxapi.ReportConfig{
 		MaxBytes:        *reportMaxBytes,
+		Bucket:          *reportBucket,
 		Prefix:          *reportPrefix,
 		RateLimitWindow: *reportRateLimitWindow,
+		Pager:           pager,
 	}
 
 	var httpHandler http.Handler
