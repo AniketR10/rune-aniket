@@ -28,7 +28,7 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.79.0
-	github.com/unstablebuild/rune-go-sdk v0.0.59
+	github.com/unstablebuild/rune-go-sdk v0.0.60
 	github.com/unstablebuild/tcell/v3 v3.6.4
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.48.0
@@ -77,6 +77,7 @@ require (
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
 	golang.org/x/oauth2 v0.35.0
+	google.golang.org/api v0.265.0
 	mvdan.cc/sh/v3 v3.12.0
 )
 
@@ -181,7 +182,6 @@ require (
 	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/time v0.14.0 // indirect
-	google.golang.org/api v0.265.0 // indirect
 	google.golang.org/genproto v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260203192932-546029d2fa20 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260203192932-546029d2fa20 // indirect
