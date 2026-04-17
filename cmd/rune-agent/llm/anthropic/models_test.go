@@ -34,6 +34,7 @@ func TestSupportsEffort(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{ClaudeOpus4Dot7, true},
 		{ClaudeOpus4Dot6, true},
 		{ClaudeSonnet4Dot6, true},
 		{ClaudeHaiku4Dot5, true},
@@ -110,6 +111,10 @@ func TestNormalizeEffort(t *testing.T) {
 		{"opus-4.6 medium", ClaudeOpus4Dot6, "medium", "medium", false},
 		{"opus-4.6 high", ClaudeOpus4Dot6, "high", "high", false},
 		{"opus-4.6 max", ClaudeOpus4Dot6, "max", "max", false},
+		{"opus-4.7 low", ClaudeOpus4Dot7, "low", "low", false},
+		{"opus-4.7 medium", ClaudeOpus4Dot7, "medium", "medium", false},
+		{"opus-4.7 high", ClaudeOpus4Dot7, "high", "high", false},
+		{"opus-4.7 max", ClaudeOpus4Dot7, "max", "max", false},
 		{"sonnet-4.6 max", ClaudeSonnet4Dot6, "max", "max", false},
 
 		// Claude 4.6: unsupported levels are dropped with warning.
@@ -118,6 +123,8 @@ func TestNormalizeEffort(t *testing.T) {
 		{"opus-4.6 xhigh", ClaudeOpus4Dot6, "xhigh", "", true},
 		{"sonnet-4.6 none", ClaudeSonnet4Dot6, "none", "", true},
 		{"sonnet-4.6 xhigh", ClaudeSonnet4Dot6, "xhigh", "", true},
+		{"sonnet-4.7 none", ClaudeOpus4Dot7, "none", "", true},
+		{"sonnet-4.7 xhigh", ClaudeOpus4Dot7, "xhigh", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -34,6 +34,8 @@ import (
 const LLMProvider = "anthropic"
 
 const (
+	// ClaudeOpus4Dot7 is Anthropic's Claude Opus 4.7 model.
+	ClaudeOpus4Dot7 = "claude-opus-4-7"
 	// ClaudeOpus4Dot6 is Anthropic's Claude Opus 4.6 model.
 	ClaudeOpus4Dot6 = "claude-opus-4-6"
 	// ClaudeSonnet4Dot6 is Anthropic's Claude Sonnet 4.6 model.
@@ -65,6 +67,7 @@ const (
 // provider at runtime for account- or region-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
+		ClaudeOpus4Dot7:   1000000,
 		ClaudeOpus4Dot6:   1000000,
 		ClaudeSonnet4Dot6: 1000000,
 		ClaudeHaiku4Dot5:  200000,
@@ -83,7 +86,7 @@ func AvailableModels() map[string]int {
 // extended thinking. Currently only 4.6 models support the adaptive mode.
 func SupportsAdaptiveThinking(model string) bool {
 	switch model {
-	case ClaudeOpus4Dot6, ClaudeSonnet4Dot6:
+	case ClaudeOpus4Dot6, ClaudeSonnet4Dot6, ClaudeOpus4Dot7:
 		return true
 	default:
 		return false
