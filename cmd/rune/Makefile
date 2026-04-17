@@ -97,12 +97,10 @@ app-amd64:
 	@ibtool --compile $(APP_EXTRAS_DIR)/MainMenu.nib $(APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@echo "injecting version $(VERSION) ($(COMMIT))"
 	@sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(APP_PLIST)
-	@cp -fp $(APP_BINARY) $(APP_EXTRAS_DIR)/rune-extension
 	@cd $(ROOT_DIR)/extra && iconutil -c icns icon.iconset
 	@mv $(ROOT_DIR)/extra/icon.icns $(APP_ICON)
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@rm -f $(APP_BINARY)
-	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_EXTRAS_DIR)/rune-extension"
 	@codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 
@@ -116,12 +114,10 @@ app-arm64:
 	@ibtool --compile $(APP_EXTRAS_DIR)/MainMenu.nib $(APP_TEMPLATE)/Contents/Resources/MainMenu.xib
 	@echo "injecting version $(VERSION) ($(COMMIT))"
 	@sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(APP_PLIST)
-	@cp -fp $(APP_BINARY) $(APP_EXTRAS_DIR)/rune-extension
 	@cd $(ROOT_DIR)/extra && iconutil -c icns icon.iconset
 	@mv $(ROOT_DIR)/extra/icon.icns $(APP_ICON)
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@rm -f $(APP_BINARY)
-	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_EXTRAS_DIR)/rune-extension"
 	@codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 

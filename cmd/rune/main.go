@@ -55,9 +55,9 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
-	"unstable.build/go-tui/cmd/rune/ide/extension"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/rpc"
@@ -94,8 +94,6 @@ var (
 	// marked hidden
 	flagWorkspaceServer = flag.StringP("workspace-server", "x", "",
 		"Run a workspace server from standard input and output")
-	flagExtensionRunner = flag.String("rune-extension-runner", os.Args[0],
-		"Executable to use to run extensions")
 	flagWorkspaceServerLogFile = flag.StringP("workspace-server-log", "o", "",
 		"Log workspace server TRACE level logs to file")
 	flagHTTPAddress = flag.String("rune-http-address", apicfg.HTTPEndpointAddress,
@@ -253,9 +251,6 @@ func main() {
 	if err := flag.CommandLine.MarkHidden("rune-grpc-address"); err != nil {
 		panic(err)
 	}
-	if err := flag.CommandLine.MarkHidden("rune-extension-runner"); err != nil {
-		panic(err)
-	}
 	if err := flag.CommandLine.MarkHidden("rune-grpc-insecure"); err != nil {
 		panic(err)
 	}
@@ -349,32 +344,23 @@ func main() {
 func appLaunchArgs(goos, execPath string) ([]string, bool) {
 	switch goos {
 	case "darwin":
-		if filepath.Base(execPath) == "rune-extension" {
-			return nil, false
-		}
-
 		macosDir := filepath.Dir(execPath)
 		contentsDir := filepath.Dir(macosDir)
 		resourcesDir := filepath.Join(contentsDir, "Resources")
 		return []string{
-			"--rune-extension-runner=" + filepath.Join(resourcesDir, "rune-extension"),
 			"--rune-zdotdir=" + filepath.Join(resourcesDir, "zdot"),
 			"-G", "-w", "",
 		}, true
 	case "linux":
-		args := []string{
-			"--rune-extension-runner=" + execPath,
-		}
-
 		appDir, ok := linuxAppDir(execPath)
 		if ok {
-			args = []string{
-				"--rune-extension-runner=" + filepath.Join(appDir, "bin", "rune"),
+			return []string{
 				"--rune-zdotdir=" + filepath.Join(appDir, "share", "zdot"),
-			}
+				"-G", "-w", "",
+			}, true
 		}
 
-		return append(args, "-G", "-w", ""), true
+		return []string{"-G", "-w", ""}, true
 	default:
 		return nil, false
 	}
@@ -413,7 +399,7 @@ func run() int {
 
 	var mu sync.Mutex
 	ctx := context.Background()
-	runner, err := extension.NewRunner(ctx, &mu, *flagDataPath, *flagExtensionRunner)
+	runner, err := extensionv2.NewRunner(ctx, &mu, *flagDataPath)
 	if err != nil {
 		err = fmt.Errorf("new extension runner: %v", err)
 		fmt.Fprintf(os.Stderr, "%s", err)
@@ -517,18 +503,16 @@ func runGUI(
 ) int {
 	setEnvForGUI(*flagDataPath)
 
-	// Capture the launch command for guiwindownew.
-	// Use flagExtensionRunner as the executable: it resolves to
-	// os.Args[0] normally, or to the rune-extension binary inside
-	// a macOS app bundle (avoids spawning a second Dock icon).
-	// Visit iterates only over flags that were explicitly set
-	// (including macOS-injected defaults after the second
-	// flag.Parse), so positional filename args are naturally excluded.
+	// Capture the launch command for guiwindownew. Visit iterates
+	// only over flags that were explicitly set (including
+	// macOS-injected defaults after the second flag.Parse), so
+	// positional filename args are naturally excluded.
+	execPath, _ := os.Executable()
 	var launchArgs []string
 	flag.CommandLine.Visit(func(f *flag.Flag) {
 		launchArgs = append(launchArgs, fmt.Sprintf("--%s=%s", f.Name, f.Value.String()))
 	})
-	launchCmd := append([]string{*flagExtensionRunner}, launchArgs...)
+	launchCmd := append([]string{execPath}, launchArgs...)
 
 	chdirerr := os.Chdir(home)
 	if chdirerr != nil {

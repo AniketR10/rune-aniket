@@ -73,12 +73,7 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, execScheme.Close()) })
 
-	baseRunner, err := NewRunner(ctx, new(sync.Mutex), dataDir,
-		WithSocketEnv("RUNE_SOCKET"),
-		WithDataDirEnv("RUNE_DATADIR"),
-		WithAuthCertEnv("RUNE_CERT"),
-		WithAuthTokenEnv("RUNE_TOKEN"),
-	)
+	baseRunner, err := NewRunner(ctx, new(sync.Mutex), dataDir)
 	require.NoError(t, err)
 
 	cases := []struct {

@@ -94,10 +94,10 @@ func (m *workspaceRunner) init(
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) {
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
-	m.cfg.authCertEnv = "IDE_CERT"
-	m.cfg.authTokenEnv = "IDE_TOKEN"
-	m.cfg.socketEnv = "IDE_SOCKET"
-	m.cfg.dataDirEnv = "IDE_DATADIR"
+	m.cfg.authCertEnv = "RUNE_CERT"
+	m.cfg.authTokenEnv = "RUNE_TOKEN"
+	m.cfg.socketEnv = "RUNE_SOCKET"
+	m.cfg.dataDirEnv = "RUNE_DATADIR"
 	for _, o := range opts {
 		o(&m.cfg)
 	}

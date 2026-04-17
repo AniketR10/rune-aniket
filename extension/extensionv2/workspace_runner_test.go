@@ -91,8 +91,8 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 
 	assert.Contains(t, exec.cmd.Env, "ZDOTDIR=/Applications/Rune.app/Contents/Resources/zdot")
 	assert.Contains(t, exec.cmd.Env, "FOO=bar")
-	assert.Contains(t, exec.cmd.Env, "IDE_SOCKET=/tmp/ext.sock")
-	assert.Contains(t, exec.cmd.Env, "IDE_DATADIR=/tmp/ext-data")
+	assert.Contains(t, exec.cmd.Env, "RUNE_SOCKET=/tmp/ext.sock")
+	assert.Contains(t, exec.cmd.Env, "RUNE_DATADIR=/tmp/ext-data")
 	assert.NotEmpty(t, exec.cmd.Dir)
 	assert.Equal(t, "/bin/zsh", exec.cmd.Path)
 	assert.Equal(t, []string{"--login", "-i"}, exec.cmd.Args)

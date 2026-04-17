@@ -23,22 +23,6 @@
 
 package extensionv2
 
-// WithPackageName returns an option that configures the
-// package name used for creating panic reports.
-func WithPackageName(pkg string) Option {
-	return func(cfg *runnerConfig) {
-		cfg.pkg = pkg
-	}
-}
-
-// WithPackageVersion returns an option that configures the
-// package version used for creating panic reports.
-func WithPackageVersion(version string) Option {
-	return func(cfg *runnerConfig) {
-		cfg.version = version
-	}
-}
-
 // WithInsecureAuth returns an option that configures
 // host resources to be exposed without authentication or authorization.
 func WithInsecureAuth() Option {
@@ -96,8 +80,6 @@ func WithAuthCertEnv(env string) Option {
 type Option func(cfg *runnerConfig)
 
 type runnerConfig struct {
-	pkg               string
-	version           string
 	insecureAuth      bool
 	insecureTransport bool
 	authCertEnv       string

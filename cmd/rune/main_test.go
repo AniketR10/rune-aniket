@@ -42,24 +42,26 @@ func TestAppLaunchArgs(t *testing.T) {
 			goos:     "darwin",
 			execPath: filepath.Join("Applications", "Rune.app", "Contents", "MacOS", "rune"),
 			wantArgs: []string{
-				"--rune-extension-runner=" + filepath.Join("Applications", "Rune.app", "Contents", "Resources", "rune-extension"),
 				"--rune-zdotdir=" + filepath.Join("Applications", "Rune.app", "Contents", "Resources", "zdot"),
 				"-G", "-w", "",
 			},
 			wantOK: true,
 		},
 		{
-			name:     "darwin extension",
+			name:     "darwin non-app",
 			goos:     "darwin",
-			execPath: filepath.Join("Applications", "Rune.app", "Contents", "Resources", "rune-extension"),
-			wantOK:   false,
+			execPath: filepath.Join("usr", "local", "bin", "rune"),
+			wantArgs: []string{
+				"--rune-zdotdir=" + filepath.Join("usr", "local", "Resources", "zdot"),
+				"-G", "-w", "",
+			},
+			wantOK: true,
 		},
 		{
 			name:     "linux freedesktop app",
 			goos:     "linux",
 			execPath: filepath.Join("opt", "Rune", "rune.app", "bin", "rune"),
 			wantArgs: []string{
-				"--rune-extension-runner=" + filepath.Join("opt", "Rune", "rune.app", "bin", "rune"),
 				"--rune-zdotdir=" + filepath.Join("opt", "Rune", "rune.app", "share", "zdot"),
 				"-G", "-w", "",
 			},
@@ -70,7 +72,6 @@ func TestAppLaunchArgs(t *testing.T) {
 			goos:     "linux",
 			execPath: filepath.Join("usr", "local", "bin", "rune"),
 			wantArgs: []string{
-				"--rune-extension-runner=" + filepath.Join("usr", "local", "bin", "rune"),
 				"-G", "-w", "",
 			},
 			wantOK: true,

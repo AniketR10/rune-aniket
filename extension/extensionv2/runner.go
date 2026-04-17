@@ -226,11 +226,7 @@ func (s contextServerStream) Context() context.Context {
 
 func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
 	ctx := context.Background()
-	sockname := r.cfg.pkg
-	if sockname == "" {
-		sockname = "ide"
-	}
-	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", sockname))
+	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", debug.Package))
 	err = retry.Retry(ctx, retrySocketStrategy, func(context.Context) (bool, error) {
 		var cfg net.ListenConfig
 		ret, err = cfg.Listen(ctx, "unix", socket)
