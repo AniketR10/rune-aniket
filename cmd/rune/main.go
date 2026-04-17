@@ -105,7 +105,9 @@ var (
 	flagGRPCInsecure = flag.Bool("rune-grpc-insecure", apicfg.InsecureTransport,
 		"If set to false, does not use GRPC over TLS or oauth2 credentials.")
 	flagTelemetryPeriod = flag.Duration("rune-telemetry-period", apicfg.TelemetryPeriod,
-		"How often to send aggregated usage data to rune servers.")
+		"How often to send aggregated usage data (requires --rune-enable-telemetry).")
+	flagEnableTelemetry = flag.Bool("rune-enable-telemetry", apicfg.EnableTelemetry,
+		"Enable sending aggregated usage data to rune servers.")
 	flagReleaseCollection = flag.String("rune-release-collection",
 		apicfg.ReleaseCollection,
 		"Collection name for the release manager.")
@@ -264,6 +266,9 @@ func main() {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-telemetry-period"); err != nil {
+		panic(err)
+	}
+	if err := flag.CommandLine.MarkHidden("rune-enable-telemetry"); err != nil {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-release-collection"); err != nil {
@@ -738,13 +743,16 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
 	apicfg.InsecureTransport = *flagGRPCInsecure
 	apicfg.TelemetryPeriod = *flagTelemetryPeriod
+	apicfg.EnableTelemetry = *flagEnableTelemetry
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	client, err := apiclient.New(i.Notifications(), storage, apicfg, *flagDataPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("new api client: %v", err)
 	}
-	if err := i.SubscribeEvents(apiclient.TelemetryEvents(), client); err != nil {
-		log.Warnf("subscribe api client to file events: %v", err)
+	if client.TelemetryEnabled() {
+		if err := i.SubscribeEvents(apiclient.TelemetryEvents(), client); err != nil {
+			log.Warnf("subscribe api client to file events: %v", err)
+		}
 	}
 	conn, err := client.Dial()
 	if err != nil {

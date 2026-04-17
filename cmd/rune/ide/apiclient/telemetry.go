@@ -77,6 +77,9 @@ func newTelemetry(
 	period time.Duration,
 	version string,
 ) *telemetry {
+	if period <= 0 {
+		panic(fmt.Sprintf("apiclient: TelemetryPeriod must be positive, got %v", period))
+	}
 	ret := new(telemetry)
 	ret.auth = auth
 

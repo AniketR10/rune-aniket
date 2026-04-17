@@ -34,7 +34,7 @@ const (
 
 	defaultHTTPEndpointAddress = "https://api.unstable.build"
 
-	defaultTelemetryPeriod = 30 * time.Second
+	defaultTelemetryPeriod = 5 * time.Minute
 )
 
 // defaultReleaseCollection returns the Firestore collection name for
@@ -52,6 +52,7 @@ func DefaultConfig() Config {
 		InsecureTransport:   false,
 		TelemetryPeriod:     defaultTelemetryPeriod,
 		ReleaseCollection:   defaultReleaseCollection(),
+		EnableTelemetry:     false,
 	}
 }
 
@@ -66,6 +67,10 @@ type Config struct {
 	InsecureTransport bool
 	// ReleaseCollection is the document collection for the package manager.
 	ReleaseCollection string
-	// TelemetryPeriod is how often do we send statistics to the server.
+	// TelemetryPeriod is how often to send statistics to the server.
+	// Must be positive when EnableTelemetry is true; zero panics.
 	TelemetryPeriod time.Duration
+	// EnableTelemetry controls whether telemetry is active. When false,
+	// no telemetry data is collected or sent.
+	EnableTelemetry bool
 }
