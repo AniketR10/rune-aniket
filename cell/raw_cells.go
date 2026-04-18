@@ -107,6 +107,151 @@ func (c *rawCells) insertNewRow(pos term.Coordinates) {
 	}
 }
 
+// splitRowsBatch applies a batch of splits to rows in c.cells with a single
+// outer-slice allocation (at most). Splits must reference distinct, strictly
+// increasing row indices.
+//
+// Each split at row Y with (Width, Times) re-slices c.cells[Y] into
+// (Times+1) pieces of length Width (head and intermediate pieces) and a
+// trailing piece containing whatever remained. The original row slice is
+// reused with 3-index slicing (cap = len), so sub-pieces do not share
+// append-writable capacity with their neighbours.
+//
+// If padToWidth > 0 and a tail piece ends up shorter than padToWidth, the
+// tail is materialized as a fresh slice of length padToWidth with the
+// original cells copied into the first positions and term.Cell{Ch: fillChar}
+// filling the rest. All such tail materializations share a single slab
+// allocation so per-tail allocations are avoided.
+//
+// Returns the total number of rows added.
+func (c *rawCells) splitRowsBatch(splits []RowSplit, padToWidth int, fillChar rune) (added int) {
+	if len(splits) == 0 {
+		return 0
+	}
+	for _, s := range splits {
+		if s.Times <= 0 || s.Width <= 0 {
+			continue
+		}
+		added += s.Times
+	}
+	if added == 0 {
+		return 0
+	}
+
+	oldLen := len(c.cells)
+	newLen := oldLen + added
+
+	var dst [][]term.Cell
+	if cap(c.cells) >= newLen {
+		dst = c.cells[:newLen]
+	} else {
+		dst = make([][]term.Cell, newLen, newLen+newLen/2)
+	}
+
+	// If padding tails, pre-allocate one slab large enough to hold every
+	// tail that needs padding. We only fill the cells that won't be copied
+	// over from the original tail.
+	var padSlab []term.Cell
+	var padOff int
+	var fill term.Cell
+	if padToWidth > 0 {
+		var padTails int
+		for _, s := range splits {
+			if s.Times <= 0 || s.Width <= 0 {
+				continue
+			}
+			orig := c.cells[s.Y]
+			tailLen := len(orig) - s.Times*s.Width
+			if tailLen < padToWidth {
+				padTails++
+			}
+		}
+		if padTails > 0 {
+			padSlab = make([]term.Cell, padTails*padToWidth)
+			fill = term.Cell{Ch: fillChar}
+		}
+	}
+
+	// Walk backwards over the original rows. Maintain a `shift` that tracks
+	// how many positions everything below the current read pointer has been
+	// pushed down by accumulated splits (from later, higher-index, original
+	// rows). Each split inserts s.Times rows into the OUTPUT, after its head.
+	//
+	// We process splits from last to first. Between splits, we copy the
+	// untouched tail rows down by `shift` positions.
+	splitIdx := len(splits) - 1
+	read := oldLen
+	write := newLen
+	for read > 0 {
+		// Find next applicable split with Y < read.
+		for splitIdx >= 0 {
+			s := splits[splitIdx]
+			if s.Times <= 0 || s.Width <= 0 {
+				splitIdx--
+				continue
+			}
+			if s.Y < read {
+				break
+			}
+			splitIdx--
+		}
+		var nextSplitY int
+		if splitIdx >= 0 {
+			nextSplitY = splits[splitIdx].Y
+		} else {
+			nextSplitY = -1
+		}
+
+		// Copy untouched rows in (nextSplitY, read) down to dst.
+		untouched := read - (nextSplitY + 1)
+		if untouched > 0 {
+			copy(dst[write-untouched:write], c.cells[nextSplitY+1:read])
+			write -= untouched
+		}
+
+		if splitIdx < 0 {
+			break
+		}
+		// Apply the split at splits[splitIdx].
+		s := splits[splitIdx]
+		orig := c.cells[s.Y]
+		origLen := len(orig)
+		// Emit the trailing pieces (j = s.Times .. 1), then the head at s.Y.
+		for j := s.Times; j >= 1; j-- {
+			start := j * s.Width
+			var end int
+			if j == s.Times {
+				end = origLen
+			} else {
+				end = start + s.Width
+			}
+			write--
+			if j == s.Times && padToWidth > 0 && end-start < padToWidth && padSlab != nil {
+				// Materialize tail into padSlab at full padToWidth. Only
+				// the pad region (past the original tail length) needs
+				// fill; the original tail cells are copied in.
+				slot := padSlab[padOff : padOff+padToWidth : padOff+padToWidth]
+				tailLen := end - start
+				copy(slot[:tailLen], orig[start:end])
+				for i := tailLen; i < padToWidth; i++ {
+					slot[i] = fill
+				}
+				dst[write] = slot
+				padOff += padToWidth
+			} else {
+				dst[write] = orig[start:end:end]
+			}
+		}
+		write--
+		dst[write] = orig[:s.Width:s.Width]
+		read = s.Y
+		splitIdx--
+	}
+
+	c.cells = dst
+	return added
+}
+
 func (c *rawCells) doInsertAt(pos term.Coordinates, r []rune, width, byteCount uint8) {
 	// make sure we have enough capacity
 	c.cells[pos.Y] = append(c.cells[pos.Y], term.Cell{})
@@ -217,6 +362,52 @@ func (c *rawCells) fillInColumns(pos term.Coordinates) (n int) {
 	return
 }
 
+// extendRowToWidth pads row y with term.Cell{Ch: c.fillInChar} until its
+// length reaches width. It performs a single slice grow when capacity is
+// insufficient. If the row is already at least width columns wide, it is
+// left unchanged.
+func (c *rawCells) extendRowToWidth(y, width int) (added int) {
+	if y < 0 || y >= len(c.cells) {
+		return 0
+	}
+	row := c.cells[y]
+	cur := len(row)
+	if cur >= width {
+		return 0
+	}
+	need := width - cur
+	if cap(row) < width {
+		grown := make([]term.Cell, width)
+		copy(grown, row)
+		row = grown
+	} else {
+		row = row[:width]
+	}
+	fill := term.Cell{Ch: c.fillInChar}
+	for i := cur; i < width; i++ {
+		row[i] = fill
+	}
+	c.cells[y] = row
+	return need
+}
+
+// trimRowsFromEnd drops up to count rows from the end of c.cells, keeping
+// at least one row (matches the invariant maintained elsewhere). It is
+// allocation-free.
+func (c *rawCells) trimRowsFromEnd(count int) (removed int) {
+	if count <= 0 {
+		return 0
+	}
+	n := len(c.cells)
+	if n <= 1 {
+		return 0
+	}
+	removed = count
+	removed = min(removed, n-1)
+	c.cells = c.cells[:n-removed]
+	return removed
+}
+
 func (c *rawCells) fillInCoords(pos term.Coordinates) (
 	from, to term.Coordinates, rowsFilled int,
 ) {
@@ -312,14 +503,104 @@ func (c *rawCells) conflate(row int) {
 	// copy cells from next row into current row
 	rlen := len(c.cells[row+1])
 	if rlen != 0 {
-		origLen := len(c.cells[row])
-		c.cells[row] = append(c.cells[row], make([]term.Cell, rlen)...)
-		copy(c.cells[row][origLen:], c.cells[row+1][:])
+		c.cells[row] = append(c.cells[row], c.cells[row+1]...)
 	}
 
 	// copy all rows into row we just moved up and trim last row
 	copy(c.cells[row+1:], c.cells[row+2:])
 	c.cells = c.cells[:len(c.cells)-1]
+}
+
+// mergeMarkedRows walks rows [0..end] and, whenever a row's last cell
+// satisfies isMark, merges it (and as many consecutive subsequent rows whose
+// previous row's last cell satisfies isMark) into the group head. The merge
+// is performed in a single pass across the backing slice.
+//
+// The mark cell in merged positions is cleared via clearMark before merging
+// so the caller can use a sentinel byte (e.g. vte wrapMarker) to detect group
+// continuation. end is exclusive; only rows at indexes < end are eligible to
+// start a group (groups may still extend past end into later rows if marked).
+//
+// Returns the total number of rows consumed by merges (i.e. how much the
+// row count shrank).
+func (c *rawCells) mergeMarkedRows(
+	end int,
+	isMark func(term.Cell) bool,
+	clearMark func(*term.Cell),
+) (merged int) {
+	n := len(c.cells)
+	if end > n {
+		end = n
+	}
+	if end <= 0 || n <= 1 {
+		return 0
+	}
+
+	write := 0
+	for read := 0; read < n; {
+		row := c.cells[read]
+		// Start of a potential group: check if this row is eligible (i.e.
+		// head row must be within [0, end)) and its last cell is marked.
+		lastCol := len(row) - 1
+		if read >= end || lastCol < 0 || !isMark(row[lastCol]) {
+			// No group starts here; just copy if write != read.
+			if write != read {
+				c.cells[write] = row
+			}
+			write++
+			read++
+			continue
+		}
+
+		// Collect consecutive rows that participate in this group.
+		groupEnd := read
+		for groupEnd+1 < n {
+			curRow := c.cells[groupEnd]
+			curLast := len(curRow) - 1
+			if curLast < 0 || !isMark(curRow[curLast]) {
+				break
+			}
+			groupEnd++
+		}
+		// groupEnd is inclusive last row of the merged line.
+
+		// Compute total length and clear marks on intermediate rows.
+		total := len(row)
+		clearMark(&row[lastCol])
+		for y := read + 1; y <= groupEnd; y++ {
+			nextRow := c.cells[y]
+			if last := len(nextRow) - 1; last >= 0 && y < groupEnd && isMark(nextRow[last]) {
+				clearMark(&nextRow[last])
+			}
+			total += len(nextRow)
+		}
+
+		// Merge.
+		merge := groupEnd - read
+		if merge == 0 {
+			if write != read {
+				c.cells[write] = row
+			}
+			write++
+			read++
+			continue
+		}
+
+		if cap(row) < total {
+			grown := make([]term.Cell, len(row), total)
+			copy(grown, row)
+			row = grown
+		}
+		for y := read + 1; y <= groupEnd; y++ {
+			row = append(row, c.cells[y]...)
+		}
+		c.cells[write] = row
+		write++
+		read = groupEnd + 1
+		merged += merge
+	}
+	c.cells = c.cells[:write]
+	return merged
 }
 
 func (c *rawCells) deleteRowRange(

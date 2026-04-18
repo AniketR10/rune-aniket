@@ -46,19 +46,82 @@ func CellsToBytesBuffer(buffer *bytes.Buffer, cells [][]term.Cell) {
 // Furthermore, it won't treat the last EOL as mandatory so it can be used
 // as an in-memory buffer.
 func CellsToBuffer(c [][]term.Cell) *Buffer {
+	return cellsToBuffer(c, ' ', false)
+}
+
+// CellsToBufferPerformance is like CellsToBuffer, but initializes the returned
+// buffer in performance mode and uses fillInChar when future edits need to fill
+// rows or columns beyond the current content.
+func CellsToBufferPerformance(c [][]term.Cell, fillInChar rune) *Buffer {
+	return cellsToBuffer(c, fillInChar, true)
+}
+
+func cellsToBuffer(c [][]term.Cell, fillInChar rune, performance bool) *Buffer {
 	cells := new(rawCells)
+	cells.fillInChar = fillInChar
+	cells.resetWithCap(defRowCap, defColumnCap)
+	if performance {
+		cells.cells = copyCellsContiguous(cells.cells, c)
+	} else {
+		cells.cells = term.CopyCells(cells.cells, c)
+	}
 
-	cells.init()
-	cells.cells = term.CopyCells(cells.cells, c)
-
-	// rawCells hasthe property that there's always at least one row
+	// rawCells has the property that there's always at least one row.
 	if cells.Rows() == 0 {
 		cells.fillInRows(0)
 	}
 
 	ret := new(Buffer)
-	ret.initWithCells(cells)
+	if performance {
+		ret.initPerformanceWithCells(cells)
+	} else {
+		ret.initWithCells(cells)
+	}
 	return ret
+}
+
+// copyCellsContiguous copies src into a destination row slice where every
+// copied row is sliced from a single contiguous backing array with
+// cap == len. This enables copy-free merges (rowsContiguous fast path) when
+// later editing coalesces adjacent rows.
+//
+// Individual row appends that exceed a row's cap will still reallocate that
+// row in Go's normal way, at which point the contiguity invariant for that
+// row is broken — but neighbouring untouched rows remain contiguous with
+// each other, so the fast path still fires for them.
+func copyCellsContiguous(dst [][]term.Cell, src [][]term.Cell) [][]term.Cell {
+	if len(dst) > len(src) {
+		dst = dst[:len(src)]
+	} else if len(dst) < len(src) {
+		for i := len(dst); i < len(src); i++ {
+			dst = append(dst, nil)
+		}
+	}
+	var total int
+	for _, r := range src {
+		total += len(r)
+	}
+	if total == 0 {
+		for i := range src {
+			dst[i] = nil
+		}
+		return dst
+	}
+	slab := make([]term.Cell, total)
+	var off int
+	for i, r := range src {
+		n := len(r)
+		if n == 0 {
+			dst[i] = nil
+			continue
+		}
+		copy(slab[off:off+n], r)
+		// Use 3-index slicing so cap == len and subsequent rows start right
+		// after the previous one's end.
+		dst[i] = slab[off : off+n : off+n]
+		off += n
+	}
+	return dst
 }
 
 // ConvertRunePosToCoordinates converts the given column and row position in number of

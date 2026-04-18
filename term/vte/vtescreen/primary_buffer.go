@@ -30,6 +30,7 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term/vte/vteparser"
 )
 
@@ -124,6 +125,18 @@ func (b *PrimaryBuffer) growLines(width, height int) {
 
 func (b *PrimaryBuffer) shrinkLines(height int) {
 	pos := b.CursorAtScroll()
+	rows := b.Cells.Rows()
+	if rows <= height {
+		return
+	}
+	// We may trim any rows beyond the cursor row down to at most `height`.
+	floor := max(pos.Y+1, height)
+	if rows <= floor {
+		return
+	}
+	if _, ok := b.Cells.TrimRowsFromEnd(rows - floor); ok {
+		return
+	}
 	for y := b.Cells.Rows() - 1; y > 0 && b.Cells.Rows() > height; y-- {
 		if pos.Y >= y {
 			break
@@ -145,10 +158,7 @@ func (b *PrimaryBuffer) growColumns(width, _ int) (wraps int) {
 			wraps = b.wrapTopLines(y, width)
 			break
 		}
-		if b.Cells.Columns(y) < width {
-			at := term.Coordinates{Y: y, X: width - 1}
-			b.Cells.InsertContext(b.AltBuffer.ctx, at, b.AltBuffer.defaultChar)
-		}
+		b.Cells.ExtendRowToWidth(y, width)
 	}
 
 	return
@@ -185,23 +195,13 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 	if width == 0 {
 		return
 	}
-	// unwrap previous wraps
-	for y := 0; y <= at && y < b.Cells.Rows(); y++ {
-		for {
-			lastCol := b.Cells.Columns(y) - 1
-			if lastCol < 0 {
-				break
-			}
-			c := b.CellAt(term.Coordinates{Y: y, X: lastCol})
-			if c == nil || c.Bytes != wrapMarker {
-				break
-			}
-			c.Bytes = 0
-			if _, ok := b.Cells.ConflateRowContext(b.AltBuffer.ctx, y); ok {
-				at--
-				n--
-			}
-		}
+	// Unwrap previous wraps in a single O(rows) pass.
+	merged, ok := b.Cells.MergeMarkedRows(at+1,
+		func(c term.Cell) bool { return c.Bytes == wrapMarker },
+		func(c *term.Cell) { c.Bytes = 0 })
+	if ok {
+		at -= merged
+		n -= merged
 	}
 	b.log(log.TraceLevel, "un-wrapped %d lines", -n)
 	if at < 0 {
@@ -211,53 +211,109 @@ func (b *PrimaryBuffer) wrapTopLines(at, width int) (n int) {
 	// it's always a positive number, whereas n represent the total
 	// wraps variation, so it can be negative if we unwrapped more
 	// lines that we wrapped.
-	var wraps int
-	for y := 0; y <= at && y < b.Cells.Rows(); y++ {
+	//
+	// After the unwrap pass, rows [0..at] are each a single logical line.
+	// For each one we either:
+	//   - pad short rows to `width`,
+	//   - trim trailing blanks and possibly split into multiple rows of
+	//     length `width`.
+	//
+	// Trim and pad operations mutate only a single row. Splits change the
+	// outer row count — we collect them and apply in a single batched
+	// structural edit (`SplitRowsBatchPadded`) to avoid repeated O(rows)
+	// slice shifts.
+	var splits []cell.RowSplit
+	var created int
+	cells := b.Cells.RawCells()
+	for y := 0; y <= at && y < len(cells); y++ {
+		row := cells[y]
 		var x int
-		for x = b.Cells.Columns(y) - 1; x > 0; x-- {
-			cell, _ := b.Cells.Cell(term.Coordinates{Y: y, X: x})
+		for x = len(row) - 1; x > 0; x-- {
+			cell := row[x]
 			if cell.Ch != b.defaultChar && cell.Ch != ' ' {
 				break
 			}
 		}
-		cols := b.Cells.Columns(y)
+		cols := len(row)
 		switch {
 		case x < width && width <= cols:
 			from := term.Coordinates{Y: y, X: width}
 			to := term.Coordinates{Y: y, X: cols}
 			b.Cells.DeleteContext(b.AltBuffer.ctx, from, to)
 		case x >= width && width <= cols:
-			from := term.Coordinates{Y: y, X: x + 1}
-			to := term.Coordinates{Y: y, X: cols}
-			b.Cells.DeleteContext(b.AltBuffer.ctx, from, to)
-			// use the new number of columns
-			cols = b.Cells.Columns(y)
+			// If trimming trailing blanks would not change the split
+			// count, skip the trim entirely and let the trailing blanks
+			// become part of the tail row. This avoids a DeleteContext
+			// call plus pad-slab fill work for those same blanks.
+			contentLen := x + 1
+			trimmedTimes := contentLen / width
+			if contentLen%width == 0 {
+				trimmedTimes--
+			}
+			untrimmedTimes := cols / width
+			if cols%width == 0 {
+				untrimmedTimes--
+			}
+			if trimmedTimes != untrimmedTimes {
+				from := term.Coordinates{Y: y, X: contentLen}
+				to := term.Coordinates{Y: y, X: cols}
+				b.Cells.DeleteContext(b.AltBuffer.ctx, from, to)
+				cells = b.Cells.RawCells()
+				cols = len(cells[y])
+			}
 			times := cols / width
 			remainder := cols % width
 			if remainder == 0 {
 				times--
 			}
-			for i := times; i > 0 && b.Cells.WrapRowContext(b.AltBuffer.ctx, y, width*i); i-- {
-				c := b.CellAt(term.Coordinates{Y: y, X: b.Cells.Columns(y) - 1})
-				c.Bytes = wrapMarker
-				n++
-				at++
-				wraps++
+			if times > 0 {
+				if splits == nil {
+					// Cap hint: at most one split per remaining row.
+					remain := (at + 1) - y
+					splits = make([]cell.RowSplit, 0, remain)
+				}
+				splits = append(splits, cell.RowSplit{
+					Y: y, Width: width, Times: times,
+				})
+				created += times
 			}
 			b.log(log.TraceLevel, "wrapped a new line line (%d), times: %d", y, times)
 		case x < width && width > cols:
-			at := term.Coordinates{Y: y, X: width - 1}
-			b.Cells.InsertContext(b.AltBuffer.ctx, at, b.AltBuffer.defaultChar)
+			b.Cells.ExtendRowToWidth(y, width)
 		default:
 			panic("pack it up boys")
 		}
+		// Structural edits above (Delete, Extend) may have moved the
+		// backing slice; refresh our local view.
+		cells = b.Cells.RawCells()
 	}
+	if len(splits) > 0 {
+		// Pad split tails to `width` via a single slab allocation so the
+		// subsequent "grow history lines" loop is a no-op for tail rows.
+		b.Cells.SplitRowsBatchPadded(splits, width, b.AltBuffer.defaultChar)
+		cells = b.Cells.RawCells()
+		shift := 0
+		for _, s := range splits {
+			headY := s.Y + shift
+			// Mark head + Times-1 intermediate pieces. The final (tail)
+			// piece at headY + Times is the tail of the original line and
+			// is NOT marked, so the next resize knows where the logical
+			// line actually ends.
+			for i := range s.Times {
+				row := cells[headY+i]
+				row[len(row)-1].Bytes = wrapMarker
+			}
+			shift += s.Times
+		}
+		n += created
+		at += created
+	}
+	wraps := created
 
 	// grow history lines that fall short or were wrapped
 	for y := range at {
 		if b.Cells.Columns(y) < width {
-			at := term.Coordinates{Y: y, X: width - 1}
-			b.Cells.InsertContext(b.AltBuffer.ctx, at, b.AltBuffer.defaultChar)
+			b.Cells.ExtendRowToWidth(y, width)
 		}
 	}
 	b.log(log.TraceLevel, "wrapped back %d lines", wraps)

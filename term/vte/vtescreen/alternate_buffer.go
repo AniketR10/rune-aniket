@@ -116,7 +116,7 @@ func (b *AltBuffer) restore(cells [][]term.Cell, cursor term.Coordinates, width,
 	b.height = height
 	b.topScrollableRegion = 0
 	b.bottomScrollableRegion = height
-	b.Cells = *cell.CellsToBuffer(cells)
+	b.Cells = *cell.CellsToBufferPerformance(cells, b.defaultChar)
 	b.Cells.ResetCapacity(width)
 	b.scroll.InitPerformance(&b.Cells)
 	b.scroll.SetTabspaces(1)

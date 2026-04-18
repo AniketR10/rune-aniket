@@ -25,6 +25,7 @@ package vtescreen
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/rivo/uniseg"
@@ -369,6 +370,15 @@ func TestPrimaryResize(t *testing.T) {
 			{10, 5, 5, 5, "aaaaaa\nbbb", "aaaaa\na    \nbbb  \n     \n     ", term.Coordinates{Y: 2, X: 3}},
 			{10, 5, 9, 5, "aaaaaa\nbbb", "aaaaaa   \nbbb      \n         \n         \n         ", term.Coordinates{Y: 1, X: 3}},
 			{10, 10, 5, 5, "aaaaaa\nbbb", "aaaaa\na    \nbbb  \n     \n     ", term.Coordinates{Y: 2, X: 3}},
+			{
+				10,
+				5,
+				1,
+				10,
+				strings.TrimSuffix(strings.Repeat("aaaaaa\nbbb\n$\n", 10), "\n"),
+				"a\na\na\na\na\na\nb\nb\nb\n$",
+				term.Coordinates{Y: 99, X: 1},
+			},
 			{10, 5, 2, 5, "aaaaaa\nbbb\n$", "aa\naa\nbb\nb \n$ ", term.Coordinates{Y: 5, X: 1}},
 			{10, 5, 2, 2, "aaaaaa\nbbb\n$", "b \n$ ", term.Coordinates{Y: 5, X: 1}},
 			{10, 5, 2, 8, "aaaaaa\nbbb\n$", "aa\naa\naa\nbb\nb \n$ \n  \n  ", term.Coordinates{Y: 5, X: 1}},
@@ -404,6 +414,102 @@ func TestPrimaryResize(t *testing.T) {
 			})
 		}
 	})
+}
+
+func BenchmarkPrimaryBufferResize(b *testing.B) {
+	const (
+		narrowWidth = 20
+		wideWidth   = 40
+		height      = 200
+		lineWidth   = 36
+	)
+
+	suite := []struct {
+		name         string
+		lineCount    int
+		initialWidth int
+		finalWidth   int
+		expectedRows int
+	}{
+		{
+			name:         "unwrap/fits_height",
+			lineCount:    height,
+			initialWidth: narrowWidth,
+			finalWidth:   wideWidth,
+			expectedRows: height,
+		},
+		{
+			name:         "unwrap/double_height",
+			lineCount:    2 * height,
+			initialWidth: narrowWidth,
+			finalWidth:   wideWidth,
+			expectedRows: 2 * height,
+		},
+		{
+			name:         "wrap/fits_height",
+			lineCount:    height / 2,
+			initialWidth: wideWidth,
+			finalWidth:   narrowWidth,
+			expectedRows: height,
+		},
+		{
+			name:         "wrap/double_height",
+			lineCount:    height,
+			initialWidth: wideWidth,
+			finalWidth:   narrowWidth,
+			expectedRows: 2 * height,
+		},
+	}
+
+	for _, test := range suite {
+		b.Run(test.name, func(b *testing.B) {
+			b.Helper()
+			prepared := makePrimaryBufferForTesting(max(test.initialWidth, test.finalWidth), height)
+			resetPrimaryBuffer(prepared,
+				makeBenchmarkPrimaryBufferContent(test.lineCount, lineWidth))
+			if test.initialWidth != prepared.Width() {
+				prepared.Resize(test.initialWidth, height)
+			}
+			snapshot := term.CloneCells(prepared.Cells.RawCells())
+			cursor := prepared.CursorAtScroll()
+			savedCursor := prepared.savedCursor
+			wraps := prepared.wraps
+			probe := NewPrimaryBuffer(0, testHistory)
+			probe.SetDefaultChar(' ')
+			probe.Restore(snapshot, cursor, test.initialWidth, height)
+			probe.SetSavedCursor(savedCursor)
+			probe.wraps = wraps
+			probe.Resize(test.finalWidth, height)
+			if probe.Rows() != test.expectedRows {
+				b.Fatalf("unexpected row count after resize: got %d, want %d", probe.Rows(), test.expectedRows)
+			}
+			buf := NewPrimaryBuffer(0, testHistory)
+			buf.SetDefaultChar(' ')
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				b.StopTimer()
+				buf.Restore(snapshot, cursor, test.initialWidth, height)
+				buf.SetSavedCursor(savedCursor)
+				buf.wraps = wraps
+				b.StartTimer()
+				buf.Resize(test.finalWidth, height)
+			}
+		})
+	}
+}
+
+func makeBenchmarkPrimaryBufferContent(lines, lineWidth int) string {
+	line := strings.Repeat("x", lineWidth)
+	var builder strings.Builder
+	builder.Grow(lines * (lineWidth + 1))
+	for i := range lines {
+		if i > 0 {
+			_ = builder.WriteByte('\n')
+		}
+		_, _ = builder.WriteString(line)
+	}
+	return builder.String()
 }
 
 func makePrimaryBufferForTesting(width, height int) *PrimaryBuffer {

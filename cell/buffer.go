@@ -254,6 +254,15 @@ func (b *Buffer) ConflateRow(y int) (x int, ok bool) {
 func (b *Buffer) ConflateRowContext(
 	ctx context.Context, y int,
 ) (x int, ok bool) {
+	if b.undoer == nil {
+		if y < 0 || b.Rows() <= 1 || y >= b.Rows()-1 {
+			return 0, false
+		}
+		x = len(b.cells.cells[y])
+		b.cells.conflate(y)
+		return x, true
+	}
+
 	from := term.Coordinates{Y: y}
 	to := term.Coordinates{Y: y + 1}
 	from, to, ok = fromToInBounds(b.view, from, to)
@@ -267,6 +276,82 @@ func (b *Buffer) ConflateRowContext(
 	return
 }
 
+// MergeMarkedRows merges runs of rows whose last cell is marked, treating
+// each run as a single logical line, in a single O(rows) pass over the
+// underlying row slice.
+//
+// Only row indexes in [0, end) are eligible to start a group. Groups may
+// still extend beyond end if a matching marker is found on later rows.
+//
+// clearMark is called to reset the sentinel on the head cell of each group
+// and on any intermediate cells that were marked.
+//
+// This is only supported in performance mode.
+func (b *Buffer) MergeMarkedRows(
+	end int,
+	isMark func(term.Cell) bool,
+	clearMark func(*term.Cell),
+) (merged int, ok bool) {
+	if b.undoer != nil {
+		panic("MergeMarkedRows should not be used if not initialized via InitPerformance")
+	}
+	return b.cells.mergeMarkedRows(end, isMark, clearMark), true
+}
+
+// RowSplit describes a single row split applied by SplitRowsBatch: row Y is
+// re-sliced into (Times+1) consecutive rows, the first Times of them having
+// length Width, plus a trailing row containing whatever remainder is left.
+type RowSplit struct {
+	Y     int
+	Width int
+	Times int
+}
+
+// SplitRowsBatch applies the provided splits in a single pass over the row
+// slice. Splits must reference distinct, strictly increasing row indices,
+// and Width*Times must be <= row length for each split. Only supported in
+// performance mode.
+func (b *Buffer) SplitRowsBatch(splits []RowSplit) (added int, ok bool) {
+	if b.undoer != nil {
+		panic("SplitRowsBatch should not be used if not initialized via InitPerformance")
+	}
+	return b.cells.splitRowsBatch(splits, 0, 0), true
+}
+
+// SplitRowsBatchPadded is like SplitRowsBatch but any tail piece of a split
+// whose length is less than padToWidth is padded to padToWidth using
+// term.Cell{Ch: fillChar}. Padding is performed by materializing new rows
+// drawn from a single slab allocation so per-tail allocations are avoided.
+// Only supported in performance mode.
+func (b *Buffer) SplitRowsBatchPadded(splits []RowSplit, padToWidth int, fillChar rune) (added int, ok bool) {
+	if b.undoer != nil {
+		panic("SplitRowsBatchPadded should not be used if not initialized via InitPerformance")
+	}
+	return b.cells.splitRowsBatch(splits, padToWidth, fillChar), true
+}
+
+// ExtendRowToWidth pads row y with fill cells until its length equals
+// width, in a single allocation when growing capacity is needed. It is
+// equivalent to repeated InsertContext calls appending the fill char, but
+// avoids repeated slice grows and editor overhead. Only supported in
+// performance mode; returns (0, false) otherwise.
+func (b *Buffer) ExtendRowToWidth(y, width int) (added int, ok bool) {
+	if b.undoer != nil {
+		panic("ExtendRowToWidth should not be used if not initialized via InitPerformance")
+	}
+	return b.cells.extendRowToWidth(y, width), true
+}
+
+// TrimRowsFromEnd removes up to count trailing rows from the buffer without
+// allocating intermediate strings. Only supported in performance mode;
+// returns (0, false) otherwise. Returns the number of rows actually removed.
+func (b *Buffer) TrimRowsFromEnd(count int) (removed int, ok bool) {
+	if b.undoer != nil {
+		panic("TrimRowsFromEnd should not be used if not initialized via InitPerformance")
+	}
+	return b.cells.trimRowsFromEnd(count), true
+}
+
 // WrapRow is equivalent to calling WrapRowContext
 // with context.Background.
 func (b *Buffer) WrapRow(y, at int) (ok bool) {
@@ -278,6 +363,14 @@ func (b *Buffer) WrapRow(y, at int) (ok bool) {
 func (b *Buffer) WrapRowContext(
 	ctx context.Context, y, at int,
 ) (ok bool) {
+	if b.undoer == nil {
+		if y < 0 || y >= b.Rows() || at > b.Columns(y) {
+			return false
+		}
+		b.cells.insertNewRow(term.Coordinates{Y: y, X: at})
+		return true
+	}
+
 	if y >= b.Rows() || at > b.Columns(y) {
 		return
 	}
