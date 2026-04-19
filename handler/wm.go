@@ -511,6 +511,11 @@ func (wm *WindowManager) RestoreTileLayout(
 	if focus != (Window{}) {
 		wm.SetFocus(focus)
 	}
+	// SetFocus stores the pre-restore focus into prevFocus, but that
+	// window is no longer part of the tree. Clear prevFocus so downstream
+	// focus transitions (e.g. Window.Close falling back to prevFocus) do
+	// not select a stale node.
+	wm.prevFocus = Window{}
 	return ret
 }
 

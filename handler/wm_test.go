@@ -516,6 +516,86 @@ func TestWindowManagerCloseFloatingSkipsMinimizedFloatingFocus(t *testing.T) {
 	assert.True(t, ok)
 }
 
+// TestWindowManagerCloseSkipsClosedPrevFocus exercises the case where, after
+// successive window closes, prevFocus points to a window that is no longer
+// alive. Close must not select such a stale window as the next focus, or
+// WindowManager.Focus() will return a closed Window and downstream
+// browser.Component.findWindow will fail to resolve it.
+func TestWindowManagerCloseSkipsClosedPrevFocus(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(20, 8)
+
+	// a is the initial focus window.
+	a := wm.Focus()
+	b, ok := wm.SplitHorizontal(a, handler.NewTestHandler())
+	require.True(t, ok)
+	c, ok := wm.SplitHorizontal(b, handler.NewTestHandler())
+	require.True(t, ok)
+	// focus is still a.
+	require.Equal(t, a.ID(), wm.Focus().ID())
+	_ = c
+
+	// Close the focused window a; focus shifts to a sibling (b or c). This
+	// also sets prevFocus to the now-closed a.
+	require.NoError(t, a.Close())
+	require.NotEqual(t, a.ID(), wm.Focus().ID())
+	after := wm.Focus()
+
+	// Close the new focus. prevFocus still points to the closed a, so
+	// Close should NOT select a as the next focus.
+	require.NoError(t, after.Close())
+
+	assert.False(t, wm.Focus().Closed(),
+		"focus should point to a live window, not a closed one")
+}
+
+// TestWindowManagerRestoreTileLayoutResetsPrevFocus ensures that a layout
+// restore does not leave prevFocus pointing at a closed window. Before this
+// fix, SetFocus stored the stale pre-restore focus into prevFocus; once the
+// user closed the new focus, Close.prevFocus fallback path restored the
+// stale window, causing WindowManager.Focus() to return a closed Window and
+// downstream browser.Component.findWindow to panic with
+// "corrupted browser: cannot find focus window".
+func TestWindowManagerRestoreTileLayoutResetsPrevFocus(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(20, 8)
+
+	// Replace the tree with a fresh two-window layout. The old focus
+	// window is no longer part of the tree after RestoreTileLayout.
+	restored := wm.RestoreTileLayout(component.TileLayout{
+		Split: component.SplitOrientationVertical,
+		Children: []component.TileLayout{
+			{WindowID: 1},
+			{WindowID: 2},
+		},
+	}, func(windowID uint64) tui.Handler {
+		return handler.NewTestHandler()
+	})
+	require.Len(t, restored, 2)
+
+	// Close the current focus window. prevFocus must not point at the
+	// old, pre-restore window, which is closed and no longer in the tree.
+	current := wm.Focus()
+	require.False(t, current.Closed())
+	require.NoError(t, current.Close())
+
+	// Verify the current focus ID is actually present in the tree. We
+	// cannot rely on Closed() alone because TileNode.Closed() is based on
+	// parent != nil and RestoreTileLayout rewrites the root in place,
+	// leaving the old focus' parent pointer dangling instead of nil.
+	focusID := wm.Focus().ID()
+	var found bool
+	wm.Iterate(func(w Window) {
+		if w.ID() == focusID {
+			found = true
+		}
+	})
+	assert.True(t, found,
+		"WindowManager.Focus() must resolve to a window that is still in the tree")
+}
+
 func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
