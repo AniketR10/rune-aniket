@@ -26,6 +26,7 @@ package ideauthorizer
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -34,7 +35,7 @@ import (
 // Permission prompt option labels shown in permission prompts.
 const (
 	PromptOptionYes       = "   Yes   "
-	PromptOptionYesAlways = "   Yes, Always   "
+	PromptOptionYesAlways = "   Yes, All   "
 	PromptOptionNo        = "   No   "
 	PromptOptionNoNever   = "   No, Never   "
 )
@@ -99,13 +100,14 @@ func (p *permissionPrompter) PromptPermission(
 
 func pluginPermissionPromptMessage(req PermissionRequest) string {
 	action := fmt.Sprintf("**%s**", permissionActionText(req.Permission))
+	commandScopeNote := commandScopeNote(req)
 	if req.CommandPath != "" && req.ExtensionID != "" && req.ExtensionName != "" {
 		command := fmt.Sprintf("run **%s** with args **%v**", req.CommandPath, req.CommandArgs)
 		if req.CommandDir != "" {
 			command = fmt.Sprintf("%s in **%s**", command, req.CommandDir)
 		}
-		return fmt.Sprintf("Extension %s by %s wants to %s.",
-			req.ExtensionName, req.DeveloperID, command)
+		return fmt.Sprintf("Extension %s by %s wants to %s.%s",
+			req.ExtensionName, req.DeveloperID, command, commandScopeNote)
 	}
 	if req.ExtensionID != "" && req.ExtensionName != "" {
 		return fmt.Sprintf("Extension %s by %s wants to %s.",
@@ -117,11 +119,12 @@ func pluginPermissionPromptMessage(req PermissionRequest) string {
 			command = fmt.Sprintf("%s in **%s**", command, req.CommandDir)
 		}
 		if req.LauncherPath != "" {
-			return fmt.Sprintf("Program **%s** with args **%v** running inside **%s** **%v** wants to %s.",
-				req.Path, req.Args, req.LauncherPath, req.LauncherArgs, command)
+			return fmt.Sprintf("Program **%s** with args **%v** running inside **%s** **%v** wants to %s.%s",
+				req.Path, req.Args, req.LauncherPath, req.LauncherArgs, command,
+				commandScopeNote)
 		}
-		return fmt.Sprintf("Program **%s** with args **%v** wants to %s.",
-			req.Path, req.Args, command)
+		return fmt.Sprintf("Program **%s** with args **%v** wants to %s.%s",
+			req.Path, req.Args, command, commandScopeNote)
 	}
 	message := fmt.Sprintf("Program %s with args %v wants to %s.",
 		req.Path, req.Args, action)
@@ -130,6 +133,28 @@ func pluginPermissionPromptMessage(req PermissionRequest) string {
 			req.Path, req.Args, req.LauncherPath, req.LauncherArgs, action)
 	}
 	return message
+}
+
+// commandScopeNote renders the "Choosing Yes, All approves ..." suffix
+// for a command-scoped permission prompt. When multiple scope labels are
+// provided, each is rendered bold and separated by commas so the user
+// sees which commands will be broadened.
+func commandScopeNote(req PermissionRequest) string {
+	labels := req.CommandScopeLabels
+	if len(labels) == 0 && req.CommandScopeLabel != "" {
+		labels = []string{req.CommandScopeLabel}
+	}
+	if len(labels) == 0 {
+		return ""
+	}
+	parts := make([]string, len(labels))
+	for i, l := range labels {
+		parts[i] = fmt.Sprintf("**%s**", l)
+	}
+	return fmt.Sprintf(
+		" Choosing **Yes, All** approves %s for future runs with any args.",
+		strings.Join(parts, ", "),
+	)
 }
 
 func pluginPromptDecision(opt string) PermissionDecision {

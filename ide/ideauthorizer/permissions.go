@@ -29,11 +29,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const (
@@ -79,24 +82,38 @@ type pluginPermissionCommandDetail struct {
 
 func pluginPermissionStorageKey(
 	path string, args []string, perm extensionapi.Permission,
-	command *pluginPermissionCommandDetail,
 ) string {
-	parts := []string{
+	return strings.Join([]string{
 		"extensionv2",
 		"plugin-permissions",
 		pluginProgramHash(path, args),
 		url.PathEscape(string(perm)),
+	}, ":")
+}
+
+// pluginPermissionCommandStorageKeys returns the storage keys for a
+// command-scoped permission decision. When the command can be decomposed
+// into a known set of effective commands, returns one key per command
+// identity so that approving "Yes, All" for a compound script broadens
+// independently for each effective command. When the command is opaque
+// (e.g. an unparseable shell script), returns a single exact-match key.
+func pluginPermissionCommandStorageKeys(
+	path string, args []string, perm extensionapi.Permission,
+	command pluginPermissionCommandDetail,
+) []string {
+	prefix := pluginPermissionStorageKey(path, args, perm)
+	identities := pluginPermissionPersistedCommandIdentities(command)
+	keys := make([]string, len(identities))
+	for i, id := range identities {
+		keys[i] = prefix + ":" + identityHash(id)
 	}
-	if command != nil {
-		parts = append(parts, pluginPermissionCommandHash(*command))
-	}
-	return strings.Join(parts, ":")
+	return keys
 }
 
 func extensionPermissionStorageKey(
-	ext Extension, perm extensionapi.Permission, command *pluginPermissionCommandDetail,
+	ext Extension, perm extensionapi.Permission,
 ) string {
-	parts := []string{
+	return strings.Join([]string{
 		"extensionv2",
 		"extension-permissions",
 		pluginProgramHash(ext.ExtensionID, []string{
@@ -105,11 +122,22 @@ func extensionPermissionStorageKey(
 			ext.ExtensionName,
 		}),
 		url.PathEscape(string(perm)),
+	}, ":")
+}
+
+// extensionPermissionCommandStorageKeys is the extension-keyed counterpart
+// of pluginPermissionCommandStorageKeys.
+func extensionPermissionCommandStorageKeys(
+	ext Extension, perm extensionapi.Permission,
+	command pluginPermissionCommandDetail,
+) []string {
+	prefix := extensionPermissionStorageKey(ext, perm)
+	identities := pluginPermissionPersistedCommandIdentities(command)
+	keys := make([]string, len(identities))
+	for i, id := range identities {
+		keys[i] = prefix + ":" + identityHash(id)
 	}
-	if command != nil {
-		parts = append(parts, pluginPermissionCommandHash(*command))
-	}
-	return strings.Join(parts, ":")
+	return keys
 }
 
 func pluginPermissionOnceKey(
@@ -172,6 +200,12 @@ func pluginPermissionCommandHash(command pluginPermissionCommandDetail) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+func identityHash(identity string) string {
+	h := sha256.New()
+	_, _ = h.Write([]byte(identity))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 func writePluginPermissionCommandHash(
 	h hashWriter, command pluginPermissionCommandDetail,
 ) {
@@ -183,6 +217,302 @@ func writePluginPermissionCommandHash(
 		_, _ = h.Write([]byte(arg))
 		_, _ = h.Write([]byte{0})
 	}
+}
+
+// pluginPermissionPersistedCommandIdentities returns the identity strings
+// that key persisted decisions for command. When the command can be
+// decomposed, returns one "<basename> *" identity per effective command.
+// Otherwise, returns a single exact-match identity covering the full Cmd.
+func pluginPermissionPersistedCommandIdentities(
+	command pluginPermissionCommandDetail,
+) []string {
+	if cmds, ok := pluginPermissionEffectiveCommands(command); ok {
+		out := make([]string, len(cmds))
+		for i, c := range cmds {
+			out[i] = c + " *"
+		}
+		return out
+	}
+	return []string{pluginPermissionExactCommandIdentity(command)}
+}
+
+// pluginPermissionApprovalScopeLabels returns the human-readable labels
+// describing what "Yes, All" will approve for command. Mirrors the
+// identities returned by pluginPermissionPersistedCommandIdentities.
+func pluginPermissionApprovalScopeLabels(
+	command pluginPermissionCommandDetail,
+) []string {
+	if cmds, ok := pluginPermissionEffectiveCommands(command); ok {
+		out := make([]string, len(cmds))
+		for i, c := range cmds {
+			out[i] = c + " *"
+		}
+		return out
+	}
+	return []string{pluginPermissionExactCommandLabel(command)}
+}
+
+func pluginPermissionExactCommandIdentity(command pluginPermissionCommandDetail) string {
+	return pluginPermissionCommandHash(command)
+}
+
+func pluginPermissionExactCommandLabel(command pluginPermissionCommandDetail) string {
+	parts := []string{command.Path}
+	if len(command.Args) > 0 {
+		parts = append(parts, strings.Join(command.Args, " "))
+	}
+	if command.Dir != "" {
+		parts = append(parts, "@ "+command.Dir)
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+// pluginPermissionEffectiveCommands extracts the sorted, deduplicated set
+// of effective command basenames that command will execute. Returns
+// (nil, false) when the command can't be safely decomposed (parse error,
+// non-literal expansions, unsupported constructs, eval/source/.) — in
+// which case callers should fall back to exact-match identity.
+func pluginPermissionEffectiveCommands(
+	command pluginPermissionCommandDetail,
+) ([]string, bool) {
+	if command.Path == "" {
+		return nil, false
+	}
+	if !pluginPermissionIsShell(command.Path) {
+		return []string{filepath.Base(command.Path)}, true
+	}
+	script, ok := shellWrappedScriptArgument(command.Args)
+	if !ok {
+		return nil, false
+	}
+	set := map[string]struct{}{}
+	if !walkShellScriptCommands(script, set) {
+		return nil, false
+	}
+	if len(set) == 0 {
+		return nil, false
+	}
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out, true
+}
+
+func pluginPermissionIsShell(path string) bool {
+	switch filepath.Base(path) {
+	case "sh", "bash", "zsh", "fish":
+		return true
+	default:
+		return false
+	}
+}
+
+// shellWrappedScriptArgument returns the script argument that follows the
+// first -c or -lc flag in args, if any.
+func shellWrappedScriptArgument(args []string) (string, bool) {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-c" || args[i] == "-lc" {
+			return args[i+1], true
+		}
+	}
+	return "", false
+}
+
+// noForkBuiltins are shell built-ins that do not fork a separate process
+// and therefore do not contribute a command to the effective-command set.
+var noForkBuiltins = map[string]bool{
+	"cd": true, "pushd": true, "popd": true,
+	"export": true, "set": true, "unset": true,
+	"readonly": true, "local": true, "declare": true, "typeset": true,
+	"alias": true, "unalias": true,
+	"shift": true, "return": true, "break": true, "continue": true,
+	":": true, "true": true, "false": true,
+	"exec": true,
+}
+
+func walkShellScriptCommands(script string, out map[string]struct{}) bool {
+	script = strings.TrimSpace(script)
+	if script == "" {
+		return false
+	}
+	file, err := syntax.NewParser().Parse(strings.NewReader(script), "")
+	if err != nil || file == nil {
+		return false
+	}
+	for _, stmt := range file.Stmts {
+		if !walkStmtCommands(stmt, out) {
+			return false
+		}
+	}
+	return true
+}
+
+func walkStmtCommands(stmt *syntax.Stmt, out map[string]struct{}) bool {
+	if stmt == nil {
+		return true
+	}
+	for _, r := range stmt.Redirs {
+		if r.Word != nil {
+			if _, ok := shellWrappedLiteralWord(r.Word); !ok {
+				return false
+			}
+		}
+		if r.Hdoc != nil {
+			if _, ok := shellWrappedLiteralWord(r.Hdoc); !ok {
+				return false
+			}
+		}
+	}
+	return walkCommandCommands(stmt.Cmd, out)
+}
+
+func walkCommandCommands(cmd syntax.Command, out map[string]struct{}) bool {
+	switch c := cmd.(type) {
+	case *syntax.CallExpr:
+		return walkCallExprCommands(c, out)
+	case *syntax.BinaryCmd:
+		return walkStmtCommands(c.X, out) && walkStmtCommands(c.Y, out)
+	case *syntax.Block:
+		return walkStmtsCommands(c.Stmts, out)
+	case *syntax.Subshell:
+		return walkStmtsCommands(c.Stmts, out)
+	case *syntax.IfClause:
+		for cur := c; cur != nil; cur = cur.Else {
+			if !walkStmtsCommands(cur.Cond, out) {
+				return false
+			}
+			if !walkStmtsCommands(cur.Then, out) {
+				return false
+			}
+		}
+		return true
+	case *syntax.ForClause:
+		return walkStmtsCommands(c.Do, out)
+	case *syntax.WhileClause:
+		return walkStmtsCommands(c.Cond, out) && walkStmtsCommands(c.Do, out)
+	case *syntax.CaseClause:
+		for _, item := range c.Items {
+			if !walkStmtsCommands(item.Stmts, out) {
+				return false
+			}
+		}
+		return true
+	case *syntax.TimeClause:
+		return walkStmtCommands(c.Stmt, out)
+	case *syntax.CoprocClause:
+		return walkStmtCommands(c.Stmt, out)
+	case *syntax.FuncDecl:
+		return walkStmtCommands(c.Body, out)
+	case *syntax.DeclClause:
+		// export/declare/local/readonly/typeset are no-fork built-ins, but
+		// their values may contain command substitution. Reject the whole
+		// script if any value isn't a pure literal.
+		for _, a := range c.Args {
+			if a.Value != nil {
+				if _, ok := shellWrappedLiteralWord(a.Value); !ok {
+					return false
+				}
+			}
+		}
+		return true
+	case *syntax.LetClause, *syntax.ArithmCmd, *syntax.TestClause:
+		// Arithmetic and test expressions don't fork.
+		return true
+	default:
+		return false
+	}
+}
+
+func walkStmtsCommands(stmts []*syntax.Stmt, out map[string]struct{}) bool {
+	for _, s := range stmts {
+		if !walkStmtCommands(s, out) {
+			return false
+		}
+	}
+	return true
+}
+
+func walkCallExprCommands(call *syntax.CallExpr, out map[string]struct{}) bool {
+	for _, a := range call.Assigns {
+		if a.Value != nil {
+			if _, ok := shellWrappedLiteralWord(a.Value); !ok {
+				return false
+			}
+		}
+	}
+	if len(call.Args) == 0 {
+		// Pure environment assignments to the current shell — no fork.
+		return true
+	}
+	fields := make([]string, 0, len(call.Args))
+	for _, w := range call.Args {
+		lit, ok := shellWrappedLiteralWord(w)
+		if !ok {
+			return false
+		}
+		fields = append(fields, lit)
+	}
+	if fields[0] == "exec" && len(fields) > 1 {
+		fields = fields[1:]
+	}
+	name := fields[0]
+	if name == "eval" || name == "source" || name == "." {
+		return false
+	}
+	if noForkBuiltins[name] {
+		return true
+	}
+	if pluginPermissionIsShell(name) {
+		// Recurse into nested shell wrappers like bash -c "...".
+		script, ok := shellWrappedScriptArgument(fields[1:])
+		if !ok {
+			return false
+		}
+		return walkShellScriptCommands(script, out)
+	}
+	out[filepath.Base(name)] = struct{}{}
+	return true
+}
+
+func shellWrappedLiteralWord(word *syntax.Word) (string, bool) {
+	if word == nil || len(word.Parts) == 0 {
+		return "", false
+	}
+	var b strings.Builder
+	for _, part := range word.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			b.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			inner, ok := shellWrappedLiteralParts(p.Parts)
+			if !ok {
+				return "", false
+			}
+			b.WriteString(inner)
+		default:
+			return "", false
+		}
+	}
+	return b.String(), true
+}
+
+func shellWrappedLiteralParts(parts []syntax.WordPart) (string, bool) {
+	var b strings.Builder
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			b.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		default:
+			return "", false
+		}
+	}
+	return b.String(), true
 }
 
 func copyPluginPermissionCommandDetail(

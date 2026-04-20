@@ -35,6 +35,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,18 +65,20 @@ type Extension struct {
 // PermissionRequest describes a single permission requested by an extension or
 // ad-hoc plugin program.
 type PermissionRequest struct {
-	Path          string
-	Args          []string
-	LauncherPath  string
-	LauncherArgs  []string
-	ExtensionID   string
-	ExtensionName string
-	DeveloperID   string
-	Permission    extensionapi.Permission
-	Resource      string
-	CommandPath   string
-	CommandArgs   []string
-	CommandDir    string
+	Path               string
+	Args               []string
+	LauncherPath       string
+	LauncherArgs       []string
+	ExtensionID        string
+	ExtensionName      string
+	DeveloperID        string
+	Permission         extensionapi.Permission
+	Resource           string
+	CommandPath        string
+	CommandArgs        []string
+	CommandDir         string
+	CommandScopeLabel  string
+	CommandScopeLabels []string
 }
 
 // PermissionDecision is the user's decision for an extension permission request.
@@ -177,14 +180,13 @@ func (a *Authorizer) Authorize(
 	return a.authorizeExtension(ctx, claims.Extra, perm, resource)
 }
 
-
 func (a *Authorizer) authorizePlugin(
 	ctx context.Context, ext Extension, perm extensionapi.Permission, resource string,
 ) error {
 	identity := pluginPermissionIdentityFromContext(ctx, ext)
-	key := pluginPermissionStorageKey(identity.Path, identity.Args, perm, nil)
+	key := pluginPermissionStorageKey(identity.Path, identity.Args, perm)
 	onceKey := pluginPermissionOnceKey(identity, perm, nil)
-	return a.authorizePermission(ctx, ext, identity, key, onceKey, perm, resource, nil)
+	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource, nil)
 }
 
 // AuthorizeCommand satisfies workspacerpc.CommandAuthorizer.
@@ -203,52 +205,46 @@ func (a *Authorizer) AuthorizeCommand(
 	perm := extensionapi.PermissionExecute
 	resource := workspacerpc.Executor_StartCommand_FullMethodName
 	var identity pluginPermissionIdentity
-	var key, onceKey string
+	var keys []string
+	var onceKey string
 	if claims.Extra.Plugin {
 		identity = pluginPermissionIdentityFromContext(ctx, claims.Extra)
-		key = pluginPermissionStorageKey(identity.Path, identity.Args, perm, &command)
+		keys = pluginPermissionCommandStorageKeys(identity.Path, identity.Args, perm, command)
 		onceKey = pluginPermissionOnceKey(identity, perm, &command)
 	} else {
 		if _, ok := claims.Extra.Permissions[perm]; !ok {
 			return blueauth.ErrForbidden
 		}
 		identity = extensionPermissionIdentity(claims.Extra)
-		key = extensionPermissionStorageKey(claims.Extra, perm, &command)
+		keys = extensionPermissionCommandStorageKeys(claims.Extra, perm, command)
 		onceKey = stablePermissionOnceKey(identity, perm, &command)
 	}
-	return a.authorizePermission(ctx, claims.Extra, identity, key, onceKey, perm, resource, &command)
+	return a.authorizePermission(ctx, claims.Extra, identity, keys, onceKey, perm, resource, &command)
 }
 
 func (a *Authorizer) authorizeExtension(
 	ctx context.Context, ext Extension, perm extensionapi.Permission, resource string,
 ) error {
 	identity := extensionPermissionIdentity(ext)
-	key := extensionPermissionStorageKey(ext, perm, nil)
+	key := extensionPermissionStorageKey(ext, perm)
 	onceKey := stablePermissionOnceKey(identity, perm, nil)
-	return a.authorizePermission(ctx, ext, identity, key, onceKey, perm, resource, nil)
+	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource, nil)
 }
 
 func (a *Authorizer) authorizePermission(
 	ctx context.Context, ext Extension, identity pluginPermissionIdentity,
-	key, onceKey string, perm extensionapi.Permission, resource string,
+	keys []string, onceKey string, perm extensionapi.Permission, resource string,
 	command *pluginPermissionCommandDetail,
 ) error {
-	if a.storage != nil {
-		var stored storedPermissionDecision
-		err := a.storage.Get(ctx, key, &stored)
-		if err == nil {
-			switch stored.Decision {
-			case pluginPermissionDecisionAllow:
-				return nil
-			case pluginPermissionDecisionDeny:
-				return blueauth.ErrForbidden
-			default:
-				return fmt.Errorf("unknown stored plugin permission decision %q",
-					stored.Decision)
-			}
+	missingKeys := keys
+	if a.storage != nil && len(keys) > 0 {
+		var err error
+		missingKeys, err = a.filterMissingStoredDecisions(ctx, keys)
+		if err != nil {
+			return err
 		}
-		if !errors.Is(err, storageapi.ErrNotFound) {
-			return fmt.Errorf("get plugin permission decision: %w", err)
+		if len(missingKeys) == 0 {
+			return nil
 		}
 	}
 
@@ -278,6 +274,9 @@ func (a *Authorizer) authorizePermission(
 		req.CommandPath = command.Path
 		req.CommandArgs = append([]string(nil), command.Args...)
 		req.CommandDir = command.Dir
+		labels := pluginPermissionApprovalScopeLabels(*command)
+		req.CommandScopeLabels = labels
+		req.CommandScopeLabel = strings.Join(labels, ", ")
 	}
 	if !ext.Plugin {
 		req.ExtensionID = ext.ExtensionID
@@ -295,22 +294,58 @@ func (a *Authorizer) authorizePermission(
 			pluginPermissionDecisionAllow, time.Now())
 		return nil
 	case PermissionAllowAlways:
-		return a.setStoredDecision(ctx, key, identity, perm, command,
-			pluginPermissionDecisionAllow)
+		for _, k := range missingKeys {
+			if err := a.setStoredDecision(ctx, k, identity, perm, command,
+				pluginPermissionDecisionAllow); err != nil {
+				return err
+			}
+		}
+		return nil
 	case PermissionDenyOnce:
 		a.setOnceDecision(onceKey, identity, perm, command,
 			pluginPermissionDecisionDeny, time.Now())
 		return blueauth.ErrForbidden
 	case PermissionDenyAlways:
-		err := a.setStoredDecision(ctx, key, identity, perm, command,
-			pluginPermissionDecisionDeny)
-		if err != nil {
-			return err
+		for _, k := range missingKeys {
+			if err := a.setStoredDecision(ctx, k, identity, perm, command,
+				pluginPermissionDecisionDeny); err != nil {
+				return err
+			}
 		}
 		return blueauth.ErrForbidden
 	default:
 		return blueauth.ErrForbidden
 	}
+}
+
+// filterMissingStoredDecisions returns the subset of keys that have no
+// persisted allow/deny decision. If any key has a stored deny, it returns
+// blueauth.ErrForbidden immediately. Returns nil when all keys are stored
+// as allow (meaning no prompt is required).
+func (a *Authorizer) filterMissingStoredDecisions(
+	ctx context.Context, keys []string,
+) ([]string, error) {
+	missing := make([]string, 0, len(keys))
+	for _, k := range keys {
+		var stored storedPermissionDecision
+		err := a.storage.Get(ctx, k, &stored)
+		if err == nil {
+			switch stored.Decision {
+			case pluginPermissionDecisionAllow:
+				continue
+			case pluginPermissionDecisionDeny:
+				return nil, blueauth.ErrForbidden
+			default:
+				return nil, fmt.Errorf(
+					"unknown stored plugin permission decision %q", stored.Decision)
+			}
+		}
+		if !errors.Is(err, storageapi.ErrNotFound) {
+			return nil, fmt.Errorf("get plugin permission decision: %w", err)
+		}
+		missing = append(missing, k)
+	}
+	return missing, nil
 }
 
 func (a *Authorizer) getOnceDecision(

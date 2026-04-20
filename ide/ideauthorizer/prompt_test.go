@@ -76,7 +76,7 @@ func TestPermissionPrompter(t *testing.T) {
 	}{
 		{name: "yes", option: PromptOptionYes,
 			wantDecision: PermissionAllowOnce},
-		{name: "yes always", option: PromptOptionYesAlways,
+		{name: "yes all", option: PromptOptionYesAlways,
 			wantDecision: PermissionAllowAlways},
 		{name: "no", option: PromptOptionNo,
 			wantDecision: PermissionDenyOnce},
@@ -131,52 +131,129 @@ func TestPluginPermissionPromptMessageWithCommand(t *testing.T) {
 	t.Parallel()
 
 	message := pluginPermissionPromptMessage(PermissionRequest{
-		Path:        "/usr/local/bin/plugin-cli",
-		Args:        []string{"run"},
-		Permission:  extensionapi.PermissionExecute,
-		CommandPath: "/bin/grep",
-		CommandArgs: []string{"foo", "/tmp/workspace"},
-		CommandDir:  "/tmp/workspace",
+		Path:              "/usr/local/bin/plugin-cli",
+		Args:              []string{"run"},
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/grep",
+		CommandArgs:       []string{"foo", "/tmp/workspace"},
+		CommandDir:        "/tmp/workspace",
+		CommandScopeLabel: "/bin/grep *",
 	})
 	assert.Contains(t, message, "Program **/usr/local/bin/plugin-cli** with args **[run]**")
 	assert.Contains(t, message, "wants to run **/bin/grep**")
 	assert.Contains(t, message, "with args **[foo /tmp/workspace]**")
 	assert.Contains(t, message, "in **/tmp/workspace**")
+	assert.Contains(t, message, "Choosing **Yes, All** approves **/bin/grep ***")
 }
 
 func TestPluginPermissionPromptMessageWithLauncherAndCommand(t *testing.T) {
 	t.Parallel()
 
 	message := pluginPermissionPromptMessage(PermissionRequest{
-		Path:         "/usr/local/bin/plugin-cli",
-		Args:         []string{"run"},
-		LauncherPath: "/bin/zsh",
-		LauncherArgs: []string{"--login"},
-		Permission:   extensionapi.PermissionExecute,
-		CommandPath:  "/bin/rm",
-		CommandArgs:  []string{"-rf", "foo"},
+		Path:              "/usr/local/bin/plugin-cli",
+		Args:              []string{"run"},
+		LauncherPath:      "/bin/zsh",
+		LauncherArgs:      []string{"--login"},
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/rm",
+		CommandArgs:       []string{"-rf", "foo"},
+		CommandScopeLabel: "/bin/rm *",
 	})
 	assert.Contains(t, message,
 		"Program **/usr/local/bin/plugin-cli** with args **[run]** running inside **/bin/zsh** **[--login]**")
 	assert.Contains(t, message, "wants to run **/bin/rm**")
 	assert.Contains(t, message, "with args **[-rf foo]**")
+	assert.Contains(t, message, "Choosing **Yes, All** approves **/bin/rm ***")
 }
 
 func TestPermissionPromptMessageHighlightsExtensionCommand(t *testing.T) {
 	t.Parallel()
 
 	message := pluginPermissionPromptMessage(PermissionRequest{
-		ExtensionID:   "test-extension",
-		ExtensionName: "Test Extension",
-		DeveloperID:   "dev-id",
-		Permission:    extensionapi.PermissionExecute,
-		CommandPath:   "/bin/grep",
-		CommandArgs:   []string{"foo"},
-		CommandDir:    "/tmp/workspace",
+		ExtensionID:       "test-extension",
+		ExtensionName:     "Test Extension",
+		DeveloperID:       "dev-id",
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/grep",
+		CommandArgs:       []string{"foo"},
+		CommandDir:        "/tmp/workspace",
+		CommandScopeLabel: "/bin/grep *",
 	})
-	assert.Equal(t,
-		"Extension Test Extension by dev-id wants to run **/bin/grep** with args **[foo]** in **/tmp/workspace**.",
-		message)
+	assert.Contains(t, message,
+		"Extension Test Extension by dev-id wants to run **/bin/grep** with args **[foo]** in **/tmp/workspace**.")
+	assert.Contains(t, message,
+		"Choosing **Yes, All** approves **/bin/grep ***")
+}
+
+func TestPluginPermissionPromptMessageWithCommandHighlightsApprovalScope(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		Path:              "/usr/local/bin/plugin-cli",
+		Args:              []string{"run"},
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/grep",
+		CommandArgs:       []string{"foo", "file.txt"},
+		CommandDir:        "/tmp/workspace",
+		CommandScopeLabel: "/bin/grep *",
+	})
+
+	assert.Contains(t, message, "run **/bin/grep** with args **[foo file.txt]**")
+	assert.Contains(t, message, "Choosing **Yes, All** approves **/bin/grep ***")
+	assert.Contains(t, message, "future runs with any args")
+}
+
+func TestPluginPermissionPromptMessageWithShellWrappedCommandUsesInnerScope(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		Path:              "/usr/local/bin/plugin-cli",
+		Args:              []string{"run"},
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/bash",
+		CommandArgs:       []string{"-c", "grep foo file.txt"},
+		CommandScopeLabel: "grep *",
+	})
+
+	assert.Contains(t, message, "run **/bin/bash** with args **[-c grep foo file.txt]**")
+	assert.Contains(t, message, "Choosing **Yes, All** approves **grep ***")
+}
+
+func TestPluginPermissionPromptMessageWithUnknownShellScriptUsesExactScopeLabel(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		Path:              "/usr/local/bin/plugin-cli",
+		Args:              []string{"run"},
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/bash",
+		CommandArgs:       []string{"-c", "echo foo; grep bar file.txt"},
+		CommandScopeLabel: "/bin/bash -c echo foo; grep bar file.txt @ /tmp",
+		CommandDir:        "/tmp",
+	})
+
+	assert.Contains(t, message, "run **/bin/bash** with args **[-c echo foo; grep bar file.txt]** in **/tmp**")
+	assert.Contains(t, message,
+		"Choosing **Yes, All** approves **/bin/bash -c echo foo; grep bar file.txt @ /tmp**")
+	assert.NotContains(t, message, "approves **bash ***")
+}
+
+func TestPluginPermissionPromptMessageWithMultipleScopeLabels(t *testing.T) {
+	t.Parallel()
+
+	message := pluginPermissionPromptMessage(PermissionRequest{
+		Path:               "/usr/local/bin/plugin-cli",
+		Args:               []string{"run"},
+		Permission:         extensionapi.PermissionExecute,
+		CommandPath:        "/bin/bash",
+		CommandArgs:        []string{"-c", "grep foo && make test && rm file"},
+		CommandScopeLabels: []string{"grep *", "make *", "rm *"},
+		CommandScopeLabel:  "grep *, make *, rm *",
+	})
+
+	assert.Contains(t, message, "run **/bin/bash**")
+	assert.Contains(t, message,
+		"Choosing **Yes, All** approves **grep ***, **make ***, **rm *** for future runs")
 }
 
 func TestPermissionPromptMessageHighlightsExtensionIntent(t *testing.T) {

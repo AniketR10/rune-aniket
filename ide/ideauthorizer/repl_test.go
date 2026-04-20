@@ -95,7 +95,7 @@ func TestAuthorizerListREPLListsPersistedDecisions(t *testing.T) {
 	authorizer := newTestAuthorizerCore(nil, storage)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(),
 		pluginPermissionStorageKey(ext.Path, ext.Args,
-			extensionapi.PermissionBrowserWindowManager, nil),
+			extensionapi.PermissionBrowserWindowManager),
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
 		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionAllow))
 	handler := authorizerREPLHandler{authorizer: authorizer}
@@ -198,7 +198,7 @@ func TestAuthorizerRevokeREPLCompletesPersistedDecisions(t *testing.T) {
 	authorizer := newTestAuthorizerCore(nil, storage)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(),
 		pluginPermissionStorageKey(ext.Path, ext.Args,
-			extensionapi.PermissionBrowserWindowManager, nil),
+			extensionapi.PermissionBrowserWindowManager),
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
 		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionAllow))
 	require.NoError(t, storage.Set(context.Background(), "unrelated",
@@ -224,7 +224,7 @@ func TestAuthorizerRevokeREPLDeletesPersistedDecisionByID(t *testing.T) {
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
 	key := pluginPermissionStorageKey(ext.Path, ext.Args,
-		extensionapi.PermissionBrowserWindowManager, nil)
+		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(), key,
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
 		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionDeny))
@@ -251,7 +251,7 @@ func TestAuthorizerRevokeREPLDeletesPersistedDecision(t *testing.T) {
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
 	key := pluginPermissionStorageKey(ext.Path, ext.Args,
-		extensionapi.PermissionBrowserWindowManager, nil)
+		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(), key,
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
 		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionDeny))
