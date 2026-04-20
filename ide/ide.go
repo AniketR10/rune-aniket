@@ -221,8 +221,13 @@ func (i *IDE) init(
 	}
 	i.options = op
 
+	defaultCfg := defaultConfigSource{
+		src:   op.defaultConfig,
+		modal: op.defaultConfigModeModal,
+		tui:   op.defaultConfigTUI,
+	}
 	configErr := loadConfig(&i.ideConfig, cfgfilename,
-		op.defaultWallpaper, op.defaultConfig, op.bell,
+		op.defaultWallpaper, defaultCfg, op.bell,
 		op.scheduleFn, op.zdotDir)
 
 	var logger *slog.Logger
@@ -320,7 +325,7 @@ func (i *IDE) init(
 		i.ideConfig.notificationsConfig(), i.ideConfig, dataDir, i.publishEvent,
 		op.extensionRunner, i.locker, op.extensions, func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
-				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn,
+				op.defaultWallpaper, defaultCfg, op.bell, op.scheduleFn,
 				op.zdotDir)
 		}, op.workspaceConfig, op.tabBarOffset,
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,

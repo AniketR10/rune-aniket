@@ -1,0 +1,843 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package ide
+
+import (
+	"bytes"
+	"context"
+	_ "embed"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	yaml "gopkg.in/yaml.v3"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/workspace"
+)
+
+// decodeStarlark is a thin test helper mirroring the legacy positional
+// signature so tests read naturally.
+func decodeStarlark(src string, params, base map[string]any) (map[string]any, error) {
+	return decodeStarlarkConfig(starlarkConfigSource{
+		src:    []byte(src),
+		params: params,
+		base:   base,
+	})
+}
+
+func TestDecodeStarlarkConfigBasic(t *testing.T) {
+	src := `
+config = {
+    "log_path": "/tmp/debug.log",
+    "log_level": "info",
+    "clipboard": "system",
+    "editor": {
+        "mode": "modal",
+        "autoindent": True,
+        "highlights": {
+            "keyword": {"fg": "yellow"},
+        },
+    },
+    "gui": {
+        "themes": {
+            "romero": {"red": "#990000"},
+        },
+    },
+}
+`
+	cfg, err := decodeStarlark(src, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/debug.log", cfg["log_path"])
+	assert.Equal(t, "info", cfg["log_level"])
+	assert.Equal(t, "system", cfg["clipboard"])
+
+	editor := cfg["editor"].(map[string]any)
+	assert.Equal(t, "modal", editor["mode"])
+	assert.Equal(t, true, editor["autoindent"])
+
+	hl := editor["highlights"].(map[string]any)
+	keyword := hl["keyword"].(map[string]any)
+	assert.Equal(t, "yellow", keyword["fg"])
+
+	gui := cfg["gui"].(map[string]any)
+	themes := gui["themes"].(map[string]any)
+	romero := themes["romero"].(map[string]any)
+	assert.Equal(t, "#990000", romero["red"])
+}
+
+func TestDecodeStarlarkConfigTopLevelControl(t *testing.T) {
+	src := `
+is_gui = False
+
+theme = "romero" if is_gui else "carmack"
+
+aliases = {}
+for kb in [("<m-q>", "quit"), ("<m-t>", "tabnew")]:
+    aliases[kb[0]] = kb[1]
+
+config = {
+    "gui": {"default_theme": theme},
+    "command": {"key_bindings": aliases},
+}
+`
+	cfg, err := decodeStarlark(src, nil, nil)
+	require.NoError(t, err)
+	gui := cfg["gui"].(map[string]any)
+	assert.Equal(t, "carmack", gui["default_theme"])
+
+	cmd := cfg["command"].(map[string]any)
+	kb := cmd["key_bindings"].(map[string]any)
+	assert.Equal(t, "quit", kb["<m-q>"])
+	assert.Equal(t, "tabnew", kb["<m-t>"])
+}
+
+func TestDecodeStarlarkConfigLists(t *testing.T) {
+	src := `
+config = {
+    "command": {
+        "aliases": {
+            "worktreenew": [
+                "!! git worktree add",
+                "workspacenew",
+                "workspacerename",
+            ],
+        },
+    },
+    "flags": ("dim", "bold"),
+    "ints": [1, 2, 3],
+}
+`
+	cfg, err := decodeStarlark(src, nil, nil)
+	require.NoError(t, err)
+	cmd := cfg["command"].(map[string]any)
+	aliases := cmd["aliases"].(map[string]any)
+	assert.Equal(t, []any{
+		"!! git worktree add",
+		"workspacenew",
+		"workspacerename",
+	}, aliases["worktreenew"])
+	assert.Equal(t, []any{"dim", "bold"}, cfg["flags"])
+	assert.Equal(t, []any{1, 2, 3}, cfg["ints"])
+}
+
+func TestDecodeStarlarkConfigTypes(t *testing.T) {
+	src := `
+config = {
+    "yes": True,
+    "no": False,
+    "n": 42,
+    "f": 3.5,
+    "s": "hello",
+    "null": None,
+}
+`
+	cfg, err := decodeStarlark(src, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, true, cfg["yes"])
+	assert.Equal(t, false, cfg["no"])
+	assert.Equal(t, 42, cfg["n"])
+	assert.Equal(t, 3.5, cfg["f"])
+	assert.Equal(t, "hello", cfg["s"])
+	assert.Nil(t, cfg["null"])
+}
+
+func TestDecodeStarlarkConfigMissingGlobal(t *testing.T) {
+	_, err := decodeStarlark("x = 1\n", nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config")
+}
+
+func TestDecodeStarlarkConfigNotADict(t *testing.T) {
+	_, err := decodeStarlark(`config = 1`, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be a dict")
+}
+
+func TestDecodeStarlarkConfigRejectsLoad(t *testing.T) {
+	_, err := decodeStarlark(`load("other.star", "x")
+config = {"x": x}
+`, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load")
+}
+
+func TestDecodeStarlarkConfigNonStringKey(t *testing.T) {
+	_, err := decodeStarlark(`config = {1: "a"}`, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "keys must be strings")
+}
+
+func TestDecodeConfigFileUsesFilenameExtension(t *testing.T) {
+	cfg, err := decodeConfigFile(
+		strings.NewReader(`config = {"log_level": "debug"}`), "config.star")
+	require.NoError(t, err)
+	assert.Equal(t, "debug", cfg["log_level"])
+
+	cfg, err = decodeConfigFile(strings.NewReader("log_level: info\n"), "config.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "info", cfg["log_level"])
+
+	_, err = decodeConfigFile(strings.NewReader(`config = {"log_level": "debug"}`), "config.yaml")
+	require.Error(t, err)
+
+	_, err = decodeConfigFile(strings.NewReader("log_level: info\n"), "config.star")
+	require.Error(t, err)
+}
+
+//go:embed testdata/runerc_sample.star
+var starlarkSampleConfig string
+
+// TestStarlarkSampleEndToEnd loads a realistic rune.star-style config through decodeConfigFile
+// and asserts the resulting config is shaped as expected.
+func TestStarlarkSampleEndToEnd(t *testing.T) {
+	cfg, err := decodeConfigFile(strings.NewReader(starlarkSampleConfig), "rune.star")
+	require.NoError(t, err)
+
+	assert.Equal(t, "info", cfg["log_level"])
+	editor := cfg["editor"].(map[string]any)
+	assert.Equal(t, "modal", editor["mode"])
+	assert.Equal(t, true, editor["autoindent"])
+
+	cmd := cfg["command"].(map[string]any)
+	kb := cmd["key_bindings"].(map[string]any)
+	assert.Equal(t, "quit", kb["<m-q>"])
+	assert.Equal(t, "tabfocus 3", kb["<a-3>"]) // produced by the for-loop
+
+	aliases := cmd["aliases"].(map[string]any)
+	assert.Equal(t, []any{
+		`!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1`,
+		"workspacenew $RUNE_DATADIR/worktrees/$1",
+		"workspacerename $1",
+	}, aliases["worktreenew"])
+}
+
+// TestStarlarkConfigLoadsFromFile exercises loadFileConfig end-to-end
+// with a .star-suffixed path.
+func TestStarlarkConfigLoadsFromFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rune.star")
+	require.NoError(t, os.WriteFile(path, []byte(starlarkSampleConfig), 0o644))
+
+	c := &ideConfig{cfg: map[string]any{}, errors: map[string]error{}}
+	require.NoError(t, loadFileConfig(c, path))
+	assert.Equal(t, "info", c.cfg["log_level"])
+}
+
+func TestYAMLConfigLoadsFromFileByExtension(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("log_level: info\n"), 0o644))
+
+	c := &ideConfig{cfg: map[string]any{}, errors: map[string]error{}}
+	require.NoError(t, loadFileConfig(c, path))
+	assert.Equal(t, "info", c.cfg["log_level"])
+}
+
+func TestDecodeStarlarkConfigWithParams(t *testing.T) {
+	src := `
+config = {
+    "mode": mode,
+    "tui":  tui,
+}
+`
+	cfg, err := decodeStarlark(src,
+		map[string]any{"tui": true, "mode": "modeless"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, true, cfg["tui"])
+	assert.Equal(t, "modeless", cfg["mode"])
+
+	// Same script with different params produces a different result.
+	cfg, err = decodeStarlark(src,
+		map[string]any{"tui": false, "mode": "modal"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, false, cfg["tui"])
+	assert.Equal(t, "modal", cfg["mode"])
+}
+
+// TestRuneStarFixture decodes the shipped cmd/rune/rune.star and checks it
+// branches correctly on the tui/mode params.
+func TestRuneStarFixture(t *testing.T) {
+	data, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name   string
+		params map[string]any
+		checks func(*testing.T, map[string]any)
+	}{
+		{
+			name:   "gui modal",
+			params: map[string]any{"mode": "modal", "tui": false},
+			checks: func(t *testing.T, cfg map[string]any) {
+				editor := cfg["editor"].(map[string]any)
+				assert.Equal(t, "modal", editor["mode"])
+				// GUI-specific window manager frame charset should use the
+				// braille-ish corners.
+				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)
+				cs := wm["frame_charset"].(map[string]any)
+				assert.Equal(t, "🭽", cs["topleft"])
+				assert.NotContains(t, cfg, "default_attr")
+			},
+		},
+		{
+			name:   "gui modeless",
+			params: map[string]any{"mode": "modeless", "tui": false},
+			checks: func(t *testing.T, cfg map[string]any) {
+				editor := cfg["editor"].(map[string]any)
+				assert.Equal(t, "modeless", editor["mode"])
+				cmd := cfg["command"].(map[string]any)
+				assert.Equal(t, "<s-m-p>", cmd["key"])
+				term := cfg["terminal"].(map[string]any)
+				assert.Equal(t, false, term["modal"])
+			},
+		},
+		{
+			name:   "tui modal",
+			params: map[string]any{"mode": "modal", "tui": true},
+			checks: func(t *testing.T, cfg map[string]any) {
+				assert.Contains(t, cfg, "default_attr")
+				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)
+				cs := wm["frame_charset"].(map[string]any)
+				assert.Equal(t, "┌", cs["topleft"])
+				// modal is still in effect.
+				editor := cfg["editor"].(map[string]any)
+				assert.Equal(t, "modal", editor["mode"])
+			},
+		},
+	}
+
+	for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				cfg, err := decodeStarlarkConfig(starlarkConfigSource{
+					src:      data,
+					filename: "rune.star",
+					params:   c.params,
+				})
+			require.NoError(t, err)
+			c.checks(t, cfg)
+		})
+	}
+}
+
+// TestRuneStarAsDefaultConfig wires the shipped rune.star Starlark config through
+// the full loadConfig path to ensure initConfig + validateConfig are happy
+// with the decoded tree.
+func TestRuneStarAsDefaultConfig(t *testing.T) {
+	data, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+
+	var cfg ideConfig
+	require.NoError(t, loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),
+		defaultConfigSource{
+			src:   string(data),
+			modal: true,
+			tui:   false,
+		},
+		term.RingBell, term.ScheduleNextTick, ""))
+	assert.Equal(t, "modal", cfg.editorMode())
+	assert.Equal(t, "info", cfg.cfg["log_level"])
+}
+
+func TestRuneStarMatchesLegacyYAML(t *testing.T) {
+	star, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+
+	base := mustLegacyConfigFromGit(t, "cmd/rune/runerc")
+	tui := mustLegacyConfigFromGit(t, "cmd/rune/runerc.tui")
+	modeless := mustLegacyModelessConfigFromGit(t)
+
+	tests := []struct {
+		name   string
+		params map[string]any
+		want   map[string]any
+	}{
+		{
+			name:   "gui modal",
+			params: map[string]any{"mode": "modal", "tui": false},
+			want:   cloneTestMap(base),
+		},
+		{
+			name:   "gui modeless",
+			params: map[string]any{"mode": "modeless", "tui": false},
+			want: func() map[string]any {
+				cfg := cloneTestMap(base)
+				overrideConfig(cfg, cloneTestMap(modeless))
+				return cfg
+			}(),
+		},
+		{
+			name:   "tui modal",
+			params: map[string]any{"mode": "modal", "tui": true},
+			want: func() map[string]any {
+				cfg := cloneTestMap(base)
+				overrideConfig(cfg, cloneTestMap(tui))
+				return cfg
+			}(),
+		},
+		{
+			name:   "tui modeless",
+			params: map[string]any{"mode": "modeless", "tui": true},
+			want: func() map[string]any {
+				cfg := cloneTestMap(base)
+				overrideConfig(cfg, cloneTestMap(modeless))
+				overrideConfig(cfg, cloneTestMap(tui))
+				return cfg
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				got, err := decodeStarlarkConfig(starlarkConfigSource{
+					src:      star,
+					filename: "rune.star",
+					params:   tt.params,
+				})
+			require.NoError(t, err)
+			assert.Equal(t, flattenConfigCSV(normalizeLegacyExpected(tt.want)),
+				flattenConfigCSV(got))
+		})
+	}
+}
+
+func TestDecodeStarlarkOverlayRead(t *testing.T) {
+	base := map[string]any{
+		"editor":     map[string]any{"mode": "modal"},
+		"log_level":  "info",
+		"extensions": map[string]any{},
+	}
+	src := `
+if config["editor"]["mode"] == "modal":
+    config["log_level"] = "debug"
+    config["extensions"]["my_extension"] = {"enabled": True}
+else:
+    config["log_level"] = "warn"
+`
+	cfg, err := decodeStarlark(src, nil, base)
+	require.NoError(t, err)
+	assert.Equal(t, "debug", cfg["log_level"])
+	ext := cfg["extensions"].(map[string]any)
+	my := ext["my_extension"].(map[string]any)
+	assert.Equal(t, true, my["enabled"])
+}
+
+func TestDecodeStarlarkOverlayRebind(t *testing.T) {
+	// The script is allowed to rebind `config` as long as the result is
+	// still a dict — we should use the rebound value, not the original.
+	base := map[string]any{"log_level": "info"}
+	src := `config = {"log_level": "error"}`
+	cfg, err := decodeStarlark(src, nil, base)
+	require.NoError(t, err)
+	assert.Equal(t, "error", cfg["log_level"])
+}
+
+func TestDecodeOverlayConfigFileStarlark(t *testing.T) {
+	base := map[string]any{
+		"editor":    map[string]any{"mode": "modal"},
+		"log_level": "info",
+	}
+	src := `
+if config["editor"]["mode"] == "modal":
+    config["command"] = {"key": "<c-p>"}
+`
+	cfg, err := decodeOverlayConfigFile(strings.NewReader(src), "override.star", base)
+	require.NoError(t, err)
+	cmd := cfg["command"].(map[string]any)
+	assert.Equal(t, "<c-p>", cmd["key"])
+	// Existing keys from base are preserved.
+	assert.Equal(t, "info", cfg["log_level"])
+}
+
+func TestDecodeOverlayConfigFileYAML(t *testing.T) {
+	base := map[string]any{
+		"editor":    map[string]any{"mode": "modal"},
+		"log_level": "info",
+	}
+	cfg, err := decodeOverlayConfigFile(
+		strings.NewReader("log_level: debug\neditor:\n  autoindent: true\n"),
+		"override.yaml", base)
+	require.NoError(t, err)
+	assert.Equal(t, "debug", cfg["log_level"])
+	editor := cfg["editor"].(map[string]any)
+	// deep-merge: existing mode preserved, new autoindent added.
+	assert.Equal(t, "modal", editor["mode"])
+	assert.Equal(t, true, editor["autoindent"])
+}
+
+func TestLoadWorkspaceConfigStar(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.star")
+	require.NoError(t, os.WriteFile(path, []byte(`config["log_level"] = "debug"`), 0o644))
+
+	c := &ideConfig{cfg: map[string]any{"log_level": "info"}, errors: map[string]error{}}
+	uri, err := workspaceapi.CurrentUserHostURI(dir)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	defer ws.Close()
+
+	isConfigErr, err := loadWorkspaceConfig("config.star", ws, uri, c)
+	require.NoError(t, err)
+	assert.False(t, isConfigErr)
+	assert.Equal(t, "debug", c.cfg["log_level"])
+}
+
+func TestLoadWorkspaceConfigYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("log_level: warn\n"), 0o644))
+
+	c := &ideConfig{cfg: map[string]any{"log_level": "info"}, errors: map[string]error{}}
+	uri, err := workspaceapi.CurrentUserHostURI(dir)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	defer ws.Close()
+
+	isConfigErr, err := loadWorkspaceConfig("config.yaml", ws, uri, c)
+	require.NoError(t, err)
+	assert.False(t, isConfigErr)
+	assert.Equal(t, "warn", c.cfg["log_level"])
+}
+
+func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
+	base := map[string]any{"log_level": "info"}
+
+	cfg, err := decodeOverlayConfigFile(
+		strings.NewReader(`config["log_level"] = "debug"`),
+		"config.star", cloneTestMap(base))
+	require.NoError(t, err)
+	assert.Equal(t, "debug", cfg["log_level"])
+
+	cfg, err = decodeOverlayConfigFile(
+		strings.NewReader("log_level: warn\n"),
+		"config.yaml", cloneTestMap(base))
+	require.NoError(t, err)
+	assert.Equal(t, "warn", cfg["log_level"])
+
+	_, err = decodeOverlayConfigFile(
+		strings.NewReader(`config["log_level"] = "debug"`),
+		"config.yaml", cloneTestMap(base))
+	require.Error(t, err)
+
+	_, err = decodeOverlayConfigFile(
+		strings.NewReader("log_level: warn\n"),
+		"config.star", cloneTestMap(base))
+	require.Error(t, err)
+}
+
+func mustLegacyConfigFromGit(t *testing.T, path string) map[string]any {
+	t.Helper()
+	text := mustGitShow(t, "2b7a654ef736fc7a8fb0a64a9e5a6cfcf9f5db0b^:"+path)
+	var cfg map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(text), &cfg))
+	return normalizeTestConfig(cfg).(map[string]any)
+}
+
+func mustLegacyModelessConfigFromGit(t *testing.T) map[string]any {
+	t.Helper()
+	return map[string]any{
+		"editor": map[string]any{
+			"mode": "modeless",
+			"modeless": map[string]any{
+				"attr":        map[string]any{"fg": "default", "bg": "default"},
+				"bar_attr":    map[string]any{"fg": "default", "bg": "default"},
+				"search_attr": map[string]any{"fg": "grey", "bg": "yellow"},
+			},
+			"status_bar": map[string]any{
+				"layout": `██▓▒░  {{ .Filepath }}  {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  ░▒▓██`,
+			},
+		},
+		"command": map[string]any{
+			"key": "<s-m-p>",
+			"key_bindings": map[string]any{
+				"<m-n>":                 "windownew",
+				"<m-o>":                 "lsphover",
+				"<m-s>":                 "write",
+				"<a-m-s>":               "writeall",
+				"<m-w>":                 "tabclose",
+				"<m-q>":                 "quit",
+				"<m-s-n>":               "windownew",
+				"<m-s-w>":               "windowclose",
+				"<m-p>":                 "searchfile",
+				"<a-g>":                 "searchtext",
+				"<m-r>":                 "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>",
+				"<s-m-r>":               "searchtype",
+				"<m-;>":                 "searchtext",
+				"<c-m-p>":               "echo <s-m-p>workspacefocus{wait}<space>",
+				"<m-f2>":                "locationtoggle bookmark",
+				"<f2>":                  "jumptolocation next bookmark",
+				"<s-f2>":                "jumptolocation prev bookmark",
+				"<s-m-f2>":              "locationdeleteall bookmark",
+				"<a-m-right>":           "tabnext",
+				"<a-m-left>":            "tabprevious",
+				"<m-f>":                 "searchtext",
+				"<m-g>":                 "jumptolocation next search",
+				"<s-m-g>":               "jumptolocation prev search",
+				"<m-u>":                 "cursorhistory prev",
+				"<s-m-u>":               "cursorhistory next",
+				"<m-,>":                 "config",
+				"<a-m-h>":               "tabmove left",
+				"<s-m-]>":               "tabnext",
+				"<s-m-[>":               "tabprevious",
+				"<c-g>":                 "echo <esc>:",
+				"<ctrl-meta-p>":         "echo <esc>:workspacefocus<space>",
+				"<alt-meta-down>":       "lspgotodef",
+				"<f12>":                 "lspgotodef",
+				"<alt-shift-meta-down>": "lspref",
+				"<m-j>":                 "",
+				"<m-k>":                 "",
+				"<m-l>":                 "",
+				"<m-h>":                 "",
+				"<m-=>":                 "guifontsize increase",
+				"<m-->":                 "guifontsize decrease",
+				"<m-t>":                 "tabnew",
+				"<a-m-l>":               "tabmove right",
+				"<m-c>":                 "clipboardcopy",
+				"<m-v>":                 "clipboardpaste",
+				"<m-y>":                 "echolastcmd",
+				"<s-m-h>":               "windowfocus left",
+				"<s-m-l>":               "windowfocus right",
+				"<s-m-j>":               "windowfocus down",
+				"<s-m-k>":               "windowfocus up",
+				"<a-s-m-h>":             "windowmove left",
+				"<a-s-m-l>":             "windowmove right",
+				"<a-s-m-j>":             "windowmove down",
+				"<a-s-m-k>":             "windowmove up",
+				"<s-m-backspace>":       "windowresize reset",
+				"<s-m-+>":               []any{"windowresize max width", "windowresize max height"},
+				"<s-m-->":               []any{"windowresize min width", "windowresize min height"},
+				"<s-m-up>":              "windowresize increase height",
+				"<s-m-down>":            "windowresize decrease height",
+				"<s-m-left>":            "windowresize decrease width",
+				"<s-m-right>":           "windowresize increase width",
+				"<s-m-w>":               "windowclose",
+				"<c-m-h>":               "windowdefaultsplit h",
+				"<c-m-v>":               "windowdefaultsplit v",
+				"<s-m-f>":               "windowtogglemaximize",
+				"<m-b>":                 "lspformat",
+				"<m-m>":                 "lspformatimports",
+				"<a-j>":                 "gitnextchange",
+				"<a-k>":                 "gitprevchange",
+				"<m-\\\\>":            "searchtext",
+				"<m-enter>":             "terminalneworsplit",
+				"<s-m-enter>":           "!",
+				"gf":                    "editfileoncursor",
+				"<m-1>":                 "workspacefocus 1",
+				"<m-2>":                 "workspacefocus 2",
+				"<m-3>":                 "workspacefocus 3",
+				"<m-4>":                 "workspacefocus 4",
+				"<m-5>":                 "workspacefocus 5",
+				"<m-6>":                 "workspacefocus 6",
+				"<m-7>":                 "workspacefocus 7",
+				"<m-8>":                 "workspacefocus 8",
+				"<m-9>":                 "workspacefocus 9",
+			},
+		},
+		"terminal": map[string]any{"modal": false},
+	}
+}
+
+func mustGitShow(t *testing.T, spec string) string {
+	t.Helper()
+	out, err := execCommandOutput("git", "show", spec)
+	require.NoError(t, err)
+	return out
+}
+
+func execCommandOutput(name string, args ...string) (string, error) {
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if stderr.Len() != 0 {
+			return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		}
+		return "", err
+	}
+	return stdout.String(), nil
+}
+
+func cloneTestMap(m map[string]any) map[string]any {
+	return normalizeTestConfig(m).(map[string]any)
+}
+
+func normalizeTestConfig(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = normalizeTestConfig(val)
+		}
+		return out
+	case map[any]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k.(string)] = normalizeTestConfig(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = normalizeTestConfig(val)
+		}
+		return out
+	default:
+		return t
+	}
+}
+
+func normalizeLegacyExpected(cfg map[string]any) map[string]any {
+	out := cloneTestMap(cfg)
+	delete(out, "frame_theme")
+	delete(out, "frame_charset_theme")
+	delete(out, "frameunion_charset_theme")
+	delete(out, "frame_attr_theme")
+	delete(out, "focus_frame_charset_theme")
+	delete(out, "focus_frame_attr_theme")
+	delete(out, "color_theme_1")
+	delete(out, "color_theme_2")
+	delete(out, "color_theme_3")
+	delete(out, "color_theme_4")
+	delete(out, "color_theme_5")
+	delete(out, "color_theme_6")
+	delete(out, "color_theme_7")
+	delete(out, "color_theme_8")
+	extsIfc, ok := out["extensions"]
+	if !ok {
+		return out
+	}
+	exts, ok := extsIfc.(map[string]any)
+	if !ok {
+		return out
+	}
+	legacyFile, hasFile := exts["fuzzy_file"].(map[string]any)
+	legacyLine, hasLine := exts["fuzzy_line"].(map[string]any)
+	_, hasSearch := exts["fuzzy_search"]
+	if !hasSearch && !hasFile && !hasLine {
+		return out
+	}
+	fuzzySearch := map[string]any{
+		"path": "extension_fuzzy_search",
+		"config": map[string]any{
+			"syntax": map[string]any{
+				"case_sensitive": true,
+				"algo":           "fuzzy",
+			},
+		},
+	}
+	if cfgMap, ok := exts["fuzzy_search"].(map[string]any); ok {
+		fuzzySearch = cloneTestMap(cfgMap)
+		if _, ok := fuzzySearch["path"]; !ok {
+			fuzzySearch["path"] = "extension_fuzzy_search"
+		}
+		configMap, ok := fuzzySearch["config"].(map[string]any)
+		if !ok {
+			configMap = map[string]any{}
+			fuzzySearch["config"] = configMap
+		}
+		if _, ok := configMap["syntax"]; !ok {
+			configMap["syntax"] = map[string]any{"case_sensitive": true, "algo": "fuzzy"}
+		}
+	}
+	configMap := fuzzySearch["config"].(map[string]any)
+	if hasFile {
+		configMap["file"] = cloneTestMap(legacyFile["config"].(map[string]any))
+		delete(exts, "fuzzy_file")
+	}
+	if hasLine {
+		configMap["line"] = cloneTestMap(legacyLine["config"].(map[string]any))
+		delete(exts, "fuzzy_line")
+	}
+	exts["fuzzy_search"] = fuzzySearch
+	return out
+}
+
+func flattenConfigCSV(cfg map[string]any) []string {
+	var rows []string
+	var walk func(string, any)
+	walk = func(prefix string, v any) {
+		switch t := v.(type) {
+		case map[string]any:
+			if len(t) == 0 {
+				rows = append(rows, prefix+",{}")
+				return
+			}
+			keys := make([]string, 0, len(t))
+			for k := range t {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				next := k
+				if prefix != "" {
+					next = prefix + "." + k
+				}
+				walk(next, t[k])
+			}
+		case []any:
+			if len(t) == 0 {
+				rows = append(rows, prefix+",[]")
+				return
+			}
+			for i, val := range t {
+				walk(prefix+"["+strconv.Itoa(i)+"]", val)
+			}
+		default:
+			rows = append(rows, prefix+","+stringifyTestScalar(t))
+		}
+	}
+	walk("", cfg)
+	sort.Strings(rows)
+	return rows
+}
+
+func stringifyTestScalar(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return "null"
+	case string:
+		return t
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprint(t)
+	}
+}

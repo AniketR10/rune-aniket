@@ -136,7 +136,9 @@ func WithDefaultWallpaper(wallpaper browser.Wallpaper) Option {
 	}
 }
 
-// WithDefaultConfigYAML sets the default baseline config.
+// WithDefaultConfigYAML sets the default baseline config from one or more
+// YAML documents. Subsequent documents override the earlier ones via the
+// usual deep-merge semantics.
 func WithDefaultConfigYAML(base string, overrides ...string) Option {
 	return func(opts *options) {
 		if len(overrides) == 0 {
@@ -162,6 +164,19 @@ func WithDefaultConfigYAML(base string, overrides ...string) Option {
 			panic("error decoding default config")
 		}
 		opts.defaultConfig = buf.String()
+	}
+}
+
+// WithDefaultConfigStarlark sets the default baseline config as a Starlark
+// source. The script must bind a top-level `config` dict. The loader exposes
+// two predeclared globals to the script:
+//   - mode: "modal" when modal is true, otherwise "modeless"
+//   - tui: the given tui boolean
+func WithDefaultConfigStarlark(src string, modal bool, tui bool) Option {
+	return func(opts *options) {
+		opts.defaultConfig = src
+		opts.defaultConfigModeModal = modal
+		opts.defaultConfigTUI = tui
 	}
 }
 
@@ -291,6 +306,9 @@ type options struct {
 	bell                func()
 	scheduleFn          func(func()) bool
 
+	defaultConfigModeModal bool
+	defaultConfigTUI       bool
+
 	initShaderFn           func(term.Attributes, component.FrameCharSet) shader.Shader
 	initShaderDuration     time.Duration
 	initShaderFPS          int
@@ -308,7 +326,7 @@ func defaultOptions() options {
 		extensions:         make(map[string]Extension),
 		workspaceConfig:    ".iderc",
 		defaultWallpaper:   browser.NopWallpaper(),
-		defaultConfig:      "{}",
+		defaultConfig:      "config = {}",
 		bell:               term.RingBell,
 		scheduleFn:         term.ScheduleNextTick,
 		workspacesBarFrame: true,

@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"errors"
@@ -2235,17 +2236,70 @@ func (c ideConfig) pluginBarConfig() plugin.BarConfig {
 	return ret
 }
 
+// decodeConfig decodes a rune configuration document from r as YAML.
+// See decodeConfigFile for the filename-aware variant used by the runtime.
 func decodeConfig(r io.Reader) (cfg map[string]any, err error) {
-	d := yaml.NewDecoder(r)
+	return decodeConfigFile(r, "")
+}
 
+func isStarlarkConfigFilename(filename string) bool {
+	return strings.HasSuffix(strings.ToLower(filename), ".star")
+}
+
+// decodeConfigFile decodes a rune configuration document from r using the
+// filename extension to choose the decoder: `.star` uses Starlark, everything
+// else uses YAML.
+func decodeConfigFile(r io.Reader, filename string) (cfg map[string]any, err error) {
+	src, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	if isStarlarkConfigFilename(filename) {
+		return decodeStarlarkConfig(starlarkConfigSource{
+			src:      src,
+			filename: filename,
+		})
+	}
 	cfg = make(map[string]any)
-	err = d.Decode(&cfg)
+	err = yaml.NewDecoder(bytes.NewReader(src)).Decode(&cfg)
 	return
+}
+
+// decodeOverlayConfigFile decodes an override document on top of base.
+// Starlark scripts see the current merged tree as a predeclared `config`
+// global and mutate it in place. YAML documents are decoded normally and
+// deep-merged on top of base by the caller.
+//
+// The returned map is the full post-override config. Callers should not
+// merge it again into base — overlay mode already consumed base, and for
+// YAML we deep-merge here so the caller receives a single consistent
+// result regardless of the input format.
+func decodeOverlayConfigFile(
+	r io.Reader, filename string, base map[string]any,
+) (map[string]any, error) {
+	src, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	if isStarlarkConfigFilename(filename) {
+		return decodeStarlarkConfig(starlarkConfigSource{
+			src:      src,
+			filename: filename,
+			base:     base,
+		})
+	}
+	overrides := make(map[string]any)
+	if err := yaml.NewDecoder(bytes.NewReader(src)).Decode(&overrides); err != nil {
+		return nil, err
+	}
+	overrideConfig(base, overrides)
+	return base, nil
 }
 
 func reloadConfig(
 	configFilePath string, defaultWallpaper browser.Wallpaper,
-	defaultConfig string, ringBell func(), scheduleNextTick func(func()) bool,
+	defaultConfig defaultConfigSource,
+	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) (ret ideConfig, err error) {
 	err = loadConfig(&ret, configFilePath,
@@ -2269,7 +2323,7 @@ func loadWorkspaceConfig(
 	}
 	defer f.Close()
 
-	cfg, err := decodeConfig(f)
+	cfg, err := decodeOverlayConfigFile(f, filename, c.cfg)
 	if err != nil {
 		return true, err
 	}
@@ -2279,7 +2333,7 @@ func loadWorkspaceConfig(
 		return false, fmt.Errorf("validate config: %w", err)
 	}
 
-	overrideConfig(c.cfg, cfg)
+	c.cfg = cfg
 	return false, nil
 }
 
@@ -2288,14 +2342,14 @@ func loadWorkspaceConfig(
 func loadConfig(
 	c *ideConfig, configPath string,
 	defaultWallpaper browser.Wallpaper,
-	defaultConfig string,
+	defaultConfig defaultConfigSource,
 	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) (err error) {
 	initDefaultConfig(c, defaultWallpaper, ringBell, scheduleNextTick,
 		zdotDir, configPath)
 
-	cfg, err := decodeConfig(strings.NewReader(defaultConfig))
+	cfg, err := decodeDefaultConfig(defaultConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -2314,6 +2368,27 @@ func loadConfig(
 	return nil
 }
 
+// defaultConfigSource is the built-in config shipped with the binary.
+// The embedded default is always Starlark and receives the predeclared
+// globals `mode` ("modal" | "modeless") and `tui` (bool).
+type defaultConfigSource struct {
+	src   string
+	modal bool
+	tui   bool
+}
+
+func decodeDefaultConfig(d defaultConfigSource) (map[string]any, error) {
+	src := []byte(d.src)
+	return decodeStarlarkConfig(starlarkConfigSource{
+		src:      src,
+		filename: "rune.star",
+		params: map[string]any{
+			"mode": map[bool]string{true: editorModeModal, false: editorModeModeless}[d.modal],
+			"tui":  d.tui,
+		},
+	})
+}
+
 func loadFileConfig(c *ideConfig, configPath string) (err error) {
 	f, err := workspace.OpenFile(configPath, os.O_RDONLY, 0)
 	if err != nil {
@@ -2324,13 +2399,11 @@ func loadFileConfig(c *ideConfig, configPath string) (err error) {
 	}
 	defer f.Close()
 
-	cfg, err := decodeConfig(f)
+	cfg, err := decodeOverlayConfigFile(f, configPath, c.cfg)
 	if err != nil {
 		return err
 	}
-
-	overrideConfig(c.cfg, cfg)
-
+	c.cfg = cfg
 	return nil
 }
 

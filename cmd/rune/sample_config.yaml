@@ -1,0 +1,68 @@
+# Rune user configuration
+#
+# Everything is commented out below; uncomment what you want to change. See
+# `cmd/rune/rune.star` in the Rune source tree for the exhaustive list of
+# available keys.
+
+# Path to the debug log. This property is not reloaded on reloadWorkspace.
+#log_path: ~/.rune/debug.log
+
+#gui:
+#  # Pick a theme by name. See the `guitheme` command for the full list of commands.
+#  default_theme: romero
+#  #font-size: 13
+#  window_opacity: { fg: 1, bg: 1 }
+
+#editor:
+#  # 'modal' (vi-like) or 'modeless' (conventional).
+#  mode: modal
+#  autoindent: true
+#  # Override syntax highlight colors. Any key omitted inherits the default.
+#  #highlights:
+#  #  keyword: { fg: yellow }
+#  #  string:  { fg: magenta }
+#  status_bar:
+#    enabled: true
+#  aux_bar:
+#    enabled: true
+#    folds: true
+#    git: inline           # bar | inline | all | disabled
+#    lines: absolute       # disabled | absolute | relative
+#    highlight_cursor: true
+
+#command:
+#  # Key that opens the command prompt.
+#  key: ":"
+#  # Command history length.
+#  max_history: 20000
+#  # Aliases layer on top of the built-ins.
+#  aliases:
+#    w: write
+#    gitblame: "! git blame %"
+#  # Key bindings merge with the built-ins; set a value to "" to unbind.
+#  key_bindings:
+#    <m-q>: quit
+#    <m-t>: tabnew
+
+#terminal:
+#  # Default shell. Falls back to $SHELL when unset.
+#  #shell: bash
+#  # Maximum emulator lines.
+#  max_lines: 1000
+#  # Enable terminal modal mode on <esc>.
+#  modal: true
+
+#workspace:
+#  auto_restore: true
+#  # Override the default ASCII wallpaper.
+#  #wallpaper: myAsciiArt
+#  #wallpaper_image: /path/to/image.png
+
+#extensions:
+#  fuzzy_search:
+#    path: extension_fuzzy_search
+#    config:
+#      file:
+#        case_sensitive: true
+#        algo: fuzzy        # fuzzy | contains | equal
+#        history_key: <m-p>

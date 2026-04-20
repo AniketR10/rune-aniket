@@ -33,7 +33,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.48.0
 	golang.org/x/image v0.38.0
-	golang.org/x/term v0.40.0
+	golang.org/x/term v0.41.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
@@ -73,6 +73,7 @@ require (
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
 	github.com/yuin/goldmark v1.7.1
+	go.starlark.net v0.0.0-20260326113308-fadfc96def35
 	go.uber.org/atomic v1.5.0
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0

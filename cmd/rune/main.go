@@ -75,7 +75,8 @@ var (
 	// this executables version.
 	version string
 
-	configFilename          = ".runerc"
+	configFilename          = "config.yaml"
+	configStarFilename      = "config.star"
 	workspaceConfigFilename = ".rune/config.yaml"
 	home                    string
 
@@ -120,7 +121,7 @@ func init() {
 		home = "."
 	}
 
-	defaultConfigPath = path.Join(home, configFilename)
+	defaultConfigPath = resolveDefaultConfigPath(defaultDataPath)
 	flagConfigPath = flag.StringP("config", "c", defaultConfigPath,
 		"Use this file for configuring rune")
 
@@ -129,6 +130,22 @@ func init() {
 		"Set temporary data directory")
 
 	version = fmt.Sprintf("%s (HEAD is %s)", debug.Tag, debug.Commit)
+}
+
+func resolveDefaultConfigPath(dataDir string) string {
+	yamlPath := path.Join(dataDir, configFilename)
+	starPath := path.Join(dataDir, configStarFilename)
+	if _, err := os.Stat(yamlPath); err == nil {
+		return yamlPath
+	}
+	if _, err := os.Stat(starPath); err == nil {
+		return starPath
+	}
+	return yamlPath
+}
+
+func resolveSampleConfigPath(dataDir string) string {
+	return path.Join(dataDir, configFilename)
 }
 
 func cwdURI() workspaceapi.URI {
@@ -318,6 +335,10 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	defaultConfigPath = resolveDefaultConfigPath(*flagDataPath)
+	if !flag.Lookup("config").Changed {
+		*flagConfigPath = defaultConfigPath
+	}
 
 	// Set up the crash report directory under the data path so reports
 	// are stored durably rather than in the OS temp dir.
@@ -449,7 +470,7 @@ func runTUI(
 		ide.WithLocker(mu),
 		ide.WithConfigFilename(workspaceConfigFilename),
 		ide.WithDefaultWallpaper(makeWallpaper()),
-		ide.WithDefaultConfigYAML(defaultGUIConfig, defaultTUIConfig),
+		ide.WithDefaultConfigStarlark(defaultStarlarkConfig, true, true),
 		ide.WithScheduleNextTick(func(fn func()) bool {
 			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
 		}),
@@ -550,7 +571,7 @@ func runGUI(
 		ide.WithWorkspacesBarOffset(workspacesTabOffset),
 		ide.WithWorkspacesIcon('1'),
 		ide.WithWorkspacesBarFrame(false),
-		ide.WithDefaultConfigYAML(defaultGUIConfig),
+		ide.WithDefaultConfigStarlark(defaultStarlarkConfig, true, false),
 		ide.WithBell(func() {}),
 		ide.WithPublishEvent(publishEvent),
 		ide.WithScheduleNextTick(func(fn func()) bool {

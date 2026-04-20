@@ -127,7 +127,7 @@ func subscribeOtherCommands(
 					return fmt.Errorf("stat config file %q: %w", configPath, err)
 				}
 
-				err = os.WriteFile(configPath, []byte(defaultGUIConfig), 0666)
+				err = os.WriteFile(configPath, []byte(defaultSampleConfig), 0666)
 				if err != nil {
 					return fmt.Errorf("write sample config to config file %q: %w", configPath, err)
 				}

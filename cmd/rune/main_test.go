@@ -24,6 +24,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -88,5 +89,53 @@ func TestAppLaunchArgs(t *testing.T) {
 				t.Fatalf("appLaunchArgs() = %#v, want %#v", gotArgs, tt.wantArgs)
 			}
 		})
+	}
+}
+
+func TestResolveDefaultConfigPathPrefersYAMLThenStar(t *testing.T) {
+	dataDir := t.TempDir()
+	yamlPath := filepath.Join(dataDir, "config.yaml")
+	starPath := filepath.Join(dataDir, "config.star")
+
+	got := resolveDefaultConfigPath(dataDir)
+	if got != yamlPath {
+		t.Fatalf("resolveDefaultConfigPath() = %q, want %q when neither exists",
+			got, yamlPath)
+	}
+
+	if err := os.WriteFile(starPath, []byte("config = {}\n"), 0o644); err != nil {
+		t.Fatalf("write star: %v", err)
+	}
+	got = resolveDefaultConfigPath(dataDir)
+	if got != starPath {
+		t.Fatalf("resolveDefaultConfigPath() = %q, want %q when only .star exists",
+			got, starPath)
+	}
+
+	if err := os.WriteFile(yamlPath, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+	got = resolveDefaultConfigPath(dataDir)
+	if got != yamlPath {
+		t.Fatalf("resolveDefaultConfigPath() = %q, want %q when both exist",
+			got, yamlPath)
+	}
+}
+
+func TestResolveSampleConfigPath(t *testing.T) {
+	dataDir := filepath.Join("home", ".rune")
+	got := resolveSampleConfigPath(dataDir)
+	want := filepath.Join(dataDir, "config.yaml")
+	if got != want {
+		t.Fatalf("resolveSampleConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveDefaultConfigPathUsesDatadirDefaultLocation(t *testing.T) {
+	dataDir := filepath.Join("home", ".rune")
+	got := resolveDefaultConfigPath(dataDir)
+	want := filepath.Join(dataDir, "config.yaml")
+	if got != want {
+		t.Fatalf("resolveDefaultConfigPath() = %q, want %q", got, want)
 	}
 }

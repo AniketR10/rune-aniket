@@ -803,7 +803,8 @@ func TestConfigSetting(t *testing.T) {
 
 func TestLoadEmbededConfig(t *testing.T) {
 	var cfg ideConfig
-	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(), "{}",
+	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
 		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
 }
@@ -825,7 +826,8 @@ command:
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
 		term.RingBell, term.ScheduleNextTick, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "alias cycle detected")
@@ -844,7 +846,8 @@ editor:
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
 		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
 	assert.Equal(t, 2, cfg.editorTabspaces())
