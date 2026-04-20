@@ -446,7 +446,7 @@ config = {
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.
         "key_bindings": {
-            "<s-tab>":        "fexplorer",
+            "<tab>":          "fexplorer",
             "<m-r>":          "history",
             "<m-,>":          "config",
             "<m-q>":          "quit",
