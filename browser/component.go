@@ -553,6 +553,22 @@ func (c *Component) Split(
 	}
 }
 
+// SplitRoot creates a new top-level split in the root tiled layout.
+func (c *Component) SplitRoot(alignment component.Alignment, h browserapi.Handler) (Window, bool) {
+	h, isTab := c.newWindowContent(h)
+	win, ok := c.wm.SplitRoot(alignment, h)
+	if !ok {
+		return nil, false
+	}
+	ret := c.newWindow(win)
+	if isTab {
+		c.dirtyTabs = true
+		h.(*Tab).setWindow(nil, ret)
+		h.(*Tab).callOnFocus()
+	}
+	return ret, true
+}
+
 // Floating opens a new floating window at the given coordinates,
 // with the given height and width.
 func (c *Component) Floating(
@@ -800,6 +816,15 @@ func (c *Component) IncreaseWindowWidth() bool {
 func (c *Component) DecreaseWindowWidth() bool {
 	w := c.wm.Focus()
 	return c.wm.SetWidth(w, w.Width()-1)
+}
+
+// SetWindowWidth sets the given window's width exactly.
+func (c *Component) SetWindowWidth(win Window, width int) bool {
+	bwin := win.(*browserWindow)
+	if bwin.parent == nil {
+		return false
+	}
+	return c.wm.SetWidth(bwin.win, width)
 }
 
 // SetFocus sets the underlying WindowManager's focus to win.

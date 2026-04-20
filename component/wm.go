@@ -305,6 +305,36 @@ func (wm *WindowManager) SplitVertical(win Window, content tui.Component) (Windo
 	return wm.nodeToWindow(node), true
 }
 
+// SplitRoot inserts a new top-level tiled window at the given side of the root layout.
+// Left/right create full-height columns; top/bottom create full-width rows.
+func (wm *WindowManager) SplitRoot(alignment component.Alignment, content tui.Component) (Window, bool) {
+	if wm.config.Frame {
+		content = wm.withFrame(content)
+	}
+	var (
+		direction splitDir
+		idx       int
+	)
+	switch alignment {
+	case component.AlignmentLeft:
+		direction = vertical
+		idx = 0
+	case component.AlignmentRight:
+		direction = vertical
+		idx = len(wm.tree.root.children)
+	case component.AlignmentTop:
+		direction = horizontal
+		idx = 0
+	case component.AlignmentBottom:
+		direction = horizontal
+		idx = len(wm.tree.root.children)
+	default:
+		return Window{}, false
+	}
+	node := wm.tree.SplitRoot(direction, idx, content)
+	return wm.nodeToWindow(node), true
+}
+
 // SetHeight fixes the height of the given window and returns true if possible,
 // or returns false if not.
 //

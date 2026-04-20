@@ -85,6 +85,267 @@ func TestSetWidthHeight(t *testing.T) {
 	comptest.TestComponent(t, wm, w, tests)
 }
 
+// splitRootLayout is one of the three initial layouts exercised by
+// TestSplitRoot: a single tile (empty), a horizontal-then-vertical
+// decomposition, or a vertical-then-horizontal decomposition.
+type splitRootLayout int
+
+const (
+	splitRootLayoutEmpty splitRootLayout = iota
+	splitRootLayoutHorizontalThenVertical
+	splitRootLayoutVerticalThenHorizontal
+)
+
+// buildSplitRootLayout populates wm/win1 with the layout identified
+// by l. The returned siblings are returned so the test can interact
+// with them if needed; callers that don't care may discard them.
+func buildSplitRootLayout(
+	t *testing.T, wm *WindowManager, win1 Window, l splitRootLayout,
+) (win2, win3 Window) {
+	t.Helper()
+	switch l {
+	case splitRootLayoutEmpty:
+		return
+	case splitRootLayoutHorizontalThenVertical:
+		var ok bool
+		win2, ok = wm.SplitHorizontal(win1, &component.TestComponent{Ch: 'B'})
+		require.True(t, ok)
+		win3, ok = wm.SplitVertical(win1, &component.TestComponent{Ch: 'C'})
+		require.True(t, ok)
+		return
+	case splitRootLayoutVerticalThenHorizontal:
+		var ok bool
+		win2, ok = wm.SplitVertical(win1, &component.TestComponent{Ch: 'B'})
+		require.True(t, ok)
+		win3, ok = wm.SplitHorizontal(win1, &component.TestComponent{Ch: 'C'})
+		require.True(t, ok)
+		return
+	}
+	t.Fatalf("unknown layout: %d", l)
+	return
+}
+
+// TestSplitRoot is a table-driven regression suite for
+// WindowManager.SplitRoot. It covers every supported Alignment
+// (left, right, top, bottom) across three starting layouts:
+//
+//   - a single-tile root,
+//   - an asymmetric split-horizontal-then-split-vertical layout,
+//   - an asymmetric split-vertical-then-split-horizontal layout,
+//
+// and asserts the final terminal rendering as a literal string.
+func TestSplitRoot(t *testing.T) {
+	tests := []struct {
+		name      string
+		layout    splitRootLayout
+		alignment component.Alignment
+		expected  string
+	}{
+		{
+			name:      "empty_left",
+			layout:    splitRootLayoutEmpty,
+			alignment: component.AlignmentLeft,
+			expected: `
+┌────────┐┌────────┐
+│DDDDDDDD││AAAAAAAA│
+│DDDDDDDD││AAAAAAAA│
+│DDDDDDDD││AAAAAAAA│
+│DDDDDDDD││AAAAAAAA│
+│DDDDDDDD││AAAAAAAA│
+│DDDDDDDD││AAAAAAAA│
+└────────┘└────────┘`,
+		},
+		{
+			name:      "empty_right",
+			layout:    splitRootLayoutEmpty,
+			alignment: component.AlignmentRight,
+			expected: `
+┌────────┐┌────────┐
+│AAAAAAAA││DDDDDDDD│
+│AAAAAAAA││DDDDDDDD│
+│AAAAAAAA││DDDDDDDD│
+│AAAAAAAA││DDDDDDDD│
+│AAAAAAAA││DDDDDDDD│
+│AAAAAAAA││DDDDDDDD│
+└────────┘└────────┘`,
+		},
+		{
+			name:      "empty_top",
+			layout:    splitRootLayoutEmpty,
+			alignment: component.AlignmentTop,
+			expected: `
+┌──────────────────┐
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+└──────────────────┘
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`,
+		},
+		{
+			name:      "empty_bottom",
+			layout:    splitRootLayoutEmpty,
+			alignment: component.AlignmentBottom,
+			expected: `
+┌──────────────────┐
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘
+┌──────────────────┐
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+└──────────────────┘`,
+		},
+		{
+			name:      "horizontal_then_vertical_left",
+			layout:    splitRootLayoutHorizontalThenVertical,
+			alignment: component.AlignmentLeft,
+			expected: `
+┌────────┐┌───┐┌───┐
+│DDDDDDDD││AAA││CCC│
+│DDDDDDDD││AAA││CCC│
+│DDDDDDDD│└───┘└───┘
+│DDDDDDDD│┌────────┐
+│DDDDDDDD││BBBBBBBB│
+│DDDDDDDD││BBBBBBBB│
+└────────┘└────────┘`,
+		},
+		{
+			name:      "horizontal_then_vertical_right",
+			layout:    splitRootLayoutHorizontalThenVertical,
+			alignment: component.AlignmentRight,
+			expected: `
+┌───┐┌───┐┌────────┐
+│AAA││CCC││DDDDDDDD│
+│AAA││CCC││DDDDDDDD│
+└───┘└───┘│DDDDDDDD│
+┌────────┐│DDDDDDDD│
+│BBBBBBBB││DDDDDDDD│
+│BBBBBBBB││DDDDDDDD│
+└────────┘└────────┘`,
+		},
+		{
+			name:      "horizontal_then_vertical_top",
+			layout:    splitRootLayoutHorizontalThenVertical,
+			alignment: component.AlignmentTop,
+			// Note: existing tiles (A/B/C) lose their frame chrome
+			// in this top/bottom flip because each ends up too
+			// short to fit a top+bottom border plus a content row.
+			expected: `
+┌──────────────────┐
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+└──────────────────┘
+AAAAAAAAAACCCCCCCCCC
+AAAAAAAAAACCCCCCCCCC
+BBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBB`,
+		},
+		{
+			name:      "horizontal_then_vertical_bottom",
+			layout:    splitRootLayoutHorizontalThenVertical,
+			alignment: component.AlignmentBottom,
+			// Note: same frame-loss caveat as horizontal_then_vertical_top.
+			expected: `
+AAAAAAAAAACCCCCCCCCC
+AAAAAAAAAACCCCCCCCCC
+BBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBB
+┌──────────────────┐
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+└──────────────────┘`,
+		},
+		{
+			name:      "vertical_then_horizontal_left",
+			layout:    splitRootLayoutVerticalThenHorizontal,
+			alignment: component.AlignmentLeft,
+			expected: `
+┌────┐┌─────┐┌─────┐
+│DDDD││AAAAA││BBBBB│
+│DDDD││AAAAA││BBBBB│
+│DDDD│└─────┘│BBBBB│
+│DDDD│┌─────┐│BBBBB│
+│DDDD││CCCCC││BBBBB│
+│DDDD││CCCCC││BBBBB│
+└────┘└─────┘└─────┘`,
+		},
+		{
+			name:      "vertical_then_horizontal_right",
+			layout:    splitRootLayoutVerticalThenHorizontal,
+			alignment: component.AlignmentRight,
+			expected: `
+┌────┐┌─────┐┌─────┐
+│AAAA││BBBBB││DDDDD│
+│AAAA││BBBBB││DDDDD│
+└────┘│BBBBB││DDDDD│
+┌────┐│BBBBB││DDDDD│
+│CCCC││BBBBB││DDDDD│
+│CCCC││BBBBB││DDDDD│
+└────┘└─────┘└─────┘`,
+		},
+		{
+			name:      "vertical_then_horizontal_top",
+			layout:    splitRootLayoutVerticalThenHorizontal,
+			alignment: component.AlignmentTop,
+			// Note: the existing A/C column loses its frame chrome
+			// here for the same reason as horizontal_then_vertical_top —
+			// each tile is too short for a full frame.
+			expected: `
+┌──────────────────┐
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+└──────────────────┘
+AAAAAAAAAA┌────────┐
+AAAAAAAAAA│BBBBBBBB│
+CCCCCCCCCC│BBBBBBBB│
+CCCCCCCCCC└────────┘`,
+		},
+		{
+			name:      "vertical_then_horizontal_bottom",
+			layout:    splitRootLayoutVerticalThenHorizontal,
+			alignment: component.AlignmentBottom,
+			// Note: same frame-loss caveat as vertical_then_horizontal_top.
+			expected: `
+AAAAAAAAAA┌────────┐
+AAAAAAAAAA│BBBBBBBB│
+CCCCCCCCCC│BBBBBBBB│
+CCCCCCCCCC└────────┘
+┌──────────────────┐
+│DDDDDDDDDDDDDDDDDD│
+│DDDDDDDDDDDDDDDDDD│
+└──────────────────┘`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := term.NewStringWriter(20, 8)
+			wm, win1 := NewWindowManager(
+				&component.TestComponent{Ch: 'A'}, testWindowManagerConfig(),
+			)
+			wm.Resize(20, 8)
+			_, _ = buildSplitRootLayout(t, wm, win1, tc.layout)
+
+			cases := []comptest.TestCase{
+				{
+					Action: func() {
+						_, ok := wm.SplitRoot(
+							tc.alignment,
+							&component.TestComponent{Ch: 'D'},
+						)
+						require.True(t, ok)
+					},
+					Expected: tc.expected,
+				},
+			}
+
+			comptest.TestComponent(t, wm, w, cases)
+		})
+	}
+}
+
 func TestWindowZeroValue(t *testing.T) {
 	t.Run("Close", func(t *testing.T) {
 		var win Window

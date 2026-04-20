@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -748,6 +749,17 @@ func (c *Component) Split(
 	return w, nil
 }
 
+// SplitRoot satisfies browser.WindowManager.
+func (c *Component) SplitRoot(
+	alignment component.Alignment, h browserapi.Handler,
+) (browser.Window, error) {
+	w, ok := c.comp.SplitRoot(alignment, h)
+	if !ok {
+		return nil, textapi.ErrInvalidSplit
+	}
+	return w, nil
+}
+
 // Bar creates a new status bar with h's component and delegates handling of mouse events to h.
 func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) error {
 	if cfg.Size <= 0 {
@@ -782,6 +794,11 @@ func (c *Component) FocusTab() (*browser.Tab, bool) {
 // It satisfies browser.Browser.
 func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {
 	return c.comp.SetFocus(win), nil
+}
+
+// SetWindowWidth sets the width of the given window.
+func (c *Component) SetWindowWidth(win browser.Window, width int) bool {
+	return c.comp.SetWindowWidth(win, width)
 }
 
 // Edit edits the resource with name and buffer

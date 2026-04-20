@@ -435,6 +435,50 @@ func (t *TileTree) SplitHorizontal(
 	return split(node, horizontal, content)
 }
 
+// SplitRoot inserts a new node with content as a top-level child of the root.
+// This guarantees the new tile spans the full height of the tiled layout when
+// direction is vertical, or the full width when direction is horizontal.
+//
+// idx is clamped to [0, len(root.children)].
+func (t *TileTree) SplitRoot(direction splitDir, idx int, content tui.Component) *TileNode {
+	if content == nil {
+		panic("empty content for tile")
+	}
+	if direction == noSplit {
+		panic("invalid root split direction")
+	}
+	root := &t.root
+	// A root with at most one child has no meaningful orientation,
+	// so we simply adopt the caller's direction.
+	if len(root.children) <= 1 {
+		root.childSplit = direction
+	} else if root.childSplit != direction {
+		// Root already has multiple children split in the opposite
+		// direction. Wrap them in a proxy node that preserves the
+		// existing orientation so the root itself can flip to the
+		// caller's direction without disturbing the existing layout.
+		proxy := new(TileNode)
+		proxy.tree = t
+		proxy.parent = root
+		proxy.childSplit = root.childSplit
+		proxy.children = root.children
+		for _, c := range proxy.children {
+			c.C.parent = proxy
+		}
+		root.childSplit = direction
+		root.children = []*component.Virtual[*TileNode]{{C: proxy}}
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(root.children) {
+		idx = len(root.children)
+	}
+	n := new(TileNode)
+	root.addChildAtIdx(n, content, direction, idx)
+	return n
+}
+
 // leftMostChild will return the left-most tile in the node
 // if node's split is horizontal, or the top-most tile if the node's split is vertical
 func (t *TileNode) leftMostChild() *TileNode {

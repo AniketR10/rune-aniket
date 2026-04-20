@@ -241,6 +241,17 @@ func (wm *WindowManager) SplitHorizontal(win Window, h tui.Handler) (Window, boo
 	return ret, true
 }
 
+// SplitRoot creates a new top-level split in the root layout.
+func (wm *WindowManager) SplitRoot(alignment compapi.Alignment, h tui.Handler) (Window, bool) {
+	w, ok := wm.comp.SplitRoot(alignment, h)
+	if !ok {
+		return Window{}, false
+	}
+	ret := wm.newNode(w)
+	wm.setFocusAttr(wm.focus)
+	return ret, true
+}
+
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
 	content handler.Floating, cfg component.FloatingConfig,
