@@ -531,6 +531,8 @@ func (h *testHandler) CellEditor() cell.Editor {
 func (e *testHandler) SetDefaultAttributes(attr term.Attributes) {
 }
 
+func (*testHandler) Dimensions() (int, int) { return 0, 0 }
+
 func (h *testHandler) CursorAtScroll() term.Coordinates {
 	return term.Coordinates{Y: h.cursor}
 }

@@ -126,6 +126,10 @@ func (t *TestHandler) CellEditor() cell.Editor {
 func (t *TestHandler) SetDefaultAttributes(attr term.Attributes) {
 }
 
+// Dimensions satisfies text.Handler. TestHandler has no buffer
+// so it reports (0, 0).
+func (t *TestHandler) Dimensions() (int, int) { return 0, 0 }
+
 // CursorAtScroll satisfies text.Handler.
 func (t *TestHandler) CursorAtScroll() term.Coordinates {
 	return term.Coordinates{}

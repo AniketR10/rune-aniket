@@ -226,6 +226,14 @@ func (b *iconsBar) barWidth() int {
 	return max(1, b.iconColumns) + 1
 }
 
+// Dimensions satisfies text.Handler: reports the ideal dimensions
+// of the inner handler plus the horizontal cells claimed by the
+// icons bar.
+func (b *iconsBar) Dimensions() (int, int) {
+	w, h := b.vhandler.C.Dimensions()
+	return w + b.barWidth(), h
+}
+
 func (b *iconsBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 	switch cmd.Name {
 	case commandToggleOverlay:

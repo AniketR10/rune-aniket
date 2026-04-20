@@ -289,6 +289,22 @@ func (b *auxBar) Resize(width, height int) {
 	}
 }
 
+// Dimensions satisfies text.Handler: reports the ideal dimensions
+// of the inner handler plus the horizontal cells claimed by the
+// auxiliary line-number bar (and folds strip) for the buffer's
+// current row count.
+func (b *auxBar) Dimensions() (int, int) {
+	w, h := b.vhandler.C.Dimensions()
+	if !b.linesEnabled {
+		return w, h
+	}
+	bar := len(strconv.Itoa(b.buf.View().Rows())) + 1
+	if b.foldsEnabled {
+		bar += foldsWidth
+	}
+	return w + bar, h
+}
+
 func (b *auxBar) HandleCommand(ctx context.Context, cmd textapi.Command) error {
 	switch cmd.Name {
 	case commandToggleOverlay:

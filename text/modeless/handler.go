@@ -686,6 +686,16 @@ func (h *editorHandler) CellEditor() cell.Editor {
 	return text.ExternalEditor(&h.cursor, h.buf.Editor())
 }
 
+// Dimensions satisfies text.Handler (and component.Floating).
+// editorHandler is a leaf handler with no sidebar chrome, so the
+// ideal size is the widest row in the underlying buffer by the
+// buffer row count. Bar-wrapping handlers add their own
+// contribution on top. See text.ViewDimensions for why this must
+// sum each cell's Width rather than use View.Columns.
+func (h *editorHandler) Dimensions() (int, int) {
+	return text.ViewDimensions(h.buf.View())
+}
+
 func (e *editorHandler) SetDefaultAttributes(attr term.Attributes) {
 	e.less.Scroll().Attributes = attr
 }

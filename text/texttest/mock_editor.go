@@ -194,6 +194,11 @@ func (t *TestEditorHandler) CellView() cell.View {
 	return t.parent.buf.View()
 }
 
+// Dimensions satisfies text.Handler.
+func (t *TestEditorHandler) Dimensions() (int, int) {
+	return text.ViewDimensions(t.parent.buf.View())
+}
+
 func (e *TestEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return nil
 }

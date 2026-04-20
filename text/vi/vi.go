@@ -419,6 +419,23 @@ func (vi *Vi) CellEditor() cell.Editor {
 	return text.ExternalEditor(vi.cursor, vi.buf.Editor())
 }
 
+// Dimensions satisfies text.Handler (and component.Floating): Vi is
+// a leaf handler with no sidebar chrome, so the ideal size is the
+// widest row in the underlying buffer by the buffer row count.
+// Bar-wrapping handlers add their own contribution on top.
+//
+// Width is the VISUAL width of the widest row, not the cell count:
+// cell.View.Columns(y) returns len(cells[y]) which is one entry per
+// grapheme cluster regardless of that cluster's monospace width. Wide
+// glyphs (e.g. Nerd Font icons treated as two cells, CJK) occupy more
+// cells on screen than they do in the buffer, so we have to sum each
+// cell's Width. Falling back to Columns(y) would under-report width
+// for any row containing a width-2 glyph, causing the hosting window
+// to be sized one cell too narrow and truncating the last character.
+func (vi *Vi) Dimensions() (int, int) {
+	return text.ViewDimensions(vi.buf.View())
+}
+
 // Resource satisfies editor.Handler.
 func (vi *Vi) Resource() workspaceapi.URI {
 	return vi.resource

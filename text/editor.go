@@ -91,6 +91,14 @@ type Handler interface {
 	// SetDefaultAttributes sets the default attributes of the given Handler
 	// before any LocationList overwrites.
 	SetDefaultAttributes(term.Attributes)
+
+	// Dimensions reports the ideal cell width/height this handler
+	// would claim to render its buffer without clipping, including
+	// any auxiliary chrome (line numbers, folds, git icons, …) the
+	// handler draws on top of the buffer. Parents wanting to avoid
+	// truncation should size the hosting window to at least these
+	// dimensions. Satisfies component.Floating.
+	Dimensions() (width, height int)
 }
 
 // EventPublisher wraps subscribing and unsubscribing to file events.
@@ -130,6 +138,35 @@ type Editor interface {
 // NewREPLHandler returns a REPL handler backed by router.
 func NewREPLHandler(comp *Component) textapi.REPLHandler {
 	return replHandler{router: comp}
+}
+
+// ViewDimensions returns the visual (width, height) needed to render
+// the given cell.View without clipping. This is the canonical way for
+// leaf text handlers to report their ideal dimensions: the width is
+// the widest row's VISUAL width (summing each cell's monospace width
+// — cells can hold wide glyphs like Nerd Font icons or CJK, which
+// occupy two cells on screen but only one entry in the backing
+// slice), and the height is the buffer's row count.
+//
+// Using View.Columns(y) directly would under-report width for any row
+// containing a width-2 glyph, causing a hosting window to be sized
+// one cell too narrow and clipping the last character.
+func ViewDimensions(v cell.View) (width, height int) {
+	height = v.Rows()
+	for _, row := range v.RawCells() {
+		w := 0
+		for _, c := range row {
+			if c.Width > 1 {
+				w += int(c.Width)
+				continue
+			}
+			w++
+		}
+		if w > width {
+			width = w
+		}
+	}
+	return
 }
 
 // replHandler routes REPL commands through a text.Component.
