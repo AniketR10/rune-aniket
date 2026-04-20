@@ -474,6 +474,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.True(t, cfg.frameUnion())
 
 	expectedIcons := text.IconSet{
+		Directory:  '',
 		Default:    'x',
 		Terminal:   '&',
 		Shell:      '8',

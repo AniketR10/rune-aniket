@@ -298,6 +298,280 @@ func TestComponentOpenEditorIntegration(t *testing.T) {
 	assert.NoError(t, b.Close())
 }
 
+func TestFileExplorerOpenFile(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	touchTestFile(t, scheme, "alpha.go")
+
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+
+	require.Nil(t, b.fileExplorerWin)
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+
+	assert.NotPanics(t, func() {
+		_, handled := b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+		assert.True(t, handled)
+	})
+
+	for _, tab := range b.comp.Browser().Tabs() {
+		if tab.URI().String() == "memory:///alpha.go" {
+			return
+		}
+	}
+	t.Fatalf("expected alpha.go to be opened in a tab")
+}
+
+// TestFileExplorerToggleTwice reproduces the bug where toggling the
+// file explorer off and on again returns a "command already
+// registered" error. Each :fexplorer invocation that opens the
+// explorer calls the real editor's Edit on the same URI, which
+// subscribes file-level commands (fold/location/git). The second
+// call must NOT re-register those commands for the same URI.
+func TestFileExplorerToggleTwice(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	// Use a vi.Editor with a workspace command registry so that
+	// fold/location/git file-scoped commands get registered on
+	// Edit — this is what the real IDE does and what makes the
+	// bug reproducible.
+	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
+		uri, texttest.NopWorkspaceRegistry(),
+	))
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ed, vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+
+	// 1st call: opens the explorer and focuses it.
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+
+	// 2nd call: explorer is focused, so closes it.
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.Nil(t, b.fileExplorerWin)
+
+	// 3rd call: must re-open without "command already registered".
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+
+	// 4th call: closes again.
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.Nil(t, b.fileExplorerWin)
+
+	// 5th call: re-opens for the second cycle.
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+}
+
+// TestFileExplorerOpenFileThenToggle exercises the realistic
+// production path: user opens fexplorer, opens a file from it (which
+// registers fold/location/git for that file's URI on the shared vi
+// editor's registry), closes the explorer, then reopens. Before the
+// caching fix, reopen re-invoked e.ed.Edit("memory:///fexplorer",
+// ...) which re-subscribed per-file commands and failed with
+// "command already registered".
+func TestFileExplorerOpenFileThenToggle(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	touchTestFile(t, scheme, "alpha.go")
+
+	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
+		uri, texttest.NopWorkspaceRegistry(),
+	))
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ed, vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+
+	// Open alpha.go from the file explorer via Enter.
+	_, handled := b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	require.True(t, handled)
+	found := false
+	for _, tab := range b.comp.Browser().Tabs() {
+		if tab.URI().String() == "memory:///alpha.go" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "alpha.go should be open in a tab")
+
+	// Close the explorer, then re-open it. This MUST succeed.
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.Nil(t, b.fileExplorerWin)
+
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+}
+
+// TestFileExplorerToggleViaTabKey reproduces the user's exact
+// reproduction: with <tab> bound to :fexplorer, pressing <tab>
+// repeatedly to open and close the explorer must never fail with
+// "command already registered". This exercises the full event
+// routing path: the KeyTab event is dispatched to the focused
+// window's handler, propagates back to ex.handleEvent, and only
+// then falls through to the command-key-binding dispatcher that
+// runs :fexplorer. This path differs from calling fexplorer
+// directly because when the explorer is focused, <tab> is first
+// delivered to the file explorer handler (and hence to the vi
+// editor chain) before reaching the :fexplorer binding.
+func TestFileExplorerToggleViaTabKey(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	touchTestFile(t, scheme, "alpha.go")
+
+	// Use a stateful workspace registry that tracks subscriptions and
+	// reports duplicates — this is what the real IDE uses and what
+	// would surface a double-Edit on memory:///fexplorer.
+	wsReg := newTrackingWorkspaceRegistry()
+	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
+		uri, wsReg,
+	))
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ed, vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		text.WithCommandKeyBinding(
+			term.KeyComb{Key: term.KeyTab}, [][]string{{"fexplorer"}}))
+	defer b.Close()
+	b.Resize(30, 15)
+
+	tabEv := term.Event{Type: term.EventKey, Key: term.KeyTab}
+
+	// 1st <tab>: open explorer.
+	b.Handle(tabEv)
+	require.NotNil(t, b.fileExplorerWin, "explorer should be open after 1st <tab>")
+	require.Empty(t, wsReg.errors(), "no errors after 1st <tab>")
+
+	// 2nd <tab>: close explorer (explorer is focused).
+	b.Handle(tabEv)
+	require.Nil(t, b.fileExplorerWin, "explorer should be closed after 2nd <tab>")
+	require.Empty(t, wsReg.errors(), "no errors after 2nd <tab>")
+
+	// 3rd <tab>: re-open. This is where "command already
+	// registered" would surface if the underlying editor was
+	// re-created on reopen.
+	b.Handle(tabEv)
+	require.NotNil(t, b.fileExplorerWin, "explorer should be open after 3rd <tab>")
+	require.Empty(t, wsReg.errors(), "no errors after 3rd <tab>")
+
+	// 4th <tab>: close again.
+	b.Handle(tabEv)
+	require.Nil(t, b.fileExplorerWin, "explorer should be closed after 4th <tab>")
+	require.Empty(t, wsReg.errors(), "no errors after 4th <tab>")
+}
+
+// TestFileExplorerRestoredAsTabNotDuplicated exercises the bug
+// surfaced by the user's real-world setup: a previous session
+// persisted memory:///fexplorer as an open file. On startup, the
+// workspace handler restores it as a tab via editFileURI, which
+// ends up calling vi.Editor.Edit on memory:///fexplorer and
+// subscribing per-file commands. When the user then presses <tab>
+// to open the explorer, ex.initFileExplorer calls Edit a second
+// time on the same URI, which fails with "command already
+// registered".
+//
+// With the fix, the file explorer URI is filtered out of session
+// history and restore, so the second Edit call never happens.
+func TestFileExplorerRestoredAsTabNotDuplicated(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	wsReg := newTrackingWorkspaceRegistry()
+	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
+		uri, wsReg,
+	))
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ed, vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+	b.Resize(30, 15)
+
+	// Simulate the session-restore path: a stale session cache lists
+	// memory:///fexplorer as an open file. The workspace handler
+	// would normally call editFileURI on it, which eventually calls
+	// vi.Editor.Edit and subscribes fold/location/git commands for
+	// the URI on the shared workspace registry.
+	fexURI, err := workspaceapi.ParseURI("memory:///fexplorer")
+	require.NoError(t, err)
+	_, err = b.editFileURI(fexURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+	require.Empty(t, wsReg.errors())
+
+	// Now trigger :fexplorer. Before the fix this would call Edit
+	// on the same URI a second time and one of the per-file command
+	// subscriptions would return "command already registered".
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.Empty(t, wsReg.errors(), "fexplorer must not double-register commands")
+	require.NotNil(t, b.fileExplorerWin)
+}
+
+// trackingWorkspaceRegistry is a text.WorkspaceCommandRegistry that
+// records every subscribe/unsubscribe and fails fast on duplicates —
+// mirroring the behaviour of the real per-workspace registry that
+// backs vi's file command subscriptions.
+type trackingWorkspaceRegistry struct {
+	mu   sync.Mutex
+	cmds map[string]struct{}
+	errs []string
+}
+
+func newTrackingWorkspaceRegistry() *trackingWorkspaceRegistry {
+	return &trackingWorkspaceRegistry{cmds: make(map[string]struct{})}
+}
+
+func (r *trackingWorkspaceRegistry) SubscribeCommandForWorkspace(
+	_ workspaceapi.URI, cmd textapi.CommandManual, _ text.CommandHandler,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.cmds[cmd.Name]; ok {
+		err := fmt.Sprintf("command already registered: %s", cmd.Name)
+		r.errs = append(r.errs, err)
+		return errors.New(err)
+	}
+	r.cmds[cmd.Name] = struct{}{}
+	return nil
+}
+
+func (r *trackingWorkspaceRegistry) UnsubscribeCommandForWorkspace(
+	_ workspaceapi.URI, name string,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cmds, name)
+	return nil
+}
+
+func (r *trackingWorkspaceRegistry) errors() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.errs...)
+}
+
 func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases := []handlertest.SequenceTestCase{
 		{"a",
@@ -1657,6 +1931,45 @@ func newExForTestingClipboard(
 ) testEx {
 	return newExForTestingWithWorkspace(t, &testLoader{}, ed, vte.DefaultConfig(),
 		nopPublishEvent, clip, opts...)
+}
+
+// newExForTestingWithStorage is a variant of newExForTestingWithWorkspace
+// that accepts a caller-supplied storage service so a second session can
+// be booted on the same backing storage (e.g. to exercise workspace
+// layout restore flows).
+func newExForTestingWithStorage(
+	t *testing.T, workspace workspace.Workspace, svc storageapi.Service,
+	ed text.Editor,
+	emulatorCfg vte.Config,
+	publishEvent func(term.Event) bool,
+	clip clipboard.Register,
+	opts ...text.Option,
+) testEx {
+	ex := new(ex)
+	ex.syncCommandPrompt = true
+	finalOpts := defCommandKeyBindings()
+	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	finalOpts = append(finalOpts, text.WithFloatingNoMaxSize(false))
+	finalOpts = append(finalOpts, opts...)
+
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		&workspaceManagerMock{workspace: ex})
+
+	uri, err := workspace.URI(".")
+	require.NoError(t, err)
+
+	require.NoError(t, ex.init(ed, workspace, svc,
+		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
+		publishEvent, 0, clip, nil, nil, nil, finalOpts...))
+	ex.subscribeCommands()
+	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
+		return newTestVteWithConfig(args), nil
+	}
+	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+		return newTestVteWithConfig(args), nil
+	}
+	ex.pluginWaitTimeout = 1 * time.Second
+	return testEx{ex: ex}
 }
 
 func TestNewWindow(t *testing.T) {

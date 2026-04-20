@@ -50,6 +50,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	fileexplorercomp "unstable.build/go-tui/component/fileexplorer"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
@@ -68,6 +70,11 @@ import (
 const (
 	commandHistoryDocumentID = "command-history:ex-command-history"
 	reissuePadding           = 10 * time.Millisecond
+	// fileExplorerURI is the pseudo-URI used to identify the file
+	// explorer's in-memory buffer. Exposed so that infrastructure
+	// that snapshots open files (session restore, history tracking)
+	// can skip it instead of trying to re-open it as a regular tab.
+	fileExplorerURI = "memory:///fexplorer"
 )
 
 var (
@@ -135,6 +142,16 @@ type ex struct {
 	companionTerminalWin browser.Window
 	companionShell       *repl.Handler
 	companionShellURI    workspaceapi.URI
+
+	fileExplorerWin    browser.Window
+	fileExplorerTarget browser.Window
+
+	// fileExplorerHandler is created lazily on the first :fexplorer
+	// invocation and reused across toggles. Recreating it would call
+	// e.ed.Edit a second time on the same memory URI, which would
+	// re-subscribe the vi editor's per-file fold/location/git
+	// commands and fail with "command already registered".
+	fileExplorerHandler *fileExplorerHandler
 }
 
 // PreviewFunc is a function used to preview commands.
@@ -592,18 +609,27 @@ func (e *ex) windowcloseall(_ context.Context, args ...string) error {
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(_ context.Context, args ...string) error {
+	if h, ok := e.fileExplorerHandlerInFocus(); ok {
+		return h.forceFlush()
+	}
 	e.forceExit = true
 	e.exit = true
 	return e.comp.Flush(e.invokeWindow())
 }
 
 func (e *ex) flushClose(_ context.Context, args ...string) error {
+	if h, ok := e.fileExplorerHandlerInFocus(); ok {
+		return h.flush()
+	}
 	e.forceExit = false
 	e.exit = true
 	return e.comp.Flush(e.invokeWindow())
 }
 
 func (e *ex) flush(ctx context.Context, args ...string) error {
+	if h, ok := e.fileExplorerHandlerInFocus(); ok {
+		return h.flush()
+	}
 	if h, ok := e.terminalInFocus(); ok {
 		var name string
 		var err error
@@ -621,6 +647,9 @@ func (e *ex) flush(ctx context.Context, args ...string) error {
 }
 
 func (e *ex) forceFlush(ctx context.Context, args ...string) error {
+	if h, ok := e.fileExplorerHandlerInFocus(); ok {
+		return h.forceFlush()
+	}
 	if h, ok := e.terminalInFocus(); ok {
 		var name string
 		var err error
@@ -1492,6 +1521,117 @@ func (e *ex) toggleCompanionTerminal() error {
 	return nil
 }
 
+func (e *ex) initFileExplorer() error {
+	// Capture current focus (the window the user came from) BEFORE
+	// creating the file explorer split; this window will be used as
+	// the target for opening files from the explorer. Save it
+	// before constructing the handler so the handler receives it.
+	prev, _ := e.comp.Focus()
+	if !prev.Closed() {
+		e.fileExplorerTarget = prev
+	}
+
+	// Create the component/buffer/editor/handler only the first time
+	// the file explorer is opened. Subsequent toggles reuse them.
+	// Re-calling e.ed.Edit on the same URI would re-subscribe the
+	// editor's per-file command handlers (fold/location/git) at the
+	// vi.Editor's internal fileCmdRegistry, which fails with
+	// "command already registered" if the previous Close path didn't
+	// fully unwind those subscriptions.
+	if e.fileExplorerHandler == nil {
+		rootURI, err := e.workspace.URI(".")
+		if err != nil {
+			return fmt.Errorf("file explorer: resolve root: %w", err)
+		}
+		buf := cell.NewBuffer()
+		comp, err := fileexplorercomp.New(buf, e.workspace, rootURI, fileexplorercomp.Config{
+			// Reuse the editor's IconSet so the explorer's glyphs
+			// (dir icon, default file icon, per-extension overrides)
+			// stay in sync with the tab bar and other IDE chrome.
+			Icons: e.config.Icons,
+			// Match the text editor's tabspaces so `>>` / `<<` in
+			// vi land the cursor on depth boundaries — the tree is
+			// rendered in the same cell buffer the editor shows.
+			IndentWidth: e.config.Tabspaces,
+			// Indent guide attributes; defaults to gray (see
+			// text.DefaultConfig) and can be overridden via
+			// editor.file_explorer.indent_attr.
+			IndentAttr: e.config.FileExplorerIndentAttr,
+		})
+		if err != nil {
+			return fmt.Errorf("file explorer: create component: %w", err)
+		}
+		uri, err := workspaceapi.ParseURI(fileExplorerURI)
+		if err != nil {
+			return fmt.Errorf("file explorer: parse uri: %w", err)
+		}
+		// Defensive: if the explorer URI is already open as a regular
+		// tab (e.g. a stale session cache restored it before filters
+		// were in place), remove that tab first. Otherwise e.ed.Edit
+		// below would re-subscribe per-file fold/location/git
+		// commands for the same URI and fail with
+		// "command already registered".
+		if existing, ok := e.comp.Resource(uri); ok {
+			if err := e.comp.RemoveTab(existing); err != nil {
+				return fmt.Errorf("file explorer: remove stale tab: %w", err)
+			}
+		}
+		ed, err := e.ed.Edit(uri, buf, false, false)
+		if err != nil {
+			return fmt.Errorf("file explorer: open editor: %w", err)
+		}
+		wrapped, err := newFileExplorerHandler(
+			exFileExplorerHost{ex: e}, comp, buf, ed, uri, e.fileExplorerTarget,
+		)
+		if err != nil {
+			return fmt.Errorf("file explorer: wrap component: %w", err)
+		}
+		e.fileExplorerHandler = wrapped
+	} else {
+		// Keep the target in sync with the latest focus.
+		e.fileExplorerHandler.SetTargetWindow(e.fileExplorerTarget)
+	}
+
+	win, err := e.comp.SplitRoot(component.AlignmentLeft, e.fileExplorerHandler)
+	if err != nil {
+		return fmt.Errorf("file explorer: create root split window: %w", err)
+	}
+	e.fileExplorerWin = win
+	e.fileExplorerHandler.SetWindow(win)
+	e.fileExplorerHandler.syncWidth()
+	_, _ = e.comp.SetFocus(prev)
+	return nil
+}
+
+func (e *ex) fexplorer(_ context.Context, args ...string) error {
+	if e.fileExplorerWin == nil || e.fileExplorerWin.Closed() {
+		e.fileExplorerWin = nil
+		if err := e.initFileExplorer(); err != nil {
+			return err
+		}
+		if e.fileExplorerWin == nil || e.fileExplorerWin.Closed() {
+			return errors.New("file explorer is not available")
+		}
+		_, _ = e.comp.SetFocus(e.fileExplorerWin)
+		return nil
+	}
+	focus, _ := e.comp.Focus()
+	if focus != e.fileExplorerWin {
+		if !focus.Closed() {
+			e.fileExplorerTarget = focus
+		}
+		_, _ = e.comp.SetFocus(e.fileExplorerWin)
+	} else {
+		prev := e.fileExplorerTarget
+		_ = e.fileExplorerWin.Close()
+		e.fileExplorerWin = nil
+		if prev != nil && !prev.Closed() {
+			_, _ = e.comp.SetFocus(prev)
+		}
+	}
+	return nil
+}
+
 func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 	h, err := e.newEmulatorHandler(args)
 	if err != nil {
@@ -2101,6 +2241,12 @@ func (e *ex) Close() (ret error) {
 		e.companionShell = nil
 		e.companionShellURI = workspaceapi.URI{}
 	}
+	if e.fileExplorerHandler != nil {
+		if err := e.fileExplorerHandler.closeEditor(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+		e.fileExplorerHandler = nil
+	}
 	if e.cmd != nil {
 		var err error
 		if e.cmdWin != nil && !e.cmdWin.Closed() {
@@ -2266,6 +2412,22 @@ func (v vteAdapter) ClearPrimaryBuffer() bool {
 
 var _ component.Scrollable = companionTerminalHandler{}
 var _ vtereservoir.VTE = companionTerminalHandler{}
+
+func (e *ex) fileExplorerHandlerInFocus() (*fileExplorerHandler, bool) {
+	if e.fileExplorerWin == nil || e.fileExplorerWin.Closed() {
+		return nil, false
+	}
+	focus, _ := e.comp.Focus()
+	if focus != e.fileExplorerWin {
+		return nil, false
+	}
+	content, err := focus.Content()
+	if err != nil {
+		return nil, false
+	}
+	h, ok := content.(*fileExplorerHandler)
+	return h, ok
+}
 
 // Aids in ensure that Close is not called when window is closed:
 // session should remain open as long as this workspace is not closed.

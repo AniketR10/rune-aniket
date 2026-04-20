@@ -627,6 +627,15 @@ var (
 				return iterator.FromSlice[string](nil), "", nil
 			},
 		},
+		"fexplorer": {
+			man: textapi.CommandManual{
+				Summary: "Toggle the file explorer floating window. " +
+					"The file explorer is a pre-minimized floating window on the left side. " +
+					"Invoking this command will un-minimize and focus the file explorer, " +
+					"or minimize it back if it is already open.",
+			},
+			handler: (*ex).fexplorer,
+		},
 	}
 
 	manSplitWindow = commandAll{

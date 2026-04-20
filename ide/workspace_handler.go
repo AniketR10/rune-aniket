@@ -763,6 +763,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithMarkdownConfig(markdownConfig),
 		text.WithClipboard(h.clip),
 		text.WithOpenRouter(h),
+		text.WithFileExplorerIndentAttr(cfg.fileExplorerIndentAttr()),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
@@ -1103,6 +1104,14 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 ) (err error) {
 	invokeWindow := ex.invokeWindow()
 	for _, f := range files {
+		// Skip the file explorer singleton: it is re-opened via
+		// :fexplorer and must not be restored as a regular tab,
+		// otherwise ex.initFileExplorer would call Edit a second
+		// time on the same URI and fail with
+		// "command already registered".
+		if f.URIString == fileExplorerURI {
+			continue
+		}
 		uri, uerr := workspaceapi.ParseURI(f.URIString)
 		// do not hard error, otherwise changes to storage representation
 		// could prevent user from opening editor at all

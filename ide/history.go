@@ -215,6 +215,14 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 	}
 
 	evUriStr := ev.URI.String()
+	// Never record the file explorer's in-memory buffer. It is
+	// managed by ex.initFileExplorer as a singleton editor; letting
+	// it participate in session history would cause the next session
+	// to restore it as a tab, which then calls Edit a second time
+	// on the same URI and fails with "command already registered".
+	if evUriStr == fileExplorerURI {
+		return false
+	}
 	prev, ok := workspaceCache.Files[evUriStr]
 
 	switch ev.Type {

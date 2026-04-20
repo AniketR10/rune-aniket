@@ -896,6 +896,9 @@ func (c ideConfig) icons() (ret text.IconSet) {
 	if _, ok := m["default"]; ok {
 		ret.Default = c.getSpecialIcon(m, "default")
 	}
+	if _, ok := m["directory"]; ok {
+		ret.Directory = c.getSpecialIcon(m, "directory")
+	}
 	if _, ok := m["terminal"]; ok {
 		ret.Terminal = c.getSpecialIcon(m, "terminal")
 	}
@@ -1331,6 +1334,44 @@ func (c ideConfig) statusBar() (config.Config, bool) {
 		return nil, false
 	}
 	return cfg, true
+}
+
+// fileExplorer returns the editor.file_explorer config block, if any.
+// Settings nested here tune the :fexplorer UI (indent guide color,
+// future knobs) without affecting the code editor itself.
+func (c ideConfig) fileExplorer() (config.Config, bool) {
+	cfg, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	cfg, err := cfg.GetConfig("file_explorer")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.file_explorer"] = err
+		}
+		return nil, false
+	}
+	return cfg, true
+}
+
+// fileExplorerIndentAttr returns the attributes used to render the
+// indent guide runes drawn at the start of every depth level in the
+// file explorer. Defaults to a gray foreground so the guides recede
+// visually behind file names.
+func (c ideConfig) fileExplorerIndentAttr() term.Attributes {
+	def := term.Attributes{Fg: tcell.ColorGray}
+	cfg, ok := c.fileExplorer()
+	if !ok {
+		return def
+	}
+	attrs, err := config.GetAttributes(cfg, "indent_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.file_explorer.indent_attr"] = err
+		}
+		return def
+	}
+	return attrs
 }
 
 func (c ideConfig) auxiliaryBarEnabled() bool {

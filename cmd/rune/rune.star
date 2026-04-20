@@ -354,6 +354,7 @@ config = {
         "icons": {
             "default":  "",
             "terminal": "",
+            "directory": "",
         },
     },
     # Built-in extension configuration. Keys are identifiers only.
@@ -445,6 +446,7 @@ config = {
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.
         "key_bindings": {
+            "<s-tab>":        "fexplorer",
             "<m-r>":          "history",
             "<m-,>":          "config",
             "<m-q>":          "quit",

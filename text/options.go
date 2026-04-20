@@ -87,6 +87,10 @@ type Config struct {
 	Markdown                markdown.Config
 	Clipboard               clipboard.Register
 	OpenRouter              OpenRouter
+	// FileExplorerIndentAttr selects the attributes applied to the
+	// indent guide rune drawn at the start of every depth level in
+	// the file explorer. Defaults to tcell.ColorGray when zero.
+	FileExplorerIndentAttr term.Attributes
 
 	EventPublisher func(term.Event) bool
 
@@ -97,6 +101,7 @@ type Config struct {
 // IconSet is used to render icons next to file names in tabs.
 type IconSet struct {
 	Extensions map[string]rune
+	Directory  rune
 	Default    rune
 	Terminal   rune
 	Shell      rune
@@ -141,8 +146,10 @@ func DefaultConfig() Config {
 		Markdown:                markdown.DefaultConfig(),
 		Clipboard:               clipboard.NewInMemory(),
 		OpenRouter:              nopOpenRouter{},
+		FileExplorerIndentAttr:  term.Attributes{Fg: tcell.ColorGray},
 		Icons: IconSet{
 			Extensions: map[string]rune{},
+			Directory:  '',
 			Default:    'o',
 			Terminal:   '$',
 			Shell:      '',
@@ -378,6 +385,14 @@ func WithPromptConfig(c browser.PromptConfig) Option {
 func WithIconSet(icons IconSet) Option {
 	return func(cfg *Config) {
 		cfg.Icons = icons
+	}
+}
+
+// WithFileExplorerIndentAttr sets the attributes used to render the
+// indent guide rune of every depth level in the file explorer.
+func WithFileExplorerIndentAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.FileExplorerIndentAttr = attr
 	}
 }
 
