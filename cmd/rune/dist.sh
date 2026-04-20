@@ -7,10 +7,10 @@
 #   BLUE_TARGET_ARCH    - target arch (e.g. amd64, arm64)
 #
 # Optional:
-#   DOWNLOADS_BUCKET    - GCS bucket (default: gs://downloads.rune-editor.com)
+#   DOWNLOADS_BUCKET    - GCS bucket (default: gs://downloads.rune.build)
 set -e
 
-DOWNLOADS_BUCKET="${DOWNLOADS_BUCKET:-gs://downloads.rune-editor.com}"
+DOWNLOADS_BUCKET="${DOWNLOADS_BUCKET:-gs://downloads.rune.build}"
 
 GIT_TAG=$(git describe --tags --dirty)
 

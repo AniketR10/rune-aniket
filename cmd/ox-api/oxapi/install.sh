@@ -21,7 +21,7 @@
 
 set -eu
 
-RUNE_DOWNLOAD_HOST="${RUNE_DOWNLOAD_HOST:-https://downloads.rune-editor.com}"
+RUNE_DOWNLOAD_HOST="${RUNE_DOWNLOAD_HOST:-https://downloads.rune.build}"
 
 main() {
     platform="$(uname -s)"

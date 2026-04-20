@@ -69,7 +69,7 @@ func DefaultConfig() Config {
 		CacheMaxEntries: 100,
 		MaxContentChars: 50000,
 		UserAgent: "Mozilla/5.0 (compatible; RuneAgent/1.0;" +
-			" +https://rune-editor.com)",
+			" +https://rune.build)",
 	}
 }
 
