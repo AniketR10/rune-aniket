@@ -514,6 +514,66 @@ func TestLoadWorkspaceConfigStar(t *testing.T) {
 	assert.Equal(t, "debug", c.cfg["log_level"])
 }
 
+func TestLoadWorkspaceConfigStarOverridesExtensionConfigFromBase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.star")
+	require.NoError(t, os.WriteFile(path, []byte(`
+config["extensions"]["git"]["config"]["from_star"] = "star"
+config["extensions"]["git"]["config"]["nested"]["override"] = "star"
+`), 0o644))
+
+	c := &ideConfig{cfg: map[string]any{
+		"extensions": map[string]any{
+			"git": map[string]any{
+				"path": "myPath",
+				"config": map[string]any{
+					"from_base": "base",
+					"nested": map[string]any{
+						"keep":     "yes",
+						"override": "base",
+					},
+				},
+			},
+		},
+	}, errors: map[string]error{}}
+	uri, err := workspaceapi.CurrentUserHostURI(dir)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	defer ws.Close()
+
+	isConfigErr, err := loadWorkspaceConfig("config.star", ws, uri, c)
+	require.NoError(t, err)
+	assert.False(t, isConfigErr)
+
+	exts := c.extensions()
+	gitExt, ok := exts["git"]
+	require.True(t, ok)
+
+	extCfg, ok := gitExt.config()
+	require.True(t, ok)
+
+	fromBase, err := extCfg.GetString("from_base")
+	require.NoError(t, err)
+	assert.Equal(t, "base", fromBase)
+
+	fromStar, err := extCfg.GetString("from_star")
+	require.NoError(t, err)
+	assert.Equal(t, "star", fromStar)
+
+	nested, err := extCfg.GetConfig("nested")
+	require.NoError(t, err)
+
+	keep, err := nested.GetString("keep")
+	require.NoError(t, err)
+	assert.Equal(t, "yes", keep)
+
+	override, err := nested.GetString("override")
+	require.NoError(t, err)
+	assert.Equal(t, "star", override)
+}
+
 func TestLoadWorkspaceConfigYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

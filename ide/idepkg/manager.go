@@ -55,6 +55,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -637,6 +638,12 @@ func (m *Manager) download(
 	}
 
 	configFile := filepath.Join(pkgVersionDirname, "config.yaml")
+	if _, statErr := os.Stat(configFile); os.IsNotExist(statErr) {
+		starFile := filepath.Join(pkgVersionDirname, "config.star")
+		if _, starErr := os.Stat(starFile); starErr == nil {
+			configFile = starFile
+		}
+	}
 
 	err = m.processConfig(pkgID, version, configFile)
 	if err != nil {
@@ -784,8 +791,18 @@ func (m *Manager) promptConfigChange(
 		m.log(log.InfoLevel, "created config backup "+
 			"before applying package updates: %s", backup)
 
-		if err := writeYAMLAtomic(m.configPath, userDoc, pkgDoc.Content[0]); err != nil {
-			return fmt.Errorf("write config: %w", err)
+		if strings.HasSuffix(strings.ToLower(m.configPath), ".star") {
+			mergedCfg, err := loadIdePkgConfigFromYAMLDoc(userDoc)
+			if err != nil {
+				return fmt.Errorf("decode merged yaml doc: %w", err)
+			}
+			if err := starlarkconfig.WriteConfigFileAtomic(m.configPath, mergedCfg); err != nil {
+				return fmt.Errorf("write starlark config: %w", err)
+			}
+		} else {
+			if err := writeYAMLAtomic(m.configPath, userDoc, pkgDoc.Content[0]); err != nil {
+				return fmt.Errorf("write config: %w", err)
+			}
 		}
 
 		return nil
@@ -842,7 +859,7 @@ func (m *Manager) processConfig(
 ) error {
 	_, err := os.Stat(pkgConfigFile)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("stat config.yaml: %v", err)
+		return fmt.Errorf("stat config: %v", err)
 	}
 	if err != nil {
 		return nil
@@ -851,16 +868,16 @@ func (m *Manager) processConfig(
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
-
-	var pkgDoc yaml.Node
-	if err := yaml.Unmarshal(data, &pkgDoc); err != nil {
-		return fmt.Errorf("unmarshal config: %w", err)
-	}
-	if pkgDoc.Kind != yaml.DocumentNode || len(pkgDoc.Content) == 0 {
+	if _, statErr := os.Stat(m.configPath); os.IsNotExist(statErr) {
 		return nil
 	}
 
-	expandNodeValues(&pkgDoc, func(key string) string {
+	userCfg, err := loadIdePkgConfigFile(m.configPath)
+	if err != nil {
+		return fmt.Errorf("load user config: %w", err)
+	}
+
+	runeVarMapping := func(key string) string {
 		switch key {
 		case "RUNE_DATADIR":
 			return m.dataDir
@@ -870,24 +887,55 @@ func (m *Manager) processConfig(
 			return string(pkgVersion)
 		}
 		return ""
-	})
-
-	if _, statErr := os.Stat(m.configPath); os.IsNotExist(statErr) {
-		return nil
 	}
 
-	userDoc, err := loadOrCreateUserConfig(m.configPath)
+	// Decode the package's contribution against an empty base. For YAML
+	// packages this yields the package map as-is; for Starlark packages
+	// it runs the script with predeclared `config = {}` so the script can
+	// mutate it freely without seeing the user's config. The result is
+	// the set of changes the package wants to apply.
+	pkgOverlayCfg, err := loadIdePkgConfigOverlay(
+		pkgConfigFile, data, map[string]any{},
+		pkgID, pkgVersion, m.dataDir,
+	)
 	if err != nil {
-		return fmt.Errorf("load user config: %w", err)
+		return fmt.Errorf("decode package config: %w", err)
 	}
+	if len(pkgOverlayCfg) == 0 {
+		return nil
+	}
+	// YAML packages carry unexpanded `$RUNE_*` placeholders in their
+	// values; expand them before comparing to the user's already-expanded
+	// config so "already merged" is detected correctly. Starlark scripts
+	// resolve these variables at evaluation time, so expansion is a no-op
+	// for them.
+	expandMapValues(pkgOverlayCfg, runeVarMapping)
 
-	// Skip prompt and merge if the package config is already present
-	// in the user config.
-	if verifyMerge(userDoc.Content[0], pkgDoc.Content[0]) == nil {
+	if idePkgVerifyMergeMap(userCfg, pkgOverlayCfg) == nil {
 		return nil
 	}
 
-	err = m.promptConfigChange(pkgID, pkgVersion, data, userDoc, &pkgDoc)
+	// Re-run the package overlay against the actual user config to produce
+	// the merged result the prompt will show and apply.
+	pkgCfg, err := loadIdePkgConfigOverlay(
+		pkgConfigFile, data, userCfg, pkgID, pkgVersion, m.dataDir,
+	)
+	if err != nil {
+		return fmt.Errorf("decode merged package config: %w", err)
+	}
+
+	pkgDoc, err := mapToYAMLDocument(pkgCfg)
+	if err != nil {
+		return fmt.Errorf("package config to yaml: %w", err)
+	}
+	userDoc, err := mapToYAMLDocument(userCfg)
+	if err != nil {
+		return fmt.Errorf("user config to yaml: %w", err)
+	}
+
+	expandNodeValues(pkgDoc, runeVarMapping)
+
+	err = m.promptConfigChange(pkgID, pkgVersion, data, userDoc, pkgDoc)
 	if err != nil {
 		return fmt.Errorf("prompt config change: %w", err)
 	}
@@ -919,7 +967,147 @@ func (m *Manager) untar(tarfile *os.File, dirname string) (string, []*tar.Header
 	}
 
 	configFile := filepath.Join(dirname, "config.yaml")
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		starFile := filepath.Join(dirname, "config.star")
+		if _, starErr := os.Stat(starFile); starErr == nil {
+			configFile = starFile
+		}
+	}
 	return configFile, executables, nil
+}
+
+func loadIdePkgConfigFile(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return loadIdePkgConfigFromBytes(path, data, "", "", "")
+}
+
+// idePkgStarlarkParams builds the predeclared globals exposed to package
+// and user config.star scripts. Empty values are omitted so scripts can
+// detect absence via `"RUNE_PKG_ID" not in dir()`-style checks.
+func idePkgStarlarkParams(pkgID string, pkgVersion release.Version, dataDir string) map[string]any {
+	params := map[string]any{}
+	if dataDir != "" {
+		params["RUNE_DATADIR"] = dataDir
+	}
+	if pkgID != "" {
+		params["RUNE_PKG_ID"] = pkgID
+	}
+	if pkgVersion != "" {
+		params["RUNE_PKG_VERSION"] = string(pkgVersion)
+	}
+	return params
+}
+
+func loadIdePkgConfigFromBytes(
+	filename string, data []byte,
+	pkgID string, pkgVersion release.Version, dataDir string,
+) (map[string]any, error) {
+	if strings.HasSuffix(strings.ToLower(filename), ".star") {
+		return starlarkconfig.Decode(starlarkconfig.Source{
+			Src:      data,
+			Filename: filename,
+			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir),
+		})
+	}
+	if len(data) == 0 {
+		return map[string]any{}, nil
+	}
+	var cfg map[string]any
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return normalizeIdePkgConfig(cfg).(map[string]any), nil
+}
+
+func loadIdePkgConfigOverlay(
+	filename string, data []byte, base map[string]any,
+	pkgID string, pkgVersion release.Version, dataDir string,
+) (map[string]any, error) {
+	if strings.HasSuffix(strings.ToLower(filename), ".star") {
+		return starlarkconfig.Decode(starlarkconfig.Source{
+			Src:      data,
+			Filename: filename,
+			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir),
+			Base:     base,
+		})
+	}
+	return loadIdePkgConfigFromBytes(filename, data, pkgID, pkgVersion, dataDir)
+}
+
+func normalizeIdePkgConfig(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = normalizeIdePkgConfig(val)
+		}
+		return out
+	case map[any]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k.(string)] = normalizeIdePkgConfig(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = normalizeIdePkgConfig(val)
+		}
+		return out
+	default:
+		return t
+	}
+}
+
+func idePkgVerifyMergeMap(written, expected map[string]any) error {
+	for key, expVal := range expected {
+		wVal, ok := written[key]
+		if !ok {
+			return fmt.Errorf("key %q missing from written config", key)
+		}
+		expMap, expIsMap := expVal.(map[string]any)
+		wMap, wIsMap := wVal.(map[string]any)
+		if expIsMap {
+			if !wIsMap {
+				return fmt.Errorf("key %q: expected mapping node", key)
+			}
+			if err := idePkgVerifyMergeMap(wMap, expMap); err != nil {
+				return fmt.Errorf("key %q: %w", key, err)
+			}
+			continue
+		}
+		if fmt.Sprint(wVal) != fmt.Sprint(expVal) {
+			return fmt.Errorf("key %q: expected %q, got %q", key, fmt.Sprint(expVal), fmt.Sprint(wVal))
+		}
+	}
+	return nil
+}
+
+func mapToYAMLDocument(cfg map[string]any) (*yaml.Node, error) {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func loadIdePkgConfigFromYAMLDoc(doc *yaml.Node) (map[string]any, error) {
+	data, err := yaml.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	var cfg map[string]any
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return normalizeIdePkgConfig(cfg).(map[string]any), nil
 }
 
 func newReadyIterator(

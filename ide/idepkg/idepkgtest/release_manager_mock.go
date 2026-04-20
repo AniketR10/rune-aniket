@@ -24,8 +24,12 @@
 package idepkgtest
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/unstablebuild/blue/iterator"
@@ -187,6 +191,12 @@ func (t *ReleaseManager) Get(
 			} else {
 				_, err = writer.Write(configPkgTar)
 			}
+		case "configpkgstar":
+			var buf []byte
+			buf, err = makeConfigPkgStarTar()
+			if err == nil {
+				_, err = writer.Write(buf)
+			}
 		}
 
 	})
@@ -243,4 +253,49 @@ func (t *ReleaseManager) callHook() {
 	if hook != nil {
 		hook()
 	}
+}
+
+func makeConfigPkgStarTar() ([]byte, error) {
+	files := map[string]string{
+		"config.star": `if "env" not in config:
+    config["env"] = {}
+config["env"]["GOROOT"] = RUNE_DATADIR + "/pkg/" + RUNE_PKG_ID + "/" + RUNE_PKG_VERSION + "/go"
+
+if "settings" not in config:
+    config["settings"] = {}
+config["settings"]["theme"] = "dark"
+config["settings"]["indent"] = 4
+`,
+		"lib/readme.txt": "# lib placeholder\n",
+	}
+
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+
+	for name, content := range files {
+		hdr := &tar.Header{
+			Name: name,
+			Mode: 0o644,
+			Size: int64(len(content)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			_ = tw.Close()
+			_ = gzw.Close()
+			return nil, fmt.Errorf("write tar header %s: %w", name, err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			_ = tw.Close()
+			_ = gzw.Close()
+			return nil, fmt.Errorf("write tar content %s: %w", name, err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		_ = gzw.Close()
+		return nil, fmt.Errorf("close tar writer: %w", err)
+	}
+	if err := gzw.Close(); err != nil {
+		return nil, fmt.Errorf("close gzip writer: %w", err)
+	}
+	return buf.Bytes(), nil
 }

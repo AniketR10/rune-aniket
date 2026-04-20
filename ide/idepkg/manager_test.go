@@ -1193,6 +1193,13 @@ func readUserConfig(t *testing.T, datadir string) *yaml.Node {
 	return &doc
 }
 
+func readUserConfigMap(t *testing.T, path string) map[string]any {
+	t.Helper()
+	cfg, err := loadIdePkgConfigFile(path)
+	require.NoError(t, err)
+	return cfg
+}
+
 func assertYAMLKey(t *testing.T, mapping *yaml.Node, key, expected string) {
 	t.Helper()
 	idx := findMappingKey(mapping, key)
@@ -1354,6 +1361,83 @@ func TestProcessInstalledSettingsConfig(t *testing.T) {
 		_, err = os.Stat(filepath.Join(datadir, "config.yaml"))
 		assert.True(t, os.IsNotExist(err))
 	})
+}
+
+func TestInstallPackageVersionConfigCrossFormat(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		userConfigName string
+		userConfig     string
+		pkgName        string
+		wantGOROOT     string
+		wantTheme      string
+		wantIndent     string
+	}{
+		{
+			name:           "extension config yaml onto user config yaml",
+			userConfigName: "config.yaml",
+			userConfig:     "{}\n",
+			pkgName:        "configpkg",
+			wantTheme:      "dark",
+			wantIndent:     "4",
+		},
+		{
+			name:           "extension config star onto user config star",
+			userConfigName: "config.star",
+			userConfig:     "config = {}\n",
+			pkgName:        "configpkgstar",
+			wantTheme:      "dark",
+			wantIndent:     "4",
+		},
+		{
+			name:           "extension config star onto user config yaml",
+			userConfigName: "config.yaml",
+			userConfig:     "{}\n",
+			pkgName:        "configpkgstar",
+			wantTheme:      "dark",
+			wantIndent:     "4",
+		},
+		{
+			name:           "extension config yaml onto user config star",
+			userConfigName: "config.star",
+			userConfig:     "config = {}\n",
+			pkgName:        "configpkg",
+			wantTheme:      "dark",
+			wantIndent:     "4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pkgs := idepkgtest.MakePackages()
+			versions := idepkgtest.MakeBundles([]release.Bundle{{Package: tt.pkgName, Version: "1"}})
+			m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+			configPath := filepath.Join(datadir, tt.userConfigName)
+			m.configPath = configPath
+			require.NoError(t, os.WriteFile(configPath, []byte(tt.userConfig), 0o644))
+
+			n.SetWg(2) // apply success + download success
+			err := m.InstallPackageVersion(context.Background(), tt.pkgName, "1")
+			require.NoError(t, err)
+			n.Wait()
+			n.RequireNoErrorNotification()
+
+			cfg := readUserConfigMap(t, configPath)
+
+			env, ok := cfg["env"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, filepath.Join(datadir, "pkg", tt.pkgName, "1", "go"), env["GOROOT"])
+
+			settings, ok := cfg["settings"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantTheme, fmt.Sprint(settings["theme"]))
+			assert.Equal(t, tt.wantIndent, fmt.Sprint(settings["indent"]))
+		})
+	}
 }
 
 func TestPromptConfigChangeRender(t *testing.T) {

@@ -128,6 +128,32 @@ func expandNodeValues(n *yaml.Node, mapping func(string) string) {
 	}
 }
 
+// expandMapValues walks cfg in place, applying os.Expand to every string
+// value using the given mapping function. Nested maps and slices are
+// traversed recursively; non-string scalars are left untouched.
+func expandMapValues(cfg map[string]any, mapping func(string) string) {
+	for k, v := range cfg {
+		cfg[k] = expandAnyValue(v, mapping)
+	}
+}
+
+func expandAnyValue(v any, mapping func(string) string) any {
+	switch t := v.(type) {
+	case string:
+		return os.Expand(t, mapping)
+	case map[string]any:
+		expandMapValues(t, mapping)
+		return t
+	case []any:
+		for i, elem := range t {
+			t[i] = expandAnyValue(elem, mapping)
+		}
+		return t
+	default:
+		return v
+	}
+}
+
 // backupUserConfig copies path to path+".backup" before any write.
 // It is a no-op if the source file does not exist.
 func backupUserConfig(path string) (string, error) {
