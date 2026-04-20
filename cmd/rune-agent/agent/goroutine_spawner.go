@@ -143,13 +143,6 @@ func (s *GoroutineSpawner) Run(
 		)
 	}
 
-	if req.TimeoutSeconds < 0 {
-		return RunHandle{}, fmt.Errorf(
-			"timeoutSeconds must be >= 0, got %d",
-			req.TimeoutSeconds,
-		)
-	}
-
 	model := req.Model
 	if model == "" {
 		model = def.Model
@@ -199,13 +192,13 @@ func (s *GoroutineSpawner) Run(
 		SubAgent:            true,
 	})
 
-	var runCtx context.Context
-	var cancel context.CancelFunc
-	if req.TimeoutSeconds > 0 {
-		runCtx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutSeconds)*time.Second)
-	} else {
-		runCtx, cancel = context.WithCancel(ctx)
-	}
+	// Sub-agent runs inherit the caller's cancellation but have no
+	// artificial deadline: a tool call may block indefinitely on user
+	// input (e.g. ideauthorizer permission prompts), and a deadline
+	// would cause those to fail spuriously. Cancellation still flows
+	// from session teardown and from the parent agent closing the
+	// returned iterator.
+	runCtx, cancel := context.WithCancel(ctx)
 
 	inner := ag.Run(runCtx, dialogueID, req.Message)
 	it := &spawnerIterator{

@@ -208,7 +208,6 @@ func TestAgentTool(t *testing.T) {
 				"prompt":"find all tests",
 				"subagent_type":"coder",
 				"model":"gpt-4",
-				"timeoutSeconds":30,
 				"cleanup":"delete"
 			}`,
 		)
@@ -218,7 +217,6 @@ func TestAgentTool(t *testing.T) {
 		assert.Equal(t, "search code", req.Label)
 		assert.Equal(t, "coder", req.AgentID)
 		assert.Equal(t, "gpt-4", req.Model)
-		assert.Equal(t, 30, req.TimeoutSeconds)
 		assert.Equal(t, "delete", req.Cleanup)
 	})
 

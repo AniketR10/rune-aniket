@@ -269,7 +269,6 @@ Prompt content`)
 		assert.Equal(t, "find all tests", spawner.lastRunReq.Message)
 		assert.Equal(t, []string{"read_file", "search_content"}, spawner.lastRunReq.AllowedTools)
 		assert.Equal(t, "You are a researcher.", spawner.lastRunReq.SystemPrompt)
-		assert.Equal(t, 0, spawner.lastRunReq.TimeoutSeconds)
 	})
 
 	t.Run("agent skill uses body as task when no args", func(t *testing.T) {

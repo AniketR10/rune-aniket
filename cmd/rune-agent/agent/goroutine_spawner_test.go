@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,9 +61,8 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 			},
 			agentID: "agent",
 			req: RunRequest{
-				AgentID:        "agent",
-				Message:        "hello",
-				TimeoutSeconds: 5,
+				AgentID: "agent",
+				Message: "hello",
 			},
 			assertFn: func(t *testing.T, handle RunHandle) {
 				assert.NotEmpty(t, handle.SessionKey)
@@ -81,9 +81,8 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 			},
 			agentID: "agent",
 			req: RunRequest{
-				AgentID:        "unknown",
-				Message:        "hello",
-				TimeoutSeconds: 5,
+				AgentID: "unknown",
+				Message: "hello",
 			},
 			wantErr: "no agent or agent skill",
 		},
@@ -104,9 +103,8 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 			},
 			agentID: "parent",
 			req: RunRequest{
-				AgentID:        "forbidden",
-				Message:        "hello",
-				TimeoutSeconds: 5,
+				AgentID: "forbidden",
+				Message: "hello",
 			},
 			wantErr: "no agent or agent skill",
 		},
@@ -126,27 +124,6 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 				Cleanup: "invalid",
 			},
 			wantErr: "invalid cleanup value",
-		},
-		{
-			name: "zero timeout means no timeout (cancel-only)",
-			defs: []Definition{
-				{
-					ID:       "agent",
-					Name:     "Agent",
-					Model:    "test-model",
-					AllowAny: true,
-				},
-			},
-			agentID: "agent",
-			req: RunRequest{
-				AgentID:        "agent",
-				Message:        "hello",
-				TimeoutSeconds: 0,
-			},
-			assertFn: func(t *testing.T, handle RunHandle) {
-				reply := consumeReply(t, handle)
-				assert.Equal(t, "reply text", reply)
-			},
 		},
 	}
 
@@ -213,19 +190,17 @@ func TestGoroutineSpawner_Run_uses_request_model(t *testing.T) {
 
 	// Run without Model: should use the agent definition's model.
 	handle, err := spawner.Run(context.Background(), RunRequest{
-		AgentID:        "agent",
-		Message:        "hello",
-		TimeoutSeconds: 5,
+		AgentID: "agent",
+		Message: "hello",
 	})
 	require.NoError(t, err)
 	consumeReply(t, handle)
 
 	// Run with Model override: should use the requested model.
 	handle, err = spawner.Run(context.Background(), RunRequest{
-		AgentID:        "agent",
-		Message:        "hello",
-		Model:          "claude-3-haiku",
-		TimeoutSeconds: 5,
+		AgentID: "agent",
+		Message: "hello",
+		Model:   "claude-3-haiku",
 	})
 	require.NoError(t, err)
 	consumeReply(t, handle)
@@ -310,11 +285,10 @@ func TestGoroutineSpawner_RunWithAllowedTools(t *testing.T) {
 	spawner.SetRegistry(NewRegistry(readTool, bashTool))
 
 	handle, err := spawner.Run(context.Background(), RunRequest{
-		AgentID:        "agent",
-		Message:        "read a file",
-		TimeoutSeconds: 5,
-		AllowedTools:   []string{"read_file"},
-		SystemPrompt:   "You are a reader.",
+		AgentID:      "agent",
+		Message:      "read a file",
+		AllowedTools: []string{"read_file"},
+		SystemPrompt: "You are a reader.",
 	})
 	require.NoError(t, err)
 	reply := consumeReply(t, handle)
@@ -355,9 +329,8 @@ func TestGoroutineSpawner_Run_streams_events(t *testing.T) {
 	spawner.SetRegistry(NewRegistry(readTool))
 
 	handle, err := spawner.Run(context.Background(), RunRequest{
-		AgentID:        "agent",
-		Message:        "read a file",
-		TimeoutSeconds: 5,
+		AgentID: "agent",
+		Message: "read a file",
 	})
 	require.NoError(t, err)
 	defer handle.Events.Close() //nolint:errcheck
@@ -390,6 +363,136 @@ func TestGoroutineSpawner_Run_streams_events(t *testing.T) {
 	assert.True(t, hasToolResult, "should stream EventToolResult")
 	assert.True(t, hasText, "should stream EventText")
 	assert.True(t, hasDone, "should stream EventDone")
+}
+
+// TestGoroutineSpawner_Run_no_tool_deadline verifies that tool
+// executions inside a spawned sub-agent run without any artificial
+// deadline. This is the fix for RUNE-AGENT-70: a tool call that
+// blocks on user input (e.g. bash waiting for an ideauthorizer
+// permission prompt) must not be aborted by a rune-agent-imposed
+// sub-agent timeout. The caller's cancellation must still propagate.
+func TestGoroutineSpawner_Run_no_tool_deadline(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "test-model",
+			AllowAny: true,
+		},
+	})
+
+	svc := &mockService{
+		responses: []mockResponse{
+			toolCallResponse("block", `{}`, "tc1"),
+			stopResponse("done"),
+		},
+	}
+
+	var capturedDeadlineOK bool
+	var capturedHasDeadline bool
+	blockTool := &mockTool{
+		name:   "block",
+		result: ToolResult{Content: "ok"},
+		executeFn: func(ctx context.Context, _ string) ToolResult {
+			_, capturedHasDeadline = ctx.Deadline()
+			capturedDeadlineOK = true
+			return ToolResult{Content: "ok"}
+		},
+	}
+	spawner := NewGoroutineSpawner(
+		newMockStore(),
+		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session", "agent",
+	)
+	spawner.SetRegistry(NewRegistry(blockTool))
+
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		AgentID: "agent",
+		Message: "call tool",
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	require.True(t, capturedDeadlineOK, "tool must have been executed")
+	assert.False(t, capturedHasDeadline,
+		"sub-agent tool context must not carry a rune-agent-imposed deadline")
+}
+
+// TestGoroutineSpawner_Run_caller_cancel_propagates verifies that
+// cancelling the caller context still terminates the sub-agent run.
+// Removing the sub-agent timeout must not break cancellation — only
+// explicit caller/session cancellation ends the run.
+func TestGoroutineSpawner_Run_caller_cancel_propagates(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			Model:    "test-model",
+			AllowAny: true,
+		},
+	})
+
+	// Tool blocks on ctx.Done so we can observe cancellation plumbing.
+	toolEntered := make(chan struct{})
+	toolErr := make(chan error, 1)
+	blockTool := &mockTool{
+		name: "block",
+		executeFn: func(ctx context.Context, _ string) ToolResult {
+			close(toolEntered)
+			<-ctx.Done()
+			toolErr <- ctx.Err()
+			return ToolResult{Content: "cancelled", IsError: true}
+		},
+	}
+
+	svc := &mockService{
+		responses: []mockResponse{
+			toolCallResponse("block", `{}`, "tc1"),
+			stopResponse("done"),
+		},
+	}
+	spawner := NewGoroutineSpawner(
+		newMockStore(),
+		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session", "agent",
+	)
+	spawner.SetRegistry(NewRegistry(blockTool))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	handle, err := spawner.Run(ctx, RunRequest{
+		AgentID: "agent",
+		Message: "call tool",
+	})
+	require.NoError(t, err)
+
+	// Drain events in the background until the iterator closes.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := handle.Events.Next(context.Background()); !ok {
+				return
+			}
+		}
+	}()
+
+	// Once the tool is running, cancel the caller context.
+	<-toolEntered
+	cancel()
+
+	select {
+	case err := <-toolErr:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("tool was not notified of cancellation")
+	}
+	<-done
 }
 
 func TestGoroutineSpawner_RunWithLabel(t *testing.T) {

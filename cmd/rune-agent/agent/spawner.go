@@ -36,14 +36,13 @@ type Spawner interface {
 
 // RunRequest is a request to run a sub-agent.
 type RunRequest struct {
-	Message        string
-	Label          string
-	AgentID        string
-	Model          string
-	TimeoutSeconds int      // 0 = no timeout
-	AllowedTools   []string // if non-empty, sub-agent receives only these tools
-	SystemPrompt   string   // if non-empty, overrides the agent definition's prompt
-	Cleanup        string   // "delete" or "keep"
+	Message      string
+	Label        string
+	AgentID      string
+	Model        string
+	AllowedTools []string // if non-empty, sub-agent receives only these tools
+	SystemPrompt string   // if non-empty, overrides the agent definition's prompt
+	Cleanup      string   // "delete" or "keep"
 }
 
 // RunHandle is the result of a Run call.

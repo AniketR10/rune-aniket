@@ -63,12 +63,11 @@ type agentTool struct {
 }
 
 type agentArgs struct {
-	Description    string `json:"description"`
-	Prompt         string `json:"prompt"`
-	SubagentType   string `json:"subagent_type"`
-	Model          string `json:"model"`
-	TimeoutSeconds int    `json:"timeoutSeconds"`
-	Cleanup        string `json:"cleanup"`
+	Description  string `json:"description"`
+	Prompt       string `json:"prompt"`
+	SubagentType string `json:"subagent_type"`
+	Model        string `json:"model"`
+	Cleanup      string `json:"cleanup"`
 }
 
 func (t *agentTool) Definition() llm.Tool {
@@ -95,11 +94,6 @@ func (t *agentTool) Definition() llm.Tool {
 					"model": map[string]any{
 						"type":        []string{"string", "null"},
 						"description": "Optional model override for the sub-agent.",
-					},
-					"timeoutSeconds": map[string]any{
-						"type":        []string{"integer", "null"},
-						"minimum":     0,
-						"description": "Max runtime in seconds (0 = no limit).",
 					},
 					"cleanup": map[string]any{
 						"type":        []string{"string", "null"},
@@ -194,12 +188,11 @@ func (t *agentTool) Execute(
 	}
 
 	handle, err := t.spawner.Run(ctx, agent.RunRequest{
-		Message:        args.Prompt,
-		Label:          args.Description,
-		AgentID:        args.SubagentType,
-		Model:          args.Model,
-		TimeoutSeconds: args.TimeoutSeconds,
-		Cleanup:        args.Cleanup,
+		Message: args.Prompt,
+		Label:   args.Description,
+		AgentID: args.SubagentType,
+		Model:   args.Model,
+		Cleanup: args.Cleanup,
 	})
 	if err != nil {
 		return agent.ToolResult{
