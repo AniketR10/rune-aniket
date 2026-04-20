@@ -41,6 +41,7 @@ import (
 
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/auth/grpcauth"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -113,12 +114,13 @@ func NewAuthorizer(
 	editor text.Editor,
 	promptOpener PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
+	notifications browserapi.Notifications,
 ) (*Authorizer, error) {
 	if editor == nil {
 		return nil, errors.New("editor is required")
 	}
 	a := &Authorizer{
-		prompter: newPermissionPrompter(promptOpener, scheduleNextTick),
+		prompter: newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
 	}

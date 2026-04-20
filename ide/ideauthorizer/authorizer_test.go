@@ -27,12 +27,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	blueauth "github.com/unstablebuild/blue/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
@@ -97,6 +99,49 @@ func syncScheduleNextTick(fn func()) bool {
 	return true
 }
 
+// capturingNotifications is a test double for browserapi.Notifications
+// that records each emitted notification so tests can assert that a
+// warning notification was delivered.
+type capturingNotifications struct {
+	mu            sync.Mutex
+	notifications []capturedNotification
+}
+
+type capturedNotification struct {
+	Level browserapi.NotificationLevel
+	Msg   string
+}
+
+func (n *capturingNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.notifications = append(n.notifications, capturedNotification{
+		Level: level,
+		Msg:   fmt.Sprintf(msg, args...),
+	})
+	return "", nil
+}
+
+func (n *capturingNotifications) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return n.Notify(level, msg, args...)
+}
+
+func (n *capturingNotifications) UpdateNotificationProgress(
+	string, string, int64, int64,
+) error {
+	return nil
+}
+
+func (n *capturingNotifications) captured() []capturedNotification {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]capturedNotification(nil), n.notifications...)
+}
+
 type errorStorage struct {
 	storageapi.Service
 	getErr error
@@ -121,7 +166,9 @@ func TestAuthorizerRegularExtensionPromptsForClaimedPermission(t *testing.T) {
 	t.Parallel()
 
 	opener := &stubPromptOpener{decision: PermissionAllowOnce}
-	a := mustNewAuthorizer(t, opener, storagestub.NewInMemoryService(), texttest.NopEditor())
+	noti := &capturingNotifications{}
+	a := mustNewAuthorizerWithNotifications(t, opener,
+		storagestub.NewInMemoryService(), texttest.NopEditor(), noti)
 	ext := testRegularExtension(extensionapi.NewPermissions(
 		extensionapi.PermissionBrowserWindowManager,
 	))
@@ -137,10 +184,20 @@ func TestAuthorizerRegularExtensionPromptsForClaimedPermission(t *testing.T) {
 	assert.Contains(t, opener.messages[0],
 		permissionActionText(extensionapi.PermissionBrowserWindowManager))
 
+	// Creating the prompt emits a single warning notification with the
+	// same message so the workspace tab can be highlighted for attention.
+	captured := noti.captured()
+	require.Len(t, captured, 1)
+	assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
+	assert.Equal(t, opener.messages[0], captured[0].Msg)
+
 	err = a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
 		testWindowManagerResource)
 	require.NoError(t, err)
 	assert.Equal(t, 1, opener.calls)
+	// The cached once-decision prevents a second prompt and thus a
+	// second warning notification.
+	assert.Len(t, noti.captured(), 1)
 }
 
 func TestAuthorizerRegularExtensionMissingClaimForbiddenWithoutPrompt(t *testing.T) {
@@ -171,7 +228,9 @@ func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
 	opener := &stubPromptOpener{
 		decision: PermissionAllowOnce,
 	}
-	a := mustNewAuthorizer(t, opener, storagestub.NewInMemoryService(), texttest.NopEditor())
+	noti := &capturingNotifications{}
+	a := mustNewAuthorizerWithNotifications(t, opener,
+		storagestub.NewInMemoryService(), texttest.NopEditor(), noti)
 	ext := testPluginExtension(extensionapi.NewPermissions(extensionapi.PermissionStorage))
 
 	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
@@ -186,6 +245,12 @@ func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
 	assert.Contains(t, opener.messages[0],
 		permissionActionText(extensionapi.PermissionBrowserWindowManager))
 	assert.Equal(t, []string{"--flag"}, ext.Args)
+
+	// Creating the prompt emits a single warning notification.
+	captured := noti.captured()
+	require.Len(t, captured, 1)
+	assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
+	assert.Equal(t, opener.messages[0], captured[0].Msg)
 }
 
 func TestAuthorizerPluginUsesPeerProcessForPromptAndStorageKey(t *testing.T) {
@@ -850,7 +915,21 @@ func mustNewAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil)
+	require.NoError(t, err)
+	return a
+}
+
+// mustNewAuthorizerWithNotifications is like mustNewAuthorizer but wires
+// a capturing notifications double so tests can assert that prompt
+// creation also emits a warning notification.
+func mustNewAuthorizerWithNotifications(
+	t *testing.T, opener PromptOpener,
+	storage storageapi.Service, editor text.Editor,
+	noti browserapi.Notifications,
+) *Authorizer {
+	t.Helper()
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti)
 	require.NoError(t, err)
 	return a
 }
@@ -859,7 +938,21 @@ func newTestAuthorizerCore(
 	opener PromptOpener, storage storageapi.Service,
 ) *Authorizer {
 	return &Authorizer{
-		prompter: newPermissionPrompter(opener, syncScheduleNextTick),
+		prompter: newPermissionPrompter(opener, syncScheduleNextTick, nil),
+		storage:  storage,
+		once:     make(map[string]pluginPermissionOnceDecision),
+	}
+}
+
+// newTestAuthorizerCoreWithNotifications is like newTestAuthorizerCore but
+// wires a capturing notifications double so tests can assert that prompt
+// creation also emits a warning notification.
+func newTestAuthorizerCoreWithNotifications(
+	opener PromptOpener, storage storageapi.Service,
+	noti browserapi.Notifications,
+) *Authorizer {
+	return &Authorizer{
+		prompter: newPermissionPrompter(opener, syncScheduleNextTick, noti),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
 	}

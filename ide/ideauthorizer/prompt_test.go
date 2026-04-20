@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -93,10 +94,11 @@ func TestPermissionPrompter(t *testing.T) {
 				option: tc.option,
 				close:  tc.close,
 			}
+			noti := &capturingNotifications{}
 			prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 				fn()
 				return true
-			})
+			}, noti)
 
 			decision, err := prompter.PromptPermission(context.Background(),
 				PermissionRequest{
@@ -109,6 +111,13 @@ func TestPermissionPrompter(t *testing.T) {
 			assert.Equal(t, 1, promptOpener.calls)
 			assert.Contains(t, promptOpener.message,
 				"Program /bin/test with args [--flag] wants to **manage the Window Manager**.")
+
+			// Creating the prompt also emits exactly one warning
+			// notification with the same permission context.
+			captured := noti.captured()
+			require.Len(t, captured, 1)
+			assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
+			assert.Equal(t, promptOpener.message, captured[0].Msg)
 		})
 	}
 }
@@ -276,18 +285,23 @@ func TestNewPermissionPrompterNilDependencies(t *testing.T) {
 	promptOpener := &fakePluginPromptOpener{option: PromptOptionYes}
 	schedule := func(fn func()) bool { return true }
 
-	assert.Nil(t, newPermissionPrompter(nil, schedule))
-	assert.Nil(t, newPermissionPrompter(promptOpener, nil))
-	assert.NotNil(t, newPermissionPrompter(promptOpener, schedule))
+	assert.Nil(t, newPermissionPrompter(nil, schedule, nil))
+	assert.Nil(t, newPermissionPrompter(promptOpener, nil, nil))
+	// A nil notifications dependency is allowed; the prompter treats it
+	// as a no-op notifier so prompts still work.
+	assert.NotNil(t, newPermissionPrompter(promptOpener, schedule, nil))
+	assert.NotNil(t, newPermissionPrompter(promptOpener, schedule,
+		&capturingNotifications{}))
 }
 
 func TestPermissionPrompterUnscheduledDeniesOnce(t *testing.T) {
 	t.Parallel()
 
 	promptOpener := &fakePluginPromptOpener{option: PromptOptionYes}
+	noti := &capturingNotifications{}
 	prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 		return false
-	})
+	}, noti)
 
 	decision, err := prompter.PromptPermission(context.Background(),
 		PermissionRequest{
@@ -297,6 +311,8 @@ func TestPermissionPrompterUnscheduledDeniesOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, PermissionDenyOnce, decision)
 	assert.Zero(t, promptOpener.calls)
+	// No prompt was opened, so no warning notification was emitted.
+	assert.Empty(t, noti.captured())
 }
 
 func TestPermissionPrompterContextCancellation(t *testing.T) {
@@ -307,7 +323,7 @@ func TestPermissionPrompterContextCancellation(t *testing.T) {
 	promptOpener := &fakePluginPromptOpener{option: "not selected"}
 	prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
 		return true
-	})
+	}, nil)
 
 	decision, err := prompter.PromptPermission(ctx, PermissionRequest{
 		Path:       "/bin/test",

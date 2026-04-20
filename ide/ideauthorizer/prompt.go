@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
@@ -43,18 +44,24 @@ const (
 type permissionPrompter struct {
 	promptOpener     PromptOpener
 	scheduleNextTick func(func()) bool
+	notifications    browserapi.Notifications
 }
 
 func newPermissionPrompter(
 	promptOpener PromptOpener,
 	scheduleNextTick func(func()) bool,
+	notifications browserapi.Notifications,
 ) *permissionPrompter {
 	if promptOpener == nil || scheduleNextTick == nil {
 		return nil
 	}
+	if notifications == nil {
+		notifications = nopPromptNotifications{}
+	}
 	return &permissionPrompter{
 		promptOpener:     promptOpener,
 		scheduleNextTick: scheduleNextTick,
+		notifications:    notifications,
 	}
 }
 
@@ -71,6 +78,10 @@ func (p *permissionPrompter) PromptPermission(
 	}
 	bindings := []term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}}
 	scheduled := p.scheduleNextTick(func() {
+		// Emit a non-deduplicating warning notification so the workspace
+		// tab that owns the prompt is highlighted for attention when the
+		// user is focused on a different workspace.
+		_, _ = p.notifications.Notify(browserapi.LevelWarn, "%s", message)
 		p.promptOpener.Prompt(message, options, bindings, handler.FuncPromptHandler(
 			func(i int, opt string) {
 				select {
@@ -170,4 +181,26 @@ func pluginPromptDecision(opt string) PermissionDecision {
 	default:
 		return PermissionDenyOnce
 	}
+}
+
+// nopPromptNotifications is used when no notifications implementation is
+// provided to newPermissionPrompter; it silently drops all notifications.
+type nopPromptNotifications struct{}
+
+func (nopPromptNotifications) Notify(
+	browserapi.NotificationLevel, string, ...any,
+) (string, error) {
+	return "", nil
+}
+
+func (nopPromptNotifications) NotifyOnce(
+	browserapi.NotificationLevel, string, ...any,
+) (string, error) {
+	return "", nil
+}
+
+func (nopPromptNotifications) UpdateNotificationProgress(
+	string, string, int64, int64,
+) error {
+	return nil
 }

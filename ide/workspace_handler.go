@@ -1014,7 +1014,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	promptOpener := &ex.comp
 	promptStorage := storageapi.WithPartition(h.storage, "extension-permissions")
 	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
-		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
+		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications)
 	if err != nil {
 		return nil, fmt.Errorf("new command authorizer: %w", err)
 	}
