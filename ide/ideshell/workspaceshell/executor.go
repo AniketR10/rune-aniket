@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/workspace/processctx"
@@ -300,7 +301,7 @@ func (e *Executor) handleStatus() iterator.Iterator[component.Responsive] {
 		})
 	}
 	e.mu.RUnlock()
-	return renderProcessTable(entries)
+	return renderProcessTableMarkdown(entries)
 }
 
 func (e *Executor) handleAudit() iterator.Iterator[component.Responsive] {
@@ -330,7 +331,7 @@ func (e *Executor) handleAudit() iterator.Iterator[component.Responsive] {
 		})
 	}
 	e.mu.RUnlock()
-	return renderProcessTable(entries)
+	return renderProcessTableMarkdown(entries)
 }
 
 func (e *Executor) handleTree() iterator.Iterator[component.Responsive] {
@@ -363,11 +364,8 @@ func (e *Executor) handleTree() iterator.Iterator[component.Responsive] {
 		})
 	}
 
-	lines := make([]component.Responsive, 0, len(infos)+1)
-	lines = append(lines, toResponsive(
-		fmt.Sprintf("  %-8s %-8s %-10s %s",
-			"PID", "PPID", "UPTIME", "COMMAND"),
-	))
+	var b strings.Builder
+	b.WriteString("- **Process tree**\n")
 
 	var walk func(info processInfo, depth int)
 	walk = func(info processInfo, depth int) {
@@ -380,11 +378,15 @@ func (e *Executor) handleTree() iterator.Iterator[component.Responsive] {
 		if info.parent != 0 {
 			ppidStr = strconv.Itoa(int(info.parent))
 		}
-		lines = append(lines, toResponsive(
-			fmt.Sprintf("  %-8d %-8s %-10s %s%s",
-				info.pid, ppidStr,
-				formatDuration(now.Sub(info.started)), indent, cmd),
-		))
+		fmt.Fprintf(
+			&b,
+			"%s- **PID %d** (PPID: %s, uptime: %s) — `%s`\n",
+			indent,
+			info.pid,
+			ppidStr,
+			formatDuration(now.Sub(info.started)),
+			cmd,
+		)
 		for _, child := range children[info.pid] {
 			walk(child, depth+1)
 		}
@@ -393,7 +395,7 @@ func (e *Executor) handleTree() iterator.Iterator[component.Responsive] {
 	for _, root := range roots {
 		walk(root, 0)
 	}
-	return iterator.FromSlice(lines)
+	return markdownResponsive(b.String())
 }
 
 func (e *Executor) handleInfo(
@@ -437,24 +439,24 @@ func (e *Executor) handleInfo(
 	}
 
 	infoLines := []string{
-		fmt.Sprintf("  PID:        %d", info.pid),
-		fmt.Sprintf("  Parent PID: %s", ppidStr),
-		fmt.Sprintf("  Command:    %s", cmd),
-		fmt.Sprintf("  Directory:  %s", info.dir),
-		fmt.Sprintf("  Started:    %s", info.started.Format(time.RFC3339)),
-		fmt.Sprintf("  Uptime:     %s", formatDuration(now.Sub(info.started))),
-		fmt.Sprintf("  Last Error: %s", lastErr),
+		fmt.Sprintf("- **PID:** `%d`", info.pid),
+		fmt.Sprintf("- **Parent PID:** `%s`", ppidStr),
+		fmt.Sprintf("- **Command:** `%s`", cmd),
+		fmt.Sprintf("- **Directory:** `%s`", info.dir),
+		fmt.Sprintf("- **Started:** %s", info.started.Format(time.RFC3339)),
+		fmt.Sprintf("- **Uptime:** %s", formatDuration(now.Sub(info.started))),
+		fmt.Sprintf("- **Last Error:** %s", lastErr),
 	}
 
 	if len(info.env) > 0 {
-		infoLines = append(infoLines, "  Environment:")
+		infoLines = append(infoLines, "- **Environment:**")
 		for _, envVar := range info.env {
 			infoLines = append(infoLines,
-				fmt.Sprintf("    %s", redactEnv(envVar)))
+				fmt.Sprintf("  - `%s`", redactEnv(envVar)))
 		}
 	}
 
-	return toLines(infoLines...), nil
+	return markdownResponsive(strings.Join(infoLines, "\n")), nil
 }
 
 func formatLastErr(err error) string {
@@ -612,28 +614,42 @@ func toLines(ss ...string) iterator.Iterator[component.Responsive] {
 	return iterator.FromSlice(out)
 }
 
-func renderProcessTable(entries []psEntry) iterator.Iterator[component.Responsive] {
+func renderProcessTableMarkdown(entries []psEntry) iterator.Iterator[component.Responsive] {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].pid < entries[j].pid
 	})
-	lines := make([]component.Responsive, 0, len(entries)+1)
-	lines = append(lines, toResponsive(
-		fmt.Sprintf("  %-8s %-10s %-30s %s", "PID", "UPTIME", "LAST ERR", "COMMAND"),
-	))
+	var b strings.Builder
+	b.WriteString("| PID | UPTIME | LAST ERR | COMMAND |\n")
+	b.WriteString("| --- | --- | --- | --- |\n")
 	for _, ent := range entries {
-		lines = append(lines, toResponsive(
-			fmt.Sprintf("  %-8d %-10s %-30s %s",
-				ent.pid, formatDuration(ent.uptime),
-				ent.lastErr, ent.command),
-		))
+		fmt.Fprintf(
+			&b,
+			"| `%d` | `%s` | %s | `%s` |\n",
+			ent.pid,
+			formatDuration(ent.uptime),
+			escapeMarkdownTableCell(ent.lastErr),
+			escapeMarkdownTableCell(ent.command),
+		)
 	}
-	return iterator.FromSlice(lines)
+	return markdownResponsive(b.String())
 }
 
 func toResponsive(s string) component.Responsive {
 	return component.NewResponsiveString(
 		s, component.StringResponsiveConfig{},
 	)
+}
+
+func markdownResponsive(content string) iterator.Iterator[component.Responsive] {
+	md, err := markdown.New(content)
+	if err != nil {
+		return iterator.FromSlice([]component.Responsive{toResponsive(content)})
+	}
+	return iterator.FromSlice([]component.Responsive{md})
+}
+
+func escapeMarkdownTableCell(s string) string {
+	return strings.ReplaceAll(s, "|", "\\|")
 }
 
 // ContextWithParentPid returns a context carrying the given

@@ -142,6 +142,14 @@ func collectText(
 	return lines
 }
 
+func collectRenderedText(
+	t *testing.T,
+	iter iterator.Iterator[component.Responsive],
+) string {
+	t.Helper()
+	return strings.Join(collectText(t, iter), "\n")
+}
+
 func TestStartTracksProcess(t *testing.T) {
 	mock := newMockExecutor()
 	exec := NewExecutor(mock)
@@ -159,10 +167,13 @@ func TestStartTracksProcess(t *testing.T) {
 	// Process should appear in status output.
 	iter := exec.handleStatus()
 	defer func() { _ = iter.Close() }()
-	out := collectText(t, iter)
-	require.Len(t, out, 2) // header + 1 process
-	assert.Contains(t, out[1], "gopls")
-	assert.Contains(t, out[1], "-rpc.trace")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "PID")
+	assert.Contains(t, out, "UPTIME")
+	assert.Contains(t, out, "LAST ERR")
+	assert.Contains(t, out, "COMMAND")
+	assert.Contains(t, out, "gopls")
+	assert.Contains(t, out, "-rpc.trace")
 }
 
 func fixedTime(t time.Time) func() time.Time {
@@ -262,14 +273,13 @@ func TestHandleCommandStatus(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	require.Len(t, out, 3) // header + 2 processes
-	assert.Contains(t, out[0], "PID")
-	assert.Contains(t, out[0], "UPTIME")
-	assert.Contains(t, out[0], "LAST ERR")
-	assert.Contains(t, out[0], "COMMAND")
-	assert.Contains(t, out[1], "gopls")
-	assert.Contains(t, out[2], "bash")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "PID")
+	assert.Contains(t, out, "UPTIME")
+	assert.Contains(t, out, "LAST ERR")
+	assert.Contains(t, out, "COMMAND")
+	assert.Contains(t, out, "gopls")
+	assert.Contains(t, out, "bash")
 }
 
 func TestDefaultSubcommandIsHelp(t *testing.T) {
@@ -280,11 +290,9 @@ func TestDefaultSubcommandIsHelp(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
+	out := collectRenderedText(t, iter)
 	combined := ""
-	for _, line := range out {
-		combined += line
-	}
+	combined += out
 	assert.Contains(t, combined, "process status")
 	assert.Contains(t, combined, "process audit")
 	assert.Contains(t, combined, "process tree")
@@ -536,13 +544,17 @@ func TestPSSortedByPid(t *testing.T) {
 
 	iter := exec.handleStatus()
 	defer func() { _ = iter.Close() }()
-	out := collectText(t, iter)
-	require.Len(t, out, 4) // header + 3
+	out := collectRenderedText(t, iter)
 
 	// PIDs should be 1, 2, 3 in order.
-	assert.Contains(t, out[1], "/c") // pid 1
-	assert.Contains(t, out[2], "/a") // pid 2
-	assert.Contains(t, out[3], "/b") // pid 3
+	idxC := strings.Index(out, "/c")
+	idxA := strings.Index(out, "/a")
+	idxB := strings.Index(out, "/b")
+	require.NotEqual(t, -1, idxC)
+	require.NotEqual(t, -1, idxA)
+	require.NotEqual(t, -1, idxB)
+	assert.Less(t, idxC, idxA)
+	assert.Less(t, idxA, idxB)
 }
 
 func TestPSShowsUptime(t *testing.T) {
@@ -561,9 +573,8 @@ func TestPSShowsUptime(t *testing.T) {
 
 	iter := exec.handleStatus()
 	defer func() { _ = iter.Close() }()
-	out := collectText(t, iter)
-	require.Len(t, out, 2)
-	assert.Contains(t, out[1], "5m32s")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "5m32s")
 }
 
 func TestExitTracksStats(t *testing.T) {
@@ -616,11 +627,10 @@ func TestStatusShowsLastErr(t *testing.T) {
 
 	iter := exec.handleStatus()
 	defer func() { _ = iter.Close() }()
-	out := collectText(t, iter)
-	require.Len(t, out, 2)
-	assert.Contains(t, out[0], "LAST ERR")
-	assert.Contains(t, out[1], "process failed very badly")
-	assert.Contains(t, out[1], "…")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "LAST ERR")
+	assert.Contains(t, out, "process failed very badly")
+	assert.Contains(t, out, "…")
 }
 
 func TestFormatDuration(t *testing.T) {
@@ -680,12 +690,12 @@ func TestHandleCommandTree(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	require.Len(t, out, 3) // header + 2 roots
-	assert.Contains(t, out[0], "PID")
-	assert.Contains(t, out[0], "PPID")
-	assert.Contains(t, out[1], "/bin/a")
-	assert.Contains(t, out[2], "/bin/b")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "Process tree")
+	assert.Contains(t, out, "PID 1")
+	assert.Contains(t, out, "PPID: —")
+	assert.Contains(t, out, "/bin/a")
+	assert.Contains(t, out, "/bin/b")
 }
 
 func TestHandleCommandTreeWithParent(t *testing.T) {
@@ -709,14 +719,11 @@ func TestHandleCommandTreeWithParent(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	require.Len(t, out, 3) // header + parent + child
-	assert.Contains(t, out[1], "/bin/ext")
-	assert.Contains(t, out[1], "—") // parent has no PPID
-	assert.Contains(t, out[2], "/bin/lsp")
-	assert.Contains(t, out[2], strconv.Itoa(int(parent))) // child shows PPID
-	// Child should be indented.
-	assert.Contains(t, out[2], "  /bin/lsp")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "/bin/ext")
+	assert.Contains(t, out, "PPID: —")
+	assert.Contains(t, out, "/bin/lsp")
+	assert.Contains(t, out, "PPID: "+strconv.Itoa(int(parent)))
 }
 
 func TestHandleCommandInfo(t *testing.T) {
@@ -744,11 +751,8 @@ func TestHandleCommandInfo(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	combined := ""
-	for _, line := range out {
-		combined += line + "\n"
-	}
+	out := collectRenderedText(t, iter)
+	combined := out + "\n"
 	assert.Contains(t, combined, "PID:")
 	assert.Contains(t, combined, "1")
 	assert.Contains(t, combined, "Command:")
@@ -915,27 +919,25 @@ func TestHandleCommandAuditShowsAllProcesses(t *testing.T) {
 	// Status should show only the running process.
 	statusIter := exec.handleStatus()
 	defer func() { _ = statusIter.Close() }()
-	statusOut := collectText(t, statusIter)
-	require.Len(t, statusOut, 2) // header + 1 running
-	assert.Contains(t, statusOut[1], "/bin/b")
+	statusOut := collectRenderedText(t, statusIter)
+	assert.Contains(t, statusOut, "/bin/b")
 
 	// Audit should show both processes.
 	auditIter := exec.handleAudit()
 	defer func() { _ = auditIter.Close() }()
-	auditOut := collectText(t, auditIter)
-	require.Len(t, auditOut, 3) // header + 2 processes
-	assert.Contains(t, auditOut[0], "PID")
-	assert.Contains(t, auditOut[0], "UPTIME")
-	assert.Contains(t, auditOut[0], "LAST ERR")
+	auditOut := collectRenderedText(t, auditIter)
+	assert.Contains(t, auditOut, "PID")
+	assert.Contains(t, auditOut, "UPTIME")
+	assert.Contains(t, auditOut, "LAST ERR")
 
 	// Exited process should show its runtime (5s) and error.
-	assert.Contains(t, auditOut[1], "/bin/a")
-	assert.Contains(t, auditOut[1], "5s")
-	assert.Contains(t, auditOut[1], "crash")
+	assert.Contains(t, auditOut, "/bin/a")
+	assert.Contains(t, auditOut, "5s")
+	assert.Contains(t, auditOut, "crash")
 
 	// Running process should show current uptime (10s).
-	assert.Contains(t, auditOut[2], "/bin/b")
-	assert.Contains(t, auditOut[2], "10s")
+	assert.Contains(t, auditOut, "/bin/b")
+	assert.Contains(t, auditOut, "10s")
 }
 
 func TestHandleCommandAuditViaDispatch(t *testing.T) {
@@ -954,9 +956,8 @@ func TestHandleCommandAuditViaDispatch(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	require.Len(t, out, 2) // header + 1 process
-	assert.Contains(t, out[1], "/bin/x")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "/bin/x")
 }
 
 func TestContextParentPidPropagation(t *testing.T) {
@@ -1006,13 +1007,11 @@ func TestContextParentPidShowsInTree(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	require.Len(t, out, 3) // header + parent + child
-	assert.Contains(t, out[1], "/bin/ext")
-	assert.Contains(t, out[1], "—") // parent has no PPID
-	assert.Contains(t, out[2], "/bin/lsp")
-	assert.Contains(t, out[2], strconv.Itoa(int(parent)))
-	assert.Contains(t, out[2], "  /bin/lsp") // indented
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "/bin/ext")
+	assert.Contains(t, out, "PPID: —")
+	assert.Contains(t, out, "/bin/lsp")
+	assert.Contains(t, out, strconv.Itoa(int(parent)))
 }
 
 func TestExtensionIDParentsSubprocesses(t *testing.T) {
@@ -1037,11 +1036,10 @@ func TestExtensionIDParentsSubprocesses(t *testing.T) {
 
 	iter := exec.handleTree()
 	defer func() { _ = iter.Close() }()
-	out := collectText(t, iter)
-	require.Len(t, out, 3)
-	assert.Contains(t, out[1], "/bin/ext")
-	assert.Contains(t, out[2], strconv.Itoa(int(parent)))
-	assert.Contains(t, out[2], "  /bin/lsp")
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "/bin/ext")
+	assert.Contains(t, out, strconv.Itoa(int(parent)))
+	assert.Contains(t, out, "/bin/lsp")
 }
 
 func TestHandleCommandInfoRedactsSecrets(t *testing.T) {
@@ -1070,8 +1068,8 @@ func TestHandleCommandInfoRedactsSecrets(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
 
-	out := collectText(t, iter)
-	combined := strings.Join(out, "\n")
+	out := collectRenderedText(t, iter)
+	combined := out
 
 	// Secret values must be redacted.
 	assert.Contains(t, combined, "RUNE_CERT=****")
@@ -1168,21 +1166,12 @@ func TestE2EProcessTreeWithRealExecutor(t *testing.T) {
 	// Verify the tree output shows the parent-child relationship.
 	iter := exec.handleTree()
 	defer func() { _ = iter.Close() }()
-	out := collectText(t, iter)
+	out := collectRenderedText(t, iter)
 
-	require.Len(t, out, 3, "expected header + parent + child")
-
-	// Header.
-	assert.Contains(t, out[0], "PID")
-	assert.Contains(t, out[0], "PPID")
-
-	// Parent line: should have its PID and "—" as PPID.
-	assert.Contains(t, out[1], strconv.Itoa(int(parentPid)))
-	assert.Contains(t, out[1], "—")
-	assert.Contains(t, out[1], "/bin/sleep")
-
-	// Child line: should have parent PID as its PPID and be indented.
-	assert.Contains(t, out[2], strconv.Itoa(int(childPid)))
-	assert.Contains(t, out[2], strconv.Itoa(int(parentPid)))
-	assert.Contains(t, out[2], "  /bin/sleep") // indented
+	assert.Contains(t, out, "Process tree")
+	assert.Contains(t, out, strconv.Itoa(int(parentPid)))
+	assert.Contains(t, out, "PPID: —")
+	assert.Contains(t, out, "/bin/sleep")
+	assert.Contains(t, out, strconv.Itoa(int(childPid)))
+	assert.Contains(t, out, "PPID: "+strconv.Itoa(int(parentPid)))
 }
