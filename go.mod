@@ -28,7 +28,7 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.79.0
-	github.com/unstablebuild/rune-go-sdk v0.0.61
+	github.com/unstablebuild/rune-go-sdk v0.0.62
 	github.com/unstablebuild/tcell/v3 v3.6.4
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.48.0
