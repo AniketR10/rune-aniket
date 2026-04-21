@@ -185,11 +185,12 @@ func TestAuthorizerRegularExtensionPromptsForClaimedPermission(t *testing.T) {
 		permissionActionText(extensionapi.PermissionBrowserWindowManager))
 
 	// Creating the prompt emits a single warning notification with the
-	// same message so the workspace tab can be highlighted for attention.
+	// relevant scope so the workspace tab can be highlighted for attention.
 	captured := noti.captured()
 	require.Len(t, captured, 1)
 	assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
-	assert.Equal(t, opener.messages[0], captured[0].Msg)
+	assert.Contains(t, captured[0].Msg, "authorization")
+	assert.Contains(t, captured[0].Msg, "Test Extension")
 
 	err = a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
 		testWindowManagerResource)
@@ -250,7 +251,8 @@ func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
 	captured := noti.captured()
 	require.Len(t, captured, 1)
 	assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
-	assert.Equal(t, opener.messages[0], captured[0].Msg)
+	assert.Contains(t, captured[0].Msg, "authorization")
+	assert.Contains(t, captured[0].Msg, "/bin/test")
 }
 
 func TestAuthorizerPluginUsesPeerProcessForPromptAndStorageKey(t *testing.T) {
@@ -1024,8 +1026,9 @@ func TestAuthorizerAuthorizeStartCommandPromptsWithCommandDetails(t *testing.T) 
 	assert.Contains(t, msg, "/bin/grep")
 	assert.Contains(t, msg, "[foo]")
 	assert.Contains(t, msg, "/tmp/workspace")
-	assert.Contains(t, msg, "Yes, All")
-	assert.Contains(t, msg, "grep *")
+	assert.Contains(t, msg, "Always")
+	assert.Contains(t, msg, "\n\nChoosing **Always** approves **grep** for all future authorization requests, for any argument combination.")
+	assert.NotContains(t, msg, "grep ∗")
 }
 
 func TestAuthorizerAuthorizeStartCommandRegularExtensionRequiresExecute(t *testing.T) {

@@ -36,9 +36,9 @@ import (
 // Permission prompt option labels shown in permission prompts.
 const (
 	PromptOptionYes       = "   Yes   "
-	PromptOptionYesAlways = "   Yes, All   "
+	PromptOptionYesAlways = "   Always   "
 	PromptOptionNo        = "   No   "
-	PromptOptionNoNever   = "   No, Never   "
+	PromptOptionNoNever   = "   Never   "
 )
 
 type permissionPrompter struct {
@@ -70,6 +70,7 @@ func (p *permissionPrompter) PromptPermission(
 ) (PermissionDecision, error) {
 	result := make(chan PermissionDecision, 1)
 	message := pluginPermissionPromptMessage(req)
+	warning := permissionPromptWarningMessage(req)
 	options := []string{
 		PromptOptionYes,
 		PromptOptionYesAlways,
@@ -78,10 +79,7 @@ func (p *permissionPrompter) PromptPermission(
 	}
 	bindings := []term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}}
 	scheduled := p.scheduleNextTick(func() {
-		// Emit a non-deduplicating warning notification so the workspace
-		// tab that owns the prompt is highlighted for attention when the
-		// user is focused on a different workspace.
-		_, _ = p.notifications.Notify(browserapi.LevelWarn, "%s", message)
+		_, _ = p.notifications.Notify(browserapi.LevelWarn, warning)
 		p.promptOpener.Prompt(message, options, bindings, handler.FuncPromptHandler(
 			func(i int, opt string) {
 				select {
@@ -107,6 +105,38 @@ func (p *permissionPrompter) PromptPermission(
 	case <-ctx.Done():
 		return PermissionDenyOnce, ctx.Err()
 	}
+}
+
+func permissionPromptWarningMessage(req PermissionRequest) string {
+	labels := displayScopeLabels(req)
+	if len(labels) > 0 {
+		return fmt.Sprintf("User authorization required for %s", strings.Join(labels, ", "))
+	}
+	if req.CommandPath != "" {
+		return fmt.Sprintf("User authorization required for %s", req.CommandPath)
+	}
+	if req.ExtensionName != "" {
+		return fmt.Sprintf("User authorization required for %s", req.ExtensionName)
+	}
+	if req.Path != "" {
+		return fmt.Sprintf("User authorization required for %s", req.Path)
+	}
+	return "User authorization required"
+}
+
+func displayScopeLabels(req PermissionRequest) []string {
+	labels := req.CommandScopeLabels
+	if len(labels) == 0 && req.CommandScopeLabel != "" {
+		labels = []string{req.CommandScopeLabel}
+	}
+	if len(labels) == 0 {
+		return nil
+	}
+	ret := make([]string, len(labels))
+	for i, l := range labels {
+		ret[i] = strings.TrimSpace(strings.ReplaceAll(l, "*", ""))
+	}
+	return ret
 }
 
 func pluginPermissionPromptMessage(req PermissionRequest) string {
@@ -146,15 +176,13 @@ func pluginPermissionPromptMessage(req PermissionRequest) string {
 	return message
 }
 
-// commandScopeNote renders the "Choosing Yes, All approves ..." suffix
+// commandScopeNote renders the scope-approval suffix shown after a
+// command-scoped permission request.
 // for a command-scoped permission prompt. When multiple scope labels are
 // provided, each is rendered bold and separated by commas so the user
 // sees which commands will be broadened.
 func commandScopeNote(req PermissionRequest) string {
-	labels := req.CommandScopeLabels
-	if len(labels) == 0 && req.CommandScopeLabel != "" {
-		labels = []string{req.CommandScopeLabel}
-	}
+	labels := displayScopeLabels(req)
 	if len(labels) == 0 {
 		return ""
 	}
@@ -163,7 +191,7 @@ func commandScopeNote(req PermissionRequest) string {
 		parts[i] = fmt.Sprintf("**%s**", l)
 	}
 	return fmt.Sprintf(
-		" Choosing **Yes, All** approves %s for future runs with any args.",
+		"\n\nChoosing **Always** approves %s for all future authorization requests, for any argument combination.",
 		strings.Join(parts, ", "),
 	)
 }

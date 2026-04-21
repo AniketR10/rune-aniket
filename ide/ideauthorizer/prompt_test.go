@@ -81,7 +81,7 @@ func TestPermissionPrompter(t *testing.T) {
 			wantDecision: PermissionAllowAlways},
 		{name: "no", option: PromptOptionNo,
 			wantDecision: PermissionDenyOnce},
-		{name: "no never", option: PromptOptionNoNever,
+		{name: "never", option: PromptOptionNoNever,
 			wantDecision: PermissionDenyAlways},
 		{name: "close", option: PromptOptionYes, close: true,
 			wantDecision: PermissionDenyOnce},
@@ -117,9 +117,39 @@ func TestPermissionPrompter(t *testing.T) {
 			captured := noti.captured()
 			require.Len(t, captured, 1)
 			assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
-			assert.Equal(t, promptOpener.message, captured[0].Msg)
+			assert.Contains(t, captured[0].Msg, "authorization")
+			assert.Contains(t, captured[0].Msg, "/bin/test")
 		})
 	}
+}
+
+func TestPermissionPrompterNotificationIncludesScopeLabel(t *testing.T) {
+	t.Parallel()
+
+	promptOpener := &fakePluginPromptOpener{option: PromptOptionYes}
+	noti := &capturingNotifications{}
+	prompter := newPermissionPrompter(promptOpener, func(fn func()) bool {
+		fn()
+		return true
+	}, noti)
+
+	decision, err := prompter.PromptPermission(context.Background(), PermissionRequest{
+		Path:              "/usr/local/bin/plugin-cli",
+		Args:              []string{"run"},
+		Permission:        extensionapi.PermissionExecute,
+		CommandPath:       "/bin/grep",
+		CommandArgs:       []string{"foo", "file.txt"},
+		CommandScopeLabel: "/bin/grep *",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, PermissionAllowOnce, decision)
+
+	captured := noti.captured()
+	require.Len(t, captured, 1)
+	assert.Equal(t, browserapi.LevelWarn, captured[0].Level)
+	assert.Contains(t, captured[0].Msg, "/bin/grep")
+	assert.NotContains(t, captured[0].Msg, "∗")
+	assert.NotContains(t, captured[0].Msg, "/bin/grep *")
 }
 
 func TestPluginPermissionPromptMessageWithLauncher(t *testing.T) {
@@ -152,7 +182,8 @@ func TestPluginPermissionPromptMessageWithCommand(t *testing.T) {
 	assert.Contains(t, message, "wants to run **/bin/grep**")
 	assert.Contains(t, message, "with args **[foo /tmp/workspace]**")
 	assert.Contains(t, message, "in **/tmp/workspace**")
-	assert.Contains(t, message, "Choosing **Yes, All** approves **/bin/grep ***")
+	assert.Contains(t, message, "\n\nChoosing **Always** approves **/bin/grep** for all future authorization requests, for any argument combination.")
+	assert.NotContains(t, message, "**/bin/grep ∗**")
 }
 
 func TestPluginPermissionPromptMessageWithLauncherAndCommand(t *testing.T) {
@@ -172,7 +203,7 @@ func TestPluginPermissionPromptMessageWithLauncherAndCommand(t *testing.T) {
 		"Program **/usr/local/bin/plugin-cli** with args **[run]** running inside **/bin/zsh** **[--login]**")
 	assert.Contains(t, message, "wants to run **/bin/rm**")
 	assert.Contains(t, message, "with args **[-rf foo]**")
-	assert.Contains(t, message, "Choosing **Yes, All** approves **/bin/rm ***")
+	assert.Contains(t, message, "\n\nChoosing **Always** approves **/bin/rm** for all future authorization requests, for any argument combination.")
 }
 
 func TestPermissionPromptMessageHighlightsExtensionCommand(t *testing.T) {
@@ -191,7 +222,7 @@ func TestPermissionPromptMessageHighlightsExtensionCommand(t *testing.T) {
 	assert.Contains(t, message,
 		"Extension Test Extension by dev-id wants to run **/bin/grep** with args **[foo]** in **/tmp/workspace**.")
 	assert.Contains(t, message,
-		"Choosing **Yes, All** approves **/bin/grep ***")
+		"\n\nChoosing **Always** approves **/bin/grep** for all future authorization requests, for any argument combination.")
 }
 
 func TestPluginPermissionPromptMessageWithCommandHighlightsApprovalScope(t *testing.T) {
@@ -208,8 +239,8 @@ func TestPluginPermissionPromptMessageWithCommandHighlightsApprovalScope(t *test
 	})
 
 	assert.Contains(t, message, "run **/bin/grep** with args **[foo file.txt]**")
-	assert.Contains(t, message, "Choosing **Yes, All** approves **/bin/grep ***")
-	assert.Contains(t, message, "future runs with any args")
+	assert.Contains(t, message, "\n\nChoosing **Always** approves **/bin/grep** for all future authorization requests, for any argument combination.")
+	assert.Contains(t, message, "for all future authorization requests, for any argument combination")
 }
 
 func TestPluginPermissionPromptMessageWithShellWrappedCommandUsesInnerScope(t *testing.T) {
@@ -225,7 +256,7 @@ func TestPluginPermissionPromptMessageWithShellWrappedCommandUsesInnerScope(t *t
 	})
 
 	assert.Contains(t, message, "run **/bin/bash** with args **[-c grep foo file.txt]**")
-	assert.Contains(t, message, "Choosing **Yes, All** approves **grep ***")
+	assert.Contains(t, message, "\n\nChoosing **Always** approves **grep** for all future authorization requests, for any argument combination.")
 }
 
 func TestPluginPermissionPromptMessageWithUnknownShellScriptUsesExactScopeLabel(t *testing.T) {
@@ -243,7 +274,7 @@ func TestPluginPermissionPromptMessageWithUnknownShellScriptUsesExactScopeLabel(
 
 	assert.Contains(t, message, "run **/bin/bash** with args **[-c echo foo; grep bar file.txt]** in **/tmp**")
 	assert.Contains(t, message,
-		"Choosing **Yes, All** approves **/bin/bash -c echo foo; grep bar file.txt @ /tmp**")
+		"\n\nChoosing **Always** approves **/bin/bash -c echo foo; grep bar file.txt @ /tmp** for all future authorization requests, for any argument combination.")
 	assert.NotContains(t, message, "approves **bash ***")
 }
 
@@ -262,7 +293,7 @@ func TestPluginPermissionPromptMessageWithMultipleScopeLabels(t *testing.T) {
 
 	assert.Contains(t, message, "run **/bin/bash**")
 	assert.Contains(t, message,
-		"Choosing **Yes, All** approves **grep ***, **make ***, **rm *** for future runs")
+		"\n\nChoosing **Always** approves **grep**, **make**, **rm** for all future authorization requests, for any argument combination.")
 }
 
 func TestPermissionPromptMessageHighlightsExtensionIntent(t *testing.T) {
