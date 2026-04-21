@@ -54,9 +54,15 @@ type recordingPager struct {
 	err   error
 }
 
+type nopPager struct{}
+
 func (p *recordingPager) Page(_ context.Context, page Page) error {
 	p.pages = append(p.pages, page)
 	return p.err
+}
+
+func (nopPager) Page(context.Context, Page) error {
+	return nil
 }
 
 func newInMemoryReportStore() *inMemoryReportStore {
@@ -102,6 +108,9 @@ metadata:
 func testReportHandler(store ReportStore, cfg ReportConfig) http.Handler {
 	logger := log.New()
 	logger.SetLevel(log.TraceLevel)
+	if cfg.Pager == nil {
+		cfg.Pager = nopPager{}
+	}
 	return newReportHandler(logger, store, cfg)
 }
 
@@ -286,6 +295,14 @@ func TestReportHandler_PagesAfterNewReportIsStored(t *testing.T) {
 	assert.Equal(t, "rune", page.Details["package"])
 	assert.Equal(t, "1.0.0", page.Details["version"])
 	assert.Equal(t, "panic: report me", page.Details["subject"])
+	objectName, ok := page.Details["object"].(string)
+	require.True(t, ok)
+	assert.Equal(
+		t,
+		"https://storage.cloud.google.com/rune-reports/"+objectName,
+		page.Details["report_download_url"],
+	)
+	assert.Equal(t, "gs://rune-reports/"+objectName, page.Details["report_gsutil_uri"])
 
 	reportMetadata, ok := page.Details["report_metadata"].(map[string]string)
 	require.True(t, ok)
@@ -326,6 +343,7 @@ func TestReportHandler_LogsCreateAttemptForEachFingerprintAttempt(t *testing.T) 
 	h := newReportHandler(logger, store, ReportConfig{
 		Prefix:          "reports/",
 		RateLimitWindow: time.Hour,
+		Pager:           nopPager{},
 	})
 	body := validReportYAML("panic: analytics crash")
 

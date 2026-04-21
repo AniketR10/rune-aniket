@@ -262,6 +262,12 @@ func (h *reportHandler) pageReportCreated(
 		"version":     report.Version,
 		"subject":     report.Subject,
 	}
+	if reportDownloadURL := reportDownloadURL(h.cfg.Bucket, objectName); reportDownloadURL != "" {
+		details["report_download_url"] = reportDownloadURL
+	}
+	if reportGSURI := reportGSURI(h.cfg.Bucket, objectName); reportGSURI != "" {
+		details["report_gsutil_uri"] = reportGSURI
+	}
 	if h.cfg.Bucket != "" {
 		details["bucket"] = h.cfg.Bucket
 	}
@@ -304,11 +310,29 @@ func (h *reportHandler) pageReportCreated(
 	}).Info("report page sent")
 }
 
+func reportDownloadURL(bucket string, objectName string) string {
+	bucket = strings.TrimSpace(bucket)
+	objectName = strings.TrimSpace(objectName)
+	if bucket == "" || objectName == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bucket, objectName)
+}
+
+func reportGSURI(bucket string, objectName string) string {
+	bucket = strings.TrimSpace(bucket)
+	objectName = strings.TrimSpace(objectName)
+	if bucket == "" || objectName == "" {
+		return ""
+	}
+	return fmt.Sprintf("gs://%s/%s", bucket, objectName)
+}
+
 func reportSource(bucket string, objectName string) string {
 	if bucket == "" {
 		return objectName
 	}
-	return fmt.Sprintf("gs://%s/%s", bucket, objectName)
+	return reportGSURI(bucket, objectName)
 }
 
 func sanitizedReportMetadata(metadata map[string]string) map[string]string {
