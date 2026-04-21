@@ -355,12 +355,12 @@ func walkStmtCommands(stmt *syntax.Stmt, out map[string]struct{}) bool {
 	}
 	for _, r := range stmt.Redirs {
 		if r.Word != nil {
-			if _, ok := shellWrappedLiteralWord(r.Word); !ok {
+			if !walkArgumentWordCommands(r.Word, out) {
 				return false
 			}
 		}
 		if r.Hdoc != nil {
-			if _, ok := shellWrappedLiteralWord(r.Hdoc); !ok {
+			if !walkArgumentWordCommands(r.Hdoc, out) {
 				return false
 			}
 		}
@@ -406,12 +406,12 @@ func walkCommandCommands(cmd syntax.Command, out map[string]struct{}) bool {
 	case *syntax.FuncDecl:
 		return walkStmtCommands(c.Body, out)
 	case *syntax.DeclClause:
-		// export/declare/local/readonly/typeset are no-fork built-ins, but
-		// their values may contain command substitution. Reject the whole
-		// script if any value isn't a pure literal.
+		// export/declare/local/readonly/typeset are no-fork built-ins.
+		// Their values may contain command substitution, which we recurse
+		// into to collect inner commands.
 		for _, a := range c.Args {
 			if a.Value != nil {
-				if _, ok := shellWrappedLiteralWord(a.Value); !ok {
+				if !walkArgumentWordCommands(a.Value, out) {
 					return false
 				}
 			}
@@ -437,7 +437,7 @@ func walkStmtsCommands(stmts []*syntax.Stmt, out map[string]struct{}) bool {
 func walkCallExprCommands(call *syntax.CallExpr, out map[string]struct{}) bool {
 	for _, a := range call.Assigns {
 		if a.Value != nil {
-			if _, ok := shellWrappedLiteralWord(a.Value); !ok {
+			if !walkArgumentWordCommands(a.Value, out) {
 				return false
 			}
 		}
@@ -446,33 +446,69 @@ func walkCallExprCommands(call *syntax.CallExpr, out map[string]struct{}) bool {
 		// Pure environment assignments to the current shell — no fork.
 		return true
 	}
-	fields := make([]string, 0, len(call.Args))
-	for _, w := range call.Args {
-		lit, ok := shellWrappedLiteralWord(w)
+	// The command-name position (first argument) must still be a pure
+	// literal — a command substitution or variable expansion there means
+	// we cannot know which program will run and the script is opaque.
+	name, ok := shellWrappedLiteralWord(call.Args[0])
+	if !ok {
+		return false
+	}
+	rest := call.Args[1:]
+	if name == "exec" && len(rest) > 0 {
+		name, ok = shellWrappedLiteralWord(rest[0])
 		if !ok {
 			return false
 		}
-		fields = append(fields, lit)
+		rest = rest[1:]
 	}
-	if fields[0] == "exec" && len(fields) > 1 {
-		fields = fields[1:]
-	}
-	name := fields[0]
 	if name == "eval" || name == "source" || name == "." {
 		return false
 	}
 	if noForkBuiltins[name] {
+		// Even when the command itself is a no-fork builtin, its
+		// arguments may contain command substitution that runs other
+		// processes; recurse into those.
+		for _, w := range rest {
+			if !walkArgumentWordCommands(w, out) {
+				return false
+			}
+		}
 		return true
 	}
 	if pluginPermissionIsShell(name) {
 		// Recurse into nested shell wrappers like bash -c "...".
-		script, ok := shellWrappedScriptArgument(fields[1:])
+		restFields := make([]string, 0, len(rest))
+		for _, w := range rest {
+			lit, ok := shellWrappedLiteralWord(w)
+			if !ok {
+				// A nested shell invocation whose arguments aren't pure
+				// literals may still be decomposable at the top level;
+				// fall back to treating it as an ordinary fork.
+				for _, w := range rest {
+					if !walkArgumentWordCommands(w, out) {
+						return false
+					}
+				}
+				out[filepath.Base(name)] = struct{}{}
+				return true
+			}
+			restFields = append(restFields, lit)
+		}
+		script, ok := shellWrappedScriptArgument(restFields)
 		if !ok {
-			return false
+			out[filepath.Base(name)] = struct{}{}
+			return true
 		}
 		return walkShellScriptCommands(script, out)
 	}
 	out[filepath.Base(name)] = struct{}{}
+	// Recurse into remaining arguments so command substitution inside
+	// them contributes to the effective-command set.
+	for _, w := range rest {
+		if !walkArgumentWordCommands(w, out) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -498,6 +534,43 @@ func shellWrappedLiteralWord(word *syntax.Word) (string, bool) {
 		}
 	}
 	return b.String(), true
+}
+
+// walkArgumentWordCommands walks an argument- or redirect-position word
+// and records commands that execute as part of evaluating it. Unlike
+// shellWrappedLiteralWord (which is used for the command-name position
+// and demands a pure literal), this tolerates variable expansion,
+// arithmetic expansion, and recurses into command and process
+// substitutions so their inner commands contribute to the effective
+// command set.
+func walkArgumentWordCommands(word *syntax.Word, out map[string]struct{}) bool {
+	if word == nil {
+		return true
+	}
+	return walkArgumentWordPartsCommands(word.Parts, out)
+}
+
+func walkArgumentWordPartsCommands(parts []syntax.WordPart, out map[string]struct{}) bool {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit, *syntax.SglQuoted, *syntax.ParamExp, *syntax.ArithmExp:
+			// Pure literals and parameter/arithmetic expansions don't
+			// fork a new process.
+		case *syntax.DblQuoted:
+			if !walkArgumentWordPartsCommands(p.Parts, out) {
+				return false
+			}
+		case *syntax.CmdSubst:
+			if !walkStmtsCommands(p.Stmts, out) {
+				return false
+			}
+		case *syntax.ExtGlob:
+			// Extended glob patterns don't invoke commands.
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func shellWrappedLiteralParts(parts []syntax.WordPart) (string, bool) {

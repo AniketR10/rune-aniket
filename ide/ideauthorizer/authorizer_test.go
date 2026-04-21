@@ -887,6 +887,79 @@ func TestPluginPermissionCommandStorageKeysOpaqueScriptFallsBackToExactMatch(t *
 	assert.NotEqual(t, keysA, keysB)
 }
 
+// Complex shell scripts that mix no-fork builtins (cd), command
+// substitution, redirects, and pipelines are decomposed into a key per
+// effective command rather than falling back to a single exact-match
+// key. Each decomposed inner command is a subset of the full script's
+// key set.
+func TestPluginPermissionCommandStorageKeysDecomposeCmdSubstScript(t *testing.T) {
+	t.Parallel()
+
+	complex := pluginPermissionCommandStorageKeys("/bin/test", []string{"a"},
+		extensionapi.PermissionExecute, pluginPermissionCommandDetail{
+			Path: "/bin/bash",
+			Args: []string{"-c",
+				"cd /Users/ernestrc/.rune/worktrees/vim && gofmt -l $(find . -name '.go' -not -path './.git/' 2>/dev/null) 2>&1 | head -20"},
+			Dir: "/tmp",
+		})
+	findOnly := pluginPermissionCommandStorageKeys("/bin/test", []string{"a"},
+		extensionapi.PermissionExecute, pluginPermissionCommandDetail{
+			Path: "/usr/bin/find",
+			Args: []string{".", "-name", "*.go"},
+			Dir:  "/tmp",
+		})
+	gofmtOnly := pluginPermissionCommandStorageKeys("/bin/test", []string{"a"},
+		extensionapi.PermissionExecute, pluginPermissionCommandDetail{
+			Path: "/usr/bin/gofmt",
+			Args: []string{"-l", "."},
+			Dir:  "/tmp",
+		})
+	headOnly := pluginPermissionCommandStorageKeys("/bin/test", []string{"a"},
+		extensionapi.PermissionExecute, pluginPermissionCommandDetail{
+			Path: "/usr/bin/head",
+			Args: []string{"-20"},
+			Dir:  "/tmp",
+		})
+
+	assert.Len(t, complex, 3)
+	assert.Contains(t, complex, findOnly[0])
+	assert.Contains(t, complex, gofmtOnly[0])
+	assert.Contains(t, complex, headOnly[0])
+}
+
+// End-to-end: once "Yes, All" is chosen for the complex regression
+// command, subsequent invocations of find, gofmt, and head run silently
+// because the approval scope was broadened to each effective command
+// rather than to the full opaque script.
+func TestAuthorizerAuthorizeStartCommandComplexBashScriptDecomposes(t *testing.T) {
+	t.Parallel()
+
+	storage := storagestub.NewInMemoryService()
+	opener := &stubPromptOpener{decision: PermissionAllowAlways}
+	a := newTestAuthorizerCore(opener, storage)
+	ext := testPluginExtension(nil)
+	ctx := blueauth.ContextWithClaims(context.Background(),
+		blueauth.UserClaims[Extension]{Extra: ext})
+
+	require.NoError(t, a.AuthorizeCommand(ctx, workspaceapi.Cmd{
+		Path: "/bin/bash",
+		Args: []string{"-c",
+			"cd /Users/ernestrc/.rune/worktrees/vim && gofmt -l $(find . -name '.go' -not -path './.git/' 2>/dev/null) 2>&1 | head -20"},
+		Dir: "/tmp",
+	}))
+	require.NoError(t, a.AuthorizeCommand(ctx, workspaceapi.Cmd{
+		Path: "/usr/bin/find", Args: []string{".", "-name", "*.go"}, Dir: "/tmp",
+	}))
+	require.NoError(t, a.AuthorizeCommand(ctx, workspaceapi.Cmd{
+		Path: "/usr/bin/gofmt", Args: []string{"-l", "."}, Dir: "/tmp",
+	}))
+	require.NoError(t, a.AuthorizeCommand(ctx, workspaceapi.Cmd{
+		Path: "/usr/bin/head", Args: []string{"-20"}, Dir: "/tmp",
+	}))
+
+	assert.Equal(t, 1, opener.calls)
+}
+
 func testPluginExtension(perms extensionapi.Permissions) Extension {
 	return Extension{
 		Metadata: extensionapi.Metadata{Permissions: perms},

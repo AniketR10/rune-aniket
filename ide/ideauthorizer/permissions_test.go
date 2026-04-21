@@ -105,16 +105,62 @@ func TestPluginPermissionEffectiveCommands(t *testing.T) {
 			want: []string{"grep"}, wantOK: true,
 		},
 		{
-			name: "command substitution is opaque",
+			name: "command substitution recurses into inner commands",
 			command: pluginPermissionCommandDetail{
 				Path: "/bin/bash", Args: []string{"-c", "grep $(cat file)"},
 			},
-			wantOK: false,
+			want: []string{"cat", "grep"}, wantOK: true,
+		},
+		{
+			name: "backtick command substitution recurses",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash", Args: []string{"-c", "grep `cat file`"},
+			},
+			want: []string{"cat", "grep"}, wantOK: true,
+		},
+		{
+			name: "command substitution in double-quoted argument recurses",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash", Args: []string{"-c", `grep -l "$(cat file)"`},
+			},
+			want: []string{"cat", "grep"}, wantOK: true,
+		},
+		{
+			name: "variable expansion in argument is tolerated",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash", Args: []string{"-c", "grep $PATTERN file"},
+			},
+			want: []string{"grep"}, wantOK: true,
+		},
+		{
+			name: "redirects to /dev/null and 2>&1 are tolerated",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c",
+					"cd /tmp && gofmt -l $(find . -name '.go' -not -path './.git/' 2>/dev/null) 2>&1 | head -20"},
+			},
+			want: []string{"find", "gofmt", "head"}, wantOK: true,
+		},
+		{
+			name: "regression: complex bash -c with cd, command substitution, redirects, and pipeline",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c",
+					"cd /Users/ernestrc/.rune/worktrees/vim && gofmt -l $(find . -name '.go' -not -path './.git/' 2>/dev/null) 2>&1 | head -20"},
+			},
+			want: []string{"find", "gofmt", "head"}, wantOK: true,
 		},
 		{
 			name: "variable expansion in command word is opaque",
 			command: pluginPermissionCommandDetail{
 				Path: "/bin/bash", Args: []string{"-c", "$CMD args"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "command substitution in command word is opaque",
+			command: pluginPermissionCommandDetail{
+				Path: "/bin/bash", Args: []string{"-c", "$(echo grep) foo"},
 			},
 			wantOK: false,
 		},
