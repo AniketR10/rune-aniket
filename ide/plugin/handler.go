@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term/vte"
@@ -339,18 +340,14 @@ func (e *Handler) initializeDoneHandler() {
 		return
 	}
 	orig := e.emulator.Component().PrimaryScroll().Buffer()
-	// re-initialize with Init, as opposed how it was initialized (InitPerformance)
-	// so cursor can subscribe and use the underlying buffer
-	data := term.CellsToString(orig.RawCells())
-	orig.Init()
-	_, _ = orig.ReadFrom(strings.NewReader(data))
+	buf := cell.CellsToBuffer(term.CloneCells(orig.RawCells()))
 
 	uri := e.emulator.Component().URI()
 
 	clipboard := nullReplaceClipboard{root: e.cfg.Clipboard}
 	var main text.Handler
 	if e.cfg.Modal {
-		main = vi.New(orig, uri,
+		main = vi.New(buf, uri,
 			vi.WithResAttr(e.cfg.SelectionAttributes),
 			vi.WithAttr(e.cfg.Attributes),
 			vi.WithWrap(false),
@@ -358,7 +355,7 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithClipboard(clipboard),
 		)
 	} else {
-		main = modeless.NewHandler(orig, uri,
+		main = modeless.NewHandler(buf, uri,
 			modeless.WithResAttr(e.cfg.SelectionAttributes),
 			modeless.WithAttr(e.cfg.Attributes),
 			modeless.WithWrap(false),

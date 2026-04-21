@@ -30,6 +30,7 @@ import (
 
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/workspacetest"
 )
 
 func TestPluginHandlerCursor(t *testing.T) {
@@ -194,6 +196,44 @@ func TestPluginHandler(t *testing.T) {
 	}
 }
 
+func TestPluginDoneHandlerKeepsLiveVTEPrimaryBufferInPerformanceMode(t *testing.T) {
+	t.Parallel()
+
+	h := new(Handler)
+	h.cfg = defaultConfig().cfg
+	h.bar = newPluginHandlerBar("done", nil, DefaultBarConfig())
+	t.Cleanup(func() { _ = h.bar.Close() })
+	h.bar.setDone(nil)
+	h.width = 5
+	h.height = 3
+
+	vteh, err := vte.NewHandler(nopBrowser{}, nopBrowser{},
+		&pluginTestExecutor{}, &pluginTestExecutor{}, nopBrowser{}, h.cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = vteh.Close() })
+	h.emulator = vteh
+	h.liveHandler = h.newUnion(vteh)
+
+	snapshot := vte.Snapshot{
+		Width:  5,
+		Height: 3,
+		Primary: vte.ScreenSnapshot{
+			Cells:  term.StringToCells("a\nb\nc\nd\ne\nf"),
+			Cursor: term.Coordinates{Y: 5},
+		},
+	}
+	require.NoError(t, h.emulator.RestoreFromSnapshot(snapshot))
+	require.False(t, h.emulator.Component().UsedAlternateBuffer())
+
+	require.NotPanics(t, func() {
+		h.initializeDoneHandler()
+	})
+
+	require.NotPanics(t, func() {
+		h.emulator.Resize(5, 2)
+	})
+}
+
 type nopBrowser struct {
 	interrupt term.Interrupter
 }
@@ -231,5 +271,28 @@ func (n nopBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error 
 func (n nopBrowser) UpdateNotificationProgress(
 	id, message string, progress, total int64,
 ) error {
+	return nil
+}
+
+type pluginTestExecutor struct{}
+
+func (e *pluginTestExecutor) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	return 0, nil
+}
+
+func (e *pluginTestExecutor) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
+	return nil
+}
+
+func (e *pluginTestExecutor) Close() error {
+	return nil
+}
+
+func (e *pluginTestExecutor) NewPty(context.Context) (workspaceapi.Pty, error) {
+	mockPtyFile := workspacetest.File{}
+	return workspaceapi.Pty{Master: &mockPtyFile, Slave: &mockPtyFile}, nil
+}
+
+func (e *pluginTestExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return nil
 }
