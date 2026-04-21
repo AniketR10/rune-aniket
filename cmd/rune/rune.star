@@ -501,6 +501,9 @@ config = {
             "<c-o>":          "cursorhistory prev",
             "<c-i>":          "cursorhistory next",
             "<a-b>":          "lsp format",
+            # on MacOS <c-space> is a shortcut. To disable it and enable this
+            # key binding, go to System Settings → Keyboard → Keyboard Shortcuts
+            # → Input Sources → uncheck both entries.
             "<c-space>":      "lsp complete",
             "<a-m>":          "go organize-imports",
             "<a-s-j>":        "gitnextchange",
