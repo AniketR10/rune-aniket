@@ -1175,7 +1175,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		h.skillRegistry,
 		memRecaller,
 		h.projectInstructions,
-		sessionKey, agentID,
+		sessionKey, agentID, h.cwd,
 	)
 	spawner.GenerateDialogueID = h.generateDialogueID
 	childEvents := make(chan agent.ChildEvent, 64)
@@ -1234,7 +1234,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
 	go debug.CapturePanicReport(func() {
 		createAgentCompletions(ctx, cancel, tx, msgRx, chatAgent, spawner, childEvents, h.skillRegistry, d.ID, syncComp, h.n,
-			makeOnCompacted(h.dialogueStore, adapter.compactFn))
+			makeOnCompacted(h.dialogueStore, adapter.compactFn),
+			h.dialogueStore)
 	})
 
 	bhandler := browserapi.FuncHandler(handler, func() error {
@@ -1331,7 +1332,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 		h.skillRegistry,
 		agent.NoMemory(),
 		h.projectInstructions,
-		queryID, "query",
+		queryID, "query", h.cwd,
 	)
 	spawner.SetRegistry(agent.NewRegistry(h.baseTools...))
 	spawner.GenerateDialogueID = h.generateDialogueID
@@ -1339,7 +1340,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 
 	go debug.CapturePanicReport(func() {
 		createAgentCompletions(ctx, cancel, tx, msgRx,
-			h.queryAgent, spawner, childEvents, h.skillRegistry, queryID, syncComp, h.n, nil)
+			h.queryAgent, spawner, childEvents, h.skillRegistry, queryID, syncComp, h.n, nil, h.dialogueStore)
 	})
 
 	var err error
@@ -1741,6 +1742,70 @@ func makeOnCompacted(store dialoguemanager.Store, compactFn func([]llm.Message))
 	}
 }
 
+// parentDialogueContextMessages loads the parent dialogue identified by
+// dialogueID and returns the subset of its stored messages suitable for
+// seeding a sub-agent whose skill opts into parent-context sharing.
+// The returned slice:
+//   - excludes messages with role system (the parent system prompt and
+//     any transient system injections are not relevant to the sub-agent),
+//   - excludes assistant tool-call messages and tool-result messages
+//     (the child sub-agent has its own tool set, so forwarding parent
+//     tool calls would produce dangling references),
+//   - excludes an exact match of currentMessage appearing at the tail
+//     (so the slash-command envelope message is not duplicated), and
+//   - returns freshly copied llm.Message values.
+//
+// store MUST NOT be nil; passing a nil store is a developer error.
+// Returns nil when the dialogue has not been persisted yet or on error.
+func parentDialogueContextMessages(
+	ctx context.Context, store dialoguemanager.Store,
+	dialogueID, currentMessage string,
+) []llm.Message {
+	if store == nil {
+		panic("parentDialogueContextMessages: store must not be nil")
+	}
+	if dialogueID == "" {
+		return nil
+	}
+	d, err := store.Get(ctx, dialogueID)
+	if err != nil {
+		// Absent parent dialogue (not yet persisted) is expected on the
+		// first turn; no context to forward.
+		return nil
+	}
+	msgs := d.Messages
+	// Drop a trailing occurrence of the current slash-command envelope
+	// message if it has already been appended to the parent dialogue.
+	if n := len(msgs); n > 0 {
+		tail := msgs[n-1]
+		if tail.Role == llm.RoleUser && tail.Content == currentMessage {
+			msgs = msgs[:n-1]
+		}
+	}
+	out := make([]llm.Message, 0, len(msgs))
+	for _, m := range msgs {
+		if m.Role == llm.RoleSystem || m.Role == llm.RoleTool {
+			continue
+		}
+		// Drop assistant messages that exist solely to carry tool
+		// calls; tool calls from the parent reference tools that may
+		// not exist in the child sub-agent.
+		if m.Role == llm.RoleAssistant && len(m.ToolCalls) > 0 && m.Content == "" && m.ReasoningContent == "" {
+			continue
+		}
+		// For assistant messages that mix text and tool calls, strip
+		// the tool calls and keep the text.
+		if len(m.ToolCalls) > 0 {
+			m.ToolCalls = nil
+		}
+		out = append(out, m)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func createAgentCompletions(
 	ctx context.Context, cancel func(),
 	tx chan<- dialoguetui.MessageEvent, rx <-chan completionRequest,
@@ -1751,7 +1816,11 @@ func createAgentCompletions(
 	syncComp syncComponent,
 	noti browserapi.Notifications,
 	onCompacted func(dialogueID string),
+	parentStore dialoguemanager.Store,
 ) {
+	if parentStore == nil {
+		panic("createAgentCompletions: parentStore must not be nil")
+	}
 	// Forward child events from sub-agents to the TUI.
 	// The goroutine must exit before we close tx to avoid
 	// sending on a closed channel.
@@ -1854,12 +1923,19 @@ func createAgentCompletions(
 				if skill.AllowedTools != "" {
 					allowedTools = strings.Fields(skill.AllowedTools)
 				}
+				var initialMessages []llm.Message
+				if skill.ParentContext {
+					initialMessages = parentDialogueContextMessages(
+						req.ctx, parentStore, id, req.msg,
+					)
+				}
 				handle, skillErr := spawner.Run(req.ctx, agent.RunRequest{
-					Label:        skill.Name,
-					Model:        ag.Model(),
-					Message:      req.msg,
-					AllowedTools: allowedTools,
-					SystemPrompt: skill.Body,
+					Label:           skill.Name,
+					Model:           ag.Model(),
+					Message:         req.msg,
+					AllowedTools:    allowedTools,
+					SystemPrompt:    skill.Body,
+					InitialMessages: initialMessages,
 				})
 				if skillErr != nil {
 					select {

@@ -34,6 +34,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
@@ -142,7 +143,7 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 				newMockStore(), factory, cfg,
 				skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 				NoMemory(), "",
-				"session-1", tt.agentID,
+				"session-1", tt.agentID, workspaceapi.URI{},
 			)
 
 			handle, err := spawner.Run(
@@ -185,7 +186,7 @@ func TestGoroutineSpawner_Run_uses_request_model(t *testing.T) {
 		newMockStore(), factory, cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
-		"session-1", "agent",
+		"session-1", "agent", workspaceapi.URI{},
 	)
 
 	// Run without Model: should use the agent definition's model.
@@ -236,7 +237,7 @@ func TestGoroutineSpawner_RunWithCleanup(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"psession",
-		"agent",
+		"agent", workspaceapi.URI{},
 	)
 	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
 		return "sub-agent-agent-fixed-id"
@@ -280,7 +281,7 @@ func TestGoroutineSpawner_RunWithAllowedTools(t *testing.T) {
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
-		"session", "agent",
+		"session", "agent", workspaceapi.URI{},
 	)
 	spawner.SetRegistry(NewRegistry(readTool, bashTool))
 
@@ -324,7 +325,7 @@ func TestGoroutineSpawner_Run_streams_events(t *testing.T) {
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
-		"session", "agent",
+		"session", "agent", workspaceapi.URI{},
 	)
 	spawner.SetRegistry(NewRegistry(readTool))
 
@@ -515,7 +516,7 @@ func TestGoroutineSpawner_RunWithLabel(t *testing.T) {
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
-		"parent-session", "agent",
+		"parent-session", "agent", workspaceapi.URI{},
 	)
 	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
 		idCounter++
@@ -581,7 +582,7 @@ You are a planner.`
 		return NewGoroutineSpawner(
 			newMockStore(),
 			func(string) (llm.Service, string, error) { return svc, "test", nil },
-			baseCfg, reg, NoMemory(), "", "s1", "agent",
+			baseCfg, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
 		)
 	}
 
@@ -641,7 +642,7 @@ You are a planner.`
 		spawner := NewGoroutineSpawner(
 			newMockStore(),
 			func(string) (llm.Service, string, error) { return svc, "test", nil },
-			restrictedCfg, reg, NoMemory(), "", "s1", "parent",
+			restrictedCfg, reg, NoMemory(), "", "s1", "parent", workspaceapi.URI{},
 		)
 		handle, err := spawner.Run(context.Background(), RunRequest{
 			AgentID: "planner",
@@ -662,7 +663,7 @@ You are a planner.`
 		spawner := NewGoroutineSpawner(
 			newMockStore(),
 			func(string) (llm.Service, string, error) { return svc, "test", nil },
-			cfgWithPlanner, reg, NoMemory(), "", "s1", "agent",
+			cfgWithPlanner, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
 		)
 		handle, err := spawner.Run(context.Background(), RunRequest{
 			AgentID: "planner",
@@ -672,6 +673,64 @@ You are a planner.`
 		reply := consumeReply(t, handle)
 		assert.Equal(t, "config-reply", reply)
 	})
+}
+
+// TestGoroutineSpawner_Run_seeds_initial_messages verifies that
+// RunRequest.InitialMessages are pre-pended to the child dialogue after
+// the child agent's own system prompt and before the current sub-agent
+// Message is appended by Agent.Run. This is the seeding mechanism used
+// by skills that opt into parent-dialogue context sharing.
+func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{ID: "agent", Name: "Agent", Model: "test-model", AllowAny: true},
+	})
+	svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
+	store := newMockStore()
+
+	spawner := NewGoroutineSpawner(
+		store,
+		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session", "agent", workspaceapi.URI{},
+	)
+	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
+		return "sub-agent-agent-seed"
+	}
+
+	parentMessages := []llm.Message{
+		// The parent system prompt MUST be filtered by the caller before
+		// handing messages to the spawner; the spawner itself does not
+		// filter. This test passes only user/assistant turns.
+		{Role: llm.RoleUser, Content: "Add feature X"},
+		{Role: llm.RoleAssistant, Content: "Ok, I'll work on X"},
+	}
+
+	handle, err := spawner.Run(context.Background(), RunRequest{
+		AgentID:         "agent",
+		Message:         "now plan the implementation",
+		SystemPrompt:    "you are a sub-agent",
+		InitialMessages: parentMessages,
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	d, ok := store.getDialogue("sub-agent-agent-seed")
+	require.True(t, ok, "child dialogue should have been persisted")
+
+	// Expected order: child system prompt, parent user, parent assistant,
+	// then the current sub-agent user message.
+	require.GreaterOrEqual(t, len(d.Messages), 4)
+	assert.Equal(t, llm.RoleSystem, d.Messages[0].Role)
+	assert.Equal(t, "you are a sub-agent", d.Messages[0].Content,
+		"child system prompt must come from the skill/agent, not the parent")
+	assert.Equal(t, llm.RoleUser, d.Messages[1].Role)
+	assert.Equal(t, "Add feature X", d.Messages[1].Content)
+	assert.Equal(t, llm.RoleAssistant, d.Messages[2].Role)
+	assert.Equal(t, "Ok, I'll work on X", d.Messages[2].Content)
+	assert.Equal(t, llm.RoleUser, d.Messages[3].Role)
+	assert.Equal(t, "now plan the implementation", d.Messages[3].Content)
 }
 
 // consumeReply drains the handle's events, collects EventText into

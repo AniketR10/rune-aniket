@@ -27,6 +27,7 @@ import (
 	"context"
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // Spawner abstracts the ability to run sub-agents.
@@ -43,6 +44,13 @@ type RunRequest struct {
 	AllowedTools []string // if non-empty, sub-agent receives only these tools
 	SystemPrompt string   // if non-empty, overrides the agent definition's prompt
 	Cleanup      string   // "delete" or "keep"
+
+	// InitialMessages, when non-empty, are prepended to the child
+	// dialogue (after the child agent's own system prompt) before the
+	// current Message is appended. This is used to seed a sub-agent with
+	// a snapshot of the parent dialogue so it can act on existing
+	// conversation context (see skills.Skill.ContextSharing).
+	InitialMessages []llm.Message
 }
 
 // RunHandle is the result of a Run call.

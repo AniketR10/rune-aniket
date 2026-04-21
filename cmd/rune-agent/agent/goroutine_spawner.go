@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
@@ -55,6 +56,7 @@ type GoroutineSpawner struct {
 	projectInstructions string
 	sessionKey          string
 	agentID             string
+	workspace           workspaceapi.URI
 
 	// GenerateDialogueID, when non-nil, replaces the default
 	// petname generator for child dialogue IDs. Intended for testing.
@@ -71,6 +73,7 @@ func NewGoroutineSpawner(
 	memory MemoryRecaller,
 	projectInstructions string,
 	sessionKey, agentID string,
+	workspace workspaceapi.URI,
 ) *GoroutineSpawner {
 	return &GoroutineSpawner{
 		store:               store,
@@ -81,6 +84,7 @@ func NewGoroutineSpawner(
 		projectInstructions: projectInstructions,
 		sessionKey:          sessionKey,
 		agentID:             agentID,
+		workspace:           workspace,
 	}
 }
 
@@ -190,6 +194,7 @@ func (s *GoroutineSpawner) Run(
 		AgentID:             agentID,
 		Provider:            provider,
 		SubAgent:            true,
+		Workspace:           s.workspace,
 	})
 
 	// Sub-agent runs inherit the caller's cancellation but have no
@@ -199,6 +204,30 @@ func (s *GoroutineSpawner) Run(
 	// from session teardown and from the parent agent closing the
 	// returned iterator.
 	runCtx, cancel := context.WithCancel(ctx)
+
+	// If the caller supplied initial messages (e.g. a snapshot of the
+	// parent dialogue), pre-create the child dialogue with the child's
+	// own system prompt followed by those seed messages. Agent.Run will
+	// then load this dialogue and append the current task message. The
+	// dialogue's metadata mirrors what Agent.Run would write for a
+	// freshly-created sub-agent dialogue (same WorkspaceURI source,
+	// same SubAgent flag, same AgentID/Model).
+	if len(req.InitialMessages) > 0 {
+		seed := make([]llm.Message, 0, 1+len(req.InitialMessages))
+		seed = append(seed, llm.Message{Role: llm.RoleSystem, Content: prompt})
+		seed = append(seed, req.InitialMessages...)
+		if createErr := s.store.Create(runCtx, dialoguemanager.Dialogue{
+			ID:           dialogueID,
+			AgentID:      agentID,
+			Model:        model,
+			WorkspaceURI: s.workspace.String(),
+			SubAgent:     true,
+			Messages:     seed,
+		}); createErr != nil {
+			slog.Warn("spawner: seed child dialogue",
+				"error", createErr, "dialogueID", dialogueID)
+		}
+	}
 
 	inner := ag.Run(runCtx, dialogueID, req.Message)
 	it := &spawnerIterator{

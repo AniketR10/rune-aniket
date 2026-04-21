@@ -45,6 +45,11 @@ type Skill struct {
 	AllowedTools  string            // optional, space-delimited
 	Type          string            // "" for prompt-skill, "agent" for agent-skill
 	Model         string            // optional model override for agent-type skills
+	// ParentContext, when true, opts an agent skill into receiving the
+	// parent dialogue's prior user/assistant messages as initial
+	// context when the skill is invoked via a slash command. Default
+	// false keeps the sub-agent isolated.
+	ParentContext bool
 }
 
 type frontmatter struct {
@@ -56,6 +61,7 @@ type frontmatter struct {
 	AllowedTools  string            `yaml:"allowed-tools"`
 	Type          string            `yaml:"type"`
 	Model         string            `yaml:"model"`
+	ParentContext bool              `yaml:"parent-context"`
 }
 
 var nameRegexp = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
@@ -95,6 +101,7 @@ func Parse(data []byte, dir string) (Skill, error) {
 		AllowedTools:  meta.AllowedTools,
 		Type:          meta.Type,
 		Model:         meta.Model,
+		ParentContext: meta.ParentContext,
 	}, nil
 }
 

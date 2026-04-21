@@ -849,7 +849,7 @@ func TestCreateAgentCompletions_SendsBreakOnCancel(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
+		nil, "", "test", "test", workspaceapi.URI{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -868,7 +868,7 @@ func TestCreateAgentCompletions_SendsBreakOnCancel(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil, store)
 	}()
 
 	// Send a request with its own cancellable context.
@@ -928,7 +928,7 @@ func TestCreateAgentCompletions_NormalFlowSendsBreak(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
+		nil, "", "test", "test", workspaceapi.URI{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -947,7 +947,7 @@ func TestCreateAgentCompletions_NormalFlowSendsBreak(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil, store)
 	}()
 
 	// Send a simple request.
@@ -994,7 +994,7 @@ func TestCreateAgentCompletions_TruncatedTurnShowsGuidance(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
+		nil, "", "test", "test", workspaceapi.URI{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -1014,7 +1014,7 @@ func TestCreateAgentCompletions_TruncatedTurnShowsGuidance(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, noti, nil)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, noti, nil, store)
 	}()
 
 	reqRx <- completionRequest{msg: "hello", ctx: ctx}
@@ -1074,7 +1074,7 @@ func TestCreateAgentCompletions_EmitsOneBreakPerCompletedTurn(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test",
+		nil, "", "test", "test", workspaceapi.URI{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -1093,7 +1093,7 @@ func TestCreateAgentCompletions_EmitsOneBreakPerCompletedTurn(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil, store)
 	}()
 
 	reqRx <- completionRequest{msg: "first", ctx: ctx}
@@ -1124,6 +1124,249 @@ func TestCreateAgentCompletions_EmitsOneBreakPerCompletedTurn(t *testing.T) {
 	<-done
 	assert.Equal(t, 2, breakCount)
 	assert.Len(t, svc.getRequests(), 2)
+}
+
+// TestCreateAgentCompletions_SkillWithParentContext verifies that when a
+// slash-command skill opts into `parent-context: true`, the sub-agent
+// it spawns receives the parent dialogue's prior user/assistant
+// messages as initial context — not just the command envelope — and
+// that tool-call/tool-result messages from the parent are stripped so
+// they cannot reference tools the child does not have.
+// Regression for RUNE-92.
+func TestCreateAgentCompletions_SkillWithParentContext(t *testing.T) {
+	t.Parallel()
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			// The planner sub-agent's very first turn: we only need
+			// it to emit a stop so the test can inspect the request.
+			{chunks: []string{"planning"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+
+	store := newTestDialogueStore(t)
+
+	// Seed the parent dialogue with prior conversation context.
+	const parentDialogueID = "d"
+	const parentUser = "We need feature X; please remember this context."
+	const parentAssistant = "Got it, I'm tracking feature X."
+	const parentToolOutput = "LEAKED-TOOL-OUTPUT"
+	commandMsg := formatSkillMessage(skills.Skill{Name: "plan"}, "")
+	require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
+		ID: parentDialogueID,
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "system prompt"},
+			{Role: llm.RoleUser, Content: parentUser},
+			{Role: llm.RoleAssistant, Content: parentAssistant},
+			// A tool-call/tool-result pair that must NOT be forwarded
+			// to the child sub-agent: forwarding would reference tools
+			// that may not exist in the child's tool filter and leaves
+			// dangling tool_use ids.
+			{
+				Role: llm.RoleAssistant,
+				ToolCalls: []llm.ToolCall{{
+					ID: "tc-parent-1", Type: llm.ToolTypeFunction,
+					Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"x.go"}`},
+				}},
+			},
+			{Role: llm.RoleTool, ToolCallID: "tc-parent-1", Content: parentToolOutput},
+			// The slash-command envelope as already persisted by the
+			// dialogue handler before createAgentCompletions runs.
+			{Role: llm.RoleUser, Content: commandMsg},
+		},
+	}))
+
+	// Register an agent-type skill that opts into parent-dialogue
+	// context sharing.
+	skillDir := t.TempDir()
+	planSkillDir := filepath.Join(skillDir, "plan")
+	require.NoError(t, os.MkdirAll(planSkillDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(planSkillDir, "SKILL.md"),
+		[]byte(`---
+name: plan
+description: Plan agent
+type: agent
+parent-context: true
+---
+You are a planner.`),
+		0o644,
+	))
+	skillReg := skills.NewRegistry(osFileSystem{}, workspaceapi.URI{}, []string{skillDir}, nil)
+
+	registry := agent.NewRegistry()
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "parent"})
+
+	spawner := agent.NewGoroutineSpawner(
+		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
+		agent.NewConfig([]agent.Definition{{ID: "default", Model: "test-model", AllowAny: true}}),
+		skillReg, agent.NoMemory(), "", "test", "default", workspaceapi.URI{},
+	)
+	spawner.SetRegistry(agent.NewRegistry())
+	childEvents := make(chan agent.ChildEvent, 64)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tx := make(chan dialoguetui.MessageEvent, 64)
+	reqRx := make(chan completionRequest)
+
+	mu := &sync.Mutex{}
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(80, 24)
+	h := &aiEditorHandler{p: term.NopInterrupter()}
+	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, parentDialogueID, sc, nopNotifications{}, nil, store)
+	}()
+
+	reqRx <- completionRequest{msg: commandMsg, skillName: "plan", ctx: ctx}
+
+	// Drain events until Break.
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-tx:
+			if ev.Type == dialoguetui.MessageEventBreak {
+				goto done
+			}
+		case <-timeout:
+			t.Fatal("timed out waiting for events")
+		}
+	}
+done:
+	cancel()
+	<-done
+
+	reqs := svc.getRequests()
+	require.GreaterOrEqual(t, len(reqs), 1, "planner sub-agent should have been invoked")
+
+	var sawUser, sawAssistant bool
+	for _, m := range reqs[0].Messages {
+		if m.Role == llm.RoleUser && m.Content == parentUser {
+			sawUser = true
+		}
+		if m.Role == llm.RoleAssistant && m.Content == parentAssistant {
+			sawAssistant = true
+		}
+		assert.Empty(t, m.ToolCalls,
+			"parent tool calls must not be forwarded to the sub-agent")
+		assert.NotEqual(t, llm.RoleTool, m.Role,
+			"parent tool results must not be forwarded to the sub-agent")
+		assert.NotContains(t, m.Content, parentToolOutput,
+			"parent tool output must not leak into the sub-agent")
+	}
+	assert.True(t, sawUser,
+		"planning sub-agent must see the prior parent user message")
+	assert.True(t, sawAssistant,
+		"planning sub-agent must see the prior parent assistant reply")
+
+	// Also assert the parent system prompt is NOT forwarded (the child
+	// has its own).
+	for _, m := range reqs[0].Messages {
+		assert.NotEqual(t, "system prompt", m.Content,
+			"parent system prompt must not leak into the sub-agent")
+	}
+}
+
+// TestCreateAgentCompletions_SkillWithoutContextSharing ensures that
+// agent skills that do NOT set `context-sharing: parent-dialogue` do
+// not receive the parent dialogue's prior messages. This guards against
+// accidental context leakage to every agent skill.
+func TestCreateAgentCompletions_SkillWithoutContextSharing(t *testing.T) {
+	t.Parallel()
+
+	svc := &agentMockService{
+		responses: []agentMockResponse{
+			{chunks: []string{"done"}, finishReason: llm.FinishReasonStop},
+		},
+	}
+
+	store := newTestDialogueStore(t)
+
+	const parentDialogueID = "d"
+	const parentUser = "SHOULD-NOT-LEAK"
+	commandMsg := formatSkillMessage(skills.Skill{Name: "other"}, "")
+	require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
+		ID: parentDialogueID,
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "sys"},
+			{Role: llm.RoleUser, Content: parentUser},
+			{Role: llm.RoleUser, Content: commandMsg},
+		},
+	}))
+
+	// Register an agent-type skill WITHOUT context-sharing.
+	skillDir := t.TempDir()
+	otherDir := filepath.Join(skillDir, "other")
+	require.NoError(t, os.MkdirAll(otherDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(otherDir, "SKILL.md"),
+		[]byte(`---
+name: other
+description: Other agent
+type: agent
+---
+You are an isolated sub-agent.`),
+		0o644,
+	))
+	skillReg := skills.NewRegistry(osFileSystem{}, workspaceapi.URI{}, []string{skillDir}, nil)
+
+	registry := agent.NewRegistry()
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{SystemPrompt: "parent"})
+
+	spawner := agent.NewGoroutineSpawner(
+		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
+		agent.NewConfig([]agent.Definition{{ID: "default", Model: "test-model", AllowAny: true}}),
+		skillReg, agent.NoMemory(), "", "test", "default", workspaceapi.URI{},
+	)
+	spawner.SetRegistry(agent.NewRegistry())
+	childEvents := make(chan agent.ChildEvent, 64)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tx := make(chan dialoguetui.MessageEvent, 64)
+	reqRx := make(chan completionRequest)
+
+	mu := &sync.Mutex{}
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	comp.Resize(80, 24)
+	h := &aiEditorHandler{p: term.NopInterrupter()}
+	sc := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, parentDialogueID, sc, nopNotifications{}, nil, store)
+	}()
+
+	reqRx <- completionRequest{msg: commandMsg, skillName: "other", ctx: ctx}
+
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case ev := <-tx:
+			if ev.Type == dialoguetui.MessageEventBreak {
+				goto done
+			}
+		case <-timeout:
+			t.Fatal("timed out waiting for events")
+		}
+	}
+done:
+	cancel()
+	<-done
+
+	reqs := svc.getRequests()
+	require.GreaterOrEqual(t, len(reqs), 1)
+	for _, m := range reqs[0].Messages {
+		assert.NotContains(t, m.Content, parentUser,
+			"sub-agents without context-sharing must not see parent dialogue messages")
+	}
 }
 
 func TestNotifyTurnOutcome(t *testing.T) {
@@ -1859,6 +2102,21 @@ func (nopFileSystem) Remove(string) error                   { return nil }
 func (nopFileSystem) Stat(string) (os.FileInfo, error)      { return nil, os.ErrNotExist }
 func (nopFileSystem) ReadDir(string) ([]os.DirEntry, error) { return nil, nil }
 func (nopFileSystem) MkdirAll(string, os.FileMode) error    { return nil }
+
+// osFileSystem is a workspaceapi.FileSystem backed by the real os
+// package, used to exercise skill loading from on-disk directories.
+type osFileSystem struct{}
+
+func (osFileSystem) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.CurrentUserHostURI(path)
+}
+func (osFileSystem) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	return os.OpenFile(path, flag, mode)
+}
+func (osFileSystem) Remove(path string) error                     { return os.Remove(path) }
+func (osFileSystem) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (osFileSystem) ReadDir(name string) ([]os.DirEntry, error)   { return os.ReadDir(name) }
+func (osFileSystem) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
 
 // testAIEditorDeps groups the handler and its captured test dependencies.
 type testAIEditorDeps struct {
@@ -10203,7 +10461,7 @@ func TestAgent_MemoryInjectedOncePerRun(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		memRecaller, "", "test", "test",
+		memRecaller, "", "test", "test", workspaceapi.URI{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -10222,7 +10480,7 @@ func TestAgent_MemoryInjectedOncePerRun(t *testing.T) {
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil, store)
 	}()
 
 	reqRx <- completionRequest{msg: "do the thing", ctx: ctx}
@@ -10292,7 +10550,7 @@ func TestAgent_MemoryRecallRenderedInTree(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		memRecaller, "", "test", "test",
+		memRecaller, "", "test", "test", workspaceapi.URI{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -10311,7 +10569,7 @@ func TestAgent_MemoryRecallRenderedInTree(t *testing.T) {
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
-		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+		createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil, store)
 	}()
 
 	reqRx <- completionRequest{msg: "hello", ctx: ctx}
@@ -10667,7 +10925,7 @@ func TestAgent_NormalizeStoredDialogueBeforeLLMCall(t *testing.T) {
 			spawner := agent.NewGoroutineSpawner(
 				store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 				agent.NewConfig(nil), skillReg,
-				agent.NoMemory(), "", "test", "test",
+				agent.NoMemory(), "", "test", "test", workspaceapi.URI{},
 			)
 			childEvents := make(chan agent.ChildEvent, 64)
 
@@ -10686,7 +10944,7 @@ func TestAgent_NormalizeStoredDialogueBeforeLLMCall(t *testing.T) {
 			doneCh := make(chan struct{})
 			go func() {
 				defer close(doneCh)
-				createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil)
+				createAgentCompletions(ctx, cancel, tx, reqRx, ag, spawner, childEvents, skillReg, "d", sc, nopNotifications{}, nil, store)
 			}()
 
 			reqRx <- completionRequest{msg: "continue", ctx: ctx}

@@ -269,6 +269,25 @@ body`,
 				Dir:         "/skills/prompt-skill",
 			},
 		},
+		{
+			name: "parent-context field parsed",
+			input: `---
+name: plan
+description: Plan agent
+type: agent
+parent-context: true
+---
+You are a planner.`,
+			dir: "/skills/plan",
+			want: Skill{
+				Name:          "plan",
+				Description:   "Plan agent",
+				Body:          "You are a planner.",
+				Dir:           "/skills/plan",
+				Type:          "agent",
+				ParentContext: true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -328,4 +347,17 @@ func TestPlanSkillFile(t *testing.T) {
 	for _, name := range []string{"apply_patch"} {
 		assert.False(t, toolSet[name], "plan skill must not include %s", name)
 	}
+}
+
+// TestPlanSkillParentContext asserts the built-in plan skill opts into
+// parent-dialogue context sharing. This is the mechanism that lets /plan
+// see the prior conversation when invoked inside an existing chat.
+func TestPlanSkillParentContext(t *testing.T) {
+	skillDir := filepath.Join(repoSkillsDir(t), "plan")
+	data, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
+	require.NoError(t, err)
+
+	skill, err := Parse(data, skillDir)
+	require.NoError(t, err)
+	assert.True(t, skill.ParentContext)
 }
