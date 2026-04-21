@@ -53,7 +53,7 @@ type commandHandler struct {
 // commands to the underlying handler. Output is streamed
 // via a channel-backed iterator.
 func (h *commandHandler) HandleCommand(
-	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	line := reconstructLine(cmd)
 	if line == "" {
@@ -73,7 +73,9 @@ func (h *commandHandler) HandleCommand(
 
 	runner, err := interp.New(
 		interp.StdIO(nil, outW, errW),
-		interp.ExecHandlers(h.execMiddleware),
+		interp.ExecHandlers(func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+			return h.execMiddleware(pw, next)
+		}),
 		interp.Interactive(true),
 	)
 	if err != nil {
@@ -148,6 +150,7 @@ func (h *commandHandler) Complete(
 }
 
 func (h *commandHandler) execMiddleware(
+	pw repl.ProgressWriter,
 	next interp.ExecHandlerFunc,
 ) interp.ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
@@ -157,7 +160,7 @@ func (h *commandHandler) execMiddleware(
 			Args: args[1:],
 		}
 		iter, err := h.underlying.HandleCommand(
-			ctx, cmd, repl.NopProgressWriter(),
+			ctx, cmd, pw,
 		)
 		if errors.Is(err, repl.ErrNotFound) {
 			return next(ctx, args)

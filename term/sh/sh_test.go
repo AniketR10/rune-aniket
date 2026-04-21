@@ -63,6 +63,29 @@ func (m *mockHandler) Complete(
 	return iterator.FromSlice[string](nil), nil
 }
 
+type recordingProgressWriter struct {
+	mu      sync.Mutex
+	calls   int
+	updates []progressUpdate
+}
+
+type progressUpdate struct {
+	progress int64
+	total    int64
+	units    string
+}
+
+func (w *recordingProgressWriter) Progress(progress, total int64, units string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.calls++
+	w.updates = append(w.updates, progressUpdate{
+		progress: progress,
+		total:    total,
+		units:    units,
+	})
+}
+
 func collectOutput(
 	t *testing.T,
 	iter iterator.Iterator[component.Responsive],
@@ -322,6 +345,40 @@ func TestLineWriterReturnsErrorOnCancelledContext(t *testing.T) {
 	// Write returns context error after cancellation.
 	_, err = w.Write([]byte("world\n"))
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestHandleCommandForwardsProgressWriter(t *testing.T) {
+	mock := &mockHandler{
+		handleFn: func(_ context.Context, cmd repl.Command, pw repl.ProgressWriter) (
+			iterator.Iterator[component.Responsive], error,
+		) {
+			if cmd.Name == "mycmd" {
+				pw.Progress(3, 10, "items")
+			}
+			return iterator.FromSlice[component.Responsive](nil), nil
+		},
+	}
+	h := New(mock)
+	pw := &recordingProgressWriter{}
+
+	iter, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: "mycmd",
+	}, pw)
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out, iterErr := collectOutput(t, iter)
+	require.NoError(t, iterErr)
+	assert.Empty(t, out)
+
+	pw.mu.Lock()
+	defer pw.mu.Unlock()
+	require.Equal(t, 1, pw.calls)
+	assert.Equal(t, []progressUpdate{{
+		progress: 3,
+		total:    10,
+		units:    "items",
+	}}, pw.updates)
 }
 
 func TestExitStatusError(t *testing.T) {
