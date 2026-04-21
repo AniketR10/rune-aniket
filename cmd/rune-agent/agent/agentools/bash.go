@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
@@ -37,9 +36,7 @@ import (
 )
 
 const (
-	defaultBashTimeout = 120 * time.Second
-	maxBashTimeout     = 600 * time.Second
-	maxCommandOutput   = 100 * 1024 // 100KB
+	maxCommandOutput = 100 * 1024 // 100KB
 )
 
 type bashTool struct {
@@ -50,7 +47,6 @@ type bashTool struct {
 type bashArgs struct {
 	Command     string `json:"command"`
 	Description string `json:"description"`
-	Timeout     *int   `json:"timeout"`
 	WorkingDir  string `json:"working_dir"`
 }
 
@@ -93,11 +89,6 @@ with no dedicated tool.`,
 							"this command does (5-10 words for simple " +
 							"commands, more for complex ones).",
 					},
-					"timeout": map[string]any{
-						"type": []string{"number", "null"},
-						"description": "Optional timeout in milliseconds " +
-							"(max 600000). Default: 120000 (2 minutes).",
-					},
 					"working_dir": map[string]any{
 						"type": []string{"string", "null"},
 						"description": "Working directory (relative to " +
@@ -130,17 +121,6 @@ func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResu
 	if args.WorkingDir != "" {
 		workDir = resolvePath(t.cwd, args.WorkingDir)
 	}
-
-	timeout := defaultBashTimeout
-	if args.Timeout != nil && *args.Timeout > 0 {
-		timeout = time.Duration(*args.Timeout) * time.Millisecond
-		if timeout > maxBashTimeout {
-			timeout = maxBashTimeout
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	var buf bytes.Buffer
 	watcher := newProcessWatcher()

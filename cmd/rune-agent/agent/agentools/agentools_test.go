@@ -35,7 +35,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -874,7 +873,7 @@ func TestBash(t *testing.T) {
 			},
 		},
 		{
-			name: "timeout returns error",
+			name: "cancelled context returns error",
 			args: `{"command": "sleep 10", "description": "Sleep"}`,
 			ctx: func() context.Context {
 				ctx, cancel := context.WithTimeout(context.Background(), 0)
@@ -927,60 +926,30 @@ func TestBash(t *testing.T) {
 	}
 }
 
-func TestBash_timeout_applied_to_context(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        string
-		wantTimeout time.Duration
-	}{
-		{
-			name:        "default timeout when omitted",
-			args:        `{"command": "echo hi", "description": "test"}`,
-			wantTimeout: 120 * time.Second,
-		},
-		{
-			name:        "custom timeout 5s",
-			args:        `{"command": "echo hi", "description": "test", "timeout": 5000}`,
-			wantTimeout: 5 * time.Second,
-		},
-		{
-			name:        "clamped to max 600s",
-			args:        `{"command": "echo hi", "description": "test", "timeout": 999999}`,
-			wantTimeout: 600 * time.Second,
-		},
-		{
-			name:        "zero uses default",
-			args:        `{"command": "echo hi", "description": "test", "timeout": 0}`,
-			wantTimeout: 120 * time.Second,
-		},
-		{
-			name:        "negative uses default",
-			args:        `{"command": "echo hi", "description": "test", "timeout": -1000}`,
-			wantTimeout: 120 * time.Second,
-		},
-	}
+func TestBash_execute_uses_caller_context_without_adding_deadline(t *testing.T) {
+	var capturedCtx context.Context
+	rec := &recordingExec{startFn: func(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+		capturedCtx = ctx
+		if cmd.Watcher != nil {
+			cmd.Watcher.WatchProcess() <- nil
+		}
+		return 1, nil
+	}}
+	tool := newBash(rec, dirURI("/workspace"))
+	tool.Execute(context.Background(), `{"command": "echo hi", "description": "test"}`)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var capturedCtx context.Context
-			rec := &recordingExec{startFn: func(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
-				capturedCtx = ctx
-				if cmd.Watcher != nil {
-					cmd.Watcher.WatchProcess() <- nil
-				}
-				return 1, nil
-			}}
-			tool := newBash(rec, dirURI("/workspace"))
-			tool.Execute(context.Background(), tt.args)
+	_, ok := capturedCtx.Deadline()
+	assert.False(t, ok, "bash should not add its own deadline")
+}
 
-			deadline, ok := capturedCtx.Deadline()
-			require.True(t, ok, "context must have a deadline")
-			remaining := time.Until(deadline)
-			// Allow 2 seconds of slack for test execution time.
-			assert.InDelta(t, tt.wantTimeout.Seconds(), remaining.Seconds(), 2,
-				"timeout should be ~%v, got ~%v", tt.wantTimeout, remaining.Round(time.Millisecond))
-		})
-	}
+func TestBash_definition_does_not_expose_timeout_parameter(t *testing.T) {
+	tool := newBash(localExec{}, dirURI("/workspace"))
+	def := tool.Definition()
+	params, ok := def.Function.Parameters.(map[string]any)
+	require.True(t, ok)
+	props, ok := params["properties"].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, props, "timeout")
 }
 
 func TestApplyPatch(t *testing.T) {
