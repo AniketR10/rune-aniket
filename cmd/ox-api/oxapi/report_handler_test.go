@@ -54,15 +54,9 @@ type recordingPager struct {
 	err   error
 }
 
-type nopPager struct{}
-
 func (p *recordingPager) Page(_ context.Context, page Page) error {
 	p.pages = append(p.pages, page)
 	return p.err
-}
-
-func (nopPager) Page(context.Context, Page) error {
-	return nil
 }
 
 func newInMemoryReportStore() *inMemoryReportStore {
@@ -124,6 +118,15 @@ func TestReportHandler_MethodNotAllowed(t *testing.T) {
 
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 	assert.Empty(t, store.objects)
+}
+
+func TestReportHandler_DefaultsNilPager(t *testing.T) {
+	store := newInMemoryReportStore()
+	logger := log.New()
+	logger.SetLevel(log.TraceLevel)
+	require.NotPanics(t, func() {
+		_ = newReportHandler(logger, store, ReportConfig{})
+	})
 }
 
 func TestReportHandler_EmptyBody(t *testing.T) {

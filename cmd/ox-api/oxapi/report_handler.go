@@ -107,7 +107,7 @@ func newReportHandler(
 		cfg.RateLimitWindow = DefaultReportRateLimitWindow
 	}
 	if cfg.Pager == nil {
-		panic("pager cannot be nil")
+		cfg.Pager = nopPager{}
 	}
 
 	return &reportHandler{

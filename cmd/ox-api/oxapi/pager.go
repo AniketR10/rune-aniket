@@ -25,6 +25,10 @@ package oxapi
 
 import "context"
 
+type nopPager struct{}
+
+func (nopPager) Page(context.Context, Page) error { return nil }
+
 const (
 	// PageSeverityInfo indicates an informational page event.
 	PageSeverityInfo = "info"
