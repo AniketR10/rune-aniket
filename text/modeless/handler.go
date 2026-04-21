@@ -492,6 +492,12 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			}
 		}
 	case term.ModCtrl:
+		switch ev.Key {
+		case term.KeyEnter:
+			h.cursor.InsertLineBelow()
+			handled = true
+			return
+		}
 		switch ev.Ch {
 		case 'y', 'c':
 			_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
@@ -558,6 +564,12 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.ExpandSelection(ctx)
 		}
 	case term.ModCtrlShift:
+		switch ev.Key {
+		case term.KeyEnter:
+			h.cursor.InsertLineAbove()
+			handled = true
+			return
+		}
 		switch ev.Ch {
 		case 'W':
 			handled = h.cursor.ShrinkSelection()
