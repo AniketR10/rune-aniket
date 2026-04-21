@@ -28,6 +28,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type mockHandler struct {
@@ -463,3 +464,54 @@ func TestPathCompletion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got2)
 }
+
+// TestForwardsResponsivesDirectly verifies that Responsives returned
+// by the underlying handler reach the outer iterator as the exact same
+// values (pointer equality), not flattened through text. Flattening
+// would force a fixed-width render and break markdown tables/other
+// Responsives that rely on resizing to the terminal width.
+func TestForwardsResponsivesDirectly(t *testing.T) {
+	want := []component.Responsive{
+		&markerResponsive{id: 1},
+		&markerResponsive{id: 2},
+		&markerResponsive{id: 3},
+	}
+	mock := &mockHandler{
+		handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
+			iterator.Iterator[component.Responsive], error,
+		) {
+			return iterator.FromSlice(want), nil
+		},
+	}
+	h := New(mock)
+	ctx := context.Background()
+	iter, err := h.HandleCommand(ctx, repl.Command{Name: "mycmd"}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	var got []component.Responsive
+	for {
+		item, ok := iter.Next(ctx)
+		if !ok {
+			break
+		}
+		got = append(got, item)
+	}
+	require.NoError(t, iter.Err())
+	require.Len(t, got, len(want))
+	for i := range want {
+		assert.Samef(t, want[i], got[i],
+			"item %d was not forwarded as-is", i)
+	}
+}
+
+// markerResponsive is a distinctive component.Responsive used to
+// verify pointer identity passes through sh.commandHandler.
+type markerResponsive struct {
+	id int
+}
+
+func (m *markerResponsive) Height(int) int         { return 1 }
+func (m *markerResponsive) Resize(_, _ int)        {}
+func (m *markerResponsive) Draw(term.Writer)       {}
+func (m *markerResponsive) Dimensions() (int, int) { return 0, 0 }

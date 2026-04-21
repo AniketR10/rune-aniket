@@ -69,6 +69,19 @@ func (w *lineWriter) send(text string) {
 	item := component.NewResponsiveString(
 		text, component.StringResponsiveConfig{},
 	)
+	w.push(item)
+}
+
+// sendResponsive flushes any buffered partial line and forwards the
+// given Responsive as-is to the output channel. Callers use this to
+// bypass text flattening when the command output is consumed directly
+// by the REPL (rather than piped into another command).
+func (w *lineWriter) sendResponsive(item component.Responsive) {
+	w.flush()
+	w.push(item)
+}
+
+func (w *lineWriter) push(item component.Responsive) {
 	select {
 	case w.ch <- item:
 	case <-w.ctx.Done():

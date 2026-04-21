@@ -168,18 +168,28 @@ func (h *commandHandler) execMiddleware(
 		}
 		defer func() { _ = iter.Close() }()
 
+		// When stdout is the REPL's own lineWriter (i.e. the
+		// command is not piped into another command or redirected
+		// to a file), forward Responsives as-is so the terminal
+		// layer can Resize them to its actual width. Flattening
+		// to pipeWidth-wide plain text would break components
+		// like markdown tables that depend on responsive layout.
+		lw, direct := hc.Stdout.(*lineWriter)
 		first := true
 		for {
 			item, ok := iter.Next(ctx)
 			if !ok {
 				break
 			}
-			text := responsiveToText(item, pipeWidth)
+			if direct {
+				lw.sendResponsive(item)
+				continue
+			}
 			if !first {
 				_, _ = fmt.Fprintln(hc.Stdout)
 			}
 			first = false
-			_, _ = fmt.Fprint(hc.Stdout, text)
+			_, _ = fmt.Fprint(hc.Stdout, responsiveToText(item, pipeWidth))
 		}
 		if err := iter.Err(); err != nil {
 			_, _ = fmt.Fprintln(hc.Stderr, err.Error())
