@@ -68,7 +68,7 @@ func TestRenderFlatDirectory(t *testing.T) {
 			{name: "README.md", isDir: false},
 		},
 	}, Config{})
-	assert.Equal(t, "  README.md\n  main.go", buf.String())
+	assert.Equal(t, " README.md\n main.go", buf.String())
 	_ = c
 }
 
@@ -85,8 +85,8 @@ func TestDrawClipping(t *testing.T) {
 	c.Resize(4, 2)
 	comptest.TestComponent(t, c, w, []comptest.TestCase{{
 		Expected: `
-  a.
-  b.`,
+  a
+  b`,
 	}})
 }
 
@@ -98,7 +98,7 @@ func TestDrawLargerThanContent(t *testing.T) {
 	w := term.NewStringWriter(20, 10)
 	c.Resize(20, 10)
 	comptest.TestComponent(t, c, w, []comptest.TestCase{{
-		Expected: "  a.go              \n" +
+		Expected: "  a.go             \n" +
 			"                    \n" +
 			"                    \n" +
 			"                    \n" +
@@ -157,10 +157,10 @@ func TestExpandNodeAtDirectory(t *testing.T) {
 
 	_, isFile := c.ExpandNodeAt(term.Coordinates{Y: 0})
 	assert.False(t, isFile)
-	assert.Equal(t, "  src/\n│   app.go", buf.String())
+	assert.Equal(t, " src/\n│    app.go", buf.String())
 
 	_, _ = c.ExpandNodeAt(term.Coordinates{Y: 0})
-	assert.Equal(t, "  src/", buf.String())
+	assert.Equal(t, " src/", buf.String())
 }
 
 // TestExpandLevel expands directories at the same depth.
@@ -175,7 +175,7 @@ func TestExpandLevel(t *testing.T) {
 		"/project/b": {{name: "b1.go"}},
 	}, Config{})
 	c.ExpandLevel(term.Coordinates{Y: 0})
-	assert.Equal(t, "  a/\n│   a1.go\n  b/\n│   b1.go\n  c.go", buf.String())
+	assert.Equal(t, " a/\n│    a1.go\n b/\n│    b1.go\n c.go", buf.String())
 }
 
 // TestCollapseLevel collapses every dir at a given depth.
@@ -190,7 +190,7 @@ func TestCollapseLevel(t *testing.T) {
 	}, Config{})
 	c.ExpandLevel(term.Coordinates{Y: 0})
 	c.CollapseLevel(term.Coordinates{Y: 0})
-	assert.Equal(t, "  a/\n  b/", buf.String())
+	assert.Equal(t, " a/\n b/", buf.String())
 }
 
 // TestCollapseAll collapses every directory.
@@ -201,7 +201,7 @@ func TestCollapseAll(t *testing.T) {
 	}, Config{})
 	c.ExpandNodeAt(term.Coordinates{Y: 0})
 	c.CollapseAll()
-	assert.Equal(t, "  src/", buf.String())
+	assert.Equal(t, " src/", buf.String())
 }
 
 // TestSorting: directories before files, each sorted alphabetically.
@@ -216,7 +216,7 @@ func TestSorting(t *testing.T) {
 		"/project/m": {},
 		"/project/b": {},
 	}, Config{})
-	assert.Equal(t, "  b/\n  m/\n  a.go\n  z.go", buf.String())
+	assert.Equal(t, " b/\n m/\n a.go\n z.go", buf.String())
 }
 
 // TestCustomIcons renders per-extension icons.
@@ -292,10 +292,9 @@ func TestCustomIndentWidthMatchesEditorTabs(t *testing.T) {
 		"/project/src": {{name: "app.go"}},
 	}, Config{IndentWidth: 4})
 	c.ExpandNodeAt(term.Coordinates{Y: 0})
-	// depth 0: "  src/" (2-space icon+sep prefix)
-	// depth 1: one `│   ` indent run (4 cells) + "  app.go"
-	//          (2-space icon+sep + name).
-	require.Equal(t, "  src/\n│     app.go", buf.String())
+	// depth 0: directory icon + space + "src/"
+	// depth 1: one `│   ` indent run (4 cells) + file icon + space + name.
+	require.Equal(t, " src/\n│    app.go", buf.String())
 	cs := c.DryFlush()
 	require.Empty(t, cs.Operations)
 	require.Empty(t, cs.Conflicts)
@@ -360,8 +359,8 @@ func TestMoveIntoDirectoryAndRenamePreservesIdentity(t *testing.T) {
 	}, Config{})
 	c.ExpandNodeAt(term.Coordinates{Y: 0})
 	// After expand, rows:
-	//   0: "  src/"
-	//   1: "  old.go"
+	//   0: " src/"
+	//   1: " old.go"
 	//
 	// Vi `dd` on row 1: DeleteRow(1). The row is removed
 	// entirely; its content is in the unnamed register.
@@ -371,17 +370,17 @@ func TestMoveIntoDirectoryAndRenamePreservesIdentity(t *testing.T) {
 	// line is pasted *after* row 0 (the current cursor line).
 	// The yanked text from DeleteRow includes no explicit
 	// newline; vi's linewise paste reintroduces one. Simulate
-	// that by inserting "  old.go\n" at {Y:1, X:0}.
+	// that by inserting " old.go\n" at {Y:1, X:0}.
 	buf.Edit(context.Background(),
 		term.Coordinates{Y: 1, X: 0},
 		term.Coordinates{Y: 1, X: 0},
-		"  old.go\n",
+		" old.go\n",
 	)
 	// Indent the (now-row-1) old.go under src/ via `>>`.
 	buf.ShiftRowRight(1)
 	// Rename old.go -> new.go on row 1 while still under src/.
 	// Preserve the leading tab so the indent survives.
-	replaceLine(buf, 1, "\t  new.go")
+	replaceLine(buf, 1, "\t new.go")
 
 	cs := c.DryFlush()
 	require.Empty(t, cs.Conflicts, "unexpected conflicts: %+v", cs.Conflicts)
@@ -843,7 +842,7 @@ func TestDryFlush(t *testing.T) {
 			edit: func(t *testing.T, c *Component, buf *cell.Buffer) {
 				// Add a row with crazy depth; parser should clamp to
 				// parent.depth+1 == 0 (root children).
-				insertAfter(buf, 0, "│ │ │   deep.go")
+				insertAfter(buf, 0, "│   │   │    deep.go")
 			},
 			wantOps: []opKey{{Type: OpCreate, New: "/project/deep.go"}},
 		},
@@ -887,7 +886,7 @@ func TestDryFlush(t *testing.T) {
 			},
 			edit: func(t *testing.T, c *Component, buf *cell.Buffer) {
 				// User renames main.go under src to app.go.
-				replaceLine(buf, 1, "┃ \ue627 app.go")
+				replaceLine(buf, 1, "┃   \ue627 app.go")
 			},
 			wantOps: []opKey{
 				{Type: OpRename, Path: "/project/src/main.go", New: "/project/src/app.go"},
@@ -1214,7 +1213,7 @@ func TestDryFlush(t *testing.T) {
 				)
 			},
 			wantOps: []opKey{
-				{Type: OpRename, Path: "/project/alpha.go", New: "/project/alpha.go  beta.go"},
+				{Type: OpRename, Path: "/project/alpha.go", New: "/project/alpha.go beta.go"},
 				{Type: OpDelete, Path: "/project/beta.go"},
 			},
 		},
@@ -1391,15 +1390,15 @@ func TestDryFlush(t *testing.T) {
 				// users doing "V4jd" then "p" inside dest/, which
 				// boils down to this mass edit:
 				//
-				//   0: "  dest/"
-				//   1: "│   src1/"
-				//   2: "│ │   a.go"
-				//   3: "│ │   b.go"
-				//   4: "│   src2/"
+				//   0: " dest/"
+				//   1: " src1/"
+				//   2: "│    a.go"
+				//   3: "│    b.go"
+				//   4: " src2/"
 				buf.Edit(context.Background(),
 					term.Coordinates{Y: 1, X: 0},
 					term.Coordinates{Y: 4, X: buf.View().Columns(4)},
-					"│   src1/\n│ │   a.go\n│ │   b.go\n│   src2/",
+					"│    src1/\n│   │    a.go\n│   │    b.go\n│    src2/",
 				)
 			},
 			wantOps: []opKey{
@@ -1842,15 +1841,15 @@ func TestDryFlush(t *testing.T) {
 				c.ExpandNodeAt(term.Coordinates{Y: 1})
 			},
 			edit: func(t *testing.T, c *Component, buf *cell.Buffer) {
-				// Buffer row 2 starts as "│ │ \ue627 service.go".
+				// Buffer row 2 starts as "│   │   \ue627 service.go".
 				// User inserts one space between the last indent
-				// marker and the icon at column 4.
+				// marker and the icon at column 8.
 				buf.Edit(context.Background(),
-					term.Coordinates{Y: 2, X: 4},
-					term.Coordinates{Y: 2, X: 4},
+					term.Coordinates{Y: 2, X: 8},
+					term.Coordinates{Y: 2, X: 8},
 					" ",
 				)
-				// Row 2 is now "│ │  \ue627 service.go".
+				// Row 2 is now "│   │    \ue627 service.go".
 			},
 		},
 	}
@@ -1878,7 +1877,7 @@ func TestFlushExecutesOperations(t *testing.T) {
 	assert.Equal(t, OpRename, cs.Operations[0].Type)
 
 	// Buffer was rewritten to match the new base tree.
-	assert.Equal(t, "  new.go", buf.String())
+	assert.Equal(t, " new.go", buf.String())
 	// FS reflects the rename.
 	_, ok := mfs.files["/project/new.go"]
 	assert.True(t, ok)

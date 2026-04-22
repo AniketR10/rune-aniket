@@ -1023,11 +1023,11 @@ func TestShellCommandOpensTab(t *testing.T) {
 			Expected: "┌──────────────────┐\n" +
 				"│ shell           │\n" +
 				"├──────────────────┤\n" +
-				"│> help            │\n" +
-				"│• help — Show avai│\n" +
-				"│lable commands    │\n" +
-				"│• status — show st│\n" +
-				"│atus              │\n" +
+				"│  available       │\n" +
+				"│  commands        │\n" +
+				"│• status — show   │\n" +
+				"│  status          │\n" +
+				"│                  │\n" +
 				"│> ▐               │\n" +
 				"└──────────────────┘",
 		},

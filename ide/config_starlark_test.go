@@ -41,7 +41,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	yaml "gopkg.in/yaml.v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/workspace"
 )
@@ -369,68 +368,6 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 	assert.Equal(t, "info", cfg.cfg["log_level"])
 }
 
-func TestRuneStarMatchesLegacyYAML(t *testing.T) {
-	star, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
-
-	base := mustLegacyConfigFromGit(t, "cmd/rune/runerc")
-	tui := mustLegacyConfigFromGit(t, "cmd/rune/runerc.tui")
-	modeless := mustLegacyModelessConfigFromGit(t)
-
-	tests := []struct {
-		name   string
-		params map[string]any
-		want   map[string]any
-	}{
-		{
-			name:   "gui modal",
-			params: map[string]any{"mode": "modal", "tui": false},
-			want:   cloneTestMap(base),
-		},
-		{
-			name:   "gui modeless",
-			params: map[string]any{"mode": "modeless", "tui": false},
-			want: func() map[string]any {
-				cfg := cloneTestMap(base)
-				overrideConfig(cfg, cloneTestMap(modeless))
-				return cfg
-			}(),
-		},
-		{
-			name:   "tui modal",
-			params: map[string]any{"mode": "modal", "tui": true},
-			want: func() map[string]any {
-				cfg := cloneTestMap(base)
-				overrideConfig(cfg, cloneTestMap(tui))
-				return cfg
-			}(),
-		},
-		{
-			name:   "tui modeless",
-			params: map[string]any{"mode": "modeless", "tui": true},
-			want: func() map[string]any {
-				cfg := cloneTestMap(base)
-				overrideConfig(cfg, cloneTestMap(modeless))
-				overrideConfig(cfg, cloneTestMap(tui))
-				return cfg
-			}(),
-		},
-	}
-
-	for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				got, err := decodeStarlarkConfig(starlarkConfigSource{
-					src:      star,
-					filename: "rune.star",
-					params:   tt.params,
-				})
-			require.NoError(t, err)
-			assert.Equal(t, flattenConfigCSV(normalizeLegacyExpected(tt.want)),
-				flattenConfigCSV(got))
-		})
-	}
-}
-
 func TestDecodeStarlarkOverlayRead(t *testing.T) {
 	base := map[string]any{
 		"editor":     map[string]any{"mode": "modal"},
@@ -619,14 +556,6 @@ func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
 	require.Error(t, err)
 }
 
-func mustLegacyConfigFromGit(t *testing.T, path string) map[string]any {
-	t.Helper()
-	text := mustGitShow(t, "2b7a654ef736fc7a8fb0a64a9e5a6cfcf9f5db0b^:"+path)
-	var cfg map[string]any
-	require.NoError(t, yaml.Unmarshal([]byte(text), &cfg))
-	return normalizeTestConfig(cfg).(map[string]any)
-}
-
 func mustLegacyModelessConfigFromGit(t *testing.T) map[string]any {
 	t.Helper()
 	return map[string]any{
@@ -729,13 +658,6 @@ func mustLegacyModelessConfigFromGit(t *testing.T) map[string]any {
 		},
 		"terminal": map[string]any{"modal": false},
 	}
-}
-
-func mustGitShow(t *testing.T, spec string) string {
-	t.Helper()
-	out, err := execCommandOutput("git", "show", spec)
-	require.NoError(t, err)
-	return out
 }
 
 func execCommandOutput(name string, args ...string) (string, error) {

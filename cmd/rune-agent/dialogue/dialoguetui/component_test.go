@@ -693,6 +693,44 @@ func TestComponentToolCallBreaksTextStream(t *testing.T) {
 	comptest.TestComponent(t, comp, w, tests)
 }
 
+func TestComponentToolCallInsertedBeforeActivePrompt(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(40, 12)
+
+	resultCh := make(chan []string, 1)
+	w := term.NewStringWriter(41, 13)
+	tests := []comptest.TestCase{
+		{
+			Action: func() {
+				comp.AddSendMessage("choose a db")
+				comp.AddPrompt(
+					"Which DB?",
+					"DB",
+					"questions=[...]",
+					[]PromptEventOption{{Label: "Postgres"}, {Label: "SQLite"}},
+					false,
+					resultCh,
+				)
+				comp.AddToolCall("c1", "request_user_input", `{}`, "Which DB?")
+			},
+			Expected: "choose a db                              \n" +
+				"? request_user_input Which DB?           \n" +
+				"questions=[...]                          \n" +
+				"                                         \n" +
+				"Which DB?                           [DB] \n" +
+				"                                         \n" +
+				"> Postgres                               \n" +
+				"  SQLite                                 \n" +
+				"                                         \n" +
+				"   ┌───────────────────────────────┐     \n" +
+				"   │                               │     \n" +
+				"   └───────────────────────────────┘     \n" +
+				"                                         ",
+		},
+	}
+	comptest.TestComponent(t, comp, w, tests)
+}
+
 func TestComponentToolCallError(t *testing.T) {
 	comp := NewComponent(ComponentConfig{})
 	comp.Resize(20, 10)

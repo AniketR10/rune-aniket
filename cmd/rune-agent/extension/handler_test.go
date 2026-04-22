@@ -2783,6 +2783,11 @@ func TestAIEditorHandler_query_renders_user_message(t *testing.T) {
 	err := deps.handler.HandleCommand(context.Background(), cmd)
 	require.NoError(t, err)
 
+	// Wait for the async agent turn to settle before inspecting state, so
+	// that t.TempDir() cleanup doesn't race with background persistence
+	// writes from the agent loop spawned by handleQuery.
+	waitUntilIdle(deps.interruptCh, 200*time.Millisecond, 2*time.Second)
+
 	deps.wm.mu.Lock()
 	floating := deps.wm.lastFloating
 	deps.wm.mu.Unlock()

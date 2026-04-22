@@ -657,6 +657,16 @@ func (c *Component) AddCommandOutput(item component.Responsive) {
 	c.moveHintToBack()
 }
 
+func (c *Component) promptAnchorNode() *component.ListNode {
+	if c.promptBodyNode != nil {
+		return c.promptBodyNode
+	}
+	if c.activePromptNode != nil {
+		return c.activePromptNode
+	}
+	return nil
+}
+
 // AddMemoryRecall adds a memory recall tree node with individual
 // memories nested as children. Memory entries are ephemeral — they
 // appear in the UI but don't survive conversation reload.
@@ -1402,7 +1412,11 @@ func (c *Component) ensureCurrentTurn() {
 	c.currentTurn.root = true
 	c.currentTurn.mode = c.collapseMode
 	c.turnNode = new(component.ListNode)
-	*c.turnNode = c.messages.PushBack(c.currentTurn)
+	if anchor := c.promptAnchorNode(); anchor != nil {
+		*c.turnNode = c.messages.InsertBefore(c.currentTurn, *anchor)
+	} else {
+		*c.turnNode = c.messages.PushBack(c.currentTurn)
+	}
 }
 
 // spacer returns a Responsive component that occupies height rows

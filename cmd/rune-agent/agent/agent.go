@@ -278,10 +278,11 @@ func (a *Agent) Run(
 	}
 
 	ch := make(chan Event, 16)
-	it := &channelIterator{ch: ch}
+	it := &channelIterator{ch: ch, done: make(chan struct{})}
 
 	go debug.CapturePanicReport(func() {
 
+		defer close(it.done)
 		defer close(ch)
 		a.run(ctx, ch, dialogueID, message, options)
 
@@ -1494,9 +1495,10 @@ func emit(ctx context.Context, ch chan<- Event, ev Event) {
 
 // channelIterator adapts a channel to iterator.Iterator[Event].
 type channelIterator struct {
-	ch  <-chan Event
-	cur Event
-	err error
+	ch   <-chan Event
+	done chan struct{}
+	cur  Event
+	err  error
 }
 
 func (c *channelIterator) Next(ctx context.Context) (Event, bool) {
@@ -1520,8 +1522,26 @@ func (c *channelIterator) Err() error {
 	return c.err
 }
 
+// Close drains any pending events and blocks until the producer goroutine
+// has finished. This provides a natural join point so callers that use
+// `defer it.Close()` wait for all background work (including post-cancel
+// state persistence) before proceeding.
 func (c *channelIterator) Close() error {
-	return nil
+	for {
+		select {
+		case _, ok := <-c.ch:
+			if !ok {
+				<-c.done
+				return nil
+			}
+		case <-c.done:
+			// Drain any remaining buffered events so the producer can
+			// finish closing without blocking on a full channel.
+			for range c.ch { //nolint:revive
+			}
+			return nil
+		}
+	}
 }
 
 // buildToolCallMessages converts pre-computed ToolCallResults into the

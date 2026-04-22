@@ -1333,7 +1333,9 @@ func TestChannelIterator(t *testing.T) {
 		ch <- Event{Type: EventText, Text: "hi"}
 		close(ch)
 
-		it := &channelIterator{ch: ch}
+		done := make(chan struct{})
+		close(done)
+		it := &channelIterator{ch: ch, done: done}
 		ev, ok := it.Next(context.Background())
 		assert.True(t, ok)
 		assert.Equal(t, "hi", ev.Text)
@@ -1348,7 +1350,9 @@ func TestChannelIterator(t *testing.T) {
 		ch <- Event{Type: EventError, Error: errors.New("bad")}
 		close(ch)
 
-		it := &channelIterator{ch: ch}
+		done := make(chan struct{})
+		close(done)
+		it := &channelIterator{ch: ch, done: done}
 		ev, ok := it.Next(context.Background())
 		assert.True(t, ok)
 		assert.Equal(t, EventError, ev.Type)
@@ -1360,7 +1364,9 @@ func TestChannelIterator(t *testing.T) {
 
 	t.Run("Err returns context error on cancellation", func(t *testing.T) {
 		ch := make(chan Event) // unbuffered, will block
-		it := &channelIterator{ch: ch}
+		done := make(chan struct{})
+		close(done)
+		it := &channelIterator{ch: ch, done: done}
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -1371,7 +1377,11 @@ func TestChannelIterator(t *testing.T) {
 	})
 
 	t.Run("Close returns nil", func(t *testing.T) {
-		it := &channelIterator{ch: make(chan Event)}
+		ch := make(chan Event)
+		close(ch)
+		done := make(chan struct{})
+		close(done)
+		it := &channelIterator{ch: ch, done: done}
 		assert.NoError(t, it.Close())
 	})
 }

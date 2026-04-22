@@ -66,7 +66,7 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			height: 6,
 			sequence: []handlertest.SequenceTestCase{{
 				InputSequence: "",
-				Expected:      "▐ .claude/          \no .gitignore        \n                    \n                    \n                    \n                    ",
+				Expected:      "▐  .claude/         \no .gitignore        \n                    \n                    \n                    \n                    ",
 			}},
 		},
 		{
@@ -82,9 +82,9 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			width:  20,
 			height: 6,
 			sequence: []handlertest.SequenceTestCase{
-				{InputSequence: "", Expected: "▐ src/              \n                    \n                    \n                    \n                    \n                    "},
-				{InputSequence: "<enter>", Expected: "▐ src/              \n│ o main.go         \n                    \n                    \n                    \n                    "},
-				{InputSequence: "<enter>", Expected: "▐ src/              \n                    \n                    \n                    \n                    \n                    "},
+				{InputSequence: "", Expected: "▐  src/             \n                    \n                    \n                    \n                    \n                    "},
+				{InputSequence: "<enter>", Expected: "▐  src/             \n│   o main.go       \n                    \n                    \n                    \n                    "},
+				{InputSequence: "<enter>", Expected: "▐  src/             \n                    \n                    \n                    \n                    \n                    "},
 			},
 		},
 		{
@@ -170,7 +170,7 @@ func TestFileExplorerHandlerRuntimeLikeDimensionsAndRender(t *testing.T) {
 
 	handlertest.RunHandlerSequence(t, h, 32, 6, []handlertest.SequenceTestCase{{
 		InputSequence: "",
-		Expected:      "1 ▐ .claude/                    \n1 o very-long-file-name.go      \n2                               \n3                               \n4                               \n5                               ",
+		Expected:      "1 ▐  .claude/                   \n1 o very-long-file-name.go      \n2                               \n3                               \n4                               \n5                               ",
 	}})
 
 	// Handler's Dimensions MUST include the editor's aux bar so the

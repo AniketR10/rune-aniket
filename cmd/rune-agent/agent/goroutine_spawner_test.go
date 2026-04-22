@@ -406,7 +406,7 @@ func TestGoroutineSpawner_Run_no_tool_deadline(t *testing.T) {
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
-		"session", "agent",
+		"session", "agent", workspaceapi.URI{},
 	)
 	spawner.SetRegistry(NewRegistry(blockTool))
 
@@ -461,7 +461,7 @@ func TestGoroutineSpawner_Run_caller_cancel_propagates(t *testing.T) {
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
-		"session", "agent",
+		"session", "agent", workspaceapi.URI{},
 	)
 	spawner.SetRegistry(NewRegistry(blockTool))
 

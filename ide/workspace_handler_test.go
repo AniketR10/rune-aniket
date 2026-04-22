@@ -2000,6 +2000,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+		m.mu.Lock()
 		ex1 := m.exHandler(m.focusHandler())
 		fileURI, err := ex1.workspace.URI("restored.txt")
 		require.NoError(t, err)
@@ -2066,6 +2067,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 			ex2.comp.Browser().TileLayout().Children[1].Split)
 		require.Len(t, ex2.comp.Browser().TileLayout().Children[1].Children, 2)
 
+		m.mu.Unlock()
 		require.NoError(t, m.Close())
 	})
 
@@ -2223,20 +2225,27 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		uri, err := workspaceapi.ParseURI(terminalWorkspaceScheme + ":///workspace")
 		require.NoError(t, err)
 		runner := FuncExtensionsRunner(testRunnerFn)
-		cfg := defaultConfigWithWrap(false)
-		cfg.cfg["workspace"] = map[string]any{"auto_restore": true}
-		cfg.ringBell = func() {}
+		newCfg := func() ideConfig {
+			cfg := defaultConfigWithWrap(false)
+			cfg.cfg["workspace"] = map[string]any{"auto_restore": true}
+			cfg.ringBell = func() {}
+			return cfg
+		}
 
 		m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+			&uri, newCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+		m1.mu.Lock()
 		ex1 := m1.exHandler(m1.focusHandler())
 		require.NoError(t, ex1.terminalnewtab(context.Background()))
 		require.Len(t, ex1.comp.Tabs(), 1)
+		m1.mu.Unlock()
 		require.NoError(t, m1.Close())
 
 		m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
+			&uri, newCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
 		defer m2.Close()
+		m2.mu.Lock()
+		defer m2.mu.Unlock()
 		ex2 := m2.exHandler(m2.focusHandler())
 		tabs := ex2.comp.Tabs()
 		require.Len(t, tabs, 1)

@@ -282,6 +282,25 @@ func TestHelpCommandOutput(t *testing.T) {
 	assert.Contains(t, out[0], "help")
 }
 
+func TestHelpCommandOutputUsesMarkdownList(t *testing.T) {
+	r := NewRegistry()
+	registerBaseCommands(r)
+	require.NoError(t, r.RegisterREPLCommand(textapi.CommandManual{
+		Name:    "status",
+		Summary: "show status",
+	}, &mockCmdHandler{}))
+
+	ctx := context.Background()
+	iter, err := r.HandleCommand(ctx, repl.Command{Name: "help"}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out := collectText(t, iter)
+	require.Len(t, out, 1)
+	assert.Contains(t, out[0], "• help — Show available commands")
+	assert.Contains(t, out[0], "• status — show status")
+}
+
 func TestHelpCommandDelegates(t *testing.T) {
 	r := NewRegistry()
 	registerBaseCommands(r)
