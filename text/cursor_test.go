@@ -856,6 +856,66 @@ func TestIndent(t *testing.T) {
 	}
 }
 
+func TestCursorReindent(t *testing.T) {
+	suite := []struct {
+		name                 string
+		inputBuffer          string
+		expectIndentationAt  int
+		cursorAtScroll       term.Coordinates
+		expectReindent       bool
+		outputBuffer         string
+		expectCursorAtScroll term.Coordinates
+	}{
+		{
+			name:                 "adds indentation",
+			inputBuffer:          "a",
+			expectIndentationAt:  1,
+			cursorAtScroll:       term.Coordinates{},
+			expectReindent:       true,
+			outputBuffer:         "\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
+		},
+		{
+			name:                 "removes indentation",
+			inputBuffer:          "\t\ta",
+			expectIndentationAt:  1,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			expectReindent:       true,
+			outputBuffer:         "\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
+		},
+		{
+			name:                 "already indented still reports available",
+			inputBuffer:          "\ta",
+			expectIndentationAt:  1,
+			cursorAtScroll:       term.Coordinates{X: 1},
+			expectReindent:       true,
+			outputBuffer:         "\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
+		},
+	}
+
+	for _, test := range suite {
+		t.Run(test.name, func(t *testing.T) {
+			c := setupCursorContent(t, 10, 10, test.inputBuffer, false)
+			mock := &mockIndentService{returnIndentationAt: test.expectIndentationAt}
+			mock.View = c.buffer().WithView(mock)
+			c.MoveToScroll(test.cursorAtScroll)
+
+			assert.Equal(t, test.expectReindent, c.Reindent())
+			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
+			assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
+		})
+	}
+
+	t.Run("no indent service returns false", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 10, "a", false)
+		assert.False(t, c.Reindent())
+		assert.Equal(t, "a", term.CellsToString(c.view().RawCells()))
+		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
+	})
+}
+
 func TestCursorCenter(t *testing.T) {
 	suite := []struct {
 		width, height             int

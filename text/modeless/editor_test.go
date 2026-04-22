@@ -257,3 +257,72 @@ func TestEditorSetCursor(t *testing.T) {
 			})
 	}
 }
+
+func TestEditorRegistersIndentCommand(t *testing.T) {
+	cwd, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	uri, err := workspaceapi.ParseURI("memory:///indent.go")
+	require.NoError(t, err)
+
+	wr := newWorkspaceRegistry()
+	ed := Editor(WithWorkspaceCommandRegistry(cwd, wr))
+	buf := cell.NewBuffer()
+	buf.WriteString("a")
+
+	h, err := ed.Edit(uri, buf, false, false)
+	require.NoError(t, err)
+	h.Resize(80, 10)
+
+	cmds := wr.sub[cwd.String()]
+	require.Contains(t, cmds, text.CommandReindent)
+
+	mock := &mockIndentView{View: buf.View(), indents: map[int]int{0: 1}}
+	buf.WithView(mock)
+
+	err = cmds[text.CommandReindent].HandleCommand(context.Background(), textapi.Command{
+		URI:  uri,
+		Name: text.CommandReindent,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "\ta", buf.String())
+
+	require.NoError(t, h.Close())
+	assert.NotContains(t, wr.sub[cwd.String()], text.CommandReindent)
+}
+
+type workspaceRegistry struct {
+	sub map[string]map[string]text.CommandHandler
+}
+
+func newWorkspaceRegistry() *workspaceRegistry {
+	return &workspaceRegistry{sub: make(map[string]map[string]text.CommandHandler)}
+}
+
+func (r *workspaceRegistry) SubscribeCommandForWorkspace(
+	workspace workspaceapi.URI, cmd textapi.CommandManual, handler text.CommandHandler,
+) error {
+	if r.sub[workspace.String()] == nil {
+		r.sub[workspace.String()] = make(map[string]text.CommandHandler)
+	}
+	r.sub[workspace.String()][cmd.Name] = handler
+	return nil
+}
+
+func (r *workspaceRegistry) UnsubscribeCommandForWorkspace(
+	workspace workspaceapi.URI, name string,
+) error {
+	if r.sub[workspace.String()] != nil {
+		delete(r.sub[workspace.String()], name)
+	}
+	return nil
+}
+
+type mockIndentView struct {
+	cell.View
+	indents map[int]int
+}
+
+func (v mockIndentView) IndentationAt(line int) (int, bool) {
+	indent, ok := v.indents[line]
+	return indent, ok
+}

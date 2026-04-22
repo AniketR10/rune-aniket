@@ -2515,18 +2515,11 @@ func toggleCaseString(s string) string {
 // TryIndent attempts to indent the cursor if an indent service is available.
 func (c *Cursor) TryIndent() bool {
 	pos := c.cursorAtScroll()
-	svc := c.getIndentService()
-	target, ok := svc.IndentationAt(pos.Y)
+	after, ok := c.reindentAt(pos)
 	if !ok {
 		return false
 	}
-	after, ok := c.doTryIndent(c.ctx, pos, target)
-	if ok {
-		c.setCursorAfterUpdate(after)
-		return true
-	}
-	after, ok = c.doTryDedent(c.ctx, pos, target)
-	if ok {
+	if after != pos {
 		c.setCursorAfterUpdate(after)
 		return true
 	}
@@ -2774,18 +2767,22 @@ func (c *Cursor) ReindentSelection() {
 	from, to := c.getShiftSelection()
 	c.Unselect()
 
-	svc := c.getIndentService()
 	for y := from.Y; y <= to.Y; y++ {
-		target, ok := svc.IndentationAt(y)
-		if !ok {
-			continue
-		}
-		pos := term.Coordinates{Y: y}
-		if _, ok := c.doTryIndent(c.ctx, pos, target); ok {
-			continue
-		}
-		c.doTryDedent(c.ctx, pos, target)
+		c.reindentAt(term.Coordinates{Y: y})
 	}
+}
+
+// Reindent reindents the current cursor line if an indent service is available.
+func (c *Cursor) Reindent() bool {
+	pos := c.cursorAtScroll()
+	after, ok := c.reindentAt(pos)
+	if !ok {
+		return false
+	}
+	if after != pos {
+		c.setCursorAfterUpdate(after)
+	}
+	return true
 }
 
 // LocationsAtCursor returns the set of locations by location list ID set by SetLocationList,
@@ -3223,6 +3220,23 @@ func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates) (term.Coord
 		return to, false
 	}
 	return c.doTryIndent(ctx, to, indentation)
+}
+
+func (c *Cursor) reindentAt(pos term.Coordinates) (term.Coordinates, bool) {
+	svc := c.getIndentService()
+	target, ok := svc.IndentationAt(pos.Y)
+	if !ok {
+		return pos, false
+	}
+	after, changed := c.doTryIndent(c.ctx, pos, target)
+	if changed {
+		return after, true
+	}
+	after, changed = c.doTryDedent(c.ctx, pos, target)
+	if changed {
+		return after, true
+	}
+	return pos, true
 }
 
 func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target int) (term.Coordinates, bool) {
