@@ -1016,6 +1016,7 @@ func newTestAuthorizerCore(
 		prompter: newPermissionPrompter(opener, syncScheduleNextTick, nil),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
+		pending:  make(map[string]*pendingPrompt),
 	}
 }
 
@@ -1030,6 +1031,7 @@ func newTestAuthorizerCoreWithNotifications(
 		prompter: newPermissionPrompter(opener, syncScheduleNextTick, noti),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
+		pending:  make(map[string]*pendingPrompt),
 	}
 }
 
@@ -1483,4 +1485,144 @@ func TestAuthorizerAuthorizeStartCommandOnceDecisionIncludesPeerAndCommand(t *te
 		assert.Equal(t, extensionapi.PermissionExecute, decision.Permission)
 		assert.Equal(t, "/bin/grep", decision.Command.Path)
 	}
+}
+
+// blockingPromptOpener blocks every Prompt call on a trigger channel
+// until the test calls release(). It records the PromptHandler of the
+// first prompt it observes so the test can simulate the user approving
+// the (single) floating prompt that the browser deduplicates by
+// message.
+type blockingPromptOpener struct {
+	decision PermissionDecision
+
+	mu       sync.Mutex
+	calls    int
+	firstHdl handler.PromptHandler
+	firstOpt int
+	options  []string
+	waiters  []chan struct{}
+	ready    chan struct{}
+}
+
+func newBlockingPromptOpener(decision PermissionDecision) *blockingPromptOpener {
+	return &blockingPromptOpener{
+		decision: decision,
+		ready:    make(chan struct{}),
+	}
+}
+
+func (p *blockingPromptOpener) Prompt(
+	_ string, options []string, _ []term.KeyComb,
+	promptHandler handler.PromptHandler,
+) browser.Window {
+	want := optionForDecision(p.decision)
+	gate := make(chan struct{})
+	p.mu.Lock()
+	p.calls++
+	if p.firstHdl == nil {
+		p.firstHdl = promptHandler
+		p.options = options
+		for i, opt := range options {
+			if opt == want {
+				p.firstOpt = i
+				break
+			}
+		}
+	}
+	first := p.calls == 1
+	p.waiters = append(p.waiters, gate)
+	p.mu.Unlock()
+	if first {
+		close(p.ready)
+	}
+	<-gate
+	return browsertest.NopWindow()
+}
+
+// release unblocks every Prompt call made so far and fires the stored
+// PromptHandler's OnSelect exactly once with the matching option index.
+// This simulates the user approving a single floating prompt that the
+// browser's deduplicate-by-message rule leaves as the only attached
+// handler.
+func (p *blockingPromptOpener) release() {
+	p.mu.Lock()
+	waiters := p.waiters
+	p.waiters = nil
+	hdl := p.firstHdl
+	optIdx := p.firstOpt
+	opts := p.options
+	p.mu.Unlock()
+	if hdl != nil {
+		hdl.OnSelect(optIdx, opts[optIdx])
+	}
+	for _, w := range waiters {
+		close(w)
+	}
+}
+
+func (p *blockingPromptOpener) waitReady(t *testing.T, d time.Duration) {
+	t.Helper()
+	select {
+	case <-p.ready:
+	case <-time.After(d):
+		t.Fatalf("timed out waiting for first prompt to arrive")
+	}
+}
+
+func (p *blockingPromptOpener) promptCalls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+// TestAuthorizerCoalescesConcurrentPrompts reproduces RUNE-97: when
+// multiple concurrent Authorize calls for the same identity+permission
+// arrive while the user is deciding, they must not each open their own
+// prompt. The browser's Component.Prompt deduplicates by message, so
+// only the first concurrent caller's PromptHandler is actually attached
+// to the floating prompt; the rest would be silently dropped and their
+// blocking `<-result` would never resolve.
+//
+// The fix coalesces concurrent Authorize calls for the same onceKey on a
+// single pendingPrompt, so one user click unblocks every caller.
+func TestAuthorizerCoalescesConcurrentPrompts(t *testing.T) {
+	t.Parallel()
+
+	opener := newBlockingPromptOpener(PermissionAllowOnce)
+	a := newTestAuthorizerCore(opener, storagestub.NewInMemoryService())
+	ext := testPluginExtension(nil)
+	ctx := contextWithPeerProcess(context.Background(), peerprocess.Process{
+		PID: 123, UID: 501, Exe: "/bin/plugin", Argv: []string{"plugin"},
+	})
+	ctx = blueauth.ContextWithClaims(ctx, blueauth.UserClaims[Extension]{Extra: ext})
+
+	const concurrency = 8
+	errs := make(chan error, concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			errs <- a.Authorize(ctx, blueauth.UserClaims[Extension]{Extra: ext},
+				"/browser.EventPublisher/Publish")
+		}()
+	}
+
+	// Wait for the first Authorize call to reach the prompt opener;
+	// give peers a moment so they also reach coalescedPrompt.
+	opener.waitReady(t, 5*time.Second)
+	time.Sleep(50 * time.Millisecond)
+
+	opener.release()
+
+	for i := 0; i < concurrency; i++ {
+		select {
+		case err := <-errs:
+			require.NoError(t, err, "Authorize #%d", i)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("Authorize #%d did not return in time", i)
+		}
+	}
+
+	// Exactly one prompt should have been opened across all N
+	// concurrent Authorize calls; the rest must have coalesced.
+	assert.Equal(t, 1, opener.promptCalls(),
+		"concurrent Authorize calls for the same onceKey must coalesce on a single prompt")
 }

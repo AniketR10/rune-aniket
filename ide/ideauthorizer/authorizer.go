@@ -123,6 +123,7 @@ func NewAuthorizer(
 		prompter: newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
 		storage:  storage,
 		once:     make(map[string]pluginPermissionOnceDecision),
+		pending:  make(map[string]*pendingPrompt),
 	}
 	if err := registerAuthorizerREPLCommand(editor, a); err != nil {
 		return nil, fmt.Errorf("register authorizer repl command: %w", err)
@@ -140,6 +141,15 @@ type Authorizer struct {
 
 	onceMu sync.Mutex
 	once   map[string]pluginPermissionOnceDecision
+
+	// pendingMu guards pending. It serializes access to the in-flight
+	// prompt map so concurrent Authorize calls for the same onceKey share
+	// a single prompt instead of each opening their own (which the
+	// browser would dedup by message, silently dropping all but the first
+	// caller's PromptHandler and leaving the rest stuck on their result
+	// channel). See RUNE-97.
+	pendingMu sync.Mutex
+	pending   map[string]*pendingPrompt
 }
 
 // GRPCAuthServerOptions returns the gRPC server options that install
@@ -285,7 +295,7 @@ func (a *Authorizer) authorizePermission(
 		req.ExtensionName = ext.ExtensionName
 		req.DeveloperID = ext.DeveloperID
 	}
-	decision, err := a.prompter.PromptPermission(ctx, req)
+	decision, err := a.coalescedPrompt(ctx, onceKey, req)
 	if err != nil {
 		return err
 	}
@@ -317,6 +327,77 @@ func (a *Authorizer) authorizePermission(
 		return blueauth.ErrForbidden
 	default:
 		return blueauth.ErrForbidden
+	}
+}
+
+// pendingPrompt holds the state of a single in-flight permission prompt
+// so that concurrent Authorize calls for the same onceKey share its
+// outcome instead of each opening their own prompt. The browser prompt
+// component deduplicates by message, so without coalescing at this
+// layer only the first caller would unblock and the rest would stay
+// stuck on their private result channel until ctx.Done() fires (or
+// forever, for long-lived RPCs). See RUNE-97.
+type pendingPrompt struct {
+	done     chan struct{}
+	decision PermissionDecision
+	err      error
+}
+
+// coalescedPrompt ensures that concurrent callers with the same onceKey
+// share a single prompt. The first caller opens the prompt; subsequent
+// callers wait on the same pendingPrompt and observe the same decision.
+// When ctx is canceled, the caller returns early without affecting other
+// waiters or the in-flight prompt.
+func (a *Authorizer) coalescedPrompt(
+	ctx context.Context, onceKey string, req PermissionRequest,
+) (PermissionDecision, error) {
+	// onceKey is derived from identity + permission (+ command for
+	// Execute); callers with the same onceKey would otherwise open
+	// identical prompts that the browser dedup by message.
+	if onceKey == "" {
+		return a.prompter.PromptPermission(ctx, req)
+	}
+	a.pendingMu.Lock()
+	if existing, ok := a.pending[onceKey]; ok {
+		a.pendingMu.Unlock()
+		return a.awaitPending(ctx, existing)
+	}
+	pending := &pendingPrompt{done: make(chan struct{})}
+	a.pending[onceKey] = pending
+	a.pendingMu.Unlock()
+
+	// Issue the prompt on behalf of all concurrent waiters on a detached
+	// goroutine with a background context, so no single caller's
+	// ctx.Done() can tear down the prompt for the others. Waiters each
+	// honor their own ctx in awaitPending below.
+	go func() {
+		decision, err := a.prompter.PromptPermission(context.Background(), req)
+		a.pendingMu.Lock()
+		pending.decision = decision
+		pending.err = err
+		delete(a.pending, onceKey)
+		a.pendingMu.Unlock()
+		close(pending.done)
+	}()
+
+	return a.awaitPending(ctx, pending)
+}
+
+// awaitPending blocks until the given pendingPrompt resolves or ctx is
+// canceled. If ctx is canceled first, the caller returns without
+// cancelling the underlying prompt (other waiters and the prompt owner
+// continue unaffected).
+func (a *Authorizer) awaitPending(
+	ctx context.Context, p *pendingPrompt,
+) (PermissionDecision, error) {
+	select {
+	case <-p.done:
+		if p.err != nil {
+			return PermissionDenyOnce, p.err
+		}
+		return p.decision, nil
+	case <-ctx.Done():
+		return PermissionDenyOnce, ctx.Err()
 	}
 }
 
