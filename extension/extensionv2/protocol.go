@@ -48,6 +48,7 @@ const extensionTokenExpiresIn = 10 * 24 * 365 * time.Hour
 type protocol struct {
 	write        bytes.Buffer
 	read         bytes.Buffer
+	readiness    *extensionReadiness
 	grantor      extension.Grantor
 	readCh       chan struct{}
 	extensionID  string
@@ -64,6 +65,7 @@ func newProtocol(
 	ctx context.Context, grantor extension.Grantor,
 	extensionID, socket, dataDir string,
 	cert []byte, insecureAuth bool, cfg config.Config, keys auth.Keys,
+	readiness *extensionReadiness,
 ) *protocol {
 	mapCfg := make(map[string]any)
 	cfg.Iterate(func(k string, v any) {
@@ -80,7 +82,15 @@ func newProtocol(
 		keys:         keys,
 		insecureAuth: insecureAuth,
 		grantor:      grantor,
+		readiness:    readiness,
 	}
+}
+
+func (p *protocol) setReady(err error) {
+	if p.readiness == nil {
+		return
+	}
+	p.readiness.Set(err)
 }
 
 func (p *protocol) Write(data []byte) (int, error) {
@@ -93,20 +103,27 @@ func (p *protocol) Write(data []byte) (int, error) {
 	err := json.Unmarshal(p.write.Bytes(), &meta)
 	if err != nil {
 		err := fmt.Errorf("unmarshal json metadata: %w", err)
+		p.setReady(err)
 		return n, err
 	}
 
 	err = validateMetadata(p.extensionID, meta)
 	if err != nil {
-		return n, fmt.Errorf("validate metadata: %w", err)
+		err = fmt.Errorf("validate metadata: %w", err)
+		p.setReady(err)
+		return n, err
 	}
 
 	ok, err := p.grantor.Grant(meta)
 	if err != nil {
-		return n, fmt.Errorf("grant permissions: %w", err)
+		err = fmt.Errorf("grant permissions: %w", err)
+		p.setReady(err)
+		return n, err
 	}
 	if !ok {
-		return n, errors.New("permission denied")
+		err = errors.New("permission denied")
+		p.setReady(err)
+		return n, err
 	}
 
 	req := extensionapi.Config{
@@ -118,12 +135,15 @@ func (p *protocol) Write(data []byte) (int, error) {
 	if !p.insecureAuth {
 		signKey, err := p.keys.Sign(p.ctx)
 		if err != nil {
-			return n, fmt.Errorf("get sign key: %w", err)
+			err = fmt.Errorf("get sign key: %w", err)
+			p.setReady(err)
+			return n, err
 		}
 		claimsExtra := ideauthorizer.Extension{Metadata: meta}
 		accessToken, err := auth.SignToken(signKey,
 			meta.DeveloperID, meta.DeveloperEmail, claimsExtra, extensionTokenExpiresIn)
 		if err != nil {
+			p.setReady(err)
 			return n, err
 		}
 		req.Token = &oauth2.Token{
@@ -134,10 +154,13 @@ func (p *protocol) Write(data []byte) (int, error) {
 
 	reqBytes, err := json.Marshal(&req)
 	if err != nil {
-		return n, fmt.Errorf("marshal extension config: %w", err)
+		err = fmt.Errorf("marshal extension config: %w", err)
+		p.setReady(err)
+		return n, err
 	}
 	_, _ = p.read.Write(reqBytes)
 	close(p.readCh)
+	p.setReady(nil)
 	return n, nil
 }
 

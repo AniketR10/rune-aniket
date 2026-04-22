@@ -193,6 +193,14 @@ func (r *Runner) WorkspaceExtensionsRunner(
 		}
 		return nil, err
 	}
+	if err := registerExtensionsREPLCommand(ret.workspaceRunner, editor); err != nil {
+		err = fmt.Errorf("register extensions repl command: %w", err)
+		if cerr := ret.Close(); cerr != nil {
+			err = multierror.Append(err, cerr)
+			return nil, err
+		}
+		return nil, err
+	}
 	return ret, nil
 }
 

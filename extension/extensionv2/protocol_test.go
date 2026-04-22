@@ -59,7 +59,7 @@ func TestProtocolGrantorGatesRunButKeepsRequestedPermissions(t *testing.T) {
 	}
 	p := newProtocol(context.Background(), extension.GrantAll(),
 		"ext-id", "/tmp/rune.sock", "/tmp/rune-data", []byte("cert"),
-		false, config.MapConfig(map[string]any{}), keys)
+		false, config.MapConfig(map[string]any{}), keys, nil)
 	encoded, err := json.Marshal(meta)
 	require.NoError(t, err)
 
