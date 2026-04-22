@@ -339,9 +339,18 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			case 'j':
 				handled = h.cursor.Conflate()
 			case ']':
-				handled = h.cursor.TryIndent()
+				if _, ok := h.cursor.SelectionMode(); ok {
+					h.cursor.ShiftSelectionRight()
+				} else {
+					h.cursor.ShiftLineRight()
+				}
+				handled = true
 			case '[':
-				handled = h.cursor.TryIndent()
+				if _, ok := h.cursor.SelectionMode(); ok {
+					handled = h.cursor.ShiftSelectionLeft()
+				} else {
+					handled = h.cursor.ShiftLineLeft()
+				}
 			case 'l':
 				if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
 					handled = h.cursor.MoveDown()
