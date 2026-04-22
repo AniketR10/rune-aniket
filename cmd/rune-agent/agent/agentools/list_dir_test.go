@@ -189,6 +189,56 @@ func TestListDir(t *testing.T) {
 	}
 }
 
+func TestListDir_absoluteDirOutsideWorkspace_showsImmediateFiles(t *testing.T) {
+	workspaceDir := setupWorkspace(t)
+	externalDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(externalDir, "alpha.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(externalDir, "beta.txt"), []byte("b"), 0o644))
+
+	tool := NewListDir(localFS{root: workspaceDir}, dirURI(workspaceDir))
+	result := tool.Execute(context.Background(), `{"dir_path": "`+externalDir+`", "depth": 1}`)
+
+	assert.False(t, result.IsError, result.Content)
+	assert.Contains(t, result.Content, "Absolute path: "+externalDir)
+	assert.Contains(t, result.Content, "alpha.txt")
+	assert.Contains(t, result.Content, "beta.txt")
+}
+
+func TestListDir_absoluteDirOutsideWorkspace_appliesDepthRelativeToRoot(t *testing.T) {
+	workspaceDir := setupWorkspace(t)
+	externalDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(externalDir, "sub", "deep"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(externalDir, "sub", "nested.txt"), []byte("n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(externalDir, "sub", "deep", "inner.txt"), []byte("i"), 0o644))
+
+	tool := NewListDir(localFS{root: workspaceDir}, dirURI(workspaceDir))
+
+	depthOne := tool.Execute(context.Background(), `{"dir_path": "`+externalDir+`", "depth": 1}`)
+	assert.False(t, depthOne.IsError, depthOne.Content)
+	assert.Contains(t, depthOne.Content, "sub/")
+	assert.NotContains(t, depthOne.Content, "nested.txt")
+	assert.NotContains(t, depthOne.Content, "inner.txt")
+
+	depthTwo := tool.Execute(context.Background(), `{"dir_path": "`+externalDir+`", "depth": 2}`)
+	assert.False(t, depthTwo.IsError, depthTwo.Content)
+	assert.Contains(t, depthTwo.Content, "sub/")
+	assert.Contains(t, depthTwo.Content, "  nested.txt")
+	assert.Contains(t, depthTwo.Content, "  deep/")
+	assert.NotContains(t, depthTwo.Content, "inner.txt")
+}
+
+func TestListDir_absoluteDirOutsideWorkspace_doesNotRenderDotSlash(t *testing.T) {
+	workspaceDir := setupWorkspace(t)
+	externalDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(externalDir, "alpha.txt"), []byte("a"), 0o644))
+
+	tool := NewListDir(localFS{root: workspaceDir}, dirURI(workspaceDir))
+	result := tool.Execute(context.Background(), `{"dir_path": "`+externalDir+`", "depth": 1}`)
+
+	assert.False(t, result.IsError, result.Content)
+	assert.NotContains(t, result.Content, "\n./")
+}
+
 func TestPathDepth(t *testing.T) {
 	tests := []struct {
 		path string

@@ -154,8 +154,20 @@ func (t *listDirTool) Execute(ctx context.Context, arguments string) agent.ToolR
 			break
 		}
 
-		d := pathDepth(path)
-		parts := strings.Split(path, string(filepath.Separator))
+		relPath := path
+		if filepath.IsAbs(path) {
+			var err error
+			relPath, err = filepath.Rel(root, path)
+			if err != nil {
+				return agent.ToolResult{Content: fmt.Sprintf("error: relativizing path %s: %v", path, err), IsError: true}
+			}
+		}
+		if relPath == "." {
+			continue
+		}
+
+		d := pathDepth(relPath)
+		parts := strings.Split(relPath, string(filepath.Separator))
 
 		// Add ancestor directories up to the depth limit.
 		for i := 1; i < d && i <= depth; i++ {
@@ -168,7 +180,7 @@ func (t *listDirTool) Execute(ctx context.Context, arguments string) agent.ToolR
 
 		// Add the file itself if within depth.
 		if d <= depth {
-			entries = append(entries, entry{relPath: path, isDir: false})
+			entries = append(entries, entry{relPath: relPath, isDir: false})
 		}
 	}
 
