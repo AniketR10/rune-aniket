@@ -25,6 +25,7 @@ package text
 
 import (
 	"context"
+	"errors"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -35,6 +36,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 )
+
+// ErrCommandNotRegistered is returned by UnsubscribeCommand and
+// UnregisterREPLCommand when the named command is not registered on the
+// editor. Callers that want to tolerate the absence of a prior
+// registration should compare against this error with errors.Is.
+var ErrCommandNotRegistered = errors.New("command not registered")
 
 // Handler just wraps a tui.Handler to indicate that this API's handlers might
 // not be compatible with other APIs.
@@ -131,8 +138,14 @@ type Editor interface {
 	// textapi.REPLHandler.
 	RegisterREPLCommand(textapi.CommandManual, textapi.REPLHandler) error
 
-	// UnsubscribeCommand un-registers command.
+	// UnsubscribeCommand un-registers command. Returns
+	// ErrCommandNotRegistered if no such command is registered.
 	UnsubscribeCommand(string) error
+
+	// UnregisterREPLCommand un-registers a previously registered REPL
+	// command. Returns ErrCommandNotRegistered if no such command is
+	// registered.
+	UnregisterREPLCommand(string) error
 }
 
 // NewREPLHandler returns a REPL handler backed by router.

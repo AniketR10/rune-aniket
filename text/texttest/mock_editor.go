@@ -217,6 +217,10 @@ func (e *TestEditor) UnsubscribeCommand(cmd string) error {
 	return nil
 }
 
+func (e *TestEditor) UnregisterREPLCommand(cmd string) error {
+	return nil
+}
+
 func (h *TestEditorHandler) LocationLists() []text.LocationSet {
 	return nil
 }

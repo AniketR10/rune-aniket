@@ -130,6 +130,10 @@ func (c *viEditor) UnsubscribeCommand(cmd string) error {
 	return errors.New("not supported")
 }
 
+func (c *viEditor) UnregisterREPLCommand(cmd string) error {
+	return errors.New("not supported")
+}
+
 // Editor is not supported
 func (e *viEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	// NOTE: it would be dead code

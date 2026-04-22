@@ -487,6 +487,7 @@ func TestClientServerIntegration(t *testing.T) {
 				},
 			},
 		}
+		ed.EXPECT().UnsubscribeCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h text.CommandHandler) error {
 				subscribed = man
@@ -553,6 +554,7 @@ func TestClientServerIntegration(t *testing.T) {
 		}, nil)
 
 		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().UnsubscribeCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h text.CommandHandler) error {
 				subscribedClient = h
@@ -596,6 +598,7 @@ func TestClientServerIntegration(t *testing.T) {
 		}, nil)
 
 		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().UnsubscribeCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h text.CommandHandler) error {
 				return errors.New("boom")
@@ -633,6 +636,7 @@ func TestClientServerIntegration(t *testing.T) {
 			})
 
 		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().UnsubscribeCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h text.CommandHandler) error {
 				subscribedClient = h
@@ -683,6 +687,7 @@ func TestClientServerIntegration(t *testing.T) {
 			})
 
 		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().UnsubscribeCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h text.CommandHandler) error {
 				subscribedClient = h
@@ -728,6 +733,7 @@ func TestClientServerIntegration(t *testing.T) {
 			})
 
 		man := textapi.CommandManual{Name: "bla"}
+		ed.EXPECT().UnsubscribeCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().SubscribeCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h text.CommandHandler) error {
 				subscribedClient = h
@@ -765,6 +771,7 @@ func TestClientServerIntegration(t *testing.T) {
 			subscribed     textapi.CommandManual
 			subscribedRepl textapi.REPLHandler
 		)
+		ed.EXPECT().UnregisterREPLCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(man textapi.CommandManual, h textapi.REPLHandler) error {
 				subscribed = man
@@ -830,6 +837,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer closeFn()
 
 		var subscribedRepl textapi.REPLHandler
+		ed.EXPECT().UnregisterREPLCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ textapi.CommandManual, h textapi.REPLHandler) error {
 				subscribedRepl = h
@@ -877,6 +885,7 @@ func TestClientServerIntegration(t *testing.T) {
 		defer closeFn()
 
 		var subscribedRepl textapi.REPLHandler
+		ed.EXPECT().UnregisterREPLCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ textapi.CommandManual, h textapi.REPLHandler) error {
 				subscribedRepl = h
@@ -925,6 +934,7 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
+		ed.EXPECT().UnregisterREPLCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
 		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).Return(errors.New("boom"))
 
 		handler := &testREPLHandler{

@@ -1059,6 +1059,15 @@ func (c *Component) RegisterREPLCommand(
 	return nil
 }
 
+// UnregisterREPLCommand un-registers a REPL command.
+func (c *Component) UnregisterREPLCommand(cmd string) error {
+	if _, ok := c.replSubscribers[cmd]; !ok {
+		return ErrCommandNotRegistered
+	}
+	delete(c.replSubscribers, cmd)
+	return nil
+}
+
 // REPLCommand returns the REPL handler registered for cmd.
 func (c *Component) REPLCommand(cmd string) (textapi.REPLHandler, bool) {
 	h, ok := c.replSubscribers[cmd]
@@ -1077,7 +1086,7 @@ func (c *Component) REPLCommands() (ret []textapi.CommandManual) {
 // UnsubscribeCommand un-registers command.
 func (c *Component) UnsubscribeCommand(cmd string) error {
 	if _, ok := c.cmdSubscribers[cmd]; !ok {
-		return errors.New("command not registered")
+		return ErrCommandNotRegistered
 	}
 	delete(c.cmdSubscribers, cmd)
 	return nil

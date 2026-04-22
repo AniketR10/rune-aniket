@@ -132,6 +132,10 @@ func (c *editor) UnsubscribeCommand(cmd string) error {
 	return errors.New("not supported")
 }
 
+func (c *editor) UnregisterREPLCommand(cmd string) error {
+	return errors.New("not supported")
+}
+
 func (e *editor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("not supported")
 }

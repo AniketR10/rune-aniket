@@ -505,6 +505,20 @@ func (mr *MockEditorMockRecorder) SubscribeEvents(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeEvents", reflect.TypeOf((*MockEditor)(nil).SubscribeEvents), arg0, arg1)
 }
 
+// UnregisterREPLCommand mocks base method.
+func (m *MockEditor) UnregisterREPLCommand(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnregisterREPLCommand", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnregisterREPLCommand indicates an expected call of UnregisterREPLCommand.
+func (mr *MockEditorMockRecorder) UnregisterREPLCommand(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterREPLCommand", reflect.TypeOf((*MockEditor)(nil).UnregisterREPLCommand), arg0)
+}
+
 // UnsubscribeCommand mocks base method.
 func (m *MockEditor) UnsubscribeCommand(arg0 string) error {
 	m.ctrl.T.Helper()

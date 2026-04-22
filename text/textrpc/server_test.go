@@ -310,6 +310,136 @@ func TestServerSubscribeCommandStopsNotificationHelperOnDisconnect(t *testing.T)
 	}
 }
 
+func TestServerSubscribeCommandUnsubscribesPlaceholderBeforeResubscribe(t *testing.T) {
+	ed := newStrictRecordingCommandEditor()
+	s := NewServer(nopNotifications{}, ed, nopLocker{})
+
+	first := newTestSubscribeCommandServer()
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- s.SubscribeCommand(first)
+	}()
+
+	select {
+	case <-ed.subscribed:
+	case <-time.After(time.Second):
+		t.Fatal("first SubscribeCommand did not register command handler")
+	}
+
+	first.closeRecv()
+	select {
+	case err := <-firstDone:
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "receive stream message")
+	case <-time.After(time.Second):
+		t.Fatal("first SubscribeCommand did not return after disconnect")
+	}
+
+	second := newTestSubscribeCommandServer()
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- s.SubscribeCommand(second)
+	}()
+
+	select {
+	case <-second.sent:
+	case <-time.After(time.Second):
+		t.Fatal("second SubscribeCommand did not send subscribe response")
+	}
+
+	second.closeRecv()
+	select {
+	case err := <-secondDone:
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "receive stream message")
+	case <-time.After(time.Second):
+		t.Fatal("second SubscribeCommand did not return after disconnect")
+	}
+
+	assert.Equal(t, []string{
+		"unsubscribe:test-command",
+		"subscribe:test-command",
+		"unsubscribe:test-command",
+		"subscribe:test-command",
+		"unsubscribe:test-command",
+		"subscribe:test-command",
+		"unsubscribe:test-command",
+		"subscribe:test-command",
+	}, ed.calls)
+}
+
+func TestServerSubscribeCommandReturnsUnexpectedUnsubscribeError(t *testing.T) {
+	ed := &failingUnsubscribeCommandEditor{err: errors.New("boom")}
+	s := NewServer(nopNotifications{}, ed, nopLocker{})
+
+	err := s.SubscribeCommand(newTestSubscribeCommandServer())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unsubscribe existing command "test-command": boom`)
+}
+
+func TestServerSubscribeREPLCommandUnregistersBeforeResubscribe(t *testing.T) {
+	ed := newStrictRecordingREPLEditor()
+	s := NewServer(nopNotifications{}, ed, nopLocker{})
+
+	first := newTestSubscribeREPLCommandServer()
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- s.SubscribeREPLCommand(first)
+	}()
+
+	select {
+	case <-first.sent:
+	case <-time.After(time.Second):
+		t.Fatal("first SubscribeREPLCommand did not send subscribe response")
+	}
+
+	first.closeRecv()
+	select {
+	case err := <-firstDone:
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "receive repl stream message")
+	case <-time.After(time.Second):
+		t.Fatal("first SubscribeREPLCommand did not return after disconnect")
+	}
+
+	second := newTestSubscribeREPLCommandServer()
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- s.SubscribeREPLCommand(second)
+	}()
+
+	select {
+	case <-second.sent:
+	case <-time.After(time.Second):
+		t.Fatal("second SubscribeREPLCommand did not send subscribe response")
+	}
+
+	second.closeRecv()
+	select {
+	case err := <-secondDone:
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "receive repl stream message")
+	case <-time.After(time.Second):
+		t.Fatal("second SubscribeREPLCommand did not return after disconnect")
+	}
+
+	assert.Equal(t, []string{
+		"unregister:test-repl-command",
+		"register:test-repl-command",
+		"unregister:test-repl-command",
+		"register:test-repl-command",
+	}, ed.calls)
+}
+
+func TestServerSubscribeREPLCommandReturnsUnexpectedUnregisterError(t *testing.T) {
+	ed := &failingUnregisterREPLEditor{err: errors.New("boom")}
+	s := NewServer(nopNotifications{}, ed, nopLocker{})
+
+	err := s.SubscribeREPLCommand(newTestSubscribeREPLCommandServer())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unregister existing repl command "test-repl-command": boom`)
+}
+
 func TestServerSubscribeEventCleansUpOnUnsubscribeEOFAndClose(t *testing.T) {
 	t.Run("normal unsubscribe", func(t *testing.T) {
 		ed := texttest.NopEditor()
@@ -423,6 +553,179 @@ func (e *recordingCommandEditor) SubscribeCommand(_ textapi.CommandManual, h tex
 func (e *recordingCommandEditor) UnsubscribeCommand(string) error {
 	return nil
 }
+
+type strictRecordingCommandEditor struct {
+	texttest.TestEditor
+	mu         sync.Mutex
+	subscribed chan struct{}
+	once       sync.Once
+	registered map[string]struct{}
+	calls      []string
+	handler    *commandClientStream
+}
+
+func newStrictRecordingCommandEditor() *strictRecordingCommandEditor {
+	return &strictRecordingCommandEditor{
+		subscribed: make(chan struct{}),
+		registered: make(map[string]struct{}),
+	}
+}
+
+func (e *strictRecordingCommandEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls = append(e.calls, "subscribe:"+cmd.Name)
+	if _, ok := e.registered[cmd.Name]; ok {
+		return errors.New("command already registered")
+	}
+	e.registered[cmd.Name] = struct{}{}
+	if stream, ok := h.(*commandClientStream); ok {
+		e.handler = stream
+	}
+	e.once.Do(func() {
+		close(e.subscribed)
+	})
+	return nil
+}
+
+func (e *strictRecordingCommandEditor) UnsubscribeCommand(cmd string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls = append(e.calls, "unsubscribe:"+cmd)
+	if _, ok := e.registered[cmd]; !ok {
+		return text.ErrCommandNotRegistered
+	}
+	delete(e.registered, cmd)
+	return nil
+}
+
+type failingUnsubscribeCommandEditor struct {
+	texttest.TestEditor
+	err error
+}
+
+func (e *failingUnsubscribeCommandEditor) SubscribeCommand(textapi.CommandManual, text.CommandHandler) error {
+	return nil
+}
+
+func (e *failingUnsubscribeCommandEditor) UnsubscribeCommand(string) error {
+	return e.err
+}
+
+type strictRecordingREPLEditor struct {
+	texttest.TestEditor
+	mu         sync.Mutex
+	registered map[string]struct{}
+	calls      []string
+}
+
+func newStrictRecordingREPLEditor() *strictRecordingREPLEditor {
+	return &strictRecordingREPLEditor{registered: make(map[string]struct{})}
+}
+
+func (e *strictRecordingREPLEditor) RegisterREPLCommand(
+	cmd textapi.CommandManual, _ textapi.REPLHandler,
+) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls = append(e.calls, "register:"+cmd.Name)
+	if _, ok := e.registered[cmd.Name]; ok {
+		return errors.New("command already registered")
+	}
+	e.registered[cmd.Name] = struct{}{}
+	return nil
+}
+
+func (e *strictRecordingREPLEditor) UnregisterREPLCommand(cmd string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls = append(e.calls, "unregister:"+cmd)
+	if _, ok := e.registered[cmd]; !ok {
+		return text.ErrCommandNotRegistered
+	}
+	delete(e.registered, cmd)
+	return nil
+}
+
+type failingUnregisterREPLEditor struct {
+	texttest.TestEditor
+	err error
+}
+
+func (e *failingUnregisterREPLEditor) RegisterREPLCommand(textapi.CommandManual, textapi.REPLHandler) error {
+	return nil
+}
+
+func (e *failingUnregisterREPLEditor) UnregisterREPLCommand(string) error {
+	return e.err
+}
+
+type testSubscribeREPLCommandServer struct {
+	ctx  context.Context
+	recv chan *textrpc.ClientREPLCommandMessage
+	sent chan *textrpc.ServerREPLCommandMessage
+}
+
+func newTestSubscribeREPLCommandServer() *testSubscribeREPLCommandServer {
+	stream := &testSubscribeREPLCommandServer{
+		ctx:  context.Background(),
+		recv: make(chan *textrpc.ClientREPLCommandMessage, 1),
+		sent: make(chan *textrpc.ServerREPLCommandMessage, 1),
+	}
+	stream.recv <- &textrpc.ClientREPLCommandMessage{
+		Type: textrpc.ClientREPLCommandMessage_Request,
+		Request: &textrpc.SubscribeREPLCommandRequest{Command: &textrpc.CommandManual{
+			Name: "test-repl-command",
+		}},
+	}
+	return stream
+}
+
+func (s *testSubscribeREPLCommandServer) closeRecv() {
+	close(s.recv)
+}
+
+func (s *testSubscribeREPLCommandServer) Recv() (*textrpc.ClientREPLCommandMessage, error) {
+	msg, ok := <-s.recv
+	if !ok {
+		return nil, io.EOF
+	}
+	return msg, nil
+}
+
+func (s *testSubscribeREPLCommandServer) Send(msg *textrpc.ServerREPLCommandMessage) error {
+	s.sent <- msg
+	return nil
+}
+
+func (s *testSubscribeREPLCommandServer) Context() context.Context {
+	return s.ctx
+}
+
+func (s *testSubscribeREPLCommandServer) SendMsg(msg any) error {
+	serverMsg := msg.(*textrpc.ServerREPLCommandMessage)
+	return s.Send(serverMsg)
+}
+
+func (s *testSubscribeREPLCommandServer) RecvMsg(msg any) error {
+	next, err := s.Recv()
+	if err != nil {
+		return err
+	}
+	clientMsg := msg.(*textrpc.ClientREPLCommandMessage)
+	proto.Merge(clientMsg, next)
+	return nil
+}
+
+func (s *testSubscribeREPLCommandServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *testSubscribeREPLCommandServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (s *testSubscribeREPLCommandServer) SetTrailer(metadata.MD) {}
 
 type recordingNotifications struct {
 	notified chan string

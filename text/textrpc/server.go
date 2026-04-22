@@ -176,6 +176,11 @@ func (s *Server) SubscribeCommand(srv textrpc.Editor_SubscribeCommandServer) err
 	man := makeStdMan(req.GetCommand())
 
 	s.editor.Lock()
+	if uerr := s.editor.UnsubscribeCommand(man.Name); uerr != nil &&
+		!errors.Is(uerr, text.ErrCommandNotRegistered) {
+		s.editor.Unlock()
+		return fmt.Errorf("unsubscribe existing command %q: %w", man.Name, uerr)
+	}
 	// NOTE this unlock here causes a race towards the first SendMsg.
 	// In practice, this is not a problem, since for a command to be dispatched
 	// the user needs to type it first, which gives plenty of time for this
@@ -248,6 +253,11 @@ func (s *Server) SubscribeREPLCommand(srv textrpc.Editor_SubscribeREPLCommandSer
 	man := makeStdMan(req.GetCommand())
 
 	s.editor.Lock()
+	if uerr := s.editor.UnregisterREPLCommand(man.Name); uerr != nil &&
+		!errors.Is(uerr, text.ErrCommandNotRegistered) {
+		s.editor.Unlock()
+		return fmt.Errorf("unregister existing repl command %q: %w", man.Name, uerr)
+	}
 	err = s.editor.RegisterREPLCommand(man, clientStream)
 	s.editor.Unlock()
 	if err != nil {
