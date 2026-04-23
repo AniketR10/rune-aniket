@@ -343,6 +343,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = true
 			case 'j':
 				handled = h.cursor.Conflate()
+			case '/':
+				handled = h.cursor.ToggleLineComment()
 			case ']':
 				if _, ok := h.cursor.SelectionMode(); ok {
 					h.cursor.ShiftSelectionRight()

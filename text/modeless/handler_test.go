@@ -457,6 +457,10 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Sort lines alphabetically", "<f5>", nil, term.Coordinates{}}, // Already sorted a-k
 		//{"Sort lines (case sensitive)", "<ctrl-f5>", nil, term.Coordinates{}},
 
+		// Comments - depends on language/syntax (assuming C-style)
+		{"Toggle line comment", "<meta-/>", new("// a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}, nil},
+		{"Toggle block comment", "<shift-right><alt-meta-/>", new("/*a*/\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 2}, nil},
+
 		// Text transformation - require selection
 		{"Transform selection to UPPERCASE", "<shift-right><meta-k><meta-u>", new("A\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Transform selection to lowercase", "<shift-right><meta-k><meta-u><home><shift-right><meta-k><meta-l>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
