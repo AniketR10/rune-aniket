@@ -596,6 +596,54 @@ func TestEditFileURIRedirectsToWorkspaceWithOpenFile(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestReadfileCrossWorkspaceIntegration(t *testing.T) {
+	tmp1 := t.TempDir()
+	tmp2 := t.TempDir()
+
+	currentPath := filepath.Join(tmp1, "current.txt")
+	require.NoError(t, os.WriteFile(currentPath, []byte("current\n"), 0o666))
+	foreignPath := filepath.Join(tmp2, "foreign.txt")
+	require.NoError(t, os.WriteFile(foreignPath, []byte("foreign contents"), 0o666))
+
+	cfg := defaultConfigWithWrap(false)
+	cfg.scheduleNextTick = func(fn func()) bool {
+		fn()
+		return true
+	}
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "", nopShutdownShaderConfig())
+	defer func() {
+		require.NoError(t, m.Close())
+	}()
+
+	uri1, err := workspaceapi.ParseURI("file://" + tmp1)
+	require.NoError(t, err)
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+
+	uri2, err := workspaceapi.ParseURI("file://" + tmp2)
+	require.NoError(t, err)
+	require.NoError(t, m.addOrCreateWorkspace(uri2))
+
+	require.True(t, m.switchToWorkspace(0))
+	currentURI, err := workspaceapi.ParseURI("file://" + currentPath)
+	require.NoError(t, err)
+	_, err = m.workspaces[0].ex.editFileURI(currentURI, m.workspaces[0].ex.invokeWindow(), false)
+	require.NoError(t, err)
+	m.workspaces[0].ex.Wait()
+
+	foreignURI, err := workspaceapi.ParseURI("file://" + foreignPath)
+	require.NoError(t, err)
+	require.NoError(t, m.workspaces[0].ex.readfile(context.Background(), foreignURI.String()))
+	m.workspaces[0].ex.Wait()
+
+	assert.Equal(t, 0, m.focus)
+	_, h, ok := m.workspaces[0].ex.handlerInFocus()
+	require.True(t, ok)
+	assert.Equal(t, "current\nforeign contents", term.CellsToString(h.CellView().RawCells()))
+	assert.Empty(t, m.workspaces[1].ex.comp.Tabs())
+	_, ok = m.workspaces[1].ex.comp.FocusTab()
+	assert.False(t, ok)
+}
+
 func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 	type integrationCase struct {
 		name           string

@@ -298,6 +298,46 @@ func TestComponentOpenEditorIntegration(t *testing.T) {
 	assert.NoError(t, b.Close())
 }
 
+func TestReadfileCommandReadsFileInOtherWorkspace(t *testing.T) {
+	currentDir := t.TempDir()
+	currentWorkspaceURI, err := workspaceapi.ParseURI("file://" + currentDir)
+	require.NoError(t, err)
+
+	foreignDir := t.TempDir()
+	foreignPath := filepath.Join(foreignDir, "foreign.txt")
+	require.NoError(t, os.WriteFile(foreignPath, []byte("foreign contents"), 0o644))
+	foreignURI, err := workspaceapi.ParseURI("file://" + foreignPath)
+	require.NoError(t, err)
+
+	workspaceWithForeignRead := &readfileCrossWorkspaceLoader{
+		testWorkspaceWithURI: testWorkspaceWithURI{
+			testLoader: &testLoader{},
+			uri:        currentWorkspaceURI,
+		},
+		foreignURI:      foreignURI,
+		currentContents: "current\n",
+	}
+
+	b := newExForTestingWithWorkspace(t, workspaceWithForeignRead,
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+
+	currentFileURI, err := workspaceapi.ParseURI(
+		"file://" + filepath.Join(currentDir, "current.txt"),
+	)
+	require.NoError(t, err)
+	_, err = b.editFileURI(currentFileURI, b.invokeWindow(), false)
+	require.NoError(t, err)
+
+	require.NoError(t, b.ex.dispatchCommand("readfile", foreignURI.String()))
+
+	_, h, ok := b.ex.handlerInFocus()
+	require.True(t, ok)
+	assert.Equal(t, "current\nforeign contents\n", term.CellsToString(h.CellView().RawCells()))
+}
+
 func TestFileExplorerOpenFile(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///")
 	require.NoError(t, err)
@@ -1812,6 +1852,39 @@ type testWorkspaceWithURI struct {
 
 func (w testWorkspaceWithURI) URI(path string) (workspaceapi.URI, error) {
 	return workspace.NewWorkspaceURI(w.uri, path)
+}
+
+type readfileCrossWorkspaceLoader struct {
+	testWorkspaceWithURI
+	foreignURI      workspaceapi.URI
+	currentContents string
+}
+
+func (w *readfileCrossWorkspaceLoader) Load(
+	filePath workspaceapi.URI, buf *cell.Buffer,
+	swapDir workspaceapi.URI, readOnly bool,
+) (workspace.FlusherCloser, error) {
+	if filePath.Equal(w.foreignURI) {
+		return nil, workspace.ErrOpenInOtherWorkspace
+	}
+	if w.currentContents != "" {
+		buf.WriteString(w.currentContents)
+	}
+	return &testFileBuffer{readOnly: readOnly}, nil
+}
+
+func (w *readfileCrossWorkspaceLoader) OpenFile(
+	path string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	expanded, err := workspaceapi.ExpandPathWithURI(path, w.uri)
+	if err == nil {
+		path = expanded
+	}
+	return os.OpenFile(path, flag, perm)
+}
+
+func (w *readfileCrossWorkspaceLoader) Open(path string) (workspaceapi.File, error) {
+	return w.OpenFile(path, os.O_RDONLY, 0)
 }
 
 func defCommandKeyBindings() (opts []text.Option) {

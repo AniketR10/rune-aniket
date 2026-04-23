@@ -69,6 +69,7 @@ type Workspace interface {
 	workspace.Loader
 	walkdir.Reader
 	schemeapi.Executor
+	Open(string) (workspaceapi.File, error)
 }
 
 // Component is an implementation of browser.Browser for file editing.
@@ -492,19 +493,22 @@ func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 		h = ed.Handler
 	}
 
-	var swapDir workspaceapi.URI
-
-	swapDir, err := c.getSwapDir(file)
-	if err != nil {
-		return err
-	}
-
 	// dump the file contents into a buffer we can read from
 	buf := cell.NewBuffer()
-	_, err = c.workspace.Load(file, buf, swapDir, true)
+	f, err := c.workspace.Open(file.Path())
 	if err != nil {
 		return err
 	}
+	defer func() { _ = f.Close() }()
+	_, err = io.ReadAll(io.TeeReader(f, buf))
+	if err != nil {
+		return err
+	}
+	view := workspace.NewUnixFileView(buf.View())
+	if !view.EndsWithEOL() {
+		buf.WriteString("\n")
+	}
+	buf.WithView(view)
 
 	// get the current cursor position to insert to, which will be the line below
 	coords := h.CursorAtScroll()
@@ -518,8 +522,9 @@ func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 	_, _, _ = cellEditor.Edit(
 		context.Background(), coords, coords, fmt.Sprintf("%s\n", buf),
 	)
-	return err
+	return nil
 }
+
 
 // Editor satisfies Editor interface.
 func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {

@@ -181,6 +181,10 @@ func (t *testLoader) OpenFile(path string, flag int, perm os.FileMode) (
 	return t.openFile, nil
 }
 
+func (t *testLoader) Open(path string) (workspaceapi.File, error) {
+	return t.OpenFile(path, os.O_RDONLY, 0)
+}
+
 func (t *testLoader) Stat(path string) (os.FileInfo, error) {
 	panic("unused")
 }
