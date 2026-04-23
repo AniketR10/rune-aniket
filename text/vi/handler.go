@@ -65,6 +65,7 @@ const (
 	searchMode // this is never set in currMode, but returned by mode()
 	caseChangeMode
 	shiftMode
+	commentMode
 )
 
 const (
@@ -118,6 +119,8 @@ type viHandlerImpl struct {
 	deleteInsert       bool
 	caseChangeFn       func() bool
 	caseChangeRepeat   rune
+	commentFn          func() bool
+	commentRepeat      rune
 	shiftFn            func()
 	shiftRepeat        rune
 	blockRepeat        struct {
@@ -246,7 +249,7 @@ func (vi *viHandlerImpl) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	case insertMode:
 		style = term.CursorStyleSteadyBar
 	case zMode, gMode, yankMode, deleteMode, replaceMode, replaceOneMode:
-	case caseChangeMode, shiftMode:
+	case caseChangeMode, shiftMode, commentMode:
 		style = term.CursorStyleSteadyUnderline
 	case normalMode, visualMode, visualLineMode, visualBlockMode:
 		style = term.CursorStyleDefault
@@ -277,6 +280,9 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 	case shiftMode:
 		text = " SHIFT "
 		attrs = term.Attributes{Bg: tcell.ColorOrange, Fg: tcell.ColorBlack}
+	case commentMode:
+		text = "COMMENT"
+		attrs = term.Attributes{Bg: tcell.ColorLime, Fg: tcell.ColorBlack}
 	case visualMode:
 		text = " VISUAL"
 		attrs = term.Attributes{Bg: tcell.ColorBlue, Fg: tcell.ColorBlack}
@@ -416,6 +422,15 @@ func (vi *viHandlerImpl) setShiftMode(fn func(), repeat rune) {
 	vi.shiftFn = fn
 	vi.shiftRepeat = repeat
 	vi.setMode(shiftMode)
+}
+
+func (vi *viHandlerImpl) setCommentMode(fn func() bool, repeat rune) {
+	vi.beginOperatorPending()
+	vi.pendingGoMotion = false
+	vi.textObjectPending = false
+	vi.commentFn = fn
+	vi.commentRepeat = repeat
+	vi.setMode(commentMode)
 }
 
 func (vi *viHandlerImpl) setVisualMode() {
@@ -2309,6 +2324,126 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 	return
 }
 
+func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
+	if ev.Ch == vi.commentRepeat && ev.Mod == 0 && vi.moveMode == moveNone {
+		if vi.selectLineCount() {
+			vi.commentFn()
+			handled = true
+		}
+		vi.cursor.Unselect()
+		vi.setNormalMode()
+		return
+	}
+	if vi.parseOperatorCountDigit(ev) {
+		return false, true
+	}
+
+	if vi.moveMode == moveNone && ev.Mod == 0 {
+		if vi.pendingGoMotion {
+			vi.pendingGoMotion = false
+			switch ev.Ch {
+			case 'e':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'e'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
+			case 'E':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'E'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
+			case 'j':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'j'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
+			case 'k':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'k'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
+			case '_':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: '_'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
+			default:
+				vi.setNormalMode()
+				return false, true
+			}
+		}
+
+		if vi.textObjectPending {
+			if ev.Ch == 'i' {
+				vi.setTextObjectPending(false)
+				return false, true
+			}
+			if ev.Ch == 'a' {
+				vi.setTextObjectPending(true)
+				return false, true
+			}
+			if !vi.selectTextObject(ev.Ch) {
+				vi.setNormalMode()
+				return false, true
+			}
+			selectionMode, ok := vi.cursor.SelectionMode()
+			if ok && selectionMode == text.StandardSelection &&
+				!strings.Contains(vi.cursor.Selection(), "\n") &&
+				vi.cursor.ToggleBlockComment() {
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return false, true
+			}
+			vi.commentFn()
+			vi.cursor.Unselect()
+			vi.setNormalMode()
+			return false, true
+		}
+		switch ev.Ch {
+		case 'g':
+			vi.pendingGoMotion = true
+			return false, true
+		case 'i':
+			vi.setTextObjectPending(false)
+			return false, true
+		case 'a':
+			vi.setTextObjectPending(true)
+			return false, true
+		}
+	}
+
+	var done bool
+	quit, handled, done = vi.handleMetaNormal(ev)
+	if !done {
+		return
+	}
+
+	vi.commentFn()
+	vi.cursor.Unselect()
+	vi.setNormalMode()
+	return
+}
+
 func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' && ev.Mod == 0 {
 		if !vi.cursor.SelectLine() {
@@ -2492,7 +2627,7 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 				handled = true
 				return
 			}
-			vi.setShiftMode(func() { vi.cursor.ToggleLineComment() }, 'c')
+			vi.setCommentMode(vi.cursor.ToggleLineComment, 'c')
 			handled = true
 			return
 		case 'e':
@@ -2603,6 +2738,8 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		quit, handled = vi.handleCaseChange(ev)
 	case shiftMode:
 		quit, handled = vi.handleShift(ev)
+	case commentMode:
+		quit, handled = vi.handleComment(ev)
 	case visualMode, visualLineMode, visualBlockMode:
 		quit, handled = vi.handleVisual(ev)
 	case replaceMode:
@@ -2645,7 +2782,7 @@ func (vi *viHandlerImpl) doMoveToBounds() {
 	}
 
 	switch vi.mode() {
-	case normalMode, yankMode, searchMode, zMode, gMode, deleteMode, caseChangeMode, shiftMode:
+	case normalMode, yankMode, searchMode, zMode, gMode, deleteMode, caseChangeMode, shiftMode, commentMode:
 		if vi.config.cursorCorrections {
 			prevCoords := vi.cursor.Coordinates()
 			vi.cursor.MoveToBounds(0)

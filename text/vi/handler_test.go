@@ -5688,6 +5688,7 @@ func TestViGc(t *testing.T) {
 		wantCoord    term.Coordinates
 		wantMode     viMode
 		wantSelected bool
+		allowUnhandledLast bool
 	}
 
 	suite := []tc{
@@ -5824,28 +5825,212 @@ func TestViGc(t *testing.T) {
 			wantMode:     normalMode,
 			wantSelected: false,
 		},
+		{
+			name:        "gcip comments inner paragraph",
+			fileText:    "alpha\nbeta\ngamma\n\ndelta\n",
+			events:      "gcip",
+			wantContent: "// alpha\n// beta\n// gamma\n\ndelta\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcap comments around paragraph selection",
+			fileText:    "alpha\nbeta\ngamma\n\ndelta\n",
+			events:      "gcap",
+			wantContent: "// alpha\n// beta\n// gamma\n\n// delta\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gciw wraps single-line word object in block comment",
+			fileText:    "alpha beta\n",
+			events:      "gciw",
+			wantContent: "/*alpha*/ beta\n",
+			wantCoord:   term.Coordinates{X: 2, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcaw wraps single-line word object in block comment",
+			fileText:    "alpha beta\n",
+			events:      "gcaw",
+			wantContent: "/*alpha */beta\n",
+			wantCoord:   term.Coordinates{X: 2, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gca brace wraps single-line block object in block comment",
+			fileText: "call{one}\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'f'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: '{'})
+			},
+			events:      "gca{",
+			wantContent: "call/*{one}*/\n",
+			wantCoord:   term.Coordinates{X: 6, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcj comments current and next line",
+			fileText:    "alpha\nbeta\ngamma\n",
+			events:      "gcj",
+			wantContent: "// alpha\n// beta\ngamma\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 1},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gck comments previous and current line",
+			fileText: "alpha\nbeta\ngamma\n",
+			before: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+			},
+			events:      "gck",
+			wantContent: "// alpha\n// beta\ngamma\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gc right brace comments to next paragraph boundary",
+			fileText:    "alpha\nbeta\n\ngamma\ndelta\n",
+			events:      "gc}",
+			wantContent: "// alpha\n// beta\n\ngamma\ndelta\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 2},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gc left brace comments backward paragraph boundary",
+			fileText: "alpha\n\nbeta\ngamma\n",
+			before: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.cursor.MoveDown()
+			},
+			events:      "gc{",
+			wantContent: "alpha\n\n// beta\ngamma\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 1},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gce comments current line",
+			fileText:    "alpha beta\n",
+			events:      "gce",
+			wantContent: "// alpha beta\n",
+			wantCoord:   term.Coordinates{X: 7, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcw comments current line",
+			fileText:    "alpha beta\n",
+			events:      "gcw",
+			wantContent: "// alpha beta\n",
+			wantCoord:   term.Coordinates{X: 8, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "2gcj uses operator count",
+			fileText:    "alpha\nbeta\ngamma\ndelta\n",
+			events:      "2gcj",
+			wantContent: "// alpha\n// beta\n// gamma\ndelta\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 2},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gc2j uses post operator count",
+			fileText:    "alpha\nbeta\ngamma\ndelta\n",
+			events:      "gc2j",
+			wantContent: "// alpha\n// beta\n// gamma\ndelta\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 2},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gcgE comments backward WORD end across lines",
+			fileText: "one\ntwo-three\nfour\n",
+			before: func(vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{X: len("four") - 1, Y: 2})
+			},
+			events:      "gcgE",
+			wantContent: "one\n// two-three\n// four\n",
+			wantCoord:   term.Coordinates{X: 11, Y: 1},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcg underscore comments to last non blank on current line",
+			fileText:    "hello   \nworld\n",
+			events:      "gcg_",
+			wantContent: "// hello   \nworld\n",
+			wantCoord:   term.Coordinates{X: 7, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcg invalid meta motion exits without mutating",
+			fileText:    "alpha\nbeta\n",
+			events:      "gcgq",
+			wantContent: "alpha\nbeta\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gciaw retargets text object and wraps single-line word in block comment",
+			fileText:    "alpha beta\n",
+			events:      "gciaw",
+			wantContent: "/*alpha */beta\n",
+			wantCoord:   term.Coordinates{X: 2, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcaiw retargets text object and wraps single-line word in block comment",
+			fileText:    "alpha beta\n",
+			events:      "gcaiw",
+			wantContent: "/*alpha*/ beta\n",
+			wantCoord:   term.Coordinates{X: 2, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gci invalid text object exits without mutating",
+			fileText:    "alpha beta\n",
+			events:      "gciq",
+			wantContent: "alpha beta\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gch no op motion exits without mutating",
+			fileText:    "alpha beta\n",
+			events:      "gch",
+			wantContent: "alpha beta\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 0},
+			wantMode:    normalMode,
+			allowUnhandledLast: true,
+		},
 	}
 
 	for _, tcase := range suite {
-		t.Run(tcase.name, func(t *testing.T) {
-			vi := setupVi(t, tcase.fileText, 2, WithComments(text.CommentConfig{
-				"txt": {Line: []string{"//"}},
-			}))
-			vi.less.Buffer().WithView(testCommentService{
-				view:  vi.less.Buffer().View(),
-				line:  []string{"//"},
-				block: []string{"/*", "*/"},
-			})
-			vi.Resize(20, 10)
-			vi.cursor.SetCommentSpec(text.CommentSpec{Line: []string{"//"}})
+			t.Run(tcase.name, func(t *testing.T) {
+				vi := setupVi(t, tcase.fileText, 2, WithComments(text.CommentConfig{
+					"txt": {
+						Line:  []string{"//"},
+						Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+					},
+				}))
+				vi.less.Buffer().WithView(testCommentService{
+					view:  vi.less.Buffer().View(),
+					line:  []string{"//"},
+					block: []string{"/*", "*/"},
+				})
+				vi.Resize(20, 10)
+				vi.cursor.SetCommentSpec(text.CommentSpec{
+					Line:  []string{"//"},
+					Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+				})
 
 			if tcase.before != nil {
 				tcase.before(vi)
 			}
 
-			for _, eventChar := range tcase.events {
+			for i, eventChar := range tcase.events {
 				quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
 				require.False(t, quit)
+				if tcase.allowUnhandledLast && i == len(tcase.events)-1 {
+					continue
+				}
 				require.True(t, handled, "event %q should be handled", string(eventChar))
 			}
 
