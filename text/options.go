@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -41,6 +42,7 @@ import (
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/syntax"
 )
 
@@ -87,6 +89,7 @@ type Config struct {
 	Markdown                markdown.Config
 	Clipboard               clipboard.Register
 	OpenRouter              OpenRouter
+	Comments                CommentConfig
 	// FileExplorerIndentAttr selects the attributes applied to the
 	// indent guide rune drawn at the start of every depth level in
 	// the file explorer. Defaults to tcell.ColorGray when zero.
@@ -96,6 +99,53 @@ type Config struct {
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
+}
+
+// CommentBlock configures one block comment delimiter pair.
+type CommentBlock struct {
+	Start string
+	End   string
+}
+
+// CommentSpec configures language-specific comment delimiters.
+// Line lists line-comment prefixes and Block lists block comment delimiter
+// pairs. The first configured token(s) are used for insertion while all
+// configured tokens are considered for removal.
+type CommentSpec struct {
+	Line  []string
+	Block []CommentBlock
+}
+
+// CommentConfig maps language IDs to their comment delimiters.
+type CommentConfig map[string]CommentSpec
+
+// ForLanguage returns the comment spec for a language ID.
+func (c CommentConfig) ForLanguage(lang string) (CommentSpec, bool) {
+	if c == nil {
+		return CommentSpec{}, false
+	}
+	spec, ok := c[lang]
+	return spec, ok
+}
+
+// CommentSpecForURI returns the comment spec for the given URI if its language
+// can be determined and a spec is configured.
+func CommentSpecForURI(uri workspaceapi.URI, comments CommentConfig) (CommentSpec, bool) {
+	lang, err := languages.LanguageForFile(filepath.Base(uri.Path()))
+	if err != nil {
+		return CommentSpec{}, false
+	}
+	return comments.ForLanguage(lang)
+}
+
+// HasLine reports whether a line-comment prefix is configured.
+func (c CommentSpec) HasLine() bool {
+	return len(c.Line) != 0 && c.Line[0] != ""
+}
+
+// HasBlock reports whether at least one block comment pair is configured.
+func (c CommentSpec) HasBlock() bool {
+	return len(c.Block) != 0 && c.Block[0].Start != "" && c.Block[0].End != ""
 }
 
 // IconSet is used to render icons next to file names in tabs.
@@ -146,6 +196,7 @@ func DefaultConfig() Config {
 		Markdown:                markdown.DefaultConfig(),
 		Clipboard:               clipboard.NewInMemory(),
 		OpenRouter:              nopOpenRouter{},
+		Comments:                CommentConfig{},
 		FileExplorerIndentAttr:  term.Attributes{Fg: tcell.ColorGray},
 		Icons: IconSet{
 			Extensions: map[string]rune{},
@@ -186,6 +237,13 @@ func WithMarkdownConfig(markdown markdown.Config) Option {
 func WithClipboard(clip clipboard.Register) Option {
 	return func(cfg *Config) {
 		cfg.Clipboard = clip
+	}
+}
+
+// WithComments returns an Option that sets language-specific comment config.
+func WithComments(comments CommentConfig) Option {
+	return func(cfg *Config) {
+		cfg.Comments = maps.Clone(comments)
 	}
 }
 

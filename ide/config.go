@@ -1697,6 +1697,69 @@ func (c ideConfig) syntaxConfig() (ret syntax.Config) {
 	return
 }
 
+func (c ideConfig) editorComments() (ret text.CommentConfig) {
+	ret = text.CommentConfig{}
+	cfg, ok := c.editor()
+	if !ok {
+		return
+	}
+	comments, err := cfg.GetMap("comments")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.comments"] = err
+		}
+		return
+	}
+	for langID := range comments {
+		langCfg, err := config.MapConfig(comments).GetConfig(langID)
+		if err != nil {
+			c.errors["editor.comments."+langID] = err
+			continue
+		}
+		spec := text.CommentSpec{}
+		if line, lerr := getStringSlice(langCfg, "line"); lerr != nil {
+			if lerr != config.ErrNotFound {
+				c.errors["editor.comments."+langID+".line"] = lerr
+			}
+		} else {
+			spec.Line = line
+		}
+		if block, berr := getStringSlice(langCfg, "block"); berr != nil {
+			if berr != config.ErrNotFound {
+				c.errors["editor.comments."+langID+".block"] = berr
+			}
+		} else {
+			for i := 0; i+1 < len(block); i += 2 {
+				spec.Block = append(spec.Block, text.CommentBlock{Start: block[i], End: block[i+1]})
+			}
+		}
+		ret[langID] = spec
+	}
+	return
+}
+
+func getStringSlice(cfg config.Config, key string) ([]string, error) {
+	vals, err := cfg.GetSlice(key)
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]string, 0, len(vals))
+	var retErr error
+	for _, val := range vals {
+		s, ok := val.(string)
+		if !ok {
+			retErr = multierr.Append(retErr,
+				fmt.Errorf("slice of strings expected for %q", key))
+			continue
+		}
+		ret = append(ret, s)
+	}
+	if retErr != nil {
+		return nil, retErr
+	}
+	return ret, nil
+}
+
 func (c ideConfig) editorTabspaces() (tabs int) {
 	tabs = text.DefaultConfig().Tabspaces
 	cfg, ok := c.editor()

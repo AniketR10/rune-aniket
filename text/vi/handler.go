@@ -1733,6 +1733,9 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		switch ev.Ch {
 		case '"':
 			vi.pendingRegister = true
+		case 'g':
+			vi.setGMode()
+			return
 		case 'z':
 			vi.cursor.HideSelection()
 			vi.setNormalMode()
@@ -2479,6 +2482,17 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			return
 		case '~':
 			vi.setCaseChangeMode(vi.cursor.ToggleCaseSelection, '~')
+			handled = true
+			return
+		case 'c':
+			if _, ok := vi.cursor.SelectionMode(); ok {
+				vi.cursor.ToggleLineComment()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				handled = true
+				return
+			}
+			vi.setShiftMode(func() { vi.cursor.ToggleLineComment() }, 'c')
 			handled = true
 			return
 		case 'e':

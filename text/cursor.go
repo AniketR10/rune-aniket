@@ -105,6 +105,7 @@ type Cursor struct {
 	scheduleNextTick func(func()) bool
 
 	locationStore LocationStore
+	commentSpec   CommentSpec
 
 	selection struct {
 		mode       SelectMode
@@ -1918,6 +1919,11 @@ func (c *Cursor) InsertString(str string) {
 	c.setCursorAfterUpdate(until)
 }
 
+// SetCommentSpec sets the active language-specific comment delimiters.
+func (c *Cursor) SetCommentSpec(spec CommentSpec) {
+	c.commentSpec = spec
+}
+
 // InsertBlock inserts a string in a block-wise fashion meaning it
 // will insert each of the lines at corresponding relative x and y positions
 // shifting content to the right accordingly.
@@ -2498,6 +2504,84 @@ func (c *Cursor) ToggleCase() (ok bool) {
 	c.MoveRight()
 	ok = true
 	return
+}
+
+// ToggleLineComment toggles the configured line-comment prefix on the current
+// line or selected lines.
+func (c *Cursor) ToggleLineComment() bool {
+	if !c.commentSpec.HasLine() {
+		return false
+	}
+	prefix := c.commentSpec.Line[0]
+	fromY, toY := c.commentLineBounds()
+	nonBlank := 0
+	for y := fromY; y <= toY; y++ {
+		if strings.TrimLeft(c.lineString(y), " \t") != "" {
+			nonBlank++
+		}
+	}
+	if nonBlank == 0 {
+		return false
+	}
+	commented := c.lineCommentedRanges(prefix, fromY, toY)
+	if len(commented) == toY-fromY+1 {
+		for i := len(commented) - 1; i >= 0; i-- {
+			if commented[i].Start == commented[i].End {
+				continue
+			}
+			c.buffer().Delete(commented[i].Start, commented[i].End)
+		}
+		c.setCursorAfterLineCommentToggle(prefix, false)
+		return true
+	}
+	for y := toY; y >= fromY; y-- {
+		line := c.lineString(y)
+		trimmed := strings.TrimLeft(line, " \t")
+		if trimmed == "" {
+			continue
+		}
+		indent := len(line) - len(trimmed)
+		c.buffer().InsertString(term.Coordinates{Y: y, X: indent}, prefix+" ")
+	}
+	c.setCursorAfterLineCommentToggle(prefix, true)
+	return true
+}
+
+// ToggleBlockComment toggles the configured block comment delimiters around the
+// current selection.
+func (c *Cursor) ToggleBlockComment() bool {
+	if !c.commentSpec.HasBlock() {
+		return false
+	}
+	open, close := c.commentSpec.Block[0].Start, c.commentSpec.Block[0].End
+	from, to, ok := c.selectionBounds()
+	if ok {
+		from, to = term.CoordinatesSort(from, to)
+		if !c.selection.explicit && c.RightInclusiveSemantics {
+			to.X++
+		}
+	}
+	if !ok {
+		cur := c.cursorAtScroll()
+		from, to = cur, cur
+	}
+	if rngs, covered := c.commentCoverage(term.Range{Start: from, End: to}); covered && len(rngs) == 1 {
+		comment := c.rangeString(rngs[0].Start, rngs[0].End)
+		if strings.HasPrefix(comment, open) && strings.HasSuffix(comment, close) {
+			c.buffer().Delete(term.Coordinates{Y: rngs[0].End.Y, X: rngs[0].End.X - len(close)}, rngs[0].End)
+			c.buffer().Delete(rngs[0].Start, term.Coordinates{Y: rngs[0].Start.Y, X: rngs[0].Start.X + len(open)})
+			c.Unselect()
+			c.setCursorAfterUpdate(rngs[0].Start)
+			return true
+		}
+	}
+	if !ok {
+		return false
+	}
+	c.buffer().InsertString(to, close)
+	c.buffer().InsertString(from, open)
+	c.setCursorAfterUpdate(term.Coordinates{Y: from.Y, X: from.X + len(open)})
+	return true
 }
 
 func toggleCaseString(s string) string {
@@ -3327,6 +3411,101 @@ func (c *Cursor) getSelectionService() selectionService {
 		return svc
 	}
 	return nil
+}
+
+func (c *Cursor) getCommentService() commentService {
+	svc, ok := c.buffer().View().(commentService)
+	if ok {
+		return svc
+	}
+	return nil
+}
+
+func (c *Cursor) commentCoverage(rng term.Range) ([]term.Range, bool) {
+	svc := c.getCommentService()
+	if svc == nil {
+		return nil, false
+	}
+	return svc.CommentCoverage(rng)
+}
+
+func (c *Cursor) commentLineBounds() (int, int) {
+	if _, ok := c.SelectionMode(); ok {
+		if from, to, ok := c.selectionBounds(); ok {
+			from, to = term.CoordinatesSort(from, to)
+			return from.Y, to.Y
+		}
+	}
+	pos := c.cursorAtScroll()
+	return pos.Y, pos.Y
+}
+
+func (c *Cursor) lineCommentedRanges(_ string, fromY, toY int) []term.Range {
+	ret := make([]term.Range, 0, toY-fromY+1)
+	for y := fromY; y <= toY; y++ {
+		line := c.lineString(y)
+		trimmed := strings.TrimLeft(line, " \t")
+		if trimmed == "" {
+			ret = append(ret, term.Range{})
+			continue
+		}
+		indent := len(line) - len(trimmed)
+		for _, candidate := range c.commentSpec.Line {
+			comment := candidate
+			if strings.HasPrefix(trimmed, candidate+" ") {
+				comment = candidate + " "
+			}
+			if !strings.HasPrefix(trimmed, comment) {
+				continue
+			}
+			start := term.Coordinates{Y: y, X: indent}
+			end := term.Coordinates{Y: y, X: indent + len(comment)}
+			coverage, ok := c.commentCoverage(term.Range{Start: start, End: end})
+			if ok && len(coverage) != 0 {
+				ret = append(ret, term.Range{Start: start, End: end})
+				goto nextLine
+			}
+		}
+		return nil
+	nextLine:
+	}
+	return ret
+}
+
+func (c *Cursor) setCursorAfterLineCommentToggle(prefix string, inserted bool) {
+	cur := c.cursorAtScroll()
+	adjust := len(prefix)
+	if inserted {
+		adjust++
+	}
+	line := c.lineString(cur.Y)
+	trimmed := strings.TrimLeft(line, " \t")
+	if trimmed == "" {
+		return
+	}
+	indent := len(line) - len(trimmed)
+	if inserted {
+		if cur.X >= indent {
+			cur.X += adjust
+		}
+	} else if cur.X >= indent+adjust {
+		cur.X -= adjust
+	} else {
+		cur.X = max(indent, 0)
+	}
+	c.setCursorAfterUpdate(cur)
+}
+
+func (c *Cursor) lineString(y int) string {
+	from := term.Coordinates{Y: y}
+	to := term.Coordinates{Y: y, X: c.buffer().Columns(y)}
+	line, _, _ := c.buffer().Select(from, to)
+	return term.CellsToString(line)
+}
+
+func (c *Cursor) rangeString(from, to term.Coordinates) string {
+	cells, _, _ := c.buffer().Select(from, to)
+	return term.CellsToString(cells)
 }
 
 func (c *Cursor) currentSelectionRange() (term.Range, term.Coordinates, bool) {

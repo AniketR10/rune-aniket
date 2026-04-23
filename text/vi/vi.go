@@ -120,6 +120,9 @@ func (vi *Vi) init(
 	vi.mouse = mouse.New(newDelegate(viHandler))
 	vi.clipboard = viHandler.config.clipboard
 	vi.scheduleNextTick = viHandler.config.scheduleNextTick
+	if spec, ok := text.CommentSpecForURI(resource, viHandler.config.comments); ok {
+		vi.cursor.SetCommentSpec(spec)
+	}
 
 	vi.repeatEdits = make([]term.Event, 0)
 	vi.currEdits = make([]term.Event, 0)

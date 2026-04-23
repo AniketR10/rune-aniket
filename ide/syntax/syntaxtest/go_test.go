@@ -1822,6 +1822,67 @@ func TestTreeQueryIntegration(t *testing.T) {
 	})
 }
 
+func TestTreeCommentCoverageIntegration(t *testing.T) {
+	t.Run("returns exact line comment ranges when fully covered", func(t *testing.T) {
+		content := "package main\n\n// alpha\n// beta\nfunc main() {}\n"
+		_, _, tree, cleanup := newTreeWithPkgManagerContent(t, newInstalledPkgManager(t), content)
+
+		ranges, ok := tree.CommentCoverage(term.Range{
+			Start: term.Coordinates{Y: 2, X: 0},
+			End:   term.Coordinates{Y: 3, X: len("// beta")},
+		})
+		stateIt := tree.State()
+		state, _ := stateIt.Next(context.Background())
+		_ = stateIt.Close()
+		assert.Equal(t, syntax.State{LangID: "go", Folds: true, Indents: true, Highlights: true}, state)
+		require.True(t, ok)
+		assert.Equal(t, []term.Range{
+			{Start: term.Coordinates{Y: 2, X: 0}, End: term.Coordinates{Y: 2, X: len("// alpha")}},
+			{Start: term.Coordinates{Y: 3, X: 0}, End: term.Coordinates{Y: 3, X: len("// beta")}},
+		}, ranges)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("returns false when selection is only partially covered by comments", func(t *testing.T) {
+		content := "package main\n\n// alpha\nfunc main() {}\n"
+		_, _, tree, cleanup := newTreeWithPkgManagerContent(t, newInstalledPkgManager(t), content)
+
+		ranges, ok := tree.CommentCoverage(term.Range{
+			Start: term.Coordinates{Y: 2, X: 0},
+			End:   term.Coordinates{Y: 3, X: 4},
+		})
+		assert.False(t, ok)
+		assert.Nil(t, ranges)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("returns exact block comment range when fully covered", func(t *testing.T) {
+		content := "package main\n\n/* alpha */\nfunc main() {}\n"
+		_, _, tree, cleanup := newTreeWithPkgManagerContent(t, newInstalledPkgManager(t), content)
+
+		ranges, ok := tree.CommentCoverage(term.Range{
+			Start: term.Coordinates{Y: 2, X: 0},
+			End:   term.Coordinates{Y: 2, X: len("/* alpha */")},
+		})
+		stateIt := tree.State()
+		state, _ := stateIt.Next(context.Background())
+		_ = stateIt.Close()
+		assert.Equal(t, syntax.State{LangID: "go", Folds: true, Indents: true, Highlights: true}, state)
+		require.True(t, ok)
+		assert.Equal(t, []term.Range{{
+			Start: term.Coordinates{Y: 2, X: 0},
+			End:   term.Coordinates{Y: 2, X: len("/* alpha */")},
+		}}, ranges)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+}
+
 func newInstalledPkgManager(t *testing.T) *mockPkgManager {
 	return newInstalledPkgManagerWithFiles(t,
 		"go/tree-sitter.so",

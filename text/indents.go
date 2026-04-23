@@ -37,6 +37,12 @@ type selectionService interface {
 
 var _ selectionService = (*syntax.Tree)(nil)
 
+type commentService interface {
+	CommentCoverage(rng term.Range) ([]term.Range, bool)
+}
+
+var _ commentService = (*syntax.Tree)(nil)
+
 type indentService interface {
 	IndentationAt(line int) (int, bool)
 }

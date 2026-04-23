@@ -39,6 +39,7 @@ type modelessConfig struct {
 	tabspaces          int
 	attr               term.Attributes
 	resAttr            term.Attributes
+	comments           text.CommentConfig
 	registry           text.WorkspaceCommandRegistry
 	wrap               bool
 	enableInitialFolds bool
@@ -179,6 +180,13 @@ func WithAttr(attr term.Attributes) Option {
 func WithClipboard(clip clipboard.Register) Option {
 	return func(cfg *modelessConfig) {
 		cfg.clipboard = clip
+	}
+}
+
+// WithComments sets language-specific comment configuration.
+func WithComments(comments text.CommentConfig) Option {
+	return func(cfg *modelessConfig) {
+		cfg.comments = comments
 	}
 }
 

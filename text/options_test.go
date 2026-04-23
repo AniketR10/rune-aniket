@@ -27,8 +27,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 func TestDefaultConfigPkgManagerReturnsNotFound(t *testing.T) {
@@ -38,4 +40,49 @@ func TestDefaultConfigPkgManagerReturnsNotFound(t *testing.T) {
 	it, err := cfg.PkgManager.LibDir(context.Background(), "go")
 	require.Nil(t, it)
 	require.ErrorIs(t, err, storageapi.ErrNotFound)
+}
+
+func TestWithComments(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	assert.Empty(t, cfg.Comments)
+
+	comments := CommentConfig{
+		"go": {
+			Line:  []string{"//"},
+			Block: []CommentBlock{{Start: "/*", End: "*/"}},
+		},
+	}
+	WithComments(comments)(&cfg)
+	assert.Equal(t, comments, cfg.Comments)
+
+	uri, err := workspaceapi.ParseURI("memory:///foo.go")
+	require.NoError(t, err)
+	spec, ok := CommentSpecForURI(uri, cfg.Comments)
+	require.True(t, ok)
+	assert.True(t, spec.HasLine())
+	assert.True(t, spec.HasBlock())
+	assert.Equal(t, []CommentBlock{{Start: "/*", End: "*/"}}, spec.Block)
+}
+
+func TestCommentConfigForLanguageNil(t *testing.T) {
+	t.Parallel()
+
+	var cc CommentConfig
+	spec, ok := cc.ForLanguage("go")
+	assert.False(t, ok)
+	assert.Equal(t, CommentSpec{}, spec)
+}
+
+func TestCommentSpecForURIUnknownLanguage(t *testing.T) {
+	t.Parallel()
+
+	comments := CommentConfig{"go": {Line: []string{"//"}}}
+	// A file without an extension cannot be resolved to a language ID.
+	uri, err := workspaceapi.ParseURI("memory:///Makefilelike")
+	require.NoError(t, err)
+	spec, ok := CommentSpecForURI(uri, comments)
+	assert.False(t, ok)
+	assert.Equal(t, CommentSpec{}, spec)
 }

@@ -95,6 +95,9 @@ func (h *editorHandler) Init(
 	})
 	h.less.Scroll().SetTabspaces(h.cfg.tabspaces)
 	h.cursor.Init(h.less.Scroll(), h.cfg.scheduleNextTick)
+	if spec, ok := text.CommentSpecForURI(resource, h.cfg.comments); ok {
+		h.cursor.SetCommentSpec(spec)
+	}
 	h.mouse = mouse.New(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = h.cfg.clipboard
 	h.statusBar = nopBar{}
@@ -276,6 +279,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.CollapseFold(context.Background())
 			case ']':
 				handled = h.cursor.ExpandFold(context.Background())
+			case '/':
+				handled = h.cursor.ToggleBlockComment()
 			case 'v':
 				if handled = h.pasteFromHistory(); handled {
 					pastedThisTurn = true

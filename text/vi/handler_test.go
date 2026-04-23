@@ -88,6 +88,12 @@ type testSelectionService struct {
 	shrink map[term.Range]term.Range
 }
 
+type testCommentService struct {
+	view  cell.View
+	line  []string
+	block []string
+}
+
 func (s testSelectionService) Rows() int { return s.view.Rows() }
 
 func (s testSelectionService) Columns(row int) int { return s.view.Columns(row) }
@@ -108,6 +114,60 @@ func (s testSelectionService) SelectionExpand(rng term.Range) (term.Range, bool)
 func (s testSelectionService) SelectionShrink(rng term.Range, caret term.Coordinates) (term.Range, bool) {
 	next, ok := s.shrink[rng]
 	return next, ok
+}
+
+func (s testCommentService) Rows() int { return s.view.Rows() }
+
+func (s testCommentService) Columns(row int) int { return s.view.Columns(row) }
+
+func (s testCommentService) Cell(at term.Coordinates) (term.Cell, bool) { return s.view.Cell(at) }
+
+func (s testCommentService) RawCells() [][]term.Cell { return s.view.RawCells() }
+
+func (s testCommentService) String() string { return s.view.String() }
+
+func (s testCommentService) CommentCoverage(rng term.Range) ([]term.Range, bool) {
+	start, end := term.CoordinatesSort(rng.Start, rng.End)
+	var ranges []term.Range
+	for y := start.Y; y <= end.Y; y++ {
+		line := term.CellsToString([][]term.Cell{s.view.RawCells()[y]})
+		trimmed := strings.TrimLeft(line, " \t")
+		indent := len(line) - len(trimmed)
+		for _, prefix := range s.line {
+			if strings.HasPrefix(trimmed, prefix) {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: indent},
+					End:   term.Coordinates{Y: y, X: len(line)},
+				})
+				goto nextLine
+			}
+			if strings.HasPrefix(trimmed, prefix+" ") {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: indent},
+					End:   term.Coordinates{Y: y, X: len(line)},
+				})
+				goto nextLine
+			}
+		}
+		for i := 0; i+1 < len(s.block); i += 2 {
+			open, close := s.block[i], s.block[i+1]
+			openIdx := strings.Index(line, open)
+			closeIdx := strings.LastIndex(line, close)
+			if openIdx >= 0 && closeIdx >= openIdx+len(open) {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: openIdx},
+					End:   term.Coordinates{Y: y, X: closeIdx + len(close)},
+				})
+				goto nextLine
+			}
+		}
+		return nil, false
+	nextLine:
+	}
+	if len(ranges) == 0 {
+		return nil, false
+	}
+	return ranges, true
 }
 
 func TestZModeSyntacticSelection(t *testing.T) {
@@ -5614,6 +5674,186 @@ func TestViG(t *testing.T) {
 				vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
 			}
 			assert.Equal(t, tcase.expectCoord, vi.cursor.Coordinates())
+		})
+	}
+}
+
+func TestViGc(t *testing.T) {
+	type tc struct {
+		name         string
+		fileText     string
+		before       func(*viHandlerImpl)
+		events       string
+		wantContent  string
+		wantCoord    term.Coordinates
+		wantMode     viMode
+		wantSelected bool
+	}
+
+	suite := []tc{
+		{
+			name:        "gcc toggles current non-empty line",
+			fileText:    "alpha\nbeta\n",
+			events:      "gcc",
+			wantContent: "// alpha\nbeta\n",
+			wantCoord:   term.Coordinates{X: 3, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gcc uncomments current line",
+			fileText:    "// alpha\nbeta\n",
+			events:      "gcc",
+			wantContent: "alpha\nbeta\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gcc toggles current last line without trailing newline",
+			fileText: "alpha\nbeta",
+			before: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+			},
+			events:      "gcc",
+			wantContent: "alpha\n// beta",
+			wantCoord:   term.Coordinates{X: 3, Y: 1},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gcc does nothing on blank line",
+			fileText: "alpha\n\nbeta\n",
+			before: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+			},
+			events:      "gcc",
+			wantContent: "alpha\n\nbeta\n",
+			wantCoord:   term.Coordinates{X: 0, Y: 1},
+			wantMode:    normalMode,
+		},
+		{
+			name:     "gc in visual mode comments same-line selection",
+			fileText: "alpha\nbeta\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			events:       "gc",
+			wantContent:  "// alpha\nbeta\n",
+			wantCoord:    term.Coordinates{X: 5, Y: 0},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+		{
+			name:     "gc in visual mode uncomments same-line selection",
+			fileText: "// alpha\nbeta\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
+			},
+			events:       "gc",
+			wantContent:  "alpha\nbeta\n",
+			wantCoord:    term.Coordinates{X: 0, Y: 0},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+		{
+			name:     "gc in visual mode comments multiline selection",
+			fileText: "alpha\nbeta\ngamma\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			events:       "gc",
+			wantContent:  "// alpha\n// beta\ngamma\n",
+			wantCoord:    term.Coordinates{X: 3, Y: 1},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+		{
+			name:     "gc in visual mode uncomments multiline selection",
+			fileText: "// alpha\n// beta\ngamma\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			events:       "gc",
+			wantContent:  "alpha\nbeta\ngamma\n",
+			wantCoord:    term.Coordinates{X: 0, Y: 1},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+		{
+			name:     "gc in visual mode comments inverse multiline selection",
+			fileText: "alpha\nbeta\ngamma\n",
+			before: func(vi *viHandlerImpl) {
+				vi.cursor.MoveDown()
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
+			},
+			events:       "gc",
+			wantContent:  "// alpha\n// beta\ngamma\n",
+			wantCoord:    term.Coordinates{X: 3, Y: 0},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+		{
+			name:     "gc in visual mode skips blank lines but comments non-blank lines",
+			fileText: "alpha\n\nbeta\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			events:       "gc",
+			wantContent:  "// alpha\n\n// beta\n",
+			wantCoord:    term.Coordinates{X: 3, Y: 2},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+		{
+			name:     "gc in visual mode on all-blank selection does nothing and exits visual",
+			fileText: "\n\n",
+			before: func(vi *viHandlerImpl) {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'v'})
+				vi.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
+			},
+			events:       "gc",
+			wantContent:  "\n\n",
+			wantCoord:    term.Coordinates{X: 0, Y: 1},
+			wantMode:     normalMode,
+			wantSelected: false,
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.fileText, 2, WithComments(text.CommentConfig{
+				"txt": {Line: []string{"//"}},
+			}))
+			vi.less.Buffer().WithView(testCommentService{
+				view:  vi.less.Buffer().View(),
+				line:  []string{"//"},
+				block: []string{"/*", "*/"},
+			})
+			vi.Resize(20, 10)
+			vi.cursor.SetCommentSpec(text.CommentSpec{Line: []string{"//"}})
+
+			if tcase.before != nil {
+				tcase.before(vi)
+			}
+
+			for _, eventChar := range tcase.events {
+				quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: eventChar})
+				require.False(t, quit)
+				require.True(t, handled, "event %q should be handled", string(eventChar))
+			}
+
+			assert.Equal(t, tcase.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.wantCoord, vi.cursor.Coordinates())
+			assert.Equal(t, tcase.wantMode, vi.mode())
+			_, selected := vi.Selection()
+			assert.Equal(t, tcase.wantSelected, selected)
 		})
 	}
 }

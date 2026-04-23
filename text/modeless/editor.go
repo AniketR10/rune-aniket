@@ -87,6 +87,10 @@ func (e *editor) Edit(
 		if err != nil {
 			return nil, err
 		}
+		ret, err = text.SubscribeCommentCommands(file, e.fileRegistry, cursor, ret)
+		if err != nil {
+			return nil, err
+		}
 		ret, err = vctrlcmd.SubscribeGitCommands(file, e.fileRegistry,
 			ret, e.auxBarConfig.Service, e.clipboard, e.notifications)
 		if err != nil {

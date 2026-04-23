@@ -49,6 +49,12 @@ type testSelectionService struct {
 	shrink map[term.Range]term.Range
 }
 
+type testCommentService struct {
+	view  cell.View
+	line  []string
+	block []string
+}
+
 func (s testSelectionService) Rows() int { return s.view.Rows() }
 
 func (s testSelectionService) Columns(row int) int { return s.view.Columns(row) }
@@ -69,6 +75,60 @@ func (s testSelectionService) SelectionExpand(rng term.Range) (term.Range, bool)
 func (s testSelectionService) SelectionShrink(rng term.Range, caret term.Coordinates) (term.Range, bool) {
 	next, ok := s.shrink[rng]
 	return next, ok
+}
+
+func (s testCommentService) Rows() int { return s.view.Rows() }
+
+func (s testCommentService) Columns(row int) int { return s.view.Columns(row) }
+
+func (s testCommentService) Cell(at term.Coordinates) (term.Cell, bool) { return s.view.Cell(at) }
+
+func (s testCommentService) RawCells() [][]term.Cell { return s.view.RawCells() }
+
+func (s testCommentService) String() string { return s.view.String() }
+
+func (s testCommentService) CommentCoverage(rng term.Range) ([]term.Range, bool) {
+	start, end := term.CoordinatesSort(rng.Start, rng.End)
+	var ranges []term.Range
+	for y := start.Y; y <= end.Y; y++ {
+		line := term.CellsToString([][]term.Cell{s.view.RawCells()[y]})
+		trimmed := strings.TrimLeft(line, " \t")
+		indent := len(line) - len(trimmed)
+		for _, prefix := range s.line {
+			if strings.HasPrefix(trimmed, prefix) {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: indent},
+					End:   term.Coordinates{Y: y, X: len(line)},
+				})
+				goto nextLine
+			}
+			if strings.HasPrefix(trimmed, prefix+" ") {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: indent},
+					End:   term.Coordinates{Y: y, X: len(line)},
+				})
+				goto nextLine
+			}
+		}
+		for i := 0; i+1 < len(s.block); i += 2 {
+			open, close := s.block[i], s.block[i+1]
+			openIdx := strings.Index(line, open)
+			closeIdx := strings.LastIndex(line, close)
+			if openIdx >= 0 && closeIdx >= openIdx+len(open) {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: openIdx},
+					End:   term.Coordinates{Y: y, X: closeIdx + len(close)},
+				})
+				goto nextLine
+			}
+		}
+		return nil, false
+	nextLine:
+	}
+	if len(ranges) == 0 {
+		return nil, false
+	}
+	return ranges, true
 }
 
 func TestCursorExternalEdit(t *testing.T) {
@@ -397,10 +457,6 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Sort lines alphabetically", "<f5>", nil, term.Coordinates{}}, // Already sorted a-k
 		//{"Sort lines (case sensitive)", "<ctrl-f5>", nil, term.Coordinates{}},
 
-		// Comments - depends on language/syntax (assuming C-style)
-		//{"Toggle line comment", "<meta-/>", sp("// a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}},
-		//{"Toggle block comment", "<shift-right><alt-meta-/>", sp("/*a*/\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 4}},
-
 		// Text transformation - require selection
 		{"Transform selection to UPPERCASE", "<shift-right><meta-k><meta-u>", new("A\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Transform selection to lowercase", "<shift-right><meta-k><meta-u><home><shift-right><meta-k><meta-l>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
@@ -503,7 +559,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		// {"Add line between paired braces", "{<enter>", sp("{\n\n}\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}},
 	}
 
-	uri, err := workspaceapi.ParseURI("memory:///myfile")
+	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
 	require.NoError(t, err)
 
 	for _, test := range suite {
@@ -515,7 +571,21 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			reg := registerhistory.NewClipboard(registerset.New(clip))
 			buf := cell.NewBuffer()
 			buf.ReadFrom(strings.NewReader(snippet))
+			buf.WithView(testCommentService{
+				view:  buf.View(),
+				line:  []string{"//"},
+				block: []string{"/*", "*/"},
+			})
 			handler := NewHandler(buf, uri, WithClipboard(reg))
+			handler = NewHandler(buf, uri,
+				WithClipboard(reg),
+				WithComments(text.CommentConfig{
+					"go": {
+						Line:  []string{"//"},
+						Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+					},
+				}),
+			)
 			handler.Resize(10, 3)
 			for _, key := range seq {
 				ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}

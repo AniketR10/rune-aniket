@@ -4929,6 +4929,12 @@ type testSelectionService struct {
 	shrinks []term.Range
 }
 
+type testCommentService struct {
+	view  cell.View
+	line  []string
+	block []CommentBlock
+}
+
 func (s testSelectionService) Rows() int {
 	return s.view.Rows()
 }
@@ -4958,6 +4964,449 @@ func (s *testSelectionService) SelectionShrink(rng term.Range, caret term.Coordi
 	s.shrinks = append(s.shrinks, rng)
 	next, ok := s.shrink[rng]
 	return next, ok
+}
+
+func (s testCommentService) Rows() int { return s.view.Rows() }
+
+func (s testCommentService) Columns(row int) int { return s.view.Columns(row) }
+
+func (s testCommentService) Cell(at term.Coordinates) (term.Cell, bool) { return s.view.Cell(at) }
+
+func (s testCommentService) RawCells() [][]term.Cell { return s.view.RawCells() }
+
+func (s testCommentService) String() string { return s.view.String() }
+
+func (s testCommentService) CommentCoverage(rng term.Range) ([]term.Range, bool) {
+	start, end := term.CoordinatesSort(rng.Start, rng.End)
+	var ranges []term.Range
+	for y := start.Y; y <= end.Y; y++ {
+		line := term.CellsToString([][]term.Cell{s.view.RawCells()[y]})
+		trimmed := strings.TrimLeft(line, " \t")
+		indent := len(line) - len(trimmed)
+		if trimmed == "" {
+			continue
+		}
+		for _, prefix := range s.line {
+			for _, candidate := range []string{prefix + " ", prefix} {
+				if strings.HasPrefix(trimmed, candidate) {
+					ranges = append(ranges, term.Range{
+						Start: term.Coordinates{Y: y, X: indent},
+						End:   term.Coordinates{Y: y, X: len(line)},
+					})
+					goto nextLine
+				}
+			}
+		}
+		for _, block := range s.block {
+			openIdx := strings.Index(line, block.Start)
+			closeIdx := strings.LastIndex(line, block.End)
+			if openIdx >= 0 && closeIdx >= openIdx+len(block.Start) {
+				ranges = append(ranges, term.Range{
+					Start: term.Coordinates{Y: y, X: openIdx},
+					End:   term.Coordinates{Y: y, X: closeIdx + len(block.End)},
+				})
+				goto nextLine
+			}
+		}
+		return nil, false
+	nextLine:
+	}
+	if len(ranges) == 0 {
+		return nil, false
+	}
+	return ranges, true
+}
+
+func attachCommentTestView(c *Cursor, spec CommentSpec) {
+	c.buffer().WithView(testCommentService{
+		view:  c.buffer().View(),
+		line:  spec.Line,
+		block: spec.Block,
+	})
+	c.SetCommentSpec(spec)
+}
+
+func setCursorAtOrFail(t *testing.T, c *Cursor, at term.Coordinates) {
+	t.Helper()
+	_, _ = c.MoveToScroll(at)
+	assert.Equal(t, at, c.CursorAtScroll())
+}
+
+func TestCursorToggleLineComment(t *testing.T) {
+	t.Parallel()
+
+	type testCase struct {
+		name        string
+		content     string
+		at          term.Coordinates
+		selectFn    func(*Cursor)
+		spec        CommentSpec
+		wantHandled bool
+		wantContent string
+		wantCursor  term.Coordinates
+	}
+
+	goSpec := CommentSpec{Line: []string{"//"}}
+	hashSpec := CommentSpec{Line: []string{"#"}}
+
+	tests := []testCase{
+		{
+			name:        "current line comments with spacing after indentation",
+			content:     "\ta\nb",
+			at:          term.Coordinates{Y: 0, X: 1},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "\t// a\nb",
+			wantCursor:  term.Coordinates{Y: 0, X: 4},
+		},
+		{
+			name:        "current line uncomments exact prefix range",
+			content:     "// a\nb",
+			at:          term.Coordinates{Y: 0, X: 3},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "a\nb",
+			wantCursor:  term.Coordinates{Y: 0, X: 1},
+		},
+		{
+			name:    "selected two lines comments both lines",
+			content: "a\nb",
+			at:      term.Coordinates{Y: 0, X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 1, X: 0})
+				require.True(t, ok)
+			},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "// a\n// b",
+			wantCursor:  term.Coordinates{Y: 1, X: 3},
+		},
+		{
+			name:    "selected two commented lines uncomments both lines",
+			content: "// a\n// b",
+			at:      term.Coordinates{Y: 0, X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 1, X: 3})
+				require.True(t, ok)
+			},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "a\nb",
+			wantCursor:  term.Coordinates{Y: 1, X: 1},
+		},
+		{
+			name:        "alternate line prefix works",
+			content:     "x",
+			at:          term.Coordinates{},
+			spec:        hashSpec,
+			wantHandled: true,
+			wantContent: "# x",
+			wantCursor:  term.Coordinates{X: 2},
+		},
+		{
+			name:        "missing comment spec returns false",
+			content:     "x",
+			at:          term.Coordinates{X: 1},
+			spec:        CommentSpec{},
+			wantHandled: false,
+			wantContent: "x",
+			wantCursor:  term.Coordinates{X: 1},
+		},
+		{
+			name:        "blank line alone returns false (no content to comment)",
+			content:     "   ",
+			at:          term.Coordinates{Y: 0, X: 1},
+			spec:        goSpec,
+			wantHandled: false,
+			wantContent: "   ",
+			wantCursor:  term.Coordinates{Y: 0, X: 1},
+		},
+		{
+			name:    "selection spanning blank and content comments only content",
+			content: "a\n\nb",
+			at:      term.Coordinates{Y: 0, X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 2, X: 0})
+				require.True(t, ok)
+			},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "// a\n\n// b",
+			wantCursor:  term.Coordinates{Y: 2, X: 3},
+		},
+		{
+			name:        "partial prefix without space still uncomments",
+			content:     "//a",
+			at:          term.Coordinates{Y: 0, X: 2},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "a",
+			wantCursor:  term.Coordinates{Y: 0, X: 0},
+		},
+		{
+			name:        "indented comment uncomments and keeps indent",
+			content:     "\t// a",
+			at:          term.Coordinates{Y: 0, X: 4},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "\ta",
+			wantCursor:  term.Coordinates{Y: 0, X: 2},
+		},
+		{
+			name:        "indented content comments at indentation boundary",
+			content:     "  x",
+			at:          term.Coordinates{Y: 0, X: 2},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "  // x",
+			wantCursor:  term.Coordinates{Y: 0, X: 5},
+		},
+		{
+			name:        "cursor at start of line before indent (insert) stays before",
+			content:     "  x",
+			at:          term.Coordinates{Y: 0, X: 0},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "  // x",
+			wantCursor:  term.Coordinates{Y: 0, X: 0},
+		},
+		{
+			name:    "line-selection across two commented lines uncomments",
+			content: "// a\n// b",
+			at:      term.Coordinates{Y: 0, X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 1, X: 0})
+				require.True(t, ok)
+			},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "a\nb",
+			wantCursor:  term.Coordinates{Y: 1, X: 0},
+		},
+		{
+			name:    "mixed comment/non-comment selection inserts prefixes on all nonblank",
+			content: "// a\nb",
+			at:      term.Coordinates{Y: 0, X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 1, X: 0})
+				require.True(t, ok)
+			},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "// // a\n// b",
+			wantCursor:  term.Coordinates{Y: 1, X: 3},
+		},
+		{
+			name:    "selection with blank middle line uncomments commented neighbors",
+			content: "// a\n\n// b",
+			at:      term.Coordinates{Y: 0, X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{Y: 2, X: 3})
+				require.True(t, ok)
+			},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "a\n\nb",
+			wantCursor:  term.Coordinates{Y: 2, X: 1},
+		},
+		{
+			name:        "only-prefix line uncomments to empty",
+			content:     "//",
+			at:          term.Coordinates{Y: 0, X: 1},
+			spec:        goSpec,
+			wantHandled: true,
+			wantContent: "",
+			wantCursor:  term.Coordinates{Y: 0, X: 1},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 10, tc.content, false)
+			attachCommentTestView(c, tc.spec)
+			setCursorAtOrFail(t, c, tc.at)
+			if tc.selectFn != nil {
+				tc.selectFn(c)
+			}
+			handled := c.ToggleLineComment()
+			assert.Equal(t, tc.wantHandled, handled)
+			assert.Equal(t, tc.wantContent, c.buffer().String())
+			assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+		})
+	}
+}
+
+func TestCursorToggleBlockComment(t *testing.T) {
+	t.Parallel()
+
+	type testCase struct {
+		name        string
+		content     string
+		at          term.Coordinates
+		selectFn    func(*Cursor)
+		spec        CommentSpec
+		wantHandled bool
+		wantContent string
+		wantCursor  term.Coordinates
+	}
+
+	spec := CommentSpec{Block: []CommentBlock{{Start: "/*", End: "*/"}}}
+
+	tests := []testCase{
+		{
+			name:    "selection wraps with block delimiters",
+			content: "alpha",
+			at:      term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{X: 4})
+				require.True(t, ok)
+			},
+			spec:        spec,
+			wantHandled: true,
+			wantContent: "/*alpha*/",
+			wantCursor:  term.Coordinates{X: 2},
+		},
+		{
+			name:        "cursor inside existing block comment unwraps",
+			content:     "/*alpha*/",
+			at:          term.Coordinates{X: 2},
+			spec:        spec,
+			wantHandled: true,
+			wantContent: "alpha",
+			wantCursor:  term.Coordinates{},
+		},
+		{
+			name:        "missing block spec returns false",
+			content:     "alpha",
+			at:          term.Coordinates{X: 1},
+			spec:        CommentSpec{},
+			wantHandled: false,
+			wantContent: "alpha",
+			wantCursor:  term.Coordinates{X: 1},
+		},
+		{
+			name:        "cursor without selection and not in block returns false",
+			content:     "alpha",
+			at:          term.Coordinates{X: 1},
+			spec:        spec,
+			wantHandled: false,
+			wantContent: "alpha",
+			wantCursor:  term.Coordinates{X: 1},
+		},
+		{
+			name:        "empty block spec returns false",
+			content:     "alpha",
+			at:          term.Coordinates{X: 1},
+			spec:        CommentSpec{Block: []CommentBlock{}},
+			wantHandled: false,
+			wantContent: "alpha",
+			wantCursor:  term.Coordinates{X: 1},
+		},
+		{
+			name:        "cursor at start of existing block comment unwraps",
+			content:     "/*x*/",
+			at:          term.Coordinates{X: 0},
+			spec:        spec,
+			wantHandled: true,
+			wantContent: "x",
+			wantCursor:  term.Coordinates{},
+		},
+		{
+			name:    "selection already wrapped unwraps",
+			content: "/*ab*/",
+			at:      term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{X: 5})
+				require.True(t, ok)
+			},
+			spec:        spec,
+			wantHandled: true,
+			wantContent: "ab",
+			wantCursor:  term.Coordinates{},
+		},
+		{
+			name:    "selection wraps multi-char content",
+			content: "abc",
+			at:      term.Coordinates{X: 0},
+			selectFn: func(c *Cursor) {
+				require.True(t, c.Select())
+				_, ok := c.MoveToScroll(term.Coordinates{X: 2})
+				require.True(t, ok)
+			},
+			spec:        spec,
+			wantHandled: true,
+			wantContent: "/*abc*/",
+			wantCursor:  term.Coordinates{X: 2},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 10, tc.content, false)
+			attachCommentTestView(c, tc.spec)
+			setCursorAtOrFail(t, c, tc.at)
+			if tc.selectFn != nil {
+				tc.selectFn(c)
+			}
+			handled := c.ToggleBlockComment()
+			assert.Equal(t, tc.wantHandled, handled)
+			assert.Equal(t, tc.wantContent, c.buffer().String())
+			assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+		})
+	}
+}
+
+func TestCursorToggleCommentCoverageGaps(t *testing.T) {
+	t.Parallel()
+
+	lineSpec := CommentSpec{Line: []string{"//"}}
+	blockSpec := CommentSpec{Block: []CommentBlock{{Start: "/*", End: "*/"}}}
+
+	t.Run("line toggle ignores blank lines when commenting", func(t *testing.T) {
+		c := setupCursorContent(t, 80, 10, "a\n\n", false)
+		attachCommentTestView(c, lineSpec)
+		setCursorAtOrFail(t, c, term.Coordinates{Y: 0, X: 0})
+		require.True(t, c.ToggleLineComment())
+		assert.Equal(t, "// a\n\n", c.buffer().String())
+	})
+
+	t.Run("line toggle on empty buffer line returns false", func(t *testing.T) {
+		c := setupCursorContent(t, 80, 10, "", false)
+		attachCommentTestView(c, lineSpec)
+		assert.False(t, c.ToggleLineComment())
+	})
+
+	t.Run("block toggle unwraps exact block range when cursor inside", func(t *testing.T) {
+		c := setupCursorContent(t, 80, 10, "/*x*/", false)
+		attachCommentTestView(c, blockSpec)
+		setCursorAtOrFail(t, c, term.Coordinates{X: 1})
+		require.True(t, c.ToggleBlockComment())
+		assert.Equal(t, "x", c.buffer().String())
+	})
+
+	t.Run("block toggle without comment service cannot unwrap", func(t *testing.T) {
+		c := setupCursorContent(t, 80, 10, "/*x*/", false)
+		c.SetCommentSpec(blockSpec)
+		setCursorAtOrFail(t, c, term.Coordinates{X: 1})
+		assert.False(t, c.ToggleBlockComment())
+		assert.Equal(t, "/*x*/", c.buffer().String())
+	})
+
+	t.Run("line toggle without comment service still comments", func(t *testing.T) {
+		c := setupCursorContent(t, 80, 10, "x", false)
+		c.SetCommentSpec(lineSpec)
+		setCursorAtOrFail(t, c, term.Coordinates{X: 0})
+		require.True(t, c.ToggleLineComment())
+		assert.Equal(t, "// x", c.buffer().String())
+	})
 }
 
 func TestCursorSelectionExpandShrink(t *testing.T) {

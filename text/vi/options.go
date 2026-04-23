@@ -38,6 +38,7 @@ import (
 type viConfig struct {
 	attr               term.Attributes
 	resAttr            term.Attributes
+	comments           text.CommentConfig
 	clipboard          clipboard.Register
 	tabspaces          int
 	scheduleNextTick   func(func()) bool
@@ -210,6 +211,13 @@ func WithAttr(attr term.Attributes) Option {
 func WithClipboard(clip clipboard.Register) Option {
 	return func(cfg *viConfig) {
 		cfg.clipboard = clip
+	}
+}
+
+// WithComments sets language-specific comment configuration.
+func WithComments(comments text.CommentConfig) Option {
+	return func(cfg *viConfig) {
+		cfg.comments = comments
 	}
 }
 

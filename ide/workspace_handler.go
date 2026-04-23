@@ -218,6 +218,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 	viOpts := append([]vi.Option{},
 		vi.WithResAttr(cfg.modalResultAttr()),
 		vi.WithTabspaces(cfg.editorTabspaces()),
+		vi.WithComments(cfg.editorComments()),
 		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
 		vi.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
@@ -245,6 +246,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithCommandBar(true),
 		modeless.WithResAttr(cfg.modelessResultAttr()),
 		modeless.WithTabspaces(cfg.editorTabspaces()),
+		modeless.WithComments(cfg.editorComments()),
 		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
 		modeless.WithAttr(cfg.modelessAttr()),
 		modeless.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
@@ -739,6 +741,7 @@ func (h *workspaceManagerHandler) textOpts(
 	markdownConfig.ScheduleNextTick = cfg.scheduleNextTick
 	ret := []text.Option{
 		text.WithTabspaces(cfg.editorTabspaces()),
+		text.WithComments(cfg.editorComments()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
 		text.WithFrameUnion(cfg.frameUnion()),

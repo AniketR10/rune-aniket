@@ -86,6 +86,10 @@ func (e *viEditor) Edit(
 		if err != nil {
 			return nil, err
 		}
+		ret, err = text.SubscribeCommentCommands(file, e.registry, cursor, ret)
+		if err != nil {
+			return nil, err
+		}
 		ret, err = vctrlcmd.SubscribeGitCommands(
 			file, e.registry, ret, e.config.auxBarConfig.Service,
 			e.config.clipboard, e.config.notifications)

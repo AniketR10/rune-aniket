@@ -127,6 +127,13 @@ editor:
             bg: green
             fg: "#f3f3f3"
     autoindent: false
+    comments:
+        go:
+            line:
+                - "//"
+            block:
+                - "/*"
+                - "*/"
     highlights:
         function:
             fg: green
@@ -400,6 +407,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	syntaxConfig.ScheduleNextTick = nil
 	expectedSyntaxConfig.ScheduleNextTick = nil
 	assert.Equal(t, expectedSyntaxConfig, syntaxConfig)
+	assert.Empty(t, cfg.editorComments())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "fish")
@@ -482,6 +490,12 @@ func TestConfigSetting(t *testing.T) {
 	}
 	actualIcons := cfg.icons()
 	assert.Equal(t, expectedIcons, actualIcons)
+	assert.Equal(t, text.CommentConfig{
+		"go": {
+			Line:  []string{"//"},
+			Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+		},
+	}, cfg.editorComments())
 	expectedLSPIcons := idelsp.IconSet{
 		idelsp.IconDiagnosticError:       "E",
 		idelsp.IconDiagnosticWarning:     "W",
