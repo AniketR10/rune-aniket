@@ -55,6 +55,7 @@ import (
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/term/sh"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
@@ -955,6 +956,178 @@ func TestClientServerIntegration(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "boom")
 	})
+
+	t.Run("forwards handler progress to caller's ProgressWriter", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		ed := texttest.NewMockEditor(ctrl)
+		s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+
+		client, closeFn := setupIntTest(t, s)
+		defer closeFn()
+
+		var subscribedRepl textapi.REPLHandler
+		ed.EXPECT().UnregisterREPLCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
+		ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ textapi.CommandManual, h textapi.REPLHandler) error {
+				subscribedRepl = h
+				return nil
+			})
+
+		handler := &testREPLHandler{
+			handleFn: func(_ context.Context, _ repl.Command, pw repl.ProgressWriter) (
+				iterator.Iterator[component.Responsive], error,
+			) {
+				pw.Progress(10, 100, "B")
+				pw.Progress(50, 100, "B")
+				pw.Progress(100, 100, "B")
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+			completeFn: func(context.Context, string, []string) (iterator.Iterator[string], error) {
+				return iterator.FromSlice[string](nil), nil
+			},
+			helpFn: func(context.Context, []string) (iterator.Iterator[component.Responsive], error) {
+				return iterator.FromSlice[component.Responsive](nil), nil
+			},
+		}
+
+		err := client.RegisterREPLCommand(textapi.CommandManual{Name: "dl"}, handler)
+		require.NoError(t, err)
+		require.NotNil(t, subscribedRepl)
+
+		pw := &recordingProgressWriter{}
+		it, err := subscribedRepl.HandleCommand(
+			context.Background(),
+			repl.Command{Name: "dl"},
+			pw,
+		)
+		require.NoError(t, err)
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+
+		progresses := pw.get()
+		require.GreaterOrEqual(t, len(progresses), 1,
+			"expected at least one progress update to reach the caller's ProgressWriter")
+		// The last update must be the terminal one; earlier samples may
+		// be dropped by the non-blocking send on the server side.
+		last := progresses[len(progresses)-1]
+		assert.Equal(t, int64(100), last.progress)
+		assert.Equal(t, int64(100), last.total)
+		assert.Equal(t, "B", last.units)
+	})
+}
+
+// TestClientServer_ShellProgressE2E wires up the full chain the editor
+// uses when it dispatches a shell command to an out-of-process
+// extension's REPL handler:
+//
+//	sh.commandHandler -> <registry> -> replCommandClientStream.HandleCommand
+//	  -> gRPC -> replCommandServerStream -> testREPLHandler.handleFn
+//
+// It asserts that Progress updates emitted by the extension-side handler
+// flow all the way back to the caller-supplied ProgressWriter.
+func TestClientServer_ShellProgressE2E(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ed := texttest.NewMockEditor(ctrl)
+	s := NewServer(nopNotifications{}, ed, new(sync.Mutex))
+
+	client, closeFn := setupIntTest(t, s)
+	defer closeFn()
+
+	// Capture the client-side stream adapter (a textapi.REPLHandler) that
+	// the server installs when the extension calls RegisterREPLCommand.
+	var subscribedRepl textapi.REPLHandler
+	ed.EXPECT().UnregisterREPLCommand(gomock.Any()).Return(text.ErrCommandNotRegistered)
+	ed.EXPECT().RegisterREPLCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ textapi.CommandManual, h textapi.REPLHandler) error {
+			subscribedRepl = h
+			return nil
+		})
+
+	// Extension-side handler. Emits progress, then finishes cleanly.
+	extHandler := &testREPLHandler{
+		handleFn: func(
+			_ context.Context, _ repl.Command, pw repl.ProgressWriter,
+		) (iterator.Iterator[component.Responsive], error) {
+			require.NotNil(t, pw)
+			pw.Progress(0, 0, "B")
+			pw.Progress(100, 100, "B")
+			return iterator.FromSlice[component.Responsive](nil), nil
+		},
+		completeFn: func(context.Context, string, []string) (iterator.Iterator[string], error) {
+			return iterator.FromSlice[string](nil), nil
+		},
+		helpFn: func(context.Context, []string) (iterator.Iterator[component.Responsive], error) {
+			return iterator.FromSlice[component.Responsive](nil), nil
+		},
+	}
+
+	err := client.RegisterREPLCommand(
+		textapi.CommandManual{Name: "dl"}, extHandler,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, subscribedRepl)
+
+	// Wrap the captured REPLHandler in a sh layer — this is the exact
+	// flow the companion shell uses: repl.Handler -> sh -> registry -> REPL.
+	shellCmd := sh.New(replByNameHandler{router: subscribedRepl})
+
+	pw := &recordingProgressWriter{}
+	ctx := context.Background()
+	iter, err := shellCmd.HandleCommand(ctx, repl.Command{Name: "dl"}, pw)
+	require.NoError(t, err)
+	_, err = iterator.ToSlice(ctx, iter)
+	require.NoError(t, err)
+
+	samples := pw.get()
+	require.NotEmpty(t, samples,
+		"expected caller's ProgressWriter to receive updates end-to-end")
+	last := samples[len(samples)-1]
+	assert.Equal(t, int64(100), last.progress)
+	assert.Equal(t, int64(100), last.total)
+	assert.Equal(t, "B", last.units)
+}
+
+// replByNameHandler adapts a textapi.REPLHandler into a
+// repl.CommandHandler by delegating HandleCommand/Complete directly. It
+// models the lookup step done by a production command registry.
+type replByNameHandler struct {
+	router textapi.REPLHandler
+}
+
+func (h replByNameHandler) HandleCommand(
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	return h.router.HandleCommand(ctx, cmd, pw)
+}
+
+func (h replByNameHandler) Complete(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	return h.router.Complete(ctx, cmd, args)
+}
+
+type progressSample struct {
+	progress, total int64
+	units           string
+}
+
+type recordingProgressWriter struct {
+	mu      sync.Mutex
+	samples []progressSample
+}
+
+func (w *recordingProgressWriter) Progress(progress, total int64, units string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.samples = append(w.samples, progressSample{progress, total, units})
+}
+
+func (w *recordingProgressWriter) get() []progressSample {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]progressSample(nil), w.samples...)
 }
 
 type testREPLHandler struct {

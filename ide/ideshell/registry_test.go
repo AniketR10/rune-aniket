@@ -17,6 +17,7 @@ package ideshell
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/term/sh"
 )
 
 const testWidth = 200
@@ -340,4 +342,73 @@ func TestHelpCommandComplete(t *testing.T) {
 	got, err := iterator.ToSlice(ctx, iter)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"far", "foo"}, got)
+}
+
+type recordingProgressWriter struct {
+	mu      sync.Mutex
+	samples []progressSample
+}
+
+type progressSample struct {
+	progress, total int64
+	units           string
+}
+
+func (w *recordingProgressWriter) Progress(progress, total int64, units string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.samples = append(w.samples, progressSample{progress, total, units})
+}
+
+func (w *recordingProgressWriter) get() []progressSample {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]progressSample(nil), w.samples...)
+}
+
+// TestShellHandlerForwardsProgressToRegisteredCommand verifies that a
+// repl.ProgressWriter passed to the shell handler reaches a command
+// registered via the registry. This mirrors the production flow the
+// editor uses when it dispatches `agent download ...` from the companion
+// shell REPL: repl.Handler -> sh.commandHandler -> CommandRegistry ->
+// registered CommandHandler.
+func TestShellHandlerForwardsProgressToRegisteredCommand(t *testing.T) {
+	shellHandler, r := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+	)
+	t.Cleanup(func() { _ = shellHandler.Close() })
+
+	r.Register("dl", "download", &mockCmdHandler{
+		handleFn: func(
+			_ context.Context, _ repl.Command, pw repl.ProgressWriter,
+		) (iterator.Iterator[component.Responsive], error) {
+			require.NotNil(t, pw)
+			pw.Progress(0, 0, "B")
+			pw.Progress(50, 100, "B")
+			pw.Progress(100, 100, "B")
+			return iterator.FromSlice[component.Responsive](nil), nil
+		},
+	})
+
+	// sh wraps the registry; the repl.Handler uses sh as its underlying
+	// CommandHandler. Drive a command end-to-end through that path with
+	// our recording ProgressWriter.
+	shCmd := sh.New(r)
+	pw := &recordingProgressWriter{}
+	ctx := context.Background()
+	iter, err := shCmd.HandleCommand(ctx, repl.Command{Name: "dl"}, pw)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = iter.Close() })
+
+	_, err = iterator.ToSlice(ctx, iter)
+	require.NoError(t, err)
+
+	samples := pw.get()
+	require.NotEmpty(t, samples,
+		"expected ProgressWriter to receive updates through sh -> registry")
+	last := samples[len(samples)-1]
+	assert.Equal(t, int64(100), last.progress)
+	assert.Equal(t, int64(100), last.total)
+	assert.Equal(t, "B", last.units)
 }

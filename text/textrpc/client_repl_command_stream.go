@@ -67,6 +67,10 @@ type responsiveCtx struct {
 	ctx    context.Context
 	cancel func()
 	ch     chan responsiveValue
+	// pw, when non-nil, receives Progress updates forwarded from
+	// extension-side HandleProgress messages. Only meaningful for
+	// handle requests; Help never reports progress.
+	pw repl.ProgressWriter
 }
 
 type responsiveValue struct {
@@ -100,6 +104,10 @@ func (c *replCommandClientStream) receiveMessages() error {
 			c.sendResponsiveValue(c.activeHandle(), responsiveFromProtoRows(
 				msg.GetHandleValue().GetRows(),
 			), "handle")
+		case textrpc.ClientREPLCommandMessage_HandleProgress:
+			if prw := msg.GetHandleProgress(); prw != nil {
+				c.forwardProgress(prw)
+			}
 		case textrpc.ClientREPLCommandMessage_HandleDone:
 			c.finishResponsive(c.takeHandle(), msg.GetHandleDone().GetError())
 		case textrpc.ClientREPLCommandMessage_HelpValue:
@@ -162,9 +170,9 @@ func (c *replCommandClientStream) receiveMessages() error {
 }
 
 func (c *replCommandClientStream) HandleCommand(
-	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
-	respCtx, err := c.installResponsiveRequest(true, ctx)
+	respCtx, err := c.installResponsiveRequest(true, ctx, pw)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +243,7 @@ func (c *replCommandClientStream) Complete(
 func (c *replCommandClientStream) Help(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
-	respCtx, err := c.installResponsiveRequest(false, ctx)
+	respCtx, err := c.installResponsiveRequest(false, ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -257,13 +265,14 @@ func (c *replCommandClientStream) Help(
 }
 
 func (c *replCommandClientStream) installResponsiveRequest(
-	isHandle bool, ctx context.Context,
+	isHandle bool, ctx context.Context, pw repl.ProgressWriter,
 ) (responsiveCtx, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	respCtx := responsiveCtx{
 		ctx:    ctx,
 		cancel: cancel,
 		ch:     make(chan responsiveValue),
+		pw:     pw,
 	}
 
 	c.mu.Lock()
@@ -310,6 +319,21 @@ func (c *replCommandClientStream) activeHandle() *responsiveCtx {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.handle
+}
+
+// forwardProgress delivers a HandleProgress message from the extension
+// to the ProgressWriter associated with the currently-active handle
+// request, if any. Progress is advisory: if no request is active, or the
+// request didn't supply a ProgressWriter, the update is silently
+// dropped.
+func (c *replCommandClientStream) forwardProgress(
+	p *textrpc.HandleREPLCommandProgress,
+) {
+	respCtx := c.activeHandle()
+	if respCtx == nil || respCtx.pw == nil {
+		return
+	}
+	respCtx.pw.Progress(p.GetProgress(), p.GetTotal(), p.GetUnits())
 }
 
 func (c *replCommandClientStream) takeHandle() *responsiveCtx {
