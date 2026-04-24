@@ -57,9 +57,10 @@ type VTE interface {
 // Facility is a pool of vte instances.It only caches vte instances
 // that start with no initial commands,
 type Facility struct {
-	mu   sync.Mutex
-	pool []VTE
-	new  func(bool) (VTE, error)
+	mu     sync.Mutex
+	pool   []VTE
+	closed bool
+	new    func(bool) (VTE, error)
 }
 
 // New allocates storage for a new Facility and initializes it.
@@ -139,6 +140,7 @@ func (f *Facility) Close() (ret error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.closed = true
 	pool := f.pool
 	f.pool = nil
 	for _, vte := range pool {
@@ -182,6 +184,10 @@ func (f *Facility) initCap(initialCapacity int) {
 func (f *Facility) put(v VTE) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.closed {
+		return false
+	}
 
 	if len(f.pool) == maxPoolSize {
 		return false

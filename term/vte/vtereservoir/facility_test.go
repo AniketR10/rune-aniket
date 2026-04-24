@@ -226,6 +226,23 @@ func TestFacility(t *testing.T) {
 		f.Resize(10, 10)
 		wg.Wait()
 	})
+
+	t.Run("put does not resurrect the pool after Close", func(t *testing.T) {
+		t.Parallel()
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			return newTestVte(f), nil
+		})
+
+		require.NoError(t, f.Close())
+
+		// Simulate an async vteAdapter.Close() callback that fires
+		// after the facility has been closed. It must NOT re-populate
+		// the pool (which would leak the underlying VTE and its
+		// associated pty + scrollback memory).
+		stray := newTestVte(f)
+		assert.False(t, f.put(stray))
+		assert.Equal(t, 0, f.Capacity())
+	})
 }
 
 type nopBrowser struct {
