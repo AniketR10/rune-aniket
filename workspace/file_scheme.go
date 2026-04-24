@@ -512,6 +512,10 @@ func (p *fileScheme) Watch(
 		notifyEvents = append(notifyEvents, nev)
 	}
 	ch := make(chan notify.EventInfo, 8192)
+	w, err := notify.Watch(path, ch, notifyEvents...)
+	if err != nil {
+		return 0, fmt.Errorf("notify: %v", err)
+	}
 	go debug.CapturePanicReport(func() {
 		for {
 			select {
@@ -535,10 +539,6 @@ func (p *fileScheme) Watch(
 			}
 		}
 	})
-	w, err := notify.Watch(path, ch, notifyEvents...)
-	if err != nil {
-		return 0, fmt.Errorf("notify: %v", err)
-	}
 	id := p.nextWatchPoint.Add(1)
 	p.watchpoints.Store(int(id), w)
 	return int(id), nil
