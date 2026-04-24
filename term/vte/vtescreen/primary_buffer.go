@@ -387,6 +387,7 @@ func (b *PrimaryBuffer) DeleteLines(start, end int) {
 // Reset clears the screen and removes history, effectively
 // leaving the content as blank and the cursor position at the top.
 func (b *PrimaryBuffer) Reset() {
+	b.Cells.ResetPerformanceCapacity(b.height, b.width)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.SetCursorAtScreen(term.Coordinates{}, false)
 }

@@ -136,6 +136,23 @@ func testListCount(t *testing.T, constructor listConstructor) {
 	assertNoLeaks(t, l)
 }
 
+func TestListDataResetDropsInputBackingStorage(t *testing.T) {
+	l := NewList(ListConfig{})
+	t.Cleanup(func() { assert.NoError(t, l.Close()) })
+
+	for i := range 1000 {
+		l.PushSync([]byte(strconv.Itoa(i)))
+	}
+	require.Greater(t, cap(l.input), 0)
+
+	l.DataReset()
+
+	assert.Zero(t, len(l.input))
+	assert.Zero(t, cap(l.input))
+	assert.Equal(t, 0, l.TotalCount())
+	assert.Equal(t, 0, l.MatchCount())
+}
+
 func TestListFocus(t *testing.T) {
 	testListFocus(t, newSimpleList)
 }

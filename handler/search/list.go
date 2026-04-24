@@ -283,7 +283,7 @@ func (l *List) DataReset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.cancelSearch()
-	l.input = l.input[:0]
+	l.input = nil
 	l.list.Reset()
 	l.setFilesCount()
 }
@@ -447,6 +447,7 @@ func (l *List) Close() error {
 	defer l.mu.Unlock()
 
 	l.cancelSearch()
+	l.input = nil
 	l.list.Reset()
 	if l.quitChan == nil {
 		return nil

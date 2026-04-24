@@ -206,6 +206,9 @@ func (e *Handler) ClearPrimaryBuffer() (ok bool) {
 	if !ok {
 		return
 	}
+	if e.modalEnabled {
+		e.vi.resetCopyState()
+	}
 	if e.viMode {
 		// re-entering vi mode will reset cursor/offset for vi handler
 		e.exitViMode()

@@ -116,6 +116,17 @@ func (b *Buffer) ResetCapacity(capacity int) {
 	b.cells.columnCap = int(math.Max(float64(defColumnCap), float64(capacity)))
 }
 
+// ResetPerformanceCapacity releases the current backing storage and resets this
+// performance-mode buffer to a single empty row with the requested capacities.
+// It is intended for long-lived buffers that may have grown large temporarily
+// and need to drop references to those large row slices.
+func (b *Buffer) ResetPerformanceCapacity(rowCapacity, columnCapacity int) {
+	if b.undoer != nil {
+		panic("ResetPerformanceCapacity should not be used if not initialized via InitPerformance")
+	}
+	b.cells.resetWithCap(rowCapacity, columnCapacity)
+}
+
 // Init initializes this Buffer with the default configuration.
 func (b *Buffer) Init() {
 	cells := new(rawCells)

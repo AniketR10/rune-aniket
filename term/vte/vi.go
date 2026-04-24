@@ -133,6 +133,14 @@ func (v *viHandler) restorePrimaryScroll() {
 	v.applyCopyState(copyState)
 }
 
+func (v *viHandler) resetCopyState() {
+	copyState := v.newCopyState(v.comp, v.viOptions())
+	copyState.resize(v.width, v.height)
+	v.copy.mu.Lock()
+	defer v.copy.mu.Unlock()
+	v.applyCopyState(copyState)
+}
+
 func (v *viHandler) newSyncState(comp parentComponent, opts []vi.Option) viSyncState {
 	// do not share scroll (we don't want vi messing around with the offsets
 	// of the vte parser, which gets complicated quickly to maintain and keep sync

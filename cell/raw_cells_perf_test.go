@@ -142,6 +142,30 @@ func TestTrimRowsFromEnd(t *testing.T) {
 	})
 }
 
+func TestResetPerformanceCapacityDropsBackingStorage(t *testing.T) {
+	b := new(Buffer)
+	b.InitPerformance(2, 2, '.')
+	b.cells.cells = make([][]term.Cell, 100, 200)
+	for i := range b.cells.cells {
+		b.cells.cells[i] = make([]term.Cell, 100, 200)
+	}
+
+	b.ResetPerformanceCapacity(3, 4)
+
+	assert.Equal(t, 1, b.Rows())
+	assert.Equal(t, 64, cap(b.cells.cells))
+	assert.Equal(t, 0, len(b.cells.cells[0]))
+	assert.Equal(t, 64, cap(b.cells.cells[0]))
+	assert.Equal(t, '.', b.cells.fillInChar)
+}
+
+func TestResetPerformanceCapacityRejectsNonPerformanceMode(t *testing.T) {
+	b := NewBuffer()
+	assert.Panics(t, func() {
+		b.ResetPerformanceCapacity(1, 1)
+	})
+}
+
 const testMark uint8 = 0x80
 
 func markLastCell(cells []term.Cell) {
