@@ -3344,6 +3344,17 @@ func TestAutoCompact(t *testing.T) {
 			},
 		}
 		store := newMockStore()
+		// Seed prior conversation so the auto-compact guard (which
+		// skips compaction on the first user turn when there is
+		// nothing to summarize) does not short-circuit.
+		require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
+			ID: "d",
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: "test system prompt"},
+				{Role: llm.RoleUser, Content: "prior"},
+				{Role: llm.RoleAssistant, Content: "prior answer"},
+			},
+		}))
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
 			Config{SystemPrompt: "test system prompt"})
 
@@ -3418,6 +3429,16 @@ func TestAutoCompact(t *testing.T) {
 			},
 		}
 		store := newMockStore()
+		// Seed prior conversation so the first-turn auto-compact guard
+		// does not short-circuit the failure-path branch under test.
+		require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
+			ID: "d",
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: "test"},
+				{Role: llm.RoleUser, Content: "prior"},
+				{Role: llm.RoleAssistant, Content: "prior answer"},
+			},
+		}))
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
 			Config{SystemPrompt: "test"})
 
@@ -3499,6 +3520,103 @@ func TestAutoCompact(t *testing.T) {
 		assert.True(t, foundProjectInstructions,
 			"post-compact user message should contain project instructions")
 	})
+}
+
+// TestAutoCompact_SkipsWhenNothingToCompact pins down the fix for the
+// "agent immediately auto-compacts on a fresh 'hello' and never makes
+// progress" bug observed with small-context local models (e.g. 8192-ctx
+// Qwen). On the very first iteration, the dialogue has only the system
+// prompt and the current user message. Even if usage is above the
+// auto-compact threshold, compacting cannot reduce the token count: the
+// system prompt and tool declarations are what dominate, and summarizing
+// a two-message conversation yields essentially the same text back. We
+// must therefore skip auto-compact when the conversation has no prior
+// assistant turn to summarize — otherwise we burn an LLM call, emit a
+// misleading "compacting" spinner, and (with tools present) can loop
+// indefinitely as every iteration re-enters the same branch.
+func TestAutoCompact_SkipsWhenNothingToCompact(t *testing.T) {
+	svc := &mockService{
+		// Only one real response slot: if the guard fires, we go
+		// straight to the model. If the guard is missing and we
+		// compact, Summarize will consume this response and then the
+		// post-compact call will fail due to lack of mock responses.
+		responses:      []mockResponse{stopResponse("hi")},
+		contextWindowN: 1000,
+		countTokensFn: func(msgs []llm.Message) (int, error) {
+			return 900, nil // 90% → would trigger auto-compact
+		},
+	}
+	store := newMockStore()
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
+		Config{SystemPrompt: "big system prompt"})
+
+	it := ag.Run(context.Background(), "d", "hello")
+	events := collectEvents(t, it)
+
+	// Must NOT have auto-compacted.
+	assert.False(t, hasEventType(events, EventCompacting),
+		"auto-compact must not trigger on the first user turn — "+
+			"there is no conversation to summarize")
+	// And the agent must still produce a normal response.
+	assert.True(t, hasEventType(events, EventDone))
+	assert.Equal(t, 1, svc.getCallCount(),
+		"agent should make exactly one LLM call (no wasted Summarize call)")
+}
+
+// TestAutoCompact_DoesNotLoopWhenCompactionCannotReduceUsage pins the
+// second half of the same bug. Even when prior conversation does exist,
+// if the resulting compacted dialogue still exceeds the auto-compact
+// threshold (e.g. because the system prompt + project-instructions +
+// tool schemas alone push past 85% of a small local context window), we
+// must not re-enter auto-compact on the very next iteration. Doing so
+// produces an infinite "compacting → compact again → compacting" loop
+// that never asks the model anything meaningful.
+//
+// The guarantee: at most one auto-compact per Run() invocation.
+func TestAutoCompact_DoesNotLoopWhenCompactionCannotReduceUsage(t *testing.T) {
+	svc := &mockService{
+		responses: []mockResponse{
+			// Summarize response (consumed by the single auto-compact).
+			stopResponse("Summary of prior work"),
+			// Normal post-compact response. If the guard is broken and
+			// we auto-compact again, we'll reach for a third response
+			// slot and the test rig will fail.
+			stopResponse("continuing"),
+		},
+		contextWindowN: 1000,
+		countTokensFn: func(msgs []llm.Message) (int, error) {
+			// Usage stays above threshold even after compaction (this
+			// is the realistic small-ctx case: tools + system prompt
+			// alone exceed the budget).
+			return 900, nil
+		},
+	}
+	store := newMockStore()
+	require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
+		ID: "d",
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "sys"},
+			{Role: llm.RoleUser, Content: "prior"},
+			{Role: llm.RoleAssistant, Content: "prior answer"},
+		},
+	}))
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
+		Config{SystemPrompt: "sys"})
+
+	it := ag.Run(context.Background(), "d", "do stuff")
+	events := collectEvents(t, it)
+
+	// Exactly one EventCompacting — no loop.
+	compactingCount := 0
+	for _, ev := range events {
+		if ev.Type == EventCompacting {
+			compactingCount++
+		}
+	}
+	assert.Equal(t, 1, compactingCount,
+		"auto-compact must fire at most once per Run() — otherwise "+
+			"a persistently-over-threshold context locks the agent in a loop")
+	assert.True(t, hasEventType(events, EventDone))
 }
 
 func TestSummarizeEmptySummaryReturnsError(t *testing.T) {

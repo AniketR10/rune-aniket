@@ -55,6 +55,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 )
@@ -813,6 +814,7 @@ func TestHandleCommand(t *testing.T) {
 				deps.storage, nil, nil, nil,
 				deps.notifications,
 				deps.dataPath,
+				deps.localRegistry,
 				deps.opts...,
 			)
 
@@ -986,6 +988,18 @@ func TestComplete(t *testing.T) {
 			},
 			wantAny: []string{"test-skill"},
 		},
+		{
+			name: "local delete completes cached model references",
+			cmd:  "local",
+			args: []string{"delete", "huggingface.co/foo"},
+			setup: func(d *testDeps) {
+				reg, err := llamacpp.NewRegistry(t.TempDir())
+				require.NoError(t, err)
+				seedLocalModel(t, reg, "huggingface.co", "foo/bar-GGUF", "latest", []byte("gguf-complete"))
+				d.localRegistry = reg
+			},
+			wantAny: []string{"huggingface.co/foo/bar-GGUF:latest"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1010,6 +1024,7 @@ func TestComplete(t *testing.T) {
 				deps.storage, nil, nil, nil,
 				deps.notifications,
 				deps.dataPath,
+				deps.localRegistry,
 				deps.opts...,
 			)
 
@@ -1064,6 +1079,7 @@ func TestHelp(t *testing.T) {
 		deps.storage, nil, nil, nil,
 		deps.notifications,
 		deps.dataPath,
+		deps.localRegistry,
 		deps.opts...,
 	)
 
@@ -1078,6 +1094,46 @@ func TestHelp(t *testing.T) {
 	}
 	if !strings.Contains(text, "show") || !strings.Contains(text, "export") {
 		t.Fatalf("expected chats subcommands in help output, got %q", text)
+	}
+}
+
+func TestHelpLocalDownload(t *testing.T) {
+	deps := newTestDeps()
+	sh := New(
+		deps.wm,
+		deps.svc,
+		deps.modelRegistry,
+		deps.defaultModel,
+		deps.store,
+		deps.registry,
+		deps.agentsConfig,
+		deps.cfg,
+		deps.skillRegistry,
+		deps.workspaceRoot,
+		deps.fs,
+		deps.storage, nil, nil, nil,
+		deps.notifications,
+		deps.dataPath,
+		deps.localRegistry,
+		deps.opts...,
+	)
+
+	ctx := context.Background()
+	it, err := sh.Help(ctx, []string{"local", "download"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := renderOutput(t, ctx, it)
+	for _, want := range []string{
+		"local download <reference>",
+		"Synopsis",
+		"Examples",
+		"hf.co/unsloth/",
+		"docker.io/library/myrepo:v1",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in help output, got %q", want, text)
+		}
 	}
 }
 
@@ -1100,6 +1156,7 @@ type testDeps struct {
 	storage       storageapi.Service
 	notifications browserapi.Notifications
 	dataPath      string
+	localRegistry *llamacpp.Registry
 }
 
 func withExecutor(exec workspaceapi.Executor) Option {
@@ -1133,6 +1190,18 @@ func newTestDeps() *testDeps {
 		stubTool{name: "write_file", desc: "Writes a file"},
 	}
 	workspaceRoot := dirURI(skillDir) // reuse temp dir as workspace root
+	// The shell requires a non-nil local llamacpp.Registry. We seed an
+	// empty one rooted under the same temp skill dir so every test
+	// gets a freshly-scoped cache; the individual setup closures
+	// override this when they need to seed manifests.
+	modelsRoot, err := os.MkdirTemp("", "llamacpp-models-*")
+	if err != nil {
+		panic(err)
+	}
+	localReg, err := llamacpp.NewRegistry(modelsRoot)
+	if err != nil {
+		panic(err)
+	}
 	return &testDeps{
 		skillDir:      skillDir,
 		workspaceRoot: workspaceRoot,
@@ -1175,6 +1244,7 @@ func newTestDeps() *testDeps {
 			},
 		},
 		notifications: stubNotifications{},
+		localRegistry: localReg,
 	}
 }
 
@@ -1902,6 +1972,7 @@ func TestExportAuditJSONLContent(t *testing.T) {
 		deps.storage, nil, nil, nil,
 		deps.notifications,
 		deps.dataPath,
+		deps.localRegistry,
 		deps.opts...,
 	)
 
@@ -2009,6 +2080,7 @@ func TestExportConversationContent(t *testing.T) {
 		deps.storage, nil, nil, nil,
 		deps.notifications,
 		deps.dataPath,
+		deps.localRegistry,
 		deps.opts...,
 	)
 
@@ -2093,6 +2165,7 @@ func TestForkDialogueStore(t *testing.T) {
 			deps.storage, nil, nil, nil,
 			deps.notifications,
 			deps.dataPath,
+			deps.localRegistry,
 			deps.opts...,
 		).(*shell)
 		d, err := deps.store.Get(ctx, "conv-1")
@@ -2151,6 +2224,7 @@ func TestForkDialogueStore(t *testing.T) {
 			deps.storage, nil, nil, nil,
 			deps.notifications,
 			deps.dataPath,
+			deps.localRegistry,
 			deps.opts...,
 		).(*shell)
 		d, err := deps.store.Get(ctx, "conv-2")
@@ -2196,6 +2270,7 @@ func TestForkDialogueStore(t *testing.T) {
 			deps.storage, nil, nil, nil,
 			deps.notifications,
 			deps.dataPath,
+			deps.localRegistry,
 			deps.opts...,
 		).(*shell)
 		d, err := deps.store.Get(ctx, "conv-3")

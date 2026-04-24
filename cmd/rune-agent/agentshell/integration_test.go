@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 )
 
@@ -108,6 +109,7 @@ func newTestFlusher(deps *testDeps) *flusher {
 		deps.storage, nil, nil, nil,
 		deps.notifications,
 		deps.dataPath,
+		deps.localRegistry,
 		deps.opts...,
 	)
 	sched := &syncScheduler{}
@@ -156,7 +158,7 @@ func TestIntegrationHelp(t *testing.T) {
 	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
 		{
 			InputSequence: "help<enter>",
-			Expected: mkExpected(3,
+			Expected: mkExpected(1,
 				"agent> help",
 				"• agents — List configured agent definitions.",
 				"• chats <list|show|log|export|clear|compact|fork> [args] — ",
@@ -169,6 +171,8 @@ func TestIntegrationHelp(t *testing.T) {
 				"  or set default reasoning effort.",
 				"• exit — Exit the shell.",
 				"• help [command ...] — Show usage for agent commands.",
+				"• local <list|download|delete> [args] — Manage locally",
+				"  cached GGUF models.",
 				"• mcp — Show MCP server status and tool stats.",
 				"• max_tokens [tokens] — Show or set the global max output",
 				"  tokens config value.",
@@ -188,10 +192,7 @@ func TestIntegrationHelp(t *testing.T) {
 		},
 		{
 			InputSequence: "agent<enter>",
-			Expected: mkExpected(0,
-				"  agent.",
-				"• tools — List registered agent tools.",
-				"",
+			Expected: mkExpected(1,
 				"agent> agent",
 				"• agents — List configured agent definitions.",
 				"• chats <list|show|log|export|clear|compact|fork> [args] — ",
@@ -204,6 +205,8 @@ func TestIntegrationHelp(t *testing.T) {
 				"  or set default reasoning effort.",
 				"• exit — Exit the shell.",
 				"• help [command ...] — Show usage for agent commands.",
+				"• local <list|download|delete> [args] — Manage locally",
+				"  cached GGUF models.",
 				"• mcp — Show MCP server status and tool stats.",
 				"• max_tokens [tokens] — Show or set the global max output",
 				"  tokens config value.",
@@ -264,6 +267,89 @@ func TestIntegrationModels(t *testing.T) {
 				"• gpt-4 — openai, 128000 tokens (default)",
 				"",
 				"agent> \u2590",
+			),
+		},
+	})
+}
+
+func TestIntegrationLocalHelp(t *testing.T) {
+	f := newTestFlusher(newTestDeps())
+	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "help<space>local<enter>",
+			Expected: mkExpected(20,
+				"agent> help local",
+				"• list — List GGUF models downloaded into the local cache.",
+				"• download <host/>owner/repo[:tag|@digest] — Download a",
+				"  GGUF model from an OCI registry into the local cache;",
+				"  hostless references default to huggingface.co and both",
+				"  tags and digests are supported.",
+				"• delete <reference> — Delete a locally cached GGUF model",
+				"  from the cache.",
+				"",
+				"agent> ▐",
+			),
+		},
+	})
+}
+
+func TestIntegrationLocalDownloadHelp(t *testing.T) {
+	f := newTestFlusher(newTestDeps())
+	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "help<space>local<space>download<enter>",
+			Expected: mkExpected(0,
+				"agent> help local download",
+				"",
+				"local download <reference>",
+				"",
+				"Download a GGUF model from an OCI registry into the local",
+				"cache.",
+				"",
+				"When the reference has no host, huggingface.co is assumed.",
+				"",
+				"",
+				"Synopsis",
+				"",
+				"local download <host/>owner/repo[:tag|@digest]",
+				"",
+				"",
+				"Examples",
+				"",
+				"• local download unsloth/gemma-3n-E2B-it-GGUF:Q4_K_M Pulls",
+				"  the Q4_K_M tag from Hugging Face.",
+				"• local download hf.co/unsloth/gemma-3n-E2B-it-GGUF Same",
+				"  thing with an explicit (short) host and the default latest",
+				"  tag.",
+				"• local download huggingface.co/foo/bar@sha256:abc… Pulls",
+				"  a specific digest instead of a tag.",
+				"• local download docker.io/library/myrepo:v1 Works against",
+				"  any OCI v2 registry, not just Hugging Face.",
+				"",
+				"See help local download for this manual from the REPL.",
+				"",
+				"agent> ▐",
+			),
+		},
+	})
+}
+
+func TestIntegrationLocalListEmpty(t *testing.T) {
+	deps := newTestDeps()
+	reg, err := llamacpp.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	deps.localRegistry = reg
+	f := newTestFlusher(deps)
+	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "local<space>list<enter>",
+			Expected: mkExpected(26,
+				"agent> local list",
+				"(no local models downloaded)",
+				"",
+				"agent> ▐",
 			),
 		},
 	})
@@ -650,6 +736,7 @@ func TestIntegrationSkillsList(t *testing.T) {
 		deps.store, deps.registry, deps.agentsConfig, deps.cfg,
 		deps.skillRegistry, deps.workspaceRoot, deps.fs,
 		deps.storage, nil, nil, nil, deps.notifications, deps.dataPath,
+		deps.localRegistry,
 		deps.opts...,
 	)
 	sched := &syncScheduler{}

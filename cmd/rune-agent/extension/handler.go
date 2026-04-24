@@ -71,6 +71,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
@@ -239,6 +240,13 @@ func newLLMService(
 		return nil, fmt.Errorf("model %q not found in registry", model)
 	}
 
+	// Local llama.cpp models: the entry's BaseURL points at an on-disk
+	// GGUF file placed there by the OCI cache registry. No API key or
+	// remote client is required.
+	if entry.Provider == llamacpp.LLMProvider {
+		return newLlamaCppService(entry, nil)
+	}
+
 	// Read provider API key.
 	var apiKey string
 	if entry.Provider != "ollama" {
@@ -400,6 +408,56 @@ func newLLMService(
 	return newClient(apiKey, c, contextMap), nil
 }
 
+// newLlamaCppService constructs a local llama.cpp-backed llm.Service for a
+// ModelEntry whose BaseURL points at an on-disk GGUF file. An optional
+// progress callback receives model-load progress (typically 0..100 mapped
+// from llama.cpp's native progress callback) so callers can surface a
+// loading indicator while the GGUF is opened.
+func newLlamaCppService(
+	entry llmregistry.ModelEntry,
+	progress func(int64, int64, string),
+) (llm.Service, error) {
+	if entry.BaseURL == "" {
+		return nil, fmt.Errorf(
+			"llamacpp model %q has no local path (BaseURL) in the registry",
+			entry.Name)
+	}
+	svc, err := llamacpp.NewService(llamacpp.Config{
+		Model:         entry.Name,
+		ModelPath:     entry.BaseURL,
+		ProjectorPath: entry.ProjectorPath,
+		ContextWindow: uint32(entry.ContextWindow),
+		NGPULayers:    -1,
+		LoadProgress:  progress,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("llamacpp: load %q: %w", entry.Name, err)
+	}
+	return svc, nil
+}
+
+func composeModelRegistry(
+	base llmregistry.Registry,
+	local llmregistry.Registry,
+	customURL string,
+	customModels map[string]int,
+) llmregistry.Registry {
+	registry := llmregistry.NewComposite(local, base)
+	if len(customModels) == 0 {
+		return registry
+	}
+	customStatic := llmregistry.NewStatic()
+	for name, ctxWindow := range customModels {
+		customStatic.Register(llmregistry.ModelEntry{
+			Name:          name,
+			Provider:      "custom_provider",
+			ContextWindow: ctxWindow,
+			BaseURL:       customURL,
+		})
+	}
+	return llmregistry.NewComposite(customStatic, registry)
+}
+
 func newCommandEventHandler(
 	ctx context.Context, ed textapi.Editor, w *extensionapi.Workspace,
 	pconfig config.Config,
@@ -515,6 +573,18 @@ func newCommandEventHandler(
 	ret.lsp = lsp
 	ret.parser = parser
 	ret.memoryDataPath = filepath.Join(w.DataDir(ctx), "memory")
+	ret.modelsCachePath = filepath.Join(w.DataDir(ctx), "models")
+	localStorage, err := db.Partition("llamacpp-registry")
+	if err != nil {
+		return nil, fmt.Errorf("partition llamacpp-registry storage: %w", err)
+	}
+	ret.localRegistry, err = llamacpp.NewRegistry(
+		ret.modelsCachePath,
+		llamacpp.WithStorage(localStorage),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("open local llamacpp registry: %w", err)
+	}
 	ret.defaultModel, err = pconfig.GetString("default_model")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -535,32 +605,21 @@ func newCommandEventHandler(
 	// Check for custom_provider config to add user-defined
 	// OpenAI-compatible models to the registry.
 	noti := w.Notifications(ctx)
-	ret.modelRegistry = defaultRegistry
+	var customURL string
+	var customModels map[string]int
 	if cpCfg, err := pconfig.GetConfig("custom_provider"); err == nil {
-		customURL, _ := cpCfg.GetString("url")
+		customURL, _ = cpCfg.GetString("url")
 		models, modelsErr := config.GetMapInt(cpCfg, "available_models")
 		if modelsErr != nil && !errors.Is(modelsErr, config.ErrNotFound) {
 			_, _ = noti.Notify(browserapi.LevelWarn,
 				"custom_provider: failed to parse available_models: %v", modelsErr)
 		}
-		if len(models) > 0 {
-			customStatic := llmregistry.NewStatic()
-			for name, ctxWindow := range models {
-				customStatic.Register(llmregistry.ModelEntry{
-					Name:          name,
-					Provider:      "custom_provider",
-					ContextWindow: ctxWindow,
-					BaseURL:       customURL,
-				})
-			}
-			ret.modelRegistry = llmregistry.NewComposite(
-				customStatic, defaultRegistry,
-			)
-		}
+		customModels = models
 	} else if !errors.Is(err, config.ErrNotFound) {
 		_, _ = noti.Notify(browserapi.LevelWarn,
 			"custom_provider: invalid config: %v", err)
 	}
+	ret.modelRegistry = composeModelRegistry(defaultRegistry, ret.localRegistry, customURL, customModels)
 
 	// Hooks: parse extensions.rune-agent.config.hooks. Errors are
 	// non-fatal: the extension still starts with an empty (no-op)
@@ -894,20 +953,105 @@ type aiEditorHandler struct {
 	// hookRunner dispatches Claude-Code-style hooks. nil when no
 	// hooks are configured.
 	hookRunner *hooks.Runner
+
+	// Local GGUF registry. Constructed eagerly in newCommandEventHandler.
+	// Owns the OCI client/cache, the in-process + persistent context
+	// metadata, and the download/delete/list surface area used by the
+	// agentshell.
+	modelsCachePath string
+	localRegistry   *llamacpp.Registry
 }
 
 func (h *aiEditorHandler) newService(model string) (llm.Service, error) {
-	svc, err := newLLMService(h.config, h.modelRegistry, model, h.newClient, h.newAnthropicClient)
+	return h.newServiceWithProgress(model, nil)
+}
+
+// newServiceWithProgress is like newService but forwards an optional
+// progress callback to local llama.cpp service creation. Remote/openai
+// providers ignore the callback because they do not perform heavyweight
+// model loads on the client side.
+func (h *aiEditorHandler) newServiceWithProgress(
+	model string,
+	progress func(int64, int64, string),
+) (llm.Service, error) {
+	entry, ok := h.modelRegistry.Get(h.ctx, model)
+	if !ok {
+		return nil, fmt.Errorf("model %q not found in registry", model)
+	}
+
+	var svc llm.Service
+	var err error
+	if entry.Provider == llamacpp.LLMProvider {
+		svc, err = newLlamaCppService(entry, progress)
+	} else {
+		svc, err = newLLMService(h.config, h.modelRegistry, model, h.newClient, h.newAnthropicClient)
+	}
 	if err != nil {
 		return nil, err
 	}
 	if h.auditStore != nil {
-		var provider string
-		if entry, ok := h.modelRegistry.Get(h.ctx, model); ok {
-			provider = entry.Provider
-		}
+		provider := entry.Provider
 		svc = llm.NewAuditService(svc, h.auditStore, model, provider)
 	}
+	return svc, nil
+}
+
+// newChatService wraps newServiceWithProgress with a notification-based
+// loading indicator for heavyweight local model loads. The chat window/tab
+// itself is only created after the backend service exists, so without this
+// the user sees a dead period while a local GGUF is mmap'd/loaded.
+func (h *aiEditorHandler) newChatService(model string) (llm.Service, error) {
+	entry, ok := h.modelRegistry.Get(h.ctx, model)
+	if !ok {
+		return nil, fmt.Errorf("model %q not found in registry", model)
+	}
+	if entry.Provider != llamacpp.LLMProvider || h.n == nil {
+		return h.newService(model)
+	}
+
+	msg := fmt.Sprintf("Loading local model %s...", model)
+	notifID, err := h.n.Notify(browserapi.LevelInfo, msg)
+	if err != nil {
+		return h.newServiceWithProgress(model, nil)
+	}
+	// Freeze the notification in place immediately; this gives us a stable
+	// row to update while the model loads.
+	_ = h.n.UpdateNotificationProgress(notifID, msg, 0, 100)
+
+	lastProgress := int64(0)
+	progressFn := func(progress, total int64, _ string) {
+		p, t := progress, total
+		if t <= 0 {
+			t = 100
+		}
+		if p < 0 {
+			p = 0
+		}
+		if p > t {
+			p = t
+		}
+		scaled := p
+		scaledTotal := t
+		if t != 100 {
+			scaled = (p * 100) / t
+			scaledTotal = 100
+		}
+		if scaled < lastProgress {
+			scaled = lastProgress
+		}
+		lastProgress = scaled
+		_ = h.n.UpdateNotificationProgress(notifID,
+			fmt.Sprintf("Loading local model %s...", model), scaled, scaledTotal)
+	}
+
+	svc, err := h.newServiceWithProgress(model, progressFn)
+	if err != nil {
+		_ = h.n.UpdateNotificationProgress(notifID,
+			fmt.Sprintf("Loading local model %s failed: %v", model, err), 100, 100)
+		return nil, err
+	}
+	_ = h.n.UpdateNotificationProgress(notifID,
+		fmt.Sprintf("Loaded local model %s", model), 100, 100)
 	return svc, nil
 }
 
@@ -1060,6 +1204,7 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 		h.skillRegistry, h.cwd, h.fs,
 		h.db, h.exec, h.lsp, h.parser, h.n,
 		h.memoryDataPath,
+		h.localRegistry,
 		opts...,
 	)
 }
@@ -1081,7 +1226,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		}
 	}
 
-	backendService, err := h.newService(model)
+	backendService, err := h.newChatService(model)
 	if err != nil {
 		return fmt.Errorf("new backend: %v", err)
 	}
@@ -1129,6 +1274,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		h.skillRegistry, h.cwd, h.fs,
 		h.db, h.exec, h.lsp, h.parser, h.n,
 		h.memoryDataPath,
+		h.localRegistry,
 		cmdShellOpts...,
 	)
 

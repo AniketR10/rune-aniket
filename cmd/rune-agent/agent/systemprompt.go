@@ -157,6 +157,20 @@ You MUST use the built-in semantic tools instead of shell commands:
 Using exec_command for tasks that have a dedicated tool is INCORRECT and
 produces inferior results.`
 
+	case "llamacpp":
+		return `
+
+=== CRITICAL: TOOL SELECTION ===
+You MUST use the built-in semantic tools instead of shell commands:
+• find_definition / search_symbols / outline_file — NOT grep_files or exec_command
+• format_file / rename_symbol — NOT gofmt, sed, or exec_command
+• read_file — NOT cat, head, tail, or exec_command
+Using exec_command for tasks that have a dedicated tool is INCORRECT and
+produces inferior results.
+
+When tools are available and one would help answer the user's request, call the
+tool instead of merely describing that you would use it.`
+
 	default:
 		return ""
 	}

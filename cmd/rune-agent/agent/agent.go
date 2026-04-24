@@ -506,6 +506,16 @@ func (a *Agent) run(
 	// once and we appended a continuation message. The second
 	// invocation passes this flag in the payload and ignores blocks.
 	var stopHookActive bool
+	// autoCompactedThisRun tracks whether we have already auto-compacted
+	// during this Run() invocation. Compaction collapses the
+	// conversation into a summary; if usage *still* exceeds the
+	// threshold afterwards (realistic on small-ctx local models where
+	// the system prompt + tool schemas alone push past 85%), the next
+	// iteration would auto-compact again, then again, ad infinitum —
+	// the user only ever sees a "compacting" spinner. One compact per
+	// Run is the strongest guarantee that still lets users pin large
+	// histories down between turns.
+	autoCompactedThisRun := false
 	persistPending := func() bool {
 		if len(newMessages) == 0 {
 			return false
@@ -600,7 +610,37 @@ func (a *Agent) run(
 
 		// Auto-compact: if usage exceeds the auto-compact ratio, compact
 		// without waiting for the model to call the compact tool.
-		if contextWindow > 0 && contextUsage >= autoCompactRatio {
+		//
+		// Two guards prevent pathological behaviour observed with
+		// small-context local models (e.g. 8192-ctx Qwen):
+		//
+		//  1. Skip when the conversation has no prior assistant turn.
+		//     On the very first user message, the only thing
+		//     compaction *could* do is replace "hello" with a summary
+		//     of "hello" — the system prompt and tool schemas (which
+		//     dominate token usage) are static and untouched by
+		//     compaction. The user just sees a long "compacting"
+		//     spinner and the model never gets to respond.
+		//
+		//  2. Skip after we already auto-compacted in this Run. If
+		//     usage is still above threshold post-compact, compacting
+		//     again will produce the same outcome — we already
+		//     replaced the conversation with the smallest faithful
+		//     summary we can. Looping wastes time and confuses the UX.
+		//     The model will instead get the request and either
+		//     respond or report a context-window-exceeded error.
+		hasPriorAssistant := false
+		for _, m := range messages {
+			if m.Role == llm.RoleAssistant {
+				hasPriorAssistant = true
+				break
+			}
+		}
+		shouldAutoCompact := contextWindow > 0 &&
+			contextUsage >= autoCompactRatio &&
+			hasPriorAssistant &&
+			!autoCompactedThisRun
+		if shouldAutoCompact {
 			log.Info("auto-compacting: context usage above threshold",
 				"usage_pct", int(contextUsage*100),
 				"threshold_pct", int(autoCompactRatio*100),
@@ -619,6 +659,7 @@ func (a *Agent) run(
 			if pcRes.Blocked() {
 				log.Warn("auto-compact blocked by PreCompact hook", "reason", pcRes.Reason)
 			} else {
+				autoCompactedThisRun = true
 				emit(ctx, ch, Event{Type: EventCompacting})
 				dialogue.Messages = messages
 				compactedDialogue, compactErr := a.compact(ctx, ch, dialogue)

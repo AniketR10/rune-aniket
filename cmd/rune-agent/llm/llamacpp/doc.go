@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,42 +21,17 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package llmregistry
 
-import (
-	"context"
-
-	"github.com/unstablebuild/rune-go-sdk/iterator"
-)
-
-// ModelEntry describes a model available in the registry.
-type ModelEntry struct {
-	// Name is the model identifier (e.g. "gpt-4o", "claude-opus-4-6").
-	Name string
-	// Provider identifies which LLM provider serves this model
-	// (e.g. "openai", "anthropic", "gemini", "ollama").
-	Provider string
-	// ContextWindow is the nominal maximum context window in tokens.
-	ContextWindow int
-	// BaseURL is the provider-specific API base URL.
-	// Empty string means use the provider's default.
-	BaseURL string
-	// ProjectorPath is the absolute path to an optional multimodal projector
-	// GGUF (mmproj) associated with a local llama.cpp model.
-	ProjectorPath string
-}
-
-// Registry provides access to available models.
-type Registry interface {
-	// Models returns an iterator over all registered model entries.
-	Models() iterator.Iterator[ModelEntry]
-	// Get returns the entry for the given model name.
-	Get(ctx context.Context, model string) (ModelEntry, bool)
-}
-
-// MutableRegistry is a Registry that supports registration.
-type MutableRegistry interface {
-	Registry
-	// Register adds model entries to the registry.
-	Register(entries ...ModelEntry)
-}
+// Package llamacpp provides CGO bindings to the vendored llama.cpp library and
+// exposes an llm.Service implementation that runs GGUF models locally.
+//
+// The llama.cpp sources are pulled in as a git submodule under llama.cpp/.
+// Static libraries are produced by the package-local Makefile (which drives
+// CMake) and linked into the binary via CGO. See README.md for build
+// instructions.
+//
+// Build tags:
+//
+//	llamacpp_cuda — enables the CUDA backend (requires nvcc and a CUDA-capable
+//	                GPU). Libraries must be prebuilt with -DGGML_CUDA=ON.
+package llamacpp

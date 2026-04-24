@@ -83,6 +83,15 @@ func TestProviderToolAddendum(t *testing.T) {
 		assert.Contains(t, a, "NOT grep_files")
 	})
 
+	t.Run("llamacpp addendum", func(t *testing.T) {
+		a := ProviderToolAddendum("llamacpp")
+		assert.Contains(t, a, "CRITICAL: TOOL SELECTION")
+		assert.Contains(t, a, "find_definition")
+		assert.Contains(t, a, "exec_command")
+		assert.Contains(t, a, "When tools are available")
+		assert.Contains(t, a, "tool instead of merely describing")
+	})
+
 	t.Run("unknown provider returns empty", func(t *testing.T) {
 		assert.Empty(t, ProviderToolAddendum("gemini"))
 		assert.Empty(t, ProviderToolAddendum("ollama"))

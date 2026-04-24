@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,42 +21,20 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package llmregistry
 
-import (
-	"context"
-
-	"github.com/unstablebuild/rune-go-sdk/iterator"
-)
-
-// ModelEntry describes a model available in the registry.
-type ModelEntry struct {
-	// Name is the model identifier (e.g. "gpt-4o", "claude-opus-4-6").
-	Name string
-	// Provider identifies which LLM provider serves this model
-	// (e.g. "openai", "anthropic", "gemini", "ollama").
-	Provider string
-	// ContextWindow is the nominal maximum context window in tokens.
-	ContextWindow int
-	// BaseURL is the provider-specific API base URL.
-	// Empty string means use the provider's default.
-	BaseURL string
-	// ProjectorPath is the absolute path to an optional multimodal projector
-	// GGUF (mmproj) associated with a local llama.cpp model.
-	ProjectorPath string
-}
-
-// Registry provides access to available models.
-type Registry interface {
-	// Models returns an iterator over all registered model entries.
-	Models() iterator.Iterator[ModelEntry]
-	// Get returns the entry for the given model name.
-	Get(ctx context.Context, model string) (ModelEntry, bool)
-}
-
-// MutableRegistry is a Registry that supports registration.
-type MutableRegistry interface {
-	Registry
-	// Register adds model entries to the registry.
-	Register(entries ...ModelEntry)
-}
+// Package ociregistry is a thin, opinionated wrapper around oras-go's
+// registry client. It adds the bits the upstream library leaves to callers
+// but that every model-puller needs:
+//
+//   - A content-addressed on-disk cache compatible with the Ollama layout
+//     (blobs/sha256-<hex>, manifests/<host>/<repo>/<tag>).
+//   - Streaming blob download with sha256 verification and resume-on-restart
+//     via a .partial file.
+//   - Progress reporting.
+//   - A Hugging-Face-friendly reference parser that accepts uppercase repo
+//     names (oras-go's validator is strict lowercase, which rejects HF
+//     repos like "bartowski/Llama-3.2-1B-Instruct-GGUF").
+//
+// The underlying HTTP transport, Bearer-challenge auth, and retry policy
+// come from oras-go.
+package ociregistry

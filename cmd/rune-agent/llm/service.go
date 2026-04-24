@@ -113,12 +113,14 @@ const (
 
 // Request is the request type for chat completions.
 type Request struct {
-	Messages         []Message
-	Tools            []Tool
-	ReasoningEffort  ReasoningEffort
-	ReasoningSummary ReasoningSummary
-	MaxOutputTokens  int
-	ResponseFormat   *ResponseFormat
+	Messages          []Message
+	Tools             []Tool
+	ToolChoice        ToolChoice
+	ParallelToolCalls *bool
+	ReasoningEffort   ReasoningEffort
+	ReasoningSummary  ReasoningSummary
+	MaxOutputTokens   int
+	ResponseFormat    *ResponseFormat
 
 	// PromptCacheKey is a stable identifier (typically the dialogue ID)
 	// that the provider uses for server-side prompt caching. Requests
@@ -134,6 +136,19 @@ type Request struct {
 	// every CreateCompletion call.
 	TokenCount int
 }
+
+// ToolChoice controls whether and how the model should use tools when tools
+// are present on a request.
+type ToolChoice string
+
+const (
+	// ToolChoiceAuto lets the provider/model decide whether to call a tool.
+	ToolChoiceAuto ToolChoice = "auto"
+	// ToolChoiceRequired requires the model to emit at least one tool call.
+	ToolChoiceRequired ToolChoice = "required"
+	// ToolChoiceNone forbids tool use even if tools are declared.
+	ToolChoiceNone ToolChoice = "none"
+)
 
 // ToolType is the type of tool that a model can invoke.
 type ToolType string

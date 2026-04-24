@@ -39,7 +39,10 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-release-linux-amd64 rune-release-linux-arm64 \
 	rune-dist-linux-amd64 rune-dist-linux-arm64 \
 	rune-dist-darwin-arm64 rune-dist-darwin-amd64 \
-	fuzz
+	deps llamacpp-libs llamacpp-init \
+	fuzz fuzz-list
+
+LLAMACPP_STAMP=$(TARGET)/llamacpp-libs.stamp
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -74,11 +77,11 @@ claudeimport: $(CLAUDEIMPORT)
 	@ pre-commit install
 
 test: CI=$(CI)
-test:
+test: $(LLAMACPP_STAMP)
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
 test: CI=$(CI)
-test-no-race:
+test-no-race: $(LLAMACPP_STAMP)
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
 # Run every Fuzz* target in the repository for FUZZTIME each (default
@@ -99,6 +102,42 @@ fuzz:
 coverage: $(BIN)
 	@ go test ./.../... -coverprofile $(BIN)/coverage
 	@ go tool cover -html=$(BIN)/coverage
+
+# fuzz runs every `Fuzz*` target in the repository for FUZZTIME each.
+# Each target runs sequentially with -parallel=1 because some fuzzers
+# (notably the llamacpp model-backed ones) load multi-GiB GGUFs into
+# Metal and cannot be safely run in parallel worker processes.
+#
+# Override defaults on the command line:
+#   make fuzz FUZZTIME=30s         # longer per-target budget
+#   make fuzz FUZZ_PKG=./component/markdown/...
+FUZZTIME ?= 10s
+FUZZ_PKG ?= ./...
+FUZZ_TEST_FLAGS ?= -race -parallel=1 -count=1
+
+fuzz: $(LLAMACPP_STAMP)
+	@ set -e; \
+	pkgs=$$(go list -f '{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}' $(FUZZ_PKG)); \
+	for pkg in $$pkgs; do \
+		targets=$$(go test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz' || true); \
+		[ -z "$$targets" ] && continue; \
+		for t in $$targets; do \
+			echo "==> $$pkg $$t (-fuzztime=$(FUZZTIME))"; \
+			go test $(FUZZ_TEST_FLAGS) -run='^$$' -fuzz='^'"$$t"'$$' -fuzztime=$(FUZZTIME) $$pkg || exit $$?; \
+		done; \
+	done
+
+# fuzz-list prints every fuzz target the repository ships, grouped by
+# package. Useful when you want to invoke `go test -fuzz=…` directly.
+fuzz-list:
+	@ set -e; \
+	pkgs=$$(go list -f '{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}' ./...); \
+	for pkg in $$pkgs; do \
+		targets=$$(go test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz' || true); \
+		[ -z "$$targets" ] && continue; \
+		echo "$$pkg:"; \
+		for t in $$targets; do echo "  $$t"; done; \
+	done
 
 generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 generate:
@@ -139,7 +178,7 @@ $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
 $(BIN)/claudeimport: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/claudeimport && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
-$(BIN)/rune-agent: $(EXECSRC) $(LIBSRC) $(BIN)
+$(BIN)/rune-agent: $(EXECSRC) $(LIBSRC) $(BIN) $(LLAMACPP_STAMP)
 	@cd cmd/rune-agent && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@
 
 $(GENERIC_EXECS): $(EXECSRC) $(LIBSRC) $(BIN)
@@ -288,3 +327,24 @@ runectl-dist-notarized: clean
 
 notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
+
+# deps brings in git-managed prerequisites that are needed for local builds.
+deps: llamacpp-init
+
+# llamacpp-init makes sure the llama.cpp git submodule is checked out. It is
+# safe to run repeatedly; the submodule Makefile is also defensive about
+# running on a populated tree.
+llamacpp-init:
+	@ git submodule update --init --recursive cmd/rune-agent/llm/llamacpp/llama.cpp
+
+# llamacpp-libs builds the static libraries that the llamacpp cgo bindings
+# link against. Skipped silently when the libs are already present and
+# fresher than the submodule's CMakeLists.txt — the submodule Makefile
+# handles its own up-to-date checks.
+
+$(LLAMACPP_STAMP): deps
+	@ mkdir -p $(dir $@)
+	@ $(MAKE) -C cmd/rune-agent/llm/llamacpp libs
+	@ touch $@
+
+llamacpp-libs: $(LLAMACPP_STAMP)

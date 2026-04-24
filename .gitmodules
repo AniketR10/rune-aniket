@@ -1,1 +1,5 @@
 
+[submodule "cmd/rune-agent/llm/llamacpp/llama.cpp"]
+	path = cmd/rune-agent/llm/llamacpp/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp.git
+	ignore = untracked

@@ -51,6 +51,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/component/markdown"
@@ -116,7 +117,7 @@ func WithServiceFactory(fn func(string) (llm.Service, error)) Option {
 const CommandName = "agent"
 
 // New returns a REPL handler backed by the agent shell.
-// It panics if wm, skillRegistry, or fs is nil.
+// It panics if wm, skillRegistry, fs, or localRegistry is nil.
 func New(
 	wm browserapi.WindowManager,
 	svc llm.Service,
@@ -135,6 +136,7 @@ func New(
 	parser syntaxapi.Parser,
 	notifications browserapi.Notifications,
 	dataPath string,
+	localRegistry *llamacpp.Registry,
 	opts ...Option,
 ) textapi.REPLHandler {
 	if wm == nil {
@@ -145,6 +147,9 @@ func New(
 	}
 	if fs == nil {
 		panic("agentshell: FileSystem must not be nil")
+	}
+	if localRegistry == nil {
+		panic("agentshell: local llamacpp.Registry must not be nil")
 	}
 	s := &shell{
 		wm:            wm,
@@ -164,6 +169,7 @@ func New(
 		parser:        parser,
 		notifications: notifications,
 		dataPath:      dataPath,
+		localRegistry: localRegistry,
 	}
 	for _, o := range opts {
 		o(s)
@@ -199,6 +205,7 @@ type shell struct {
 	getMaxTokens        func() int
 	setMaxTokens        func(int)
 	serviceFactory      func(string) (llm.Service, error)
+	localRegistry       *llamacpp.Registry
 }
 
 var commandNames = []string{
@@ -209,6 +216,7 @@ var commandNames = []string{
 	"effort",
 	"exit",
 	"help",
+	"local",
 	"mcp",
 	"max_tokens",
 	"model",
@@ -243,6 +251,20 @@ var commandManual = textapi.CommandManual{
 		{Name: "effort", Summary: "Show or set default reasoning effort.", Synopsis: "[none|minimal|low|medium|high|xhigh|max]"},
 		{Name: "exit", Summary: "Exit the shell."},
 		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[command ...]"},
+		{
+			Name:     "local",
+			Summary:  "Manage locally cached GGUF models.",
+			Synopsis: "<list|download|delete> [args]",
+			Commands: []textapi.CommandManual{
+				{Name: "list", Summary: "List GGUF models downloaded into the local cache."},
+				{
+					Name:     "download",
+					Summary:  "Download a GGUF model from an OCI registry into the local cache; hostless references default to huggingface.co and both tags and digests are supported.",
+					Synopsis: "<host/>owner/repo[:tag|@digest]",
+				},
+				{Name: "delete", Summary: "Delete a locally cached GGUF model from the cache.", Synopsis: "<reference>"},
+			},
+		},
 		{Name: "mcp", Summary: "Show MCP server status and tool stats."},
 		{Name: "max_tokens", Summary: "Show or set the global max output tokens config value.", Synopsis: "[tokens]"},
 		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[dialogue_id]"},
@@ -387,7 +409,7 @@ func (s *shell) completeManualPath(args []string) iterator.Iterator[string] {
 }
 
 func (s *shell) handleCommand(
-	ctx context.Context, cmd repl.Command,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	switch cmd.Name {
 	case "help":
@@ -416,6 +438,8 @@ func (s *shell) handleCommand(
 		return s.handleDream(ctx, cmd.Args)
 	case "effort":
 		return s.handleEffort(cmd.Args)
+	case "local":
+		return s.handleLocal(ctx, cmd.Args, pw)
 	case "exit":
 		return s.exit()
 	default:
@@ -425,7 +449,7 @@ func (s *shell) handleCommand(
 
 // HandleCommand dispatches the given command.
 func (s *shell) HandleCommand(
-	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	// Re-scan skill directories so out-of-band changes are picked up,
 	// mirroring the agent loop's per-turn Reload in agent.go.
@@ -438,7 +462,7 @@ func (s *shell) HandleCommand(
 		cmd = repl.Command{Name: cmd.Args[0], Args: cmd.Args[1:]}
 	}
 
-	return s.handleCommand(ctx, cmd)
+	return s.handleCommand(ctx, cmd, pw)
 }
 
 func (s *shell) handleChats(
@@ -544,6 +568,17 @@ func (s *shell) Complete(
 		return s.completeSkills(ctx, args)
 	case "chats":
 		return s.completeChats(ctx, args)
+	case "local":
+		if len(args) == 0 {
+			return iterator.FromSlice([]string{"list", "download", "delete"}), nil
+		}
+		if len(args) == 1 {
+			return iterator.FromSlice(filterNames([]string{"list", "download", "delete"}, args[0])), nil
+		}
+		if len(args) == 2 && args[0] == "delete" {
+			return s.completeLocalDelete(args[1]), nil
+		}
+		return iterator.FromSlice[string](nil), nil
 	}
 
 	if len(args) > 1 {
@@ -566,6 +601,9 @@ func (s *shell) Complete(
 func (s *shell) Help(
 	_ context.Context, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 2 && args[0] == "local" && args[1] == "download" {
+		return markdownOutput(downloadUsage), nil
+	}
 	man, fullName, ok := subcommandManual(args)
 	if !ok {
 		return nil, fmt.Errorf("unknown command: %s", strings.Join(args, " "))
@@ -608,6 +646,77 @@ func (s *shell) listModels() iterator.Iterator[component.Responsive] {
 		fmt.Fprintf(&b, "- **%s** — %s, %d tokens%s\n", e.name, e.provider, e.ctx, marker)
 	}
 	return markdownOutput(b.String())
+}
+
+func (s *shell) handleLocal(
+	ctx context.Context, args []string, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, errors.New("usage: local <list|download|delete> [args]")
+	}
+	switch args[0] {
+	case "list":
+		if len(args) != 1 {
+			return nil, errors.New("usage: local list")
+		}
+		return s.listLocalModels(), nil
+	case "download":
+		return s.handleDownload(ctx, args[1:], pw)
+	case "delete":
+		return s.handleLocalDelete(ctx, args[1:])
+	default:
+		return nil, fmt.Errorf("unknown local subcommand: %s", args[0])
+	}
+}
+
+func (s *shell) listLocalModels() iterator.Iterator[component.Responsive] {
+	refs, err := s.localRegistry.CachedReferences()
+	if err != nil {
+		return markdownOutput(fmt.Sprintf("local list: %v", err))
+	}
+	if len(refs) == 0 {
+		return markdownOutput("*(no local models downloaded)*")
+	}
+	var b strings.Builder
+	b.WriteString("## Local Models\n\n")
+	for _, ref := range refs {
+		fmt.Fprintf(&b, "- **%s**\n", ref.String())
+	}
+	return markdownOutput(b.String())
+}
+
+func (s *shell) handleLocalDelete(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) != 1 {
+		return nil, errors.New("usage: local delete <reference>")
+	}
+	ref, err := llamacpp.ParseReference(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse reference: %w", err)
+	}
+	if err := s.localRegistry.Delete(ctx, ref); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%s is not present in the local cache", ref.String())
+		}
+		return nil, fmt.Errorf("local delete %s: %w", ref.String(), err)
+	}
+	return markdownOutput(fmt.Sprintf("Deleted `%s` from the local cache", ref.String())), nil
+}
+
+func (s *shell) completeLocalDelete(prefix string) iterator.Iterator[string] {
+	refs, err := s.localRegistry.CachedReferences()
+	if err != nil {
+		return iterator.FromSlice[string](nil)
+	}
+	var out []string
+	for _, ref := range refs {
+		name := ref.String()
+		if strings.HasPrefix(name, prefix) {
+			out = append(out, name)
+		}
+	}
+	return iterator.FromSlice(out)
 }
 
 func (s *shell) model(

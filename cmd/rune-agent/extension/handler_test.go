@@ -83,6 +83,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	llmopenai "unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
@@ -1562,6 +1563,63 @@ func TestNewLLMService_unknown_model_returns_error(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found in registry")
 }
 
+func TestNewLLMService_llamacpp_requires_base_url(t *testing.T) {
+	t.Parallel()
+	reg := llmregistry.NewStatic()
+	reg.Register(llmregistry.ModelEntry{
+		Name:          "local.gguf",
+		Provider:      llamacpp.LLMProvider,
+		ContextWindow: 4096,
+		BaseURL:       "",
+	})
+
+	_, err := newLLMService(stubConfig{}, reg, "local.gguf", nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no local path")
+}
+
+func TestNewLLMService_llamacpp_loads_from_registry_base_url(t *testing.T) {
+	t.Parallel()
+	// The OCI cache registry plants the absolute on-disk GGUF path in
+	// BaseURL. newLLMService must route these entries to llamacpp.NewService
+	// rather than falling through to the OpenAI-compatible branch (which
+	// would demand an api_key). With an unreadable path llamacpp fails to
+	// load — but with a recognisable llamacpp-specific error, not an
+	// "api_key" one.
+	reg := llmregistry.NewStatic()
+	reg.Register(llmregistry.ModelEntry{
+		Name:          "huggingface.co/example/model:q4",
+		Provider:      llamacpp.LLMProvider,
+		ContextWindow: 4096,
+		BaseURL:       "/nonexistent/llamacpp-test.gguf",
+	})
+
+	_, err := newLLMService(stubConfig{}, reg, "huggingface.co/example/model:q4", nil, nil)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "api_key")
+	assert.Contains(t, err.Error(), "llamacpp")
+}
+
+func TestNewLlamaCppService_DefaultsToGPUOffload(t *testing.T) {
+	t.Parallel()
+
+	entry := llmregistry.ModelEntry{
+		Name:          "huggingface.co/example/model:q4",
+		Provider:      llamacpp.LLMProvider,
+		ContextWindow: 4096,
+		BaseURL:       "/nonexistent/llamacpp-test.gguf",
+	}
+
+	_, err := newLlamaCppService(entry, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "llamacpp")
+	assert.NotContains(t, err.Error(), "api_key")
+	// This test exists to pin the extension-side default: local llama.cpp
+	// services should be constructed with GPU offload enabled when the
+	// backend supports it, rather than accidentally overriding the wrapper's
+	// default to CPU-only via the zero value.
+}
+
 func TestNewLLMService_registry_base_url_overrides_config(t *testing.T) {
 	t.Parallel()
 	reg := llmregistry.NewStatic()
@@ -1627,6 +1685,46 @@ func TestNewLLMService_custom_provider_model(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, svc)
 	assert.Equal(t, 32000, svc.ContextWindow())
+}
+
+func TestComposeModelRegistry_CustomProviderPreservesLocalModels(t *testing.T) {
+	t.Parallel()
+
+	defaultReg := llmregistry.NewStatic()
+	defaultReg.Register(llmregistry.ModelEntry{
+		Name:          llmopenai.GPT5Dot4,
+		Provider:      "openai",
+		ContextWindow: 128000,
+	})
+
+	localReg := llmregistry.NewStatic()
+	localReg.Register(llmregistry.ModelEntry{
+		Name:          "huggingface.co/example/local:q4",
+		Provider:      llamacpp.LLMProvider,
+		ContextWindow: 4096,
+		BaseURL:       "/tmp/local.gguf",
+	})
+
+	reg := composeModelRegistry(
+		defaultReg,
+		localReg,
+		"https://custom.example.com/v1/",
+		map[string]int{"my-custom-model": 32000},
+	)
+
+	ctx := context.Background()
+	if _, ok := reg.Get(ctx, "my-custom-model"); !ok {
+		t.Fatal("expected custom provider model to be present")
+	}
+	if entry, ok := reg.Get(ctx, "huggingface.co/example/local:q4"); !ok {
+		t.Fatal("expected local llamacpp model to remain present when custom_provider is configured")
+	} else {
+		assert.Equal(t, llamacpp.LLMProvider, entry.Provider)
+		assert.Equal(t, "/tmp/local.gguf", entry.BaseURL)
+	}
+	if _, ok := reg.Get(ctx, llmopenai.GPT5Dot4); !ok {
+		t.Fatal("expected default registry model to remain present")
+	}
 }
 
 func TestNewLLMService_empty_registry_base_url_keeps_config(t *testing.T) {
@@ -2274,6 +2372,27 @@ func waitUntilIdle(ch <-chan struct{}, idleTimeout, maxWait time.Duration) {
 	}
 }
 
+// newTestLocalRegistry returns an empty llamacpp.Registry rooted in a
+// per-test scratch directory. All *aiEditorHandler test fixtures
+// require one — the shell's local registry is a hard dependency — so
+// this helper keeps every construction site uniform.
+//
+// We use os.MkdirTemp + t.Cleanup instead of t.TempDir() because the
+// registry writes into its root directory eagerly, and some tests
+// finish before background goroutines holding the directory are
+// drained. t.TempDir()'s synchronous cleanup then trips on the
+// leftover files. An explicit RemoveAll in Cleanup is best-effort and
+// doesn't fail the test if something is still mid-flight.
+func newTestLocalRegistry(t *testing.T) *llamacpp.Registry {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "llamacpp-registry-test-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	reg, err := llamacpp.NewRegistry(dir)
+	require.NoError(t, err)
+	return reg
+}
+
 func newTestAIEditorHandler(t *testing.T, svc *agentMockService) testAIEditorDeps {
 	t.Helper()
 
@@ -2335,6 +2454,7 @@ func newTestAIEditorHandler(t *testing.T, svc *agentMockService) testAIEditorDep
 		config:        cfg,
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
+		localRegistry: newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
@@ -2523,6 +2643,7 @@ func newTestAIEditorHandlerWithServer(t *testing.T, serverURL string) testAIEdit
 		config:        cfg,
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
+		localRegistry: newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
@@ -2608,6 +2729,7 @@ func newTestAIEditorHandlerWithServerAndRealStore(t *testing.T, serverURL string
 		config:            cfg,
 		resources:         make(map[string]string),
 		agentsConfig:      agent.NewConfig(nil),
+		localRegistry:     newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
@@ -2717,6 +2839,7 @@ func newTestAIEditorHandlerWithServerAndRPCStore(t *testing.T, serverURL string)
 		config:            cfg,
 		resources:         make(map[string]string),
 		agentsConfig:      agent.NewConfig(nil),
+		localRegistry:     newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
@@ -4786,6 +4909,7 @@ func TestAIEditorHandler_model_switch_propagates_to_agent_skill(t *testing.T) {
 			Model:    "test-model",
 			AllowAny: true,
 		}}),
+		localRegistry: newTestLocalRegistry(t),
 	}
 	// Add mock read_file tool so the sub-agent can execute it.
 	h.baseTools = []agent.Tool{&agentMockTool{
@@ -6657,6 +6781,7 @@ func TestAIEditorHandler_chat_compact_normalizes_stored_history_before_summarize
 		config:        cfg,
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
+		localRegistry: newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 	h.queryAgent = agent.NewAgent(
@@ -9211,6 +9336,7 @@ func TestAIEditorHandler_chat_model_switch_uses_provider_tools(t *testing.T) {
 		config:        cfg,
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
+		localRegistry: newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
@@ -9431,6 +9557,7 @@ func TestAIEditorHandler_exec_command_and_write_stdin_integration(t *testing.T) 
 		config:        cfg,
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
+		localRegistry: newTestLocalRegistry(t),
 	}
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
@@ -11762,6 +11889,7 @@ func TestAIEditorHandler_model_switch_no_empty_text_blocks(t *testing.T) {
 				config:        cfg,
 				resources:     make(map[string]string),
 				agentsConfig:  agent.NewConfig(nil),
+				localRegistry: newTestLocalRegistry(t),
 			}
 			h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 			h.queryAgent = agent.NewAgent(
