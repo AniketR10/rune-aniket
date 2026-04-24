@@ -160,11 +160,16 @@ func readFileSymbols(
 	parser *parser,
 	w workspaceapi.FileSystem,
 	filename string, results chan match,
-) error {
+) (retErr error) {
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		return fmt.Errorf("open file: %v", err)
 	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			retErr = multierror.Append(retErr, fmt.Errorf("close file: %v", cerr))
+		}
+	}()
 
 	r := bufio.NewReader(file)
 	data, err := io.ReadAll(r)
@@ -189,7 +194,6 @@ func readFileSymbols(
 	captureNames := parser.query.CaptureNames()
 	content := []byte(buf.String())
 	matches := cur.Matches(parser.query, root, content)
-	var retErr error
 	for {
 		m, ok := matches.Next()
 		if !ok {

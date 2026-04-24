@@ -303,11 +303,16 @@ func readFileSymbols(
 	ctx context.Context, parser *parser, uri workspaceapi.URI,
 	w workspaceapi.FileSystem, filename string,
 	results chan syntaxapi.Result, captureNameFilters []string,
-) error {
+) (retErr error) {
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		return fmt.Errorf("open file: %v", err)
 	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("close file: %v", cerr))
+		}
+	}()
 
 	r := bufio.NewReader(file)
 	data, err := io.ReadAll(r)
@@ -332,7 +337,6 @@ func readFileSymbols(
 	captureNames := parser.query.CaptureNames()
 	content := data
 	matches := cur.Matches(parser.query, root, content)
-	var retErr error
 	for {
 		m, ok := matches.Next()
 		if !ok {
