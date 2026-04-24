@@ -38,7 +38,7 @@ import (
 // RPCAuthorizer returns an auth.Authorizer of an rpc User.
 func RPCAuthorizer(issuesCollection string, releaseCollections []string) blueauth.Authorizer[auth.RPCUser] {
 	paths := map[string]func(blueauth.UserClaims[auth.RPCUser]) bool{
-		"/api/health": func(u blueauth.UserClaims[auth.RPCUser]) bool { return true },
+		"/api/health":  func(u blueauth.UserClaims[auth.RPCUser]) bool { return true },
 		"/api/reports": roleGreaterBasic,
 		fmt.Sprintf("/proto.DocumentStore.%s/Create", issuesCollection): roleGreaterBasic,
 		fmt.Sprintf("/proto.DocumentStore.%s/Update", issuesCollection): roleGreaterBasic,

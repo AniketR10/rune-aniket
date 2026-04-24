@@ -122,7 +122,7 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 			wantContains: []string{
 				fmt.Sprintf("Program %s", runectl),
 				"with args [wm focus]",
-				"running inside /bin/sh [-c",
+				"running inside /bin/sh with args:\n\n```",
 				"wants to **manage the Window Manager**.",
 			},
 			wantNotContain: []string{"Program /bin/sh with args [-c"},

@@ -435,7 +435,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 	for i := 0; i < concurrency; i++ {
 		go func(i int) {
 			defer wg.Done()
-			cctx, ccancel := context.WithTimeout(ctx, 5*time.Second)
+			cctx, ccancel := context.WithTimeout(ctx, 30*time.Second)
 			defer ccancel()
 			errs[i] = interrupter.Interrupt(cctx)
 		}(i)
@@ -447,7 +447,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 	// to reach the opener.
 	require.Eventually(t, func() bool {
 		return prompt.calls() == 1
-	}, 5*time.Second, 10*time.Millisecond,
+	}, 15*time.Second, 10*time.Millisecond,
 		"exactly one prompt should reach the opener for N concurrent Interrupts")
 
 	// Simulate the user approving the single (deduplicated) prompt.

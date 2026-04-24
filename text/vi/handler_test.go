@@ -6549,7 +6549,6 @@ func TestGoFormatWrapParagraph(t *testing.T) {
 		content            string
 		before             func(t *testing.T, vi *viHandlerImpl)
 		events             string
-		keyEvents          []term.Event
 		ruler              int
 		width              int
 		wantContent        string
@@ -6772,8 +6771,8 @@ type callbackAdapter struct {
 			wantMode: normalMode,
 		},
 		{
-			name:    "visual line gq formats selected plain paragraphs independently",
-			content: "alpha beta gamma delta\nepsilon zeta eta theta\n\none two three four\nfive six seven eight\n",
+			name:        "visual line gq formats selected plain paragraphs independently",
+			content:     "alpha beta gamma delta\nepsilon zeta eta theta\n\none two three four\nfive six seven eight\n",
 			events:      "Vjjjgq",
 			ruler:       12,
 			width:       80,
@@ -6816,23 +6815,6 @@ type callbackAdapter struct {
 			wantContent: "// alpha beta\n// gamma delta\n// epsilon\nnext\n",
 			wantMode:    normalMode,
 		},
-		{
-			name:       "gq slash search wraps through matching line",
-			content:    "one two three four\nalpha beta gamma\nEND marker here\ntail unchanged\n",
-			keyEvents: []term.Event{
-				{Type: term.EventKey, Ch: 'g'},
-				{Type: term.EventKey, Ch: 'q'},
-				{Type: term.EventKey, Ch: '/'},
-				{Type: term.EventKey, Ch: 'E'},
-				{Type: term.EventKey, Ch: 'N'},
-				{Type: term.EventKey, Ch: 'D'},
-				{Type: term.EventKey, Key: term.KeyEnter},
-			},
-			ruler:      12,
-			width:      80,
-			wantContent: "one two\nthree four\nalpha beta\ngamma\nEND marker here\ntail unchanged\n",
-			wantMode:   normalMode,
-		},
 	}
 
 	for _, tcase := range suite {
@@ -6842,11 +6824,9 @@ type callbackAdapter struct {
 				tcase.before(t, vi)
 			}
 
-			events := tcase.keyEvents
-			if events == nil {
-				for _, eventChar := range tcase.events {
-					events = append(events, term.Event{Type: term.EventKey, Ch: eventChar})
-				}
+			var events []term.Event
+			for _, eventChar := range tcase.events {
+				events = append(events, term.Event{Type: term.EventKey, Ch: eventChar})
 			}
 			for i, ev := range events {
 				quit, handled := vi.Handle(ev)

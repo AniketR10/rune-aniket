@@ -35,7 +35,7 @@ import (
 type Config struct {
 	// HistoryCycleKey is the key used to cycle through previously executed
 	// commands one at a time, replacing the input buffer with each entry.
-	HistoryCycleKey  term.KeyComb
+	HistoryCycleKey term.KeyComb
 	// HistoryToggleKey is the key used to toggle the entire prompt list
 	// between the available commands and the command history. Pressing it
 	// once shows history entries; pressing it again restores the command list.
