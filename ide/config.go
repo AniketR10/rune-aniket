@@ -1738,6 +1738,37 @@ func (c ideConfig) editorComments() (ret text.CommentConfig) {
 	return
 }
 
+func (c ideConfig) editorIndents() text.IndentConfig {
+	ret := text.IndentConfig{}
+	cfg, ok := c.editor()
+	if !ok {
+		return ret
+	}
+	entries, err := cfg.GetMap("indents")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.indents"] = err
+		}
+		return ret
+	}
+	for langID, raw := range entries {
+		val, ok := raw.(string)
+		if !ok {
+			c.errors["editor.indents."+langID] = errors.New("expected string value")
+			continue
+		}
+		switch val {
+		case "tab", "tabs":
+			ret[langID] = text.IndentRuneTab
+		case "space", "spaces":
+			ret[langID] = text.IndentRuneSpace
+		default:
+			c.errors["editor.indents."+langID] = errors.New("expected 'tab' or 'spaces'")
+		}
+	}
+	return ret
+}
+
 func getStringSlice(cfg config.Config, key string) ([]string, error) {
 	vals, err := cfg.GetSlice(key)
 	if err != nil {

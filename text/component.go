@@ -525,7 +525,6 @@ func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 	return nil
 }
 
-
 // Editor satisfies Editor interface.
 func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {
 	for _, tab := range c.comp.Tabs() {

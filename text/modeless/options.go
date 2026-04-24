@@ -37,6 +37,8 @@ import (
 // modelessConfig holds configuration for Editor.
 type modelessConfig struct {
 	tabspaces          int
+	indents            text.IndentConfig
+	indentRune         rune
 	attr               term.Attributes
 	resAttr            term.Attributes
 	comments           text.CommentConfig
@@ -93,6 +95,13 @@ func WithResAttr(attr term.Attributes) Option {
 func WithTabspaces(tabspaces int) Option {
 	return func(cfg *modelessConfig) {
 		cfg.tabspaces = tabspaces
+	}
+}
+
+// WithIndents sets language-specific indent material configuration.
+func WithIndents(indents text.IndentConfig) Option {
+	return func(cfg *modelessConfig) {
+		cfg.indents = indents
 	}
 }
 

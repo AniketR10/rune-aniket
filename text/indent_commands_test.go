@@ -49,7 +49,7 @@ func TestSubscribeIndentCommands(t *testing.T) {
 	mock := &mockIndentService{returnIndentationAt: 1}
 	mock.View = c.buffer().WithView(mock)
 
-	wrapped, err := SubscribeIndentCommands(uri, fileRegistry, c, h)
+	wrapped, err := SubscribeIndentCommands(uri, fileRegistry, c, IndentConfig{}, h)
 	require.NoError(t, err)
 	commands := registry.sub[cwd.String()]
 	require.Contains(t, commands, CommandReindent)
@@ -77,7 +77,7 @@ func TestIndentCommandReindentsSelection(t *testing.T) {
 	mock := &mockIndentService{returnIndentationAt: 1}
 	mock.View = c.buffer().WithView(mock)
 
-	wrapped, err := SubscribeIndentCommands(uri, fileRegistry, c, h)
+	wrapped, err := SubscribeIndentCommands(uri, fileRegistry, c, IndentConfig{}, h)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, wrapped.Close()) })
 
@@ -103,7 +103,7 @@ func TestIndentCommandWithoutIndentServiceReturnsError(t *testing.T) {
 	h := &indentTestHandler{uri: uri}
 	c := setupCursorContent(t, 80, 10, "a", false)
 
-	wrapped, err := SubscribeIndentCommands(uri, fileRegistry, c, h)
+	wrapped, err := SubscribeIndentCommands(uri, fileRegistry, c, IndentConfig{}, h)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, wrapped.Close()) })
 

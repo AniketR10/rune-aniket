@@ -46,11 +46,12 @@ var indentCommands = []textapi.CommandManual{{
 // for the returned Handler.
 func SubscribeIndentCommands(
 	file workspaceapi.URI, registry FileCommandRegistry,
-	cursor *Cursor, handler Handler,
+	cursor *Cursor, indents IndentConfig, handler Handler,
 ) (Handler, error) {
 	ret := indentCommandHandler{
 		file:     file,
 		cursor:   cursor,
+		indents:  indents,
 		registry: registry,
 		Handler:  handler,
 	}
@@ -70,6 +71,7 @@ type indentCommandHandler struct {
 	Handler
 	cursor   *Cursor
 	file     workspaceapi.URI
+	indents  IndentConfig
 	registry FileCommandRegistry
 }
 
@@ -89,11 +91,15 @@ func (u indentCommandHandler) HandleCommand(
 ) (err error) {
 	switch cmd.Name {
 	case CommandReindent:
+		indentRune, ok := IndentRuneForURI(u.file, u.indents)
+		if !ok {
+			indentRune = IndentRuneTab
+		}
 		if _, ok := u.cursor.SelectionMode(); ok {
-			u.cursor.ReindentSelection()
+			u.cursor.ReindentSelection(indentRune)
 			return nil
 		}
-		if !u.cursor.Reindent() {
+		if !u.cursor.Reindent(indentRune) {
 			return errors.New("auto-indentation not available at the current position")
 		}
 		return nil

@@ -69,18 +69,19 @@ type editorHandler struct {
 // NewHandler returns a modeless, simple-to-use text.Handler.
 func NewHandler(
 	buf *cell.Buffer, resource workspaceapi.URI,
-	opts ...Option,
+	indentRune rune, opts ...Option,
 ) text.Handler {
 	ret := new(editorHandler)
-	ret.Init(buf, resource, opts...)
+	ret.Init(buf, resource, indentRune, opts...)
 	return ret
 }
 
 func (h *editorHandler) Init(
 	buf *cell.Buffer, resource workspaceapi.URI,
-	opts ...Option,
+	indentRune rune, opts ...Option,
 ) {
 	h.cfg = defaultConfig()
+	h.cfg.indentRune = indentRune
 	for _, o := range opts {
 		o(&h.cfg)
 	}
@@ -465,7 +466,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.cursor.DeleteSelection()
 				h.cursor.Unselect()
 			}
-			h.cursor.Insert('\n')
+			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune)
 			handled = true
 		case term.KeySpace:
 			if _, ok := h.cursor.SelectionMode(); ok {
@@ -479,7 +480,9 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.cursor.ShiftSelectionRight()
 				h.cursor.Unselect()
 			} else {
-				h.cursor.Insert('\t')
+				if !h.cursor.TryIndent(h.cfg.indentRune) {
+					h.cursor.Insert('\t')
+				}
 			}
 			handled = true
 		case term.KeyBackspace:
@@ -510,7 +513,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.ModCtrl:
 		switch ev.Key {
 		case term.KeyEnter:
-			h.cursor.InsertLineBelow()
+			h.cursor.InsertLineBelow(h.cfg.indentRune)
 			handled = true
 			return
 		}
@@ -582,7 +585,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.ModCtrlShift:
 		switch ev.Key {
 		case term.KeyEnter:
-			h.cursor.InsertLineAbove()
+			h.cursor.InsertLineAbove(h.cfg.indentRune)
 			handled = true
 			return
 		}
@@ -815,7 +818,7 @@ func (h *editorHandler) pasteAndReindent() (handled bool) {
 		h.cursor.MoveToScroll(endPos)
 		return
 	}
-	h.cursor.ReindentSelection()
+	h.cursor.ReindentSelection(h.cfg.indentRune)
 	h.cursor.MoveToScroll(endPos)
 	return
 }

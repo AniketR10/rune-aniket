@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 )
@@ -85,7 +86,7 @@ func newViIntegrationTestCase(
 	buf, _, uri, clean := newIntegrationTestCase(t, content)
 	defer clean()
 
-	vi := vi.New(buf, uri)
+	vi := vi.NewWithIndentRune(buf, uri, text.IndentRuneTab)
 	vi.Resize(width, height)
 	return buf, vi, clean
 }

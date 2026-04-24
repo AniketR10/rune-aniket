@@ -337,12 +337,12 @@ func TestRuneStarFixture(t *testing.T) {
 	}
 
 	for _, c := range cases {
-			t.Run(c.name, func(t *testing.T) {
-				cfg, err := decodeStarlarkConfig(starlarkConfigSource{
-					src:      data,
-					filename: "rune.star",
-					params:   c.params,
-				})
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := decodeStarlarkConfig(starlarkConfigSource{
+				src:      data,
+				filename: "rune.star",
+				params:   c.params,
+			})
 			require.NoError(t, err)
 			c.checks(t, cfg)
 		})
@@ -641,7 +641,7 @@ func mustLegacyModelessConfigFromGit(t *testing.T) map[string]any {
 				"<m-m>":                 "lspformatimports",
 				"<a-j>":                 "gitnextchange",
 				"<a-k>":                 "gitprevchange",
-				"<m-\\\\>":            "searchtext",
+				"<m-\\\\>":              "searchtext",
 				"<m-enter>":             "terminalneworsplit",
 				"<s-m-enter>":           "!",
 				"gf":                    "editfileoncursor",

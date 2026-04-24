@@ -39,6 +39,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term/vte/vtescreen"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -141,7 +142,7 @@ func (v *viHandler) newSyncState(comp parentComponent, opts []vi.Option) viSyncS
 	scroll.InitPerformance(vteScroll.Buffer())
 	scroll.InvertOffset = true
 	syncVi := new(vi.Vi)
-	syncVi.InitWithScroll(scroll, comp.URI(), opts...)
+	syncVi.InitWithScroll(scroll, comp.URI(), text.IndentRuneTab, opts...)
 	return viSyncState{
 		mu:        comp.Locker(),
 		vi:        syncVi,
@@ -159,7 +160,7 @@ func (v *viHandler) newCopyState(comp parentComponent, opts []vi.Option) viCopyS
 	copyScroll.InitPerformance(copyBuffer)
 	copyScroll.InvertOffset = true
 	copyVi := new(vi.Vi)
-	copyVi.InitWithScroll(copyScroll, comp.URI(), opts...)
+	copyVi.InitWithScroll(copyScroll, comp.URI(), text.IndentRuneTab, opts...)
 	return viCopyState{
 		vi:     copyVi,
 		editor: copyScroll.Buffer().WithEditor(copyEditor{v: v}),

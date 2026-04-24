@@ -63,6 +63,7 @@ func TestFoldsIntegration(t *testing.T) {
 		wg.Add(1)
 		mu.Lock()
 		h := NewHandler(buf, uri,
+			'\t',
 			WithHideInitialFolds(true),
 			WithScheduleNextTick(cb),
 			WithAutoCenter(true),
@@ -236,6 +237,7 @@ diff_buf_adjust(win_
 			},
 		}
 		h := NewHandler(buf, uri,
+			'\t',
 			WithHideInitialFolds(true),
 			WithAutoCenter(true),
 			WithScheduleNextTick(cb),

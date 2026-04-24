@@ -41,6 +41,8 @@ type viConfig struct {
 	comments           text.CommentConfig
 	clipboard          clipboard.Register
 	tabspaces          int
+	indents            text.IndentConfig
+	indentRune         rune
 	scheduleNextTick   func(func()) bool
 	defaultRegister    string
 	registry           text.WorkspaceCommandRegistry
@@ -110,6 +112,13 @@ type Option func(*viConfig)
 func WithTabspaces(tabspaces int) Option {
 	return func(cfg *viConfig) {
 		cfg.tabspaces = tabspaces
+	}
+}
+
+// WithIndents sets language-specific indent material configuration.
+func WithIndents(indents text.IndentConfig) Option {
+	return func(cfg *viConfig) {
+		cfg.indents = indents
 	}
 }
 

@@ -265,6 +265,7 @@ config = {
         "mode":       "modal",
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
+        "tabspaces": 4,
         "modal": {
             # Default text attributes.
             "attr":        attr(fg = "default", bg = "default"),
@@ -272,6 +273,11 @@ config = {
             "bar_attr":    attr(fg = "default", bg = "default"),
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
+        },
+        "indents": {
+            "chatito": "spaces",
+            "nim": "spaces",
+            "yaml": "spaces",
         },
         # Syntax highlight overrides. Any omitted key inherits the default
         # highlight attributes provided by the active language/parser.

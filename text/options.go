@@ -119,6 +119,36 @@ type CommentSpec struct {
 // CommentConfig maps language IDs to their comment delimiters.
 type CommentConfig map[string]CommentSpec
 
+const (
+	// IndentRuneTab is a tab rune used for indenting.
+	IndentRuneTab rune = '\t'
+	// IndentRuneSpace is a space rune used for indenting.
+	IndentRuneSpace rune = ' '
+)
+
+// IndentConfig maps language IDs to the indent material used by editors.
+// Supported values are IndentRuneTab and IndentRuneSpace.
+type IndentConfig map[string]rune
+
+// ForLanguage returns the indent rune for a language ID.
+func (c IndentConfig) ForLanguage(lang string) (rune, bool) {
+	if c == nil {
+		return 0, false
+	}
+	r, ok := c[lang]
+	return r, ok
+}
+
+// IndentRuneForURI returns the indent rune for the given URI if its language
+// can be determined and a config is present.
+func IndentRuneForURI(uri workspaceapi.URI, indents IndentConfig) (rune, bool) {
+	lang, err := languages.LanguageForFile(filepath.Base(uri.Path()))
+	if err != nil {
+		return 0, false
+	}
+	return indents.ForLanguage(lang)
+}
+
 // ForLanguage returns the comment spec for a language ID.
 func (c CommentConfig) ForLanguage(lang string) (CommentSpec, bool) {
 	if c == nil {

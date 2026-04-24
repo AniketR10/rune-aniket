@@ -65,7 +65,7 @@ func TestCursorHiddenLines(t *testing.T) {
 		require.True(t, c.scroll.MarkHidden(1, 3))
 
 		assert.True(t, c.MoveDown())
-		c.InsertLineBelow()
+		c.InsertLineBelow(IndentRuneTab)
 		assert.Equal(t, "a\nb\nc\nd\n\ne", c.buffer().String())
 	})
 }
@@ -749,6 +749,7 @@ func TestIndent(t *testing.T) {
 	suite := []struct {
 		inputBuffer          string
 		expectIndentationAt  int
+		indentRune           rune
 		expectIndent         bool
 		cursorAtScroll       term.Coordinates
 		outputBuffer         string
@@ -757,6 +758,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:         "",
 			expectIndentationAt: 0,
+			indentRune:          IndentRuneTab,
 			expectIndent:        false,
 			cursorAtScroll:      term.Coordinates{},
 			outputBuffer:        "",
@@ -764,6 +766,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "a",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{},
 			outputBuffer:         "\ta",
@@ -772,6 +775,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:         "\ta",
 			expectIndentationAt: 1,
+			indentRune:          IndentRuneTab,
 			expectIndent:        false,
 			cursorAtScroll:      term.Coordinates{},
 			outputBuffer:        "\ta",
@@ -779,6 +783,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "\ta",
 			expectIndentationAt:  2,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 1},
 			outputBuffer:         "\t\ta",
@@ -787,6 +792,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "\ta",
 			expectIndentationAt:  0,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 1},
 			outputBuffer:         "a",
@@ -795,6 +801,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "\t\ta",
 			expectIndentationAt:  0,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 2},
 			outputBuffer:         "a",
@@ -803,6 +810,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:         "a\ta",
 			expectIndentationAt: 0,
+			indentRune:          IndentRuneTab,
 			expectIndent:        false,
 			cursorAtScroll:      term.Coordinates{X: 2},
 			outputBuffer:        "a\ta",
@@ -810,6 +818,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "a\ta",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 2},
 			outputBuffer:         "\ta\ta",
@@ -818,6 +827,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "\t\ta\ta",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 2},
 			outputBuffer:         "\ta\ta",
@@ -826,6 +836,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "\taX",
 			expectIndentationAt:  2,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 2},
 			outputBuffer:         "\t\taX",
@@ -834,6 +845,7 @@ func TestIndent(t *testing.T) {
 		{
 			inputBuffer:          "\t\taX",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 3},
 			outputBuffer:         "\taX",
@@ -847,7 +859,7 @@ func TestIndent(t *testing.T) {
 			mock := &mockIndentService{returnIndentationAt: test.expectIndentationAt}
 			mock.View = c.buffer().WithView(mock)
 			c.MoveToScroll(test.cursorAtScroll)
-			assert.Equal(t, test.expectIndent, c.TryIndent())
+			assert.Equal(t, test.expectIndent, c.TryIndent(test.indentRune))
 			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 			if test.expectIndent {
 				assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
@@ -861,6 +873,8 @@ func TestCursorReindent(t *testing.T) {
 		name                 string
 		inputBuffer          string
 		expectIndentationAt  int
+		indentRune           rune
+		tabspaces            int
 		cursorAtScroll       term.Coordinates
 		expectReindent       bool
 		outputBuffer         string
@@ -870,6 +884,8 @@ func TestCursorReindent(t *testing.T) {
 			name:                 "adds indentation",
 			inputBuffer:          "a",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
+			tabspaces:            component.DefaultTabspaces,
 			cursorAtScroll:       term.Coordinates{},
 			expectReindent:       true,
 			outputBuffer:         "\ta",
@@ -879,6 +895,8 @@ func TestCursorReindent(t *testing.T) {
 			name:                 "removes indentation",
 			inputBuffer:          "\t\ta",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
+			tabspaces:            component.DefaultTabspaces,
 			cursorAtScroll:       term.Coordinates{X: 2},
 			expectReindent:       true,
 			outputBuffer:         "\ta",
@@ -888,6 +906,96 @@ func TestCursorReindent(t *testing.T) {
 			name:                 "already indented still reports available",
 			inputBuffer:          "\ta",
 			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
+			tabspaces:            component.DefaultTabspaces,
+			cursorAtScroll:       term.Coordinates{X: 1},
+			expectReindent:       true,
+			outputBuffer:         "\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
+		},
+		{
+			name:                 "spaces add indentation using tabspaces width",
+			inputBuffer:          "a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{},
+			expectReindent:       true,
+			outputBuffer:         "    a",
+			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+		{
+			name:                 "spaces remove indentation to target width",
+			inputBuffer:          "        a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{X: 8},
+			expectReindent:       true,
+			outputBuffer:         "    a",
+			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+		{
+			name:                 "spaces already at target indentation",
+			inputBuffer:          "    a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{X: 4},
+			expectReindent:       true,
+			outputBuffer:         "    a",
+			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+		{
+			name:                 "spaces honor two-column tabspaces",
+			inputBuffer:          "    a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            2,
+			cursorAtScroll:       term.Coordinates{X: 4},
+			expectReindent:       true,
+			outputBuffer:         "  a",
+			expectCursorAtScroll: term.Coordinates{X: 2},
+		},
+		{
+			name:                 "mixed tabs and spaces preserve existing mixed indent when target reached",
+			inputBuffer:          "\t  a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{X: 3},
+			expectReindent:       true,
+			outputBuffer:         "\t  a",
+			expectCursorAtScroll: term.Coordinates{X: 1},
+		},
+		{
+			name:                 "mixed spaces and tabs preserve extra indentation when already tab-indented",
+			inputBuffer:          "  \ta",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
+			tabspaces:            component.DefaultTabspaces,
+			cursorAtScroll:       term.Coordinates{X: 3},
+			expectReindent:       true,
+			outputBuffer:         "\t  \ta",
+			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+		{
+			name:                 "only spaces with tab indent prepends tab",
+			inputBuffer:          "  a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
+			tabspaces:            component.DefaultTabspaces,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			expectReindent:       true,
+			outputBuffer:         "\t  a",
+			expectCursorAtScroll: term.Coordinates{X: 3},
+		},
+		{
+			name:                 "only tabs with space indent remains valid at same visual width",
+			inputBuffer:          "\ta",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
 			cursorAtScroll:       term.Coordinates{X: 1},
 			expectReindent:       true,
 			outputBuffer:         "\ta",
@@ -898,11 +1006,12 @@ func TestCursorReindent(t *testing.T) {
 	for _, test := range suite {
 		t.Run(test.name, func(t *testing.T) {
 			c := setupCursorContent(t, 10, 10, test.inputBuffer, false)
+			c.scroll.SetTabspaces(test.tabspaces)
 			mock := &mockIndentService{returnIndentationAt: test.expectIndentationAt}
 			mock.View = c.buffer().WithView(mock)
 			c.MoveToScroll(test.cursorAtScroll)
 
-			assert.Equal(t, test.expectReindent, c.Reindent())
+			assert.Equal(t, test.expectReindent, c.Reindent(test.indentRune))
 			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 			assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
 		})
@@ -910,10 +1019,83 @@ func TestCursorReindent(t *testing.T) {
 
 	t.Run("no indent service returns false", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "a", false)
-		assert.False(t, c.Reindent())
+		assert.False(t, c.Reindent(IndentRuneTab))
 		assert.Equal(t, "a", term.CellsToString(c.view().RawCells()))
 		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
 	})
+}
+
+func TestCursorTryIndentWithConfiguredIndentRune(t *testing.T) {
+	suite := []struct {
+		name                 string
+		inputBuffer          string
+		expectIndentationAt  int
+		indentRune           rune
+		tabspaces            int
+		cursorAtScroll       term.Coordinates
+		expectIndent         bool
+		outputBuffer         string
+		expectCursorAtScroll term.Coordinates
+	}{
+		{
+			name:                 "spaces indent using tabspaces width",
+			inputBuffer:          "a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{},
+			expectIndent:         true,
+			outputBuffer:         "    a",
+			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+		{
+			name:                 "spaces with two-column tabspaces",
+			inputBuffer:          "a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            2,
+			cursorAtScroll:       term.Coordinates{},
+			expectIndent:         true,
+			outputBuffer:         "  a",
+			expectCursorAtScroll: term.Coordinates{X: 2},
+		},
+		{
+			name:                 "mixed leading whitespace adds only missing spaces at start",
+			inputBuffer:          "\t a",
+			expectIndentationAt:  2,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			expectIndent:         true,
+			outputBuffer:         "   \t a",
+			expectCursorAtScroll: term.Coordinates{X: 5},
+		},
+		{
+			name:                 "only spaces already indented enough",
+			inputBuffer:          "    a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            4,
+			cursorAtScroll:       term.Coordinates{X: 4},
+			expectIndent:         false,
+			outputBuffer:         "    a",
+			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+	}
+
+	for _, test := range suite {
+		t.Run(test.name, func(t *testing.T) {
+			c := setupCursorContent(t, 10, 10, test.inputBuffer, false)
+			c.scroll.SetTabspaces(test.tabspaces)
+			mock := &mockIndentService{returnIndentationAt: test.expectIndentationAt}
+			mock.View = c.buffer().WithView(mock)
+			c.MoveToScroll(test.cursorAtScroll)
+
+			assert.Equal(t, test.expectIndent, c.TryIndent(test.indentRune))
+			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
+			assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
+		})
+	}
 }
 
 func TestCursorCenter(t *testing.T) {
@@ -2948,7 +3130,7 @@ func TestCursorInsertLine(t *testing.T) {
 			assert.Equal(t, term.Coordinates{}, e.Coordinates())
 			assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
 
-			e.InsertLineAbove()
+			e.InsertLineAbove(IndentRuneTab)
 			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[0]))
 			assert.Equal(t, 33, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{}, e.Coordinates())
@@ -2959,13 +3141,13 @@ func TestCursorInsertLine(t *testing.T) {
 			e.cursor.X = 9
 
 			assert.Equal(t, term.Coordinates{Y: 2, X: 9}, e.Coordinates())
-			e.InsertLineAbove()
+			e.InsertLineAbove(IndentRuneTab)
 			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
 			assert.Equal(t, 34, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{Y: 2, X: 0}, e.Coordinates())
 
 			e.MoveEndLine()
-			e.InsertLineBelow()
+			e.InsertLineBelow(IndentRuneTab)
 			assert.Equal(t, 35, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.cursorAtScroll())
 
@@ -2974,7 +3156,7 @@ func TestCursorInsertLine(t *testing.T) {
 			assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
 			assert.Equal(t, term.Coordinates{Y: 34}, e.cursorAtScroll())
 
-			e.InsertLineBelow()
+			e.InsertLineBelow(IndentRuneTab)
 			assert.Equal(t, 36, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
 			assert.Equal(t, term.Coordinates{Y: 35}, e.cursorAtScroll())
@@ -2998,8 +3180,8 @@ func main() {
 			assert.Equal(t, buf.String(), content)
 
 			require.True(t, cursor.MoveLineDown())
-			cursor.InsertLineBelow()
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab)
 			cursor.Insert('\t')
 			cursor.Insert('f')
 			cursor.Insert('m')
@@ -3014,13 +3196,13 @@ func main() {
 
 			require.True(t, cursor.MoveLastLine())
 
-			cursor.InsertLineBelow()
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab)
 			cursor.Insert('i')
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
 			cursor.Insert('\t')
 			cursor.InsertString("XXXXXXXXXXXXXXXXXXXXXXXX")
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
 			cursor.Insert('}')
 
 			assert.Equal(t, `package main
@@ -3037,7 +3219,7 @@ i
 			require.True(t, cursor.MoveLineUp())
 			cursor.MoveStartLine()
 			require.True(t, cursor.MoveEndLine())
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
 			cursor.InsertString("hello")
 
 			assert.Equal(t, `package main
@@ -4339,13 +4521,13 @@ func TestFileCursorIntegration(t *testing.T) {
 		}},
 		{"is able to insert at last line + 1", false, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},
 		{"is able to insert at last EOL", true, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			cursor.InsertLineBelow()
+			cursor.InsertLineBelow(IndentRuneTab)
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},

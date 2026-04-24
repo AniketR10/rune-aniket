@@ -867,3 +867,27 @@ editor:
 	require.NoError(t, err)
 	assert.Equal(t, 2, cfg.editorTabspaces())
 }
+
+func TestEditorIndentType(t *testing.T) {
+	f, err := os.CreateTemp("", "")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`
+editor:
+  indents:
+    yaml: spaces
+    go: tab
+`)
+	require.NoError(t, err)
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.Equal(t, text.IndentConfig{
+		"yaml": text.IndentRuneSpace,
+		"go":   text.IndentRuneTab,
+	}, cfg.editorIndents())
+}

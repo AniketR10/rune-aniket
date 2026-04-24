@@ -86,3 +86,18 @@ func TestCommentSpecForURIUnknownLanguage(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, CommentSpec{}, spec)
 }
+
+func TestIndentRuneForURI(t *testing.T) {
+	t.Parallel()
+
+	indents := IndentConfig{
+		"yaml": IndentRuneSpace,
+		"go":   IndentRuneTab,
+	}
+
+	uri, err := workspaceapi.ParseURI("memory:///foo.yaml")
+	require.NoError(t, err)
+	r, ok := IndentRuneForURI(uri, indents)
+	require.True(t, ok)
+	assert.Equal(t, IndentRuneSpace, r)
+}

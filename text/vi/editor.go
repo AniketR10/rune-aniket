@@ -67,7 +67,11 @@ func Editor(opts ...Option) text.Editor {
 func (e *viEditor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
-	root := New(buf, file, e.opts...)
+	indentRune := text.IndentRuneTab
+	if r, ok := text.IndentRuneForURI(file, e.config.indents); ok {
+		indentRune = r
+	}
+	root := NewWithIndentRune(buf, file, indentRune, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
 	scroll := root.less.Scroll()
@@ -82,7 +86,7 @@ func (e *viEditor) Edit(
 		if err != nil {
 			return nil, err
 		}
-		ret, err = text.SubscribeIndentCommands(file, e.registry, cursor, ret)
+		ret, err = text.SubscribeIndentCommands(file, e.registry, cursor, e.config.indents, ret)
 		if err != nil {
 			return nil, err
 		}

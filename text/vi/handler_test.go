@@ -4241,6 +4241,45 @@ func TestInsertModeCtrlShortcuts(t *testing.T) {
 	}
 }
 
+func TestInsertModeTabUsesIndentServiceWhenAvailable(t *testing.T) {
+	t.Run("tab uses indent service when available", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.Init()
+		_, err := buf.ReadFrom(strings.NewReader("abc"))
+		require.NoError(t, err)
+		buf.WithView(mockIndentView{View: buf.View(), indents: map[int]int{0: 2}})
+
+		vi := new(viHandlerImpl)
+		vi.init(buf, defaultviHandlerImplConfig())
+		vi.Resize(10, 10)
+
+		_ = vi.setCursorAtScroll(term.Coordinates{X: 0, Y: 0})
+		vi.setInsertMode()
+
+		exit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+		require.False(t, exit)
+		require.True(t, handled)
+		assert.Equal(t, insertMode, vi.mode())
+		assert.Equal(t, "\t\tabc", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 2, Y: 0}, vi.cursor.CursorAtScroll())
+	})
+
+	t.Run("tab falls back to literal tab without indent service", func(t *testing.T) {
+		vi := setupVi(t, "abc", 2)
+		vi.Resize(10, 10)
+
+		_ = vi.setCursorAtScroll(term.Coordinates{X: 0, Y: 0})
+		vi.setInsertMode()
+
+		exit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+		require.False(t, exit)
+		require.True(t, handled)
+		assert.Equal(t, insertMode, vi.mode())
+		assert.Equal(t, "\tabc", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 1, Y: 0}, vi.cursor.CursorAtScroll())
+	})
+}
+
 type insertModeCommandStep struct {
 	name                 string
 	event                term.Event
@@ -5680,14 +5719,14 @@ func TestViG(t *testing.T) {
 
 func TestViGc(t *testing.T) {
 	type tc struct {
-		name         string
-		fileText     string
-		before       func(*viHandlerImpl)
-		events       string
-		wantContent  string
-		wantCoord    term.Coordinates
-		wantMode     viMode
-		wantSelected bool
+		name               string
+		fileText           string
+		before             func(*viHandlerImpl)
+		events             string
+		wantContent        string
+		wantCoord          term.Coordinates
+		wantMode           viMode
+		wantSelected       bool
 		allowUnhandledLast bool
 	}
 
@@ -5992,34 +6031,34 @@ func TestViGc(t *testing.T) {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "gch no op motion exits without mutating",
-			fileText:    "alpha beta\n",
-			events:      "gch",
-			wantContent: "alpha beta\n",
-			wantCoord:   term.Coordinates{X: 0, Y: 0},
-			wantMode:    normalMode,
+			name:               "gch no op motion exits without mutating",
+			fileText:           "alpha beta\n",
+			events:             "gch",
+			wantContent:        "alpha beta\n",
+			wantCoord:          term.Coordinates{X: 0, Y: 0},
+			wantMode:           normalMode,
 			allowUnhandledLast: true,
 		},
 	}
 
 	for _, tcase := range suite {
-			t.Run(tcase.name, func(t *testing.T) {
-				vi := setupVi(t, tcase.fileText, 2, WithComments(text.CommentConfig{
-					"txt": {
-						Line:  []string{"//"},
-						Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
-					},
-				}))
-				vi.less.Buffer().WithView(testCommentService{
-					view:  vi.less.Buffer().View(),
-					line:  []string{"//"},
-					block: []string{"/*", "*/"},
-				})
-				vi.Resize(20, 10)
-				vi.cursor.SetCommentSpec(text.CommentSpec{
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupVi(t, tcase.fileText, 2, WithComments(text.CommentConfig{
+				"txt": {
 					Line:  []string{"//"},
 					Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
-				})
+				},
+			}))
+			vi.less.Buffer().WithView(testCommentService{
+				view:  vi.less.Buffer().View(),
+				line:  []string{"//"},
+				block: []string{"/*", "*/"},
+			})
+			vi.Resize(20, 10)
+			vi.cursor.SetCommentSpec(text.CommentSpec{
+				Line:  []string{"//"},
+				Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+			})
 
 			if tcase.before != nil {
 				tcase.before(vi)

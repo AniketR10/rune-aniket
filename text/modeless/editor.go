@@ -40,6 +40,7 @@ func Editor(opts ...Option) text.Editor {
 	for _, o := range opts {
 		o(&ret.modelessConfig)
 	}
+	ret.indents = text.IndentConfig{}
 	ret.pub.Init()
 	if ret.modelessConfig.registry != nil {
 		ret.fileRegistry = text.NewFileCommandRegistry(
@@ -51,6 +52,7 @@ func Editor(opts ...Option) text.Editor {
 
 type editor struct {
 	modelessConfig
+	indents      text.IndentConfig
 	fileRegistry text.FileCommandRegistry
 	pub          text.Publisher
 	opts         []Option
@@ -70,7 +72,11 @@ func (a publisherEventsAdapter) UnsubscribeEvents(sub text.EventHandler) (bool, 
 func (e *editor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (ret text.Handler, err error) {
-	handler := NewHandler(buf, file, e.opts...)
+	indentRune := text.IndentRuneTab
+	if r, ok := text.IndentRuneForURI(file, e.indents); ok {
+		indentRune = r
+	}
+	handler := NewHandler(buf, file, indentRune, e.opts...)
 	ret = handler
 	cursor := &handler.(*editorHandler).cursor
 	if e.fileRegistry != nil {
@@ -83,7 +89,7 @@ func (e *editor) Edit(
 		if err != nil {
 			return nil, err
 		}
-		ret, err = text.SubscribeIndentCommands(file, e.fileRegistry, cursor, ret)
+		ret, err = text.SubscribeIndentCommands(file, e.fileRegistry, cursor, e.indents, ret)
 		if err != nil {
 			return nil, err
 		}

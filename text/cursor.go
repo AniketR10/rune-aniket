@@ -1814,7 +1814,7 @@ func (c *Cursor) MoveToMatchingRune() bool {
 }
 
 // InsertLineAbove inserts a row above the current row and moves the cursor up.
-func (c *Cursor) InsertLineAbove() {
+func (c *Cursor) InsertLineAbove(indentRune rune) {
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -1823,18 +1823,18 @@ func (c *Cursor) InsertLineAbove() {
 	pos := cursorAtScroll
 	pos.X = 0
 	c.buffer().Edit(c.ctx, pos, pos, "\n")
-	pos, _ = c.tryIndent(c.ctx, pos)
+	pos, _ = c.tryIndent(c.ctx, pos, indentRune)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
 }
 
 // InsertLineBelow inserts a row below the current row and moves the cursor down.
-func (c *Cursor) InsertLineBelow() {
+func (c *Cursor) InsertLineBelow(indentRune rune) {
 	if _, ok := c.scroll.HiddenBlockAt(c.cursorAtScroll().Y); ok {
 		c.MoveDown()
 		c.MoveStartLine()
-		c.Insert('\n')
+		c.InsertWithIndentRune('\n', indentRune)
 		c.MoveUp()
 		c.MoveEndLine()
 		return
@@ -1847,7 +1847,7 @@ func (c *Cursor) InsertLineBelow() {
 	pos := c.cursorAtScroll()
 	pos.X = buf.Columns(pos.Y)
 	_, to, _ := buf.Edit(c.ctx, pos, pos, "\n")
-	to, _ = c.tryIndent(c.ctx, to)
+	to, _ = c.tryIndent(c.ctx, to, indentRune)
 
 	c.selection.mode = mode
 	c.setSelection()
@@ -1856,11 +1856,17 @@ func (c *Cursor) InsertLineBelow() {
 
 // Insert is equivalent to InsertContext with context.Background.
 func (c *Cursor) Insert(r rune) {
-	c.InsertContext(c.ctx, r)
+	c.InsertWithIndentRune(r, IndentRuneTab)
+}
+
+// InsertWithIndentRune inserts rune at the current cursor position using the
+// given indent material for indentation-aware follow-up edits.
+func (c *Cursor) InsertWithIndentRune(r rune, indentRune rune) {
+	c.InsertContext(c.ctx, r, indentRune)
 }
 
 // InsertContext inserts rune at the current cursor's position.
-func (c *Cursor) InsertContext(ctx context.Context, r rune) {
+func (c *Cursor) InsertContext(ctx context.Context, r rune, indentRune rune) {
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -1869,10 +1875,10 @@ func (c *Cursor) InsertContext(ctx context.Context, r rune) {
 	pos := c.buffer().InsertContext(ctx, insertAt, r)
 	switch r {
 	case '\n':
-		pos, _ = c.tryIndent(ctx, pos)
+		pos, _ = c.tryIndent(ctx, pos, indentRune)
 	case '}', ']', ')':
 		var ok bool
-		pos, ok = c.tryDedent(ctx, pos)
+		pos, ok = c.tryDedent(ctx, pos, indentRune)
 		if ok {
 			pos.X++
 		}
@@ -1893,10 +1899,10 @@ func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
 	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
 	switch r {
 	case '\n':
-		pos, _ = c.tryIndent(c.ctx, pos)
+		pos, _ = c.tryIndent(c.ctx, pos, IndentRuneTab)
 	case '}', ']', ')':
 		var ok bool
-		pos, ok = c.tryDedent(c.ctx, pos)
+		pos, ok = c.tryDedent(c.ctx, pos, IndentRuneTab)
 		if ok {
 			pos.X++
 		}
@@ -2597,9 +2603,9 @@ func toggleCaseString(s string) string {
 }
 
 // TryIndent attempts to indent the cursor if an indent service is available.
-func (c *Cursor) TryIndent() bool {
+func (c *Cursor) TryIndent(indentRune rune) bool {
 	pos := c.cursorAtScroll()
-	after, ok := c.reindentAt(pos)
+	after, ok := c.reindentAt(pos, indentRune)
 	if !ok {
 		return false
 	}
@@ -2847,19 +2853,19 @@ func (c *Cursor) ShiftSelectionLeft() (ok bool) {
 
 // ReindentSelection reindents all lines in the current selection using the indent service.
 // It unselects after the operation.
-func (c *Cursor) ReindentSelection() {
+func (c *Cursor) ReindentSelection(indentRune rune) {
 	from, to := c.getShiftSelection()
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		c.reindentAt(term.Coordinates{Y: y})
+		c.reindentAt(term.Coordinates{Y: y}, indentRune)
 	}
 }
 
 // Reindent reindents the current cursor line if an indent service is available.
-func (c *Cursor) Reindent() bool {
+func (c *Cursor) Reindent(indentRune rune) bool {
 	pos := c.cursorAtScroll()
-	after, ok := c.reindentAt(pos)
+	after, ok := c.reindentAt(pos, indentRune)
 	if !ok {
 		return false
 	}
@@ -3280,15 +3286,27 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	c.setCursor(res, c.shouldSeek)
 }
 
-func (c *Cursor) getIndentation(pos term.Coordinates) (ret int, ok bool) {
+func (c *Cursor) getIndentation(pos term.Coordinates, indentRune rune) (ret int, ok bool) {
 	cells := c.buffer().RawCells()
 	if pos.Y >= len(cells) {
 		return
 	}
+	tabspaces := max(1, c.scroll.Tabspaces())
 	for x, cell := range cells[pos.Y] {
 		switch cell.Ch {
 		case '\t':
-			ret++
+			if indentRune == IndentRuneSpace {
+				ret += tabspaces
+			} else {
+				ret++
+			}
+		case ' ':
+			if indentRune == IndentRuneSpace {
+				ret++
+			} else {
+				ok = x == pos.X
+				return
+			}
 		default:
 			ok = x == pos.X
 			return
@@ -3297,34 +3315,37 @@ func (c *Cursor) getIndentation(pos term.Coordinates) (ret int, ok bool) {
 	return
 }
 
-func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates) (term.Coordinates, bool) {
+func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates, indentRune rune) (term.Coordinates, bool) {
 	svc := c.getIndentService()
 	indentation, ok := svc.IndentationAt(to.Y)
 	if !ok {
 		return to, false
 	}
-	return c.doTryIndent(ctx, to, indentation)
+	return c.doTryIndent(ctx, to, indentation, indentRune)
 }
 
-func (c *Cursor) reindentAt(pos term.Coordinates) (term.Coordinates, bool) {
+func (c *Cursor) reindentAt(pos term.Coordinates, indentRune rune) (term.Coordinates, bool) {
 	svc := c.getIndentService()
 	target, ok := svc.IndentationAt(pos.Y)
 	if !ok {
 		return pos, false
 	}
-	after, changed := c.doTryIndent(c.ctx, pos, target)
+	after, changed := c.doTryIndent(c.ctx, pos, target, indentRune)
 	if changed {
 		return after, true
 	}
-	after, changed = c.doTryDedent(c.ctx, pos, target)
+	after, changed = c.doTryDedent(c.ctx, pos, target, indentRune)
 	if changed {
 		return after, true
 	}
 	return pos, true
 }
 
-func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target int) (term.Coordinates, bool) {
-	current, _ := c.getIndentation(to)
+func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target int, indentRune rune) (term.Coordinates, bool) {
+	current, _ := c.getIndentation(to, indentRune)
+	if indentRune == IndentRuneSpace {
+		target *= max(1, c.scroll.Tabspaces())
+	}
 	diff := target - current
 	if diff <= 0 {
 		c.log(log.DebugLevel, "try indent: already equal or more than correct indentation: %d", target)
@@ -3332,20 +3353,26 @@ func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target in
 	}
 
 	var builder strings.Builder
-	for range diff {
-		builder.WriteByte('\t')
+	if indentRune == IndentRuneSpace {
+		for range diff {
+			builder.WriteByte(' ')
+		}
+	} else {
+		for range diff {
+			builder.WriteByte('\t')
+		}
 	}
 	buf := c.buffer()
-	tabs := builder.String()
+	indent := builder.String()
 	// even if given position to indent is not at the start of the line
 	// to "indent" we must resolve to start of line
 	at := term.Coordinates{Y: to.Y}
-	_, _, _ = buf.Edit(ctx, at, at, tabs)
+	_, _, _ = buf.Edit(ctx, at, at, indent)
 	to.X += diff
 	return to, true
 }
 
-func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates) (
+func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates, indentRune rune) (
 	term.Coordinates, bool,
 ) {
 	svc := c.getIndentService()
@@ -3353,14 +3380,17 @@ func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates) (
 	if !ok {
 		return pos, false
 	}
-	return c.doTryDedent(ctx, pos, indentation)
+	return c.doTryDedent(ctx, pos, indentation, indentRune)
 }
 
-func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target int) (
+func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target int, indentRune rune) (
 	term.Coordinates, bool,
 ) {
 	buf := c.buffer()
-	current, _ := c.getIndentation(pos)
+	current, _ := c.getIndentation(pos, indentRune)
+	if indentRune == IndentRuneSpace {
+		target *= max(1, c.scroll.Tabspaces())
+	}
 	diff := current - target
 	if diff <= 0 {
 		c.log(log.TraceLevel, "try dedent: already equal or less than correct indentation: %d", target)
