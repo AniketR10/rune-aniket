@@ -80,7 +80,7 @@ func main() {
 	assert.Equal(t, out.String(), content)
 
 	require.True(t, cursor.MoveDown())
-	cursor.InsertLineBelow(text.IndentRuneTab)
+	cursor.InsertLineBelow(text.IndentRuneTab, 0)
 	cursor.Insert('\t')
 	cursor.Insert('f')
 	cursor.Insert('m')

@@ -86,7 +86,7 @@ func newViIntegrationTestCase(
 	buf, _, uri, clean := newIntegrationTestCase(t, content)
 	defer clean()
 
-	vi := vi.NewWithIndentRune(buf, uri, text.IndentRuneTab)
+	vi := vi.NewWithIndent(buf, uri, text.IndentRuneTab, 0)
 	vi.Resize(width, height)
 	return buf, vi, clean
 }

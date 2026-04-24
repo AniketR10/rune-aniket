@@ -347,7 +347,7 @@ func (e *Handler) initializeDoneHandler() {
 	clipboard := nullReplaceClipboard{root: e.cfg.Clipboard}
 	var main text.Handler
 	if e.cfg.Modal {
-		main = vi.NewWithIndentRune(buf, uri, text.IndentRuneTab,
+		main = vi.NewWithIndent(buf, uri, text.IndentRuneTab, 0,
 			vi.WithResAttr(e.cfg.SelectionAttributes),
 			vi.WithAttr(e.cfg.Attributes),
 			vi.WithWrap(false),
@@ -355,7 +355,7 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithClipboard(clipboard),
 		)
 	} else {
-		main = modeless.NewHandler(buf, uri, text.IndentRuneTab,
+		main = modeless.NewHandler(buf, uri, text.IndentRuneTab, 0,
 			modeless.WithResAttr(e.cfg.SelectionAttributes),
 			modeless.WithAttr(e.cfg.Attributes),
 			modeless.WithWrap(false),

@@ -140,48 +140,64 @@ func (c IndentConfig) ForLanguage(lang string) (rune, bool) {
 	return r, ok
 }
 
-// IndentRuneForURI returns the indent rune for the given URI.
+// IndentConfigForURI returns the indent rune, the number of spaces per
+// indent level, and whether the configuration could be resolved for the
+// given URI.
 //
 // Resolution order:
-//  1. If the language cannot be determined from the URI, return (0, false).
-//  2. If the buffer's existing indentation is conclusive (only tabs or only
-//     spaces found at the start of indented lines), prefer the detected
-//     rune. This ensures we do not introduce mixed tab/space indentation
-//     into files that already use one style — notably relevant for Python.
-//  3. Otherwise fall back to the configured indent rune for the language.
-//  4. If no configuration is present either, return (0, false).
-func IndentRuneForURI(
-	uri workspaceapi.URI, buf *cell.Buffer, indents IndentConfig,
-) (rune, bool) {
+//  1. If the language cannot be determined from the URI, return
+//     (0, defaultTabspaces, false).
+//  2. If the buffer's existing indentation is conclusive (only tabs or
+//     only spaces found at the start of indented lines), prefer the
+//     detected rune and, for space-indented buffers, the smallest
+//     detected leading-space run as the indent width.
+//  3. Otherwise fall back to the configured indent rune for the language
+//     and defaultTabspaces for the width.
+//  4. If no configuration is present either, return
+//     (0, defaultTabspaces, false).
+//
+// The returned width is always defaultTabspaces for tab-indented material
+// and when detection does not yield a conclusive space width.
+func IndentConfigForURI(
+	uri workspaceapi.URI, buf *cell.Buffer, indents IndentConfig, defaultTabspaces int,
+) (rune, int, bool) {
 	lang, err := languages.LanguageForFile(filepath.Base(uri.Path()))
 	if err != nil {
-		return 0, false
+		return 0, defaultTabspaces, false
 	}
-	if r, ok := detectIndentRune(buf); ok {
-		return r, true
+	if r, n, ok := detectIndentConfig(buf); ok {
+		if r == IndentRuneSpace && n > 0 {
+			return r, n, true
+		}
+		return r, defaultTabspaces, true
 	}
-	return indents.ForLanguage(lang)
+	if r, ok := indents.ForLanguage(lang); ok {
+		return r, defaultTabspaces, true
+	}
+	return 0, defaultTabspaces, false
 }
 
 // detectIndentScanLimit is the maximum number of non-empty rows inspected
-// by detectIndentRune before giving up.
+// by detectIndentConfig before giving up.
 const detectIndentScanLimit = 500
 
-// detectIndentRune inspects the leading runes of the given buffer's rows
+// detectIndentConfig inspects the leading runes of the given buffer's rows
 // and reports whether the file is consistently indented with tabs or
-// spaces. It returns (0, false) when the buffer is nil, empty, or uses
-// a mix of both styles (inconclusive).
+// spaces. For space-indented buffers it also returns the smallest observed
+// leading-space run (a reasonable proxy for one indent level). It returns
+// (0, 0, false) when the buffer is nil, empty, or uses a mix of both styles
+// (inconclusive).
 //
 // A row counts as tab-indented when its first cell is '\t'. A row counts
 // as space-indented when its first two cells are both ' ' (single leading
 // spaces are ignored to avoid false positives on non-indent content such
 // as Markdown paragraphs). All other rows are ignored.
-func detectIndentRune(buf *cell.Buffer) (rune, bool) {
+func detectIndentConfig(buf *cell.Buffer) (rune, int, bool) {
 	if buf == nil {
-		return 0, false
+		return 0, 0, false
 	}
 	rows := buf.RawCells()
-	tabs, spaces, scanned := 0, 0, 0
+	tabs, spaces, scanned, minSpaces := 0, 0, 0, 0
 	for _, row := range rows {
 		if len(row) == 0 {
 			continue
@@ -194,18 +210,25 @@ func detectIndentRune(buf *cell.Buffer) (rune, bool) {
 		case IndentRuneTab:
 			tabs++
 		case IndentRuneSpace:
-			if len(row) >= 2 && row[1].Ch == IndentRuneSpace {
+			n := 0
+			for n < len(row) && row[n].Ch == IndentRuneSpace {
+				n++
+			}
+			if n >= 2 {
 				spaces++
+				if minSpaces == 0 || n < minSpaces {
+					minSpaces = n
+				}
 			}
 		}
 	}
 	switch {
 	case tabs > 0 && spaces == 0:
-		return IndentRuneTab, true
+		return IndentRuneTab, 0, true
 	case spaces > 0 && tabs == 0:
-		return IndentRuneSpace, true
+		return IndentRuneSpace, minSpaces, true
 	}
-	return 0, false
+	return 0, 0, false
 }
 
 // ForLanguage returns the comment spec for a language ID.

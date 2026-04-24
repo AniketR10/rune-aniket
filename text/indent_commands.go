@@ -91,15 +91,18 @@ func (u indentCommandHandler) HandleCommand(
 ) (err error) {
 	switch cmd.Name {
 	case CommandReindent:
-		indentRune, ok := IndentRuneForURI(u.file, u.cursor.buffer(), u.indents)
+		indentRune, tabspaces, ok := IndentConfigForURI(
+			u.file, u.cursor.buffer(), u.indents,
+			max(1, u.cursor.scroll.Tabspaces()),
+		)
 		if !ok {
 			indentRune = IndentRuneTab
 		}
 		if _, ok := u.cursor.SelectionMode(); ok {
-			u.cursor.ReindentSelection(indentRune)
+			u.cursor.ReindentSelection(indentRune, tabspaces)
 			return nil
 		}
-		if !u.cursor.Reindent(indentRune) {
+		if !u.cursor.Reindent(indentRune, tabspaces) {
 			return errors.New("auto-indentation not available at the current position")
 		}
 		return nil

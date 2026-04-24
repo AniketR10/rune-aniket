@@ -2046,7 +2046,7 @@ func (c *Cursor) MoveToMatchingRune() bool {
 }
 
 // InsertLineAbove inserts a row above the current row and moves the cursor up.
-func (c *Cursor) InsertLineAbove(indentRune rune) {
+func (c *Cursor) InsertLineAbove(indentRune rune, tabspaces int) {
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -2055,18 +2055,18 @@ func (c *Cursor) InsertLineAbove(indentRune rune) {
 	pos := cursorAtScroll
 	pos.X = 0
 	c.buffer().Edit(c.ctx, pos, pos, "\n")
-	pos, _ = c.tryIndent(c.ctx, pos, indentRune)
+	pos, _ = c.tryIndent(c.ctx, pos, indentRune, tabspaces)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
 }
 
 // InsertLineBelow inserts a row below the current row and moves the cursor down.
-func (c *Cursor) InsertLineBelow(indentRune rune) {
+func (c *Cursor) InsertLineBelow(indentRune rune, tabspaces int) {
 	if _, ok := c.scroll.HiddenBlockAt(c.cursorAtScroll().Y); ok {
 		c.MoveDown()
 		c.MoveStartLine()
-		c.InsertWithIndentRune('\n', indentRune)
+		c.InsertWithIndentRune('\n', indentRune, tabspaces)
 		c.MoveUp()
 		c.MoveEndLine()
 		return
@@ -2079,7 +2079,7 @@ func (c *Cursor) InsertLineBelow(indentRune rune) {
 	pos := c.cursorAtScroll()
 	pos.X = buf.Columns(pos.Y)
 	_, to, _ := buf.Edit(c.ctx, pos, pos, "\n")
-	to, _ = c.tryIndent(c.ctx, to, indentRune)
+	to, _ = c.tryIndent(c.ctx, to, indentRune, tabspaces)
 
 	c.selection.mode = mode
 	c.setSelection()
@@ -2088,17 +2088,18 @@ func (c *Cursor) InsertLineBelow(indentRune rune) {
 
 // Insert is equivalent to InsertContext with context.Background.
 func (c *Cursor) Insert(r rune) {
-	c.InsertWithIndentRune(r, IndentRuneTab)
+	c.InsertWithIndentRune(r, IndentRuneTab, 0)
 }
 
 // InsertWithIndentRune inserts rune at the current cursor position using the
-// given indent material for indentation-aware follow-up edits.
-func (c *Cursor) InsertWithIndentRune(r rune, indentRune rune) {
-	c.InsertContext(c.ctx, r, indentRune)
+// given indent material and indent width for indentation-aware follow-up edits.
+// tabspaces is only consulted when indentRune is IndentRuneSpace.
+func (c *Cursor) InsertWithIndentRune(r rune, indentRune rune, tabspaces int) {
+	c.InsertContext(c.ctx, r, indentRune, tabspaces)
 }
 
 // InsertContext inserts rune at the current cursor's position.
-func (c *Cursor) InsertContext(ctx context.Context, r rune, indentRune rune) {
+func (c *Cursor) InsertContext(ctx context.Context, r rune, indentRune rune, tabspaces int) {
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
@@ -2107,10 +2108,10 @@ func (c *Cursor) InsertContext(ctx context.Context, r rune, indentRune rune) {
 	pos := c.buffer().InsertContext(ctx, insertAt, r)
 	switch r {
 	case '\n':
-		pos, _ = c.tryIndent(ctx, pos, indentRune)
+		pos, _ = c.tryIndent(ctx, pos, indentRune, tabspaces)
 	case '}', ']', ')':
 		var ok bool
-		pos, ok = c.tryDedent(ctx, pos, indentRune)
+		pos, ok = c.tryDedent(ctx, pos, indentRune, tabspaces)
 		if ok {
 			pos.X++
 		}
@@ -2131,10 +2132,10 @@ func (c *Cursor) InsertWithAttr(r rune, attr term.Attributes) {
 	pos := c.buffer().InsertWithAttr(insertAt, r, attr)
 	switch r {
 	case '\n':
-		pos, _ = c.tryIndent(c.ctx, pos, IndentRuneTab)
+		pos, _ = c.tryIndent(c.ctx, pos, IndentRuneTab, 0)
 	case '}', ']', ')':
 		var ok bool
-		pos, ok = c.tryDedent(c.ctx, pos, IndentRuneTab)
+		pos, ok = c.tryDedent(c.ctx, pos, IndentRuneTab, 0)
 		if ok {
 			pos.X++
 		}
@@ -2835,9 +2836,9 @@ func toggleCaseString(s string) string {
 }
 
 // TryIndent attempts to indent the cursor if an indent service is available.
-func (c *Cursor) TryIndent(indentRune rune) bool {
+func (c *Cursor) TryIndent(indentRune rune, tabspaces int) bool {
 	pos := c.cursorAtScroll()
-	after, ok := c.reindentAt(pos, indentRune)
+	after, ok := c.reindentAt(pos, indentRune, tabspaces)
 	if !ok {
 		return false
 	}
@@ -3023,10 +3024,10 @@ func (c *Cursor) MoveToPrevChar(ch rune) bool {
 
 // ShiftLineRight shifts the current cursor's line one indent level to the right.
 // The indent material used is determined by indentRune (tab or space); when
-// inserting spaces, the cursor's scroll tabspaces setting controls the width.
-func (c *Cursor) ShiftLineRight(indentRune rune) {
+// inserting spaces, tabspaces controls the number of spaces per indent level.
+func (c *Cursor) ShiftLineRight(indentRune rune, tabspaces int) {
 	cursor := c.cursorAtScroll()
-	indent, width := c.indentMaterial(indentRune)
+	indent, width := c.indentMaterial(indentRune, tabspaces)
 	at := term.Coordinates{Y: cursor.Y}
 	c.buffer().InsertString(at, indent)
 	cursor.X += width
@@ -3035,12 +3036,12 @@ func (c *Cursor) ShiftLineRight(indentRune rune) {
 
 // ShiftLineLeft shifts the current cursor's line one indent level to the left.
 // The indent material used is determined by indentRune (tab or space); when
-// dedenting spaces, the cursor's scroll tabspaces setting controls the width.
+// dedenting spaces, tabspaces controls the number of spaces per indent level.
 // It returns false if the line's start of content is already at the start of
 // the line.
-func (c *Cursor) ShiftLineLeft(indentRune rune) bool {
+func (c *Cursor) ShiftLineLeft(indentRune rune, tabspaces int) bool {
 	cursor := c.cursorAtScroll()
-	removed, ok := c.shiftRowLeft(cursor.Y, indentRune)
+	removed, ok := c.shiftRowLeft(cursor.Y, indentRune, tabspaces)
 	if !ok {
 		return false
 	}
@@ -3065,12 +3066,12 @@ func (c *Cursor) getShiftSelection() (from, to term.Coordinates) {
 
 // ShiftSelectionRight shifts the current selection one indent level to the
 // right. The indent material is controlled by indentRune.
-func (c *Cursor) ShiftSelectionRight(indentRune rune) {
+func (c *Cursor) ShiftSelectionRight(indentRune rune, tabspaces int) {
 	from, to := c.getShiftSelection()
 
 	c.Unselect()
 
-	indent, _ := c.indentMaterial(indentRune)
+	indent, _ := c.indentMaterial(indentRune, tabspaces)
 	for y := from.Y; y <= to.Y; y++ {
 		c.buffer().InsertString(term.Coordinates{Y: y}, indent)
 	}
@@ -3079,13 +3080,13 @@ func (c *Cursor) ShiftSelectionRight(indentRune rune) {
 // ShiftSelectionLeft shifts the current selection one indent level to the
 // left. The indent material is controlled by indentRune. It returns false if
 // selection could not be shifted.
-func (c *Cursor) ShiftSelectionLeft(indentRune rune) (ok bool) {
+func (c *Cursor) ShiftSelectionLeft(indentRune rune, tabspaces int) (ok bool) {
 	from, to := c.getShiftSelection()
 
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		if _, sok := c.shiftRowLeft(y, indentRune); sok {
+		if _, sok := c.shiftRowLeft(y, indentRune, tabspaces); sok {
 			ok = true
 		}
 	}
@@ -3093,18 +3094,30 @@ func (c *Cursor) ShiftSelectionLeft(indentRune rune) (ok bool) {
 }
 
 // indentMaterial returns the indent string to insert for one indent level and
-// the number of cells that indent occupies.
-func (c *Cursor) indentMaterial(indentRune rune) (string, int) {
+// the number of cells that indent occupies. tabspaces is only consulted when
+// indentRune is IndentRuneSpace; a non-positive value falls back to the
+// scroll's configured tabspaces.
+func (c *Cursor) indentMaterial(indentRune rune, tabspaces int) (string, int) {
 	if indentRune == IndentRuneSpace {
-		width := max(1, c.scroll.Tabspaces())
+		width := c.resolveTabspaces(tabspaces)
 		return strings.Repeat(" ", width), width
 	}
 	return "\t", 1
 }
 
+// resolveTabspaces returns a positive indent width, preferring the
+// explicitly-passed tabspaces when it is positive and falling back to
+// the scroll's configured value otherwise.
+func (c *Cursor) resolveTabspaces(tabspaces int) int {
+	if tabspaces <= 0 {
+		tabspaces = c.scroll.Tabspaces()
+	}
+	return max(1, tabspaces)
+}
+
 // shiftRowLeft removes one indent level from the start of the row and returns
 // the number of cells removed and whether anything was removed.
-func (c *Cursor) shiftRowLeft(row int, indentRune rune) (int, bool) {
+func (c *Cursor) shiftRowLeft(row int, indentRune rune, tabspaces int) (int, bool) {
 	buf := c.buffer()
 	if indentRune != IndentRuneSpace {
 		if buf.ShiftRowLeft(row) {
@@ -3112,18 +3125,18 @@ func (c *Cursor) shiftRowLeft(row int, indentRune rune) (int, bool) {
 		}
 		return 0, false
 	}
-	tabspaces := max(1, c.scroll.Tabspaces())
+	ts := c.resolveTabspaces(tabspaces)
 	from := term.Coordinates{Y: row}
 	// Remove up to tabspaces leading ' ' or a single leading '\t'.
 	removed := 0
-	for removed < tabspaces {
+	for removed < ts {
 		cell, ok := buf.Cell(term.Coordinates{Y: row, X: removed})
 		if !ok {
 			break
 		}
 		if cell.Ch == '\t' && removed == 0 {
 			buf.Delete(from, term.Coordinates{Y: row, X: 1})
-			return tabspaces, true
+			return ts, true
 		}
 		if cell.Ch != ' ' {
 			break
@@ -3139,19 +3152,19 @@ func (c *Cursor) shiftRowLeft(row int, indentRune rune) (int, bool) {
 
 // ReindentSelection reindents all lines in the current selection using the indent service.
 // It unselects after the operation.
-func (c *Cursor) ReindentSelection(indentRune rune) {
+func (c *Cursor) ReindentSelection(indentRune rune, tabspaces int) {
 	from, to := c.getShiftSelection()
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		c.reindentAt(term.Coordinates{Y: y}, indentRune)
+		c.reindentAt(term.Coordinates{Y: y}, indentRune, tabspaces)
 	}
 }
 
 // Reindent reindents the current cursor line if an indent service is available.
-func (c *Cursor) Reindent(indentRune rune) bool {
+func (c *Cursor) Reindent(indentRune rune, tabspaces int) bool {
 	pos := c.cursorAtScroll()
-	after, ok := c.reindentAt(pos, indentRune)
+	after, ok := c.reindentAt(pos, indentRune, tabspaces)
 	if !ok {
 		return false
 	}
@@ -3572,17 +3585,17 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	c.setCursor(res, c.shouldSeek)
 }
 
-func (c *Cursor) getIndentation(pos term.Coordinates, indentRune rune) (ret int, ok bool) {
+func (c *Cursor) getIndentation(pos term.Coordinates, indentRune rune, tabspaces int) (ret int, ok bool) {
 	cells := c.buffer().RawCells()
 	if pos.Y >= len(cells) {
 		return
 	}
-	tabspaces := max(1, c.scroll.Tabspaces())
+	ts := c.resolveTabspaces(tabspaces)
 	for x, cell := range cells[pos.Y] {
 		switch cell.Ch {
 		case '\t':
 			if indentRune == IndentRuneSpace {
-				ret += tabspaces
+				ret += ts
 			} else {
 				ret++
 			}
@@ -3601,36 +3614,36 @@ func (c *Cursor) getIndentation(pos term.Coordinates, indentRune rune) (ret int,
 	return
 }
 
-func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates, indentRune rune) (term.Coordinates, bool) {
+func (c *Cursor) tryIndent(ctx context.Context, to term.Coordinates, indentRune rune, tabspaces int) (term.Coordinates, bool) {
 	svc := c.getIndentService()
 	indentation, ok := svc.IndentationAt(to.Y)
 	if !ok {
 		return to, false
 	}
-	return c.doTryIndent(ctx, to, indentation, indentRune)
+	return c.doTryIndent(ctx, to, indentation, indentRune, tabspaces)
 }
 
-func (c *Cursor) reindentAt(pos term.Coordinates, indentRune rune) (term.Coordinates, bool) {
+func (c *Cursor) reindentAt(pos term.Coordinates, indentRune rune, tabspaces int) (term.Coordinates, bool) {
 	svc := c.getIndentService()
 	target, ok := svc.IndentationAt(pos.Y)
 	if !ok {
 		return pos, false
 	}
-	after, changed := c.doTryIndent(c.ctx, pos, target, indentRune)
+	after, changed := c.doTryIndent(c.ctx, pos, target, indentRune, tabspaces)
 	if changed {
 		return after, true
 	}
-	after, changed = c.doTryDedent(c.ctx, pos, target, indentRune)
+	after, changed = c.doTryDedent(c.ctx, pos, target, indentRune, tabspaces)
 	if changed {
 		return after, true
 	}
 	return pos, true
 }
 
-func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target int, indentRune rune) (term.Coordinates, bool) {
-	current, _ := c.getIndentation(to, indentRune)
+func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target int, indentRune rune, tabspaces int) (term.Coordinates, bool) {
+	current, _ := c.getIndentation(to, indentRune, tabspaces)
 	if indentRune == IndentRuneSpace {
-		target *= max(1, c.scroll.Tabspaces())
+		target *= c.resolveTabspaces(tabspaces)
 	}
 	diff := target - current
 	if diff <= 0 {
@@ -3658,7 +3671,7 @@ func (c *Cursor) doTryIndent(ctx context.Context, to term.Coordinates, target in
 	return to, true
 }
 
-func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates, indentRune rune) (
+func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates, indentRune rune, tabspaces int) (
 	term.Coordinates, bool,
 ) {
 	svc := c.getIndentService()
@@ -3666,16 +3679,16 @@ func (c *Cursor) tryDedent(ctx context.Context, pos term.Coordinates, indentRune
 	if !ok {
 		return pos, false
 	}
-	return c.doTryDedent(ctx, pos, indentation, indentRune)
+	return c.doTryDedent(ctx, pos, indentation, indentRune, tabspaces)
 }
 
-func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target int, indentRune rune) (
+func (c *Cursor) doTryDedent(ctx context.Context, pos term.Coordinates, target int, indentRune rune, tabspaces int) (
 	term.Coordinates, bool,
 ) {
 	buf := c.buffer()
-	current, _ := c.getIndentation(pos, indentRune)
+	current, _ := c.getIndentation(pos, indentRune, tabspaces)
 	if indentRune == IndentRuneSpace {
-		target *= max(1, c.scroll.Tabspaces())
+		target *= c.resolveTabspaces(tabspaces)
 	}
 	diff := current - target
 	if diff <= 0 {

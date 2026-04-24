@@ -88,7 +88,7 @@ func TestCommentSpecForURIUnknownLanguage(t *testing.T) {
 	assert.Equal(t, CommentSpec{}, spec)
 }
 
-func TestIndentRuneForURI(t *testing.T) {
+func TestIndentConfigForURI(t *testing.T) {
 	t.Parallel()
 
 	indents := IndentConfig{
@@ -98,9 +98,10 @@ func TestIndentRuneForURI(t *testing.T) {
 
 	uri, err := workspaceapi.ParseURI("memory:///foo.yaml")
 	require.NoError(t, err)
-	r, ok := IndentRuneForURI(uri, nil, indents)
+	r, n, ok := IndentConfigForURI(uri, nil, indents, 4)
 	require.True(t, ok)
 	assert.Equal(t, IndentRuneSpace, r)
+	assert.Equal(t, 4, n)
 }
 
 func newBufferWithContent(t *testing.T, content string) *cell.Buffer {
@@ -111,7 +112,7 @@ func newBufferWithContent(t *testing.T, content string) *cell.Buffer {
 	return buf
 }
 
-func TestIndentRuneForURI_Detection(t *testing.T) {
+func TestIndentConfigForURI_Detection(t *testing.T) {
 	t.Parallel()
 
 	knownURI, err := workspaceapi.ParseURI("memory:///foo.py")
@@ -124,147 +125,181 @@ func TestIndentRuneForURI_Detection(t *testing.T) {
 	emptyCfg := IndentConfig{}
 
 	tests := []struct {
-		name    string
-		uri     workspaceapi.URI
-		content string
-		useBuf  bool
-		indents IndentConfig
-		wantR   rune
-		wantOK  bool
+		name             string
+		uri              workspaceapi.URI
+		content          string
+		useBuf           bool
+		indents          IndentConfig
+		defaultTabspaces int
+		wantR            rune
+		wantN            int
+		wantOK           bool
 	}{
 		{
-			name:    "unknown language with empty buffer",
-			uri:     unknownURI,
-			useBuf:  true,
-			indents: tabsCfg,
-			wantOK:  false,
+			name:             "unknown language with empty buffer",
+			uri:              unknownURI,
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantN:            4,
+			wantOK:           false,
 		},
 		{
-			name:    "unknown language with tab-indented buffer",
-			uri:     unknownURI,
-			content: "\tfoo\n",
-			useBuf:  true,
-			indents: tabsCfg,
-			wantOK:  false,
+			name:             "unknown language with tab-indented buffer",
+			uri:              unknownURI,
+			content:          "\tfoo\n",
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantN:            4,
+			wantOK:           false,
 		},
 		{
-			name:    "known language, no config, empty buffer",
-			uri:     knownURI,
-			useBuf:  true,
-			indents: emptyCfg,
-			wantOK:  false,
+			name:             "known language, no config, empty buffer",
+			uri:              knownURI,
+			useBuf:           true,
+			indents:          emptyCfg,
+			defaultTabspaces: 4,
+			wantN:            4,
+			wantOK:           false,
 		},
 		{
-			name:    "known language, configured tabs, empty buffer",
-			uri:     knownURI,
-			useBuf:  true,
-			indents: tabsCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "known language, configured tabs, empty buffer",
+			uri:              knownURI,
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "known language, configured spaces, empty buffer",
-			uri:     knownURI,
-			useBuf:  true,
-			indents: spacesCfg,
-			wantR:   IndentRuneSpace,
-			wantOK:  true,
+			name:             "known language, configured spaces, empty buffer",
+			uri:              knownURI,
+			useBuf:           true,
+			indents:          spacesCfg,
+			defaultTabspaces: 2,
+			wantR:            IndentRuneSpace,
+			wantN:            2,
+			wantOK:           true,
 		},
 		{
-			name:    "configured tabs but buffer uses spaces",
-			uri:     knownURI,
-			content: "def foo():\n    return 1\n",
-			useBuf:  true,
-			indents: tabsCfg,
-			wantR:   IndentRuneSpace,
-			wantOK:  true,
+			name:             "configured tabs but buffer uses spaces",
+			uri:              knownURI,
+			content:          "def foo():\n    return 1\n",
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 8,
+			wantR:            IndentRuneSpace,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "configured spaces but buffer uses tabs",
-			uri:     knownURI,
-			content: "def foo():\n\treturn 1\n",
-			useBuf:  true,
-			indents: spacesCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "configured spaces but buffer uses tabs",
+			uri:              knownURI,
+			content:          "def foo():\n\treturn 1\n",
+			useBuf:           true,
+			indents:          spacesCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "configured tabs and buffer uses tabs",
-			uri:     knownURI,
-			content: "def foo():\n\treturn 1\n",
-			useBuf:  true,
-			indents: tabsCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "configured tabs and buffer uses tabs",
+			uri:              knownURI,
+			content:          "def foo():\n\treturn 1\n",
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "configured spaces and buffer uses spaces",
-			uri:     knownURI,
-			content: "def foo():\n    return 1\n",
-			useBuf:  true,
-			indents: spacesCfg,
-			wantR:   IndentRuneSpace,
-			wantOK:  true,
+			name:             "configured spaces and buffer uses spaces",
+			uri:              knownURI,
+			content:          "def foo():\n    return 1\n",
+			useBuf:           true,
+			indents:          spacesCfg,
+			defaultTabspaces: 8,
+			wantR:            IndentRuneSpace,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "mixed indentation falls back to configured tabs",
-			uri:     knownURI,
-			content: "def foo():\n\treturn 1\ndef bar():\n    return 2\n",
-			useBuf:  true,
-			indents: tabsCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "mixed indentation falls back to configured tabs",
+			uri:              knownURI,
+			content:          "def foo():\n\treturn 1\ndef bar():\n    return 2\n",
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "no configured rune, detected spaces bridge the gap",
-			uri:     knownURI,
-			content: "def foo():\n    return 1\n",
-			useBuf:  true,
-			indents: emptyCfg,
-			wantR:   IndentRuneSpace,
-			wantOK:  true,
+			name:             "no configured rune, detected spaces bridge the gap",
+			uri:              knownURI,
+			content:          "def foo():\n    return 1\n",
+			useBuf:           true,
+			indents:          emptyCfg,
+			defaultTabspaces: 8,
+			wantR:            IndentRuneSpace,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "no configured rune, detected tabs bridge the gap",
-			uri:     knownURI,
-			content: "def foo():\n\treturn 1\n",
-			useBuf:  true,
-			indents: emptyCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "no configured rune, detected tabs bridge the gap",
+			uri:              knownURI,
+			content:          "def foo():\n\treturn 1\n",
+			useBuf:           true,
+			indents:          emptyCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "nil buffer falls back to configured rune",
-			uri:     knownURI,
-			useBuf:  false,
-			indents: spacesCfg,
-			wantR:   IndentRuneSpace,
-			wantOK:  true,
+			name:             "nil buffer falls back to configured rune",
+			uri:              knownURI,
+			useBuf:           false,
+			indents:          spacesCfg,
+			defaultTabspaces: 2,
+			wantR:            IndentRuneSpace,
+			wantN:            2,
+			wantOK:           true,
 		},
 		{
-			name:    "nil buffer with no config",
-			uri:     knownURI,
-			useBuf:  false,
-			indents: emptyCfg,
-			wantOK:  false,
+			name:             "nil buffer with no config",
+			uri:              knownURI,
+			useBuf:           false,
+			indents:          emptyCfg,
+			defaultTabspaces: 4,
+			wantN:            4,
+			wantOK:           false,
 		},
 		{
-			name:    "non-indented lines are inconclusive",
-			uri:     knownURI,
-			content: "hello\nworld\n",
-			useBuf:  true,
-			indents: tabsCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "non-indented lines are inconclusive",
+			uri:              knownURI,
+			content:          "hello\nworld\n",
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 		{
-			name:    "single leading space is ignored",
-			uri:     knownURI,
-			content: " a leading space line\nanother\n",
-			useBuf:  true,
-			indents: tabsCfg,
-			wantR:   IndentRuneTab,
-			wantOK:  true,
+			name:             "single leading space is ignored",
+			uri:              knownURI,
+			content:          " a leading space line\nanother\n",
+			useBuf:           true,
+			indents:          tabsCfg,
+			defaultTabspaces: 4,
+			wantR:            IndentRuneTab,
+			wantN:            4,
+			wantOK:           true,
 		},
 	}
 
@@ -275,8 +310,9 @@ func TestIndentRuneForURI_Detection(t *testing.T) {
 			if tc.useBuf {
 				buf = newBufferWithContent(t, tc.content)
 			}
-			r, ok := IndentRuneForURI(tc.uri, buf, tc.indents)
+			r, n, ok := IndentConfigForURI(tc.uri, buf, tc.indents, tc.defaultTabspaces)
 			assert.Equal(t, tc.wantOK, ok)
+			assert.Equal(t, tc.wantN, n)
 			if tc.wantOK {
 				assert.Equal(t, tc.wantR, r)
 			}
@@ -284,13 +320,14 @@ func TestIndentRuneForURI_Detection(t *testing.T) {
 	}
 }
 
-func TestDetectIndentRune(t *testing.T) {
+func TestDetectIndentConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
 		buf    *cell.Buffer
 		wantR  rune
+		wantN  int
 		wantOK bool
 	}{
 		{
@@ -323,6 +360,7 @@ func TestDetectIndentRune(t *testing.T) {
 			name:   "spaces only",
 			buf:    newBufferWithContent(t, "def foo():\n    return 1\n    return 2\n"),
 			wantR:  IndentRuneSpace,
+			wantN:  4,
 			wantOK: true,
 		},
 		{
@@ -339,6 +377,21 @@ func TestDetectIndentRune(t *testing.T) {
 			name:   "two or more leading spaces counts as spaces",
 			buf:    newBufferWithContent(t, "  x\n"),
 			wantR:  IndentRuneSpace,
+			wantN:  2,
+			wantOK: true,
+		},
+		{
+			name:   "smallest leading-space run wins",
+			buf:    newBufferWithContent(t, "  x\n    y\n      z\n"),
+			wantR:  IndentRuneSpace,
+			wantN:  2,
+			wantOK: true,
+		},
+		{
+			name:   "three-space indent detected",
+			buf:    newBufferWithContent(t, "def foo():\n   return 1\n   return 2\n"),
+			wantR:  IndentRuneSpace,
+			wantN:  3,
 			wantOK: true,
 		},
 	}
@@ -346,10 +399,11 @@ func TestDetectIndentRune(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			r, ok := detectIndentRune(tc.buf)
+			r, n, ok := detectIndentConfig(tc.buf)
 			assert.Equal(t, tc.wantOK, ok)
 			if tc.wantOK {
 				assert.Equal(t, tc.wantR, r)
+				assert.Equal(t, tc.wantN, n)
 			}
 		})
 	}

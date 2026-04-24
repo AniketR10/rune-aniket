@@ -1362,7 +1362,7 @@ func (r *testRemote) deleteChar() {
 
 func (r *testRemote) insertChar(ch rune) {
 	r.ops = append(r.ops, func() {
-		r.cursor.InsertContext(r.ctx, ch, text.IndentRuneTab)
+		r.cursor.InsertContext(r.ctx, ch, text.IndentRuneTab, 0)
 	})
 }
 
@@ -1394,7 +1394,7 @@ func (r *testRemote) conflate() {
 
 func (r *testRemote) wrapLine() {
 	r.ops = append(r.ops, func() {
-		r.cursor.InsertContext(r.ctx, '\n', text.IndentRuneTab)
+		r.cursor.InsertContext(r.ctx, '\n', text.IndentRuneTab, 0)
 	})
 }
 

@@ -68,10 +68,13 @@ func (e *viEditor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
 	indentRune := text.IndentRuneTab
-	if r, ok := text.IndentRuneForURI(file, buf, e.config.indents); ok {
+	r, tabspaces, ok := text.IndentConfigForURI(
+		file, buf, e.config.indents, e.config.tabspaces,
+	)
+	if ok {
 		indentRune = r
 	}
-	root := NewWithIndentRune(buf, file, indentRune, e.opts...)
+	root := NewWithIndent(buf, file, indentRune, tabspaces, e.opts...)
 	// publisher does not mutate cursor and it should never do so
 	cursor := root.cursor
 	scroll := root.less.Scroll()

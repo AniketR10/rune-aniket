@@ -37,6 +37,7 @@ import (
 // modelessConfig holds configuration for Editor.
 type modelessConfig struct {
 	tabspaces          int
+	indentTabspaces    int
 	indents            text.IndentConfig
 	indentRune         rune
 	ruler              int

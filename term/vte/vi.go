@@ -150,7 +150,7 @@ func (v *viHandler) newSyncState(comp parentComponent, opts []vi.Option) viSyncS
 	scroll.InitPerformance(vteScroll.Buffer())
 	scroll.InvertOffset = true
 	syncVi := new(vi.Vi)
-	syncVi.InitWithScroll(scroll, comp.URI(), text.IndentRuneTab, opts...)
+	syncVi.InitWithScroll(scroll, comp.URI(), text.IndentRuneTab, 0, opts...)
 	return viSyncState{
 		mu:        comp.Locker(),
 		vi:        syncVi,
@@ -168,7 +168,7 @@ func (v *viHandler) newCopyState(comp parentComponent, opts []vi.Option) viCopyS
 	copyScroll.InitPerformance(copyBuffer)
 	copyScroll.InvertOffset = true
 	copyVi := new(vi.Vi)
-	copyVi.InitWithScroll(copyScroll, comp.URI(), text.IndentRuneTab, opts...)
+	copyVi.InitWithScroll(copyScroll, comp.URI(), text.IndentRuneTab, 0, opts...)
 	return viCopyState{
 		vi:     copyVi,
 		editor: copyScroll.Buffer().WithEditor(copyEditor{v: v}),

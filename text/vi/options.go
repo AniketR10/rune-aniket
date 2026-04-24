@@ -41,6 +41,7 @@ type viConfig struct {
 	comments           text.CommentConfig
 	clipboard          clipboard.Register
 	tabspaces          int
+	indentTabspaces    int
 	indents            text.IndentConfig
 	indentRune         rune
 	ruler              int

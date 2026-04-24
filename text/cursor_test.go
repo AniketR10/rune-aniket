@@ -65,7 +65,7 @@ func TestCursorHiddenLines(t *testing.T) {
 		require.True(t, c.scroll.MarkHidden(1, 3))
 
 		assert.True(t, c.MoveDown())
-		c.InsertLineBelow(IndentRuneTab)
+		c.InsertLineBelow(IndentRuneTab, 0)
 		assert.Equal(t, "a\nb\nc\nd\n\ne", c.buffer().String())
 	})
 }
@@ -1002,7 +1002,7 @@ func TestIndent(t *testing.T) {
 			mock := &mockIndentService{returnIndentationAt: test.expectIndentationAt}
 			mock.View = c.buffer().WithView(mock)
 			c.MoveToScroll(test.cursorAtScroll)
-			assert.Equal(t, test.expectIndent, c.TryIndent(test.indentRune))
+			assert.Equal(t, test.expectIndent, c.TryIndent(test.indentRune, 0))
 			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 			if test.expectIndent {
 				assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
@@ -1154,7 +1154,7 @@ func TestCursorReindent(t *testing.T) {
 			mock.View = c.buffer().WithView(mock)
 			c.MoveToScroll(test.cursorAtScroll)
 
-			assert.Equal(t, test.expectReindent, c.Reindent(test.indentRune))
+			assert.Equal(t, test.expectReindent, c.Reindent(test.indentRune, 0))
 			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 			assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
 		})
@@ -1162,10 +1162,41 @@ func TestCursorReindent(t *testing.T) {
 
 	t.Run("no indent service returns false", func(t *testing.T) {
 		c := setupCursorContent(t, 10, 10, "a", false)
-		assert.False(t, c.Reindent(IndentRuneTab))
+		assert.False(t, c.Reindent(IndentRuneTab, 0))
 		assert.Equal(t, "a", term.CellsToString(c.view().RawCells()))
 		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
 	})
+}
+
+// TestCursorReindentHonorsTabspacesArgument verifies that when Reindent
+// is invoked with an explicit tabspaces argument, the cursor uses that
+// width rather than the scroll's configured tabspaces. This guards
+// against misindenting files whose indent width differs from the
+// editor's configured tabspaces.
+func TestCursorReindentHonorsTabspacesArgument(t *testing.T) {
+	// Scroll tabspaces configured to 4 but caller passes 2-space indent.
+	c := setupCursorContent(t, 20, 10, "a", false)
+	c.scroll.SetTabspaces(4)
+	mock := &mockIndentService{returnIndentationAt: 1}
+	mock.View = c.buffer().WithView(mock)
+
+	assert.True(t, c.Reindent(IndentRuneSpace, 2))
+	assert.Equal(t, "  a", term.CellsToString(c.view().RawCells()))
+	assert.Equal(t, term.Coordinates{X: 2}, c.CursorAtScroll())
+}
+
+// TestCursorShiftLineRightHonorsTabspacesArgument verifies the explicit
+// indent width is honored by the shift/dedent path as well.
+func TestCursorShiftLineRightHonorsTabspacesArgument(t *testing.T) {
+	c := setupCursorContent(t, 20, 10, "a", false)
+	c.scroll.SetTabspaces(4)
+
+	c.ShiftLineRight(IndentRuneSpace, 2)
+	assert.Equal(t, "  a", c.scroll.Buffer().String())
+	assert.Equal(t, term.Coordinates{X: 2}, c.cursor)
+
+	assert.True(t, c.ShiftLineLeft(IndentRuneSpace, 2))
+	assert.Equal(t, "a", c.scroll.Buffer().String())
 }
 
 func TestCursorTryIndentWithConfiguredIndentRune(t *testing.T) {
@@ -1234,7 +1265,7 @@ func TestCursorTryIndentWithConfiguredIndentRune(t *testing.T) {
 			mock.View = c.buffer().WithView(mock)
 			c.MoveToScroll(test.cursorAtScroll)
 
-			assert.Equal(t, test.expectIndent, c.TryIndent(test.indentRune))
+			assert.Equal(t, test.expectIndent, c.TryIndent(test.indentRune, 0))
 			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 			assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
 		})
@@ -3273,7 +3304,7 @@ func TestCursorInsertLine(t *testing.T) {
 			assert.Equal(t, term.Coordinates{}, e.Coordinates())
 			assert.Equal(t, term.Coordinates{}, e.cursorAtScroll())
 
-			e.InsertLineAbove(IndentRuneTab)
+			e.InsertLineAbove(IndentRuneTab, 0)
 			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[0]))
 			assert.Equal(t, 33, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{}, e.Coordinates())
@@ -3284,13 +3315,13 @@ func TestCursorInsertLine(t *testing.T) {
 			e.cursor.X = 9
 
 			assert.Equal(t, term.Coordinates{Y: 2, X: 9}, e.Coordinates())
-			e.InsertLineAbove(IndentRuneTab)
+			e.InsertLineAbove(IndentRuneTab, 0)
 			assert.Equal(t, 0, len(e.scroll.Buffer().RawCells()[2]))
 			assert.Equal(t, 34, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{Y: 2, X: 0}, e.Coordinates())
 
 			e.MoveEndLine()
-			e.InsertLineBelow(IndentRuneTab)
+			e.InsertLineBelow(IndentRuneTab, 0)
 			assert.Equal(t, 35, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{Y: 3, X: 0}, e.cursorAtScroll())
 
@@ -3299,7 +3330,7 @@ func TestCursorInsertLine(t *testing.T) {
 			assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
 			assert.Equal(t, term.Coordinates{Y: 34}, e.cursorAtScroll())
 
-			e.InsertLineBelow(IndentRuneTab)
+			e.InsertLineBelow(IndentRuneTab, 0)
 			assert.Equal(t, 36, e.scroll.Buffer().Rows())
 			assert.Equal(t, term.Coordinates{Y: 9, X: 0}, e.Coordinates())
 			assert.Equal(t, term.Coordinates{Y: 35}, e.cursorAtScroll())
@@ -3323,8 +3354,8 @@ func main() {
 			assert.Equal(t, buf.String(), content)
 
 			require.True(t, cursor.MoveLineDown())
-			cursor.InsertLineBelow(IndentRuneTab)
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			cursor.Insert('\t')
 			cursor.Insert('f')
 			cursor.Insert('m')
@@ -3339,13 +3370,13 @@ func main() {
 
 			require.True(t, cursor.MoveLastLine())
 
-			cursor.InsertLineBelow(IndentRuneTab)
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			cursor.Insert('i')
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			cursor.Insert('\t')
 			cursor.InsertString("XXXXXXXXXXXXXXXXXXXXXXXX")
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			cursor.Insert('}')
 
 			assert.Equal(t, `package main
@@ -3362,7 +3393,7 @@ i
 			require.True(t, cursor.MoveLineUp())
 			cursor.MoveStartLine()
 			require.True(t, cursor.MoveEndLine())
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			cursor.InsertString("hello")
 
 			assert.Equal(t, `package main
@@ -4348,22 +4379,22 @@ func TestCursorCell(t *testing.T) {
 
 func TestCursorShiftLine(t *testing.T) {
 	c := setupCursorContent(t, 10, 1, " blabla\nbleble", false)
-	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
-	assert.False(t, c.ShiftLineLeft(IndentRuneTab))
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab, 0))
+	assert.False(t, c.ShiftLineLeft(IndentRuneTab, 0))
 	assert.Equal(t, term.Coordinates{}, c.cursor)
 
-	c.ShiftLineRight(IndentRuneTab)
+	c.ShiftLineRight(IndentRuneTab, 0)
 	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
-	c.ShiftLineRight(IndentRuneTab)
+	c.ShiftLineRight(IndentRuneTab, 0)
 	assert.Equal(t, term.Coordinates{X: 8}, c.cursor)
-	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab, 0))
 	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
-	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab, 0))
 	assert.Equal(t, term.Coordinates{}, c.cursor)
 	assert.True(t, c.MoveDown())
-	c.ShiftLineRight(IndentRuneTab)
+	c.ShiftLineRight(IndentRuneTab, 0)
 	assert.Equal(t, term.Coordinates{Y: 0, X: 4}, c.cursor)
-	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab, 0))
 	assert.Equal(t, term.Coordinates{Y: 0, X: 0}, c.cursor)
 }
 
@@ -4372,12 +4403,12 @@ func TestCursorShiftSelection(t *testing.T) {
 	require.True(t, c.Select())
 	require.True(t, c.MoveDown())
 
-	c.ShiftSelectionRight(IndentRuneTab)
+	c.ShiftSelectionRight(IndentRuneTab, 0)
 	assert.Equal(t, "\t blabla\n\tbleble", c.scroll.Buffer().String())
 
 	require.True(t, c.SelectBlock())
 	require.True(t, c.MoveUp())
-	assert.True(t, c.ShiftSelectionLeft(IndentRuneTab))
+	assert.True(t, c.ShiftSelectionLeft(IndentRuneTab, 0))
 	assert.Equal(t, " blabla\nbleble", c.scroll.Buffer().String())
 }
 
@@ -4490,7 +4521,7 @@ func TestCursorShiftLineRightTable(t *testing.T) {
 				require.True(t, ok)
 			}
 
-			c.ShiftLineRight(tc.indentRune)
+			c.ShiftLineRight(tc.indentRune, 0)
 
 			assert.Equal(t, tc.want, c.scroll.Buffer().String())
 			assert.Equal(t, tc.wantCursor, c.cursor)
@@ -4616,7 +4647,7 @@ func TestCursorShiftLineLeftTable(t *testing.T) {
 				require.True(t, ok)
 			}
 
-			ok := c.ShiftLineLeft(tc.indentRune)
+			ok := c.ShiftLineLeft(tc.indentRune, 0)
 
 			assert.Equal(t, tc.wantOk, ok)
 			assert.Equal(t, tc.want, c.scroll.Buffer().String())
@@ -4731,7 +4762,7 @@ func TestCursorShiftSelectionRightTable(t *testing.T) {
 			c.scroll.SetTabspaces(tc.tabspaces)
 			tc.selectSetup(c)
 
-			c.ShiftSelectionRight(tc.indentRune)
+			c.ShiftSelectionRight(tc.indentRune, 0)
 
 			assert.Equal(t, tc.want, c.scroll.Buffer().String())
 			if tc.indentRune == IndentRuneSpace {
@@ -4862,7 +4893,7 @@ func TestCursorShiftSelectionLeftTable(t *testing.T) {
 			c.scroll.SetTabspaces(tc.tabspaces)
 			tc.selectSetup(c)
 
-			ok := c.ShiftSelectionLeft(tc.indentRune)
+			ok := c.ShiftSelectionLeft(tc.indentRune, 0)
 
 			assert.Equal(t, tc.wantOk, ok)
 			assert.Equal(t, tc.want, c.scroll.Buffer().String())
@@ -4891,11 +4922,11 @@ func TestCursorShiftLineRoundTripTable(t *testing.T) {
 			c := setupCursorContent(t, 30, 5, tc.content, false)
 			c.scroll.SetTabspaces(tc.tabspaces)
 
-			c.ShiftLineRight(tc.indentRune)
+			c.ShiftLineRight(tc.indentRune, 0)
 			assert.NotEqual(t, tc.content, c.scroll.Buffer().String(),
 				"shift-right must change the buffer")
 
-			assert.True(t, c.ShiftLineLeft(tc.indentRune),
+			assert.True(t, c.ShiftLineLeft(tc.indentRune, 0),
 				"shift-left after shift-right must succeed")
 			assert.Equal(t, tc.content, c.scroll.Buffer().String(),
 				"roundtrip must restore original content")
@@ -5516,13 +5547,13 @@ func TestFileCursorIntegration(t *testing.T) {
 		}},
 		{"is able to insert at last line + 1", false, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},
 		{"is able to insert at last EOL", true, func(t *testing.T, cursor *Cursor) {
 			assert.True(t, cursor.MoveLastLine())
-			cursor.InsertLineBelow(IndentRuneTab)
+			cursor.InsertLineBelow(IndentRuneTab, 0)
 			assert.Equal(t, term.Coordinates{Y: 32}, cursor.CursorAtScroll())
 			assert.Equal(t, sampleSnippet+"\n", cursor.buffer().String())
 		}},

@@ -75,20 +75,29 @@ type Vi struct {
 
 // New allocates storage for a new Vi handler, initializes it and returns it.
 func New(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) *Vi {
-	return NewWithIndentRune(buf, resource, text.IndentRuneTab, opts...)
+	return NewWithIndent(buf, resource, text.IndentRuneTab, 0, opts...)
 }
 
-// NewWithIndentRune allocates storage for a new Vi handler, initializes it and returns it.
-func NewWithIndentRune(buf *cell.Buffer, resource workspaceapi.URI, indentRune rune, opts ...Option) *Vi {
+// NewWithIndent allocates storage for a new Vi handler, initializes it and returns it.
+// indentTabspaces is the number of spaces per indent level when indentRune is
+// IndentRuneSpace; pass 0 to fall back to the editor's configured tabspaces.
+func NewWithIndent(
+	buf *cell.Buffer, resource workspaceapi.URI,
+	indentRune rune, indentTabspaces int, opts ...Option,
+) *Vi {
 	vi := new(Vi)
-	vi.Init(buf, resource, indentRune, opts...)
+	vi.Init(buf, resource, indentRune, indentTabspaces, opts...)
 	return vi
 }
 
 // Init initialies this vi handle with the given cell.Buffer.
-func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, indentRune rune, opts ...Option) {
+func (vi *Vi) Init(
+	buf *cell.Buffer, resource workspaceapi.URI,
+	indentRune rune, indentTabspaces int, opts ...Option,
+) {
 	vi.config = defaultviHandlerImplConfig()
 	vi.config.indentRune = indentRune
+	vi.config.indentTabspaces = indentTabspaces
 	for _, o := range opts {
 		o(&vi.config)
 	}
@@ -107,9 +116,13 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, indentRune rune,
 // deletes to clipboard or undo/redo because we don't know if the given Scroll was initialized with
 // Subscribe functionality or not. Init should be used in favor of this method for standard
 // usage of Vi.
-func (vi *Vi) InitWithScroll(scroll *component.Scroll, resource workspaceapi.URI, indentRune rune, opts ...Option) {
+func (vi *Vi) InitWithScroll(
+	scroll *component.Scroll, resource workspaceapi.URI,
+	indentRune rune, indentTabspaces int, opts ...Option,
+) {
 	vi.config = defaultviHandlerImplConfig()
 	vi.config.indentRune = indentRune
+	vi.config.indentTabspaces = indentTabspaces
 	for _, o := range opts {
 		o(&vi.config)
 	}

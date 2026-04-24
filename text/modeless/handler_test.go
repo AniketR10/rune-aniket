@@ -140,7 +140,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -159,7 +159,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -178,7 +178,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -198,7 +198,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -218,7 +218,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -240,7 +240,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -261,7 +261,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -283,7 +283,7 @@ func TestCursorExternalEdit(t *testing.T) {
 
 		buf := cell.NewBuffer()
 		buf.ReadFrom(strings.NewReader(snippet))
-		vi := NewHandler(buf, uri, text.IndentRuneTab)
+		vi := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		vi.Resize(width, height)
 
 		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
@@ -345,7 +345,7 @@ c
 		require.NoError(t, err)
 		buf := cell.NewBuffer()
 		_, _ = buf.ReadFrom(strings.NewReader("a\nb\nc"))
-		handler := NewHandler(buf, uri, text.IndentRuneTab)
+		handler := NewHandler(buf, uri, text.IndentRuneTab, 0)
 		handler.Resize(20, 10)
 		handler.SetLocationList(textapi.LocationPriorityInfo, "id",
 			textapi.LocationSlice([]textapi.Location{
@@ -380,7 +380,7 @@ func TestSyntacticSelectionKeyBindings(t *testing.T) {
 	}
 	buf.WithView(view)
 
-	h := NewHandler(buf, uri, text.IndentRuneTab)
+	h := NewHandler(buf, uri, text.IndentRuneTab, 0)
 	h.Resize(80, 10)
 	require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
 
@@ -584,9 +584,9 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 				line:  []string{"//"},
 				block: []string{"/*", "*/"},
 			})
-			handler := NewHandler(buf, uri, text.IndentRuneTab, WithClipboard(reg))
+			handler := NewHandler(buf, uri, text.IndentRuneTab, 0, WithClipboard(reg))
 			handler = NewHandler(buf, uri,
-				text.IndentRuneTab,
+				text.IndentRuneTab, 0,
 				WithClipboard(reg),
 				WithRuler(12),
 				WithComments(text.CommentConfig{
@@ -751,7 +751,7 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 
 			buf := cell.NewBuffer()
 			buf.ReadFrom(strings.NewReader(test.content))
-			h := NewHandler(buf, uri, text.IndentRuneTab, WithClipboard(reg))
+			h := NewHandler(buf, uri, text.IndentRuneTab, 0, WithClipboard(reg))
 			h.Resize(10, 3)
 
 			for _, step := range test.steps {
@@ -886,7 +886,7 @@ func TestPasteAndReindent(t *testing.T) {
 			}
 
 			handler := NewHandler(buf, uri,
-				text.IndentRuneTab,
+				text.IndentRuneTab, 0,
 				WithClipboard(clip),
 				WithTabspaces(1),
 			)

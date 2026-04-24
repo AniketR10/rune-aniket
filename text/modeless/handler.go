@@ -66,22 +66,25 @@ type editorHandler struct {
 	historyIdx       int
 }
 
-// NewHandler returns a modeless, simple-to-use text.Handler.
+// NewHandler returns a modeless, simple-to-use text.Handler. indentTabspaces
+// is the number of spaces per indent level when indentRune is IndentRuneSpace;
+// pass 0 to fall back to the editor's configured tabspaces.
 func NewHandler(
 	buf *cell.Buffer, resource workspaceapi.URI,
-	indentRune rune, opts ...Option,
+	indentRune rune, indentTabspaces int, opts ...Option,
 ) text.Handler {
 	ret := new(editorHandler)
-	ret.Init(buf, resource, indentRune, opts...)
+	ret.Init(buf, resource, indentRune, indentTabspaces, opts...)
 	return ret
 }
 
 func (h *editorHandler) Init(
 	buf *cell.Buffer, resource workspaceapi.URI,
-	indentRune rune, opts ...Option,
+	indentRune rune, indentTabspaces int, opts ...Option,
 ) {
 	h.cfg = defaultConfig()
 	h.cfg.indentRune = indentRune
+	h.cfg.indentTabspaces = indentTabspaces
 	for _, o := range opts {
 		o(&h.cfg)
 	}
@@ -234,10 +237,10 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 		switch ev.Key {
 		case term.KeyTab:
 			if _, ok := h.cursor.SelectionMode(); ok {
-				h.cursor.ShiftSelectionLeft(h.cfg.indentRune)
+				h.cursor.ShiftSelectionLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
 				h.cursor.Unselect()
 			} else {
-				h.cursor.ShiftLineLeft(h.cfg.indentRune)
+				h.cursor.ShiftLineLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
 			}
 			handled = true
 			return
@@ -350,16 +353,16 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.ToggleLineComment()
 			case ']':
 				if _, ok := h.cursor.SelectionMode(); ok {
-					h.cursor.ShiftSelectionRight(h.cfg.indentRune)
+					h.cursor.ShiftSelectionRight(h.cfg.indentRune, h.cfg.indentTabspaces)
 				} else {
-					h.cursor.ShiftLineRight(h.cfg.indentRune)
+					h.cursor.ShiftLineRight(h.cfg.indentRune, h.cfg.indentTabspaces)
 				}
 				handled = true
 			case '[':
 				if _, ok := h.cursor.SelectionMode(); ok {
-					handled = h.cursor.ShiftSelectionLeft(h.cfg.indentRune)
+					handled = h.cursor.ShiftSelectionLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
 				} else {
-					handled = h.cursor.ShiftLineLeft(h.cfg.indentRune)
+					handled = h.cursor.ShiftLineLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
 				}
 			case 'l':
 				if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
@@ -468,21 +471,21 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.cursor.DeleteSelection()
 				h.cursor.Unselect()
 			}
-			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune)
+			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
 		case term.KeySpace:
 			if _, ok := h.cursor.SelectionMode(); ok {
 				h.cursor.DeleteSelection()
 				h.cursor.Unselect()
 			}
-			h.cursor.InsertWithIndentRune(' ', h.cfg.indentRune)
+			h.cursor.InsertWithIndentRune(' ', h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
 		case term.KeyTab:
 			if _, ok := h.cursor.SelectionMode(); ok {
-				h.cursor.ShiftSelectionRight(h.cfg.indentRune)
+				h.cursor.ShiftSelectionRight(h.cfg.indentRune, h.cfg.indentTabspaces)
 				h.cursor.Unselect()
 			} else {
-				if !h.cursor.TryIndent(h.cfg.indentRune) {
+				if !h.cursor.TryIndent(h.cfg.indentRune, h.cfg.indentTabspaces) {
 					h.cursor.Insert(h.cfg.indentRune)
 				}
 			}
@@ -507,7 +510,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 					handled = h.cursor.DeleteSelection()
 					h.cursor.Unselect()
 				} else {
-					h.cursor.InsertWithIndentRune(ev.Ch, h.cfg.indentRune)
+					h.cursor.InsertWithIndentRune(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
 					handled = true
 				}
 			}
@@ -515,7 +518,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.ModCtrl:
 		switch ev.Key {
 		case term.KeyEnter:
-			h.cursor.InsertLineBelow(h.cfg.indentRune)
+			h.cursor.InsertLineBelow(h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
 			return
 		}
@@ -591,7 +594,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 	case term.ModCtrlShift:
 		switch ev.Key {
 		case term.KeyEnter:
-			h.cursor.InsertLineAbove(h.cfg.indentRune)
+			h.cursor.InsertLineAbove(h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
 			return
 		}
@@ -828,7 +831,7 @@ func (h *editorHandler) pasteAndReindent() (handled bool) {
 		h.cursor.MoveToScroll(endPos)
 		return
 	}
-	h.cursor.ReindentSelection(h.cfg.indentRune)
+	h.cursor.ReindentSelection(h.cfg.indentRune, h.cfg.indentTabspaces)
 	h.cursor.MoveToScroll(endPos)
 	return
 }
