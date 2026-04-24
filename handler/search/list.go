@@ -447,6 +447,7 @@ func (l *List) Close() error {
 	defer l.mu.Unlock()
 
 	l.cancelSearch()
+	l.cancelPush()
 	l.input = nil
 	l.list.Reset()
 	if l.quitChan == nil {

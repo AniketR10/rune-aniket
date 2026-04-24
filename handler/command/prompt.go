@@ -1175,13 +1175,25 @@ func (h *Prompt) Dimensions() (width, height int) {
 
 // Close closes all resources associated with this Prompt.
 func (h *Prompt) Close() error {
-	defer h.cancelCtx()
+	h.mu.Lock()
+	h.cancelCompletionPush("close")
+	h.cancelPreview()
+	h.cancelCtx()
+	h.mu.Unlock()
+
+	h.Wait()
+
+	err := h.list.Close()
 
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.cancelCompletionPush("close")
-	return h.list.Close()
+	h.commandAndArgs = nil
+	h.commandsBackup = nil
+	h.manualComponent = nil
+	h.previewComponent = nil
+	h.previewMatch = nil
+	h.preview = nil
+	h.mu.Unlock()
+	return err
 }
 
 func (h *Prompt) setUserScrolling(scrolling bool) bool {
