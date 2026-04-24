@@ -482,7 +482,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Exit multiple selections (single selection mode)", "<ctrl-shift-down><escape>", nil, term.Coordinates{Y: 0, X: 0}},
 
 		// Expand selection
-		//{"Expand selection to brackets", "{abc}<left><left><shift-left><ctrl-shift-m>", nil, term.Coordinates{X: 4}}, // No brackets
+		{"Expand selection to brackets", "{abc}<left><left><shift-left><ctrl-shift-m>", nil, term.Coordinates{X: 4}, nil},
 		//{"Expand selection to HTML/XML tag", "<shift-meta-a>", nil, term.Coordinates{}}, // No tags
 		//{"Expand selection to scope", "<shift-meta-space>", nil, term.Coordinates{}},
 		//{"Expand selection to indentation level", "<shift-meta-j>", nil, term.Coordinates{}},

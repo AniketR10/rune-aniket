@@ -532,6 +532,10 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.less.Scroll().SeekDownPage()
 		case 'm':
 			handled = h.cursor.MoveToMatchingRune()
+		case 'M':
+			handled = h.cursor.SelectABlockClose('(', ')') ||
+				h.cursor.SelectABlockClose('{', '}') ||
+				h.cursor.SelectABlockClose('[', ']')
 		case 'd':
 			handled = h.cursor.Delete()
 		case 'h':
@@ -592,6 +596,10 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 		switch ev.Ch {
+		case 'M':
+			handled = h.cursor.SelectABlockClose('(', ')') ||
+				h.cursor.SelectABlockClose('{', '}') ||
+				h.cursor.SelectABlockClose('[', ']')
 		case 'W':
 			handled = h.cursor.ShrinkSelection()
 		}

@@ -532,6 +532,149 @@ func TestCursorTextObjects(t *testing.T) {
 	})
 }
 
+func TestCursorSelectABlockEdges(t *testing.T) {
+	type blockCase struct {
+		name       string
+		content    string
+		at         term.Coordinates
+		open       rune
+		close      rune
+		wantOK     bool
+		want       string
+		wantCursor term.Coordinates
+	}
+
+	for _, tc := range []blockCase{
+		{
+			name:       "single line at contents",
+			content:    "{abc}",
+			at:         term.Coordinates{X: 2},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{abc}",
+			wantCursor: term.Coordinates{X: 4},
+		},
+		{
+			name:       "single line at opening delimiter",
+			content:    "{abc}",
+			at:         term.Coordinates{X: 0},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{abc}",
+			wantCursor: term.Coordinates{X: 4},
+		},
+		{
+			name:       "single line at closing delimiter",
+			content:    "{abc}",
+			at:         term.Coordinates{X: 4},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{abc}",
+			wantCursor: term.Coordinates{X: 4},
+		},
+		{
+			name:       "spaced contents",
+			content:    "fn({ a b })",
+			at:         term.Coordinates{X: 6},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{ a b }",
+			wantCursor: term.Coordinates{X: 9},
+		},
+		{
+			name:       "tabbed contents",
+			content:    "fn(\t[\ta\tb\t]\t)",
+			at:         term.Coordinates{X: 6},
+			open:       '[',
+			close:      ']',
+			wantOK:     true,
+			want:       "[\ta\tb\t]",
+			wantCursor: term.Coordinates{X: 10},
+		},
+		{
+			name:       "multiline block",
+			content:    "call({\n\talpha\n\tbeta\n})",
+			at:         term.Coordinates{Y: 2, X: 2},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{\n\talpha\n\tbeta\n}",
+			wantCursor: term.Coordinates{Y: 3, X: 0},
+		},
+		{
+			name:       "nested block chooses nearest",
+			content:    "outer({inner})",
+			at:         term.Coordinates{X: 8},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{inner}",
+			wantCursor: term.Coordinates{X: 12},
+		},
+		{
+			name:       "mixed delimiters are ignored",
+			content:    "fn({[abc]})",
+			at:         term.Coordinates{X: 5},
+			open:       '{',
+			close:      '}',
+			wantOK:     true,
+			want:       "{[abc]}",
+			wantCursor: term.Coordinates{X: 9},
+		},
+		{
+			name:       "empty block",
+			content:    "call()",
+			at:         term.Coordinates{X: 4},
+			open:       '(',
+			close:      ')',
+			wantOK:     true,
+			want:       "()",
+			wantCursor: term.Coordinates{X: 5},
+		},
+		{
+			name:    "unclosed block fails",
+			content: "call({abc)",
+			at:      term.Coordinates{X: 7},
+			open:    '{',
+			close:   '}',
+			wantOK:  false,
+		},
+		{
+			name:    "unopened block fails",
+			content: "call(abc})",
+			at:      term.Coordinates{X: 6},
+			open:    '{',
+			close:   '}',
+			wantOK:  false,
+		},
+		{
+			name:    "empty buffer fails",
+			content: "",
+			at:      term.Coordinates{},
+			open:    '{',
+			close:   '}',
+			wantOK:  false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 10, tc.content, false)
+			_, _ = c.MoveToScroll(tc.at)
+
+			ok := c.SelectABlockClose(tc.open, tc.close)
+			assert.Equal(t, tc.wantOK, ok)
+			if !tc.wantOK {
+				return
+			}
+			assert.Equal(t, tc.want, c.Selection())
+			assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+		})
+	}
+}
+
 func TestCursorTextObjectDeleteSelection(t *testing.T) {
 	type deleteCase struct {
 		name       string

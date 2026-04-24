@@ -1536,6 +1536,18 @@ func (c *Cursor) SelectABlock(open, close rune) bool {
 	return c.selectRange(start, end)
 }
 
+// SelectABlockClose selects the surrounding paired block including delimiters,
+// leaving the cursor on the closing delimiter.
+func (c *Cursor) SelectABlockClose(open, close rune) bool {
+	start, end, ok := c.blockBounds(open, close)
+	if !ok {
+		return false
+	}
+	selectionEnd := end
+	selectionEnd.X++
+	return c.setExplicitSelection(StandardSelection, start, selectionEnd, end)
+}
+
 func (c *Cursor) isBlankLine(y int) bool {
 	if y < 0 || y >= c.rows() {
 		return true
