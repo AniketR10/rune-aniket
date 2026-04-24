@@ -43,7 +43,10 @@ func dispatchFilesystemEvents(
 ) {
 	for {
 		select {
-		case fsev := <-ch:
+		case fsev, ok := <-ch:
+			if !ok {
+				return
+			}
 			dispatchFilesystemEvent(ex, mu, ignores, fsev)
 		case <-ctx.Done():
 			return

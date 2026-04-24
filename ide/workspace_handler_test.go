@@ -3742,3 +3742,36 @@ func newWriterForAttrTesting(width, height int) *term.StringWriter {
 	writer.ForegroundCh = '#'
 	return writer
 }
+
+// TestCloseWorkspaceRemovesClosedWorkspaceFromManager guards against a
+// regression where closing a workspace via the IDE left the workspace
+// rooted in workspace.Manager. Each closed workspace would keep its scheme
+// (and the file/watcher state owned by the scheme) alive forever, which
+// caused steady memory growth on workspace open/close cycles.
+func TestCloseWorkspaceRemovesClosedWorkspaceFromManager(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	manager := workspace.NewManager(config.NopConfig())
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory:///%s", dir))
+	require.NoError(t, err)
+
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	// Sanity: workspace was added to the Manager.
+	require.True(t, manager.HasWorkspace(uri),
+		"workspace should be registered with the Manager after init")
+
+	require.NoError(t, m.commandCloseWorkspace())
+	require.Equal(t, 0, m.workspaceCount)
+
+	require.False(t, manager.HasWorkspace(uri),
+		"closing a workspace must remove it from workspace.Manager so its scheme can be GC'd")
+}

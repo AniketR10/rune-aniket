@@ -892,6 +892,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancelCtx:           cancel,
 		uri:                 uri,
 		ex:                  ex,
+		cwd:                 cwd,
 	}
 	tm.workspace = wh
 
@@ -1231,7 +1232,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 
 func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
 	i := h.focus
-	workspaceURI, _, err := h.closeWorkspace()
+	workspaceURI, _, err := h.closeWorkspaceKeepScheme()
 	if err != nil {
 		return err
 	}
@@ -1280,6 +1281,24 @@ func (h *workspaceManagerHandler) commandRenameWorkspace(args ...string) error {
 }
 
 func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
+	return h.doCloseWorkspace(true)
+}
+
+// closeWorkspaceKeepScheme is like closeWorkspace but does NOT remove the
+// backing workspace from workspace.Manager. This is used by
+// commandReloadWorkspace, where the workspace is immediately re-added under
+// the same URI; keeping the Manager entry means AddWorkspace returns the
+// same managerWorkspace and the existing scheme (e.g. an in-memory scheme
+// holding live buffer content) survives the reload.
+func (h *workspaceManagerHandler) closeWorkspaceKeepScheme() (
+	workspaceapi.URI, []workspaceapi.URI, error,
+) {
+	return h.doCloseWorkspace(false)
+}
+
+func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
+	workspaceapi.URI, []workspaceapi.URI, error,
+) {
 	if h.focusHandler() == h.empty {
 		return workspaceapi.URI{}, nil, errors.New("workspace tab is empty")
 	}
@@ -1300,7 +1319,12 @@ func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspac
 
 	h.history.recordWorkspaceFileWindows(uri, hm.ex.fileWindowIDs())
 	h.history.recordCloseWorkspace(uri)
-	err := hm.Close()
+	var err error
+	if removeFromManager {
+		err = hm.closeAndRemove()
+	} else {
+		err = hm.Close()
+	}
 	if err != nil {
 		log.Error(err)
 	} else {
@@ -1432,31 +1456,63 @@ type workspaceHandler struct {
 	cancelCtx           func()
 	uri                 workspaceapi.URI
 	Extensions          atomic.Value
+	// cwd is the managerWorkspace returned by workspace.Manager.AddWorkspace.
+	// It is closed in closeAndRemove (the single-workspace close path) so
+	// its underlying scheme can be dropped from workspace.Manager and
+	// garbage-collected. It is NOT closed in Close(), which is also invoked
+	// on full-IDE shutdown where the workspace.Manager is owned by the
+	// caller.
+	cwd       workspace.Workspace
+	closeOnce sync.Once
+	closeErr  error
 }
 
-func (hm *workspaceHandler) Close() (ret error) {
-	if err := hm.ex.Close(); err != nil {
+func (hm *workspaceHandler) Close() error {
+	hm.closeOnce.Do(func() {
+		var ret error
+		if err := hm.ex.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+		if runner := hm.Extensions.Load(); runner != nil {
+			if err := runner.(io.Closer).Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		if closer, ok := hm.vctrlService.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		if hm.cursorHistoryCloser != nil {
+			if err := hm.cursorHistoryCloser.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		// cancel at the end, so fs event processing is not
+		// vacated before everything else is still potentially
+		// sending events (i.e. mem scheme)
+		hm.cancelCtx()
+		hm.closeErr = ret
+	})
+	return hm.closeErr
+}
+
+// closeAndRemove closes this handler and also removes the backing workspace
+// from the owning workspace.Manager so the scheme it owns can be
+// garbage-collected. This is the right teardown when a single workspace is
+// closed while the rest of the IDE stays alive (e.g. via :close). It must
+// NOT be used on full-IDE shutdown, because the Manager is owned by the
+// caller and survives the handler.
+func (hm *workspaceHandler) closeAndRemove() (ret error) {
+	if err := hm.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	if runner := hm.Extensions.Load(); runner != nil {
-		if err := runner.(io.Closer).Close(); err != nil {
+	if hm.cwd != nil {
+		if err := hm.cwd.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
+		hm.cwd = nil
 	}
-	if closer, ok := hm.vctrlService.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
-	if hm.cursorHistoryCloser != nil {
-		if err := hm.cursorHistoryCloser.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
-	// cancel at the end, so fs event processing is not
-	// vacated before everything else is still potentially
-	// sending events (i.e. mem scheme)
-	hm.cancelCtx()
 	return ret
 }
 

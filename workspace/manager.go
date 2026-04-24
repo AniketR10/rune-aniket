@@ -175,6 +175,15 @@ func (m *Manager) Workspace(file workspaceapi.URI) (Workspace, bool, error) {
 	return nil, false, nil
 }
 
+// HasWorkspace reports whether this Manager currently tracks a workspace
+// registered under the given URI. This is an exact key lookup, unlike
+// Workspace which matches any workspace whose scheme/host/port/user are
+// compatible with the given URI.
+func (m *Manager) HasWorkspace(uri workspaceapi.URI) bool {
+	_, ok := m.workspaces[uri.String()]
+	return ok
+}
+
 // Close closes all resources associated with this Manager.
 func (m *Manager) Close() error {
 	var ret error
