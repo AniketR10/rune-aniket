@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"github.com/ernestrc/logd-go/logging"
+	"github.com/ernestrc/go-multierror"
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -263,7 +264,20 @@ func (m *Manager) OnFocus(prevFocus, newFocus handler.Window) {
 // Close stops all tasks and closes this Manager's resources.
 func (m *Manager) Close() error {
 	m.cancelCtx()
-	return nil
+	var ret error
+	m.tasks.Range(func(k, v any) bool {
+		m.tasks.Delete(k)
+		t := v.(*Task)
+		t.doClose()
+		<-t.doneWaitCh
+		if t.tab != nil {
+			if err := t.b.RemoveTab(t.tab); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		return true
+	})
+	return ret
 }
 
 // allows calling it directly in tests with fake windows
