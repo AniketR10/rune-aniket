@@ -72,7 +72,7 @@ func main() {
 	ollamaRegistry := ollama.NewRegistry("")
 	registry := llmregistry.NewComposite(static, ollamaRegistry)
 
-	defaultModel := openai.GPT5Dot4
+	defaultModel := openai.GPT5Dot5
 
 	ext, metadata := extension.NewExtension(registry, defaultModel)
 	err := extensionapi.ServeWorkspaceExtension(ext, metadata)

@@ -565,8 +565,8 @@ func newCommandEventHandler(
 	if _, ok := ret.modelRegistry.Get(ctx, ret.defaultModel); !ok {
 		slog.Warn("default model not found in registry, falling back",
 			"requested", ret.defaultModel,
-			"fallback", openai.GPT5Dot4)
-		ret.defaultModel = openai.GPT5Dot4
+			"fallback", openai.GPT5Dot5)
+		ret.defaultModel = openai.GPT5Dot5
 	}
 
 	ret.cfg = defaultComponentCfg

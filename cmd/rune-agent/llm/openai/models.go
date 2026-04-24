@@ -34,6 +34,8 @@ import (
 const LLMProvider = "openai"
 
 const (
+	// GPT5Dot5 is the GPT-5.5 model.
+	GPT5Dot5 = "gpt-5.5"
 	// GPT5Dot4 is the GPT-5.4 model.
 	GPT5Dot4 = "gpt-5.4"
 	// GPT5Dot4Pro is the GPT-5.4 Pro model.
@@ -185,7 +187,7 @@ func supportedEfforts(model string) map[string]bool {
 	switch {
 	case model == GPT5Dot4Pro:
 		return gpt5Dot4ProEfforts
-	case model == GPT5Dot4 || strings.HasPrefix(model, "gpt-5.4"):
+	case model == GPT5Dot5 || strings.HasPrefix(model, "gpt-5.4"):
 		return gpt5Dot4Efforts
 	case model == GPT5Dot3Codex || strings.HasPrefix(model, "gpt-5.3-codex"):
 		return gpt5Dot3CodexEfforts
@@ -259,6 +261,7 @@ func IsResponsesOnlyModel(model string) bool {
 // provider at runtime for account- or region-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
+		GPT5Dot5:         1050000,
 		GPT5Dot4:         1050000,
 		GPT5Dot4Pro:      1050000,
 		GPT5Dot4Mini:     1050000,
