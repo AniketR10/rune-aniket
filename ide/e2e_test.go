@@ -72,7 +72,10 @@ command:
 		require.NoError(t, err)
 
 		var mu sync.Mutex
-		i, err := ide.New(dir, config.Name(), dir, ide.WithLocker(&mu))
+		i, err := ide.New(dir, config.Name(), dir,
+			ide.WithLocker(&mu),
+			ide.WithPublishEvent(func(term.Event) bool { return true }),
+		)
 		require.NoError(t, err)
 
 		handler := i.Ready()
@@ -138,6 +141,7 @@ command:
 		i, err := ide.New(dir, config.Name(), dir,
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
+			ide.WithPublishEvent(func(term.Event) bool { return true }),
 		)
 		require.NoError(t, err)
 
@@ -200,6 +204,7 @@ command:
 		i, err := ide.New(dir, config.Name(), dir,
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
+			ide.WithPublishEvent(func(term.Event) bool { return true }),
 		)
 		require.NoError(t, err)
 
