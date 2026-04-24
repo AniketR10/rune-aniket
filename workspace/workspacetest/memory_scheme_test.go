@@ -97,3 +97,27 @@ func TestMemoryFile(t *testing.T) {
 		assert.Equal(t, "345", string(data))
 	})
 }
+
+// memoryScheme.Close used to iterate each event bucket and close every
+// channel it found. Because Watch stores the same channel in one bucket per
+// subscribed event, a watcher registered for several events (as the IDE
+// registers Create/Write/Remove/Rename) would trigger "close of closed
+// channel" on the second bucket.
+func TestMemoryScheme_CloseDoesNotDoubleCloseMultiEventWatchers(t *testing.T) {
+	ctx := context.Background()
+	uri, err := workspaceapi.ParseURI("memory:///workspace")
+	require.NoError(t, err)
+
+	mem, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	ch := make(chan schemeapi.EventInfo, 1)
+	_, err = mem.Watch("/workspace/...", ch,
+		schemeapi.Create, schemeapi.Write, schemeapi.Remove, schemeapi.Rename)
+	require.NoError(t, err)
+
+	// Must not panic with "close of closed channel".
+	require.NotPanics(t, func() {
+		require.NoError(t, mem.Close())
+	})
+}

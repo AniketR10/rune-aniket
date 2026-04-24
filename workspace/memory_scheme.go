@@ -515,10 +515,12 @@ func (m *memoryScheme) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, chs := range m.watchpoints {
-		for _, ch := range chs {
-			close(ch)
-		}
+	// Close each watcher channel exactly once. Watch appends the same channel
+	// into one bucket per subscribed event, so iterating m.watchpoints here
+	// would try to close the same channel multiple times. watchpointIDs is
+	// keyed by watchpoint ID and holds each channel exactly once.
+	for _, ch := range m.watchpointIDs {
+		close(ch)
 	}
 
 	m.files = nil
