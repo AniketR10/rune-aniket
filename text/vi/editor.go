@@ -68,7 +68,7 @@ func (e *viEditor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
 	indentRune := text.IndentRuneTab
-	if r, ok := text.IndentRuneForURI(file, e.config.indents); ok {
+	if r, ok := text.IndentRuneForURI(file, buf, e.config.indents); ok {
 		indentRune = r
 	}
 	root := NewWithIndentRune(buf, file, indentRune, e.opts...)

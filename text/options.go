@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
@@ -139,14 +140,72 @@ func (c IndentConfig) ForLanguage(lang string) (rune, bool) {
 	return r, ok
 }
 
-// IndentRuneForURI returns the indent rune for the given URI if its language
-// can be determined and a config is present.
-func IndentRuneForURI(uri workspaceapi.URI, indents IndentConfig) (rune, bool) {
+// IndentRuneForURI returns the indent rune for the given URI.
+//
+// Resolution order:
+//  1. If the language cannot be determined from the URI, return (0, false).
+//  2. If the buffer's existing indentation is conclusive (only tabs or only
+//     spaces found at the start of indented lines), prefer the detected
+//     rune. This ensures we do not introduce mixed tab/space indentation
+//     into files that already use one style — notably relevant for Python.
+//  3. Otherwise fall back to the configured indent rune for the language.
+//  4. If no configuration is present either, return (0, false).
+func IndentRuneForURI(
+	uri workspaceapi.URI, buf *cell.Buffer, indents IndentConfig,
+) (rune, bool) {
 	lang, err := languages.LanguageForFile(filepath.Base(uri.Path()))
 	if err != nil {
 		return 0, false
 	}
+	if r, ok := detectIndentRune(buf); ok {
+		return r, true
+	}
 	return indents.ForLanguage(lang)
+}
+
+// detectIndentScanLimit is the maximum number of non-empty rows inspected
+// by detectIndentRune before giving up.
+const detectIndentScanLimit = 500
+
+// detectIndentRune inspects the leading runes of the given buffer's rows
+// and reports whether the file is consistently indented with tabs or
+// spaces. It returns (0, false) when the buffer is nil, empty, or uses
+// a mix of both styles (inconclusive).
+//
+// A row counts as tab-indented when its first cell is '\t'. A row counts
+// as space-indented when its first two cells are both ' ' (single leading
+// spaces are ignored to avoid false positives on non-indent content such
+// as Markdown paragraphs). All other rows are ignored.
+func detectIndentRune(buf *cell.Buffer) (rune, bool) {
+	if buf == nil {
+		return 0, false
+	}
+	rows := buf.RawCells()
+	tabs, spaces, scanned := 0, 0, 0
+	for _, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+		scanned++
+		if scanned > detectIndentScanLimit {
+			break
+		}
+		switch row[0].Ch {
+		case IndentRuneTab:
+			tabs++
+		case IndentRuneSpace:
+			if len(row) >= 2 && row[1].Ch == IndentRuneSpace {
+				spaces++
+			}
+		}
+	}
+	switch {
+	case tabs > 0 && spaces == 0:
+		return IndentRuneTab, true
+	case spaces > 0 && tabs == 0:
+		return IndentRuneSpace, true
+	}
+	return 0, false
 }
 
 // ForLanguage returns the comment spec for a language ID.

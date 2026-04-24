@@ -73,7 +73,7 @@ func (e *editor) Edit(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (ret text.Handler, err error) {
 	indentRune := text.IndentRuneTab
-	if r, ok := text.IndentRuneForURI(file, e.indents); ok {
+	if r, ok := text.IndentRuneForURI(file, buf, e.indents); ok {
 		indentRune = r
 	}
 	handler := NewHandler(buf, file, indentRune, e.opts...)

@@ -91,7 +91,7 @@ func (u indentCommandHandler) HandleCommand(
 ) (err error) {
 	switch cmd.Name {
 	case CommandReindent:
-		indentRune, ok := IndentRuneForURI(u.file, u.indents)
+		indentRune, ok := IndentRuneForURI(u.file, u.cursor.buffer(), u.indents)
 		if !ok {
 			indentRune = IndentRuneTab
 		}
