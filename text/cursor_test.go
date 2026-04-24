@@ -4955,6 +4955,336 @@ func TestCursorWrap(t *testing.T) {
 	})
 }
 
+func TestCursorWrapParagraph(t *testing.T) {
+	t.Parallel()
+
+	type testCase struct {
+		name           string
+		content        string
+		cursor         term.Coordinates
+		ruler          int
+		commentSpec    CommentSpec
+		wantChanged    bool
+		wantContent    string
+		wantCursor     *term.Coordinates
+		wrapAgainNoOp  bool
+		wantSecondText string
+	}
+
+	coord := func(pos term.Coordinates) *term.Coordinates { return &pos }
+
+	tests := []testCase{
+		{
+			name:        "wraps plain paragraph to ruler",
+			content:     "alpha beta gamma delta\nepsilon zeta eta theta\n\nnext paragraph",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       20,
+			wantChanged: true,
+			wantContent: "alpha beta gamma\ndelta epsilon zeta\neta theta\n\nnext paragraph",
+			wantCursor:  coord(term.Coordinates{Y: 0, X: 0}),
+		},
+		{
+			name:        "preserves indentation while wrapping",
+			content:     "    alpha beta gamma delta epsilon zeta\n    eta theta iota\n",
+			cursor:      term.Coordinates{Y: 0, X: 4},
+			ruler:       20,
+			wantChanged: true,
+			wantContent: "    alpha beta gamma\n    delta epsilon\n    zeta eta theta\n    iota\n",
+		},
+		{
+			name:        "reflows line comments preserving comment leader",
+			content:     "// alpha beta gamma delta\n// epsilon zeta eta theta\n\nfn main() {}",
+			cursor:      term.Coordinates{Y: 0, X: 3},
+			ruler:       20,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n\nfn main() {}",
+		},
+		{
+			name:        "returns false when paragraph already fits",
+			content:     "short line\n\nnext",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       90,
+			wantChanged: false,
+			wantContent: "short line\n\nnext",
+			wantCursor:  coord(term.Coordinates{Y: 0, X: 0}),
+		},
+		{
+			name:        "blank line chooses next paragraph",
+			content:     "\n\nalpha beta gamma delta epsilon\nnext line words\n\ntrailing",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       14,
+			wantChanged: true,
+			wantContent: "\n\nalpha beta\ngamma delta\nepsilon next\nline words\n\ntrailing",
+		},
+		{
+			name:        "blank line chooses previous paragraph when no next paragraph exists",
+			content:     "alpha beta gamma delta\n\n\n",
+			cursor:      term.Coordinates{Y: 2, X: 0},
+			ruler:       12,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\n\n\n",
+		},
+		{
+			name:        "empty buffer returns false",
+			content:     "",
+			cursor:      term.Coordinates{},
+			ruler:       10,
+			wantChanged: false,
+			wantContent: "",
+		},
+		{
+			name:        "single very long word stays on one line but still joins paragraph",
+			content:     "supercalifragilisticexpialidocious\nword",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       8,
+			wantChanged: false,
+			wantContent: "supercalifragilisticexpialidocious\nword",
+		},
+		{
+			name:           "already wrapped second invocation is no op",
+			content:        "alpha beta gamma delta epsilon zeta eta theta",
+			cursor:         term.Coordinates{Y: 0, X: 0},
+			ruler:          12,
+			wantChanged:    true,
+			wantContent:    "alpha beta\ngamma delta\nepsilon zeta\neta theta",
+			wrapAgainNoOp:  true,
+			wantSecondText: "alpha beta\ngamma delta\nepsilon zeta\neta theta",
+		},
+		{
+			name:        "preserves multiple blank line separators around paragraph",
+			content:     "before\n\n\nalpha beta gamma delta\nepsilon zeta\n\n\nafter",
+			cursor:      term.Coordinates{Y: 3, X: 0},
+			ruler:       12,
+			wantChanged: true,
+			wantContent: "before\n\n\nalpha beta\ngamma delta\nepsilon zeta\n\n\nafter",
+		},
+		{
+			name:        "handles very long line followed by very short line",
+			content:     "alpha beta gamma delta epsilon zeta eta theta iota kappa\nx\n\nend",
+			cursor:      term.Coordinates{Y: 0, X: 10},
+			ruler:       16,
+			wantChanged: true,
+			wantContent: "alpha beta gamma\ndelta epsilon\nzeta eta theta\niota kappa x\n\nend",
+		},
+		{
+			name:        "preserves tab indentation",
+			content:     "\talpha beta gamma delta epsilon\n\teta theta\n",
+			cursor:      term.Coordinates{Y: 0, X: 1},
+			ruler:       14,
+			wantChanged: true,
+			wantContent: "\talpha beta\n\tgamma delta\n\tepsilon eta\n\ttheta\n",
+		},
+		{
+			name:        "line comments without trailing space leader are preserved",
+			content:     "//alpha beta gamma delta\n//epsilon zeta eta theta",
+			cursor:      term.Coordinates{Y: 0, X: 2},
+			ruler:       16,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "//alpha beta\n//gamma delta\n//epsilon zeta\n//eta theta",
+		},
+		{
+			name:        "mixed commented and uncommented lines do not preserve comment leader",
+			content:     "// alpha beta gamma\ndelta epsilon zeta",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       16,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "// alpha beta\ngamma delta\nepsilon zeta",
+		},
+		{
+			name:        "cursor inside second line of paragraph still wraps paragraph",
+			content:     "alpha beta gamma\ndelta epsilon zeta eta\n\nend",
+			cursor:      term.Coordinates{Y: 1, X: 4},
+			ruler:       15,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\neta\n\nend",
+		},
+		{
+			name:        "null character inside paragraph is preserved as content",
+			content:     "alpha \x00 beta gamma delta\nepsilon zeta",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       12,
+			wantChanged: true,
+			wantContent: "alpha \x00 beta\ngamma delta\nepsilon zeta",
+		},
+		{
+			name:        "ruler zero is no op",
+			content:     "alpha beta gamma delta",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       0,
+			wantChanged: false,
+			wantContent: "alpha beta gamma delta",
+		},
+		{
+			name:        "ruler smaller than indent still wraps one word per line",
+			content:     "        alpha beta gamma",
+			cursor:      term.Coordinates{Y: 0, X: 8},
+			ruler:       2,
+			wantChanged: true,
+			wantContent: "        alpha\n        beta\n        gamma",
+		},
+		{
+			name:        "comment ruler smaller than indent and leader still wraps one word per line",
+			content:     "    // alpha beta gamma",
+			cursor:      term.Coordinates{Y: 0, X: 4},
+			ruler:       3,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "    // alpha\n    // beta\n    // gamma",
+		},
+		{
+			name:        "single line paragraph that needs wrap",
+			content:     "alpha beta gamma delta epsilon",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       11,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon",
+		},
+		{
+			name:        "whitespace normalization collapses repeated spaces within paragraph",
+			content:     "alpha   beta\tgamma\ndelta",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       20,
+			wantChanged: true,
+			wantContent: "alpha beta gamma\ndelta",
+		},
+		{
+			name:        "cursor on blank line between very short and very long paragraphs chooses next paragraph",
+			content:     "x\n\nalpha beta gamma delta epsilon zeta eta theta\n",
+			cursor:      term.Coordinates{Y: 1, X: 0},
+			ruler:       14,
+			wantChanged: true,
+			wantContent: "x\n\nalpha beta\ngamma delta\nepsilon zeta\neta theta\n",
+		},
+		{
+			name:        "comment paragraph with indentation preserved on all wrapped lines",
+			content:     "    // alpha beta gamma delta epsilon\n    // zeta eta theta\n",
+			cursor:      term.Coordinates{Y: 0, X: 4},
+			ruler:       18,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "    // alpha beta\n    // gamma delta\n    // epsilon\n    // zeta eta\n    // theta\n",
+		},
+		{
+			name:        "block comment syntax configured but no shared line leader means literal wrap",
+			content:     "/* alpha beta gamma delta */\nepsilon zeta eta",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       18,
+			commentSpec: CommentSpec{Block: []CommentBlock{{Start: "/*", End: "*/"}}},
+			wantChanged: true,
+			wantContent: "/* alpha beta\ngamma delta */\nepsilon zeta eta",
+		},
+		{
+			name:        "crlf style content is normalized by buffer and still wraps safely",
+			content:     "alpha beta gamma delta\r\nepsilon zeta eta\r\n\r\nend",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       16,
+			wantChanged: true,
+			wantContent: "alpha beta gamma\ndelta epsilon\nzeta eta end",
+		},
+		{
+			name:           "unicode wide characters remain stable under double wrap",
+			content:        "你好 世界 再见 朋友 测试 内容",
+			cursor:         term.Coordinates{Y: 0, X: 0},
+			ruler:          8,
+			wantChanged:    true,
+			wantContent:    "你好\n世界\n再见\n朋友\n测试\n内容",
+			wrapAgainNoOp:  true,
+			wantSecondText: "你好\n世界\n再见\n朋友\n测试\n内容",
+		},
+		{
+			name:        "hidden lines outside paragraph do not affect wrap result",
+			content:     "head1\nhead2\n\nalpha beta gamma delta epsilon zeta\neta theta\n\ntail1\ntail2",
+			cursor:      term.Coordinates{Y: 3, X: 0},
+			ruler:       14,
+			wantChanged: true,
+			wantContent: "head1\nhead2\n\nalpha beta\ngamma delta\nepsilon zeta\neta theta\n\ntail1\ntail2",
+		},
+		{
+			name:        "paragraph with punctuation preserves tokens and wraps only on spaces",
+			content:     "alpha,beta gamma.delta epsilon-zeta eta/theta",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       18,
+			wantChanged: true,
+			wantContent: "alpha,beta\ngamma.delta\nepsilon-zeta\neta/theta",
+		},
+		{
+			name:        "single nonblank line containing only whitespace around null remains no op when already minimal",
+			content:     "\x00",
+			cursor:      term.Coordinates{Y: 0, X: 0},
+			ruler:       5,
+			wantChanged: false,
+			wantContent: "\x00",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 20, tc.content, false)
+			if tc.commentSpec.HasLine() || tc.commentSpec.HasBlock() {
+				attachCommentTestView(c, tc.commentSpec)
+			}
+			if tc.content != "" {
+				setCursorAtOrFail(t, c, tc.cursor)
+			}
+			if tc.name == "hidden lines outside paragraph do not affect wrap result" {
+				require.True(t, c.scroll.MarkHidden(0, 1))
+				require.True(t, c.scroll.MarkHidden(6, 7))
+			}
+
+			changed := c.WrapParagraph(tc.ruler)
+			assert.Equal(t, tc.wantChanged, changed)
+			assert.Equal(t, tc.wantContent, c.buffer().String())
+			if tc.wantCursor != nil {
+				assert.Equal(t, *tc.wantCursor, c.CursorAtScroll())
+			}
+			if tc.wrapAgainNoOp {
+				assert.False(t, c.WrapParagraph(tc.ruler))
+				assert.Equal(t, tc.wantSecondText, c.buffer().String())
+			}
+		})
+	}
+}
+
+func FuzzCursorWrapParagraph(f *testing.F) {
+	seeds := []struct {
+		content string
+		ruler   int
+		line    string
+	}{
+		{"alpha beta gamma delta\nepsilon zeta\n\nend", 12, ""},
+		{"// alpha beta gamma delta\n// epsilon zeta eta\n", 16, "//"},
+		{"\talpha beta gamma\n\tdelta epsilon\n", 10, ""},
+		{"alpha \x00 beta gamma\ndelta", 12, ""},
+		{"你好 世界 再见 朋友", 8, ""},
+	}
+	for _, seed := range seeds {
+		f.Add(seed.content, seed.ruler, seed.line)
+	}
+
+	f.Fuzz(func(t *testing.T, content string, ruler int, line string) {
+		if ruler < -10 || ruler > 200 {
+			return
+		}
+		c := setupCursorContent(t, 80, 20, content, false)
+		if line != "" {
+			attachCommentTestView(c, CommentSpec{Line: []string{line}})
+		}
+		if c.rows() > 0 {
+			_, _ = c.MoveToScroll(term.Coordinates{})
+		}
+
+		_ = c.WrapParagraph(ruler)
+		afterFirst := c.buffer().String()
+		_ = c.WrapParagraph(ruler)
+		afterSecond := c.buffer().String()
+
+		assert.Equal(t, afterFirst, afterSecond)
+	})
+}
+
 func TestCursorSelectWordInsertWord(t *testing.T) {
 	for _, wrap := range []bool{false, true} {
 		t.Run(fmt.Sprintf("wrap:%v", wrap), func(t *testing.T) {

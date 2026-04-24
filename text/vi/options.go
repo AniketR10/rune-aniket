@@ -43,6 +43,7 @@ type viConfig struct {
 	tabspaces          int
 	indents            text.IndentConfig
 	indentRune         rune
+	ruler              int
 	scheduleNextTick   func(func()) bool
 	defaultRegister    string
 	registry           text.WorkspaceCommandRegistry
@@ -92,6 +93,7 @@ func defaultviHandlerImplConfig() viConfig {
 	return viConfig{
 		tabspaces:  component.DefaultTabspaces,
 		indentRune: text.IndentRuneTab,
+		ruler:      90,
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},
@@ -120,6 +122,13 @@ func WithTabspaces(tabspaces int) Option {
 func WithIndents(indents text.IndentConfig) Option {
 	return func(cfg *viConfig) {
 		cfg.indents = indents
+	}
+}
+
+// WithRuler sets the ruler column used by paragraph reflow commands.
+func WithRuler(ruler int) Option {
+	return func(cfg *viConfig) {
+		cfg.ruler = ruler
 	}
 }
 

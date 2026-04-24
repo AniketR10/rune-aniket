@@ -1754,6 +1754,13 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 		case '"':
 			vi.pendingRegister = true
 		case 'g':
+			if mode, ok := vi.cursor.SelectionMode(); ok && mode == text.LineSelection {
+				if vi.pendingGoMotion {
+					vi.pendingGoMotion = false
+				}
+				vi.setGMode()
+				return
+			}
 			vi.setGMode()
 			return
 		case 'z':
@@ -1842,7 +1849,9 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.setNormalMode()
 		}
 	default:
-		vi.cursor.Unselect()
+		if vi.mode() != gMode {
+			vi.cursor.Unselect()
+		}
 	}
 
 	return
@@ -1976,6 +1985,16 @@ func (vi *viHandlerImpl) handleMetaGo(ev term.Event) (quit, handled, done bool) 
 	switch ev.Mod {
 	case 0:
 		switch ev.Ch {
+		case 'g':
+			vi.cursor.MoveToScroll(vi.anchor)
+			if vi.count == 1 {
+				vi.cursor.MoveFirstLine()
+			} else {
+				target := max(0, min(vi.count-1, vi.less.Buffer().Rows()-1))
+				vi.setCursorAtScroll(term.Coordinates{Y: target})
+			}
+			vi.resetCount()
+			handled = true
 		case 'e':
 			vi.repeatMotion(vi.cursor.MoveLeftEndWord)
 			handled = true
@@ -2023,6 +2042,15 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 		if vi.pendingGoMotion {
 			vi.pendingGoMotion = false
 			switch ev.Ch {
+			case 'g':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'g'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
 			case 'e':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'e'})
 				if !done {
@@ -2135,6 +2163,15 @@ func (vi *viHandlerImpl) handleShift(ev term.Event) (quit, handled bool) {
 		if vi.pendingGoMotion {
 			vi.pendingGoMotion = false
 			switch ev.Ch {
+			case 'g':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'g'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
 			case 'e':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'e'})
 				if !done {
@@ -2347,6 +2384,15 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 		if vi.pendingGoMotion {
 			vi.pendingGoMotion = false
 			switch ev.Ch {
+			case 'g':
+				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'g'})
+				if !done {
+					return quit, handled
+				}
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return quit, true
 			case 'e':
 				quit, handled, done := vi.handleMetaGo(term.Event{Type: ev.Type, Mod: ev.Mod, Ch: 'e'})
 				if !done {
@@ -2412,7 +2458,7 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 				return false, true
 			}
 			selectionMode, ok := vi.cursor.SelectionMode()
-			if ok && selectionMode == text.StandardSelection &&
+			if vi.commentRepeat == 'c' && ok && selectionMode == text.StandardSelection &&
 				!strings.Contains(vi.cursor.Selection(), "\n") &&
 				vi.cursor.ToggleBlockComment() {
 				vi.cursor.Unselect()
@@ -2428,6 +2474,13 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 		case 'g':
 			vi.pendingGoMotion = true
 			return false, true
+		case '_':
+			if vi.selectLineCount() {
+				vi.commentFn()
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return false, true
+			}
 		case 'i':
 			vi.setTextObjectPending(false)
 			return false, true
@@ -2633,6 +2686,18 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 				return
 			}
 			vi.setCommentMode(vi.cursor.ToggleLineComment, 'c')
+			handled = true
+			return
+		case 'q':
+			if _, ok := vi.cursor.SelectionMode(); ok {
+				handled = vi.cursor.WrapSelectedParagraph(vi.config.ruler)
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return
+			}
+			vi.setCommentMode(func() bool {
+				return vi.cursor.WrapSelectedParagraph(vi.config.ruler)
+			}, 'q')
 			handled = true
 			return
 		case 'e':

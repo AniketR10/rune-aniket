@@ -39,6 +39,7 @@ type modelessConfig struct {
 	tabspaces          int
 	indents            text.IndentConfig
 	indentRune         rune
+	ruler              int
 	attr               term.Attributes
 	resAttr            term.Attributes
 	comments           text.CommentConfig
@@ -69,6 +70,7 @@ func defaultConfig() modelessConfig {
 	return modelessConfig{
 		tabspaces:  component.DefaultTabspaces,
 		indentRune: text.IndentRuneTab,
+		ruler:      90,
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},
@@ -103,6 +105,13 @@ func WithTabspaces(tabspaces int) Option {
 func WithIndents(indents text.IndentConfig) Option {
 	return func(cfg *modelessConfig) {
 		cfg.indents = indents
+	}
+}
+
+// WithRuler sets the ruler column used by paragraph reflow commands.
+func WithRuler(ruler int) Option {
+	return func(cfg *modelessConfig) {
+		cfg.ruler = ruler
 	}
 }
 

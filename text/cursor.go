@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
@@ -1545,7 +1546,7 @@ func (c *Cursor) isBlankLine(y int) bool {
 	}
 	for x := range cols {
 		cell, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: y, X: x})
-		if ok && !isWordObjectBlank(cell.Ch) {
+		if ok && !isWrapParagraphBlank(cell.Ch) {
 			return false
 		}
 	}
@@ -1597,6 +1598,225 @@ found:
 		}
 	}
 	return startLine, endLine, true
+}
+
+// WrapParagraph reflows the current paragraph to fit within the given ruler.
+// It preserves indentation and re-applies a common line comment leader when
+// the paragraph is a block of line comments.
+func (c *Cursor) WrapParagraph(ruler int) bool {
+	if ruler <= 0 {
+		return false
+	}
+	startLine, endLine, ok := c.paragraphLines(false)
+	if !ok {
+		return false
+	}
+	indent, leader, bodyLines, ok := c.wrapParagraphParts(startLine, endLine)
+	if !ok {
+		return false
+	}
+	return c.wrapParagraphRange(startLine, endLine, indent, leader, bodyLines, ruler)
+}
+
+// WrapSelectedParagraph reflows the current selected line range. It is intended
+// for visual-line gq style formatting where the selected comment block should be
+// reformatted without absorbing surrounding code.
+func (c *Cursor) WrapSelectedParagraph(ruler int) bool {
+	if ruler <= 0 {
+		return false
+	}
+	mode, ok := c.SelectionMode()
+	if !ok || mode == BlockSelection {
+		return false
+	}
+	chunks := c.wrapSelectedParagraphChunks()
+	if len(chunks) == 0 {
+		return false
+	}
+	var changed bool
+	for i := len(chunks) - 1; i >= 0; i-- {
+		chunk := chunks[i]
+		indent, leader, bodyLines, ok := c.wrapParagraphParts(chunk.startLine, chunk.endLine)
+		if !ok {
+			continue
+		}
+		if c.wrapParagraphRange(chunk.startLine, chunk.endLine, indent, leader, bodyLines, ruler) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+type wrapParagraphChunk struct {
+	startLine int
+	endLine   int
+}
+
+func (c *Cursor) wrapSelectedParagraphChunks() []wrapParagraphChunk {
+	startLine, endLine := c.commentLineBounds()
+	firstContent := -1
+	for y := startLine; y <= endLine; y++ {
+		if strings.TrimSpace(c.lineString(y)) != "" {
+			firstContent = y
+			break
+		}
+	}
+	if firstContent < 0 {
+		return nil
+	}
+	firstIsComment := c.lineHasAnyCommentPrefix(firstContent)
+	var chunks []wrapParagraphChunk
+	for y := startLine; y <= endLine; {
+		for y <= endLine && strings.TrimSpace(c.lineString(y)) == "" {
+			y++
+		}
+		if y > endLine {
+			break
+		}
+
+		isComment := c.lineHasAnyCommentPrefix(y)
+		if firstIsComment && !isComment {
+			break
+		}
+
+		chunkStart := y
+		for y <= endLine {
+			line := c.lineString(y)
+			if strings.TrimSpace(line) == "" {
+				break
+			}
+			if c.lineHasAnyCommentPrefix(y) != isComment {
+				break
+			}
+			y++
+		}
+		chunks = append(chunks, wrapParagraphChunk{startLine: chunkStart, endLine: y - 1})
+	}
+	return chunks
+}
+
+func (c *Cursor) lineHasAnyCommentPrefix(y int) bool {
+	if !c.commentSpec.HasLine() {
+		return false
+	}
+	trimmed := strings.TrimLeft(c.lineString(y), " \t")
+	for _, prefix := range c.commentSpec.Line {
+		if strings.HasPrefix(trimmed, prefix+" ") || strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cursor) wrapParagraphRange(startLine, endLine int, indent, leader string, bodyLines []string, ruler int) bool {
+	body := strings.Join(strings.Fields(strings.Join(bodyLines, " ")), " ")
+	if body == "" {
+		return false
+	}
+	available := ruler - graphemecluster.StringWidth(indent) - graphemecluster.StringWidth(leader)
+	if available <= 0 {
+		available = 1
+	}
+	wrapped := wrapTextWords(body, available)
+	if len(wrapped) == 0 {
+		return false
+	}
+	for i := range wrapped {
+		wrapped[i] = indent + leader + wrapped[i]
+	}
+	replacement := strings.Join(wrapped, "\n")
+	from := term.Coordinates{Y: startLine}
+	to := term.Coordinates{Y: endLine, X: c.buffer().Columns(endLine)}
+	if c.rangeString(from, to) == replacement {
+		return false
+	}
+	cur := c.CursorAtScroll()
+	_, after, _ := c.buffer().Edit(c.ctx, from, to, replacement)
+	if cur.Y >= startLine && cur.Y <= endLine {
+		cur.Y = min(cur.Y, startLine+len(wrapped)-1)
+		cur.X = min(cur.X, c.buffer().Columns(cur.Y))
+		c.setCursorAfterUpdate(cur)
+		return true
+	}
+	c.setCursorAfterUpdate(after)
+	return true
+}
+
+func (c *Cursor) wrapParagraphParts(startLine, endLine int) (indent, leader string, bodyLines []string, ok bool) {
+	lines := make([]string, 0, endLine-startLine+1)
+	for y := startLine; y <= endLine; y++ {
+		lines = append(lines, c.lineString(y))
+	}
+	if len(lines) == 0 {
+		return "", "", nil, false
+	}
+	indent = leadingWhitespace(lines[0])
+	leader = c.commonCommentLeader(lines)
+	for _, line := range lines {
+		trimmed := strings.TrimPrefix(line, indent)
+		if leader != "" {
+			trimmed = strings.TrimPrefix(trimmed, leader)
+		}
+		trimmed = strings.TrimSpace(trimmed)
+		if trimmed != "" {
+			bodyLines = append(bodyLines, trimmed)
+		}
+	}
+	if len(bodyLines) == 0 {
+		return "", "", nil, false
+	}
+	return indent, leader, bodyLines, true
+}
+
+func (c *Cursor) commonCommentLeader(lines []string) string {
+	if !c.commentSpec.HasLine() {
+		return ""
+	}
+	linePrefix := c.commentSpec.Line[0]
+	leader := linePrefix + " "
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if !strings.HasPrefix(trimmed, linePrefix) {
+			return ""
+		}
+		if !strings.HasPrefix(trimmed, leader) {
+			leader = linePrefix
+		}
+	}
+	return leader
+}
+
+func leadingWhitespace(s string) string {
+	for i, r := range s {
+		if r != ' ' && r != '\t' {
+			return s[:i]
+		}
+	}
+	return s
+}
+
+func wrapTextWords(text string, width int) []string {
+	if width <= 0 {
+		width = 1
+	}
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return nil
+	}
+	lines := []string{words[0]}
+	for _, word := range words[1:] {
+		current := lines[len(lines)-1]
+		if graphemecluster.StringWidth(current)+1+graphemecluster.StringWidth(word) <= width {
+			lines[len(lines)-1] = current + " " + word
+			continue
+		}
+		lines = append(lines, word)
+	}
+	return lines
+}
+
+func isWrapParagraphBlank(r rune) bool {
+	return r == '\x00' || r == ' ' || r == '\t' || r == '\r'
 }
 
 // SelectInnerParagraph selects the current paragraph without surrounding blank lines.

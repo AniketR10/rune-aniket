@@ -1188,6 +1188,23 @@ func (c ideConfig) editorMode() (ret string) {
 	return
 }
 
+func (c ideConfig) editorRuler() (ruler int) {
+	ruler = 90
+	cfg, ok := c.editor()
+	if !ok {
+		return
+	}
+	value, err := cfg.GetInt("ruler")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.ruler"] = err
+		}
+		return
+	}
+	ruler = value
+	return
+}
+
 func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
 	cfg, ok := c.virtual()
 	if !ok {

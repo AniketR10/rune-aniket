@@ -68,6 +68,7 @@ default_attr:
     fg: "#f2f2f2"
 
 editor:
+    ruler: 72
     status_bar:
         enabled: true
         background_attr:
@@ -400,6 +401,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
 	assert.True(t, cfg.autoRestore())
 	assert.Equal(t, "  ", cfg.tabNameSeparator())
+	assert.Equal(t, 90, cfg.editorRuler())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
 	syntaxConfig := cfg.syntaxConfig()
@@ -454,6 +456,7 @@ func TestConfigSetting(t *testing.T) {
 		term.RingBell, term.ScheduleNextTick, "", "")
 
 	assert.Equal(t, 4, cfg.editorTabspaces())
+	assert.Equal(t, 72, cfg.editorRuler())
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
 	assert.True(t, ok)
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())

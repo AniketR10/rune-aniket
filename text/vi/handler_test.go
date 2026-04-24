@@ -6543,6 +6543,331 @@ func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
 	}
 }
 
+func TestGoFormatWrapParagraph(t *testing.T) {
+	type tc struct {
+		name               string
+		content            string
+		before             func(t *testing.T, vi *viHandlerImpl)
+		events             string
+		keyEvents          []term.Event
+		ruler              int
+		width              int
+		wantContent        string
+		wantMode           viMode
+		wantSelected       bool
+		allowUnhandledLast bool
+	}
+
+	setupWrapVi := func(t *testing.T, content string, ruler, width int) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t,
+			content,
+			2,
+			WithRuler(ruler),
+			WithComments(text.CommentConfig{
+				"go": {Line: []string{"//"}},
+			}),
+		)
+		vi.Resize(width, 20)
+
+		buf := vi.less.Buffer()
+		buf.WithView(testCommentService{view: buf.View(), line: []string{"//"}})
+		vi.cursor.SetCommentSpec(text.CommentSpec{Line: []string{"//"}})
+		return vi
+	}
+
+	callbackAdapterContent := `// callbackAdapter adapts semanticapi.LSPCallback to jsonrpc2.Handler. jfkejwflkwejflwejflew jfklej wklefjkl jfwe jfklw jfklwej elfkj wlkjf klwejfl wjefkl jeklfjw
+// fjewkjfewl
+// jfekljfwlwejflkwefjklwjeflkjlwkef fjlk w jflkew fwekljfewj lfwjelkwlkfjewlkfj j jlfkwejlfkj
+type callbackAdapter struct {
+	cb         semanticapi.LSPCallback
+	serverName string
+}
+`
+
+	suite := []tc{
+		{
+			name:    "gqq wraps current line only",
+			content: "// alpha beta gamma delta epsilon zeta eta theta\n// iota kappa lambda mu\n\nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gqq",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n// iota kappa lambda mu\n\nnext\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "2gqq wraps current and next line via operator count",
+			content: "// alpha beta gamma\n// delta epsilon zeta\n\nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "2gqq",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta\n\nnext\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqj wraps current and next line only",
+			content: "keep me untouched\nalpha beta gamma delta epsilon\nzeta eta theta\nleave me too\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0}))
+			},
+			events:      "gqj",
+			ruler:       16,
+			width:       80,
+			wantContent: "keep me untouched\nalpha beta gamma\ndelta epsilon\nzeta eta theta\nleave me too\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqk wraps previous and current line only",
+			content: "keep me untouched\nalpha beta gamma delta epsilon\nzeta eta theta\nleave me too\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
+			},
+			events:      "gqk",
+			ruler:       16,
+			width:       80,
+			wantContent: "keep me untouched\nalpha beta gamma\ndelta epsilon\nzeta eta theta\nleave me too\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqgk wraps previous and current line via meta motion",
+			content: "keep me untouched\nalpha beta gamma delta epsilon\nzeta eta theta\nleave me too\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
+			},
+			events:      "gqgk",
+			ruler:       16,
+			width:       80,
+			wantContent: "keep me untouched\nalpha beta gamma\ndelta epsilon\nzeta eta theta\nleave me too\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "2gqj uses operator count across three comment lines",
+			content: "// alpha beta\n// gamma delta\n// epsilon zeta\nstop\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "2gqj",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta\nstop\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq2j uses post operator count across three comment lines",
+			content: "// alpha beta\n// gamma delta\n// epsilon zeta\nstop\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gq2j",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta\nstop\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqg_ wraps current line using meta underscore motion",
+			content: "// alpha beta gamma delta   \nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gqg_",
+			ruler:       14,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\nnext\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq_ wraps current line using underscore motion",
+			content: "// alpha beta gamma delta   \nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gq_",
+			ruler:       14,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\nnext\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqgg wraps from cursor line to first line",
+			content: "// alpha beta gamma\n// delta epsilon zeta\n// one two three four\n// LAST\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 3}))
+			},
+			events:      "gqgg",
+			ruler:       20,
+			width:       60,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta one two\n// three four\n// LAST\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqiw formats and does not toggle block comments",
+			content: "alpha beta gamma delta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetCommentSpec(text.CommentSpec{
+					Line:  []string{"//"},
+					Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+				})
+				vi.less.Buffer().WithView(testCommentService{
+					view:  vi.less.Buffer().View(),
+					line:  []string{"//"},
+					block: []string{"/*", "*/"},
+				})
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("alpha ")}))
+			},
+			events:      "gqiw",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqip wraps inner comment paragraph only",
+			content: "// alpha beta gamma delta\n// epsilon zeta eta theta\n\n// keep second paragraph intact\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gqip",
+			ruler:       20,
+			width:       60,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n\n// keep second paragraph intact\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqap wraps around paragraph selection without swallowing next paragraph",
+			content: "// alpha beta gamma delta\n// epsilon zeta eta theta\n\n// keep second paragraph intact\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gqap",
+			ruler:       20,
+			width:       60,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n\n// keep second\n// paragraph intact\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "visual line gq reflows selected comment block without swallowing following code",
+			content: callbackAdapterContent,
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events: "Vjjgq",
+			ruler:  80,
+			width:  120,
+			wantContent: `// callbackAdapter adapts semanticapi.LSPCallback to jsonrpc2.Handler.
+// jfkejwflkwejflwejflew jfklej wklefjkl jfwe jfklw jfklwej elfkj wlkjf klwejfl
+// wjefkl jeklfjw fjewkjfewl jfekljfwlwejflkwefjklwjeflkjlwkef fjlk w jflkew
+// fwekljfewj lfwjelkwlkfjewlkfj j jlfkwejlfkj
+type callbackAdapter struct {
+	cb         semanticapi.LSPCallback
+	serverName string
+}
+`,
+			wantMode: normalMode,
+		},
+		{
+			name:    "visual line gq formats selected plain paragraphs independently",
+			content: "alpha beta gamma delta\nepsilon zeta eta theta\n\none two three four\nfive six seven eight\n",
+			events:      "Vjjjgq",
+			ruler:       12,
+			width:       80,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\neta theta\n\none two\nthree four\nfive six seven eight\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "visual line gq formats selected comment paragraphs independently",
+			content: "// alpha beta gamma delta\n// epsilon zeta eta theta\n\n// one two three four\n// five six seven eight\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "Vjjjgq",
+			ruler:       20,
+			width:       80,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n\n// one two three\n// four\n// five six seven eight\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqg invalid meta motion exits without mutating",
+			content: "// alpha beta gamma delta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gqgz",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma delta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gqE wraps current line via WORD-end motion",
+			content: "// alpha beta gamma delta epsilon\nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gqE",
+			ruler:       18,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\n// epsilon\nnext\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:       "gq slash search wraps through matching line",
+			content:    "one two three four\nalpha beta gamma\nEND marker here\ntail unchanged\n",
+			keyEvents: []term.Event{
+				{Type: term.EventKey, Ch: 'g'},
+				{Type: term.EventKey, Ch: 'q'},
+				{Type: term.EventKey, Ch: '/'},
+				{Type: term.EventKey, Ch: 'E'},
+				{Type: term.EventKey, Ch: 'N'},
+				{Type: term.EventKey, Ch: 'D'},
+				{Type: term.EventKey, Key: term.KeyEnter},
+			},
+			ruler:      12,
+			width:      80,
+			wantContent: "one two\nthree four\nalpha beta\ngamma\nEND marker here\ntail unchanged\n",
+			wantMode:   normalMode,
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupWrapVi(t, tcase.content, tcase.ruler, tcase.width)
+			if tcase.before != nil {
+				tcase.before(t, vi)
+			}
+
+			events := tcase.keyEvents
+			if events == nil {
+				for _, eventChar := range tcase.events {
+					events = append(events, term.Event{Type: term.EventKey, Ch: eventChar})
+				}
+			}
+			for i, ev := range events {
+				quit, handled := vi.Handle(ev)
+				require.False(t, quit)
+				if tcase.allowUnhandledLast && i == len(events)-1 {
+					continue
+				}
+				require.True(t, handled, "event %v should be handled", ev)
+			}
+
+			assert.Equal(t, tcase.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.wantMode, vi.mode())
+			_, selected := vi.Selection()
+			assert.Equal(t, tcase.wantSelected, selected)
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			assert.Equal(t, 0, vi.operatorCount)
+		})
+	}
+}
+
 func TestCursorOutOfBounds(t *testing.T) {
 	for _, wrap := range []bool{false, true} {
 		for _, contentWindowOverflow := range []bool{false, true} {

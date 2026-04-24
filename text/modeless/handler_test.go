@@ -464,7 +464,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		// Text transformation - require selection
 		{"Transform selection to UPPERCASE", "<shift-right><meta-k><meta-u>", new("A\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Transform selection to lowercase", "<shift-right><meta-k><meta-u><home><shift-right><meta-k><meta-l>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		//{"Wrap paragraph at ruler", "<alt-meta-q>", nil, term.Coordinates{}}, // no effect on single character line
+		{"Wrap paragraph at ruler", "<alt-meta-q>", new("alpha beta\ngamma delta\nepsilon zeta\neta theta\n\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		//{"Wrap selection in HTML tag", "<shift-right><ctrl-shift-w>", sp("<p>a</p>\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}},
 		//{"Close current HTML/XML tag", "<alt-meta-.>", nil, term.Coordinates{}}, // No open tag
 
@@ -573,8 +573,12 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 
 			clip := clipboard.NewInMemory()
 			reg := registerhistory.NewClipboard(registerset.New(clip))
+			content := snippet
+			if test.description == "Wrap paragraph at ruler" {
+				content = "alpha beta gamma delta epsilon zeta eta theta\n\ni\nj\nk"
+			}
 			buf := cell.NewBuffer()
-			buf.ReadFrom(strings.NewReader(snippet))
+			buf.ReadFrom(strings.NewReader(content))
 			buf.WithView(testCommentService{
 				view:  buf.View(),
 				line:  []string{"//"},
@@ -584,6 +588,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			handler = NewHandler(buf, uri,
 				text.IndentRuneTab,
 				WithClipboard(reg),
+				WithRuler(12),
 				WithComments(text.CommentConfig{
 					"go": {
 						Line:  []string{"//"},

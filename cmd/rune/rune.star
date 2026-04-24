@@ -279,6 +279,8 @@ config = {
             "nim": "spaces",
             "yaml": "spaces",
         },
+        # Used to determine the max columns to allow in text wrapping operations
+        "ruler": 90,
         # Syntax highlight overrides. Any omitted key inherits the default
         # highlight attributes provided by the active language/parser.
         "highlights": {

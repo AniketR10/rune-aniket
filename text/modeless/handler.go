@@ -282,6 +282,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.ExpandFold(context.Background())
 			case '/':
 				handled = h.cursor.ToggleBlockComment()
+			case 'q':
+				handled = h.cursor.WrapParagraph(h.cfg.ruler)
 			case 'v':
 				if handled = h.pasteFromHistory(); handled {
 					pastedThisTurn = true
