@@ -106,11 +106,16 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	return it, nil
 }
 
-func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines chan string) error {
+func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines chan string) (retErr error) {
 	f, err := w.OpenFile(file, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			retErr = multierr.Append(retErr, err)
+		}
+	}()
 	r := bufio.NewScanner(f)
 	r.Buffer(buffer, len(buffer))
 	var i int

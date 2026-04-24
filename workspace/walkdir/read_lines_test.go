@@ -221,6 +221,40 @@ func TestReadLines_contextWorkerCountLimitsConcurrency(t *testing.T) {
 	}
 }
 
+func TestReadLinesClosesOpenedFiles(t *testing.T) {
+	fs := &closeCountingReader{
+		files: map[string]string{
+			"a.txt": "a\n",
+			"b.txt": "b\n",
+		},
+	}
+
+	ctx := ContextWithWorkerCount(context.Background(), 1)
+	lines, err := ReadLines(ctx, fs, newStringIterator([]string{"a.txt", "b.txt"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		_, ok := lines.Next(context.Background())
+		if !ok {
+			break
+		}
+	}
+	if err := lines.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lines.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := fs.opened.Load(); got != 2 {
+		t.Fatalf("opened files = %d, want 2", got)
+	}
+	if got := fs.closed.Load(); got != fs.opened.Load() {
+		t.Fatalf("closed files = %d, want %d", got, fs.opened.Load())
+	}
+}
+
 type stringIterator struct {
 	values []string
 	idx    int
@@ -309,3 +343,59 @@ func (n nopFile) Sync() error { return nil }
 func (n nopFile) Truncate(int64) error { return nil }
 
 func (n nopFile) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+type closeCountingReader struct {
+	files  map[string]string
+	opened atomic.Int64
+	closed atomic.Int64
+}
+
+func (r *closeCountingReader) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file:///" + path)
+}
+
+func (r *closeCountingReader) OpenFile(path string, _ int, _ os.FileMode) (workspaceapi.File, error) {
+	content, ok := r.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	r.opened.Add(1)
+	return closeCountingFile{
+		Reader: bytes.NewBufferString(content),
+		close:  func() { r.closed.Add(1) },
+	}, nil
+}
+
+func (r *closeCountingReader) Stat(string) (os.FileInfo, error) {
+	return nil, os.ErrNotExist
+}
+
+func (r *closeCountingReader) ReadDir(string) ([]os.DirEntry, error) {
+	return nil, os.ErrNotExist
+}
+
+type closeCountingFile struct {
+	io.Reader
+	close func()
+}
+
+func (f closeCountingFile) Close() error {
+	f.close()
+	return nil
+}
+
+func (f closeCountingFile) Fd() uintptr { return 0 }
+
+func (f closeCountingFile) Name() string { return "" }
+
+func (f closeCountingFile) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
+
+func (f closeCountingFile) Seek(int64, int) (int64, error) { return 0, nil }
+
+func (f closeCountingFile) Stat() (os.FileInfo, error) { return nil, os.ErrInvalid }
+
+func (f closeCountingFile) Sync() error { return nil }
+
+func (f closeCountingFile) Truncate(int64) error { return nil }
+
+func (f closeCountingFile) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

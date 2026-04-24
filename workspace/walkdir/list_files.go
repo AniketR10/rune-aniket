@@ -74,6 +74,17 @@ func ListFiles(
 	// get root as relative path to workspace
 	root = workspaceapi.RelPath(workspaceURI, rootURI)
 
+	for {
+		finfo, err := w.Stat(root)
+		if err == nil && finfo.IsDir() {
+			break
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		root = filepath.Dir(root)
+	}
+
 	iterator := &listFilesIterator{dataCh: iterCh}
 	ctx, cancel := context.WithCancel(ctx)
 	iterator.ctx = ctx
@@ -86,17 +97,6 @@ func ListFiles(
 				workspaceURI.Path(), &iterator.mu, &allErrors[i], false)
 
 		})
-	}
-
-	for {
-		finfo, err := w.Stat(root)
-		if err == nil && finfo.IsDir() {
-			break
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		root = filepath.Dir(root)
 	}
 
 	wg.Add(1)
