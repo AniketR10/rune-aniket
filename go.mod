@@ -28,8 +28,8 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.79.0
-	github.com/unstablebuild/rune-go-sdk v0.0.62
-	github.com/unstablebuild/tcell/v3 v3.6.4
+	github.com/unstablebuild/rune-go-sdk v0.0.65
+	github.com/unstablebuild/tcell/v3 v3.6.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.48.0
 	golang.org/x/image v0.38.0
@@ -63,6 +63,7 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.9.2
 	github.com/ebitengine/purego v0.9.0
+	github.com/gliderlabs/ssh v0.3.8
 	github.com/go-git/go-billy/v6 v6.0.0-20251022185412-61e52df296a5
 	github.com/go-git/go-git/v6 v6.0.0-20250819122726-39261590f7f3
 	github.com/go-jose/go-jose/v4 v4.1.3
@@ -100,10 +101,11 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.6.2 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect

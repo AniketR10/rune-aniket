@@ -1,0 +1,118 @@
+// Copyright 2026 Unstable Build, LLC.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// See <https://www.gnu.org/licenses/> for a copy of the license.
+
+package main
+
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
+)
+
+// fakeScreen mirrors the SDK's RunScreen tests. We intentionally avoid
+// tcell.SimulationScreen because its PostEvent implementation recurses.
+type fakeScreen struct {
+	mu     sync.Mutex
+	width  int
+	height int
+	evch   chan tcell.Event
+}
+
+func newFakeScreen(w, h int) *fakeScreen {
+	return &fakeScreen{width: w, height: h, evch: make(chan tcell.Event, 16)}
+}
+
+func (s *fakeScreen) SetContent(int, int, rune, []rune, uint8, tcell.Style) {}
+func (s *fakeScreen) UnionStyle(int, int, tcell.Style)                      {}
+func (s *fakeScreen) Fill(rune, tcell.Style)                                {}
+func (s *fakeScreen) ShowCursor(int, int)                                   {}
+func (s *fakeScreen) HideCursor()                                           {}
+func (s *fakeScreen) SetCursorStyle(tcell.CursorStyle)                      {}
+func (s *fakeScreen) Size() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.width, s.height
+}
+func (s *fakeScreen) Show()                    {}
+func (s *fakeScreen) Poll() <-chan tcell.Event { return s.evch }
+func (s *fakeScreen) PostEvent(ev tcell.Event) error {
+	select {
+	case s.evch <- ev:
+		return nil
+	default:
+		return tcell.ErrEventQFull
+	}
+}
+func (s *fakeScreen) Bell() {}
+
+type drawCounterHandler struct{ draws atomic.Int32 }
+
+func (h *drawCounterHandler) Resize(int, int)  {}
+func (h *drawCounterHandler) Draw(term.Writer) { h.draws.Add(1) }
+func (h *drawCounterHandler) Handle(ev term.Event) (bool, bool) {
+	return ev.Type == term.EventKey && ev.Key == term.KeyEsc, true
+}
+func (h *drawCounterHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+func (h *drawCounterHandler) Selection() (string, bool) { return "", false }
+
+// TestWriterInterrupterPublishesMultipleInterrupts verifies that the
+// per-session writerInterrupter can trigger more than one redraw when
+// used against tui.RunWriter with that SAME writer instance. This is
+// the contract sshshop relies on for shaders and any other background
+// animations: multiple interrupt ticks must schedule multiple redraws
+// without waiting for any keypress.
+func TestWriterInterrupterPublishesMultipleInterrupts(t *testing.T) {
+	s := newFakeScreen(20, 8)
+
+	h := &drawCounterHandler{}
+	w := term.NewTermboxWriterFromScreen(s)
+	done := make(chan error, 1)
+	go func() { done <- tui.RunWriter(h, w) }()
+
+	interrupter := writerInterrupter{w: w}
+
+	require.Eventually(t, func() bool {
+		return h.draws.Load() >= 1
+	}, time.Second, 20*time.Millisecond)
+	base := h.draws.Load()
+
+	require.NoError(t, interrupter.Interrupt(context.Background()))
+	require.Eventually(t, func() bool {
+		return h.draws.Load() > base
+	}, time.Second, 20*time.Millisecond)
+	afterFirst := h.draws.Load()
+
+	require.NoError(t, interrupter.Interrupt(context.Background()))
+	require.Eventually(t, func() bool {
+		return h.draws.Load() > afterFirst
+	}, time.Second, 20*time.Millisecond,
+		"second interrupt should schedule another redraw without any keypress")
+
+	require.True(t, w.PublishEvent(term.Event{Type: term.EventKey, Key: term.KeyEsc}))
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("RunScreen did not exit after Esc")
+	}
+}

@@ -1,0 +1,51 @@
+// Copyright 2026 Unstable Build, LLC.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// See <https://www.gnu.org/licenses/> for a copy of the license.
+
+package shop
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+type noopTUIHandler struct{}
+
+func (noopTUIHandler) Resize(int, int)                {}
+func (noopTUIHandler) Draw(term.Writer)               {}
+func (noopTUIHandler) Handle(term.Event) (bool, bool) { return false, false }
+func (noopTUIHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, 0, false
+}
+func (noopTUIHandler) Selection() (string, bool) { return "", false }
+
+func TestNewShaderRootUsesProvidedInterrupter(t *testing.T) {
+	var calls atomic.Int32
+	interrupter := term.FuncInterrupter(func(context.Context) error {
+		calls.Add(1)
+		return nil
+	})
+
+	r := NewShaderRoot(noopTUIHandler{}, interrupter)
+	defer func() { _ = r.Close() }()
+
+	require.Eventually(t, func() bool {
+		return calls.Load() > 0
+	}, time.Second, 20*time.Millisecond,
+		"startup shader should tick through the supplied interrupter")
+}
