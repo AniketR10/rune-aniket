@@ -185,13 +185,14 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command)
 	reqMsg.Type = textrpc.ServerCommandMessage_Complete
 	reqMsg.Complete = &req
 
-	if err := c.stream.Send(&reqMsg); err != nil {
-		return nil, "", fmt.Errorf("send complete request: %w", err)
-	}
-
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ch := make(chan chanValue)
 	c.completers.Store(id, chanCtx{ctx: ctx, ch: ch})
+	if err := c.stream.Send(&reqMsg); err != nil {
+		cancelCtx()
+		c.completers.Delete(id)
+		return nil, "", fmt.Errorf("send complete request: %w", err)
+	}
 
 	return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
 		select {
@@ -209,6 +210,7 @@ func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command)
 		}
 	}, func() error {
 		cancelCtx()
+		c.completers.Delete(id)
 		return nil
 	}), "", nil
 }
