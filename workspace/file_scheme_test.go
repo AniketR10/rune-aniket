@@ -274,3 +274,101 @@ func TestStartCommand(t *testing.T) {
 		assert.Equal(t, stdout.String(), tmpDir+"\n")
 	})
 }
+
+func TestFileSchemeCloseClosesTrackedFiles(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+	require.NoError(t, err)
+
+	s, err := newTestFileScheme(uri)
+	require.NoError(t, err)
+
+	path1 := tmpDir + "/a.txt"
+	path2 := tmpDir + "/b.txt"
+	require.NoError(t, os.WriteFile(path1, []byte("hello"), 0644))
+	require.NoError(t, os.WriteFile(path2, []byte("world"), 0644))
+
+	f1, err := s.OpenFile(path1, os.O_RDONLY, 0)
+	require.NoError(t, err)
+	f2, err := s.OpenFile(path2, os.O_RDONLY, 0)
+	require.NoError(t, err)
+
+	// Sanity: both files tracked before close.
+	var countBefore int
+	s.files.Range(func(_, _ any) bool { countBefore++; return true })
+	assert.Equal(t, 2, countBefore)
+
+	require.NoError(t, s.Close())
+
+	// After Close, tracked files should have been removed and underlying files
+	// closed (a second close on the underlying *os.File returns an error).
+	var countAfter int
+	s.files.Range(func(_, _ any) bool { countAfter++; return true })
+	assert.Equal(t, 0, countAfter)
+
+	// Closing again should be a no-op (idempotent) for the wrapped file.
+	assert.NoError(t, f1.Close())
+	assert.NoError(t, f2.Close())
+}
+
+func TestOpenFileClosesSchemeOnCallerClose(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	path := tmpDir + "/a.txt"
+	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
+
+	f, err := OpenFile(path, os.O_RDONLY, 0)
+	require.NoError(t, err)
+
+	owned, ok := f.(*ownedSchemeFile)
+	require.True(t, ok, "OpenFile should return an ownedSchemeFile")
+
+	// Closing the returned file should also close the owning scheme's context,
+	// which we can observe via the wrapped fileSchemeFile deregistering itself.
+	inner, ok := owned.File.(*fileSchemeFile)
+	require.True(t, ok, "wrapped file should be a fileSchemeFile")
+	scheme := inner.p
+	var tracked int
+	scheme.files.Range(func(_, _ any) bool { tracked++; return true })
+	require.Equal(t, 1, tracked)
+
+	require.NoError(t, f.Close())
+
+	// After Close, scheme should no longer track the file and its context
+	// should be cancelled.
+	tracked = 0
+	scheme.files.Range(func(_, _ any) bool { tracked++; return true })
+	assert.Equal(t, 0, tracked)
+	select {
+	case <-scheme.ctx.Done():
+	default:
+		t.Fatal("scheme context should be cancelled after close")
+	}
+
+	// Closing again should remain a no-op.
+	assert.NoError(t, f.Close())
+}
+
+func TestReadFileClosesFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	path := tmpDir + "/a.txt"
+	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
+
+	data, err := ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "hello", string(data))
+	// Calling ReadFile many times should not accumulate open FDs; if it did
+	// we'd eventually hit EMFILE. This is a coarse smoke-check.
+	for i := range 1024 {
+		_, err := ReadFile(path)
+		require.NoError(t, err, "iteration %d", i)
+	}
+}

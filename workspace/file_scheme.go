@@ -85,12 +85,12 @@ func OpenFile(filename string, flag int, perm os.FileMode) (workspaceapi.File, e
 	if err != nil {
 		return nil, fmt.Errorf("file scheme: %v", err)
 	}
-	defer fs.Close() // nolint:errcheck
 	f, err := fs.OpenFile(filename, flag, perm)
 	if err != nil {
+		_ = fs.Close()
 		return nil, err
 	}
-	return f, nil
+	return &ownedSchemeFile{File: f, scheme: fs}, nil
 }
 
 // ReadFile reads the file named by filename and returns the contents.
@@ -100,6 +100,7 @@ func ReadFile(filename string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
+	defer f.Close() //nolint:errcheck
 	return io.ReadAll(f)
 }
 
@@ -561,6 +562,12 @@ func (p *fileScheme) Close() (ret error) {
 		}
 		return true
 	})
+	p.files.Range(func(_ any, value any) bool {
+		if err := value.(*fileSchemeFile).Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+		return true
+	})
 	return
 }
 
@@ -569,7 +576,9 @@ type fileSchemeFile struct {
 	workspaceapi.File
 	p *fileScheme
 	// cache fd so pty.SetSize doesn't cause races on fd destroy (on reads)
-	fd uintptr
+	fd       uintptr
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (f *fileSchemeFile) Fd() uintptr {
@@ -577,8 +586,33 @@ func (f *fileSchemeFile) Fd() uintptr {
 }
 
 func (f *fileSchemeFile) Close() error {
-	f.p.files.Delete(f.Fd())
-	return f.File.Close()
+	f.closeOnce.Do(func() {
+		f.p.files.Delete(f.Fd())
+		f.closeErr = f.File.Close()
+	})
+	return f.closeErr
+}
+
+// ownedSchemeFile wraps a workspaceapi.File returned by the package-level
+// OpenFile helper. Closing it closes both the file and the scheme that was
+// created to open it.
+type ownedSchemeFile struct {
+	workspaceapi.File
+	scheme    io.Closer
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func (f *ownedSchemeFile) Close() error {
+	f.closeOnce.Do(func() {
+		if err := f.File.Close(); err != nil {
+			f.closeErr = err
+		}
+		if err := f.scheme.Close(); err != nil {
+			f.closeErr = multierror.Append(f.closeErr, err)
+		}
+	})
+	return f.closeErr
 }
 
 func makeLocalURI(path string) (workspaceapi.URI, error) {
