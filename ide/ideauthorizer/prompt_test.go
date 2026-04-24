@@ -25,6 +25,7 @@ package ideauthorizer
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -169,21 +170,170 @@ func TestPluginPermissionPromptMessageWithLauncher(t *testing.T) {
 func TestPluginPermissionPromptMessageWithCommand(t *testing.T) {
 	t.Parallel()
 
-	message := pluginPermissionPromptMessage(PermissionRequest{
-		Path:              "/usr/local/bin/plugin-cli",
-		Args:              []string{"run"},
-		Permission:        extensionapi.PermissionExecute,
-		CommandPath:       "/bin/grep",
-		CommandArgs:       []string{"foo", "/tmp/workspace"},
-		CommandDir:        "/tmp/workspace",
-		CommandScopeLabel: "/bin/grep *",
-	})
-	assert.Contains(t, message, "Program **/usr/local/bin/plugin-cli** with args **[run]**")
-	assert.Contains(t, message, "wants to run **/bin/grep**")
-	assert.Contains(t, message, "with args **[foo /tmp/workspace]**")
-	assert.Contains(t, message, "in **/tmp/workspace**")
-	assert.Contains(t, message, "\n\nChoosing **Always** approves **/bin/grep** for all future authorization requests, for any argument combination.")
-	assert.NotContains(t, message, "**/bin/grep ∗**")
+	longPython := "python -c " + strings.Repeat("print('markdown **is not bold**');", 4)
+	pythonEOF := "python <<'PY'\nimport json\nprint(json.dumps({'ok': True}))\nPY"
+	perlScript := "perl -0777 -ne 'print if /BEGIN.*END/s' README.md"
+	complexBash := "echo `git rev-parse --show-toplevel` && printf %s $(python - <<'PY'\nprint('nested')\nPY\n)"
+
+	tests := []struct {
+		name        string
+		req         PermissionRequest
+		contains    []string
+		notContains []string
+	}{
+		{
+			name: "short simple args stay inline",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/bin/grep",
+				CommandArgs:       []string{"foo", "/tmp/workspace"},
+				CommandDir:        "/tmp/workspace",
+				CommandScopeLabel: "/bin/grep *",
+			},
+			contains: []string{
+				"Program **/usr/local/bin/plugin-cli** with args **[run]**",
+				"wants to run **/bin/grep**",
+				"with args **[foo /tmp/workspace]**",
+				"in **/tmp/workspace**",
+				"\n\nChoosing **Always** approves **/bin/grep** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"**/bin/grep ∗**", "```"},
+		},
+		{
+			name: "long python script arg uses code block",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/bin/bash",
+				CommandArgs:       []string{"-c", longPython},
+				CommandScopeLabel: "/bin/bash *",
+			},
+			contains: []string{
+				"run **/bin/bash** with args:\n\n```",
+				"-c\n" + longPython,
+				"\n\nChoosing **Always** approves **/bin/bash** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"with args **[-c "},
+		},
+		{
+			name: "multiline script arg uses code block",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/bin/bash",
+				CommandArgs:       []string{"-c", "echo first\necho second"},
+				CommandScopeLabel: "/bin/bash *",
+			},
+			contains: []string{
+				"run **/bin/bash** with args:\n\n```",
+				"-c\necho first\necho second",
+				"\n\nChoosing **Always** approves **/bin/bash** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"with args **[-c "},
+		},
+		{
+			name: "markdown args use code block",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/bin/echo",
+				CommandArgs:       []string{"**bold** [link](target) # heading"},
+				CommandScopeLabel: "/bin/echo *",
+			},
+			contains: []string{
+				"run **/bin/echo** with args:\n\n```",
+				"**bold** [link](target) # heading",
+				"\n\nChoosing **Always** approves **/bin/echo** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"run **/bin/echo** with args **["},
+		},
+		{
+			name: "backtick args use safe code fence",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/bin/bash",
+				CommandArgs:       []string{"-c", "echo ```fence```"},
+				CommandScopeLabel: "/bin/bash *",
+			},
+			contains: []string{
+				"run **/bin/bash** with args:\n\n````\n-c\necho ```fence```\n````",
+				"\n\nChoosing **Always** approves **/bin/bash** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"with args **[-c "},
+		},
+		{
+			name: "perl one-liner script arg uses code block",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/usr/bin/perl",
+				CommandArgs:       []string{"-e", perlScript},
+				CommandScopeLabel: "perl *",
+			},
+			contains: []string{
+				"run **/usr/bin/perl** with args:\n\n```",
+				"-e\n" + perlScript,
+				"\n\nChoosing **Always** approves **perl** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"run **/usr/bin/perl** with args **["},
+		},
+		{
+			name: "python heredoc shell script uses code block",
+			req: PermissionRequest{
+				Path:              "/usr/local/bin/plugin-cli",
+				Args:              []string{"run"},
+				Permission:        extensionapi.PermissionExecute,
+				CommandPath:       "/bin/bash",
+				CommandArgs:       []string{"-c", pythonEOF},
+				CommandScopeLabel: "python *",
+			},
+			contains: []string{
+				"run **/bin/bash** with args:\n\n```",
+				"-c\n" + pythonEOF,
+				"\n\nChoosing **Always** approves **python** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"with args **[-c "},
+		},
+		{
+			name: "complex bash substitutions use safe fence and scope list",
+			req: PermissionRequest{
+				Path:               "/usr/local/bin/plugin-cli",
+				Args:               []string{"run"},
+				Permission:         extensionapi.PermissionExecute,
+				CommandPath:        "/bin/bash",
+				CommandArgs:        []string{"-c", complexBash},
+				CommandScopeLabels: []string{"echo *", "git *", "printf *", "python *"},
+			},
+			contains: []string{
+				"run **/bin/bash** with args:\n\n``",
+				"-c\n" + complexBash,
+				"Choosing **Always** approves **echo**, **git**, **printf**, **python** for all future authorization requests, for any argument combination.",
+			},
+			notContains: []string{"with args **[-c "},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			message := pluginPermissionPromptMessage(tt.req)
+			for _, want := range tt.contains {
+				assert.Contains(t, message, want)
+			}
+			for _, unwanted := range tt.notContains {
+				assert.NotContains(t, message, unwanted)
+			}
+		})
+	}
 }
 
 func TestPluginPermissionPromptMessageWithLauncherAndCommand(t *testing.T) {

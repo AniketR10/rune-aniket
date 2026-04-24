@@ -927,6 +927,92 @@ func TestPluginPermissionCommandStorageKeysDecomposeCmdSubstScript(t *testing.T)
 	assert.Contains(t, complex, headOnly[0])
 }
 
+func TestPluginPermissionEffectiveCommandsDecomposeScriptSubstitutions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cmd  pluginPermissionCommandDetail
+		want []string
+	}{
+		{
+			name: "perl script with backtick command substitution",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/usr/bin/perl",
+				Args: []string{"-e", "print `git rev-parse --show-toplevel`;"},
+			},
+			want: []string{"perl"},
+		},
+		{
+			name: "python stdin script from shell heredoc",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", "python <<'PY'\nimport json\nprint(json.dumps({'ok': True}))\nPY"},
+			},
+			want: []string{"python"},
+		},
+		{
+			name: "backtick command substitution in argument",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", "echo `git rev-parse --show-toplevel`"},
+			},
+			want: []string{"echo", "git"},
+		},
+		{
+			name: "nested dollar command substitutions in argument",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", "printf %s $(dirname $(which go))"},
+			},
+			want: []string{"dirname", "printf", "which"},
+		},
+		{
+			name: "command substitution command name with literal nested command",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", "$(echo grep) foo file.txt"},
+			},
+			want: []string{"echo", "grep"},
+		},
+		{
+			name: "backtick command name with literal nested command",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", "`echo grep` foo file.txt"},
+			},
+			want: []string{"echo", "grep"},
+		},
+		{
+			name: "complex bash sequence with nested substitutions",
+			cmd: pluginPermissionCommandDetail{
+				Path: "/bin/bash",
+				Args: []string{"-c", "cd /tmp && echo `git rev-parse --show-toplevel` && printf %s $(dirname $(which go)) | wc -c"},
+			},
+			want: []string{"dirname", "echo", "git", "printf", "wc", "which"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := pluginPermissionEffectiveCommands(tt.cmd)
+			require.True(t, ok)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, expectedScopeLabels(tt.want), pluginPermissionApprovalScopeLabels(tt.cmd))
+		})
+	}
+}
+
+func expectedScopeLabels(commands []string) []string {
+	labels := make([]string, len(commands))
+	for i, command := range commands {
+		labels[i] = command + " *"
+	}
+	return labels
+}
+
 // End-to-end: once "Yes, All" is chosen for the complex regression
 // command, subsequent invocations of find, gofmt, and head run silently
 // because the approval scope was broadened to each effective command

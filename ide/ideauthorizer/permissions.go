@@ -449,13 +449,13 @@ func walkCallExprCommands(call *syntax.CallExpr, out map[string]struct{}) bool {
 	// The command-name position (first argument) must still be a pure
 	// literal — a command substitution or variable expansion there means
 	// we cannot know which program will run and the script is opaque.
-	name, ok := shellWrappedLiteralWord(call.Args[0])
+	name, ok := shellWrappedCommandNameWord(call.Args[0], out)
 	if !ok {
 		return false
 	}
 	rest := call.Args[1:]
 	if name == "exec" && len(rest) > 0 {
-		name, ok = shellWrappedLiteralWord(rest[0])
+		name, ok = shellWrappedCommandNameWord(rest[0], out)
 		if !ok {
 			return false
 		}
@@ -534,6 +534,99 @@ func shellWrappedLiteralWord(word *syntax.Word) (string, bool) {
 		}
 	}
 	return b.String(), true
+}
+
+func shellWrappedCommandNameWord(word *syntax.Word, out map[string]struct{}) (string, bool) {
+	if word == nil || len(word.Parts) == 0 {
+		return "", false
+	}
+	var b strings.Builder
+	for _, part := range word.Parts {
+		s, ok := shellWrappedCommandNamePart(part, out)
+		if !ok {
+			return "", false
+		}
+		b.WriteString(s)
+	}
+	name := strings.TrimSpace(b.String())
+	if name == "" || strings.ContainsAny(name, " \t\r\n") {
+		return "", false
+	}
+	return name, true
+}
+
+func shellWrappedCommandNamePart(part syntax.WordPart, out map[string]struct{}) (string, bool) {
+	switch p := part.(type) {
+	case *syntax.Lit:
+		return p.Value, true
+	case *syntax.SglQuoted:
+		return p.Value, true
+	case *syntax.DblQuoted:
+		return shellWrappedCommandNameParts(p.Parts, out)
+	case *syntax.CmdSubst:
+		return shellWrappedLiteralCommandSubstitution(p, out)
+	default:
+		return "", false
+	}
+}
+
+func shellWrappedCommandNameParts(parts []syntax.WordPart, out map[string]struct{}) (string, bool) {
+	var b strings.Builder
+	for _, part := range parts {
+		s, ok := shellWrappedCommandNamePart(part, out)
+		if !ok {
+			return "", false
+		}
+		b.WriteString(s)
+	}
+	return b.String(), true
+}
+
+func shellWrappedLiteralCommandSubstitution(
+	subst *syntax.CmdSubst, out map[string]struct{},
+) (string, bool) {
+	if subst == nil || len(subst.Stmts) != 1 {
+		return "", false
+	}
+	stmt := subst.Stmts[0]
+	if stmt == nil || len(stmt.Redirs) > 0 {
+		return "", false
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) > 0 || len(call.Args) == 0 {
+		return "", false
+	}
+	name, ok := shellWrappedLiteralWord(call.Args[0])
+	if !ok {
+		return "", false
+	}
+	if name != "echo" && name != "printf" {
+		return "", false
+	}
+	args := make([]string, 0, len(call.Args)-1)
+	for _, arg := range call.Args[1:] {
+		lit, ok := shellWrappedLiteralWord(arg)
+		if !ok {
+			return "", false
+		}
+		args = append(args, lit)
+	}
+	var value string
+	switch name {
+	case "echo":
+		value = strings.Join(args, " ")
+	case "printf":
+		if len(args) != 2 || args[0] != "%s" {
+			return "", false
+		}
+		value = args[1]
+	}
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsAny(value, " \t\r\n") {
+		return "", false
+	}
+	out[name] = struct{}{}
+	return value, true
 }
 
 // walkArgumentWordCommands walks an argument- or redirect-position word

@@ -158,11 +158,11 @@ func TestPluginPermissionEffectiveCommands(t *testing.T) {
 			wantOK: false,
 		},
 		{
-			name: "command substitution in command word is opaque",
+			name: "literal command substitution in command word decomposes",
 			command: pluginPermissionCommandDetail{
 				Path: "/bin/bash", Args: []string{"-c", "$(echo grep) foo"},
 			},
-			wantOK: false,
+			want: []string{"echo", "grep"}, wantOK: true,
 		},
 		{
 			name: "eval is rejected",
