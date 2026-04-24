@@ -132,3 +132,79 @@ func TestYAMLEnterUsesSpaceIndentIntegration(t *testing.T) {
 	assert.Equal(t, "root:\n  child:\n    x", actual)
 	assert.NotContains(t, actual, "\t")
 }
+
+// TestYAMLShiftRightUsesSpaceIndentIntegration verifies that vi `>>` on a
+// YAML file uses space indentation, not a tab, matching the configured
+// indent material for the yaml language.
+func TestYAMLShiftRightUsesSpaceIndentIntegration(t *testing.T) {
+	pkgs := newInstalledYAMLPkgManager(t)
+
+	var wg sync.WaitGroup
+	ready := func(context.Context) error {
+		wg.Done()
+		return nil
+	}
+
+	const width, height = 40, 12
+	mu, comp, cleanup := newYAMLTestCase(t, pkgs, width, height, ready)
+	defer cleanup()
+
+	const yamlContent = "root:\nchild:"
+
+	wg.Add(1)
+	mu.Lock()
+	_, h := newEditFileName(t, comp, yamlContent, "config.yaml")
+	mu.Unlock()
+	wg.Wait()
+
+	// Move to last line and run `>>` to indent it one level.
+	keys, err := term.ParseKeys(`G\>\>`)
+	require.NoError(t, err)
+	for _, key := range keys {
+		ev := term.Event{Type: term.EventKey, Ch: key.Ch, Key: key.Key, Mod: key.Mod}
+		_, handled := h.Handle(ev)
+		require.True(t, handled, "%s", ev.KeyComb().String())
+	}
+
+	actual := h.CellView().String()
+	assert.NotContains(t, actual, "\t", "YAML shift-right must not introduce tabs")
+	assert.Contains(t, actual, "    child:")
+}
+
+// TestYAMLVisualShiftRightUsesSpaceIndentIntegration verifies that visual-mode
+// `>` on a YAML selection uses space indentation.
+func TestYAMLVisualShiftRightUsesSpaceIndentIntegration(t *testing.T) {
+	pkgs := newInstalledYAMLPkgManager(t)
+
+	var wg sync.WaitGroup
+	ready := func(context.Context) error {
+		wg.Done()
+		return nil
+	}
+
+	const width, height = 40, 12
+	mu, comp, cleanup := newYAMLTestCase(t, pkgs, width, height, ready)
+	defer cleanup()
+
+	const yamlContent = "root:\nchild:\nother:"
+
+	wg.Add(1)
+	mu.Lock()
+	_, h := newEditFileName(t, comp, yamlContent, "config.yaml")
+	mu.Unlock()
+	wg.Wait()
+
+	// Visual-line select last two lines and indent once.
+	keys, err := term.ParseKeys(`jVj\>`)
+	require.NoError(t, err)
+	for _, key := range keys {
+		ev := term.Event{Type: term.EventKey, Ch: key.Ch, Key: key.Key, Mod: key.Mod}
+		_, handled := h.Handle(ev)
+		require.True(t, handled, "%s", ev.KeyComb().String())
+	}
+
+	actual := h.CellView().String()
+	assert.NotContains(t, actual, "\t", "YAML visual shift-right must not introduce tabs")
+	assert.Contains(t, actual, "    child:")
+	assert.Contains(t, actual, "    other:")
+}

@@ -4205,22 +4205,22 @@ func TestCursorCell(t *testing.T) {
 
 func TestCursorShiftLine(t *testing.T) {
 	c := setupCursorContent(t, 10, 1, " blabla\nbleble", false)
-	assert.True(t, c.ShiftLineLeft())
-	assert.False(t, c.ShiftLineLeft())
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
+	assert.False(t, c.ShiftLineLeft(IndentRuneTab))
 	assert.Equal(t, term.Coordinates{}, c.cursor)
 
-	c.ShiftLineRight()
+	c.ShiftLineRight(IndentRuneTab)
 	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
-	c.ShiftLineRight()
+	c.ShiftLineRight(IndentRuneTab)
 	assert.Equal(t, term.Coordinates{X: 8}, c.cursor)
-	assert.True(t, c.ShiftLineLeft())
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
 	assert.Equal(t, term.Coordinates{X: 4}, c.cursor)
-	assert.True(t, c.ShiftLineLeft())
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
 	assert.Equal(t, term.Coordinates{}, c.cursor)
 	assert.True(t, c.MoveDown())
-	c.ShiftLineRight()
+	c.ShiftLineRight(IndentRuneTab)
 	assert.Equal(t, term.Coordinates{Y: 0, X: 4}, c.cursor)
-	assert.True(t, c.ShiftLineLeft())
+	assert.True(t, c.ShiftLineLeft(IndentRuneTab))
 	assert.Equal(t, term.Coordinates{Y: 0, X: 0}, c.cursor)
 }
 
@@ -4229,13 +4229,535 @@ func TestCursorShiftSelection(t *testing.T) {
 	require.True(t, c.Select())
 	require.True(t, c.MoveDown())
 
-	c.ShiftSelectionRight()
+	c.ShiftSelectionRight(IndentRuneTab)
 	assert.Equal(t, "\t blabla\n\tbleble", c.scroll.Buffer().String())
 
 	require.True(t, c.SelectBlock())
 	require.True(t, c.MoveUp())
-	assert.True(t, c.ShiftSelectionLeft())
+	assert.True(t, c.ShiftSelectionLeft(IndentRuneTab))
 	assert.Equal(t, " blabla\nbleble", c.scroll.Buffer().String())
+}
+
+// TestCursorShiftLineRightTable covers Cursor.ShiftLineRight across both
+// indent materials, tabspaces widths, starting cursor positions and
+// pre-existing indentation.
+//
+// wantCursor is the cursor in scroll.Buffer window coordinates after the
+// shift. Note that when indent material is a tab and the column the cursor
+// lands on is itself a tab, the window coordinate snaps to the right edge of
+// that tab cell (tabspaces-1 columns past its left edge) — that is the
+// existing Scroll coordinate semantics for tabs.
+func TestCursorShiftLineRightTable(t *testing.T) {
+	tsuite := []struct {
+		name       string
+		content    string
+		tabspaces  int
+		indentRune rune
+		cursorAt   term.Coordinates
+		want       string
+		wantCursor term.Coordinates
+	}{
+		{
+			name:       "tab on empty line inserts a tab",
+			content:    "",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			want:       "\t",
+			// cursor past the inserted tab; scroll {1,0} renders at window X:4
+			wantCursor: term.Coordinates{X: 4},
+		},
+		{
+			name:       "tab on simple line inserts a single tab at start",
+			content:    "hello",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			want:       "\thello",
+			// scroll {1,0} = 'h'; window X:4 (just past the tab)
+			wantCursor: term.Coordinates{X: 4},
+		},
+		{
+			name:       "tab on already-indented line appends another tab",
+			content:    "\thello",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			want:       "\t\thello",
+			// scroll {1,0} = the second tab cell; window snaps to the right
+			// edge of that tab (col 7 = 2*tabspaces-1)
+			wantCursor: term.Coordinates{X: 7},
+		},
+		{
+			name:       "tab preserves cursor on non-first row",
+			content:    "a\nb",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			cursorAt:   term.Coordinates{Y: 1},
+			want:       "a\n\tb",
+			// scroll {1,1} = 'b'; window X:4
+			wantCursor: term.Coordinates{X: 4, Y: 1},
+		},
+		{
+			name:       "space indent at tabspaces=2 inserts two spaces",
+			content:    "hello",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			want:       "  hello",
+			wantCursor: term.Coordinates{X: 2},
+		},
+		{
+			name:       "space indent at tabspaces=4 inserts four spaces",
+			content:    "hello",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			want:       "    hello",
+			wantCursor: term.Coordinates{X: 4},
+		},
+		{
+			name:       "space indent appends onto existing spaces",
+			content:    "  hello",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			want:       "    hello",
+			// cursor stays at scroll {2,0} = third space; window X:2
+			wantCursor: term.Coordinates{X: 2},
+		},
+		{
+			name:       "space indent on empty line inserts tabspaces spaces",
+			content:    "",
+			tabspaces:  3,
+			indentRune: IndentRuneSpace,
+			want:       "   ",
+			wantCursor: term.Coordinates{X: 3},
+		},
+		{
+			name:       "space indent zero tabspaces defaults to one space",
+			content:    "hello",
+			tabspaces:  0,
+			indentRune: IndentRuneSpace,
+			want:       " hello",
+			wantCursor: term.Coordinates{X: 1},
+		},
+	}
+
+	for _, tc := range tsuite {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 30, 10, tc.content, false)
+			c.scroll.SetTabspaces(tc.tabspaces)
+			if tc.cursorAt != (term.Coordinates{}) {
+				_, ok := c.MoveToScroll(tc.cursorAt)
+				require.True(t, ok)
+			}
+
+			c.ShiftLineRight(tc.indentRune)
+
+			assert.Equal(t, tc.want, c.scroll.Buffer().String())
+			assert.Equal(t, tc.wantCursor, c.cursor)
+			if tc.indentRune == IndentRuneSpace {
+				assert.NotContains(t, c.scroll.Buffer().String(), "\t",
+					"space indent must never introduce tabs")
+			}
+		})
+	}
+}
+
+// TestCursorShiftLineLeftTable covers Cursor.ShiftLineLeft across indent
+// materials, tabspaces widths and mixed leading whitespace shapes.
+func TestCursorShiftLineLeftTable(t *testing.T) {
+	tsuite := []struct {
+		name       string
+		content    string
+		tabspaces  int
+		indentRune rune
+		cursorAt   term.Coordinates
+		wantOk     bool
+		want       string
+		wantCursor term.Coordinates
+	}{
+		{
+			name:       "tab removes a leading tab",
+			content:    "\thello",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			cursorAt:   term.Coordinates{X: 1},
+			wantOk:     true,
+			want:       "hello",
+			wantCursor: term.Coordinates{X: 0},
+		},
+		{
+			name:       "tab removes a single leading space",
+			content:    " hello",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			cursorAt:   term.Coordinates{X: 1},
+			wantOk:     true,
+			want:       "hello",
+			wantCursor: term.Coordinates{X: 0},
+		},
+		{
+			name:       "tab on non-indented line is a no-op",
+			content:    "hello",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			wantOk:     false,
+			want:       "hello",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "space removes tabspaces leading spaces",
+			content:    "    hello",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			cursorAt:   term.Coordinates{X: 4},
+			wantOk:     true,
+			want:       "  hello",
+			wantCursor: term.Coordinates{X: 2},
+		},
+		{
+			name:       "space removes up to tabspaces when fewer available",
+			content:    " hello",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			cursorAt:   term.Coordinates{X: 1},
+			wantOk:     true,
+			want:       "hello",
+			wantCursor: term.Coordinates{X: 0},
+		},
+		{
+			name:       "space on non-indented line is a no-op",
+			content:    "hello",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			wantOk:     false,
+			want:       "hello",
+			wantCursor: term.Coordinates{},
+		},
+		{
+			name:       "space treats a leading tab as one full indent level",
+			content:    "\thello",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			cursorAt:   term.Coordinates{X: 1},
+			wantOk:     true,
+			want:       "hello",
+			wantCursor: term.Coordinates{X: 0},
+		},
+		{
+			name:       "space stops removing at a mid-indent tab boundary",
+			content:    "  \thello",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			wantOk:     true,
+			want:       "\thello",
+			// After dedent, the cursor is at scroll {0,0} and the remaining
+			// leading tab spans columns 0..tabspaces-1 in window coords, so
+			// the window X snaps to its right edge (tabspaces-1).
+			wantCursor: term.Coordinates{X: 3},
+		},
+		{
+			name:       "space clamps negative cursor to zero",
+			content:    "  hello",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			cursorAt:   term.Coordinates{X: 1},
+			wantOk:     true,
+			want:       "hello",
+			wantCursor: term.Coordinates{X: 0},
+		},
+	}
+
+	for _, tc := range tsuite {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 30, 10, tc.content, false)
+			c.scroll.SetTabspaces(tc.tabspaces)
+			if tc.cursorAt != (term.Coordinates{}) {
+				_, ok := c.MoveToScroll(tc.cursorAt)
+				require.True(t, ok)
+			}
+
+			ok := c.ShiftLineLeft(tc.indentRune)
+
+			assert.Equal(t, tc.wantOk, ok)
+			assert.Equal(t, tc.want, c.scroll.Buffer().String())
+			assert.Equal(t, tc.wantCursor, c.cursor)
+			if tc.indentRune == IndentRuneSpace && !strings.Contains(tc.content, "\t") {
+				assert.NotContains(t, c.scroll.Buffer().String(), "\t",
+					"space dedent of space-only indent must not introduce tabs")
+			}
+		})
+	}
+}
+
+// TestCursorShiftSelectionRightTable covers Cursor.ShiftSelectionRight across
+// indent materials, tabspaces widths and selection modes (line and block),
+// spanning multiple rows including empty rows.
+func TestCursorShiftSelectionRightTable(t *testing.T) {
+	tsuite := []struct {
+		name       string
+		content    string
+		tabspaces  int
+		indentRune rune
+		// selectSetup is called after setup to create the selection. Returns
+		// to/from — the test only uses it to drive the handler; assertions are
+		// on the resulting buffer.
+		selectSetup func(*Cursor)
+		want        string
+	}{
+		{
+			name:       "tab indents line-selected rows",
+			content:    "a\nb",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			want: "\ta\n\tb",
+		},
+		{
+			name:       "space indents line-selected rows at tabspaces=2",
+			content:    "a\nb",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			want: "  a\n  b",
+		},
+		{
+			name:       "space indents line-selected rows at tabspaces=4",
+			content:    "a\nb\nc",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+				require.True(t, c.MoveDown())
+			},
+			want: "    a\n    b\n    c",
+		},
+		{
+			name:       "space indents an empty row in the selection",
+			content:    "a\n\nb",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+				require.True(t, c.MoveDown())
+			},
+			want: "  a\n  \n  b",
+		},
+		{
+			name:       "space indents pre-indented rows without introducing tabs",
+			content:    "  a\n    b",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			want: "    a\n      b",
+		},
+		{
+			name:       "tab on single-row selection indents that row",
+			content:    "hello\nworld",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.Select())
+				require.True(t, c.MoveRight())
+			},
+			want: "\thello\nworld",
+		},
+		{
+			name:       "space on single-row selection indents that row only",
+			content:    "hello\nworld",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.Select())
+				require.True(t, c.MoveRight())
+			},
+			want: "  hello\nworld",
+		},
+	}
+
+	for _, tc := range tsuite {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 30, 10, tc.content, false)
+			c.scroll.SetTabspaces(tc.tabspaces)
+			tc.selectSetup(c)
+
+			c.ShiftSelectionRight(tc.indentRune)
+
+			assert.Equal(t, tc.want, c.scroll.Buffer().String())
+			if tc.indentRune == IndentRuneSpace {
+				// only meaningful when the input contained no tabs
+				if !strings.Contains(tc.content, "\t") {
+					assert.NotContains(t, c.scroll.Buffer().String(), "\t",
+						"space indent must never introduce tabs")
+				}
+			}
+		})
+	}
+}
+
+// TestCursorShiftSelectionLeftTable covers Cursor.ShiftSelectionLeft across
+// indent materials, with mixed leading whitespace, asserting both the bool
+// return and the resulting buffer.
+func TestCursorShiftSelectionLeftTable(t *testing.T) {
+	tsuite := []struct {
+		name        string
+		content     string
+		tabspaces   int
+		indentRune  rune
+		selectSetup func(*Cursor)
+		wantOk      bool
+		want        string
+	}{
+		{
+			name:       "tab dedents tab-indented rows",
+			content:    "\ta\n\tb",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: true,
+			want:   "a\nb",
+		},
+		{
+			name:       "tab on all non-indented rows is a no-op",
+			content:    "a\nb",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: false,
+			want:   "a\nb",
+		},
+		{
+			name:       "tab returns ok true if any row was dedented",
+			content:    "\ta\nb",
+			tabspaces:  4,
+			indentRune: IndentRuneTab,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: true,
+			want:   "a\nb",
+		},
+		{
+			name:       "space dedents space-indented rows at tabspaces=2",
+			content:    "  a\n  b",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: true,
+			want:   "a\nb",
+		},
+		{
+			name:       "space dedents only up to tabspaces per row",
+			content:    "    a\n      b",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: true,
+			want:   "  a\n    b",
+		},
+		{
+			name:       "space dedents partial indent when fewer spaces than tabspaces",
+			content:    " a\n   b",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: true,
+			want:   "a\nb",
+		},
+		{
+			name:       "space on all non-indented rows is a no-op",
+			content:    "a\nb",
+			tabspaces:  2,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: false,
+			want:   "a\nb",
+		},
+		{
+			name:       "space collapses a leading tab to empty",
+			content:    "\ta\n\tb",
+			tabspaces:  4,
+			indentRune: IndentRuneSpace,
+			selectSetup: func(c *Cursor) {
+				require.True(t, c.SelectLine())
+				require.True(t, c.MoveDown())
+			},
+			wantOk: true,
+			want:   "a\nb",
+		},
+	}
+
+	for _, tc := range tsuite {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 30, 10, tc.content, false)
+			c.scroll.SetTabspaces(tc.tabspaces)
+			tc.selectSetup(c)
+
+			ok := c.ShiftSelectionLeft(tc.indentRune)
+
+			assert.Equal(t, tc.wantOk, ok)
+			assert.Equal(t, tc.want, c.scroll.Buffer().String())
+		})
+	}
+}
+
+// TestCursorShiftLineRoundTripTable ensures shift-right followed by shift-left
+// restores the original buffer for both indent materials.
+func TestCursorShiftLineRoundTripTable(t *testing.T) {
+	tsuite := []struct {
+		name       string
+		content    string
+		tabspaces  int
+		indentRune rune
+	}{
+		{"tab roundtrip on plain line", "hello", 4, IndentRuneTab},
+		{"tab roundtrip on pre-indented line", "\thello", 4, IndentRuneTab},
+		{"space roundtrip at tabspaces=2", "hello", 2, IndentRuneSpace},
+		{"space roundtrip at tabspaces=4", "hello", 4, IndentRuneSpace},
+		{"space roundtrip on pre-indented line", "  hello", 2, IndentRuneSpace},
+	}
+
+	for _, tc := range tsuite {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 30, 5, tc.content, false)
+			c.scroll.SetTabspaces(tc.tabspaces)
+
+			c.ShiftLineRight(tc.indentRune)
+			assert.NotEqual(t, tc.content, c.scroll.Buffer().String(),
+				"shift-right must change the buffer")
+
+			assert.True(t, c.ShiftLineLeft(tc.indentRune),
+				"shift-left after shift-right must succeed")
+			assert.Equal(t, tc.content, c.scroll.Buffer().String(),
+				"roundtrip must restore original content")
+		})
+	}
 }
 
 var (

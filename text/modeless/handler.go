@@ -234,10 +234,10 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 		switch ev.Key {
 		case term.KeyTab:
 			if _, ok := h.cursor.SelectionMode(); ok {
-				h.cursor.ShiftSelectionLeft()
+				h.cursor.ShiftSelectionLeft(h.cfg.indentRune)
 				h.cursor.Unselect()
 			} else {
-				h.cursor.ShiftLineLeft()
+				h.cursor.ShiftLineLeft(h.cfg.indentRune)
 			}
 			handled = true
 			return
@@ -348,16 +348,16 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.ToggleLineComment()
 			case ']':
 				if _, ok := h.cursor.SelectionMode(); ok {
-					h.cursor.ShiftSelectionRight()
+					h.cursor.ShiftSelectionRight(h.cfg.indentRune)
 				} else {
-					h.cursor.ShiftLineRight()
+					h.cursor.ShiftLineRight(h.cfg.indentRune)
 				}
 				handled = true
 			case '[':
 				if _, ok := h.cursor.SelectionMode(); ok {
-					handled = h.cursor.ShiftSelectionLeft()
+					handled = h.cursor.ShiftSelectionLeft(h.cfg.indentRune)
 				} else {
-					handled = h.cursor.ShiftLineLeft()
+					handled = h.cursor.ShiftLineLeft(h.cfg.indentRune)
 				}
 			case 'l':
 				if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
@@ -473,15 +473,15 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.cursor.DeleteSelection()
 				h.cursor.Unselect()
 			}
-			h.cursor.Insert(' ')
+			h.cursor.InsertWithIndentRune(' ', h.cfg.indentRune)
 			handled = true
 		case term.KeyTab:
 			if _, ok := h.cursor.SelectionMode(); ok {
-				h.cursor.ShiftSelectionRight()
+				h.cursor.ShiftSelectionRight(h.cfg.indentRune)
 				h.cursor.Unselect()
 			} else {
 				if !h.cursor.TryIndent(h.cfg.indentRune) {
-					h.cursor.Insert('\t')
+					h.cursor.Insert(h.cfg.indentRune)
 				}
 			}
 			handled = true
@@ -505,7 +505,7 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 					handled = h.cursor.DeleteSelection()
 					h.cursor.Unselect()
 				} else {
-					h.cursor.Insert(ev.Ch)
+					h.cursor.InsertWithIndentRune(ev.Ch, h.cfg.indentRune)
 					handled = true
 				}
 			}

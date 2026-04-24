@@ -67,7 +67,8 @@ type statusBar interface {
 // defaultmodelessHandlerImplConfig is a sane configuration defaults for modelessHandlerImpl.
 func defaultConfig() modelessConfig {
 	return modelessConfig{
-		tabspaces: component.DefaultTabspaces,
+		tabspaces:  component.DefaultTabspaces,
+		indentRune: text.IndentRuneTab,
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},

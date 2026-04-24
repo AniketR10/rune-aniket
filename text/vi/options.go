@@ -90,7 +90,8 @@ type MacroPlayer interface {
 // defaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
 func defaultviHandlerImplConfig() viConfig {
 	return viConfig{
-		tabspaces: component.DefaultTabspaces,
+		tabspaces:  component.DefaultTabspaces,
+		indentRune: text.IndentRuneTab,
 		resAttr: term.Attributes{
 			Attrs: tcell.AttrReverse,
 		},

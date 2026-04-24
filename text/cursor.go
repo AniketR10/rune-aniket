@@ -2789,23 +2789,30 @@ func (c *Cursor) MoveToPrevChar(ch rune) bool {
 	})
 }
 
-// ShiftLineRight shifts the current cursor's line one tab to the right.
-func (c *Cursor) ShiftLineRight() {
+// ShiftLineRight shifts the current cursor's line one indent level to the right.
+// The indent material used is determined by indentRune (tab or space); when
+// inserting spaces, the cursor's scroll tabspaces setting controls the width.
+func (c *Cursor) ShiftLineRight(indentRune rune) {
 	cursor := c.cursorAtScroll()
-	c.buffer().ShiftRowRight(cursor.Y)
-	cursor.X++
+	indent, width := c.indentMaterial(indentRune)
+	at := term.Coordinates{Y: cursor.Y}
+	c.buffer().InsertString(at, indent)
+	cursor.X += width
 	c.setCursorAfterUpdate(cursor)
 }
 
-// ShiftLineLeft shifts the current cursor's line one tab to the left. It returns
-// false if line's start of content is already at the start of the line.
-func (c *Cursor) ShiftLineLeft() bool {
+// ShiftLineLeft shifts the current cursor's line one indent level to the left.
+// The indent material used is determined by indentRune (tab or space); when
+// dedenting spaces, the cursor's scroll tabspaces setting controls the width.
+// It returns false if the line's start of content is already at the start of
+// the line.
+func (c *Cursor) ShiftLineLeft(indentRune rune) bool {
 	cursor := c.cursorAtScroll()
-	ok := c.buffer().ShiftRowLeft(cursor.Y)
+	removed, ok := c.shiftRowLeft(cursor.Y, indentRune)
 	if !ok {
 		return false
 	}
-	cursor.X--
+	cursor.X -= removed
 	if cursor.X < 0 {
 		cursor.X = 0
 	}
@@ -2824,31 +2831,78 @@ func (c *Cursor) getShiftSelection() (from, to term.Coordinates) {
 	return
 }
 
-// ShiftSelectionRight shifts the current selection one tab to the right.
-func (c *Cursor) ShiftSelectionRight() {
+// ShiftSelectionRight shifts the current selection one indent level to the
+// right. The indent material is controlled by indentRune.
+func (c *Cursor) ShiftSelectionRight(indentRune rune) {
 	from, to := c.getShiftSelection()
 
 	c.Unselect()
 
+	indent, _ := c.indentMaterial(indentRune)
 	for y := from.Y; y <= to.Y; y++ {
-		c.buffer().ShiftRowRight(y)
+		c.buffer().InsertString(term.Coordinates{Y: y}, indent)
 	}
 }
 
-// ShiftSelectionLeft shifts the current selection one tab to the left. It returns
-// false if selection could not be shifted.
-func (c *Cursor) ShiftSelectionLeft() (ok bool) {
+// ShiftSelectionLeft shifts the current selection one indent level to the
+// left. The indent material is controlled by indentRune. It returns false if
+// selection could not be shifted.
+func (c *Cursor) ShiftSelectionLeft(indentRune rune) (ok bool) {
 	from, to := c.getShiftSelection()
 
 	c.Unselect()
 
 	for y := from.Y; y <= to.Y; y++ {
-		sok := c.buffer().ShiftRowLeft(y)
-		if sok {
+		if _, sok := c.shiftRowLeft(y, indentRune); sok {
 			ok = true
 		}
 	}
 	return
+}
+
+// indentMaterial returns the indent string to insert for one indent level and
+// the number of cells that indent occupies.
+func (c *Cursor) indentMaterial(indentRune rune) (string, int) {
+	if indentRune == IndentRuneSpace {
+		width := max(1, c.scroll.Tabspaces())
+		return strings.Repeat(" ", width), width
+	}
+	return "\t", 1
+}
+
+// shiftRowLeft removes one indent level from the start of the row and returns
+// the number of cells removed and whether anything was removed.
+func (c *Cursor) shiftRowLeft(row int, indentRune rune) (int, bool) {
+	buf := c.buffer()
+	if indentRune != IndentRuneSpace {
+		if buf.ShiftRowLeft(row) {
+			return 1, true
+		}
+		return 0, false
+	}
+	tabspaces := max(1, c.scroll.Tabspaces())
+	from := term.Coordinates{Y: row}
+	// Remove up to tabspaces leading ' ' or a single leading '\t'.
+	removed := 0
+	for removed < tabspaces {
+		cell, ok := buf.Cell(term.Coordinates{Y: row, X: removed})
+		if !ok {
+			break
+		}
+		if cell.Ch == '\t' && removed == 0 {
+			buf.Delete(from, term.Coordinates{Y: row, X: 1})
+			return tabspaces, true
+		}
+		if cell.Ch != ' ' {
+			break
+		}
+		removed++
+	}
+	if removed == 0 {
+		return 0, false
+	}
+	buf.Delete(from, term.Coordinates{Y: row, X: removed})
+	return removed, true
 }
 
 // ReindentSelection reindents all lines in the current selection using the indent service.

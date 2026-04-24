@@ -886,13 +886,16 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		case 'r':
 			vi.setReplaceOneMode()
 		case '>':
-			vi.setShiftMode(vi.cursor.ShiftSelectionRight, '>')
+			vi.setShiftMode(
+				func() { vi.cursor.ShiftSelectionRight(vi.config.indentRune) }, '>')
 			doResetCount = false
 		case '<':
-			vi.setShiftMode(func() { vi.cursor.ShiftSelectionLeft() }, '<')
+			vi.setShiftMode(
+				func() { vi.cursor.ShiftSelectionLeft(vi.config.indentRune) }, '<')
 			doResetCount = false
 		case '=':
-			vi.setShiftMode(func() { vi.cursor.ReindentSelection(vi.config.indentRune) }, '=')
+			vi.setShiftMode(
+				func() { vi.cursor.ReindentSelection(vi.config.indentRune) }, '=')
 			doResetCount = false
 		case ',':
 			event := term.Event{Type: term.EventKey, Ch: vi.moveChar}
@@ -1504,13 +1507,13 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			vi.insertRegister.WriteRune('\n')
 			handled = true
 		case term.KeySpace:
-			vi.cursor.Insert(' ')
+			vi.cursor.InsertWithIndentRune(' ', vi.config.indentRune)
 			vi.insertRegister.WriteRune(' ')
 			handled = true
 		case term.KeyTab:
 			if !vi.cursor.TryIndent(vi.config.indentRune) {
-				vi.cursor.Insert('\t')
-				vi.insertRegister.WriteRune('\t')
+				vi.cursor.InsertWithIndentRune(vi.config.indentRune, vi.config.indentRune)
+				vi.insertRegister.WriteRune(vi.config.indentRune)
 			}
 			handled = true
 		case term.KeyBackspace:
@@ -1537,7 +1540,7 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			handled = true
 		default:
 			if ev.Ch != 0 {
-				vi.cursor.Insert(ev.Ch)
+				vi.cursor.InsertWithIndentRune(ev.Ch, vi.config.indentRune)
 				vi.insertRegister.WriteRune(ev.Ch)
 				handled = true
 			}
@@ -1558,10 +1561,10 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			vi.insertRegister.WriteRune('\n')
 			handled = true
 		case 't':
-			vi.cursor.ShiftLineRight()
+			vi.cursor.ShiftLineRight(vi.config.indentRune)
 			handled = true
 		case 'd':
-			vi.cursor.ShiftLineLeft()
+			vi.cursor.ShiftLineLeft(vi.config.indentRune)
 			handled = true
 		case 'n':
 			keepCompletion = true
@@ -1767,10 +1770,10 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 				vi.cursor.SwapSelectionEnd()
 			}
 		case '>':
-			vi.cursor.ShiftSelectionRight()
+			vi.cursor.ShiftSelectionRight(vi.config.indentRune)
 			vi.setNormalMode()
 		case '<':
-			vi.cursor.ShiftSelectionLeft()
+			vi.cursor.ShiftSelectionLeft(vi.config.indentRune)
 			vi.setNormalMode()
 		case '=':
 			vi.cursor.ReindentSelection(vi.config.indentRune)
