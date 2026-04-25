@@ -699,6 +699,8 @@ if mode == "modeless":
                 "<m-f>":       "searchtext",
                 "<m-g>":       "jumptolocation next search",
                 "<s-m-g>":     "jumptolocation prev search",
+                "<ctrl-->":    "cursorhistory prev",
+                "<ctrl-shift-->": "cursorhistory next",
                 "<m-u>":       "cursorhistory prev",
                 "<s-m-u>":     "cursorhistory next",
                 "<m-,>":       "config",

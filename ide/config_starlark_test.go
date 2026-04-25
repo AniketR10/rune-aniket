@@ -317,6 +317,9 @@ func TestRuneStarFixture(t *testing.T) {
 				assert.Equal(t, "modeless", editor["mode"])
 				cmd := cfg["command"].(map[string]any)
 				assert.Equal(t, "<s-m-p>", cmd["key"])
+				bindings := cmd["key_bindings"].(map[string]any)
+				assert.Equal(t, "cursorhistory prev", bindings["<ctrl-->"])
+				assert.Equal(t, "cursorhistory next", bindings["<ctrl-shift-->"])
 				term := cfg["terminal"].(map[string]any)
 				assert.Equal(t, false, term["modal"])
 			},
