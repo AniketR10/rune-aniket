@@ -153,7 +153,23 @@ Relative paths in this skill are relative to the skill directory.
 		second := tool.Execute(ctx, `{"name":"debug"}`)
 		assert.False(t, second.IsError)
 		assert.Contains(t, second.Content, "already loaded")
-		assert.NotContains(t, second.Content, "<skill_content")
+		// Avoid re-injecting the full body, but still point the model at
+		// the existing skill_content block so it knows where to find
+		// the instructions instead of giving up.
+		assert.NotContains(t, second.Content, "</skill_content>")
+		assert.Contains(t, second.Content, `<skill_content name="debug">`)
+	})
+
+	t.Run("definition description references actual injected tag", func(t *testing.T) {
+		tool := NewSkillTool(registry, nil, nil)
+		desc := tool.Definition().Function.Description
+		// The preloaded skill content is injected with a
+		// <skill_content> tag (see skills.FormatSkillContent). The tool
+		// description must reference that real tag — not a fictional
+		// <skill-name> tag — so the model recognises a preloaded skill
+		// and follows its instructions directly.
+		assert.Contains(t, desc, "<skill_content")
+		assert.NotContains(t, desc, "<skill-name>")
 	})
 
 	t.Run("different skills are not deduped", func(t *testing.T) {

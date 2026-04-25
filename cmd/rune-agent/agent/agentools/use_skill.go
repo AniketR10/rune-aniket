@@ -66,8 +66,9 @@ func (t *skillTool) Definition() llm.Tool {
 			Description: `Load and execute a skill by name. When the user's request matches a
 skill listed in the system-reminder, call this tool BEFORE generating
 any other response. Do not mention a skill without calling this tool.
-If a <skill-name> tag is already present in the current turn, the
-skill has been loaded — follow its instructions directly.
+If a <skill_content> block is already present in the current turn,
+the skill has been loaded — follow its instructions directly without
+calling this tool again.
 When users reference a slash command or /<something> (e.g. "/review",
 "/commit"), they are referring to a skill. Use this tool to invoke it.`,
 			Parameters: map[string]any{
@@ -132,10 +133,19 @@ func (t *skillTool) Execute(
 		return t.executeAgentSkill(ctx, skill, args.Args)
 	}
 
-	// Dedup: skip if this skill was already loaded in this run.
+	// Dedup: don't re-inject the full body if this skill was already
+	// loaded in this run. Still point the model at the existing
+	// <skill_content> block so it follows the instructions instead of
+	// giving up.
 	if agent.IsSkillActivated(ctx, args.Name) {
 		return agent.ToolResult{
-			Content: fmt.Sprintf("Skill %q is already loaded in this conversation.", args.Name),
+			Content: fmt.Sprintf(
+				"Skill %q is already loaded in this conversation. "+
+					"Follow the instructions in the existing "+
+					"<skill_content name=%q> block above instead of "+
+					"calling this tool again.",
+				args.Name, args.Name,
+			),
 		}
 	}
 	agent.MarkSkillActivated(ctx, args.Name)
