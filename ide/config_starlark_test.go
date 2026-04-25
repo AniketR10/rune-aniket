@@ -369,6 +369,7 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 		term.RingBell, term.ScheduleNextTick, ""))
 	assert.Equal(t, "modal", cfg.editorMode())
 	assert.Equal(t, "info", cfg.cfg["log_level"])
+	assert.Equal(t, 2000, cfg.shellMaxHistory())
 }
 
 func TestDecodeStarlarkOverlayRead(t *testing.T) {

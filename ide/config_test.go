@@ -827,6 +827,27 @@ func TestLoadEmbededConfig(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestShellMaxHistoryFromConfig(t *testing.T) {
+	f, err := os.CreateTemp("", "*.star")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`config = {
+    "shell": {
+        "max_history": 7,
+    },
+}`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.Equal(t, 7, cfg.shellMaxHistory())
+}
+
 func TestInvalidAliases(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)

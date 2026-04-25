@@ -78,6 +78,7 @@ type Config struct {
 	Tabspaces               int
 	CommandEvent            term.KeyComb
 	CommandMaxHistory       int
+	ShellMaxHistory         int
 	CommandHistoryKey       term.KeyComb
 	CommandKeyBindings      map[term.KeyComb][][]string
 	CommandSequenceBindings map[handler.Sequence][][]string
@@ -294,6 +295,7 @@ func DefaultConfig() Config {
 		Tabspaces:               4,
 		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       2000,
+		ShellMaxHistory:         2000,
 		CommandHistoryKey:       term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
 		Config:                  browser.DefaultConfig(),
 		DirtyTabAttr:            term.Attributes{Attrs: tcell.AttrBold},
@@ -484,6 +486,13 @@ func WithCommandKeyBinding(key term.KeyComb, cmdAndArgs [][]string) Option {
 func WithCommandMaxHistory(max int) Option {
 	return func(cfg *Config) {
 		cfg.CommandMaxHistory = max
+	}
+}
+
+// WithShellMaxHistory sets the max history to retain for the companion shell.
+func WithShellMaxHistory(max int) Option {
+	return func(cfg *Config) {
+		cfg.ShellMaxHistory = max
 	}
 }
 

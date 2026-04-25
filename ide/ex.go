@@ -69,6 +69,7 @@ import (
 
 const (
 	commandHistoryDocumentID = "command-history:ex-command-history"
+	shellHistoryDocumentID   = "shell-history:ex-shell-history"
 	reissuePadding           = 10 * time.Millisecond
 	// fileExplorerURI is the pseudo-URI used to identify the file
 	// explorer's in-memory buffer. Exposed so that infrastructure
@@ -1658,7 +1659,11 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 
 func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
 	if e.companionShell == nil {
-		h, registry := ideshell.New(e.emulatorConfig.ScheduleNextTick, e)
+		h, registry := ideshell.New(
+			e.emulatorConfig.ScheduleNextTick, e,
+			repl.WithMaxHistory(e.config.ShellMaxHistory),
+			repl.WithStorage(shellHistoryDocumentID, e.storage),
+		)
 		if e.wsExecutor != nil {
 			e.wsExecutor.RegisterCommands(registry)
 		}

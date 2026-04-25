@@ -254,6 +254,30 @@ func (c ideConfig) commandMaxHistory() (ret int) {
 	return
 }
 
+func (c ideConfig) shell() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(config.MapConfig(c.cfg), "shell")
+}
+
+func (c ideConfig) shellMaxHistory() (ret int) {
+	ret = text.DefaultConfig().ShellMaxHistory
+	b, ok := c.shell()
+	if !ok {
+		return
+	}
+	max, err := b.GetInt("max_history")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["shell.max_history"] = err
+		}
+		return
+	}
+	ret = max
+	return
+}
+
 func (c ideConfig) commandHistoryKey() (ret term.KeyComb) {
 	ret = text.DefaultConfig().CommandHistoryKey
 	cfg, ok := c.command()

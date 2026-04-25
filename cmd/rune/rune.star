@@ -239,6 +239,9 @@ config = {
             "hint":        "󰌵",
         },
     },
+    "shell": {
+        "max_history": 2000,
+    },
     "gui": {
         # Add or remove pixels from the font's default column width.
         "column-width-offset": -1,

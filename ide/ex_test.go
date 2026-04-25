@@ -1083,6 +1083,129 @@ func TestShellCommandOpensTab(t *testing.T) {
 	assert.Equal(t, "shell:///tmp/my-workspace", tabs[0].URI().String())
 }
 
+// TestShellCommandPersistsHistory verifies that commands entered into
+// the IDE shell are persisted to the shared storageapi.Service via the
+// shellHistoryDocumentID, and that a second ex booted on the same
+// storage observes the previously persisted entries.
+func TestShellCommandPersistsHistory(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-hist")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+
+	svc := storagestub.NewInMemoryService()
+
+	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+
+	// Drive `:shell help<enter>` through the handler. The exact
+	// layout is verified by TestShellCommandOpensTab; here we only
+	// care about the persistence side-effect on storageapi.Service.
+	handlertest.RunHandlerSequence(t, b, 20, 10, []handlertest.SequenceTestCase{
+		{
+			InputSequence: "<c-\\\\>shell<enter>help<enter>",
+			Expected: "┌──────────────────┐\n" +
+				"│\ue691 shell           │\n" +
+				"├──────────────────┤\n" +
+				"│> help            │\n" +
+				"│• help — Show     │\n" +
+				"│  available       │\n" +
+				"│  commands        │\n" +
+				"│                  │\n" +
+				"│> ▐               │\n" +
+				"└──────────────────┘",
+		},
+	})
+
+	// The command typed through the shell tab should have been
+	// persisted by repl.WithStorage under shellHistoryDocumentID.
+	var doc struct {
+		Items []string
+	}
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	require.NotEmpty(t, doc.Items)
+	assert.Equal(t, "help", doc.Items[0])
+
+	b.Close()
+
+	// Boot a fresh ex backed by the same storage and verify the
+	// repl-backed history document is still available.
+	b2 := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b2.mu = &sync.Mutex{}
+	b2.scheduler = scheduler
+	defer b2.Close()
+
+	require.NoError(t, b2.shellnewtab(context.Background()))
+	tabs := b2.comp.Tabs()
+	require.Len(t, tabs, 1)
+	_, ok := tabs[0].Handler().(*repl.Handler)
+	assert.True(t, ok)
+
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	assert.Contains(t, doc.Items, "help")
+}
+
+func TestShellCommandRespectsMaxHistory(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-hist-max")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+
+	svc := storagestub.NewInMemoryService()
+	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+		text.WithShellMaxHistory(2),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	openShell := func() {
+		b.Handle(term.Event{Type: term.EventKey, Ch: '\\', Mod: term.ModCtrl})
+		for _, r := range "shell" {
+			b.Handle(term.Event{Type: term.EventKey, Ch: r})
+		}
+		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	}
+	submitHelp := func() {
+		for _, r := range "help" {
+			b.Handle(term.Event{Type: term.EventKey, Ch: r})
+		}
+		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	}
+
+	openShell()
+	for range 3 {
+		submitHelp()
+	}
+
+	var doc struct {
+		Items []string
+	}
+	require.NoError(t, svc.Get(context.Background(), shellHistoryDocumentID, &doc))
+	require.Len(t, doc.Items, 2)
+	assert.Equal(t, []string{"help", "help"}, doc.Items)
+	assert.Len(t, doc.Items, 2)
+}
+
 func assertHandled(
 	t *testing.T, h *browsertest.TestHandler, startingRune rune, exit, handled bool,
 ) {
