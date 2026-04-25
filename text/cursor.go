@@ -1849,6 +1849,102 @@ func (c *Cursor) SelectAParagraph() bool {
 	return c.selectRange(term.Coordinates{Y: startLine}, c.lineEndCoordinate(endLine))
 }
 
+// lineVisualIndent returns the number of visual columns of leading
+// whitespace on line y, expanding tab characters using the given tabstop.
+// Lines without leading whitespace return 0.
+func (c *Cursor) lineVisualIndent(y int, tabspaces int) int {
+	if y < 0 || y >= c.rows() {
+		return 0
+	}
+	cells := c.buffer().RawCells()
+	if y >= len(cells) {
+		return 0
+	}
+	ts := max(1, tabspaces)
+	indent := 0
+	for _, cell := range cells[y] {
+		switch cell.Ch {
+		case '\t':
+			indent += ts
+		case ' ':
+			indent++
+		default:
+			return indent
+		}
+	}
+	return indent
+}
+
+// SelectIndentationLevel selects the contiguous block of lines whose
+// visual indentation is greater than or equal to the indentation of the
+// current line, including blank lines that lie between same-indent lines
+// and trimming any leading or trailing blank lines that would extend the
+// selection beyond the indented block.
+func (c *Cursor) SelectIndentationLevel(tabspaces int) bool {
+	pos, ok := c.cursorAtScrollBounds()
+	if !ok {
+		return false
+	}
+	rows := c.rows()
+	if rows == 0 {
+		return false
+	}
+
+	line := pos.Y
+	if line >= rows {
+		line = rows - 1
+	}
+	if c.isBlankLine(line) {
+		found := false
+		for next := line + 1; next < rows; next++ {
+			if !c.isBlankLine(next) {
+				line = next
+				found = true
+				break
+			}
+		}
+		if !found {
+			for prev := line - 1; prev >= 0; prev-- {
+				if !c.isBlankLine(prev) {
+					line = prev
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	target := c.lineVisualIndent(line, tabspaces)
+	startLine, endLine := line, line
+	for startLine > 0 {
+		prev := startLine - 1
+		if !c.isBlankLine(prev) && c.lineVisualIndent(prev, tabspaces) < target {
+			break
+		}
+		startLine = prev
+	}
+	for endLine+1 < rows {
+		next := endLine + 1
+		if !c.isBlankLine(next) && c.lineVisualIndent(next, tabspaces) < target {
+			break
+		}
+		endLine = next
+	}
+	for startLine < line && c.isBlankLine(startLine) {
+		startLine++
+	}
+	for endLine > line && c.isBlankLine(endLine) {
+		endLine--
+	}
+
+	from := term.Coordinates{Y: startLine}
+	to := term.Coordinates{Y: endLine, X: c.view().Columns(endLine)}
+	return c.setExplicitSelection(LineSelection, from, to, from)
+}
+
 // MoveNextParagraph moves the cursor forward to the next blank line
 // after a non-blank line (i.e. the next paragraph boundary). Returns
 // true when the cursor actually moved.

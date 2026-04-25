@@ -504,7 +504,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		{"Expand selection to brackets", "{abc}<left><left><shift-left><ctrl-shift-m>", nil, term.Coordinates{X: 4}, nil},
 		//{"Expand selection to HTML/XML tag", "<shift-meta-a>", nil, term.Coordinates{}}, // No tags
 		{"Expand selection to scope", "<shift-meta-space>", nil, term.Coordinates{}, nil},
-		//{"Expand selection to indentation level", "<shift-meta-j>", nil, term.Coordinates{}},
+		{"Expand selection to indentation level", "<shift-meta-j><m-c>", nil, term.Coordinates{}, spAll("\n")},
 
 		// Navigation and movement
 		{"Move cursor to beginning of line", "<right><ctrl-a>", nil, term.Coordinates{Y: 0, X: 0}, nil},
@@ -630,6 +630,111 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 				assert.Equal(t, *test.clipboard, paste.Text)
 			}
 			assert.Equal(t, test.coordinates, handler.CursorAtScroll())
+		})
+	}
+}
+
+func TestSublimeSelectIndentationLevelKeyBinding(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		content     string
+		keys        string
+		tabspaces   int
+		wantHandled []bool
+		wantClip    string
+		wantSel     string
+		wantAt      term.Coordinates
+		wantMode    text.SelectMode
+		wantModeOK  bool
+	}{
+		{
+			name:     "copies current indented block",
+			content:  "root\n\tb\n\tc\nroot2",
+			keys:     "<down><shift-meta-j><m-c>",
+			wantClip: "\tb\n\tc\n",
+			wantAt:   term.Coordinates{Y: 1},
+		},
+		{
+			name:       "leaves line selection active after keybinding",
+			content:    "root\n\tb\n\tc\nroot2",
+			keys:       "<down><shift-meta-j>",
+			wantSel:    "\tb\n\tc\n",
+			wantAt:     term.Coordinates{Y: 1},
+			wantMode:   text.LineSelection,
+			wantModeOK: true,
+		},
+		{
+			name:       "keeps deeper nested lines in selected block",
+			content:    "root\n  if\n    child\n  sibling\nroot2",
+			keys:       "<down><shift-meta-j>",
+			wantSel:    "  if\n    child\n  sibling\n",
+			wantAt:     term.Coordinates{Y: 1},
+			wantMode:   text.LineSelection,
+			wantModeOK: true,
+		},
+		{
+			name:       "uses configured tabspaces for visual indentation",
+			content:    "root\n\ttabbed\n  two spaces\n shallow",
+			keys:       "<down><shift-meta-j>",
+			tabspaces:  2,
+			wantSel:    "\ttabbed\n  two spaces\n",
+			wantAt:     term.Coordinates{Y: 1},
+			wantMode:   text.LineSelection,
+			wantModeOK: true,
+		},
+		{
+			name:        "does not leave selection on blank-only buffer",
+			content:     "\n\t\n  ",
+			keys:        "<down><shift-meta-j>",
+			wantHandled: []bool{true, false},
+			wantAt:      term.Coordinates{Y: 1},
+			wantModeOK:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			seq, err := term.ParseKeys(tc.keys)
+			require.NoError(t, err)
+
+			clip := clipboard.NewInMemory()
+			reg := registerhistory.NewClipboard(registerset.New(clip))
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tc.content))
+
+			tabspaces := tc.tabspaces
+			if tabspaces <= 0 {
+				tabspaces = 4
+			}
+			handler := NewHandler(buf, uri, text.IndentRuneTab, tabspaces, WithClipboard(reg)).(*editorHandler)
+			handler.Resize(80, 10)
+			for i, key := range seq {
+				ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}
+				_, ok := handler.Handle(ev)
+				wantHandled := true
+				if len(tc.wantHandled) > 0 {
+					wantHandled = tc.wantHandled[i]
+				}
+				require.Equal(t, wantHandled, ok, "key %d", i)
+			}
+
+			if tc.wantClip != "" {
+				paste, err := clip.Paste(clipboard.DefaultRegisterID)
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantClip, paste.Text)
+			}
+			if tc.wantSel != "" {
+				assert.Equal(t, tc.wantSel, handler.cursor.Selection())
+			}
+			mode, ok := handler.cursor.SelectionMode()
+			assert.Equal(t, tc.wantModeOK, ok)
+			if tc.wantModeOK {
+				assert.Equal(t, tc.wantMode, mode)
+			}
+			assert.Equal(t, tc.wantAt, handler.CursorAtScroll())
 		})
 	}
 }

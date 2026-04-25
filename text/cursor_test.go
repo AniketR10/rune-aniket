@@ -5104,6 +5104,148 @@ func TestCursorMoveToScroll(t *testing.T) {
 	}
 }
 
+func TestCursorSelectIndentationLevel(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		cursorAt  term.Coordinates
+		tabspaces int
+		want      bool
+		wantSel   string
+		wantStart term.Coordinates
+		wantEnd   term.Coordinates
+	}{
+		{
+			name:    "empty buffer returns false",
+			content: "",
+			want:    false,
+		},
+		{
+			name:     "blank-only buffer returns false",
+			content:  "\n\t\n  ",
+			cursorAt: term.Coordinates{Y: 1},
+			want:     false,
+		},
+		{
+			name:      "all indent zero selects entire buffer",
+			content:   "a\nb\nc",
+			cursorAt:  term.Coordinates{Y: 1},
+			want:      true,
+			wantSel:   "a\nb\nc\n",
+			wantStart: term.Coordinates{Y: 0},
+			wantEnd:   term.Coordinates{Y: 2, X: 1},
+		},
+		{
+			name:      "indented block bounded by less-indented lines",
+			content:   "a\n\tb\n\tc\nd",
+			cursorAt:  term.Coordinates{Y: 1},
+			want:      true,
+			wantSel:   "\tb\n\tc\n",
+			wantStart: term.Coordinates{Y: 1},
+			wantEnd:   term.Coordinates{Y: 2, X: 2},
+		},
+		{
+			name:      "deeper nested lines stay inside selected indent level",
+			content:   "root\n  if\n    child\n  sibling\nroot2",
+			cursorAt:  term.Coordinates{Y: 1},
+			want:      true,
+			wantSel:   "  if\n    child\n  sibling\n",
+			wantStart: term.Coordinates{Y: 1},
+			wantEnd:   term.Coordinates{Y: 3, X: 9},
+		},
+		{
+			name:      "mixed tabs and spaces compare by visual indentation",
+			content:   "root\n\ttabbed\n    spaced\n  shallow",
+			cursorAt:  term.Coordinates{Y: 1},
+			tabspaces: 4,
+			want:      true,
+			wantSel:   "\ttabbed\n    spaced\n",
+			wantStart: term.Coordinates{Y: 1},
+			wantEnd:   term.Coordinates{Y: 2, X: 10},
+		},
+		{
+			name:      "explicit tabspaces controls visual indentation comparison",
+			content:   "root\n\ttabbed\n  two spaces\n shallow",
+			cursorAt:  term.Coordinates{Y: 1},
+			tabspaces: 2,
+			want:      true,
+			wantSel:   "\ttabbed\n  two spaces\n",
+			wantStart: term.Coordinates{Y: 1},
+			wantEnd:   term.Coordinates{Y: 2, X: 12},
+		},
+		{
+			name:      "blank line between same-indent lines is included",
+			content:   "\ta\n\n\tb\nc",
+			cursorAt:  term.Coordinates{Y: 0},
+			want:      true,
+			wantSel:   "\ta\n\n\tb\n",
+			wantStart: term.Coordinates{Y: 0},
+			wantEnd:   term.Coordinates{Y: 2, X: 2},
+		},
+		{
+			name:      "cursor on blank line uses nearest non-blank line",
+			content:   "a\n\n\tb\n\tc\nd",
+			cursorAt:  term.Coordinates{Y: 1},
+			want:      true,
+			wantSel:   "\tb\n\tc\n",
+			wantStart: term.Coordinates{Y: 2},
+			wantEnd:   term.Coordinates{Y: 3, X: 2},
+		},
+		{
+			name:      "cursor on trailing blank line falls back to previous non-blank line",
+			content:   "a\n\tb\n\tc\n\n",
+			cursorAt:  term.Coordinates{Y: 3},
+			want:      true,
+			wantSel:   "\tb\n\tc\n",
+			wantStart: term.Coordinates{Y: 1},
+			wantEnd:   term.Coordinates{Y: 2, X: 2},
+		},
+		{
+			name:      "leading blank lines beyond block are trimmed",
+			content:   "\n\n\tb\n\tc\nd",
+			cursorAt:  term.Coordinates{Y: 2},
+			want:      true,
+			wantSel:   "\tb\n\tc\n",
+			wantStart: term.Coordinates{Y: 2},
+			wantEnd:   term.Coordinates{Y: 3, X: 2},
+		},
+		{
+			name:      "trailing blank lines beyond block are trimmed",
+			content:   "a\n\tb\n\n",
+			cursorAt:  term.Coordinates{Y: 1},
+			want:      true,
+			wantSel:   "\tb\n",
+			wantStart: term.Coordinates{Y: 1},
+			wantEnd:   term.Coordinates{Y: 1, X: 2},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := setupCursorContent(t, 80, 10, tc.content, false)
+			if tc.content != "" {
+				c.MoveToScroll(tc.cursorAt)
+				require.Equal(t, tc.cursorAt, c.cursorAtScroll())
+			}
+			tabspaces := tc.tabspaces
+			if tabspaces <= 0 {
+				tabspaces = 4
+			}
+			got := c.SelectIndentationLevel(tabspaces)
+			assert.Equal(t, tc.want, got)
+			if !tc.want {
+				return
+			}
+			mode, ok := c.SelectionMode()
+			require.True(t, ok)
+			assert.Equal(t, LineSelection, mode)
+			assert.Equal(t, tc.wantSel, c.Selection())
+			assert.Equal(t, tc.wantStart, c.selection.scrollFrom)
+			assert.Equal(t, tc.wantEnd, c.selection.scrollTo)
+		})
+	}
+}
+
 func TestCursorWrap(t *testing.T) {
 	t.Run("takes wraps into consideration", func(t *testing.T) {
 		e := setupCursor(t, 10, 10, true)

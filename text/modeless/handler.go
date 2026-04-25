@@ -379,6 +379,9 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				return
 			case 'D':
 				handled = h.duplicateLine(false /* down */)
+			case 'J':
+				handled = h.cursor.SelectIndentationLevel(h.cfg.indentTabspaces)
+				return
 			case 'd':
 				handled = h.selectNextWordAtCursor()
 				return
