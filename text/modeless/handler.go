@@ -300,6 +300,11 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowUp:
 			handled = h.moveLine(true /* up */)
 		}
+	case term.ModShiftMeta:
+		switch ev.Key {
+		case term.KeySpace:
+			handled = h.cursor.ExpandSelection(ctx)
+		}
 	case term.ModAlt:
 		switch ev.Key {
 		case term.KeyArrowDown:

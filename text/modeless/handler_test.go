@@ -87,6 +87,25 @@ func (s testCommentService) RawCells() [][]term.Cell { return s.view.RawCells() 
 
 func (s testCommentService) String() string { return s.view.String() }
 
+// SelectionExpand lets the modeless handler tests exercise wiring that
+// targets a selection service. The default behavior expands an empty
+// caret range by one column so the tests do not need a full syntactic
+// selection implementation.
+func (s testCommentService) SelectionExpand(rng term.Range) (term.Range, bool) {
+	if rng.Start == rng.End {
+		end := rng.End
+		end.X++
+		return term.Range{Start: rng.Start, End: end}, true
+	}
+	return term.Range{}, false
+}
+
+func (s testCommentService) SelectionShrink(
+	rng term.Range, caret term.Coordinates,
+) (term.Range, bool) {
+	return term.Range{Start: caret, End: caret}, true
+}
+
 func (s testCommentService) CommentCoverage(rng term.Range) ([]term.Range, bool) {
 	start, end := term.CoordinatesSort(rng.Start, rng.End)
 	var ranges []term.Range
@@ -484,7 +503,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		// Expand selection
 		{"Expand selection to brackets", "{abc}<left><left><shift-left><ctrl-shift-m>", nil, term.Coordinates{X: 4}, nil},
 		//{"Expand selection to HTML/XML tag", "<shift-meta-a>", nil, term.Coordinates{}}, // No tags
-		//{"Expand selection to scope", "<shift-meta-space>", nil, term.Coordinates{}},
+		{"Expand selection to scope", "<shift-meta-space>", nil, term.Coordinates{}, nil},
 		//{"Expand selection to indentation level", "<shift-meta-j>", nil, term.Coordinates{}},
 
 		// Navigation and movement
