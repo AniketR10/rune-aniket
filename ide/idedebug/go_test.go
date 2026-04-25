@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package idedebug
 
 import (
@@ -59,7 +58,7 @@ func TestE2E(t *testing.T) {
 
 	// Line number for "sum := Add(x, y)" in
 	// go/main.go (after the license header).
-	const breakpointLine = 27
+	const breakpointLine = 37
 
 	tests := []struct {
 		name string
@@ -371,7 +370,7 @@ func TestE2E_NoReadErrorWarnings(t *testing.T) {
 
 	uri := makeURI(t, "file://"+tmpDir)
 	mainPath := filepath.Join(tmpDir, "main.go")
-	const breakpointLine = 27
+	const breakpointLine = 37
 
 	// Install a warn-capturing slog handler.
 	// Use a TextHandler writing to stderr as the inner

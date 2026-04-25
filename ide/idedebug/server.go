@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package idedebug
 
 import (
@@ -121,9 +120,9 @@ func (s *debugServer) start(ctx context.Context) error {
 	}
 
 	// Do not use ctx for lifecycle cancellation: it is scoped to the initial
-	// protocol exchange. Copy logical process metadata from ctx into the server
-	// lifecycle context so debug adapter processes remain associated with the
-	// extension that requested them.
+	// protocol exchange and may be a testing.T context in tests. Copy only the
+	// logical process metadata from ctx into the server lifecycle context so the
+	// debug adapter lives until Manager.Close/debugServer.stop cancels s.ctx.
 	lifecycleCtx := processctx.DeriveCommandContext(s.ctx, ctx)
 
 	s.log.Info("starting server", "path", cmd.Path, "args", cmd.Args)

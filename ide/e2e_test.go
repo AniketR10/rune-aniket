@@ -236,16 +236,39 @@ command:
 }
 
 func assertCwdVar(t *testing.T, filename string, expectedValue string) {
-	data, err := os.ReadFile(filename)
-	require.NoError(t, err)
-	assert.Equal(t, expectedValue, strings.TrimSuffix(strings.Trim(string(data), " "), "\n"))
+	t.Helper()
+
+	var actual string
+	assert.Eventually(t, func() bool {
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			return false
+		}
+		actual = strings.TrimSuffix(strings.Trim(string(data), " "), "\n")
+		return actual == expectedValue
+	}, 5*time.Second, 50*time.Millisecond,
+		"expected %q in %s, got %q", expectedValue, filename, actual)
 }
 
 func assertAuthVarsPresent(t *testing.T, filename string) {
-	data, err := os.ReadFile(filename)
-	require.NoError(t, err)
+	t.Helper()
 
-	vars := strings.Split(strings.TrimSuffix(strings.Trim(string(data), " "), "\n"), "\n")
+	var vars []string
+	assert.Eventually(t, func() bool {
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			return false
+		}
+		content := strings.TrimSuffix(strings.Trim(string(data), " "), "\n")
+		if content == "" {
+			vars = nil
+		} else {
+			vars = strings.Split(content, "\n")
+		}
+		return len(vars) == 4
+	}, 5*time.Second, 50*time.Millisecond,
+		"expected auth env vars in %s, got %v", filename, vars)
+
 	assert.Equal(t, 4, len(vars))
 	for _, v := range vars {
 		kv := strings.Split(v, "=")

@@ -3670,8 +3670,9 @@ func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]any{
 		"clipboard": "memory",
 		"command": map[string]any{
-			"show_manual_after": "1h",
-			"key":               "<c-\\\\>", // see handlertest.TestHandlerIsolated
+			"show_manual_after":  "1h",
+			"show_progress_hint": false,
+			"key":                "<c-\\\\>", // see handlertest.TestHandlerIsolated
 			"key_bindings": map[string]any{
 				"1": "workspacefocus 1",
 				"2": "workspacefocus 2",
