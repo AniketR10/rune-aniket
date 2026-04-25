@@ -3729,7 +3729,13 @@ func TestAIEditorHandler_complete_filters_sub_agent_dialogues(t *testing.T) {
 
 	flusher := openChatAndGetTab(t, deps)
 	flusher.idleTimeout = 200 * time.Millisecond
-	flusher.maxWait = 1 * time.Second
+	// This flow runs a main agent and a sub-agent. Under the race detector
+	// and package-level parallelism, approving the final plan can take more
+	// than one second to progress from the sub-agent's final response to the
+	// parent agent's completed skill response. Give the async flusher enough
+	// time to settle so the assertions observe the stable final frame rather
+	// than an intermediate transcript state.
+	flusher.maxWait = 10 * time.Second
 
 	// Drive the conversation: user sends "hello" which triggers the
 	// full main-agent → agent tool → sub-agent → main-agent flow.
@@ -10842,28 +10848,40 @@ func TestAgent_NormalizeStoredDialogueBeforeLLMCall(t *testing.T) {
 	// rejectMalformed returns a 400 error if the request contains any of
 	// the message issues that normalizeMessages is supposed to fix.
 	rejectMalformed := func(req llm.Request) error {
-		callIDs := make(map[string]struct{})
-		resultIDs := make(map[string]struct{})
-		for _, msg := range req.Messages {
+		validToolResultIndexes := make(map[int]struct{})
+		for i, msg := range req.Messages {
+			if msg.Role != llm.RoleAssistant || len(msg.ToolCalls) == 0 {
+				continue
+			}
+
+			callIDs := make(map[string]struct{}, len(msg.ToolCalls))
 			for _, tc := range msg.ToolCalls {
 				callIDs[tc.ID] = struct{}{}
 			}
-			if msg.Role == llm.RoleTool && msg.ToolCallID != "" {
-				resultIDs[msg.ToolCallID] = struct{}{}
+
+			seenResults := make(map[string]struct{}, len(msg.ToolCalls))
+			for j := i + 1; j < len(req.Messages) && req.Messages[j].Role == llm.RoleTool; j++ {
+				id := req.Messages[j].ToolCallID
+				if _, ok := callIDs[id]; ok {
+					seenResults[id] = struct{}{}
+					validToolResultIndexes[j] = struct{}{}
+				}
+			}
+
+			for _, tc := range msg.ToolCalls {
+				if _, ok := seenResults[tc.ID]; !ok {
+					return fmt.Errorf("400: tool use id %s not followed immediately by tool result", tc.ID)
+				}
 			}
 		}
-		for _, msg := range req.Messages {
+
+		for i, msg := range req.Messages {
 			if msg.Role == llm.RoleAssistant && msg.Content == "" {
 				return fmt.Errorf("400: text content blocks must be non-empty")
 			}
-			for _, tc := range msg.ToolCalls {
-				if _, ok := resultIDs[tc.ID]; !ok {
-					return fmt.Errorf("400: tool use id %s not found in tool results", tc.ID)
-				}
-			}
 			if msg.Role == llm.RoleTool {
-				if _, ok := callIDs[msg.ToolCallID]; !ok {
-					return fmt.Errorf("400: tool result %s references unknown tool call", msg.ToolCallID)
+				if _, ok := validToolResultIndexes[i]; !ok {
+					return fmt.Errorf("400: tool result %s is not adjacent to its tool call", msg.ToolCallID)
 				}
 			}
 		}
@@ -10902,6 +10920,22 @@ func TestAgent_NormalizeStoredDialogueBeforeLLMCall(t *testing.T) {
 				{Role: llm.RoleSystem, Content: "sys"},
 				{Role: llm.RoleUser, Content: "fix the bug"},
 				{Role: llm.RoleTool, Content: "package main", ToolCallID: "call_missing"},
+			},
+		},
+		{
+			name: "non-adjacent matched tool result",
+			stored: []llm.Message{
+				{Role: llm.RoleSystem, Content: "sys"},
+				{Role: llm.RoleUser, Content: "fix the bug"},
+				{
+					Role:    llm.RoleAssistant,
+					Content: "I'll read the file",
+					ToolCalls: []llm.ToolCall{
+						{ID: "call_late", Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`}},
+					},
+				},
+				{Role: llm.RoleUser, Content: "continue"},
+				{Role: llm.RoleTool, Content: "package main", ToolCallID: "call_late"},
 			},
 		},
 	}

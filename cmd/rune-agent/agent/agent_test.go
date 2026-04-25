@@ -3714,6 +3714,17 @@ func TestCachePrefixStability(t *testing.T) {
 }
 
 func TestNormalizeMessages(t *testing.T) {
+	toolCall := func(id string) llm.ToolCall {
+		return llm.ToolCall{
+			ID:   id,
+			Type: llm.ToolTypeFunction,
+			Function: llm.FunctionCall{
+				Name:      "read_file",
+				Arguments: `{"path":"x"}`,
+			},
+		}
+	}
+
 	t.Run("drops empty assistant messages after stripping orphaned tool calls", func(t *testing.T) {
 		// Simulates a model switch scenario: an assistant message has tool calls
 		// but no text content (common for OpenAI). When tool calls are orphaned
@@ -3748,6 +3759,99 @@ func TestNormalizeMessages(t *testing.T) {
 		assert.Equal(t, "Sure, let me check.", msgs[1].Content)
 		assert.Empty(t, msgs[1].ToolCalls)
 	})
+
+	t.Run("drops matched tool calls and results that are not adjacent", func(t *testing.T) {
+		msgs := normalizeMessages([]llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+			{Role: llm.RoleAssistant, Content: "I'll check.", ToolCalls: []llm.ToolCall{toolCall("late_1")}},
+			{Role: llm.RoleUser, Content: "actually, continue"},
+			{Role: llm.RoleTool, ToolCallID: "late_1", Content: "result"},
+			{Role: llm.RoleAssistant, Content: "done"},
+		})
+
+		require.Len(t, msgs, 4)
+		assert.Equal(t, llm.RoleUser, msgs[0].Role)
+		assert.Equal(t, llm.RoleAssistant, msgs[1].Role)
+		assert.Equal(t, "I'll check.", msgs[1].Content)
+		assert.Empty(t, msgs[1].ToolCalls)
+		assert.Equal(t, llm.RoleUser, msgs[2].Role)
+		assert.Equal(t, llm.RoleAssistant, msgs[3].Role)
+	})
+
+	t.Run("keeps only immediate tool calls with results from partial group", func(t *testing.T) {
+		msgs := normalizeMessages([]llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{toolCall("immediate_1"), toolCall("missing_1")}},
+			{Role: llm.RoleTool, ToolCallID: "immediate_1", Content: "result"},
+			{Role: llm.RoleUser, Content: "next"},
+		})
+
+		require.Len(t, msgs, 4)
+		assert.Equal(t, llm.RoleAssistant, msgs[1].Role)
+		require.Len(t, msgs[1].ToolCalls, 1)
+		assert.Equal(t, "immediate_1", msgs[1].ToolCalls[0].ID)
+		assert.Equal(t, llm.RoleTool, msgs[2].Role)
+		assert.Equal(t, "immediate_1", msgs[2].ToolCallID)
+	})
+
+	t.Run("drops late tool result even when earlier assistant call has immediate result", func(t *testing.T) {
+		msgs := normalizeMessages([]llm.Message{
+			{Role: llm.RoleUser, Content: "hello"},
+			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{toolCall("call_1")}},
+			{Role: llm.RoleTool, ToolCallID: "call_1", Content: "first result"},
+			{Role: llm.RoleAssistant, Content: "got it"},
+			{Role: llm.RoleTool, ToolCallID: "call_1", Content: "duplicate late result"},
+			{Role: llm.RoleUser, Content: "next"},
+		})
+
+		require.Len(t, msgs, 5)
+		assert.Equal(t, llm.RoleTool, msgs[2].Role)
+		assert.Equal(t, "first result", msgs[2].Content)
+		for _, msg := range msgs[3:] {
+			assert.NotEqual(t, llm.RoleTool, msg.Role)
+		}
+	})
+}
+
+func TestAgentRun_NormalizesNonAdjacentToolResultsBeforeReplay(t *testing.T) {
+	t.Parallel()
+
+	store := newMockStore()
+	replayCall := llm.ToolCall{
+		ID:   "late_1",
+		Type: llm.ToolTypeFunction,
+		Function: llm.FunctionCall{
+			Name:      "read_file",
+			Arguments: `{"path":"x"}`,
+		},
+	}
+	store.data["d"] = dialoguemanager.Dialogue{
+		ID: "d",
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "sys"},
+			{Role: llm.RoleUser, Content: "inspect"},
+			{Role: llm.RoleAssistant, Content: "I'll inspect.", ToolCalls: []llm.ToolCall{replayCall}},
+			{Role: llm.RoleUser, Content: "continue instead"},
+			{Role: llm.RoleTool, ToolCallID: "late_1", Content: "late result"},
+		},
+	}
+
+	svc := &mockService{responses: []mockResponse{stopResponse("done")}}
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{SystemPrompt: "sys"})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d", "continue"))
+	assert.True(t, hasEventType(events, EventDone))
+	require.Equal(t, 1, svc.getCallCount())
+	require.Len(t, svc.requests, 1)
+
+	for _, msg := range svc.requests[0].Messages {
+		assert.NotEqual(t, llm.RoleTool, msg.Role,
+			"late non-adjacent tool results must not be replayed to providers")
+		for _, tc := range msg.ToolCalls {
+			assert.NotEqual(t, "late_1", tc.ID,
+				"tool calls without immediate results must not be replayed to providers")
+		}
+	}
 }
 
 func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testing.T) {

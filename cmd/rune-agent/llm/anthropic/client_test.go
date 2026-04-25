@@ -141,6 +141,57 @@ func TestMaxOutputTokensOverridesConfig(t *testing.T) {
 	assert.Equal(t, int64(8192), captured.MaxTokens)
 }
 
+func TestCreateCompletion_NormalizedReplayDoesNotEmitUnpairedToolUse(t *testing.T) {
+	var captured requestBody
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(body, &captured))
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, minimalSSEResponse("ok"))
+	}))
+	defer srv.Close()
+
+	c := NewClient("test-key", Config{
+		Model:   "claude-test",
+		BaseURL: srv.URL,
+	}, nil)
+
+	// This is the provider-facing shape normalizeMessages should produce
+	// for a stored replay where an assistant tool call was separated from a
+	// matching result by another user turn: keep the assistant text, but
+	// strip both the non-adjacent tool_use and late tool_result.
+	it, err := c.CreateCompletion(context.Background(), llm.Request{
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "sys"},
+			{Role: llm.RoleUser, Content: "inspect"},
+			{Role: llm.RoleAssistant, Content: "I'll inspect."},
+			{Role: llm.RoleUser, Content: "continue instead"},
+			{Role: llm.RoleUser, Content: "continue"},
+		},
+	})
+	require.NoError(t, err)
+	for {
+		_, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+	}
+	require.NoError(t, it.Err())
+	require.NoError(t, it.Close())
+
+	for _, msg := range captured.Messages {
+		for _, block := range msg.Content {
+			assert.NotEqual(t, "tool_use", block.Type,
+				"normalized replay must not emit tool_use blocks without immediate tool_result blocks")
+			assert.NotEqual(t, "tool_result", block.Type,
+				"normalized replay must not emit late tool_result blocks")
+		}
+	}
+}
+
 func TestCacheBreakpoints(t *testing.T) {
 	tests := []struct {
 		name         string

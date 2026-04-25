@@ -992,28 +992,47 @@ func (a *Agent) run(
 //  2. Orphaned tool calls / results: an assistant message may contain
 //     tool calls whose results were never persisted (e.g. the turn was
 //     interrupted before tool execution). Conversely, tool result
-//     messages may lack a preceding tool call. Both cases cause API
-//     errors, so orphaned tool calls are stripped from the assistant
-//     message and orphaned tool results are removed entirely.
+//     messages may lack a preceding tool call. Anthropic also requires
+//     tool results to appear in the immediately-following user turn, so
+//     a matching result ID later in the transcript is still invalid.
+//     Orphaned or non-adjacent tool calls are stripped from the assistant
+//     message and orphaned or non-adjacent tool results are removed
+//     entirely.
 func normalizeMessages(messages []llm.Message) []llm.Message {
-	// Collect the set of tool call IDs that have a matching result,
-	// and the set of tool result IDs that reference an existing call.
-	toolCallIDs := make(map[string]struct{})
-	toolResultIDs := make(map[string]struct{})
+	// Mark only structurally valid tool-call pairs. A tool result is valid
+	// only when it appears in the consecutive RoleTool message group that
+	// immediately follows the assistant message containing its tool call.
+	validToolCallIDs := make(map[int]map[string]struct{})
+	validToolResultIndexes := make(map[int]struct{})
 	for i := range messages {
-		for _, tc := range messages[i].ToolCalls {
-			toolCallIDs[tc.ID] = struct{}{}
+		if messages[i].Role != llm.RoleAssistant || len(messages[i].ToolCalls) == 0 {
+			continue
 		}
-		if messages[i].Role == llm.RoleTool && messages[i].ToolCallID != "" {
-			toolResultIDs[messages[i].ToolCallID] = struct{}{}
-		}
-	}
 
-	// Matched IDs are those present in both sets.
-	matched := make(map[string]struct{}, len(toolCallIDs))
-	for id := range toolCallIDs {
-		if _, ok := toolResultIDs[id]; ok {
-			matched[id] = struct{}{}
+		callIDs := make(map[string]struct{}, len(messages[i].ToolCalls))
+		for _, tc := range messages[i].ToolCalls {
+			callIDs[tc.ID] = struct{}{}
+		}
+
+		seenResults := make(map[string]struct{}, len(messages[i].ToolCalls))
+		for j := i + 1; j < len(messages) && messages[j].Role == llm.RoleTool; j++ {
+			id := messages[j].ToolCallID
+			if id == "" {
+				continue
+			}
+			if _, ok := callIDs[id]; !ok {
+				continue
+			}
+			if _, ok := seenResults[id]; ok {
+				continue
+			}
+
+			seenResults[id] = struct{}{}
+			validToolResultIndexes[j] = struct{}{}
+			if validToolCallIDs[i] == nil {
+				validToolCallIDs[i] = make(map[string]struct{}, len(messages[i].ToolCalls))
+			}
+			validToolCallIDs[i][id] = struct{}{}
 		}
 	}
 
@@ -1021,20 +1040,20 @@ func normalizeMessages(messages []llm.Message) []llm.Message {
 	for i := range messages {
 		msg := &messages[i]
 
-		// Strip orphaned tool calls from assistant messages.
+		// Strip orphaned or non-adjacent tool calls from assistant messages.
 		if len(msg.ToolCalls) > 0 {
 			kept := msg.ToolCalls[:0]
 			for _, tc := range msg.ToolCalls {
-				if _, ok := matched[tc.ID]; ok {
+				if _, ok := validToolCallIDs[i][tc.ID]; ok {
 					kept = append(kept, tc)
 				}
 			}
 			msg.ToolCalls = kept
 		}
 
-		// Drop orphaned tool results.
+		// Drop orphaned or non-adjacent tool results.
 		if msg.Role == llm.RoleTool {
-			if _, ok := matched[msg.ToolCallID]; !ok {
+			if _, ok := validToolResultIndexes[i]; !ok {
 				continue
 			}
 		}
