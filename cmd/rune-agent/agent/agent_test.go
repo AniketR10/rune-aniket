@@ -670,7 +670,8 @@ func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	assert.NotEmpty(t, archivedID)
 
 	require.Len(t, compactedMsgs, 3)
-	assert.Equal(t, llm.RoleSystem, compactedMsgs[1].Role)
+	assert.Equal(t, llm.RoleUser, compactedMsgs[1].Role,
+		"approved plan must be persisted as a user-anchor message so subsequent assistant tool_use turns are valid")
 	assert.Contains(t, compactedMsgs[1].Content, "/tmp/plan.md")
 	assert.Contains(t, compactedMsgs[1].Content, "Do X")
 }
@@ -705,7 +706,8 @@ func TestCompactDialogueWithApprovedPlanUsesResumeProgressMessage(t *testing.T) 
 
 	require.Len(t, compactedMsgs, 3)
 	assert.Equal(t, llm.RoleSystem, compactedMsgs[0].Role)
-	assert.Equal(t, llm.RoleSystem, compactedMsgs[1].Role)
+	assert.Equal(t, llm.RoleUser, compactedMsgs[1].Role,
+		"approved plan must be persisted as a user-anchor message so subsequent assistant tool_use turns are valid")
 	assert.Contains(t, compactedMsgs[1].Content, "/tmp/plan.md")
 	assert.Equal(t, llm.RoleUser, compactedMsgs[2].Role)
 	assert.Contains(t, compactedMsgs[2].Content, "Continue executing the approved plan immediately")
@@ -1919,6 +1921,132 @@ func TestClearContext(t *testing.T) {
 		require.NotNil(t, d.ApprovedPlan, "stored dialogue should contain approved plan metadata")
 		assert.Equal(t, "/tmp/plan.md", d.ApprovedPlan.Path)
 		assert.Equal(t, planContent, d.ApprovedPlan.Body)
+	})
+
+	t.Run("persists user message anchoring approved plan so follow-ups have a user turn", func(t *testing.T) {
+		// Regression: after exit_plan_mode approval the agent used to persist
+		// only [system] as the new dialogue messages, with the plan kept as
+		// out-of-band ApprovedPlan metadata. When implementation finished and
+		// the user followed up, the persisted dialogue shape was
+		//
+		//	[system, assistant(tool_use), tool, ..., assistant(text), user(followup)]
+		//
+		// which Anthropic rejects because messages.0 is an assistant tool_use
+		// without a preceding user turn (the system block is extracted out of
+		// the messages array). The fix is to persist the approved plan as a
+		// RoleUser message inside Messages, matching the TUI's replay path.
+		planContent := "## Step 1\nDo something"
+		svc := &mockService{
+			responses: []mockResponse{
+				toolCallResponse("exit_plan", "{}", "ep1"),
+				toolCallResponse("read_file", `{"path":"x"}`, "rf1"),
+				stopResponse("Implementation complete"),
+			},
+		}
+		store := newMockStore()
+		exitPlan := &mockTool{
+			name: "exit_plan",
+			result: ToolResult{
+				Content:      "Plan approved. Saved to /tmp/plan.md\n\n" + planContent,
+				ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent},
+				ClearContext: true,
+			},
+		}
+		readFile := &mockTool{
+			name:   "read_file",
+			result: ToolResult{Content: "file contents"},
+		}
+		ag := NewAgent(svc, NewRegistry(exitPlan, readFile), noSkills(), store, NoMemory(),
+			Config{SystemPrompt: "sys"})
+
+		_ = collectEvents(t, ag.Run(context.Background(), "d", "create a plan"))
+
+		stored, ok := store.getDialogue("d")
+		require.True(t, ok)
+		require.GreaterOrEqual(t, len(stored.Messages), 2,
+			"cleared dialogue must have at least system+user anchoring the plan")
+		assert.Equal(t, llm.RoleSystem, stored.Messages[0].Role)
+		assert.Equal(t, llm.RoleUser, stored.Messages[1].Role,
+			"second message must be a user turn so subsequent assistant tool_use turns are valid")
+		assert.Contains(t, stored.Messages[1].Content, "Plan approved. Saved to /tmp/plan.md")
+		assert.Contains(t, stored.Messages[1].Content, planContent)
+
+		// Assistant tool-use messages must come AFTER the user anchor, never
+		// before it.
+		var sawUser bool
+		for _, msg := range stored.Messages {
+			if msg.Role == llm.RoleUser {
+				sawUser = true
+				continue
+			}
+			if msg.Role == llm.RoleAssistant && len(msg.ToolCalls) > 0 {
+				assert.True(t, sawUser,
+					"assistant tool_use message appeared before any user message: %+v", msg)
+			}
+		}
+	})
+
+	t.Run("follow-up after exit_plan does not start with assistant tool_use", func(t *testing.T) {
+		// Drives a full turn after clearContext + a follow-up user message,
+		// then asserts the captured LLM request would be valid for Anthropic
+		// (which rejects messages.0 being assistant or messages.N being a
+		// tool_use without an immediately following tool_result).
+		planContent := "## Step 1\nImplement"
+		svc := &mockService{
+			responses: []mockResponse{
+				toolCallResponse("exit_plan", "{}", "ep1"),
+				toolCallResponse("read_file", `{"path":"x"}`, "rf1"),
+				stopResponse("All done."),
+				stopResponse("Follow-up answer"),
+			},
+		}
+		store := newMockStore()
+		exitPlan := &mockTool{
+			name: "exit_plan",
+			result: ToolResult{
+				Content:      "Plan approved. Saved to /tmp/plan.md\n\n" + planContent,
+				ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent},
+				ClearContext: true,
+			},
+		}
+		readFile := &mockTool{
+			name:   "read_file",
+			result: ToolResult{Content: "file contents"},
+		}
+		ag := NewAgent(svc, NewRegistry(exitPlan, readFile), noSkills(), store, NoMemory(),
+			Config{SystemPrompt: "sys"})
+
+		_ = collectEvents(t, ag.Run(context.Background(), "d", "create a plan"))
+		_ = collectEvents(t, ag.Run(context.Background(), "d", "any follow-up question"))
+
+		require.GreaterOrEqual(t, len(svc.requests), 4,
+			"expected at least one request for the follow-up turn after clearContext")
+		followUpReq := svc.requests[len(svc.requests)-1]
+		require.NotEmpty(t, followUpReq.Messages)
+
+		// Strip system messages to mirror what providers like Anthropic do
+		// when extracting the system block out of the messages array.
+		var nonSystem []llm.Message
+		for _, msg := range followUpReq.Messages {
+			if msg.Role == llm.RoleSystem {
+				continue
+			}
+			nonSystem = append(nonSystem, msg)
+		}
+		require.NotEmpty(t, nonSystem, "follow-up request must contain at least one non-system message")
+		assert.Equal(t, llm.RoleUser, nonSystem[0].Role,
+			"first non-system message must be a user turn (Anthropic rejects assistant-first)")
+		for i, msg := range nonSystem {
+			if msg.Role != llm.RoleAssistant || len(msg.ToolCalls) == 0 {
+				continue
+			}
+			require.Less(t, i+1, len(nonSystem),
+				"assistant tool_use at end of request has no following tool_result")
+			next := nonSystem[i+1]
+			assert.Equal(t, llm.RoleTool, next.Role,
+				"assistant tool_use must be immediately followed by a tool_result (got %s at index %d)",
+				next.Role, i+1)
+		}
 	})
 
 	t.Run("plan survives auto-compaction with file path", func(t *testing.T) {

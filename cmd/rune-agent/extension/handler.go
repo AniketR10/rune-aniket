@@ -1559,16 +1559,32 @@ func baseDialogueID(archivedID string) string {
 }
 
 func replayMessages(d dialoguemanager.Dialogue) []llm.Message {
+	// New dialogues persist the approved plan as a RoleUser anchor message
+	// directly inside d.Messages (see clearContext / CompactDialogue), so we
+	// must NOT re-inject when it is already present — that would duplicate
+	// the plan in the TUI and in any path that feeds the LLM.
+	//
+	// Older dialogues (persisted before the fix) only kept the plan as
+	// out-of-band metadata. For those we still inject a synthetic user
+	// message after the system prompt so the conversation has a valid
+	// user/assistant alternation.
+	if d.ApprovedPlan == nil {
+		return d.Messages
+	}
+	planMsg := llm.Message{
+		Role:    llm.RoleUser,
+		Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", d.ApprovedPlan.Path, d.ApprovedPlan.Body),
+	}
+	if len(d.Messages) >= 2 &&
+		d.Messages[1].Role == llm.RoleUser &&
+		d.Messages[1].Content == planMsg.Content {
+		return d.Messages
+	}
 	msgs := make([]llm.Message, 0, len(d.Messages)+1)
 	if len(d.Messages) > 0 {
 		msgs = append(msgs, d.Messages[0])
 	}
-	if d.ApprovedPlan != nil {
-		msgs = append(msgs, llm.Message{
-			Role:    llm.RoleUser,
-			Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", d.ApprovedPlan.Path, d.ApprovedPlan.Body),
-		})
-	}
+	msgs = append(msgs, planMsg)
 	if len(d.Messages) > 1 {
 		msgs = append(msgs, d.Messages[1:]...)
 	}

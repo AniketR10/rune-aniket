@@ -1258,14 +1258,28 @@ func approvedPlanMessages(plan *dialoguemanager.ApprovedPlan) []llm.Message {
 		return nil
 	}
 	return []llm.Message{{
-		Role:    llm.RoleSystem,
+		// Anchor the conversation with a user turn so subsequent
+		// assistant tool_use turns are valid for providers that require
+		// strict user/assistant alternation (e.g. Anthropic). System
+		// messages are extracted out of the messages array by those
+		// providers, so an assistant tool_use directly after the system
+		// prompt would produce
+		//
+		//   "messages.0: tool_use ids were found without tool_result
+		//   blocks immediately after"
+		//
+		// when the conversation resumes from compaction or after a
+		// cleared exit_plan_mode turn.
+		Role:    llm.RoleUser,
 		Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", plan.Path, plan.Body),
 	}}
 }
 
 // clearContext replaces the conversation with just a system prompt and
-// approved-plan metadata, archives the old messages, and overwrites the
-// current dialogue in-place. The dialogue ID never changes.
+// the approved-plan as a user-anchor message, archives the old messages,
+// and overwrites the current dialogue in-place. The dialogue ID never
+// changes. The plan is also persisted as out-of-band metadata so it
+// survives further compactions.
 func (a *Agent) clearContext(
 	ctx context.Context, ch chan<- Event,
 	approvedPlan *dialoguemanager.ApprovedPlan,
@@ -1277,7 +1291,10 @@ func (a *Agent) clearContext(
 		return nil, err
 	}
 
-	clearedMsgs := []llm.Message{{Role: llm.RoleSystem, Content: a.config.SystemPrompt}}
+	clearedMsgs := append(
+		[]llm.Message{{Role: llm.RoleSystem, Content: a.config.SystemPrompt}},
+		approvedPlanMessages(approvedPlan)...,
+	)
 
 	if err := a.store.ArchiveAndReplace(ctx, dialoguemanager.ArchiveAndReplaceParams{
 		Dialogue:           d,
@@ -1290,7 +1307,7 @@ func (a *Agent) clearContext(
 	}
 
 	emit(ctx, ch, Event{Type: EventCompacted, ArchivedDialogueID: archivedID})
-	return append(clearedMsgs, approvedPlanMessages(approvedPlan)...), nil
+	return clearedMsgs, nil
 }
 
 // CompactSummaryPrefix is prepended to the LLM-generated summary when
