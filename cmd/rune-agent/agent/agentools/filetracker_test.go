@@ -297,7 +297,7 @@ func TestReadFile_dropsStaleReads(t *testing.T) {
 	tool := newReadFile(localFS{}, dirURI(dir), tracker, 0)
 
 	t.Run("second read returns first read ID as stale", func(t *testing.T) {
-		ctx := agent.WithParentToolCallID(agent.WithActivatedSkills(t.Context()), "call_1")
+		ctx := agent.WithParentToolCallID(t.Context(), "call_1")
 		r1 := tool.Execute(ctx, `{"path":"a.txt","offset":null,"limit":null}`)
 		require.False(t, r1.IsError)
 		assert.Empty(t, r1.DropToolResultIDs, "first read should not drop anything")

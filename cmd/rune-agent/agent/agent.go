@@ -295,15 +295,13 @@ func (a *Agent) run(
 	ctx context.Context, ch chan<- Event,
 	dialogueID string, userMessage string, opts runOptions,
 ) {
-	ctx = WithActivatedSkills(ctx)
-
-	// If a skill was pre-loaded via slash command, mark it activated
-	// (prevents the LLM from re-invoking it via the use_skill tool)
-	// and prepare its content for system-message injection.
+	// If a skill was pre-loaded via slash command, prepare its
+	// content for system-message injection. Re-invocations via the
+	// skill tool are harmless and re-deliver the body, so no
+	// activation tracking is required.
 	var preloadedSkillMsg string
 	if opts.skillName != "" {
 		if skill, ok := a.skillRegistry.Get(opts.skillName); ok {
-			MarkSkillActivated(ctx, skill.Name)
 			preloadedSkillMsg = skills.FormatSkillContent(skill)
 		}
 	}

@@ -25,14 +25,12 @@ package agent
 
 import (
 	"context"
-	"sync"
 )
 
 type contextKey int
 
 const (
 	parentToolCallIDKey contextKey = iota
-	activatedSkillsKey
 	currentModelKey
 )
 
@@ -56,38 +54,4 @@ func WithCurrentModel(ctx context.Context, model string) context.Context {
 func CurrentModel(ctx context.Context) string {
 	v, _ := ctx.Value(currentModelKey).(string)
 	return v
-}
-
-// activatedSkills tracks which skills have been loaded in a single Run.
-type activatedSkills struct {
-	mu sync.Mutex
-	m  map[string]bool
-}
-
-// WithActivatedSkills returns a context carrying a fresh activated-skills set.
-// Call once per Agent.Run to scope deduplication to a single conversation turn.
-func WithActivatedSkills(ctx context.Context) context.Context {
-	return context.WithValue(ctx, activatedSkillsKey, &activatedSkills{m: make(map[string]bool)})
-}
-
-// MarkSkillActivated records that a skill has been loaded in this run.
-func MarkSkillActivated(ctx context.Context, name string) {
-	s, _ := ctx.Value(activatedSkillsKey).(*activatedSkills)
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.m[name] = true
-	s.mu.Unlock()
-}
-
-// IsSkillActivated reports whether a skill has already been loaded in this run.
-func IsSkillActivated(ctx context.Context, name string) bool {
-	s, _ := ctx.Value(activatedSkillsKey).(*activatedSkills)
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.m[name]
 }

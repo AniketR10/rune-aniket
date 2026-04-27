@@ -142,9 +142,9 @@ Relative paths in this skill are relative to the skill directory.
 			tool.Summary(`{"name":"debug","args":"--verbose"}`))
 	})
 
-	t.Run("duplicate activation returns short message", func(t *testing.T) {
+	t.Run("duplicate activation re-injects full skill body", func(t *testing.T) {
 		tool := NewSkillTool(registry, nil, nil)
-		ctx := agent.WithActivatedSkills(context.Background())
+		ctx := context.Background()
 
 		first := tool.Execute(ctx, `{"name":"debug"}`)
 		assert.False(t, first.IsError)
@@ -152,12 +152,15 @@ Relative paths in this skill are relative to the skill directory.
 
 		second := tool.Execute(ctx, `{"name":"debug"}`)
 		assert.False(t, second.IsError)
-		assert.Contains(t, second.Content, "already loaded")
-		// Avoid re-injecting the full body, but still point the model at
-		// the existing skill_content block so it knows where to find
-		// the instructions instead of giving up.
-		assert.NotContains(t, second.Content, "</skill_content>")
+		// Re-injecting the full body is a deliberate trade-off: a
+		// "see the block above" hint is unreliable because the model
+		// frequently fails to locate the transient system message
+		// (especially for slash-command preloads) and gives up.
+		// Returning the full body costs a few tokens but guarantees
+		// the model has the instructions it needs to proceed.
 		assert.Contains(t, second.Content, `<skill_content name="debug">`)
+		assert.Contains(t, second.Content, "</skill_content>")
+		assert.Contains(t, second.Content, "Check logs")
 	})
 
 	t.Run("definition description references actual injected tag", func(t *testing.T) {
@@ -174,7 +177,7 @@ Relative paths in this skill are relative to the skill directory.
 
 	t.Run("different skills are not deduped", func(t *testing.T) {
 		tool := NewSkillTool(registry, nil, nil)
-		ctx := agent.WithActivatedSkills(context.Background())
+		ctx := context.Background()
 
 		first := tool.Execute(ctx, `{"name":"debug"}`)
 		assert.Contains(t, first.Content, "<skill_content")
@@ -183,18 +186,6 @@ Relative paths in this skill are relative to the skill directory.
 		assert.Contains(t, second.Content, "<skill_content")
 	})
 
-	t.Run("dedup is scoped per run context", func(t *testing.T) {
-		tool := NewSkillTool(registry, nil, nil)
-
-		ctx1 := agent.WithActivatedSkills(context.Background())
-		r1 := tool.Execute(ctx1, `{"name":"debug"}`)
-		assert.Contains(t, r1.Content, "<skill_content")
-
-		// New context = new run = skill can be loaded again.
-		ctx2 := agent.WithActivatedSkills(context.Background())
-		r2 := tool.Execute(ctx2, `{"name":"debug"}`)
-		assert.Contains(t, r2.Content, "<skill_content")
-	})
 }
 
 func TestSkillToolWithResources(t *testing.T) {
@@ -217,7 +208,7 @@ Do stuff`)
 
 	registry := skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
 	tool := NewSkillTool(registry, nil, nil)
-	ctx := agent.WithActivatedSkills(context.Background())
+	ctx := context.Background()
 	result := tool.Execute(ctx, `{"name":"my-skill"}`)
 
 	assert.False(t, result.IsError)
@@ -238,7 +229,7 @@ Just instructions`)
 
 	registry := skills.NewRegistry(osFileSystem{}, dirURI(""), []string{dir}, nil)
 	tool := NewSkillTool(registry, nil, nil)
-	ctx := agent.WithActivatedSkills(context.Background())
+	ctx := context.Background()
 	result := tool.Execute(ctx, `{"name":"bare"}`)
 
 	assert.False(t, result.IsError)
@@ -335,7 +326,7 @@ Prompt content`)
 	t.Run("prompt skill ignores spawner", func(t *testing.T) {
 		spawner := &mockSpawner{}
 		tool := NewSkillTool(registry, spawner, nil)
-		ctx := agent.WithActivatedSkills(context.Background())
+		ctx := context.Background()
 		result := tool.Execute(ctx, `{"name":"prompt"}`)
 
 		assert.False(t, result.IsError)
@@ -356,7 +347,7 @@ Prompt content`)
 		childEvents := make(chan agent.ChildEvent, 64)
 		tool := NewSkillTool(registry, spawner, childEvents)
 		ctx := agent.WithParentToolCallID(
-			agent.WithActivatedSkills(context.Background()), "parent-dedup")
+			context.Background(), "parent-dedup")
 
 		first := tool.Execute(ctx, `{"name":"research","args":"first"}`)
 		assert.False(t, first.IsError)

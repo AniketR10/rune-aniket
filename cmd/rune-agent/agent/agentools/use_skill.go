@@ -133,23 +133,14 @@ func (t *skillTool) Execute(
 		return t.executeAgentSkill(ctx, skill, args.Args)
 	}
 
-	// Dedup: don't re-inject the full body if this skill was already
-	// loaded in this run. Still point the model at the existing
-	// <skill_content> block so it follows the instructions instead of
-	// giving up.
-	if agent.IsSkillActivated(ctx, args.Name) {
-		return agent.ToolResult{
-			Content: fmt.Sprintf(
-				"Skill %q is already loaded in this conversation. "+
-					"Follow the instructions in the existing "+
-					"<skill_content name=%q> block above instead of "+
-					"calling this tool again.",
-				args.Name, args.Name,
-			),
-		}
-	}
-	agent.MarkSkillActivated(ctx, args.Name)
-
+	// Always return the full <skill_content> body, even on repeat
+	// invocations. A "see the block above" hint was tried and proved
+	// unreliable: the model frequently fails to locate a transient
+	// system message (especially for slash-command preloads, where
+	// the user message is just the <command-name> envelope) and
+	// gives up instead of following the skill. Re-injecting the body
+	// costs a few tokens but guarantees the instructions are present
+	// in the tool result the model is already attending to.
 	return agent.ToolResult{Content: skills.FormatSkillContent(skill)}
 }
 
