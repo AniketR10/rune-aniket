@@ -45,7 +45,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
-	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
@@ -147,7 +146,7 @@ type ex struct {
 
 	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
-	companionShell       *repl.Handler
+	companionShell       *ideshell.Handler
 	companionShellURI    workspaceapi.URI
 
 	fileExplorerWin    browser.Window
@@ -1667,8 +1666,11 @@ func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
 	if e.companionShell == nil {
 		h, registry := ideshell.New(
 			e.emulatorConfig.ScheduleNextTick, e,
-			repl.WithMaxHistory(e.config.ShellMaxHistory),
-			repl.WithStorage(shellHistoryDocumentID, e.storage),
+			ideshell.Config{
+				Storage:           e.storage,
+				HistoryDocumentID: shellHistoryDocumentID,
+				MaxHistory:        e.config.ShellMaxHistory,
+			},
 		)
 		if e.wsExecutor != nil {
 			e.wsExecutor.RegisterCommands(registry)

@@ -64,6 +64,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
@@ -1077,7 +1078,7 @@ func TestShellCommandOpensTab(t *testing.T) {
 
 	tabs := b.comp.Tabs()
 	require.Len(t, tabs, 1)
-	_, ok := tabs[0].Handler().(*repl.Handler)
+	_, ok := tabs[0].Handler().(*ideshell.Handler)
 	assert.True(t, ok)
 	assert.Equal(t, text.DefaultConfig().Icons.Shell, b.config.Icons.Shell)
 	assert.Equal(t, "shell:///tmp/my-workspace", tabs[0].URI().String())
@@ -1150,7 +1151,7 @@ func TestShellCommandPersistsHistory(t *testing.T) {
 	require.NoError(t, b2.shellnewtab(context.Background()))
 	tabs := b2.comp.Tabs()
 	require.Len(t, tabs, 1)
-	_, ok := tabs[0].Handler().(*repl.Handler)
+	_, ok := tabs[0].Handler().(*ideshell.Handler)
 	assert.True(t, ok)
 
 	require.NoError(t, svc.Get(

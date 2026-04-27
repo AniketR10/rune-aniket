@@ -262,6 +262,7 @@ func TestNewRegistersHelp(t *testing.T) {
 	_, r := New(
 		func(func()) bool { return false },
 		term.NopInterrupter(),
+		Config{},
 	)
 
 	ctx := context.Background()
@@ -386,6 +387,7 @@ func TestShellHandlerForwardsProgressToRegisteredCommand(t *testing.T) {
 	shellHandler, r := New(
 		func(func()) bool { return false },
 		term.NopInterrupter(),
+		Config{},
 	)
 	t.Cleanup(func() { _ = shellHandler.Close() })
 

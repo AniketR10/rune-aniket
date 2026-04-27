@@ -21,32 +21,83 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ideshell
 
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term/sh"
 )
 
-// New creates a repl.Handler wired with a CommandRegistry,
-// sh layer, and the built-in help command. The returned
-// registry can be used to register additional commands.
+// Config configures optional dependencies of the IDE shell handler.
+type Config struct {
+	// Storage is used by both the inner repl history persistence and
+	// by the reverse-history search overlay. May be nil in tests.
+	Storage storageapi.Service
+	// HistoryDocumentID is the storage key under which the shell
+	// history is persisted. Required if Storage is set.
+	HistoryDocumentID string
+	// MaxHistory caps the number of persisted history entries.
+	MaxHistory int
+	// Prompt is the inputbox prompt prefix shown both in the
+	// regular shell view and on the search overlay's input bar.
+	// Defaults to "> ".
+	Prompt string
+}
+
+// New creates an IDE shell Handler wired with a CommandRegistry, sh
+// layer, and the built-in help command. The returned Handler wraps an
+// SDK repl.Handler and adds an interactive reverse-history search
+// overlay. The returned registry can be used to register additional
+// commands.
 func New(
 	scheduleNextTick func(func()) bool,
 	interrupter term.Interrupter,
+	cfg Config,
 	opts ...repl.Option,
-) (*repl.Handler, *CommandRegistry) {
+) (*Handler, *CommandRegistry) {
 	r := NewRegistry()
 	registerBaseCommands(r)
-	h := repl.New(sh.New(r), scheduleNextTick, interrupter, opts...)
+	prompt := cfg.Prompt
+	if prompt == "" {
+		prompt = defaultPrompt
+	}
+	if cfg.Storage != nil && cfg.HistoryDocumentID != "" {
+		opts = append(opts,
+			repl.WithStorage(cfg.HistoryDocumentID, cfg.Storage),
+		)
+	}
+	if cfg.MaxHistory > 0 {
+		opts = append(opts, repl.WithMaxHistory(cfg.MaxHistory))
+	}
+	opts = append(opts, repl.WithPrompt(prompt))
+	shim := &completionShim{underlying: sh.New(r)}
+	inner := repl.New(shim, scheduleNextTick, interrupter, opts...)
+	list := search.NewList(search.ListConfig{
+		Algo:            search.FuzzyMatch,
+		Interrupter:     interrupter,
+		SyncSearch:      true,
+		BottomSearchBar: true,
+	})
+	h := &Handler{
+		inner:      inner,
+		storage:    cfg.Storage,
+		historyKey: cfg.HistoryDocumentID,
+		maxHistory: cfg.MaxHistory,
+		list:       list,
+		shim:       shim,
+		prompt:     prompt,
+	}
 	return h, r
 }
+
+const defaultPrompt = "> "
 
 func registerBaseCommands(r *CommandRegistry) {
 	r.Register("help", "Show available commands", &helpHandler{r: r})
