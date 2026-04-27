@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -201,7 +202,24 @@ func (t *agentTool) Execute(
 		}
 	}
 
-	return consumeSubAgent(ctx, handle.Events, t.childEvents)
+	tr := consumeSubAgent(ctx, handle.Events, t.childEvents)
+
+	// SubagentStop hook: parent's hook runner observes (and may
+	// block) sub-agent completion. A blocked decision turns into an
+	// error result returned to the parent's LLM.
+	res := agent.HooksFromContext(ctx).Run(ctx, hooks.Payload{
+		SessionID:     agent.DialogueIDFromContext(ctx),
+		Cwd:           agent.WorkspaceURIFromContext(ctx),
+		HookEventName: hooks.EventSubagentStop,
+	})
+	if res.Blocked() {
+		reason := res.Reason
+		if reason == "" {
+			reason = "blocked by SubagentStop hook"
+		}
+		tr = agent.ToolResult{Content: reason, IsError: true}
+	}
+	return tr
 }
 
 // consumeSubAgent drains a sub-agent event iterator, forwarding

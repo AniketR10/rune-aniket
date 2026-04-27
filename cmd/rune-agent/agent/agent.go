@@ -25,6 +25,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,6 +42,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/debug"
 )
@@ -68,6 +70,11 @@ type Config struct {
 	// injected as a <project-instructions> XML block prepended to
 	// the user message on every turn (not persisted).
 	ProjectInstructions string
+
+	// Hooks, when non-nil, dispatches Claude-Code-style hooks at
+	// well-defined points in the agent loop (SessionStart,
+	// PostToolUse, Stop, PreCompact, etc.). A nil runner is a no-op.
+	Hooks *hooks.Runner
 }
 
 // Memory represents a single recalled memory entry.
@@ -130,6 +137,20 @@ func (a *Agent) Model() string {
 	return a.config.Model
 }
 
+// Hooks returns the hook runner configured for this agent. NewAgent
+// guarantees a non-nil runner: a runner with no configured hooks is
+// a no-op.
+func (a *Agent) Hooks() *hooks.Runner {
+	return a.config.Hooks
+}
+
+// Workspace returns the workspace URI the agent is bound to. Callers
+// must treat this as a potentially non-local URI (e.g. ssh://) — it
+// is not safe to feed straight into local filesystem APIs.
+func (a *Agent) Workspace() workspaceapi.URI {
+	return a.config.Workspace
+}
+
 // SetEffort sets the session-level reasoning effort. An empty string
 // means use the provider/config default.
 func (a *Agent) SetEffort(effort llm.ReasoningEffort) {
@@ -177,6 +198,11 @@ func NewAgent(
 	}
 	if config.MaxIterations <= 0 {
 		config.MaxIterations = 500
+	}
+	if config.Hooks == nil {
+		// Auto-initialize so call sites can dispatch hooks
+		// unconditionally; the empty config produces a no-op runner.
+		config.Hooks = hooks.NewRunner(hooks.Config{}, nil, nil, "")
 	}
 	return &Agent{
 		svc:           svc,
@@ -337,6 +363,20 @@ func (a *Agent) run(
 	}
 	hasPersistedDialogue := !isNew
 
+	// SessionStart hook: fire after dialogue is loaded/created. The
+	// result's AdditionalContext is prepended to the user message so
+	// it reaches the model on the very first turn.
+	startRes := a.config.Hooks.Run(ctx, hooks.Payload{
+		SessionID:     dialogueID,
+		Cwd:           a.config.Workspace,
+		HookEventName: hooks.EventSessionStart,
+		Source:        sessionStartSource(isNew),
+		Model:         a.config.Model,
+	})
+	if startRes.AdditionalContext != "" {
+		userMessage = startRes.AdditionalContext + "\n\n" + userMessage
+	}
+
 	// Gather context resources in deterministic order. sync.Map.Range
 	// iterates non-deterministically; sorting by URI string ensures the
 	// system prompt prefix is stable across calls, which is critical for
@@ -462,6 +502,10 @@ func (a *Agent) run(
 	var infos []toolCallInfo
 	var toolMsgs []llm.Message
 	var imageContentParts []llm.ContentPart
+	// stopHookActive is set to true once the Stop hook has blocked
+	// once and we appended a continuation message. The second
+	// invocation passes this flag in the payload and ignores blocks.
+	var stopHookActive bool
 	persistPending := func() bool {
 		if len(newMessages) == 0 {
 			return false
@@ -561,20 +605,35 @@ func (a *Agent) run(
 				"usage_pct", int(contextUsage*100),
 				"threshold_pct", int(autoCompactRatio*100),
 			)
-			emit(ctx, ch, Event{Type: EventCompacting})
-			dialogue.Messages = messages
-			compactedDialogue, compactErr := a.compact(ctx, ch, dialogue)
-			if compactErr != nil {
-				log.Warn("auto-compact failed, continuing without compaction", "error", compactErr)
+			// PreCompact (auto): a block here skips compaction for
+			// this turn. We fall through and let the iteration
+			// continue with the existing message set; the runtime
+			// will call the LLM and may legitimately fail with a
+			// context-too-large error, which is up to the operator.
+			pcRes := a.config.Hooks.Run(ctx, hooks.Payload{
+				SessionID:     dialogueID,
+				Cwd:           a.config.Workspace,
+				HookEventName: hooks.EventPreCompact,
+				Trigger:       "auto",
+			})
+			if pcRes.Blocked() {
+				log.Warn("auto-compact blocked by PreCompact hook", "reason", pcRes.Reason)
 			} else {
-				dialogue = compactedDialogue
-				hasPersistedDialogue = true
-				newMessages = nil
-				messages = append(dialogue.Messages[:len(dialogue.Messages):len(dialogue.Messages)], resourceMsgs...)
-				userMsgIdx = len(dialogue.Messages) - 1
-				lastAPITokensSent = 0
-				emit(ctx, ch, Event{Type: EventDone})
-				continue
+				emit(ctx, ch, Event{Type: EventCompacting})
+				dialogue.Messages = messages
+				compactedDialogue, compactErr := a.compact(ctx, ch, dialogue)
+				if compactErr != nil {
+					log.Warn("auto-compact failed, continuing without compaction", "error", compactErr)
+				} else {
+					dialogue = compactedDialogue
+					hasPersistedDialogue = true
+					newMessages = nil
+					messages = append(dialogue.Messages[:len(dialogue.Messages):len(dialogue.Messages)], resourceMsgs...)
+					userMsgIdx = len(dialogue.Messages) - 1
+					lastAPITokensSent = 0
+					emit(ctx, ch, Event{Type: EventDone})
+					continue
+				}
 			}
 		}
 
@@ -730,6 +789,30 @@ func (a *Agent) run(
 			return
 
 		case llm.FinishReasonStop:
+			// Stop hook may block — i.e. instruct the agent to keep
+			// going. We allow exactly one continuation per Run to
+			// prevent infinite loops; the second invocation passes
+			// stop_hook_active=true and ignores any further block.
+			stopRes := a.config.Hooks.Run(ctx, hooks.Payload{
+				SessionID:      dialogueID,
+				Cwd:            a.config.Workspace,
+				HookEventName:  hooks.EventStop,
+				StopHookActive: stopHookActive,
+			})
+			if stopRes.Blocked() && !stopHookActive {
+				stopHookActive = true
+				reason := stopRes.Reason
+				if reason == "" {
+					reason = "Continue"
+				}
+				contMsg := llm.Message{Role: llm.RoleUser, Content: reason}
+				messages = append(messages, contMsg)
+				newMessages = append(newMessages, contMsg)
+				usage.Add(completionUsage, 0, inferenceDuration, 0)
+				pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+				emit(ctx, ch, Event{Type: EventDone, FinishReason: finishReason})
+				continue
+			}
 			usage.Add(completionUsage, 0, inferenceDuration, 0)
 			usage.TotalDuration = time.Since(runStart)
 			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
@@ -804,6 +887,9 @@ func (a *Agent) run(
 						} else {
 							toolCtx := WithCurrentModel(ctx, a.Model())
 							toolCtx = WithParentToolCallID(toolCtx, info.call.ID)
+							toolCtx = WithHooks(toolCtx, a.config.Hooks)
+							toolCtx = WithWorkspaceURI(toolCtx, a.config.Workspace)
+							toolCtx = WithDialogueID(toolCtx, dialogueID)
 							toolStart := time.Now()
 							result = info.tool.Execute(toolCtx, info.call.Function.Arguments)
 							dur = time.Since(toolStart)
@@ -849,28 +935,43 @@ func (a *Agent) run(
 							IsError: true,
 						}
 					} else {
-						emit(ctx, ch, Event{Type: EventCompacting})
-
-						// Strip the trailing assistant message (the compact
-						// tool call itself) — its tool result hasn't been
-						// appended yet, and an unpaired tool_calls message
-						// would cause an API error during summarization.
-						compactD := dialogue
-						compactD.Messages = messages[:len(messages)-1]
-						compactedDialogue, compactErr := a.compact(ctx, ch, compactD)
-						if compactErr != nil {
+						// PreCompact (tool): a block here turns the
+						// compact tool call into an error result.
+						pcRes := a.config.Hooks.Run(ctx, hooks.Payload{
+							SessionID:     dialogueID,
+							Cwd:           a.config.Workspace,
+							HookEventName: hooks.EventPreCompact,
+							Trigger:       "tool",
+						})
+						if pcRes.Blocked() {
 							result = ToolResult{
-								Content: fmt.Sprintf("Compaction failed: %v. Continue without compacting.", compactErr),
+								Content: fmt.Sprintf("Compaction blocked by hook: %s", pcRes.Reason),
 								IsError: true,
 							}
 						} else {
-							dialogue = compactedDialogue
-							hasPersistedDialogue = true
-							newMessages = nil
-							messages = append(dialogue.Messages[:len(dialogue.Messages):len(dialogue.Messages)], resourceMsgs...)
-							userMsgIdx = len(dialogue.Messages) - 1
-							lastAPITokensSent = 0 // force re-count with compacted messages
-							compacted = true
+							emit(ctx, ch, Event{Type: EventCompacting})
+
+							// Strip the trailing assistant message (the compact
+							// tool call itself) — its tool result hasn't been
+							// appended yet, and an unpaired tool_calls message
+							// would cause an API error during summarization.
+							compactD := dialogue
+							compactD.Messages = messages[:len(messages)-1]
+							compactedDialogue, compactErr := a.compact(ctx, ch, compactD)
+							if compactErr != nil {
+								result = ToolResult{
+									Content: fmt.Sprintf("Compaction failed: %v. Continue without compacting.", compactErr),
+									IsError: true,
+								}
+							} else {
+								dialogue = compactedDialogue
+								hasPersistedDialogue = true
+								newMessages = nil
+								messages = append(dialogue.Messages[:len(dialogue.Messages):len(dialogue.Messages)], resourceMsgs...)
+								userMsgIdx = len(dialogue.Messages) - 1
+								lastAPITokensSent = 0 // force re-count with compacted messages
+								compacted = true
+							}
 						}
 					}
 				}
@@ -913,6 +1014,21 @@ func (a *Agent) run(
 					IsError:      result.IsError,
 					ToolDuration: tr.duration,
 				})
+				// PostToolUse hook: may block tool output, replacing
+				// the content the model sees with a structured reason.
+				hres := a.config.Hooks.Run(ctx, hooks.Payload{
+					SessionID:     dialogueID,
+					Cwd:           a.config.Workspace,
+					HookEventName: hooks.EventPostToolUse,
+					ToolName:      tr.info.call.Function.Name,
+					ToolInput:     toolInputJSON(tr.info.call.Function.Arguments),
+					ToolResponse:  toolResponseJSON(result.Content, result.IsError),
+					ToolUseID:     tr.info.call.ID,
+				})
+				if hres.Blocked() {
+					result.Content = hres.Reason
+					result.IsError = true
+				}
 				toolMsgs[tr.index] = llm.Message{
 					Role:       llm.RoleTool,
 					Content:    result.Content,
@@ -1464,12 +1580,37 @@ func Summarize(ctx context.Context, svc llm.Service, messages []llm.Message) (st
 // under a unique archived ID, and overwrites the current dialogue in-place
 // with the compacted messages. The dialogue ID never changes. It returns
 // both the compacted messages and the archived dialogue ID.
+//
+// Manual compact callers (e.g. /compact slash command) may pass
+// WithCompactHooks to fire the PreCompact hook with trigger="manual".
+// A blocked hook is returned as a regular error.
 func CompactDialogue(
 	ctx context.Context,
 	svc llm.Service,
 	store dialoguemanager.Store,
 	d dialoguemanager.Dialogue,
+	opts ...CompactOption,
 ) (compactedMsgs []llm.Message, archivedDialogueID string, err error) {
+	var copts compactOptions
+	for _, o := range opts {
+		o(&copts)
+	}
+
+	cwd, _ := d.Workspace()
+	pcRes := copts.hooks.Run(ctx, hooks.Payload{
+		SessionID:     d.ID,
+		Cwd:           cwd,
+		HookEventName: hooks.EventPreCompact,
+		Trigger:       "manual",
+	})
+	if pcRes.Blocked() {
+		reason := pcRes.Reason
+		if reason == "" {
+			reason = "compaction blocked by PreCompact hook"
+		}
+		return nil, "", errors.New(reason)
+	}
+
 	summaryText, err := Summarize(ctx, svc, d.Messages)
 	if err != nil {
 		return nil, "", err
@@ -1525,6 +1666,53 @@ func emit(ctx context.Context, ch chan<- Event, ev Event) {
 	case ch <- ev:
 	case <-ctx.Done():
 	}
+}
+
+// sessionStartSource returns the SessionStart hook source value
+// ("startup" for newly-created dialogues, "resume" for existing ones).
+func sessionStartSource(isNew bool) string {
+	if isNew {
+		return "startup"
+	}
+	return "resume"
+}
+
+// CompactOption configures CompactDialogue.
+type CompactOption func(*compactOptions)
+
+type compactOptions struct {
+	hooks *hooks.Runner
+}
+
+// WithCompactHooks fires the PreCompact hook (manual trigger) before
+// summarizing. A blocked hook turns into a returned error.
+func WithCompactHooks(r *hooks.Runner) CompactOption {
+	return func(o *compactOptions) { o.hooks = r }
+}
+
+// toolInputJSON returns the tool's raw arguments string as a
+// json.RawMessage when it parses as JSON, otherwise it wraps the
+// arguments in a JSON string.
+func toolInputJSON(args string) []byte {
+	if args == "" {
+		return nil
+	}
+	var probe any
+	if err := json.Unmarshal([]byte(args), &probe); err == nil {
+		return []byte(args)
+	}
+	b, _ := json.Marshal(args)
+	return b
+}
+
+// toolResponseJSON encodes the tool result content + error flag as a
+// JSON object suitable for the PostToolUse payload.
+func toolResponseJSON(content string, isErr bool) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"content":  content,
+		"is_error": isErr,
+	})
+	return b
 }
 
 // channelIterator adapts a channel to iterator.Iterator[Event].

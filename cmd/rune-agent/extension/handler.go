@@ -68,6 +68,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agentshell"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
@@ -562,6 +563,25 @@ func newCommandEventHandler(
 			"custom_provider: invalid config: %v", err)
 	}
 
+	// Hooks: parse extensions.rune-agent.config.hooks. Errors are
+	// non-fatal: the extension still starts with an empty (no-op)
+	// hook config. The single Runner constructed here is shared
+	// across chat and query agents and propagated via agent.Config.
+	var hooksCfg hooks.Config
+	if hooksMap, hookErr := pconfig.GetMap("hooks"); hookErr == nil {
+		parsed, parseErr := hooks.Parse(hooksMap)
+		if parseErr != nil {
+			_, _ = noti.Notify(browserapi.LevelWarn,
+				"hooks: invalid config: %v", parseErr)
+		} else {
+			hooksCfg = parsed
+		}
+	} else if !errors.Is(hookErr, config.ErrNotFound) {
+		_, _ = noti.Notify(browserapi.LevelWarn,
+			"hooks: invalid config: %v", hookErr)
+	}
+	ret.hookRunner = hooks.NewRunner(hooksCfg, executor, noti, cwd.Path())
+
 	if _, ok := ret.modelRegistry.Get(ctx, ret.defaultModel); !ok {
 		slog.Warn("default model not found in registry, falling back",
 			"requested", ret.defaultModel,
@@ -733,7 +753,11 @@ func newCommandEventHandler(
 	ret.p = w.Interrupter(ctx)
 	ret.o = w.ResourceOpener(ctx)
 	ret.wm = w.WindowManager(ctx)
-	ret.n = w.Notifications(ctx)
+	// Wrap Notifications so every Notify call fans out to configured
+	// Notification hooks. The wrapper is purely observational; the
+	// hook return value is ignored.
+	ret.n = newNotificationsWithHooks(
+		w.Notifications(ctx), ret.hookRunner, ret.cwd)
 	ret.resources = make(map[string]string)
 
 	ret.dialogueStore = dialogueStore
@@ -778,6 +802,7 @@ func newCommandEventHandler(
 			Model:               ret.queryDefaultModel,
 			Provider:            queryEntry.Provider,
 			Workspace:           ret.cwd,
+			Hooks:               ret.hookRunner,
 		},
 	)
 
@@ -866,6 +891,10 @@ type aiEditorHandler struct {
 	openChatAgents sync.Map
 	ctx            context.Context
 	cancelCtx      func()
+
+	// hookRunner dispatches Claude-Code-style hooks. nil when no
+	// hooks are configured.
+	hookRunner *hooks.Runner
 }
 
 func (h *aiEditorHandler) newService(model string) (llm.Service, error) {
@@ -1202,6 +1231,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "ask_user_question",
 	)
 	spawner.SetRegistry(chatRegistry)
+	spawner.SetHooks(h.hookRunner)
 
 	syncComp := syncComponent{mu: mu, comp: comp, h: h, hintSlot: hs}
 	h.openChats.Store(d.ID, syncComp)
@@ -1220,6 +1250,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 			Model:               model,
 			Provider:            chatEntry.Provider,
 			Workspace:           h.cwd,
+			Hooks:               h.hookRunner,
 		},
 	)
 	if effort := h.getDefaultEffort(); effort != "" {
@@ -1242,6 +1273,14 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		cancel()
 		h.openChats.Delete(d.ID)
 		h.openChatAgents.Delete(d.ID)
+		// SessionEnd hook (reason=tab_close): fire-and-forget.
+		// Purely observational; no result fields are honored.
+		h.hookRunner.Run(h.ctx, hooks.Payload{
+			SessionID:     d.ID,
+			Cwd:           h.cwd,
+			HookEventName: hooks.EventSessionEnd,
+			Reason:        "tab_close",
+		})
 		return nil
 	})
 	uri, err := getModelUri(d.ID, model)
@@ -1970,6 +2009,38 @@ func createAgentCompletions(
 			}
 		}
 		if it == nil {
+			// UserPromptSubmit hook: fires before the agent loop
+			// receives the prompt. A blocked decision cancels the
+			// turn and surfaces the reason as an error to the TUI;
+			// otherwise additionalContext is prepended to the prompt
+			// for this turn (transient — never persisted).
+			upsRes := ag.Hooks().Run(req.ctx, hooks.Payload{
+				SessionID:     id,
+				Cwd:           ag.Workspace(),
+				HookEventName: hooks.EventUserPromptSubmit,
+				Prompt:        req.msg,
+			})
+			if upsRes.Blocked() {
+				reason := upsRes.Reason
+				if reason == "" {
+					reason = "blocked by UserPromptSubmit hook"
+				}
+				select {
+				case tx <- dialoguetui.MessageEvent{
+					Type: dialoguetui.MessageEventError, Text: reason,
+				}:
+				case <-ctx.Done():
+				}
+				select {
+				case tx <- dialoguetui.MessageEvent{Type: dialoguetui.MessageEventBreak}:
+				case <-ctx.Done():
+				}
+				syncComp.removeStatusHint(hint)
+				continue
+			}
+			if upsRes.AdditionalContext != "" {
+				req.msg = upsRes.AdditionalContext + "\n\n" + req.msg
+			}
 			var runOpts []agent.RunOption
 			if req.skillName != "" {
 				runOpts = append(runOpts, agent.WithSkillName(req.skillName))

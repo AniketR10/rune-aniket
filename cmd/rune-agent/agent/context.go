@@ -25,6 +25,9 @@ package agent
 
 import (
 	"context"
+
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/hooks"
 )
 
 type contextKey int
@@ -32,6 +35,9 @@ type contextKey int
 const (
 	parentToolCallIDKey contextKey = iota
 	currentModelKey
+	hooksRunnerKey
+	workspaceURIKey
+	dialogueIDKey
 )
 
 // WithParentToolCallID returns a context carrying the parent tool call ID.
@@ -53,5 +59,42 @@ func WithCurrentModel(ctx context.Context, model string) context.Context {
 // CurrentModel extracts the current model name from the context.
 func CurrentModel(ctx context.Context) string {
 	v, _ := ctx.Value(currentModelKey).(string)
+	return v
+}
+
+// WithHooks returns a context carrying the agent's hook runner.
+func WithHooks(ctx context.Context, r *hooks.Runner) context.Context {
+	return context.WithValue(ctx, hooksRunnerKey, r)
+}
+
+// HooksFromContext extracts the hook runner from the context.
+func HooksFromContext(ctx context.Context) *hooks.Runner {
+	v, _ := ctx.Value(hooksRunnerKey).(*hooks.Runner)
+	return v
+}
+
+// WithWorkspaceURI returns a context carrying the agent's workspace
+// URI. The URI is intentionally not collapsed to a string so callers
+// see that it may be non-local (e.g. ssh://) and is unsafe to feed
+// straight into local filesystem APIs.
+func WithWorkspaceURI(ctx context.Context, uri workspaceapi.URI) context.Context {
+	return context.WithValue(ctx, workspaceURIKey, uri)
+}
+
+// WorkspaceURIFromContext extracts the workspace URI from the
+// context. Returns the zero URI when none was attached.
+func WorkspaceURIFromContext(ctx context.Context) workspaceapi.URI {
+	v, _ := ctx.Value(workspaceURIKey).(workspaceapi.URI)
+	return v
+}
+
+// WithDialogueID returns a context carrying the parent dialogue ID.
+func WithDialogueID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, dialogueIDKey, id)
+}
+
+// DialogueIDFromContext extracts the dialogue ID from the context.
+func DialogueIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(dialogueIDKey).(string)
 	return v
 }

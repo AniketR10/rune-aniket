@@ -1,0 +1,210 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+
+package agent
+
+import (
+	"context"
+	"os"
+	osexec "os/exec"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/hooks"
+	"unstable.build/go-tui/cmd/rune-agent/llm"
+)
+
+func TestHooks_PostToolUseBlock(t *testing.T) {
+	t.Parallel()
+	// Hook returns exit 2 with a reason on stderr → must replace the
+	// tool result content the model sees and mark IsError.
+	cfg := hookCfg(hooks.EventPostToolUse, "my_tool",
+		`printf "hooked: not allowed" 1>&2; exit 2`)
+	runner := hooks.NewRunner(cfg, hooksTestExec{}, nil, "")
+
+	svc := &mockService{responses: []mockResponse{
+		toolCallResponse("my_tool", `{}`, "c1"),
+		stopResponse("done"),
+	}}
+	store := newMockStore()
+	tool := &mockTool{name: "my_tool", result: ToolResult{Content: "original"}}
+	reg := NewRegistry(tool)
+	ag := NewAgent(svc, reg, noSkills(), store, NoMemory(), Config{
+		SystemPrompt: "t",
+		Hooks:        runner,
+	})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d", "hi"))
+	require.True(t, hasEventType(events, EventDone))
+
+	// The model's second turn must see the replaced content.
+	d, ok := store.getDialogue("d")
+	require.True(t, ok)
+	var lastTool *llm.Message
+	for i := range d.Messages {
+		if d.Messages[i].Role == llm.RoleTool {
+			lastTool = &d.Messages[i]
+		}
+	}
+	require.NotNil(t, lastTool)
+	assert.Equal(t, "hooked: not allowed", lastTool.Content)
+}
+
+func TestHooks_StopContinuationGuard(t *testing.T) {
+	t.Parallel()
+	// First Stop block fires; the agent should append a continuation
+	// message and run a second turn. The hook fires again with
+	// stop_hook_active=true; we'd block again, but the guard ignores
+	// it. The agent thus exits cleanly with two stop responses.
+	cfg := hookCfg(hooks.EventStop, "*",
+		`printf "keep going" 1>&2; exit 2`)
+	runner := hooks.NewRunner(cfg, hooksTestExec{}, nil, "")
+
+	svc := &mockService{responses: []mockResponse{
+		stopResponse("first"),
+		stopResponse("second"),
+	}}
+	store := newMockStore()
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{
+		SystemPrompt: "t",
+		Hooks:        runner,
+	})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d", "hi"))
+	require.True(t, hasEventType(events, EventDone))
+
+	// Two assistant turns must have been produced.
+	d, ok := store.getDialogue("d")
+	require.True(t, ok)
+	var assistantCount int
+	for _, m := range d.Messages {
+		if m.Role == llm.RoleAssistant {
+			assistantCount++
+		}
+	}
+	assert.Equal(t, 2, assistantCount, "Stop continuation should append a second assistant turn exactly once")
+	// The injected continuation reason must show up as a user message.
+	var foundCont bool
+	for _, m := range d.Messages {
+		if m.Role == llm.RoleUser && strings.Contains(m.Content, "keep going") {
+			foundCont = true
+		}
+	}
+	assert.True(t, foundCont, "expected continuation user message")
+}
+
+func TestHooks_SessionStartAdditionalContext(t *testing.T) {
+	t.Parallel()
+	cfg := hookCfg(hooks.EventSessionStart, "*",
+		`printf "context-from-hook"`)
+	runner := hooks.NewRunner(cfg, hooksTestExec{}, nil, "")
+
+	svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
+	store := newMockStore()
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{
+		SystemPrompt: "t",
+		Hooks:        runner,
+	})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d", "hello"))
+	require.True(t, hasEventType(events, EventDone))
+
+	d, ok := store.getDialogue("d")
+	require.True(t, ok)
+	var userMsg *llm.Message
+	for i := range d.Messages {
+		if d.Messages[i].Role == llm.RoleUser {
+			userMsg = &d.Messages[i]
+			break
+		}
+	}
+	require.NotNil(t, userMsg)
+	assert.True(t, strings.Contains(userMsg.Content, "context-from-hook"),
+		"user message should carry hook additionalContext, got %q", userMsg.Content)
+}
+
+func TestHooks_PreCompactManualBlocked(t *testing.T) {
+	t.Parallel()
+	cfg := hookCfg(hooks.EventPreCompact, "*",
+		`printf "no compact" 1>&2; exit 2`)
+	runner := hooks.NewRunner(cfg, hooksTestExec{}, nil, "")
+
+	store := newMockStore()
+	d := dialoguemanager.Dialogue{
+		ID: "d-pre",
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: "sys"},
+			{Role: llm.RoleUser, Content: "hi"},
+			{Role: llm.RoleAssistant, Content: "hello"},
+		},
+	}
+	require.NoError(t, store.Create(context.Background(), d))
+	svc := &mockService{responses: []mockResponse{stopResponse("Summary")}}
+
+	_, _, err := CompactDialogue(context.Background(), svc, store, d, WithCompactHooks(runner))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no compact")
+}
+
+// --- helpers ---
+
+// hooksTestExec executes commands locally so the hook runner has a
+// real shell to dispatch to in these integration tests.
+type hooksTestExec struct{}
+
+func (hooksTestExec) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	c := osexec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Dir = cmd.Dir
+	c.Stdin = cmd.Stdin
+	c.Stdout = cmd.Stdout
+	c.Stderr = cmd.Stderr
+	c.Env = append(os.Environ(), cmd.Env...)
+	if err := c.Start(); err != nil {
+		return 0, err
+	}
+	pid := workspaceapi.Pid(c.Process.Pid)
+	go func() {
+		err := c.Wait()
+		if cmd.Watcher != nil {
+			cmd.Watcher.WatchProcess() <- err
+		}
+	}()
+	return pid, nil
+}
+
+func (hooksTestExec) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (hooksTestExec) Close() error                                  { return nil }
+
+// hookCfg is a small helper that registers a single command hook for
+// the given event with the matcher provided.
+func hookCfg(ev hooks.Event, matcher, command string) hooks.Config {
+	g := hooks.Group{
+		Matcher: matcher,
+		Hooks: []hooks.Hook{{
+			Type:    hooks.HookTypeCommand,
+			Command: command,
+			Timeout: 2 * time.Second,
+		}},
+	}
+	cfg := hooks.Config{}
+	switch ev {
+	case hooks.EventPostToolUse:
+		cfg.PostToolUse = []hooks.Group{g}
+	case hooks.EventStop:
+		cfg.Stop = []hooks.Group{g}
+	case hooks.EventUserPromptSubmit:
+		cfg.UserPromptSubmit = []hooks.Group{g}
+	case hooks.EventPreCompact:
+		cfg.PreCompact = []hooks.Group{g}
+	case hooks.EventSessionStart:
+		cfg.SessionStart = []hooks.Group{g}
+	}
+	return cfg
+}

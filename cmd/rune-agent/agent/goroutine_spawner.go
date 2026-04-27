@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -57,6 +58,7 @@ type GoroutineSpawner struct {
 	sessionKey          string
 	agentID             string
 	workspace           workspaceapi.URI
+	hookRunner          *hooks.Runner
 
 	// GenerateDialogueID, when non-nil, replaces the default
 	// petname generator for child dialogue IDs. Intended for testing.
@@ -94,6 +96,12 @@ func NewGoroutineSpawner(
 // the skill tool) that reference the spawner itself.
 func (s *GoroutineSpawner) SetRegistry(r *Registry) {
 	s.registry = r
+}
+
+// SetHooks installs the hook runner that child sub-agents inherit.
+// Must be called before any Run calls; nil is a no-op.
+func (s *GoroutineSpawner) SetHooks(r *hooks.Runner) {
+	s.hookRunner = r
 }
 
 // Run validates the request, creates a sub-agent, and returns
@@ -236,6 +244,8 @@ func (s *GoroutineSpawner) Run(
 		store:      s.store,
 		dialogueID: dialogueID,
 		cleanup:    req.Cleanup,
+		hooks:      s.hookRunner,
+		workspace:  s.workspace,
 	}
 
 	return RunHandle{
@@ -277,6 +287,8 @@ type spawnerIterator struct {
 	store      dialoguemanager.Store
 	dialogueID string
 	cleanup    string
+	hooks      *hooks.Runner
+	workspace  workspaceapi.URI
 }
 
 func (s *spawnerIterator) Next(ctx context.Context) (Event, bool) {
@@ -290,6 +302,14 @@ func (s *spawnerIterator) Err() error {
 func (s *spawnerIterator) Close() error {
 	s.cancel()
 	err := s.inner.Close()
+	// SessionEnd hook (reason=subagent): fire-and-forget once the
+	// child agent loop has exited.
+	s.hooks.Run(context.Background(), hooks.Payload{
+		SessionID:     s.dialogueID,
+		Cwd:           s.workspace,
+		HookEventName: hooks.EventSessionEnd,
+		Reason:        "subagent",
+	})
 	if s.cleanup == "delete" {
 		delCtx, delCancel := context.WithTimeout(
 			context.Background(), 10*time.Second,
