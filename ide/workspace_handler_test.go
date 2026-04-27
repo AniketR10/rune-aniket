@@ -663,7 +663,6 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			},
 		}
 		m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "", nopShutdownShaderConfig())
-		m.forceSyncCommandPrompt = true
 
 		uri1, err := workspaceapi.ParseURI("file://" + tmp1)
 		require.NoError(t, err)
@@ -2142,7 +2141,6 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		cfg.ringBell = func() {}
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
-		m.forceSyncCommandPrompt = true
 
 		wantLayout := `┌──────────────────────────────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
@@ -2494,8 +2492,6 @@ func TestMoveWorkspace(t *testing.T) {
 │                                      │
 ┌──────────────────────────────────────┐
 │workspacemove ▐                       │
-│left                                  │
-│right                                 │
 │1                                     │
 │2                                     │
 │3                                     │
@@ -2503,6 +2499,8 @@ func TestMoveWorkspace(t *testing.T) {
 │5                                     │
 │6                                     │
 │7                                     │
+│8                                     │
+│9                                     │
 └──────────────────────────────────────┘`},
 	}
 	h := newSafeHandler(m)
@@ -2574,7 +2572,6 @@ func TestExternalCommands(t *testing.T) {
 
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
-		m.forceSyncCommandPrompt = true
 		err = m.subscribeCommand(textapi.CommandManual{Name: "ramon"},
 			text.FuncCommandHandler(func(context.Context, textapi.Command) error {
 				return nil
@@ -2655,7 +2652,6 @@ func TestExternalCommands(t *testing.T) {
 
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 			nopShutdownShaderConfig())
-		m.forceSyncCommandPrompt = true
 
 		const n = 50
 		var wg sync.WaitGroup
@@ -3732,6 +3728,15 @@ func (f fnRunner) Close() error {
 }
 
 func newSafeHandler(m *testWorkspaceManagerHandler) *safeHandler {
+	// Force the command Prompt into sync mode so completion runs
+	// inline on the test goroutine. The async path spawns a raw
+	// goroutine that iterates the prompt's history slice without
+	// holding the harness lock; in production the single-threaded
+	// event loop serialises everything so this is safe, but tests
+	// drive Handle from the test goroutine while the prompt is still
+	// iterating, which races with the next History.Add. See the data
+	// race fixed for TestWorkspaceManagerHandlerDraw.
+	m.forceSyncCommandPrompt = true
 	return &safeHandler{
 		Component: m,
 		Handler:   m, mu: m.mu,

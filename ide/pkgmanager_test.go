@@ -131,7 +131,6 @@ func TestPackageManagerIntegration(t *testing.T) {
 	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 	rm.SetMissProgressComplete(true)
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, true, 15)
-	m.forceSyncCommandPrompt = true
 
 	cases := []handlertest.SequenceTestCase{
 		{":pkginstall ",
