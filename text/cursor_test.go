@@ -6857,3 +6857,279 @@ type mockIndentService struct {
 func (m *mockIndentService) IndentationAt(line int) (int, bool) {
 	return m.returnIndentationAt, true
 }
+
+// TestWrapSelectedParagraphBlockSelection exercises Cursor.WrapSelectedParagraph
+// with a visual-block selection across many edge cases. Vim treats gq on a
+// <C-v> selection as a linewise reflow over every line covered by the block,
+// regardless of per-column block bounds, so all of these cases drive the
+// machinery via SelectBlock and assert the linewise reflow result.
+func TestWrapSelectedParagraphBlockSelection(t *testing.T) {
+	t.Parallel()
+
+	type tc struct {
+		name        string
+		content     string
+		anchor      term.Coordinates // block anchor (SelectBlock invocation site)
+		to          term.Coordinates // block extent (cursor position after SelectBlock)
+		ruler       int
+		width       int
+		height      int
+		wrap        bool
+		commentSpec CommentSpec
+		wantChanged bool
+		wantContent string
+	}
+
+	tests := []tc{
+		{
+			name:        "single column block reflows full lines",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 1, X: 3},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\n",
+		},
+		{
+			name:        "single line block degenerates to current line wrap",
+			content:     "alpha beta gamma delta epsilon zeta\n",
+			anchor:      term.Coordinates{Y: 0, X: 3},
+			to:          term.Coordinates{Y: 0, X: 8},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\n",
+		},
+		{
+			name:        "backwards anchor (anchor below, cursor above) still reflows linewise",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			anchor:      term.Coordinates{Y: 2, X: 5},
+			to:          term.Coordinates{Y: 0, X: 1},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\n",
+		},
+		{
+			name:        "block past EOL on short rows still reflows full lines",
+			content:     "alpha beta gamma delta epsilon zeta\nx\ny\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 2, X: 30},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			// rows 1..2 are "x" and "y" — together they form a single
+			// paragraph chunk after the long row that is reflowed to
+			// "alpha beta\ngamma delta\nepsilon zeta", followed by
+			// "x y" merged into a single short line.
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nx y\n",
+		},
+		{
+			name:        "block with both endpoints past EOL clamps and reflows",
+			content:     "alpha beta gamma delta epsilon\nsh\n",
+			anchor:      term.Coordinates{Y: 1, X: 100},
+			to:          term.Coordinates{Y: 0, X: 100},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon sh\n",
+		},
+		{
+			name:        "tabs in indentation are preserved on each wrapped line",
+			content:     "\talpha beta gamma delta epsilon zeta\n\tsecond line\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 1, X: 2},
+			ruler:       14,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "\talpha beta\n\tgamma delta\n\tepsilon zeta\n\tsecond line\n",
+		},
+		{
+			name:        "wide CJK characters are wrapped using display width",
+			content:     "你好 世界 再见 朋友 测试 内容\nsecond\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 0, X: 2},
+			ruler:       8,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "你好\n世界\n再见\n朋友\n测试\n内容\nsecond\n",
+		},
+		{
+			name:        "embedded NUL bytes are treated as paragraph blanks but preserve trailing tokens",
+			content:     "alpha\x00 beta gamma delta epsilon\nsecond\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 1, X: 3},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			// strings.Fields treats NUL/space identically, so "alpha\x00"
+			// remains a single token preceding the rest of the words.
+			wantContent: "alpha\x00 beta\ngamma delta\nepsilon\nsecond\n",
+		},
+		{
+			name:        "block over only-blank lines is a no-op",
+			content:     "\n\n\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 2, X: 0},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: false,
+			wantContent: "\n\n\n",
+		},
+		{
+			name:        "comment block reflows preserving line leader",
+			content:     "// alpha beta gamma\n// delta epsilon zeta eta theta\nplain code line\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 2, X: 4},
+			ruler:       14,
+			width:       80,
+			height:      10,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			// the block crosses a comment->code boundary so the chunker
+			// reflows the leading comment paragraph and stops; the
+			// trailing plain code line is left intact.
+			wantContent: "// alpha beta\n// gamma delta\n// epsilon\n// zeta eta\n// theta\nplain code line\n",
+		},
+		{
+			name:        "block spanning blank line splits into two reflowed chunks",
+			content:     "alpha beta gamma delta epsilon\n\nsecond paragraph keeps text\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 2, X: 5},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon\n\nsecond\nparagraph\nkeeps text\n",
+		},
+		{
+			name:        "block over comment, blank, then non-comment only reflows leading comment chunk",
+			content:     "// alpha beta gamma delta\n\nplain text\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 2, X: 2},
+			ruler:       14,
+			width:       80,
+			height:      10,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "// alpha beta\n// gamma delta\n\nplain text\n",
+		},
+		{
+			name:        "block on file without trailing newline reflows last line",
+			content:     "alpha beta gamma delta epsilon zeta",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 0, X: 5},
+			ruler:       12,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta",
+		},
+		{
+			name:        "block over content already inside ruler is a no-op",
+			content:     "tiny\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 0, X: 2},
+			ruler:       80,
+			width:       80,
+			height:      10,
+			wantChanged: false,
+			wantContent: "tiny\n",
+		},
+		{
+			name:        "non-positive ruler is a no-op",
+			content:     "alpha beta gamma\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 0, X: 2},
+			ruler:       0,
+			width:       80,
+			height:      10,
+			wantChanged: false,
+			wantContent: "alpha beta gamma\n",
+		},
+		{
+			name:        "negative ruler is a no-op",
+			content:     "alpha beta gamma\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 0, X: 2},
+			ruler:       -3,
+			width:       80,
+			height:      10,
+			wantChanged: false,
+			wantContent: "alpha beta gamma\n",
+		},
+		{
+			name:        "wrap-mode-on viewport still reflows full source lines",
+			content:     "alpha beta gamma delta epsilon zeta eta theta\nsecond\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 1, X: 3},
+			ruler:       14,
+			width:       10,
+			height:      10,
+			wrap:        true,
+			wantChanged: true,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\neta theta\nsecond\n",
+		},
+		{
+			name:        "ruler smaller than indent+leader still produces at least one word per line",
+			content:     "    alpha beta gamma delta\n    next words here\n",
+			anchor:      term.Coordinates{Y: 0, X: 4},
+			to:          term.Coordinates{Y: 1, X: 4},
+			ruler:       4,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			wantContent: "    alpha\n    beta\n    gamma\n    delta\n    next\n    words\n    here\n",
+		},
+		{
+			name:        "block over leading blank then comment chunk skips blank, reflows comment",
+			content:     "\n// alpha beta gamma delta epsilon\n// zeta eta theta\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 2, X: 3},
+			ruler:       16,
+			width:       80,
+			height:      10,
+			commentSpec: CommentSpec{Line: []string{"//"}},
+			wantChanged: true,
+			wantContent: "\n// alpha beta\n// gamma delta\n// epsilon zeta\n// eta theta\n",
+		},
+	}
+
+	for _, tcase := range tests {
+		t.Run(tcase.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := setupCursorContent(t, tcase.width, tcase.height, tcase.content, tcase.wrap)
+			if tcase.commentSpec.HasLine() || len(tcase.commentSpec.Block) > 0 {
+				attachCommentTestView(c, tcase.commentSpec)
+			}
+
+			// position the anchor; we don't assert ok because (0,0) at
+			// startup is already the cursor and MoveToScroll's ok
+			// reports movement, not success.
+			_, _ = c.MoveToScroll(tcase.anchor)
+			require.True(t, c.SelectBlock(),
+				"SelectBlock at anchor %+v failed", tcase.anchor)
+			_, _ = c.MoveToScroll(tcase.to)
+
+			mode, ok := c.SelectionMode()
+			require.True(t, ok)
+			require.Equal(t, BlockSelection, mode)
+
+			changed := c.WrapSelectedParagraph(tcase.ruler)
+			assert.Equal(t, tcase.wantChanged, changed, "changed mismatch")
+			assert.Equal(t, tcase.wantContent, c.scroll.Buffer().String(),
+				"content mismatch")
+		})
+	}
+}

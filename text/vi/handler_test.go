@@ -6577,6 +6577,15 @@ func parseSearchOpEvents(seq string) []term.Event {
 			case "enter":
 				events = append(events, term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			default:
+				// support <c-X> form for ctrl-modified single chars.
+				if strings.HasPrefix(name, "c-") && len([]rune(name)) == 3 {
+					events = append(events, term.Event{
+						Type: term.EventKey,
+						Mod:  term.ModCtrl,
+						Ch:   []rune(name)[2],
+					})
+					break
+				}
 				panic("parseSearchOpEvents: unknown token <" + name + ">")
 			}
 			i = end
@@ -6833,6 +6842,98 @@ type callbackAdapter struct {
 			ruler:       20,
 			width:       80,
 			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n\n// one two three\n// four\n// five six seven eight\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq reflows whole lines covered by the block",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\nfourth line\nfifth line\n",
+			events:      "<c-v>jjj$gq",
+			ruler:       12,
+			width:       40,
+			// Vim treats gq on a block selection as a linewise gq
+			// over the lines covered by the block; column ranges
+			// inside the block are ignored for the reflow target.
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\nfourth line\nfifth line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq on a single line behaves like gqq",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line untouched\n",
+			events:      "<c-v>gq",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line untouched\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq preserves tab indentation across reflowed lines",
+			content:     "\talpha beta gamma delta epsilon zeta\n\tsecond line\n",
+			events:      "<c-v>jllgq",
+			ruler:       14,
+			width:       40,
+			wantContent: "\talpha beta\n\tgamma delta\n\tepsilon zeta\n\tsecond line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq reflows wide CJK text using display width",
+			content:     "你好 世界 再见 朋友 测试 内容\nsecond line\n",
+			events:      "<c-v>jllgq",
+			ruler:       8,
+			width:       40,
+			// ruler=8 also rewraps "second line" (11 cols) onto two lines.
+			wantContent: "你好\n世界\n再见\n朋友\n测试\n内容\nsecond\nline\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "visual block gq across comment then code only reflows leading comment chunk",
+			content: "// alpha beta gamma delta epsilon\nplain code keeps its shape\n",
+			events:      "<c-v>jllgq",
+			ruler:       14,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\n// epsilon\nplain code keeps its shape\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq across paragraph blank line splits chunks",
+			content:     "alpha beta gamma delta epsilon\n\nsecond paragraph keeps text\n",
+			events:      "<c-v>jjllgq",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon\n\nsecond\nparagraph\nkeeps text\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq over only blank lines is a no-op",
+			content:     "\n\n\n",
+			events:      "<c-v>jjgq",
+			ruler:       12,
+			width:       40,
+			wantContent: "\n\n\n",
+			wantMode:    normalMode,
+			// blank-only paragraph reflow is a no-op so the final q
+			// returns unhandled by gq.
+			allowUnhandledLast: true,
+		},
+		{
+			name:        "visual block gq with backward $-extension over short row reflows full lines",
+			content:     "alpha beta gamma delta epsilon zeta\nx\n",
+			events:      "<c-v>j$gq",
+			ruler:       12,
+			width:       40,
+			// row 1 ("x") is short so $ on row 1 is the very first column;
+			// the block still covers rows 0..1 and gq reflows whole lines.
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nx\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gq with large ruler joins lines into a single reflowed paragraph",
+			content:     "tiny line\nshort too\n",
+			events:      "<c-v>jllgq",
+			ruler:       40,
+			width:       60,
+			// ruler=40 fits both source lines together; gq joins them
+			// into a single reflowed line.
+			wantContent: "tiny line short too\n",
 			wantMode:    normalMode,
 		},
 		{

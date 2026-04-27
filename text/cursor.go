@@ -1632,13 +1632,14 @@ func (c *Cursor) WrapParagraph(ruler int) bool {
 
 // WrapSelectedParagraph reflows the current selected line range. It is intended
 // for visual-line gq style formatting where the selected comment block should be
-// reformatted without absorbing surrounding code.
+// reformatted without absorbing surrounding code. Block selections are
+// treated as if every covered line were fully selected (Vim behavior:
+// gq on <C-v> ignores per-column block bounds).
 func (c *Cursor) WrapSelectedParagraph(ruler int) bool {
 	if ruler <= 0 {
 		return false
 	}
-	mode, ok := c.SelectionMode()
-	if !ok || mode == BlockSelection {
+	if _, ok := c.SelectionMode(); !ok {
 		return false
 	}
 	chunks := c.wrapSelectedParagraphChunks()
