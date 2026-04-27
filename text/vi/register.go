@@ -43,6 +43,19 @@ func validRegisterName(name rune) bool {
 		('A' <= name && name <= 'Z')
 }
 
+// validMarkName reports whether name is accepted as a mark identifier
+// for `'{mark}` / `` `{mark} `` motions. Vim recognizes alphabetic
+// marks (a-z, A-Z) plus the special marks `.` (last change), `<` and
+// `>` (visual selection start/end). Numeric or other special marks
+// (`'`, `^`, `[`, `]`, etc.) are not recognized here yet.
+func validMarkName(name rune) bool {
+	if name == '.' || name == '<' || name == '>' {
+		return true
+	}
+	return ('a' <= name && name <= 'z') ||
+		('A' <= name && name <= 'Z')
+}
+
 func registerNameToID(name rune) string {
 	if name == 0 || name == unnamedRegister {
 		return clipboard.DefaultRegisterID

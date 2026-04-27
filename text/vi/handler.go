@@ -324,6 +324,30 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	return true
 }
 
+// recordVisualMarksFromSnapshot persists snapshotted selection bounds
+// as the `<` / `>` visual marks. It is a no-op when no snapshot was
+// captured. Used by handleVisual to record bounds before operators
+// that internally clear the selection (yank, delete, etc.).
+func (vi *viHandlerImpl) recordVisualMarksFromSnapshot(
+	had bool, from, to term.Coordinates,
+) {
+	if !had {
+		return
+	}
+	vi.cursor.SetLocationList(textapi.LocationPriorityInfo,
+		visualSelectionStartMarkID,
+		textapi.LocationSlice([]textapi.Location{{
+			From: from,
+			To:   term.Coordinates{Y: from.Y, X: from.X + 1},
+		}}))
+	vi.cursor.SetLocationList(textapi.LocationPriorityInfo,
+		visualSelectionEndMarkID,
+		textapi.LocationSlice([]textapi.Location{{
+			From: to,
+			To:   term.Coordinates{Y: to.Y, X: to.X + 1},
+		}}))
+}
+
 func (vi *viHandlerImpl) beginOperatorPending() {
 	vi.operatorCount = max(1, vi.count)
 	vi.count = 1
@@ -358,6 +382,18 @@ func (vi *viHandlerImpl) setGMode() {
 }
 
 const foldHighlightLocationListID = "_foldHighlightID"
+
+// visualSelectionStartMarkID and visualSelectionEndMarkID hold the
+// start (`<`) and end (`>`) of the last visual selection. They are
+// populated whenever vi exits a visual mode and are consumed by the
+// `'<`/`` `< ``/`'>`/`` `> `` keybindings via the standard
+// location-jump command. Vim records these for any visual operation
+// (operator, <esc>, motion-driven exit), so we update them on every
+// transition out of a visual mode.
+const (
+	visualSelectionStartMarkID = "<"
+	visualSelectionEndMarkID   = ">"
+)
 
 func (vi *viHandlerImpl) setZMode() {
 	vi.setMode(zMode)
@@ -1709,8 +1745,43 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
+	// Snapshot the current selection bounds before dispatching the
+	// event. Many visual-mode operators (yank, delete, change,
+	// shift, gq, gu, gU, g~, ...) clear the selection internally,
+	// so we cannot read the bounds back after dispatch. If this
+	// event causes vi to leave visual mode, persist the snapshot as
+	// the `<` / `>` visual marks below.
+	hadSelection := false
+	var snapFrom, snapTo term.Coordinates
+	if from, to, ok := vi.cursor.SelectionBounds(); ok {
+		hadSelection = true
+		snapFrom, snapTo = term.CoordinatesSort(from, to)
+		if mode, modeOk := vi.cursor.SelectionMode(); modeOk {
+			// For line selections, Vim's `'>` mark sits at the
+			// last column of the last selected line. Adjust the
+			// snapshot accordingly so jumps land in the right
+			// place.
+			if mode == text.LineSelection {
+				snapFrom.X = 0
+				snapTo.X = vi.less.Buffer().Columns(snapTo.Y)
+			}
+		}
+	}
+	// Persist visual marks whenever this dispatch leaves any of
+	// the visual modes, regardless of which path inside this
+	// function returned.
+	defer func() {
+		switch vi.mode() {
+		case visualMode, visualLineMode, visualBlockMode:
+			// staying in visual; don't overwrite marks yet.
+		default:
+			vi.recordVisualMarksFromSnapshot(hadSelection, snapFrom, snapTo)
+		}
+	}()
+
 	if ev.Key == term.KeyEsc || (ev.Ch == 'c' && ev.Mod == term.ModCtrl) {
 		vi.setNormalMode()
+		vi.recordVisualMarksFromSnapshot(hadSelection, snapFrom, snapTo)
 		vi.cursor.Unselect()
 		handled = true
 		return
@@ -2762,7 +2833,7 @@ func (vi *viHandlerImpl) beginMarkOp(linewise, forceLinewise bool, apply, finish
 // over the materialized range. Unknown or unset marks are no-ops.
 func (vi *viHandlerImpl) handleMarkOp(ev term.Event) (quit, handled bool) {
 	op := vi.pendingMarkOp
-	if ev.Mod != 0 || !validRegisterName(ev.Ch) {
+	if ev.Mod != 0 || !validMarkName(ev.Ch) {
 		vi.cancelMarkOp()
 		return false, true
 	}
@@ -3084,7 +3155,13 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			return
 		case 'q':
 			if _, ok := vi.cursor.SelectionMode(); ok {
-				handled = vi.cursor.WrapSelectedParagraph(vi.config.ruler)
+				// Vim treats gq on a blank-only selection as handled
+				// (no buffer change, but the operator consumed the
+				// keys and the mode transition runs). Always report
+				// handled so the visual operator pipeline matches
+				// Vim semantics.
+				vi.cursor.WrapSelectedParagraph(vi.config.ruler)
+				handled = true
 				vi.cursor.Unselect()
 				vi.setNormalMode()
 				return

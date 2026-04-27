@@ -5389,7 +5389,10 @@ func TestCursorWrapParagraph(t *testing.T) {
 			cursor:      term.Coordinates{Y: 0, X: 1},
 			ruler:       14,
 			wantChanged: true,
-			wantContent: "\talpha beta\n\tgamma delta\n\tepsilon eta\n\ttheta\n",
+			// Tab in indent expands to tabspaces (default 4) so the
+			// available width is 14-4=10. "gamma delta" = 11 cells
+			// exceeds it; only "alpha beta" and "eta theta" fit pairs.
+			wantContent: "\talpha beta\n\tgamma\n\tdelta\n\tepsilon\n\teta theta\n",
 		},
 		{
 			name:        "line comments without trailing space leader are preserved",
@@ -6949,7 +6952,23 @@ func TestWrapSelectedParagraphBlockSelection(t *testing.T) {
 			width:       80,
 			height:      10,
 			wantChanged: true,
-			wantContent: "\talpha beta\n\tgamma delta\n\tepsilon zeta\n\tsecond line\n",
+			// Tab in indent expands to tabspaces (default 4) so the
+			// available width is 14-4=10; pairs that exceed 10 cells
+			// are wrapped to their own lines.
+			wantContent: "\talpha beta\n\tgamma\n\tdelta\n\tepsilon\n\tzeta\n\tsecond\n\tline\n",
+		},
+		{
+			name:        "double-tab indent reduces available width by two tabstops",
+			content:     "\t\talpha beta gamma delta epsilon\n",
+			anchor:      term.Coordinates{Y: 0, X: 0},
+			to:          term.Coordinates{Y: 0, X: 4},
+			ruler:       20,
+			width:       80,
+			height:      10,
+			wantChanged: true,
+			// Two tabs at default tabspaces=4 cost 8 cells; available
+			// is 20-8=12, so pairs longer than 12 are wrapped.
+			wantContent: "\t\talpha beta\n\t\tgamma delta\n\t\tepsilon\n",
 		},
 		{
 			name:        "wide CJK characters are wrapped using display width",
@@ -6996,10 +7015,9 @@ func TestWrapSelectedParagraphBlockSelection(t *testing.T) {
 			height:      10,
 			commentSpec: CommentSpec{Line: []string{"//"}},
 			wantChanged: true,
-			// the block crosses a comment->code boundary so the chunker
-			// reflows the leading comment paragraph and stops; the
-			// trailing plain code line is left intact.
-			wantContent: "// alpha beta\n// gamma delta\n// epsilon\n// zeta eta\n// theta\nplain code line\n",
+			// the block crosses a comment->code boundary; both
+			// chunks are reflowed independently (Vim behavior).
+			wantContent: "// alpha beta\n// gamma delta\n// epsilon\n// zeta eta\n// theta\nplain code\nline\n",
 		},
 		{
 			name:        "block spanning blank line splits into two reflowed chunks",

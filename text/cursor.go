@@ -1667,17 +1667,6 @@ type wrapParagraphChunk struct {
 
 func (c *Cursor) wrapSelectedParagraphChunks() []wrapParagraphChunk {
 	startLine, endLine := c.commentLineBounds()
-	firstContent := -1
-	for y := startLine; y <= endLine; y++ {
-		if strings.TrimSpace(c.lineString(y)) != "" {
-			firstContent = y
-			break
-		}
-	}
-	if firstContent < 0 {
-		return nil
-	}
-	firstIsComment := c.lineHasAnyCommentPrefix(firstContent)
 	var chunks []wrapParagraphChunk
 	for y := startLine; y <= endLine; {
 		for y <= endLine && strings.TrimSpace(c.lineString(y)) == "" {
@@ -1688,10 +1677,6 @@ func (c *Cursor) wrapSelectedParagraphChunks() []wrapParagraphChunk {
 		}
 
 		isComment := c.lineHasAnyCommentPrefix(y)
-		if firstIsComment && !isComment {
-			break
-		}
-
 		chunkStart := y
 		for y <= endLine {
 			line := c.lineString(y)
@@ -1726,11 +1711,13 @@ func (c *Cursor) wrapParagraphRange(startLine, endLine int, indent, leader strin
 	if body == "" {
 		return false
 	}
-	available := ruler - graphemecluster.StringWidth(indent) - graphemecluster.StringWidth(leader)
+	tabspaces := c.resolveTabspaces(0)
+	available := ruler - displayWidthWithTabs(indent, tabspaces, 0) -
+		displayWidthWithTabs(leader, tabspaces, displayWidthWithTabs(indent, tabspaces, 0))
 	if available <= 0 {
 		available = 1
 	}
-	wrapped := wrapTextWords(body, available)
+	wrapped := wrapTextWords(body, available, tabspaces)
 	if len(wrapped) == 0 {
 		return false
 	}
@@ -1808,7 +1795,24 @@ func leadingWhitespace(s string) string {
 	return s
 }
 
-func wrapTextWords(text string, width int) []string {
+// displayWidthWithTabs returns the display width of s assuming it begins
+// at column startCol. Tabs advance to the next multiple of tabspaces.
+func displayWidthWithTabs(s string, tabspaces, startCol int) int {
+	if tabspaces <= 0 {
+		tabspaces = 1
+	}
+	col := startCol
+	for _, r := range s {
+		if r == '\t' {
+			col += tabspaces - (col % tabspaces)
+			continue
+		}
+		col += graphemecluster.StringWidth(string(r))
+	}
+	return col - startCol
+}
+
+func wrapTextWords(text string, width, tabspaces int) []string {
 	if width <= 0 {
 		width = 1
 	}
@@ -1819,7 +1823,9 @@ func wrapTextWords(text string, width int) []string {
 	lines := []string{words[0]}
 	for _, word := range words[1:] {
 		current := lines[len(lines)-1]
-		if graphemecluster.StringWidth(current)+1+graphemecluster.StringWidth(word) <= width {
+		currentWidth := displayWidthWithTabs(current, tabspaces, 0)
+		wordWidth := displayWidthWithTabs(word, tabspaces, currentWidth+1)
+		if currentWidth+1+wordWidth <= width {
 			lines[len(lines)-1] = current + " " + word
 			continue
 		}
@@ -2532,6 +2538,15 @@ func (c *Cursor) setSelection() (ok bool) {
 	c.SetLocationList(internalLocationListPriority, selectionLocationListID, LocationSlice(locs))
 
 	return
+}
+
+// SelectionBounds returns the unsorted (anchor, cursor) coordinates of
+// the current selection, if any. The returned coordinates are clamped
+// into the buffer; callers that need a sorted (from <= to) range can
+// use term.CoordinatesSort. ok is false when there is no active
+// selection.
+func (c *Cursor) SelectionBounds() (from, to term.Coordinates, ok bool) {
+	return c.selectionBounds()
 }
 
 func (c *Cursor) selectionBounds() (from, to term.Coordinates, ok bool) {

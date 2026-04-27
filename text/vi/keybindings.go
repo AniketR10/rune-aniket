@@ -62,5 +62,23 @@ func KeyBindings() (ret map[handler.Sequence][][]string) {
 	ret[seq] = [][]string{
 		{text.CommandLocationJumpLine, "next", lastChangeLocationListID},
 	}
+	// `< / `> — jump to start/end of last visual selection (exact)
+	seq = handler.Sequence{First: term.KeyComb{Ch: '`'}, Last: term.KeyComb{Ch: '<'}}
+	ret[seq] = [][]string{
+		{text.CommandLocationJump, "next", visualSelectionStartMarkID},
+	}
+	seq = handler.Sequence{First: term.KeyComb{Ch: '`'}, Last: term.KeyComb{Ch: '>'}}
+	ret[seq] = [][]string{
+		{text.CommandLocationJump, "next", visualSelectionEndMarkID},
+	}
+	// '< / '> — jump to start/end of last visual selection (linewise)
+	seq = handler.Sequence{First: term.KeyComb{Ch: '\''}, Last: term.KeyComb{Ch: '<'}}
+	ret[seq] = [][]string{
+		{text.CommandLocationJumpLine, "next", visualSelectionStartMarkID},
+	}
+	seq = handler.Sequence{First: term.KeyComb{Ch: '\''}, Last: term.KeyComb{Ch: '>'}}
+	ret[seq] = [][]string{
+		{text.CommandLocationJumpLine, "next", visualSelectionEndMarkID},
+	}
 	return ret
 }

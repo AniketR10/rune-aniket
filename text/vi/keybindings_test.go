@@ -54,6 +54,30 @@ func TestKeyBindingsSpecialMarks(t *testing.T) {
 			last:    '.',
 			wantCmd: [][]string{{text.CommandLocationJumpLine, "next", lastChangeLocationListID}},
 		},
+		{
+			name:    "backtick-less jumps to start of last visual selection",
+			first:   '`',
+			last:    '<',
+			wantCmd: [][]string{{text.CommandLocationJump, "next", visualSelectionStartMarkID}},
+		},
+		{
+			name:    "backtick-greater jumps to end of last visual selection",
+			first:   '`',
+			last:    '>',
+			wantCmd: [][]string{{text.CommandLocationJump, "next", visualSelectionEndMarkID}},
+		},
+		{
+			name:    "apostrophe-less jumps to start of last visual selection line",
+			first:   '\'',
+			last:    '<',
+			wantCmd: [][]string{{text.CommandLocationJumpLine, "next", visualSelectionStartMarkID}},
+		},
+		{
+			name:    "apostrophe-greater jumps to end of last visual selection line",
+			first:   '\'',
+			last:    '>',
+			wantCmd: [][]string{{text.CommandLocationJumpLine, "next", visualSelectionEndMarkID}},
+		},
 	}
 
 	for _, tc := range tests {

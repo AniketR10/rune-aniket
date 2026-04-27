@@ -6885,12 +6885,12 @@ type callbackAdapter struct {
 			wantMode:    normalMode,
 		},
 		{
-			name:    "visual block gq across comment then code only reflows leading comment chunk",
+			name:    "visual block gq across comment then code reflows both chunks independently",
 			content: "// alpha beta gamma delta epsilon\nplain code keeps its shape\n",
 			events:      "<c-v>jllgq",
 			ruler:       14,
 			width:       40,
-			wantContent: "// alpha beta\n// gamma delta\n// epsilon\nplain code keeps its shape\n",
+			wantContent: "// alpha beta\n// gamma delta\n// epsilon\nplain code\nkeeps its\nshape\n",
 			wantMode:    normalMode,
 		},
 		{
@@ -6910,9 +6910,6 @@ type callbackAdapter struct {
 			width:       40,
 			wantContent: "\n\n\n",
 			wantMode:    normalMode,
-			// blank-only paragraph reflow is a no-op so the final q
-			// returns unhandled by gq.
-			allowUnhandledLast: true,
 		},
 		{
 			name:        "visual block gq with backward $-extension over short row reflows full lines",
@@ -6934,6 +6931,41 @@ type callbackAdapter struct {
 			// ruler=40 fits both source lines together; gq joins them
 			// into a single reflowed line.
 			wantContent: "tiny line short too\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "visual block gq ignores count typed inside the visual " +
+				"selection (matches Vim)",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			events:      "<c-v>j3gq",
+			ruler:       12,
+			width:       40,
+			// In Vim, a count entered between selecting and gq is
+			// silently consumed; the operator runs once over the
+			// existing selection.
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "visual block gq ignores count typed before <c-v> " +
+				"(matches Vim)",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			events:      "3<c-v>jgq",
+			ruler:       12,
+			width:       40,
+			// Leading count is consumed by the visual mode entry;
+			// gq still operates once over the resulting selection.
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "visual line gq ignores count typed inside the visual " +
+				"selection (matches Vim)",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\n",
+			events:      "Vj5gq",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\n",
 			wantMode:    normalMode,
 		},
 		{
@@ -8953,6 +8985,53 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantMode:    normalMode,
 			wantCursor:  &term.Coordinates{Y: 0, X: 0},
 			wantUnnamed: "first\n  second\n",
+		},
+		// ---- visual marks (`< / `> / '< / '>) used as motion targets ----
+		{
+			name: "d backtick less deletes from cursor to start of last visual selection",
+			content: "alpha beta gamma delta\nsecond line\n",
+			marks: map[rune]term.Coordinates{
+				'<': {Y: 0, X: 6}, // pre-seeded last visual selection start
+			},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 12}))
+			},
+			events: "d`\\<",
+			width:  40,
+			// charwise backward exclusive: deletes columns 6..11
+			// ("beta g") leaving "alpha amma delta\n".
+			wantContent: "alpha amma delta\nsecond line\n",
+			wantMode:    normalMode,
+			wantUnnamed: "beta g",
+		},
+		{
+			name: "y quote greater yanks lines up to and including end of last selection",
+			content: "first line\nsecond line\nthird line\nfourth line\n",
+			marks: map[rune]term.Coordinates{
+				'>': {Y: 2, X: 4}, // last visual selection ends inside line 2
+			},
+			events: "y'\\>",
+			width:  40,
+			// linewise yank from cursor (line 0) down to line 2.
+			wantContent: "first line\nsecond line\nthird line\nfourth line\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first line\nsecond line\nthird line\n",
+		},
+		{
+			name: "gq quote less reflows from cursor up to start-of-selection line",
+			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			marks: map[rune]term.Coordinates{
+				'<': {Y: 0, X: 0}, // last visual selection started at row 0
+			},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
+			},
+			events: "gq'\\<",
+			width:  40,
+			// gq from cursor (row 2) backward to mark line (row 0)
+			// reflows rows 0..2 as one paragraph at default ruler 90.
+			wantContent: "alpha beta gamma delta epsilon zeta second line third line\n",
+			wantMode:    normalMode,
 		},
 	}
 

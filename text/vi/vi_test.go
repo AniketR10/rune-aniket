@@ -1203,6 +1203,149 @@ func TestLastChangeMark(t *testing.T) {
 	}
 }
 
+// TestVisualMarks verifies that vi records the `<` and `>` visual
+// marks whenever it leaves a visual mode (operator, <esc>, or
+// motion-driven exit), and that the corresponding `'<` / `'>` /
+// `` `< `` / `` `> `` keybindings can jump back to those positions —
+// matching Vim's :help visual-marks.
+func TestVisualMarks(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		run       func(t *testing.T, vi *Vi)
+		wantLess  *term.Coordinates
+		wantGreat *term.Coordinates
+	}{
+		{
+			name:    "visual exit via <esc> records selection bounds",
+			content: "alpha beta\ngamma delta\nepsilon zeta\n",
+			run: func(t *testing.T, vi *Vi) {
+				// v + 2 j extends a charwise selection from (0,0) to (2,0).
+				handleRunes(t, vi, "vjj")
+				quit, handled := vi.Handle(testEsc())
+				require.False(t, quit)
+				require.True(t, handled)
+			},
+			wantLess:  &term.Coordinates{Y: 0, X: 0},
+			wantGreat: &term.Coordinates{Y: 2, X: 0},
+		},
+		{
+			name:    "visual line exit via operator records selection bounds",
+			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			run: func(t *testing.T, vi *Vi) {
+				// V j enters visual-line and extends one line down,
+				// then `y` yanks and leaves visual.
+				handleRunes(t, vi, "Vjy")
+			},
+			// Linewise selection runs from start of line 0 to last
+			// column of line 1.
+			wantLess: &term.Coordinates{Y: 0, X: 0},
+			wantGreat: &term.Coordinates{
+				Y: 1, X: len("second line"),
+			},
+		},
+		{
+			name:    "visual block exit via gq records selection bounds",
+			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			run: func(t *testing.T, vi *Vi) {
+				// <c-v> j l l gq — block select rows 0..1, columns
+				// 0..2, then run gq which exits visual.
+				quit, handled := vi.Handle(term.Event{
+					Type: term.EventKey, Mod: term.ModCtrl, Ch: 'v',
+				})
+				require.False(t, quit)
+				require.True(t, handled)
+				handleRunes(t, vi, "jllgq")
+			},
+			wantLess:  &term.Coordinates{Y: 0, X: 0},
+			wantGreat: &term.Coordinates{Y: 1, X: 2},
+		},
+		{
+			name:    "backwards visual selection stores sorted bounds",
+			content: "alpha beta\ngamma delta\nepsilon zeta\n",
+			run: func(t *testing.T, vi *Vi) {
+				// move to (2,3), then v + 2 k h h h to extend back.
+				handleRunes(t, vi, "jjlllvkkhhh")
+				quit, handled := vi.Handle(testEsc())
+				require.False(t, quit)
+				require.True(t, handled)
+			},
+			// Even though the user extended upward and leftward,
+			// `'<` ends up at the smaller coordinate.
+			wantLess:  &term.Coordinates{Y: 0, X: 0},
+			wantGreat: &term.Coordinates{Y: 2, X: 3},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader(tc.content))
+			vi := New(buf, uri)
+			vi.Resize(40, 20)
+
+			tc.run(t, vi)
+
+			less := currentLocation(t, vi, visualSelectionStartMarkID)
+			greater := currentLocation(t, vi, visualSelectionEndMarkID)
+
+			if tc.wantLess != nil {
+				assert.Equal(t, *tc.wantLess, less.From, "'< mark from")
+			}
+			if tc.wantGreat != nil {
+				assert.Equal(t, *tc.wantGreat, greater.From, "'> mark from")
+			}
+		})
+	}
+}
+
+// TestVisualMarksJump verifies that visual marks can be used as
+// targets for cursor-level navigation. Keybinding-level dispatch is
+// covered in keybindings_test.go; this exercises the underlying
+// MoveToNextLocation API that the keybindings invoke.
+func TestVisualMarksJump(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupKeys  string
+		jumpListID string
+		wantCursor term.Coordinates
+	}{
+		{
+			name:       "less mark jumps to start of last selection",
+			setupKeys:  "vjj", // (0,0) -> (2,0)
+			jumpListID: visualSelectionStartMarkID,
+			wantCursor: term.Coordinates{Y: 0, X: 0},
+		},
+		{
+			name:       "greater mark jumps to end of last selection",
+			setupKeys:  "vjj",
+			jumpListID: visualSelectionEndMarkID,
+			wantCursor: term.Coordinates{Y: 2, X: 0},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			buf.ReadFrom(strings.NewReader("alpha\nbeta\ngamma\n"))
+			vi := New(buf, uri)
+			vi.Resize(40, 20)
+
+			handleRunes(t, vi, tc.setupKeys)
+			quit, handled := vi.Handle(testEsc())
+			require.False(t, quit)
+			require.True(t, handled)
+
+			// Move cursor away so the jump produces a visible change.
+			handleRunes(t, vi, "G")
+			require.NotEqual(t, tc.wantCursor, vi.CursorAtScroll())
+
+			require.True(t, vi.MoveToNextLocation(tc.jumpListID))
+			assert.Equal(t, tc.wantCursor, vi.CursorAtScroll())
+		})
+	}
+}
+
 func TestChangeListOperations(t *testing.T) {
 	tests := []struct {
 		name string
