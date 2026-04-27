@@ -7110,6 +7110,62 @@ type callbackAdapter struct {
 			wantContent: "alpha beta gamma delta epsilon zeta\nsecond line\n",
 			wantMode:    normalMode,
 		},
+
+		// ---- gq`{mark} exact (charwise) mark motion ----
+		{
+			name: "gq backtick a with mark at column 0 excludes the mark line",
+			content: "alpha beta gamma delta epsilon\n" +
+				"second line\n" +
+				"third line\n" +
+				"MARK keep\n",
+			// mark `a` at line 3 column 0; charwise/exclusive
+			// motion stops *before* the mark cell, so the mark
+			// line is not included in the reflow range.
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "a",
+					textapi.LocationSlice([]textapi.Location{{
+						From: term.Coordinates{Y: 3, X: 0},
+						To:   term.Coordinates{Y: 3, X: 1},
+					}}),
+				)
+			},
+			events:      "gggq`a",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon\nsecond line\nthird line\nMARK keep\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "gq backtick a with mark mid-line includes mark line",
+			content: "alpha beta gamma delta epsilon\n" +
+				"second line\n" +
+				"third line MARK keep\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "a",
+					textapi.LocationSlice([]textapi.Location{{
+						From: term.Coordinates{Y: 2, X: 11},
+						To:   term.Coordinates{Y: 2, X: 12},
+					}}),
+				)
+			},
+			events:      "gggq`a",
+			ruler:       12,
+			width:       40,
+			// mark at column 11 on line 2 is inside the line; gq
+			// formats whole lines 0..2.
+			wantContent: "alpha beta\ngamma delta\nepsilon\nsecond line\nthird line\nMARK keep\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "gq backtick z without a set mark is a no-op",
+			content: "alpha beta gamma delta epsilon zeta\n" +
+				"second line\n",
+			events:      "gggq`z",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta gamma delta epsilon zeta\nsecond line\n",
+			wantMode:    normalMode,
+		},
 	}
 
 	for _, tcase := range suite {
