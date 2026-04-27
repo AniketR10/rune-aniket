@@ -1664,13 +1664,18 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 
 func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
 	if e.companionShell == nil {
+		shellCfg := ideshell.Config{
+			Storage:           e.storage,
+			HistoryDocumentID: shellHistoryDocumentID,
+			MaxHistory:        e.config.ShellMaxHistory,
+		}
+		if e.commandEditor != nil {
+			shellCfg.EditModeKey = command.DefaultConfig().EditModeKey
+			shellCfg.Editor = e.commandEditor
+		}
 		h, registry := ideshell.New(
 			e.emulatorConfig.ScheduleNextTick, e,
-			ideshell.Config{
-				Storage:           e.storage,
-				HistoryDocumentID: shellHistoryDocumentID,
-				MaxHistory:        e.config.ShellMaxHistory,
-			},
+			shellCfg,
 		)
 		if e.wsExecutor != nil {
 			e.wsExecutor.RegisterCommands(registry)

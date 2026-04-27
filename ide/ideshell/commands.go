@@ -31,6 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term/sh"
 )
@@ -49,6 +50,15 @@ type Config struct {
 	// regular shell view and on the search overlay's input bar.
 	// Defaults to "> ".
 	Prompt string
+	// EditModeKey toggles a modal text-editor mode where the shell
+	// input can be freely edited without triggering completion or
+	// history-search overlays. Pressing it again, <enter>, <tab>,
+	// or <ctrl-c> exits the mode and the edited buffer replaces
+	// the inner inputbox text. Zero value disables modal edit.
+	EditModeKey term.KeyComb
+	// Editor drives the shell's modal edit mode (see EditModeKey).
+	// Required when EditModeKey is non-zero.
+	Editor command.Editor
 }
 
 // New creates an IDE shell Handler wired with a CommandRegistry, sh
@@ -93,6 +103,13 @@ func New(
 		list:       list,
 		shim:       shim,
 		prompt:     prompt,
+	}
+	if cfg.EditModeKey != (term.KeyComb{}) {
+		if cfg.Editor == nil {
+			panic("ideshell.Config.Editor is required when EditModeKey is set")
+		}
+		h.editSession = command.NewEditSession(cfg.Editor, cfg.EditModeKey)
+		h.editKey = cfg.EditModeKey
 	}
 	return h, r
 }

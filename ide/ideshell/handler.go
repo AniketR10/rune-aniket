@@ -30,6 +30,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
 )
 
@@ -79,6 +81,20 @@ type Handler struct {
 	// input bar — this is what makes the overlay's bar look like a
 	// continuation of the shell prompt.
 	prompt string
+
+	// editSession drives the shell's modal edit mode (toggled via
+	// editKey). When active, all input events are routed to the
+	// spawned EditHandler instead of the inner repl. On exit the
+	// edited buffer is committed back to the inner repl by
+	// re-issuing key events. Nil when modal edit is disabled.
+	editSession *command.EditSession
+	// editKey is the configured modal-edit toggle. Equals
+	// editSession's exit key when editSession is non-nil.
+	editKey term.KeyComb
+	// editBuf is the cell.Buffer the active EditSession is bound
+	// to. It is allocated once per Begin and inspected on End to
+	// commit the final text back to the inner inputbox.
+	editBuf *cell.Buffer
 }
 
 // Wait forwards to the underlying repl.Handler so callers (including
@@ -89,6 +105,9 @@ func (h *Handler) Wait() {
 
 // Close releases both the inner repl handler and the search list.
 func (h *Handler) Close() error {
+	if h.editSession != nil {
+		h.editSession.End()
+	}
 	err := h.inner.Close()
 	if h.list != nil {
 		if cerr := h.list.Close(); cerr != nil && err == nil {
@@ -105,6 +124,9 @@ func (h *Handler) Close() error {
 func (h *Handler) Resize(width, height int) {
 	h.width = width
 	h.height = height
+	if h.editSession != nil {
+		h.editSession.Resize(width, height)
+	}
 	if !h.searching {
 		h.inner.Resize(width, height)
 		h.lastSearchH = 0
@@ -127,6 +149,10 @@ func (h *Handler) Resize(width, height int) {
 
 // Draw satisfies tui.Component.
 func (h *Handler) Draw(w term.Writer) {
+	if h.editSession != nil && h.editSession.Active() {
+		h.drawEdit(w)
+		return
+	}
 	if !h.searching {
 		h.inner.Draw(w)
 		return
@@ -140,6 +166,14 @@ func (h *Handler) Draw(w term.Writer) {
 // cursor belongs to the search bar that we render on the bottom
 // row.
 func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	if h.editSession != nil {
+		if pos, style, ok := h.editSession.Cursor(); ok {
+			// drawEdit paints the editor below the inner repl,
+			// offset by innerH; mirror that translation here.
+			pos.Y += h.editInnerH()
+			return pos, style, true
+		}
+	}
 	if !h.searching {
 		return h.inner.Cursor()
 	}
@@ -175,6 +209,21 @@ func (h *Handler) Selection() (string, bool) {
 func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
 		return h.inner.Handle(ev)
+	}
+
+	if h.editSession != nil && h.editSession.Active() {
+		done, handled := h.editSession.Handle(ev)
+		switch done {
+		case command.EditDoneExit:
+			return h.exitEditMode(false, ev)
+		case command.EditDoneSubmit:
+			return h.exitEditMode(true, ev)
+		}
+		return false, handled
+	}
+	if h.editSession != nil && ev.KeyComb() == h.editKey {
+		h.enterEditMode()
+		return false, true
 	}
 
 	if !h.searching {

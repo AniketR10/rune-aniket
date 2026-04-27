@@ -85,12 +85,13 @@ type Prompt struct {
 	userScrolling  bool
 	bracketedPaste bool
 
-	// editHandler is non-nil while the prompt is in modal edit mode
-	// (toggled via Config.EditModeKey). All input events are routed to
-	// it instead of the regular command/argument handlers, and the
-	// prompt's completion/search/manual machinery is frozen. Exiting
-	// edit mode replays the buffer through the regular handlers.
-	editHandler EditHandler
+	// editSession drives the prompt's modal edit mode (toggled via
+	// Config.EditModeKey). When active, all input events are routed
+	// to its spawned EditHandler instead of the regular command /
+	// argument handlers, and the prompt's completion / search /
+	// manual machinery is frozen. Exiting edit mode replays the
+	// buffer through the regular handlers as if it had been pasted.
+	editSession *EditSession
 
 	// used to signal across Handle calls that user
 	// is cyclying through commands, in particular
@@ -165,6 +166,7 @@ func (h *Prompt) doInit(
 	if config.Editor == nil {
 		panic("command.Config.Editor is required")
 	}
+	h.editSession = NewEditSession(config.Editor, config.EditModeKey)
 	h.mode = modeCommandPromptCommand
 	h.config = config
 	h.dispatcher = dispatcher
@@ -222,9 +224,7 @@ func (h *Prompt) getCommandOverlayHeight(width int) int {
 func (h *Prompt) Resize(width, height int) {
 	h.width = width
 	h.height = height
-	if h.editHandler != nil {
-		h.editHandler.Resize(width, height)
-	}
+	h.editSession.Resize(width, height)
 	if !h.showManual || h.manualComponent == nil {
 		h.list.Resize(width, height)
 		return
@@ -460,10 +460,10 @@ func (h *Prompt) handle(ev term.Event, sync bool) (quit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
-	if h.editHandler != nil {
+	if h.editSession.Active() {
 		return h.handleEditMode(ev, sync)
 	}
-	if h.editModeEnabled() && ev.KeyComb() == h.config.EditModeKey {
+	if h.editSession.Enabled() && ev.KeyComb() == h.config.EditModeKey {
 		h.enterEditMode()
 		return false, true
 	}
@@ -707,43 +707,25 @@ func (h *Prompt) completionArgs() []string {
 	return append(args, h.list.Buffer().String())
 }
 
-// editModeEnabled reports whether modal edit mode can be entered.
-func (h *Prompt) editModeEnabled() bool {
-	return h.config.EditModeKey != (term.KeyComb{})
-}
-
-// enterEditMode switches the prompt into modal edit mode by spawning
-// an EditHandler from Config.Editor bound to the prompt's internal
-// cell.Buffer. While in edit mode all input is delegated to the
-// spawned handler and completion/search machinery is frozen.
-//
-// The editor's cursor is initialised to where the prompt's cursor
-// was rendered before the mode switch (the end of the input on the
-// first row), so the user can keep typing without first having to
-// reposition.
+// enterEditMode opens the EditSession seeded at the end of the
+// prompt buffer (where the prompt's cursor was) so the user can keep
+// typing without first having to reposition.
 func (h *Prompt) enterEditMode() {
 	h.cancelPreview()
-	edh := h.config.Editor.Edit(&h.buf)
-	edh.Resize(h.width, h.height)
-	edh.SetCursorAtScroll(term.Coordinates{X: h.buf.Columns(0)})
-	h.editHandler = edh
+	h.editSession.Begin(&h.buf, term.Coordinates{X: h.buf.Columns(0)})
 	h.log(log.TraceLevel, "entering command prompt edit mode")
 }
 
-// exitEditMode tears down the spawned edit handler and replays the
-// final buffer contents through the regular command/argument handlers
-// as if the user had pasted them. This re-computes completions and
-// rebuilds h.commandAndArgs without any cherry-picking logic.
+// exitEditMode commits the edited buffer back through the regular
+// command/argument handlers as if it had been pasted. This re-runs
+// completion and rebuilds h.commandAndArgs without any
+// cherry-picking logic.
 func (h *Prompt) exitEditMode(sync bool) {
-	if h.editHandler == nil {
+	if !h.editSession.Active() {
 		return
 	}
-	if closer, ok := h.editHandler.(interface{ Close() error }); ok {
-		_ = closer.Close()
-	}
-	h.editHandler = nil
-
 	final := h.buf.String()
+	h.editSession.End()
 	h.log(log.TraceLevel, "exiting command prompt edit mode: %q", final)
 
 	h.reset()
@@ -754,30 +736,18 @@ func (h *Prompt) exitEditMode(sync bool) {
 	h.bracketedPaste = false
 }
 
-// handleEditMode processes an event while the prompt is in modal edit
-// mode. EditModeKey and <tab> exit the mode silently; <enter> exits
-// then falls through to the regular dispatch path. Every other event
-// is forwarded to the spawned edit handler.
+// handleEditMode forwards events to the EditSession. On Exit it
+// silently drops back to command mode; on Submit it additionally
+// re-dispatches the original <enter> through the regular handler so
+// the now-replayed command is executed.
 func (h *Prompt) handleEditMode(ev term.Event, sync bool) (quit, handled bool) {
-	key := ev.KeyComb()
-	switch {
-	case key == h.config.EditModeKey:
+	done, handled := h.editSession.Handle(ev)
+	switch done {
+	case EditDoneExit:
 		h.exitEditMode(sync)
 		return false, true
-	case ev.Mod == 0 && ev.Key == term.KeyTab:
+	case EditDoneSubmit:
 		h.exitEditMode(sync)
-		return false, true
-	case ev.Mod == term.ModCtrl && ev.Ch == 'c':
-		// ctrl-c is a universal "drop back to command mode" signal.
-		// Consume it upstream so the editor never sees it (otherwise
-		// the underlying editor handler would interpret it, e.g. a
-		// vi handler treats it as "leave insert mode").
-		h.exitEditMode(sync)
-		return false, true
-	case ev.Mod == 0 && ev.Key == term.KeyEnter:
-		h.exitEditMode(sync)
-		// re-dispatch through the regular handler so Enter triggers
-		// command dispatch with the now-replayed buffer.
 		switch h.mode {
 		case modeCommandPromptCommand:
 			return h.handleCommand(ev, sync)
@@ -785,8 +755,7 @@ func (h *Prompt) handleEditMode(ev term.Event, sync bool) (quit, handled bool) {
 			return h.handleCompleteArgs(ev, sync)
 		}
 	}
-
-	return h.editHandler.Handle(ev)
+	return false, handled
 }
 
 func (h *Prompt) completeTopList() bool {
@@ -1193,8 +1162,8 @@ func (h *Prompt) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if h.width == 0 {
 		return term.Coordinates{}, 0, false
 	}
-	if h.editHandler != nil {
-		return h.editHandler.Cursor()
+	if pos, style, ok := h.editSession.Cursor(); ok {
+		return pos, style, true
 	}
 	leftWidgetWidth := h.width - animationWidth
 	if leftWidgetWidth <= 0 {
@@ -1285,10 +1254,7 @@ func (h *Prompt) Close() error {
 	h.cancelCompletionPush("close")
 	h.cancelPreview()
 	h.cancelCtx()
-	if closer, ok := h.editHandler.(interface{ Close() error }); ok {
-		_ = closer.Close()
-	}
-	h.editHandler = nil
+	h.editSession.End()
 	h.mu.Unlock()
 
 	h.Wait()
