@@ -7649,6 +7649,11 @@ func TestAIEditorHandler_chat_clear_no_args_archives_and_clears(t *testing.T) {
 
 	// === Session 1: send a message, then /clear ===
 	flusher1 := openChatAndGetTab(t, deps)
+	// /clear streams its confirmation through AddCommand's drain
+	// goroutine. Under load (-race + parallel suite) the final
+	// interrupt can arrive after the default 50ms idle window,
+	// leaving the snapshot blank. Bump for headroom.
+	flusher1.idleTimeout = 200 * time.Millisecond
 
 	handlertest.RunHandlerSequence(t, flusher1, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		{
@@ -7707,6 +7712,7 @@ func TestAIEditorHandler_chat_clear_no_args_archives_and_clears(t *testing.T) {
 
 	// === Session 2: reopen, verify clean, add more, clear again ===
 	flusher2 := openChatAndGetTab(t, deps)
+	flusher2.idleTimeout = 200 * time.Millisecond
 
 	handlertest.RunHandlerSequence(t, flusher2, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		// Chat should be empty after /clear.
@@ -7782,6 +7788,7 @@ func TestAIEditorHandler_chat_clear_no_args_archives_and_clears(t *testing.T) {
 
 	// === Session 3: reopen, verify still clean ===
 	flusher3 := openChatAndGetTab(t, deps)
+	flusher3.idleTimeout = 200 * time.Millisecond
 
 	handlertest.RunHandlerSequence(t, flusher3, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		{
@@ -7807,6 +7814,7 @@ func TestAIEditorHandler_chat_clear_after_normal_turn_with_real_store(t *testing
 
 	deps := newTestAIEditorHandlerWithServerAndRealStore(t, srv.URL)
 	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
 
 	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		{
@@ -7854,6 +7862,7 @@ func TestAIEditorHandler_chat_clear_after_normal_turn_with_rpc_store(t *testing.
 
 	deps := newTestAIEditorHandlerWithServerAndRPCStore(t, srv.URL)
 	flusher := openChatAndGetTab(t, deps)
+	flusher.idleTimeout = 200 * time.Millisecond
 
 	handlertest.RunHandlerSequence(t, flusher, e2eWidth, e2eHeight, []handlertest.SequenceTestCase{
 		{
