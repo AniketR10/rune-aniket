@@ -6845,11 +6845,11 @@ type callbackAdapter struct {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "visual block gq reflows whole lines covered by the block",
-			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\nfourth line\nfifth line\n",
-			events:      "<c-v>jjj$gq",
-			ruler:       12,
-			width:       40,
+			name:    "visual block gq reflows whole lines covered by the block",
+			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\nfourth line\nfifth line\n",
+			events:  "<c-v>jjj$gq",
+			ruler:   12,
+			width:   40,
 			// Vim treats gq on a block selection as a linewise gq
 			// over the lines covered by the block; column ranges
 			// inside the block are ignored for the reflow target.
@@ -6875,18 +6875,18 @@ type callbackAdapter struct {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "visual block gq reflows wide CJK text using display width",
-			content:     "你好 世界 再见 朋友 测试 内容\nsecond line\n",
-			events:      "<c-v>jllgq",
-			ruler:       8,
-			width:       40,
+			name:    "visual block gq reflows wide CJK text using display width",
+			content: "你好 世界 再见 朋友 测试 内容\nsecond line\n",
+			events:  "<c-v>jllgq",
+			ruler:   8,
+			width:   40,
 			// ruler=8 also rewraps "second line" (11 cols) onto two lines.
 			wantContent: "你好\n世界\n再见\n朋友\n测试\n内容\nsecond\nline\n",
 			wantMode:    normalMode,
 		},
 		{
-			name:    "visual block gq across comment then code reflows both chunks independently",
-			content: "// alpha beta gamma delta epsilon\nplain code keeps its shape\n",
+			name:        "visual block gq across comment then code reflows both chunks independently",
+			content:     "// alpha beta gamma delta epsilon\nplain code keeps its shape\n",
 			events:      "<c-v>jllgq",
 			ruler:       14,
 			width:       40,
@@ -6912,22 +6912,22 @@ type callbackAdapter struct {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "visual block gq with backward $-extension over short row reflows full lines",
-			content:     "alpha beta gamma delta epsilon zeta\nx\n",
-			events:      "<c-v>j$gq",
-			ruler:       12,
-			width:       40,
+			name:    "visual block gq with backward $-extension over short row reflows full lines",
+			content: "alpha beta gamma delta epsilon zeta\nx\n",
+			events:  "<c-v>j$gq",
+			ruler:   12,
+			width:   40,
 			// row 1 ("x") is short so $ on row 1 is the very first column;
 			// the block still covers rows 0..1 and gq reflows whole lines.
 			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nx\n",
 			wantMode:    normalMode,
 		},
 		{
-			name:        "visual block gq with large ruler joins lines into a single reflowed paragraph",
-			content:     "tiny line\nshort too\n",
-			events:      "<c-v>jllgq",
-			ruler:       40,
-			width:       60,
+			name:    "visual block gq with large ruler joins lines into a single reflowed paragraph",
+			content: "tiny line\nshort too\n",
+			events:  "<c-v>jllgq",
+			ruler:   40,
+			width:   60,
 			// ruler=40 fits both source lines together; gq joins them
 			// into a single reflowed line.
 			wantContent: "tiny line short too\n",
@@ -6936,10 +6936,10 @@ type callbackAdapter struct {
 		{
 			name: "visual block gq ignores count typed inside the visual " +
 				"selection (matches Vim)",
-			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
-			events:      "<c-v>j3gq",
-			ruler:       12,
-			width:       40,
+			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			events:  "<c-v>j3gq",
+			ruler:   12,
+			width:   40,
 			// In Vim, a count entered between selecting and gq is
 			// silently consumed; the operator runs once over the
 			// existing selection.
@@ -6949,10 +6949,10 @@ type callbackAdapter struct {
 		{
 			name: "visual block gq ignores count typed before <c-v> " +
 				"(matches Vim)",
-			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
-			events:      "3<c-v>jgq",
-			ruler:       12,
-			width:       40,
+			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
+			events:  "3<c-v>jgq",
+			ruler:   12,
+			width:   40,
 			// Leading count is consumed by the visual mode entry;
 			// gq still operates once over the resulting selection.
 			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\n",
@@ -7174,9 +7174,9 @@ type callbackAdapter struct {
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 5}))
 			},
-			events:      "gq#",
-			ruler:       12,
-			width:       40,
+			events: "gq#",
+			ruler:  12,
+			width:  40,
 			// gq is linewise so the whole 3-line range collapses
 			// into a single paragraph, then re-wraps at column 12.
 			wantContent: "END alpha\nbeta gamma\ndelta\nepsilon zeta\neta theta\niota kappa\nlast END\ntrailing\nwords go on\n",
@@ -7201,9 +7201,9 @@ type callbackAdapter struct {
 					}}),
 				)
 			},
-			events:      "gggq'a",
-			ruler:       12,
-			width:       40,
+			events: "gggq'a",
+			ruler:  12,
+			width:  40,
 			// linewise reflow of lines 0..3 inclusive.
 			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\nkeep MARK\nfourth line\nlast\n",
 			wantMode:    normalMode,
@@ -7236,9 +7236,9 @@ type callbackAdapter struct {
 			name: "gq quote z without a set mark is a no-op",
 			content: "alpha beta gamma delta epsilon zeta\n" +
 				"second line\n",
-			events:      "gggq'z",
-			ruler:       12,
-			width:       40,
+			events: "gggq'z",
+			ruler:  12,
+			width:  40,
 			// no mark `z` exists; the buffer is unchanged.
 			wantContent: "alpha beta gamma delta epsilon zeta\nsecond line\n",
 			wantMode:    normalMode,
@@ -7281,9 +7281,9 @@ type callbackAdapter struct {
 					}}),
 				)
 			},
-			events:      "gggq`a",
-			ruler:       12,
-			width:       40,
+			events: "gggq`a",
+			ruler:  12,
+			width:  40,
 			// mark at column 11 on line 2 is inside the line; gq
 			// formats whole lines 0..2.
 			wantContent: "alpha beta\ngamma delta\nepsilon\nsecond line\nthird line\nMARK keep\n",
@@ -7329,6 +7329,282 @@ type callbackAdapter struct {
 	}
 }
 
+// TestGwFormatWrapParagraph mirrors a subset of TestGoFormatWrapParagraph
+// but for the `gw` operator, which performs the same paragraph reflow as
+// `gq` while restoring the cursor to its position from before the
+// operator was invoked.
+func TestGwFormatWrapParagraph(t *testing.T) {
+	type tc struct {
+		name        string
+		content     string
+		before      func(t *testing.T, vi *viHandlerImpl)
+		events      string
+		ruler       int
+		width       int
+		wantContent string
+		wantCursor  term.Coordinates
+		wantMode    viMode
+	}
+
+	setupWrapVi := func(t *testing.T, content string, ruler, width int) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t,
+			content,
+			2,
+			WithRuler(ruler),
+			WithComments(text.CommentConfig{
+				"go": {Line: []string{"//"}},
+			}),
+		)
+		vi.Resize(width, 20)
+
+		buf := vi.less.Buffer()
+		buf.WithView(testCommentService{view: buf.View(), line: []string{"//"}})
+		vi.cursor.SetCommentSpec(text.CommentSpec{Line: []string{"//"}})
+		return vi
+	}
+
+	suite := []tc{
+		{
+			name:    "gww wraps current line and restores cursor",
+			content: "// alpha beta gamma delta epsilon zeta eta theta\n// iota kappa lambda mu\n\nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gww",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n// iota kappa lambda mu\n\nnext\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gwgg wraps to first line and restores cursor",
+			content: "// alpha beta gamma\n// delta epsilon zeta\n// one two three four\n// LAST\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 3}))
+			},
+			events:      "gwgg",
+			ruler:       20,
+			width:       60,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta one two\n// three four\n// LAST\n",
+			wantCursor:  term.Coordinates{Y: 2, X: 8},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "2gwgw formats count lines and restores cursor",
+			content: "// alpha beta\n// gamma delta\n// epsilon zeta\nstop\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "2gwgw",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta\n// epsilon zeta\nstop\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "2gwj uses operator count and restores cursor",
+			content: "// alpha beta\n// gamma delta\n// epsilon zeta\nstop\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "2gwj",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta\nstop\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gw2j uses motion count and restores cursor",
+			content: "// alpha beta\n// gamma delta\n// epsilon zeta\nstop\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gw2j",
+			ruler:       20,
+			width:       40,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta\nstop\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gwk wraps previous and current line and restores cursor",
+			content: "keep me untouched\nalpha beta gamma delta epsilon\nzeta eta theta\nleave me too\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
+			},
+			events:      "gwk",
+			ruler:       16,
+			width:       80,
+			wantContent: "keep me untouched\nalpha beta gamma\ndelta epsilon\nzeta eta theta\nleave me too\n",
+			wantCursor:  term.Coordinates{Y: 3, X: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gwgk wraps previous display line and restores cursor",
+			content: "keep me untouched\nalpha beta gamma delta epsilon\nzeta eta theta\nleave me too\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
+			},
+			events:      "gwgk",
+			ruler:       16,
+			width:       80,
+			wantContent: "keep me untouched\nalpha beta gamma\ndelta epsilon\nzeta eta theta\nleave me too\n",
+			wantCursor:  term.Coordinates{Y: 3, X: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gw underscore wraps current line and restores cursor",
+			content: "// alpha beta gamma delta   \nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gw_",
+			ruler:       14,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\nnext\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gw meta underscore wraps current line and restores cursor",
+			content: "// alpha beta gamma delta   \nnext\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gwg_",
+			ruler:       14,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\nnext\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gwip wraps inner paragraph and restores cursor",
+			content: "// alpha beta gamma delta\n// epsilon zeta eta theta\n\n// keep second paragraph intact\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gwip",
+			ruler:       20,
+			width:       60,
+			wantContent: "// alpha beta gamma\n// delta epsilon\n// zeta eta theta\n\n// keep second paragraph intact\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 3},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gw slash search wraps through match and restores cursor",
+			content:     "one two three four\nalpha beta gamma\nEND marker here\ntail unchanged\n",
+			events:      "gw/END\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "one two\nthree four\nalpha beta\ngamma\nEND marker here\ntail unchanged\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name: "gw quote a reflows linewise to mark and restores cursor",
+			content: "alpha beta gamma delta epsilon zeta\n" +
+				"second line\n" +
+				"third line keep\n" +
+				"MARK fourth line\n" +
+				"last\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "a",
+					textapi.LocationSlice([]textapi.Location{{
+						From: term.Coordinates{Y: 3, X: 0},
+						To:   term.Coordinates{Y: 3, X: 1},
+					}}),
+				)
+			},
+			events:      "gggw'a",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\nkeep MARK\nfourth line\nlast\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name: "gw backtick a reflows to exact mark and restores cursor",
+			content: "alpha beta gamma delta epsilon\n" +
+				"second line\n" +
+				"third line MARK keep\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "a",
+					textapi.LocationSlice([]textapi.Location{{
+						From: term.Coordinates{Y: 2, X: 11},
+						To:   term.Coordinates{Y: 2, X: 12},
+					}}),
+				)
+			},
+			events:      "gggw`a",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon\nsecond line\nthird line\nMARK keep\n",
+			wantCursor:  term.Coordinates{Y: 0, X: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual line gw wraps selection and restores cursor",
+			content:     "alpha beta gamma delta\nepsilon zeta eta theta\n\none two three four\nfive six seven eight\n",
+			events:      "Vjjjgw",
+			ruler:       12,
+			width:       80,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\neta theta\n\none two\nthree four\nfive six seven eight\n",
+			wantCursor:  term.Coordinates{Y: 5, X: 0},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gw reflows full covered lines and restores cursor",
+			content:     "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\nfourth line\nfifth line\n",
+			events:      "<c-v>jjj$gw",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\nfourth line\nfifth line\n",
+			wantCursor:  term.Coordinates{Y: 5, X: 10},
+			wantMode:    normalMode,
+		},
+		{
+			name:        "visual block gw over only blank lines is handled",
+			content:     "\n\n\n",
+			events:      "<c-v>jjgw",
+			ruler:       12,
+			width:       40,
+			wantContent: "\n\n\n",
+			wantCursor:  term.Coordinates{Y: 2, X: 0},
+			wantMode:    normalMode,
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			vi := setupWrapVi(t, tcase.content, tcase.ruler, tcase.width)
+			if tcase.before != nil {
+				tcase.before(t, vi)
+			}
+
+			events := parseSearchOpEvents(tcase.events)
+			for _, ev := range events {
+				quit, handled := vi.Handle(ev)
+				require.False(t, quit)
+				require.True(t, handled, "event %v should be handled", ev)
+			}
+
+			assert.Equal(t, tcase.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.wantMode, vi.mode())
+			assert.Equal(t, tcase.wantCursor, vi.cursorAtScroll())
+			_, selected := vi.Selection()
+			assert.False(t, selected)
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			assert.Equal(t, 0, vi.operatorCount)
+		})
+	}
+}
+
 // TestSearchOperatorMotion covers `/pattern<CR>` and `?pattern<CR>` as
 // operator-pending motions for d, y, c, >, <, gu, gU, g~. The gq
 // operator is exercised by TestGoFormatWrapParagraph above.
@@ -7342,9 +7618,9 @@ func TestSearchOperatorMotion(t *testing.T) {
 		wantContent string
 		wantMode    viMode
 		// optional assertions; zero-valued means "do not check".
-		wantCursor   *term.Coordinates
-		wantUnnamed  string // contents of the unnamed register
-		wantSearch   string // contents of the / register
+		wantCursor  *term.Coordinates
+		wantUnnamed string // contents of the unnamed register
+		wantSearch  string // contents of the / register
 	}
 
 	suite := []tc{
@@ -7630,21 +7906,21 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "d slash matching cursor position is a no-op",
-			content:     "MARK alpha\nbeta\n",
-			events:      "d/MARK\n",
-			width:       40,
+			name:    "d slash matching cursor position is a no-op",
+			content: "MARK alpha\nbeta\n",
+			events:  "d/MARK\n",
+			width:   40,
 			// cursor is already on the match; before==after so the
 			// operator cancels without mutating the buffer.
 			wantContent: "MARK alpha\nbeta\n",
 			wantMode:    normalMode,
 		},
 		{
-			name:        "d question wraps around when no earlier match exists",
-			content:     "alpha beta\ngamma TARGET delta\n",
-			before:      func(t *testing.T, vi *viHandlerImpl) { vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 0}) },
-			events:      "d?TARGET\n",
-			width:       40,
+			name:    "d question wraps around when no earlier match exists",
+			content: "alpha beta\ngamma TARGET delta\n",
+			before:  func(t *testing.T, vi *viHandlerImpl) { vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 0}) },
+			events:  "d?TARGET\n",
+			width:   40,
 			// search wraps around the buffer; cursor at {0,0} jumps
 			// forward to the only match and the prefix is deleted.
 			wantContent: "TARGET delta\n",
@@ -7836,10 +8112,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "d slash then dot is no-op (search ops are not recorded)",
-			content:     "alpha END beta\nlast\n",
-			events:      "d/END\n.",
-			width:       40,
+			name:    "d slash then dot is no-op (search ops are not recorded)",
+			content: "alpha END beta\nlast\n",
+			events:  "d/END\n.",
+			width:   40,
 			// the `.` repeats the last change; search-ops are not yet
 			// captured by the dot register, so it acts on whatever the
 			// last recorded change was. The test verifies the buffer
@@ -7850,10 +8126,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- count and visual-mode interactions ----
 		{
-			name:        "d slash with count before operator deletes only the first match (count not yet supported)",
-			content:     "alpha END beta END gamma\n",
-			events:      "2d/END\n",
-			width:       40,
+			name:    "d slash with count before operator deletes only the first match (count not yet supported)",
+			content: "alpha END beta END gamma\n",
+			events:  "2d/END\n",
+			width:   40,
 			// search operators do not yet honor the operator count;
 			// confirm at least the first match's prefix is deleted
 			// and we are in normal mode without a panic.
@@ -7861,10 +8137,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "y slash from visual mode is a no-op (handler is not visual)",
-			content:     "alpha END beta\n",
-			events:      "v",
-			width:       40,
+			name:    "y slash from visual mode is a no-op (handler is not visual)",
+			content: "alpha END beta\n",
+			events:  "v",
+			width:   40,
 			// visual mode does not enter the search-op path; this is a
 			// regression guard that visual `v` plus subsequent input
 			// does not panic and the buffer is unchanged.
@@ -7909,8 +8185,8 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- search register population on no-op paths ----
 		{
-			name:        "d slash empty pattern does not overwrite search register",
-			content:     "alpha\n",
+			name:    "d slash empty pattern does not overwrite search register",
+			content: "alpha\n",
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				_ = vi.writeRegister('/', clipboard.Data{Text: "previous"})
 			},
@@ -7921,8 +8197,8 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantSearch:  "previous",
 		},
 		{
-			name:        "d slash escape does not overwrite search register",
-			content:     "alpha\n",
+			name:    "d slash escape does not overwrite search register",
+			content: "alpha\n",
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				_ = vi.writeRegister('/', clipboard.Data{Text: "previous"})
 			},
@@ -7944,10 +8220,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- gq with edge cases (linewise) ----
 		{
-			name:        "gq slash on single line with unicode wraps using rune count",
-			content:     "alpha 你好 beta gamma delta MARK end\n",
-			events:      "gq/MARK\n",
-			width:       40,
+			name:    "gq slash on single line with unicode wraps using rune count",
+			content: "alpha 你好 beta gamma delta MARK end\n",
+			events:  "gq/MARK\n",
+			width:   40,
 			// ruler default for setupVi is 0 so this is a regression
 			// guard that gq with a non-positive ruler is a no-op and
 			// the buffer is preserved.
@@ -7982,10 +8258,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- handler-mode hygiene ----
 		{
-			name:        "delete-insert (c) slash followed by typed text inserts in place",
-			content:     "alpha END beta\n",
-			events:      "c/END\nXYZ",
-			width:       40,
+			name:    "delete-insert (c) slash followed by typed text inserts in place",
+			content: "alpha END beta\n",
+			events:  "c/END\nXYZ",
+			width:   40,
 			// after c/END\n the buffer is "END beta\n" with cursor in
 			// insert mode at column 0; typing XYZ inserts before END.
 			wantContent: "XYZEND beta\n",
@@ -8003,8 +8279,8 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantUnnamed: "alpha ",
 		},
 		{
-			name:        "delete into black-hole register does not pollute unnamed",
-			content:     "alpha END beta\n",
+			name:    "delete into black-hole register does not pollute unnamed",
+			content: "alpha END beta\n",
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				_ = vi.writeRegister(unnamedRegister, clipboard.Data{Text: "preserved"})
 			},
@@ -8017,10 +8293,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- pattern with spaces and special whitespace ----
 		{
-			name:        "d slash pattern with trailing space matches literally",
-			content:     "alpha END  beta\n",
-			events:      "d/END \n",
-			width:       40,
+			name:    "d slash pattern with trailing space matches literally",
+			content: "alpha END  beta\n",
+			events:  "d/END \n",
+			width:   40,
 			// pattern is `END ` (trailing space); deletes through the
 			// match start of `END` itself (col 6).
 			wantContent: "END  beta\n",
@@ -8093,10 +8369,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantUnnamed: "first\n",
 		},
 		{
-			name:        "d slash where match is on cursor line after cursor",
-			content:     "abc MARK def\n",
-			events:      "ld/MARK\n",
-			width:       40,
+			name:    "d slash where match is on cursor line after cursor",
+			content: "abc MARK def\n",
+			events:  "ld/MARK\n",
+			width:   40,
 			// cursor moves to col 1 then deletes through the match.
 			wantContent: "aMARK def\n",
 			wantMode:    normalMode,
@@ -8105,10 +8381,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- null / control character handling ----
 		{
-			name:        "d slash deletes through embedded null byte in buffer",
-			content:     "alp\x00ha END beta\n",
-			events:      "d/END\n",
-			width:       40,
+			name:    "d slash deletes through embedded null byte in buffer",
+			content: "alp\x00ha END beta\n",
+			events:  "d/END\n",
+			width:   40,
 			// the NUL byte is an ordinary cell; the operator deletes
 			// `alp\x00ha ` up to the match start and leaves the rest.
 			wantContent: "END beta\n",
@@ -8116,10 +8392,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 			wantUnnamed: "alp\x00ha ",
 		},
 		{
-			name:        "d slash matches pattern containing null byte",
-			content:     "alpha\x00END beta\n",
-			events:      "d/\x00END\n",
-			width:       40,
+			name:    "d slash matches pattern containing null byte",
+			content: "alpha\x00END beta\n",
+			events:  "d/\x00END\n",
+			width:   40,
 			// the typed pattern is `\x00END`; the match starts at the
 			// NUL position, so only `alpha` is deleted.
 			wantContent: "\x00END beta\n",
@@ -8138,10 +8414,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- tabs and indentation in pattern / content ----
 		{
-			name:        "d slash pattern containing literal tab matches",
-			content:     "alpha\tEND beta\n",
-			events:      "d/\tEND\n",
-			width:       40,
+			name:    "d slash pattern containing literal tab matches",
+			content: "alpha\tEND beta\n",
+			events:  "d/\tEND\n",
+			width:   40,
 			// pattern is "<TAB>END"; match starts at the tab so only
 			// "alpha" is consumed.
 			wantContent: "\tEND beta\n",
@@ -8163,18 +8439,18 @@ func TestSearchOperatorMotion(t *testing.T) {
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 4})
 			},
-			events:      "d?MARK\n",
-			width:       40,
+			events: "d?MARK\n",
+			width:  40,
 			// charwise backward: deletes "MARK\n    " up to cursor
 			// (exclusive), leaving the trailing "alpha".
 			wantContent: "alpha\n",
 			wantMode:    normalMode,
 		},
 		{
-			name:        "shift right slash preserves and adds to existing indentation",
-			content:     "\talpha\n  beta\nMARK\n",
-			events:      ">/MARK\n",
-			width:       40,
+			name:    "shift right slash preserves and adds to existing indentation",
+			content: "\talpha\n  beta\nMARK\n",
+			events:  ">/MARK\n",
+			width:   40,
 			// linewise exclusive: match line at col 0 is excluded.
 			wantContent: "\t\talpha\n\t  beta\nMARK\n",
 			wantMode:    normalMode,
@@ -8258,8 +8534,8 @@ func TestSearchOperatorMotion(t *testing.T) {
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("alpha END 你")})
 			},
-			events:      "d?END\n",
-			width:       40,
+			events: "d?END\n",
+			width:  40,
 			// charwise backward: deletes "END " plus first wide char.
 			wantContent: "alpha 好\n",
 			wantMode:    normalMode,
@@ -8281,10 +8557,10 @@ func TestSearchOperatorMotion(t *testing.T) {
 
 		// ---- patterns containing unusual characters ----
 		{
-			name:        "d slash pattern with multiple slashes only first delimits",
-			content:     "a/b/c END\n",
-			events:      "d/c\n",
-			width:       40,
+			name:    "d slash pattern with multiple slashes only first delimits",
+			content: "a/b/c END\n",
+			events:  "d/c\n",
+			width:   40,
 			// the `/` after `d` opens the search bar; everything up
 			// to <CR> is the pattern. Only the typed character `c`
 			// (not slashes) is forwarded as pattern text.
@@ -8352,7 +8628,7 @@ func TestSearchOperatorMotion(t *testing.T) {
 	}
 }
 
-// TestMarkOperatorMotion covers `'{mark}` and `` `{mark} `` as
+// TestMarkOperatorMotion covers `'{mark}` and “ `{mark} “ as
 // operator-pending motions for d, c, y, >, <, gu, gU, g~. The gq
 // operator is exercised by TestGoFormatWrapParagraph above.
 func TestMarkOperatorMotion(t *testing.T) {
@@ -8408,23 +8684,23 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "d backtick a backward charwise deletes prefix to cursor",
-			content:     "alpha beta gamma\nsecond line\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			name:    "d backtick a backward charwise deletes prefix to cursor",
+			content: "alpha beta gamma\nsecond line\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 6}))
 			},
-			events:      "d`a",
-			width:       40,
+			events: "d`a",
+			width:  40,
 			// charwise backward exclusive: deletes "alpha " up to but
 			// not including the cursor character.
 			wantContent: "beta gamma\nsecond line\n",
 			wantMode:    normalMode,
 		},
 		{
-			name:        "d quote a backward linewise deletes whole lines",
-			content:     "first\nsecond\nthird\nfourth\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			name:    "d quote a backward linewise deletes whole lines",
+			content: "first\nsecond\nthird\nfourth\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
 			},
@@ -8488,11 +8764,11 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantMode:    normalMode,
 		},
 		{
-			name:        "shift right backtick a still indents whole lines",
-			content:     "first\nsecond\nthird\nfourth\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 3}},
-			events:      ">`a",
-			width:       40,
+			name:    "shift right backtick a still indents whole lines",
+			content: "first\nsecond\nthird\nfourth\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 2, X: 3}},
+			events:  ">`a",
+			width:   40,
 			// shift is intrinsically linewise; the column part of the
 			// mark is ignored.
 			wantContent: "\tfirst\n\tsecond\n\tthird\nfourth\n",
@@ -8598,9 +8874,9 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantRegister:     "alpha ",
 		},
 		{
-			name:        "d into black-hole register does not pollute unnamed",
-			content:     "alpha beta\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			name:    "d into black-hole register does not pollute unnamed",
+			content: "alpha beta\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				_ = vi.writeRegister(unnamedRegister, clipboard.Data{Text: "preserved"})
 			},
@@ -8633,9 +8909,9 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantUnnamed: "alpha ",
 		},
 		{
-			name:        "d backtick backward through wide chars",
-			content:     "alpha 你好 beta\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			name:    "d backtick backward through wide chars",
+			content: "alpha 你好 beta\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 8}))
 			},
@@ -8709,11 +8985,11 @@ func TestMarkOperatorMotion(t *testing.T) {
 
 		// ---- buffer boundary edge cases ----
 		{
-			name:        "d quote a deletes only line in single-line buffer",
-			content:     "alpha beta",
-			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
-			events:      "d'a",
-			width:       40,
+			name:    "d quote a deletes only line in single-line buffer",
+			content: "alpha beta",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:  "d'a",
+			width:   40,
 			// `'a` snaps to first non-blank of the same line, so the
 			// cursor doesn't actually move (still at {0,0}); the
 			// before==after guard fires and the buffer is preserved.
@@ -8769,11 +9045,11 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantUnnamed: "first\nsecond\nthird\n",
 		},
 		{
-			name:        "d quote a with mark beyond actual content is no-op",
-			content:     "alpha\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 99, X: 0}},
-			events:      "d'a",
-			width:       40,
+			name:    "d quote a with mark beyond actual content is no-op",
+			content: "alpha\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 99, X: 0}},
+			events:  "d'a",
+			width:   40,
 			// jumping to a mark stored beyond the end of the buffer
 			// snaps the cursor to the last reachable position; the
 			// resulting linewise selection covers the rest of the
@@ -8804,8 +9080,8 @@ func TestMarkOperatorMotion(t *testing.T) {
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				vi.setCursorAtScroll(term.Coordinates{Y: 5, X: 0})
 			},
-			events:      "d'a",
-			width:       40,
+			events: "d'a",
+			width:  40,
 			// cursor lands past content; the linewise range still
 			// resolves and clears the buffer.
 			wantContent: "",
@@ -8821,8 +9097,8 @@ func TestMarkOperatorMotion(t *testing.T) {
 				// cursor far past the actual end-of-line.
 				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 100})
 			},
-			events:      "d`a",
-			width:       40,
+			events: "d`a",
+			width:  40,
 			// cursor is clamped to the last column on the line; the
 			// backward charwise delete from there to mark at col 0
 			// removes the prefix up to (but not including) the
@@ -8866,8 +9142,8 @@ func TestMarkOperatorMotion(t *testing.T) {
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				vi.setCursorAtScroll(term.Coordinates{Y: 99, X: 0})
 			},
-			events:      ">'a",
-			width:       40,
+			events: ">'a",
+			width:  40,
 			// shift indents every line in the resolved linewise
 			// range, including the empty trailing row implied by
 			// the cursor clamp.
@@ -8901,11 +9177,11 @@ func TestMarkOperatorMotion(t *testing.T) {
 
 		// ---- count prefix on operator ----
 		{
-			name:        "d count prefix is consumed but does not multiply mark motion",
-			content:     "first\nsecond\nthird\nfourth\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
-			events:      "2d'a",
-			width:       40,
+			name:    "d count prefix is consumed but does not multiply mark motion",
+			content: "first\nsecond\nthird\nfourth\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:  "2d'a",
+			width:   40,
 			// the `2` count is applied to the operator but the
 			// mark range is fixed (cursor 0..mark 1 = lines 0,1).
 			wantContent: "third\nfourth\n",
@@ -8915,11 +9191,11 @@ func TestMarkOperatorMotion(t *testing.T) {
 
 		// ---- yank+paste integration ----
 		{
-			name:        "y quote a then Gp pastes captured lines after last line",
-			content:     "first\nsecond\nthird\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
-			events:      "y'aGp",
-			width:       40,
+			name:    "y quote a then Gp pastes captured lines after last line",
+			content: "first\nsecond\nthird\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:  "y'aGp",
+			width:   40,
 			// linewise yank captures lines 0..1; Gp pastes after the
 			// last line. The buffer's trailing-newline semantics
 			// produce one blank line between the original content
@@ -8941,10 +9217,10 @@ func TestMarkOperatorMotion(t *testing.T) {
 
 		// ---- chained operators with mark hygiene ----
 		{
-			name:        "d backtick cancel via invalid mark then dd works",
-			content:     "alpha\nbeta\n",
-			events:      "d`1dd",
-			width:       40,
+			name:    "d backtick cancel via invalid mark then dd works",
+			content: "alpha\nbeta\n",
+			events:  "d`1dd",
+			width:   40,
 			// `1` is invalid as a mark name -> cancel; then `dd`
 			// deletes the current line.
 			wantContent: "beta\n",
@@ -8954,12 +9230,12 @@ func TestMarkOperatorMotion(t *testing.T) {
 
 		// ---- wrap mode regression guard ----
 		{
-			name:        "d backtick a in wrap mode does not panic and leaves buffer intact",
-			content:     "alpha beta gamma delta epsilon zeta\n",
-			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 24}},
-			events:      "d`a",
-			width:       10,
-			wrap:        true,
+			name:    "d backtick a in wrap mode does not panic and leaves buffer intact",
+			content: "alpha beta gamma delta epsilon zeta\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 24}},
+			events:  "d`a",
+			width:   10,
+			wrap:    true,
 			// wrap mode reinterprets coordinates as display lines;
 			// jumping to a logical-only mark coordinate inside a
 			// wrapped row is currently a no-op rather than crashing.
@@ -8976,8 +9252,8 @@ func TestMarkOperatorMotion(t *testing.T) {
 			before: func(t *testing.T, vi *viHandlerImpl) {
 				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 5}))
 			},
-			events:      "d'a",
-			width:       40,
+			events: "d'a",
+			width:  40,
 			// linewise delete from line 1 backward to mark at line 0
 			// removes both lines; cursor lands at first non-blank of
 			// the surviving "third" line (col 0).
@@ -8988,7 +9264,7 @@ func TestMarkOperatorMotion(t *testing.T) {
 		},
 		// ---- visual marks (`< / `> / '< / '>) used as motion targets ----
 		{
-			name: "d backtick less deletes from cursor to start of last visual selection",
+			name:    "d backtick less deletes from cursor to start of last visual selection",
 			content: "alpha beta gamma delta\nsecond line\n",
 			marks: map[rune]term.Coordinates{
 				'<': {Y: 0, X: 6}, // pre-seeded last visual selection start
@@ -9005,7 +9281,7 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantUnnamed: "beta g",
 		},
 		{
-			name: "y quote greater yanks lines up to and including end of last selection",
+			name:    "y quote greater yanks lines up to and including end of last selection",
 			content: "first line\nsecond line\nthird line\nfourth line\n",
 			marks: map[rune]term.Coordinates{
 				'>': {Y: 2, X: 4}, // last visual selection ends inside line 2
@@ -9018,7 +9294,7 @@ func TestMarkOperatorMotion(t *testing.T) {
 			wantUnnamed: "first line\nsecond line\nthird line\n",
 		},
 		{
-			name: "gq quote less reflows from cursor up to start-of-selection line",
+			name:    "gq quote less reflows from cursor up to start-of-selection line",
 			content: "alpha beta gamma delta epsilon zeta\nsecond line\nthird line\n",
 			marks: map[rune]term.Coordinates{
 				'<': {Y: 0, X: 0}, // last visual selection started at row 0

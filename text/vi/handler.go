@@ -2660,9 +2660,9 @@ func (vi *viHandlerImpl) beginSearchOp(direction moveMode, linewise bool, apply,
 	vi.searchMode = direction
 }
 
-// beginCommentSearchOp arms the search-pending state for the gq operator.
-// gq is linewise: the resolved range is extended to whole lines before
-// the formatter runs.
+// beginCommentSearchOp arms the search-pending state for the gq/gw
+// operators. Formatting is linewise: the resolved range is extended to
+// whole lines before the formatter runs.
 func (vi *viHandlerImpl) beginCommentSearchOp(direction moveMode) {
 	commentFn := vi.commentFn
 	vi.beginSearchOp(direction, true,
@@ -2812,10 +2812,10 @@ func (vi *viHandlerImpl) cancelSearchOp() {
 // intrinsically linewise (gq, >, <) set forceLinewise=true regardless
 // of which mark form was used.
 type markOpState struct {
-	linewise       bool   // true when the mark form was `'`
-	forceLinewise  bool   // true for intrinsically linewise operators
-	apply          func() // run on the materialized selection
-	finish         func() // mode transition after apply
+	linewise      bool   // true when the mark form was `'`
+	forceLinewise bool   // true for intrinsically linewise operators
+	apply         func() // run on the materialized selection
+	finish        func() // mode transition after apply
 }
 
 // beginMarkOp arms the mark-pending state for an operator. The next
@@ -2898,8 +2898,8 @@ func (vi *viHandlerImpl) cancelMarkOp() {
 	vi.setNormalMode()
 }
 
-// beginCommentMarkOp arms the mark-pending state for the gq operator.
-// gq is linewise regardless of `'` vs `` ` ``.
+// beginCommentMarkOp arms the mark-pending state for the gq/gw operators.
+// Formatting is linewise regardless of `'` vs `` ` ``.
 func (vi *viHandlerImpl) beginCommentMarkOp(linewise bool) {
 	commentFn := vi.commentFn
 	vi.beginMarkOp(linewise, true,
@@ -3169,6 +3169,20 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			vi.setCommentMode(func() bool {
 				return vi.cursor.WrapSelectedParagraph(vi.config.ruler)
 			}, 'q')
+			handled = true
+			return
+		case 'w':
+			saved := vi.cursor.CursorAtScroll()
+			if _, ok := vi.cursor.SelectionMode(); ok {
+				vi.cursor.WrapSelectedParagraphPreservePosition(vi.config.ruler, saved)
+				handled = true
+				vi.cursor.Unselect()
+				vi.setNormalMode()
+				return
+			}
+			vi.setCommentMode(func() bool {
+				return vi.cursor.WrapSelectedParagraphPreservePosition(vi.config.ruler, saved)
+			}, 'w')
 			handled = true
 			return
 		case 'e':

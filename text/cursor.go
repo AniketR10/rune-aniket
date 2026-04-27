@@ -1627,7 +1627,7 @@ func (c *Cursor) WrapParagraph(ruler int) bool {
 	if !ok {
 		return false
 	}
-	return c.wrapParagraphRange(startLine, endLine, indent, leader, bodyLines, ruler)
+	return c.wrapParagraphRange(startLine, endLine, indent, leader, bodyLines, ruler, nil)
 }
 
 // WrapSelectedParagraph reflows the current selected line range. It is intended
@@ -1636,6 +1636,25 @@ func (c *Cursor) WrapParagraph(ruler int) bool {
 // treated as if every covered line were fully selected (Vim behavior:
 // gq on <C-v> ignores per-column block bounds).
 func (c *Cursor) WrapSelectedParagraph(ruler int) bool {
+	return c.wrapSelectedParagraph(ruler, nil)
+}
+
+// WrapSelectedParagraphPreservePosition reflows the current selected line range
+// and restores the cursor to the same text position after reflow. This matches
+// Vim's gw operator: the saved position is tracked through the formatted text
+// rather than restored as a raw line/column coordinate.
+func (c *Cursor) WrapSelectedParagraphPreservePosition(ruler int, pos term.Coordinates) bool {
+	state := &wrapParagraphPreservedPosition{pos: pos}
+	changed := c.wrapSelectedParagraph(ruler, state)
+	c.SetCursorAtScroll(state.pos)
+	return changed
+}
+
+type wrapParagraphPreservedPosition struct {
+	pos term.Coordinates
+}
+
+func (c *Cursor) wrapSelectedParagraph(ruler int, preserved *wrapParagraphPreservedPosition) bool {
 	if ruler <= 0 {
 		return false
 	}
@@ -1653,7 +1672,7 @@ func (c *Cursor) WrapSelectedParagraph(ruler int) bool {
 		if !ok {
 			continue
 		}
-		if c.wrapParagraphRange(chunk.startLine, chunk.endLine, indent, leader, bodyLines, ruler) {
+		if c.wrapParagraphRange(chunk.startLine, chunk.endLine, indent, leader, bodyLines, ruler, preserved) {
 			changed = true
 		}
 	}
@@ -1706,7 +1725,13 @@ func (c *Cursor) lineHasAnyCommentPrefix(y int) bool {
 	return false
 }
 
-func (c *Cursor) wrapParagraphRange(startLine, endLine int, indent, leader string, bodyLines []string, ruler int) bool {
+func (c *Cursor) wrapParagraphRange(
+	startLine, endLine int,
+	indent, leader string,
+	bodyLines []string,
+	ruler int,
+	preserved *wrapParagraphPreservedPosition,
+) bool {
 	body := strings.Join(strings.Fields(strings.Join(bodyLines, " ")), " ")
 	if body == "" {
 		return false
@@ -1717,18 +1742,27 @@ func (c *Cursor) wrapParagraphRange(startLine, endLine int, indent, leader strin
 	if available <= 0 {
 		available = 1
 	}
-	wrapped := wrapTextWords(body, available, tabspaces)
-	if len(wrapped) == 0 {
+	wrappedBody := wrapTextWords(body, available, tabspaces)
+	if len(wrappedBody) == 0 {
 		return false
 	}
+	wrapped := make([]string, len(wrappedBody))
 	for i := range wrapped {
-		wrapped[i] = indent + leader + wrapped[i]
+		wrapped[i] = indent + leader + wrappedBody[i]
 	}
 	replacement := strings.Join(wrapped, "\n")
 	from := term.Coordinates{Y: startLine}
 	to := term.Coordinates{Y: endLine, X: c.buffer().Columns(endLine)}
 	if c.rangeString(from, to) == replacement {
 		return false
+	}
+	if preserved != nil {
+		if preserved.pos.Y >= startLine && preserved.pos.Y <= endLine {
+			offset := c.wrapParagraphTextOffset(startLine, endLine, indent, leader, bodyLines, preserved.pos)
+			preserved.pos = wrapParagraphPositionForTextOffset(startLine, indent, leader, wrappedBody, offset)
+		} else if preserved.pos.Y > endLine {
+			preserved.pos.Y += len(wrapped) - (endLine - startLine + 1)
+		}
 	}
 	cur := c.CursorAtScroll()
 	_, after, _ := c.buffer().Edit(c.ctx, from, to, replacement)
@@ -1740,6 +1774,84 @@ func (c *Cursor) wrapParagraphRange(startLine, endLine int, indent, leader strin
 	}
 	c.setCursorAfterUpdate(after)
 	return true
+}
+
+func (c *Cursor) wrapParagraphTextOffset(
+	startLine, endLine int,
+	indent, leader string,
+	bodyLines []string,
+	pos term.Coordinates,
+) int {
+	if pos.Y < startLine {
+		return 0
+	}
+
+	offset := 0
+	bodyIndex := 0
+	for y := startLine; y <= endLine && bodyIndex < len(bodyLines); y++ {
+		line := c.lineString(y)
+		bodyStart, body := wrapParagraphLineBody(line, indent, leader)
+		if body == "" {
+			continue
+		}
+		if y < pos.Y {
+			offset += len([]rune(body))
+			if bodyIndex < len(bodyLines)-1 {
+				offset++
+			}
+			bodyIndex++
+			continue
+		}
+		return offset + max(0, pos.X-bodyStart)
+	}
+
+	return offset
+}
+
+func wrapParagraphLineBody(line, indent, leader string) (start int, body string) {
+	trimmed := strings.TrimPrefix(line, indent)
+	start = len([]rune(line)) - len([]rune(trimmed))
+	if leader != "" {
+		withoutLeader := strings.TrimPrefix(trimmed, leader)
+		start += len([]rune(trimmed)) - len([]rune(withoutLeader))
+		trimmed = withoutLeader
+	}
+	leading := len([]rune(trimmed)) - len([]rune(strings.TrimLeft(trimmed, " \t")))
+	start += leading
+	body = strings.TrimSpace(trimmed)
+	return start, body
+}
+
+func wrapParagraphPositionForTextOffset(
+	startLine int,
+	indent, leader string,
+	wrappedBody []string,
+	offset int,
+) term.Coordinates {
+	if len(wrappedBody) == 0 {
+		return term.Coordinates{Y: startLine}
+	}
+	prefixWidth := len([]rune(indent + leader))
+	if offset <= 0 {
+		return term.Coordinates{Y: startLine, X: prefixWidth}
+	}
+
+	remaining := offset
+	for i, line := range wrappedBody {
+		lineLen := len([]rune(line))
+		if remaining <= lineLen {
+			return term.Coordinates{Y: startLine + i, X: prefixWidth + remaining}
+		}
+		remaining -= lineLen
+		if i < len(wrappedBody)-1 {
+			if remaining == 0 {
+				return term.Coordinates{Y: startLine + i, X: prefixWidth + lineLen}
+			}
+			remaining--
+		}
+	}
+	lastLine := wrappedBody[len(wrappedBody)-1]
+	return term.Coordinates{Y: startLine + len(wrappedBody) - 1, X: prefixWidth + len([]rune(lastLine))}
 }
 
 func (c *Cursor) wrapParagraphParts(startLine, endLine int) (indent, leader string, bodyLines []string, ok bool) {
