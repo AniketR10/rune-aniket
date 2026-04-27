@@ -8163,6 +8163,698 @@ func TestSearchOperatorMotion(t *testing.T) {
 	}
 }
 
+// TestMarkOperatorMotion covers `'{mark}` and `` `{mark} `` as
+// operator-pending motions for d, c, y, >, <, gu, gU, g~. The gq
+// operator is exercised by TestGoFormatWrapParagraph above.
+func TestMarkOperatorMotion(t *testing.T) {
+	type tc struct {
+		name        string
+		content     string
+		marks       map[rune]term.Coordinates
+		before      func(t *testing.T, vi *viHandlerImpl)
+		events      string
+		width       int
+		wantContent string
+		wantMode    viMode
+		wantCursor  *term.Coordinates
+		wantUnnamed string
+		// optional: when true, enable wrap mode and use width as
+		// wrap column. Useful for documenting wrap-mode behavior.
+		wrap   bool
+		height int
+		// optional: assert contents of a named register (zero rune
+		// means do not check).
+		wantRegisterName rune
+		wantRegister     string
+	}
+
+	suite := []tc{
+		// ---- delete (charwise via backtick, linewise via quote) ----
+		{
+			name:        "d backtick a deletes charwise from cursor up to mark",
+			content:     "alpha beta gamma\nsecond line\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "d`a",
+			width:       40,
+			wantContent: "beta gamma\nsecond line\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:        "d quote a deletes whole lines from cursor to mark",
+			content:     "first line\nsecond line\nthird line\nfourth line\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "fourth line\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first line\nsecond line\nthird line\n",
+		},
+		{
+			name:        "d backtick z without a set mark is a no-op",
+			content:     "alpha beta gamma\nsecond line\n",
+			events:      "d`z",
+			width:       40,
+			wantContent: "alpha beta gamma\nsecond line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d backtick a backward charwise deletes prefix to cursor",
+			content:     "alpha beta gamma\nsecond line\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 6}))
+			},
+			events:      "d`a",
+			width:       40,
+			// charwise backward exclusive: deletes "alpha " up to but
+			// not including the cursor character.
+			wantContent: "beta gamma\nsecond line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d quote a backward linewise deletes whole lines",
+			content:     "first\nsecond\nthird\nfourth\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 0}))
+			},
+			events:      "d'a",
+			width:       40,
+			wantContent: "fourth\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first\nsecond\nthird\n",
+		},
+
+		// ---- change ----
+		{
+			name:        "c backtick a deletes range and enters insert mode",
+			content:     "alpha beta gamma\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "c`aXYZ",
+			width:       40,
+			wantContent: "XYZbeta gamma\n",
+			wantMode:    insertMode,
+		},
+		{
+			name:        "c quote a deletes whole lines and enters insert mode",
+			content:     "first\nsecond\nthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "c'a",
+			width:       40,
+			wantContent: "third\n",
+			wantMode:    insertMode,
+		},
+
+		// ---- yank ----
+		{
+			name:        "y backtick a captures charwise prefix without mutating buffer",
+			content:     "alpha beta gamma\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "y`a",
+			width:       40,
+			wantContent: "alpha beta gamma\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:        "y quote a captures whole lines without mutating buffer",
+			content:     "first\nsecond\nthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "y'a",
+			width:       40,
+			wantContent: "first\nsecond\nthird\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first\nsecond\n",
+		},
+
+		// ---- shift (always linewise regardless of ' vs `) ----
+		{
+			name:        "shift right quote a indents lines from cursor to mark",
+			content:     "first\nsecond\nthird\nfourth\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 0}},
+			events:      ">'a",
+			width:       40,
+			wantContent: "\tfirst\n\tsecond\n\tthird\nfourth\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "shift right backtick a still indents whole lines",
+			content:     "first\nsecond\nthird\nfourth\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 3}},
+			events:      ">`a",
+			width:       40,
+			// shift is intrinsically linewise; the column part of the
+			// mark is ignored.
+			wantContent: "\tfirst\n\tsecond\n\tthird\nfourth\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "shift left quote a dedents lines",
+			content:     "\tfirst\n\tsecond\n\tthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "\\<'a",
+			width:       40,
+			wantContent: "first\nsecond\n\tthird\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- case change ----
+		{
+			name:        "gu backtick a lowercases charwise prefix to mark",
+			content:     "ALPHA BETA GAMMA\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "gu`a",
+			width:       40,
+			wantContent: "alpha BETA GAMMA\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gU backtick a uppercases charwise prefix to mark",
+			content:     "alpha beta gamma\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "gU`a",
+			width:       40,
+			wantContent: "ALPHA beta gamma\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "g tilde backtick a toggles charwise prefix to mark",
+			content:     "Alpha BETA gamma\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "g~`a",
+			width:       40,
+			wantContent: "aLPHA BETA gamma\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gu quote a lowercases whole lines",
+			content:     "FIRST\nSECOND\nTHIRD\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "gu'a",
+			width:       40,
+			wantContent: "first\nsecond\nTHIRD\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- unset / invalid mark ----
+		{
+			name:        "y quote z without a set mark is a no-op",
+			content:     "alpha beta\n",
+			events:      "y'z",
+			width:       40,
+			wantContent: "alpha beta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "shift right quote a invalid mark name is a no-op",
+			content:     "first\nsecond\n",
+			events:      ">'1",
+			width:       40,
+			wantContent: "first\nsecond\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- cursor placement / register hygiene ----
+		{
+			name:        "d quote a places cursor at first non-blank of remaining line",
+			content:     "first\nsecond\nthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "third\n",
+			wantMode:    normalMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+		},
+		{
+			name:        "d backtick a into named register",
+			content:     "alpha beta\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "\"bd`a",
+			width:       40,
+			wantContent: "beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:             "y backtick a into named register populates that register",
+			content:          "alpha beta\n",
+			marks:            map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:           "\"by`a",
+			width:            40,
+			wantContent:      "alpha beta\n",
+			wantMode:         normalMode,
+			wantUnnamed:      "alpha ",
+			wantRegisterName: 'b',
+			wantRegister:     "alpha ",
+		},
+		{
+			name:        "d into black-hole register does not pollute unnamed",
+			content:     "alpha beta\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				_ = vi.writeRegister(unnamedRegister, clipboard.Data{Text: "preserved"})
+			},
+			events:      "\"_d`a",
+			width:       40,
+			wantContent: "beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "preserved",
+		},
+
+		// ---- wide / unicode ----
+		{
+			name:        "d backtick consumes wide CJK prefix",
+			content:     "你好世界 alpha\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 5}},
+			events:      "d`a",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+			wantUnnamed: "你好世界 ",
+		},
+		{
+			name:        "d backtick stops before wide CJK at mark",
+			content:     "alpha 你好 beta\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "d`a",
+			width:       40,
+			wantContent: "你好 beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:        "d backtick backward through wide chars",
+			content:     "alpha 你好 beta\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 8}))
+			},
+			events:      "d`a",
+			width:       40,
+			wantContent: " beta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "y quote a captures linewise unicode buffer",
+			content:     "你好世界\n第二行\n第三行\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "y'a",
+			width:       40,
+			wantContent: "你好世界\n第二行\n第三行\n",
+			wantMode:    normalMode,
+			wantUnnamed: "你好世界\n第二行\n",
+		},
+		{
+			name:        "gu backtick lowercases unicode",
+			content:     "ÉLÈVE alpha\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 5}},
+			events:      "gu`a",
+			width:       40,
+			wantContent: "élève alpha\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- null / control characters in content ----
+		{
+			name:        "d backtick deletes through embedded null byte",
+			content:     "alp\x00ha beta\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 7}},
+			events:      "d`a",
+			width:       40,
+			wantContent: "beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alp\x00ha ",
+		},
+		{
+			name:        "d quote a deletes lines containing null bytes",
+			content:     "alpha\x00line\nsecond\nthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "third\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha\x00line\nsecond\n",
+		},
+
+		// ---- tabs and indentation ----
+		{
+			name:        "d quote a includes tabs and trailing spaces",
+			content:     "\talpha   \n\tbeta\nMARK\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "",
+			wantMode:    normalMode,
+			wantUnnamed: "\talpha   \n\tbeta\nMARK\n",
+		},
+		{
+			name:        "shift right quote indents tab-prefixed lines",
+			content:     "\talpha\n  beta\nMARK\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 0}},
+			events:      ">'a",
+			width:       40,
+			wantContent: "\t\talpha\n\t  beta\n\tMARK\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- buffer boundary edge cases ----
+		{
+			name:        "d quote a deletes only line in single-line buffer",
+			content:     "alpha beta",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "d'a",
+			width:       40,
+			// `'a` snaps to first non-blank of the same line, so the
+			// cursor doesn't actually move (still at {0,0}); the
+			// before==after guard fires and the buffer is preserved.
+			wantContent: "alpha beta",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d quote a on empty buffer is a no-op",
+			content:     "",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d backtick a on cursor-position mark is a no-op",
+			content:     "alpha\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			events:      "d`a",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d quote a on file with no trailing newline",
+			content:     "first\nsecond\nthird",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "",
+			wantMode:    normalMode,
+			wantUnnamed: "first\nsecond\nthird\n",
+		},
+		{
+			name:        "d backtick a single-line no trailing newline",
+			content:     "alpha END beta",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 6}},
+			events:      "d`a",
+			width:       40,
+			wantContent: "END beta",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:        "d quote a with mark on last line",
+			content:     "first\nsecond\nthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 2, X: 0}},
+			events:      "d'a",
+			width:       40,
+			wantContent: "",
+			wantMode:    normalMode,
+			wantUnnamed: "first\nsecond\nthird\n",
+		},
+		{
+			name:        "d quote a with mark beyond actual content is no-op",
+			content:     "alpha\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 99, X: 0}},
+			events:      "d'a",
+			width:       40,
+			// jumping to a mark stored beyond the end of the buffer
+			// snaps the cursor to the last reachable position; the
+			// resulting linewise selection covers the rest of the
+			// buffer. This documents the current behavior; users
+			// should not normally end up with such marks.
+			wantContent: "",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha\n\n",
+		},
+
+		// ---- cursor placement edge cases ----
+		{
+			name:    "d backtick a with cursor past end of line",
+			content: "alpha END beta\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 13}))
+			},
+			events:      "d`a",
+			width:       40,
+			wantContent: "a\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "d quote a with cursor past last line is a no-op",
+			content: "first\nsecond\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 5, X: 0})
+			},
+			events:      "d'a",
+			width:       40,
+			// cursor lands past content; the linewise range still
+			// resolves and clears the buffer.
+			wantContent: "",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "d backtick a with cursor positioned past end of line is clamped",
+			content: "abc\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				// simulate a stale cursor (e.g. an external file
+				// edit shrank the line under us): position the
+				// cursor far past the actual end-of-line.
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 100})
+			},
+			events:      "d`a",
+			width:       40,
+			// cursor is clamped to the last column on the line; the
+			// backward charwise delete from there to mark at col 0
+			// removes the prefix up to (but not including) the
+			// surviving last cell.
+			wantContent: "c\n",
+			wantMode:    normalMode,
+			wantUnnamed: "ab",
+		},
+		{
+			name:    "y backtick a with cursor past EOL captures clamped charwise range",
+			content: "abc def\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 100})
+			},
+			events:      "y`a",
+			width:       40,
+			wantContent: "abc def\n",
+			wantMode:    normalMode,
+			wantUnnamed: "abc de",
+		},
+		{
+			name:    "d quote a with cursor past EOB and EOL clears whole buffer",
+			content: "first\nsecond\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				// past both last line and last column; cursor is
+				// clamped onto the empty trailing row.
+				vi.setCursorAtScroll(term.Coordinates{Y: 99, X: 99})
+			},
+			events:      "d'a",
+			width:       40,
+			wantContent: "",
+			wantMode:    normalMode,
+			wantUnnamed: "first\nsecond\n\n",
+		},
+		{
+			name:    "shift right quote a with cursor past EOB indents all lines",
+			content: "first\nsecond\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 99, X: 0})
+			},
+			events:      ">'a",
+			width:       40,
+			// shift indents every line in the resolved linewise
+			// range, including the empty trailing row implied by
+			// the cursor clamp.
+			wantContent: "\tfirst\n\tsecond\n\t",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "c backtick a with cursor past EOL deletes clamped range and enters insert",
+			content: "abc\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 100})
+			},
+			events:      "c`aXY",
+			width:       40,
+			wantContent: "XYc\n",
+			wantMode:    insertMode,
+		},
+
+		// ---- uppercase mark name ----
+		{
+			name:        "d backtick uppercase mark A works",
+			content:     "alpha\nbeta MARK\n",
+			marks:       map[rune]term.Coordinates{'A': {Y: 1, X: 5}},
+			events:      "d`A",
+			width:       40,
+			wantContent: "MARK\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha\nbeta ",
+		},
+
+		// ---- count prefix on operator ----
+		{
+			name:        "d count prefix is consumed but does not multiply mark motion",
+			content:     "first\nsecond\nthird\nfourth\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "2d'a",
+			width:       40,
+			// the `2` count is applied to the operator but the
+			// mark range is fixed (cursor 0..mark 1 = lines 0,1).
+			wantContent: "third\nfourth\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first\nsecond\n",
+		},
+
+		// ---- yank+paste integration ----
+		{
+			name:        "y quote a then Gp pastes captured lines after last line",
+			content:     "first\nsecond\nthird\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 1, X: 0}},
+			events:      "y'aGp",
+			width:       40,
+			// linewise yank captures lines 0..1; Gp pastes after the
+			// last line. The buffer's trailing-newline semantics
+			// produce one blank line between the original content
+			// and the pasted block.
+			wantContent: "first\nsecond\nthird\n\nfirst\nsecond\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- escape cancels pending mark ----
+		{
+			name:        "d quote escape cancels and returns to normal",
+			content:     "alpha\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			events:      "d'<esc>",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- chained operators with mark hygiene ----
+		{
+			name:        "d backtick cancel via invalid mark then dd works",
+			content:     "alpha\nbeta\n",
+			events:      "d`1dd",
+			width:       40,
+			// `1` is invalid as a mark name -> cancel; then `dd`
+			// deletes the current line.
+			wantContent: "beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha\n",
+		},
+
+		// ---- wrap mode regression guard ----
+		{
+			name:        "d backtick a in wrap mode does not panic and leaves buffer intact",
+			content:     "alpha beta gamma delta epsilon zeta\n",
+			marks:       map[rune]term.Coordinates{'a': {Y: 0, X: 24}},
+			events:      "d`a",
+			width:       10,
+			wrap:        true,
+			// wrap mode reinterprets coordinates as display lines;
+			// jumping to a logical-only mark coordinate inside a
+			// wrapped row is currently a no-op rather than crashing.
+			// Documents existing behavior.
+			wantContent: "alpha beta gamma delta epsilon zeta\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- linewise cursor placement ----
+		{
+			name:    "d quote a leaves cursor on first non-blank of surviving line",
+			content: "first\n  second\nthird\n",
+			marks:   map[rune]term.Coordinates{'a': {Y: 0, X: 0}},
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 5}))
+			},
+			events:      "d'a",
+			width:       40,
+			// linewise delete from line 1 backward to mark at line 0
+			// removes both lines; cursor lands at first non-blank of
+			// the surviving "third" line (col 0).
+			wantContent: "third\n",
+			wantMode:    normalMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+			wantUnnamed: "first\n  second\n",
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			clip := new(mockClip)
+			opts := []Option{WithClipboard(registerset.New(clip))}
+			if tcase.wrap {
+				opts = append(opts, WithWrap(true))
+			}
+			vi := setupVi(t, tcase.content, 2, opts...)
+			height := tcase.height
+			if height == 0 {
+				height = 20
+			}
+			vi.Resize(tcase.width, height)
+			for name, pos := range tcase.marks {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, string(name),
+					textapi.LocationSlice([]textapi.Location{{
+						From: pos,
+						To:   term.Coordinates{Y: pos.Y, X: pos.X + 1},
+					}}),
+				)
+			}
+			if tcase.before != nil {
+				tcase.before(t, vi)
+			}
+
+			events := parseSearchOpEvents(tcase.events)
+			for _, ev := range events {
+				quit, _ := vi.Handle(ev)
+				require.False(t, quit)
+			}
+
+			assert.Equal(t, tcase.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.wantMode, vi.mode())
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			assert.Equal(t, 0, vi.operatorCount)
+			if tcase.wantCursor != nil {
+				assert.Equal(t, *tcase.wantCursor, vi.cursorAtScroll(),
+					"final cursor position")
+			}
+			if tcase.wantUnnamed != "" {
+				data, err := vi.readRegister(unnamedRegister)
+				require.NoError(t, err)
+				assert.Equal(t, tcase.wantUnnamed, data.Text,
+					"unnamed register contents")
+			}
+			if tcase.wantRegisterName != 0 {
+				data, err := vi.readRegister(tcase.wantRegisterName)
+				require.NoError(t, err)
+				assert.Equal(t, tcase.wantRegister, data.Text,
+					"register %q contents", string(tcase.wantRegisterName))
+			}
+		})
+	}
+}
+
 func TestCursorOutOfBounds(t *testing.T) {
 	for _, wrap := range []bool{false, true} {
 		for _, contentWindowOverflow := range []bool{false, true} {

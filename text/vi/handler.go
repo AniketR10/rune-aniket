@@ -122,8 +122,7 @@ type viHandlerImpl struct {
 	commentFn          func() bool
 	commentRepeat      rune
 	pendingSearchOp    *searchOpState
-	pendingMark        bool
-	pendingMarkLine    bool
+	pendingMarkOp      *markOpState
 	shiftFn            func()
 	shiftRepeat        rune
 	blockRepeat        struct {
@@ -321,8 +320,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.pendingSearchOp = nil
-	vi.pendingMark = false
-	vi.pendingMarkLine = false
+	vi.pendingMarkOp = nil
 	return true
 }
 
@@ -2138,6 +2136,12 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 			vi.beginYankSearchOp(moveToPrev)
 			vi.less.Handle(ev)
 			return false, true
+		case '\'':
+			vi.beginYankMarkOp(true)
+			return false, true
+		case '`':
+			vi.beginYankMarkOp(false)
+			return false, true
 		}
 	}
 
@@ -2267,6 +2271,12 @@ func (vi *viHandlerImpl) handleShift(ev term.Event) (quit, handled bool) {
 			vi.beginShiftSearchOp(moveToPrev)
 			vi.less.Handle(ev)
 			return false, true
+		case '\'':
+			vi.beginShiftMarkOp(true)
+			return false, true
+		case '`':
+			vi.beginShiftMarkOp(false)
+			return false, true
 		}
 	}
 
@@ -2382,6 +2392,12 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 			vi.beginCaseChangeSearchOp(moveToPrev)
 			vi.less.Handle(ev)
 			return false, true
+		case '\'':
+			vi.beginCaseChangeMarkOp(true)
+			return false, true
+		case '`':
+			vi.beginCaseChangeMarkOp(false)
+			return false, true
 		}
 	}
 
@@ -2411,49 +2427,6 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
-		if vi.pendingMark {
-			vi.pendingMark = false
-			linewise := vi.pendingMarkLine
-			vi.pendingMarkLine = false
-			if !validRegisterName(ev.Ch) {
-				vi.setNormalMode()
-				return false, true
-			}
-			before := vi.cursorAtScroll()
-			if !vi.moveToNextLocation(string(ev.Ch)) {
-				vi.setNormalMode()
-				return false, true
-			}
-			if linewise {
-				vi.cursor.MoveStartLineNonBlank()
-			}
-			after := vi.cursorAtScroll()
-			if before == after {
-				vi.setNormalMode()
-				return false, true
-			}
-			from, to := before, after
-			if to.Y < from.Y || (to.Y == from.Y && to.X < from.X) {
-				from, to = to, from
-			}
-			if linewise {
-				buf := vi.less.Buffer()
-				if to.Y < 0 || to.Y >= buf.Rows() {
-					vi.setNormalMode()
-					return false, true
-				}
-				from = term.Coordinates{Y: from.Y}
-				to = term.Coordinates{Y: to.Y, X: buf.Columns(to.Y)}
-			}
-			if !vi.cursor.SelectRange(from, to) {
-				vi.setNormalMode()
-				return false, true
-			}
-			vi.commentFn()
-			vi.cursor.Unselect()
-			vi.setNormalMode()
-			return false, true
-		}
 		if vi.pendingGoMotion {
 			vi.pendingGoMotion = false
 			switch ev.Ch {
@@ -2569,12 +2542,10 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 			vi.less.Handle(ev)
 			return false, true
 		case '\'':
-			vi.pendingMark = true
-			vi.pendingMarkLine = true
+			vi.beginCommentMarkOp(true)
 			return false, true
 		case '`':
-			vi.pendingMark = true
-			vi.pendingMarkLine = false
+			vi.beginCommentMarkOp(false)
 			return false, true
 		}
 	}
@@ -2762,6 +2733,155 @@ func (vi *viHandlerImpl) cancelSearchOp() {
 	vi.setNormalMode()
 }
 
+// markOpState holds the operator-pending state while a mark motion
+// (`'{a}` or `` `{a} ``) is being entered. It is constructed by
+// beginMarkOp and consumed by handleMarkOp once the mark name is
+// received. linewise is forced for `'`; charwise (`` ` ``) operators
+// fall back to their natural granularity. Operators that are
+// intrinsically linewise (gq, >, <) set forceLinewise=true regardless
+// of which mark form was used.
+type markOpState struct {
+	linewise       bool   // true when the mark form was `'`
+	forceLinewise  bool   // true for intrinsically linewise operators
+	apply          func() // run on the materialized selection
+	finish         func() // mode transition after apply
+}
+
+// beginMarkOp arms the mark-pending state for an operator. The next
+// event consumed by handleMarkOp must be the mark name.
+func (vi *viHandlerImpl) beginMarkOp(linewise, forceLinewise bool, apply, finish func()) {
+	vi.pendingMarkOp = &markOpState{
+		linewise:      linewise,
+		forceLinewise: forceLinewise,
+		apply:         apply,
+		finish:        finish,
+	}
+}
+
+// handleMarkOp consumes the mark-name event and runs the operator
+// over the materialized range. Unknown or unset marks are no-ops.
+func (vi *viHandlerImpl) handleMarkOp(ev term.Event) (quit, handled bool) {
+	op := vi.pendingMarkOp
+	if ev.Mod != 0 || !validRegisterName(ev.Ch) {
+		vi.cancelMarkOp()
+		return false, true
+	}
+	before := vi.cursorAtScroll()
+	if !vi.moveToNextLocation(string(ev.Ch)) {
+		vi.cancelMarkOp()
+		return false, true
+	}
+	linewise := op.linewise || op.forceLinewise
+	if linewise {
+		vi.cursor.MoveStartLineNonBlank()
+	}
+	after := vi.cursorAtScroll()
+	if before == after {
+		vi.cancelMarkOp()
+		return false, true
+	}
+	if linewise {
+		// Linewise selection: anchor at the starting line, then
+		// extend down or up to the mark line. SelectLine produces a
+		// proper line selection (including trailing newline) that
+		// operators like d, c, y can act on as whole-line ranges.
+		vi.cursor.MoveToScroll(before)
+		if !vi.cursor.SelectLine() {
+			vi.cancelMarkOp()
+			return false, true
+		}
+		if after.Y > before.Y {
+			for i := before.Y; i < after.Y; i++ {
+				if !vi.cursor.MoveLineDown() {
+					break
+				}
+			}
+		} else if after.Y < before.Y {
+			for i := before.Y; i > after.Y; i-- {
+				if !vi.cursor.MoveLineUp() {
+					break
+				}
+			}
+		}
+	} else {
+		from, to := before, after
+		if to.Y < from.Y || (to.Y == from.Y && to.X < from.X) {
+			from, to = to, from
+		}
+		if !vi.cursor.SelectRange(from, to) {
+			vi.cancelMarkOp()
+			return false, true
+		}
+	}
+	op.apply()
+	vi.pendingMarkOp = nil
+	op.finish()
+	return false, true
+}
+
+// cancelMarkOp clears the mark-operator state and returns to normal
+// mode without mutating the buffer.
+func (vi *viHandlerImpl) cancelMarkOp() {
+	vi.pendingMarkOp = nil
+	vi.cursor.Unselect()
+	vi.setNormalMode()
+}
+
+// beginCommentMarkOp arms the mark-pending state for the gq operator.
+// gq is linewise regardless of `'` vs `` ` ``.
+func (vi *viHandlerImpl) beginCommentMarkOp(linewise bool) {
+	commentFn := vi.commentFn
+	vi.beginMarkOp(linewise, true,
+		func() { commentFn() },
+		func() { vi.cursor.Unselect(); vi.setNormalMode() },
+	)
+}
+
+// beginYankMarkOp arms the mark-pending state for the y operator.
+func (vi *viHandlerImpl) beginYankMarkOp(linewise bool) {
+	vi.beginMarkOp(linewise, false,
+		vi.copySelection,
+		func() { vi.setNormalMode() },
+	)
+}
+
+// beginDeleteMarkOp arms the mark-pending state for d/c.
+func (vi *viHandlerImpl) beginDeleteMarkOp(linewise bool) {
+	deleteInsert := vi.deleteInsert
+	vi.beginMarkOp(linewise, false,
+		func() {
+			vi.copySelectionForDelete()
+			vi.cursor.DeleteSelection()
+		},
+		func() {
+			if deleteInsert {
+				vi.setInsertMode()
+			} else {
+				vi.setNormalMode()
+			}
+		},
+	)
+}
+
+// beginShiftMarkOp arms the mark-pending state for >/<. Shift is
+// always linewise.
+func (vi *viHandlerImpl) beginShiftMarkOp(linewise bool) {
+	shiftFn := vi.shiftFn
+	vi.beginMarkOp(linewise, true,
+		func() { shiftFn() },
+		func() { vi.setNormalMode() },
+	)
+}
+
+// beginCaseChangeMarkOp arms the mark-pending state for gu/gU/g~.
+func (vi *viHandlerImpl) beginCaseChangeMarkOp(linewise bool) {
+	caseChangeFn := vi.caseChangeFn
+	vi.beginMarkOp(linewise, false,
+		func() { caseChangeFn() },
+		func() { vi.setNormalMode() },
+	)
+}
+
 func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 	if !vi.deleteInsert && vi.moveMode == moveNone && ev.Ch == 'd' && ev.Mod == 0 {
 		if !vi.cursor.SelectLine() {
@@ -2909,6 +3029,12 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		case '?':
 			vi.beginDeleteSearchOp(moveToPrev)
 			vi.less.Handle(ev)
+			return false, true
+		case '\'':
+			vi.beginDeleteMarkOp(true)
+			return false, true
+		case '`':
+			vi.beginDeleteMarkOp(false)
 			return false, true
 		}
 	}
@@ -3058,6 +3184,13 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 		mode := vi.mode()
 		defer vi.doneHandle(mode)
 		quit, handled = vi.handleSearchOp(ev)
+		return
+	}
+
+	if vi.pendingMarkOp != nil {
+		mode := vi.mode()
+		defer vi.doneHandle(mode)
+		quit, handled = vi.handleMarkOp(ev)
 		return
 	}
 
