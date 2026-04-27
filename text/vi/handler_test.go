@@ -7049,6 +7049,67 @@ type callbackAdapter struct {
 			wantContent: "END alpha\nbeta gamma\ndelta\nepsilon zeta\neta theta\niota kappa\nlast END\ntrailing\nwords go on\n",
 			wantMode:    normalMode,
 		},
+
+		// ---- gq'{mark} linewise mark motion ----
+		{
+			name: "gq quote a reflows linewise from cursor to mark a",
+			content: "alpha beta gamma delta epsilon zeta\n" +
+				"second line\n" +
+				"third line keep\n" +
+				"MARK fourth line\n" +
+				"last\n",
+			// seed mark `a` on line 3 (linewise jump targets the
+			// first non-blank column of that line).
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "a",
+					textapi.LocationSlice([]textapi.Location{{
+						From: term.Coordinates{Y: 3, X: 0},
+						To:   term.Coordinates{Y: 3, X: 1},
+					}}),
+				)
+			},
+			events:      "gggq'a",
+			ruler:       12,
+			width:       40,
+			// linewise reflow of lines 0..3 inclusive.
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nsecond line\nthird line\nkeep MARK\nfourth line\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "gq quote a from below reflows backward through mark a",
+			content: "first paragraph spans some text\n" +
+				"MARK line\n" +
+				"middle text here\n" +
+				"alpha beta gamma delta epsilon zeta eta\n" +
+				"final\n",
+			// mark `a` at line 1; cursor starts on line 3 then
+			// gq'a should reflow lines 1..3 inclusive.
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetLocationList(textapi.LocationPriorityInfo, "a",
+					textapi.LocationSlice([]textapi.Location{{
+						From: term.Coordinates{Y: 1, X: 0},
+						To:   term.Coordinates{Y: 1, X: 1},
+					}}),
+				)
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 3, X: 0}))
+			},
+			events:      "gq'a",
+			ruler:       12,
+			width:       40,
+			wantContent: "first paragraph spans some text\nMARK line\nmiddle text\nhere alpha\nbeta gamma\ndelta\nepsilon zeta\neta\nfinal\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "gq quote z without a set mark is a no-op",
+			content: "alpha beta gamma delta epsilon zeta\n" +
+				"second line\n",
+			events:      "gggq'z",
+			ruler:       12,
+			width:       40,
+			// no mark `z` exists; the buffer is unchanged.
+			wantContent: "alpha beta gamma delta epsilon zeta\nsecond line\n",
+			wantMode:    normalMode,
+		},
 	}
 
 	for _, tcase := range suite {

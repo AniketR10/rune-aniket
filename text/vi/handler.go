@@ -122,6 +122,8 @@ type viHandlerImpl struct {
 	commentFn          func() bool
 	commentRepeat      rune
 	pendingSearchOp    *searchOpState
+	pendingMark        bool
+	pendingMarkLine    bool
 	shiftFn            func()
 	shiftRepeat        rune
 	blockRepeat        struct {
@@ -319,6 +321,8 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
 	vi.pendingSearchOp = nil
+	vi.pendingMark = false
+	vi.pendingMarkLine = false
 	return true
 }
 
@@ -2407,6 +2411,49 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 	}
 
 	if vi.moveMode == moveNone && ev.Mod == 0 {
+		if vi.pendingMark {
+			vi.pendingMark = false
+			linewise := vi.pendingMarkLine
+			vi.pendingMarkLine = false
+			if !validRegisterName(ev.Ch) {
+				vi.setNormalMode()
+				return false, true
+			}
+			before := vi.cursorAtScroll()
+			if !vi.moveToNextLocation(string(ev.Ch)) {
+				vi.setNormalMode()
+				return false, true
+			}
+			if linewise {
+				vi.cursor.MoveStartLineNonBlank()
+			}
+			after := vi.cursorAtScroll()
+			if before == after {
+				vi.setNormalMode()
+				return false, true
+			}
+			from, to := before, after
+			if to.Y < from.Y || (to.Y == from.Y && to.X < from.X) {
+				from, to = to, from
+			}
+			if linewise {
+				buf := vi.less.Buffer()
+				if to.Y < 0 || to.Y >= buf.Rows() {
+					vi.setNormalMode()
+					return false, true
+				}
+				from = term.Coordinates{Y: from.Y}
+				to = term.Coordinates{Y: to.Y, X: buf.Columns(to.Y)}
+			}
+			if !vi.cursor.SelectRange(from, to) {
+				vi.setNormalMode()
+				return false, true
+			}
+			vi.commentFn()
+			vi.cursor.Unselect()
+			vi.setNormalMode()
+			return false, true
+		}
 		if vi.pendingGoMotion {
 			vi.pendingGoMotion = false
 			switch ev.Ch {
@@ -2520,6 +2567,14 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 		case '?':
 			vi.beginCommentSearchOp(moveToPrev)
 			vi.less.Handle(ev)
+			return false, true
+		case '\'':
+			vi.pendingMark = true
+			vi.pendingMarkLine = true
+			return false, true
+		case '`':
+			vi.pendingMark = true
+			vi.pendingMarkLine = false
 			return false, true
 		}
 	}
