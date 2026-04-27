@@ -6991,6 +6991,64 @@ type callbackAdapter struct {
 			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nMARK here\nlast\n",
 			wantMode:    normalMode,
 		},
+
+		// ---- gqn / gqN reuse the last-used search pattern ----
+		{
+			name: "gqn reflows from cursor to next match of last search",
+			content: "alpha beta gamma delta epsilon\nMARK\n" +
+				"zeta eta theta iota kappa\nEND tail\nlast\n",
+			events:      "/END\ngggqn",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon MARK\nzeta eta\ntheta iota\nkappa END\ntail\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "gqN reflows backward from cursor to previous match of last search",
+			content: "alpha beta gamma delta epsilon\nMARK\n" +
+				"zeta eta theta iota kappa END\nlast text here\n",
+			events:      "/END\nGgqN",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta gamma delta epsilon\nMARK\nzeta eta\ntheta iota\nkappa END\nlast text\nhere\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- gq* / gq# search the word under the cursor ----
+		{
+			name: "gq star reflows from cursor to next match of word under cursor",
+			content: "alpha beta\nEND tail keep going\n" +
+				"zeta eta theta iota kappa END\nlast\n",
+			// place the cursor on the second line where "END" is
+			// the word under the cursor; gq* formats forward to the
+			// next "END" match.
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0}))
+			},
+			events:      "gq*",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\nEND tail\nkeep going\nzeta eta\ntheta iota\nkappa END\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name: "gq hash reflows backward from cursor to previous match of word under cursor",
+			content: "END alpha beta gamma delta epsilon\n" +
+				"zeta eta theta iota kappa\n" +
+				"last END trailing words go on\n",
+			// place the cursor on the END word at line 2; gq# formats
+			// backward to the previous END match on line 0.
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 2, X: 5}))
+			},
+			events:      "gq#",
+			ruler:       12,
+			width:       40,
+			// gq is linewise so the whole 3-line range collapses
+			// into a single paragraph, then re-wraps at column 12.
+			wantContent: "END alpha\nbeta gamma\ndelta\nepsilon zeta\neta theta\niota kappa\nlast END\ntrailing\nwords go on\n",
+			wantMode:    normalMode,
+		},
 	}
 
 	for _, tcase := range suite {
