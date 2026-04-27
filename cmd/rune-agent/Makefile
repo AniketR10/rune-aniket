@@ -11,7 +11,17 @@ NOTARIZE_ZIP := $(abspath $(ROOT_DIR)/rune-agent-notarize.zip)
 DIST_SH := ./dist.sh
 ROOT_DIST_SH := ./cmd/rune-agent/dist.sh
 
-.PHONY: clean build pkg sign notarize dist dist-notarized
+VERSION ?= $(shell git -C $(ROOT_DIR) describe --tags 2>/dev/null)
+COMMIT  ?= $(shell git -C $(ROOT_DIR) rev-parse --short HEAD 2>/dev/null)
+TARGET := $(abspath $(ROOT_DIR)/target)
+RUNE_AGENT_LINUX_TARGET_OS ?= linux
+RUNE_AGENT_LINUX_TARGET_ARCH ?= amd64
+RUNE_AGENT_LINUX_OUTPUT_DIR ?= $(TARGET)/rune-agent_$(RUNE_AGENT_LINUX_TARGET_OS)_$(RUNE_AGENT_LINUX_TARGET_ARCH)
+RUNE_AGENT_LINUX_RELEASE_TAR ?= rune-agent-release-$(RUNE_AGENT_LINUX_TARGET_OS)-$(RUNE_AGENT_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
+
+.PHONY: clean build pkg sign notarize dist dist-notarized \
+	linux-cross-compile release-linux-amd64 release-linux-arm64 \
+	dist-linux-amd64 dist-linux-arm64
 
 build: $(BIN)/rune-agent
 
@@ -61,3 +71,43 @@ dist: clean $(TAR)
 dist-notarized: dist
 	@echo "Skipping notarized dist (not on macOS)"
 endif
+
+# linux-cross-compile builds a stripped-down rune-agent bundle (no GUI deps)
+# inside a Debian-based Docker image. The resulting tarball is dropped into
+# $(RUNE_AGENT_LINUX_OUTPUT_DIR) along with the unpacked rune-agent/ tree.
+linux-cross-compile:
+	@rm -rf $(RUNE_AGENT_LINUX_OUTPUT_DIR)
+	@mkdir -p $(RUNE_AGENT_LINUX_OUTPUT_DIR)
+	@cd $(ROOT_DIR) && docker buildx build --rm \
+		-f deploy/rune-agent/Dockerfile \
+		--platform $(RUNE_AGENT_LINUX_TARGET_OS)/$(RUNE_AGENT_LINUX_TARGET_ARCH) \
+		--build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" \
+		--build-arg RUNE_BUILD_TAG="$(VERSION)" \
+		--build-arg RUNE_BUILD_COMMIT="$(COMMIT)" \
+		--build-arg RUNE_RELEASE_TAR="$(RUNE_AGENT_LINUX_RELEASE_TAR)" \
+		--output type=local,dest=$(RUNE_AGENT_LINUX_OUTPUT_DIR) \
+		.
+
+release-linux-amd64:
+	@RUNE_AGENT_LINUX_TARGET_ARCH=amd64 \
+		RUNE_AGENT_LINUX_RELEASE_TAR=rune-agent-release-linux-amd64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
+		$(MAKE) linux-cross-compile
+
+release-linux-arm64:
+	@RUNE_AGENT_LINUX_TARGET_ARCH=arm64 \
+		RUNE_AGENT_LINUX_RELEASE_TAR=rune-agent-release-linux-arm64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
+		$(MAKE) linux-cross-compile
+
+dist-linux-amd64: release-linux-amd64
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_amd64/rune-agent-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=amd64 \
+		./cmd/rune/dist.sh
+
+dist-linux-arm64: release-linux-arm64
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_arm64/rune-agent-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=arm64 \
+		./cmd/rune/dist.sh

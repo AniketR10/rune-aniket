@@ -3,6 +3,7 @@
 #include "mtmd.h"
 #include "mtmd-helper.h"
 
+#include <cstring>
 #include <string>
 #include <vector>
 

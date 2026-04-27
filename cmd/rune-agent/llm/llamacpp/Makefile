@@ -33,13 +33,38 @@ endif
 
 ifeq ($(LLAMACPP_CUDA),1)
   CMAKE_FLAGS += -DGGML_CUDA=ON
+  # NCCL is multi-GPU collective comms — useful for distributed inference,
+  # not for a desktop/edge agent. cmake auto-detects libnccl when it ships
+  # in the CUDA devel image (e.g. nvidia/cuda:*-devel-ubuntu22.04), which
+  # then introduces undefined references to ncclCommDestroy / ncclAllReduce
+  # at link time unless we also link -lnccl. Disable explicitly.
+  CMAKE_FLAGS += -DGGML_CUDA_NCCL=OFF
 endif
+
+# LLAMACPP_BLAS=1 enables the GGML BLAS backend on non-Darwin builds (Darwin
+# already opts in unconditionally above via Accelerate). On linux this links
+# OpenBLAS into libggml-blas.a, which the cgo bindings pull in when built
+# with `-tags=llamacpp_blas`.
+ifeq ($(LLAMACPP_BLAS),1)
+  CMAKE_FLAGS += -DGGML_BLAS=ON
+endif
+
+# EXTRA_CMAKE_FLAGS lets callers append cmake variables without editing this
+# Makefile. It is primarily used by the Linux cross-compile flow in
+# deploy/rune-agent/Dockerfile to inject a CMAKE_TOOLCHAIN_FILE and override
+# CMAKE_C/CXX_COMPILER for the target architecture.
+CMAKE_FLAGS += $(EXTRA_CMAKE_FLAGS)
 
 LIBS := libllama.a libggml.a libggml-base.a libggml-cpu.a \
         libllama-common.a libllama-common-base.a libcpp-httplib.a \
         libmtmd.a libserver-context.a
 ifeq ($(UNAME),Darwin)
   LIBS += libggml-metal.a libggml-blas.a
+endif
+ifeq ($(LLAMACPP_BLAS),1)
+ifneq ($(UNAME),Darwin)
+  LIBS += libggml-blas.a
+endif
 endif
 ifeq ($(LLAMACPP_CUDA),1)
   LIBS += libggml-cuda.a
@@ -86,6 +111,11 @@ build: configure
 
 ifeq ($(UNAME),Darwin)
 BACKEND_TARGETS := ggml-metal ggml-blas
+endif
+ifeq ($(LLAMACPP_BLAS),1)
+ifneq ($(UNAME),Darwin)
+BACKEND_TARGETS += ggml-blas
+endif
 endif
 ifeq ($(LLAMACPP_CUDA),1)
 BACKEND_TARGETS += ggml-cuda

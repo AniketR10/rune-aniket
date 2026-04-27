@@ -45,6 +45,22 @@ package llamacpp
 #cgo darwin LDFLAGS:  -lggml-blas -lggml-metal
 #cgo darwin LDFLAGS:  -framework Accelerate -framework Foundation -framework Metal -framework MetalKit -framework MetalPerformanceShaders
 
+// On Linux, ggml-cpu's OpenMP-parallelised paths require linking against
+// GCC's GNU OpenMP runtime (libgomp). Without this, ld fails with
+// undefined references to GOMP_barrier / GOMP_parallel from ggml-cpu.c.
+#cgo linux LDFLAGS: -lgomp
+
+// On linux, BLAS comes from OpenBLAS via the GGML BLAS backend. The
+// llamacpp_blas build tag opts the binary into linking it; the static
+// libggml-blas.a is built only when LLAMACPP_BLAS=1 is passed to the
+// llamacpp Makefile.
+// libgfortran is a transitive runtime dep of OpenBLAS on Linux: openblas
+// dispatches into LAPACK routines that use Fortran intrinsics like
+// _gfortran_etime / _gfortran_concat_string. We must link it explicitly
+// because GNU ld won't pull a shared lib's transitive deps automatically
+// when the symbols are referenced through a versioned (@GFORTRAN_8) tag.
+#cgo linux,llamacpp_blas LDFLAGS: -lggml-blas -lopenblas -lgfortran
+
 #cgo llamacpp_cuda LDFLAGS: -lggml-cuda -lcudart -lcublas -lcuda
 
 #include <stdint.h>

@@ -33,6 +33,9 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
+	rune-agent-linux-cross-compile \
+	rune-agent-release-linux-amd64 rune-agent-release-linux-arm64 \
+	rune-agent-dist-linux-amd64 rune-agent-dist-linux-arm64 \
 	fuzzy-search fuzzy-search-pkg fuzzy-search-dist \
 	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
 	notary-credentials runectl \
@@ -83,21 +86,6 @@ test: $(LLAMACPP_STAMP)
 test: CI=$(CI)
 test-no-race: $(LLAMACPP_STAMP)
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
-
-# Run every Fuzz* target in the repository for FUZZTIME each (default
-# 10s). go test -fuzz only supports one target per invocation, so we
-# discover them with `go test -list` and iterate. Override with e.g.
-# `make fuzz FUZZTIME=1m`.
-FUZZTIME ?= 10s
-fuzz:
-	@ set -e; \
-	for pkg in $$(go list ./...); do \
-		targets=$$(go test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz' || true); \
-		for target in $$targets; do \
-			echo "==> fuzzing $$pkg $$target ($(FUZZTIME))"; \
-			go test -run=^$$ -fuzz=^$$target$$ -fuzztime=$(FUZZTIME) $$pkg; \
-		done; \
-	done
 
 coverage: $(BIN)
 	@ go test ./.../... -coverprofile $(BIN)/coverage
@@ -300,6 +288,21 @@ rune-agent-dist: clean
 
 rune-agent-dist-notarized: clean
 	@$(MAKE) -C cmd/rune-agent dist-notarized
+
+rune-agent-linux-cross-compile:
+	@$(MAKE) -C cmd/rune-agent linux-cross-compile
+
+rune-agent-release-linux-amd64:
+	@$(MAKE) -C cmd/rune-agent release-linux-amd64
+
+rune-agent-release-linux-arm64:
+	@$(MAKE) -C cmd/rune-agent release-linux-arm64
+
+rune-agent-dist-linux-amd64: clean
+	@$(MAKE) -C cmd/rune-agent dist-linux-amd64
+
+rune-agent-dist-linux-arm64: clean
+	@$(MAKE) -C cmd/rune-agent dist-linux-arm64
 
 fuzzy-search: CGO_ENABLED=CGO_ENABLED=1
 fuzzy-search: $(BIN)/extension_fuzzy_search
