@@ -28,8 +28,43 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/cell"
 )
+
+// EditHandler is the tui.Handler returned by Editor.Edit. It exposes
+// SetCursorAtScroll so the Prompt can position the editor's cursor at
+// the same buffer coordinates the prompt was showing before entering
+// edit mode (without this we would jump back to the start of the
+// buffer every time).
+type EditHandler interface {
+	tui.Handler
+	// SetCursorAtScroll moves the editor cursor to the given buffer
+	// coordinates. The receiver typically wants to be Resize()d to a
+	// non-zero size first so its internal scroll state can satisfy the
+	// move.
+	SetCursorAtScroll(pos term.Coordinates) bool
+}
+
+// Editor is the interface implemented by text editors that can be
+// plugged into the Prompt to drive its modal edit mode. It is
+// satisfied by call-site adapters that construct a bare vi.Vi or
+// modeless editor handler bound to the given buffer (avoiding any
+// auxiliary status / icons / location bars that the full text.Editor
+// pipeline layers on top, which would otherwise shift the visible
+// cursor coordinates).
+//
+// While in edit mode the Prompt forwards every input event to the
+// EditHandler returned by Edit, allowing users to freely modify the
+// prompt's input buffer with the editor's full feature set (cursor
+// navigation, undo, selection, …). The Prompt Close()s the handler
+// (if it implements io.Closer) when edit mode exits.
+type Editor interface {
+	// Edit returns an EditHandler bound to buf. The Prompt retains
+	// ownership of the returned handler only while edit mode is active.
+	Edit(buf *cell.Buffer) EditHandler
+}
 
 // Config represents the configuration needed to initialize a Handler.
 type Config struct {
@@ -40,6 +75,15 @@ type Config struct {
 	// between the available commands and the command history. Pressing it
 	// once shows history entries; pressing it again restores the command list.
 	HistoryToggleKey term.KeyComb
+	// EditModeKey toggles a modal text-editor mode where the prompt
+	// input can be freely edited without triggering completions,
+	// searches or manual updates. Pressing it again, <enter> or <tab>
+	// exits the mode and replays the buffer through the prompt as if
+	// it had been pasted, re-computing completions accordingly.
+	EditModeKey term.KeyComb
+	// Editor drives the prompt's modal edit mode (see EditModeKey).
+	// Required: NewPrompt/Init panic if nil.
+	Editor           Editor
 	MatchedTextAttr  term.Attributes
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
@@ -76,6 +120,7 @@ func DefaultConfig() Config {
 		MaxHistory:       100,
 		HistoryCycleKey:  term.KeyComb{Ch: ':'},
 		HistoryToggleKey: term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
+		EditModeKey:      term.KeyComb{Mod: term.ModShift, Key: term.KeyEsc},
 		MatchedTextAttr:  term.Attributes{Fg: tcell.ColorRed},
 		FocusElementAttr: term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline, Fg: tcell.ColorRed},
 		ElementAttr:      term.Attributes{},

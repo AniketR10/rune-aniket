@@ -47,8 +47,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/ideshell"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 )
 
 // Root is the storefront's top-level tui.Handler. One per SSH session.
@@ -233,6 +236,7 @@ func (r *Root) openPalette() {
 	// Always surface the manual panel for the focused entry so the
 	// user sees the synopsis/description without having to idle.
 	cfg.ShowManualAfter = 0
+	cfg.Editor = paletteEditor{}
 	manuals := r.commandManuals()
 
 	prompt := command.NewPrompt(
@@ -360,4 +364,19 @@ func mustParseURI(raw string) workspaceapi.URI {
 		panic(fmt.Errorf("parse uri %q: %w", raw, err))
 	}
 	return uri
+}
+
+// paletteEditor adapts modeless.NewHandler to command.Editor for the
+// shop's command palette modal edit mode. Using modeless.NewHandler
+// directly (rather than going through text.Editor.Edit) avoids the
+// auxiliary status / icons / location bars that would otherwise shift
+// the visible cursor coordinates.
+type paletteEditor struct{}
+
+func (paletteEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	uri := workspaceapi.RandomURI("shop-palette-edit")
+	return modeless.NewHandler(buf, uri, text.IndentRuneTab, 0,
+		modeless.WithCommandBar(false),
+		modeless.WithWrap(false),
+	)
 }

@@ -126,7 +126,13 @@ type ex struct {
 	reissueEvent         term.Event
 	cmd                  *command.Prompt
 	syncCommandPrompt    bool
-	pluginWaitTimeout    time.Duration
+	// commandEditor, when non-nil, drives the command Prompt's modal
+	// edit mode. It is set by the workspace handler to a bare vi or
+	// modeless handler (no aux/status/icons bars) chosen from the
+	// active editor mode configuration. Tests that construct ex
+	// directly leave it nil and fall back to wrapping e.ed.Edit.
+	commandEditor     command.Editor
+	pluginWaitTimeout time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
 	cmdV             handler.Virtual[*browser.Component]
@@ -2067,6 +2073,11 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
+	if e.commandEditor != nil {
+		commandCfg.Editor = e.commandEditor
+	} else {
+		commandCfg.Editor = commandPromptEditor{ed: e.ed}
+	}
 	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(
@@ -2201,6 +2212,32 @@ func (e *ex) Draw(w term.Writer) {
 // Editor returns the underlying Editor implementation.
 func (e *ex) Editor() text.Editor {
 	return &e.comp
+}
+
+// commandPromptEditor adapts a text.Editor to the command.Editor
+// interface expected by command.Prompt for its modal edit mode. It
+// goes through text.Editor.Edit, which layers auxiliary status /
+// icons / location bars on top of the bare buffer view; that is
+// undesirable because those bars displace the cursor coordinates
+// reported back to the prompt, but it is acceptable as a fallback
+// for tests that do not assert visual cursor placement. Production
+// flows replace this with a bare vi.New / modeless.NewHandler
+// adapter (see workspace_handler.go).
+type commandPromptEditor struct {
+	ed text.Editor
+}
+
+func (c commandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	uri := workspaceapi.RandomURI("command-prompt-edit")
+	h, err := c.ed.Edit(uri, buf, false, false)
+	if err != nil {
+		// text.Editor implementations used here are in-process and
+		// do not return errors for in-memory buffers.
+		panic(fmt.Errorf("command prompt editor: %w", err))
+	}
+	h.SetWrap(true)
+	h.ShowCommandBar(false)
+	return h
 }
 
 // Browser returns the underlying browser.Browser implementaiton.

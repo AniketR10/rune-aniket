@@ -58,6 +58,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/component/notifications"
@@ -264,6 +265,76 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	)
 }
 
+// newCommandPromptEditor returns the command.Editor adapter used by
+// the command Prompt's modal edit mode. It bypasses text.Editor.Edit
+// (which layers status / icons / location / aux bars on top of the
+// bare buffer view, displacing the cursor coordinates the prompt
+// reads back) and instantiates either a vi.Vi or a modeless editor
+// handler directly, mirroring the editor mode the user has selected
+// for the rest of the IDE.
+func (h *workspaceManagerHandler) newCommandPromptEditor(
+	cfg ideConfig,
+) command.Editor {
+	switch cfg.editorMode() {
+	case editorModeModeless:
+		return modelessCommandPromptEditor{
+			tabspaces:        cfg.editorTabspaces(),
+			indents:          cfg.editorIndents(),
+			scheduleNextTick: cfg.scheduleNextTick,
+			clipboard:        h.clip,
+		}
+	case editorModeModal:
+		return viCommandPromptEditor{
+			tabspaces:        cfg.editorTabspaces(),
+			indents:          cfg.editorIndents(),
+			scheduleNextTick: cfg.scheduleNextTick,
+			clipboard:        h.clip,
+		}
+	default:
+		panic("invalid editor mode")
+	}
+}
+
+// modelessCommandPromptEditor and viCommandPromptEditor are bare
+// command.Editor adapters: each Edit invocation spins up a fresh
+// editor handler bound to the supplied buffer, with no bar chrome.
+type modelessCommandPromptEditor struct {
+	tabspaces        int
+	indents          text.IndentConfig
+	scheduleNextTick func(func()) bool
+	clipboard        clipboard.Register
+}
+
+func (m modelessCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	uri := workspaceapi.RandomURI("command-prompt-edit")
+	return modeless.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
+		modeless.WithCommandBar(false),
+		modeless.WithTabspaces(m.tabspaces),
+		modeless.WithIndents(m.indents),
+		modeless.WithScheduleNextTick(m.scheduleNextTick),
+		modeless.WithClipboard(m.clipboard),
+		modeless.WithWrap(false),
+	)
+}
+
+type viCommandPromptEditor struct {
+	tabspaces        int
+	indents          text.IndentConfig
+	scheduleNextTick func(func()) bool
+	clipboard        clipboard.Register
+}
+
+func (v viCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	uri := workspaceapi.RandomURI("command-prompt-edit")
+	return vi.NewWithIndent(buf, uri, text.IndentRuneTab, v.tabspaces,
+		vi.WithTabspaces(v.tabspaces),
+		vi.WithIndents(v.indents),
+		vi.WithScheduleNextTick(v.scheduleNextTick),
+		vi.WithClipboard(v.clipboard),
+		vi.WithWrap(false),
+	)
+}
+
 func (h *workspaceManagerHandler) init(
 	cwd *workspaceapi.URI, homeDirUri workspaceapi.URI,
 	manager workspace.WorkspaceManager,
@@ -348,6 +419,7 @@ func (h *workspaceManagerHandler) init(
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
+	h.empty.commandEditor = h.newCommandPromptEditor(cfg)
 	tm.tm = h.empty.Browser()
 	if err = h.subscribeAllCommands(h.empty); err != nil {
 		return err
@@ -865,6 +937,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancel()
 		return fmt.Errorf("new ex: %w", err)
 	}
+	ex.commandEditor = h.newCommandPromptEditor(cfg)
 	apibrowser := newBrowserAdapter(ex.Browser())
 	cursorHistoryCloser, err := idecursor.WithHistory(
 		ex.Editor(), h.ideStorage, apibrowser, apibrowser, ex.workspace,

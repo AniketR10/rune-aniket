@@ -39,11 +39,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/handlertest"
 )
 
 func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := testDefaultConfig()
 	cfg.ShowManualAfter = 0
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.FrameCharSet = component.FrameCharSetDefault()
@@ -165,7 +166,7 @@ car.                `},
 func TestCommandHandlerPreview(t *testing.T) {
 	t.Run("esc at the end", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
-		cfg := DefaultConfig()
+		cfg := testDefaultConfig()
 		cfg.ShowManualAfter = 1 * time.Hour
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
@@ -267,7 +268,7 @@ arg2
 
 	t.Run("dispatch at the end", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
-		cfg := DefaultConfig()
+		cfg := testDefaultConfig()
 		cfg.ShowManualAfter = 1 * time.Hour
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
@@ -336,7 +337,7 @@ kotomichi
 
 	t.Run("preview returns manual", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
-		cfg := DefaultConfig()
+		cfg := testDefaultConfig()
 		cfg.ShowManualAfter = 0
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
@@ -451,7 +452,7 @@ YAY [arg2]          `},
 
 func TestCommandHandlerDispatch(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
-	cfg := DefaultConfig()
+	cfg := testDefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
@@ -573,8 +574,231 @@ func TestCommandHandlerDispatch(t *testing.T) {
 	}
 }
 
+func TestCommandHandlerEditMode(t *testing.T) {
+	feedKeys := func(t *testing.T, h interface {
+		Handle(term.Event) (bool, bool)
+	}, seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			h.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+		}
+	}
+
+	// stubEditor returns an Editor that produces a minimal tui.Handler
+	// appending typed runes to the end of the buffer. It also records
+	// every event it receives so tests can assert that the prompt is
+	// correctly delegating input.
+	stubEditor := func(seen *[]term.Event) Editor {
+		return stubEditorImpl{seen: seen}
+	}
+
+	t.Run("edits buffer and replays through handler on exit", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+		cfg.Editor = stubEditor(nil)
+
+		var dispatched [][]string
+		dispatchFn := func(cmd string, args ...string) bool {
+			out := append([]string{cmd}, args...)
+			dispatched = append(dispatched, out)
+			return true
+		}
+
+		var completeCalls int
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			completeCalls++
+			return iterator.FromSlice([]string{"myArg"}), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori", "lorelai"})
+		interrupter := term.NopInterrupter()
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			interrupter, cmds, cfg,
+		)
+		defer b.Close()
+
+		h := testCommandHandler{b}
+
+		// Type "rori myArg " into the prompt (auto-complete via tab),
+		// then enter edit mode, append a literal "X" and dispatch.
+		feedKeys(t, h, "rori<space>my<tab><shift-esc>X<enter>")
+
+		require.Equal(t, [][]string{{"rori", "myArg", "X"}}, dispatched)
+		assert.Greater(t, completeCalls, 0)
+	})
+
+	t.Run("delegates events to edit handler and freezes completion", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+		var seen []term.Event
+		cfg.Editor = stubEditor(&seen)
+
+		dispatchFn := func(cmd string, args ...string) bool {
+			return true
+		}
+
+		var completeCalls int
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			completeCalls++
+			return iterator.FromSlice[string](nil), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori", "lorelai"})
+		interrupter := term.NopInterrupter()
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			interrupter, cmds, cfg,
+		)
+		defer b.Close()
+
+		h := testCommandHandler{b}
+
+		// Prime with "rori " so completer runs at least once.
+		feedKeys(t, h, "rori<space>")
+
+		baseline := completeCalls
+
+		// In edit mode every event is forwarded to the spawned
+		// handler and completions stay frozen.
+		feedKeys(t, h, "<shift-esc>abc<left><backspace>")
+
+		assert.Equal(t, baseline, completeCalls,
+			"completer must not be called while in edit mode")
+
+		// The stub editor appends every printable rune, ignores arrow
+		// keys (they are still forwarded), and removes the last rune
+		// on backspace. Starting from "rori ":
+		//   abc          -> "rori abc"
+		//   <left>       -> (no-op; recorded)
+		//   <backspace>  -> "rori ab"
+		assert.Equal(t, "rori ab", b.buf.String())
+		// the edit handler must have received every key after entering
+		// edit mode (a, b, c, left, backspace) — five events.
+		assert.Len(t, seen, 5)
+	})
+
+	t.Run("panics when Editor is nil", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.Editor = nil
+
+		dispatchFn := func(cmd string, args ...string) bool { return true }
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+		assert.Panics(t, func() {
+			_ = NewPrompt(
+				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+				term.NopInterrupter(), nil, cfg,
+			)
+		})
+	})
+
+	t.Run("places editor cursor at end of buffer on entry", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+
+		// Capture the spawned handler so we can inspect its cursor.
+		var captured *stubEditHandler
+		cfg.Editor = capturingEditor{captured: &captured}
+
+		dispatchFn := func(cmd string, args ...string) bool { return true }
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori"})
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			term.NopInterrupter(), cmds, cfg,
+		)
+		defer b.Close()
+
+		feedKeys(t, testCommandHandler{b}, "rori<space>my<shift-esc>")
+		require.NotNil(t, captured)
+		// "rori my" -> 7 columns; cursor must land just after the y.
+		assert.Equal(t, 7, captured.cursorX)
+	})
+
+	t.Run("ctrl-c exits edit mode without forwarding to editor", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+		var seen []term.Event
+		cfg.Editor = stubEditor(&seen)
+
+		dispatchFn := func(cmd string, args ...string) bool { return true }
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori"})
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			term.NopInterrupter(), cmds, cfg,
+		)
+		defer b.Close()
+
+		h := testCommandHandler{b}
+		feedKeys(t, h, "rori<shift-esc>X<ctrl-c>")
+		// editor must have received only "X" — ctrl-c is consumed
+		// upstream and the prompt drops back to command mode.
+		require.Len(t, seen, 1)
+		assert.Equal(t, 'X', seen[0].Ch)
+
+		// after ctrl-c we are back in command mode; further keys
+		// flow through the regular handler again.
+		feedKeys(t, h, "Y")
+		assert.Len(t, seen, 1, "no further events after ctrl-c")
+		assert.Equal(t, "roriXY", b.buf.String())
+	})
+
+	t.Run("tab exits edit mode without forwarding to editor", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+		var seen []term.Event
+		cfg.Editor = stubEditor(&seen)
+
+		dispatchFn := func(cmd string, args ...string) bool { return true }
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori"})
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			term.NopInterrupter(), cmds, cfg,
+		)
+		defer b.Close()
+
+		feedKeys(t, testCommandHandler{b}, "rori<shift-esc>X<tab>")
+		// editor must have received only "X" — tab is consumed
+		// upstream so the editor never sees it (it would otherwise
+		// insert a tab character or move into completion).
+		require.Len(t, seen, 1)
+		assert.Equal(t, 'X', seen[0].Ch)
+	})
+}
+
 func TestCommandHandlerDraw(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := testDefaultConfig()
 	cfg.ShowManualAfter = 1 * time.Hour
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
@@ -1143,7 +1367,7 @@ func TestCommandHandlerCancel(t *testing.T) {
 
 		b := NewPrompt(
 			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
-			term.NopInterrupter(), nil, DefaultConfig(),
+			term.NopInterrupter(), nil, testDefaultConfig(),
 		)
 
 		// Type in the command to stimulate the `neverEndingComplete` completion iterator
@@ -1182,7 +1406,7 @@ func TestCommandHandlerHideProgressHint(t *testing.T) {
 	completeFn, cleanupComplete := neverEndingComplete()
 	defer cleanupComplete(t)
 
-	cfg := DefaultConfig()
+	cfg := testDefaultConfig()
 	cfg.ShowProgressHint = false
 	b := NewPrompt(
 		storagestub.NewInMemoryService(),
@@ -1239,7 +1463,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 			FuncDispatcher(dispatchFn),
 			term.NopInterrupter(),
 			nil,
-			DefaultConfig(),
+			testDefaultConfig(),
 		)
 		defer b.Close()
 
@@ -1323,7 +1547,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 			FuncDispatcher(dispatchFn),
 			term.NopInterrupter(),
 			nil,
-			DefaultConfig(),
+			testDefaultConfig(),
 		)
 		defer b.Close()
 
@@ -1381,7 +1605,7 @@ func TestCommandHandlerHistory(t *testing.T) {
 }
 
 func TestCommandHandlerResetHistory(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := testDefaultConfig()
 	cfg.HistoryCycleKey = term.KeyComb{Ch: ':'}
 	cfg.Sync = true
 
@@ -1449,7 +1673,7 @@ func TestCommandHandlerResetHistory(t *testing.T) {
 func TestCommandHandlerHistoryToggleKey(t *testing.T) {
 	toggleKey := term.KeyComb{Mod: term.ModMeta, Ch: 'r'}
 
-	cfg := DefaultConfig()
+	cfg := testDefaultConfig()
 	cfg.HistoryCycleKey = term.KeyComb{Ch: ':'}
 	cfg.HistoryToggleKey = toggleKey
 	cfg.Sync = true
@@ -1524,11 +1748,93 @@ type testCommandHandler struct {
 	*Prompt
 }
 
+// testDefaultConfig returns a Config suitable for prompt tests that
+// don't otherwise care about edit mode: it wires a no-op stub Editor
+// so NewPrompt's required-Editor invariant is satisfied.
+func testDefaultConfig() Config {
+	cfg := DefaultConfig()
+	cfg.Editor = stubEditorImpl{}
+	return cfg
+}
+
 func (t testCommandHandler) Handle(ev term.Event) (bool, bool) {
 	t.Wait()
 	quit, handled := t.Prompt.Handle(ev)
 	t.Wait()
 	return quit, handled
+}
+
+// stubEditorImpl is a minimal command.Editor used to verify that the
+// command Prompt correctly delegates events while in modal edit mode.
+type stubEditorImpl struct {
+	seen *[]term.Event
+}
+
+func (e stubEditorImpl) Edit(buf *cell.Buffer) EditHandler {
+	return &stubEditHandler{buf: buf, seen: e.seen}
+}
+
+// stubEditHandler is the tui.Handler returned by stubEditorImpl. It
+// appends typed runes to the end of buf and removes the last rune on
+// backspace; everything else is recorded but otherwise ignored.
+type stubEditHandler struct {
+	buf  *cell.Buffer
+	seen *[]term.Event
+	// cursor X within the buffer; updated by SetCursorAtScroll and
+	// recorded by tests asserting that the prompt restores the
+	// command-mode cursor on entry.
+	cursorX int
+}
+
+func (s *stubEditHandler) Resize(width, height int) {}
+func (s *stubEditHandler) Draw(term.Writer)         {}
+func (s *stubEditHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{X: s.cursorX}, term.CursorStyleBlinkingBlock, true
+}
+func (s *stubEditHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+	s.cursorX = pos.X
+	return true
+}
+func (s *stubEditHandler) Selection() (string, bool) { return "", false }
+func (s *stubEditHandler) Handle(ev term.Event) (bool, bool) {
+	if s.seen != nil {
+		*s.seen = append(*s.seen, ev)
+	}
+	if ev.Type != term.EventKey {
+		return false, true
+	}
+	switch ev.Key {
+	case term.KeyBackspace:
+		cols := s.buf.Columns(0)
+		if cols > 0 {
+			s.buf.DeleteCell(term.Coordinates{X: cols - 1})
+		}
+		return false, true
+	case term.KeySpace:
+		s.buf.WriteString(" ")
+		return false, true
+	}
+	if ev.Ch != 0 {
+		s.buf.WriteString(string(ev.Ch))
+	}
+	return false, true
+}
+
+var _ EditHandler = (*stubEditHandler)(nil)
+
+// capturingEditor is a command.Editor that records the most recently
+// returned stubEditHandler so tests can assert on its observed state
+// (cursor position, etc.).
+type capturingEditor struct {
+	captured **stubEditHandler
+}
+
+func (c capturingEditor) Edit(buf *cell.Buffer) EditHandler {
+	h := &stubEditHandler{buf: buf}
+	if c.captured != nil {
+		*c.captured = h
+	}
+	return h
 }
 
 var (
