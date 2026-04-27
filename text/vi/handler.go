@@ -121,6 +121,7 @@ type viHandlerImpl struct {
 	caseChangeRepeat   rune
 	commentFn          func() bool
 	commentRepeat      rune
+	pendingSearchOp    *searchOpState
 	shiftFn            func()
 	shiftRepeat        rune
 	blockRepeat        struct {
@@ -317,6 +318,7 @@ func (vi *viHandlerImpl) setNormalMode() bool {
 	vi.pendingPlayback = false
 	vi.pendingGoMotion = false
 	vi.textObjectPending = false
+	vi.pendingSearchOp = nil
 	return true
 }
 
@@ -2124,6 +2126,14 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 		case 'a':
 			vi.setTextObjectPending(true)
 			return false, true
+		case '/':
+			vi.beginYankSearchOp(moveToNext)
+			vi.less.Handle(ev)
+			return false, true
+		case '?':
+			vi.beginYankSearchOp(moveToPrev)
+			vi.less.Handle(ev)
+			return false, true
 		}
 	}
 
@@ -2245,6 +2255,14 @@ func (vi *viHandlerImpl) handleShift(ev term.Event) (quit, handled bool) {
 		case 'a':
 			vi.setTextObjectPending(true)
 			return false, true
+		case '/':
+			vi.beginShiftSearchOp(moveToNext)
+			vi.less.Handle(ev)
+			return false, true
+		case '?':
+			vi.beginShiftSearchOp(moveToPrev)
+			vi.less.Handle(ev)
+			return false, true
 		}
 	}
 
@@ -2351,6 +2369,14 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 			return false, true
 		case 'a':
 			vi.setTextObjectPending(true)
+			return false, true
+		case '/':
+			vi.beginCaseChangeSearchOp(moveToNext)
+			vi.less.Handle(ev)
+			return false, true
+		case '?':
+			vi.beginCaseChangeSearchOp(moveToPrev)
+			vi.less.Handle(ev)
 			return false, true
 		}
 	}
@@ -2487,6 +2513,14 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 		case 'a':
 			vi.setTextObjectPending(true)
 			return false, true
+		case '/':
+			vi.beginCommentSearchOp(moveToNext)
+			vi.less.Handle(ev)
+			return false, true
+		case '?':
+			vi.beginCommentSearchOp(moveToPrev)
+			vi.less.Handle(ev)
+			return false, true
 		}
 	}
 
@@ -2500,6 +2534,177 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 	vi.cursor.Unselect()
 	vi.setNormalMode()
 	return
+}
+
+// searchOpState holds the operator-pending state while a `/` or `?`
+// motion is being entered. It is constructed by beginSearchOp and
+// consumed by handleSearchOp once the user submits or cancels the
+// search. Each operator (gq, d, y, c, >, <, gu, gU, g~) builds its
+// own apply closure for what to do with the resolved range.
+type searchOpState struct {
+	from      term.Coordinates // cursor position when `/` or `?` was pressed
+	direction moveMode         // moveToNext or moveToPrev
+	linewise  bool             // when true the range is extended to whole lines
+	apply     func()           // run on the materialized selection
+	finish    func()           // mode transition after apply (e.g. setNormalMode)
+}
+
+// beginSearchOp captures the current cursor and arms the search-pending
+// state for an operator. The caller must follow up by forwarding the
+// triggering event (`/` or `?`) to vi.less so the search bar is shown.
+func (vi *viHandlerImpl) beginSearchOp(direction moveMode, linewise bool, apply, finish func()) {
+	vi.pendingSearchOp = &searchOpState{
+		from:      vi.cursorAtScroll(),
+		direction: direction,
+		linewise:  linewise,
+		apply:     apply,
+		finish:    finish,
+	}
+	vi.searchMode = direction
+}
+
+// beginCommentSearchOp arms the search-pending state for the gq operator.
+// gq is linewise: the resolved range is extended to whole lines before
+// the formatter runs.
+func (vi *viHandlerImpl) beginCommentSearchOp(direction moveMode) {
+	commentFn := vi.commentFn
+	vi.beginSearchOp(direction, true,
+		func() { commentFn() },
+		func() { vi.cursor.Unselect(); vi.setNormalMode() },
+	)
+}
+
+// beginYankSearchOp arms the search-pending state for the y operator.
+// Yank with `/` or `?` is charwise.
+func (vi *viHandlerImpl) beginYankSearchOp(direction moveMode) {
+	vi.beginSearchOp(direction, false,
+		vi.copySelection,
+		func() { vi.setNormalMode() },
+	)
+}
+
+// beginDeleteSearchOp arms the search-pending state for the d/c
+// operators. The motion is charwise. When the operator was invoked as
+// `c` (deleteInsert), the cursor enters insert mode after the deletion.
+func (vi *viHandlerImpl) beginDeleteSearchOp(direction moveMode) {
+	deleteInsert := vi.deleteInsert
+	vi.beginSearchOp(direction, false,
+		func() {
+			vi.copySelectionForDelete()
+			vi.cursor.DeleteSelection()
+		},
+		func() {
+			if deleteInsert {
+				vi.setInsertMode()
+			} else {
+				vi.setNormalMode()
+			}
+		},
+	)
+}
+
+// beginShiftSearchOp arms the search-pending state for the >/< shift
+// operators. Shift is linewise.
+func (vi *viHandlerImpl) beginShiftSearchOp(direction moveMode) {
+	shiftFn := vi.shiftFn
+	vi.beginSearchOp(direction, true,
+		func() { shiftFn() },
+		func() { vi.setNormalMode() },
+	)
+}
+
+// beginCaseChangeSearchOp arms the search-pending state for the gu/gU/g~
+// operators. The motion is charwise.
+func (vi *viHandlerImpl) beginCaseChangeSearchOp(direction moveMode) {
+	caseChangeFn := vi.caseChangeFn
+	vi.beginSearchOp(direction, false,
+		func() { caseChangeFn() },
+		func() { vi.setNormalMode() },
+	)
+}
+
+// handleSearchOp routes events while an operator is waiting for the
+// user to finish typing a `/` or `?` pattern. Typing and editing keys
+// are forwarded to vi.less, Enter resolves the search and runs the
+// operator, Esc cancels.
+func (vi *viHandlerImpl) handleSearchOp(ev term.Event) (quit, handled bool) {
+	if ev.Mod == 0 {
+		switch ev.Key {
+		case term.KeyEnter:
+			vi.completeSearchOp()
+			return false, true
+		case term.KeyEsc:
+			vi.cancelSearchOp()
+			return false, true
+		}
+	}
+	return vi.less.Handle(ev)
+}
+
+// completeSearchOp resolves the typed pattern, materializes the motion
+// range as a selection, runs the operator's apply/finish closures, and
+// clears the pending state. On empty pattern, no match, or zero-width
+// range it cancels cleanly without mutating the buffer.
+func (vi *viHandlerImpl) completeSearchOp() {
+	op := vi.pendingSearchOp
+	text := vi.less.SearchText()
+	vi.less.SetNormalMode()
+	if text == "" {
+		vi.less.SetMessage("")
+		vi.cancelSearchOp()
+		return
+	}
+	vi.less.SetMessage("searching '%s'", text)
+	before := op.from
+	vi.search(text)
+	if err := vi.writeRegister('/', clipboard.Data{Text: text}); err != nil {
+		vi.logError(err)
+	}
+	after := vi.cursorAtScroll()
+	if before == after {
+		vi.cancelSearchOp()
+		return
+	}
+
+	from, to := before, after
+	if to.Y < from.Y || (to.Y == from.Y && to.X < from.X) {
+		from, to = to, from
+	}
+	if op.linewise {
+		// Linewise operators (gq, >, <) extend the range to whole lines.
+		// Search motions are exclusive: a match landing at column 0
+		// excludes the match line from the linewise range.
+		if after.X == 0 && after != before {
+			if after.Y > before.Y {
+				to.Y--
+			} else {
+				from.Y++
+			}
+			if to.Y < from.Y {
+				vi.cancelSearchOp()
+				return
+			}
+		}
+		from = term.Coordinates{Y: from.Y}
+		to = term.Coordinates{Y: to.Y, X: vi.less.Buffer().Columns(to.Y)}
+	}
+
+	if !vi.cursor.SelectRange(from, to) {
+		vi.cancelSearchOp()
+		return
+	}
+	op.apply()
+	vi.pendingSearchOp = nil
+	op.finish()
+}
+
+// cancelSearchOp clears the search-operator state and returns to
+// normal mode without mutating the buffer.
+func (vi *viHandlerImpl) cancelSearchOp() {
+	vi.less.SetNormalMode()
+	vi.pendingSearchOp = nil
+	vi.cursor.Unselect()
+	vi.setNormalMode()
 }
 
 func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
@@ -2642,6 +2847,14 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 		case 'a':
 			vi.setTextObjectPending(true)
 			return false, true
+		case '/':
+			vi.beginDeleteSearchOp(moveToNext)
+			vi.less.Handle(ev)
+			return false, true
+		case '?':
+			vi.beginDeleteSearchOp(moveToPrev)
+			vi.less.Handle(ev)
+			return false, true
 		}
 	}
 
@@ -2783,6 +2996,13 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 			vi.pasteBuf.WriteRune(ev.Ch)
 		}
 		handled = true
+		return
+	}
+
+	if vi.pendingSearchOp != nil {
+		mode := vi.mode()
+		defer vi.doneHandle(mode)
+		quit, handled = vi.handleSearchOp(ev)
 		return
 	}
 

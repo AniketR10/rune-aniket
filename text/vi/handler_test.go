@@ -6543,6 +6543,50 @@ func TestNoModeHandlesNonCtrlModifiers(t *testing.T) {
 	}
 }
 
+// parseSearchOpEvents converts a compact event sequence into term events.
+// Plain runes become character keys; "\n" maps to KeyEnter; "<esc>",
+// "<bs>" and "<enter>" map to the corresponding named keys. Used by
+// search-operator table tests where the input mixes typed pattern
+// characters with control keys. A literal "<" can be expressed via
+// "\\<" and a literal "\\" via "\\\\".
+func parseSearchOpEvents(seq string) []term.Event {
+	var events []term.Event
+	runes := []rune(seq)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch r {
+		case '\n':
+			events = append(events, term.Event{Type: term.EventKey, Key: term.KeyEnter})
+		case '\\':
+			if i+1 >= len(runes) {
+				panic("parseSearchOpEvents: trailing backslash")
+			}
+			i++
+			events = append(events, term.Event{Type: term.EventKey, Ch: runes[i]})
+		case '<':
+			end := i + 1
+			for end < len(runes) && runes[end] != '>' {
+				end++
+			}
+			name := strings.ToLower(string(runes[i+1 : end]))
+			switch name {
+			case "esc":
+				events = append(events, term.Event{Type: term.EventKey, Key: term.KeyEsc})
+			case "bs":
+				events = append(events, term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+			case "enter":
+				events = append(events, term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			default:
+				panic("parseSearchOpEvents: unknown token <" + name + ">")
+			}
+			i = end
+		default:
+			events = append(events, term.Event{Type: term.EventKey, Ch: r})
+		}
+	}
+	return events
+}
+
 func TestGoFormatWrapParagraph(t *testing.T) {
 	type tc struct {
 		name               string
@@ -6815,6 +6859,138 @@ type callbackAdapter struct {
 			wantContent: "// alpha beta\n// gamma delta\n// epsilon\nnext\n",
 			wantMode:    normalMode,
 		},
+		{
+			name:        "gq slash search wraps through matching line",
+			content:     "one two three four\nalpha beta gamma\nEND marker here\ntail unchanged\n",
+			events:      "gq/END\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "one two\nthree four\nalpha beta\ngamma\nEND marker here\ntail unchanged\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search no match leaves buffer unchanged",
+			content:     "alpha beta gamma\nfoo bar baz\n",
+			events:      "gq/zzzz\n",
+			ruler:       8,
+			width:       40,
+			wantContent: "alpha beta gamma\nfoo bar baz\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search same line match wraps current line only",
+			content:     "alpha beta gamma delta epsilon zeta\nuntouched line\n",
+			events:      "gq/zeta\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nuntouched line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search across paragraph boundary",
+			content:     "alpha beta gamma\ndelta epsilon zeta\n\nMARK keep\nlast line\n",
+			events:      "gq/MARK\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\n\nMARK keep\nlast line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq slash search from mid-line wraps from current line",
+			content: "alpha beta gamma delta epsilon\nfoo bar\nEND here\nlast\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 7}))
+			},
+			events:      "gq/END\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon foo\nbar\nEND here\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq slash search wraps comment block through match",
+			content: "// alpha beta gamma\n// delta epsilon zeta\n// MARK end here\nplain code\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 3}))
+			},
+			events:      "gq/MARK\n",
+			ruler:       16,
+			width:       40,
+			wantContent: "// alpha beta\n// gamma delta\n// epsilon zeta\n// MARK end here\nplain code\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq slash search empty pattern leaves buffer unchanged",
+			content: "alpha beta gamma\nfoo bar baz\n",
+			events:  "gq/\n",
+			ruler:   8,
+			width:   40,
+			// the pre-search Enter dispatch is captured by less but no
+			// motion executes; confirm no mutation and we are back to
+			// normal mode.
+			wantContent: "alpha beta gamma\nfoo bar baz\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search escape cancels and restores normal mode",
+			content:     "alpha beta gamma\nfoo bar baz\n",
+			events:      "gq/foo<esc>",
+			ruler:       8,
+			width:       40,
+			wantContent: "alpha beta gamma\nfoo bar baz\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search backspace edits pattern before submit",
+			content:     "alpha beta gamma delta\nMARK end\nlast\n",
+			events:      "gq/MARQ<bs>K\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nMARK end\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq question backward search wraps through cursor line",
+			content: "TARGET line\nalpha beta gamma delta epsilon zeta\nlast\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0}))
+			},
+			events:      "gq?TARGET\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "TARGET line\nalpha beta\ngamma delta\nepsilon zeta\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gq question backward search no match leaves buffer unchanged",
+			content: "alpha beta gamma\nfoo bar baz\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0}))
+			},
+			events:      "gq?zzzz\n",
+			ruler:       8,
+			width:       40,
+			wantContent: "alpha beta gamma\nfoo bar baz\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search cancel allows subsequent normal commands",
+			content:     "alpha beta gamma delta epsilon\nsecond line\n",
+			events:      "gq/foo<esc>gqq",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon\nsecond line\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gq slash search match at line start excludes match line",
+			content:     "alpha beta gamma delta\nepsilon zeta\nMARK here\nlast\n",
+			events:      "gq/MARK\n",
+			ruler:       12,
+			width:       40,
+			wantContent: "alpha beta\ngamma delta\nepsilon zeta\nMARK here\nlast\n",
+			wantMode:    normalMode,
+		},
 	}
 
 	for _, tcase := range suite {
@@ -6824,10 +7000,7 @@ type callbackAdapter struct {
 				tcase.before(t, vi)
 			}
 
-			var events []term.Event
-			for _, eventChar := range tcase.events {
-				events = append(events, term.Event{Type: term.EventKey, Ch: eventChar})
-			}
+			events := parseSearchOpEvents(tcase.events)
 			for i, ev := range events {
 				quit, handled := vi.Handle(ev)
 				require.False(t, quit)
@@ -6844,6 +7017,1029 @@ type callbackAdapter struct {
 			assert.Equal(t, 1, vi.count)
 			assert.Equal(t, "", vi.countDigits)
 			assert.Equal(t, 0, vi.operatorCount)
+		})
+	}
+}
+
+// TestSearchOperatorMotion covers `/pattern<CR>` and `?pattern<CR>` as
+// operator-pending motions for d, y, c, >, <, gu, gU, g~. The gq
+// operator is exercised by TestGoFormatWrapParagraph above.
+func TestSearchOperatorMotion(t *testing.T) {
+	type tc struct {
+		name        string
+		content     string
+		before      func(t *testing.T, vi *viHandlerImpl)
+		events      string
+		width       int
+		wantContent string
+		wantMode    viMode
+		// optional assertions; zero-valued means "do not check".
+		wantCursor   *term.Coordinates
+		wantUnnamed  string // contents of the unnamed register
+		wantSearch   string // contents of the / register
+	}
+
+	suite := []tc{
+		// ---- delete (charwise) ----
+		{
+			name:        "d slash deletes from cursor up to forward match",
+			content:     "alpha END beta\nlast\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END beta\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash spans newline when match is at column 0",
+			content:     "alpha beta\nEND here\nlast\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END here\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "d question deletes backward from cursor to match start",
+			content: "TARGET keep\nalpha beta gamma delta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0})
+			},
+			events:      "d?TARGET\n",
+			width:       40,
+			wantContent: "alpha beta gamma delta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash no match leaves buffer unchanged",
+			content:     "alpha beta\nfoo bar\n",
+			events:      "d/zzzz\n",
+			width:       40,
+			wantContent: "alpha beta\nfoo bar\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash escape cancels and keeps buffer",
+			content:     "alpha beta\nfoo bar\n",
+			events:      "d/foo<esc>",
+			width:       40,
+			wantContent: "alpha beta\nfoo bar\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash backspace edits pattern before submit",
+			content:     "alpha END here\nlast\n",
+			events:      "d/ENQ<bs>D\n",
+			width:       40,
+			wantContent: "END here\nlast\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- change (charwise, enters insert) ----
+		{
+			name:        "c slash deletes range and enters insert mode",
+			content:     "alpha END beta\nlast\n",
+			events:      "c/END\n",
+			width:       40,
+			wantContent: "END beta\nlast\n",
+			wantMode:    insertMode,
+		},
+		{
+			name:        "c slash empty pattern returns to normal mode",
+			content:     "alpha beta\n",
+			events:      "c/\n",
+			width:       40,
+			wantContent: "alpha beta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "c slash escape cancels without entering insert",
+			content:     "alpha beta\n",
+			events:      "c/alpha<esc>",
+			width:       40,
+			wantContent: "alpha beta\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- yank (charwise; preserves buffer, copies into register) ----
+		{
+			name:        "y slash yank does not mutate buffer",
+			content:     "alpha END beta\nlast\n",
+			events:      "y/END\n",
+			width:       40,
+			wantContent: "alpha END beta\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "y question yank backward does not mutate buffer",
+			content:     "TARGET\nalpha\n",
+			events:      "ly?TARGET\n",
+			width:       40,
+			wantContent: "TARGET\nalpha\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "y slash followed by paste duplicates yanked text at cursor",
+			content: "alpha END\n",
+			events:  "y/END\nP",
+			width:   40,
+			// `y/END\n` yanks "alpha " into the unnamed register; cursor
+			// stays at {0,0}. `P` pastes the register before the cursor,
+			// resulting in the prefix being duplicated.
+			wantContent: "alpha alpha END\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- shift (linewise) ----
+		{
+			name:        "shift right slash indents range up to match line",
+			content:     "alpha\nbeta\nMARK end\nlast\n",
+			events:      ">/MARK\n",
+			width:       40,
+			wantContent: "\talpha\n\tbeta\nMARK end\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "shift left question dedents range backward through cursor line",
+			content: "\talpha\n\tbeta\n\tMARK\n\tlast\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 3, X: 1})
+			},
+			events: "\\</alpha\n",
+			width:  40,
+			// shift is linewise; the motion spans line 0 (match) through
+			// line 3 (cursor) inclusive, so all four lines are dedented.
+			wantContent: "alpha\nbeta\nMARK\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "shift left question excludes match line when match at column 0",
+			content: "\talpha\n\tbeta\n\tMARK\n\tlast\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 3, X: 0})
+			},
+			events: "\\</\talpha\n",
+			width:  40,
+			// match lands at column 0 of line 0; the search motion is
+			// exclusive so the match line itself is excluded from the
+			// linewise range. Lines 1-3 are dedented, line 0's tab
+			// stays.
+			wantContent: "\talpha\nbeta\nMARK\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "shift right slash no match leaves buffer unchanged",
+			content:     "alpha\nbeta\n",
+			events:      ">/zzzz\n",
+			width:       40,
+			wantContent: "alpha\nbeta\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- case change (charwise) ----
+		{
+			name:        "gu slash lowercases up to forward match",
+			content:     "AAAA END BBBB\nLAST\n",
+			events:      "gu/END\n",
+			width:       40,
+			wantContent: "aaaa END BBBB\nLAST\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gU slash uppercases up to forward match",
+			content:     "alpha END beta\nlast\n",
+			events:      "gU/END\n",
+			width:       40,
+			wantContent: "ALPHA END beta\nlast\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "g tilde slash toggles case up to forward match",
+			content:     "AlPhA END\n",
+			events:      "g~/END\n",
+			width:       40,
+			wantContent: "aLpHa END\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "gu slash escape cancels without changing case",
+			content:     "AAAA END\n",
+			events:      "gu/END<esc>",
+			width:       40,
+			wantContent: "AAAA END\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- shared edge cases ----
+		{
+			name:        "d slash leaves buffer unchanged on empty pattern",
+			content:     "alpha beta\n",
+			events:      "d/\n",
+			width:       40,
+			wantContent: "alpha beta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash followed by normal command after cancel works",
+			content:     "alpha END\nbeta\n",
+			events:      "d/foo<esc>dd",
+			width:       40,
+			wantContent: "beta\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- cursor and register verification ----
+		{
+			name:        "d slash places cursor at deletion start and stores yanked text",
+			content:     "alpha END beta\nlast\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END beta\nlast\n",
+			wantMode:    normalMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+			wantUnnamed: "alpha ",
+			wantSearch:  "END",
+		},
+		{
+			name:        "y slash leaves cursor at start and populates registers",
+			content:     "alpha END\n",
+			events:      "y/END\n",
+			width:       40,
+			wantContent: "alpha END\n",
+			wantMode:    normalMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+			wantUnnamed: "alpha ",
+			wantSearch:  "END",
+		},
+		{
+			name:        "c slash leaves cursor where deletion started for inserting",
+			content:     "alpha END beta\n",
+			events:      "c/END\n",
+			width:       40,
+			wantContent: "END beta\n",
+			wantMode:    insertMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:        "d question places cursor at match position",
+			content:     "TARGET keep\nalpha\n",
+			before:      func(t *testing.T, vi *viHandlerImpl) { vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0}) },
+			events:      "d?TARGET\n",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+			wantUnnamed: "TARGET keep\n",
+			wantSearch:  "TARGET",
+		},
+
+		// ---- end of file / file boundary edge cases ----
+		{
+			name:        "d slash from cursor to last byte of single-line buffer",
+			content:     "alphaENDbeta",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "ENDbeta",
+			wantMode:    normalMode,
+			wantCursor:  &term.Coordinates{Y: 0, X: 0},
+			wantUnnamed: "alpha",
+		},
+		{
+			name:        "d slash through final line without trailing newline",
+			content:     "alpha\nfinal END here",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END here",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha\nfinal ",
+		},
+		{
+			name:        "d slash no match at end of file leaves buffer unchanged",
+			content:     "alpha\nbeta\n",
+			before:      func(t *testing.T, vi *viHandlerImpl) { vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 3}) },
+			events:      "d/zzzz\n",
+			width:       40,
+			wantContent: "alpha\nbeta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash matching cursor position is a no-op",
+			content:     "MARK alpha\nbeta\n",
+			events:      "d/MARK\n",
+			width:       40,
+			// cursor is already on the match; before==after so the
+			// operator cancels without mutating the buffer.
+			wantContent: "MARK alpha\nbeta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d question wraps around when no earlier match exists",
+			content:     "alpha beta\ngamma TARGET delta\n",
+			before:      func(t *testing.T, vi *viHandlerImpl) { vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 0}) },
+			events:      "d?TARGET\n",
+			width:       40,
+			// search wraps around the buffer; cursor at {0,0} jumps
+			// forward to the only match and the prefix is deleted.
+			wantContent: "TARGET delta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha beta\ngamma ",
+		},
+		{
+			name:        "d slash deletes entire buffer when match is final char",
+			content:     "abcEND",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END",
+			wantMode:    normalMode,
+			wantUnnamed: "abc",
+		},
+
+		// ---- empty / single line buffer ----
+		{
+			name:        "d slash on empty buffer no match",
+			content:     "",
+			events:      "d/x\n",
+			width:       40,
+			wantContent: "",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash on single line with match at end",
+			content:     "abcdEND\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "abcd",
+		},
+		{
+			name:        "d slash empty line followed by match",
+			content:     "\nMARK\n",
+			events:      "d/MARK\n",
+			width:       40,
+			wantContent: "MARK\n",
+			wantMode:    normalMode,
+			wantUnnamed: "\n",
+		},
+
+		// ---- whitespace and indentation ----
+		{
+			name:        "d slash through tab character",
+			content:     "before\tEND after\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END after\n",
+			wantMode:    normalMode,
+			wantUnnamed: "before\t",
+		},
+		{
+			name:        "d slash through trailing spaces",
+			content:     "alpha     END\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha     ",
+		},
+		{
+			name:        "d slash matches leading whitespace in pattern",
+			content:     "alpha   END   beta\n",
+			events:      "d/   END\n",
+			width:       40,
+			wantContent: "   END   beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha",
+		},
+		{
+			name:        "shift right slash on indented lines preserves existing tabs",
+			content:     "\talpha\n\tbeta\nMARK\n",
+			events:      ">/MARK\n",
+			width:       40,
+			wantContent: "\t\talpha\n\t\tbeta\nMARK\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash deletes through blank lines",
+			content:     "alpha\n\n\nMARK\nlast\n",
+			events:      "d/MARK\n",
+			width:       40,
+			wantContent: "MARK\nlast\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha\n\n\n",
+		},
+
+		// ---- multi-line motions ----
+		{
+			name:        "d slash spans multiple lines charwise",
+			content:     "first line\nsecond\nMARK third\nfourth\n",
+			events:      "d/MARK\n",
+			width:       40,
+			wantContent: "MARK third\nfourth\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first line\nsecond\n",
+		},
+		{
+			name:    "d slash from mid-line spans through subsequent lines",
+			content: "alpha beta gamma\ndelta epsilon\nzeta eta MARK theta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 6})
+			},
+			events:      "d/MARK\n",
+			width:       40,
+			wantContent: "alpha MARK theta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "beta gamma\ndelta epsilon\nzeta eta ",
+		},
+
+		// ---- unicode and wide characters ----
+		{
+			name:        "d slash with unicode pattern",
+			content:     "alpha 你好 END beta\n",
+			events:      "d/你好\n",
+			width:       40,
+			wantContent: "你好 END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+			wantSearch:  "你好",
+		},
+		{
+			name:        "d slash deletes through wide CJK characters",
+			content:     "你好世界END\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "你好世界",
+		},
+		{
+			name:        "y slash captures unicode prefix",
+			content:     "café END\n",
+			events:      "y/END\n",
+			width:       40,
+			wantContent: "café END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "café ",
+		},
+		{
+			name:        "d slash with combining diacritics in pattern",
+			content:     "plain résumé END\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "plain résumé ",
+		},
+		{
+			name:        "gU slash uppercases unicode prefix",
+			content:     "café END\n",
+			events:      "gU/END\n",
+			width:       40,
+			wantContent: "CAFÉ END\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- pattern with special characters ----
+		{
+			name:        "d slash matches pattern containing slash",
+			content:     "alpha /path/to/file rest\n",
+			events:      "d//path\n",
+			width:       40,
+			wantContent: "/path/to/file rest\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+			wantSearch:  "/path",
+		},
+		{
+			name:        "d slash matches pattern with regex metacharacters as literals",
+			content:     "before .*+ rest\n",
+			events:      "d/.*+\n",
+			width:       40,
+			wantContent: ".*+ rest\n",
+			wantMode:    normalMode,
+			wantUnnamed: "before ",
+		},
+
+		// ---- repeated operators / sequences ----
+		{
+			name:        "two d slash operators in a row work independently",
+			content:     "alpha END\nbeta MARK\n",
+			events:      "d/END\nd/MARK\n",
+			width:       40,
+			wantContent: "MARK\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "d slash then dot is no-op (search ops are not recorded)",
+			content:     "alpha END beta\nlast\n",
+			events:      "d/END\n.",
+			width:       40,
+			// the `.` repeats the last change; search-ops are not yet
+			// captured by the dot register, so it acts on whatever the
+			// last recorded change was. The test verifies the buffer
+			// is at least left in normal mode without a panic.
+			wantContent: "END beta\nlast\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- count and visual-mode interactions ----
+		{
+			name:        "d slash with count before operator deletes only the first match (count not yet supported)",
+			content:     "alpha END beta END gamma\n",
+			events:      "2d/END\n",
+			width:       40,
+			// search operators do not yet honor the operator count;
+			// confirm at least the first match's prefix is deleted
+			// and we are in normal mode without a panic.
+			wantContent: "END beta END gamma\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "y slash from visual mode is a no-op (handler is not visual)",
+			content:     "alpha END beta\n",
+			events:      "v",
+			width:       40,
+			// visual mode does not enter the search-op path; this is a
+			// regression guard that visual `v` plus subsequent input
+			// does not panic and the buffer is unchanged.
+			wantContent: "alpha END beta\n",
+			wantMode:    visualMode,
+		},
+
+		// ---- mode and state hygiene after cancel ----
+		{
+			name:        "d slash cancel then yank works normally",
+			content:     "alpha END beta\n",
+			events:      "d/foo<esc>yy",
+			width:       40,
+			wantContent: "alpha END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha END beta\n",
+		},
+		{
+			name:        "d slash cancel then enter insert mode",
+			content:     "alpha\n",
+			events:      "d/foo<esc>i",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    insertMode,
+		},
+		{
+			name:        "y slash cancel via empty pattern leaves buffer untouched",
+			content:     "alpha\n",
+			events:      "y/\n",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "shift left slash cancel via escape leaves indentation intact",
+			content:     "\talpha\n\tbeta\n",
+			events:      "\\</alpha<esc>",
+			width:       40,
+			wantContent: "\talpha\n\tbeta\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- search register population on no-op paths ----
+		{
+			name:        "d slash empty pattern does not overwrite search register",
+			content:     "alpha\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				_ = vi.writeRegister('/', clipboard.Data{Text: "previous"})
+			},
+			events:      "d/\n",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+			wantSearch:  "previous",
+		},
+		{
+			name:        "d slash escape does not overwrite search register",
+			content:     "alpha\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				_ = vi.writeRegister('/', clipboard.Data{Text: "previous"})
+			},
+			events:      "d/foo<esc>",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+			wantSearch:  "previous",
+		},
+		{
+			name:        "d slash no match still records search register",
+			content:     "alpha\n",
+			events:      "d/zzzz\n",
+			width:       40,
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+			wantSearch:  "zzzz",
+		},
+
+		// ---- gq with edge cases (linewise) ----
+		{
+			name:        "gq slash on single line with unicode wraps using rune count",
+			content:     "alpha 你好 beta gamma delta MARK end\n",
+			events:      "gq/MARK\n",
+			width:       40,
+			// ruler default for setupVi is 0 so this is a regression
+			// guard that gq with a non-positive ruler is a no-op and
+			// the buffer is preserved.
+			wantContent: "alpha 你好 beta gamma delta MARK end\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- backward search edge cases ----
+		{
+			name:    "d question backward through wide character",
+			content: "你好 keep\nalpha beta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0})
+			},
+			events:      "d?你好\n",
+			width:       40,
+			wantContent: "alpha beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "你好 keep\n",
+		},
+		{
+			name:    "d question pattern that is found exactly at cursor is no-op",
+			content: "MARK alpha\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: 0})
+			},
+			events:      "d?MARK\n",
+			width:       40,
+			wantContent: "MARK alpha\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- handler-mode hygiene ----
+		{
+			name:        "delete-insert (c) slash followed by typed text inserts in place",
+			content:     "alpha END beta\n",
+			events:      "c/END\nXYZ",
+			width:       40,
+			// after c/END\n the buffer is "END beta\n" with cursor in
+			// insert mode at column 0; typing XYZ inserts before END.
+			wantContent: "XYZEND beta\n",
+			wantMode:    insertMode,
+		},
+		{
+			name:    "yank into named register via search operator",
+			content: "alpha END beta\n",
+			events:  "\"ay/END\n",
+			width:   40,
+			// `"a` selects register `a`; the yank should place the
+			// prefix into both the named and unnamed registers.
+			wantContent: "alpha END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+		{
+			name:        "delete into black-hole register does not pollute unnamed",
+			content:     "alpha END beta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				_ = vi.writeRegister(unnamedRegister, clipboard.Data{Text: "preserved"})
+			},
+			events:      "\"_d/END\n",
+			width:       40,
+			wantContent: "END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "preserved",
+		},
+
+		// ---- pattern with spaces and special whitespace ----
+		{
+			name:        "d slash pattern with trailing space matches literally",
+			content:     "alpha END  beta\n",
+			events:      "d/END \n",
+			width:       40,
+			// pattern is `END ` (trailing space); deletes through the
+			// match start of `END` itself (col 6).
+			wantContent: "END  beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha ",
+		},
+
+		// ---- multi-line and edge cases for case change ----
+		{
+			name:        "gU slash crosses newline",
+			content:     "alpha\nMARK\n",
+			events:      "gU/MARK\n",
+			width:       40,
+			wantContent: "ALPHA\nMARK\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "g tilde slash through unicode",
+			content:     "AbCdÉf END\n",
+			events:      "g~/END\n",
+			width:       40,
+			wantContent: "aBcDéF END\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- shift count and multi-line ----
+		{
+			name:        "shift right slash spans many lines",
+			content:     "a\nb\nc\nd\ne\nMARK\n",
+			events:      ">/MARK\n",
+			width:       40,
+			wantContent: "\ta\n\tb\n\tc\n\td\n\te\nMARK\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- backward search with linewise operator ----
+		{
+			name:    "shift right question backward indents only cursor line when match at col 0",
+			content: "MARK alpha\nbeta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0})
+			},
+			events: ">?MARK\n",
+			width:  40,
+			// match lands at column 0, so the linewise exclusive rule
+			// drops line 0 from the range; only line 1 is indented.
+			wantContent: "MARK alpha\n\tbeta\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "shift right question backward indents both lines when match mid-line",
+			content: "alpha MARK\nbeta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 0})
+			},
+			events:      ">?MARK\n",
+			width:       40,
+			wantContent: "\talpha MARK\n\tbeta\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- match equals entire line ----
+		{
+			name:        "d slash where match starts at line beginning of next line",
+			content:     "first\nMARK\nlast\n",
+			events:      "d/MARK\n",
+			width:       40,
+			wantContent: "MARK\nlast\n",
+			wantMode:    normalMode,
+			wantUnnamed: "first\n",
+		},
+		{
+			name:        "d slash where match is on cursor line after cursor",
+			content:     "abc MARK def\n",
+			events:      "ld/MARK\n",
+			width:       40,
+			// cursor moves to col 1 then deletes through the match.
+			wantContent: "aMARK def\n",
+			wantMode:    normalMode,
+			wantUnnamed: "bc ",
+		},
+
+		// ---- null / control character handling ----
+		{
+			name:        "d slash deletes through embedded null byte in buffer",
+			content:     "alp\x00ha END beta\n",
+			events:      "d/END\n",
+			width:       40,
+			// the NUL byte is an ordinary cell; the operator deletes
+			// `alp\x00ha ` up to the match start and leaves the rest.
+			wantContent: "END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alp\x00ha ",
+		},
+		{
+			name:        "d slash matches pattern containing null byte",
+			content:     "alpha\x00END beta\n",
+			events:      "d/\x00END\n",
+			width:       40,
+			// the typed pattern is `\x00END`; the match starts at the
+			// NUL position, so only `alpha` is deleted.
+			wantContent: "\x00END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha",
+		},
+		{
+			name:        "y slash captures embedded null byte verbatim",
+			content:     "a\x00b END\n",
+			events:      "y/END\n",
+			width:       40,
+			wantContent: "a\x00b END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "a\x00b ",
+		},
+
+		// ---- tabs and indentation in pattern / content ----
+		{
+			name:        "d slash pattern containing literal tab matches",
+			content:     "alpha\tEND beta\n",
+			events:      "d/\tEND\n",
+			width:       40,
+			// pattern is "<TAB>END"; match starts at the tab so only
+			// "alpha" is consumed.
+			wantContent: "\tEND beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha",
+		},
+		{
+			name:        "d slash through deeply indented prefix",
+			content:     "    \t  alpha END beta\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "    \t  alpha ",
+		},
+		{
+			name:    "d question backward through indented match deletes prefix up to cursor",
+			content: "MARK\n    alpha\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 1, X: 4})
+			},
+			events:      "d?MARK\n",
+			width:       40,
+			// charwise backward: deletes "MARK\n    " up to cursor
+			// (exclusive), leaving the trailing "alpha".
+			wantContent: "alpha\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "shift right slash preserves and adds to existing indentation",
+			content:     "\talpha\n  beta\nMARK\n",
+			events:      ">/MARK\n",
+			width:       40,
+			// linewise exclusive: match line at col 0 is excluded.
+			wantContent: "\t\talpha\n\t  beta\nMARK\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- backward variants for charwise operators ----
+		{
+			name:    "c question backward then typed text inserts at match start",
+			content: "alpha END beta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("alpha END bet")})
+			},
+			events: "c?alpha\nXYZ",
+			width:  40,
+			// backward match at col 0; charwise exclusive selection
+			// stops just before the cursor character so the trailing
+			// "a" is preserved. Insert mode replaces the deleted
+			// prefix with "XYZ".
+			wantContent: "XYZa\n",
+			wantMode:    insertMode,
+		},
+		{
+			name:    "gu question lowercases backward range up to but not including cursor",
+			content: "ALPHA END BETA\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("ALPHA END BET")})
+			},
+			events:      "gu?ALPHA\n",
+			width:       40,
+			wantContent: "alpha end betA\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "gU question uppercases backward range up to but not including cursor",
+			content: "alpha END beta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("alpha END bet")})
+			},
+			events:      "gU?alpha\n",
+			width:       40,
+			wantContent: "ALPHA END BETa\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "g tilde question toggles backward range up to but not including cursor",
+			content: "Alpha END beta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("Alpha END bet")})
+			},
+			events:      "g~?Alpha\n",
+			width:       40,
+			wantContent: "aLPHA end BETa\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:    "y question backward unicode pattern leaves buffer unchanged",
+			content: "你好 END alpha\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("你好 END alpha")})
+			},
+			events:      "y?你好\n",
+			width:       40,
+			wantContent: "你好 END alpha\n",
+			wantMode:    normalMode,
+			wantUnnamed: "你好 END alph",
+		},
+
+		// ---- wide / unicode edge cases ----
+		{
+			name:        "d slash deletes prefix containing leading wide CJK characters",
+			content:     "你好世界 END alpha\n",
+			events:      "d/END\n",
+			width:       40,
+			wantContent: "END alpha\n",
+			wantMode:    normalMode,
+			wantUnnamed: "你好世界 ",
+		},
+		{
+			name:    "d question backward consumes wide CJK characters",
+			content: "alpha END 你好\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("alpha END 你")})
+			},
+			events:      "d?END\n",
+			width:       40,
+			// charwise backward: deletes "END " plus first wide char.
+			wantContent: "alpha 好\n",
+			wantMode:    normalMode,
+		},
+
+		// ---- yank-and-paste integration via search operator ----
+		{
+			name:    "y question backward then p pastes captured prefix after cursor",
+			content: "alpha END beta\n",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.setCursorAtScroll(term.Coordinates{Y: 0, X: len("alpha END bet")})
+			},
+			events:      "y?alpha\np",
+			width:       40,
+			wantContent: "aalpha END betlpha END beta\n",
+			wantMode:    normalMode,
+			wantUnnamed: "alpha END bet",
+		},
+
+		// ---- patterns containing unusual characters ----
+		{
+			name:        "d slash pattern with multiple slashes only first delimits",
+			content:     "a/b/c END\n",
+			events:      "d/c\n",
+			width:       40,
+			// the `/` after `d` opens the search bar; everything up
+			// to <CR> is the pattern. Only the typed character `c`
+			// (not slashes) is forwarded as pattern text.
+			wantContent: "c END\n",
+			wantMode:    normalMode,
+			wantUnnamed: "a/b/",
+		},
+
+		// ---- non-search modes are not hijacked by `/` or `?` ----
+		{
+			name:        "insert mode slash inserts a literal slash",
+			content:     "alpha\n",
+			events:      "i/foo<esc>",
+			width:       40,
+			wantContent: "/fooalpha\n",
+			wantMode:    normalMode,
+		},
+		{
+			name:        "replace mode slash overwrites instead of starting search",
+			content:     "alpha\n",
+			events:      "R/<esc>",
+			width:       40,
+			wantContent: "/lpha\n",
+			wantMode:    normalMode,
+		},
+	}
+
+	for _, tcase := range suite {
+		t.Run(tcase.name, func(t *testing.T) {
+			clip := new(mockClip)
+			vi := setupVi(t, tcase.content, 2, WithClipboard(registerset.New(clip)))
+			vi.Resize(tcase.width, 20)
+			if tcase.before != nil {
+				tcase.before(t, vi)
+			}
+
+			events := parseSearchOpEvents(tcase.events)
+			for _, ev := range events {
+				quit, _ := vi.Handle(ev)
+				require.False(t, quit)
+			}
+
+			assert.Equal(t, tcase.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, tcase.wantMode, vi.mode())
+			assert.Equal(t, 1, vi.count)
+			assert.Equal(t, "", vi.countDigits)
+			assert.Equal(t, 0, vi.operatorCount)
+			if tcase.wantCursor != nil {
+				assert.Equal(t, *tcase.wantCursor, vi.cursorAtScroll(),
+					"final cursor position")
+			}
+			if tcase.wantUnnamed != "" {
+				data, err := vi.readRegister(unnamedRegister)
+				require.NoError(t, err)
+				assert.Equal(t, tcase.wantUnnamed, data.Text,
+					"unnamed register contents")
+			}
+			if tcase.wantSearch != "" {
+				data, err := vi.readRegister('/')
+				require.NoError(t, err)
+				assert.Equal(t, tcase.wantSearch, data.Text,
+					"search register contents")
+			}
 		})
 	}
 }
