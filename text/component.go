@@ -87,6 +87,11 @@ type Component struct {
 	replSubscribers map[string]replCommandAll
 	editors         map[string]Handler
 	fileRegistry    FileCommandRegistry
+	// shParser is reused across regroupAndUnquote calls to avoid
+	// allocating a parser on every alias dispatch. Component
+	// dispatches are serialised by the caller's lock, so a single
+	// parser is safe here.
+	shParser *shsyntax.Parser
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -209,6 +214,7 @@ func (c *Component) Init(
 	c.cmdSubscribers = make(map[string]commandAll)
 	c.replSubscribers = make(map[string]replCommandAll)
 	c.editors = make(map[string]Handler)
+	c.shParser = shsyntax.NewParser()
 
 	// validate that config aliases are not recursive
 	return ValidateCommandAliases(c.config.CommandAliases)
@@ -601,7 +607,11 @@ func (c *Component) replacePositionalArgs(
 				break
 			}
 			old := cmd
-			cmd = strings.ReplaceAll(cmd, arg, dispatched.Args[replace])
+			// Shell-quote the substituted value so the recursive
+			// dispatch (which re-tokenises the alias target) preserves
+			// it as a single argument even when it contains whitespace
+			// or shell metacharacters.
+			cmd = strings.ReplaceAll(cmd, arg, shellQuote(dispatched.Args[replace]))
 			if old != cmd {
 				argsReplaced[replace] = struct{}{}
 			}
@@ -638,13 +648,6 @@ func (c *Component) DispatchCommand(
 			cmd.Args[i] = strings.ReplaceAll(arg, impossibleMark, "%")
 		}
 	}
-	// best effort attempt to group arguments in single/double quotes, etc.
-	args, err := regroupArgs(strings.Join(cmd.Args, " "))
-	if err != nil {
-		c.log(log.DebugLevel, "could not group command arguments: %v", err)
-		args = cmd.Args
-	}
-	cmd.Args = args
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
@@ -654,7 +657,15 @@ func (c *Component) DispatchCommand(
 		}
 		c.log(log.TraceLevel, "replaced positional args: %#v, cmd: %#v", targets, cmd)
 		for _, target := range targets.Commands {
-			argv := strings.Split(target, " ")
+			// Tokenise via shell rules + unquote so the recursive
+			// handler receives clean argument values. shellQuote was
+			// applied to substituted positional values to keep them
+			// grouped across this re-tokenisation step. Falls back
+			// to a naive split if the parser produces nothing.
+			argv := c.regroupAndUnquote(target)
+			if len(argv) == 0 {
+				argv = strings.Split(target, " ")
+			}
 			targetCmd := textapi.Command{
 				Name:     argv[0],
 				Args:     append(argv[1:], cmd.Args...),
@@ -1293,23 +1304,31 @@ func (c *Component) loadMarkdown(uri workspaceapi.URI) (browserapi.Handler, erro
 	return handler, nil
 }
 
-func regroupArgs(s string) ([]string, error) {
-	p := shsyntax.NewParser()
-	printer := shsyntax.NewPrinter()
-	var words []string
-	for w, err := range p.WordsSeq(strings.NewReader(s)) {
-		if err != nil {
-			return nil, err
-		}
-		var builder strings.Builder
-		for _, node := range w.Parts {
-			if err := printer.Print(&builder, node); err != nil {
-				return nil, err
-			}
-		}
-		words = append(words, builder.String())
+// shellQuote wraps s with POSIX shell quoting so that a downstream
+// consumer that re-tokenises via mvdan.cc/sh recovers it as a single
+// literal argument. Values that would survive re-tokenisation unchanged
+// are returned as-is. On the rare error case (e.g. embedded NUL) the
+// string is returned verbatim — handlers can still observe and reject
+// it downstream.
+func shellQuote(s string) string {
+	q, err := shsyntax.Quote(s, shsyntax.LangBash)
+	if err != nil {
+		return s
 	}
-	return words, nil
+	return q
+}
+
+// regroupAndUnquote parses s as a shell-style word list and returns each
+// word with its outer quoting/escaping stripped. Use this when handing
+// tokens that survived an alias-target round trip to a recursive
+// dispatcher whose subscribers expect clean argument values.
+func (c *Component) regroupAndUnquote(s string) []string {
+	tokens := command.SplitCommandLine(c.shParser, s)
+	out := make([]string, len(tokens))
+	for i, t := range tokens {
+		out[i] = command.UnquoteToken(c.shParser, t)
+	}
+	return out
 }
 
 var _ workspace.FlusherCloser = (*editorFlusherCloser)(nil)

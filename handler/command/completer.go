@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"mvdan.cc/sh/v3/shell"
+	shsyntax "mvdan.cc/sh/v3/syntax"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -111,6 +112,9 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 		}
 		return it, nil
 	}
+	// One parser per Completer instance: walkDirCompleter is invoked
+	// serially from setCompletionList, so a single parser is fine here.
+	parser := shsyntax.NewParser()
 	return FuncCompleter(func(
 		ctx context.Context, args []string,
 	) (iterator.Iterator[string], string, error) {
@@ -123,7 +127,7 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 		}
 
 		var modifiedLast string
-		last := args[len(args)-1]
+		last := UnquoteToken(parser, args[len(args)-1])
 
 		// take ~ as the home of the user using the editor.
 		// rather than the home directory of the user at the workspace.

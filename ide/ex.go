@@ -64,6 +64,8 @@ import (
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
+
+	shsyntax "mvdan.cc/sh/v3/syntax"
 )
 
 const (
@@ -1251,7 +1253,12 @@ func (e *ex) executePlugin(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return e.toggleCompanionTerminal()
 	}
-	h, err := e.newPluginHandler(args...)
+	// Args reach this handler already unquoted by the command prompt.
+	// The plugin handler stitches them back together into a command line
+	// that the VTE will re-tokenise via mvdan.cc/sh — so individual args
+	// containing whitespace or shell metacharacters must be re-quoted to
+	// survive that round trip as a single argument.
+	h, err := e.newPluginHandler(reshellQuoteArgs(args)...)
 	if err != nil {
 		return err
 	}
@@ -1284,7 +1291,9 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 	e.log(log.DebugLevel, "starting command %v", args)
 	cfg := e.emulatorConfig
 	cfg.Watcher = watcher
-	cfg.CommandAndArgs = args
+	// See executePlugin: re-quote so the VTE's shell.Fields call
+	// preserves argument boundaries that contain whitespace.
+	cfg.CommandAndArgs = reshellQuoteArgs(args)
 	// use set executor so we can inject plugin vars
 	v, err := vte.NewHandler(e.Browser(), e.Browser(),
 		e.workspace, e.executor, e.tm, cfg)
@@ -1341,6 +1350,26 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 
 	})
 	return nil
+}
+
+// reshellQuoteArgs re-applies POSIX-style shell quoting to args so that a
+// downstream consumer that re-joins them with spaces and re-runs a shell
+// tokenizer (mvdan.cc/sh's Fields) recovers the original argument
+// boundaries even when individual values contain whitespace or shell
+// metacharacters. Used by the plugin executor whose VTE pipeline does
+// exactly that round-trip.
+func reshellQuoteArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		// On the rare error case (e.g. embedded NUL) leave the value
+		// verbatim — the plugin executor surfaces such errors below.
+		q, err := shsyntax.Quote(a, shsyntax.LangBash)
+		if err != nil {
+			q = a
+		}
+		out[i] = q
+	}
+	return out
 }
 
 func (e *ex) keydump(_ context.Context, _ ...string) error {

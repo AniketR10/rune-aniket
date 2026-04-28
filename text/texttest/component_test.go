@@ -1336,7 +1336,7 @@ func TestDispatchCommand(t *testing.T) {
 				text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 					newWindowCalled++
 					assert.Equal(t, "newWindow", cmd.Name)
-					assert.Equal(t, []string{"wasup", "'arg2'", "$name", "$1"}, cmd.Args)
+					assert.Equal(t, []string{"wasup", "arg2", "$name", "$1"}, cmd.Args)
 					return nil
 				}, nil))
 
@@ -1380,7 +1380,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				newWindowCalled++
 				assert.Equal(t, "newWindow", cmd.Name)
-				assert.Equal(t, []string{"wasup", "'arg2'", "$name", "arg1"}, cmd.Args)
+				assert.Equal(t, []string{"wasup", "arg2", "$name", "arg1"}, cmd.Args)
 				return nil
 			}, nil))
 
@@ -1423,7 +1423,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				newWindowCalled++
 				assert.Equal(t, "newWindow", cmd.Name)
-				assert.Equal(t, []string{"wasup", "'arg2'", "$name", "$1"}, cmd.Args)
+				assert.Equal(t, []string{"wasup", "arg2", "$name", "$1"}, cmd.Args)
 				return nil
 			}, nil))
 

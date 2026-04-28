@@ -539,6 +539,15 @@ func TestCommandHandlerDispatch(t *testing.T) {
 		{"dispatch auto-complete with tab and enter regardless of whether user IS scrolling",
 			"lo#>", []string{"lane", "lorelai", "rori"},
 			completeWith("myArg"), expectDispatch("lorelai")},
+		{"dispatch backslash-escaped space stays in same arg",
+			`lo path\ with\ space>`, []string{"lane", "lorelai", "rori"},
+			nopComplete, expectDispatch("lorelai", "path with space")},
+		{"dispatch single-quoted arg stays in same arg",
+			"lo 'path with space'>", []string{"lane", "lorelai", "rori"},
+			nopComplete, expectDispatch("lorelai", "path with space")},
+		{"dispatch double-quoted arg stays in same arg",
+			`lo "path with space">`, []string{"lane", "lorelai", "rori"},
+			nopComplete, expectDispatch("lorelai", "path with space")},
 	}
 
 	for _, tcase := range tsuite {

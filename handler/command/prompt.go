@@ -49,6 +49,8 @@ import (
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/search"
+
+	shsyntax "mvdan.cc/sh/v3/syntax"
 )
 
 // NewPrompt allocates storage for a new Prompt and initializes it.
@@ -118,6 +120,45 @@ type Prompt struct {
 	completionCtx         context.Context // children of ctx
 	completionCancel      func()
 	completingWithHistory atomic.Bool
+
+	// shParser is reused across SplitCommandLine / UnquoteToken /
+	// lastTokenIsIncomplete calls so we don't re-allocate a parser on
+	// every keystroke. The parser is internally reset at the start of
+	// each Words call, so it is safe to reuse from the prompt's
+	// goroutine but must not be shared across goroutines.
+	shParser *shsyntax.Parser
+}
+
+// lastTokenIsIncomplete reports whether s ends inside an in-progress
+// backslash escape, single-quoted region, or double-quoted region —
+// i.e. whether the next typed space should stay inside the current
+// token instead of splitting arguments.
+//
+// The shell parser's IsIncomplete signal handles open quotes; a
+// trailing odd-length run of backslashes is detected separately because
+// the parser treats a dangling backslash as a literal byte.
+func (h *Prompt) lastTokenIsIncomplete(s string) bool {
+	if endsInOpenEscape(s) {
+		return true
+	}
+	var lastErr error
+	for _, err := range h.shParser.WordsSeq(strings.NewReader(s)) {
+		if err != nil {
+			lastErr = err
+			break
+		}
+	}
+	return lastErr != nil && shsyntax.IsIncomplete(lastErr)
+}
+
+// endsInOpenEscape returns true if s ends with an odd-length run of
+// trailing backslashes.
+func endsInOpenEscape(s string) bool {
+	count := 0
+	for i := len(s) - 1; i >= 0 && s[i] == '\\'; i-- {
+		count++
+	}
+	return count%2 == 1
 }
 
 var _ component.Floating = (*Prompt)(nil)
@@ -175,6 +216,7 @@ func (h *Prompt) doInit(
 	h.animation.C = newNopAnimation(config)
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 	h.resetManualTimeout = make(chan struct{})
+	h.shParser = shsyntax.NewParser()
 
 	h.buf.Init()
 	h.inputString.Store("")
@@ -360,12 +402,17 @@ func (h *Prompt) doDispatchPreviewArgument() (component.Responsive, []byte, func
 		return nil, nil, nil
 	}
 	cmdAndArgsStr := h.buf.String()
-	cmdAndArgs := strings.Split(cmdAndArgsStr, " ")
+	cmdAndArgs := SplitCommandLine(h.shParser, cmdAndArgsStr)
 	if len(cmdAndArgs) == 0 {
 		return nil, nil, nil
 	}
-	// last argument is the one we want to preview
-	cmdAndArgs = cmdAndArgs[:len(cmdAndArgs)-1]
+	// last argument is the one we want to preview. If the buffer ends in
+	// a separator space, the user has not started typing the new argument
+	// yet, so the focused match becomes a brand new trailing argument
+	// rather than replacing the previously typed one.
+	if !strings.HasSuffix(cmdAndArgsStr, " ") || h.lastTokenIsIncomplete(cmdAndArgsStr) {
+		cmdAndArgs = cmdAndArgs[:len(cmdAndArgs)-1]
+	}
 	previewArg := string(match.Data())
 	cmdAndArgs = append(cmdAndArgs, previewArg)
 
@@ -396,7 +443,15 @@ func (h *Prompt) dispatchCommand() (
 		commandAndArgsString = strings.Join(h.commandAndArgs, " ")
 
 		h.log(log.TraceLevel, "dispatching command and args %#v", h.commandAndArgs)
-		quit = h.dispatcher.Dispatch(h.commandAndArgs[0], h.commandAndArgs[1:]...)
+		// Strip shell-style quoting/escaping from each argument before
+		// handing them to the dispatcher so subscribers receive the
+		// unescaped literal value (e.g. ~/Unstable\ Build → ~/Unstable Build).
+		// The command itself is dispatched verbatim.
+		dispatchArgs := make([]string, len(h.commandAndArgs)-1)
+		for i, a := range h.commandAndArgs[1:] {
+			dispatchArgs[i] = UnquoteToken(h.shParser, a)
+		}
+		quit = h.dispatcher.Dispatch(h.commandAndArgs[0], dispatchArgs...)
 	} else {
 		match, _ := h.list.Focus()
 		// if no args, then it means that we are in command mode, in which case
@@ -630,14 +685,23 @@ func (h *Prompt) handleCommand(ev term.Event, sync bool) (quit, handled bool) {
 	}
 
 	handled = true
-	h.buf.WriteString(string(ev.Ch))
 	if ev.Ch == ' ' {
+		// check the buffer state before appending the incoming space —
+		// once written, a pending `\` would already have consumed it.
+		incomplete := h.lastTokenIsIncomplete(h.buf.String())
+		h.buf.WriteString(string(ev.Ch))
+		if incomplete {
+			// space belongs inside a quoted/escaped argument, not a separator.
+			h.list.Buffer().WriteString(string(ev.Ch))
+			return
+		}
 		// wait as commands are finite and muscle memory could beat
 		// the completing logic
 		h.Wait()
 		h.incArgsCompleteMode(!h.bracketedPaste, sync)
 		return
 	}
+	h.buf.WriteString(string(ev.Ch))
 	h.list.Buffer().WriteString(string(ev.Ch))
 	return
 }
@@ -686,14 +750,25 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 
 	h.cancelPreview()
 	handled = true
-	h.buf.WriteString(string(ev.Ch))
 	if ev.Ch == ' ' {
+		incomplete := h.lastTokenIsIncomplete(h.buf.String())
+		h.buf.WriteString(string(ev.Ch))
+		if incomplete {
+			// space belongs inside a quoted/escaped argument, not a separator.
+			isEmpty := h.list.Buffer().Size() == 0
+			h.list.Buffer().WriteString(string(ev.Ch))
+			if isEmpty {
+				h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
+			}
+			return
+		}
 		// do not wait here, as args are expected to be dynamic
 		// and fuzzy search is a guide for user to complete
 		h.incArgsCompleteMode(false, sync)
 		return
 	}
 	isEmpty := h.list.Buffer().Size() == 0
+	h.buf.WriteString(string(ev.Ch))
 	h.list.Buffer().WriteString(string(ev.Ch))
 	if isEmpty {
 		h.setCompletionList(false, sync, h.commandAndArgs[0], h.completionArgs()...)
@@ -766,7 +841,7 @@ func (h *Prompt) completeTopList() bool {
 		return false
 	}
 	// could have completed multiple arguments
-	parts := strings.Split(string(match.Data()), " ")
+	parts := SplitCommandLine(h.shParser, string(match.Data()))
 	h.commandAndArgs = append(h.commandAndArgs, parts...)
 	newCmdAndArgs := strings.Join(h.commandAndArgs, " ")
 	h.buf.Replace(newCmdAndArgs + " ")
@@ -864,11 +939,13 @@ func (h *Prompt) setCompletionList(
 	bufStrArgs := h.buf.String()
 	var externalCmdAndArgs []string
 	// only add one extra argument at the end, if there are multiple spaces
-	if strings.HasSuffix(bufStrArgs, " ") {
-		externalCmdAndArgs = strings.Split(strings.TrimSpace(bufStrArgs), " ")
+	// AND the trailing space is a separator (i.e. not inside a quote or
+	// after a backslash escape).
+	if strings.HasSuffix(bufStrArgs, " ") && !h.lastTokenIsIncomplete(bufStrArgs) {
+		externalCmdAndArgs = SplitCommandLine(h.shParser, strings.TrimRight(bufStrArgs, " "))
 		externalCmdAndArgs = append(externalCmdAndArgs, "")
 	} else {
-		externalCmdAndArgs = strings.Split(bufStrArgs, " ")
+		externalCmdAndArgs = SplitCommandLine(h.shParser, bufStrArgs)
 	}
 
 	// also do not add intermediate spaces
@@ -945,7 +1022,9 @@ func (h *Prompt) setCompletionList(
 
 			it, isEmpty := iterator.IsEmpty(ctx, it)
 			if isEmpty {
-				it = manualCompleter(ctx, commandsBackup, mode,
+				// New parser per goroutine: see commandArgsHistoryIterator.
+				it = manualCompleter(ctx, shsyntax.NewParser(),
+					commandsBackup, mode,
 					cmdAndArgs[0], cmdAndArgs[1:]...)
 			}
 			h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
@@ -992,11 +1071,17 @@ func (h *Prompt) commandArgsHistoryIterator(
 	history := h.history.Slice()
 	it := iterator.FromSlice(history)
 
+	// commandArgsHistoryIterator is invoked from a completion goroutine
+	// (see pushCompletionList) so it cannot share h.shParser with the
+	// main Handle goroutine. Allocate a parser scoped to this call and
+	// the lazy mapper closure below.
+	parser := shsyntax.NewParser()
+
 	// cmdAndArgs is not orthogonal to how we want to handle them here
 	// essentially, we don't know by simply inspecting them, if we are
 	// at the start of a new arg, or at the end of the previous command
 	// as last space is handled ambigously.
-	cmdAndArgs = strings.Split(strings.Join(cmdAndArgs, " "), " ")
+	cmdAndArgs = SplitCommandLine(parser, strings.Join(cmdAndArgs, " "))
 	m := len(cmdAndArgs)
 	if int(h.mode) < len(cmdAndArgs) {
 		m = len(cmdAndArgs) - 1
@@ -1010,7 +1095,7 @@ func (h *Prompt) commandArgsHistoryIterator(
 		return strings.HasPrefix(query, queryMatch)
 	})
 	mapArgs := iterator.Map(filterNoArgs, func(query string) (args string) {
-		storedAndArgs := strings.Split(query, " ")
+		storedAndArgs := SplitCommandLine(parser, query)
 		ret := strings.Join(storedAndArgs[m:], " ")
 		return ret
 	})
@@ -1330,7 +1415,7 @@ func (h *Prompt) newManualComponent(bufString string) component.Responsive {
 func (h *Prompt) buildManualComponent(bufString string) component.Responsive {
 	var man Manual
 	var ok bool
-	cmdAndArgs := strings.Split(strings.TrimSpace(bufString), " ")
+	cmdAndArgs := SplitCommandLine(h.shParser, strings.TrimSpace(bufString))
 
 	if len(cmdAndArgs) == 0 || (len(cmdAndArgs) == 1 && int(h.mode) < 1) {
 		// if input is something like "ed" or "" then
@@ -1399,7 +1484,7 @@ func (h *Prompt) getManualForCommand(cmd string) (Manual, bool) {
 func (h *Prompt) manualCompleter(
 	ctx context.Context, cmd string, args ...string,
 ) iterator.Iterator[string] {
-	return manualCompleter(ctx, h.commandsBackup, h.mode, cmd, args...)
+	return manualCompleter(ctx, h.shParser, h.commandsBackup, h.mode, cmd, args...)
 }
 
 func (h *Prompt) getSeparatorHeight() int {
@@ -1479,7 +1564,7 @@ func getManualForCommand(cmd string, commandsBackup []Manual) (Manual, bool) {
 // keep Prompt state as arguments, so we can
 // better manage concurrent access to them
 func manualCompleter(
-	_ context.Context, commandsBackup []Manual,
+	_ context.Context, p *shsyntax.Parser, commandsBackup []Manual,
 	mode commandPromptMode, cmd string, args ...string,
 ) iterator.Iterator[string] {
 	man, ok := getManualForCommand(cmd, commandsBackup)
@@ -1487,7 +1572,7 @@ func manualCompleter(
 		return iterator.FromSlice[string](nil)
 	}
 
-	args = strings.Split(strings.TrimSpace(strings.Join(args, " ")), " ")
+	args = SplitCommandLine(p, strings.TrimSpace(strings.Join(args, " ")))
 	// return iterator with submcommands,
 	// if first command hasn't been fully typed yet
 	if len(args) == 0 || (len(args) == 1 && mode < 2) {

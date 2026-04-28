@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -3471,6 +3472,101 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 		fs, err := os.Stat(tempDir)
 		require.NoError(t, err)
 		require.True(t, fs.IsDir())
+	}
+}
+
+// TestWorkspaceManagerCreateWorkspaceQuotedPath guards the fix for RUNE-120:
+// the modal command prompt must respect bash-style quoting/escaping so that
+// directory paths containing spaces survive `:` dispatch unchanged. Each case
+// drives a separate fresh manager so the variants can be asserted independently.
+func TestWorkspaceManagerCreateWorkspaceQuotedPath(t *testing.T) {
+	parent := t.TempDir()
+	// The escape variant exercises raw backslash space escapes which only
+	// guard whitespace; shell metacharacters such as parens still need to be
+	// quoted. Keep the directory name space-only so the test focuses on the
+	// space-escaping behaviour without dragging in unrelated metacharacter
+	// quoting concerns.
+	dirEscape := filepath.Join(parent, "Unstable Build escape")
+	dirSingle := filepath.Join(parent, "Unstable Build (single)")
+	dirDouble := filepath.Join(parent, "Unstable Build (double)")
+	for _, d := range []string{dirEscape, dirSingle, dirDouble} {
+		require.NoError(t, os.MkdirAll(d, 0700))
+	}
+
+	cases := []struct {
+		name string
+		// raw is the buffer the prompt should receive after the
+		// leading "workspacenew ". feedLiteral emits each rune as a
+		// literal key event; spaces are sent as KeySpace events to
+		// match the runtime keypress path.
+		raw  string
+		path string
+	}{
+		{
+			name: "backslash-escaped spaces",
+			raw:  strings.ReplaceAll(dirEscape, " ", `\ `),
+			path: dirEscape,
+		},
+		{
+			name: "single-quoted path",
+			raw:  fmt.Sprintf("'%s'", dirSingle),
+			path: dirSingle,
+		},
+		{
+			name: "double-quoted path",
+			raw:  fmt.Sprintf(`"%s"`, dirDouble),
+			path: dirDouble,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil,
+				nopShutdownShaderConfig())
+			t.Cleanup(func() { m.Close() })
+			m.forceSyncCommandPrompt = true
+			m.Resize(30, 20)
+
+			h := newSafeHandler(m)
+			// open the modal command prompt (Ctrl+\\, see defaultCfg).
+			h.Handle(term.Event{Type: term.EventKey,
+				Mod: term.ModCtrl, Ch: '\\'})
+			feedLiteral(t, h, "workspacenew ")
+			feedLiteral(t, h, tc.raw)
+			h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+			require.Equal(t, 2, m.workspaceCount,
+				"expected the new workspace to be registered alongside the default one")
+
+			uri, err := workspaceapi.CurrentUserHostURI(tc.path)
+			require.NoError(t, err)
+			var found bool
+			for _, w := range m.workspaces {
+				if w == nil {
+					continue
+				}
+				if w.uri == uri {
+					found = true
+					break
+				}
+			}
+			require.True(t, found,
+				"expected to find workspace registered at %s", uri)
+		})
+	}
+}
+
+// feedLiteral writes each rune in s to h as a regular key event. Space is
+// translated to KeySpace to match the runtime keypress path.
+func feedLiteral(t *testing.T, h tui.Handler, s string) {
+	t.Helper()
+	for _, r := range s {
+		switch r {
+		case ' ':
+			h.Handle(term.Event{Type: term.EventKey, Key: term.KeySpace})
+		default:
+			h.Handle(term.Event{Type: term.EventKey, Ch: r})
+		}
 	}
 }
 
