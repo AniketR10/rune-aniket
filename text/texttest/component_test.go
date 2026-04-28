@@ -1600,7 +1600,10 @@ func TestCompleteCommand(t *testing.T) {
 		}
 		cfg := text.DefaultConfig()
 		cfg.CommandAliases = map[string]text.CommandAlias{
-			"blah": text.CommandAlias{Commands: []string{"bleh"}, Completer: completer},
+			"blah": text.CommandAlias{
+				Commands:   []string{"bleh"},
+				Completers: []func(*text.Component) command.Completer{completer},
+			},
 		}
 		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
@@ -1625,7 +1628,10 @@ func TestCompleteCommand(t *testing.T) {
 		}
 		cfg := text.DefaultConfig()
 		cfg.CommandAliases = map[string]text.CommandAlias{
-			"blah": text.CommandAlias{Commands: []string{"bleh"}, Completer: completer},
+			"blah": text.CommandAlias{
+				Commands:   []string{"bleh"},
+				Completers: []func(*text.Component) command.Completer{completer},
+			},
 		}
 		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
 		require.NoError(t, err)
@@ -1675,6 +1681,41 @@ func TestCompleteCommand(t *testing.T) {
 		options := assertIteratorLen(t, 2, it)
 		assert.Equal(t, []string{"one", "two"}, options)
 		assert.Equal(t, "2", newLastArg)
+	})
+
+	t.Run("chains multiple alias completers in order", func(t *testing.T) {
+		first := func(c *text.Component) command.Completer {
+			return command.FuncCompleter(func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				return iterator.FromSlice([]string{"alpha", "beta"}), "", nil
+			})
+		}
+		second := func(c *text.Component) command.Completer {
+			return command.FuncCompleter(func(ctx context.Context, args []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				return iterator.FromSlice([]string{"gamma", "delta"}), "", nil
+			})
+		}
+		cfg := text.DefaultConfig()
+		cfg.CommandAliases = map[string]text.CommandAlias{
+			"chain": text.CommandAlias{
+				Commands: []string{"e"},
+				Completers: []func(*text.Component) command.Completer{
+					first, second,
+				},
+			},
+		}
+		c, err := text.NewComponent(NopEditor(), &testLoader{}, cfg)
+		require.NoError(t, err)
+
+		it, _, err := c.CompleteCommand(context.Background(), textapi.Command{Name: "chain"})
+		require.NoError(t, err)
+
+		got, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"alpha", "beta", "gamma", "delta"}, got)
 	})
 }
 

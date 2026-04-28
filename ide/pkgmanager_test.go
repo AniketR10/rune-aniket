@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -42,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
@@ -1134,8 +1136,9 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 
 	notiCfg := notificationsConfig()
 	notiCfg.Width = notificationsWidth
+	storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager,
-		notiCfg, cfg,
+		notiCfg, cfg, storage,
 		dir, func(ev term.Event) bool {
 			if ev.Type == term.EventInterrupt {
 				interrupter.Interrupt(ev.Context)
@@ -1232,8 +1235,9 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 		}
 	}
 
+	storage2 := localstorage.New(context.Background(), dir, doctoml.Marshaler())
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager,
-		notificationsConfig(), cfg,
+		notificationsConfig(), cfg, storage2,
 		dir, func(ev term.Event) bool {
 			if ev.Type == term.EventInterrupt {
 				interrupter.Interrupt(ev.Context)

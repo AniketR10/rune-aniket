@@ -44,7 +44,11 @@ func validateConfig(cfg map[string]any) (err error) {
 }
 
 func validateAliases(c *ideConfig, cfg map[string]any) (err error) {
-	err = text.ValidateCommandAliases(c.commandAliases())
+	// Cycle detection only inspects alias Commands so we parse the
+	// commands without building completer chains, which would require
+	// a storage-backed history accessor that the validator doesn't have.
+	aliases, _ := c.parseAliasCommands()
+	err = text.ValidateCommandAliases(aliases)
 	if err != nil {
 		// void aliases but keep the rest of config intact.
 		// this ensures that text.NewComponent doesn't hard error,

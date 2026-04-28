@@ -26,6 +26,7 @@ package ide
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -33,11 +34,13 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -288,6 +291,129 @@ func TestOpen(t *testing.T) {
 		// allow for syntax to unpack things
 		time.Sleep(200 * time.Millisecond)
 	})
+}
+
+// TestWonAliasIntegration is an end-to-end test that wires the IDE
+// through real configuration to verify the `won` alias from the user's
+// `~/.runedev/config.yaml`:
+//
+//	command:
+//	  aliases:
+//	    won:
+//	      command: workspacenew
+//	      completer:
+//	        - '{history}'
+//	        - '{file}'
+//
+// The test goes through the real configuration loader, the real
+// command alias parser, the real workspace history (backed by
+// localstorage on a temp dir), and the real text.Component completion
+// path. After dispatching `:won <repoA>` once, querying the alias
+// completion again must surface "<repoA>" as the first match — proving
+// that `{history}` is wired correctly all the way from the YAML
+// completer chain through search.History.HistoryIterator.
+func TestWonAliasIntegration(t *testing.T) {
+	dataDir := t.TempDir()
+	repoA := t.TempDir()
+	repoB := t.TempDir()
+
+	// Real config file with the `won` alias in YAML form, identical to
+	// what the user has in ~/.runedev/config.yaml.
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  show_manual_after: 1h
+  key: ":"
+  aliases:
+    won:
+      command: workspacenew
+      completer:
+        - '{history}'
+        - '{file}'
+`), 0666))
+
+	// Initial cwd workspace. We use repoB (different from repoA) so
+	// the file-based completer's results are clearly distinguishable
+	// from the history entries.
+	// Seed repoB with a file so we can Open it as the initial
+	// workspace; without an opened workspace the IDE root forwards
+	// events differently and the command prompt would not even be
+	// reachable from the empty root handler.
+	repoBFile := filepath.Join(repoB, "seed.txt")
+	require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
+
+	mu := new(sync.Mutex)
+	i, err := New(repoB, configPath, dataDir,
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	root := i.Ready()
+
+	repoBURI, err := workspaceapi.CurrentUserHostURI(repoBFile)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(repoBURI))
+	mu.Unlock()
+
+	// Sanity: alias is wired through configuration.
+	wh := i.workspaceHandler
+	aliases := i.ideConfig.commandAliases()
+	wonAlias, ok := aliases["won"]
+	require.True(t, ok, "won alias must be registered from YAML config")
+	require.Len(t, wonAlias.Completers, 2,
+		"won alias must have two completer factories ({history} + {file})")
+
+	// Dispatch the alias by driving keyboard input through the IDE
+	// root handler — the same code path a real user takes. This goes
+	// through the command Prompt, which is what records the entered
+	// command line into search.History on Enter.
+	// term.ParseKeys requires `<space>` rather than literal spaces;
+	// the alias name has none, but the command itself needs the
+	// space token between `won` and the path argument.
+	wonInvocation := ":won<space>" + repoA + "<enter>"
+	keys, err := term.ParseKeys(wonInvocation)
+	require.NoError(t, err)
+	root.Resize(80, 24)
+	for _, k := range keys {
+		mu.Lock()
+		root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+		mu.Unlock()
+	}
+
+	// Wait for any async completion machinery to settle (the
+	// dispatch path runs the alias handler on a goroutine and
+	// records history when it returns).
+	wh.focusEx().Wait()
+
+	// Now ask the focused text.Component to complete the same alias
+	// with no partial last arg. This is exactly the call the prompt
+	// issues when the user types `:won ` (alias + space).
+	ex := wh.exHandler(wh.focusHandler())
+	require.NotNil(t, ex, "expected a focused ex handler after dispatch")
+	mu.Lock()
+	it, _, err := ex.comp.CompleteCommand(t.Context(),
+		textapi.Command{Name: "won", Args: []string{""}})
+	mu.Unlock()
+	require.NoError(t, err)
+	defer func() { _ = it.Close() }()
+
+	got, err := iterator.ToSlice(t.Context(), it)
+	require.NoError(t, err)
+	require.NotEmpty(t, got,
+		"won completion must surface at least the prior `won %s` history entry, "+
+			"got nothing — `{history}` is not wired correctly", repoA)
+
+	// History must come first per chain order in the YAML config. The
+	// HistoryCompleter strips the alias-name prefix, so the entry the
+	// user sees back is just the arg that was passed (the repoA path).
+	assert.Equal(t, repoA, got[0],
+		"first completion must be the prior `won` argument from history; "+
+			"got %q. full result: %v", got[0], got)
 }
 
 type mockShader struct {

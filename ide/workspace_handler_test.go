@@ -50,6 +50,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -63,6 +64,7 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idetask"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -997,8 +999,9 @@ func TestWorkspaceConfig(t *testing.T) {
 		shRunner.init(
 			handler.Nop(), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig(), component.FrameCharSetDefault())
+		storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager,
-			notificationsConfig(), cfg, dir,
+			notificationsConfig(), cfg, storage, dir,
 			func(term.Event) bool {
 				return true
 			}, runner, mu, nil,
@@ -3617,8 +3620,9 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 
 	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
+	storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager,
-		notiConfig, cfg, dir, func(term.Event) bool {
+		notiConfig, cfg, storage, dir, func(term.Event) bool {
 			return true
 		}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },

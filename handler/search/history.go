@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/retry"
 )
@@ -109,9 +110,17 @@ func (h *History) Add(query string) error {
 
 	err := storageapi.ConsistentUpdate(ctx, h.store, h.docID, &h.doc, retryStrategy,
 		func() ([]storageapi.Update, []storageapi.Precondition) {
-			h.doc.Queries = append(h.doc.Queries, "")
-			copy(h.doc.Queries[1:], h.doc.Queries)
-			h.doc.Queries[0] = query
+			newQueries := make([]string, 0, len(h.doc.Queries)+1)
+			seen := map[string]struct{}{query: {}}
+			newQueries = append(newQueries, query)
+			for _, q := range h.doc.Queries {
+				if _, ok := seen[q]; ok {
+					continue
+				}
+				seen[q] = struct{}{}
+				newQueries = append(newQueries, q)
+			}
+			h.doc.Queries = newQueries
 
 			if len(h.doc.Queries) > h.max {
 				h.doc.Queries = h.doc.Queries[:h.max]
@@ -184,6 +193,28 @@ func (h *History) Next() string {
 // Slice returns all queries as a slice.
 func (h *History) Slice() []string {
 	return h.doc.Queries
+}
+
+// HistoryIterator reads the persisted history fresh from the store and
+// returns an iterator over its entries along with true, or a nil iterator
+// and false when no entries are persisted (or the read fails). The args
+// parameter is unused — included so the method signature satisfies the
+// command.HistoryAccessor interface, which can be used by alias completer
+// chains to expose this history as a streaming completer source.
+//
+// Unlike Slice, this method does not depend on Load having been called
+// and reflects the latest persisted state.
+func (h *History) HistoryIterator(
+	ctx context.Context, _ []string,
+) (iterator.Iterator[string], bool) {
+	var doc historyDocument
+	if err := h.store.Get(ctx, h.docID, &doc); err != nil {
+		return nil, false
+	}
+	if len(doc.Queries) == 0 {
+		return nil, false
+	}
+	return iterator.FromSlice(doc.Queries), true
 }
 
 type historyDocument struct {

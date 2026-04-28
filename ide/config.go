@@ -41,6 +41,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -56,6 +57,7 @@ import (
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
@@ -98,6 +100,13 @@ type ideConfig struct {
 	ringBell         func()
 	scheduleNextTick func(func()) bool
 	zdotDir          string
+	// storage is the IDE-wide storage service. It's owned by the IDE
+	// and shared across workspaces; commandAliases consults it to
+	// resolve `{history}` placeholders in alias completer chains by
+	// constructing a search.History against the prompt's history doc.
+	// May be nil during validation paths or in tests that don't need
+	// to actually run completer chains.
+	storage storageapi.Service
 }
 
 func overrideConfig(ideConfig, cfg map[string]any) {
@@ -411,102 +420,111 @@ func (c ideConfig) commandOverlayShowProgressHint() (ret bool) {
 	return
 }
 
-func (c ideConfig) commandAliases() (ret map[string]text.CommandAlias) {
-	ret = make(map[string]text.CommandAlias)
+// commandAliases returns the parsed command aliases together with their
+// completer chains. It panics when c.storage is nil — building an alias
+// chain requires a storage-backed history accessor to resolve `{history}`
+// placeholders, and that storage is an IDE-wide invariant set by ide.New.
+// Validation paths that only need cycle detection over alias names should
+// use parseAliasCommands directly.
+func (c ideConfig) commandAliases() map[string]text.CommandAlias {
+	if c.storage == nil {
+		panic("ideConfig.commandAliases: storage is nil; must be set " +
+			"before constructing alias completer chains")
+	}
+	history := search.NewHistory(
+		c.storage, commandHistoryDocumentID, c.commandMaxHistory())
+	ret, _ := c.parseAliasCommands()
+
 	cfg, ok := c.command()
 	if !ok {
-		return
+		return ret
 	}
+	cfgsAliases, err := cfg.GetMap(keyCommandAliases)
+	if err != nil {
+		// already recorded by parseAliasCommands.
+		return ret
+	}
+	var perr error
+	for k, v := range cfgsAliases {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		raw, ok := m["completer"]
+		if !ok {
+			continue
+		}
+		alias, ok := ret[k]
+		if !ok {
+			continue
+		}
+		completers, parseErr := parseAliasCompleter(k, raw, history)
+		if parseErr != nil {
+			perr = multierr.Append(perr, parseErr)
+		}
+		alias.Completers = completers
+		ret[k] = alias
+	}
+	if perr != nil {
+		c.errors[fmt.Sprintf("command.%s", keyCommandAliases)] = perr
+	}
+	return ret
+}
 
+// parseAliasCommands returns a map of alias name to CommandAlias with only
+// the Commands field populated, plus the parsing error. Used by both
+// commandAliases (which then layers completer chains on top) and the
+// validator (which only needs to detect alias cycles based on Commands).
+// Records any parse errors under "command.aliases" in c.errors.
+func (c ideConfig) parseAliasCommands() (map[string]text.CommandAlias, error) {
+	ret := make(map[string]text.CommandAlias)
+	cfg, ok := c.command()
+	if !ok {
+		return ret, nil
+	}
 	cfgsAliases, err := cfg.GetMap(keyCommandAliases)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("command.%s", keyCommandAliases)] = err
 		}
-		return
+		return ret, err
 	}
-
 	for k, v := range cfgsAliases {
 		alias := text.CommandAlias{Name: k}
 		switch tp := v.(type) {
 		case map[string]any:
 			for kk, vv := range tp {
-				switch kk {
-				case "commands", "command":
-					switch ttp := vv.(type) {
-					case string:
-						alias.Commands = make([]string, 1)
-						alias.Commands[0] = ttp
-					case []any:
-						alias.Commands = make([]string, 0)
-						for _, v := range ttp {
-							switch vtp := v.(type) {
-							case string:
-								alias.Commands = append(alias.Commands, vtp)
-							default:
-								err = multierr.Append(err,
-									fmt.Errorf("invalid value type for command.%s.%s", keyCommandAliases, k))
-							}
+				if kk != "commands" && kk != "command" {
+					continue
+				}
+				switch ttp := vv.(type) {
+				case string:
+					alias.Commands = []string{ttp}
+				case []any:
+					for _, v := range ttp {
+						s, isStr := v.(string)
+						if !isStr {
+							err = multierr.Append(err, fmt.Errorf(
+								"invalid value type for command.%s.%s",
+								keyCommandAliases, k))
+							continue
 						}
-					}
-				case "completer":
-					switch ttp := vv.(type) {
-					case string:
-						switch ttp {
-						case "files":
-							alias.Completer = filepathCompleter
-						case "dirs":
-							alias.Completer = dirCompleter
-						case "history":
-							alias.Completer = nil // default is history
-						default:
-							ttp := strings.Trim(ttp, " ")
-							if !strings.HasPrefix(ttp, "!") {
-								err = multierr.Append(err,
-									fmt.Errorf("invalid value for command.%s.%s.completer: "+
-										"expected 'history', 'files', a command starting with '!', "+
-										"or list of completion options",
-										keyCommandAliases, k))
-							} else {
-								alias.Completer = commandCompleter(strings.TrimPrefix(ttp, "!"))
-							}
-						}
-					case []any:
-						options := make([]string, 0)
-						for _, v := range ttp {
-							switch vtp := v.(type) {
-							case string:
-								options = append(options, vtp)
-							default:
-								err = multierr.Append(err,
-									fmt.Errorf("invalid value type for option in "+
-										"command.%s.%s.completer: expected string or list of "+
-										"strings", keyCommandAliases, k))
-							}
-						}
-						alias.Completer = func(c *text.Component) command.Completer {
-							return command.FuncCompleter(func(context.Context, []string) (
-								iterator.Iterator[string], string, error,
-							) {
-								return iterator.FromSlice(options), "", nil
-							})
-						}
+						alias.Commands = append(alias.Commands, s)
 					}
 				}
 			}
 		case string:
-			alias.Commands = make([]string, 1)
-			alias.Commands[0] = tp
+			alias.Commands = []string{tp}
 		case []any:
-			alias.Commands = make([]string, 0)
 			for _, v := range tp {
-				switch vtp := v.(type) {
-				case string:
-					alias.Commands = append(alias.Commands, vtp)
-				default:
-					err = multierr.Append(err,
-						fmt.Errorf("invalid value type for command.%s.%s", keyCommandAliases, k))
+				s, isStr := v.(string)
+				if !isStr {
+					err = multierr.Append(err, fmt.Errorf(
+						"invalid value type for command.%s.%s",
+						keyCommandAliases, k))
+					continue
 				}
+				alias.Commands = append(alias.Commands, s)
 			}
 		}
 		if len(alias.Commands) != 0 {
@@ -516,7 +534,7 @@ func (c ideConfig) commandAliases() (ret map[string]text.CommandAlias) {
 	if err != nil {
 		c.errors[fmt.Sprintf("command.%s", keyCommandAliases)] = err
 	}
-	return
+	return ret, err
 }
 
 func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
@@ -2604,6 +2622,175 @@ func filepathCompleter(c *text.Component) command.Completer {
 
 func dirCompleter(c *text.Component) command.Completer {
 	return command.DirsCompleter(c.Workspace())
+}
+
+// historyCompleter returns a factory that exposes the given accessor as
+// a Completer. The accessor must be non-nil — see commandAliases for the
+// invariant.
+func historyCompleter(acc command.HistoryAccessor) func(*text.Component) command.Completer {
+	if acc == nil {
+		panic("historyCompleter: nil HistoryAccessor")
+	}
+	c := command.HistoryCompleter(acc)
+	return func(*text.Component) command.Completer { return c }
+}
+
+func staticOptionsCompleter(options []string) func(*text.Component) command.Completer {
+	return func(c *text.Component) command.Completer {
+		return command.FuncCompleter(func(context.Context, []string) (
+			iterator.Iterator[string], string, error,
+		) {
+			return iterator.FromSlice(options), "", nil
+		})
+	}
+}
+
+// completerPlaceholders maps the recognized {name} placeholders in an
+// alias completer entry to their factory. The "history" placeholder is
+// resolved against the supplied HistoryAccessor.
+func completerPlaceholders(
+	history command.HistoryAccessor,
+) map[string]func(*text.Component) command.Completer {
+	return map[string]func(*text.Component) command.Completer{
+		"file":        filepathCompleter,
+		"files":       filepathCompleter,
+		"dir":         dirCompleter,
+		"dirs":        dirCompleter,
+		"directory":   dirCompleter,
+		"directories": dirCompleter,
+		"history":     historyCompleter(history),
+	}
+}
+
+// parsePlaceholder returns the factory for `{name}` and true when v is a
+// recognized placeholder, the literal placeholder name (or empty) and a
+// non-nil error when v is a `{...}` value with an unknown name, or nil and
+// false when v is not a placeholder.
+func parsePlaceholder(
+	v string,
+	placeholders map[string]func(*text.Component) command.Completer,
+) (func(*text.Component) command.Completer, string, bool) {
+	t := strings.TrimSpace(v)
+	if !strings.HasPrefix(t, "{") || !strings.HasSuffix(t, "}") {
+		return nil, "", false
+	}
+	name := strings.TrimSpace(t[1 : len(t)-1])
+	factory, ok := placeholders[strings.ToLower(name)]
+	return factory, name, ok
+}
+
+// parseAliasCompleter parses an alias completer YAML value and returns the
+// ordered list of factories. Single-string values continue to support the
+// existing keywords ("files", "dirs", "history") as well as the new
+// {name} placeholder syntax. List values may mix placeholders, external
+// commands ("! cmd"), and bare strings (treated as static options). Lists
+// of bare strings only continue to behave as a single static-options
+// completer for backwards compatibility.
+func parseAliasCompleter(
+	name string, v any, history command.HistoryAccessor,
+) ([]func(*text.Component) command.Completer, error) {
+	placeholders := completerPlaceholders(history)
+	switch ttp := v.(type) {
+	case string:
+		t := strings.TrimSpace(ttp)
+		switch t {
+		case "files":
+			return []func(*text.Component) command.Completer{filepathCompleter}, nil
+		case "dirs":
+			return []func(*text.Component) command.Completer{dirCompleter}, nil
+		case "history":
+			return []func(*text.Component) command.Completer{historyCompleter(history)}, nil
+		}
+		if factory, ph, ok := parsePlaceholder(t, placeholders); ok {
+			return []func(*text.Component) command.Completer{factory}, nil
+		} else if ph != "" {
+			return nil, fmt.Errorf(
+				"invalid value for command.%s.%s.completer: "+
+					"unknown placeholder {%s}",
+				keyCommandAliases, name, ph)
+		}
+		if !strings.HasPrefix(t, "!") {
+			return nil, fmt.Errorf(
+				"invalid value for command.%s.%s.completer: "+
+					"expected 'history', 'files', 'dirs', a {placeholder}, "+
+					"a command starting with '!', or a list of completion options",
+				keyCommandAliases, name)
+		}
+		return []func(*text.Component) command.Completer{
+			commandCompleter(strings.TrimPrefix(t, "!")),
+		}, nil
+	case []any:
+		strs := make([]string, 0, len(ttp))
+		var typeErr error
+		hasPlaceholderOrCmd := false
+		for _, item := range ttp {
+			s, isStr := item.(string)
+			if !isStr {
+				typeErr = multierr.Append(typeErr, fmt.Errorf(
+					"invalid value type for option in command.%s.%s.completer: "+
+						"expected string or list of strings",
+					keyCommandAliases, name))
+				continue
+			}
+			strs = append(strs, s)
+			t := strings.TrimSpace(s)
+			if strings.HasPrefix(t, "{") || strings.HasPrefix(t, "!") {
+				hasPlaceholderOrCmd = true
+			}
+		}
+		if typeErr != nil {
+			return nil, typeErr
+		}
+		if !hasPlaceholderOrCmd {
+			// preserve current behavior: list of bare strings is a single
+			// static-options completer.
+			return []func(*text.Component) command.Completer{
+				staticOptionsCompleter(strs),
+			}, nil
+		}
+		var factories []func(*text.Component) command.Completer
+		var staticBuf []string
+		flushStatic := func() {
+			if len(staticBuf) == 0 {
+				return
+			}
+			opts := make([]string, len(staticBuf))
+			copy(opts, staticBuf)
+			factories = append(factories, staticOptionsCompleter(opts))
+			staticBuf = staticBuf[:0]
+		}
+		var parseErr error
+		for _, s := range strs {
+			t := strings.TrimSpace(s)
+			if factory, ph, ok := parsePlaceholder(t, placeholders); ok {
+				flushStatic()
+				factories = append(factories, factory)
+				continue
+			} else if ph != "" {
+				parseErr = multierr.Append(parseErr, fmt.Errorf(
+					"invalid value for command.%s.%s.completer: "+
+						"unknown placeholder {%s}",
+					keyCommandAliases, name, ph))
+				continue
+			}
+			if strings.HasPrefix(t, "!") {
+				flushStatic()
+				factories = append(factories,
+					commandCompleter(strings.TrimPrefix(t, "!")))
+				continue
+			}
+			staticBuf = append(staticBuf, s)
+		}
+		flushStatic()
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		return factories, nil
+	default:
+		return nil, fmt.Errorf(
+			"invalid value type for command.%s.%s.completer",
+			keyCommandAliases, name)
+	}
 }
 
 func commandCompleter(cmdstr string) func(c *text.Component) command.Completer {

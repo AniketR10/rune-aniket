@@ -567,11 +567,25 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
 	if a, ok := c.config.CommandAliases[cmd.Name]; ok {
-		if a.Completer == nil {
+		if len(a.Completers) == 0 {
 			return iterator.FromSlice[string](nil), "", nil
 		}
-		return a.Completer(c).
-			Complete(ctx, append([]string{cmd.Name}, cmd.Args...))
+		args := append([]string{cmd.Name}, cmd.Args...)
+		if len(a.Completers) == 1 {
+			factory := a.Completers[0]
+			if factory == nil {
+				return iterator.FromSlice[string](nil), "", nil
+			}
+			return factory(c).Complete(ctx, args)
+		}
+		completers := make([]command.Completer, 0, len(a.Completers))
+		for _, factory := range a.Completers {
+			if factory == nil {
+				continue
+			}
+			completers = append(completers, factory(c))
+		}
+		return command.MultiCompleter(completers...).Complete(ctx, args)
 	}
 
 	man, ok := c.cmdSubscribers[cmd.Name]

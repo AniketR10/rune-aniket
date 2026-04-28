@@ -272,9 +272,14 @@ type IconSet struct {
 
 // CommandAlias is a command to command alias, along with completion configuration.
 type CommandAlias struct {
-	Name      string
-	Commands  []string
-	Completer func(*Component) command.Completer
+	Name     string
+	Commands []string
+	// Completers is the ordered list of completer factories that produce
+	// suggestions for this alias. When the alias is matched, results from
+	// each completer are concatenated in list order with duplicates filtered
+	// out, so that earlier completers take priority over later ones. An empty
+	// or nil slice falls back to the prompt's implicit history-based fallback.
+	Completers []func(*Component) command.Completer
 }
 
 // DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.

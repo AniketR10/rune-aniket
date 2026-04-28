@@ -47,7 +47,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -77,7 +76,6 @@ import (
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
-	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
@@ -349,7 +347,8 @@ func (h *workspaceManagerHandler) init(
 	cwd *workspaceapi.URI, homeDirUri workspaceapi.URI,
 	manager workspace.WorkspaceManager,
 	notiConfig notifications.Config,
-	cfg ideConfig, sixDir string, publishEvent func(term.Event) bool,
+	cfg ideConfig, storage storageapi.Service, sixDir string,
+	publishEvent func(term.Event) bool,
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
@@ -363,8 +362,14 @@ func (h *workspaceManagerHandler) init(
 ) (err error) {
 	ctx := context.Background()
 
-	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
+	h.storage = storage
 	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
+	// Ensure ideConfig — used to assemble alias completer chains during
+	// textOpts — can resolve `{history}` against the same partitioned
+	// storage the command Prompt writes to. The Prompt persists command
+	// history under the "ide" partition; the {history} completer must
+	// read from the same partition or it will see an empty document.
+	cfg.storage = h.ideStorage
 	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
 		payload, _ := term.PayloadFromContext(ctx)
 		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
@@ -910,6 +915,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	cfg, configErr := h.reloadConfig()
+	// Ensure ideConfig used for textOpts can resolve `{history}` placeholders
+	// in command alias completer chains. Use the same partitioned storage
+	// the command Prompt uses so the doc IDs line up.
+	cfg.storage = h.ideStorage
 	_, wConfigErr := loadWorkspaceConfig(h.workspaceConfigFilename, cwd, uri, &cfg)
 	if wConfigErr != nil {
 		configErr = multierror.Append(configErr, fmt.Errorf("workspace config: %w", wConfigErr))

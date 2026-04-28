@@ -24,11 +24,13 @@
 package search
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
 
@@ -87,4 +89,93 @@ func TestHistory(t *testing.T) {
 	require.NoError(t, history.Remove("ToRemove"))
 	found := slices.Contains(history.Slice(), "ToRemove")
 	assert.False(t, found)
+}
+
+func TestHistoryIterator(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	history := NewHistory(store, "id-iter", 4)
+	require.NoError(t, history.Load())
+
+	// fresh accessor on an empty store reports no history.
+	it, ok := history.HistoryIterator(context.Background(), nil)
+	assert.False(t, ok)
+	assert.Nil(t, it)
+
+	// populate the store with three entries; HistoryIterator must
+	// stream them in order without depending on Load (it reads fresh
+	// from storage on every call).
+	require.NoError(t, history.Add("alpha"))
+	require.NoError(t, history.Add("beta"))
+	require.NoError(t, history.Add("gamma"))
+
+	other := NewHistory(store, "id-iter", 4)
+	// HistoryIterator does not require Load: it reads directly from
+	// the store via storageapi.Get.
+	it, ok = other.HistoryIterator(context.Background(), nil)
+	require.True(t, ok)
+	require.NotNil(t, it)
+
+	got, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	// History.Add prepends so most-recent comes first.
+	assert.Equal(t, []string{"gamma", "beta", "alpha"}, got)
+}
+
+// TestHistoryAddDeduplicates verifies that re-adding an entry moves it
+// to the front (MRU) instead of producing a duplicate. This is the
+// canonical semantics for command history — repeating `:won /repo/A`
+// should not bloat the persisted document with the same line over and
+// over, and consumers (the alias `{history}` completer, the prompt's
+// implicit fallback) shouldn't have to dedupe at read time.
+func TestHistoryAddDeduplicates(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	history := NewHistory(store, "id-dedup", 8)
+	require.NoError(t, history.Load())
+
+	require.NoError(t, history.Add("alpha"))
+	require.NoError(t, history.Add("beta"))
+	require.NoError(t, history.Add("gamma"))
+
+	// Re-add an existing entry: the in-memory slice must contain
+	// each entry exactly once, with the re-added one promoted to
+	// the front.
+	require.NoError(t, history.Add("alpha"))
+	assert.Equal(t, []string{"alpha", "gamma", "beta"}, history.Slice())
+
+	// Persisted form must match: a fresh History over the same
+	// store sees only the deduped, MRU-ordered entries.
+	other := NewHistory(store, "id-dedup", 8)
+	it, ok := other.HistoryIterator(context.Background(), nil)
+	require.True(t, ok)
+	got, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alpha", "gamma", "beta"}, got)
+
+	// Re-adding the most-recent entry is a no-op (other than
+	// resetting the Next cursor) — order is preserved, length
+	// unchanged.
+	require.NoError(t, history.Add("alpha"))
+	assert.Equal(t, []string{"alpha", "gamma", "beta"}, history.Slice())
+}
+
+func TestHistoryAddNormalizesPersistedDuplicates(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	history := NewHistory(store, "id-dedup-existing", 8)
+	require.NoError(t, history.Load())
+
+	// Simulate an older persisted document, written before Add enforced
+	// uniqueness, that already contains duplicates unrelated to the next
+	// query being added.
+	history.doc.Queries = []string{"beta", "alpha", "beta", "gamma", "alpha"}
+	require.NoError(t, store.Set(context.Background(), "id-dedup-existing", &history.doc))
+
+	require.NoError(t, history.Add("delta"))
+	assert.Equal(t, []string{"delta", "beta", "alpha", "gamma"}, history.Slice())
+
+	other := NewHistory(store, "id-dedup-existing", 8)
+	it, ok := other.HistoryIterator(context.Background(), nil)
+	require.True(t, ok)
+	got, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"delta", "beta", "alpha", "gamma"}, got)
 }

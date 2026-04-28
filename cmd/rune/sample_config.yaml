@@ -38,6 +38,11 @@
 #  # Aliases layer on top of the built-ins.
 #  aliases:
 #    w: write
+#    won:
+#      command: workspacenew
+#      completer:
+#        - {history}
+#        - {file}
 #    gitblame: "! git blame %"
 #  # Key bindings merge with the built-ins; set a value to "" to unbind.
 #  key_bindings:

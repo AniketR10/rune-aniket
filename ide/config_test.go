@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -185,6 +186,21 @@ command:
     dtmf:
       commands: ram
       completer: '! hello'
+    editmix:
+      commands: e
+      completer:
+        - '{history}'
+        - '{file}'
+    static_with_hist:
+      commands: m
+      completer:
+        - '{history}'
+        - a
+        - B
+    bad:
+      commands: x
+      completer:
+        - '{nope}'
   manual_attr:
     fg: black
     bg: yellow
@@ -456,6 +472,7 @@ func TestConfigSetting(t *testing.T) {
 	var cfg ideConfig
 	initConfig(&cfg, m, browser.NopWallpaper(),
 		term.RingBell, term.ScheduleNextTick, "", "")
+	cfg.storage = storagestub.NewInMemoryService()
 
 	assert.Equal(t, 4, cfg.editorTabspaces())
 	assert.Equal(t, 72, cfg.editorRuler())
@@ -528,37 +545,79 @@ func TestConfigSetting(t *testing.T) {
 				"NowIcaresomemore",
 				"Comingback",
 			},
-			Completer: nil,
 		},
 		"daynight": text.CommandAlias{
-			Name:      "daynight",
-			Commands:  []string{"ram"},
-			Completer: nil,
+			Name:     "daynight",
+			Commands: []string{"ram"},
 		},
 		"dtmf": text.CommandAlias{
-			Name:      "dtmf",
-			Commands:  []string{"ram"},
-			Completer: nil,
+			Name:     "dtmf",
+			Commands: []string{"ram"},
+		},
+		"editmix": text.CommandAlias{
+			Name:     "editmix",
+			Commands: []string{"e"},
+		},
+		"static_with_hist": text.CommandAlias{
+			Name:     "static_with_hist",
+			Commands: []string{"m"},
+		},
+		"bad": text.CommandAlias{
+			Name:     "bad",
+			Commands: []string{"x"},
 		},
 	}
 	actualCommandAliases := cfg.commandAliases()
 	parcelsAlias := actualCommandAliases["parcels"]
-	assert.NotNil(t, parcelsAlias.Completer)
-	parcelsAlias.Completer = nil
+	require.Len(t, parcelsAlias.Completers, 1)
+	assert.NotNil(t, parcelsAlias.Completers[0])
+	parcelsAlias.Completers = nil
 	actualCommandAliases["parcels"] = parcelsAlias
 
 	daynight := actualCommandAliases["daynight"]
-	require.NotNil(t, daynight.Completer)
-	it, _, err := daynight.Completer(new(text.Component)).
+	require.Len(t, daynight.Completers, 1)
+	require.NotNil(t, daynight.Completers[0])
+	it, _, err := daynight.Completers[0](new(text.Component)).
 		Complete(context.Background(), []string{})
 	require.NoError(t, err)
-	daynight.Completer = nil
+	daynight.Completers = nil
 	actualCommandAliases["daynight"] = daynight
 
 	dtmf := actualCommandAliases["dtmf"]
-	require.NotNil(t, dtmf.Completer)
-	dtmf.Completer = nil
+	require.Len(t, dtmf.Completers, 1)
+	assert.NotNil(t, dtmf.Completers[0])
+	dtmf.Completers = nil
 	actualCommandAliases["dtmf"] = dtmf
+
+	editmix := actualCommandAliases["editmix"]
+	require.Len(t, editmix.Completers, 2)
+	assert.NotNil(t, editmix.Completers[0])
+	assert.NotNil(t, editmix.Completers[1])
+	editmix.Completers = nil
+	actualCommandAliases["editmix"] = editmix
+
+	staticWithHist := actualCommandAliases["static_with_hist"]
+	require.Len(t, staticWithHist.Completers, 2)
+	assert.NotNil(t, staticWithHist.Completers[0])
+	// second factory exposes the static options "a" and "B"
+	staticIt, _, sterr := staticWithHist.Completers[1](new(text.Component)).
+		Complete(context.Background(), []string{})
+	require.NoError(t, sterr)
+	staticOpts, sterr := iterator.ToSlice(context.Background(), staticIt)
+	require.NoError(t, sterr)
+	assert.Equal(t, []string{"a", "B"}, staticOpts)
+	staticWithHist.Completers = nil
+	actualCommandAliases["static_with_hist"] = staticWithHist
+
+	bad := actualCommandAliases["bad"]
+	// {nope} is unknown so no factories are produced.
+	assert.Empty(t, bad.Completers)
+	bad.Completers = nil
+	actualCommandAliases["bad"] = bad
+	// the parser should record an error under
+	// command.aliases.bad.completer (or command.aliases when aggregated).
+	_, hasErr := cfg.errors["command.aliases"]
+	assert.True(t, hasErr, "expected parser error for {nope} placeholder")
 
 	actualOptions, err := iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)
@@ -873,7 +932,8 @@ command:
 		term.RingBell, term.ScheduleNextTick, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "alias cycle detected")
-	assert.Empty(t, cfg.commandAliases())
+	aliases, _ := cfg.parseAliasCommands()
+	assert.Empty(t, aliases)
 }
 
 func TestTabspaces(t *testing.T) {

@@ -35,6 +35,7 @@ import (
 	"strings"
 	"syscall"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -245,4 +246,149 @@ func parseURIOrWorkspaceURI(reader walkdir.Reader, path string) (workspaceapi.UR
 		uri, err = reader.URI(path)
 	}
 	return uri, err
+}
+
+// HistoryAccessor exposes the persisted command history as a stream of
+// raw command-and-args lines. Implementations return the iterator and
+// true when any history is available, or a nil iterator and false when
+// no history exists. The args parameter is the same one passed to a
+// Completer's Complete; implementations are free to ignore it (the
+// canonical implementation does — filtering happens in HistoryCompleter,
+// see its docs).
+type HistoryAccessor interface {
+	HistoryIterator(ctx context.Context, args []string) (iterator.Iterator[string], bool)
+}
+
+// HistoryCompleter returns a Completer backed by the given HistoryAccessor.
+// Used by alias chains to expose a per-alias argument history as a regular
+// Completer that can be combined with other completers via MultiCompleter.
+//
+// HistoryCompleter narrows the raw history stream to entries that begin
+// with the same command prefix that the user is currently typing — the
+// `args` slice received by Complete is "<alias-name>", "<arg1>", …,
+// "<partial-last-arg>". Only entries whose first len(args)-1 tokens
+// match are kept, and the matching prefix is stripped from each entry
+// before being yielded. This mirrors the implicit history fallback the
+// command Prompt has always applied (see commandArgsHistoryIterator)
+// so the `{history}` placeholder behaves consistently with it.
+//
+// Panics when acc is nil — the caller must supply a working accessor.
+func HistoryCompleter(acc HistoryAccessor) Completer {
+	if acc == nil {
+		panic("command.HistoryCompleter: nil HistoryAccessor")
+	}
+	return FuncCompleter(func(
+		ctx context.Context, args []string,
+	) (iterator.Iterator[string], string, error) {
+		it, ok := acc.HistoryIterator(ctx, args)
+		if !ok || it == nil {
+			return iterator.Empty[string](), "", nil
+		}
+		// "<cmd> <arg1> … <partialLastArg>" — keep entries that start
+		// with the leading "<cmd> <arg1> … " (everything except the
+		// trailing partial last arg) and strip that prefix on emit.
+		prefixTokens := args
+		if len(prefixTokens) > 0 {
+			prefixTokens = prefixTokens[:len(prefixTokens)-1]
+		}
+		prefix := strings.Join(prefixTokens, " ")
+		if prefix != "" {
+			prefix += " "
+		}
+		filtered := iterator.Filter(it, func(entry string) bool {
+			if prefix == "" {
+				return entry != ""
+			}
+			return strings.HasPrefix(entry, prefix)
+		})
+		stripped := iterator.Map(filtered, func(entry string) string {
+			return strings.TrimPrefix(entry, prefix)
+		})
+		return iterator.Filter(stripped, func(entry string) bool {
+			return entry != ""
+		}), "", nil
+	})
+}
+
+// MultiCompleter returns a Completer that yields the concatenation of
+// every child's results, in order. The returned iterator is a pure
+// projection — no values are ever buffered on the calling goroutine,
+// every Next call forwards directly to the underlying child iterator.
+// Duplicate values across children are NOT filtered.
+//
+// Each child's Complete is called eagerly when the parent Complete is
+// called. Complete is intended to be cheap — it just sets up the
+// pipeline; the expensive work (walking a directory, reading a slow
+// command's stdout, …) only happens as Next is pulled. Calling all
+// Complete()s up front lets us collect each child's newLastArg
+// synchronously: the first non-empty value wins, in chain order. This
+// matters for placeholders like {file}, where an entry such as `~/foo`
+// must be expanded to `/home/user/foo` no matter where in the chain
+// the file completer lives.
+//
+// The resulting iterator streams via iterator.Aggregate, which only
+// advances to the next child once the current one is exhausted. So a
+// slow first child never starves the later ones, and a caller that
+// stops iterating early (Close) tears every child down without ever
+// pulling from them.
+//
+// nil entries in completers panic on iteration: an empty slot in a
+// completer chain is a programmer error and should fail loudly.
+// If a child returns an error from Complete, the error is logged and
+// the child is skipped; iteration continues with the remaining
+// children.
+func MultiCompleter(completers ...Completer) Completer {
+	return FuncCompleter(func(
+		ctx context.Context, args []string,
+	) (iterator.Iterator[string], string, error) {
+		if len(completers) == 0 {
+			return iterator.Empty[string](), "", nil
+		}
+
+		iters := make([]iterator.Iterator[string], 0, len(completers))
+		var newLastArg string
+		for _, c := range completers {
+			if c == nil {
+				panic("command.MultiCompleter: nil child completer")
+			}
+			it, last, err := c.Complete(ctx, args)
+			if err != nil {
+				log.WithField("class", "command.MultiCompleter").
+					Warnf("child completer returned error: %v", err)
+				continue
+			}
+			if it == nil {
+				continue
+			}
+			// First non-empty newLastArg wins, but keep walking so
+			// later children also have their Complete invoked and
+			// their iterators contribute to the streamed output.
+			if newLastArg == "" && last != "" {
+				newLastArg = last
+			}
+			iters = append(iters, errorSwallowingIterator(it))
+		}
+		if len(iters) == 0 {
+			return iterator.Empty[string](), newLastArg, nil
+		}
+		return iterator.Aggregate(iters...), newLastArg, nil
+	})
+}
+
+// errorSwallowingIterator wraps it so that Aggregate (which stops on
+// the first child error) keeps streaming subsequent children when one
+// child reports an iteration error. The error is logged for diagnostics
+// instead of bubbling up.
+func errorSwallowingIterator(it iterator.Iterator[string]) iterator.Iterator[string] {
+	return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
+		v, ok := it.Next(ctx)
+		if !ok {
+			if err := it.Err(); err != nil && !errors.Is(err, context.Canceled) {
+				log.WithField("class", "command.MultiCompleter").
+					Warnf("child completer iterator error: %v", err)
+			}
+			return v, false, nil
+		}
+		return v, true, nil
+	}, it.Close)
 }

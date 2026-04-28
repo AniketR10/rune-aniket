@@ -25,19 +25,26 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/workspace"
 )
 
 func TestCommandOutputLinesCompleterCloseSignals(t *testing.T) {
@@ -294,8 +301,8 @@ func newCompleterFixture(tb testing.TB) completerFixture {
 		"backslash\\name.txt",
 		"emoji-🚀.txt",
 		"日本語.txt",
-		"café.txt",         // composed (NFC)
-		"cafe\u0301.txt",   // decomposed (NFD)
+		"café.txt",       // composed (NFC)
+		"cafe\u0301.txt", // decomposed (NFD)
 		".hidden",
 		"plain.swp", // filtered by completer
 		"normal.swp.go",
@@ -381,8 +388,8 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 			wantSubset: []string{"alpha.go", "src/cmd/file_00.go"},
 		},
 		{
-			name:       "plain partial path",
-			args:       []string{"edit", "src"},
+			name: "plain partial path",
+			args: []string{"edit", "src"},
 			// walkDirCompleter resolves to the workspace root (since
 			// "src" is interpreted as a partial filename whose parent
 			// is the cwd) and returns recursive results. We assert on
@@ -390,25 +397,25 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 			wantSubset: []string{"src/cmd/file_00.go", "src/pkg/pkg_00.go"},
 		},
 		{
-			name:       "absolute path",
-			args:       []string{"edit", filepath.Join(fix.root, "src")},
+			name: "absolute path",
+			args: []string{"edit", filepath.Join(fix.root, "src")},
 			wantSomeContains: []string{
 				filepath.Join("src", "cmd", "file_00.go"),
 			},
 		},
 		{
-			name: "backslash-escaped space",
-			args: []string{"edit", `with\ space`},
+			name:       "backslash-escaped space",
+			args:       []string{"edit", `with\ space`},
 			wantSubset: []string{"with space/nested/file.txt"},
 		},
 		{
-			name: "single-quoted with space",
-			args: []string{"edit", `'with space'`},
+			name:       "single-quoted with space",
+			args:       []string{"edit", `'with space'`},
 			wantSubset: []string{"with space/nested/file.txt"},
 		},
 		{
-			name: "double-quoted with space",
-			args: []string{"edit", `"with space"`},
+			name:       "double-quoted with space",
+			args:       []string{"edit", `"with space"`},
 			wantSubset: []string{"with space/nested/file.txt"},
 		},
 		{
@@ -416,8 +423,8 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 			// We resolve to a path that does not exist and expect
 			// either a clean empty result or a typed error — what we
 			// must not see is panic or junk in the path lookup.
-			args:       []string{"edit", `"a\"b"`},
-			wantNotIn:  []string{`a\"b`, `"a\"b"`},
+			args:      []string{"edit", `"a\"b"`},
+			wantNotIn: []string{`a\"b`, `"a\"b"`},
 		},
 		{
 			name: "unclosed single quote is lenient",
@@ -465,13 +472,13 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 			wantSubset: []string{"weird$name.txt"},
 		},
 		{
-			name: "shell glob char in quoted value",
-			args: []string{"edit", `'glob*name.txt'`},
+			name:       "shell glob char in quoted value",
+			args:       []string{"edit", `'glob*name.txt'`},
 			wantSubset: []string{"glob*name.txt"},
 		},
 		{
-			name: "paren in quoted value",
-			args: []string{"edit", `'paren(name).txt'`},
+			name:       "paren in quoted value",
+			args:       []string{"edit", `'paren(name).txt'`},
 			wantSubset: []string{"paren(name).txt"},
 		},
 		{
@@ -631,4 +638,508 @@ func BenchmarkFilePathCompleter(b *testing.B) {
 			}
 		})
 	}
+}
+
+func sliceCompleter(values ...string) Completer {
+	return FuncCompleter(func(
+		_ context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		return iterator.FromSlice(values), "", nil
+	})
+}
+
+func errCompleter(err error) Completer {
+	return FuncCompleter(func(
+		_ context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		return nil, "", err
+	})
+}
+
+func TestMultiCompleter(t *testing.T) {
+	tests := []struct {
+		name       string
+		completers []Completer
+		want       []string
+	}{
+		{
+			name:       "empty list yields empty iterator",
+			completers: nil,
+			want:       nil,
+		},
+		{
+			name:       "single child returns its results",
+			completers: []Completer{sliceCompleter("a", "b")},
+			want:       []string{"a", "b"},
+		},
+		{
+			name: "two children concatenate in order",
+			completers: []Completer{
+				sliceCompleter("a", "b"),
+				sliceCompleter("c", "d"),
+			},
+			want: []string{"a", "b", "c", "d"},
+		},
+		{
+			name: "duplicates across children are preserved",
+			completers: []Completer{
+				sliceCompleter("a", "b"),
+				sliceCompleter("b", "c", "a", "d"),
+			},
+			want: []string{"a", "b", "b", "c", "a", "d"},
+		},
+		{
+			name: "child error is skipped, others continue",
+			completers: []Completer{
+				errCompleter(errors.New("first failed")),
+				sliceCompleter("c", "d"),
+			},
+			want: []string{"c", "d"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := MultiCompleter(tt.completers...)
+			it, _, err := c.Complete(context.Background(), nil)
+			require.NoError(t, err)
+			got := collectAll(t, it)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestMultiCompleterPanicsOnNilChild documents that a nil entry in a
+// completer chain is treated as a programmer error: configuration that
+// emits no factories should drop the alias, not silently produce a
+// chain with a missing slot.
+func TestMultiCompleterPanicsOnNilChild(t *testing.T) {
+	c := MultiCompleter(sliceCompleter("ok"), nil)
+	assert.PanicsWithValue(t,
+		"command.MultiCompleter: nil child completer",
+		func() { _, _, _ = c.Complete(context.Background(), nil) })
+}
+
+func TestMultiCompleterContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := MultiCompleter(sliceCompleter("a", "b", "c"))
+	it, _, err := c.Complete(ctx, nil)
+	require.NoError(t, err)
+	cancel()
+	for {
+		_, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+	}
+	// either completed naturally or aborted; just confirm Close doesn't panic
+	require.NoError(t, it.Close())
+}
+
+// TestMultiCompleterNewLastArgFromAnyChild documents that newLastArg
+// is propagated from whichever child returns one — not just the first.
+// This is what allows e.g. `{file}` (typically a later child) to expand
+// `~` even when an earlier `{history}` child returned no expansion.
+func TestMultiCompleterNewLastArgFromAnyChild(t *testing.T) {
+	withLast := func(values []string, last string) Completer {
+		return FuncCompleter(func(
+			_ context.Context, _ []string,
+		) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice(values), last, nil
+		})
+	}
+
+	t.Run("first non-empty newLastArg wins, in chain order", func(t *testing.T) {
+		c := MultiCompleter(
+			sliceCompleter("a"), // returns ""
+			withLast([]string{"b"}, "second-arg"),
+			withLast([]string{"c"}, "third-arg"),
+		)
+		_, last, err := c.Complete(context.Background(), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second-arg", last)
+	})
+
+	t.Run("newLastArg propagated even when only the last child has one", func(t *testing.T) {
+		c := MultiCompleter(
+			sliceCompleter("a"),
+			sliceCompleter("b"),
+			withLast([]string{"c"}, "expanded"),
+		)
+		_, last, err := c.Complete(context.Background(), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "expanded", last)
+	})
+}
+
+// fakeHistoryAccessor is a HistoryAccessor backed by a function so tests
+// can express the desired behavior inline.
+type fakeHistoryAccessor func(ctx context.Context, args []string) (iterator.Iterator[string], bool)
+
+func (f fakeHistoryAccessor) HistoryIterator(
+	ctx context.Context, args []string,
+) (iterator.Iterator[string], bool) {
+	return f(ctx, args)
+}
+
+func TestHistoryCompleter(t *testing.T) {
+	t.Run("nil accessor panics", func(t *testing.T) {
+		assert.PanicsWithValue(t,
+			"command.HistoryCompleter: nil HistoryAccessor",
+			func() { HistoryCompleter(nil) })
+	})
+
+	t.Run("forwards accessor results", func(t *testing.T) {
+		acc := fakeHistoryAccessor(func(ctx context.Context, args []string) (iterator.Iterator[string], bool) {
+			return iterator.FromSlice([]string{"prev1", "prev2"}), true
+		})
+		c := HistoryCompleter(acc)
+		it, _, err := c.Complete(context.Background(), []string{"e"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"prev1", "prev2"}, collectAll(t, it))
+	})
+
+	t.Run("not-ok accessor returns empty iterator", func(t *testing.T) {
+		acc := fakeHistoryAccessor(func(ctx context.Context, args []string) (iterator.Iterator[string], bool) {
+			return nil, false
+		})
+		c := HistoryCompleter(acc)
+		it, _, err := c.Complete(context.Background(), nil)
+		require.NoError(t, err)
+		assert.Empty(t, collectAll(t, it))
+	})
+
+	t.Run("entries are filtered by command prefix and stripped", func(t *testing.T) {
+		// HistoryAccessor returns the persisted command lines. The
+		// completer is responsible for keeping only entries whose
+		// command-prefix matches `args[:len(args)-1]` and for stripping
+		// that prefix before yielding.
+		acc := fakeHistoryAccessor(func(ctx context.Context, args []string) (iterator.Iterator[string], bool) {
+			return iterator.FromSlice([]string{
+				"won previous-arg",
+				"othercmd irrelevant",
+				"won another-prev",
+				"won",
+			}), true
+		})
+		c := HistoryCompleter(acc)
+		// args here mirrors what setCompletionList passes: full
+		// command tokens plus the partial last arg the user is
+		// currently typing.
+		it, _, err := c.Complete(context.Background(), []string{"won", ""})
+		require.NoError(t, err)
+		assert.Equal(t,
+			[]string{"previous-arg", "another-prev"},
+			collectAll(t, it))
+	})
+
+	t.Run("multi-token prefix filters and strips the full prefix", func(t *testing.T) {
+		acc := fakeHistoryAccessor(func(ctx context.Context, args []string) (iterator.Iterator[string], bool) {
+			return iterator.FromSlice([]string{
+				"git push origin main",
+				"git push other branch",
+				"git pull origin main",
+			}), true
+		})
+		c := HistoryCompleter(acc)
+		it, _, err := c.Complete(context.Background(),
+			[]string{"git", "push", ""})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"origin main", "other branch"},
+			collectAll(t, it))
+	})
+}
+
+// blockingCompleter returns an iterator whose first Next blocks forever
+// (until close). Used to assert that MultiCompleter does NOT buffer the
+// first child's iterator before returning to the caller.
+func blockingCompleter() Completer {
+	return FuncCompleter(func(
+		ctx context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		closed := make(chan struct{})
+		return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
+			select {
+			case <-ctx.Done():
+				return "", false, ctx.Err()
+			case <-closed:
+				return "", false, nil
+			}
+		}, func() error { close(closed); return nil }), "", nil
+	})
+}
+
+// TestMultiCompleterDoesNotBuffer verifies that MultiCompleter returns
+// its iterator to the caller without first draining any child iterator.
+// A buffered implementation would block here on the first child's Next.
+func TestMultiCompleterDoesNotBuffer(t *testing.T) {
+	first := blockingCompleter()
+	second := sliceCompleter("after")
+
+	c := MultiCompleter(first, second)
+
+	done := make(chan struct {
+		it  iterator.Iterator[string]
+		err error
+	}, 1)
+	go func() {
+		it, _, err := c.Complete(context.Background(), nil)
+		done <- struct {
+			it  iterator.Iterator[string]
+			err error
+		}{it, err}
+	}()
+
+	select {
+	case got := <-done:
+		require.NoError(t, got.err)
+		require.NotNil(t, got.it)
+		// drain in a separate goroutine so we don't deadlock; the test
+		// closes early to release the blocking child.
+		require.NoError(t, got.it.Close())
+	case <-time.After(time.Second):
+		t.Fatal("MultiCompleter.Complete blocked: it must not drain children before returning")
+	}
+}
+
+// TestMultiCompleterStreamsFirstValue verifies that the first value from
+// a child iterator can be observed via Next() before the child has
+// finished producing all of its values. A buffered implementation would
+// hold the value back until the entire child stream completed.
+func TestMultiCompleterStreamsFirstValue(t *testing.T) {
+	hold := make(chan struct{})
+	closed := make(chan struct{})
+	produced := []string{"first", "second"}
+	var idx int
+
+	streaming := FuncCompleter(func(
+		ctx context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
+			if idx == 0 {
+				idx++
+				return produced[0], true, nil
+			}
+			// after first value, block until the test releases hold
+			// to simulate a slow producer.
+			select {
+			case <-ctx.Done():
+				return "", false, ctx.Err()
+			case <-hold:
+				if idx-1 < len(produced)-1 {
+					idx++
+					return produced[idx-1], true, nil
+				}
+				return "", false, nil
+			case <-closed:
+				return "", false, nil
+			}
+		}, func() error {
+			select {
+			case <-closed:
+			default:
+				close(closed)
+			}
+			return nil
+		}), "", nil
+	})
+
+	c := MultiCompleter(streaming, sliceCompleter("trailing"))
+	it, _, err := c.Complete(context.Background(), nil)
+	require.NoError(t, err)
+
+	type result struct {
+		val string
+		ok  bool
+	}
+	got := make(chan result, 1)
+	go func() {
+		v, ok := it.Next(context.Background())
+		got <- result{v, ok}
+	}()
+
+	select {
+	case r := <-got:
+		require.True(t, r.ok)
+		assert.Equal(t, "first", r.val)
+	case <-time.After(time.Second):
+		t.Fatal("MultiCompleter buffered: first value not surfaced before child stream completed")
+	}
+
+	close(hold)
+	require.NoError(t, it.Close())
+}
+
+// streamingChild returns a Completer whose iterator yields one value
+// per send on `gate` and ends when `done` is closed. This lets tests
+// step through values one at a time and assert non-buffering behavior.
+func streamingChild(values []string, gate <-chan struct{}, done <-chan struct{}) Completer {
+	return FuncCompleter(func(
+		_ context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		var idx int
+		return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
+			select {
+			case <-ctx.Done():
+				return "", false, ctx.Err()
+			case <-done:
+				return "", false, nil
+			case <-gate:
+				if idx >= len(values) {
+					return "", false, nil
+				}
+				v := values[idx]
+				idx++
+				return v, true, nil
+			}
+		}, func() error { return nil }), "", nil
+	})
+}
+
+// TestMultiCompleterStreamingNoBuffering exercises the strongest
+// invariant: each value produced by the underlying child iterator must
+// be observable by the caller via Next BEFORE the next value is
+// produced. A buffered implementation would block the caller's Next
+// until many values have accumulated.
+func TestMultiCompleterStreamingNoBuffering(t *testing.T) {
+	gate := make(chan struct{})
+	done := make(chan struct{})
+	defer close(done)
+
+	c := MultiCompleter(streamingChild(
+		[]string{"a", "b", "c"}, gate, done,
+	), sliceCompleter("trailer"))
+
+	it, _, err := c.Complete(context.Background(), nil)
+	require.NoError(t, err)
+	defer func() { _ = it.Close() }()
+
+	for _, want := range []string{"a", "b", "c"} {
+		type res struct {
+			v  string
+			ok bool
+		}
+		got := make(chan res, 1)
+		// Start the consumer first so a buffering implementation has
+		// no excuse: the consumer is parked in Next before any value
+		// is produced.
+		go func() {
+			v, ok := it.Next(context.Background())
+			got <- res{v, ok}
+		}()
+
+		// Open the gate for exactly one value.
+		gate <- struct{}{}
+
+		select {
+		case r := <-got:
+			require.True(t, r.ok)
+			assert.Equal(t, want, r.v)
+		case <-time.After(time.Second):
+			t.Fatalf("MultiCompleter buffered: did not surface %q before next produce step", want)
+		}
+	}
+}
+
+// TestMultiCompleterAliasIntegration exercises the real-world wiring
+// behind the `won` alias from the user's config:
+//
+//	aliases:
+//	  won:
+//	    command: workspacenew
+//	    completer:
+//	      - '{history}'
+//	      - '{file}'
+//
+// The chain composes a HistoryCompleter (backed by a real search.History
+// over storagestub) with a real FilePathCompleter (backed by a real
+// workspace.NewFileScheme over a temp dir). It asserts:
+//
+//  1. previously-run "won …" entries are surfaced first (with the
+//     command-prefix stripped), so reissuing a past invocation just
+//     requires picking from the list;
+//  2. file-system results follow the history entries;
+//  3. the file completer's `~` expansion is preserved as newLastArg
+//     even though it is not the first child in the chain.
+func TestMultiCompleterAliasIntegration(t *testing.T) {
+	dir, err := os.MkdirTemp("", "won-alias-int-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	for _, name := range []string{"foo.go", "bar.go", "baz.txt"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), nil, 0644))
+	}
+
+	dirURI, err := workspaceapi.CurrentUserHostURI(dir)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), dirURI)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	store := storagestub.NewInMemoryService()
+	history := search.NewHistory(store, "alias-history-doc", 16)
+	require.NoError(t, history.Load())
+
+	// History contains both "won …" entries (relevant to this alias)
+	// and unrelated commands that must NOT bleed into the suggestions.
+	require.NoError(t, history.Add("won previous-arg"))
+	require.NoError(t, history.Add("othercmd irrelevant"))
+	require.NoError(t, history.Add("won another-prev"))
+
+	chain := MultiCompleter(
+		HistoryCompleter(history),
+		FilePathCompleter(scheme),
+	)
+
+	t.Run("history entries are surfaced first, with command prefix stripped", func(t *testing.T) {
+		// Empty last arg: file completer returns all files; history
+		// returns just the prior `won …` invocations as their args.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		it, _, err := chain.Complete(ctx, []string{"won", ""})
+		require.NoError(t, err)
+		defer func() { _ = it.Close() }()
+
+		var got []string
+		for {
+			val, ok := it.Next(ctx)
+			if !ok {
+				break
+			}
+			got = append(got, val)
+		}
+
+		// The two "won …" history entries must appear first, in
+		// most-recent-first order, with the leading "won " stripped.
+		// Unrelated history entries must NOT be present.
+		require.GreaterOrEqual(t, len(got), 2,
+			"expected at least the two history entries before files, got %v", got)
+		assert.Equal(t, []string{"another-prev", "previous-arg"}, got[:2],
+			"history entries must come first, most-recent-first, with command prefix stripped")
+		assert.NotContains(t, got, "othercmd irrelevant",
+			"unrelated history entries must not bleed into alias completions")
+
+		// Files come after history.
+		assert.ElementsMatch(t,
+			[]string{"foo.go", "bar.go", "baz.txt"}, got[2:])
+	})
+
+	t.Run("file completer ~ expansion is propagated as newLastArg", func(t *testing.T) {
+		usr, err := user.Current()
+		require.NoError(t, err)
+
+		it, newLastArg, err := chain.Complete(
+			context.Background(), []string{"won", "~/"})
+		require.NoError(t, err)
+		defer func() { _ = it.Close() }()
+
+		// MultiCompleter must propagate the file completer's ~
+		// expansion even though it is the second child in the chain;
+		// without that, the prompt buffer keeps the literal "~/" and
+		// the user can never resolve their home directory.
+		assert.Equal(t, usr.HomeDir, newLastArg,
+			"file completer's ~ expansion must propagate as newLastArg "+
+				"even when it is not the first viable child in the chain")
+	})
 }

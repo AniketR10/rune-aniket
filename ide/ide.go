@@ -39,12 +39,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -59,6 +61,7 @@ type IDE struct {
 	workspaceHandler *workspaceManagerHandler
 	root             shaderRunner
 	publishEventFn   EventPublisher
+	storage          storageapi.Service
 }
 
 // EventPublisher is a function that publishes the given event back
@@ -149,7 +152,7 @@ func (i *IDE) Browser() browser.Browser {
 // Storage returns persistent storage acrosss IDE instances, given
 // the same data dir passed in ide.New, or ide.NewRecovery.
 func (i *IDE) Storage() storageapi.Service {
-	return i.workspaceHandler.storage
+	return i.storage
 }
 
 // Size returns the current width and height in cells.
@@ -229,6 +232,15 @@ func (i *IDE) init(
 	configErr := loadConfig(&i.ideConfig, cfgfilename,
 		op.defaultWallpaper, defaultCfg, op.bell,
 		op.scheduleFn, op.zdotDir)
+
+	// Storage is built here (not in workspaceManagerHandler.init) so
+	// ideConfig — which is consulted to build alias completer chains
+	// before any workspace is created — can resolve `{history}`
+	// placeholders against the persisted command history doc. The
+	// command Prompt writes history under the "ide" partition, so
+	// alias chains must read from the same partition.
+	i.storage = localstorage.New(context.Background(), dataDir, doctoml.Marshaler())
+	i.ideConfig.storage = storageapi.WithPartition(i.storage, "ide")
 
 	var logger *slog.Logger
 	if logPath := i.ideConfig.logOutputPath(); logPath != "" {
@@ -322,11 +334,14 @@ func (i *IDE) init(
 
 	i.workspaceHandler = new(workspaceManagerHandler)
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
-		i.ideConfig.notificationsConfig(), i.ideConfig, dataDir, i.publishEvent,
+		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
+		i.publishEvent,
 		op.extensionRunner, i.locker, op.extensions, func() (ideConfig, error) {
-			return reloadConfig(cfgfilename,
+			cfg, err := reloadConfig(cfgfilename,
 				op.defaultWallpaper, defaultCfg, op.bell, op.scheduleFn,
 				op.zdotDir)
+			cfg.storage = i.ideConfig.storage
+			return cfg, err
 		}, op.workspaceConfig, op.tabBarOffset,
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,

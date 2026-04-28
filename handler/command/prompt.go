@@ -1099,16 +1099,10 @@ func (h *Prompt) commandArgsHistoryIterator(
 		ret := strings.Join(storedAndArgs[m:], " ")
 		return ret
 	})
-	seen := make(map[string]struct{})
-	uniqueArgs := iterator.Filter(mapArgs, func(args string) bool {
-		_, ok := seen[args]
-		if !ok {
-			seen[args] = struct{}{}
-			return args != ""
-		}
-		return false
+	nonEmptyArgs := iterator.Filter(mapArgs, func(args string) bool {
+		return args != ""
 	})
-	it, isEmpty := iterator.IsEmpty(ctx, uniqueArgs)
+	it, isEmpty := iterator.IsEmpty(ctx, nonEmptyArgs)
 
 	if !isEmpty {
 		h.completingWithHistory.Store(true)
