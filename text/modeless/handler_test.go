@@ -471,6 +471,11 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		{"Unindent current line(s)", "<meta-]><meta-[>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Delete from cursor to end of line", "<meta-k><meta-k>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Delete to beginning of line", "<right><meta-k><meta-backspace>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Set mark at cursor position", "<meta-k><meta-space>", nil, term.Coordinates{}, nil},
+		{"Select from cursor to mark", "<meta-k><meta-space><down><down><meta-k><meta-a><m-c>", nil, term.Coordinates{Y: 0, X: 0}, new("a\nb\n")},
+		{"Delete from cursor to mark", "<meta-k><meta-space><down><down><meta-k><meta-w>", new("c\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Swap cursor position with mark", "<meta-k><meta-space><down><down><meta-k><meta-x>", nil, term.Coordinates{Y: 0, X: 0}, nil},
+		{"Clear mark", "<meta-k><meta-space><meta-k><meta-g>", nil, term.Coordinates{}, nil},
 		{"Delete to end of line", "<meta-delete>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Transpose (swap adjacent characters)", "<down><right><ctrl-t>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}, nil},
 		//{"Sort lines alphabetically", "<f5>", nil, term.Coordinates{}}, // Already sorted a-k
@@ -632,6 +637,79 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			assert.Equal(t, test.coordinates, handler.CursorAtScroll())
 		})
 	}
+}
+
+func TestMetaKMarkUsesSharedLocationList(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader("a\nb\nc"))
+	h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+	h.Resize(10, 3)
+
+	run := func(keys string) {
+		seq, err := term.ParseKeys(keys)
+		require.NoError(t, err)
+		for _, key := range seq {
+			_, handled := h.Handle(term.Event{
+				Type: term.EventKey,
+				Key:  key.Key,
+				Mod:  key.Mod,
+				Ch:   key.Ch,
+			})
+			require.True(t, handled)
+		}
+	}
+	markLocations := func() []textapi.Location {
+		for _, list := range h.LocationLists() {
+			if list.ID == modelessMarkLocationListID {
+				return list.Locations
+			}
+		}
+		return nil
+	}
+
+	run("<meta-k><meta-space>")
+	require.Len(t, markLocations(), 1)
+	assert.Equal(t, term.Coordinates{}, markLocations()[0].From)
+
+	run("<down><down><meta-k><meta-space>")
+	require.Len(t, markLocations(), 2)
+	assert.Equal(t, term.Coordinates{}, markLocations()[0].From)
+	assert.Equal(t, term.Coordinates{Y: 2}, markLocations()[1].From)
+
+	run("<meta-k><meta-g>")
+	assert.Empty(t, markLocations())
+}
+
+func TestMetaKSwapUpdatesSharedMarkLocation(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader("a\nb\nc"))
+	h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+	h.Resize(10, 3)
+
+	seq, err := term.ParseKeys("<meta-k><meta-space><down><meta-k><meta-space><down><meta-k><meta-x>")
+	require.NoError(t, err)
+	for _, key := range seq {
+		_, handled := h.Handle(term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch})
+		require.True(t, handled)
+	}
+
+	assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	for _, list := range h.LocationLists() {
+		if list.ID != modelessMarkLocationListID {
+			continue
+		}
+		require.Len(t, list.Locations, 2)
+		assert.Equal(t, term.Coordinates{}, list.Locations[0].From)
+		assert.Equal(t, term.Coordinates{Y: 2}, list.Locations[1].From)
+		return
+	}
+	t.Fatal("mark location list not found")
 }
 
 func TestSublimeSelectIndentationLevelKeyBinding(t *testing.T) {

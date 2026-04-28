@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
@@ -45,6 +46,8 @@ import (
 )
 
 var _ component.Scrollable = (*editorHandler)(nil)
+
+const modelessMarkLocationListID = "mark"
 
 type editorHandler struct {
 	cfg              modelessConfig
@@ -152,6 +155,101 @@ func (h *editorHandler) Draw(w term.Writer) {
 	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
 }
 
+func (h *editorHandler) setMarkLocation() bool {
+	locs := h.markLocations()
+	pos := h.cursor.CursorAtScroll()
+	locs = append(locs, h.newMarkLocation(pos))
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
+		text.LocationSlice(locs))
+	return true
+}
+
+func (h *editorHandler) newMarkLocation(pos term.Coordinates) textapi.Location {
+	return textapi.Location{
+		From: pos,
+		To:   term.Coordinates{Y: pos.Y, X: pos.X + 1},
+		Attr: term.Attributes{Bg: tcell.ColorGray},
+	}
+}
+
+func (h *editorHandler) markLocations() []textapi.Location {
+	for _, list := range h.cursor.LocationLists() {
+		if list.ID != modelessMarkLocationListID {
+			continue
+		}
+		locs := make([]textapi.Location, len(list.Locations))
+		copy(locs, list.Locations)
+		return locs
+	}
+	return nil
+}
+
+func (h *editorHandler) markLocation() (textapi.Location, bool) {
+	locs := h.markLocations()
+	if len(locs) == 0 {
+		return textapi.Location{}, false
+	}
+	return locs[len(locs)-1], true
+}
+
+func (h *editorHandler) clearMarkLocation() bool {
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID, nil)
+	return true
+}
+
+func (h *editorHandler) selectToMark(delete bool) bool {
+	loc, ok := h.markLocation()
+	if !ok {
+		return false
+	}
+	from := loc.From
+	to := h.cursor.CursorAtScroll()
+	if delete {
+		from, to = to, from
+	}
+	if !h.cursor.SelectRange(from, to) {
+		return false
+	}
+	if !delete {
+		return true
+	}
+	if !h.cursor.DeleteSelection() {
+		return false
+	}
+	h.popMarkLocation()
+	return true
+}
+
+func (h *editorHandler) popMarkLocation() bool {
+	locs := h.markLocations()
+	if len(locs) == 0 {
+		return false
+	}
+	locs = locs[:len(locs)-1]
+	if len(locs) == 0 {
+		return h.clearMarkLocation()
+	}
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
+		text.LocationSlice(locs))
+	return true
+}
+
+func (h *editorHandler) swapWithMark() bool {
+	locs := h.markLocations()
+	if len(locs) == 0 {
+		return false
+	}
+	loc := locs[len(locs)-1]
+	prev := h.cursor.CursorAtScroll()
+	if _, ok := h.cursor.MoveToScroll(loc.From); !ok {
+		return false
+	}
+	locs[len(locs)-1] = h.newMarkLocation(prev)
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
+		text.LocationSlice(locs))
+	return true
+}
+
 func (h *editorHandler) handleMetaK(ev term.Event) (handled bool) {
 	h.log(log.TraceLevel, "handle metak, event: %#v", ev)
 	if ev.Mod != term.ModMeta {
@@ -163,11 +261,21 @@ func (h *editorHandler) handleMetaK(ev term.Event) (handled bool) {
 			h.cursor.MoveStartLine()
 			handled = h.cursor.DeleteSelection()
 		}
+	case term.KeySpace:
+		handled = h.setMarkLocation()
 	}
 	if handled {
 		return
 	}
 	switch ev.Ch {
+	case 'a':
+		handled = h.selectToMark(false)
+	case 'w':
+		handled = h.selectToMark(true)
+	case 'x':
+		handled = h.swapWithMark()
+	case 'g':
+		handled = h.clearMarkLocation()
 	case 'u':
 		handled = h.cursor.UppercaseSelection()
 	case 'l':
