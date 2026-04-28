@@ -59,6 +59,7 @@ type modelessConfig struct {
 	macroRecorder      MacroRecorder
 	macroPlayer        MacroPlayer
 	autoCenter         bool
+	autoPair           bool
 	statusBarConfig    text.StatusBarConfig
 	statusBarEnabled   bool
 	scheduleNextTick   func(fn func()) bool
@@ -177,6 +178,14 @@ func WithMacroPlayer(player MacroPlayer) Option {
 func WithAutoCenter(enabled bool) Option {
 	return func(cfg *modelessConfig) {
 		cfg.autoCenter = enabled
+	}
+}
+
+// WithAutoPair determines whether the modeless editor should use cursor-level
+// delimiter auto-pair behavior while inserting text.
+func WithAutoPair(enabled bool) Option {
+	return func(cfg *modelessConfig) {
+		cfg.autoPair = enabled
 	}
 }
 

@@ -4241,6 +4241,56 @@ func TestInsertModeCtrlShortcuts(t *testing.T) {
 	}
 }
 
+func TestInsertModeAutoPairOption(t *testing.T) {
+	run := func(t *testing.T, keycomb string, opts ...Option) *viHandlerImpl {
+		t.Helper()
+		seq, err := term.ParseKeys("i" + keycomb)
+		require.NoError(t, err)
+
+		vi := setupVi(t, "a", 2, opts...)
+		vi.Resize(10, 5)
+		for _, key := range seq {
+			exit, handled := vi.Handle(term.Event{
+				Type: term.EventKey,
+				Key:  key.Key,
+				Mod:  key.Mod,
+				Ch:   key.Ch,
+			})
+			require.False(t, exit)
+			require.True(t, handled)
+		}
+		return vi
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		vi := run(t, "(")
+
+		assert.Equal(t, "(a", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 1}, vi.cursorAtScroll())
+	})
+
+	t.Run("opening delimiters insert matching pair when enabled", func(t *testing.T) {
+		vi := run(t, "(", WithAutoPair(true))
+
+		assert.Equal(t, "()a", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 1}, vi.cursorAtScroll())
+	})
+
+	t.Run("backspace removes matching pair when enabled", func(t *testing.T) {
+		vi := run(t, "(<backspace>", WithAutoPair(true))
+
+		assert.Equal(t, "a", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{}, vi.cursorAtScroll())
+	})
+
+	t.Run("enter between braces creates blank line when enabled", func(t *testing.T) {
+		vi := run(t, "{<enter>", WithAutoPair(true))
+
+		assert.Equal(t, "{\n\n}\na", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{Y: 1}, vi.cursorAtScroll())
+	})
+}
+
 func TestInsertModeTabUsesIndentServiceWhenAvailable(t *testing.T) {
 	t.Run("tab uses indent service when available", func(t *testing.T) {
 		buf := cell.NewBuffer()

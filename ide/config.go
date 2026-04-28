@@ -1229,6 +1229,21 @@ func (c ideConfig) editorRuler() (ruler int) {
 	return
 }
 
+func (c ideConfig) editorAutoPair() bool {
+	cfg, ok := c.editor()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetBool("auto_pair")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.auto_pair"] = err
+		}
+		return false
+	}
+	return enabled
+}
+
 func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
 	cfg, ok := c.virtual()
 	if !ok {

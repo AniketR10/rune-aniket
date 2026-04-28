@@ -618,13 +618,13 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Jump to previous misspelling", "<ctrl-shift-f6>", nil, term.Coordinates{}},
 
 		// Auto-pairing (context-dependent) - these insert characters
-		// {"Auto-pair double quotes", "\"", sp("\"\"\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}},
-		// {"Auto-pair single quotes", "'", sp("''\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}},
-		// {"Auto-pair parentheses", "(", sp("()\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}},
-		// {"Auto-pair square brackets", "[", sp("[]\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}},
-		// {"Auto-pair curly braces", "{", sp("{}\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}},
-		// {"Delete matching pair (when between paired characters)", "(<backspace>", sp("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}},
-		// {"Add line between paired braces", "{<enter>", sp("{\n\n}\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}},
+		{"Auto-pair double quotes", "\"", new("\"\"a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Auto-pair single quotes", "'", new("''a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Auto-pair parentheses", "(", new("()a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Auto-pair square brackets", "[", new("[]a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Auto-pair curly braces", "{", new("{}a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Delete matching pair (when between paired characters)", "(<backspace>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Add line between paired braces", "{<enter>", new("{\n\n}\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}, nil},
 	}
 
 	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
@@ -650,8 +650,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			})
 			recorder := new(testMacroRecorder)
 			player := new(testMacroPlayer)
-			handler := NewHandler(buf, uri,
-				text.IndentRuneTab, 0,
+			opts := []Option{
 				WithClipboard(reg),
 				WithMacroRecorder(recorder),
 				WithMacroPlayer(player),
@@ -662,7 +661,13 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 						Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
 					},
 				}),
-			)
+			}
+			if strings.HasPrefix(test.description, "Auto-pair") ||
+				test.description == "Delete matching pair (when between paired characters)" ||
+				test.description == "Add line between paired braces" {
+				opts = append(opts, WithAutoPair(true))
+			}
+			handler := NewHandler(buf, uri, text.IndentRuneTab, 0, opts...)
 			handler.Resize(10, 3)
 			for _, key := range seq {
 				ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}
@@ -695,6 +700,61 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			assert.Equal(t, test.coordinates, handler.CursorAtScroll())
 		})
 	}
+}
+
+func TestAutoPairOption(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
+	require.NoError(t, err)
+
+	run := func(t *testing.T, keycomb string, opts ...Option) (*cell.Buffer, *editorHandler) {
+		t.Helper()
+		seq, err := term.ParseKeys(keycomb)
+		require.NoError(t, err)
+
+		buf := cell.NewBuffer()
+		buf.ReadFrom(strings.NewReader("a"))
+		h := NewHandler(buf, uri, text.IndentRuneTab, 0, opts...)
+		h.Resize(10, 3)
+		handler := h.(*editorHandler)
+		for _, key := range seq {
+			_, handled := handler.Handle(term.Event{
+				Type: term.EventKey,
+				Key:  key.Key,
+				Mod:  key.Mod,
+				Ch:   key.Ch,
+			})
+			require.True(t, handled)
+		}
+		return buf, handler
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		buf, h := run(t, "(")
+
+		assert.Equal(t, "(a", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("opening delimiters insert matching pair when enabled", func(t *testing.T) {
+		buf, h := run(t, "(", WithAutoPair(true))
+
+		assert.Equal(t, "()a", buf.String())
+		assert.Equal(t, term.Coordinates{X: 1}, h.CursorAtScroll())
+	})
+
+	t.Run("backspace removes matching pair when enabled", func(t *testing.T) {
+		buf, h := run(t, "(<backspace>", WithAutoPair(true))
+
+		assert.Equal(t, "a", buf.String())
+		assert.Equal(t, term.Coordinates{}, h.CursorAtScroll())
+	})
+
+	t.Run("enter between braces creates blank line when enabled", func(t *testing.T) {
+		buf, h := run(t, "{<enter>", WithAutoPair(true))
+
+		assert.Equal(t, "{\n\n}\na", buf.String())
+		assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
+	})
 }
 
 func TestMetaKMarkUsesSharedLocationList(t *testing.T) {

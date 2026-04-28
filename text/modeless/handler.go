@@ -602,7 +602,11 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.cursor.DeleteSelection()
 				h.cursor.Unselect()
 			}
-			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune, h.cfg.indentTabspaces)
+			if h.cfg.autoPair {
+				h.cursor.InsertAutoPairNewline(h.cfg.indentRune, h.cfg.indentTabspaces)
+			} else {
+				h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune, h.cfg.indentTabspaces)
+			}
 			handled = true
 		case term.KeySpace:
 			if _, ok := h.cursor.SelectionMode(); ok {
@@ -626,6 +630,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			if _, ok := h.cursor.SelectionMode(); ok {
 				handled = h.cursor.DeleteSelection()
 				h.cursor.Unselect()
+			} else if h.cfg.autoPair {
+				handled = h.cursor.BackspaceAutoPair()
 			} else {
 				handled = h.cursor.Backspace()
 			}
@@ -641,6 +647,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				if _, ok := h.cursor.SelectionMode(); ok {
 					handled = h.cursor.DeleteSelection()
 					h.cursor.Unselect()
+				} else if h.cfg.autoPair {
+					handled = h.cursor.InsertWithAutoPair(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
 				} else {
 					h.cursor.InsertWithIndentRune(ev.Ch, h.cfg.indentRune, h.cfg.indentTabspaces)
 					handled = true

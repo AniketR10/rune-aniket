@@ -69,6 +69,7 @@ default_attr:
 
 editor:
     ruler: 72
+    auto_pair: true
     status_bar:
         enabled: true
         background_attr:
@@ -402,6 +403,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.True(t, cfg.autoRestore())
 	assert.Equal(t, "  ", cfg.tabNameSeparator())
 	assert.Equal(t, 90, cfg.editorRuler())
+	assert.False(t, cfg.editorAutoPair())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
 	syntaxConfig := cfg.syntaxConfig()
@@ -457,6 +459,7 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, 4, cfg.editorTabspaces())
 	assert.Equal(t, 72, cfg.editorRuler())
+	assert.True(t, cfg.editorAutoPair())
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
 	assert.True(t, ok)
 	assert.Equal(t, "/tmp/debug.log", cfg.logOutputPath())

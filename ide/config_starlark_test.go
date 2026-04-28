@@ -301,6 +301,7 @@ func TestRuneStarFixture(t *testing.T) {
 			checks: func(t *testing.T, cfg map[string]any) {
 				editor := cfg["editor"].(map[string]any)
 				assert.Equal(t, "modal", editor["mode"])
+				assert.Equal(t, false, editor["auto_pair"])
 				// GUI-specific window manager frame charset should use the
 				// braille-ish corners.
 				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)
@@ -315,6 +316,7 @@ func TestRuneStarFixture(t *testing.T) {
 			checks: func(t *testing.T, cfg map[string]any) {
 				editor := cfg["editor"].(map[string]any)
 				assert.Equal(t, "modeless", editor["mode"])
+				assert.Equal(t, true, editor["auto_pair"])
 				cmd := cfg["command"].(map[string]any)
 				assert.Equal(t, "<s-m-p>", cmd["key"])
 				bindings := cmd["key_bindings"].(map[string]any)
@@ -340,6 +342,7 @@ func TestRuneStarFixture(t *testing.T) {
 				// modal is still in effect.
 				editor := cfg["editor"].(map[string]any)
 				assert.Equal(t, "modal", editor["mode"])
+				assert.Equal(t, false, editor["auto_pair"])
 			},
 		},
 	}
@@ -373,6 +376,7 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 		},
 		term.RingBell, term.ScheduleNextTick, ""))
 	assert.Equal(t, "modal", cfg.editorMode())
+	assert.False(t, cfg.editorAutoPair())
 	assert.Equal(t, "info", cfg.cfg["log_level"])
 	assert.Equal(t, 2000, cfg.shellMaxHistory())
 }

@@ -268,6 +268,9 @@ config = {
         "mode":       "modal",
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
+        # Auto-pair quotes, brackets, and braces while editing. Explicitly off
+        # for modal mode by default; the modeless override below enables it.
+        "auto_pair":  False,
         "tabspaces": 4,
         "modal": {
             # Default text attributes.
@@ -664,7 +667,8 @@ config = {
 if mode == "modeless":
     config = merge(config, {
         "editor": {
-            "mode": "modeless",
+            "mode":      "modeless",
+            "auto_pair": True,
             "modeless": {
                 "attr":        attr(fg = "default", bg = "default"),
                 "bar_attr":    attr(fg = "default", bg = "default"),

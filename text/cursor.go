@@ -2313,6 +2313,61 @@ func (c *Cursor) InsertWithIndentRune(r rune, indentRune rune, tabspaces int) {
 	c.InsertContext(c.ctx, r, indentRune, tabspaces)
 }
 
+// InsertWithAutoPair inserts r at the current cursor position with basic
+// delimiter auto-pair behavior. Opening delimiters insert their matching closing
+// delimiter and leave the cursor between the pair. Closing delimiters overtype a
+// matching delimiter already under the cursor. Other runes insert normally.
+func (c *Cursor) InsertWithAutoPair(r rune, indentRune rune, tabspaces int) bool {
+	if _, ok := autoPairOpenForClose(r); ok {
+		if cell, cellOK := c.cellAtScrollCoordinates(c.cursorAtScroll()); cellOK && cell.Ch == r {
+			return c.MoveRight()
+		}
+	}
+
+	if close, ok := autoPairCloseForOpen(r); ok {
+		c.insertAutoPairRunes(r, close)
+		return true
+	}
+
+	c.InsertWithIndentRune(r, indentRune, tabspaces)
+	return true
+}
+
+// BackspaceAutoPair deletes both delimiters when the cursor is between a known
+// matching pair. Otherwise, it behaves like Backspace.
+func (c *Cursor) BackspaceAutoPair() bool {
+	prevPos, nextPos, _, _, ok := c.autoPairAroundCursor()
+	if !ok {
+		return c.Backspace()
+	}
+
+	_, old := c.buffer().DeleteContext(c.ctx, prevPos, term.Coordinates{Y: nextPos.Y, X: nextPos.X + 1})
+	if old == "" {
+		return false
+	}
+	c.setCursorAfterUpdate(prevPos)
+	return true
+}
+
+// InsertAutoPairNewline inserts a blank line between paired braces when the
+// cursor is between "{" and "}". In all other cases it inserts a normal newline.
+func (c *Cursor) InsertAutoPairNewline(indentRune rune, tabspaces int) bool {
+	_, nextPos, prev, next, ok := c.autoPairAroundCursor()
+	if !ok || !autoPairIsBracePair(prev, next) {
+		c.InsertWithIndentRune('\n', indentRune, tabspaces)
+		return true
+	}
+
+	insertAt := c.cursorAtScroll()
+	if nextPos.X+1 < c.view().Columns(nextPos.Y) {
+		_, _, _ = c.buffer().Edit(c.ctx, nextPos, term.Coordinates{Y: nextPos.Y, X: nextPos.X + 1}, "\n\n}\n")
+	} else {
+		_, _, _ = c.buffer().Edit(c.ctx, insertAt, insertAt, "\n\n")
+	}
+	c.setCursorAfterUpdate(term.Coordinates{Y: insertAt.Y + 1})
+	return true
+}
+
 // InsertContext inserts rune at the current cursor's position.
 func (c *Cursor) InsertContext(ctx context.Context, r rune, indentRune rune, tabspaces int) {
 	mode := c.selection.mode
@@ -3827,6 +3882,78 @@ func (c *Cursor) setCursorAfterUpdate(atScroll term.Coordinates) {
 	c.scroll.RecalculateWraps()
 	res, _ := c.scroll.ScrollToWindowCoordinates(atScroll)
 	c.setCursor(res, c.shouldSeek)
+}
+
+func autoPairCloseForOpen(open rune) (rune, bool) {
+	switch open {
+	case '(':
+		return ')', true
+	case '[':
+		return ']', true
+	case '{':
+		return '}', true
+	case '"':
+		return '"', true
+	case '\'':
+		return '\'', true
+	default:
+		return 0, false
+	}
+}
+
+func autoPairOpenForClose(close rune) (rune, bool) {
+	switch close {
+	case ')':
+		return '(', true
+	case ']':
+		return '[', true
+	case '}':
+		return '{', true
+	case '"':
+		return '"', true
+	case '\'':
+		return '\'', true
+	default:
+		return 0, false
+	}
+}
+
+func (c *Cursor) insertAutoPairRunes(open, close rune) {
+	mode := c.selection.mode
+	c.selection.mode = NoSelection
+	c.setSelection()
+
+	insertAt := c.cursorAtScroll()
+	_, _, _ = c.buffer().Edit(c.ctx, insertAt, insertAt, string([]rune{open, close}))
+	c.selection.mode = mode
+	c.setSelection()
+	c.setCursorAfterUpdate(term.Coordinates{Y: insertAt.Y, X: insertAt.X + 1})
+}
+
+func (c *Cursor) autoPairAroundCursor() (
+	prevPos, nextPos term.Coordinates, prev, next term.Cell, ok bool,
+) {
+	pos := c.cursorAtScroll()
+	if pos.X <= 0 {
+		return term.Coordinates{}, term.Coordinates{}, term.Cell{}, term.Cell{}, false
+	}
+
+	prevPos = term.Coordinates{Y: pos.Y, X: pos.X - 1}
+	nextPos = pos
+	prev, ok = c.cellAtScrollCoordinates(prevPos)
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, term.Cell{}, term.Cell{}, false
+	}
+	next, ok = c.cellAtScrollCoordinates(pos)
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, term.Cell{}, term.Cell{}, false
+	}
+	close, ok := autoPairCloseForOpen(prev.Ch)
+	return prevPos, nextPos, prev, next, ok && close == next.Ch
+}
+
+func autoPairIsBracePair(prev, next term.Cell) bool {
+	return prev.Ch == '{' && next.Ch == '}'
 }
 
 func (c *Cursor) getIndentation(pos term.Coordinates, indentRune rune, tabspaces int) (ret int, ok bool) {

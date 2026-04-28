@@ -221,6 +221,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithTabspaces(cfg.editorTabspaces()),
 		vi.WithIndents(cfg.editorIndents()),
 		vi.WithRuler(cfg.editorRuler()),
+		vi.WithAutoPair(cfg.editorAutoPair()),
 		vi.WithComments(cfg.editorComments()),
 		vi.WithScheduleNextTick(cfg.scheduleNextTick),
 		vi.WithAttr(cfg.modalAttr()),
@@ -251,6 +252,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithTabspaces(cfg.editorTabspaces()),
 		modeless.WithIndents(cfg.editorIndents()),
 		modeless.WithRuler(cfg.editorRuler()),
+		modeless.WithAutoPair(cfg.editorAutoPair()),
 		modeless.WithComments(cfg.editorComments()),
 		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
 		modeless.WithAttr(cfg.modelessAttr()),
@@ -284,6 +286,7 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 			indents:          cfg.editorIndents(),
 			scheduleNextTick: cfg.scheduleNextTick,
 			clipboard:        h.clip,
+			autoPair:         cfg.editorAutoPair(),
 		}
 	case editorModeModal:
 		return viCommandPromptEditor{
@@ -291,6 +294,7 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 			indents:          cfg.editorIndents(),
 			scheduleNextTick: cfg.scheduleNextTick,
 			clipboard:        h.clip,
+			autoPair:         cfg.editorAutoPair(),
 		}
 	default:
 		panic("invalid editor mode")
@@ -305,6 +309,7 @@ type modelessCommandPromptEditor struct {
 	indents          text.IndentConfig
 	scheduleNextTick func(func()) bool
 	clipboard        clipboard.Register
+	autoPair         bool
 }
 
 func (m modelessCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
@@ -315,6 +320,7 @@ func (m modelessCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler 
 		modeless.WithIndents(m.indents),
 		modeless.WithScheduleNextTick(m.scheduleNextTick),
 		modeless.WithClipboard(m.clipboard),
+		modeless.WithAutoPair(m.autoPair),
 		modeless.WithWrap(false),
 	)
 }
@@ -324,6 +330,7 @@ type viCommandPromptEditor struct {
 	indents          text.IndentConfig
 	scheduleNextTick func(func()) bool
 	clipboard        clipboard.Register
+	autoPair         bool
 }
 
 func (v viCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
@@ -333,6 +340,7 @@ func (v viCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 		vi.WithIndents(v.indents),
 		vi.WithScheduleNextTick(v.scheduleNextTick),
 		vi.WithClipboard(v.clipboard),
+		vi.WithAutoPair(v.autoPair),
 		vi.WithWrap(false),
 	)
 }

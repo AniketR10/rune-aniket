@@ -386,7 +386,7 @@ const foldHighlightLocationListID = "_foldHighlightID"
 // visualSelectionStartMarkID and visualSelectionEndMarkID hold the
 // start (`<`) and end (`>`) of the last visual selection. They are
 // populated whenever vi exits a visual mode and are consumed by the
-// `'<`/`` `< ``/`'>`/`` `> `` keybindings via the standard
+// `'<`/“ `< “/`'>`/“ `> “ keybindings via the standard
 // location-jump command. Vim records these for any visual operation
 // (operator, <esc>, motion-driven exit), so we update them on every
 // transition out of a visual mode.
@@ -1558,7 +1558,11 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 	case 0:
 		switch ev.Key {
 		case term.KeyEnter:
-			vi.cursor.InsertWithIndentRune('\n', vi.config.indentRune, vi.config.indentTabspaces)
+			if vi.config.autoPair {
+				vi.cursor.InsertAutoPairNewline(vi.config.indentRune, vi.config.indentTabspaces)
+			} else {
+				vi.cursor.InsertWithIndentRune('\n', vi.config.indentRune, vi.config.indentTabspaces)
+			}
 			vi.insertRegister.WriteRune('\n')
 			handled = true
 		case term.KeySpace:
@@ -1569,7 +1573,11 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			vi.insertTabIndent()
 			handled = true
 		case term.KeyBackspace:
-			vi.cursor.Backspace()
+			if vi.config.autoPair {
+				vi.cursor.BackspaceAutoPair()
+			} else {
+				vi.cursor.Backspace()
+			}
 			handled = true
 		case term.KeyEsc:
 			vi.exitInsert()
@@ -1592,7 +1600,11 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			handled = true
 		default:
 			if ev.Ch != 0 {
-				vi.cursor.InsertWithIndentRune(ev.Ch, vi.config.indentRune, vi.config.indentTabspaces)
+				if vi.config.autoPair {
+					vi.cursor.InsertWithAutoPair(ev.Ch, vi.config.indentRune, vi.config.indentTabspaces)
+				} else {
+					vi.cursor.InsertWithIndentRune(ev.Ch, vi.config.indentRune, vi.config.indentTabspaces)
+				}
 				vi.insertRegister.WriteRune(ev.Ch)
 				handled = true
 			}
@@ -2817,9 +2829,9 @@ func (vi *viHandlerImpl) cancelSearchOp() {
 }
 
 // markOpState holds the operator-pending state while a mark motion
-// (`'{a}` or `` `{a} ``) is being entered. It is constructed by
+// (`'{a}` or “ `{a} “) is being entered. It is constructed by
 // beginMarkOp and consumed by handleMarkOp once the mark name is
-// received. linewise is forced for `'`; charwise (`` ` ``) operators
+// received. linewise is forced for `'`; charwise (“ ` “) operators
 // fall back to their natural granularity. Operators that are
 // intrinsically linewise (gq, >, <) set forceLinewise=true regardless
 // of which mark form was used.
@@ -2911,7 +2923,7 @@ func (vi *viHandlerImpl) cancelMarkOp() {
 }
 
 // beginCommentMarkOp arms the mark-pending state for the gq/gw operators.
-// Formatting is linewise regardless of `'` vs `` ` ``.
+// Formatting is linewise regardless of `'` vs “ ` “.
 func (vi *viHandlerImpl) beginCommentMarkOp(linewise bool) {
 	commentFn := vi.commentFn
 	vi.beginMarkOp(linewise, true,

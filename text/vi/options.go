@@ -51,6 +51,7 @@ type viConfig struct {
 	wrap               bool
 	cursorCorrections  bool
 	autoCenter         bool
+	autoPair           bool
 	enableInitialFolds bool
 	enableAuxBar       bool
 	auxBarConfig       text.AuxBarConfig
@@ -264,6 +265,14 @@ func WithCursorCorrections(enabled bool) Option {
 func WithAutoCenter(enabled bool) Option {
 	return func(cfg *viConfig) {
 		cfg.autoCenter = enabled
+	}
+}
+
+// WithAutoPair determines whether insert mode should use cursor-level
+// delimiter auto-pair behavior while inserting text.
+func WithAutoPair(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.autoPair = enabled
 	}
 }
 

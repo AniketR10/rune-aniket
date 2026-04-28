@@ -4977,6 +4977,171 @@ func TestCursorShiftLineRoundTripTable(t *testing.T) {
 	}
 }
 
+func TestCursorAutoPair(t *testing.T) {
+	t.Run("InsertWithAutoPair", func(t *testing.T) {
+		tsuite := []struct {
+			name       string
+			content    string
+			at         term.Coordinates
+			ch         rune
+			wantBuffer string
+			wantCursor term.Coordinates
+		}{
+			// Opening delimiters insert the matching closing delimiter
+			// and leave the cursor between the pair.
+			{"open ( before text", "abc", term.Coordinates{X: 0}, '(', "()abc", term.Coordinates{X: 1}},
+			{"open [ before text", "abc", term.Coordinates{X: 0}, '[', "[]abc", term.Coordinates{X: 1}},
+			{"open { before text", "abc", term.Coordinates{X: 0}, '{', "{}abc", term.Coordinates{X: 1}},
+			{`open " before text`, "abc", term.Coordinates{X: 0}, '"', `""abc`, term.Coordinates{X: 1}},
+			{"open ' before text", "abc", term.Coordinates{X: 0}, '\'', "''abc", term.Coordinates{X: 1}},
+
+			// Opening delimiter at common cursor positions.
+			{"open ( in middle of word", "abc", term.Coordinates{X: 1}, '(', "a()bc", term.Coordinates{X: 2}},
+			{"open { at end of line", "abc", term.Coordinates{X: 3}, '{', "abc{}", term.Coordinates{X: 4}},
+			{"open [ on second line", "x\ny", term.Coordinates{X: 0, Y: 1}, '[', "x\n[]y", term.Coordinates{X: 1, Y: 1}},
+			{"open ( before existing close", ")", term.Coordinates{X: 0}, '(', "())", term.Coordinates{X: 1}},
+			{"open { before existing close", "}", term.Coordinates{X: 0}, '{', "{}}", term.Coordinates{X: 1}},
+
+			// Overtype: closing delimiter on top of matching close advances cursor.
+			{"overtype )", "()", term.Coordinates{X: 1}, ')', "()", term.Coordinates{X: 2}},
+			{"overtype ]", "[]", term.Coordinates{X: 1}, ']', "[]", term.Coordinates{X: 2}},
+			{"overtype }", "{}", term.Coordinates{X: 1}, '}', "{}", term.Coordinates{X: 2}},
+			{`overtype "`, `""`, term.Coordinates{X: 1}, '"', `""`, term.Coordinates{X: 2}},
+			{"overtype '", "''", term.Coordinates{X: 1}, '\'', "''", term.Coordinates{X: 2}},
+
+			// Unmatched closing delimiter inserts normally.
+			{"unmatched ) inserts", "abc", term.Coordinates{X: 1}, ')', "a)bc", term.Coordinates{X: 2}},
+			{"unmatched ] inserts", "abc", term.Coordinates{X: 1}, ']', "a]bc", term.Coordinates{X: 2}},
+			{"unmatched } inserts", "abc", term.Coordinates{X: 0}, '}', "}abc", term.Coordinates{X: 1}},
+
+			// Quote runes are both open and close. With no matching quote
+			// under the cursor we fall through to the open-pair insert.
+			{`quote " in word inserts pair`, "abc", term.Coordinates{X: 1}, '"', `a""bc`, term.Coordinates{X: 2}},
+			{"quote ' in word inserts pair", "abc", term.Coordinates{X: 1}, '\'', "a''bc", term.Coordinates{X: 2}},
+
+			// Non-delimiter characters insert normally.
+			{"non-delimiter inserts normally", "ac", term.Coordinates{X: 1}, 'b', "abc", term.Coordinates{X: 2}},
+
+			// Closing delimiter at end of line where no cell exists at
+			// the cursor falls through to a normal insert.
+			{"close ) at end of line", "()", term.Coordinates{X: 2}, ')', "())", term.Coordinates{X: 3}},
+		}
+
+		for _, tc := range tsuite {
+			t.Run(tc.name, func(t *testing.T) {
+				c := setupCursorContent(t, 10, 5, tc.content, false)
+				_, _ = c.MoveToScroll(tc.at)
+
+				ok := c.InsertWithAutoPair(tc.ch, IndentRuneTab, 0)
+
+				assert.True(t, ok)
+				assert.Equal(t, tc.wantBuffer, c.buffer().String())
+				assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+			})
+		}
+	})
+
+	t.Run("BackspaceAutoPair", func(t *testing.T) {
+		tsuite := []struct {
+			name       string
+			content    string
+			at         term.Coordinates
+			wantBuffer string
+			wantCursor term.Coordinates
+			wantOK     bool
+		}{
+			// Backspace between a matching pair removes both delimiters.
+			{"between ( )", "()", term.Coordinates{X: 1}, "", term.Coordinates{}, true},
+			{"between [ ]", "[]", term.Coordinates{X: 1}, "", term.Coordinates{}, true},
+			{"between { }", "{}", term.Coordinates{X: 1}, "", term.Coordinates{}, true},
+			{`between " "`, `""`, term.Coordinates{X: 1}, "", term.Coordinates{}, true},
+			{"between ' '", "''", term.Coordinates{X: 1}, "", term.Coordinates{}, true},
+
+			// Pair removal preserves surrounding content.
+			{"pair with trailing text", "()abc", term.Coordinates{X: 1}, "abc", term.Coordinates{}, true},
+			{"pair with leading text", "abc()", term.Coordinates{X: 4}, "abc", term.Coordinates{X: 3}, true},
+			{"pair sandwiched", "x()y", term.Coordinates{X: 2}, "xy", term.Coordinates{X: 1}, true},
+
+			// Mismatched pair falls back to plain backspace.
+			{"mismatched ( ]", "(]", term.Coordinates{X: 1}, "]", term.Coordinates{}, true},
+			{"mismatched { )", "{)", term.Coordinates{X: 1}, ")", term.Coordinates{}, true},
+
+			// Plain backspace fallback for non-delimiters.
+			{"middle of word", "abc", term.Coordinates{X: 2}, "ac", term.Coordinates{X: 1}, true},
+			{"end of word", "abc", term.Coordinates{X: 3}, "ab", term.Coordinates{X: 2}, true},
+
+			// Backspace from start of a line joins with the line above.
+			{"start of second line", "ab\ncd", term.Coordinates{X: 0, Y: 1}, "abcd", term.Coordinates{X: 2, Y: 0}, true},
+
+			// Backspace at the very start of the buffer is a no-op.
+			{"start of buffer non-empty", "abc", term.Coordinates{}, "abc", term.Coordinates{}, false},
+			{"empty buffer", "", term.Coordinates{}, "", term.Coordinates{}, false},
+
+			// A close-then-open sequence is not a pair: fall back to plain
+			// backspace which removes the previous close.
+			{"close-open is not a pair", ")(", term.Coordinates{X: 1}, "(", term.Coordinates{}, true},
+		}
+
+		for _, tc := range tsuite {
+			t.Run(tc.name, func(t *testing.T) {
+				c := setupCursorContent(t, 10, 5, tc.content, false)
+				_, _ = c.MoveToScroll(tc.at)
+
+				ok := c.BackspaceAutoPair()
+
+				assert.Equal(t, tc.wantOK, ok)
+				assert.Equal(t, tc.wantBuffer, c.buffer().String())
+				assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+			})
+		}
+	})
+
+	t.Run("InsertAutoPairNewline", func(t *testing.T) {
+		tsuite := []struct {
+			name       string
+			content    string
+			at         term.Coordinates
+			wantBuffer string
+			wantCursor term.Coordinates
+		}{
+			// Brace pair: open the body on its own line so the closing
+			// brace stays alone.
+			{"empty {} alone", "{}", term.Coordinates{X: 1}, "{\n\n}", term.Coordinates{X: 0, Y: 1}},
+			{"{} with trailing text", "{}a", term.Coordinates{X: 1}, "{\n\n}\na", term.Coordinates{X: 0, Y: 1}},
+			{"{} with leading and trailing text", "x{}y", term.Coordinates{X: 2}, "x{\n\n}\ny", term.Coordinates{X: 0, Y: 1}},
+			{"{} at end of line, more lines below", "x{}\nz", term.Coordinates{X: 2}, "x{\n\n}\nz", term.Coordinates{X: 0, Y: 1}},
+
+			// Non-brace pairs split a normal newline; the closing
+			// delimiter is not relocated to its own line.
+			{"() splits as plain newline", "()", term.Coordinates{X: 1}, "(\n)", term.Coordinates{X: 0, Y: 1}},
+			{"[] splits as plain newline", "[]", term.Coordinates{X: 1}, "[\n]", term.Coordinates{X: 0, Y: 1}},
+			{`"" splits as plain newline`, `""`, term.Coordinates{X: 1}, "\"\n\"", term.Coordinates{X: 0, Y: 1}},
+
+			// No pair under the cursor: behaves like a normal newline.
+			{"plain text mid-word", "abc", term.Coordinates{X: 1}, "a\nbc", term.Coordinates{X: 0, Y: 1}},
+			{"plain text at end of line", "abc", term.Coordinates{X: 3}, "abc\n", term.Coordinates{X: 0, Y: 1}},
+
+			// Cursor at start of a line is not between a pair, even if
+			// the previous line ends with `{`. The plain newline is
+			// inserted, leaving the closing `}` on the next line.
+			{"start of line after {", "{\n}", term.Coordinates{X: 0, Y: 1}, "{\n\n}", term.Coordinates{X: 0, Y: 2}},
+		}
+
+		for _, tc := range tsuite {
+			t.Run(tc.name, func(t *testing.T) {
+				c := setupCursorContent(t, 10, 5, tc.content, false)
+				_, _ = c.MoveToScroll(tc.at)
+
+				ok := c.InsertAutoPairNewline(IndentRuneTab, 0)
+
+				assert.True(t, ok)
+				assert.Equal(t, tc.wantBuffer, c.buffer().String())
+				assert.Equal(t, tc.wantCursor, c.CursorAtScroll())
+			})
+		}
+	})
+}
+
 var (
 	abcAttr      = term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}
 	abcLocations = []textapi.Location{
