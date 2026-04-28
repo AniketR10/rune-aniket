@@ -4280,6 +4280,72 @@ func TestInsertModeTabUsesIndentServiceWhenAvailable(t *testing.T) {
 	})
 }
 
+// TestInsertModeTabAfterOInsertsFullIndentLevel reproduces RUNE-121: pressing
+// `o<tab>` in a 2-space indented file must add a full indent level rather
+// than a single space, and a second `<tab>` must add another level rather
+// than dedenting.
+func TestInsertModeTabAfterOInsertsFullIndentLevel(t *testing.T) {
+	t.Run("tab on line at target inserts full indent level", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.Init()
+		_, err := buf.ReadFrom(strings.NewReader("a:\n  b: c"))
+		require.NoError(t, err)
+		buf.WithView(mockIndentView{View: buf.View(), indents: map[int]int{0: 0, 1: 1, 2: 1}})
+
+		cfg := defaultviHandlerImplConfig()
+		cfg.tabspaces = 2
+		cfg.indentRune = text.IndentRuneSpace
+		cfg.indentTabspaces = 2
+		vi := new(viHandlerImpl)
+		vi.init(buf, cfg)
+		vi.Resize(20, 10)
+
+		// Move to end of first line and press `o` to open a new line below.
+		require.True(t, vi.setCursorAtScroll(term.Coordinates{X: 1, Y: 0}))
+		_, _ = vi.Handle(term.Event{Type: term.EventKey, Ch: 'o'})
+		require.Equal(t, insertMode, vi.mode())
+		// `o` runs tryIndent so the new line is at the syntax target (2 spaces).
+		assert.Equal(t, "a:\n  \n  b: c", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 2, Y: 1}, vi.cursor.CursorAtScroll())
+
+		// First <tab> must insert 2 more spaces, not 1.
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+		require.True(t, handled)
+		assert.Equal(t, "a:\n    \n  b: c", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 4, Y: 1}, vi.cursor.CursorAtScroll())
+
+		// Second <tab> must insert another 2 spaces, not dedent.
+		_, handled = vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+		require.True(t, handled)
+		assert.Equal(t, "a:\n      \n  b: c", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 6, Y: 1}, vi.cursor.CursorAtScroll())
+	})
+
+	t.Run("tab on under-indented line snaps up to target", func(t *testing.T) {
+		buf := cell.NewBuffer()
+		buf.Init()
+		_, err := buf.ReadFrom(strings.NewReader("abc"))
+		require.NoError(t, err)
+		buf.WithView(mockIndentView{View: buf.View(), indents: map[int]int{0: 1}})
+
+		cfg := defaultviHandlerImplConfig()
+		cfg.tabspaces = 2
+		cfg.indentRune = text.IndentRuneSpace
+		cfg.indentTabspaces = 2
+		vi := new(viHandlerImpl)
+		vi.init(buf, cfg)
+		vi.Resize(20, 10)
+
+		_ = vi.setCursorAtScroll(term.Coordinates{X: 0, Y: 0})
+		vi.setInsertMode()
+
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+		require.True(t, handled)
+		assert.Equal(t, "  abc", vi.less.Buffer().String())
+		assert.Equal(t, term.Coordinates{X: 2, Y: 0}, vi.cursor.CursorAtScroll())
+	})
+}
+
 type insertModeCommandStep struct {
 	name                 string
 	event                term.Event

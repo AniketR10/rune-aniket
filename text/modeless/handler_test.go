@@ -1037,6 +1037,35 @@ func (v testIndentView) IndentationAt(line int) (int, bool) {
 	return target, ok
 }
 
+// TestModelessTabAtTargetInsertsFullIndentLevel reproduces RUNE-121 for the
+// modeless handler: when the line is already at the syntax target indent, a
+// <tab> keypress must add a full indent level rather than a single space, and
+// a second <tab> must add another level rather than dedenting.
+func TestModelessTabAtTargetInsertsFullIndentLevel(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///indent.yaml")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.Init()
+	_, err = buf.ReadFrom(strings.NewReader("  "))
+	require.NoError(t, err)
+	buf.WithView(testIndentView{View: buf.View(), indents: map[int]int{0: 1}})
+
+	h := NewHandler(buf, uri, text.IndentRuneSpace, 2, WithTabspaces(2))
+	h.Resize(20, 10)
+	require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2, Y: 0}))
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+	require.True(t, handled)
+	assert.Equal(t, "    ", buf.String())
+	assert.Equal(t, term.Coordinates{X: 4, Y: 0}, h.CursorAtScroll())
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+	require.True(t, handled)
+	assert.Equal(t, "      ", buf.String())
+	assert.Equal(t, term.Coordinates{X: 6, Y: 0}, h.CursorAtScroll())
+}
+
 // errorClipboard is a clipboard.Register that always returns an error on Paste.
 type errorClipboard struct{}
 

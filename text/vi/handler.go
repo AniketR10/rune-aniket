@@ -1510,6 +1510,21 @@ func (vi *viHandlerImpl) exitInsert() {
 	vi.setNormalMode()
 }
 
+// insertTabIndent handles a <tab> keypress in insert mode. It either snaps
+// the line up to the syntax target indent or inserts a full indent level via
+// Cursor.TryIndent. When no indent service is available, it falls back to
+// inserting the configured indent rune literally. The inserted material is
+// recorded to vi.insertRegister so that `.`-repeat replays the keystroke.
+func (vi *viHandlerImpl) insertTabIndent() {
+	if vi.cursor.TryIndent(vi.config.indentRune, vi.config.indentTabspaces) {
+		vi.insertRegister.WriteRune(vi.config.indentRune)
+		return
+	}
+	vi.cursor.InsertWithIndentRune(
+		vi.config.indentRune, vi.config.indentRune, vi.config.indentTabspaces)
+	vi.insertRegister.WriteRune(vi.config.indentRune)
+}
+
 func (vi *viHandlerImpl) writeDotRegister() {
 	str := vi.insertRegister.String()
 	if str == "" {
@@ -1551,10 +1566,7 @@ func (vi *viHandlerImpl) handleInsert(ev term.Event) (quit, handled bool) {
 			vi.insertRegister.WriteRune(' ')
 			handled = true
 		case term.KeyTab:
-			if !vi.cursor.TryIndent(vi.config.indentRune, vi.config.indentTabspaces) {
-				vi.cursor.InsertWithIndentRune(vi.config.indentRune, vi.config.indentRune, vi.config.indentTabspaces)
-				vi.insertRegister.WriteRune(vi.config.indentRune)
-			}
+			vi.insertTabIndent()
 			handled = true
 		case term.KeyBackspace:
 			vi.cursor.Backspace()

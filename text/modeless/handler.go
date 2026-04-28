@@ -617,7 +617,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.cursor.Unselect()
 			} else {
 				if !h.cursor.TryIndent(h.cfg.indentRune, h.cfg.indentTabspaces) {
-					h.cursor.Insert(h.cfg.indentRune)
+					h.cursor.InsertWithIndentRune(
+						h.cfg.indentRune, h.cfg.indentRune, h.cfg.indentTabspaces)
 				}
 			}
 			handled = true

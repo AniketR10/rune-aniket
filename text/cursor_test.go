@@ -899,12 +899,13 @@ func TestIndent(t *testing.T) {
 		expectCursorAtScroll term.Coordinates
 	}{
 		{
-			inputBuffer:         "",
-			expectIndentationAt: 0,
-			indentRune:          IndentRuneTab,
-			expectIndent:        false,
-			cursorAtScroll:      term.Coordinates{},
-			outputBuffer:        "",
+			inputBuffer:          "",
+			expectIndentationAt:  0,
+			indentRune:           IndentRuneTab,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{},
+			outputBuffer:         "\t",
+			expectCursorAtScroll: term.Coordinates{X: 1},
 		},
 		{
 			inputBuffer:          "a",
@@ -916,12 +917,13 @@ func TestIndent(t *testing.T) {
 			expectCursorAtScroll: term.Coordinates{X: 1},
 		},
 		{
-			inputBuffer:         "\ta",
-			expectIndentationAt: 1,
-			indentRune:          IndentRuneTab,
-			expectIndent:        false,
-			cursorAtScroll:      term.Coordinates{},
-			outputBuffer:        "\ta",
+			inputBuffer:          "\ta",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneTab,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{},
+			outputBuffer:         "\t\ta",
+			expectCursorAtScroll: term.Coordinates{X: 1},
 		},
 		{
 			inputBuffer:          "\ta",
@@ -938,8 +940,8 @@ func TestIndent(t *testing.T) {
 			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 1},
-			outputBuffer:         "a",
-			expectCursorAtScroll: term.Coordinates{},
+			outputBuffer:         "\t\ta",
+			expectCursorAtScroll: term.Coordinates{X: 2},
 		},
 		{
 			inputBuffer:          "\t\ta",
@@ -947,16 +949,17 @@ func TestIndent(t *testing.T) {
 			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 2},
-			outputBuffer:         "a",
-			expectCursorAtScroll: term.Coordinates{},
+			outputBuffer:         "\t\t\ta",
+			expectCursorAtScroll: term.Coordinates{X: 3},
 		},
 		{
-			inputBuffer:         "a\ta",
-			expectIndentationAt: 0,
-			indentRune:          IndentRuneTab,
-			expectIndent:        false,
-			cursorAtScroll:      term.Coordinates{X: 2},
-			outputBuffer:        "a\ta",
+			inputBuffer:          "a\ta",
+			expectIndentationAt:  0,
+			indentRune:           IndentRuneTab,
+			expectIndent:         true,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			outputBuffer:         "a\t\ta",
+			expectCursorAtScroll: term.Coordinates{X: 3},
 		},
 		{
 			inputBuffer:          "a\ta",
@@ -973,8 +976,8 @@ func TestIndent(t *testing.T) {
 			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 2},
-			outputBuffer:         "\ta\ta",
-			expectCursorAtScroll: term.Coordinates{X: 1},
+			outputBuffer:         "\t\t\ta\ta",
+			expectCursorAtScroll: term.Coordinates{X: 3},
 		},
 		{
 			inputBuffer:          "\taX",
@@ -991,8 +994,8 @@ func TestIndent(t *testing.T) {
 			indentRune:           IndentRuneTab,
 			expectIndent:         true,
 			cursorAtScroll:       term.Coordinates{X: 3},
-			outputBuffer:         "\taX",
-			expectCursorAtScroll: term.Coordinates{X: 2},
+			outputBuffer:         "\t\ta\tX",
+			expectCursorAtScroll: term.Coordinates{X: 4},
 		},
 	}
 
@@ -1251,9 +1254,49 @@ func TestCursorTryIndentWithConfiguredIndentRune(t *testing.T) {
 			indentRune:           IndentRuneSpace,
 			tabspaces:            4,
 			cursorAtScroll:       term.Coordinates{X: 4},
-			expectIndent:         false,
+			expectIndent:         true,
+			outputBuffer:         "        a",
+			expectCursorAtScroll: term.Coordinates{X: 8},
+		},
+		{
+			// RUNE-121: o<tab> on a 2-space indented YAML file. The line is
+			// already at the syntax target so a tab keypress must add a full
+			// indent level rather than no-op or dedent.
+			name:                 "spaces at target inserts full indent level",
+			inputBuffer:          "  a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            2,
+			cursorAtScroll:       term.Coordinates{X: 2},
+			expectIndent:         true,
 			outputBuffer:         "    a",
 			expectCursorAtScroll: term.Coordinates{X: 4},
+		},
+		{
+			// RUNE-121: a second tab from the position above must add another
+			// full indent level rather than dedenting.
+			name:                 "spaces above target inserts another full indent level",
+			inputBuffer:          "    a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            2,
+			cursorAtScroll:       term.Coordinates{X: 4},
+			expectIndent:         true,
+			outputBuffer:         "      a",
+			expectCursorAtScroll: term.Coordinates{X: 6},
+		},
+		{
+			// RUNE-121 control case: line under-indented still snaps up to
+			// the syntax target.
+			name:                 "spaces under-indented snaps up to target",
+			inputBuffer:          "a",
+			expectIndentationAt:  1,
+			indentRune:           IndentRuneSpace,
+			tabspaces:            2,
+			cursorAtScroll:       term.Coordinates{},
+			expectIndent:         true,
+			outputBuffer:         "  a",
+			expectCursorAtScroll: term.Coordinates{X: 2},
 		},
 	}
 

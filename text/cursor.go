@@ -3060,17 +3060,37 @@ func toggleCaseString(s string) string {
 }
 
 // TryIndent attempts to indent the cursor if an indent service is available.
+// When the line is below the syntax target indent, TryIndent snaps the line
+// up to the target. Otherwise it always inserts exactly one full indent level
+// at the start of the line (a tab for IndentRuneTab, or strings.Repeat(" ",
+// tabspaces) for IndentRuneSpace) and advances the cursor by that width.
+// TryIndent never dedents; explicit snap-to-target dedent behaviour is
+// available through Reindent / ReindentSelection.
+// Returns false when no indent service is available so the caller can fall
+// back to inserting the indent rune literally.
 func (c *Cursor) TryIndent(indentRune rune, tabspaces int) bool {
 	pos := c.cursorAtScroll()
-	after, ok := c.reindentAt(pos, indentRune, tabspaces)
+	svc := c.getIndentService()
+	target, ok := svc.IndentationAt(pos.Y)
 	if !ok {
 		return false
 	}
-	if after != pos {
-		c.setCursorAfterUpdate(after)
-		return true
+	current, _ := c.getIndentation(pos, indentRune, tabspaces)
+	targetCells := target
+	if indentRune == IndentRuneSpace {
+		targetCells *= c.resolveTabspaces(tabspaces)
 	}
-	return false
+	var after term.Coordinates
+	if current < targetCells {
+		after, _ = c.doTryIndent(c.ctx, pos, target, indentRune, tabspaces)
+	} else {
+		indent, width := c.indentMaterial(indentRune, tabspaces)
+		c.buffer().InsertString(pos, indent)
+		after = pos
+		after.X += width
+	}
+	c.setCursorAfterUpdate(after)
+	return true
 }
 
 // ToggleHide either unhides the hidden block at cursor,
