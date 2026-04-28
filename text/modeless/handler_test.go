@@ -55,6 +55,46 @@ type testCommentService struct {
 	block []string
 }
 
+type testMacroRecorder struct {
+	started   []string
+	stopped   int
+	recording bool
+}
+
+func (r *testMacroRecorder) Start(registerID string) {
+	r.started = append(r.started, registerID)
+	r.recording = true
+}
+
+func (r *testMacroRecorder) Stop() {
+	r.stopped++
+	r.recording = false
+}
+
+func (r *testMacroRecorder) IsRecording() bool {
+	return r.recording
+}
+
+type testMacroPlayer struct {
+	plays   []testMacroPlay
+	err     error
+	playing bool
+}
+
+type testMacroPlay struct {
+	registerID string
+	count      int
+}
+
+func (p *testMacroPlayer) Play(registerID string, count int) error {
+	p.plays = append(p.plays, testMacroPlay{registerID: registerID, count: count})
+	return p.err
+}
+
+func (p *testMacroPlayer) IsPlaying() bool {
+	return p.playing
+}
+
 func (s testSelectionService) Rows() int { return s.view.Rows() }
 
 func (s testSelectionService) Columns(row int) int { return s.view.Columns(row) }
@@ -564,8 +604,8 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Clear mark", "<meta-k><meta-space><meta-k><meta-g>", nil, term.Coordinates{}},
 
 		// Macros
-		//{"Start/stop recording macro", "<ctrl-q>", nil, term.Coordinates{}},
-		//{"Playback recorded macro", "<ctrl-q><right><ctrl-q><ctrl-shift-q>", nil, term.Coordinates{Y: 0, X: 1}},
+		{"Start/stop recording macro", "<ctrl-q>", nil, term.Coordinates{}, nil},
+		{"Playback recorded macro", "<ctrl-q><right><ctrl-q><ctrl-shift-q>", nil, term.Coordinates{Y: 0, X: 1}, nil},
 
 		// Build system
 		// {"Build (run default build system)", "<meta-b>", nil, term.Coordinates{}},
@@ -608,10 +648,13 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 				line:  []string{"//"},
 				block: []string{"/*", "*/"},
 			})
-			handler := NewHandler(buf, uri, text.IndentRuneTab, 0, WithClipboard(reg))
-			handler = NewHandler(buf, uri,
+			recorder := new(testMacroRecorder)
+			player := new(testMacroPlayer)
+			handler := NewHandler(buf, uri,
 				text.IndentRuneTab, 0,
 				WithClipboard(reg),
+				WithMacroRecorder(recorder),
+				WithMacroPlayer(player),
 				WithRuler(12),
 				WithComments(text.CommentConfig{
 					"go": {
@@ -633,6 +676,21 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 				paste, err := clip.Paste(clipboard.DefaultRegisterID)
 				require.NoError(t, err)
 				assert.Equal(t, *test.clipboard, paste.Text)
+			}
+			switch test.description {
+			case "Start/stop recording macro":
+				assert.Equal(t, []string{registerset.UnnamedRegisterID}, recorder.started)
+				assert.True(t, recorder.recording)
+				assert.Zero(t, recorder.stopped)
+				assert.Empty(t, player.plays)
+			case "Playback recorded macro":
+				assert.Equal(t, []string{registerset.UnnamedRegisterID}, recorder.started)
+				assert.False(t, recorder.recording)
+				assert.Equal(t, 1, recorder.stopped)
+				assert.Equal(t, []testMacroPlay{{
+					registerID: registerset.UnnamedRegisterID,
+					count:      1,
+				}}, player.plays)
 			}
 			assert.Equal(t, test.coordinates, handler.CursorAtScroll())
 		})

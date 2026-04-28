@@ -259,6 +259,8 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithGitIcons(cfg.gitIconsEnabled()),
 		modeless.WithHideInitialFolds(cfg.initialFolds()),
 		modeless.WithClipboard(h.clip),
+		modeless.WithMacroRecorder(h.macro),
+		modeless.WithMacroPlayer(h.macroPlayer),
 		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
 		modeless.WithAutoCenter(true),

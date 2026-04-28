@@ -43,6 +43,7 @@ import (
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/registerhistory"
+	"unstable.build/go-tui/text/registerset"
 )
 
 var _ component.Scrollable = (*editorHandler)(nil)
@@ -61,6 +62,8 @@ type editorHandler struct {
 	height           int
 	mouse            *mouse.Mouse
 	clipboard        clipboard.Register
+	macroRecorder    MacroRecorder
+	macroPlayer      MacroPlayer
 	pendingSetCursor *term.Coordinates
 	lastIterateWord  term.Coordinates
 	setLocations     bool
@@ -107,6 +110,8 @@ func (h *editorHandler) Init(
 	}
 	h.mouse = mouse.New(text.CursorMouseDelegate(&h.cursor))
 	h.clipboard = h.cfg.clipboard
+	h.macroRecorder = h.cfg.macroRecorder
+	h.macroPlayer = h.cfg.macroPlayer
 	h.statusBar = nopBar{}
 	h.lastIterateWord.X = -1
 	if h.cfg.enableInitialFolds {
@@ -247,6 +252,16 @@ func (h *editorHandler) swapWithMark() bool {
 	locs[len(locs)-1] = h.newMarkLocation(prev)
 	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
 		text.LocationSlice(locs))
+	return true
+}
+
+func (h *editorHandler) playMacro() bool {
+	if h.macroPlayer == nil {
+		return false
+	}
+	if err := h.macroPlayer.Play(registerset.UnnamedRegisterID, 1); err != nil {
+		h.log(log.ErrorLevel, "macro playback: %v", err)
+	}
 	return true
 }
 
@@ -665,6 +680,17 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.MoveUp()
 		case 'n':
 			handled = h.cursor.MoveDown()
+		case 'q':
+			if h.macroRecorder != nil {
+				if h.macroRecorder.IsRecording() {
+					h.macroRecorder.Stop()
+				} else {
+					h.macroRecorder.Start(registerset.UnnamedRegisterID)
+				}
+				handled = true
+			}
+		case 'Q':
+			handled = h.playMacro()
 		case 'e':
 			handled = h.cursor.MoveEndLine()
 		case 'z':
@@ -715,6 +741,8 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 			return
 		}
 		switch ev.Ch {
+		case 'Q':
+			handled = h.playMacro()
 		case 'M':
 			handled = h.cursor.SelectABlockClose('(', ')') ||
 				h.cursor.SelectABlockClose('{', '}') ||

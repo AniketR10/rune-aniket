@@ -56,6 +56,8 @@ type modelessConfig struct {
 	workspace          workspaceapi.URI
 	clipboard          clipboard.Register
 	notifications      browserapi.Notifications
+	macroRecorder      MacroRecorder
+	macroPlayer        MacroPlayer
 	autoCenter         bool
 	statusBarConfig    text.StatusBarConfig
 	statusBarEnabled   bool
@@ -64,6 +66,21 @@ type modelessConfig struct {
 
 type statusBar interface {
 	SetStatus(string, term.Attributes)
+}
+
+// MacroRecorder is a cross-editor recorder used to expose modeless macro
+// controls without owning the underlying recording implementation.
+type MacroRecorder interface {
+	Start(registerID string)
+	Stop()
+	IsRecording() bool
+}
+
+// MacroPlayer triggers macro playback from a clipboard register.
+// The count parameter specifies how many times to replay the register.
+type MacroPlayer interface {
+	Play(registerID string, count int) error
+	IsPlaying() bool
 }
 
 // defaultmodelessHandlerImplConfig is a sane configuration defaults for modelessHandlerImpl.
@@ -138,6 +155,20 @@ func WithScheduleNextTick(fn func(func()) bool) Option {
 func WithNotifications(noti browserapi.Notifications) Option {
 	return func(cfg *modelessConfig) {
 		cfg.notifications = noti
+	}
+}
+
+// WithMacroRecorder sets the macro recorder used by modeless macro controls.
+func WithMacroRecorder(recorder MacroRecorder) Option {
+	return func(cfg *modelessConfig) {
+		cfg.macroRecorder = recorder
+	}
+}
+
+// WithMacroPlayer sets the macro player used by modeless macro controls.
+func WithMacroPlayer(player MacroPlayer) Option {
+	return func(cfg *modelessConfig) {
+		cfg.macroPlayer = player
 	}
 }
 
