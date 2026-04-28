@@ -262,6 +262,7 @@ func (e *ex) init(
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
 	e.tasks = idetask.NewManager(&e.comp, tm, m,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
+	e.tasks.SetFrameAttr(e.config.FrameAttr)
 	e.comp.SubscribeWindow(e.tasks)
 	return
 }

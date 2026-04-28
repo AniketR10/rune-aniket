@@ -47,6 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/plugin"
 )
@@ -133,6 +134,40 @@ func TestManager(t *testing.T) {
 		_, minimized = ws[0].IsMinimized()
 		assert.True(t, minimized)
 	})
+
+	t.Run("status color paints frame Bg and preserves configured Fg/Attrs",
+		func(t *testing.T) {
+			wm := newFakeBrowser()
+			exec := newFakeScheme()
+			m := newTestManager(wm, exec)
+
+			// Configure the default non-focus frame attrs from config. The
+			// newly created floating window may transiently have focus attrs;
+			// task minimized frames must still use this configured baseline.
+			configured := term.Attributes{
+				Fg:    tcell.ColorSilver,
+				Bg:    tcell.ColorNavy,
+				Attrs: tcell.AttrBold,
+			}
+			m.SetFrameAttr(configured)
+			wm.nextFrameAttr = term.Attributes{Fg: tcell.ColorRed}
+
+			require.NoError(t, m.RunTask(Task{Name: "build", Cmd: "echo"}))
+			ws := wm.Created()
+			require.Len(t, ws, 1)
+
+			got := ws[0].FrameAttr()
+			assert.Equal(t, configured.Fg, got.Fg,
+				"configured frame Fg must be preserved")
+			assert.Equal(t, tcell.ColorGray, got.Bg,
+				"running status should paint frame Bg")
+			assert.Equal(t, configured.Attrs, got.Attrs,
+				"configured frame Attrs must be preserved")
+
+			m.onFocus(&fakeWindow{}, ws[0])
+			assert.Equal(t, configured, ws[0].FrameAttr(),
+				"unminimize should restore the configured frame attrs")
+		})
 
 	t.Run("SetMaxWidth changes to max width passed to new task's plugin handler", func(t *testing.T) {
 		wm := newFakeBrowser()
@@ -810,6 +845,8 @@ type fakeWindow struct {
 
 	minAlign component.Alignment
 	cfg      browserapi.FloatingConfig
+
+	frameAttr term.Attributes
 }
 
 func (w *fakeWindow) Content() tui.Handler {
@@ -885,7 +922,17 @@ func (w *fakeWindow) MinimizeRight(padding int) bool {
 	return true
 }
 func (w *fakeWindow) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
-	return term.Attributes{}, true
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	prev := w.frameAttr
+	w.frameAttr = attr
+	return prev, true
+}
+
+func (w *fakeWindow) FrameAttr() term.Attributes {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.frameAttr
 }
 
 func (w *fakeWindow) Closed() bool {
@@ -903,6 +950,7 @@ type fakeBrowser struct {
 	createErr       error
 	createHook      func(taskName string, cfg browserapi.FloatingConfig)
 	createdHandlers []browser.ScrollableFloating
+	nextFrameAttr   term.Attributes
 }
 
 func newFakeBrowser() *fakeBrowser {
@@ -949,7 +997,7 @@ func (m *fakeBrowser) Floating(h browser.Floating, cfg browserapi.FloatingConfig
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
-	w := &fakeWindow{cfg: cfg}
+	w := &fakeWindow{cfg: cfg, frameAttr: m.nextFrameAttr}
 	m.mu.Lock()
 	m.created = append(m.created, w)
 	m.mu.Unlock()

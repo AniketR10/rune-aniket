@@ -30,12 +30,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ernestrc/logd-go/logging"
 	"github.com/ernestrc/go-multierror"
+	"github.com/ernestrc/logd-go/logging"
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
@@ -56,6 +57,7 @@ type Manager struct {
 	tasks            sync.Map
 	width            int
 	height           int
+	frameAttr        term.Attributes
 	newPlugin        pluginBuilder
 	scheduleNextTick func(func()) bool
 }
@@ -75,6 +77,13 @@ func NewManager(
 	m := new(Manager)
 	m.Init(b, tm, scheme, scheduleNextTick, opts...)
 	return m
+}
+
+// SetFrameAttr configures the default non-focus frame attrs used by minimized
+// task windows. Task status colors override only Bg, preserving Fg/Attrs from
+// this value.
+func (m *Manager) SetFrameAttr(attr term.Attributes) {
+	m.frameAttr = attr
 }
 
 // Init initializes this Manager with the given browser, scheme and options.
@@ -144,6 +153,7 @@ func (m *Manager) RunTask(t Task) error {
 		m.tasks.Delete(t.Name)
 		return fmt.Errorf("workspace watch: %w", err)
 	}
+	t.defaultFrameAttr = m.frameAttr
 	ctx, cancel, err := t.init(id, m.ctx, m.b, m.scheme,
 		m.newPlugin, m.width, m.height, func() {
 			m.tasks.Delete(t.Name)

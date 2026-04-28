@@ -95,22 +95,22 @@ type Task struct {
 	newPlugin        pluginBuilder
 	scheduleNextTick func(fn func()) bool
 
-	bar             tui.Component
-	barColor        tcell.Color
-	defaultBarColor tcell.Color
-	width           int
-	maxWidth        int
-	minWidth        int
-	minHeight       int
-	height          int
-	running         bool
-	paused          bool
-	restartPending  bool
-	lastExit        error
-	lastStart       time.Time
-	lastDuration    time.Duration
-	handler         browser.ScrollableFloating
-	scheme          schemeapi.Scheme
+	bar              tui.Component
+	barColor         tcell.Color
+	defaultFrameAttr term.Attributes
+	width            int
+	maxWidth         int
+	minWidth         int
+	minHeight        int
+	height           int
+	running          bool
+	paused           bool
+	restartPending   bool
+	lastExit         error
+	lastStart        time.Time
+	lastDuration     time.Duration
+	handler          browser.ScrollableFloating
+	scheme           schemeapi.Scheme
 	// don't use mu to check if closed, so StopTask, followed by
 	// browser close handler doesn't deadlock
 	closed *atomic.Bool
@@ -405,7 +405,6 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 
 func (t *Task) setRunning(h browser.ScrollableFloating) {
 	_ = t.handler.Close()
-	isFirst := t.runs == 0
 	t.runs++
 	t.lastStart = time.Now()
 	t.running = true
@@ -413,7 +412,7 @@ func (t *Task) setRunning(h browser.ScrollableFloating) {
 	t.restartPending = false
 	t.handler = h
 	t.barColor = colorRunning
-	t.setBarColor(t.barColor, isFirst)
+	t.setBarColor(t.barColor)
 }
 
 func (t *Task) setError(err error) {
@@ -443,7 +442,7 @@ func (t *Task) doSetError(err error) {
 				),
 			))
 	}
-	t.setBarColor(t.barColor, false)
+	t.setBarColor(t.barColor)
 }
 
 func (t *Task) setSuccess() {
@@ -454,7 +453,7 @@ func (t *Task) setSuccess() {
 	t.lastExit = nil
 	t.running = false
 	t.barColor = colorSuccess
-	t.setBarColor(t.barColor, false)
+	t.setBarColor(t.barColor)
 }
 
 func (t *Task) pause() {
@@ -478,21 +477,26 @@ func (t *Task) setPause() {
 	defer t.mu.Unlock()
 
 	t.barColor = colorPaused
-	t.setBarColor(t.barColor, false)
+	t.setBarColor(t.barColor)
 }
 
-func (t *Task) setBarColor(color tcell.Color, storeFirst bool) {
+// setBarColor paints the minimized task frame background with the given status
+// color while preserving the configured non-focus frame Fg/Attrs.
+func (t *Task) setBarColor(color tcell.Color) {
 	t.scheduleNextTick(func() {
 		if _, is := t.win.IsMinimized(); is && !t.win.Closed() {
-			prev, _ := t.win.SetFrameAttr(term.Attributes{Bg: color})
-			if storeFirst {
-				t.defaultBarColor = prev.Bg
-			}
+			attr := t.defaultFrameAttr
+			attr.Bg = color
+			t.win.SetFrameAttr(attr)
 		}
-		if t.tab != nil {
-			t.tab.SetAttrs(t.Name, term.Attributes{Fg: color})
-		}
+		t.setTabColor(color)
 	})
+}
+
+func (t *Task) setTabColor(color tcell.Color) {
+	if t.tab != nil {
+		t.tab.SetAttrs(t.Name, term.Attributes{Fg: color})
+	}
 }
 
 // OnFocus satisfies browser.TabSubscriber.
@@ -551,7 +555,8 @@ func (t *Task) unminimize() {
 		return
 	}
 	t.win.Unminimize()
-	t.setBarColor(t.defaultBarColor, false)
+	t.win.SetFrameAttr(t.defaultFrameAttr)
+	t.scheduleNextTick(func() { t.setTabColor(tcell.ColorDefault) })
 }
 
 func (t *Task) minimize() {
@@ -568,7 +573,7 @@ func (t *Task) minimize() {
 	default:
 		t.win.MinimizeRight(minimizePadding)
 	}
-	t.setBarColor(t.barColor, false)
+	t.setBarColor(t.barColor)
 }
 
 func (t *Task) log(level log.Level, msg string, args ...any) {
