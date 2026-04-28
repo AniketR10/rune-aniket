@@ -320,6 +320,11 @@ func TestRuneStarFixture(t *testing.T) {
 				bindings := cmd["key_bindings"].(map[string]any)
 				assert.Equal(t, "cursorhistory prev", bindings["<ctrl-->"])
 				assert.Equal(t, "cursorhistory next", bindings["<ctrl-shift-->"])
+				assert.Equal(t, "locationtoggle bookmark", bindings["<m-f2>"])
+				assert.Equal(t, "jumptolocation next bookmark", bindings["<f2>"])
+				assert.Equal(t, "jumptolocation previous bookmark", bindings["<s-f2>"])
+				assert.Equal(t, "locationhighlight bookmark", bindings["<a-f2>"])
+				assert.Equal(t, "locationdeleteall bookmark", bindings["<s-m-f2>"])
 				term := cfg["terminal"].(map[string]any)
 				assert.Equal(t, false, term["modal"])
 			},

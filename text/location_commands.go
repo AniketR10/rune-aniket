@@ -45,10 +45,11 @@ func SubscribeLocationCommands(
 	file workspaceapi.URI, registry FileCommandRegistry, ed Handler,
 ) (Handler, error) {
 	ret := locationCommandHandler{
-		file:              file,
-		registry:          registry,
-		Handler:           ed,
-		userLocationLists: make(map[string]struct{}),
+		file:                     file,
+		registry:                 registry,
+		Handler:                  ed,
+		userLocationLists:        make(map[string]struct{}),
+		highlightedLocationLists: make(map[string]struct{}),
 	}
 	var retErr error
 	for _, cmd := range locationCommands {
@@ -72,6 +73,8 @@ const (
 	CommandCreateLocation = "locationcreate"
 	// CommandDeleteAllLocations is the command name for deleting all locations on a list.
 	CommandDeleteAllLocations = "locationdeleteall"
+	// CommandHighlightLocations is the command name for highlighting all locations on a list.
+	CommandHighlightLocations = "locationhighlight"
 	commandToggleLocation     = "locationtoggle"
 	commandDeleteLocation     = "locationdelete"
 	defaultUserLocationList   = "mark"
@@ -141,13 +144,20 @@ var locationCommands = []textapi.CommandManual{
 			" list is `%s`.", defaultUserLocationList),
 		Synopsis: "[location-list]",
 	},
+	{
+		Name: CommandHighlightLocations,
+		Summary: fmt.Sprintf("Highlights all locations of the given user-created location list. The default"+
+			" user-created location list is `%s`.", defaultUserLocationList),
+		Synopsis: "[location-list]",
+	},
 }
 
 type locationCommandHandler struct {
 	file     workspaceapi.URI
 	registry FileCommandRegistry
 	Handler
-	userLocationLists map[string]struct{}
+	userLocationLists        map[string]struct{}
+	highlightedLocationLists map[string]struct{}
 }
 
 func (u locationCommandHandler) Close() (ret error) {
@@ -180,6 +190,8 @@ func (u locationCommandHandler) HandleCommand(
 		}
 	case CommandDeleteAllLocations:
 		err = u.handleDeleteAllLocations(cmd)
+	case CommandHighlightLocations:
+		err = u.handleHighlightLocations(cmd)
 	default:
 		err = errors.New("extraneous command")
 	}
@@ -198,7 +210,7 @@ func (u locationCommandHandler) Complete(ctx context.Context, cmd textapi.Comman
 		ret, err = u.completeCreateLocation(cmd)
 	case commandDeleteLocation:
 		ret, err = u.completeDeleteLocation(cmd)
-	case CommandDeleteAllLocations:
+	case CommandDeleteAllLocations, CommandHighlightLocations:
 		ret, err = u.completeCreateLocation(cmd)
 	default:
 		err = errors.New("extraneous command")
@@ -300,6 +312,42 @@ func (u locationCommandHandler) handleDeleteAllLocations(cmd textapi.Command) (e
 	u.Handler.SetLocationList(textapi.LocationPriorityInfo, list, nil)
 	clear(u.userLocationLists)
 	return
+}
+
+func (u locationCommandHandler) handleHighlightLocations(cmd textapi.Command) (err error) {
+	list := defaultUserLocationList
+	if len(cmd.Args) > 0 {
+		list = cmd.Args[0]
+	}
+	if _, ok := u.highlightedLocationLists[list]; ok {
+		u.Handler.SetLocationList(
+			textapi.LocationPriorityCritical,
+			selectionLocationListID,
+			LocationSlice(nil),
+		)
+		delete(u.highlightedLocationLists, list)
+		return nil
+	}
+
+	for _, locationList := range u.Handler.LocationLists() {
+		if locationList.ID != list {
+			continue
+		}
+		clear(u.highlightedLocationLists)
+		locations := make([]textapi.Location, len(locationList.Locations))
+		for i, loc := range locationList.Locations {
+			loc.Attr = term.Attributes{Attrs: tcell.AttrReverse}
+			locations[i] = loc
+		}
+		u.Handler.SetLocationList(
+			textapi.LocationPriorityCritical,
+			selectionLocationListID,
+			LocationSlice(locations),
+		)
+		u.highlightedLocationLists[list] = struct{}{}
+		return nil
+	}
+	return errors.New("location list does not exist")
 }
 
 func (u locationCommandHandler) handleDeleteLocation(cmd textapi.Command) (err error) {
