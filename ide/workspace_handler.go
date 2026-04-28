@@ -1138,7 +1138,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)
 	}
-	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser)
+	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser, callbacks)
 	apiHandler, err := lspcmd.AllHandler(
 		lsp, apieditor, apibrowser, apibrowser, apibrowser,
 		ex.workspace, parser, cmdcfg)
@@ -2049,11 +2049,13 @@ func (f *workspaceTabManager) SetTabName(
 func lspCommandsConfig(
 	uri workspaceapi.URI, cfg ideConfig, notifications browserapi.Notifications,
 	interrupter term.Interrupter, parser syntaxapi.Parser,
+	diagnosticsSource lspcmd.DiagnosticsSource,
 ) lspcmd.Config {
 	cmdcfg := lspcmd.DefaultConfig()
 	cmdcfg.RootURI = uri
 	cmdcfg.Parser = parser
 	cmdcfg.ScheduleNextTick = cfg.scheduleNextTick
+	cmdcfg.DiagnosticsSource = diagnosticsSource
 	cmdcfg.Highlight.Delay = 50 * time.Millisecond
 	cmdcfg.Highlight.WriteAttr = term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline}
 	cmdcfg.Highlight.ReadAttr = term.Attributes{Attrs: tcell.AttrUnderline}

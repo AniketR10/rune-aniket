@@ -86,6 +86,10 @@ func Manual() textapi.CommandManual {
 				Summary:  "Find references to a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{
+				Name:    "diagnostics",
+				Summary: "Show all LSP diagnostics in a location picker",
+			},
+			{
 				Name:    "signature-help",
 				Summary: "Show signature help at cursor",
 			},
@@ -111,6 +115,12 @@ type Config struct {
 	References     ReferencesConfig
 	Highlight      HighlightConfig
 	SignatureHelp  SignatureHelpConfig
+	Diagnostics    DiagnosticsConfig
+
+	// DiagnosticsSource provides the workspace-wide diagnostics
+	// snapshot consumed by the "diagnostics" subcommand. When nil,
+	// the subcommand reports that no diagnostics are available.
+	DiagnosticsSource DiagnosticsSource
 
 	// ScheduleNextTick defers a function to the next event-loop tick.
 	ScheduleNextTick func(func()) bool
@@ -133,6 +143,7 @@ func DefaultConfig() Config {
 		References:     DefaultReferencesConfig(),
 		Highlight:      DefaultHighlightConfig(),
 		SignatureHelp:  DefaultSignatureHelpConfig(),
+		Diagnostics:    DefaultDiagnosticsConfig(),
 		Interrupter:    term.NopInterrupter(),
 	}
 }
@@ -188,6 +199,11 @@ func AllHandler(
 		"references": ReferencesHandler(
 			lsp, editor, wm, opener, notify, fs,
 			cfg.RootURI, cfg.ScheduleNextTick, cfg.Parser, cfg.References, wsLog,
+		),
+		"diagnostics": DiagnosticsHandler(
+			editor, wm, opener, notify, fs,
+			cfg.RootURI, cfg.ScheduleNextTick, cfg.Parser,
+			cfg.DiagnosticsSource, cfg.Diagnostics, wsLog,
 		),
 		"signature-help": SignatureHelpHandler(lsp, editor, wm,
 			cfg.ScheduleNextTick, cfg.SignatureHelp, wsLog),

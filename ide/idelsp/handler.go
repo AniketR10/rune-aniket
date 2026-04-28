@@ -137,6 +137,7 @@ type CallbackHandler struct {
 	progress     map[string]string
 	fileVersions map[string]*fileVersionState
 	versionCond  *sync.Cond
+	diagnostics  map[string][]semanticapi.Diagnostic
 }
 
 // fileVersionState tracks the latest sent and processed
@@ -210,6 +211,7 @@ func NewCallbackHandler(
 		log:              slog.With("struct", "idelsp.CallbackHandler", "workspace", rootURI),
 		progress:         make(map[string]string),
 		fileVersions:     make(map[string]*fileVersionState),
+		diagnostics:      make(map[string][]semanticapi.Diagnostic),
 	}
 	h.versionCond = sync.NewCond(&h.mu)
 	return h
@@ -256,6 +258,19 @@ func (h *CallbackHandler) PublishDiagnostics(
 	if err != nil {
 		return fmt.Errorf("parse URI: %w", err)
 	}
+
+	// Centrally cache the latest diagnostics for this URI so the
+	// `lsp diagnostics` command can list them across all files,
+	// regardless of whether the file is currently open in an editor.
+	h.mu.Lock()
+	if len(params.Diagnostics) == 0 {
+		delete(h.diagnostics, params.URI)
+	} else {
+		stored := make([]semanticapi.Diagnostic, len(params.Diagnostics))
+		copy(stored, params.Diagnostics)
+		h.diagnostics[params.URI] = stored
+	}
+	h.mu.Unlock()
 
 	locs := make([]textapi.Location, 0, len(params.Diagnostics))
 	highest := textapi.LocationPriorityInfo
@@ -304,6 +319,22 @@ func (h *CallbackHandler) PublishDiagnostics(
 		return errCouldNotSchedule
 	}
 	return nil
+}
+
+// Diagnostics returns a snapshot of the latest diagnostics
+// received via PublishDiagnostics, keyed by document URI.
+// The returned map and its slices are owned by the caller and
+// safe to mutate.
+func (h *CallbackHandler) Diagnostics() map[string][]semanticapi.Diagnostic {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make(map[string][]semanticapi.Diagnostic, len(h.diagnostics))
+	for uri, diags := range h.diagnostics {
+		dup := make([]semanticapi.Diagnostic, len(diags))
+		copy(dup, diags)
+		out[uri] = dup
+	}
+	return out
 }
 
 // Progress handles $/progress notifications.

@@ -458,6 +458,56 @@ func TestCallbackHandler_PublishDiagnostics_IconConfig(t *testing.T) {
 	assert.Equal(t, ">", ed.locations[4].Icon)
 }
 
+func TestCallbackHandler_Diagnostics(t *testing.T) {
+	t.Parallel()
+
+	uri, err := workspaceapi.ParseURI("file:///tmp/test.go")
+	require.NoError(t, err)
+	ed := &mockEditor{handler: &mockEditorHandler{uri: uri}}
+	h := NewCallbackHandler(
+		nil, nil, nil, ed, nil, "", CallbackHandlerConfig{},
+	)
+
+	// Empty source initially.
+	assert.Empty(t, h.Diagnostics())
+
+	// Publish diagnostics for one URI.
+	diags := []semanticapi.Diagnostic{
+		{
+			Range: semanticapi.Range{
+				Start: semanticapi.Position{Line: 1, Character: 0},
+				End:   semanticapi.Position{Line: 1, Character: 5},
+			},
+			Severity: semanticapi.DiagnosticSeverityError,
+			Message:  "boom",
+		},
+	}
+	err = h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/test.go",
+		Diagnostics: diags,
+	})
+	require.NoError(t, err)
+	got := h.Diagnostics()
+	require.Len(t, got, 1)
+	require.Len(t, got["file:///tmp/test.go"], 1)
+	assert.Equal(t, "boom", got["file:///tmp/test.go"][0].Message)
+
+	// Mutating the returned snapshot must not leak into internal state.
+	got["file:///tmp/test.go"][0].Message = "tampered"
+	delete(got, "file:///tmp/test.go")
+	got2 := h.Diagnostics()
+	require.Len(t, got2, 1)
+	assert.Equal(t, "boom", got2["file:///tmp/test.go"][0].Message)
+
+	// Publishing an empty slice clears the entry for that URI.
+	err = h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/test.go",
+		Diagnostics: nil,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, h.Diagnostics())
+}
+
 func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 	t.Parallel()
 
