@@ -2235,7 +2235,7 @@ type commandPromptEditor struct {
 }
 
 func (c commandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
-	uri := workspaceapi.RandomURI("command-prompt-edit")
+	uri := workspaceapi.RandomURI("memory")
 	h, err := c.ed.Edit(uri, buf, false, false)
 	if err != nil {
 		// text.Editor implementations used here are in-process and

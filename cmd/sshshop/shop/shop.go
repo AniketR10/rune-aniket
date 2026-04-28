@@ -374,7 +374,7 @@ func mustParseURI(raw string) workspaceapi.URI {
 type paletteEditor struct{}
 
 func (paletteEditor) Edit(buf *cell.Buffer) command.EditHandler {
-	uri := workspaceapi.RandomURI("shop-palette-edit")
+	uri := workspaceapi.RandomURI("memory")
 	return modeless.NewHandler(buf, uri, text.IndentRuneTab, 0,
 		modeless.WithCommandBar(false),
 		modeless.WithWrap(false),

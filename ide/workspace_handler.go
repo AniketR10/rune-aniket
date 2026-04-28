@@ -306,7 +306,7 @@ type modelessCommandPromptEditor struct {
 }
 
 func (m modelessCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
-	uri := workspaceapi.RandomURI("command-prompt-edit")
+	uri := workspaceapi.RandomURI("memory")
 	return modeless.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
 		modeless.WithCommandBar(false),
 		modeless.WithTabspaces(m.tabspaces),
@@ -325,7 +325,7 @@ type viCommandPromptEditor struct {
 }
 
 func (v viCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
-	uri := workspaceapi.RandomURI("command-prompt-edit")
+	uri := workspaceapi.RandomURI("memory")
 	return vi.NewWithIndent(buf, uri, text.IndentRuneTab, v.tabspaces,
 		vi.WithTabspaces(v.tabspaces),
 		vi.WithIndents(v.indents),

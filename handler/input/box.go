@@ -82,7 +82,7 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 		panic("max height cannot be smaller than min height")
 	}
 
-	uri := workspaceapi.RandomURI("inputbox")
+	uri := workspaceapi.RandomURI("memory")
 	edh, err := ed.Edit(uri, buf, false, false)
 	if err != nil {
 		// this should not really happen, as editor implementations
