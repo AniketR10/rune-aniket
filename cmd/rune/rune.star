@@ -89,7 +89,7 @@ GUI_THEMES = {
         "foreground": "#bbc2cf", "background": "#000000", "black": "#000000",
         "maroon": "#ff2400", "green": "#98be65", "olive": "#ecbe7b",
         "navy": "#5f0000", "purple": "#e50000", "teal": "#46d9ff",
-        "silver": "#5c677d", "gray": "#282c34", "red": "#990000",
+        "silver": "#666666", "gray": "#282c34", "red": "#990000",
         "lime": "#98be65", "yellow": "#ecbe7b", "blue": "#ba0e2e",
         "magenta": "#ff6c6b", "cyan": "#46d9ff", "white": "#bbc2cf",
         "cursor": "#e50000",
