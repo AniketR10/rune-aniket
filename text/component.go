@@ -47,7 +47,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	shsyntax "mvdan.cc/sh/v3/syntax"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/markdown"
@@ -87,11 +86,6 @@ type Component struct {
 	replSubscribers map[string]replCommandAll
 	editors         map[string]Handler
 	fileRegistry    FileCommandRegistry
-	// shParser is reused across regroupAndUnquote calls to avoid
-	// allocating a parser on every alias dispatch. Component
-	// dispatches are serialised by the caller's lock, so a single
-	// parser is safe here.
-	shParser *shsyntax.Parser
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -214,7 +208,6 @@ func (c *Component) Init(
 	c.cmdSubscribers = make(map[string]commandAll)
 	c.replSubscribers = make(map[string]replCommandAll)
 	c.editors = make(map[string]Handler)
-	c.shParser = shsyntax.NewParser()
 
 	// validate that config aliases are not recursive
 	return ValidateCommandAliases(c.config.CommandAliases)
@@ -625,7 +618,7 @@ func (c *Component) replacePositionalArgs(
 			// dispatch (which re-tokenises the alias target) preserves
 			// it as a single argument even when it contains whitespace
 			// or shell metacharacters.
-			cmd = strings.ReplaceAll(cmd, arg, shellQuote(dispatched.Args[replace]))
+			cmd = strings.ReplaceAll(cmd, arg, command.ShellQuote(dispatched.Args[replace]))
 			if old != cmd {
 				argsReplaced[replace] = struct{}{}
 			}
@@ -671,12 +664,7 @@ func (c *Component) DispatchCommand(
 		}
 		c.log(log.TraceLevel, "replaced positional args: %#v, cmd: %#v", targets, cmd)
 		for _, target := range targets.Commands {
-			// Tokenise via shell rules + unquote so the recursive
-			// handler receives clean argument values. shellQuote was
-			// applied to substituted positional values to keep them
-			// grouped across this re-tokenisation step. Falls back
-			// to a naive split if the parser produces nothing.
-			argv := c.regroupAndUnquote(target)
+			argv := regroupAndUnquote(target)
 			if len(argv) == 0 {
 				argv = strings.Split(target, " ")
 			}
@@ -688,7 +676,6 @@ func (c *Component) DispatchCommand(
 				Window:   cmd.Window,
 				Cursor:   cmd.Cursor,
 			}
-			// re-use re-expansion logic or call to another alias
 			targetHandled, targetErr := c.DispatchCommand(
 				contextWithAlias(ctx, cmd.Name), targetCmd)
 			if targetErr != nil {
@@ -1318,29 +1305,15 @@ func (c *Component) loadMarkdown(uri workspaceapi.URI) (browserapi.Handler, erro
 	return handler, nil
 }
 
-// shellQuote wraps s with POSIX shell quoting so that a downstream
-// consumer that re-tokenises via mvdan.cc/sh recovers it as a single
-// literal argument. Values that would survive re-tokenisation unchanged
-// are returned as-is. On the rare error case (e.g. embedded NUL) the
-// string is returned verbatim — handlers can still observe and reject
-// it downstream.
-func shellQuote(s string) string {
-	q, err := shsyntax.Quote(s, shsyntax.LangBash)
-	if err != nil {
-		return s
-	}
-	return q
-}
-
-// regroupAndUnquote parses s as a shell-style word list and returns each
-// word with its outer quoting/escaping stripped. Use this when handing
-// tokens that survived an alias-target round trip to a recursive
-// dispatcher whose subscribers expect clean argument values.
-func (c *Component) regroupAndUnquote(s string) []string {
-	tokens := command.SplitCommandLine(c.shParser, s)
+// regroupAndUnquote parses s with the Layer 1 argv tokenizer and
+// returns each word with its outer quoting/escaping stripped. Use this
+// when handing tokens that survived an alias-target round trip to a
+// recursive dispatcher whose subscribers expect clean argument values.
+func regroupAndUnquote(s string) []string {
+	tokens := command.SplitCommandLine(s)
 	out := make([]string, len(tokens))
 	for i, t := range tokens {
-		out[i] = command.UnquoteToken(c.shParser, t)
+		out[i] = command.UnquoteToken(t)
 	}
 	return out
 }

@@ -1316,6 +1316,42 @@ func TestDispatchCommand(t *testing.T) {
 		assert.True(t, newWindowCalled)
 	})
 
+	t.Run("passes echo-syntax alias body verbatim", func(t *testing.T) {
+		config := text.DefaultConfig()
+		config.CommandAliases = map[string]text.CommandAlias{
+			"searchfunc": {
+				Commands: []string{
+					`echo {prompt}searchast<space>locals.scm<enter>`,
+				},
+			},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var gotArgs []string
+		var called bool
+		c.SubscribeCommand(testCommand("echo", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				called = true
+				gotArgs = cmd.Args
+				return nil
+			}, nil))
+
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "searchfunc",
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(context.Background(), cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
+		require.True(t, called)
+		assert.Equal(t,
+			[]string{`{prompt}searchast<space>locals.scm<enter>`},
+			gotArgs)
+	})
+
 	t.Run("replaces aliases positional commands with dispatched cmds", func(t *testing.T) {
 		config := text.DefaultConfig()
 		config.CommandAliases = map[string]text.CommandAlias{

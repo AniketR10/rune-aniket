@@ -38,7 +38,8 @@ RELEASE_FILES=$(wildcard release/*)
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
 	rune-dist-linux-amd64 rune-dist-linux-arm64 \
-	rune-dist-darwin-arm64 rune-dist-darwin-amd64
+	rune-dist-darwin-arm64 rune-dist-darwin-amd64 \
+	fuzz
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -79,6 +80,21 @@ test:
 test: CI=$(CI)
 test-no-race:
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
+
+# Run every Fuzz* target in the repository for FUZZTIME each (default
+# 10s). go test -fuzz only supports one target per invocation, so we
+# discover them with `go test -list` and iterate. Override with e.g.
+# `make fuzz FUZZTIME=1m`.
+FUZZTIME ?= 10s
+fuzz:
+	@ set -e; \
+	for pkg in $$(go list ./...); do \
+		targets=$$(go test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz' || true); \
+		for target in $$targets; do \
+			echo "==> fuzzing $$pkg $$target ($(FUZZTIME))"; \
+			go test -run=^$$ -fuzz=^$$target$$ -fuzztime=$(FUZZTIME) $$pkg; \
+		done; \
+	done
 
 coverage: $(BIN)
 	@ go test ./.../... -coverprofile $(BIN)/coverage

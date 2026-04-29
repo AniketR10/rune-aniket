@@ -4416,6 +4416,76 @@ func TestEcho(t *testing.T) {
 	})
 }
 
+// TestExEchoMultipleArgs covers the per-argv-element parsing of the
+// `echo` ex command: each argument is parsed independently with
+// parseEchoKeys, and resulting key sequences are concatenated. Used
+// to be a join-with-space + parse, which spuriously injected a literal
+// <space> key between logically independent argv elements.
+func TestExEchoMultipleArgs(t *testing.T) {
+	var published []term.Event
+	publishEvent := func(ev term.Event) bool {
+		if ev.Type == term.EventInterrupt {
+			return true
+		}
+		published = append(published, ev)
+		return true
+	}
+	e := newExForTestingWithWorkspace(t, &testLoader{},
+		texttest.NopEditor(), vte.DefaultConfig(),
+		publishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	defer e.Close()
+
+	require.NoError(t, e.echo(context.Background(), "<space>", "<enter>"))
+	require.Len(t, published, 2)
+	assert.Equal(t, term.KeySpace, published[0].Key)
+	assert.Equal(t, term.KeyEnter, published[1].Key)
+}
+
+// TestSearchAstAliasesFromRuneStar is the RUNE-123 regression covering
+// the actual `searchfunc` / `searchvar` / `searchtype` aliases shipped
+// in cmd/rune/rune.star. Their bodies use both echo's `<…>` key syntax
+// and the `|` separator inside the searchast query — all of which the
+// previous shell-style Layer 1 tokenizer would split incorrectly,
+// causing the recursive `echo` dispatch to fail with an
+// `invalid syntax` error notification. With the layered tokenizer
+// each alias body survives unchanged as a single argv element, and
+// parseEchoKeys accepts it.
+func TestSearchAstAliasesFromRuneStar(t *testing.T) {
+	// Source of truth: cmd/rune/rune.star. Keep these in sync with
+	// the strings declared there.
+	const (
+		searchfuncBody = `echo {prompt}searchast<space>locals.scm<space>local.definition.method|local.definition.function<enter>`
+		searchvarBody  = `echo {prompt}searchast<space>locals.scm<space>local.definition.var<enter>`
+		searchtypeBody = `echo {prompt}searchast<space>locals.scm<space>local.definition.type<enter>`
+	)
+	cases := []struct {
+		alias string
+		body  string
+	}{
+		{"searchfunc", searchfuncBody},
+		{"searchvar", searchvarBody},
+		{"searchtype", searchtypeBody},
+	}
+	for _, tc := range cases {
+		t.Run(tc.alias, func(t *testing.T) {
+			publishEvent := func(ev term.Event) bool { return true }
+			e := newExForTestingWithWorkspace(t, &testLoader{},
+				texttest.NopEditor(), vte.DefaultConfig(),
+				publishEvent, clipboard.NewInMemory(),
+				text.WithCommandKey(testCommandKey),
+				text.WithCommandAliases(map[string]text.CommandAlias{
+					tc.alias: {Commands: []string{tc.body}},
+				}),
+			)
+			defer e.Close()
+
+			require.NoError(t, e.dispatchCommand(tc.alias))
+		})
+	}
+}
+
 func TestMoveTabs(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit caliu.go>:edit boira.go>b",

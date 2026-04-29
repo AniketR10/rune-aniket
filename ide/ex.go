@@ -1823,14 +1823,18 @@ func (e *ex) windownew(_ context.Context, args ...string) error {
 }
 
 func (e *ex) echo(_ context.Context, args ...string) error {
-	sequence := strings.Join(args, " ")
-	if sequence == "" {
+	if len(args) == 0 {
 		return errors.New("expected one argument with the sequence of keys")
 	}
-	keys, err := parseEchoKeys(sequence)
-	if err != nil {
-		return fmt.Errorf("invalid syntax: %v", err)
+	var keys []echoKey
+	for _, arg := range args {
+		sub, err := parseEchoKeys(arg)
+		if err != nil {
+			return fmt.Errorf("invalid syntax: %v", err)
+		}
+		keys = append(keys, sub...)
 	}
+	var err error
 	keys, err = e.expandEchoRegisters(keys, nil)
 	if err != nil {
 		return err

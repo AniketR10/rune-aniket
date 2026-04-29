@@ -25,122 +25,252 @@ package command
 
 import (
 	"strings"
-
-	shsyntax "mvdan.cc/sh/v3/syntax"
 )
 
-// SplitCommandLine tokenises a command-prompt buffer like a POSIX shell would,
-// honouring backslash escapes, single-quoted ('…'), and double-quoted ("…")
-// regions. Tokens retain their literal escape and quote characters so that the
-// buffer can be round-tripped via strings.Join(tokens, " ") without information
-// loss. Use UnquoteToken to obtain the unescaped value of a single token.
+// SplitCommandLine tokenises a command-prompt buffer using a deliberately
+// minimal grammar: ASCII whitespace separates tokens, `\` escapes the
+// following byte, single quotes ('…') wrap a literal region with no
+// escapes, and double quotes ("…") wrap a region in which only `\"`,
+// `\\`, and `\<newline>` are escapes (every other `\<c>` is two literal
+// bytes). No other characters are special; in particular, `<`, `>`,
+// `|`, `{`, `}`, `&`, `;`, `(`, `)`, `$`, `~`, `*`, `?`, and `#` are all
+// returned verbatim. This is intentionally narrower than POSIX shell —
+// any per-command argv grammar (echo's `<…>` keys, searchast's `|`
+// separator, …) lives in Layer 3 and is unaffected by Layer 1.
 //
-// A trailing dangling backslash or an unclosed quote are treated as if the
-// remainder of the buffer were inside the open region; this keeps the live
-// prompt usable while the user is still typing.
+// Tokens retain their literal escape and quote characters so the buffer
+// can be round-tripped (modulo separator collapsing) via the prompt;
+// use UnquoteToken to obtain the unescaped value of a single token.
 //
-// p is reset and reused; pass a single per-handler parser to avoid
-// re-allocating one on every call.
-func SplitCommandLine(p *shsyntax.Parser, s string) []string {
+// A trailing dangling backslash or an unclosed quote are treated as if
+// the remainder of the buffer were inside the open region; this keeps
+// the live prompt usable while the user is still typing.
+func SplitCommandLine(s string) []string {
 	var tokens []string
-	lastEnd := 0
-	for w, err := range p.WordsSeq(strings.NewReader(s)) {
-		if err != nil {
-			// Stop after the first unparseable region; the trailing
-			// fallback below captures it as one final token.
+	i := 0
+	n := len(s)
+	for i < n {
+		// skip leading separators
+		for i < n && (s[i] == ' ' || s[i] == '\t') {
+			i++
+		}
+		if i >= n {
 			break
 		}
-		start := int(w.Pos().Offset())
-		end := int(w.End().Offset())
-		tokens = append(tokens, s[start:end])
-		lastEnd = end
-	}
-	// Capture any trailing region the parser couldn't consume (open
-	// quote, dangling backslash, unfinished word) as a single token so
-	// the live prompt remains usable while the user is still typing.
-	rest := strings.TrimLeft(s[lastEnd:], " \t")
-	if rest != "" {
-		tokens = append(tokens, rest)
+		start := i
+		state := stateOutside
+	tokLoop:
+		for i < n {
+			c := s[i]
+			switch state {
+			case stateOutside:
+				switch c {
+				case ' ', '\t':
+					break tokLoop
+				case '\\':
+					if i+1 >= n {
+						// dangling backslash: keep it as part of the token
+						i++
+						break tokLoop
+					}
+					i += 2
+				case '\'':
+					state = stateSingle
+					i++
+				case '"':
+					state = stateDouble
+					i++
+				default:
+					i++
+				}
+			case stateSingle:
+				if c == '\'' {
+					state = stateOutside
+				}
+				i++
+			case stateDouble:
+				if c == '\\' && i+1 < n {
+					next := s[i+1]
+					if next == '"' || next == '\\' || next == '\n' {
+						i += 2
+						continue
+					}
+					i++
+					continue
+				}
+				if c == '"' {
+					state = stateOutside
+				}
+				i++
+			}
+		}
+		tokens = append(tokens, s[start:i])
 	}
 	return tokens
 }
 
-// UnquoteToken removes the shell-style backslash escapes and single/double
-// quote groupings produced by SplitCommandLine, returning the literal argument
-// value that handlers should receive. Unclosed quotes and dangling backslashes
-// are tolerated: their contents are returned verbatim minus the opening
-// delimiter, matching the lenient behaviour of SplitCommandLine itself.
-//
-// p is reset and reused; pass a single per-handler parser to avoid
-// re-allocating one on every call.
-func UnquoteToken(p *shsyntax.Parser, s string) string {
+// UnquoteToken removes the Layer 1 backslash escapes and single/double
+// quote groupings produced by SplitCommandLine, returning the literal
+// argument value that handlers should receive. Unclosed quotes and
+// dangling backslashes are tolerated: their contents are returned
+// verbatim minus the opening delimiter, matching the lenient
+// "still typing" semantics of SplitCommandLine itself.
+func UnquoteToken(s string) string {
 	var b strings.Builder
-	consumed := 0
-	for w, err := range p.WordsSeq(strings.NewReader(s)) {
-		if err != nil {
-			break
+	b.Grow(len(s))
+	i := 0
+	n := len(s)
+	for i < n {
+		c := s[i]
+		switch c {
+		case '\\':
+			if i+1 >= n {
+				// dangling backslash: drop it
+				i++
+				continue
+			}
+			b.WriteByte(s[i+1])
+			i += 2
+		case '\'':
+			i++
+			for i < n && s[i] != '\'' {
+				b.WriteByte(s[i])
+				i++
+			}
+			if i < n {
+				i++ // skip closing '
+			}
+		case '"':
+			i++
+			for i < n && s[i] != '"' {
+				if s[i] == '\\' && i+1 < n {
+					next := s[i+1]
+					if next == '"' || next == '\\' {
+						b.WriteByte(next)
+						i += 2
+						continue
+					}
+					if next == '\n' {
+						i += 2
+						continue
+					}
+					// every other \<c> is two literal bytes (POSIX)
+					b.WriteByte('\\')
+					b.WriteByte(next)
+					i += 2
+					continue
+				}
+				b.WriteByte(s[i])
+				i++
+			}
+			if i < n {
+				i++ // skip closing "
+			}
+		default:
+			b.WriteByte(c)
+			i++
 		}
-		for _, part := range w.Parts {
-			writeUnquotedPart(&b, part)
-		}
-		consumed = int(w.End().Offset())
-	}
-	// Lenient tail handling: drop any unmatched opening quote and emit
-	// the rest verbatim minus the leading delimiter. This matches the
-	// "still typing" semantics of SplitCommandLine.
-	tail := strings.TrimLeft(s[consumed:], " \t")
-	switch {
-	case strings.HasPrefix(tail, "'"), strings.HasPrefix(tail, `"`):
-		b.WriteString(tail[1:])
-	case strings.HasSuffix(tail, `\`):
-		b.WriteString(tail[:len(tail)-1])
-	default:
-		b.WriteString(tail)
 	}
 	return b.String()
 }
 
-// writeUnquotedPart writes the literal value of a parsed shell word part,
-// stripping backslash escapes and quote groupings. Unsupported parts (e.g.
-// `$var`) are re-printed verbatim via the syntax printer.
-func writeUnquotedPart(b *strings.Builder, node shsyntax.WordPart) {
-	switch p := node.(type) {
-	case *shsyntax.Lit:
-		writeUnquotedLit(b, p.Value, false)
-	case *shsyntax.SglQuoted:
-		b.WriteString(p.Value)
-	case *shsyntax.DblQuoted:
-		for _, part := range p.Parts {
-			if lit, ok := part.(*shsyntax.Lit); ok {
-				writeUnquotedLit(b, lit.Value, true)
+// LastTokenIsIncomplete reports whether s ends inside an open
+// single-quoted region, an open double-quoted region, or with an
+// odd-length run of trailing backslashes. In any of those cases the
+// next typed space should stay inside the current token instead of
+// splitting arguments.
+func LastTokenIsIncomplete(s string) bool {
+	state := stateOutside
+	i := 0
+	n := len(s)
+	for i < n {
+		c := s[i]
+		switch state {
+		case stateOutside:
+			switch c {
+			case '\\':
+				if i+1 >= n {
+					return true
+				}
+				i += 2
+			case '\'':
+				state = stateSingle
+				i++
+			case '"':
+				state = stateDouble
+				i++
+			default:
+				i++
+			}
+		case stateSingle:
+			if c == '\'' {
+				state = stateOutside
+			}
+			i++
+		case stateDouble:
+			if c == '\\' && i+1 < n {
+				next := s[i+1]
+				if next == '"' || next == '\\' || next == '\n' {
+					i += 2
+					continue
+				}
+				i++
 				continue
 			}
-			_ = shsyntax.NewPrinter().Print(b, part)
+			if c == '"' {
+				state = stateOutside
+			}
+			i++
 		}
-	default:
-		_ = shsyntax.NewPrinter().Print(b, node)
 	}
+	return state != stateOutside
 }
 
-func writeUnquotedLit(b *strings.Builder, s string, inDoubleQuotes bool) {
+// ShellQuote wraps s such that re-tokenising the result via
+// SplitCommandLine + UnquoteToken yields s unchanged as a single
+// argument. Strings that contain no Layer 1 metacharacters and are
+// non-empty are returned as-is.
+func ShellQuote(s string) string {
+	if s == "" {
+		return `''`
+	}
+	if !needsShellQuote(s) {
+		return s
+	}
+	if !strings.ContainsRune(s, '\'') {
+		return "'" + s + "'"
+	}
+	// fall back to double-quoting so we can keep embedded single
+	// quotes verbatim. Inside double quotes only `\` and `"` need
+	// escaping under Layer 1.
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte('"')
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c != '\\' {
-			b.WriteByte(c)
-			continue
+		if c == '\\' || c == '"' {
+			b.WriteByte('\\')
 		}
-		if i+1 >= len(s) {
-			// Trailing dangling backslash (still-typing); drop it
-			// rather than passing it through, so partial completions
-			// see a clean prefix.
-			continue
-		}
-		next := s[i+1]
-		if inDoubleQuotes && next != '"' && next != '\\' {
-			b.WriteByte(c)
-			continue
-		}
-		b.WriteByte(next)
-		i++
+		b.WriteByte(c)
 	}
+	b.WriteByte('"')
+	return b.String()
 }
+
+func needsShellQuote(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\\', '\'', '"':
+			return true
+		}
+	}
+	return false
+}
+
+type quotingState uint8
+
+const (
+	stateOutside quotingState = iota
+	stateSingle
+	stateDouble
+)
