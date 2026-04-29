@@ -2838,6 +2838,67 @@ func TestTerminalWriteOpensSavePrompt(t *testing.T) {
 	require.Contains(t, term.CellsToString(doc.Snapshot.ActiveCells()), "terminal output")
 }
 
+func TestTerminalNewForwardsShellArgument(t *testing.T) {
+	type call struct {
+		name string
+		fn   func(b *testEx, args ...string) error
+	}
+	calls := []call{
+		{
+			name: "terminalnew",
+			fn: func(b *testEx, args ...string) error {
+				return b.ex.terminalnew(context.Background(), args...)
+			},
+		},
+		{
+			name: "terminalnewtab",
+			fn: func(b *testEx, args ...string) error {
+				return b.ex.terminalnewtab(context.Background(), args...)
+			},
+		},
+		{
+			name: "terminalneworsplit",
+			fn: func(b *testEx, args ...string) error {
+				return b.ex.terminalneworsplit(context.Background(), args...)
+			},
+		},
+	}
+	cases := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{name: "no args", args: nil, expected: nil},
+		{name: "shell only", args: []string{"zsh"}, expected: []string{"zsh"}},
+		{name: "shell with flags", args: []string{"zsh", "-i"}, expected: []string{"zsh", "-i"}},
+	}
+	for _, c := range calls {
+		for _, tc := range cases {
+			t.Run(c.name+"/"+tc.name, func(t *testing.T) {
+				b := newExForTesting(t, texttest.NopEditor())
+				defer b.Close()
+				var captured []string
+				var captureCalled bool
+				b.ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
+					captureCalled = true
+					captured = append([]string(nil), args...)
+					h := newTestVteWithConfig(args)
+					uri, err := workspaceapi.ParseURI(
+						fmt.Sprintf("terminaltest:///%s/%s", c.name, tc.name))
+					if err != nil {
+						return nil, err
+					}
+					h.uri = uri
+					return h, nil
+				}
+				require.NoError(t, c.fn(&b, tc.args...))
+				require.True(t, captureCalled)
+				require.Equal(t, tc.expected, captured)
+			})
+		}
+	}
+}
+
 func TestTerminalWriteUsesNextAvailableName(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor())
 	defer b.Close()

@@ -365,9 +365,12 @@ var (
 		"terminalnewtab": {
 			man: textapi.CommandManual{
 				Summary: "Open a new terminal emulator in a new tab and attach it to the current " +
-					"active window. If `shell` is not set in the " +
-					"terminal config, the default system shell defined via the SHELL " +
-					"environment variable is used.",
+					"active window. If a `shell` argument is provided, it is used as the " +
+					"command line for the new terminal (the first token is the executable, " +
+					"the rest are forwarded as arguments). Otherwise the default configured " +
+					"in `terminal.shell` is used; if that is unset, the system shell defined " +
+					"via the SHELL environment variable is used.",
+				Synopsis: "[shell]",
 			},
 			handler: (*ex).terminalnewtab,
 		},
@@ -382,9 +385,12 @@ var (
 				Summary: "Open a new terminal emulator and attach it to the current " +
 					"active window. The terminal created by this command is automatically " +
 					"closed when the content of the window is replaced, for example by " +
-					"`tabnext` or `tabprevious`. If `shell` is not set in the " +
-					"terminal config, the default system shell defined via the SHELL " +
-					"environment variable is used.",
+					"`tabnext` or `tabprevious`. If a `shell` argument is provided, it is " +
+					"used as the command line for the new terminal (the first token is the " +
+					"executable, the rest are forwarded as arguments). Otherwise the default " +
+					"configured in `terminal.shell` is used; if that is unset, the system " +
+					"shell defined via the SHELL environment variable is used.",
+				Synopsis: "[shell]",
 			},
 			handler: (*ex).terminalnew,
 		},
@@ -395,9 +401,12 @@ var (
 					"the window is not empty. The terminal created by this " +
 					"command is automatically closed when the content of the " +
 					"window is replaced, for example by " +
-					"`tabnext` or `tabprevious`. If `shell` is not set in the " +
-					"terminal config, the default system shell defined via the SHELL " +
-					"environment variable is used.",
+					"`tabnext` or `tabprevious`. If a `shell` argument is provided, it is " +
+					"used as the command line for the new terminal (the first token is the " +
+					"executable, the rest are forwarded as arguments). Otherwise the default " +
+					"configured in `terminal.shell` is used; if that is unset, the system " +
+					"shell defined via the SHELL environment variable is used.",
+				Synopsis: "[shell]",
 			},
 			handler: (*ex).terminalneworsplit,
 		},
