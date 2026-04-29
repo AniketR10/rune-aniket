@@ -57,6 +57,7 @@ import (
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"mvdan.cc/sh/v3/shell"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
@@ -2641,7 +2642,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──┌────────────────────────────────┐──┤
-│  │ ▀ sh -c 'sleep 20 && echo %' 0s│  │
+│  │ ▀ sh -c "sleep 20 && echo %" 0s│  │
 │  │▐                               │  │
 │  │                                │  │
 │  │                                │  │
@@ -4484,6 +4485,117 @@ func TestSearchAstAliasesFromRuneStar(t *testing.T) {
 			require.NoError(t, e.dispatchCommand(tc.alias))
 		})
 	}
+}
+
+// captureLoader is a testLoader that records the workspaceapi.Cmd values
+// passed to StartCommand so tests can assert what argv reaches the
+// VTE-bound `!!` plugin executor (post reshellQuoteArgs + shell.Fields).
+type captureLoader struct {
+	testLoader
+	startErr error
+	cmds     []workspaceapi.Cmd
+}
+
+func (c *captureLoader) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	c.cmds = append(c.cmds, cmd)
+	return 0, c.startErr
+}
+
+// TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion is a regression
+// for the RUNE_DATADIR worktree disaster: invoking the `worktreenew`
+// alias from cmd/rune/rune.star wrapped substituted positional args
+// (e.g. "$RUNE_DATADIR/worktrees/$1") in single quotes when re-handing
+// them to the VTE-backed `!!` plugin. shell.Fields then treated the
+// value as a literal, so `git worktree add` saw "$RUNE_DATADIR" rather
+// than the expanded path, and a literal "$RUNE_DATADIR" directory was
+// created inside the repository.
+//
+// The test asserts the round-trip invariant directly on
+// reshellQuoteArgs: after re-quoting and re-tokenising via shell.Fields
+// (the same call the VTE pipeline performs), every $VAR survives env
+// expansion. Sibling subtests cover the alias body in isolation by
+// configuring it on a freshly built ex and verifying the args reaching
+// the (intercepted) downstream commands match what the user typed.
+func TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion(t *testing.T) {
+	// Source of truth: cmd/rune/rune.star. Keep these in sync with the
+	// strings declared there.
+	const (
+		runeStarPluginCmd       = `!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1`
+		runeStarWorkspaceCmd    = `workspacenew $RUNE_DATADIR/worktrees/$1`
+		runeStarWorkspaceRename = `workspacerename $1`
+		worktreeName            = "tabs-refresh-gpt"
+	)
+	dataDir := t.TempDir()
+	t.Setenv("RUNE_DATADIR", dataDir)
+
+	t.Run("reshellQuoteArgs preserves $VAR through shell.Fields", func(t *testing.T) {
+		// These are exactly the args the recursive `!!` dispatch
+		// receives after Layer 1 strips the surrounding double quotes
+		// from the alias body and replacePositionalArgs has substituted
+		// $1.
+		args := []string{
+			"git", "worktree", "add",
+			"$RUNE_DATADIR/worktrees/" + worktreeName,
+			"-b", worktreeName,
+		}
+		quoted := reshellQuoteArgs(args)
+		fields, err := shell.Fields(strings.Join(quoted, " "), os.Getenv)
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"git", "worktree", "add",
+			filepath.Join(dataDir, "worktrees", worktreeName),
+			"-b", worktreeName,
+		}, fields,
+			"$RUNE_DATADIR must survive reshellQuoteArgs round-trip; "+
+				"single-quoting would suppress shell.Fields env expansion "+
+				"and create a literal $RUNE_DATADIR directory")
+	})
+
+	t.Run("worktreenew dispatch reaches StartCommand with expanded path", func(t *testing.T) {
+		// Capture StartCommand so we observe the argv reaching the
+		// VTE's executor — i.e. after reshellQuoteArgs + shell.Fields,
+		// the same place a real `!!` invocation would land. A non-nil
+		// return makes executePluginWait fail fast.
+		captured := &captureLoader{
+			testLoader: testLoader{},
+			startErr:   errors.New("captured-start-command"),
+		}
+		publishEvent := func(ev term.Event) bool { return true }
+		e := newExForTestingWithWorkspace(t, captured,
+			texttest.NopEditor(), vte.DefaultConfig(),
+			publishEvent, clipboard.NewInMemory(),
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandAliases(map[string]text.CommandAlias{
+				"worktreenew": {Commands: []string{
+					runeStarPluginCmd,
+					runeStarWorkspaceCmd,
+					runeStarWorkspaceRename,
+				}},
+			}),
+		)
+		defer e.Close()
+
+		// dispatchCommand returns the StartCommand failure wrapped
+		// inside the alias error chain; that's expected. The chain
+		// aborts after the first line, so we only assert on the args
+		// reaching the VTE executor for `!!`.
+		_ = e.dispatchCommand("worktreenew", worktreeName)
+
+		require.NotEmpty(t, captured.cmds,
+			"!! must have reached the executor's StartCommand")
+		got := captured.cmds[0]
+		argv := append([]string{got.Path}, got.Args...)
+		assert.Equal(t, []string{
+			"git", "worktree", "add",
+			filepath.Join(dataDir, "worktrees", worktreeName),
+			"-b", worktreeName,
+		}, argv,
+			"$RUNE_DATADIR must be expanded by the VTE's shell.Fields; "+
+				"single-quoting would leave a literal $RUNE_DATADIR in argv "+
+				"and create a directory of that literal name")
+	})
 }
 
 func TestMoveTabs(t *testing.T) {

@@ -64,8 +64,6 @@ import (
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
-
-	shsyntax "mvdan.cc/sh/v3/syntax"
 )
 
 const (
@@ -1359,18 +1357,59 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 // boundaries even when individual values contain whitespace or shell
 // metacharacters. Used by the plugin executor whose VTE pipeline does
 // exactly that round-trip.
+//
+// Quoting uses double quotes (or no quotes when unnecessary) rather than
+// single quotes so that variable expansion of values like
+// "$RUNE_DATADIR/worktrees/foo" — which alias bodies routinely embed —
+// is still performed by shell.Fields downstream. Single-quoting would
+// suppress that expansion, leaving a literal "$RUNE_DATADIR" in argv
+// (RUNE-AGENT/worktreenew regression).
 func reshellQuoteArgs(args []string) []string {
 	out := make([]string, len(args))
 	for i, a := range args {
-		// On the rare error case (e.g. embedded NUL) leave the value
-		// verbatim — the plugin executor surfaces such errors below.
-		q, err := shsyntax.Quote(a, shsyntax.LangBash)
-		if err != nil {
-			q = a
-		}
-		out[i] = q
+		out[i] = shellFieldsQuote(a)
 	}
 	return out
+}
+
+// shellFieldsQuote wraps s so that shell.Fields(s, os.Getenv) returns it
+// as a single argument while preserving POSIX-style $VAR / ${VAR}
+// expansion. Strings that do not contain Layer 1 / shell metacharacters
+// are returned verbatim. Values that need quoting are wrapped in double
+// quotes, escaping the few characters that are still special inside
+// double-quoted regions: `\`, `"`, and backtick.
+func shellFieldsQuote(s string) string {
+	if s == "" {
+		return `""`
+	}
+	if !needsShellFieldsQuote(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\\' || c == '"' || c == '`' {
+			b.WriteByte('\\')
+		}
+		b.WriteByte(c)
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+func needsShellFieldsQuote(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\n', '\r',
+			'\\', '"', '\'', '`',
+			'|', '&', ';', '(', ')', '<', '>',
+			'*', '?', '[', ']', '#', '~', '=':
+			return true
+		}
+	}
+	return false
 }
 
 func (e *ex) keydump(_ context.Context, _ ...string) error {
