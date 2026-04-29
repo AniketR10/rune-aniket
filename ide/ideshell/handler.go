@@ -543,8 +543,9 @@ func (h *Handler) openSearch() {
 	for _, item := range h.loadHistory() {
 		h.list.PushSync([]byte(item))
 	}
-	h.query = h.query[:0]
-	h.list.Buffer().Replace("")
+	seed := h.inner.Text()
+	h.query = append(h.query[:0], []rune(seed)...)
+	h.list.Buffer().Replace(seed)
 	h.list.FocusStart()
 	h.searching = true
 	h.mode = modeHistory

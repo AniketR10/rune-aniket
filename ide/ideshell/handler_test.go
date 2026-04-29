@@ -221,6 +221,22 @@ func handlerTestCases() []handlerCase {
                               
 > make▐                    1/3`,
 	}, {
+		name:     "<c-r> seeds query from inputbox text",
+		items:    []string{"alpha", "beta", "charlie"},
+		sequence: "bet<c-r>",
+		expected: `                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+                              
+  beta                        
+                              
+> bet▐                     1/3`,
+	}, {
 		name:     "<backspace> shrinks query",
 		items:    []string{"abc", "abd"},
 		sequence: "<c-r>abc<backspace>",
@@ -399,7 +415,7 @@ func handlerTestCases() []handlerCase {
 	}, {
 		name: "accepting clears any pre-existing prompt text " +
 			"before inserting entry",
-		items:    []string{"long-entry"},
+		items:    []string{"hello-entry"},
 		sequence: "hello<c-r><enter>",
 		expected: `                              
                               
@@ -412,7 +428,7 @@ func handlerTestCases() []handlerCase {
                               
                               
                               
-> long-entry▐                 `,
+> hello-entry▐                `,
 	}, {
 		name:     "accepting with no matches leaves prompt untouched",
 		items:    []string{"alpha"},
@@ -528,8 +544,8 @@ func handlerTestCases() []handlerCase {
                               
 > ▐                           `,
 	}, {
-		name: "re-opening overlay after an accept still " +
-			"shows the full history",
+		name: "re-opening overlay after an accept seeds the " +
+			"query with the accepted entry",
 		items:    []string{"alpha", "beta", "charlie"},
 		sequence: "<c-r><enter><c-r>",
 		expected: `                              
@@ -539,11 +555,11 @@ func handlerTestCases() []handlerCase {
                               
                               
                               
-  charlie                     
-  beta                        
-  alpha                       
                               
-> ▐                        3/3`,
+                              
+  charlie                     
+                              
+> charlie▐                 1/3`,
 	}, {
 		name:     "without storage <c-r> opens an empty overlay",
 		items:    nil,
@@ -796,7 +812,7 @@ func handlerTestCases() []handlerCase {
                               
                               
                               
-> ▐                        0/0`,
+> fo▐                      0/0`,
 	}, {
 		// Width is 30 and the prompt is "> ", so each input
 		// line holds 28 runes. 90 'x' wraps to 4 lines.
@@ -831,7 +847,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
                               
                               
                               
-> ▐                        0/0`,
+>                             `,
 	}, {
 		name: "opening overlay with history above a multi-line " +
 			"input keeps both the input and the candidates visible",
@@ -841,15 +857,15 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 		expected: `                              
                               
                               
+                              
+                              
 > xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
                               
-  charlie                     
-  beta                        
-  alpha                       
                               
-> ▐                        3/3`,
+                              
+>                             `,
 	}, {
 		name: "cancelling the overlay restores the original " +
 			"multi-line input layout",
@@ -920,9 +936,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
                               
-  alpha                       
                               
-> ▐                        1/1`,
+                              
+>                             `,
 	}, {
 		// Argument completion with a wrapped first line — the
 		// overlay still appears at the bottom and the partial
@@ -1086,14 +1102,14 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
                               
                               
                               
+                              
+                              
 > g xxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
                               
-  charlie                     
-  beta                        
-  alpha                       
                               
-> ▐                        3/3`,
+                              
+>                             `,
 	}, {
 		// Regression: opening completion when the prompt line
 		// has wrapped over several rows must not overdraw the
