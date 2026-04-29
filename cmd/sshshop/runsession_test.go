@@ -95,7 +95,7 @@ func TestWriterInterrupterPublishesMultipleInterrupts(t *testing.T) {
 	s := newFakeScreen(20, 8)
 
 	h := &drawCounterHandler{}
-	w := term.NewTermboxWriterFromScreen(s)
+	w := term.NewScreenWriter(s)
 	done := make(chan error, 1)
 	go func() { done <- tui.RunWriter(h, w) }()
 

@@ -85,7 +85,7 @@ func runSession(ctx context.Context, sess ssh.Session, log *slog.Logger) error {
 	// events that this screen's event loop will actually observe.
 	// term.DefaultWriter / tui.PublishEvent both target the process
 	// global writer and would be silently dropped in RunScreen mode.
-	writer := term.NewTermboxWriterFromScreen(screen)
+	writer := term.NewScreenWriter(screen)
 	sessionInterrupter := writerInterrupter{w: writer}
 
 	root := shop.NewRoot(sess, log,
@@ -117,7 +117,7 @@ func runSession(ctx context.Context, sess ssh.Session, log *slog.Logger) error {
 // so background goroutines can request redraws by posting interrupt
 // events onto this writer's screen event queue.
 type writerInterrupter struct {
-	w *term.TermboxWriter
+	w *term.ScreenWriter
 }
 
 func (wi writerInterrupter) Interrupt(ctx context.Context) error {
