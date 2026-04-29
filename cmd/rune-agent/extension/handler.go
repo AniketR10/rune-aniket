@@ -212,7 +212,6 @@ var (
 
 func defaultMarkdownConfig() *markdown.Config {
 	cfg := markdown.DefaultConfig()
-	cfg.Paragraph = term.Attributes{Fg: tcell.ColorSilver}
 	cfg.HeaderPrefix = false
 	return &cfg
 }

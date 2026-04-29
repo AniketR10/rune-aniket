@@ -112,7 +112,7 @@ func DefaultConfig() Config {
 	magentaBold := term.Attributes{Fg: tcell.ColorFuchsia, Attrs: tcell.AttrBold}
 	cyan := term.Attributes{Fg: tcell.ColorTeal}
 	cyanUnderline := term.Attributes{Fg: tcell.ColorTeal, Attrs: tcell.AttrUnderline}
-	codeblock := term.Attributes{Fg: tcell.ColorSilver, Bg: tcell.ColorGray}
+	codeblock := term.Attributes{Bg: tcell.ColorGray}
 	gray := term.Attributes{Fg: tcell.ColorGray}
 	def := term.Attributes{Fg: tcell.ColorDefault}
 	defBold := term.Attributes{Fg: tcell.ColorDefault, Attrs: tcell.AttrBold}
