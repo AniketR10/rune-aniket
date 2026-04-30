@@ -27,6 +27,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -131,7 +132,15 @@ func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines c
 		case lines <- fmt.Sprintf("%s:%d:%s", file, i, data):
 		}
 	}
-	return r.Err()
+	// A single line larger than the scanner's buffer (e.g. minified JS,
+	// generated JSON, log lines) surfaces as bufio.ErrTooLong. Silently stop
+	// scanning that file instead of aggregating the error onto the iterator;
+	// callers care about errors that affect the search as a whole, not about
+	// individual files we cannot tokenize.
+	if err := r.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
+		return err
+	}
+	return nil
 }
 
 func readFileWorker(

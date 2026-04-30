@@ -73,6 +73,21 @@ func (mr *MockWorkspaceMockRecorder) Load(file, buf, swapDir, readOnly any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Load", reflect.TypeOf((*MockWorkspace)(nil).Load), file, buf, swapDir, readOnly)
 }
 
+// Open mocks base method.
+func (m *MockWorkspace) Open(arg0 string) (workspaceapi.File, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", arg0)
+	ret0, _ := ret[0].(workspaceapi.File)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *MockWorkspaceMockRecorder) Open(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockWorkspace)(nil).Open), arg0)
+}
+
 // OpenFile mocks base method.
 func (m *MockWorkspace) OpenFile(path string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 	m.ctrl.T.Helper()
@@ -82,25 +97,10 @@ func (m *MockWorkspace) OpenFile(path string, flag int, perm os.FileMode) (works
 	return ret0, ret1
 }
 
-// Open mocks base method.
-func (m *MockWorkspace) Open(filename string) (workspaceapi.File, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Open", filename)
-	ret0, _ := ret[0].(workspaceapi.File)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
 // OpenFile indicates an expected call of OpenFile.
 func (mr *MockWorkspaceMockRecorder) OpenFile(path, flag, perm any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenFile", reflect.TypeOf((*MockWorkspace)(nil).OpenFile), path, flag, perm)
-}
-
-// Open indicates an expected call of Open.
-func (mr *MockWorkspaceMockRecorder) Open(filename any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockWorkspace)(nil).Open), filename)
 }
 
 // ReadDir mocks base method.

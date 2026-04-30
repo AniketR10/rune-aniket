@@ -8,11 +8,13 @@ import (
 	"context"
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/ide/vctrl"
 )
 
 // NewExtension returns the combined fuzzy search extension and its metadata.
@@ -37,6 +39,12 @@ type workspaceExtension struct{}
 func (workspaceExtension) ExtendWorkspace(
 	ctx context.Context, w *extensionapi.Workspace, c config.Config,
 ) error {
+	fs := w.FileSystem(ctx)
+	matcher, err := vctrl.LoadGitignore(fs)
+	if err != nil {
+		log.Warnf("fuzzy_search: load gitignore: %v", err)
+		matcher = vctrl.NopMatcher(false)
+	}
 	clients := finder.Clients{
 		Storage:        w.Storage(ctx),
 		ResourceOpener: w.ResourceOpener(ctx),
@@ -44,8 +52,9 @@ func (workspaceExtension) ExtendWorkspace(
 		Interrupter:    w.Interrupter(ctx),
 		Notifications:  w.Notifications(ctx),
 		Editor:         w.Editor(ctx),
-		FileSystem:     w.FileSystem(ctx),
+		FileSystem:     fs,
 		Executor:       w.Executor(ctx),
+		IgnoreMatcher:  matcher,
 	}
 	dataDir := w.DataDir(ctx)
 

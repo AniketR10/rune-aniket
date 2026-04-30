@@ -56,6 +56,7 @@ func ListFiles(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
 	workers := workerCountFromContext(ctx)
+	filter := filterFromContext(ctx)
 	var wg sync.WaitGroup
 	iterCh := make(chan string)
 	workerCh := make(chan string)
@@ -94,7 +95,7 @@ func ListFiles(
 	for i := range workers {
 		go debug.CapturePanicReport(func() {
 			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
-				workspaceURI.Path(), &iterator.mu, &allErrors[i], false)
+				workspaceURI.Path(), &iterator.mu, &allErrors[i], false, filter)
 
 		})
 	}
@@ -127,7 +128,7 @@ var defaultWorkers = runtime.NumCPU() * 8
 func traverseDirWorker(
 	ctx context.Context, w Reader, wg *sync.WaitGroup,
 	iterCh, workerCh chan string, cwd string, mu *sync.Mutex, err *error,
-	dirOnly bool,
+	dirOnly bool, filter Filter,
 ) {
 	for {
 		// do not use ctx here, as we could endup with an outstanding
@@ -136,7 +137,7 @@ func traverseDirWorker(
 		if !ok {
 			return
 		}
-		dirErr := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh, dirOnly)
+		dirErr := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh, dirOnly, filter)
 		if dirErr != nil {
 			mu.Lock()
 			*err = multierr.Append(*err, dirErr)
@@ -148,7 +149,7 @@ func traverseDirWorker(
 func dirTraversal(
 	ctx context.Context, w Reader, cwd, dirname string,
 	wg *sync.WaitGroup, iterCh, workerCh chan string,
-	dirOnly bool,
+	dirOnly bool, filter Filter,
 ) error {
 	defer wg.Done()
 	absPath := dirname
@@ -165,6 +166,12 @@ func dirTraversal(
 	for _, info := range dirNames {
 		path := filepath.Join(dirname, info.Name())
 		tpe := info.Type()
+		// path is workspace-relative (ListFiles normalizes root via
+		// workspaceapi.RelPath before recursing), so we can match the
+		// filter without an extra w.URI() round trip per entry.
+		if filter != nil && filter.MatchRelPath(path, tpe.IsDir()) {
+			continue
+		}
 		if tpe.IsRegular() && !dirOnly {
 			// ensure dirTraversal returns
 			select {
@@ -196,7 +203,7 @@ func dirTraversal(
 		case workerCh <- path:
 		default:
 			// the rest of workers are busy, keep going
-			err := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh, dirOnly)
+			err := dirTraversal(ctx, w, cwd, path, wg, iterCh, workerCh, dirOnly, filter)
 			if err != nil {
 				ret = multierr.Append(ret, err)
 			}

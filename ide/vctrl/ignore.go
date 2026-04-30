@@ -33,7 +33,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
-	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 const (
@@ -57,10 +57,19 @@ var commonExcludes = []gitignore.Pattern{
 	gitignore.ParsePattern("*.sock", nil),
 }
 
+// FileReader is the subset of file-system operations needed to load
+// .gitignore-derived matchers. Both schemeapi.Scheme and
+// workspaceapi.FileSystem satisfy this interface.
+type FileReader interface {
+	URI(path string) (workspaceapi.URI, error)
+	OpenFile(path string, flag int, perm os.FileMode) (workspaceapi.File, error)
+	ReadDir(name string) ([]fs.DirEntry, error)
+}
+
 // LoadGitignore load all workspaces' .gitignore files recursively
 // and returns a Matcher that matches against all loaded patterns,
 // plus adds some common excludes like .swp files or .git/** directory.
-func LoadGitignore(cwd schemeapi.Scheme) (Matcher, error) {
+func LoadGitignore(cwd FileReader) (Matcher, error) {
 	excludes, err := loadGitignoreRecursively(cwd, nil)
 	if err != nil {
 		return nil, err
@@ -68,7 +77,7 @@ func LoadGitignore(cwd schemeapi.Scheme) (Matcher, error) {
 	return MatcherFromPatterns(cwd, append(excludes, commonExcludes...)...)
 }
 
-func loadGitignoreRecursively(cwd schemeapi.Scheme, path []string) (
+func loadGitignoreRecursively(cwd FileReader, path []string) (
 	ps []gitignore.Pattern, err error,
 ) {
 	ps, _ = readIgnoreFile(cwd, path, infoExcludeFile)
@@ -103,7 +112,7 @@ func loadGitignoreRecursively(cwd schemeapi.Scheme, path []string) (
 	return
 }
 
-func readIgnoreFile(cwd schemeapi.Scheme, paths []string, file string) (
+func readIgnoreFile(cwd FileReader, paths []string, file string) (
 	patterns []gitignore.Pattern, err error,
 ) {
 	path := filepath.Join(paths...)

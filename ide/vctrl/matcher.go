@@ -29,18 +29,23 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
-	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // Matcher abstracts the ability to match files against glob patterns.
 type Matcher interface {
 	Match(file workspaceapi.URI, isDir bool) bool
+	// MatchRelPath is a fast path equivalent to Match for callers that
+	// already have the path relative to the matcher's cwd. It avoids the
+	// workspaceapi.RelPath round trip — useful in hot loops like walkdir
+	// traversal where every entry would otherwise require a w.URI(path)
+	// call (and a remote round trip on non-local workspaces).
+	MatchRelPath(relpath string, isDir bool) bool
 }
 
 // MatcherFromPatterns returns a matcher that matches files with the given patterns.
 func MatcherFromPatterns(
-	cwd schemeapi.Scheme, patterns ...gitignore.Pattern,
+	cwd FileReader, patterns ...gitignore.Pattern,
 ) (Matcher, error) {
 	cwduri, err := cwd.URI(".")
 	if err != nil {
@@ -64,9 +69,12 @@ type uriMatcher struct {
 
 func (u uriMatcher) Match(uri workspaceapi.URI, isDir bool) (match bool) {
 	relpath := workspaceapi.RelPath(u.cwduri, uri)
+	return u.MatchRelPath(relpath, isDir)
+}
+
+func (u uriMatcher) MatchRelPath(relpath string, isDir bool) bool {
 	pathcomps := strings.Split(relpath, string(filepath.Separator))
-	match = u.matcher.Match(pathcomps, isDir)
-	return
+	return u.matcher.Match(pathcomps, isDir)
 }
 
 type nopMatcher struct {
@@ -74,5 +82,9 @@ type nopMatcher struct {
 }
 
 func (n nopMatcher) Match(uri workspaceapi.URI, isDir bool) bool {
+	return n.match
+}
+
+func (n nopMatcher) MatchRelPath(string, bool) bool {
 	return n.match
 }

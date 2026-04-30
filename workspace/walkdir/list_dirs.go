@@ -47,6 +47,7 @@ func ListDirs(
 	ctx context.Context, w Reader, root string,
 ) (iterator.Iterator[string], error) {
 	workers := workerCountFromContext(ctx)
+	filter := filterFromContext(ctx)
 	var wg sync.WaitGroup
 	iterCh := make(chan string)
 	workerCh := make(chan string)
@@ -85,7 +86,7 @@ func ListDirs(
 	for i := range workers {
 		go debug.CapturePanicReport(func() {
 			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
-				workspaceURI.Path(), &iterator.mu, &allErrors[i], true)
+				workspaceURI.Path(), &iterator.mu, &allErrors[i], true, filter)
 
 		})
 	}

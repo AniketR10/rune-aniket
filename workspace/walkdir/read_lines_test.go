@@ -24,6 +24,7 @@
 package walkdir
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -125,6 +126,62 @@ func TestReadLines_close_does_not_hang(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close() hung — likely deadlock in readFile workers")
+	}
+}
+
+func TestReadLines_skipsOverlongLines(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a file with a short first line, a single line longer than the
+	// scanner's max token size (which would normally surface as
+	// bufio.ErrTooLong), and a short trailing line.
+	overlong := bytes.Repeat([]byte("a"), bufio.MaxScanTokenSize+1)
+	var content bytes.Buffer
+	content.WriteString("first line\n")
+	content.Write(overlong)
+	content.WriteByte('\n')
+	content.WriteString("trailing line\n")
+
+	path := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(path, content.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := localFS{root: dir}
+	ctx := context.Background()
+
+	paths, err := ListFiles(ctx, fs, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lines, err := ReadLines(ctx, fs, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lines.Close() //nolint:errcheck
+
+	var got []string
+	for {
+		line, ok := lines.Next(ctx)
+		if !ok {
+			break
+		}
+		got = append(got, line)
+	}
+
+	if err := lines.Err(); err != nil {
+		t.Fatalf("Err() = %v, want nil after overlong line", err)
+	}
+
+	// The overlong line halts that scanner, so we only require the lines that
+	// fit the buffer to be reported. Validate that we received the first short
+	// line without surfacing a bufio.ErrTooLong error.
+	if len(got) == 0 {
+		t.Fatalf("expected at least one line, got none")
+	}
+	if !strings.Contains(got[0], "first line") {
+		t.Fatalf("expected first line content, got %q", got[0])
 	}
 }
 

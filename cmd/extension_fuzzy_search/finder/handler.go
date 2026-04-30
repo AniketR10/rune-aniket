@@ -48,6 +48,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 const (
@@ -79,6 +80,10 @@ type Clients struct {
 	Editor         textapi.Editor
 	FileSystem     workspaceapi.FileSystem
 	Executor       workspaceapi.Executor
+	// IgnoreMatcher excludes paths from the workspace traversal performed by
+	// the native (non-ripgrep) fuzzy search backend. May be nil, in which
+	// case no exclusions are applied.
+	IgnoreMatcher walkdir.Filter
 }
 
 // RedispatchHandler is a browser handler that can handle repeated command
@@ -105,6 +110,23 @@ func NewV2(
 		log.Tracef("loaded 'history' from config: %v", maxHistory)
 	}
 
+	listCfg := buildListConfig(cfg, clients.Interrupter)
+	return newV2WithListConfig(ctx, clients, invokeWindow,
+		historyKey, historyDocumentID, command, maxHistory, listCfg,
+		fallback, getResource)
+}
+
+// newV2WithListConfig is the test-friendly constructor: it accepts a
+// pre-built search.ListConfig so callers (notably tests) can opt into
+// SyncSearch and other deterministic settings without going through
+// config.Config.
+func newV2WithListConfig(
+	ctx context.Context, clients Clients, invokeWindow browserapi.Window,
+	historyKey term.KeyComb, historyDocumentID string, command string,
+	maxHistory int, listCfg search.ListConfig,
+	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
+	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates, bool),
+) (RedispatchHandler, error) {
 	h := &fuzzyFinderHandler{
 		s:                    clients.Storage,
 		f:                    clients.ResourceOpener,
@@ -114,6 +136,7 @@ func NewV2(
 		ed:                   clients.Editor,
 		fs:                   clients.FileSystem,
 		executor:             clients.Executor,
+		ignoreMatcher:        clients.IgnoreMatcher,
 		invokeWindow:         invokeWindow,
 		historyKey:           historyKey,
 		getResource:          getResource,
@@ -121,6 +144,7 @@ func NewV2(
 		useWorkspaceFallback: command == "",
 		workspaceFallback:    fallback,
 		waitChan:             make(chan error),
+		scanDone:             make(chan struct{}),
 	}
 	if h.f == nil || h.p == nil {
 		return nil, errors.New("extension is missing critical permissions")
@@ -134,8 +158,7 @@ func NewV2(
 
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
-	listConfig := h.getListConfig(cfg)
-	h.list.Init(listConfig)
+	h.list.Init(listCfg)
 	ed, _ := modeless.Editor(modeless.WithWrap(true)).
 		Edit(workspaceapi.RandomURI("memory"), h.list.Buffer(), false, false)
 	h.listHandler = search.Handler(&h.list, ed, func(item string) {
@@ -145,9 +168,9 @@ func NewV2(
 	})
 
 	var defCell term.Cell
-	if listConfig.ElementAttr != nil {
-		defCell.Bg = listConfig.ElementAttr.Bg
-		defCell.Fg = listConfig.ElementAttr.Fg
+	if listCfg.ElementAttr != nil {
+		defCell.Bg = listCfg.ElementAttr.Bg
+		defCell.Fg = listCfg.ElementAttr.Fg
 	}
 	h.background = component.WithBackground(h.listHandler, defCell)
 
@@ -169,6 +192,7 @@ type fuzzyFinderHandler struct {
 	ed                   textapi.Editor
 	fs                   workspaceapi.FileSystem
 	executor             workspaceapi.Executor
+	ignoreMatcher        walkdir.Filter
 	invokeWindow         browserapi.Window
 	historyKey           term.KeyComb
 	mu                   sync.Mutex
@@ -188,6 +212,10 @@ type fuzzyFinderHandler struct {
 	cancelScan           func()
 
 	history search.History
+
+	// scanDone is closed after the initial scanData goroutine finishes.
+	// Used by tests to wait for the workspace scan to complete.
+	scanDone chan struct{}
 }
 
 func (h *fuzzyFinderHandler) execCommand(ctx context.Context, command string) (
@@ -349,6 +377,9 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 	defer close(datachan)
 	log.Debugf("using workspace API to get resource iterator")
 
+	if h.ignoreMatcher != nil {
+		ctx = walkdir.WithContextFilter(ctx, h.ignoreMatcher)
+	}
 	it, err := h.workspaceFallback(h.fs, ctx)
 	if err != nil {
 		return fmt.Errorf("workspace API fallback: %v", err)
@@ -388,6 +419,7 @@ func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(
 
 func (h *fuzzyFinderHandler) scanData() {
 	start := time.Now()
+	defer close(h.scanDone)
 	defer func() {
 		if log.IsLevelEnabled(log.DebugLevel) {
 			log.Debugf("Done iterating over data in %s", time.Since(start))
@@ -450,7 +482,7 @@ func (h *fuzzyFinderHandler) scanData() {
 
 }
 
-func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
+func buildListConfig(c config.Config, interrupter term.Interrupter) search.ListConfig {
 	caseSensitive, err := c.GetBool("case_sensitive")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -473,7 +505,7 @@ func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {
 	cfg := search.ListConfig{
 		Algo: algo,
 		Interrupter: term.FuncInterrupter(func(ctx context.Context) error {
-			err := h.p.Interrupt(ctx)
+			err := interrupter.Interrupt(ctx)
 			if err != nil {
 				log.Errorf("interrupt: %v", err)
 			}
