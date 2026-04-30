@@ -1262,6 +1262,21 @@ func (c ideConfig) editorAutoPair() bool {
 	return enabled
 }
 
+func (c ideConfig) editorAutoSave() bool {
+	cfg, ok := c.editor()
+	if !ok {
+		return false
+	}
+	enabled, err := cfg.GetBool("auto_save")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.auto_save"] = err
+		}
+		return false
+	}
+	return enabled
+}
+
 func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
 	cfg, ok := c.virtual()
 	if !ok {

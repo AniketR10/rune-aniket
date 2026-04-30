@@ -439,7 +439,7 @@ func (h *workspaceManagerHandler) init(
 	if err = h.subscribeAllCommands(h.empty); err != nil {
 		return err
 	}
-	if err = h.subscribeAllEvents(h.empty); err != nil {
+	if err = h.subscribeAllEvents(cfg, h.empty); err != nil {
 		return err
 	}
 
@@ -973,7 +973,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancel()
 		return err
 	}
-	if err = h.subscribeAllEvents(ex); err != nil {
+	if err = h.subscribeAllEvents(cfg, ex); err != nil {
 		_ = cursorHistoryCloser.Close()
 		cancel()
 		return err
@@ -1877,8 +1877,20 @@ func (h *workspaceManagerHandler) subscribeExternalEvents(
 	return ret
 }
 
-func (h *workspaceManagerHandler) subscribeAllEvents(ex *ex) error {
-	return h.subscribeExternalEvents(ex, h.externalEvents...)
+func (h *workspaceManagerHandler) subscribeAllEvents(
+	cfg ideConfig, ex *ex,
+) error {
+	if err := h.subscribeExternalEvents(ex, h.externalEvents...); err != nil {
+		return err
+	}
+	if cfg.editorAutoSave() {
+		saver := autoSaverFactory(&ex.comp, ex.notifications,
+			cfg.scheduleNextTick, defaultAutoSaveDelay)
+		if err := ex.comp.SubscribeEvents(autoSaveEvents, saver); err != nil {
+			return fmt.Errorf("subscribe autoSaver: %w", err)
+		}
+	}
+	return nil
 }
 
 func (h *workspaceManagerHandler) SubscribeEvents(

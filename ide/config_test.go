@@ -71,6 +71,7 @@ default_attr:
 editor:
     ruler: 72
     auto_pair: true
+    auto_save: true
     status_bar:
         enabled: true
         background_attr:
@@ -420,6 +421,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, "  ", cfg.tabNameSeparator())
 	assert.Equal(t, 90, cfg.editorRuler())
 	assert.False(t, cfg.editorAutoPair())
+	assert.False(t, cfg.editorAutoSave())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
 	syntaxConfig := cfg.syntaxConfig()

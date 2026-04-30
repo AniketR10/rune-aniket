@@ -271,6 +271,9 @@ config = {
         # Auto-pair quotes, brackets, and braces while editing. Explicitly off
         # for modal mode by default; the modeless override below enables it.
         "auto_pair":  False,
+        # Auto-save dirty buffers after a brief idle period. Off by default;
+        # set to True to flush file tabs ~2s after the last edit.
+        "auto_save":  False,
         "tabspaces": 4,
         "modal": {
             # Default text attributes.

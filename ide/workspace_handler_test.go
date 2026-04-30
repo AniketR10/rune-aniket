@@ -2411,6 +2411,229 @@ func TestInitializeNotifications(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+// recordingNotifications wraps a browserapi.Notifications and captures every
+// (level, formatted-msg) pair seen. Used by the auto-save integration test
+// to assert which notifications the autoSaver surfaces, without depending
+// on UI rendering.
+type recordingNotifications struct {
+	mu       sync.Mutex
+	inner    browserapi.Notifications
+	captured []capturedNote
+}
+
+type capturedNote struct {
+	level browserapi.NotificationLevel
+	msg   string
+}
+
+// feedAutoSaveSequence feeds the legacy handlertest sequence syntax used by
+// other integration tests in this file: ':' opens the modal prompt, '>' is
+// Enter, '<' is Esc, and bare runes are typed verbatim. It bypasses the
+// rendered-output assertion of TestHandlerSequence which is irrelevant
+// here.
+func feedAutoSaveSequence(t *testing.T, h tui.Handler, seq string) {
+	t.Helper()
+	for _, r := range seq {
+		switch r {
+		case ':':
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: '\\', Type: term.EventKey})
+		case ' ':
+			h.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
+		case '>':
+			h.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
+		case '<':
+			h.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
+		default:
+			h.Handle(term.Event{Ch: r, Type: term.EventKey})
+		}
+	}
+}
+
+func (r *recordingNotifications) Notify(level browserapi.NotificationLevel,
+	msg string, args ...any) (string, error) {
+	r.mu.Lock()
+	r.captured = append(r.captured,
+		capturedNote{level: level, msg: fmt.Sprintf(msg, args...)})
+	r.mu.Unlock()
+	return r.inner.Notify(level, msg, args...)
+}
+
+func (r *recordingNotifications) NotifyOnce(level browserapi.NotificationLevel,
+	msg string, args ...any) (string, error) {
+	r.mu.Lock()
+	r.captured = append(r.captured,
+		capturedNote{level: level, msg: fmt.Sprintf(msg, args...)})
+	r.mu.Unlock()
+	return r.inner.NotifyOnce(level, msg, args...)
+}
+
+func (r *recordingNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	return r.inner.UpdateNotificationProgress(id, message, progress, total)
+}
+
+func (r *recordingNotifications) snapshot() []capturedNote {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]capturedNote, len(r.captured))
+	copy(out, r.captured)
+	return out
+}
+
+// integrationFlusher is a stub autoSaverFlusher used by
+// TestAutoSaveIntegration. It records flush attempts and returns the
+// error configured by the test, isolating the integration to the
+// wiring (config → subscription → debounce → flush → notification)
+// without exercising real disk I/O, which would race with the
+// per-workspace filesystem-event dispatcher under -race.
+type integrationFlusher struct {
+	mu     sync.Mutex
+	called bool
+	err    error
+}
+
+func (f *integrationFlusher) Resource(uri workspaceapi.URI) (browserapi.Handler, bool) {
+	return integrationHandler{uri: uri}, true
+}
+
+func (f *integrationFlusher) FlushTab(_ browserapi.Handler) error {
+	f.mu.Lock()
+	f.called = true
+	err := f.err
+	f.mu.Unlock()
+	return err
+}
+
+func (f *integrationFlusher) flushed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.called
+}
+
+type integrationHandler struct{ uri workspaceapi.URI }
+
+func (integrationHandler) Resize(_, _ int)                          {}
+func (integrationHandler) Draw(_ term.Writer)                       {}
+func (integrationHandler) Handle(_ term.Event) (exit, handled bool) { return false, false }
+func (integrationHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, 0, false
+}
+func (integrationHandler) Selection() (string, bool) { return "", false }
+func (integrationHandler) Close() error              { return nil }
+
+func TestAutoSaveIntegration(t *testing.T) {
+	// Shorten the auto-save delay so tests don't have to wait the
+	// production 2s. The factory hook lets us wrap the workspace's
+	// notifications channel with a recorder.
+	prevDelay := defaultAutoSaveDelay
+	defaultAutoSaveDelay = 10 * time.Millisecond
+	t.Cleanup(func() { defaultAutoSaveDelay = prevDelay })
+
+	cases := []struct {
+		name       string
+		flushErr   error
+		wantNotify bool
+		wantNotMsg string
+	}{
+		{
+			name:       "writable file is flushed after idle delay",
+			flushErr:   nil,
+			wantNotify: false,
+		},
+		{
+			name:       "read-only file surfaces a warning notification",
+			flushErr:   workspaceapi.ErrFileIsNotWritable,
+			wantNotify: true,
+			wantNotMsg: "auto-save skipped",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			filename := "doc.txt"
+
+			cfg := defaultConfigWithWrap(false)
+			editorCfg := cfg.cfg["editor"].(map[string]any)
+			editorCfg["auto_save"] = true
+			cfg.cfg["editor"] = editorCfg
+
+			// Replace the autoSaver's component with a stub flusher
+			// that records flush attempts and returns the test's
+			// configured error. This isolates the integration to
+			// the wiring (config → subscription → debounced timer
+			// → flush call → notification) without exercising real
+			// disk I/O, which would race with the per-workspace
+			// filesystem-event dispatcher under -race.
+			stub := &integrationFlusher{
+				err: tc.flushErr,
+			}
+			var rec *recordingNotifications
+			prevFactory := autoSaverFactory
+			autoSaverFactory = func(_ autoSaverFlusher,
+				notif browserapi.Notifications,
+				sched func(func()) bool, _ time.Duration,
+			) *autoSaver {
+				rec = &recordingNotifications{inner: notif}
+				return newAutoSaver(stub, rec, sched,
+					defaultAutoSaveDelay)
+			}
+			t.Cleanup(func() { autoSaverFactory = prevFactory })
+
+			uri, err := workspaceapi.ParseURI("memory://" + dir)
+			require.NoError(t, err)
+			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+				nopShutdownShaderConfig())
+			require.NoError(t, m.addOrCreateWorkspace(uri))
+			t.Cleanup(func() { _ = m.Close() })
+
+			require.NotNil(t, rec, "autoSaver was not constructed; "+
+				"check editor.auto_save config wiring")
+
+			h := newSafeHandler(m)
+			h.Resize(30, 9)
+			feedAutoSaveSequence(t, h, ":edit "+filename+">iHello<")
+
+			require.Eventually(t, func() bool {
+				if !stub.flushed() {
+					return false
+				}
+				if tc.wantNotify {
+					for _, n := range rec.snapshot() {
+						if strings.Contains(n.msg, tc.wantNotMsg) {
+							return true
+						}
+					}
+					return false
+				}
+				return true
+			}, 2*time.Second, 5*time.Millisecond)
+
+			assert.True(t, stub.flushed(),
+				"autoSaver did not invoke flush after edit")
+			if tc.wantNotify {
+				var found bool
+				for _, n := range rec.snapshot() {
+					if strings.Contains(n.msg, tc.wantNotMsg) {
+						assert.Equal(t, browserapi.LevelWarn, n.level)
+						found = true
+						break
+					}
+				}
+				assert.True(t, found,
+					"expected notification containing %q, got %v",
+					tc.wantNotMsg, rec.snapshot())
+			} else {
+				for _, n := range rec.snapshot() {
+					assert.NotContains(t, n.msg, "auto-save",
+						"unexpected auto-save notification: %v", n)
+				}
+			}
+		})
+	}
+}
+
 func TestNoBar(t *testing.T) {
 	cfg := defaultConfigWithWrap(false)
 	cfg.cfg["browser"] = map[string]any{"workspace_bar": false}
