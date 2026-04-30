@@ -196,6 +196,13 @@ type Message struct {
 	ToolCalls        []ToolCall    `json:"ToolCalls,omitempty"`
 	ToolCallID       string        `json:"ToolCallID,omitempty"`
 	Name             string        `json:"Name,omitempty"`
+	// ProviderItems carries opaque provider-specific items that must be
+	// threaded back into the next request to maintain stateful continuity
+	// (e.g. ChatGPT Codex backend reasoning items with encrypted_content
+	// when store=false). Each entry is the raw JSON of a single item,
+	// preserved in the order it was emitted by the provider. Cross-provider
+	// code should treat this field as opaque.
+	ProviderItems []json.RawMessage `json:"ProviderItems,omitempty"`
 }
 
 // UnmarshalJSON handles both the new format and the old persisted format

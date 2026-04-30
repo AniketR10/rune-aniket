@@ -83,6 +83,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
+	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	llmopenai "unstable.build/go-tui/cmd/rune-agent/llm/openai"
@@ -1725,6 +1726,59 @@ func TestComposeModelRegistry_CustomProviderPreservesLocalModels(t *testing.T) {
 	if _, ok := reg.Get(ctx, llmopenai.GPT5Dot4); !ok {
 		t.Fatal("expected default registry model to remain present")
 	}
+}
+
+func TestNewLLMService_codexUsesStoredCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	reg := llmregistry.NewStatic()
+	codex.RegisterModels(reg)
+	db := storagestub.NewInMemoryService()
+	require.NoError(t, codex.SaveCredential(ctx, db, codex.Credential{
+		AccessToken:  "codex-access-token",
+		RefreshToken: "codex-refresh-token",
+		AccountID:    "account-123",
+		FedRAMP:      true,
+		Expiry:       time.Now().Add(time.Hour),
+	}))
+
+	var gotToken string
+	var gotConfig llmopenai.Config
+	var gotModels map[string]int
+	svc, err := newLLMService(stubConfig{}, reg, codex.GPT5Dot4,
+		func(token string, c llmopenai.Config, models map[string]int) llm.Service {
+			gotToken = token
+			gotConfig = c
+			gotModels = models
+			return &agentMockService{contextWindow: models[c.Model]}
+		}, nil, withLLMServiceStorage(ctx, db))
+	require.NoError(t, err)
+	assert.NotNil(t, svc)
+	assert.Equal(t, "codex-access-token", gotToken)
+	assert.Equal(t, "gpt-5.4", gotConfig.Model)
+	assert.Equal(t, codex.OpenAICompatibleURL, gotConfig.BaseURL)
+	assert.True(t, gotConfig.ForceResponsesAPI)
+	require.NotNil(t, gotConfig.Store)
+	assert.False(t, *gotConfig.Store)
+	assert.True(t, gotConfig.DisableParallelToolCalls)
+	assert.NotEmpty(t, gotConfig.ClientMetadata["x-codex-installation-id"])
+	assert.Equal(t, "account-123", gotConfig.Headers["ChatGPT-Account-ID"])
+	assert.Equal(t, "true", gotConfig.Headers["X-OpenAI-Fedramp"])
+	assert.Equal(t, "codex_cli_rs", gotConfig.Headers["originator"])
+	assert.Equal(t, 1000000, gotModels["gpt-5.4"])
+	assert.Equal(t, 1000000, svc.ContextWindow())
+}
+
+func TestNewLLMService_codexMissingCredentialReturnsLoginHint(t *testing.T) {
+	t.Parallel()
+	reg := llmregistry.NewStatic()
+	codex.RegisterModels(reg)
+	db := storagestub.NewInMemoryService()
+
+	_, err := newLLMService(stubConfig{}, reg, codex.GPT5Dot4, nil, nil,
+		withLLMServiceStorage(context.Background(), db))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "agent providers codex login")
 }
 
 func TestNewLLMService_empty_registry_base_url_keeps_config(t *testing.T) {

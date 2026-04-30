@@ -814,6 +814,172 @@ func TestResponsesReasoningSummaryFromRequest(t *testing.T) {
 	assert.Equal(t, "detailed", reasoning["summary"])
 }
 
+// TestResponsesIncludesEncryptedReasoningContent verifies that, for any
+// reasoning model on the Responses API, the client sets
+// include=[reasoning.encrypted_content] so reasoning items can be threaded
+// back across turns. This is required for stateless (store=false) callers and
+// harmless otherwise — see https://platform.openai.com/docs/guides/reasoning.
+func TestResponsesIncludesEncryptedReasoningContent(t *testing.T) {
+	body := captureResponsesRequestBody(t, Config{
+		Model:             GPT5Dot3Codex,
+		ForceResponsesAPI: true,
+	}, llm.Request{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "hi"}},
+	})
+	require.Equal(t, []any{"reasoning.encrypted_content"}, body["include"])
+}
+
+// TestResponsesSessionHeadersFromPromptCacheKey verifies that any caller
+// supplying a PromptCacheKey gets correlation headers usable by the Codex
+// backend (and ignored by OpenAI hosted).
+func TestResponsesSessionHeadersFromPromptCacheKey(t *testing.T) {
+	captured := captureResponsesRequest(t, Config{
+		Model:             GPT5Dot3Codex,
+		ForceResponsesAPI: true,
+	}, llm.Request{
+		Messages:       []llm.Message{{Role: llm.RoleUser, Content: "hi"}},
+		PromptCacheKey: "thread-abc",
+	})
+	assert.Equal(t, "thread-abc", captured.Header.Get("session_id"))
+	assert.Equal(t, "thread-abc", captured.Header.Get("x-client-request-id"))
+}
+
+// TestResponsesStorefalseAndDisabledParallel verifies the generic stateless
+// knobs, used by the Codex caller (and any other ZDR / store=false consumer).
+func TestResponsesStorefalseAndDisabledParallel(t *testing.T) {
+	storeFalse := false
+	body := captureResponsesRequestBody(t, Config{
+		Model:                    GPT5Dot3Codex,
+		ForceResponsesAPI:        true,
+		Store:                    &storeFalse,
+		DisableParallelToolCalls: true,
+		ClientMetadata:           map[string]string{"x-codex-installation-id": "install-1"},
+	}, llm.Request{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "hi"}},
+	})
+	assert.Equal(t, false, body["store"])
+	assert.Equal(t, false, body["parallel_tool_calls"])
+	metadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "install-1", metadata["x-codex-installation-id"])
+}
+
+// TestResponsesReasoningRoundTrip verifies that reasoning items emitted by
+// the Responses API stream are captured into Message.ProviderItems with their
+// encrypted_content intact, and that they are threaded back verbatim as input
+// items on the next request. Per OpenAI's reasoning guide, this is required
+// for stateless callers (store=false / ZDR) and recommended for any caller
+// that does function calling with a reasoning model and is not relying on
+// previous_response_id.
+func TestResponsesReasoningRoundTrip(t *testing.T) {
+	reasoningItem := `{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"plan"}],"encrypted_content":"ENC_BLOB","status":"completed"}`
+	functionCallItem := `{"type":"function_call","id":"fc_item_1","call_id":"call_1","name":"skill","arguments":"{\"name\":\"explore\",\"args\":\"\"}","status":"completed"}`
+	sseEvents := []string{
+		`{"type":"response.output_item.done","output_index":0,"sequence_number":1,"item":` + reasoningItem + `}`,
+		`{"type":"response.output_item.done","output_index":1,"sequence_number":2,"item":` + functionCallItem + `}`,
+		`{"type":"response.completed","sequence_number":3,"response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":10,"output_tokens":5}}}`,
+	}
+	srv := responsesSSEServer(t, sseEvents)
+
+	c := NewClient("test-key", Config{
+		Model:             GPT5Dot3Codex,
+		BaseURL:           srv.URL,
+		ForceResponsesAPI: true,
+	}, AvailableModels())
+
+	ctx := context.Background()
+	it, err := c.CreateCompletion(ctx, llm.Request{Messages: []llm.Message{
+		{Role: llm.RoleUser, Content: "explore"},
+	}})
+	require.NoError(t, err)
+
+	var doneData *llm.DoneData
+	for {
+		ev, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		if ev.Type == llm.EventStreamDone {
+			doneData = ev.DoneData
+		}
+	}
+	require.NoError(t, it.Err())
+	require.NoError(t, it.Close())
+	require.NotNil(t, doneData)
+
+	// The assistant message must carry both opaque output items in stream
+	// order so they can be replayed.
+	require.Len(t, doneData.Message.ProviderItems, 2)
+	assert.JSONEq(t, reasoningItem, string(doneData.Message.ProviderItems[0]))
+	assert.JSONEq(t, functionCallItem, string(doneData.Message.ProviderItems[1]))
+	require.Len(t, doneData.Message.ToolCalls, 1)
+	assert.Equal(t, "call_1", doneData.Message.ToolCalls[0].ID)
+
+	// Now feed that assistant message + a tool result back into a new
+	// request and verify the input array faithfully reproduces the
+	// reasoning + function_call + function_call_output sequence.
+	captured := captureResponsesRequest(t, Config{
+		Model:             GPT5Dot3Codex,
+		ForceResponsesAPI: true,
+	}, llm.Request{
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "explore"},
+			doneData.Message,
+			{Role: llm.RoleTool, ToolCallID: "call_1", Content: "ok"},
+		},
+	})
+
+	input, ok := captured.Body["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 4)
+
+	// 0: original user message.
+	user, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "user", user["role"])
+
+	// 1: reasoning item with encrypted_content preserved.
+	reasoning, ok := input[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "reasoning", reasoning["type"])
+	assert.Equal(t, "rs_1", reasoning["id"])
+	assert.Equal(t, "ENC_BLOB", reasoning["encrypted_content"])
+
+	// 2: function_call item with original call_id.
+	fnCall, ok := input[2].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "function_call", fnCall["type"])
+	assert.Equal(t, "call_1", fnCall["call_id"])
+	assert.Equal(t, "skill", fnCall["name"])
+
+	// 3: function_call_output we produced from the tool message.
+	fnOut, ok := input[3].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "function_call_output", fnOut["type"])
+	assert.Equal(t, "call_1", fnOut["call_id"])
+	assert.Equal(t, "ok", fnOut["output"])
+}
+
+// TestMessageProviderItemsJSONRoundTrip ensures opaque provider items survive
+// persistence (they are stored alongside the assistant message in the
+// dialogue history).
+func TestMessageProviderItemsJSONRoundTrip(t *testing.T) {
+	original := llm.Message{
+		Role:          llm.RoleAssistant,
+		Content:       "hi",
+		ProviderItems: []json.RawMessage{json.RawMessage(`{"type":"reasoning","encrypted_content":"X"}`)},
+	}
+	b, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got llm.Message
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Len(t, got.ProviderItems, 1)
+	assert.JSONEq(t,
+		`{"type":"reasoning","encrypted_content":"X"}`,
+		string(got.ProviderItems[0]))
+}
+
 // responsesSSEServer creates a test HTTP server that returns the given SSE events
 // in the Responses API format. Use for testing the responses stream iterator.
 func responsesSSEServer(t *testing.T, events []string) *httptest.Server {
@@ -833,12 +999,26 @@ func responsesSSEServer(t *testing.T, events []string) *httptest.Server {
 // request body for a Responses API call. The server returns a minimal SSE
 // response so the client completes without error.
 func captureResponsesRequestBody(t *testing.T, cfg Config, req llm.Request) map[string]any {
+	return captureResponsesRequest(t, cfg, req).Body
+}
+
+type capturedResponsesRequest struct {
+	Method string
+	Path   string
+	Header http.Header
+	Body   map[string]any
+}
+
+func captureResponsesRequest(t *testing.T, cfg Config, req llm.Request) capturedResponsesRequest {
 	t.Helper()
-	var captured map[string]any
+	var captured capturedResponsesRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured.Method = r.Method
+		captured.Path = r.URL.Path
+		captured.Header = r.Header.Clone()
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(body, &captured))
+		require.NoError(t, json.Unmarshal(body, &captured.Body))
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintf(w, "data: %s\n\n",
@@ -858,7 +1038,7 @@ func captureResponsesRequestBody(t *testing.T, cfg Config, req llm.Request) map[
 		}
 	}
 	_ = it.Close()
-	require.NotNil(t, captured, "server should have received a request")
+	require.NotNil(t, captured.Body, "server should have received a request")
 	return captured
 }
 

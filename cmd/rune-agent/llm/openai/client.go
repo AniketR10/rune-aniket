@@ -79,6 +79,8 @@ type Config struct {
 	Tools []llm.Tool
 	// BaseURL for of the http service.
 	BaseURL string
+	// Headers contains optional provider-specific headers to send with every request.
+	Headers map[string]string
 
 	// ResponseFormat ensures responses always follow a specific format.
 	ResponseFormat *llm.ResponseFormat
@@ -86,6 +88,19 @@ type Config struct {
 	// ForceResponsesAPI forces the client to use the /v1/responses
 	// endpoint even for models that support /v1/chat/completions.
 	ForceResponsesAPI bool
+	// Store, when non-nil, sets the Responses API `store` parameter.
+	// Pass false to opt into stateless operation (e.g. ChatGPT Codex
+	// backend, ZDR organizations). When stateless, the client also
+	// includes `reasoning.encrypted_content` so reasoning items can be
+	// threaded back across turns.
+	Store *bool
+	// DisableParallelToolCalls, when true, sets parallel_tool_calls=false
+	// on the Responses API. The ChatGPT Codex backend requires this.
+	DisableParallelToolCalls bool
+	// ClientMetadata is forwarded as the Responses API `client_metadata`
+	// field. Used by the Codex backend to carry e.g. the installation ID
+	// (`x-codex-installation-id`).
+	ClientMetadata map[string]string
 
 	// DebugHTTP enables debug logging of HTTP request and response
 	// byte lengths and selected headers.
@@ -139,6 +154,11 @@ func NewClientWithHTTP(token string, config Config, availableModels map[string]i
 	}
 	if config.BaseURL != "" {
 		opts = append(opts, option.WithBaseURL(config.BaseURL))
+	}
+	for key, value := range config.Headers {
+		if value != "" {
+			opts = append(opts, option.WithHeader(key, value))
+		}
 	}
 	if config.DebugHTTP {
 		opts = append(opts, option.WithMiddleware(
@@ -362,6 +382,7 @@ func (a client) createResponsesCompletion(
 		},
 		Tools: tools,
 	}
+	var requestOptions []option.RequestOption
 
 	// Set prompt_cache_key so the provider can cache the tokenized
 	// prefix across requests sharing the same conversation. This
@@ -405,11 +426,40 @@ func (a client) createResponsesCompletion(
 	if a.config.TopP != 0 {
 		params.TopP = param.NewOpt(a.config.TopP)
 	}
+	if a.config.Store != nil {
+		params.Store = param.NewOpt(*a.config.Store)
+	}
+	if a.config.DisableParallelToolCalls {
+		params.ParallelToolCalls = param.NewOpt(false)
+	}
+	// Always include encrypted_content for reasoning models so that
+	// reasoning items returned by the provider can be threaded back as
+	// input on subsequent turns. This is required when store=false (or
+	// for ZDR organizations) and harmless otherwise. See:
+	// https://platform.openai.com/docs/guides/reasoning ("Encrypted
+	// reasoning items").
+	if SupportsReasoning(a.config.Model) {
+		params.Include = []responses.ResponseIncludable{
+			responses.ResponseIncludableReasoningEncryptedContent,
+		}
+	}
+	// Provider-specific session correlation headers. The Codex backend
+	// uses these for routing and tracing; OpenAI hosted ignores them.
+	if request.PromptCacheKey != "" {
+		requestOptions = append(requestOptions,
+			option.WithHeader("session_id", request.PromptCacheKey),
+			option.WithHeader("x-client-request-id", request.PromptCacheKey),
+		)
+	}
+	if len(a.config.ClientMetadata) > 0 {
+		requestOptions = append(requestOptions,
+			option.WithJSONSet("client_metadata", a.config.ClientMetadata))
+	}
 
-	stream := a.client.Responses.NewStreaming(ctx, params)
+	stream := a.client.Responses.NewStreaming(ctx, params, requestOptions...)
 
 	newStream := func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
-		return a.client.Responses.NewStreaming(ctx, params)
+		return a.client.Responses.NewStreaming(ctx, params, requestOptions...)
 	}
 
 	return &responsesStreamIterator{
@@ -887,6 +937,12 @@ type responsesStreamIterator struct {
 	toolCalls        []llm.ToolCall
 	// Track in-flight function call arguments by output_index.
 	pendingCalls map[int64]*llm.ToolCall
+	// providerItems carries opaque provider-specific output items (e.g.
+	// reasoning items with encrypted_content) captured in stream order.
+	// These must be threaded back into the next request to maintain
+	// stateful continuity for stateless backends like the ChatGPT Codex
+	// store=false flow.
+	providerItems []json.RawMessage
 	// Final response (set by response.completed event).
 	finalResponse *responses.Response
 	err           error
@@ -936,6 +992,7 @@ func (s *responsesStreamIterator) Next(ctx context.Context) (llm.Event, bool) {
 						s.reasoningContent.Reset()
 						s.toolCalls = nil
 						s.pendingCalls = nil
+						s.providerItems = nil
 						s.finalResponse = nil
 
 						// Buffer reset + warning events.
@@ -1006,6 +1063,17 @@ func (s *responsesStreamIterator) Next(ctx context.Context) (llm.Event, bool) {
 			case "response.output_item.done":
 				// An output item is complete. Check if it's a function call.
 				item := event.Item
+				// Preserve the raw JSON of items the provider may need to
+				// see threaded back as input on subsequent turns. We keep
+				// reasoning, message, and function_call items so the full
+				// assistant turn can be faithfully replayed for stateless
+				// backends (e.g. ChatGPT Codex with store=false).
+				switch item.Type {
+				case "reasoning", "message", "function_call":
+					if raw := item.RawJSON(); raw != "" {
+						s.providerItems = append(s.providerItems, json.RawMessage(raw))
+					}
+				}
 				if item.Type == "function_call" {
 					tc := llm.ToolCall{
 						ID:   item.CallID,
@@ -1055,6 +1123,7 @@ func (s *responsesStreamIterator) buildDoneEvent() llm.Event {
 		Content:          s.textContent.String(),
 		ReasoningContent: s.reasoningContent.String(),
 		ToolCalls:        s.toolCalls,
+		ProviderItems:    s.providerItems,
 	}
 
 	var finishReason llm.FinishReason

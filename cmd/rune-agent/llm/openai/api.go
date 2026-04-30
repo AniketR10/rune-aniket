@@ -183,6 +183,21 @@ func responsesInputFromMessages(msgs []llm.Message) (responses.ResponseInputPara
 			items = append(items, item)
 
 		case llm.RoleAssistant:
+			// Prefer the verbatim provider-emitted items: they preserve
+			// reasoning items (with encrypted_content), the assistant
+			// message, and any function calls in the exact order the model
+			// produced them. The Responses API requires this for stateless
+			// (store=false / ZDR) continuity, and OpenAI recommends it
+			// generally when function calling with reasoning models.
+			// See: https://platform.openai.com/docs/guides/reasoning
+			// ("Keeping reasoning items in context").
+			if len(msg.ProviderItems) > 0 {
+				for _, raw := range msg.ProviderItems {
+					items = append(items,
+						param.Override[responses.ResponseInputItemUnionParam](raw))
+				}
+				continue
+			}
 			if len(msg.ToolCalls) > 0 {
 				// Assistant message with text content.
 				if msg.Content != "" {

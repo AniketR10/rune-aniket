@@ -158,8 +158,7 @@ func TestIntegrationHelp(t *testing.T) {
 	handlertest.RunHandlerSequence(t, f, testWidth, testHeight, []handlertest.SequenceTestCase{
 		{
 			InputSequence: "help<enter>",
-			Expected: mkExpected(1,
-				"agent> help",
+			Expected: mkExpected(0,
 				"• agents — List configured agent definitions.",
 				"• chats <list|show|log|export|clear|compact|fork> [args] — ",
 				"  Inspect, export, compact, clear, and fork saved",
@@ -180,6 +179,8 @@ func TestIntegrationHelp(t *testing.T) {
 				"  conversation's assigned model.",
 				"• models — List available models with context window",
 				"  sizes.",
+				"• providers <codex> <login|status> — Inspect and manage",
+				"  provider authentication.",
 				"• skills <list|show|list-dirs|add-dir|remove-dir> [args] — ",
 				"  Inspect discovered skills and configured skill",
 				"  directories.",
@@ -192,8 +193,7 @@ func TestIntegrationHelp(t *testing.T) {
 		},
 		{
 			InputSequence: "agent<enter>",
-			Expected: mkExpected(1,
-				"agent> agent",
+			Expected: mkExpected(0,
 				"• agents — List configured agent definitions.",
 				"• chats <list|show|log|export|clear|compact|fork> [args] — ",
 				"  Inspect, export, compact, clear, and fork saved",
@@ -214,6 +214,8 @@ func TestIntegrationHelp(t *testing.T) {
 				"  conversation's assigned model.",
 				"• models — List available models with context window",
 				"  sizes.",
+				"• providers <codex> <login|status> — Inspect and manage",
+				"  provider authentication.",
 				"• skills <list|show|list-dirs|add-dir|remove-dir> [args] — ",
 				"  Inspect discovered skills and configured skill",
 				"  directories.",

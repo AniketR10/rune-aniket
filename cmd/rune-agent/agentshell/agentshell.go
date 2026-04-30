@@ -221,6 +221,7 @@ var commandNames = []string{
 	"max_tokens",
 	"model",
 	"models",
+	"providers",
 	"skills",
 	"system-prompt",
 	"tools",
@@ -269,6 +270,22 @@ var commandManual = textapi.CommandManual{
 		{Name: "max_tokens", Summary: "Show or set the global max output tokens config value.", Synopsis: "[tokens]"},
 		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[dialogue_id]"},
 		{Name: "models", Summary: "List available models with context window sizes."},
+		{
+			Name:     "providers",
+			Summary:  "Inspect and manage provider authentication.",
+			Synopsis: "<codex> <login|status>",
+			Commands: []textapi.CommandManual{
+				{
+					Name:     "codex",
+					Summary:  "Manage Codex provider authentication.",
+					Synopsis: "<login|status>",
+					Commands: []textapi.CommandManual{
+						{Name: "login", Summary: "Authenticate with Codex."},
+						{Name: "status", Summary: "Show Codex authentication status."},
+					},
+				},
+			},
+		},
 		{
 			Name:     "skills",
 			Summary:  "Inspect discovered skills and configured skill directories.",
@@ -418,6 +435,8 @@ func (s *shell) handleCommand(
 		return s.handleChats(ctx, cmd.Args)
 	case "models":
 		return s.listModels(), nil
+	case "providers":
+		return s.handleProviders(ctx, cmd.Args)
 	case "model":
 		return s.model(ctx, cmd.Args)
 	case "tools":
@@ -579,6 +598,8 @@ func (s *shell) Complete(
 			return s.completeLocalDelete(args[1]), nil
 		}
 		return iterator.FromSlice[string](nil), nil
+	case "providers":
+		return s.completeProviders(args), nil
 	}
 
 	if len(args) > 1 {

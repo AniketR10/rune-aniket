@@ -146,7 +146,7 @@ You MUST use the built-in semantic tools instead of shell commands:
 Using bash or shell commands for tasks that have a dedicated tool is
 INCORRECT and produces inferior results.`
 
-	case "openai":
+	case "openai", "codex":
 		return `
 
 === CRITICAL: TOOL SELECTION ===

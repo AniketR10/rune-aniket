@@ -71,6 +71,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
+	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
@@ -222,6 +223,20 @@ func defaultMarkdownConfig() *markdown.Config {
 // tests may substitute a stub.
 type clientConstructor func(token string, cfg openai.Config, models map[string]int) llm.Service
 
+type llmServiceOptions struct {
+	ctx     context.Context
+	storage storageapi.Service
+}
+
+type llmServiceOption func(*llmServiceOptions)
+
+func withLLMServiceStorage(ctx context.Context, storage storageapi.Service) llmServiceOption {
+	return func(o *llmServiceOptions) {
+		o.ctx = ctx
+		o.storage = storage
+	}
+}
+
 // newLLMService creates an LLM service for the given model by reading
 // provider API keys and LLM parameters from the current config. This is
 // called each time a service is needed so that config changes (e.g. via
@@ -234,8 +249,17 @@ func newLLMService(
 	model string,
 	newClient clientConstructor,
 	newAnthropicClient anthropic.ClientConstructor,
+	opts ...llmServiceOption,
 ) (llm.Service, error) {
-	entry, ok := reg.Get(context.Background(), model)
+	svcOpts := llmServiceOptions{ctx: context.Background()}
+	for _, opt := range opts {
+		opt(&svcOpts)
+	}
+	if svcOpts.ctx == nil {
+		svcOpts.ctx = context.Background()
+	}
+
+	entry, ok := reg.Get(svcOpts.ctx, model)
 	if !ok {
 		return nil, fmt.Errorf("model %q not found in registry", model)
 	}
@@ -249,7 +273,18 @@ func newLLMService(
 
 	// Read provider API key.
 	var apiKey string
-	if entry.Provider != "ollama" {
+	var codexCred codex.Credential
+	if entry.Provider == codex.LLMProvider {
+		var err error
+		codexCred, err = codex.CredentialForClient(svcOpts.ctx, svcOpts.storage)
+		if err != nil {
+			if errors.Is(err, codex.ErrCredentialNotFound) {
+				return nil, errors.New("no Codex credential found; open the Rune's shell and run `agent providers codex login`")
+			}
+			return nil, fmt.Errorf("load Codex credential: %w", err)
+		}
+		apiKey = codexCred.AccessToken
+	} else if entry.Provider != "ollama" {
 		if pcfg, err := cfg.GetConfig(entry.Provider); err == nil {
 			if key, err := pcfg.GetString("api_key"); err == nil {
 				apiKey = key
@@ -349,6 +384,21 @@ func newLLMService(
 	c.MaxTokens = maxTokens
 	c.DebugHTTP = debugHTTP
 	c.BaseURL = entry.BaseURL
+	if entry.Provider == codex.LLMProvider {
+		c.Model = codex.UpstreamModelName(model)
+		c.ForceResponsesAPI = true
+		// The ChatGPT Codex backend rejects parallel tool calls and only
+		// supports stateless requests; it carries the installation ID via
+		// client_metadata. The Responses API path threads reasoning items
+		// back universally, so no Codex-specific input shaping is needed.
+		c.Store = new(false)
+		c.DisableParallelToolCalls = true
+		c.ClientMetadata = map[string]string{
+			"x-codex-installation-id": codexCred.InstallationID,
+		}
+		c.Headers = codexCred.ClientHeaders()
+		contextMap = codex.UpstreamAvailableModels()
+	}
 
 	// Read per-provider OpenAI settings.
 	if pcfg, err := cfg.GetConfig(entry.Provider); err == nil {
@@ -372,6 +422,9 @@ func newLLMService(
 		}
 	} else if !errors.Is(err, config.ErrNotFound) {
 		return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
+	}
+	if entry.Provider == codex.LLMProvider {
+		c.ForceResponsesAPI = true
 	}
 
 	if v, err := cfg.GetFloat("frequency_penalty"); err == nil {
@@ -544,7 +597,15 @@ func newCommandEventHandler(
 		agentools.NewExecCommand(ret.sessionMgr, cwd),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
+	ret.toolRegistry.RegisterOverrides(codex.LLMProvider,
+		agentools.NewGrepFiles(fs, cwd, tracker),
+		agentools.NewListDir(fs, cwd),
+		agentools.NewExecCommand(ret.sessionMgr, cwd),
+		agentools.NewWriteStdin(ret.sessionMgr),
+	)
 	ret.toolRegistry.RegisterExclusions(openai.LLMProvider,
+		"search_content", "compact", "bash")
+	ret.toolRegistry.RegisterExclusions(codex.LLMProvider,
 		"search_content", "compact", "bash")
 	ret.systemPrompt = agent.DefaultSystemPrompt(cwd)
 
@@ -984,7 +1045,8 @@ func (h *aiEditorHandler) newServiceWithProgress(
 	if entry.Provider == llamacpp.LLMProvider {
 		svc, err = newLlamaCppService(entry, progress)
 	} else {
-		svc, err = newLLMService(h.config, h.modelRegistry, model, h.newClient, h.newAnthropicClient)
+		svc, err = newLLMService(h.config, h.modelRegistry, model,
+			h.newClient, h.newAnthropicClient, withLLMServiceStorage(h.ctx, h.db))
 	}
 	if err != nil {
 		return nil, err
@@ -1288,6 +1350,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		store:              h.dialogueStore,
 		modelRegistry:      h.modelRegistry,
 		config:             h.config,
+		ctx:                h.ctx,
+		storage:            h.db,
 		newClient:          h.newClient,
 		newAnthropicClient: h.newAnthropicClient,
 		currentModel:       model,
@@ -1372,7 +1436,14 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		agentools.NewUpdatePlan(progressUpdater),
 		agentools.NewRequestUserInput(prompter),
 	)
+	chatRegistry.RegisterOverrides(codex.LLMProvider,
+		agentools.NewUpdatePlan(progressUpdater),
+		agentools.NewRequestUserInput(prompter),
+	)
 	chatRegistry.RegisterExclusions(openai.LLMProvider,
+		"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "ask_user_question",
+	)
+	chatRegistry.RegisterExclusions(codex.LLMProvider,
 		"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "ask_user_question",
 	)
 	spawner.SetRegistry(chatRegistry)
@@ -2532,6 +2603,8 @@ type commandAdapter struct {
 	agent              *agent.Agent
 	modelRegistry      llmregistry.Registry
 	config             config.Config
+	ctx                context.Context
+	storage            storageapi.Service
 	newClient          clientConstructor
 	newAnthropicClient anthropic.ClientConstructor
 	currentModel       string
@@ -2543,7 +2616,8 @@ type commandAdapter struct {
 }
 
 func (a *commandAdapter) newService(model string) (llm.Service, error) {
-	svc, err := newLLMService(a.config, a.modelRegistry, model, a.newClient, a.newAnthropicClient)
+	svc, err := newLLMService(a.config, a.modelRegistry, model,
+		a.newClient, a.newAnthropicClient, withLLMServiceStorage(a.ctx, a.storage))
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,65 +21,39 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package codex
 
 import (
-	"fmt"
-	"log/slog"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
+	"context"
+	"testing"
 
-	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"unstable.build/go-tui/cmd/rune-agent/extension"
-	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
-	"unstable.build/go-tui/cmd/rune-agent/llm/gemini"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/llm/ollama"
-	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
-	"unstable.build/go-tui/debug"
 )
 
-var (
-	// Tag is a compile-time variable
-	Tag = "development"
-	// Commit is a compile-time variable
-	Commit = "HEAD"
-	// Version is injected at compile time.
-	Version string
-)
+func TestRegisterModels(t *testing.T) {
+	reg := llmregistry.NewStatic()
+	RegisterModels(reg)
 
-func init() {
-	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
+	entry, ok := reg.Get(context.Background(), GPT5Dot4)
+	require.True(t, ok)
+	assert.Equal(t, LLMProvider, entry.Provider)
+	assert.Equal(t, OpenAICompatibleURL, entry.BaseURL)
+	assert.Equal(t, 1000000, entry.ContextWindow)
 }
 
-func main() {
-	go debug.CapturePanicReport(func() {
+func TestUpstreamModelName(t *testing.T) {
+	assert.Equal(t, "gpt-5.4", UpstreamModelName(GPT5Dot4))
+	assert.Equal(t, "unknown", UpstreamModelName("unknown"))
+}
 
-		err := http.ListenAndServe("localhost:6669", nil)
-		if err != nil {
-			slog.Warn("pprof server listen and serve", "error", err)
-		}
-
-	})
-
-	// Build the composite model registry from all providers.
-	static := llmregistry.NewStatic()
-	openai.RegisterModels(static)
-	codex.RegisterModels(static)
-	anthropic.RegisterModels(static)
-	gemini.RegisterModels(static)
-
-	ollamaRegistry := ollama.NewRegistry("")
-	registry := llmregistry.NewComposite(static, ollamaRegistry)
-
-	defaultModel := openai.GPT5Dot5
-
-	ext, metadata := extension.NewExtension(registry, defaultModel)
-	err := extensionapi.ServeWorkspaceExtension(ext, metadata)
-	if err != nil {
-		slog.Error("serve extension", "error", err)
-		os.Exit(1)
-	}
+func TestUpstreamAvailableModels(t *testing.T) {
+	models := UpstreamAvailableModels()
+	assert.Equal(t, 272000, models["gpt-5.5"])
+	assert.Equal(t, 1000000, models["gpt-5.4"])
+	assert.Equal(t, 272000, models["gpt-5.4-mini"])
+	assert.Equal(t, 272000, models["gpt-5.3-codex"])
+	assert.Equal(t, 272000, models["gpt-5.2"])
+	assert.Equal(t, 1000000, models["codex-auto-review"])
 }

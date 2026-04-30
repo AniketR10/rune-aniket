@@ -56,6 +56,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
+	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 )
@@ -790,6 +791,49 @@ func TestHandleCommand(t *testing.T) {
 			cmd:     repl.Command{Name: "effort"},
 			wantErr: true,
 		},
+		{
+			name:    "providers with no args returns usage error",
+			cmd:     repl.Command{Name: "providers"},
+			wantErr: true,
+		},
+		{
+			name:    "providers unknown provider returns error",
+			cmd:     repl.Command{Name: "providers", Args: []string{"unknown"}},
+			wantErr: true,
+		},
+		{
+			name:    "providers codex with no command returns usage error",
+			cmd:     repl.Command{Name: "providers", Args: []string{"codex"}},
+			wantErr: true,
+		},
+		{
+			name: "providers codex status unauthenticated",
+			cmd:  repl.Command{Name: "providers", Args: []string{"codex", "status"}},
+			assertOut: func(t *testing.T, text string) {
+				if !strings.Contains(text, "not authenticated") {
+					t.Fatalf("expected not authenticated status, got %q", text)
+				}
+			},
+		},
+		{
+			name: "agent parent dispatches providers codex status",
+			cmd:  repl.Command{Name: CommandName, Args: []string{"providers", "codex", "status"}},
+			setup: func(d *testDeps) {
+				require.NoError(t, codex.SaveCredential(context.Background(), d.storage, codex.Credential{
+					AccessToken:  "access-token",
+					RefreshToken: "refresh-token",
+					Email:        "user@example.com",
+					AccountID:    "account-123",
+					LastRefresh:  time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+					Expiry:       time.Date(2026, 4, 30, 13, 0, 0, 0, time.UTC),
+				}))
+			},
+			assertOut: func(t *testing.T, text string) {
+				if !strings.Contains(text, "authenticated") || !strings.Contains(text, "user@example.com") {
+					t.Fatalf("expected authenticated account output, got %q", text)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -905,6 +949,18 @@ func TestComplete(t *testing.T) {
 			cmd:     "chats",
 			args:    []string{""},
 			wantAny: []string{"clear", "compact", "export", "list", "log", "show"},
+		},
+		{
+			name:    "providers completes provider names",
+			cmd:     "providers",
+			args:    []string{""},
+			wantAny: []string{"codex"},
+		},
+		{
+			name:    "providers codex completes subcommands",
+			cmd:     "providers",
+			args:    []string{"codex", ""},
+			wantAny: []string{"login", "status"},
 		},
 		{
 			name:    "chats completes subcommands with prefix",
@@ -1243,6 +1299,7 @@ func newTestDeps() *testDeps {
 				},
 			},
 		},
+		storage:       storagestub.NewInMemoryService(),
 		notifications: stubNotifications{},
 		localRegistry: localReg,
 	}
