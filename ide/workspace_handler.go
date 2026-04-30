@@ -72,6 +72,7 @@ import (
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 	"unstable.build/go-tui/ide/idemacro"
+	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
@@ -1151,10 +1152,40 @@ func (h *workspaceManagerHandler) buildExtensions(
 	lsp := idelsp.New(uri, cwd,
 		cwd, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
-	dap := idedebug.New(uri, cwd, h.pkgmanager, idedebug.Config{MaxRetries: 5})
+	// Debug adapter manager. Session creation is owned by the
+	// consumer (typically agentshell); the Manager itself holds
+	// no "current" session and routes every call by sessionID.
+	dapCfg := idedebug.Config{
+		MaxRetries: 5,
+		Adapters:   cfg.debuggerConfigs(),
+	}
+	dap := idedebug.New(uri, cwd, h.pkgmanager, dapCfg)
 	err = ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)
+	}
+	// Register the top-level "debugger" REPL command and its
+	// command-prompt handler. debugshell.Handler owns the active
+	// debug session lifecycle (initialize, launch, attach,
+	// terminate) and forwards DAP events back to the REPL.
+	dbgHandler := debugshell.New(dap, &ex.comp, apieditor, debugshell.Config{
+		WorkspaceURI: uri,
+		Icons: debugshell.Icons{
+			Breakpoint: "",
+			Stopped:    "",
+		},
+		Debugger:         dapCfg,
+		ScheduleNextTick: cfg.scheduleNextTick,
+	}).WithNotify(func(level browserapi.NotificationLevel, msg string, args ...any) {
+		_, _ = notifications.Notify(level, msg, args...)
+	}).WithParser(parser)
+	dbgMan := debugshell.Manual()
+	if err := ex.comp.RegisterREPLCommand(dbgMan, dbgHandler); err != nil {
+		log.Errorf("register debugger repl command: %v", err)
+	}
+	if err := ex.comp.SubscribeCommand(dbgMan,
+		debugshell.NewPromptHandler(dbgHandler)); err != nil {
+		log.Errorf("subscribe debugger command prompt: %v", err)
 	}
 	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser, callbacks)
 	apiHandler, err := lspcmd.AllHandler(

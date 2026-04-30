@@ -27,87 +27,58 @@ package idedebug
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/go-dap"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
 )
 
-const (
-	// InitializeOptionsLanguageID is the property that DAP clients
-	// must pass in InitializeOptions to specify the language identifier
-	// for the debug adapter.
-	InitializeOptionsLanguageID = "langID"
-	// InitializeOptionsLanguageCommand is the property that DAP clients
-	// must pass in InitializeOptions to specify the debug adapter command.
-	// This can be an absolute path or a name which will be searched in
-	// the user's PATH. The string is split on spaces to form argv.
-	InitializeOptionsLanguageCommand = "command"
-)
-
-// Initialize configures the debug adapter with client
-// capabilities and retrieves the adapter's capabilities.
-//
-// args.InitializeOptions must contain "langID" and "command"
-// properties that specify the debug adapter to use.
-func (m *Manager) Initialize(
-	ctx context.Context,
-	args *debugapi.InitializeRequestArguments,
-) (*dap.Capabilities, error) {
-	var cfg debugConfig
-	if len(args.InitializeOptions) == 0 {
-		return nil, errors.New("expected initialize options with " +
-			"language ID and command params")
-	}
-	var opts map[string]any
-	if err := json.Unmarshal(args.InitializeOptions, &opts); err != nil {
-		return nil, fmt.Errorf("decode initialize options: %w", err)
-	}
-	idAny, ok := opts[InitializeOptionsLanguageID]
+// CreateSession starts a new debug session for the given
+// language. It looks up the adapter config under
+// Manager.cfg.Adapters[langID], spawns a fresh *debugServer,
+// performs the DAP Initialize handshake, and stores the server
+// under a minted sessionID. DAP events are delivered to
+// subscriber for the lifetime of the session.
+func (m *Manager) CreateSession(
+	ctx context.Context, langID string,
+	client debugapi.ClientCapabilities, subscriber debugapi.EventSubscriber,
+) (string, *dap.Capabilities, error) {
+	adapter, ok := m.cfg.Adapters[langID]
 	if !ok {
-		return nil, fmt.Errorf("decode initialize options: '%s' not found",
-			InitializeOptionsLanguageID)
+		return "", nil, fmt.Errorf("%w: %s",
+			debugapi.ErrNoAdapterConfigured, langID)
 	}
-	id, ok := idAny.(string)
-	if !ok {
-		return nil, fmt.Errorf("decode initialize options: '%s' should be a string",
-			InitializeOptionsLanguageID)
+	if len(adapter.Command) == 0 {
+		return "", nil, fmt.Errorf(
+			"debug adapter for %s has empty command", langID)
 	}
-	cmdAny, ok := opts[InitializeOptionsLanguageCommand]
-	if !ok {
-		return nil, fmt.Errorf("decode initialize options: '%s' not found",
-			InitializeOptionsLanguageCommand)
+	cfg := debugConfig{
+		langID:    langID,
+		adapterID: adapter.AdapterID,
+		command:   adapter.Command[0],
+		args:      append([]string(nil), adapter.Command[1:]...),
 	}
-	cmdAndArgs, ok := cmdAny.(string)
-	if !ok {
-		return nil, fmt.Errorf("decode initialize options: '%s' should be a string",
-			InitializeOptionsLanguageCommand)
+	if cfg.adapterID == "" {
+		cfg.adapterID = langID
 	}
-	argv := strings.Split(cmdAndArgs, " ")
-	if len(argv) == 0 {
-		return nil, fmt.Errorf("decode initialize options: '%s' is an empty string",
-			InitializeOptionsLanguageCommand)
-	}
-	cfg = debugConfig{
-		id:      id,
-		command: argv[0],
-		args:    argv[1:],
-	}
-
-	srv, err := m.getOrCreateServer(ctx, cfg)
+	sessionID, err := newSessionID()
 	if err != nil {
-		return nil, fmt.Errorf("initialize server: %w", err)
+		return "", nil, err
 	}
-	return srv.caps, nil
+	srv, err := m.startSession(ctx, sessionID, cfg, client, subscriber)
+	if err != nil {
+		return "", nil, fmt.Errorf("start session %s: %w", langID, err)
+	}
+	return sessionID, srv.caps, nil
 }
 
 // Launch starts the debuggee. The request is sent without
 // waiting for a response because in DAP the LaunchResponse
 // only arrives after ConfigurationDone.
-func (m *Manager) Launch(_ context.Context, args debugapi.LaunchRequestArguments) error {
-	srv, err := m.serverForLaunch(args.Program)
+func (m *Manager) Launch(
+	_ context.Context, sessionID string, args debugapi.LaunchRequestArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -116,6 +87,12 @@ func (m *Manager) Launch(_ context.Context, args debugapi.LaunchRequestArguments
 		"program":     args.Program,
 		"stopOnEntry": args.StopOnEntry,
 		"noDebug":     args.NoDebug,
+		// Pipe the debuggee's stdout/stderr back over the
+		// DAP wire as OutputEvents instead of inheriting the
+		// IDE's std streams. Delve's "remote" outputMode is
+		// the documented way to do this; the debugshell
+		// captures these events to a per-session file.
+		"outputMode": "remote",
 	}
 	if len(args.Args) > 0 {
 		launchArgs["args"] = args.Args
@@ -140,12 +117,25 @@ func (m *Manager) Launch(_ context.Context, args debugapi.LaunchRequestArguments
 // Attach connects to an already running debuggee.
 // Like Launch, the response only arrives after
 // ConfigurationDone.
-func (m *Manager) Attach(_ context.Context, args debugapi.AttachRequestArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) Attach(
+	_ context.Context, sessionID string, args debugapi.AttachRequestArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
-	argsJSON, err := json.Marshal(args)
+	// delve's dap server expects "mode" and "processId" keys,
+	// not the SDK's default "pid". Build the args explicitly.
+	attachArgs := map[string]any{
+		"mode": "local",
+	}
+	if args.PID != 0 {
+		attachArgs["processId"] = args.PID
+	}
+	if args.Program != "" {
+		attachArgs["program"] = args.Program
+	}
+	argsJSON, err := json.Marshal(attachArgs)
 	if err != nil {
 		return fmt.Errorf("marshal attach args: %w", err)
 	}
@@ -157,8 +147,8 @@ func (m *Manager) Attach(_ context.Context, args debugapi.AttachRequestArguments
 }
 
 // ConfigurationDone signals that configuration is done.
-func (m *Manager) ConfigurationDone(ctx context.Context) error {
-	srv, err := m.activeServer()
+func (m *Manager) ConfigurationDone(ctx context.Context, sessionID string) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -183,8 +173,10 @@ func (m *Manager) ConfigurationDone(ctx context.Context) error {
 }
 
 // Disconnect ends the debug session.
-func (m *Manager) Disconnect(ctx context.Context, args *dap.DisconnectArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) Disconnect(
+	ctx context.Context, sessionID string, args *dap.DisconnectArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -197,8 +189,10 @@ func (m *Manager) Disconnect(ctx context.Context, args *dap.DisconnectArguments)
 }
 
 // Terminate requests graceful termination.
-func (m *Manager) Terminate(ctx context.Context, args *dap.TerminateArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) Terminate(
+	ctx context.Context, sessionID string, args *dap.TerminateArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -211,8 +205,8 @@ func (m *Manager) Terminate(ctx context.Context, args *dap.TerminateArguments) e
 }
 
 // Restart restarts the debug session.
-func (m *Manager) Restart(ctx context.Context) error {
-	srv, err := m.activeServer()
+func (m *Manager) Restart(ctx context.Context, sessionID string) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -224,16 +218,10 @@ func (m *Manager) Restart(ctx context.Context) error {
 }
 
 // SetBreakpoints sets breakpoints for a source file.
-func (m *Manager) SetBreakpoints(ctx context.Context, args *dap.SetBreakpointsArguments) (
-	[]dap.Breakpoint, error,
-) {
-	var srv *debugServer
-	var err error
-	if args.Source.Path != "" {
-		srv, err = m.serverForFile(args.Source.Path)
-	} else {
-		srv, err = m.activeServer()
-	}
+func (m *Manager) SetBreakpoints(
+	ctx context.Context, sessionID string, args *dap.SetBreakpointsArguments,
+) ([]dap.Breakpoint, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -254,9 +242,10 @@ func (m *Manager) SetBreakpoints(ctx context.Context, args *dap.SetBreakpointsAr
 
 // SetFunctionBreakpoints sets breakpoints on functions.
 func (m *Manager) SetFunctionBreakpoints(
-	ctx context.Context, args *dap.SetFunctionBreakpointsArguments,
+	ctx context.Context, sessionID string,
+	args *dap.SetFunctionBreakpointsArguments,
 ) ([]dap.Breakpoint, error) {
-	srv, err := m.activeServer()
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -277,9 +266,10 @@ func (m *Manager) SetFunctionBreakpoints(
 
 // SetExceptionBreakpoints configures exception bps.
 func (m *Manager) SetExceptionBreakpoints(
-	ctx context.Context, args *dap.SetExceptionBreakpointsArguments,
+	ctx context.Context, sessionID string,
+	args *dap.SetExceptionBreakpointsArguments,
 ) ([]dap.Breakpoint, error) {
-	srv, err := m.activeServer()
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -300,9 +290,9 @@ func (m *Manager) SetExceptionBreakpoints(
 
 // Continue resumes execution of all threads.
 func (m *Manager) Continue(
-	ctx context.Context, args *dap.ContinueArguments,
+	ctx context.Context, sessionID string, args *dap.ContinueArguments,
 ) (*dap.ContinueResponseBody, error) {
-	srv, err := m.activeServer()
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,8 +312,10 @@ func (m *Manager) Continue(
 }
 
 // Next executes one step over.
-func (m *Manager) Next(ctx context.Context, args *dap.NextArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) Next(
+	ctx context.Context, sessionID string, args *dap.NextArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -336,8 +328,10 @@ func (m *Manager) Next(ctx context.Context, args *dap.NextArguments) error {
 }
 
 // StepIn steps into a function call.
-func (m *Manager) StepIn(ctx context.Context, args *dap.StepInArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) StepIn(
+	ctx context.Context, sessionID string, args *dap.StepInArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -350,8 +344,10 @@ func (m *Manager) StepIn(ctx context.Context, args *dap.StepInArguments) error {
 }
 
 // StepOut steps out of the current function.
-func (m *Manager) StepOut(ctx context.Context, args *dap.StepOutArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) StepOut(
+	ctx context.Context, sessionID string, args *dap.StepOutArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -364,8 +360,10 @@ func (m *Manager) StepOut(ctx context.Context, args *dap.StepOutArguments) error
 }
 
 // StepBack executes one backward step.
-func (m *Manager) StepBack(ctx context.Context, args *dap.StepBackArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) StepBack(
+	ctx context.Context, sessionID string, args *dap.StepBackArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -378,8 +376,10 @@ func (m *Manager) StepBack(ctx context.Context, args *dap.StepBackArguments) err
 }
 
 // ReverseContinue resumes backward execution.
-func (m *Manager) ReverseContinue(ctx context.Context, args *dap.ReverseContinueArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) ReverseContinue(
+	ctx context.Context, sessionID string, args *dap.ReverseContinueArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -392,8 +392,10 @@ func (m *Manager) ReverseContinue(ctx context.Context, args *dap.ReverseContinue
 }
 
 // Pause suspends execution.
-func (m *Manager) Pause(ctx context.Context, args *dap.PauseArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) Pause(
+	ctx context.Context, sessionID string, args *dap.PauseArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -406,8 +408,8 @@ func (m *Manager) Pause(ctx context.Context, args *dap.PauseArguments) error {
 }
 
 // Threads retrieves all threads.
-func (m *Manager) Threads(ctx context.Context) ([]dap.Thread, error) {
-	srv, err := m.activeServer()
+func (m *Manager) Threads(ctx context.Context, sessionID string) ([]dap.Thread, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -426,10 +428,10 @@ func (m *Manager) Threads(ctx context.Context) ([]dap.Thread, error) {
 }
 
 // StackTrace returns the call stack for a thread.
-func (m *Manager) StackTrace(ctx context.Context, args *dap.StackTraceArguments) (
-	*dap.StackTraceResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) StackTrace(
+	ctx context.Context, sessionID string, args *dap.StackTraceArguments,
+) (*dap.StackTraceResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -449,10 +451,10 @@ func (m *Manager) StackTrace(ctx context.Context, args *dap.StackTraceArguments)
 }
 
 // Scopes returns variable scopes for a stack frame.
-func (m *Manager) Scopes(ctx context.Context, args *dap.ScopesArguments) (
-	[]dap.Scope, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Scopes(
+	ctx context.Context, sessionID string, args *dap.ScopesArguments,
+) ([]dap.Scope, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -472,10 +474,10 @@ func (m *Manager) Scopes(ctx context.Context, args *dap.ScopesArguments) (
 }
 
 // Variables retrieves child variables.
-func (m *Manager) Variables(ctx context.Context, args *dap.VariablesArguments) (
-	[]dap.Variable, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Variables(
+	ctx context.Context, sessionID string, args *dap.VariablesArguments,
+) ([]dap.Variable, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -495,10 +497,10 @@ func (m *Manager) Variables(ctx context.Context, args *dap.VariablesArguments) (
 }
 
 // SetVariable modifies a variable's value.
-func (m *Manager) SetVariable(ctx context.Context, args *dap.SetVariableArguments) (
-	*dap.SetVariableResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) SetVariable(
+	ctx context.Context, sessionID string, args *dap.SetVariableArguments,
+) (*dap.SetVariableResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -518,10 +520,10 @@ func (m *Manager) SetVariable(ctx context.Context, args *dap.SetVariableArgument
 }
 
 // Source retrieves source code.
-func (m *Manager) Source(ctx context.Context, args *dap.SourceArguments) (
-	*dap.SourceResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Source(
+	ctx context.Context, sessionID string, args *dap.SourceArguments,
+) (*dap.SourceResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -541,10 +543,10 @@ func (m *Manager) Source(ctx context.Context, args *dap.SourceArguments) (
 }
 
 // Evaluate evaluates an expression.
-func (m *Manager) Evaluate(ctx context.Context, args *dap.EvaluateArguments) (
-	*dap.EvaluateResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Evaluate(
+	ctx context.Context, sessionID string, args *dap.EvaluateArguments,
+) (*dap.EvaluateResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -564,10 +566,10 @@ func (m *Manager) Evaluate(ctx context.Context, args *dap.EvaluateArguments) (
 }
 
 // SetExpression assigns a value to an expression.
-func (m *Manager) SetExpression(ctx context.Context, args *dap.SetExpressionArguments) (
-	*dap.SetExpressionResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) SetExpression(
+	ctx context.Context, sessionID string, args *dap.SetExpressionArguments,
+) (*dap.SetExpressionResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -587,10 +589,10 @@ func (m *Manager) SetExpression(ctx context.Context, args *dap.SetExpressionArgu
 }
 
 // Completions provides completion suggestions.
-func (m *Manager) Completions(ctx context.Context, args *dap.CompletionsArguments) (
-	[]dap.CompletionItem, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Completions(
+	ctx context.Context, sessionID string, args *dap.CompletionsArguments,
+) ([]dap.CompletionItem, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -610,10 +612,10 @@ func (m *Manager) Completions(ctx context.Context, args *dap.CompletionsArgument
 }
 
 // ExceptionInfo retrieves exception details.
-func (m *Manager) ExceptionInfo(ctx context.Context, args *dap.ExceptionInfoArguments) (
-	*dap.ExceptionInfoResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) ExceptionInfo(
+	ctx context.Context, sessionID string, args *dap.ExceptionInfoArguments,
+) (*dap.ExceptionInfoResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -633,10 +635,10 @@ func (m *Manager) ExceptionInfo(ctx context.Context, args *dap.ExceptionInfoArgu
 }
 
 // Modules retrieves loaded modules.
-func (m *Manager) Modules(ctx context.Context, args *dap.ModulesArguments) (
-	*dap.ModulesResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Modules(
+	ctx context.Context, sessionID string, args *dap.ModulesArguments,
+) (*dap.ModulesResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -656,8 +658,10 @@ func (m *Manager) Modules(ctx context.Context, args *dap.ModulesArguments) (
 }
 
 // LoadedSources retrieves all loaded sources.
-func (m *Manager) LoadedSources(ctx context.Context) ([]dap.Source, error) {
-	srv, err := m.activeServer()
+func (m *Manager) LoadedSources(
+	ctx context.Context, sessionID string,
+) ([]dap.Source, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -676,10 +680,10 @@ func (m *Manager) LoadedSources(ctx context.Context) ([]dap.Source, error) {
 }
 
 // ReadMemory reads bytes from memory.
-func (m *Manager) ReadMemory(ctx context.Context, args *dap.ReadMemoryArguments) (
-	*dap.ReadMemoryResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) ReadMemory(
+	ctx context.Context, sessionID string, args *dap.ReadMemoryArguments,
+) (*dap.ReadMemoryResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -699,10 +703,10 @@ func (m *Manager) ReadMemory(ctx context.Context, args *dap.ReadMemoryArguments)
 }
 
 // WriteMemory writes bytes to memory.
-func (m *Manager) WriteMemory(ctx context.Context, args *dap.WriteMemoryArguments) (
-	*dap.WriteMemoryResponseBody, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) WriteMemory(
+	ctx context.Context, sessionID string, args *dap.WriteMemoryArguments,
+) (*dap.WriteMemoryResponseBody, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -722,10 +726,10 @@ func (m *Manager) WriteMemory(ctx context.Context, args *dap.WriteMemoryArgument
 }
 
 // Disassemble returns disassembled instructions.
-func (m *Manager) Disassemble(ctx context.Context, args *dap.DisassembleArguments) (
-	[]dap.DisassembledInstruction, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) Disassemble(
+	ctx context.Context, sessionID string, args *dap.DisassembleArguments,
+) ([]dap.DisassembledInstruction, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -745,10 +749,10 @@ func (m *Manager) Disassemble(ctx context.Context, args *dap.DisassembleArgument
 }
 
 // GotoTargets returns possible goto targets.
-func (m *Manager) GotoTargets(ctx context.Context, args *dap.GotoTargetsArguments) (
-	[]dap.GotoTarget, error,
-) {
-	srv, err := m.activeServer()
+func (m *Manager) GotoTargets(
+	ctx context.Context, sessionID string, args *dap.GotoTargetsArguments,
+) ([]dap.GotoTarget, error) {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -768,8 +772,10 @@ func (m *Manager) GotoTargets(ctx context.Context, args *dap.GotoTargetsArgument
 }
 
 // Goto sets execution to continue from a target.
-func (m *Manager) Goto(ctx context.Context, args *dap.GotoArguments) error {
-	srv, err := m.activeServer()
+func (m *Manager) Goto(
+	ctx context.Context, sessionID string, args *dap.GotoArguments,
+) error {
+	srv, err := m.sessionFor(sessionID)
 	if err != nil {
 		return err
 	}
@@ -779,14 +785,4 @@ func (m *Manager) Goto(ctx context.Context, args *dap.GotoArguments) error {
 	}
 	_, err = srv.sendRequest(ctx, req)
 	return err
-}
-
-func (m *Manager) serverForLaunch(program string) (*debugServer, error) {
-	if program != "" {
-		srv, err := m.serverForFile(program)
-		if err == nil {
-			return srv, nil
-		}
-	}
-	return m.activeServer()
 }

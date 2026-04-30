@@ -774,6 +774,18 @@ func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
 }
 
+// IterateWindows mocks base method.
+func (m *MockWindowManager) IterateWindows(fn func(browser.Window)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IterateWindows", fn)
+}
+
+// IterateWindows indicates an expected call of IterateWindows.
+func (mr *MockWindowManagerMockRecorder) IterateWindows(fn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IterateWindows", reflect.TypeOf((*MockWindowManager)(nil).IterateWindows), fn)
+}
+
 // SetFocus mocks base method.
 func (m *MockWindowManager) SetFocus(win browser.Window) (browser.Window, error) {
 	m.ctrl.T.Helper()
@@ -1146,6 +1158,18 @@ func (m *MockBrowser) Focus() (browser.Window, error) {
 func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockBrowser)(nil).Focus))
+}
+
+// IterateWindows mocks base method.
+func (m *MockBrowser) IterateWindows(fn func(browser.Window)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IterateWindows", fn)
+}
+
+// IterateWindows indicates an expected call of IterateWindows.
+func (mr *MockBrowserMockRecorder) IterateWindows(fn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IterateWindows", reflect.TypeOf((*MockBrowser)(nil).IterateWindows), fn)
 }
 
 // Notify mocks base method.

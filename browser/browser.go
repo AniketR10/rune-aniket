@@ -131,6 +131,10 @@ type WindowManager interface {
 	// SetFocus sets the window in focus and returns the previous window in focus.
 	// It satisfies browser.Browser.
 	SetFocus(win Window) (Window, error)
+
+	// IterateWindows applies fn to each open window managed by this
+	// WindowManager.
+	IterateWindows(fn func(Window))
 }
 
 // TabManager is the interface that groups tab management methods.

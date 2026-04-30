@@ -4023,8 +4023,11 @@ func defaultCfg() ideConfig {
 			"progress_bar": false,
 		},
 	},
-		scheduleNextTick: nil,
-		configPath:       "not-empty",
+		scheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+		configPath: "not-empty",
 	}
 }
 

@@ -58,6 +58,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
@@ -159,6 +160,60 @@ func (c ideConfig) command() (config.Config, bool) {
 		return nil, false
 	}
 	return c.getConfig(config.MapConfig(c.cfg), "command")
+}
+
+// debugger returns the `debugger` configuration block, if any.
+func (c ideConfig) debugger() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	cfg, ok := c.getConfig(config.MapConfig(c.cfg), "debugger")
+	return cfg, ok
+}
+
+// debuggerConfigs extracts the `debugger.<langID>` adapter
+// registry from the merged rune.star configuration. Each entry
+// must provide a string `command` (argv template with an
+// optional {addr} placeholder) and may provide a string
+// `adapter_id` (defaults to the language ID).
+//
+// Invalid entries are recorded in c.errors and skipped.
+func (c ideConfig) debuggerConfigs() map[string]idedebug.AdapterConfig {
+	dbg, ok := c.debugger()
+	if !ok {
+		return nil
+	}
+	ret := make(map[string]idedebug.AdapterConfig)
+	dbg.Iterate(func(langID string, _ any) {
+		entry, err := dbg.GetConfig(langID)
+		if err != nil {
+			c.errors["debugger."+langID] = err
+			return
+		}
+		cmdStr, err := entry.GetString("command")
+		if err != nil {
+			c.errors["debugger."+langID+".command"] = err
+			return
+		}
+		argv := strings.Fields(cmdStr)
+		if len(argv) == 0 {
+			c.errors["debugger."+langID+".command"] = errors.New(
+				"command is empty")
+			return
+		}
+		adapterID := langID
+		if s, err := entry.GetString("adapter_id"); err == nil && s != "" {
+			adapterID = s
+		} else if err != nil && err != config.ErrNotFound {
+			c.errors["debugger."+langID+".adapter_id"] = err
+			return
+		}
+		ret[langID] = idedebug.AdapterConfig{
+			Command:   argv,
+			AdapterID: adapterID,
+		}
+	})
+	return ret
 }
 
 func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {

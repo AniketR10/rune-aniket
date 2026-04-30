@@ -101,6 +101,13 @@ func (b toBrowser) Window(id uint64) (browser.Window, bool) {
 	return NopWindow(), true
 }
 
+func (b toBrowser) IterateWindows(fn func(browser.Window)) {
+	// browserapi.Browser does not expose iteration over windows.
+	// The test stub leaves it as a no-op so callers that only
+	// happen to satisfy WindowManager via this adapter still
+	// compile.
+}
+
 func (b toBrowser) Notify(level browserapi.NotificationLevel, msg string, args ...any) (
 	string, error,
 ) {

@@ -247,6 +247,8 @@ func (e2eBrowser) SetFocus(browser.Window) (browser.Window, error) {
 
 func (e2eBrowser) Window(uint64) (browser.Window, bool) { return browsertest.NopWindow(), true }
 
+func (e2eBrowser) IterateWindows(func(browser.Window)) {}
+
 func (e2eBrowser) Split(
 	browserapi.Orientation, browser.Window, browserapi.Handler,
 ) (browser.Window, error) {

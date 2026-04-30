@@ -22,14 +22,51 @@
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 
-package idedebug
+// Package main is a tiny program with a deliberate off-by-one
+// bug used by the debugshell e2e tests. Sum iterates one past
+// n, so Sum(5) returns 21 instead of 15. The bug is a clean
+// breakpoint target: stop inside Sum, inspect i and total at
+// the boundary.
+//
+// When invoked with the single argument "wait", main loops
+// calling Sum forever (with a small sleep between iterations)
+// so the attach test has time to spawn the process, connect
+// dlv to it, and reliably hit a breakpoint inside Sum.
+package main
 
-import "github.com/unstablebuild/rune-go-sdk/api/textapi"
+import (
+	"fmt"
+	"os"
+	"time"
+)
 
-// EditorEvents returns the events that Manager is
-// interested in subscribing to.
-func EditorEvents() []textapi.EventType {
-	return []textapi.EventType{
-		textapi.EventTypeOpen,
+// Sum is intentionally buggy: it iterates one past n.
+func Sum(n int) int {
+	total := 0
+
+	for i := 1; i <= n+1; i++ {
+		total += i
 	}
+	return total
+}
+
+// Other is a sibling helper that intentionally reuses the same
+// local names (n, total) so the e2e tests can verify scope
+// filtering: when the debuggee is stopped inside Sum, the
+// references to n/total inside Other must NOT be highlighted
+// as in-scope variables.
+func Other(n int) int {
+	total := n * 2
+	return total
+}
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "wait" {
+		for {
+			_ = Sum(5)
+			_ = Other(3)
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	fmt.Println("Sum:", Sum(5))
 }

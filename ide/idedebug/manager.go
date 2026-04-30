@@ -26,6 +26,8 @@ package idedebug
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,63 +36,79 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/go-dap"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
-	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
 	"unstable.build/go-tui/debug"
 )
 
-// ErrNoServer is returned when no debug server is
-// available for the requested operation.
-var ErrNoServer = errors.New("no debug server")
-
-// EventSubscriber receives DAP events from the debug server.
-type EventSubscriber interface {
-	OnEvent(ev dap.EventMessage)
+// PkgManager abstracts the ability to resolve package
+// directories for a given package identifier.
+type PkgManager interface {
+	// LibDir returns an iterator of directory paths where
+	// the package's binaries may be found.
+	LibDir(ctx context.Context, pkgID string) (iterator.Iterator[string], error)
 }
 
-// nopEventSubscriber is a no-op implementation of EventSubscriber.
-type nopEventSubscriber struct{}
+// debugConfig holds the parameters used to spawn a single debug
+// adapter. The placeholder {addr} in args is replaced at runtime
+// with the TCP address the adapter should listen on
+// (e.g. "127.0.0.1:56789").
+type debugConfig struct {
+	langID    string
+	adapterID string
+	command   string
+	args      []string
+}
 
-func (nopEventSubscriber) OnEvent(dap.EventMessage) {}
+// AdapterConfig describes how to launch the debug adapter for a
+// given DAP language ID. The language ID itself is the map key
+// in Config.Adapters.
+type AdapterConfig struct {
+	// Command is the argv template for spawning the adapter.
+	// The first element is the executable; the remaining
+	// elements are its arguments. Any {addr} placeholder is
+	// replaced at runtime with a bound host:port the adapter
+	// should listen on.
+	Command []string
+	// AdapterID is the DAP adapter identifier advertised during
+	// the Initialize handshake. Defaults to the language ID.
+	AdapterID string
+}
 
-// Config provides optional configuration for a Manager.
+// Config provides configuration for a Manager.
 type Config struct {
-	MaxRetries         int
-	InitializeTimeout  time.Duration
-	CloseTimeout       time.Duration
-	EventHandleTimeout time.Duration
-	EventSubscriber    EventSubscriber
-	NoInitializeServer bool
+	MaxRetries        int
+	InitializeTimeout time.Duration
+	CloseTimeout      time.Duration
+	// Adapters is the registry of debug adapters keyed by DAP
+	// language ID. Populated from the `debugger` section of
+	// rune.star (see ide/config.go).
+	Adapters map[string]AdapterConfig
 }
 
-// Manager is a multi-language DAP server manager.
-// It implements debugapi.Debugger and textapi.EventHandler.
+// Manager is a multi-session DAP server manager implementing
+// debugapi.Debugger. Every call to CreateSession spawns a fresh
+// *debugServer for the configured adapter of the requested
+// langID and assigns it a unique sessionID. All subsequent
+// method calls dispatch via sessionID.
 type Manager struct {
 	cfg        Config
-	evs        chan textapi.Event
-	mu         sync.Mutex
-	wg         sync.WaitGroup
 	rootURI    string
 	executor   schemeapi.Executor
 	pkgManager PkgManager
-	servers    map[string]*debugServer
-	starting   map[string]chan struct{}
-	activeSrv  *debugServer
-	eventSub   EventSubscriber
 	ctx        context.Context
 	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 	log        *slog.Logger
+
+	mu       sync.Mutex
+	sessions map[string]*debugServer // sessionID -> server
 }
 
-var (
-	_ textapi.EventHandler = (*Manager)(nil)
-	_ debugapi.Debugger    = (*Manager)(nil)
-)
+var _ debugapi.Debugger = (*Manager)(nil)
 
 // New creates a new Manager with the given dependencies
 // and configuration.
@@ -109,34 +127,17 @@ func New(
 	if cfg.CloseTimeout == 0 {
 		cfg.CloseTimeout = 5 * time.Second
 	}
-	if cfg.EventHandleTimeout == 0 {
-		cfg.EventHandleTimeout = 1 * time.Second
-	}
-	if cfg.EventSubscriber == nil {
-		cfg.EventSubscriber = nopEventSubscriber{}
-	}
 	ctx, cancel := context.WithCancel(context.Background())
-	ret := &Manager{
+	return &Manager{
 		cfg:        cfg,
 		log:        slog.With("struct", "idedebug.Manager"),
 		rootURI:    convertURI(uri),
 		executor:   executor,
 		pkgManager: pkgManager,
-		servers:    make(map[string]*debugServer),
-		starting:   make(map[string]chan struct{}),
-		eventSub:   cfg.EventSubscriber,
+		sessions:   make(map[string]*debugServer),
 		ctx:        ctx,
 		cancel:     cancel,
-		// Buffer of 1 for evs: allows Handle to
-		// return without blocking in the common
-		// case while handleEvs processes.
-		evs: make(chan textapi.Event, 1),
 	}
-	ret.wg.Add(1)
-	go debug.CapturePanicReport(func() {
-		ret.handleEvs()
-	})
-	return ret
 }
 
 // Close shuts down all active debug servers and waits
@@ -145,8 +146,8 @@ func (m *Manager) Close() error {
 	m.cancel()
 
 	m.mu.Lock()
-	servers := make([]*debugServer, 0, len(m.servers))
-	for _, s := range m.servers {
+	servers := make([]*debugServer, 0, len(m.sessions))
+	for _, s := range m.sessions {
 		servers = append(servers, s)
 	}
 	m.mu.Unlock()
@@ -164,108 +165,34 @@ func (m *Manager) Close() error {
 	return errors.Join(errs...)
 }
 
-// Handle implements textapi.EventHandler.
-func (m *Manager) Handle(
-	_ context.Context, ev textapi.Event,
-) bool {
-	m.log.Debug("received event", "type", ev.Type, "file", ev.URI)
-	select {
-	case m.evs <- ev:
-		return false
-	case <-m.ctx.Done():
-		return true
+// newSessionID mints a random, unique session identifier.
+func newSessionID() (string, error) {
+	var buf [10]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", fmt.Errorf("session id: %w", err)
 	}
+	return base32.StdEncoding.WithPadding(base32.NoPadding).
+		EncodeToString(buf[:]), nil
 }
 
-func (m *Manager) handleEvs() {
-	defer m.wg.Done()
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case ev := <-m.evs:
-			if err := m.handle(ev); err != nil {
-				m.log.Error("handle event", "error", err)
-			}
-		}
-	}
-}
-
-func (m *Manager) handle(ev textapi.Event) error {
-	ctx, cancel := context.WithTimeout(m.ctx, m.cfg.EventHandleTimeout)
-	defer cancel()
-
-	switch ev.Type {
-	case textapi.EventTypeOpen:
-		m.log.Debug("process open", "file", ev.URI)
-		_, err := m.ensureServer(ctx, ev.URI)
-		return err
-	default:
-		return nil
-	}
-}
-
-func (m *Manager) ensureServer(
-	ctx context.Context, filename workspaceapi.URI,
-) (*debugServer, error) {
-	if m.cfg.NoInitializeServer {
-		return nil, fmt.Errorf("server not initialized and auto-initialize config is false")
-	}
-	cfg, err := debugAdapterForFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	return m.getOrCreateServer(ctx, cfg)
-}
-
-// getOrCreateServer returns an existing server for the
-// given adapter config, or initializes one. Concurrent
-// callers for the same adapter ID will block until the
-// first caller's initialization completes.
-func (m *Manager) getOrCreateServer(
-	ctx context.Context, cfg debugConfig,
-) (*debugServer, error) {
+// sessionFor looks up the *debugServer for sessionID, returning
+// ErrSessionNotFound if none exists.
+func (m *Manager) sessionFor(sessionID string) (*debugServer, error) {
 	m.mu.Lock()
-	if srv, ok := m.servers[cfg.id]; ok {
-		m.mu.Unlock()
-		return srv, nil
-	}
-
-	// Another goroutine is already initializing this
-	// adapter — wait for it.
-	if ch, ok := m.starting[cfg.id]; ok {
-		m.mu.Unlock()
-		select {
-		case <-ch:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-		m.mu.Lock()
-		srv := m.servers[cfg.id]
-		m.mu.Unlock()
-		if srv == nil {
-			return nil, fmt.Errorf("%w: %s init failed", ErrNoServer, cfg.id)
-		}
-		return srv, nil
-	}
-
-	// We are the first — mark this adapter as starting.
-	ch := make(chan struct{})
-	m.starting[cfg.id] = ch
+	srv := m.sessions[sessionID]
 	m.mu.Unlock()
-
-	defer func() {
-		m.mu.Lock()
-		delete(m.starting, cfg.id)
-		m.mu.Unlock()
-		close(ch) // unblock waiting goroutines
-	}()
-
-	return m.initializeServer(ctx, cfg)
+	if srv == nil {
+		return nil, debugapi.ErrSessionNotFound
+	}
+	return srv, nil
 }
 
-func (m *Manager) initializeServer(
-	ctx context.Context, cfg debugConfig,
+// startSession creates the *debugServer for cfg, performs the
+// DAP Initialize handshake, inserts it into the sessions map
+// under sessionID, and spawns the watchSession goroutine.
+func (m *Manager) startSession(
+	ctx context.Context, sessionID string, cfg debugConfig,
+	client debugapi.ClientCapabilities, sub debugapi.EventSubscriber,
 ) (*debugServer, error) {
 	if cfg.command == "" {
 		return nil, errors.New("debug adapter config with empty command")
@@ -283,7 +210,7 @@ func (m *Manager) initializeServer(
 		}
 	}
 
-	srv := newDebugServer(m.ctx, cfg, binPath, m.executor, m.rootURI, m.eventSub)
+	srv := newDebugServer(m.ctx, cfg, binPath, m.executor, m.rootURI, client, sub)
 
 	ctx, cancel := context.WithTimeout(ctx, m.cfg.InitializeTimeout)
 	defer cancel()
@@ -293,14 +220,13 @@ func (m *Manager) initializeServer(
 	}
 
 	m.mu.Lock()
-	m.servers[cfg.id] = srv
-	m.activeSrv = srv
+	m.sessions[sessionID] = srv
 	m.mu.Unlock()
 
 	m.wg.Add(1)
 	go debug.CapturePanicReport(func() {
 		defer m.wg.Done()
-		m.watchServer(&cfg, srv)
+		m.watchSession(sessionID, &cfg, srv)
 	})
 	return srv, nil
 }
@@ -308,7 +234,7 @@ func (m *Manager) initializeServer(
 func (m *Manager) findBinary(
 	ctx context.Context, cfg *debugConfig,
 ) (string, error) {
-	files, err := m.pkgManager.LibDir(ctx, cfg.id)
+	files, err := m.pkgManager.LibDir(ctx, cfg.langID)
 	if err != nil {
 		return "", fmt.Errorf("lib dir: %w", err)
 	}
@@ -331,30 +257,45 @@ func (m *Manager) findBinary(
 	return "", fmt.Errorf("%s not found in any package directory", cfg.command)
 }
 
-func (m *Manager) watchServer(
-	cfg *debugConfig, srv *debugServer,
+// watchSession monitors a session's underlying debug server.
+// On clean exit, the session ends and the subscriber is closed
+// with reason "terminated". On error exit, the server is
+// retried up to cfg.MaxRetries; on success, the sessionID is
+// preserved and the subscriber continues to receive events. On
+// retries-exhausted, the subscriber is closed with reason
+// "adapter_failed".
+func (m *Manager) watchSession(
+	sessionID string, cfg *debugConfig, srv *debugServer,
 ) {
 	defer srv.closeConn()
 
 	ch := srv.watcher
 	if ch == nil {
+		m.removeSession(sessionID, srv)
+		srv.notifyClose("terminated")
 		return
 	}
 
 	select {
 	case <-m.ctx.Done():
+		srv.notifyClose("canceled")
 		return
 	case err := <-ch:
 		if err == nil {
 			m.log.Debug("server exited gracefully",
-				"adapter", cfg.id)
+				"session", sessionID, "lang", cfg.langID)
+			m.removeSession(sessionID, srv)
+			srv.notifyClose("terminated")
 			return
 		}
-		m.log.Warn("server crashed", "adapter", cfg.id, "error", err)
+		m.log.Warn("server crashed",
+			"session", sessionID, "lang", cfg.langID, "error", err)
 		srv.mu.Lock()
 		stopCalled := srv.stopCalled
 		srv.mu.Unlock()
 		if stopCalled {
+			m.removeSession(sessionID, srv)
+			srv.notifyClose("disconnected")
 			return
 		}
 	}
@@ -368,63 +309,44 @@ func (m *Manager) watchServer(
 		ctx, cancel := context.WithTimeout(ctx, m.cfg.InitializeTimeout)
 		defer cancel()
 
-		m.log.Debug("restarting debug adapter", "adapter", cfg.id)
-		newSrv := newDebugServer(m.ctx, srv.cfg, srv.binPath, m.executor, m.rootURI, m.eventSub)
+		m.log.Debug("restarting debug adapter",
+			"session", sessionID, "lang", cfg.langID)
+		newSrv := newDebugServer(m.ctx, srv.cfg, srv.binPath,
+			m.executor, m.rootURI, srv.client, srv.eventSub)
 
 		if err := newSrv.start(ctx); err != nil {
 			return true, err
 		}
 		m.mu.Lock()
-		m.servers[cfg.id] = newSrv
-		m.activeSrv = newSrv
+		m.sessions[sessionID] = newSrv
 		m.mu.Unlock()
 
 		m.wg.Add(1)
 		go debug.CapturePanicReport(func() {
 			defer m.wg.Done()
-			m.watchServer(cfg, newSrv)
+			m.watchSession(sessionID, cfg, newSrv)
 		})
 		return false, nil
 	})
 
 	if retryErr != nil {
-		m.mu.Lock()
-		if m.servers[cfg.id] == srv {
-			delete(m.servers, cfg.id)
-		}
-		if m.activeSrv == srv {
-			m.activeSrv = nil
-		}
-		m.mu.Unlock()
+		m.removeSession(sessionID, srv)
 		m.log.Error("debug adapter failed after retries",
-			"adapter", cfg.command, "retries", m.cfg.MaxRetries, "error", retryErr)
+			"session", sessionID, "adapter", cfg.command,
+			"retries", m.cfg.MaxRetries, "error", retryErr)
+		srv.notifyClose("adapter_failed")
 	}
 }
 
-func (m *Manager) serverForFile(
-	path string,
-) (*debugServer, error) {
-	cfg, err := debugAdapterForFilename(path)
-	if err != nil {
-		return nil, err
-	}
+// removeSession deletes sessionID from the sessions map if it
+// is still bound to srv. Does nothing if a retry has already
+// swapped in a different server.
+func (m *Manager) removeSession(sessionID string, srv *debugServer) {
 	m.mu.Lock()
-	srv, ok := m.servers[cfg.id]
-	m.mu.Unlock()
-	if !ok {
-		return nil, fmt.Errorf("%w: adapter %s not running", ErrNoServer, cfg.id)
+	if m.sessions[sessionID] == srv {
+		delete(m.sessions, sessionID)
 	}
-	return srv, nil
-}
-
-func (m *Manager) activeServer() (*debugServer, error) {
-	m.mu.Lock()
-	srv := m.activeSrv
 	m.mu.Unlock()
-	if srv == nil {
-		return nil, ErrNoServer
-	}
-	return srv, nil
 }
 
 func convertURI(u workspaceapi.URI) string {

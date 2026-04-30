@@ -36,17 +36,23 @@ import (
 	"time"
 
 	"github.com/google/go-dap"
+	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace/processctx"
 )
 
+// errNoServer is returned by a *debugServer when its connection
+// has been torn down or it has not yet been started.
+var errNoServer = errors.New("no debug server")
+
 type debugServer struct {
 	mu         sync.Mutex
 	writeMu    sync.Mutex
 	wg         sync.WaitGroup
 	closeOnce  sync.Once
+	closeSub   sync.Once
 	ctx        context.Context
 	cancel     func()
 	stopCalled bool
@@ -61,7 +67,8 @@ type debugServer struct {
 	seq        atomic.Int64
 	pending    map[int]chan dap.Message
 	pendingMu  sync.Mutex
-	eventSub   EventSubscriber
+	client     debugapi.ClientCapabilities
+	eventSub   debugapi.EventSubscriber
 	alive      bool
 	log        *slog.Logger
 	caps       *dap.Capabilities
@@ -71,6 +78,11 @@ type debugServer struct {
 	// channel. readLoop captures the error here so that
 	// ConfigurationDone can surface it.
 	launchErr error
+	// stderr accumulates the text of "output" DAP events with
+	// category "stderr" so we can surface them together with a
+	// failed launch/attach response (delve reports build errors
+	// via output events rather than in the response body).
+	stderr []byte
 }
 
 func newDebugServer(
@@ -79,7 +91,8 @@ func newDebugServer(
 	binPath string,
 	executor schemeapi.Executor,
 	rootURI string,
-	eventSub EventSubscriber,
+	client debugapi.ClientCapabilities,
+	eventSub debugapi.EventSubscriber,
 ) *debugServer {
 	ctx, cancel := context.WithCancel(ctx)
 	return &debugServer{
@@ -89,10 +102,21 @@ func newDebugServer(
 		binPath:  binPath,
 		executor: executor,
 		rootURI:  rootURI,
+		client:   client,
 		eventSub: eventSub,
 		pending:  make(map[int]chan dap.Message),
-		log:      slog.With("struct", "idedebug.debugServer", "adapter", cfg.id, "uri", rootURI),
+		log:      slog.With("struct", "idedebug.debugServer", "lang", cfg.langID, "uri", rootURI),
 	}
+}
+
+// notifyClose invokes the subscriber's OnClose exactly once.
+func (s *debugServer) notifyClose(reason string) {
+	if s.eventSub == nil {
+		return
+	}
+	s.closeSub.Do(func() {
+		s.eventSub.OnClose(reason)
+	})
 }
 
 func (s *debugServer) start(ctx context.Context) error {
@@ -205,15 +229,39 @@ func dialWithRetry(ctx context.Context, addr string) (net.Conn, error) {
 
 func (s *debugServer) initialize(ctx context.Context) (*dap.Capabilities, error) {
 	s.log.Debug("dap initialize")
+	adapterID := s.cfg.adapterID
+	if adapterID == "" {
+		adapterID = s.cfg.langID
+	}
+	clientID := s.client.ClientID
+	if clientID == "" {
+		clientID = "rune"
+	}
+	clientName := s.client.ClientName
+	if clientName == "" {
+		clientName = "Rune IDE"
+	}
+	pathFormat := s.client.PathFormat
+	if pathFormat == "" {
+		pathFormat = "path"
+	}
 	req := &dap.InitializeRequest{
 		Request: s.newRequest("initialize"),
 		Arguments: dap.InitializeRequestArguments{
-			ClientID:        "rune",
-			ClientName:      "Rune IDE",
-			AdapterID:       s.cfg.id,
-			LinesStartAt1:   true,
-			ColumnsStartAt1: true,
-			PathFormat:      "path",
+			ClientID:                     clientID,
+			ClientName:                   clientName,
+			AdapterID:                    adapterID,
+			Locale:                       s.client.Locale,
+			LinesStartAt1:                s.client.LinesStartAt1 || true,
+			ColumnsStartAt1:              s.client.ColumnsStartAt1 || true,
+			PathFormat:                   pathFormat,
+			SupportsVariableType:         s.client.SupportsVariableType,
+			SupportsVariablePaging:       s.client.SupportsVariablePaging,
+			SupportsRunInTerminalRequest: s.client.SupportsRunInTerminalRequest,
+			SupportsMemoryReferences:     s.client.SupportsMemoryReferences,
+			SupportsProgressReporting:    s.client.SupportsProgressReporting,
+			SupportsInvalidatedEvent:     s.client.SupportsInvalidatedEvent,
+			SupportsMemoryEvent:          s.client.SupportsMemoryEvent,
 		},
 	}
 	resp, err := s.sendRequest(ctx, req)
@@ -258,7 +306,7 @@ func (s *debugServer) sendRequest(ctx context.Context, req dap.Message) (dap.Mes
 	s.mu.Lock()
 	if !s.alive {
 		s.mu.Unlock()
-		return nil, ErrNoServer
+		return nil, errNoServer
 	}
 	s.mu.Unlock()
 
@@ -290,7 +338,7 @@ func (s *debugServer) sendRequest(ctx context.Context, req dap.Message) (dap.Mes
 		}
 		if resp, ok := msg.(dap.ResponseMessage); ok {
 			if !resp.GetResponse().Success {
-				return nil, fmt.Errorf("dap error: %s", resp.GetResponse().Message)
+				return nil, formatResponseError(msg)
 			}
 		}
 		return msg, nil
@@ -326,8 +374,9 @@ func (s *debugServer) readLoop() {
 				if !resp.Success {
 					cmd := resp.Command
 					if cmd == "launch" || cmd == "attach" {
+						err := s.formatLaunchError(m)
 						s.mu.Lock()
-						s.launchErr = fmt.Errorf("dap error: %s", resp.Message)
+						s.launchErr = err
 						s.mu.Unlock()
 					}
 				}
@@ -335,7 +384,9 @@ func (s *debugServer) readLoop() {
 					"requestSeq", reqSeq, "command", resp.Command, "success", resp.Success)
 			}
 		case dap.EventMessage:
-			s.eventSub.OnEvent(m)
+			if s.eventSub != nil {
+				s.eventSub.OnEvent(m)
+			}
 		default:
 			s.log.Debug("unknown message type", "type", fmt.Sprintf("%T", msg))
 		}
@@ -358,7 +409,7 @@ func (s *debugServer) writeRequest(req dap.Message) error {
 	s.mu.Lock()
 	if !s.alive {
 		s.mu.Unlock()
-		return ErrNoServer
+		return errNoServer
 	}
 	s.mu.Unlock()
 	s.writeMu.Lock()
@@ -390,4 +441,61 @@ func (s *debugServer) newRequest(command string) dap.Request {
 		},
 		Command: command,
 	}
+}
+
+// formatResponseError returns an error describing a failed DAP
+// response. It prefers the structured body.error.format field
+// (used by delve to report build errors and similar) and falls
+// back to the short Response.Message otherwise.
+//
+// msg is typically a dap.ResponseMessage or *dap.Response.
+func formatResponseError(msg any) error {
+	var short, detail string
+	if rm, ok := msg.(dap.ResponseMessage); ok {
+		short = rm.GetResponse().Message
+	}
+	if r, ok := msg.(*dap.Response); ok {
+		short = r.Message
+	}
+	if er, ok := msg.(*dap.ErrorResponse); ok && er.Body.Error != nil {
+		detail = er.Body.Error.Format
+	}
+	// Some adapters (e.g. delve's dap server on launch errors)
+	// already include the short Message at the start of the
+	// detailed format. Avoid duplicating it in that case.
+	combined := short
+	if detail != "" {
+		switch {
+		case short == "":
+			combined = detail
+		case detail == short:
+			// identical — keep short
+		case strings.HasPrefix(detail, short+": "),
+			strings.HasPrefix(detail, short+". "),
+			strings.HasPrefix(detail, short):
+			combined = detail
+		default:
+			combined = short + ": " + detail
+		}
+	}
+	if combined == "" {
+		return errors.New("dap error")
+	}
+	return fmt.Errorf("dap error: %s", combined)
+}
+
+// formatLaunchError builds an error for a failed launch/attach
+// response by combining formatResponseError with any stderr
+// output buffered from DAP output events. Clears the buffer so
+// subsequent launch attempts start fresh.
+func (s *debugServer) formatLaunchError(msg any) error {
+	base := formatResponseError(msg)
+	s.mu.Lock()
+	stderr := strings.TrimRight(string(s.stderr), "\n")
+	s.stderr = nil
+	s.mu.Unlock()
+	if stderr == "" {
+		return base
+	}
+	return fmt.Errorf("%w\n%s", base, stderr)
 }

@@ -765,6 +765,11 @@ func (c *Component) Split(
 	return w, nil
 }
 
+// IterateWindows satisfies browser.WindowManager.
+func (c *Component) IterateWindows(fn func(browser.Window)) {
+	c.comp.IterateWindows(fn)
+}
+
 // SplitRoot satisfies browser.WindowManager.
 func (c *Component) SplitRoot(
 	alignment component.Alignment, h browserapi.Handler,

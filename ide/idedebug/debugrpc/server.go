@@ -26,7 +26,9 @@ package debugrpc
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"sync"
 
 	"github.com/google/go-dap"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
@@ -57,38 +59,154 @@ func (s *Server) Register(srv *grpc.Server) {
 	debugrpc.RegisterDebuggerServer(srv, s)
 }
 
-// Initialize implements DebuggerServer.
-func (s *Server) Initialize(ctx context.Context, req *debugrpc.InitializeRequest) (*debugrpc.InitializeResponse, error) {
-	ctx, cancel := joincontext.New(ctx, s.ctx)
+// CreateSession implements DebuggerServer. It creates a new
+// session via the wrapped Debugger and streams the resulting
+// SessionEvents back to the client. The first message is a
+// SessionOpened carrying the new sessionID and adapter
+// capabilities; subsequent messages carry DAP events; a final
+// SessionClosed terminates the stream.
+func (s *Server) CreateSession(
+	req *debugrpc.CreateSessionRequest,
+	stream grpc.ServerStreamingServer[debugrpc.SessionEvent],
+) error {
+	ctx, cancel := joincontext.New(stream.Context(), s.ctx)
 	defer cancel()
-	args := &debugapi.InitializeRequestArguments{
-		InitializeRequestArguments: dap.InitializeRequestArguments{
-			ClientID:                     req.GetClientId(),
-			ClientName:                   req.GetClientName(),
-			AdapterID:                    req.GetAdapterId(),
-			Locale:                       req.GetLocale(),
-			LinesStartAt1:                req.GetLinesStartAt_1(),
-			ColumnsStartAt1:              req.GetColumnsStartAt_1(),
-			PathFormat:                   req.GetPathFormat(),
-			SupportsVariableType:         req.GetSupportsVariableType(),
-			SupportsVariablePaging:       req.GetSupportsVariablePaging(),
-			SupportsRunInTerminalRequest: req.GetSupportsRunInTerminalRequest(),
-			SupportsMemoryReferences:     req.GetSupportsMemoryReferences(),
-			SupportsProgressReporting:    req.GetSupportsProgressReporting(),
-			SupportsInvalidatedEvent:     req.GetSupportsInvalidatedEvent(),
-			SupportsMemoryEvent:          req.GetSupportsMemoryEvent(),
-		},
-		InitializeOptions: req.GetInitializeOptions(),
+
+	sub := newStreamSubscriber(stream)
+	sessionID, caps, err := s.debugger.CreateSession(ctx, req.GetLangId(),
+		clientCapabilitiesFromProto(req.GetClient()), sub)
+	if err != nil {
+		return err
 	}
 
-	caps, err := s.debugger.Initialize(ctx, args)
+	if err := stream.Send(&debugrpc.SessionEvent{
+		Payload: &debugrpc.SessionEvent_Opened{Opened: &debugrpc.SessionOpened{
+			SessionId:    sessionID,
+			Capabilities: capabilitiesToProto(caps),
+		}},
+	}); err != nil {
+		return err
+	}
+
+	// Block until the subscriber observes a session close, the
+	// stream context is cancelled, or the server is shutting
+	// down. Errors from sub.run propagate back as the stream
+	// status code.
+	return sub.run(ctx)
+}
+
+// streamSubscriber adapts a server-side SessionEvent stream to
+// the debugapi.EventSubscriber interface. Events are forwarded
+// to the stream synchronously; OnClose terminates the stream's
+// run loop.
+type streamSubscriber struct {
+	stream grpc.ServerStreamingServer[debugrpc.SessionEvent]
+
+	mu        sync.Mutex
+	closed    bool
+	closeOnce sync.Once
+	done      chan struct{}
+	closeErr  error
+	reason    string
+}
+
+func newStreamSubscriber(
+	stream grpc.ServerStreamingServer[debugrpc.SessionEvent],
+) *streamSubscriber {
+	return &streamSubscriber{
+		stream: stream,
+		done:   make(chan struct{}),
+	}
+}
+
+// OnEvent implements debugapi.EventSubscriber.
+func (s *streamSubscriber) OnEvent(ev dap.EventMessage) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+	pb, err := dapEventToProto(ev)
+	if err != nil {
+		return
+	}
+	if err := s.stream.Send(&debugrpc.SessionEvent{
+		Payload: &debugrpc.SessionEvent_DapEvent{DapEvent: pb},
+	}); err != nil {
+		s.closeOnce.Do(func() {
+			s.mu.Lock()
+			s.closed = true
+			s.closeErr = err
+			s.mu.Unlock()
+			close(s.done)
+		})
+	}
+}
+
+// OnClose implements debugapi.EventSubscriber.
+func (s *streamSubscriber) OnClose(reason string) {
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		s.closed = true
+		s.reason = reason
+		s.mu.Unlock()
+		_ = s.stream.Send(&debugrpc.SessionEvent{
+			Payload: &debugrpc.SessionEvent_Closed{
+				Closed: &debugrpc.SessionClosed{Reason: reason},
+			},
+		})
+		close(s.done)
+	})
+}
+
+// run blocks until the subscriber reports a close or ctx is
+// cancelled.
+func (s *streamSubscriber) run(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.done:
+		s.mu.Lock()
+		err := s.closeErr
+		s.mu.Unlock()
+		return err
+	}
+}
+
+// dapEventToProto, dapEventFromProto, and clientCapabilitiesFromProto
+// are aliases for the helpers defined alongside the Client.
+func dapEventToProto(ev dap.EventMessage) (*debugrpc.Event, error) {
+	body, err := json.Marshal(ev)
 	if err != nil {
 		return nil, err
 	}
+	name := ""
+	if e := ev.GetEvent(); e != nil {
+		name = e.Event
+	}
+	return &debugrpc.Event{Event: name, Body: body}, nil
+}
 
-	return &debugrpc.InitializeResponse{
-		Capabilities: capabilitiesToProto(caps),
-	}, nil
+func clientCapabilitiesFromProto(c *debugrpc.ClientCapabilities) debugapi.ClientCapabilities {
+	if c == nil {
+		return debugapi.ClientCapabilities{}
+	}
+	return debugapi.ClientCapabilities{
+		ClientID:                     c.GetClientId(),
+		ClientName:                   c.GetClientName(),
+		Locale:                       c.GetLocale(),
+		LinesStartAt1:                c.GetLinesStartAt_1(),
+		ColumnsStartAt1:              c.GetColumnsStartAt_1(),
+		PathFormat:                   c.GetPathFormat(),
+		SupportsVariableType:         c.GetSupportsVariableType(),
+		SupportsVariablePaging:       c.GetSupportsVariablePaging(),
+		SupportsRunInTerminalRequest: c.GetSupportsRunInTerminalRequest(),
+		SupportsMemoryReferences:     c.GetSupportsMemoryReferences(),
+		SupportsProgressReporting:    c.GetSupportsProgressReporting(),
+		SupportsInvalidatedEvent:     c.GetSupportsInvalidatedEvent(),
+		SupportsMemoryEvent:          c.GetSupportsMemoryEvent(),
+	}
 }
 
 // Launch implements DebuggerServer.
@@ -104,7 +222,7 @@ func (s *Server) Launch(ctx context.Context, req *debugrpc.LaunchRequest) (*debu
 		NoDebug:     req.GetNoDebug(),
 	}
 
-	if err := s.debugger.Launch(ctx, args); err != nil {
+	if err := s.debugger.Launch(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -120,7 +238,7 @@ func (s *Server) Attach(ctx context.Context, req *debugrpc.AttachRequest) (*debu
 		Program: req.GetProgram(),
 	}
 
-	if err := s.debugger.Attach(ctx, args); err != nil {
+	if err := s.debugger.Attach(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +249,7 @@ func (s *Server) Attach(ctx context.Context, req *debugrpc.AttachRequest) (*debu
 func (s *Server) ConfigurationDone(ctx context.Context, req *debugrpc.ConfigurationDoneRequest) (*debugrpc.ConfigurationDoneResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	if err := s.debugger.ConfigurationDone(ctx); err != nil {
+	if err := s.debugger.ConfigurationDone(ctx, req.GetSessionId()); err != nil {
 		return nil, err
 	}
 	return &debugrpc.ConfigurationDoneResponse{}, nil
@@ -147,7 +265,7 @@ func (s *Server) Disconnect(ctx context.Context, req *debugrpc.DisconnectRequest
 		SuspendDebuggee:   req.GetSuspendDebuggee(),
 	}
 
-	if err := s.debugger.Disconnect(ctx, args); err != nil {
+	if err := s.debugger.Disconnect(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -162,7 +280,7 @@ func (s *Server) Terminate(ctx context.Context, req *debugrpc.TerminateRequest) 
 		Restart: req.GetRestart(),
 	}
 
-	if err := s.debugger.Terminate(ctx, args); err != nil {
+	if err := s.debugger.Terminate(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -173,7 +291,7 @@ func (s *Server) Terminate(ctx context.Context, req *debugrpc.TerminateRequest) 
 func (s *Server) Restart(ctx context.Context, req *debugrpc.RestartRequest) (*debugrpc.RestartResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	if err := s.debugger.Restart(ctx); err != nil {
+	if err := s.debugger.Restart(ctx, req.GetSessionId()); err != nil {
 		return nil, err
 	}
 	return &debugrpc.RestartResponse{}, nil
@@ -189,7 +307,7 @@ func (s *Server) SetBreakpoints(ctx context.Context, req *debugrpc.SetBreakpoint
 		SourceModified: req.GetSourceModified(),
 	}
 
-	bps, err := s.debugger.SetBreakpoints(ctx, args)
+	bps, err := s.debugger.SetBreakpoints(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +325,7 @@ func (s *Server) SetFunctionBreakpoints(ctx context.Context, req *debugrpc.SetFu
 		Breakpoints: functionBreakpointsFromProto(req.GetBreakpoints()),
 	}
 
-	bps, err := s.debugger.SetFunctionBreakpoints(ctx, args)
+	bps, err := s.debugger.SetFunctionBreakpoints(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +343,7 @@ func (s *Server) SetExceptionBreakpoints(ctx context.Context, req *debugrpc.SetE
 		Filters: req.GetFilters(),
 	}
 
-	bps, err := s.debugger.SetExceptionBreakpoints(ctx, args)
+	bps, err := s.debugger.SetExceptionBreakpoints(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +362,7 @@ func (s *Server) Continue(ctx context.Context, req *debugrpc.ContinueRequest) (*
 		SingleThread: req.GetSingleThread(),
 	}
 
-	resp, err := s.debugger.Continue(ctx, args)
+	resp, err := s.debugger.Continue(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +380,7 @@ func (s *Server) Pause(ctx context.Context, req *debugrpc.PauseRequest) (*debugr
 		ThreadId: int(req.GetThreadId()),
 	}
 
-	if err := s.debugger.Pause(ctx, args); err != nil {
+	if err := s.debugger.Pause(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.PauseResponse{}, nil
@@ -278,7 +396,7 @@ func (s *Server) Next(ctx context.Context, req *debugrpc.NextRequest) (*debugrpc
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	if err := s.debugger.Next(ctx, args); err != nil {
+	if err := s.debugger.Next(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.NextResponse{}, nil
@@ -295,7 +413,7 @@ func (s *Server) StepIn(ctx context.Context, req *debugrpc.StepInRequest) (*debu
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	if err := s.debugger.StepIn(ctx, args); err != nil {
+	if err := s.debugger.StepIn(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.StepInResponse{}, nil
@@ -311,7 +429,7 @@ func (s *Server) StepOut(ctx context.Context, req *debugrpc.StepOutRequest) (*de
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	if err := s.debugger.StepOut(ctx, args); err != nil {
+	if err := s.debugger.StepOut(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.StepOutResponse{}, nil
@@ -327,7 +445,7 @@ func (s *Server) StepBack(ctx context.Context, req *debugrpc.StepBackRequest) (*
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	if err := s.debugger.StepBack(ctx, args); err != nil {
+	if err := s.debugger.StepBack(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.StepBackResponse{}, nil
@@ -342,7 +460,7 @@ func (s *Server) ReverseContinue(ctx context.Context, req *debugrpc.ReverseConti
 		SingleThread: req.GetSingleThread(),
 	}
 
-	if err := s.debugger.ReverseContinue(ctx, args); err != nil {
+	if err := s.debugger.ReverseContinue(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.ReverseContinueResponse{}, nil
@@ -352,7 +470,7 @@ func (s *Server) ReverseContinue(ctx context.Context, req *debugrpc.ReverseConti
 func (s *Server) Threads(ctx context.Context, req *debugrpc.ThreadsRequest) (*debugrpc.ThreadsResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	threads, err := s.debugger.Threads(ctx)
+	threads, err := s.debugger.Threads(ctx, req.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +490,7 @@ func (s *Server) StackTrace(ctx context.Context, req *debugrpc.StackTraceRequest
 		Levels:     int(req.GetLevels()),
 	}
 
-	resp, err := s.debugger.StackTrace(ctx, args)
+	resp, err := s.debugger.StackTrace(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +509,7 @@ func (s *Server) Scopes(ctx context.Context, req *debugrpc.ScopesRequest) (*debu
 		FrameId: int(req.GetFrameId()),
 	}
 
-	scopes, err := s.debugger.Scopes(ctx, args)
+	scopes, err := s.debugger.Scopes(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +530,7 @@ func (s *Server) Variables(ctx context.Context, req *debugrpc.VariablesRequest) 
 		Count:              int(req.GetCount()),
 	}
 
-	vars, err := s.debugger.Variables(ctx, args)
+	vars, err := s.debugger.Variables(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +550,7 @@ func (s *Server) SetVariable(ctx context.Context, req *debugrpc.SetVariableReque
 		Value:              req.GetValue(),
 	}
 
-	resp, err := s.debugger.SetVariable(ctx, args)
+	resp, err := s.debugger.SetVariable(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +573,7 @@ func (s *Server) Source(ctx context.Context, req *debugrpc.SourceRequest) (*debu
 		Source:          sourceFromProtoPtr(req.GetSource()),
 	}
 
-	resp, err := s.debugger.Source(ctx, args)
+	resp, err := s.debugger.Source(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +594,7 @@ func (s *Server) Evaluate(ctx context.Context, req *debugrpc.EvaluateRequest) (*
 		Context:    req.GetContext(),
 	}
 
-	resp, err := s.debugger.Evaluate(ctx, args)
+	resp, err := s.debugger.Evaluate(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +619,7 @@ func (s *Server) SetExpression(ctx context.Context, req *debugrpc.SetExpressionR
 		FrameId:    int(req.GetFrameId()),
 	}
 
-	resp, err := s.debugger.SetExpression(ctx, args)
+	resp, err := s.debugger.SetExpression(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +644,7 @@ func (s *Server) Completions(ctx context.Context, req *debugrpc.CompletionsReque
 		Line:    int(req.GetLine()),
 	}
 
-	items, err := s.debugger.Completions(ctx, args)
+	items, err := s.debugger.Completions(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +662,7 @@ func (s *Server) ExceptionInfo(ctx context.Context, req *debugrpc.ExceptionInfoR
 		ThreadId: int(req.GetThreadId()),
 	}
 
-	resp, err := s.debugger.ExceptionInfo(ctx, args)
+	resp, err := s.debugger.ExceptionInfo(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +683,7 @@ func (s *Server) Modules(ctx context.Context, req *debugrpc.ModulesRequest) (*de
 		ModuleCount: int(req.GetModuleCount()),
 	}
 
-	resp, err := s.debugger.Modules(ctx, args)
+	resp, err := s.debugger.Modules(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +698,7 @@ func (s *Server) Modules(ctx context.Context, req *debugrpc.ModulesRequest) (*de
 func (s *Server) LoadedSources(ctx context.Context, req *debugrpc.LoadedSourcesRequest) (*debugrpc.LoadedSourcesResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	sources, err := s.debugger.LoadedSources(ctx)
+	sources, err := s.debugger.LoadedSources(ctx, req.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -600,7 +718,7 @@ func (s *Server) ReadMemory(ctx context.Context, req *debugrpc.ReadMemoryRequest
 		Count:           int(req.GetCount()),
 	}
 
-	resp, err := s.debugger.ReadMemory(ctx, args)
+	resp, err := s.debugger.ReadMemory(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -623,7 +741,7 @@ func (s *Server) WriteMemory(ctx context.Context, req *debugrpc.WriteMemoryReque
 		AllowPartial:    req.GetAllowPartial(),
 	}
 
-	resp, err := s.debugger.WriteMemory(ctx, args)
+	resp, err := s.debugger.WriteMemory(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +764,7 @@ func (s *Server) Disassemble(ctx context.Context, req *debugrpc.DisassembleReque
 		ResolveSymbols:    req.GetResolveSymbols(),
 	}
 
-	instructions, err := s.debugger.Disassemble(ctx, args)
+	instructions, err := s.debugger.Disassemble(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -666,7 +784,7 @@ func (s *Server) GotoTargets(ctx context.Context, req *debugrpc.GotoTargetsReque
 		Column: int(req.GetColumn()),
 	}
 
-	targets, err := s.debugger.GotoTargets(ctx, args)
+	targets, err := s.debugger.GotoTargets(ctx, req.GetSessionId(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -685,7 +803,7 @@ func (s *Server) Goto(ctx context.Context, req *debugrpc.GotoRequest) (*debugrpc
 		TargetId: int(req.GetTargetId()),
 	}
 
-	if err := s.debugger.Goto(ctx, args); err != nil {
+	if err := s.debugger.Goto(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
