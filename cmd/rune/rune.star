@@ -373,6 +373,13 @@ config = {
             "terminal": "",
             "directory": "",
         },
+        # file_explorer configures the :fexplorer tree view. Indent
+        # and icon attributes default to gray so the guides and glyphs
+        # recede visually behind file names.
+        "file_explorer": {
+            "indent_attr": attr(fg = "gray"),
+            "icon_attr":   attr(fg = "gray"),
+        },
     },
     # Built-in extension configuration. Keys are identifiers only.
     "extensions": {

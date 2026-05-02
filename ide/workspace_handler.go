@@ -859,6 +859,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithClipboard(h.clip),
 		text.WithOpenRouter(h),
 		text.WithFileExplorerIndentAttr(cfg.fileExplorerIndentAttr()),
+		text.WithFileExplorerIconAttr(cfg.fileExplorerIconAttr()),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {

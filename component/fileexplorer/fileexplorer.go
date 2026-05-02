@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package fileexplorer
 
 import (
@@ -74,6 +73,12 @@ type Config struct {
 	// level. The default (zero value) renders the indent guides in
 	// tcell.ColorGray so they recede visually behind file names.
 	IndentAttr term.Attributes
+	// IconAttr is applied to the per-row icon glyph (directory,
+	// default file, or per-extension override) drawn after the indent
+	// guides. The default (zero value) renders the icons in
+	// tcell.ColorGray so they recede visually behind file names,
+	// matching the indent guides.
+	IconAttr term.Attributes
 }
 
 // Component renders a file tree into a shared *cell.Buffer. It
@@ -193,6 +198,9 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.IndentAttr == (term.Attributes{}) {
 		cfg.IndentAttr = term.Attributes{Fg: tcell.ColorGray}
+	}
+	if cfg.IconAttr == (term.Attributes{}) {
+		cfg.IconAttr = term.Attributes{Fg: tcell.ColorGray}
 	}
 	return cfg
 }
@@ -990,6 +998,7 @@ func (c *Component) rewriteBufferFromTree(tree *node) {
 	c.internal = true
 	c.buf.ReplaceContext(context.Background(), b.String())
 	c.applyIndentAttr(flat)
+	c.applyIconAttr(flat)
 	c.internal = false
 	c.rowIDs = rowIDs
 }
@@ -1017,6 +1026,28 @@ func (c *Component) applyIndentAttr(flat []*node) {
 			row[x].Bg = attr.Bg
 			row[x].Attrs = attr.Attrs
 		}
+	}
+}
+
+// applyIconAttr decorates the per-row icon glyph with the configured
+// icon attributes. The icon cell sits immediately after the indent
+// guides at column n.depth * IndentWidth, mirroring renderLine.
+func (c *Component) applyIconAttr(flat []*node) {
+	attr := c.cfg.IconAttr
+	width := c.cfg.IndentWidth
+	cells := c.buf.RawCells()
+	for y, n := range flat {
+		if y >= len(cells) {
+			break
+		}
+		row := cells[y]
+		x := n.depth * width
+		if x >= len(row) {
+			continue
+		}
+		row[x].Fg = attr.Fg
+		row[x].Bg = attr.Bg
+		row[x].Attrs = attr.Attrs
 	}
 }
 

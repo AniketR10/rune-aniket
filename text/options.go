@@ -96,6 +96,11 @@ type Config struct {
 	// indent guide rune drawn at the start of every depth level in
 	// the file explorer. Defaults to tcell.ColorGray when zero.
 	FileExplorerIndentAttr term.Attributes
+	// FileExplorerIconAttr selects the attributes applied to the
+	// per-row icon glyph (directory, default file, or per-extension
+	// override) drawn after the indent guides in the file explorer.
+	// Defaults to tcell.ColorGray when zero.
+	FileExplorerIconAttr term.Attributes
 
 	EventPublisher func(term.Event) bool
 
@@ -317,6 +322,7 @@ func DefaultConfig() Config {
 		OpenRouter:              nopOpenRouter{},
 		Comments:                CommentConfig{},
 		FileExplorerIndentAttr:  term.Attributes{Fg: tcell.ColorGray},
+		FileExplorerIconAttr:    term.Attributes{Fg: tcell.ColorGray},
 		Icons: IconSet{
 			Extensions: map[string]rune{},
 			Directory:  '',
@@ -577,6 +583,14 @@ func WithIconSet(icons IconSet) Option {
 func WithFileExplorerIndentAttr(attr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.FileExplorerIndentAttr = attr
+	}
+}
+
+// WithFileExplorerIconAttr sets the attributes used to render the
+// per-row icon glyph in the file explorer.
+func WithFileExplorerIconAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.FileExplorerIconAttr = attr
 	}
 }
 

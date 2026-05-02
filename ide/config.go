@@ -1463,6 +1463,26 @@ func (c ideConfig) fileExplorerIndentAttr() term.Attributes {
 	return attrs
 }
 
+// fileExplorerIconAttr returns the attributes used to render the
+// per-row icon glyph (directory, default file, per-extension
+// override) in the file explorer. Defaults to a gray foreground so
+// the icons recede visually behind file names.
+func (c ideConfig) fileExplorerIconAttr() term.Attributes {
+	def := term.Attributes{Fg: tcell.ColorGray}
+	cfg, ok := c.fileExplorer()
+	if !ok {
+		return def
+	}
+	attrs, err := config.GetAttributes(cfg, "icon_attr")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.file_explorer.icon_attr"] = err
+		}
+		return def
+	}
+	return attrs
+}
+
 func (c ideConfig) auxiliaryBarEnabled() bool {
 	cfg, ok := c.auxiliaryBar()
 	if !ok {

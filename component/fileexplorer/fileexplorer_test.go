@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package fileexplorer
 
 import (
@@ -288,6 +287,42 @@ func TestIndentAttrHonorsConfig(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Equal(t, '│', rows[1][0].Ch)
 	require.Equal(t, tcell.ColorRed, rows[1][0].Fg)
+}
+
+// TestIconAttrDefaultsToGray renders a nested tree and asserts that
+// the per-row icon glyph carries the gray foreground attribute by
+// default — the icons should recede visually behind file names just
+// like the indent guides.
+func TestIconAttrDefaultsToGray(t *testing.T) {
+	c, buf, _ := newComp(t, map[string][]mockEntry{
+		"/project":     {{name: "src", isDir: true}},
+		"/project/src": {{name: "app.go"}},
+	}, Config{})
+	c.ExpandNodeAt(term.Coordinates{Y: 0})
+	rows := buf.View().RawCells()
+	require.Len(t, rows, 2)
+	// Row 0 is the root directory at depth 0; the icon sits at
+	// column 0.
+	require.Equal(t, tcell.ColorGray, rows[0][0].Fg)
+	// Row 1 is the file at depth 1; the icon sits at column
+	// 1 * IndentWidth.
+	// IndentWidth defaults to 4 (matching the editor's default
+	// tabspaces); see normalizeConfig.
+	require.Equal(t, tcell.ColorGray, rows[1][4].Fg)
+}
+
+// TestIconAttrHonorsConfig verifies that an explicit IconAttr
+// overrides the default gray foreground.
+func TestIconAttrHonorsConfig(t *testing.T) {
+	c, buf, _ := newComp(t, map[string][]mockEntry{
+		"/project":     {{name: "src", isDir: true}},
+		"/project/src": {{name: "app.go"}},
+	}, Config{IconAttr: term.Attributes{Fg: tcell.ColorRed}})
+	c.ExpandNodeAt(term.Coordinates{Y: 0})
+	rows := buf.View().RawCells()
+	require.Len(t, rows, 2)
+	require.Equal(t, tcell.ColorRed, rows[0][0].Fg)
+	require.Equal(t, tcell.ColorRed, rows[1][4].Fg)
 }
 
 // TestCustomIndentWidthMatchesEditorTabs renders nested entries with

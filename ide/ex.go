@@ -1632,6 +1632,10 @@ func (e *ex) initFileExplorer() error {
 			// text.DefaultConfig) and can be overridden via
 			// editor.file_explorer.indent_attr.
 			IndentAttr: e.config.FileExplorerIndentAttr,
+			// Icon attributes; defaults to gray (see
+			// text.DefaultConfig) and can be overridden via
+			// editor.file_explorer.icon_attr.
+			IconAttr: e.config.FileExplorerIconAttr,
 		})
 		if err != nil {
 			return fmt.Errorf("file explorer: create component: %w", err)
