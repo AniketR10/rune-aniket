@@ -16,7 +16,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	tconfig "unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -72,7 +72,7 @@ func newFileHandler(
 	if len(cmd.Args) != 0 {
 		cmdStr = strings.Join(cmd.Args, " ")
 	}
-	return finder.NewV2(context.Background(), clients, invokeWindow, c,
+	return finder.New(context.Background(), clients, invokeWindow, c,
 		historyKey, fileHistoryDocumentID, cmdStr,
 		workspaceListFiles, fileResource)
 }

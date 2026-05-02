@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -101,6 +102,7 @@ type ex struct {
 	clip         clipboard.Register
 	executor     schemeapi.Executor
 	ed           text.Editor
+	parser       syntaxapi.Parser
 	wsExecutor   *workspaceshell.Executor
 	storage      storageapi.Service
 	workspaceURI workspaceapi.URI
@@ -178,12 +180,13 @@ func newEx(
 	macro macroRecorder,
 	dispatchOnPreview map[string]PreviewFunc,
 	tm browser.TabManager,
+	parser syntaxapi.Parser,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
 	err = e.init(ed, m, storage, notifications, uri,
 		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip, macro,
-		dispatchOnPreview, tm, opts...)
+		dispatchOnPreview, tm, parser, opts...)
 	if err != nil {
 		return
 	}
@@ -206,6 +209,7 @@ func (e *ex) init(
 	macro macroRecorder,
 	dispatchOnPreview map[string]PreviewFunc,
 	tm browser.TabManager,
+	parser syntaxapi.Parser,
 	opts ...text.Option,
 ) (err error) {
 	err = e.doInit(ed, m, storage, notifications, uri,
@@ -213,6 +217,7 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
+	e.parser = parser
 	err = e.comp.Init(ed, m, e.config)
 	if err != nil {
 		return

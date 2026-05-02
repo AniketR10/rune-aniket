@@ -70,7 +70,7 @@ func Permissions() []extensionapi.Permission {
 	}
 }
 
-// Clients contains the workspace clients required by NewV2.
+// Clients contains the workspace clients required by New.
 type Clients struct {
 	Storage        storageapi.Service
 	ResourceOpener browserapi.ResourceOpener
@@ -93,8 +93,8 @@ type RedispatchHandler interface {
 	Redispatch(context.Context, textapi.Command) error
 }
 
-// NewV2 returns a tui handler that uses native extensionv2 workspace clients.
-func NewV2(
+// New returns a tui handler that uses native extensionv2 workspace clients.
+func New(
 	ctx context.Context, clients Clients, invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
@@ -111,16 +111,15 @@ func NewV2(
 	}
 
 	listCfg := buildListConfig(cfg, clients.Interrupter)
-	return newV2WithListConfig(ctx, clients, invokeWindow,
+	return NewWithListConfig(ctx, clients, invokeWindow,
 		historyKey, historyDocumentID, command, maxHistory, listCfg,
 		fallback, getResource)
 }
 
-// newV2WithListConfig is the test-friendly constructor: it accepts a
-// pre-built search.ListConfig so callers (notably tests) can opt into
-// SyncSearch and other deterministic settings without going through
-// config.Config.
-func newV2WithListConfig(
+// NewWithListConfig is like New but accepts a pre-built
+// search.ListConfig so callers can opt into SyncSearch and other
+// deterministic settings without going through config.Config.
+func NewWithListConfig(
 	ctx context.Context, clients Clients, invokeWindow browserapi.Window,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	maxHistory int, listCfg search.ListConfig,
@@ -234,6 +233,33 @@ func (h *fuzzyFinderHandler) WatchProcess() chan error {
 	return h.waitChan
 }
 
+// ScanWaiter is implemented by the handler returned from New /
+// NewWithListConfig. It exposes a hook that closes once the initial
+// scan goroutine completes; tests may type-assert to this interface
+// to deterministically wait before driving the handler.
+type ScanWaiter interface {
+	ScanDone() <-chan struct{}
+	// DrainList blocks until any in-flight list consumer goroutine has
+	// exited. Combined with a closed ScanDone() this guarantees the
+	// list's contents are stable.
+	DrainList()
+}
+
+// ScanDone returns a channel that is closed when the initial scan
+// goroutine completes. See ScanWaiter.
+func (h *fuzzyFinderHandler) ScanDone() <-chan struct{} {
+	return h.scanDone
+}
+
+// DrainList re-invokes the underlying list's Push to force the prior
+// consumer goroutine to exit, then closes the new channel so the
+// freshly started consumer also returns. After DrainList returns the
+// list is guaranteed to be in a stable state.
+func (h *fuzzyFinderHandler) DrainList() {
+	ch := h.list.Push(context.Background())
+	close(ch)
+}
+
 func (h *fuzzyFinderHandler) execCommandWith(
 	ctx context.Context, shell string, commandStr string,
 ) (*os.File, *os.File, workspaceapi.Pid, error) {
@@ -293,7 +319,7 @@ func (h *fuzzyFinderHandler) readCommand(ctx context.Context, datachan chan<- []
 
 func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) {
 	if h.s == nil {
-		log.Debug("Storage permission not granted; ignoring history feature")
+		// Storage not granted; ignoring history feature
 		return
 	}
 
@@ -320,10 +346,6 @@ func (h *fuzzyFinderHandler) setContent(
 	err := h.wm.SetWindowContent(h.invokeWindow, b)
 	if err != nil && !errors.Is(err, browserapi.ErrTabNotFree) {
 		return err
-	}
-	if h.ed == nil {
-		log.Info("could not set cursor position because host did not grant extensionapi.PermissionEditor")
-		return nil
 	}
 
 	hed, err := h.ed.Editor(resource)
@@ -621,10 +643,10 @@ func (h *fuzzyFinderHandler) Cursor() (
 func (h *fuzzyFinderHandler) Close() (ret error) {
 	h.cancelCtx()
 
-	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
-
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	log.Tracef("fuzzyFinderHandler.Close(): %#v", h.pid)
 
 	h.killed = true
 	if h.cancelScan != nil {
@@ -632,11 +654,6 @@ func (h *fuzzyFinderHandler) Close() (ret error) {
 	}
 	if err := h.list.Close(); err != nil {
 		ret = multierror.Append(ret, err)
-	}
-	if h.s != nil {
-		if err := h.s.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
 	}
 	return ret
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/handler/finder"
 )
 
 type splitCommandHandler struct {

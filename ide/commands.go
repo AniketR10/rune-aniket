@@ -648,6 +648,18 @@ var (
 			},
 			handler: (*ex).fexplorer,
 		},
+		"locationpicker": {
+			man: textapi.CommandManual{
+				Summary: "Run a program and present its stdout as a list of locations " +
+					"in a floating fuzzy-search picker. Each stdout line must follow " +
+					"the `path[:line[:col]]` convention. The focused entry's file is " +
+					"shown in a syntax-highlighted preview pane on top of the list. " +
+					"Selecting an entry opens the file in the previously focused window " +
+					"at the parsed coordinates.",
+				Synopsis: "<program> [args]",
+			},
+			handler: (*ex).locationpicker,
+		},
 	}
 
 	manSplitWindow = commandAll{

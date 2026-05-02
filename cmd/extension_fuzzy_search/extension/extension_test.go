@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/handler/finder"
 )
 
 func TestNewExtensionMetadata(t *testing.T) {

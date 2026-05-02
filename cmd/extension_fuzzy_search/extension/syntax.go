@@ -19,7 +19,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -101,7 +101,7 @@ func newSyntaxHandler(
 	captureNames := strings.Split(captureNameString, "|")
 	noHistoryKey := term.KeyComb{}
 
-	return finder.NewV2(ctx, clients, invokeWindow,
+	return finder.New(ctx, clients, invokeWindow,
 		c, noHistoryKey, "unused", "",
 		readSymbolsFunction(dataDir, queryFile, captureNames), syntaxResource)
 }

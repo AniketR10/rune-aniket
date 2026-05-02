@@ -13,7 +13,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/ide/vctrl"
 )
 

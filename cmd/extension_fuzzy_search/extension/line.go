@@ -17,7 +17,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	tconfig "unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -84,6 +84,6 @@ func newLineHandler(
 	if len(cmd.Args) != 0 {
 		cmdStr = strings.Join(cmd.Args, " ")
 	}
-	return finder.NewV2(ctx, clients, invokeWindow,
+	return finder.New(ctx, clients, invokeWindow,
 		c, historyKey, lineHistoryDocumentID, cmdStr, readfiles, lineResource)
 }

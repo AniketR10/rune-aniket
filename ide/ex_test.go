@@ -1665,7 +1665,7 @@ func TestExKeySequence(t *testing.T) {
 				defer mu.Unlock()
 				ex.Handle(ev)
 				return true
-			}, 0, clipboard.NewInMemory(), nil, nil, nil, opts...))
+			}, 0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
 		ex.subscribeCommands()
 		b := testEx{ex: ex}
 		closeFns = append(closeFns, func() error {
@@ -2089,7 +2089,7 @@ func newExForTestingTerminal(
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
-		0, clipboard.NewInMemory(), nil, nil, nil, opts...))
+		0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
 	ex.subscribeCommands()
 	return testEx{ex: ex}
 }
@@ -2119,7 +2119,7 @@ func newExForTestingWithWorkspace(
 
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, nil, nil, finalOpts...))
+		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -2157,7 +2157,7 @@ func newExForTestingCommandsPreview(
 
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, previews, nil, finalOpts...))
+		publishEvent, 0, clip, nil, previews, nil, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -2207,7 +2207,7 @@ func newExForTestingWithStorage(
 
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, nil, nil, finalOpts...))
+		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -3134,7 +3134,7 @@ func TestExUsesSharedIDEStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ex.init(texttest.NopEditor(), workspace, storage,
 		notifications, uri, vte.DefaultConfig(), plugin.DefaultBarConfig(),
-		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil))
+		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil, nil))
 
 	require.Equal(t, 0, storage.partitionCalls)
 	require.Same(t, storage, ex.storage)

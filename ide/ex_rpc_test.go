@@ -140,7 +140,7 @@ func newTestRPCBrowser(t *testing.T,
 		ex.syncCommandPrompt = true
 		err = ex.init(ed, &testLoader{}, svc, notifications, uri,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(),
-			nopPublishEvent, 0, clip, nil, nil, nil, opts...)
+			nopPublishEvent, 0, clip, nil, nil, nil, nil, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

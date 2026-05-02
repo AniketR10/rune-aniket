@@ -8,13 +8,17 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -75,7 +79,7 @@ func TestNativeBackend_GitignoreFiltersResults(t *testing.T) {
 		Interrupter: term.NopInterrupter(),
 		SyncSearch:  true,
 	}
-	rh, err := newV2WithListConfig(
+	rh, err := NewWithListConfig(
 		context.Background(), clients, stubWindow(0),
 		term.KeyComb{}, "", "", 0, listCfg,
 		listFiles, getResource,
@@ -163,6 +167,67 @@ func (r *resizableHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return r.h.Cursor()
 }
 func (r *resizableHandler) Selection() (string, bool) { return r.h.Selection() }
+
+// TestCloseDoesNotCloseSharedStorage verifies that closing a finder handler
+// does not propagate Close to the storage service it borrowed via
+// Clients.Storage. The storage handle is shared host-wide (it is the
+// IDE-wide partition wrapping a single firstmover gRPC connection); closing
+// it from inside the finder tears down the connection for every other
+// consumer (notably command.Prompt history loads and any subsequent finder
+// invocation), which manifests as
+// "rpc error: code = Canceled desc = grpc: the client connection is closing".
+func TestCloseDoesNotCloseSharedStorage(t *testing.T) {
+	store := &closeCountingService{Service: storagestub.NewInMemoryService()}
+
+	clients := Clients{
+		Storage:        store,
+		ResourceOpener: stubResourceOpener{},
+		WindowManager:  stubWindowManager{},
+		Interrupter:    term.NopInterrupter(),
+		Notifications:  stubNotifications{},
+	}
+	listCfg := search.ListConfig{
+		Algo:        search.FuzzyMatch,
+		Interrupter: term.NopInterrupter(),
+		SyncSearch:  true,
+	}
+	listFiles := func(_ workspaceapi.FileSystem, _ context.Context) (
+		iterator.Iterator[string], error,
+	) {
+		return iterator.FromSlice([]string{}), nil
+	}
+	getResource := func(_ workspaceapi.FileSystem, _ string) (
+		workspaceapi.URI, term.Coordinates, bool,
+	) {
+		return workspaceapi.URI{}, term.Coordinates{}, false
+	}
+
+	rh, err := NewWithListConfig(
+		context.Background(), clients, stubWindow(0),
+		term.KeyComb{}, "history-doc", "", 8, listCfg,
+		listFiles, getResource,
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, rh.Close())
+	assert.Equal(t, int32(0), store.closeCount.Load(),
+		"finder.Close must not close the borrowed shared storage")
+
+	// The shared storage must still be usable after the finder is closed.
+	require.NoError(t, store.Set(context.Background(), "probe", map[string]any{"k": "v"}))
+}
+
+// closeCountingService wraps a storageapi.Service and counts Close calls so
+// tests can assert that borrowed services are not closed by their consumer.
+type closeCountingService struct {
+	storageapi.Service
+	closeCount atomic.Int32
+}
+
+func (s *closeCountingService) Close() error {
+	s.closeCount.Add(1)
+	return s.Service.Close()
+}
 
 // --- stubs ----------------------------------------------------------------
 

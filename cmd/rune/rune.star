@@ -442,7 +442,27 @@ config = {
             "gitprevchange":  "jumptolocation previous gitchange",
             "lspnextdiagnostic": "jumptolocation next lsp-diagnostics",
             "lspprevdiagnostic": "jumptolocation previous lsp-diagnostics",
-            "searchdiff":     'searchtext git diff -U0 --no-ext-diff | awk \'/^diff --git|^diff --cc/ { file = $3; sub(/^a\\//, "", file); } /^@@/ || /^@@@/ { split($3, nums, ","); gsub(/[^0-9]/, "", nums[1]); line_number = nums[1]; first_change = 1; } /^[-+]/ && first_change { print file ":" line_number ":" " " $0; first_change = 0; }\'',
+            # locationpicker re-shell-quotes each token before
+            # handing the joined command to $SHELL -c, so alias
+            # bodies do not need to add extra single/double
+            # quoting for values that survive Layer 1 prompt
+            # tokenisation as a single token (no embedded
+            # whitespace).
+            "grep":           "locationpicker grep -n -R $1",
+            "todogrep":       "locationpicker grep -n -R -E (TODO|FIXME)",
+            "conflicts":      "locationpicker git grep -n --column '^<<<<<<<\\|^=======$\\|^>>>>>>>'",
+            "gitgrep":        "locationpicker git grep -n --column -- $1",
+            # gitchanges: present every changed hunk (working tree
+            # vs HEAD) as a `path:line:1:hunk` location. The awk
+            # script reads `git diff -U0` from a sub-pipe and
+            # extracts the post-image start line of each `@@` hunk
+            # header. -U0 keeps each hunk anchored to a single
+            # changed line so the picker entry points directly at
+            # the edit. Single-quoting protects the awk body from
+            # Layer 1 prompt tokenisation; locationpicker then
+            # re-shell-quotes it so the whole script reaches awk
+            # as one argv element.
+            "gitchanges":     "locationpicker awk 'BEGIN { cmd = \"git diff HEAD --no-color -U0\"; while ((cmd | getline line) > 0) { if (substr(line, 1, 6) == \"+++ b/\") f = substr(line, 7); else if (substr(line, 1, 2) == \"@@\") { match(line, /[+][0-9]+/); print f \":\" substr(line, RSTART+1, RLENGTH-1) \":1:\" line } } }'",
             "gitblame":       "! git blame %",
             "gitdiff":        "! git diff",
             "shadercancel":   "shaderrun nop 500ms",

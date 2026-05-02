@@ -419,7 +419,8 @@ func (h *workspaceManagerHandler) init(
 
 	// don't install a fs watcher for the home workspace,
 	// to prevent unecessary resource consumption
-	globalOpts := h.textOpts(h.homeURI, cfg, h.homeWorkspace)
+	homeParser := syntax.NewParser(h.homeWorkspace, h.pkgmanager, h.homeURI)
+	globalOpts := h.textOpts(cfg, homeParser)
 	// do not pass a real version control for home workspace
 	ed, err := h.newEditor(homeDirUri, cfg, vctrl.NopService())
 	if err != nil {
@@ -431,7 +432,7 @@ func (h *workspaceManagerHandler) init(
 	h.empty, err = newEx(ed, homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.publishEvent, 0 /* vte capacity */, h.clip, h.macro,
-		h.dispatchOnPreview, tm, globalOpts...)
+		h.dispatchOnPreview, tm, homeParser, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
@@ -826,10 +827,10 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 }
 
 func (h *workspaceManagerHandler) textOpts(
-	uri workspaceapi.URI, cfg ideConfig, workspace workspace.Workspace,
+	cfg ideConfig, parser syntaxapi.Parser,
 ) []text.Option {
 	markdownConfig := markdown.DefaultConfig()
-	markdownConfig.Parser = syntax.NewParser(workspace, h.pkgmanager, uri)
+	markdownConfig.Parser = parser
 	markdownConfig.ScheduleNextTick = cfg.scheduleNextTick
 	ret := []text.Option{
 		text.WithTabspaces(cfg.editorTabspaces()),
@@ -926,7 +927,8 @@ func (h *workspaceManagerHandler) addWorkspace(
 		configErr = multierror.Append(configErr, fmt.Errorf("workspace config: %w", wConfigErr))
 	}
 
-	textOpts := h.textOpts(uri, cfg, cwd)
+	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
+	textOpts := h.textOpts(cfg, parser)
 	vctrlService := vctrl.NopService()
 	if cfg.auxiliaryBarGit() || cfg.gitIconsEnabled() {
 		vctrlService, err = gogit.NewService(uri, cwd)
@@ -953,7 +955,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	tm.parent = h
 	ex, err := newEx(ed, multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
-		h.clip, h.macro, h.dispatchOnPreview, tm, textOpts...)
+		h.clip, h.macro, h.dispatchOnPreview, tm, parser, textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)
