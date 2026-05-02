@@ -103,6 +103,22 @@ func (h *Handler) Wait() {
 	h.inner.Wait()
 }
 
+// Submit aborts any in-flight command on the inner repl, clears the
+// current input, types line into the inputbox and dispatches it by
+// re-issuing <enter>. The leading <ctrl-c> mirrors what a real user
+// would do to interrupt whatever the shell is currently running so a
+// follow-up command can be pasted on top of a fresh prompt.
+func (h *Handler) Submit(line string) {
+	if h.searching {
+		h.cancelSearch()
+	}
+	abort := term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl}
+	_, _ = h.inner.Handle(abort)
+	h.replaceInputText(line)
+	enter := term.Event{Type: term.EventKey, Key: term.KeyEnter}
+	_, _ = h.inner.Handle(enter)
+}
+
 // Close releases both the inner repl handler and the search list.
 func (h *Handler) Close() error {
 	if h.editSession != nil {

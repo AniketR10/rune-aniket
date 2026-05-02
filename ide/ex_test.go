@@ -1085,6 +1085,55 @@ func TestShellCommandOpensTab(t *testing.T) {
 	assert.Equal(t, "shell:///tmp/my-workspace", tabs[0].URI().String())
 }
 
+// TestShellCommandPastesArgument verifies that arguments passed to the
+// `:shell` ex command are submitted to the shell prompt as a single
+// command line, both when the shell tab is created on first use and
+// when the existing companion shell tab is reused.
+func TestShellCommandPastesArgument(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-paste")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	svc := storagestub.NewInMemoryService()
+	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	// First call creates the companion shell tab and pastes the
+	// command. The repl persists submitted commands to history.
+	require.NoError(t, b.shellnewtab(context.Background(), "help"))
+	var doc struct{ Items []string }
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	require.NotEmpty(t, doc.Items)
+	assert.Equal(t, "help", doc.Items[len(doc.Items)-1])
+
+	// Second call reuses the existing tab and submits a different
+	// command, which should also be persisted to history.
+	require.NoError(t, b.shellnewtab(
+		context.Background(), "help", "help",
+	))
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	assert.Equal(t, "help help", doc.Items[len(doc.Items)-1])
+
+	// Calling without arguments must not submit anything new.
+	prev := len(doc.Items)
+	require.NoError(t, b.shellnewtab(context.Background()))
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	assert.Equal(t, prev, len(doc.Items))
+}
+
 // TestShellCommandPersistsHistory verifies that commands entered into
 // the IDE shell are persisted to the shared storageapi.Service via the
 // shellHistoryDocumentID, and that a second ex booted on the same

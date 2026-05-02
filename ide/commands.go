@@ -376,7 +376,10 @@ var (
 		},
 		"shell": {
 			man: textapi.CommandManual{
-				Summary: "Open a new IDE shell in a durable tab and route commands through registered REPL handlers.",
+				Summary: "Open a new IDE shell in a durable tab and route commands through registered REPL handlers. " +
+					"If arguments are provided they are submitted as a command line on the shell prompt; " +
+					"any in-flight command in the existing shell is interrupted with <ctrl-c> first.",
+				Synopsis: "[command [args...]]",
 			},
 			handler: (*ex).shellnewtab,
 		},

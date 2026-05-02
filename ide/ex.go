@@ -1735,7 +1735,7 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 	return nil
 }
 
-func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
+func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 	if e.companionShell == nil {
 		shellCfg := ideshell.Config{
 			Storage:           e.storage,
@@ -1797,12 +1797,18 @@ func (e *ex) shellnewtab(_ context.Context, _ ...string) error {
 		content, cerr := win.Content()
 		if cerr == nil {
 			if curr, ok := content.(*browser.Tab); ok && curr == tab {
+				if line := strings.TrimSpace(strings.Join(args, " ")); line != "" {
+					e.companionShell.Submit(line)
+				}
 				return nil
 			}
 		}
 		return err
 	}
 	tab.Subscribe((*tabSubscriber)(e))
+	if line := strings.TrimSpace(strings.Join(args, " ")); line != "" {
+		e.companionShell.Submit(line)
+	}
 	return nil
 }
 
