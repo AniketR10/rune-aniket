@@ -187,6 +187,9 @@ func normalizeConfig(cfg Config) Config {
 	if cfg.Icons.Directory == 0 {
 		cfg.Icons.Directory = ''
 	}
+	if cfg.Icons.OpenDirectory == 0 {
+		cfg.Icons.OpenDirectory = ''
+	}
 	if cfg.Icons.Default == 0 {
 		cfg.Icons.Default = ''
 	}

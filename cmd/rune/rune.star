@@ -372,6 +372,7 @@ config = {
             "default":  "",
             "terminal": "",
             "directory": "",
+            "open_directory": "",
         },
         # file_explorer configures the :fexplorer tree view. Indent
         # and icon attributes default to gray so the guides and glyphs

@@ -507,11 +507,12 @@ func TestConfigSetting(t *testing.T) {
 	assert.True(t, cfg.frameUnion())
 
 	expectedIcons := text.IconSet{
-		Directory:  '',
-		Default:    'x',
-		Terminal:   '&',
-		Shell:      '8',
-		Extensions: map[string]rune{".go": '$'},
+		Directory:     '',
+		OpenDirectory: '',
+		Default:       'x',
+		Terminal:      '&',
+		Shell:         '8',
+		Extensions:    map[string]rune{".go": '$'},
 	}
 	actualIcons := cfg.icons()
 	assert.Equal(t, expectedIcons, actualIcons)

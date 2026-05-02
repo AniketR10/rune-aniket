@@ -146,6 +146,9 @@ func renderLine(n *node, cfg Config) string {
 
 func iconFor(n *node, cfg Config) rune {
 	if n.isDir {
+		if n.expanded && cfg.Icons.OpenDirectory != 0 {
+			return cfg.Icons.OpenDirectory
+		}
 		return cfg.Icons.Directory
 	}
 	ext := filepath.Ext(n.name)

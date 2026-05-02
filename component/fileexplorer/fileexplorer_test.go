@@ -166,7 +166,7 @@ func TestExpandNodeAtDirectory(t *testing.T) {
 
 	_, isFile := c.ExpandNodeAt(term.Coordinates{Y: 0})
 	assert.False(t, isFile)
-	assert.Equal(t, " src/\n│    app.go", buf.String())
+	assert.Equal(t, " src/\n│    app.go", buf.String())
 
 	_, _ = c.ExpandNodeAt(term.Coordinates{Y: 0})
 	assert.Equal(t, " src/", buf.String())
@@ -184,7 +184,7 @@ func TestExpandLevel(t *testing.T) {
 		"/project/b": {{name: "b1.go"}},
 	}, Config{})
 	c.ExpandLevel(term.Coordinates{Y: 0})
-	assert.Equal(t, " a/\n│    a1.go\n b/\n│    b1.go\n c.go", buf.String())
+	assert.Equal(t, " a/\n│    a1.go\n b/\n│    b1.go\n c.go", buf.String())
 }
 
 // TestCollapseLevel collapses every dir at a given depth.
@@ -325,6 +325,27 @@ func TestIconAttrHonorsConfig(t *testing.T) {
 	require.Equal(t, tcell.ColorRed, rows[1][4].Fg)
 }
 
+// TestOpenDirectoryIcon verifies that expanded directories render with
+// Icons.OpenDirectory while collapsed directories keep Icons.Directory.
+func TestOpenDirectoryIcon(t *testing.T) {
+	c, buf, _ := newComp(t, map[string][]mockEntry{
+		"/project":     {{name: "src", isDir: true}},
+		"/project/src": {{name: "app.go"}},
+	}, Config{Icons: text.IconSet{
+		Directory:     '\uf4d3',
+		OpenDirectory: '\uf07c',
+		Default:       '\uf40d',
+	}})
+	// Initially collapsed: closed icon.
+	require.Equal(t, "\uf4d3 src/", buf.String())
+	c.ExpandNodeAt(term.Coordinates{Y: 0})
+	// Expanded: open icon.
+	require.Equal(t, "\uf07c src/\n│   \uf40d app.go", buf.String())
+	c.ExpandNodeAt(term.Coordinates{Y: 0})
+	// Re-collapsed: closed icon again.
+	require.Equal(t, "\uf4d3 src/", buf.String())
+}
+
 // TestCustomIndentWidthMatchesEditorTabs renders nested entries with
 // IndentWidth=4 (the default editor tabspaces) so that each depth
 // level lines up with a 4-cell tab. Both the renderer AND the parser
@@ -339,7 +360,7 @@ func TestCustomIndentWidthMatchesEditorTabs(t *testing.T) {
 	c.ExpandNodeAt(term.Coordinates{Y: 0})
 	// depth 0: directory icon + space + "src/"
 	// depth 1: one `│   ` indent run (4 cells) + file icon + space + name.
-	require.Equal(t, " src/\n│    app.go", buf.String())
+	require.Equal(t, " src/\n│    app.go", buf.String())
 	cs := c.DryFlush()
 	require.Empty(t, cs.Operations)
 	require.Empty(t, cs.Conflicts)

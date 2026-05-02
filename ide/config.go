@@ -941,6 +941,9 @@ func (c ideConfig) icons() (ret text.IconSet) {
 	if _, ok := m["directory"]; ok {
 		ret.Directory = c.getSpecialIcon(m, "directory")
 	}
+	if _, ok := m["open_directory"]; ok {
+		ret.OpenDirectory = c.getSpecialIcon(m, "open_directory")
+	}
 	if _, ok := m["terminal"]; ok {
 		ret.Terminal = c.getSpecialIcon(m, "terminal")
 	}

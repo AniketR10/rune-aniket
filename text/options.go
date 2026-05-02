@@ -270,9 +270,12 @@ func (c CommentSpec) HasBlock() bool {
 type IconSet struct {
 	Extensions map[string]rune
 	Directory  rune
-	Default    rune
-	Terminal   rune
-	Shell      rune
+	// OpenDirectory is used by the file explorer for directories that
+	// are currently expanded; collapsed directories use Directory.
+	OpenDirectory rune
+	Default       rune
+	Terminal      rune
+	Shell         rune
 }
 
 // CommandAlias is a command to command alias, along with completion configuration.
@@ -324,11 +327,12 @@ func DefaultConfig() Config {
 		FileExplorerIndentAttr:  term.Attributes{Fg: tcell.ColorGray},
 		FileExplorerIconAttr:    term.Attributes{Fg: tcell.ColorGray},
 		Icons: IconSet{
-			Extensions: map[string]rune{},
-			Directory:  '',
-			Default:    'o',
-			Terminal:   '$',
-			Shell:      '',
+			Extensions:    map[string]rune{},
+			Directory:     '',
+			OpenDirectory: '',
+			Default:       'o',
+			Terminal:      '$',
+			Shell:         '',
 		},
 	}
 	return cfg

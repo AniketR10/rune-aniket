@@ -83,7 +83,7 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			height: 6,
 			sequence: []handlertest.SequenceTestCase{
 				{InputSequence: "", Expected: "▐  src/             \n                    \n                    \n                    \n                    \n                    "},
-				{InputSequence: "<enter>", Expected: "▐  src/             \n│   o main.go       \n                    \n                    \n                    \n                    "},
+				{InputSequence: "<enter>", Expected: "▐ src/              \n│   o main.go       \n                    \n                    \n                    \n                    "},
 				{InputSequence: "<enter>", Expected: "▐  src/             \n                    \n                    \n                    \n                    \n                    "},
 			},
 		},
