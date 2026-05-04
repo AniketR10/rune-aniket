@@ -491,9 +491,7 @@ func (wm *WindowManager) SizeFloating() int {
 
 // TileLayout returns the current tiled window tree layout.
 func (wm *WindowManager) TileLayout() component.TileLayout {
-	layout := wm.comp.TileLayout()
-	layout.FocusWindowID = wm.focus.ID()
-	return layout
+	return wm.comp.TileLayout()
 }
 
 // RestoreTileLayout replaces the current tiled layout and returns a map from
@@ -505,41 +503,33 @@ func (wm *WindowManager) RestoreTileLayout(
 	components := wm.comp.RestoreTileLayout(layout, func(windowID uint64) tui.Component {
 		return content(windowID)
 	})
+	wm.prevMouseScrollBarDrag = false
+	wm.prevMouseLeftChild = component.Window{}
 	ret := make(map[uint64]Window, len(components))
 	for id, win := range components {
 		ret[id] = wm.newNode(win)
 	}
+	// Always (re)set focus to a live tile in the new tree. The
+	// pre-restore wm.focus points at a node that was just discarded;
+	// if we left it in place, downstream callers (e.g.
+	// browser.Component.focus) would look up a Window ID missing
+	// from their bookkeeping and panic. Iterate visits tiles in
+	// tree order, giving a deterministic fallback.
 	var focus Window
-	if layout.FocusWindowID != 0 {
-		focus = ret[layout.FocusWindowID]
-	}
-	if focus == (Window{}) {
-		id, ok := tileLayoutFirstLeaf(layout)
-		if ok {
-			focus = ret[id]
+	wm.Iterate(func(candidate Window) {
+		if focus == (Window{}) && !candidate.IsFloating() {
+			focus = candidate
 		}
-	}
+	})
 	if focus != (Window{}) {
 		wm.SetFocus(focus)
 	}
-	// SetFocus stores the pre-restore focus into prevFocus, but that
-	// window is no longer part of the tree. Clear prevFocus so downstream
-	// focus transitions (e.g. Window.Close falling back to prevFocus) do
+	// SetFocus stored the pre-restore focus into prevFocus, but that
+	// window is no longer part of the tree. Clear it so downstream
+	// focus transitions (Window.Close falling back to prevFocus) do
 	// not select a stale node.
 	wm.prevFocus = Window{}
 	return ret
-}
-
-func tileLayoutFirstLeaf(layout component.TileLayout) (uint64, bool) {
-	if len(layout.Children) == 0 {
-		return layout.WindowID, layout.WindowID != 0
-	}
-	for _, child := range layout.Children {
-		if id, ok := tileLayoutFirstLeaf(child); ok {
-			return id, true
-		}
-	}
-	return 0, false
 }
 
 // Iterate applies op to the content of all widnows of this WindowManager.

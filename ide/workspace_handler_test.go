@@ -2146,10 +2146,40 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
 
-		wantLayout := `┌──────────────────────────────────────────────────────────────────────────────┐
+		wantLayoutBeforeReload := `┌──────────────────────────────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
 ├┌────────────────────────┐┌────────────────────────┐┌─────────────────────────┤
 ││                        ││▐                       ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        ││                         │
+││                        ││                        │└─────────────────────────┘
+││                        ││                        │┌───────────┐┌────────────┐
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                        ││           ││            │
+││                        ││                  NORMAL││           ││      NORMAL│
+└└────────────────────────┘└────────────────────────┘└───────────┘└────────────┘`
+		// After workspacereload, focus is no longer persisted via the
+		// layout: WindowManager.RestoreTileLayout picks the first leaf
+		// it finds in the new tree as the active focus. Here that is
+		// the empty top-left tile (which has no editor and therefore
+		// no cursor), so the visible cursor that was present in
+		// wantLayoutBeforeReload disappears from the rendered frame.
+		wantLayoutAfterReload := `┌──────────────────────────────────────────────────────────────────────────────┐
+│o nested.txt  o middle.txt                                                    │
+├┌────────────────────────┐┌────────────────────────┐┌─────────────────────────┤
+││                        ││                        ││                         │
 ││                        ││                        ││                         │
 ││                        ││                        ││                         │
 ││                        ││                        ││                         │
@@ -2205,11 +2235,11 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 					"<c-\\\\>windowfocus<space>left<enter>" +
 					"<c-\\\\>windowfocus<space>left<enter>" +
 					"<c-\\\\>edit<space>middle.txt<enter>",
-				Expected: wantLayout,
+				Expected: wantLayoutBeforeReload,
 			},
 			{
 				InputSequence: "<c-\\\\>workspacereload<enter>",
-				Expected:      wantLayout,
+				Expected:      wantLayoutAfterReload,
 			},
 			{
 				InputSequence: "<c-\\\\>taskfocus<space>sleeper<enter>",

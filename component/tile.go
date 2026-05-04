@@ -61,11 +61,10 @@ type TileNode struct {
 // Nodes with children represent split stems; nodes without children represent
 // leaf windows and carry the corresponding window ID.
 type TileLayout struct {
-	WindowID      uint64
-	FocusWindowID uint64
-	Split         SplitOrientation
-	Children      []TileLayout
-	Floating      []FloatingLayout
+	WindowID uint64
+	Split    SplitOrientation
+	Children []TileLayout
+	Floating []FloatingLayout
 }
 
 // FloatingLayout is a serializable representation of a floating window's

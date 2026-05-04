@@ -596,6 +596,32 @@ func TestWindowManagerRestoreTileLayoutResetsPrevFocus(t *testing.T) {
 		"WindowManager.Focus() must resolve to a window that is still in the tree")
 }
 
+// TestWindowManagerRestoreTileLayoutEmptyLayout exercises the case where
+// RestoreTileLayout is invoked with an empty layout (a leaf layout
+// with WindowID == 0). Without a fallback, the old pre-restore
+// wm.focus would survive and point at a now-discarded node,
+// causing Iterate to skip it and downstream callers (such as
+// browser.Component.focus) to panic with "cannot find focus window".
+func TestWindowManagerRestoreTileLayoutEmptyLayout(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(20, 8)
+
+	wm.RestoreTileLayout(component.TileLayout{}, func(windowID uint64) tui.Handler {
+		return handler.NewTestHandler()
+	})
+
+	focusID := wm.Focus().ID()
+	var found bool
+	wm.Iterate(func(w Window) {
+		if w.ID() == focusID {
+			found = true
+		}
+	})
+	assert.True(t, found,
+		"WindowManager.Focus() must resolve to a window that is still in the tree")
+}
+
 func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame

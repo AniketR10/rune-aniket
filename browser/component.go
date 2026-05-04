@@ -465,6 +465,7 @@ func (c *Component) RestoreTileLayout(
 	content func(windowID uint64) browserapi.Handler,
 ) map[uint64]Window {
 	c.windows = make(map[uint64]*browserWindow)
+	c.prompts = make(map[string]Window)
 	windows := c.wm.RestoreTileLayout(layout, func(windowID uint64) tui.Handler {
 		h := content(windowID)
 		wrapped, _ := c.newWindowContent(h)
@@ -479,6 +480,16 @@ func (c *Component) RestoreTileLayout(
 			tab.callOnFocus()
 		}
 	}
+	// Make sure every live wm window is tracked in c.windows. This
+	// covers leaf nodes that wm.RestoreTileLayout omitted from its
+	// returned map (e.g. layouts with WindowID == 0), so that
+	// c.focus() can always resolve wm.Focus() to a *browserWindow.
+	c.wm.Iterate(func(w thandler.Window) {
+		if _, ok := c.findWindow(w.ID()); ok {
+			return
+		}
+		c.newWindow(w)
+	})
 	c.dirtyTabs = true
 	return ret
 }

@@ -35,6 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	tcomponent "unstable.build/go-tui/component"
+
 	"unstable.build/go-tui/browser"
 )
 
@@ -1030,4 +1032,25 @@ func (c *contentSwapper) Close() error {
 
 func browserConfig() browser.Config {
 	return browser.Config{}
+}
+
+// TestComponentRestoreTileLayoutEmptyLayout reproduces the
+// "corrupted browser: cannot find focus window" panic raised from
+// browser.Component.focus after RestoreTileLayout is invoked with a
+// layout that does not yield any leaf with a non-zero WindowID.
+//
+// In production this surfaced when a user's session restored a
+// normalized empty layout: the underlying handler.WindowManager kept
+// a stale focus pointing at the pre-restore tile (now discarded), and
+// any subsequent call to e.comp.Focus() in the IDE event loop would
+// look up a Window ID missing from c.windows and panic.
+func TestComponentRestoreTileLayoutEmptyLayout(t *testing.T) {
+	c := browser.NewComponent(browserConfig())
+	c.Resize(40, 20)
+
+	_ = c.RestoreTileLayout(tcomponent.TileLayout{}, func(windowID uint64) browserapi.Handler {
+		return nil
+	})
+
+	require.NotNil(t, c.Focus())
 }
