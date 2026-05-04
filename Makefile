@@ -29,6 +29,7 @@ RELEASE_FILES=$(wildcard release/*)
 .PHONY: debug clean test coverage generate sixdev rune rune-agent ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
+	rune-app-delve \
 	rune-docker-build rune-docker-run ox-api-docker-build-gcp ox-api-docker-push-gcp \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
@@ -255,6 +256,9 @@ rune-app-amd64:
 
 rune-app-arm64:
 	@$(MAKE) -C cmd/rune app-arm64
+
+rune-app-delve:
+	@$(MAKE) -C cmd/rune app-delve
 
 rune-dmg:
 	@$(MAKE) -C cmd/rune dmg

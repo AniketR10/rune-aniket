@@ -39,7 +39,7 @@ endif
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
 	docker-build docker-run linux-cross-compile \
 	release-linux-amd64 release-linux-arm64 dist-linux-amd64 dist-linux-arm64 \
-	dist-darwin-arm64 dist-darwin-amd64
+	dist-darwin-arm64 dist-darwin-amd64 app-delve
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
@@ -188,6 +188,40 @@ dmg-amd64-notarize: dmg-amd64
 	@echo "Notarization completed: $(DMG_DIR)/$(DMG_NAME_AMD64)"
 
 release-all: dmg-notarize
+
+# app-delve builds the macOS .app for the host arch with debugger-friendly
+# flags (-gcflags="all=-N -l") and ad-hoc signs it with the
+# com.apple.security.get-task-allow entitlement so delve can attach to the
+# running PID. No hardened runtime, no notarization — strictly for local
+# debugging.
+#
+# Usage:
+#   make rune-app-delve
+#   open $(RUNE_RELEASE_DIR)/Rune.app
+#   dlv attach $$(pgrep -n rune)
+app-delve:
+	@rm -rf $(RUNE_RELEASE_DIR)
+	@mkdir -p $(RUNE_RELEASE_DIR)
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOOS=darwin $(GO) build -gcflags="all=-N -l" $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
+	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
+	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
+	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
+	@ibtool --compile $(APP_EXTRAS_DIR)/MainMenu.nib $(APP_TEMPLATE)/Contents/Resources/MainMenu.xib
+	@echo "injecting version $(VERSION) ($(COMMIT))"
+	@sed -i $(SED_INPLACE) -e 's/{{VERSION}}/$(VERSION)/g' -e 's/{{COMMIT}}/$(COMMIT)/g' $(APP_PLIST)
+	@cd $(ROOT_DIR)/extra && iconutil -c icns icon.iconset
+	@mv $(ROOT_DIR)/extra/icon.icns $(APP_ICON)
+	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
+	@rm -f $(APP_BINARY)
+	@printf '%s\n' \
+		'<?xml version="1.0" encoding="UTF-8"?>' \
+		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+		'<plist version="1.0"><dict>' \
+		'<key>com.apple.security.get-task-allow</key><true/>' \
+		'</dict></plist>' > $(RUNE_RELEASE_DIR)/debug.entitlements
+	@codesign --force --deep --sign - --entitlements $(RUNE_RELEASE_DIR)/debug.entitlements "$(APP_DIR)/$(APP_NAME)"
+	@echo "Created debug-enabled '$(APP_NAME)' in '$(APP_DIR)'"
+	@echo "Attach with: dlv attach \$$(pgrep -n rune)"
 endif
 
 docker-build:
