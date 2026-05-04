@@ -36,6 +36,13 @@ type ctxKey int
 // PayloadFromContext instead of using this key directly.
 var pKey ctxKey
 
+// barsKey signals that a text.Editor.Edit caller wants the editor
+// to install its full auxiliary chrome (status / icons / aux bars,
+// command bar) on top of the bare buffer view. It is unexported;
+// callers use withAuxiliaryBars to opt in and editors use
+// BarsFromContext to read the flag.
+var barsKey ctxKey = 1
+
 func contextWithAlias(ctx context.Context, cmd string) context.Context {
 	return context.WithValue(ctx, pKey, cmd)
 }
@@ -45,4 +52,26 @@ func contextWithAlias(ctx context.Context, cmd string) context.Context {
 func IsAliasContext(ctx context.Context) (string, bool) {
 	locker, ok := ctx.Value(pKey).(string)
 	return locker, ok
+}
+
+// withAuxiliaryBars returns a context that signals to text.Editor
+// implementations that the caller wants the full auxiliary chrome
+// (status / icons / aux bars, command bar) wrapped around the
+// returned handler.
+//
+// Only text.Component, which owns the surrounding browser tab and
+// reserves screen space for those bars, should set this; other
+// callers (input boxes, command prompts, finders, file explorers)
+// embed the editor in their own layout and want a bare view.
+func withAuxiliaryBars(ctx context.Context) context.Context {
+	return context.WithValue(ctx, barsKey, true)
+}
+
+// BarsFromContext reports whether the context was prepared by
+// withAuxiliaryBars. text.Editor implementations call it to decide
+// whether to wrap the returned text.Handler with status / icons /
+// aux bars.
+func BarsFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(barsKey).(bool)
+	return v
 }

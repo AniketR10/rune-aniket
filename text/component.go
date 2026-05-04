@@ -159,7 +159,7 @@ func (c *Component) newFileBuffer(
 		c.config.PkgManager, locs, file, buf, fc, c.workspace, c.config.Syntax)
 	fc = tree
 
-	handler, err = c.ed.Edit(c.ctx, file, buf, readOnly, recover)
+	handler, err = c.ed.Edit(withAuxiliaryBars(c.ctx), file, buf, readOnly, recover)
 	if err != nil {
 		return nil, nil, err
 	}

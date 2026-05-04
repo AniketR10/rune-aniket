@@ -110,6 +110,9 @@ func (e *editor) Edit(
 	}
 	scroll := handler.(*editorHandler).less.Scroll()
 	ret = e.pub.PublishEdit(file, buf, ret, cursor)
+	if !text.BarsFromContext(ctx) {
+		return ret, nil
+	}
 	auxBarConfig := e.auxBarConfig
 	auxBarConfig.CommandRegistry = e.fileRegistry
 	iconsBarConfig := e.iconsBarConfig

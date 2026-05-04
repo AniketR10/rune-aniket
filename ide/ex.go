@@ -2310,14 +2310,13 @@ func (e *ex) Editor() text.Editor {
 }
 
 // commandPromptEditor adapts a text.Editor to the command.Editor
-// interface expected by command.Prompt for its modal edit mode. It
-// goes through text.Editor.Edit, which layers auxiliary status /
-// icons / location bars on top of the bare buffer view; that is
-// undesirable because those bars displace the cursor coordinates
-// reported back to the prompt, but it is acceptable as a fallback
-// for tests that do not assert visual cursor placement. Production
-// flows replace this with a bare vi.New / modeless.NewHandler
-// adapter (see workspace_handler.go).
+// interface expected by command.Prompt for its modal edit mode.
+// It calls text.Editor.Edit with a bare context (no
+// withAuxiliaryBars), so the editor returns just the buffer view
+// with no status / icons / aux bar chrome. That keeps the visible
+// cursor coordinates aligned with the prompt's own coordinates.
+// Production flows replace this with a bare vi.New /
+// modeless.NewHandler adapter (see workspace_handler.go).
 type commandPromptEditor struct {
 	ed text.Editor
 }

@@ -107,6 +107,9 @@ func (e *viEditor) Edit(
 		}
 	}
 	ret = e.Publisher.PublishEdit(file, buf, ret, cursor)
+	if !text.BarsFromContext(ctx) {
+		return ret, nil
+	}
 	auxBarConfig := e.config.auxBarConfig
 	auxBarConfig.CommandRegistry = e.registry
 	iconsBarConfig := e.config.iconsBarConfig

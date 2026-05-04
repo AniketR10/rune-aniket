@@ -78,20 +78,13 @@ func TestEditorDispatchFocus(t *testing.T) {
 }
 
 func TestEditorDispatchScroll(t *testing.T) {
-	cfg := text.StatusBarConfig{
-		Publisher: &texttest.TestEditor{},
-		ScheduleNextTick: func(cb func()) bool {
-			cb()
-			return true
-		},
-	}
-	ed := Editor(WithStatusBarConfig(true, cfg))
+	ed := Editor()
 	buf := cell.NewBuffer()
 	buf.WriteString("Atzari\nSurinach")
 	h, err := ed.Edit(context.Background(), workspaceapi.URI{}, buf, false, false)
 	require.NoError(t, err)
 
-	h.Resize(2, 2)
+	h.Resize(2, 1)
 	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 
 	at := term.Coordinates{X: -1}

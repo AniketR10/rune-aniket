@@ -305,21 +305,27 @@ diff_buf_adjust(win_
 			return true
 		}
 		mu.Lock()
-		cfg := text.StatusBarConfig{
+		// text.Editor only installs auxiliary chrome when called via
+		// text.Component (which threads withAuxiliaryBars in the
+		// context). Tests that want to exercise the bar wiring stack
+		// the bars on top of a bare vi handler directly.
+		root := New(buf, uri,
+			WithScheduleNextTick(cb),
+			WithAutoCenter(true),
+		)
+		scroll := root.less.Scroll()
+		auxCfg := text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}
+		statusCfg := text.StatusBarConfig{
 			Publisher: &texttest.TestEditor{},
 			ScheduleNextTick: func(cb func()) bool {
 				cb()
 				return true
 			},
 		}
-		ed := Editor(
-			WithScheduleNextTick(cb),
-			WithAuxiliaryBar(true, text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}),
-			WithStatusBarConfig(true, cfg),
-		)
 		wg.Add(1)
-		vi, err := ed.Edit(context.Background(), uri, buf, false, false)
-		require.NoError(t, err)
+		var vi text.Handler = text.WithAuxBar(root, buf, scroll, auxCfg)
+		vi = text.WithStatusBar(vi, buf, scroll, false, false, statusCfg)
+		root.setStatusBar(vi.(*text.StatusBar))
 		vi.Resize(50, 10)
 		mu.Unlock()
 		wg.Wait() // wait for bar

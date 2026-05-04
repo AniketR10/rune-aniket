@@ -171,20 +171,24 @@ func TestFileExplorerHandlerRuntimeLikeDimensionsAndRender(t *testing.T) {
 
 	handlertest.RunHandlerSequence(t, h, 32, 6, []handlertest.SequenceTestCase{{
 		InputSequence: "",
-		Expected:      "1 ▐  .claude/                   \n1 o very-long-file-name.go      \n2                               \n3                               \n4                               \n5                               ",
+		// text.Editor only installs auxiliary chrome (line numbers,
+		// status bar, …) when called via text.Component. The file
+		// explorer goes through the bare editor path and so renders
+		// the buffer view directly, with no leading "1 " line-number
+		// column.
+		Expected: "▐  .claude/                     \no very-long-file-name.go        \n                                \n                                \n                                \n                                ",
 	}})
 
-	// Handler's Dimensions MUST include the editor's aux bar so the
-	// parent window can size itself to render both the bar and the
-	// full content without truncation. comp.Dimensions returns only
-	// the buffer content width; h.Dimensions must be strictly
-	// greater when the aux bar is enabled.
+	// With no bars, the handler's Dimensions reflect just the
+	// buffer view. comp.Dimensions returns the same content width
+	// the bare editor renders, so the handler width matches the
+	// component width and stays large enough to fit the longest row.
 	w, _ := h.Dimensions()
 	cw, ch := comp.Dimensions()
 	require.Equal(t, ch, 2)
-	require.GreaterOrEqual(t, w, cw+2, // bar needs ≥ 2 cols for "1 "
-		"handler width must include aux bar width")
-	require.GreaterOrEqual(t, w, len("1 o very-long-file-name.go"))
+	require.GreaterOrEqual(t, w, cw,
+		"handler width must cover the buffer content width")
+	require.GreaterOrEqual(t, w, len("o very-long-file-name.go"))
 	h.syncWidth()
 	require.Equal(t, w+2, host.lastWidth)
 }
@@ -240,10 +244,11 @@ func TestFileExplorerHandlerDimensionsForPrecommitConfig(t *testing.T) {
 			GitEnabled:       false,
 			ScheduleNextTick: func(fn func()) bool { fn(); return true },
 		}),
-		// Matches production: both the aux (line numbers) bar and the
-		// icons (git / location) bar wrap the editor. Each claims
-		// columns on the left of the window, so the handler's
-		// Dimensions() must include both bars' widths.
+		// Note: text.Editor only installs auxiliary chrome (line
+		// numbers, icons bar, …) when called via text.Component.
+		// The file explorer takes the bare-editor path, so the bars
+		// configured here have no effect on Dimensions and the
+		// handler width covers just the buffer content.
 		vi.WithIconsBar(true, text.IconsBarConfig{
 			ScheduleNextTick: func(fn func()) bool { fn(); return true },
 		}),
@@ -256,25 +261,20 @@ func TestFileExplorerHandlerDimensionsForPrecommitConfig(t *testing.T) {
 	h, err := newFileExplorerHandler(host, comp, buf, edh, uri, host.focus)
 	require.NoError(t, err)
 	h.SetWindow(&testExplorerWindow{id: 2})
-	// Resize to a generous width so the editor doesn't drop the aux bar.
+	// Resize to a generous width so the editor renders the full row.
 	h.Resize(64, 6)
 
 	// Required visible width for the rendered row is:
 	//   icon (2, because Nerd Font) + space (1) + len(fileName)
-	// plus each chrome bar's contribution:
-	//   - aux line-number bar: "1 " => 2 cells
-	//   - icons bar: max(1, iconColumns) + 1 => 2 cells when empty
-	const auxBarWidth = 2
-	const iconsBarWidth = 2
 	wantContent := 2 + 1 + len(fileName)
-	wantHandler := wantContent + auxBarWidth + iconsBarWidth
+	wantHandler := wantContent
 
 	w, hgt := h.Dimensions()
 	require.Equal(t, 1, hgt, "single visible row")
 	require.GreaterOrEqual(t, w, wantHandler,
-		"handler.Dimensions().width must cover '%s' (icon+space+name=%d) "+
-			"plus aux bar width (%d); got %d",
-		fileName, wantContent, auxBarWidth, w,
+		"handler.Dimensions().width must cover '%s' "+
+			"(icon+space+name=%d); got %d",
+		fileName, wantContent, w,
 	)
 
 	// Also render into a writer at the reported width and verify the

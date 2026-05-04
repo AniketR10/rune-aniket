@@ -24,7 +24,6 @@
 package modeless
 
 import (
-	"context"
 	"sync"
 	"testing"
 
@@ -124,21 +123,26 @@ diff_buf_adjust(win_
 			return true
 		}
 		mu.Lock()
-		cfg := text.StatusBarConfig{
+		// text.Editor only installs auxiliary chrome when called via
+		// text.Component (which threads withAuxiliaryBars in the
+		// context). Tests that want to exercise the bar wiring stack
+		// the bars on top of a bare modeless handler directly.
+		root := NewHandler(buf, uri, '\t', 0,
+			WithScheduleNextTick(cb),
+			WithAutoCenter(true),
+		)
+		scroll := root.(*editorHandler).less.Scroll()
+		auxCfg := text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}
+		statusCfg := text.StatusBarConfig{
 			Publisher: &texttest.TestEditor{},
 			ScheduleNextTick: func(cb func()) bool {
 				cb()
 				return true
 			},
 		}
-		ed := Editor(
-			WithScheduleNextTick(cb),
-			WithAuxiliaryBar(true, text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}),
-			WithStatusBarConfig(true, cfg),
-		)
 		wg.Add(1)
-		h, err := ed.Edit(context.Background(), uri, buf, false, false)
-		require.NoError(t, err)
+		var h text.Handler = text.WithAuxBar(root, buf, scroll, auxCfg)
+		h = text.WithStatusBar(h, buf, scroll, false, false, statusCfg)
 		h.Resize(50, 10)
 		mu.Unlock()
 		wg.Wait() // wait for bar
