@@ -960,6 +960,99 @@ func TestResponsesReasoningRoundTrip(t *testing.T) {
 	assert.Equal(t, "ok", fnOut["output"])
 }
 
+// TestResponsesAutoDiagProviderItemsRoundTrip locks in the contract that
+// when auto-diagnostics injects a synthetic `function_call` ProviderItem
+// alongside a synthetic ToolCall, the Responses converter emits both the
+// original and the synthetic function_call items in order, followed by
+// both function_call_output items. Without the synthetic ProviderItem,
+// the Responses/Codex backend rejects the request with
+// 400 "No tool call found for function call output ...".
+func TestResponsesAutoDiagProviderItemsRoundTrip(t *testing.T) {
+	originalCallID := "call_orig"
+	syntheticCallID := "auto-diag-" + originalCallID
+	originalFnCall := `{"type":"function_call","call_id":"` + originalCallID +
+		`","name":"apply_patch","arguments":"{\"patch\":\"p\"}"}`
+	syntheticFnCall := `{"type":"function_call","call_id":"` + syntheticCallID +
+		`","name":"check_file_errors","arguments":"{\"path\":\"/workspace/main.go\"}"}`
+
+	assistantMsg := llm.Message{
+		Role: llm.RoleAssistant,
+		ProviderItems: []json.RawMessage{
+			json.RawMessage(originalFnCall),
+			json.RawMessage(syntheticFnCall),
+		},
+		ToolCalls: []llm.ToolCall{
+			{
+				ID:   originalCallID,
+				Type: llm.ToolTypeFunction,
+				Function: llm.FunctionCall{
+					Name:      "apply_patch",
+					Arguments: `{"patch":"p"}`,
+				},
+			},
+			{
+				ID:   syntheticCallID,
+				Type: llm.ToolTypeFunction,
+				Function: llm.FunctionCall{
+					Name:      "check_file_errors",
+					Arguments: `{"path":"/workspace/main.go"}`,
+				},
+			},
+		},
+	}
+
+	captured := captureResponsesRequest(t, Config{
+		Model:             GPT5Dot3Codex,
+		ForceResponsesAPI: true,
+	}, llm.Request{
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "edit"},
+			assistantMsg,
+			{Role: llm.RoleTool, ToolCallID: originalCallID, Content: "applied"},
+			{Role: llm.RoleTool, ToolCallID: syntheticCallID, Content: "no errors"},
+		},
+	})
+
+	input, ok := captured.Body["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 5)
+
+	// 0: user message.
+	user, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "user", user["role"])
+
+	// 1: original function_call from ProviderItems.
+	origCall, ok := input[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "function_call", origCall["type"])
+	assert.Equal(t, originalCallID, origCall["call_id"])
+	assert.Equal(t, "apply_patch", origCall["name"])
+
+	// 2: synthetic function_call appended by auto-diagnostics.
+	syntheticCall, ok := input[2].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "function_call", syntheticCall["type"])
+	assert.Equal(t, syntheticCallID, syntheticCall["call_id"])
+	assert.Equal(t, "check_file_errors", syntheticCall["name"])
+
+	// 3: original function_call_output.
+	origOut, ok := input[3].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "function_call_output", origOut["type"])
+	assert.Equal(t, originalCallID, origOut["call_id"])
+	assert.Equal(t, "applied", origOut["output"])
+
+	// 4: synthetic function_call_output. This must follow a matching
+	// function_call earlier in the input array — that is the entire
+	// point of this test.
+	syntheticOut, ok := input[4].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "function_call_output", syntheticOut["type"])
+	assert.Equal(t, syntheticCallID, syntheticOut["call_id"])
+	assert.Equal(t, "no errors", syntheticOut["output"])
+}
+
 // TestMessageProviderItemsJSONRoundTrip ensures opaque provider items survive
 // persistence (they are stored alongside the assistant message in the
 // dialogue history).

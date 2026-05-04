@@ -1278,6 +1278,31 @@ func (a *Agent) injectAutoDiagnostics(
 		}
 		assistantMsg.ToolCalls = append(assistantMsg.ToolCalls, syntheticCall)
 
+		// When the assistant message carries verbatim provider items
+		// (Responses API replay), the converter prefers ProviderItems
+		// over ToolCalls (see openai.responsesInputFromMessages). We
+		// must also append a synthetic function_call provider item so
+		// that the matching function_call_output we add below has its
+		// referenced call present in the next request's input array.
+		// Without this, the Codex/Responses backend rejects the
+		// follow-up request with "No tool call found for function call
+		// output with call_id auto-diag-...".
+		if len(assistantMsg.ProviderItems) > 0 {
+			syntheticItem, err := json.Marshal(map[string]any{
+				"type":      "function_call",
+				"call_id":   syntheticID,
+				"name":      "check_file_errors",
+				"arguments": diagArgs,
+			})
+			if err == nil {
+				assistantMsg.ProviderItems = append(
+					assistantMsg.ProviderItems, syntheticItem)
+			} else {
+				log.Warn("auto-diagnostics: failed to marshal synthetic provider item",
+					"error", err)
+			}
+		}
+
 		emit(ctx, ch, Event{
 			Type:          EventToolCall,
 			ToolCallID:    syntheticID,

@@ -25,6 +25,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -1327,6 +1328,93 @@ func TestAutoDiagnostics(t *testing.T) {
 		}
 		assert.Equal(t, []string{"c1", "c2", "auto-diag-c1"}, toolIDs)
 	})
+
+	t.Run("auto-diagnostics injects synthetic ProviderItem on Responses replay",
+		func(t *testing.T) {
+			// On the Responses API replay path, the assistant message
+			// carries opaque provider items in addition to ToolCalls. The
+			// converter prefers ProviderItems over ToolCalls, so the
+			// auto-diagnostics injection must also append a synthetic
+			// `function_call` provider item — otherwise the next request's
+			// `function_call_output` for `auto-diag-*` has no matching call
+			// and the Codex/Responses backend returns
+			// 400 "No tool call found for function call output ...".
+			origCallID := "call_O4Ah"
+			origFnCall := json.RawMessage(`{"type":"function_call","call_id":"` +
+				origCallID + `","name":"apply_patch","arguments":"{\"patch\":\"p\"}"}`)
+			reasoning := json.RawMessage(
+				`{"type":"reasoning","id":"rs_1","encrypted_content":"ENC"}`)
+
+			svc := &mockService{
+				responses: []mockResponse{
+					{
+						chunks:       []string{""},
+						finishReason: llm.FinishReasonToolCall,
+						toolCalls: []llm.ToolCall{
+							{
+								ID:   origCallID,
+								Type: llm.ToolTypeFunction,
+								Function: llm.FunctionCall{
+									Name:      "apply_patch",
+									Arguments: `{"patch":"p"}`,
+								},
+							},
+						},
+						providerItems: []json.RawMessage{reasoning, origFnCall},
+					},
+					stopResponse("done"),
+				},
+			}
+			patchTool := &mockTool{
+				name: "apply_patch",
+				result: ToolResult{
+					Content:      "applied 1/1 operations successfully",
+					TouchedFiles: []string{"/workspace/main.go"},
+				},
+			}
+			diagTool := &mockTool{
+				name:   "check_file_errors",
+				result: ToolResult{Content: "no errors or warnings"},
+			}
+			store := newMockStore()
+			ag := NewAgent(svc, NewRegistry(patchTool, diagTool), noSkills(), store,
+				NoMemory(), Config{SystemPrompt: "test"})
+
+			events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+			assert.True(t, hasEventType(events, EventDone))
+
+			// The persisted assistant message in the second request must
+			// carry both the synthetic ToolCall and a matching synthetic
+			// function_call ProviderItem appended after the original items.
+			require.Equal(t, 2, svc.getCallCount())
+			secondReq := svc.requests[1]
+			var assistantMsg llm.Message
+			for _, m := range secondReq.Messages {
+				if m.Role == llm.RoleAssistant {
+					assistantMsg = m
+				}
+			}
+			require.Len(t, assistantMsg.ToolCalls, 2)
+			assert.Equal(t, "auto-diag-"+origCallID,
+				assistantMsg.ToolCalls[1].ID)
+
+			require.Len(t, assistantMsg.ProviderItems, 3,
+				"synthetic function_call provider item must be appended")
+			var synthetic map[string]any
+			require.NoError(t, json.Unmarshal(
+				assistantMsg.ProviderItems[2], &synthetic))
+			assert.Equal(t, "function_call", synthetic["type"])
+			assert.Equal(t, "auto-diag-"+origCallID, synthetic["call_id"])
+			assert.Equal(t, "check_file_errors", synthetic["name"])
+			assert.Equal(t, `{"path":"/workspace/main.go"}`,
+				synthetic["arguments"])
+
+			// Original provider items must remain untouched and in order.
+			assert.JSONEq(t, string(reasoning),
+				string(assistantMsg.ProviderItems[0]))
+			assert.JSONEq(t, string(origFnCall),
+				string(assistantMsg.ProviderItems[1]))
+		})
 }
 
 func TestChannelIterator(t *testing.T) {
@@ -2809,6 +2897,11 @@ type mockResponse struct {
 	err               error
 	streamErr         error                // error to return from iterator.Err() after consuming
 	rateLimitWarnings []*llm.RateLimitInfo // warnings to emit before text deltas
+	// providerItems are forwarded into DoneData.Message.ProviderItems so
+	// tests can simulate a Responses API stream that emits opaque items
+	// (reasoning blobs, function_call entries) which must be replayed
+	// verbatim on the next request.
+	providerItems []json.RawMessage
 }
 
 func (m *mockService) CreateCompletion(
@@ -2885,6 +2978,7 @@ func (m *mockService) CreateCompletion(
 		Content:          content,
 		ReasoningContent: reasoning,
 		ToolCalls:        resp.toolCalls,
+		ProviderItems:    resp.providerItems,
 	}
 
 	items = append(items, llm.Event{
