@@ -120,6 +120,7 @@ func (t *TestEditorHandler) MaxSeekOffset() int {
 }
 
 func (e *TestEditor) Edit(
+	ctx context.Context,
 	resource workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
 	e.uri = resource

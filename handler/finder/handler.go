@@ -159,7 +159,7 @@ func NewWithListConfig(
 
 	h.list.Init(listCfg)
 	ed, _ := modeless.Editor(modeless.WithWrap(true)).
-		Edit(workspaceapi.RandomURI("memory"), h.list.Buffer(), false, false)
+		Edit(h.ctx, workspaceapi.RandomURI("memory"), h.list.Buffer(), false, false)
 	h.listHandler = search.Handler(&h.list, ed, func(item string) {
 		searchQuery := h.list.Buffer().String()
 		h.openResource(searchQuery, item)

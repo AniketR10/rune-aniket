@@ -64,8 +64,8 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*texttest.MockEditor,
 }
 
 func expectEdit(t *testing.T, mock *texttest.MockEditor, resource workspaceapi.URI, content string, readOnly, recovered bool) {
-	mock.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(_uri workspaceapi.URI, buf *cell.Buffer, _readOnly, _recovered bool) (text.Handler, error) {
+	mock.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1).
+		DoAndReturn(func(_ context.Context, _uri workspaceapi.URI, buf *cell.Buffer, _readOnly, _recovered bool) (text.Handler, error) {
 			assert.Equal(t, resource, _uri)
 			assert.Equal(t, content, buf.String())
 			assert.Equal(t, readOnly, _readOnly)
@@ -126,7 +126,7 @@ func TestServerEdit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock, s := newTestServer(t, ctrl)
 
-		mock.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		mock.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("NOLINUX")).
 			Times(1)
 

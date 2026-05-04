@@ -24,6 +24,7 @@
 package modeless
 
 import (
+	"context"
 	"errors"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -70,6 +71,7 @@ func (a publisherEventsAdapter) UnsubscribeEvents(sub text.EventHandler) (bool, 
 }
 
 func (e *editor) Edit(
+	ctx context.Context,
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (ret text.Handler, err error) {
 	indentRune := text.IndentRuneTab

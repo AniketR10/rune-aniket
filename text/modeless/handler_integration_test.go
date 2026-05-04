@@ -24,6 +24,7 @@
 package modeless
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -136,7 +137,7 @@ diff_buf_adjust(win_
 			WithStatusBarConfig(true, cfg),
 		)
 		wg.Add(1)
-		h, err := ed.Edit(uri, buf, false, false)
+		h, err := ed.Edit(context.Background(), uri, buf, false, false)
 		require.NoError(t, err)
 		h.Resize(50, 10)
 		mu.Unlock()

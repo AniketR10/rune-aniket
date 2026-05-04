@@ -24,6 +24,7 @@
 package input
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -83,7 +84,7 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 	}
 
 	uri := workspaceapi.RandomURI("memory")
-	edh, err := ed.Edit(uri, buf, false, false)
+	edh, err := ed.Edit(context.Background(), uri, buf, false, false)
 	if err != nil {
 		// this should not really happen, as editor implementations
 		// passed to an input box should all be internal, and so

@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -161,7 +162,7 @@ func TestFileExplorerHandlerRuntimeLikeDimensionsAndRender(t *testing.T) {
 	host := &testFileExplorerHost{focus: &testExplorerWindow{id: 1}, frame: true}
 	uri, err := workspaceapi.ParseURI("memory:///fexplorer-test-1")
 	require.NoError(t, err)
-	edh, err := ed.Edit(uri, buf, false, false)
+	edh, err := ed.Edit(context.Background(), uri, buf, false, false)
 	require.NoError(t, err)
 	h, err := newFileExplorerHandler(host, comp, buf, edh, uri, host.focus)
 	require.NoError(t, err)
@@ -250,7 +251,7 @@ func TestFileExplorerHandlerDimensionsForPrecommitConfig(t *testing.T) {
 	host := &testFileExplorerHost{focus: &testExplorerWindow{id: 1}, frame: true}
 	uri, err := workspaceapi.ParseURI("memory:///fexplorer-precommit-test")
 	require.NoError(t, err)
-	edh, err := ed.Edit(uri, buf, false, false)
+	edh, err := ed.Edit(context.Background(), uri, buf, false, false)
 	require.NoError(t, err)
 	h, err := newFileExplorerHandler(host, comp, buf, edh, uri, host.focus)
 	require.NoError(t, err)
@@ -377,7 +378,7 @@ func newTestFileExplorerHandler(t *testing.T, dirs map[string][]explorerMockEntr
 	host := &testFileExplorerHost{focus: &testExplorerWindow{id: 1}}
 	uri, err := workspaceapi.ParseURI("memory:///fexplorer-test-2")
 	require.NoError(t, err)
-	edh, err := ed.Edit(uri, buf, false, false)
+	edh, err := ed.Edit(context.Background(), uri, buf, false, false)
 	require.NoError(t, err)
 	h, err := newFileExplorerHandler(host, comp, buf, edh, uri, host.focus)
 	require.NoError(t, err)

@@ -71,7 +71,7 @@ func TestEditorDispatchFocus(t *testing.T) {
 
 	buf := cell.NewBuffer()
 	buf.WriteString(content)
-	_, err = ed.Edit(uri, buf, false, false)
+	_, err = ed.Edit(context.Background(), uri, buf, false, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, focusCalled)
@@ -88,7 +88,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	ed := Editor(WithStatusBarConfig(true, cfg))
 	buf := cell.NewBuffer()
 	buf.WriteString("Atzari\nSurinach")
-	h, err := ed.Edit(workspaceapi.URI{}, buf, false, false)
+	h, err := ed.Edit(context.Background(), workspaceapi.URI{}, buf, false, false)
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
@@ -120,7 +120,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 		ed := Editor()
 		buf := cell.NewBuffer()
 		buf.WriteString("Matias\nGiordano\n")
-		h, err := ed.Edit(uri, buf, false, false)
+		h, err := ed.Edit(context.Background(), uri, buf, false, false)
 		require.NoError(t, err)
 
 		// should scroll as well, but changes in cursorAtScroll is what we are expecting
@@ -158,7 +158,7 @@ func TestEditorDispatchCursor(t *testing.T) {
 		ed := Editor()
 		buf := cell.NewBuffer()
 		buf.WriteString("Matias\nGiordano\n")
-		h, err := ed.Edit(uri, buf, false, false)
+		h, err := ed.Edit(context.Background(), uri, buf, false, false)
 		require.NoError(t, err)
 		h.Resize(2, 1)
 
@@ -201,7 +201,7 @@ func TestEditorSetCursor(t *testing.T) {
 		t.Run(fmt.Sprintf("wrap: %v, does not return error if cursor already at position", wrap),
 			func(t *testing.T) {
 				ed := Editor(WithWrap(wrap), WithAutoCenter(true))
-				h, err := ed.Edit(uri, cell.NewBuffer(), false, false)
+				h, err := ed.Edit(context.Background(), uri, cell.NewBuffer(), false, false)
 				require.NoError(t, err)
 				if wrap {
 					h.Resize(1, 1) // just not 0, 0
@@ -215,7 +215,7 @@ func TestEditorSetCursor(t *testing.T) {
 				buf := cell.NewBuffer()
 				buf.WriteString("a")
 				ed := Editor(WithWrap(wrap), WithAutoCenter(true))
-				h, err := ed.Edit(uri, buf, false, false)
+				h, err := ed.Edit(context.Background(), uri, buf, false, false)
 				require.NoError(t, err)
 				h.Resize(1, 1)
 
@@ -230,7 +230,7 @@ func TestEditorSetCursor(t *testing.T) {
 				buf := cell.NewBuffer()
 				buf.WriteString("aaaaaaaaaaaaaaaa\nbb\nc\nd\ne")
 				ed := Editor(WithWrap(wrap), WithAutoCenter(true))
-				h, err := ed.Edit(uri, buf, false, false)
+				h, err := ed.Edit(context.Background(), uri, buf, false, false)
 				require.NoError(t, err)
 				cursor := h.(interface{ CursorReference() *text.Cursor }).CursorReference()
 
@@ -268,7 +268,7 @@ func TestEditorRegistersIndentCommand(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString("a")
 
-	h, err := ed.Edit(uri, buf, false, false)
+	h, err := ed.Edit(context.Background(), uri, buf, false, false)
 	require.NoError(t, err)
 	h.Resize(80, 10)
 

@@ -1660,7 +1660,7 @@ func (e *ex) initFileExplorer() error {
 				return fmt.Errorf("file explorer: remove stale tab: %w", err)
 			}
 		}
-		ed, err := e.ed.Edit(uri, buf, false, false)
+		ed, err := e.ed.Edit(context.Background(), uri, buf, false, false)
 		if err != nil {
 			return fmt.Errorf("file explorer: open editor: %w", err)
 		}
@@ -2324,7 +2324,7 @@ type commandPromptEditor struct {
 
 func (c commandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	uri := workspaceapi.RandomURI("memory")
-	h, err := c.ed.Edit(uri, buf, false, false)
+	h, err := c.ed.Edit(context.Background(), uri, buf, false, false)
 	if err != nil {
 		// text.Editor implementations used here are in-process and
 		// do not return errors for in-memory buffers.

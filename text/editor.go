@@ -124,6 +124,7 @@ type Editor interface {
 	// Edit opens a file and returns an editor.Handler to edit it or an error
 	// if there was an error opening it.
 	Edit(
+		ctx context.Context,
 		file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 	) (Handler, error)
 

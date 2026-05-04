@@ -24,6 +24,7 @@
 package vi
 
 import (
+	"context"
 	"errors"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -65,6 +66,7 @@ func Editor(opts ...Option) text.Editor {
 }
 
 func (e *viEditor) Edit(
+	ctx context.Context,
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
 	indentRune := text.IndentRuneTab

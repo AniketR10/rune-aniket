@@ -318,7 +318,7 @@ diff_buf_adjust(win_
 			WithStatusBarConfig(true, cfg),
 		)
 		wg.Add(1)
-		vi, err := ed.Edit(uri, buf, false, false)
+		vi, err := ed.Edit(context.Background(), uri, buf, false, false)
 		require.NoError(t, err)
 		vi.Resize(50, 10)
 		mu.Unlock()
@@ -1206,7 +1206,7 @@ func TestLastChangeMark(t *testing.T) {
 // TestVisualMarks verifies that vi records the `<` and `>` visual
 // marks whenever it leaves a visual mode (operator, <esc>, or
 // motion-driven exit), and that the corresponding `'<` / `'>` /
-// `` `< `` / `` `> `` keybindings can jump back to those positions —
+// “ `< “ / “ `> “ keybindings can jump back to those positions —
 // matching Vim's :help visual-marks.
 func TestVisualMarks(t *testing.T) {
 	tests := []struct {

@@ -91,7 +91,7 @@ func (s *Server) Edit(ctx context.Context, in *textrpc.EditRequest) (
 	err = s.editHandler(uri,
 		func(resource workspaceapi.URI) (text.Handler, error) {
 			buf := EditRequestToBuffer(in)
-			return s.editor.Edit(uri, buf, in.GetReadOnly(), in.GetRecovered())
+			return s.editor.Edit(ctx, uri, buf, in.GetReadOnly(), in.GetRecovered())
 		})
 	if err != nil {
 		return nil, err

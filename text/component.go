@@ -159,7 +159,7 @@ func (c *Component) newFileBuffer(
 		c.config.PkgManager, locs, file, buf, fc, c.workspace, c.config.Syntax)
 	fc = tree
 
-	handler, err = c.ed.Edit(file, buf, readOnly, recover)
+	handler, err = c.ed.Edit(c.ctx, file, buf, readOnly, recover)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -829,9 +829,10 @@ func (c *Component) SetWindowWidth(win browser.Window, width int) bool {
 //
 // Deprecated: Use OpenFileTab instead.
 func (c *Component) Edit(
+	ctx context.Context,
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recover bool,
 ) (Handler, error) {
-	editor, err := c.ed.Edit(file, buf, readOnly, recover)
+	editor, err := c.ed.Edit(ctx, file, buf, readOnly, recover)
 	if err != nil {
 		return nil, err
 	}

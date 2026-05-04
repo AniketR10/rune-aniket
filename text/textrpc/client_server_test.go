@@ -124,7 +124,7 @@ func TestClientServerIntegration(t *testing.T) {
 		client, closeFn := setupIntTest(t, s)
 		defer closeFn()
 
-		ed.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		ed.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("The Upsetter")).
 			Times(1)
 
@@ -146,14 +146,14 @@ func TestClientServerIntegration(t *testing.T) {
 				"Edit->EventTypeOpen",
 				textapi.EventTypeOpen,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
-					ed.Edit(uri, buf, false, false)
+					ed.Edit(context.Background(), uri, buf, false, false)
 				}, nil, nil, nil,
 			},
 			{
 				"Edit->EventTypeEdit",
 				textapi.EventTypeEdit,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
-					ed.Edit(uri, buf, false, false)
+					ed.Edit(context.Background(), uri, buf, false, false)
 					buf.WriteString(str1)
 				}, &term.Coordinates{}, &term.Coordinates{}, &str1,
 			},
@@ -162,7 +162,7 @@ func TestClientServerIntegration(t *testing.T) {
 				textapi.EventTypeEdit,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					ed.Edit(uri, buf, false, false)
+					ed.Edit(context.Background(), uri, buf, false, false)
 					buf.DeleteRow(0)
 				}, &term.Coordinates{}, &term.Coordinates{Y: 1}, nil,
 			},
@@ -171,7 +171,7 @@ func TestClientServerIntegration(t *testing.T) {
 				textapi.EventTypeCursor,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					h, err := ed.Edit(uri, buf, false, false)
+					h, err := ed.Edit(context.Background(), uri, buf, false, false)
 					assert.NoError(t, err)
 					h.Handle(term.Event{Ch: 'l'})
 				}, &term.Coordinates{}, &term.Coordinates{}, nil,
@@ -181,7 +181,7 @@ func TestClientServerIntegration(t *testing.T) {
 				textapi.EventTypeSelection,
 				func(t *testing.T, resourceName string, ed text.Editor, buf *cell.Buffer) {
 					buf.WriteString(str1)
-					h, err := ed.Edit(uri, buf, false, false)
+					h, err := ed.Edit(context.Background(), uri, buf, false, false)
 					assert.NoError(t, err)
 					h.Handle(term.Event{Ch: 'v'})
 				}, &term.Coordinates{}, &term.Coordinates{}, nil,
@@ -253,7 +253,7 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Wait()
 
 		// proceed to trigger
-		ed.Edit(uri, cell.NewBuffer(), false, false)
+		ed.Edit(context.Background(), uri, cell.NewBuffer(), false, false)
 
 		// wg panics if Done called but not added
 		wg.Wait()
