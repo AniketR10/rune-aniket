@@ -488,6 +488,18 @@ config = {
                 "command": "!! git worktree remove $1",
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
+            # Open a workspace and play the shine shader as a visual
+            # confirmation that the new workspace was opened.
+            "wopen": {
+                "command": [
+                    "workspacenew $1",
+                    "shaderrun shine 600ms",
+                ],
+                "completer": [
+                    "{history}",
+                    "{file}",
+                ],
+            },
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.
         "key_bindings": {
