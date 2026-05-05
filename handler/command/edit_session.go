@@ -160,6 +160,34 @@ func (s *EditSession) CursorAtScroll() (term.Coordinates, term.CursorStyle, bool
 	return s.handler.CursorAtScroll(), style, true
 }
 
+// Selection returns the active handler's selection; the second
+// return is false when the session is inactive (so hosts can fall
+// through to their own selection logic).
+func (s *EditSession) Selection() (string, bool) {
+	if s.handler == nil {
+		return "", false
+	}
+	return s.handler.Selection()
+}
+
+// SelectionBounds returns the active handler's selection range in
+// buffer (scroll) coordinates; ok is false when the session is
+// inactive, no selection is active, or the underlying EditHandler
+// does not implement SelectionBoundsHandler. Hosts that render the
+// edit-session buffer outside the editor's own Draw pipeline use
+// this to paint the selection highlight in their own coordinate
+// system.
+func (s *EditSession) SelectionBounds() (from, to term.Coordinates, ok bool) {
+	if s.handler == nil {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	sb, ok := s.handler.(SelectionBoundsHandler)
+	if !ok {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	return sb.SelectionBounds()
+}
+
 // Drawer returns the active handler as a Draw-only view so hosts
 // can composite the editor onto their own writer. The second return
 // is false when the session is inactive.

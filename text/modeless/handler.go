@@ -809,6 +809,15 @@ func (h *editorHandler) Selection() (string, bool) {
 	return text, text != ""
 }
 
+// SelectionBounds returns the unsorted (anchor, cursor) buffer
+// coordinates of the active selection, if any. ok is false when no
+// selection is active. Hosts that render the buffer outside the
+// editor's Draw pipeline use this to paint the selection highlight
+// in their own coordinate system.
+func (h *editorHandler) SelectionBounds() (from, to term.Coordinates, ok bool) {
+	return h.cursor.SelectionBounds()
+}
+
 // Close satisfies editor.Handler.
 func (h *editorHandler) Close() error {
 	return nil

@@ -1121,6 +1121,129 @@ func TestCommandHandlerEditMode(t *testing.T) {
 		assert.Equal(t, 7, captured.cursorX)
 	})
 
+	t.Run("forwards editor selection while edit mode is active", func(t *testing.T) {
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+
+		var captured *stubEditHandler
+		cfg.Editor = capturingEditor{captured: &captured}
+
+		dispatchFn := func(cmd string, args ...string) bool { return true }
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori"})
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			term.NopInterrupter(), cmds, cfg,
+		)
+		defer b.Close()
+
+		// Outside edit mode the prompt has no selection to surface.
+		sel, ok := b.Selection()
+		assert.False(t, ok)
+		assert.Empty(t, sel)
+
+		// Enter edit mode and stage a selection on the spawned editor.
+		feedKeys(t, testCommandHandler{b}, "rori<space>my<shift-esc>")
+		require.NotNil(t, captured)
+		captured.selection = "rori my"
+
+		// While in edit mode the prompt must report the editor's
+		// selection so the runtime can render the highlight.
+		sel, ok = b.Selection()
+		assert.True(t, ok, "edit-mode selection must be visible to the runtime")
+		assert.Equal(t, "rori my", sel)
+	})
+
+	t.Run("paints selection highlight in wrapped prompt geometry", func(t *testing.T) {
+		// The prompt renders the buffer through a responsive
+		// component that strips per-cell attributes, and bypasses
+		// the editor's own DrawLocations selection-rendering
+		// pipeline. Without an explicit overlay the highlight is
+		// invisible; this test pins the overlay to the wrap layout.
+		storage := storagestub.NewInMemoryService()
+		cfg := testDefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+
+		var captured *stubEditHandler
+		cfg.Editor = capturingEditor{captured: &captured}
+
+		dispatchFn := func(cmd string, args ...string) bool { return true }
+		completeFn := func(ctx context.Context, args []string) (iterator.Iterator[string], string, error) {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+
+		cmds := testNoManualCommands([]string{"rori"})
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+			term.NopInterrupter(), cmds, cfg,
+		)
+		defer b.Close()
+
+		// Type 25 ones so the buffer wraps to 2 visual rows at
+		// width 20 (leftWidgetWidth = 20-3 animationWidth = 17).
+		// Then enter edit mode.
+		feedKeys(t, testCommandHandler{b},
+			strings.Repeat("1", 25)+"<shift-esc>")
+		require.NotNil(t, captured)
+
+		// Stage a selection that crosses the wrap boundary: from
+		// row 0 col 15 through row 0 col 19 (5 cells, indices 15..19).
+		// In wrapped geometry that maps to:
+		//   buf 15 -> visual (15, 0)
+		//   buf 16 -> visual (16, 0)
+		//   buf 17 -> visual (0, 1)
+		//   buf 18 -> visual (1, 1)
+		//   buf 19 -> visual (2, 1)
+		captured.hasSelection = true
+		captured.selectionFrom = term.Coordinates{X: 15}
+		captured.selectionTo = term.Coordinates{X: 19}
+
+		const width, height = 20, 5
+		b.Resize(width, height)
+		w := term.NewStringWriter(width, height)
+		b.Draw(w)
+
+		// The overlay paints reverse-video on each visible cell
+		// covered by the selection. Map back (X, Y) → cell index
+		// in the writer's buffer and assert AttrReverse is set.
+		cells := w.Cells()
+		cellAt := func(x, y int) term.Cell { return cells[y*width+x] }
+
+		// At width 20 the prompt's responsive component renders at
+		// the top of the writer (y=0..bufHeight-1). 17-cell-wide
+		// rows wrap "11111...(25)" to two rows of 17 / 8 cells.
+		want := []term.Coordinates{
+			{X: 15, Y: 0},
+			{X: 16, Y: 0},
+			{X: 0, Y: 1},
+			{X: 1, Y: 1},
+			{X: 2, Y: 1},
+		}
+		for _, pos := range want {
+			c := cellAt(pos.X, pos.Y)
+			assert.NotZerof(t, c.Attrs&term.AttrReverse,
+				"selection cell at %v must have AttrReverse set", pos)
+		}
+
+		// Cells outside the selection must NOT be reverse-video.
+		for _, pos := range []term.Coordinates{
+			{X: 14, Y: 0},
+			{X: 3, Y: 1},
+		} {
+			c := cellAt(pos.X, pos.Y)
+			assert.Zerof(t, c.Attrs&term.AttrReverse,
+				"non-selection cell at %v must not have AttrReverse set", pos)
+		}
+	})
+
 	t.Run("ctrl-c exits edit mode without forwarding to editor", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
@@ -2173,6 +2296,15 @@ type stubEditHandler struct {
 	// recorded by tests asserting that the prompt restores the
 	// command-mode cursor on entry.
 	cursorX int
+	// selection is returned by Selection() so tests can verify the
+	// Prompt forwards Selection from the active EditHandler.
+	selection string
+	// selectionFrom/selectionTo back SelectionBounds so tests can
+	// stage a buffer-relative selection range and assert that the
+	// Prompt overlays the highlight in its own coordinate system.
+	selectionFrom term.Coordinates
+	selectionTo   term.Coordinates
+	hasSelection  bool
 }
 
 func (s *stubEditHandler) Resize(width, height int) {}
@@ -2187,7 +2319,16 @@ func (s *stubEditHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	s.cursorX = pos.X
 	return true
 }
-func (s *stubEditHandler) Selection() (string, bool) { return "", false }
+func (s *stubEditHandler) Selection() (string, bool) { return s.selection, s.selection != "" }
+
+// SelectionBounds satisfies the optional SelectionBoundsHandler
+// capability.
+func (s *stubEditHandler) SelectionBounds() (from, to term.Coordinates, ok bool) {
+	if !s.hasSelection {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+	return s.selectionFrom, s.selectionTo, true
+}
 func (s *stubEditHandler) Handle(ev term.Event) (bool, bool) {
 	if s.seen != nil {
 		*s.seen = append(*s.seen, ev)

@@ -53,6 +53,18 @@ type EditHandler interface {
 	CursorAtScroll() term.Coordinates
 }
 
+// SelectionBoundsHandler is implemented by EditHandlers that can
+// report their active selection range in buffer (scroll)
+// coordinates. Hosts that re-render the editor's buffer through
+// their own layout (e.g. the command Prompt's responsive view) use
+// this optional capability to paint a selection highlight in their
+// own coordinate system, since the editor's selection rendering is
+// otherwise tied to its own Draw pipeline (DrawLocations) and would
+// not survive an external responsive draw.
+type SelectionBoundsHandler interface {
+	SelectionBounds() (from, to term.Coordinates, ok bool)
+}
+
 // Editor is the interface implemented by text editors that can be
 // plugged into the Prompt to drive its modal edit mode. It is
 // satisfied by call-site adapters that construct a bare vi.Vi or

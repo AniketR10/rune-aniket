@@ -318,6 +318,14 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 
 	h.list.Draw(w)
 	union.Draw(w)
+
+	// Overlay the active edit-session selection highlight in the
+	// prompt's wrap geometry. The responsive renderer above does not
+	// preserve per-cell attributes, and the editor's own selection
+	// highlight is drawn via DrawLocations in its (unused here) Draw
+	// pipeline, so without this overlay visual selections inside
+	// modal edit mode would be invisible to the user.
+	h.drawSelectionOverlay(w, leftWidgetWidth, bufHeight)
 }
 
 func (h *Prompt) handleLastCommand() {
@@ -1192,6 +1200,9 @@ func (h *Prompt) reset() {
 
 // Selection satisfies tui.Handler.
 func (h *Prompt) Selection() (string, bool) {
+	if sel, ok := h.editSession.Selection(); ok {
+		return sel, true
+	}
 	return "", false
 }
 
@@ -1238,6 +1249,51 @@ func chunkDisplayWidth(chunk []term.Cell) int {
 		total += w
 	}
 	return total
+}
+
+// drawSelectionOverlay paints reverse-video attributes on every
+// visible cell that falls within the active edit-session
+// selection. The responsive renderer used by the prompt does not
+// preserve per-cell attributes, and the editor's own selection
+// rendering is tied to its DrawLocations pipeline that the prompt
+// bypasses, so without this overlay visual selections in modal
+// edit mode would be invisible.
+func (h *Prompt) drawSelectionOverlay(w term.Writer, wrapWidth, visibleHeight int) {
+	from, to, ok := h.editSession.SelectionBounds()
+	if !ok {
+		return
+	}
+	from, to = term.CoordinatesSort(from, to)
+	// vi visual mode is right-inclusive; treat `to` as inclusive
+	// of the cell at to.X. modeless selections are exclusive but
+	// the cursor sits past the last selected char so this still
+	// matches what the editor would highlight via DrawLocations.
+	rows := h.buf.RawCells()
+	attr := term.Attributes{Attrs: term.AttrReverse}
+	for y := from.Y; y <= to.Y && y < len(rows); y++ {
+		row := rows[y]
+		startX := 0
+		endX := len(row)
+		if y == from.Y {
+			startX = from.X
+		}
+		if y == to.Y {
+			endX = min(to.X+1, len(row))
+		}
+		for x := startX; x < endX; x++ {
+			pos := visualCursorAtBufferPos(rows,
+				term.Coordinates{Y: y, X: x},
+				wrapWidth, visibleHeight)
+			cw := int(row[x].Width)
+			if cw <= 0 {
+				cw = 1
+			}
+			for dx := 0; dx < cw; dx++ {
+				w.UnionAttributes(
+					term.Coordinates{X: pos.X + dx, Y: pos.Y}, attr)
+			}
+		}
+	}
 }
 
 // wrappedRows returns the number of visual rows a buffer row of the
