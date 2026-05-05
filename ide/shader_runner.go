@@ -207,6 +207,18 @@ func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
 			fadeInPerc, fadeOutPerc,
 			r.defAttr,
 		)
+	case "shine":
+		s = wrapShaderCrossFadeInOut(
+			glslshader.Shine(glslshader.DefaultShineParams(), r.defAttr),
+			fadeInPerc, fadeOutPerc,
+			r.defAttr,
+		)
+	case "shineFrame":
+		s = wrapShaderCrossFadeInOut(
+			glslshader.ShineFrame(glslshader.DefaultShineFrameParams(r.fc), r.defAttr),
+			fadeInPerc, fadeOutPerc,
+			r.defAttr,
+		)
 	case "trippy":
 		s = wrapShaderCrossFadeInOut(
 			glslshader.Trippy(glslshader.DefaultTrippyParams(), float64(fps)),
@@ -248,6 +260,8 @@ func (r *shaderRunner) Complete(ctx context.Context, cmd textapi.Command) (
 			"noise",
 			"nop",
 			"risingChars",
+			"shine",
+			"shineFrame",
 			"trippy",
 		}), "", nil
 	}
