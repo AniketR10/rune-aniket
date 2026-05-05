@@ -130,7 +130,7 @@ func readIgnoreFile(cwd FileReader, paths []string, file string) (
 	for scanner.Scan() {
 		s := scanner.Text()
 		if !strings.HasPrefix(s, gitCommentChar) && len(strings.TrimSpace(s)) > 0 {
-			patterns = append(patterns, gitignore.ParsePattern(s, nil))
+			patterns = append(patterns, gitignore.ParsePattern(s, paths))
 		}
 	}
 	if scanner.Err() != nil {

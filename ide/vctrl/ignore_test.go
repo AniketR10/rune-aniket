@@ -65,6 +65,26 @@ func TestLoadGitignore(t *testing.T) {
 		assert.False(t, matcher.Match(makeURI(t, cwd, ".ox.go"), false))
 	})
 
+	t.Run("nested .gitignore patterns are scoped to their directory", func(t *testing.T) {
+		cwd := newFileScheme(t) // memscheme doesn't support dirs
+		// vendor/.gitignore says "*" — must only match inside vendor/, not
+		// across the whole workspace.
+		touchGitignoreAt(t, cwd, "*", filepath.Join("vendor", gitIgnoreFile))
+		matcher, err := LoadGitignore(cwd)
+		require.NoError(t, err)
+
+		// Inside vendor/: pattern applies.
+		assert.True(t, matcher.Match(makeURI(t, cwd, "vendor/foo.go"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, "vendor/sub/bar.go"), false))
+
+		// Outside vendor/: pattern must NOT apply. This is the regression
+		// from a nested pattern leaking globally and matching every entry.
+		assert.False(t, matcher.Match(makeURI(t, cwd, "main.go"), false))
+		assert.False(t, matcher.Match(makeURI(t, cwd, "cmd"), true))
+		assert.False(t, matcher.Match(makeURI(t, cwd, "cmd/main.go"), false))
+		assert.False(t, matcher.Match(makeURI(t, cwd, "pkg/lib.go"), false))
+	})
+
 	t.Run("uses .gitignore entire directory excludes", func(t *testing.T) {
 		cwd := newScheme(t)
 		touchGitignore(t, cwd, ".ox/")
