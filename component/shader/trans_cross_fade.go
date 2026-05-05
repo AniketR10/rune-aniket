@@ -171,12 +171,22 @@ func (t *transCrossFade) interpolateBuffer(
 
 	for y, row := range final {
 		for x := range row {
-			final[y][x].Fg = shaderutils.InterpolateColor(
-				prog0to05, final[y][x].Fg, t.buf[y][x].Fg, t.defaultAttr.Fg,
-			)
-			final[y][x].Bg = shaderutils.InterpolateColor(
-				prog0to05, final[y][x].Bg, t.buf[y][x].Bg, t.defaultAttr.Bg,
-			)
+			// Avoid blending cells where both shaders produced the same
+			// foreground/background. Calling InterpolateColor on identical
+			// values is a no-op for the math but converts named/palette
+			// colors into literal TrueColor RGB which terminals may render
+			// with a slightly different hue, leaving a visible "wake" on
+			// untouched cells across the transition window.
+			if final[y][x].Fg != t.buf[y][x].Fg {
+				final[y][x].Fg = shaderutils.InterpolateColor(
+					prog0to05, final[y][x].Fg, t.buf[y][x].Fg, t.defaultAttr.Fg,
+				)
+			}
+			if final[y][x].Bg != t.buf[y][x].Bg {
+				final[y][x].Bg = shaderutils.InterpolateColor(
+					prog0to05, final[y][x].Bg, t.buf[y][x].Bg, t.defaultAttr.Bg,
+				)
+			}
 			t.activations[y][x] = false
 		}
 	}

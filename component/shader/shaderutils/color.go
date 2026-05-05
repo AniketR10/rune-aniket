@@ -34,13 +34,35 @@ import (
 //
 // In case color is the tcell.ColorDefault then it is resolved with
 // resolveColorDefault.
+//
+// If after resolution either endpoint is still unresolvable (e.g. a default
+// color whose fallback is also default), the blend is undefined and the
+// function returns color unchanged so callers preserve the terminal's
+// default rendering rather than emitting garbage RGB.
 func InterpolateColor(
 	factor float64, color, target, resolveColorDefault tcell.Color,
 ) tcell.Color {
-	if color == tcell.ColorDefault {
-		color = resolveColorDefault
+	// Identity short-circuit: when color and target are the same value,
+	// return color unchanged so named/palette colors (and ColorDefault) are
+	// preserved instead of being converted to literal TrueColor RGB. This
+	// keeps cells that no shader actually changed visually identical to the
+	// underlying component when used via blending wrappers.
+	if color == target {
+		return color
 	}
-	r, g, b := color.RGB()
+	resolved := color
+	if resolved == tcell.ColorDefault {
+		resolved = resolveColorDefault
+	}
+	// If either endpoint can't be expressed as RGB after resolution, the
+	// lerp would operate over (-1,-1,-1) and NewRGBColor's & 0xff masking
+	// would synthesize spurious dark/bright colors at intermediate
+	// factors. Treat it as a no-op and keep the original color so the
+	// terminal keeps rendering it natively.
+	if resolved.Hex() < 0 || target.Hex() < 0 {
+		return color
+	}
+	r, g, b := resolved.RGB()
 	tr, tg, tb := target.RGB()
 	return tcell.NewRGBColor(
 		int32(float64(r)+((float64(tr)-float64(r))*factor)),

@@ -95,6 +95,66 @@ func TestInterpolateColor(t *testing.T) {
 	}
 }
 
+// TestInterpolateColorPreservesIdentityWhenColorAndTargetMatch ensures that
+// blending a color with itself returns the exact same Color value (e.g. a
+// named/palette index), not its RGB-converted equivalent. This matters for
+// terminals that render named/palette colors via their themed palette but
+// render literal RGB as TrueColor — converting would visibly shift the hue.
+func TestInterpolateColorPreservesIdentityWhenColorAndTargetMatch(t *testing.T) {
+	tsuite := []struct {
+		name   string
+		color  tcell.Color
+		factor float64
+	}{
+		{name: "named color blue", color: tcell.ColorBlue, factor: 0.5},
+		{name: "named color red at factor 0", color: tcell.ColorRed, factor: 0.0},
+		{name: "named color green at factor 1", color: tcell.ColorGreen, factor: 1.0},
+		{name: "default color preserved", color: tcell.ColorDefault, factor: 0.5},
+		{name: "rgb color round-trips", color: tcell.NewRGBColor(12, 34, 56), factor: 0.7},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			res := InterpolateColor(
+				tcase.factor, tcase.color, tcase.color, tcell.ColorDefault,
+			)
+			assert.Equal(t, tcase.color, res)
+		})
+	}
+}
+
+// TestInterpolateColorWithUnresolvableDefault guards against a class of bugs
+// where blending a ColorDefault input with a target while passing
+// ColorDefault as resolveColorDefault would compute lerps over (-1,-1,-1)
+// (Color.RGB returns -1 for unresolved colors). The masking inside
+// NewRGBColor turns those into garbage pseudo-colors (e.g. 24 for low
+// factors, 255 for factor=0) producing visible "black cliffs" or flashes
+// at band edges. Instead, when the color cannot be resolved, blending
+// should be a no-op and the original ColorDefault must be preserved so the
+// terminal keeps rendering it as the user's default text color.
+func TestInterpolateColorWithUnresolvableDefault(t *testing.T) {
+	tsuite := []struct {
+		name   string
+		factor float64
+	}{
+		{name: "factor 0", factor: 0.0},
+		{name: "factor near 0 (would yield dark gray)", factor: 0.1},
+		{name: "factor 0.5 (would yield mid gray)", factor: 0.5},
+		{name: "factor 1", factor: 1.0},
+	}
+	for _, tcase := range tsuite {
+		t.Run(tcase.name, func(t *testing.T) {
+			res := InterpolateColor(
+				tcase.factor,
+				tcell.ColorDefault,
+				tcell.NewRGBColor(255, 255, 255),
+				tcell.ColorDefault, // also unresolvable
+			)
+			assert.Equal(t, tcell.ColorDefault, res)
+		})
+	}
+}
+
 func TestColorBrightness(t *testing.T) {
 	tsuite := []struct {
 		name                string

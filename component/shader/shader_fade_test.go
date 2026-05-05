@@ -77,8 +77,11 @@ func TestFade(t *testing.T) {
 			in: [][]term.Cell{{
 				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(10, 10, 10), Bg: 0}},
 			}},
+			// Bg is ColorDefault and defaultAttrs.Bg is also unset, so the
+			// blend has no resolvable starting point and Fg ends up
+			// resolving to ColorDefault.
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(3, 3, 3), Bg: 0}},
+				{Attributes: term.Attributes{Fg: tcell.ColorDefault, Bg: 0}},
 			}},
 		},
 		{
