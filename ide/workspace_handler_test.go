@@ -2601,12 +2601,21 @@ func TestAutoSaveIntegration(t *testing.T) {
 			}
 			var rec *recordingNotifications
 			prevFactory := autoSaverFactory
+			// The autoSaver assumes all map mutations happen on the
+			// editor's event-loop goroutine. In production this is
+			// guaranteed because scheduleNextTick re-posts the flush
+			// callback as a term.EventInterrupt, which the event loop
+			// serializes with edit handling. defaultCfg's
+			// scheduleNextTick runs callbacks inline, so we replace
+			// it with a queue and drain inside the polling loop below
+			// so flushURI always runs on the test goroutine.
+			schedQ := newQueueSched()
 			autoSaverFactory = func(_ autoSaverFlusher,
 				notif browserapi.Notifications,
-				sched func(func()) bool, _ time.Duration,
+				_ func(func()) bool, _ time.Duration,
 			) *autoSaver {
 				rec = &recordingNotifications{inner: notif}
-				return newAutoSaver(stub, rec, sched,
+				return newAutoSaver(stub, rec, schedQ.sched,
 					defaultAutoSaveDelay)
 			}
 			t.Cleanup(func() { autoSaverFactory = prevFactory })
@@ -2626,6 +2635,7 @@ func TestAutoSaveIntegration(t *testing.T) {
 			feedAutoSaveSequence(t, h, ":edit "+filename+">iHello<")
 
 			require.Eventually(t, func() bool {
+				schedQ.drainAll()
 				if !stub.flushed() {
 					return false
 				}
