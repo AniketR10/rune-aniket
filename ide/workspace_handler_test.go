@@ -594,6 +594,197 @@ func setupGitlinkRepo(t *testing.T) (dir, commit, relFile string) {
 	return
 }
 
+// TestCommandPromptEditModeWrappedCursor exercises the integration
+// between the modal command prompt's responsive (wrapping) renderer
+// and its embedded vi editor (which has wrap=false). When the user
+// fills the prompt past one visual row, opens edit mode via
+// <shift-esc>, and navigates with hjkl, the cursor must follow the
+// VISUAL wrapped position — not stay glued to row 0 of the editor's
+// flat buffer view.
+//
+// At width=60 the prompt clamps to its 50-wide minWidth dimension,
+// minus the 2-cell frame, minus animationWidth=3 = 45 cells of
+// visible input per visual row. 134 ones therefore render as three
+// visual rows of 45/45/44 cells.
+func TestCommandPromptEditModeWrappedCursor(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	uri1, err := workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
+		nopShutdownShaderConfig())
+	require.NoError(t, m.addOrCreateWorkspace(uri1))
+
+	h := newSafeHandler(m)
+	const width, height = 60, 15
+	const fill = 134 // 45 + 45 + 44 = 3 wrapped rows
+
+	cases := []handlertest.SequenceTestCase{
+		// 1. Open prompt and overflow it to three wrapped rows.
+		// In command mode the cursor sits one past the last typed
+		// character, i.e. visual (24, 2).
+		{InputSequence: `<c-\\>` + strings.Repeat("1", fill), Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│1111111111111111111111111111111111111111111111111111111   │
+│1111111111111111111111111111111111111111111111111111111   │
+│111111111111111111111111▐                                 │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 2. <s-esc> enters modal edit mode (vi normal mode); the
+		// editor is seeded at the same buffer position as the
+		// command-mode cursor (one past the last typed char) and
+		// the prompt MUST translate that position through the same
+		// wrap geometry. Without that translation the cursor
+		// disappears (vi reports a window cursor that the prompt
+		// blindly forwards into its own coordinate space).
+		{InputSequence: "<s-esc>", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│1111111111111111111111111111111111111111111111111111111   │
+│1111111111111111111111111111111111111111111111111111111   │
+│111111111111111111111111▐                                 │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 3. Replace the first cell of visual row 0 with 'X' via
+		// `0rX`. After `0` the cursor is at scroll col 0; `rX`
+		// replaces it with X and keeps the cursor on the new char.
+		{InputSequence: "0rX", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│▐111111111111111111111111111111111111111111111111111111   │
+│1111111111111111111111111111111111111111111111111111111   │
+│111111111111111111111111                                  │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 4. Move to the last column of visual row 0 (scroll col 54)
+		// and replace with X. The cursor sits ON the replaced char,
+		// so it overlays the new X at visual (54, 0).
+		{InputSequence: strings.Repeat("l", 54) + "rX", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│X11111111111111111111111111111111111111111111111111111▐   │
+│1111111111111111111111111111111111111111111111111111111   │
+│111111111111111111111111                                  │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 5. Step right one cell — first column of visual row 1.
+		// User-requested: "move to the start of the second line".
+		// Replace with X. Visual (0, 1).
+		{InputSequence: "lrX", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│X11111111111111111111111111111111111111111111111111111X   │
+│▐111111111111111111111111111111111111111111111111111111   │
+│111111111111111111111111                                  │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 6. End of visual row 1 (scroll col 109). Cursor overlays
+		// the new X at visual (54, 1).
+		{InputSequence: strings.Repeat("l", 54) + "rX", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│X11111111111111111111111111111111111111111111111111111X   │
+│X11111111111111111111111111111111111111111111111111111▐   │
+│111111111111111111111111                                  │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 7. Start of visual row 2 (scroll col 110).
+		{InputSequence: "lrX", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│X11111111111111111111111111111111111111111111111111111X   │
+│X11111111111111111111111111111111111111111111111111111X   │
+│▐11111111111111111111111                                  │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+		// 8. From start of row 2 (col 110, which the prior step
+		// replaced with X) navigate to scroll col 132, replace with
+		// X. Visual (22, 2). 134 cells fill row 2 partially:
+		// positions 110..133, i.e. 24 cells. Col 0 of row 2 still
+		// shows the X added in case 7. Col 23 still shows the
+		// original 1 (134 cells, last index 133, visual col 23).
+		{InputSequence: strings.Repeat("l", 22) + "rX", Expected: `
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+┌──────────────────────────────────────────────────────────┐
+│X11111111111111111111111111111111111111111111111111111X   │
+│X11111111111111111111111111111111111111111111111111111X   │
+│X111111111111111111111▐1                                  │
+└──────────────────────────────────────────────────────────┘
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘`[1:]},
+	}
+	handlertest.RunHandlerSequence(t, h, width, height, cases)
+
+	require.NoError(t, m.Close())
+}
+
 func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)

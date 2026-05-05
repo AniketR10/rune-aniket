@@ -1200,25 +1200,103 @@ func (h *Prompt) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if h.width == 0 {
 		return term.Coordinates{}, 0, false
 	}
-	if pos, style, ok := h.editSession.Cursor(); ok {
-		return pos, style, true
-	}
 	leftWidgetWidth := h.width - animationWidth
 	if leftWidgetWidth <= 0 {
 		leftWidgetWidth = h.width
 	}
-	var pos term.Coordinates
-	cursorOffset := len(h.buf.String())
-	x := cursorOffset % leftWidgetWidth
-	y := cursorOffset / leftWidgetWidth
-	if y >= h.height {
-		pos.X += leftWidgetWidth - 1
-		pos.Y += h.height - 1
-	} else {
-		pos.X += x
-		pos.Y += y
+	bufHeight := min(h.getCommandOverlayHeight(h.width), h.height)
+	rows := h.buf.RawCells()
+	// In edit mode, translate the editor's buffer-relative cursor
+	// through the same wrap geometry the prompt uses to render the
+	// buffer; the editor's own Cursor() returns window coordinates
+	// shaped by its own (typically wrap=false) layout and would
+	// otherwise drift from the visible wrapped text.
+	if bufPos, style, ok := h.editSession.CursorAtScroll(); ok {
+		pos := visualCursorAtBufferPos(rows, bufPos, leftWidgetWidth, bufHeight)
+		return pos, style, true
 	}
+	// Outside edit mode the cursor sits one cell past the last
+	// rune of the last buffer row.
+	bufPos := term.Coordinates{Y: max(0, len(rows)-1)}
+	if len(rows) > 0 {
+		bufPos.X = len(rows[len(rows)-1])
+	}
+	pos := visualCursorAtBufferPos(rows, bufPos, leftWidgetWidth, bufHeight)
 	return pos, term.CursorStyleBlinkingBar, true
+}
+
+// chunkDisplayWidth sums the cell display widths of one wrapped
+// chunk. Tabs and NULs deserialize as cells with Width=0 yet still
+// occupy one column on screen, so clamp Width to a minimum of 1.
+func chunkDisplayWidth(chunk []term.Cell) int {
+	var total int
+	for _, c := range chunk {
+		w := int(c.Width)
+		if w == 0 {
+			w = 1
+		}
+		total += w
+	}
+	return total
+}
+
+// wrappedRows returns the number of visual rows a buffer row of the
+// given cell count occupies when wrapped to wrapWidth cells, matching
+// component.ResponsiveString.massageInput's row count. An empty row
+// still occupies one visual row (the renderer emits one blank line).
+func wrappedRows(cellCount, wrapWidth int) int {
+	if cellCount == 0 {
+		return 1
+	}
+	rows := cellCount / wrapWidth
+	if cellCount%wrapWidth != 0 {
+		rows++
+	}
+	return rows
+}
+
+// visualCursorAtBufferPos maps a buffer (row, col) coordinate, where
+// col is a cell index within the buffer row, to the prompt's wrapped
+// visual coordinates. It mirrors component.ResponsiveString.
+// massageInput: source rows are sliced into chunks of wrapWidth cells
+// each; the visual Y is the cumulative chunk count of preceding rows
+// plus the chunk index within the current row, and visual X is the
+// display width of the cells before col within the current chunk
+// (clamped to wrapWidth-1 so the cursor never escapes the visible
+// area). When the resulting Y would fall past visibleHeight the
+// cursor is clamped to the last visible cell, matching the
+// renderer's vertical truncation.
+func visualCursorAtBufferPos(
+	rows [][]term.Cell, bufPos term.Coordinates,
+	wrapWidth, visibleHeight int,
+) term.Coordinates {
+	if wrapWidth <= 0 {
+		return term.Coordinates{}
+	}
+	by := max(0, bufPos.Y)
+	if by >= len(rows) {
+		by = max(0, len(rows)-1)
+	}
+	var y int
+	for i := 0; i < by; i++ {
+		y += wrappedRows(len(rows[i]), wrapWidth)
+	}
+	var chunk []term.Cell
+	if by < len(rows) {
+		row := rows[by]
+		bx := min(len(row), max(0, bufPos.X))
+		chunkIdx := bx / wrapWidth
+		y += chunkIdx
+		chunk = row[chunkIdx*wrapWidth : bx]
+	}
+	x := chunkDisplayWidth(chunk)
+	if x >= wrapWidth {
+		x = wrapWidth - 1
+	}
+	if visibleHeight > 0 && y >= visibleHeight {
+		return term.Coordinates{X: wrapWidth - 1, Y: visibleHeight - 1}
+	}
+	return term.Coordinates{X: x, Y: y}
 }
 
 // Wait waits for any asynchronous completion

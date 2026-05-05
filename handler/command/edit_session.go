@@ -141,6 +141,25 @@ func (s *EditSession) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return s.handler.Cursor()
 }
 
+// CursorAtScroll returns the active handler's cursor in buffer
+// (scroll) coordinates plus its preferred cursor style; the third
+// return is false when the session is inactive (so hosts can fall
+// through to their own cursor logic). Hosts that render the
+// edit-session buffer through their own layout (e.g. wrapping)
+// rely on this to convert the editor's buffer position into their
+// own visible coordinates instead of trusting Cursor()'s already-
+// laid-out window position.
+func (s *EditSession) CursorAtScroll() (term.Coordinates, term.CursorStyle, bool) {
+	if s.handler == nil {
+		return term.Coordinates{}, 0, false
+	}
+	_, style, ok := s.handler.Cursor()
+	if !ok {
+		return term.Coordinates{}, 0, false
+	}
+	return s.handler.CursorAtScroll(), style, true
+}
+
 // Drawer returns the active handler as a Draw-only view so hosts
 // can composite the editor onto their own writer. The second return
 // is false when the session is inactive.

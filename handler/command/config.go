@@ -44,6 +44,13 @@ type EditHandler interface {
 	// non-zero size first so its internal scroll state can satisfy the
 	// move.
 	SetCursorAtScroll(pos term.Coordinates) bool
+	// CursorAtScroll returns the editor cursor's position in buffer
+	// (scroll) coordinates. Hosts that wrap the editor's buffer through
+	// their own renderer (e.g. the command Prompt's responsive view)
+	// rely on this to translate the buffer position to their own
+	// visual layout, since Cursor() returns window coordinates that
+	// reflect the editor's own scroll/wrap configuration.
+	CursorAtScroll() term.Coordinates
 }
 
 // Editor is the interface implemented by text editors that can be

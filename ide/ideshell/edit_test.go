@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ideshell
 
 import (
@@ -69,6 +68,9 @@ func (s *stubEditHandler) Draw(term.Writer) {}
 func (s *stubEditHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{X: s.buf.Columns(0)},
 		term.CursorStyleSteadyBar, true
+}
+func (s *stubEditHandler) CursorAtScroll() term.Coordinates {
+	return term.Coordinates{X: s.buf.Columns(0)}
 }
 func (s *stubEditHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	if s.initialCursor != nil {

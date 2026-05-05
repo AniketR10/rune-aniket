@@ -450,6 +450,293 @@ YAY [arg2]          `},
 	})
 }
 
+func TestCommandHandlerCursorWrapping(t *testing.T) {
+	// At width=20 the prompt's input field has leftWidgetWidth=17
+	// (animationWidth=3 reserved on the right). These cases exercise
+	// the cursor placement when the typed buffer wraps onto multiple
+	// rendered rows or contains multi-byte runes whose byte length
+	// drifts from their display-cell width.
+	cfg := testDefaultConfig()
+	cfg.ShowManualAfter = 1 * time.Hour
+	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
+	cfg.Sync = true
+
+	type wrapCase struct {
+		desc     string
+		sequence string
+		expected string
+	}
+	tsuite := []wrapCase{
+		{
+			// 25 ASCII chars on width 20 (leftWidget=17): row 0 holds
+			// 17 cells, row 1 holds the remaining 8; cursor sits at
+			// the end of the wrapped text (col 8, row 1).
+			"25 ascii chars wrap to two rows",
+			"abcdefghijklmnopqrstuvwxy",
+			`abcdefghijklmnopq   
+rstuvwxy▐           
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		},
+		{
+			// Exactly leftWidgetWidth cells: input fits in a single
+			// rendered row. The cursor must stay on row 0 (clamped
+			// to col leftWidgetWidth-1) instead of falling onto row
+			// 1 which belongs to the search-list area.
+			"exactly leftWidgetWidth cells stays on input row",
+			"abcdefghijklmnopq",
+			`abcdefghijklmnop▐   
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		},
+		{
+			// Multi-byte rune ('é' is 2 bytes, 1 cell) before a wrap
+			// boundary exercises the byte-vs-cell drift: 18 cells
+			// total, wraps to two rows of 17 + 1 cells, cursor at
+			// (1, 1).
+			"multi-byte rune before wrap boundary",
+			"éabcdefghijklmnopq",
+			`éabcdefghijklmnop   
+q▐                  
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		},
+		{
+			// In args mode the full buffer (cmd + space + arg) wraps
+			// across rows; the cursor must land at the end of the
+			// wrapped argument relative to the input row group.
+			"command + long argument wraps across rows",
+			"ko<space>abcdefghijklmnopqrstuv",
+			`ko abcdefghijklmn   
+opqrstuv▐           
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `,
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			dispatchFn, cleanup := nopDispatch()
+			defer cleanup(t)
+			completeFn, cleanupComplete := nopComplete()
+			defer cleanupComplete(t)
+
+			storage := storagestub.NewInMemoryService()
+			b := NewPrompt(
+				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+				term.NopInterrupter(), nil, cfg,
+			)
+			defer b.Close()
+
+			cases := []handlertest.SequenceTestCase{
+				{InputSequence: tcase.sequence, Expected: tcase.expected},
+			}
+			handlertest.RunHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		})
+	}
+
+	// Multi-row buffers are reachable when the edit-mode editor
+	// inserts a newline and the buffer is replayed back through the
+	// prompt; each newline starts a fresh visual row, so the cursor
+	// must land at the end of the LAST buffer row, not at a column
+	// derived from summing all cells in the buffer.
+	bufCases := []struct {
+		desc string
+		// buf is written verbatim into the underlying cell.Buffer,
+		// bypassing the regular keystroke handlers so we can stage
+		// configurations (newlines, raw control bytes, …) that
+		// users can produce indirectly via the modal editor or
+		// pasted history but cannot type one rune at a time.
+		buf  string
+		want term.Coordinates
+	}{
+		{
+			// Two-row buffer: cursor must land on the last buffer
+			// row, not at a column derived from summing all cells.
+			"newline before short text",
+			"hello\nwor",
+			term.Coordinates{X: 3, Y: 1},
+		},
+		{
+			// Trailing newline opens a new (empty) row; cursor
+			// belongs at column 0 of that row.
+			"trailing newline",
+			"abc\n",
+			term.Coordinates{X: 0, Y: 1},
+		},
+		{
+			// Several blank lines: cursor must sit on the last
+			// row, not on row 0.
+			"only newlines",
+			"\n\n\n",
+			term.Coordinates{X: 0, Y: 3},
+		},
+		{
+			// Wide CJK runes count as 2 display columns each. Eight
+			// CJK glyphs occupy the full 16 visible columns of the
+			// 17-cell input row, so the cursor sits at column 16.
+			"eight cjk wide chars fill the row",
+			"中中中中中中中中",
+			term.Coordinates{X: 16, Y: 0},
+		},
+		{
+			// Nine CJK runes overflow the 17-column input row by
+			// one display cell; the renderer truncates the trailing
+			// glyph and the cursor must clamp to the last visible
+			// column instead of escaping past the input area.
+			"nine cjk overflows display width",
+			"中中中中中中中中中",
+			term.Coordinates{X: 16, Y: 0},
+		},
+		{
+			// Twenty CJK glyphs (40 display columns) wrap at the
+			// cell-count boundary (17), not the display-width
+			// boundary: row 0 holds cells [0..16] (the renderer
+			// truncates the trailing glyph that would overflow
+			// past column 17), row 1 holds cells [17..19] which
+			// occupy columns 0..5; the cursor must land at (6, 1),
+			// not at the far right of the row.
+			"twenty cjk wraps by cell count",
+			"中中中中中中中中中中中中中中中中中中中中",
+			term.Coordinates{X: 6, Y: 1},
+		},
+		{
+			// 18 CJK = 18 cells: row 0 holds 17 cells, row 1 holds
+			// the lone trailing CJK (display width 2). Cursor sits
+			// at column 2 of row 1, NOT at the far-right clamp —
+			// dividing total display width (36) by leftWidgetWidth
+			// (17) would push the cursor to row 2 and trigger a
+			// spurious clamp to (16, 1).
+			"eighteen cjk wraps to second row at column 2",
+			"中中中中中中中中中中中中中中中中中中",
+			term.Coordinates{X: 2, Y: 1},
+		},
+		{
+			// 17 ASCII + 1 CJK = 18 cells: same wrap shape as the
+			// 18-CJK case but with mixed widths on row 0. Verifies
+			// the algorithm tracks per-row cell counts rather than
+			// summing display widths across rows.
+			"ascii row plus trailing wide rune wraps",
+			"abcdefghijklmnopq中",
+			term.Coordinates{X: 2, Y: 1},
+		},
+		{
+			// Mixed-width row that exceeds display width but fits
+			// by cell count: 16 CJK + 1 ASCII = 17 cells (display
+			// 33). One visual row, cursor clamps to last visible
+			// column.
+			"sixteen cjk plus ascii fills exactly one row",
+			"中中中中中中中中中中中中中中中中a",
+			term.Coordinates{X: 16, Y: 0},
+		},
+		{
+			// CJK row followed by a short ASCII row exercises the
+			// per-row wrap accumulation: row 0 wraps once and
+			// occupies one visual row; the cursor must land on the
+			// short row at column 1.
+			"cjk row then short ascii row",
+			"中中中中\nx",
+			term.Coordinates{X: 1, Y: 1},
+		},
+		{
+			// Two leading blank rows count as two visual rows; the
+			// cursor on the wrapped third row must land at (8, 3).
+			"two blank rows then wrapping ascii",
+			"\n\nabcdefghijklmnopqrstuvwxy",
+			term.Coordinates{X: 8, Y: 3},
+		},
+		{
+			// A wrapping ASCII row followed by a short row: the
+			// cursor must offset by the wrapped row count rather
+			// than dividing by leftWidgetWidth across the whole
+			// buffer.
+			"wrapped row followed by short row",
+			"abcdefghijklmnopqrstuvwxy\nfoo",
+			term.Coordinates{X: 3, Y: 2},
+		},
+		{
+			// A leading empty row still counts as one visual row,
+			// pushing the cursor onto the row below.
+			"empty leading row",
+			"\nabc",
+			term.Coordinates{X: 3, Y: 1},
+		},
+		{
+			// Tabs are stored as a single cell of zero display
+			// width by ReadFrom; treat them as occupying one column
+			// so the cursor advances rather than collapsing onto a
+			// previous glyph.
+			"tab then text",
+			"\thi",
+			term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			// NUL bytes survive the byte-stream as zero-width cells
+			// (same shape as tabs from ReadFrom). The cursor must
+			// still advance one column per cell.
+			"null byte between letters",
+			"a\x00b",
+			term.Coordinates{X: 3, Y: 0},
+		},
+		{
+			// Buffers larger than the visible input area must clamp
+			// the cursor to the last visible row's last column
+			// instead of returning an out-of-bounds row that would
+			// fall onto the search list.
+			"buffer overflows visible rows",
+			strings.Repeat("a", 17*12),
+			term.Coordinates{X: 16, Y: 9},
+		},
+	}
+	for _, tc := range bufCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			dispatchFn, cleanup := nopDispatch()
+			defer cleanup(t)
+			completeFn, cleanupComplete := nopComplete()
+			defer cleanupComplete(t)
+
+			storage := storagestub.NewInMemoryService()
+			b := NewPrompt(
+				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+				term.NopInterrupter(), nil, cfg,
+			)
+			defer b.Close()
+
+			b.Resize(20, 10)
+			b.buf.WriteString(tc.buf)
+
+			cur, _, ok := b.Cursor()
+			require.True(t, ok)
+			assert.Equal(t, tc.want, cur)
+		})
+	}
+}
+
 func TestCommandHandlerDispatch(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	cfg := testDefaultConfig()
@@ -1892,6 +2179,9 @@ func (s *stubEditHandler) Resize(width, height int) {}
 func (s *stubEditHandler) Draw(term.Writer)         {}
 func (s *stubEditHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{X: s.cursorX}, term.CursorStyleBlinkingBlock, true
+}
+func (s *stubEditHandler) CursorAtScroll() term.Coordinates {
+	return term.Coordinates{X: s.cursorX}
 }
 func (s *stubEditHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	s.cursorX = pos.X
