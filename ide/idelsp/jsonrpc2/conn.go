@@ -498,6 +498,11 @@ func (c *Connection) Wait() error {
 	return err
 }
 
+// Done returns a channel that is closed when the connection has finished
+// shutting down. It can be used to observe asynchronous connection death
+// (read error, write error, explicit Close) without blocking on Wait.
+func (c *Connection) Done() <-chan struct{} { return c.done }
+
 // Close stops accepting new requests, waits for in-flight requests and enqueued
 // Handle calls to complete, and then closes the underlying stream.
 //

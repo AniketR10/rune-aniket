@@ -39,7 +39,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var sockCounter atomic.Uint64
@@ -615,37 +617,40 @@ func TestInitialized(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
-		env := newTestEnv(t, &stubLSP{})
-		require.NoError(t, env.client.Shutdown(context.Background()))
-	})
-
-	t.Run("error path", func(t *testing.T) {
-		stub := &stubLSP{
-			onShutdown: func(context.Context) error { return errors.New("shutdown err") },
-		}
-		env := newTestEnv(t, stub)
-		err := env.client.Shutdown(context.Background())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "shutdown err")
-	})
+	// Shutdown is denied at the gRPC bridge so that extensions cannot
+	// tear down the workspace's language servers; the underlying
+	// semanticapi.LSP impl is never invoked.
+	called := false
+	stub := &stubLSP{
+		onShutdown: func(context.Context) error {
+			called = true
+			return nil
+		},
+	}
+	env := newTestEnv(t, stub)
+	err := env.client.Shutdown(context.Background())
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error, got %v", err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.False(t, called, "Shutdown must not reach the LSP impl")
 }
 
 func TestExit(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
-		env := newTestEnv(t, &stubLSP{})
-		require.NoError(t, env.client.Exit(context.Background()))
-	})
-
-	t.Run("error path", func(t *testing.T) {
-		stub := &stubLSP{
-			onExit: func(context.Context) error { return errors.New("exit err") },
-		}
-		env := newTestEnv(t, stub)
-		err := env.client.Exit(context.Background())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exit err")
-	})
+	called := false
+	stub := &stubLSP{
+		onExit: func(context.Context) error {
+			called = true
+			return nil
+		},
+	}
+	env := newTestEnv(t, stub)
+	err := env.client.Exit(context.Background())
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error, got %v", err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.False(t, called, "Exit must not reach the LSP impl")
 }
 
 func TestDidOpen(t *testing.T) {

@@ -74,6 +74,29 @@ func (pc pipeCloser) Close() error {
 	return pc.r.Close()
 }
 
+// deadlineWriter wraps a jsonrpc2.Writer to apply a per-write deadline
+// derived from the call context onto the underlying net.Conn. This
+// prevents Write from blocking indefinitely if the kernel write buffer
+// fills (e.g. peer LSP stalled). Because jsonrpc2.Connection serializes
+// writes through a 1-buffered channel, the deadline pokes here cannot
+// overlap with another writer's deadline. Crucially, only the writer
+// FD is touched — the reader FD is never given a per-RPC deadline,
+// so a slow caller cannot kill the long-lived readIncoming goroutine.
+type deadlineWriter struct {
+	inner jsonrpc2.Writer
+	conn  net.Conn
+}
+
+func (w *deadlineWriter) Write(ctx context.Context, msg jsonrpc2.Message) error {
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := w.conn.SetWriteDeadline(deadline); err != nil {
+			return fmt.Errorf("set write deadline: %w", err)
+		}
+		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
+	}
+	return w.inner.Write(ctx, msg)
+}
+
 func newLangServer(
 	ctx context.Context,
 	cfg langConfig,
@@ -159,7 +182,7 @@ func (s *langServer) start(ctx context.Context) error {
 	closer := pipeCloser{r: stdout, w: stdin}
 	s.conn = jsonrpc2.NewConnection(lifecycleContext, jsonrpc2.ConnectionConfig{
 		Reader: framer.Reader(stdout),
-		Writer: framer.Writer(stdin),
+		Writer: &deadlineWriter{inner: framer.Writer(stdin), conn: stdin},
 		Closer: closer,
 		Bind:   func(*jsonrpc2.Connection) jsonrpc2.Handler { return s.handler },
 	})
@@ -206,15 +229,7 @@ func (s *langServer) stop(ctx context.Context) error {
 		return nil
 	}
 	s.alive = false
-	stdin := s.stdin
 	s.mu.Unlock()
-
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := stdin.SetDeadline(deadline); err != nil {
-			return fmt.Errorf("set stdout deadline: %v", err)
-		}
-		defer stdin.SetDeadline(time.Time{}) // nolint:errcheck
-	}
 
 	var raw json.RawMessage
 	err := s.conn.Call(ctx, "shutdown", nil).Await(ctx, &raw)
@@ -239,26 +254,10 @@ func (s *langServer) call(
 		return ErrNoServer
 	}
 	conn := s.conn
-	stdin, stdout := s.stdin, s.stdout
 	s.mu.Unlock()
 	s.log.Debug("rpc call", "method", method, "step", "attempt")
 
-	// if context has a deadline, set it on the stdin conn for the request
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := stdin.SetDeadline(deadline); err != nil {
-			return fmt.Errorf("set stdout deadline: %v", err)
-		}
-		defer stdin.SetDeadline(time.Time{}) // nolint:errcheck
-	}
 	call := conn.Call(ctx, method, params)
-
-	// if context has a deadline, set it on the stdout for the response
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := stdout.SetDeadline(deadline); err != nil {
-			return fmt.Errorf("set stdout deadline: %v", err)
-		}
-		defer stdout.SetDeadline(time.Time{}) // nolint:errcheck
-	}
 	err := call.Await(ctx, result)
 	if err != nil {
 		s.log.Warn("rpc call", "method", method, "error", err)
@@ -278,16 +277,7 @@ func (s *langServer) notify(
 		return ErrNoServer
 	}
 	conn := s.conn
-	stdin := s.stdin
 	s.mu.Unlock()
-
-	// if context has a deadline, set it on the stdin conn for the request
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := stdin.SetDeadline(deadline); err != nil {
-			return fmt.Errorf("set stdout deadline: %v", err)
-		}
-		defer stdin.SetDeadline(time.Time{}) // nolint:errcheck
-	}
 
 	s.log.Debug("rpc notify", "method", method, "step", "attempt")
 	err := conn.Notify(ctx, method, params)

@@ -34,6 +34,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -144,6 +145,7 @@ func New(
 		pkgManager:    pkgManager,
 		notifications: notifications,
 		callback:      cfg.Callback,
+		maxRetries:    cfg.MaxRetries,
 		servers:       make(map[string]*langServer),
 		files:         make(map[string]*file),
 		pendingOpens:  make(map[string]textapi.Event),
@@ -617,6 +619,24 @@ func (m *Manager) watchServer(
 		srv.mu.Unlock()
 		if stopCalled {
 			return
+		}
+	case <-srv.conn.Done():
+		// The jsonrpc2 connection died (e.g. read or write error)
+		// while the child process is still running. This leaves the
+		// editor unable to communicate even though the server looks
+		// alive. Kill the orphaned process and fall through into the
+		// restart loop.
+		srv.mu.Lock()
+		stopCalled := srv.stopCalled
+		srv.mu.Unlock()
+		if stopCalled {
+			return
+		}
+		m.log.Warn("jsonrpc2 connection died, killing orphan process",
+			"language", lang.id, "pid", srv.pid)
+		if err := m.executor.Signal(srv.pid, syscall.SIGKILL); err != nil {
+			m.log.Warn("kill orphan lsp process",
+				"language", lang.id, "pid", srv.pid, "error", err)
 		}
 	}
 

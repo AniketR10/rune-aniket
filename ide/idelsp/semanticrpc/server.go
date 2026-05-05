@@ -30,6 +30,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
 	"github.com/unstablebuild/rune-go-sdk/joincontext"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Server struct {
@@ -78,24 +80,17 @@ func (s *Server) Initialized(ctx context.Context, req *semanticrpc.InitializedRe
 	return &semanticrpc.InitializedResponse{}, nil
 }
 
-func (s *Server) Shutdown(ctx context.Context, req *semanticrpc.ShutdownRequest) (*semanticrpc.ShutdownResponse, error) {
-	ctx, cancel := joincontext.New(ctx, s.ctx)
-	defer cancel()
-	err := s.impl.Shutdown(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &semanticrpc.ShutdownResponse{}, nil
+// Shutdown is reserved for the LSP host. Extensions speaking to the
+// gRPC bridge must not be able to shut down the workspace's language
+// servers; the in-process semanticapi.LSP implementation continues to
+// expose Shutdown for the host's own lifecycle management.
+func (s *Server) Shutdown(context.Context, *semanticrpc.ShutdownRequest) (*semanticrpc.ShutdownResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "shutdown is reserved for the LSP host")
 }
 
-func (s *Server) Exit(ctx context.Context, req *semanticrpc.ExitRequest) (*semanticrpc.ExitResponse, error) {
-	ctx, cancel := joincontext.New(ctx, s.ctx)
-	defer cancel()
-	err := s.impl.Exit(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &semanticrpc.ExitResponse{}, nil
+// Exit is reserved for the LSP host. See Shutdown for rationale.
+func (s *Server) Exit(context.Context, *semanticrpc.ExitRequest) (*semanticrpc.ExitResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "exit is reserved for the LSP host")
 }
 
 func (s *Server) DidOpen(ctx context.Context, req *semanticrpc.DidOpenRequest) (*semanticrpc.DidOpenResponse, error) {
