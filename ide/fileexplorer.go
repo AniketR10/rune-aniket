@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
@@ -36,6 +37,11 @@ import (
 )
 
 var _ browser.ScrollableFloating = (*fileExplorerHandler)(nil)
+
+// fileExplorerSpanHPad is the horizontal padding applied around the
+// file explorer's editor content so that there is breathing room on
+// the left and right sides of the rendered tree.
+const fileExplorerSpanHPad = 2
 
 type fileExplorerHost interface {
 	Prompt(message string, options []string, bindings []term.KeyComb, promptHandler handler.PromptHandler) browser.Window
@@ -53,6 +59,7 @@ type fileExplorerHandler struct {
 	comp   *fileexplorercomp.Component
 	buf    *cell.Buffer
 	ed     text.Handler
+	span   *handler.Span
 	uri    workspaceapi.URI
 	width  int
 	height int
@@ -77,6 +84,10 @@ func newFileExplorerHandler(
 		uri:    uri,
 		target: target,
 	}
+	h.span = handler.NewSpan(ed, component.SpanConfig{
+		PadHorizontal:    fileExplorerSpanHPad,
+		ContentAlignment: component.AlignmentCentered,
+	})
 	h.ScrollableFloating = browser.FuncScrollableFloatingHandler(h, func() error { return nil })
 	return h, nil
 }
@@ -96,7 +107,7 @@ func (h *fileExplorerHandler) Handle(ev term.Event) (exit, handled bool) {
 			return false, true
 		}
 	}
-	exit, handled = h.ed.Handle(ev)
+	exit, handled = h.span.Handle(ev)
 	if !handled {
 		return exit, handled
 	}
@@ -109,30 +120,31 @@ func (h *fileExplorerHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 func (h *fileExplorerHandler) Draw(w term.Writer) {
-	h.ed.Draw(w)
+	h.span.Draw(w)
 }
 
 func (h *fileExplorerHandler) Resize(width, height int) {
 	h.width = width
 	h.height = height
-	h.ed.Resize(width, height)
+	h.span.Resize(width, height)
 }
 
 func (h *fileExplorerHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return h.ed.Cursor()
+	return h.span.Cursor()
 }
 
 func (h *fileExplorerHandler) Selection() (string, bool) {
-	return h.ed.Selection()
+	return h.span.Selection()
 }
 
 func (h *fileExplorerHandler) Dimensions() (int, int) {
 	// The editor reports its own ideal dimensions including any
 	// auxiliary chrome (line numbers, folds, git icons) drawn on
-	// top of the shared buffer, so the parent window can size
-	// itself to fit both the chrome and the full tree without
-	// truncation.
-	return h.ed.Dimensions()
+	// top of the shared buffer; the surrounding span adds the
+	// configured horizontal breathing room so the parent window
+	// can size itself to fit the chrome, the full tree, and the
+	// padding without truncation.
+	return h.span.Dimensions()
 }
 
 func (h *fileExplorerHandler) SeekUp() bool {

@@ -67,7 +67,7 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			height: 6,
 			sequence: []handlertest.SequenceTestCase{{
 				InputSequence: "",
-				Expected:      "▐  .claude/         \no .gitignore        \n                    \n                    \n                    \n                    ",
+				Expected:      " ▐  .claude/        \n o .gitignore       \n                    \n                    \n                    \n                    ",
 			}},
 		},
 		{
@@ -83,9 +83,9 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			width:  20,
 			height: 6,
 			sequence: []handlertest.SequenceTestCase{
-				{InputSequence: "", Expected: "▐  src/             \n                    \n                    \n                    \n                    \n                    "},
-				{InputSequence: "<enter>", Expected: "▐ src/              \n│   o main.go       \n                    \n                    \n                    \n                    "},
-				{InputSequence: "<enter>", Expected: "▐  src/             \n                    \n                    \n                    \n                    \n                    "},
+				{InputSequence: "", Expected: " ▐  src/            \n                    \n                    \n                    \n                    \n                    "},
+				{InputSequence: "<enter>", Expected: " ▐  src/            \n │   o main.go      \n                    \n                    \n                    \n                    "},
+				{InputSequence: "<enter>", Expected: " ▐  src/            \n                    \n                    \n                    \n                    \n                    "},
 			},
 		},
 		{
@@ -99,7 +99,7 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			height: 6,
 			sequence: []handlertest.SequenceTestCase{{
 				InputSequence: "<enter>",
-				Expected:      "▐ file.go           \n                    \n                    \n                    \n                    \n                    ",
+				Expected:      " ▐ file.go          \n                    \n                    \n                    \n                    \n                    ",
 			}},
 			assert: func(t *testing.T, _ *fileExplorerHandler, host *testFileExplorerHost) {
 				require.Len(t, host.opened, 1)
@@ -117,7 +117,7 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			height: 4,
 			sequence: []handlertest.SequenceTestCase{{
 				InputSequence: "",
-				Expected:      "▐ very-long-file-name.go                \n                                        \n                                        \n                                        ",
+				Expected:      " ▐ very-long-file-name.go               \n                                        \n                                        \n                                        ",
 			}},
 			assert: func(t *testing.T, h *fileExplorerHandler, _ *testFileExplorerHost) {
 				w, hgt := h.Dimensions()
@@ -176,7 +176,7 @@ func TestFileExplorerHandlerRuntimeLikeDimensionsAndRender(t *testing.T) {
 		// explorer goes through the bare editor path and so renders
 		// the buffer view directly, with no leading "1 " line-number
 		// column.
-		Expected: "▐  .claude/                     \no very-long-file-name.go        \n                                \n                                \n                                \n                                ",
+		Expected: " ▐  .claude/                    \n o very-long-file-name.go       \n                                \n                                \n                                \n                                ",
 	}})
 
 	// With no bars, the handler's Dimensions reflect just the
