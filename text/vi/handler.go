@@ -1961,6 +1961,14 @@ func (vi *viHandlerImpl) handleMoveToCharacter(mode moveMode, ev term.Event) (ex
 	case 0:
 		switch ev.Type {
 		case term.EventKey:
+			switch ev.Key {
+			case term.KeySpace:
+				ev.Ch = ' '
+			case term.KeyTab:
+				ev.Ch = '\t'
+			case term.KeyEnter:
+				ev.Ch = '\n'
+			}
 			var ok bool
 			switch mode {
 			case moveToNext:

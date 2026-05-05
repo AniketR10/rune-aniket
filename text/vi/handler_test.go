@@ -2534,6 +2534,147 @@ func TestViCountedOperatorScenarios(t *testing.T) {
 	}
 }
 
+func TestViFindCharacterSpecialKeys(t *testing.T) {
+	type step struct {
+		// Either ev (for special keys) or ch (for printable characters).
+		ev term.Event
+		ch rune
+	}
+
+	type testCase struct {
+		name          string
+		content       string
+		setup         func(*viHandlerImpl)
+		steps         []step
+		wantContent   string
+		wantScroll    term.Coordinates
+		wantMode      viMode
+		wantClipboard string
+	}
+
+	key := func(k term.Key) step {
+		return step{ev: term.Event{Type: term.EventKey, Key: k}}
+	}
+	ch := func(r rune) step { return step{ch: r} }
+
+	cases := []testCase{
+		{
+			name:        "f<space> moves cursor to next space",
+			content:     "hello world",
+			steps:       []step{ch('f'), key(term.KeySpace)},
+			wantScroll:  term.Coordinates{X: len("hello"), Y: 0},
+			wantContent: "hello world",
+		},
+		{
+			name:        "F<space> moves cursor to previous space",
+			content:     "hello world",
+			setup:       func(vi *viHandlerImpl) { vi.cursor.MoveEndLine() },
+			steps:       []step{ch('F'), key(term.KeySpace)},
+			wantScroll:  term.Coordinates{X: len("hello"), Y: 0},
+			wantContent: "hello world",
+		},
+		{
+			name:        "t<space> stops one before next space",
+			content:     "hello world",
+			steps:       []step{ch('t'), key(term.KeySpace)},
+			wantScroll:  term.Coordinates{X: len("hell"), Y: 0},
+			wantContent: "hello world",
+		},
+		{
+			name:        "T<space> stops one after previous space",
+			content:     "hello world",
+			setup:       func(vi *viHandlerImpl) { vi.cursor.MoveEndLine() },
+			steps:       []step{ch('T'), key(term.KeySpace)},
+			wantScroll:  term.Coordinates{X: len("hello "), Y: 0},
+			wantContent: "hello world",
+		},
+		{
+			name:        "df<space> deletes through next space",
+			content:     "hello world",
+			steps:       []step{ch('d'), ch('f'), key(term.KeySpace)},
+			wantScroll:  term.Coordinates{X: 0, Y: 0},
+			wantContent: "world",
+		},
+		{
+			name:        "cf<space> changes through next space",
+			content:     "hello world",
+			steps:       []step{ch('c'), ch('f'), key(term.KeySpace)},
+			wantScroll:  term.Coordinates{X: 0, Y: 0},
+			wantContent: "world",
+			wantMode:    insertMode,
+		},
+		{
+			name:          "yf<space> yanks through next space",
+			content:       "hello world",
+			steps:         []step{ch('y'), ch('f'), key(term.KeySpace)},
+			wantScroll:    term.Coordinates{X: 0, Y: 0},
+			wantContent:   "hello world",
+			wantClipboard: "hello ",
+		},
+		{
+			name:        "; after f<space> repeats find to next space",
+			content:     "a b c d",
+			steps:       []step{ch('f'), key(term.KeySpace), ch(';')},
+			wantScroll:  term.Coordinates{X: len("a b"), Y: 0},
+			wantContent: "a b c d",
+		},
+		{
+			name:        ", after f<space> reverses to previous space",
+			content:     "a b c d",
+			steps:       []step{ch('f'), key(term.KeySpace), ch('f'), key(term.KeySpace), ch(',')},
+			wantScroll:  term.Coordinates{X: len("a"), Y: 0},
+			wantContent: "a b c d",
+		},
+		{
+			name:        "f<tab> moves cursor to next tab",
+			content:     "ab\tcd",
+			steps:       []step{ch('f'), key(term.KeyTab)},
+			wantScroll:  term.Coordinates{X: len("ab"), Y: 0},
+			wantContent: "ab\tcd",
+		},
+		{
+			name:        "df<tab> deletes through next tab",
+			content:     "ab\tcd",
+			steps:       []step{ch('d'), ch('f'), key(term.KeyTab)},
+			wantScroll:  term.Coordinates{X: 0, Y: 0},
+			wantContent: "cd",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			vi := setupVi(t, tc.content, 2)
+			vi.Resize(80, 8)
+			vi.Draw(term.NoopWriter{})
+			if tc.setup != nil {
+				tc.setup(vi)
+			}
+
+			for _, s := range tc.steps {
+				ev := s.ev
+				if ev.Type == 0 {
+					ev = term.Event{Type: term.EventKey, Ch: s.ch}
+				}
+				_, handled := vi.Handle(ev)
+				require.True(t, handled, "event %+v", ev)
+			}
+
+			assert.Equal(t, tc.wantContent, vi.less.Buffer().String())
+			assert.Equal(t, tc.wantScroll, vi.cursor.CursorAtScroll())
+			wantMode := tc.wantMode
+			if wantMode == 0 {
+				wantMode = normalMode
+			}
+			assert.Equal(t, wantMode, vi.mode())
+			if tc.wantClipboard != "" {
+				paste, err := vi.config.clipboard.Paste(vi.config.defaultRegister)
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantClipboard, paste.Text)
+			}
+		})
+	}
+}
+
 func TestViX(t *testing.T) {
 	suite := []struct {
 		name          string
