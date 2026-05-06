@@ -54,12 +54,22 @@ const (
 		"and workspace.ssh.shell configuration, if you have any."
 )
 
-// New returns a schemeapi.Scheme capable of managing
-// files over an ssh connection.
-func New(
-	ctx context.Context, cfg config.Config, uri workspaceapi.URI,
-) (schemeapi.Scheme, error) {
-	return newScheme(ctx, cfg, uri)
+// New returns a schemeapi.SchemeFunc capable of managing files over an ssh
+// connection. ui drives the interactive auth flow (passphrase / password /
+// kbd-interactive prompts). It is intended to be installed into a workspace
+// manager:
+//
+//	mgr.RegisterScheme(workspacessh.Scheme, workspacessh.New(ui))
+//
+// New panics if ui is nil: a real UI is mandatory because the ssh dial may
+// trigger interactive prompts that have no useful default.
+func New(ui UI) schemeapi.SchemeFunc {
+	if ui == nil {
+		panic("workspacessh.New: ui is required")
+	}
+	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
+		return newScheme(ctx, cfg, uri, ui)
+	}
 }
 
 type remote interface {
@@ -79,13 +89,17 @@ type scheme struct {
 	connectSchemeFn connectSchemeFn
 	ctx             context.Context
 	cancelCtx       func()
+	ui              UI
 
 	schemeapi.Scheme
 }
 
 func newScheme(
-	ctx context.Context, ccfg config.Config, uri workspaceapi.URI,
+	ctx context.Context, ccfg config.Config, uri workspaceapi.URI, ui UI,
 ) (*scheme, error) {
+	if ui == nil {
+		panic("workspacessh.newScheme: ui is required")
+	}
 	ret := new(scheme)
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 
@@ -95,14 +109,17 @@ func newScheme(
 	}
 
 	ret.getUser = user.Current
+	ret.ui = ui
 	if cc.command == "" {
-		ret.remoteFn = newStdRemote
+		ret.remoteFn = func(c context.Context, sc sshConfig, u workspaceapi.URI) (remote, error) {
+			return newStdRemote(c, sc, u, ret.ui)
+		}
 	} else {
 		ret.remoteFn = newProcRemote
 	}
 
 	ret.connectSchemeFn = ret.connectScheme
-	err = ret.init(ctx, cc, uri, (schemeapi.Scheme).Stat)
+	err = ret.init(ctx, cc, uri)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +179,7 @@ func (s *scheme) runAndWait(
 		cmdStr = s.cfg.shell
 	}
 	var stderr, stdout bytes.Buffer
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
 		Path:    cmdStr,
 		Args:    args,
@@ -235,7 +252,10 @@ func (s *scheme) workspaceExists(
 func (s *scheme) connectScheme(
 	ctx context.Context, uri workspaceapi.URI, closeHook func(error),
 ) (schemeapi.Scheme, error) {
-	const six = "six"
+	// remoteWorkspaceServerBin is the binary name we expect to find on
+	// the remote host. It is the `rune` binary started in workspace
+	// server mode (see cmd/rune/main.go: --workspace-server / -x).
+	const remoteWorkspaceServerBin = "rune"
 
 	sshPath := s.basePath
 	if sshPath == "" {
@@ -250,7 +270,7 @@ func (s *scheme) connectScheme(
 	// NOTE: the next checks are to avoid error messages getting lost when
 	// trying to connect so we can provide better error messages
 
-	err = s.whichCommand(ctx, remote, six)
+	err = s.whichCommand(ctx, remote, remoteWorkspaceServerBin)
 	if err != nil {
 		return nil, err
 	}
@@ -267,16 +287,16 @@ func (s *scheme) connectScheme(
 
 	var extraArgs []string
 	if log.IsLevelEnabled(log.TraceLevel) {
-		extraArgs = []string{"-p", "-o", "six-workspace-server.log"}
+		extraArgs = []string{"-p", "-o", "rune-workspace-server.log"}
 	}
 
-	cmdStr := six
+	cmdStr := remoteWorkspaceServerBin
 	args := append([]string{"-x", sshPath}, extraArgs...)
 	if s.cfg.shell != "" {
 		args = append([]string{"-c", cmdStr}, args...)
 		cmdStr = s.cfg.shell
 	}
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
 		Path:    cmdStr,
 		Args:    args,
@@ -299,8 +319,6 @@ func (s *scheme) connectScheme(
 	conn, err := grpc.Dial("",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
-			// FIXME std conn is not goroutine-safe. Close causes *hook=nil to race
-			// with a second Close *hook.
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */
 				func() {
@@ -313,14 +331,27 @@ func (s *scheme) connectScheme(
 
 	go debug.CapturePanicReport(func() {
 		defer remote.Close()
-		err := <-ch
+		// Wait for the remote process to exit OR for the scheme's
+		// own context to be cancelled. Without the second case, a
+		// hung remote (or a Watcher that never delivers the exit
+		// status — e.g. when the watcher's send blocks because
+		// nothing is reading) would leak this goroutine and the
+		// associated SSH session for the lifetime of the test
+		// binary.
+		var err error
+		select {
+		case err = <-ch:
+		case <-s.ctx.Done():
+		}
 		if err != nil {
 			stderrStr, rerr := io.ReadAll(stderrRead)
 			if rerr != nil {
-				err = fmt.Errorf("could not read error from stderr but there was"+
-					"an error executing remote six server over SSH: %s", err)
+				err = fmt.Errorf("could not read error from stderr but there "+
+					"was an error executing remote rune workspace server "+
+					"over SSH: %s", err)
 			} else {
-				err = fmt.Errorf("error executing remote six server over SSH: %s: %s", err, stderrStr)
+				err = fmt.Errorf("error executing remote rune workspace "+
+					"server over SSH: %s: %s", err, stderrStr)
 			}
 		}
 		closeHook(err)
@@ -359,7 +390,6 @@ func (s *scheme) setPipes(
 
 func (s *scheme) init(
 	ctx context.Context, cc sshConfig, uri workspaceapi.URI,
-	statWorkspaceDir func(schemeapi.Scheme, string) (os.FileInfo, error),
 ) (err error) {
 	if uri.Scheme() != Scheme {
 		return errors.New("invalid non-ssh scheme")
@@ -378,15 +408,6 @@ func (s *scheme) init(
 	}
 
 	s.Scheme = newRemoteScheme(ctx, s.connectSchemeFn, uri)
-	fi, err := statWorkspaceDir(s.Scheme, uri.Path())
-	if err != nil {
-		return fmt.Errorf("Stat workspace: %v", err)
-	}
-
-	if !fi.IsDir() {
-		return fmt.Errorf("workspaceapi.URI does not refer to a directory: %s", uri.String())
-	}
-
 	return nil
 }
 

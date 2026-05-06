@@ -32,6 +32,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -113,6 +114,15 @@ type fileScheme struct {
 	cancelCtx  func()
 	cmds       sync.Map // map[workspaceapi.Pid]struct{}
 
+	// zdotDir, when non-empty, is exported as ZDOTDIR to the shell
+	// processes started via the empty-cmd-Path protocol contract (see
+	// StartCommand). Resolved from the scheme's config at init time so
+	// it always reflects the executor's host: for SSH workspaces the
+	// remote `rune -x` server reads its own config, so the local IDE's
+	// zdotdir (which points at a host-specific path) doesn't leak into
+	// the remote shell's environment.
+	zdotDir string
+
 	watchpoints    sync.Map
 	nextWatchPoint atomic.Int64
 
@@ -123,7 +133,10 @@ type fileScheme struct {
 	// Technically we could leak files if clients
 	// never close files, but once Server is garbage
 	// collected, all files that are orhpaned will be closed.
-	files sync.Map // map[uintptr]workspaceapi.File
+	//
+	// A pointer is used so a chrooted view can share the same map
+	// with its parent — see Chroot below.
+	files *sync.Map // map[uintptr]workspaceapi.File
 }
 
 func (p *fileScheme) init(
@@ -143,6 +156,15 @@ func (p *fileScheme) init(
 	p.workspace = workspace
 	p.nextWatchPoint.Add(1)
 	p.ctx, p.cancelCtx = context.WithCancel(context.Background())
+	if p.files == nil {
+		p.files = new(sync.Map)
+	}
+	if cfg != nil {
+		// zdotdir is optional; ErrNotFound just means "not configured".
+		if z, err := cfg.GetString("zdotdir"); err == nil {
+			p.zdotDir = z
+		}
+	}
 	return nil
 }
 
@@ -336,6 +358,25 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
 	var err error
+	// Empty Path is the protocol contract for "run the user's login
+	// shell on the executor's host". The fileScheme on the host that
+	// will actually run the process owns this resolution: for SSH
+	// workspaces this travels through workspacerpc to the remote
+	// fileScheme so $SHELL and ZDOTDIR come from the *remote* host's
+	// config, never the IDE host's.
+	if cmd.Path == "" {
+		cmd.Path = resolveLoginShell()
+		if len(cmd.Args) == 0 {
+			cmd.Args = []string{"--login", "-i"}
+		}
+		// Apply shell-specific env tweaks. We only know how to
+		// inject a custom rc dir for zsh today; bash ignores
+		// BASH_ENV / --rcfile under --login, and sh has no
+		// equivalent.
+		if filepath.Base(cmd.Path) == "zsh" && p.zdotDir != "" {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("ZDOTDIR=%s", p.zdotDir))
+		}
+	}
 	path := cmd.Path
 	if filepath.Base(cmd.Path) == cmd.Path {
 		path, err = find.Executable(cmd.Path)
@@ -391,13 +432,15 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		p.log(log.DebugLevel, "exec.Command: Wait returned: cmd=%v pid=%d, err=%v",
 			stdcmd.Args, stdcmd.Process.Pid, err)
 
-		// set a timeout to how long we wait for a watcher
-		// to drain the error. This is just to avoid
-		// buggy watchers to cause this goroutine to block forever,
-		// so the timeout should be in the order of minutes.
-		// use a new context so the cancelation of the command doesn't
-		// prevent watcher from being called.
-		ctx, cancel := context.WithTimeout(p.ctx, watcherWaitTimeout)
+		// Deliver the exit status to the watcher with a generous
+		// timeout. Use context.Background here rather than a context
+		// derived from p.ctx so callers continue to get the exit
+		// notification even if the file scheme has already begun
+		// shutting down — buggy watchers (or watchers waiting on
+		// the producer in turn, like wrapWatcher in workspacessh)
+		// would otherwise leak when both sides cancel concurrently.
+		ctx, cancel := context.WithTimeout(
+			context.Background(), watcherWaitTimeout)
 		defer cancel()
 
 		if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
@@ -422,8 +465,16 @@ func (p *fileScheme) Chroot(path string) (schemeapi.Scheme, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx := context.Background()
-	return NewFileScheme(ctx, config.NopConfig(), uri)
+	child := new(fileScheme)
+	child.getUser = p.getUser
+	child.osStat = p.osStat
+	child.lookupUser = p.lookupUser
+	child.files = p.files
+	child.zdotDir = p.zdotDir
+	if err := child.init(config.NopConfig(), uri); err != nil {
+		return nil, err
+	}
+	return child, nil
 }
 
 func (p *fileScheme) Signal(pid workspaceapi.Pid, signal syscall.Signal) error {
@@ -576,7 +627,7 @@ type fileSchemeFile struct {
 	workspaceapi.File
 	p *fileScheme
 	// cache fd so pty.SetSize doesn't cause races on fd destroy (on reads)
-	fd       uintptr
+	fd        uintptr
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -677,4 +728,51 @@ func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI) eventInfo {
 		uri: uri,
 		e:   nev,
 	}
+}
+
+// resolveLoginShell returns the user's login shell on the host where
+// the file scheme runs. The protocol contract is that an empty
+// workspaceapi.Cmd.Path means "use the user's login shell"; this
+// helper turns that contract into a concrete binary.
+func resolveLoginShell() string {
+	const fallback = "/bin/sh"
+	candidates := []string{
+		"/bin/bash",
+		"/usr/bin/bash",
+		"/bin/zsh",
+		"/usr/bin/zsh",
+		fallback,
+	}
+	if sh := strings.TrimSpace(os.Getenv("SHELL")); sh != "" && filepath.IsAbs(sh) {
+		if isExecutableFile(sh) {
+			return sh
+		}
+		// $SHELL was set but unusable from this process. Log so an
+		// operator can see why we're falling back, then try the
+		// well-known list.
+		log.WithField(logging.KeyClass, "fileScheme").Warnf(
+			"resolveLoginShell: $SHELL=%q is not an executable file on this "+
+				"host; falling back to a well-known shell", sh)
+	}
+	for _, c := range candidates {
+		if isExecutableFile(c) {
+			return c
+		}
+	}
+	return fallback
+}
+
+// isExecutableFile reports whether path refers to a regular,
+// executable file. Symlinks are followed (os.Stat).
+func isExecutableFile(path string) bool {
+	st, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !st.Mode().IsRegular() {
+		return false
+	}
+	// Any execute bit is enough; the kernel will tell us later if we
+	// can't actually run it as the current user.
+	return st.Mode().Perm()&0o111 != 0
 }

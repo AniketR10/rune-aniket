@@ -46,7 +46,10 @@ import (
 
 var _ tui.Handler = (*Handler)(nil)
 
-const handleTimeout = 50 * time.Millisecond
+// defaultHandleTimeout bounds how long Handle will wait for the pty
+// to produce an update after writing a keypress. It is a redraw
+// debounce, NOT a gate on whether the event is considered handled.
+const defaultHandleTimeout = 50 * time.Millisecond
 
 // Handler is a terminal emulator that satisfies tui.Handler.
 type Handler struct {
@@ -54,6 +57,7 @@ type Handler struct {
 	publisher     browser.EventPublisher
 	notifications browser.Notifications
 	handleTimer   *time.Timer
+	handleTimeout time.Duration
 	vi            viHandler
 	ctx           context.Context
 	cancelCtx     func()
@@ -98,7 +102,8 @@ func (e *Handler) Init(
 	config.Clipboard = stitchingClipboard{root: config.Clipboard}
 	e.publisher = publisher
 	e.notifications = n
-	e.handleTimer = time.NewTimer(handleTimeout)
+	e.handleTimeout = defaultHandleTimeout
+	e.handleTimer = time.NewTimer(e.handleTimeout)
 	// leave in idle state so we can call Reset directly in handle
 	if !e.handleTimer.Stop() {
 		<-e.handleTimer.C
@@ -331,6 +336,18 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.notify(browserapi.LevelError, "write to pty: %v", err)
 		return
 	}
+	// Mark the event handled as soon as it is written to the pty.
+	// Whether the pty has finished echoing the bytes back yet is
+	// orthogonal to whether we consumed the event. Gating `handled`
+	// on the round-trip used to break callers that chain into a key
+	// sequencer: over a high-latency transport (e.g. an SSH workspace
+	// where pty bytes round-trip via workspacerpc), the echo arrives
+	// after handleTimeout and we returned handled=false. The IDE
+	// sequencer would then treat the keypress as an unhandled event
+	// for sequence matching and re-issue it on timeout, producing
+	// duplicated input (e.g. typing "g" surfaced as "gg" because
+	// "g" is the prefix of "gg"/"gf" bindings).
+	handled = true
 
 	// do not scroll to bottom in all cases or it could
 	// interfere with interactive program that uses primary buffer
@@ -338,14 +355,13 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.comp.ScrollBottom()
 		e.log(log.TraceLevel, "written cltr-c to pty: %q", raw)
 	}
-	e.handleTimer.Reset(handleTimeout)
+	e.handleTimer.Reset(e.handleTimeout)
 	select {
 	case <-e.handleTimer.C:
 		e.handleTimer.Stop()
 	case <-e.ctx.Done():
 		exit = true
 	case <-e.updateCh:
-		handled = true
 		if !e.handleTimer.Stop() {
 			<-e.handleTimer.C
 		}

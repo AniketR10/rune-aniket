@@ -30,10 +30,9 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
+	"sync"
 	"syscall"
 	"testing"
-	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/assert"
@@ -44,98 +43,6 @@ import (
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
-
-type nopExecutor struct {
-}
-
-func (n nopExecutor) StartCommand(
-	ctx context.Context, cmd workspaceapi.Cmd,
-) (workspaceapi.Pid, error) {
-	return 0, nil
-}
-
-func (n nopExecutor) Signal(workspaceapi.Pid, syscall.Signal) error {
-	return nil
-}
-func (n nopExecutor) Close() error {
-	return nil
-}
-
-type nopRemote struct {
-}
-
-func (n nopRemote) NewSession() (schemeapi.Executor, error) {
-	return nopExecutor{}, nil
-}
-
-func (n nopRemote) Close() error {
-	return nil
-}
-
-type testFileInfo struct {
-	name string
-}
-
-func (t testFileInfo) Name() string {
-	return t.name
-}
-func (t testFileInfo) Size() int64 {
-	return 0
-}
-
-func (t testFileInfo) Mode() os.FileMode {
-	return 0
-}
-
-func (t testFileInfo) ModTime() time.Time {
-	return time.Time{}
-}
-
-func (t testFileInfo) IsDir() bool {
-	return !strings.Contains(t.name, ".")
-}
-
-func (t testFileInfo) Sys() any {
-	return nil
-}
-
-func newTestScheme(
-	cfg config.Config, workspaceURI workspaceapi.URI,
-	connectSchemeFn func(ctx context.Context,
-		uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error),
-) (schemeapi.Scheme, error) {
-	s := new(scheme)
-	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
-	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
-		return nopRemote{}, nil
-	}
-	s.getUser = func() (*user.User, error) {
-		return &user.User{Username: "git", HomeDir: "/home/git"}, nil
-	}
-	if connectSchemeFn == nil {
-		connectSchemeFn = func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (
-			schemeapi.Scheme, error,
-		) {
-			return workspacetest.NewNopScheme("test")(ctx, config.NopConfig(), uri)
-		}
-	}
-	s.connectSchemeFn = connectSchemeFn
-
-	err := s.init(context.Background(), sshConfig{}, workspaceURI,
-		func(_ schemeapi.Scheme, name string) (os.FileInfo, error) {
-			return testFileInfo{name: name}, nil
-		})
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-func newNopScheme(t *testing.T, workspaceURI workspaceapi.URI) *scheme {
-	s, err := newTestScheme(config.NopConfig(), workspaceURI, nil)
-	require.NoError(t, err)
-	return s.(*scheme)
-}
 
 func TestNewScheme(t *testing.T) {
 	tsuite := []struct {
@@ -153,8 +60,6 @@ func TestNewScheme(t *testing.T) {
 			"ssh://ernie@ernest.photography/home/ernie/src", ""},
 		{"no host returns error", "ssh:///tmp", "", "could not parse ssh workspaceapi.URI: ssh scheme with empty host is invalid"},
 		{"different scheme returns error", "file:///tmp", "", "invalid non-ssh scheme"},
-		{"file URI returns error", "ssh://ernie@ernest.photography/tmp/file.txt", "",
-			"workspaceapi.URI does not refer to a directory: ssh://ernie@ernest.photography/tmp/file.txt"},
 	}
 
 	for _, tcase := range tsuite {
@@ -241,6 +146,67 @@ func TestURI(t *testing.T) {
 
 		})
 	}
+}
+
+// TestConnectSchemeUsesRune asserts that the workspace-scheme bootstrap
+// looks for the `rune` binary on the remote — the same name that
+// `cmd/rune` accepts via its `--workspace-server / -x` flag (see
+// cmd/rune/main.go). A previous version of the code looked for an
+// obsolete binary called `six`, which made every real connection fail
+// with "six executable was not found on remote" even when authentication
+// succeeded. The bug went undetected because the docker e2e matrix
+// short-circuits via TestAuthDial and never reaches connectScheme.
+func TestConnectSchemeUsesRune(t *testing.T) {
+	rec := &recordingRemote{}
+
+	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	defer s.cancelCtx()
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
+		return rec, nil
+	}
+	s.getUser = func() (*user.User, error) {
+		return &user.User{Username: "test", HomeDir: "/home/test"}, nil
+	}
+	s.ui = errorUI{}
+	uri, err := workspaceapi.ParseURI("ssh://test@example.com/tmp")
+	require.NoError(t, err)
+	s.user, s.homedir, s.hostPort, s.basePath, err = parseWorkspaceURI(uri, s.getUser)
+	require.NoError(t, err)
+
+	closeHook := func(error) {}
+	scheme, err := s.connectScheme(context.Background(), uri, closeHook)
+	require.NoError(t, err)
+	if scheme != nil {
+		_ = scheme.Close()
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	require.NotEmpty(t, rec.commands, "expected connectScheme to issue commands")
+
+	// First command is `which <bin>` — that's the canonical signal.
+	first := rec.commands[0]
+	assert.Equal(t, "which", first.Path,
+		"first command should be `which <remote bin>`; got %+v", first)
+	require.NotEmpty(t, first.Args)
+	assert.Equal(t, "rune", first.Args[0],
+		"connectScheme must look for the `rune` binary on the remote "+
+			"(matches cmd/rune --workspace-server). Got %q.",
+		first.Args[0])
+
+	// The actual workspace-server invocation should also use `rune`.
+	var sawServer bool
+	for _, c := range rec.commands {
+		if c.Path == "rune" {
+			sawServer = true
+			assert.Contains(t, c.Args, "-x",
+				"rune workspace server should be started with -x; got %+v", c)
+			break
+		}
+	}
+	assert.True(t, sawServer,
+		"expected at least one command to invoke `rune`; saw %+v", rec.commands)
 }
 
 func TestIntegrationCanWorkspaceURI(t *testing.T) {
@@ -398,4 +364,119 @@ func TestSSHScheme(t *testing.T) {
 	for _, clean := range cleanup {
 		_ = clean()
 	}
+}
+
+type nopExecutor struct {
+}
+
+func (n nopExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return 0, nil
+}
+
+func (n nopExecutor) Signal(workspaceapi.Pid, syscall.Signal) error {
+	return nil
+}
+func (n nopExecutor) Close() error {
+	return nil
+}
+
+type nopRemote struct {
+}
+
+func (n nopRemote) NewSession() (schemeapi.Executor, error) {
+	return nopExecutor{}, nil
+}
+
+func (n nopRemote) Close() error {
+	return nil
+}
+
+// recordingRemote captures every command issued via NewSession/StartCommand
+// so tests can assert on the binary that connectScheme runs on the remote.
+// Each StartCommand is treated as a successful exit (status 0) by signaling
+// the supplied ProcessWatcher with nil.
+type recordingRemote struct {
+	mu       sync.Mutex
+	commands []workspaceapi.Cmd
+}
+
+func (r *recordingRemote) NewSession() (schemeapi.Executor, error) {
+	return &recordingExecutor{remote: r}, nil
+}
+
+func (r *recordingRemote) Close() error { return nil }
+
+type recordingExecutor struct {
+	remote *recordingRemote
+}
+
+func (e *recordingExecutor) StartCommand(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	e.remote.mu.Lock()
+	e.remote.commands = append(e.remote.commands, cmd)
+	e.remote.mu.Unlock()
+	if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
+		go func() { cmd.Watcher.WatchProcess() <- nil }()
+	}
+	return 1, nil
+}
+
+func (e *recordingExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (e *recordingExecutor) Close() error                                  { return nil }
+
+// errorUI fails any prompt; tests use it because newTestScheme stubs the
+// remote, so prompts should never fire.
+type errorUI struct{}
+
+func (errorUI) PromptSecret(context.Context, string) (string, error) {
+	return "", fmt.Errorf("unexpected prompt: secret")
+}
+
+func (errorUI) PromptText(context.Context, string, string) (string, error) {
+	return "", fmt.Errorf("unexpected prompt: text")
+}
+
+func (errorUI) PromptChoice(context.Context, string, []string) (int, error) {
+	return -1, fmt.Errorf("unexpected prompt: choice")
+}
+
+func (errorUI) Notify(NotificationLevel, string) {}
+
+func newTestScheme(
+	cfg config.Config, workspaceURI workspaceapi.URI,
+	connectSchemeFn func(ctx context.Context,
+		uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error),
+) (schemeapi.Scheme, error) {
+	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
+		return nopRemote{}, nil
+	}
+	s.getUser = func() (*user.User, error) {
+		return &user.User{Username: "git", HomeDir: "/home/git"}, nil
+	}
+	s.ui = errorUI{}
+	if connectSchemeFn == nil {
+		connectSchemeFn = func(ctx context.Context, uri workspaceapi.URI, closeHook func(error)) (
+			schemeapi.Scheme, error,
+		) {
+			return workspacetest.NewNopScheme("test")(ctx, config.NopConfig(), uri)
+		}
+	}
+	s.connectSchemeFn = connectSchemeFn
+
+	err := s.init(context.Background(), sshConfig{}, workspaceURI)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func newNopScheme(t *testing.T, workspaceURI workspaceapi.URI) *scheme {
+	s, err := newTestScheme(config.NopConfig(), workspaceURI, nil)
+	require.NoError(t, err)
+	return s.(*scheme)
 }

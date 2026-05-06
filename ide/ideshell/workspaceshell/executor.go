@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package workspaceshell provides a workspaceapi.Executor wrapper
 // that tracks running processes and exposes a "process" shell
 // command via ideshell.CommandHandler.
@@ -213,17 +212,35 @@ func (e *Executor) StartCommand(
 	return e.Start(ctx, cmd)
 }
 
-// RegisterCommands registers the "process" command in the
-// given registry with the executor as its handler.
-func (e *Executor) RegisterCommands(r *ideshell.CommandRegistry) {
+// RegisterProcessCommand registers the "process" REPL command in
+// the given registry. Use this for the executor that tracks
+// workspace processes (ad-hoc commands, plugins, vte ptys).
+func (e *Executor) RegisterProcessCommand(r *ideshell.CommandRegistry) {
 	r.Register("process", "Process management", e)
+}
+
+// RegisterExtensionsProcessCommand registers the
+// "extensions-process" REPL command in the given registry. Use
+// this for the executor that tracks extension binaries launched
+// by the extension runner. Subcommands (status/audit/tree/info/
+// signal/stop) are the same as for the "process" command but
+// operate on the extension PIDs only.
+func (e *Executor) RegisterExtensionsProcessCommand(r *ideshell.CommandRegistry) {
+	r.Register("extensions-process", "Extensions process management", e)
+}
+
+// processCommandNames are the REPL command names HandleCommand and
+// Complete recognize. The same Executor type backs both names so
+// callers can choose at registration time which one to expose.
+func isProcessCommandName(name string) bool {
+	return name == "process" || name == "extensions-process"
 }
 
 // HandleCommand dispatches process subcommands.
 func (e *Executor) HandleCommand(
 	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
-	if cmd.Name != "process" {
+	if !isProcessCommandName(cmd.Name) {
 		return nil, repl.ErrNotFound
 	}
 	if len(cmd.Args) == 0 {
@@ -251,7 +268,7 @@ func (e *Executor) HandleCommand(
 func (e *Executor) Complete(
 	_ context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
-	if cmd != "process" {
+	if !isProcessCommandName(cmd) {
 		return iterator.Empty[string](), nil
 	}
 	if len(args) == 0 {

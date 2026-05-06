@@ -26,38 +26,49 @@ package workspacetest
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
+	"path"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/workspace/walkdir"
 	"unstable.build/go-tui/workspace/workspacessh"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
 
-// NOTE if this is failing or you are iterating on functionality
-// used by SSH, remember to call make run build_docker.sh before running these tests again.
+// TestIntegrationScheme exercises the full schemeapi.Scheme contract
+// (Open / Read / Stat / Remove / Rename / ...) over both the std (Go
+// crypto/ssh) and proc (forked openssh) remotes against a real
+// container.
+//
+// The suite issues many ssh connections in quick succession against a
+// single shared container, so the harness raises MaxStartups well past
+// the linuxserver/openssh-server default via ExtraSSHDConfig. See also
+// TestConnectSchemeEndToEnd (connect_test.go) for connectScheme
+// coverage and TestAuthMatrix for SSH auth UX coverage.
 func TestIntegrationScheme(t *testing.T) {
-	if os.Getenv("CI") == "true" {
-		t.SkipNow()
-	}
-	hostname, teardown := runDockerOrSkip(t)
-	t.Cleanup(func() { teardown() })
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+	c := StartContainer(t, SSHDScenario{
+		PublicKeyFile:     "/id_ed25519.pub",
+		InstallRuneBinary: true,
+		ExtraSSHDConfig: "MaxStartups 200:30:400\n" +
+			"MaxSessions 200\n" +
+			"LoginGraceTime 60\n",
+	})
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
 
 	cfgs := map[string]config.Config{
 		"openssh_proc_remote": config.MapConfig(map[string]any{
-			"command": "ssh -o StrictHostKeyChecking=no -i ./id_ed25519 %h -p %p",
+			"command": "ssh -o StrictHostKeyChecking=no -i " + keyPath + " %h -p %p",
 			"timeout": "20s",
 		}),
 		"go_stdlib_remote": config.MapConfig(map[string]any{
-			"private_keys": []any{"./id_ed25519"},
+			"private_keys": []any{keyPath},
 			"timeout":      "20s",
 			"insecure":     true,
 		}),
@@ -65,122 +76,110 @@ func TestIntegrationScheme(t *testing.T) {
 	for desc, cfg := range cfgs {
 		t.Run(desc, func(t *testing.T) {
 			workspacetest.TestWorkspaceSchemeFiles(t, func(t *testing.T) schemeapi.Scheme {
-				return newSchemeIntegration(t, hostname, cfg)
+				return newSchemeIntegration(t, c.HostPort, cfg)
 			})
 
 			workspacetest.TestWorkspaceSchemeExecutor(t, func(t *testing.T) schemeapi.Scheme {
-				return newSchemeIntegration(t, hostname, cfg)
+				return newSchemeIntegration(t, c.HostPort, cfg)
 			})
 		})
 	}
 }
 
-func teardownFn(container string) func() error {
-	return func() error {
-		cmd := exec.Cmd{
-			Path: "stop_docker.sh",
-			Args: []string{"stop_docker.sh", container},
-		}
-		err := cmd.Run()
-		if err != nil {
-			return fmt.Errorf("stop_docker.sh %q", container)
-		}
-		return nil
-	}
-}
-
-func runContainer() (string, func() error, error) {
-	cmd := exec.Cmd{
-		Path: "run_docker.sh",
-		Dir:  ".",
-	}
-	pipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", nil, err
-	}
-	errPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return "", nil, err
-	}
-
-	err = cmd.Start()
-	if err != nil {
-		return "", nil, err
-	}
-
-	data, err := io.ReadAll(pipe)
-	errdata, _ := io.ReadAll(errPipe)
-	if err != nil {
-		_ = cmd.Wait()
-		err = fmt.Errorf("%v: %s", err, string(errdata))
-		return "", nil, err
-	}
-
-	err = cmd.Wait()
-	if err != nil {
-		err = fmt.Errorf("%v: %s", err, string(errdata))
-		return "", nil, err
-	}
-
-	// $CONTAINER:$IP:$PORT
-	chunks := strings.Split(string(data), ":")
-	if len(chunks) != 3 {
-		panic("could not parse script stdout")
-	}
-
-	container := strings.Trim(chunks[0], "\n ")
-	ip := strings.Trim(chunks[1], "\n ")
-	port := strings.Trim(chunks[2], "\n ")
-
-	if ip == "" || port == "" || container == "" {
-		panic(fmt.Sprintf("missing one of ip, port or container: %q %q %q", ip, port, container))
-	}
-
-	return fmt.Sprintf("%s:%s", ip, port), teardownFn(container), nil
-}
-
-func runDockerOrSkip(t *testing.T) (string, func()) {
-	hostname, teardown, err := runContainer()
-	if err != nil {
-		t.Logf("problem starting container, maybe you want to build_docker.sh first? skipping test: %s\n", err)
-		t.SkipNow()
-		return "", func() {}
-	}
-	return hostname, func() {
-		err := teardown()
-		if err != nil {
-			t.Logf("error stopping container for %q: %s\n", hostname, err)
-		}
-	}
-}
+// integrationDirCounter ensures each schemeFn(t) call gets its own
+// subdirectory under /tmp so the per-subtest filesystem state cannot
+// leak into the next subtest. The container is reused across subtests
+// (see TestIntegrationScheme) for connection-rate reasons; a unique
+// workspace dir per subtest is the cheap way to keep them isolated.
+var integrationDirCounter atomic.Uint64
 
 func newSchemeIntegration(
 	t *testing.T, hostname string, cfg config.Config,
 ) schemeapi.Scheme {
-	workspaceURI, err := workspaceapi.ParseURI("ssh://test@" + hostname + "/tmp")
+	t.Helper()
+
+	// Pick a workspace directory unique to this subtest. Just the
+	// counter would suffice, but keeping the test name in the path
+	// makes it grep-friendly when something goes wrong. Strip every
+	// non-[A-Za-z0-9_-] rune so we never have to worry about shell
+	// quoting (the bootstrap forwards the path through `bash -c`).
+	dir := path.Join("/tmp", fmt.Sprintf("rune_ssh_test_%s_%d",
+		safeName(t.Name()), integrationDirCounter.Add(1)))
+
+	workspaceURI, err := workspaceapi.ParseURI(
+		"ssh://test@" + hostname + dir)
 	require.NoError(t, err)
 
-	var mu sync.Mutex
 	ctx := context.Background()
-	mu.Lock()
 
-	s, err := workspacessh.New(ctx, cfg, workspaceURI)
+	schemeFn := workspacessh.New(&errorUI{})
+
+	// Pre-create the workspace dir on the remote so the bootstrap's
+	// `ls $path` check succeeds before the gRPC channel comes up.
+	mkdir, err := schemeFn(ctx, cfg, parentURI(t, workspaceURI))
+	require.NoError(t, err)
+	require.NoError(t, mkdir.MkdirAll(dir, 0o755))
+	mkdir.Close()
+
+	s, err := schemeFn(ctx, cfg, workspaceURI)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		s, err := workspacessh.New(ctx, cfg, workspaceURI)
-		require.NoError(t, err)
-		it, err := walkdir.ListFiles(context.Background(), s, "/tmp")
-		require.NoError(t, err)
-		for {
-			f, ok := it.Next(context.Background())
-			if !ok {
-				break
-			}
-			require.NoError(t, s.Remove(f))
-		}
-		require.NoError(t, it.Err())
-		s.Close()
+		// The container is torn down by the parent test's t.Cleanup,
+		// so we don't bother removing the per-subtest dir from the
+		// remote — the entire fs is gone shortly after this returns,
+		// and a per-file `rm` would multiply many small gRPC
+		// round-trips through the SSH tunnel. Just close the
+		// scheme to release its ssh session.
+		_ = s.Close()
 	})
 	return s
+}
+
+// parentURI returns a URI pointing at /tmp on the remote — used to run
+// MkdirAll for a fresh per-subtest workspace dir before connecting the
+// real workspace scheme.
+func parentURI(t *testing.T, u workspaceapi.URI) workspaceapi.URI {
+	t.Helper()
+	parent, err := workspaceapi.ParseURI(
+		"ssh://" + u.User() + "@" + u.Host() + "/tmp")
+	require.NoError(t, err)
+	return parent
+}
+
+// errorUI fails any prompt request: this integration test only verifies
+// non-interactive flows (configured key, healthy server).
+type errorUI struct{}
+
+func (errorUI) PromptSecret(context.Context, string) (string, error) {
+	return "", fmt.Errorf("unexpected prompt: secret")
+}
+
+func (errorUI) PromptText(context.Context, string, string) (string, error) {
+	return "", fmt.Errorf("unexpected prompt: text")
+}
+
+func (errorUI) PromptChoice(context.Context, string, []string) (int, error) {
+	return -1, fmt.Errorf("unexpected prompt: choice")
+}
+
+func (errorUI) Notify(workspacessh.NotificationLevel, string) {}
+
+// safeName returns a shell-safe version of name suitable for substitution
+// into a path the bootstrap may quote naively.
+func safeName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }

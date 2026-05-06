@@ -3076,7 +3076,7 @@ func TestSetExecutorPreservesReservoirCapacity(t *testing.T) {
 	// Trigger setExecutor with the original executor; the new
 	// reservoir must come up with the originally configured capacity,
 	// regardless of what the (just-closed) old reservoir reports.
-	b.ex.setExecutor(b.ex.executor, b.ex.wsExecutor)
+	b.ex.setExecutor(b.ex.executor, b.ex.wsExecutor, b.ex.extensionsExecutor)
 
 	require.NotNil(t, b.ex.reservoir)
 	assert.NotSame(t, first, b.ex.reservoir)

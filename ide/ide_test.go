@@ -451,7 +451,7 @@ func testRunnerFn(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	dataDir string, n browser.Notifications,
-	exec schemeapi.Executor,
+	exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
 	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,

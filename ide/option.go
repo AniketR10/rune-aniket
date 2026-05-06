@@ -343,7 +343,7 @@ func (n nopExtensions) WorkspaceExtensionsRunner(
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
 	dataDir string, notifications browser.Notifications,
-	exec schemeapi.Executor,
+	exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
 	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,

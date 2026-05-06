@@ -41,6 +41,14 @@ type sshConfig struct {
 	command     string
 	shell       string
 	insecure    bool
+	// kbdInteractive enables PAM-style keyboard-interactive auth. Off by
+	// default because the Go ssh client surfaces a confusing "unexpected
+	// message type 51" error when the server advertises kbd-interactive
+	// but does not actually configure any challenges.
+	kbdInteractive bool
+	// knownHostsPath overrides the default ~/.ssh/known_hosts path. Empty
+	// means use the default.
+	knownHostsPath string
 }
 
 func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
@@ -64,6 +72,14 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	if err != nil && err != config.ErrNotFound {
 		retErr = multierr.Append(retErr, err)
 	}
+	kbdInteractive, err := cfg.GetBool("kbd_interactive")
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
+	knownHosts, err := cfg.GetString("known_hosts")
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
 	if retErr != nil {
 		retErr = fmt.Errorf("could not load ssh config: %s", retErr)
 		return
@@ -74,6 +90,8 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	ret.privateKeys = privateKeys
 	ret.shell = shell
 	ret.insecure = insecure
+	ret.kbdInteractive = kbdInteractive
+	ret.knownHostsPath = knownHosts
 	return
 }
 

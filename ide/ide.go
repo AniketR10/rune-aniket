@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -294,11 +295,15 @@ func (i *IDE) init(
 	// register default schemes
 	workspaceManager := workspace.NewManagerWithWorkspaceFunc(
 		i.ideConfig.workspace(), workspace.NewSchemeWorkspace)
-	err := workspaceManager.RegisterScheme(workspacessh.Scheme, workspacessh.New)
+	err := workspaceManager.RegisterScheme(
+		workspacessh.Scheme,
+		workspacessh.New(newWorkspaceWindowManagerUI(i)),
+	)
 	if err != nil {
 		return fmt.Errorf("register ssh scheme: %w", err)
 	}
-	err = workspaceManager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
+	err = workspaceManager.RegisterScheme(workspace.FileScheme,
+		fileSchemeFunc(op.zdotDir))
 	if err != nil {
 		return fmt.Errorf("register file scheme: %w", err)
 	}
@@ -374,4 +379,44 @@ func (i *IDE) initRunning() {
 		i.root.runShader(i.options.initShaderFn(i.root.defAttr, i.ideConfig.windowFrameCharset()),
 			i.options.initShaderFPS, i.options.initShaderDuration)
 	}
+}
+
+// fileSchemeFunc returns a schemeapi.SchemeFunc that wraps
+// workspace.NewFileScheme to inject the IDE's --rune-zdotdir flag
+// into the per-scheme config under "zdotdir". The fileScheme reads
+// it back to set ZDOTDIR when starting an empty-Path login shell
+// (see workspace.fileScheme.StartCommand). zdotdir applies only to
+// the local file scheme — for SSH workspaces the *remote* rune
+// process resolves its own zdotdir from its own config, so the IDE
+// host's flag never leaks across the wire.
+func fileSchemeFunc(zdotDir string) schemeapi.SchemeFunc {
+	return func(
+		ctx context.Context, cfg config.Config, uri workspaceapi.URI,
+	) (schemeapi.Scheme, error) {
+		if zdotDir != "" {
+			cfg = configWithZdotDir(cfg, zdotDir)
+		}
+		return workspace.NewFileScheme(ctx, cfg, uri)
+	}
+}
+
+// configWithZdotDir returns a config.Config that overlays "zdotdir"
+// onto base. If the user's workspace.file config already sets
+// "zdotdir" we let it win — explicit configuration beats the
+// command-line default.
+func configWithZdotDir(base config.Config, zdotDir string) config.Config {
+	if base != nil {
+		if existing, err := base.GetString("zdotdir"); err == nil && existing != "" {
+			return base
+		}
+	}
+	merged := map[string]any{"zdotdir": zdotDir}
+	if base != nil {
+		base.Iterate(func(k string, v any) {
+			if _, ok := merged[k]; !ok {
+				merged[k] = v
+			}
+		})
+	}
+	return config.MapConfig(merged)
 }

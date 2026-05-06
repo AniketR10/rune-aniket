@@ -460,7 +460,14 @@ func (h *workspaceManagerHandler) init(
 	wsExec := workspaceshell.NewExecutor(
 		workspaceExecutorAdapter{e: h.homeWorkspace})
 	trackedCwd := &trackedWorkspace{Workspace: h.homeWorkspace, exec: wsExec}
-	runner, err := h.buildExtensions(cfg, homeDirUri, trackedCwd, h.empty)
+	extExec, err := newExtensionsExecutor()
+	if err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Error building extensions executor: %v", err)
+		log.Errorf("build home workspace extensions executor: %v", err)
+		return nil
+	}
+	runner, err := h.buildExtensions(cfg, homeDirUri, trackedCwd, h.empty, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -468,7 +475,7 @@ func (h *workspaceManagerHandler) init(
 	} else {
 		exec, isExecutor := runner.(schemeapi.Executor)
 		if isExecutor {
-			h.empty.setExecutor(exec, wsExec)
+			h.empty.setExecutor(exec, wsExec, extExec.shell)
 		}
 		h.homeRunner = runner
 		// speed up initialization by initializing extensions asynchronously
@@ -1070,7 +1077,16 @@ func (h *workspaceManagerHandler) addWorkspace(
 	wsExec := workspaceshell.NewExecutor(
 		workspaceExecutorAdapter{e: cwd})
 	trackedCwd := &trackedWorkspace{Workspace: cwd, exec: wsExec}
-	runner, err := h.buildExtensions(cfg, uri, trackedCwd, ex)
+	extExec, err := newExtensionsExecutor()
+	if err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Error building extensions executor: %v", err)
+		log.Errorf("build extensions executor for workspace %s: %v",
+			uri.String(), err)
+		cancel()
+		return fmt.Errorf("new extensions executor: %w", err)
+	}
+	runner, err := h.buildExtensions(cfg, uri, trackedCwd, ex, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -1078,7 +1094,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	} else {
 		exec, isExecutor := runner.(schemeapi.Executor)
 		if isExecutor {
-			ex.setExecutor(exec, wsExec)
+			ex.setExecutor(exec, wsExec, extExec.shell)
 		}
 		wh.Extensions.Store(runner)
 		// load async to speed up workspace initialization
@@ -1158,7 +1174,7 @@ func lspConfig(cfg ideConfig) config.Config {
 
 func (h *workspaceManagerHandler) buildExtensions(
 	cfg ideConfig, uri workspaceapi.URI,
-	cwd workspace.Workspace, ex *ex,
+	cwd workspace.Workspace, ex *ex, extExecutor *extensionsExecutor,
 ) (extension.Runner, error) {
 	notifications := h.notifications.new(uri, ex.container)
 	ed := ex.Editor()
@@ -1262,7 +1278,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	browser := ex.Browser()
 	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, cmdAuthorizer,
-		dataDir, browser, cwd, grantor,
+		dataDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
 		return nil, fmt.Errorf("new workspace extensions runner: %v", err)

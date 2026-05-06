@@ -353,7 +353,7 @@ func newTestWorkspaceRunnerWithExecutor(t *testing.T, exec schemeapi.Executor) *
 	uri, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
 	return newWorkspaceRunner(
-		exec, extension.GrantAll(), uri,
+		exec, exec, extension.GrantAll(), uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys,
 	)
 }

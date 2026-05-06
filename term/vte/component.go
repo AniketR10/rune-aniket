@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -771,27 +770,15 @@ func (t *Component) createPty() error {
 		},
 		Watcher: t.watcher,
 	}
-	if len(cmdAndArgs) == 0 {
-		sh := os.Getenv("SHELL")
-		if sh == "" {
-			sh = "sh"
+	cmd.Env = appendDefaultTerminalEnv(cmd.Env)
+	// When the user hasn't configured a CommandAndArgs, leave
+	// cmd.Path empty: that's the protocol contract for "use the
+	// user's login shell on the executor's host",
+	if len(cmdAndArgs) > 0 {
+		cmd.Path = cmdAndArgs[0]
+		if len(cmdAndArgs) > 1 {
+			cmd.Args = cmdAndArgs[1:]
 		}
-		cmdAndArgs = []string{sh, "--login", "-i"}
-		switch filepath.Base(cmdAndArgs[0]) {
-		case "zsh":
-			if t.cfg.ZdotDir != "" {
-				cmd.Env = append(cmd.Env, fmt.Sprintf("ZDOTDIR=%s", t.cfg.ZdotDir))
-			}
-		case "bash":
-			// with bash there's nothing you can inject (en vars or cli options); if --login is set
-			// BASH_ENV, --rcfile are ignored. So we can't provide a custom rc
-		case "sh": // ctrl-a ctrl-g works by default
-		}
-	}
-
-	cmd.Path = cmdAndArgs[0]
-	if len(cmdAndArgs) > 1 {
-		cmd.Args = cmdAndArgs[1:]
 	}
 
 	cmd.Stdout = pty.Slave
@@ -811,6 +798,43 @@ func (t *Component) createPty() error {
 	}
 	t.pty = pty
 	return nil
+}
+
+// appendDefaultTerminalEnv pins TERM=xterm-256color and unsets
+// COLORTERM for the program spawned in the vte. Existing TERM /
+// COLORTERM entries in env are preserved so a caller can override.
+//
+// The COLORTERM clear is intentional: we want programs running in
+// the vte to render with the 256-color ANSI palette so the editor
+// theme remains the single source of truth for colors. The
+// executor's host env typically carries COLORTERM=truecolor (the
+// local rune process sets it via setEnvForGUI); without an explicit
+// empty override, fileScheme would append it after our entries when
+// it merges stdcmd.Environ() with cmd.Env, and the child would
+// advertise truecolor and bypass the theme palette.
+func appendDefaultTerminalEnv(env []string) []string {
+	// We pick plain "xterm" (16-color ANSI) rather than
+	// "xterm-256color" so programs emit SGR 30-37/40-47/90-97/100-107
+	// and the editor's theme palette is the single source of truth
+	// for colors. xterm terminfo still carries Ss/Se, so the cursor
+	// shape contract (block in vim normal mode) is preserved.
+	const defaultTerm = "xterm"
+	hasTerm, hasColorTerm := false, false
+	for _, e := range env {
+		switch {
+		case strings.HasPrefix(e, "TERM="):
+			hasTerm = true
+		case strings.HasPrefix(e, "COLORTERM="):
+			hasColorTerm = true
+		}
+	}
+	if !hasTerm {
+		env = append(env, "TERM="+defaultTerm)
+	}
+	if !hasColorTerm {
+		env = append(env, "COLORTERM=")
+	}
+	return env
 }
 
 func (t *Component) selection() (cells [][]term.Cell, ok bool) {

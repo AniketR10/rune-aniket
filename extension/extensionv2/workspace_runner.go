@@ -61,14 +61,27 @@ type workspaceRunner struct {
 	workspace workspaceapi.URI
 	dataDir   string
 	grantor   extension.Grantor
-	executor  schemeapi.Executor
-	socket    string
-	tlsCert   []byte
-	keys      auth.Keys
-	ctx       context.Context
-	cancelCtx func()
-	mu        sync.Mutex
-	states    map[string]*extensionRunState
+	// executor runs ad-hoc commands submitted via StartCommand. This
+	// is the workspace's own executor (file://, ssh:// gRPC, etc.) so
+	// callers like vte.Component can pass workspace-bound
+	// stdin/stdout/stderr (pty fds, remote files, ...) and have them
+	// routed correctly to the host where the workspace lives.
+	executor schemeapi.Executor
+	// extExecutor runs extension binaries that the IDE launches via
+	// Run(). Extensions are user-owned local binaries that always
+	// live on the IDE host, so we always run them through a local
+	// fileScheme regardless of the workspace's scheme. Routing them
+	// through a remote (ssh) executor breaks the "user owns
+	// extensions" model and surfaces as "lost connection to remote"
+	// when N extensions race to fork/exec over a single SSH channel.
+	extExecutor schemeapi.Executor
+	socket      string
+	tlsCert     []byte
+	keys        auth.Keys
+	ctx         context.Context
+	cancelCtx   func()
+	mu          sync.Mutex
+	states      map[string]*extensionRunState
 }
 
 type extensionRunState struct {
@@ -99,19 +112,19 @@ var _ schemeapi.Executor = (*workspaceRunner)(nil)
 var _ extension.Runner = (*workspaceRunner)(nil)
 
 func newWorkspaceRunner(
-	executor schemeapi.Executor, grantor extension.Grantor,
+	executor, extExecutor schemeapi.Executor, grantor extension.Grantor,
 	workspace workspaceapi.URI, socket, dataDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) *workspaceRunner {
 	ret := new(workspaceRunner)
-	ret.init(executor, grantor, workspace,
+	ret.init(executor, extExecutor, grantor, workspace,
 		socket, dataDir, tlsCert, keys, opts...)
 	return ret
 }
 
 // Init initializes this Runner with the given grantor and options.
 func (m *workspaceRunner) init(
-	executor schemeapi.Executor, grantor extension.Grantor,
+	executor, extExecutor schemeapi.Executor, grantor extension.Grantor,
 	workspace workspaceapi.URI, socket, dataDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) {
@@ -127,6 +140,10 @@ func (m *workspaceRunner) init(
 	m.grantor = grantor
 	m.keys = keys
 	m.executor = executor
+	if extExecutor == nil {
+		panic("extensionv2: extExecutor must not be nil")
+	}
+	m.extExecutor = extExecutor
 	m.socket = socket
 	m.dataDir = dataDir
 	m.workspace = workspace
@@ -137,17 +154,11 @@ func (m *workspaceRunner) init(
 func (m *workspaceRunner) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {
-	var err error
 	env, err := m.commandEnvs(ctx, cmd.Path, cmd.Args)
 	if err != nil {
 		return 0, err
 	}
 	cmd.Env = append(cmd.Env, env...)
-	// emulate the same logic as file scheme
-	dir, err := workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
-	if err == nil {
-		cmd.Dir = dir
-	}
 	return m.executor.StartCommand(ctx, cmd)
 }
 
@@ -179,7 +190,7 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 		return fmt.Errorf("make command: %w", err)
 	}
 
-	pid, err := m.executor.StartCommand(ctx, cmd)
+	pid, err := m.extExecutor.StartCommand(ctx, cmd)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("start command: %w", err)

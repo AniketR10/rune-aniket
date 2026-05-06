@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -40,6 +41,8 @@ type stdConn struct {
 	logger    *log.Logger
 	closeHook func()
 	conn      net.Conn
+	closeOnce sync.Once
+	hookOnce  sync.Once
 }
 
 func newStdConn(
@@ -91,19 +94,19 @@ func (s *stdConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (s *stdConn) callHook(hook *func()) {
-	hookFn := *hook
-	*hook = nil
-	if hookFn == nil {
-		return
-	}
-	hookFn()
-}
-
+// Close is safe to call concurrently and is idempotent
 func (s *stdConn) Close() error {
 	s.log(log.TraceLevel, "close called, invoking hooks now")
-	s.callHook(&s.closeHook)
-	return s.conn.Close()
+	s.hookOnce.Do(func() {
+		if s.closeHook != nil {
+			s.closeHook()
+		}
+	})
+	var err error
+	s.closeOnce.Do(func() {
+		err = s.conn.Close()
+	})
+	return err
 }
 
 func (s *stdConn) SetDeadline(t time.Time) error {

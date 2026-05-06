@@ -49,7 +49,9 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps llamacpp-libs llamacpp-init \
 	ox-api-init \
-	fuzz fuzz-list
+	fuzz fuzz-list \
+	manual-ssh-test \
+	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 LLAMACPP_STAMP=$(TARGET)/llamacpp-libs.stamp
 
@@ -278,6 +280,33 @@ rune-staging-dist-darwin-arm64: clean
 
 rune-staging-dist-darwin-amd64: clean
 	@$(MAKE) -C cmd/rune staging-dist-darwin-amd64
+
+# manual-ssh-test runs a named manual SSH scenario script using the
+# real Linux release rune binary as the remote workspace server.
+#
+# We pick the linux arch that matches the docker host's native
+# architecture so the openssh test container runs the rune binary
+# without QEMU emulation (the harness's e2e tests do the same; see
+# containerGOARCH() in workspace/workspacessh/test/harness.go).
+#
+# Usage:
+#   make manual-ssh-test workspace/workspacessh/manual_test/01_host_key_match.sh
+RUNE_LINUX_HOST_ARCH := $(shell uname -m | sed -e 's/^arm64$$/arm64/' -e 's/^aarch64$$/arm64/' -e 's/^x86_64$$/amd64/' -e 's/^amd64$$/amd64/')
+RUNE_LINUX_REMOTE_BIN := $(TARGET)/rune_linux_$(RUNE_LINUX_HOST_ARCH)/rune.app/bin/rune
+MANUAL_SSH_SCRIPT := $(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
+
+manual-ssh-test: rune-release-linux-$(RUNE_LINUX_HOST_ARCH)
+	@if [ -z "$(MANUAL_SSH_SCRIPT)" ]; then \
+		echo "usage: make manual-ssh-test workspace/workspacessh/manual_test/<file>.sh" >&2; \
+		exit 2; \
+	fi
+	@RUNE_REMOTE_BIN=$(RUNE_LINUX_REMOTE_BIN) ./$(MANUAL_SSH_SCRIPT)
+
+# Swallow the script path argument so make doesn't try to (re)build
+# the .sh file as a target. The actual script is invoked by the
+# manual-ssh-test recipe above.
+workspace/workspacessh/manual_test/%.sh:
+	@:
 
 rune-app-amd64:
 	@$(MAKE) -C cmd/rune app-amd64

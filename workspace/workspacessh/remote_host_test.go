@@ -44,12 +44,6 @@ import (
 	tworkspacerpc "unstable.build/go-tui/workspace/workspacerpc"
 )
 
-var logger = log.New()
-
-func init() {
-	logger.Out = io.Discard
-}
-
 func TestReaderWriterListener(t *testing.T) {
 	t.Run("one accept", func(t *testing.T) {
 		inRead, inWrite, err := os.Pipe()
@@ -125,6 +119,12 @@ func TestReaderWriterListener(t *testing.T) {
 			outRead.Close()
 		})
 	})
+}
+
+var logger = log.New()
+
+func init() {
+	logger.Out = io.Discard
 }
 
 type closer struct {

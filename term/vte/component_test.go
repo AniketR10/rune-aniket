@@ -25,6 +25,7 @@ package vte
 
 import (
 	"context"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -416,6 +417,70 @@ func (e *testExecutor) NewPty(context.Context) (workspaceapi.Pty, error) {
 
 func (e *testExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {
 	return nil
+}
+
+// recordingExecutor captures the workspaceapi.Cmd passed to StartCommand
+// so tests can assert on env, path, args, etc.
+type recordingExecutor struct {
+	testExecutor
+	mu  sync.Mutex
+	cmd workspaceapi.Cmd
+}
+
+func (e *recordingExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.cmd = cmd
+	return 0, nil
+}
+
+func (e *recordingExecutor) snapshotCmd() workspaceapi.Cmd {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cmd
+}
+
+// TestComponentCreatePtySetsTerminalEnv pins the contract that the vte
+// component injects a sane TERM/COLORTERM into every command it spawns.
+// Without it, an SSH-workspace runesvc inherits TERM="" or "dumb" from
+// its non-PTY SSH session; vim then falls back to its built-in "ansi"
+// terminfo, which has no Ss/Se entries, never emits DECSCUSR, and the
+// host renders CursorStyleDefault as a bar instead of the block vim
+// would otherwise request.
+func TestComponentCreatePtySetsTerminalEnv(t *testing.T) {
+	t.Parallel()
+
+	exec := &recordingExecutor{}
+	cfg := DefaultConfig()
+	_, err := NewComponent(exec, exec, &mockTabManager{}, cfg)
+	require.NoError(t, err)
+
+	got := exec.snapshotCmd()
+	assert.Contains(t, got.Env, "TERM=xterm",
+		"vte.Component must pin TERM=xterm (not xterm-256color) so "+
+			"the spawned program (e.g. vim) emits SGR 30-37/90-97 "+
+			"ANSI colors and lets the editor theme govern the "+
+			"palette, while still finding Ss/Se in terminfo for "+
+			"DECSCUSR. Got Env=%v", got.Env)
+	for _, e := range got.Env {
+		assert.NotEqual(t, "TERM=xterm-256color", e,
+			"vte.Component must NOT advertise xterm-256color; "+
+				"that would let programs use SGR 38;5;N which "+
+				"bypasses the editor theme. Got Env=%v", got.Env)
+	}
+	assert.Contains(t, got.Env, "COLORTERM=",
+		"vte.Component must clear COLORTERM so spawned programs "+
+			"render with the 256-color ANSI palette and the "+
+			"editor's theme remains the single source of truth "+
+			"for colors. Got Env=%v", got.Env)
+	for _, e := range got.Env {
+		assert.NotEqual(t, "COLORTERM=truecolor", e,
+			"vte.Component must NOT advertise truecolor; that "+
+				"would let programs bypass the editor theme. "+
+				"Got Env=%v", got.Env)
+	}
 }
 
 func assertDraw(t *testing.T, comp *Component, expected string) {

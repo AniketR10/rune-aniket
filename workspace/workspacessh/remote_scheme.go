@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -65,6 +66,12 @@ type remoteScheme struct {
 	cancelCtx func()
 	currState atomic.Value
 
+	// firstAttempt is closed by maintainConnection after the first
+	// connect attempt completes (success or failure). state() blocks on
+	// this channel so callers don't observe a transient
+	// "not connected yet" error before the dial has had a chance to run.
+	firstAttempt chan struct{}
+
 	// NOTE this is not a regular map because
 	// otherwise we need to worry about synchronizing deletes
 	// on runtime finalizer's
@@ -73,11 +80,11 @@ type remoteScheme struct {
 
 func (s *remoteScheme) maintainConnection(
 	connect connectSchemeFn, uri workspaceapi.URI,
-	closeChan chan struct{}, sema *sync.Mutex,
+	closeChan chan struct{},
 ) {
 	logger := log.WithField(logging.KeyClass, "ssh")
 
-	var initSema bool
+	var firstAttemptDone bool
 	_ = retry.Retry(s.ctx, retryStrategy,
 		func(ctx context.Context) (bool, error) {
 
@@ -107,16 +114,25 @@ func (s *remoteScheme) maintainConnection(
 				logger.Tracef("closed previous remote scheme: %v", err)
 			}
 
-			if !initSema {
-				// unlock initialization semaphore
-				// so constructor returns after first attempt to connect
-				sema.Unlock()
-				initSema = true
+			if !firstAttemptDone {
+				// signal that the first attempt has completed (success
+				// or failure); state() blocks on this so callers see a
+				// real error / connected scheme rather than the
+				// "not connected yet" sentinel.
+				close(s.firstAttempt)
+				firstAttemptDone = true
 			}
 
 			if err != nil {
 				cancel()
 				logger.Warnf("failed to connect to %s: %s", uri, err)
+				if !isRetryableConnectError(err) {
+					// Permanent failure: stop reconnecting so we don't
+					// pester the user with prompts forever (e.g. the
+					// password keeps failing, the host key changed, or
+					// the workspace path doesn't exist on the remote).
+					return false, err
+				}
 				return true, err
 			}
 
@@ -146,6 +162,37 @@ func (s *remoteScheme) maintainConnection(
 	logger.Debugf("stopped trying to re-connect to remote %s", uri)
 }
 
+// isRetryableConnectError returns true when err looks transient enough
+// that re-running ssh.Dial may succeed (network hiccups, intermittent
+// timeouts). Permanent failures (auth rejected, host key mismatch, the
+// remote workspace path or rune binary missing) return false: retrying
+// only re-prompts the user for credentials they have already shown they
+// don't have.
+func isRetryableConnectError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Typed errors surfaced by std_remote.translateDialError.
+	if errors.Is(err, ErrAuthRequiredKey) ||
+		errors.Is(err, ErrHostKeyMismatch) {
+		return false
+	}
+	msg := err.Error()
+	// Generic auth failure strings from the Go ssh client.
+	if strings.Contains(msg, "unable to authenticate") ||
+		strings.Contains(msg, "no supported methods remain") ||
+		strings.Contains(msg, "ssh authentication") {
+		return false
+	}
+	// connectScheme verifies the remote workspace path / rune binary
+	// before returning. These are not transient.
+	if strings.Contains(msg, "executable was not found on remote") ||
+		strings.Contains(msg, "was not found on remote") {
+		return false
+	}
+	return true
+}
+
 func (s *remoteScheme) setError(logger *log.Entry, err error) {
 	prevState := s.currState.Swap(state{lastSessionError: err})
 	if prevState != nil && prevState.(state).scheme != nil {
@@ -154,31 +201,43 @@ func (s *remoteScheme) setError(logger *log.Entry, err error) {
 	}
 }
 
+// newRemoteScheme constructs a remoteScheme and starts a background
+// maintain-connection goroutine. The constructor returns immediately;
+// callers that need to observe the first connect attempt block via
+// state() instead. This split lets the constructor be invoked from the
+// IDE event loop without preventing the dial from posting interactive
+// auth prompts back to that loop.
 func newRemoteScheme(
 	ctx context.Context, connect connectSchemeFn, uri workspaceapi.URI,
 ) schemeapi.Scheme {
 	ret := &remoteScheme{
-		uri:       uri,
-		closeChan: make(chan struct{}),
+		uri:          uri,
+		closeChan:    make(chan struct{}),
+		firstAttempt: make(chan struct{}),
 	}
 	ret.currState.Store(state{lastSessionError: errors.New("not connected yet")})
 	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
 
-	// ensure that we return once we have attempted
-	// to connect at least once.
-	var sema sync.Mutex
-	sema.Lock()
 	go debug.CapturePanicReport(func() {
-		ret.maintainConnection(connect, uri, ret.closeChan, &sema)
+		ret.maintainConnection(connect, uri, ret.closeChan)
 	})
-	sema.Lock()
-	defer sema.Unlock()
 	return ret
 }
 
-// this should only be called from within event loop,
-// otherwhise need to sync first with locker.
+// state returns the current connection state. It blocks until the first
+// connect attempt has completed (success or failure) so callers don't
+// observe the transient "not connected yet" sentinel that the
+// constructor seeds. After the first attempt this is a non-blocking read
+// of an atomic value.
+//
+// NOTE: this should only be called from within event loop, otherwhise
+// need to sync first with locker.
 func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) { //nolint:staticcheck
+	select {
+	case <-s.firstAttempt:
+	case <-s.ctx.Done():
+		return s.ctx.Err(), nil
+	}
 	currState := s.currState.Load().(state)
 	err = currState.lastSessionError
 	scheme = currState.scheme
@@ -448,9 +507,19 @@ type wrapWatcher struct {
 func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWatcher {
 	ret := wrapWatcher{
 		watcher: watcher,
-		ch:      make(chan error),
+		// Buffered so the producer (fileScheme.StartCommand) is not
+		// forced to block on the unbuffered handoff while we
+		// forward to the underlying watcher. Avoids leaking this
+		// goroutine if the producer eventually decides to bail
+		// out via ctx.Done before sending — see comment at the
+		// receive below.
+		ch: make(chan error, 1),
 	}
 	go debug.CapturePanicReport(func() {
+		// Wait for the StartCommand producer to send a final err.
+		// If no err is ever sent (e.g. fileScheme.StartCommand bailed
+		// out via watcherWaitTimeout), this goroutine would leak;
+		// the producer is expected to always send so we just block.
 		err := <-ret.ch
 		cancelFn()
 		if ret.watcher != nil && ret.watcher.WatchProcess() != nil {

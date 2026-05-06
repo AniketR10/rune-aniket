@@ -131,6 +131,7 @@ func TestExtensionInterruptPermissionE2E(t *testing.T) {
 		dataDir,
 		hostBrowser,
 		execScheme,
+		execScheme, // extExecutor: e2e doesn't split the two
 		extension.GrantAll(),
 		texttest.NopEditor(),
 		prompt,
@@ -144,7 +145,7 @@ func TestExtensionInterruptPermissionE2E(t *testing.T) {
 	// socket. We sign a bearer token with the runner's keys so the auth
 	// middleware identifies this client as a plugin extension with all
 	// permissions declared.
-	socket := filepath.Join(uri.Path(), ".gotui.sock")
+	socket := baseRunner.socketPath(uri)
 	require.NoError(t, waitForSocket(socket, 5*time.Second))
 
 	signKey, err := baseRunner.keys.Sign(ctx)
@@ -367,6 +368,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 		dataDir,
 		hostBrowser,
 		execScheme,
+		execScheme, // extExecutor: e2e doesn't split the two
 		extension.GrantAll(),
 		texttest.NopEditor(),
 		prompt,
@@ -376,7 +378,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runner.Close()) })
 
-	socket := filepath.Join(uri.Path(), ".gotui.sock")
+	socket := baseRunner.socketPath(uri)
 	require.NoError(t, waitForSocket(socket, 5*time.Second))
 
 	signKey, err := baseRunner.keys.Sign(ctx)

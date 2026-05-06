@@ -53,6 +53,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"golang.org/x/oauth2"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/component/shader"
@@ -315,8 +316,11 @@ func main() {
 			logPath := filepath.Join(os.TempDir(), "rune_launch.log")
 			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err == nil {
+				// syscall.Dup2 isn't defined on linux/arm64 (the
+				// kernel only exposes Dup3 there); golang.org/x/sys/unix
+				// papers over the difference.
 				fd := int(f.Fd())
-				_ = syscall.Dup2(fd, int(os.Stderr.Fd()))
+				_ = unix.Dup2(fd, int(os.Stderr.Fd()))
 			}
 			flag.Parse()
 		}

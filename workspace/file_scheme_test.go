@@ -31,6 +31,7 @@ import (
 
 	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -272,6 +273,311 @@ func TestStartCommand(t *testing.T) {
 
 		assert.Equal(t, stderr.String(), "")
 		assert.Equal(t, stdout.String(), tmpDir+"\n")
+	})
+
+	t.Run("empty Cmd.Path resolves to host's $SHELL", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		t.Setenv("SHELL", "/bin/sh")
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			// Empty Path — protocol contract for "use the user's
+			// login shell on the executor's host".
+			Args:    []string{"-c", "echo hello"},
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+
+		assert.Equal(t, "hello\n", stdout.String(),
+			"empty Path should be resolved to /bin/sh from $SHELL")
+	})
+
+	t.Run("empty Cmd.Path falls back when $SHELL unset", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		t.Setenv("SHELL", "")
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Args:    []string{"-c", "echo ok"},
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+
+		assert.Equal(t, "ok\n", stdout.String(),
+			"empty Path with unset $SHELL must still launch a shell (/bin/sh fallback)")
+	})
+
+	t.Run("empty Cmd.Path falls back when $SHELL is not absolute", func(t *testing.T) {
+		// Some misbehaving environments set SHELL to a bare name
+		// like "zsh" that may not resolve via PATH inside the
+		// stripped exec environment we run with. The fallback
+		// guards against that footgun.
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		t.Setenv("SHELL", "zsh") // not absolute
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Args:    []string{"-c", "echo fallback"},
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+
+		assert.Equal(t, "fallback\n", stdout.String(),
+			"empty Path with non-absolute $SHELL must fall back to /bin/sh")
+	})
+
+	t.Run("empty Cmd.Path defaults Args to --login -i", func(t *testing.T) {
+		// vte.Component leaves Path AND Args empty when the user
+		// hasn't configured a shell; the fileScheme owns the
+		// login-shell defaults so the same Cmd is transport-agnostic
+		// (works locally and over workspacessh+workspacerpc).
+		//
+		// We point SHELL at a shell-script wrapper that prints its
+		// own argv. That gives us a portable way to verify the
+		// resolved args without depending on a real shell's
+		// runtime behaviour.
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		bin := filepath.Join(tmpDir, "fake-shell")
+		require.NoError(t, os.WriteFile(bin,
+			[]byte("#!/bin/sh\nprintf '%s\\n' \"$@\"\n"), 0o755))
+		t.Setenv("SHELL", bin)
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			// Empty Path AND empty Args.
+			Stdout:  &stdout,
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+
+		assert.Equal(t, "--login\n-i\n", stdout.String(),
+			"empty Args must default to [--login, -i] so empty-cmd "+
+				"Cmds produce a usable login shell")
+	})
+
+	t.Run("empty Cmd.Path with zsh exports ZDOTDIR from config", func(t *testing.T) {
+		// The fileScheme reads zdotdir from the workspace config
+		// at init time. That keeps the resolution local to the
+		// host that will actually run the shell — for SSH
+		// workspaces the remote rune sees its own config, so the
+		// IDE host's ZDOTDIR doesn't leak across the wire.
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		// Bypass newTestFileScheme so we can pass a non-nop config.
+		s := new(fileScheme)
+		s.osStat = os.Stat
+		s.getUser = func() (*user.User, error) {
+			return &user.User{Username: "git", HomeDir: "/home/git"}, nil
+		}
+		s.lookupUser = func(name string) (*user.User, error) {
+			return &user.User{Username: name, HomeDir: "/home/" + name}, nil
+		}
+		require.NoError(t, s.init(
+			config.MapConfig(map[string]any{"zdotdir": "/zdot/dir"}),
+			uri,
+		))
+
+		// We can't rely on zsh being installed in CI, so we point
+		// SHELL at a script named "zsh" (so filepath.Base of the
+		// resolved shell is "zsh") that just trampolines into
+		// /bin/sh. The fileScheme only injects ZDOTDIR when the
+		// resolved binary's basename matches "zsh", which is what
+		// we want to verify here.
+		bin := filepath.Join(tmpDir, "zsh")
+		require.NoError(t, os.WriteFile(bin,
+			[]byte("#!/bin/sh\nexec /bin/sh \"$@\"\n"), 0o755))
+		t.Setenv("SHELL", bin)
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Args:    []string{"-c", "echo ZDOTDIR=$ZDOTDIR"},
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+
+		assert.Equal(t, "ZDOTDIR=/zdot/dir\n", stdout.String(),
+			"fileScheme should export ZDOTDIR when the resolved "+
+				"shell is zsh and zdotdir is set in config")
+	})
+
+	t.Run("empty Cmd.Path without zsh leaves ZDOTDIR untouched", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s := new(fileScheme)
+		s.osStat = os.Stat
+		s.getUser = func() (*user.User, error) {
+			return &user.User{Username: "git", HomeDir: "/home/git"}, nil
+		}
+		s.lookupUser = func(name string) (*user.User, error) {
+			return &user.User{Username: name, HomeDir: "/home/" + name}, nil
+		}
+		require.NoError(t, s.init(
+			config.MapConfig(map[string]any{"zdotdir": "/zdot/dir"}),
+			uri,
+		))
+
+		t.Setenv("SHELL", "/bin/sh")
+		// Make sure the parent's ZDOTDIR is unset so the test
+		// only sees what fileScheme adds (or doesn't add).
+		t.Setenv("ZDOTDIR", "")
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Args:    []string{"-c", "echo ZDOTDIR=${ZDOTDIR:-unset}"},
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+
+		assert.Equal(t, "ZDOTDIR=unset\n", stdout.String(),
+			"non-zsh shells must not receive the configured ZDOTDIR; "+
+				"got %q", stdout.String())
+	})
+}
+
+func TestResolveLoginShell(t *testing.T) {
+	t.Run("absolute SHELL pointing at non-existent file falls back", func(t *testing.T) {
+		// Reproduces the user-reported "fork/exec /usr/bin/bash: no
+		// such file or directory" error: $SHELL points at a path
+		// that exists in some context (e.g. a login shell) but not
+		// in the rune-x process's view of the filesystem.
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		bogus := filepath.Join(tmpDir, "definitely-not-here")
+		t.Setenv("SHELL", bogus)
+
+		got := resolveLoginShell()
+		assert.NotEqual(t, bogus, got,
+			"resolveLoginShell must not return a $SHELL that doesn't "+
+				"exist on disk; that produces a confusing fork/exec "+
+				"error far from this code")
+		// Whatever it picked must itself be executable so the
+		// caller can actually run it.
+		assert.True(t, isExecutableFile(got),
+			"fallback %q must itself be executable", got)
+	})
+
+	t.Run("absolute SHELL pointing at a directory falls back", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		t.Setenv("SHELL", tmpDir) // directory, not a file
+
+		got := resolveLoginShell()
+		assert.NotEqual(t, tmpDir, got)
+		assert.True(t, isExecutableFile(got))
+	})
+
+	t.Run("SHELL with stray whitespace is trimmed", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		bin := filepath.Join(tmpDir, "fake-shell")
+		require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
+
+		t.Setenv("SHELL", "  "+bin+"\n")
+
+		got := resolveLoginShell()
+		assert.Equal(t, bin, got,
+			"resolveLoginShell must trim whitespace from $SHELL; "+
+				"some sshd-spawned environments propagate a trailing "+
+				"newline that breaks fork/exec")
+	})
+
+	t.Run("absolute existing executable SHELL is returned", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		bin := filepath.Join(tmpDir, "good-shell")
+		require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
+
+		t.Setenv("SHELL", bin)
+		assert.Equal(t, bin, resolveLoginShell())
 	})
 }
 

@@ -99,17 +99,22 @@ type macroRecorder interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config       text.Config
-	comp         text.Component
-	clip         clipboard.Register
-	executor     schemeapi.Executor
-	ed           text.Editor
-	parser       syntaxapi.Parser
-	wsExecutor   *workspaceshell.Executor
-	storage      storageapi.Service
-	workspaceURI workspaceapi.URI
-	closed       bool
-	reservoir    *vtereservoir.Facility
+	config     text.Config
+	comp       text.Component
+	clip       clipboard.Register
+	executor   schemeapi.Executor
+	ed         text.Editor
+	parser     syntaxapi.Parser
+	wsExecutor *workspaceshell.Executor
+	// extensionsExecutor tracks extension binaries launched by the
+	// IDE's extension runner. It backs the "extensions-process" REPL
+	// command so users can list, signal, or stop extension PIDs the
+	// same way they would workspace processes.
+	extensionsExecutor *workspaceshell.Executor
+	storage            storageapi.Service
+	workspaceURI       workspaceapi.URI
+	closed             bool
+	reservoir          *vtereservoir.Facility
 	// initialReservoirCapacity preserves the configured pool size so
 	// that setExecutor can re-create the reservoir without racing
 	// against the asynchronous initCap (Capacity() returns the
@@ -302,9 +307,14 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
-func (e *ex) setExecutor(exe schemeapi.Executor, wsExec *workspaceshell.Executor) {
+func (e *ex) setExecutor(
+	exe schemeapi.Executor,
+	wsExec *workspaceshell.Executor,
+	extExec *workspaceshell.Executor,
+) {
 	e.executor = exe
 	e.wsExecutor = wsExec
+	e.extensionsExecutor = extExec
 	if e.reservoir != nil {
 		_ = e.reservoir.Close()
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
@@ -1757,7 +1767,10 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 			shellCfg,
 		)
 		if e.wsExecutor != nil {
-			e.wsExecutor.RegisterCommands(registry)
+			e.wsExecutor.RegisterProcessCommand(registry)
+		}
+		if e.extensionsExecutor != nil {
+			e.extensionsExecutor.RegisterExtensionsProcessCommand(registry)
 		}
 
 		router := text.NewREPLHandler(&e.comp)

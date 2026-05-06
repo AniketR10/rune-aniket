@@ -40,65 +40,6 @@ import (
 	"unstable.build/go-tui/workspace/workspaceapitest"
 )
 
-func expectSchemeAPISuccess(
-	t *testing.T, ctrl *gomock.Controller, mu *sync.Mutex,
-	mock *schemetest.MockScheme, scheme schemeapi.Scheme,
-) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
-	_, err := scheme.StartCommand(context.Background(), workspaceapi.Cmd{})
-	require.NoError(t, err)
-
-	mock.EXPECT().Signal(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	err = scheme.Signal(0, 0)
-	require.NoError(t, err)
-
-	f := workspaceapitest.NewMockFile(ctrl)
-	f.EXPECT().Fd().AnyTimes()
-	f.EXPECT().Name().AnyTimes()
-	mock.EXPECT().OpenFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(f, nil).Times(1)
-	_, osErr := scheme.OpenFile("", 0, 0)
-	require.Nil(t, osErr)
-
-	mock.EXPECT().Remove(gomock.Any()).Return(nil).Times(1)
-	err = scheme.Remove("")
-	require.NoError(t, err)
-
-	mock.EXPECT().Rename(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	err = scheme.Rename("", "")
-	require.NoError(t, err)
-
-	mock.EXPECT().Stat(gomock.Any()).Return(nil, nil).Times(1)
-	_, err = scheme.Stat("")
-	require.NoError(t, err)
-
-	mock.EXPECT().Lstat(gomock.Any()).Return(nil, nil).Times(1)
-	_, err = scheme.Lstat("")
-	require.NoError(t, err)
-
-	mock.EXPECT().Readlink(gomock.Any()).Return("", nil).Times(1)
-	_, err = scheme.Readlink("")
-	require.NoError(t, err)
-
-	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).
-		Return(workspaceapi.Pid(0), nil).Times(1)
-	_, err = scheme.StartCommand(context.Background(),
-		workspaceapi.Cmd{Path: "blah"})
-	require.NoError(t, err)
-
-	mock.EXPECT().ReadDir(gomock.Any()).Return([]os.DirEntry{}, nil).Times(1)
-	_, err = scheme.ReadDir("")
-	require.NoError(t, err)
-}
-
-func expectSchemeClose(t *testing.T, mock *schemetest.MockScheme, scheme schemeapi.Scheme) {
-	mock.EXPECT().Close().Return(nil)
-	err := scheme.Close()
-	require.NoError(t, err)
-}
-
 func TestRemoteScheme(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("ssh://unsable.build/home/ernie")
 	require.NoError(t, err)
@@ -211,4 +152,63 @@ func TestRemoteScheme(t *testing.T) {
 		f := scheme.NewFile(1299, "blabla")
 		require.Nil(t, f)
 	})
+}
+
+func expectSchemeAPISuccess(
+	t *testing.T, ctrl *gomock.Controller, mu *sync.Mutex,
+	mock *schemetest.MockScheme, scheme schemeapi.Scheme,
+) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).Return(workspaceapi.Pid(0), nil).Times(1)
+	_, err := scheme.StartCommand(context.Background(), workspaceapi.Cmd{})
+	require.NoError(t, err)
+
+	mock.EXPECT().Signal(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	err = scheme.Signal(0, 0)
+	require.NoError(t, err)
+
+	f := workspaceapitest.NewMockFile(ctrl)
+	f.EXPECT().Fd().AnyTimes()
+	f.EXPECT().Name().AnyTimes()
+	mock.EXPECT().OpenFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(f, nil).Times(1)
+	_, osErr := scheme.OpenFile("", 0, 0)
+	require.Nil(t, osErr)
+
+	mock.EXPECT().Remove(gomock.Any()).Return(nil).Times(1)
+	err = scheme.Remove("")
+	require.NoError(t, err)
+
+	mock.EXPECT().Rename(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	err = scheme.Rename("", "")
+	require.NoError(t, err)
+
+	mock.EXPECT().Stat(gomock.Any()).Return(nil, nil).Times(1)
+	_, err = scheme.Stat("")
+	require.NoError(t, err)
+
+	mock.EXPECT().Lstat(gomock.Any()).Return(nil, nil).Times(1)
+	_, err = scheme.Lstat("")
+	require.NoError(t, err)
+
+	mock.EXPECT().Readlink(gomock.Any()).Return("", nil).Times(1)
+	_, err = scheme.Readlink("")
+	require.NoError(t, err)
+
+	mock.EXPECT().StartCommand(gomock.Any(), gomock.Any()).
+		Return(workspaceapi.Pid(0), nil).Times(1)
+	_, err = scheme.StartCommand(context.Background(),
+		workspaceapi.Cmd{Path: "blah"})
+	require.NoError(t, err)
+
+	mock.EXPECT().ReadDir(gomock.Any()).Return([]os.DirEntry{}, nil).Times(1)
+	_, err = scheme.ReadDir("")
+	require.NoError(t, err)
+}
+
+func expectSchemeClose(t *testing.T, mock *schemetest.MockScheme, scheme schemeapi.Scheme) {
+	mock.EXPECT().Close().Return(nil)
+	err := scheme.Close()
+	require.NoError(t, err)
 }

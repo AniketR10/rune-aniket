@@ -25,14 +25,15 @@ package extensionv2
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -98,7 +99,7 @@ func (r *Runner) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
 	dataDir string, notifications browser.Notifications,
-	executor schemeapi.Executor,
+	executor, extExecutor schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
 	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
@@ -183,7 +184,8 @@ func (r *Runner) WorkspaceExtensionsRunner(
 		_ = ret.srv.Serve(listener)
 	})
 
-	ret.workspaceRunner = newWorkspaceRunner(executor, grantor, uri,
+	ret.workspaceRunner = newWorkspaceRunner(
+		executor, extExecutor, grantor, uri,
 		socket, r.dataDir, cert, r.keys, r.opts...)
 	if err != nil {
 		err = fmt.Errorf("new workspace runner: %w", err)
@@ -230,7 +232,7 @@ func (s contextServerStream) Context() context.Context {
 
 func (r *Runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
 	ctx := context.Background()
-	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", debug.Package))
+	socket := r.socketPath(uri)
 	err = retry.Retry(ctx, retrySocketStrategy, func(context.Context) (bool, error) {
 		var cfg net.ListenConfig
 		ret, err = cfg.Listen(ctx, "unix", socket)
@@ -256,6 +258,48 @@ func (r *Runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err er
 	})
 	return
 }
+
+// socketPath returns the local filesystem path where the unix listener
+// for the given workspace's extension server should live. Extensions
+// are always run on the IDE host (by design: the user owns extensions,
+// not the remote system), so the socket is always a local path
+// regardless of the workspace's scheme.
+//
+// The basename is a stable, content-addressed hash of the workspace
+// URI. That gives us:
+//   - determinism: re-opening the same workspace reuses the same
+//     socket name, so a stale socket from a previous run can be
+//     replaced cleanly (newUnixListener already does the unlink on
+//     EADDRINUSE retry).
+//   - portability: hex output is restricted to [0-9a-f] which is
+//     accepted by every filesystem we care about.
+//   - bounded length: 16 hex chars (8 bytes / 64 bits of SHA-256)
+//     leaves plenty of headroom under the unix-socket path limit
+//     (104 on macOS, 108 on Linux). 64 bits is enough entropy to
+//     avoid collisions across the workspaces a single user opens;
+//     the dataDir itself is per-user.
+//
+// If <dataDir>/sockets/<hash>.sock would exceed the OS' sun_path
+// limit (notoriously short on macOS at 104 bytes including NUL), we
+// fall back to placing the socket directly under os.TempDir(). That
+// preserves the determinism property (same URI ⇒ same name) while
+// guaranteeing we always produce a bindable path even when dataDir
+// itself is deeply nested (e.g. inside a t.TempDir()).
+func (r *Runner) socketPath(uri workspaceapi.URI) string {
+	sum := sha256.Sum256([]byte(uri.String()))
+	name := hex.EncodeToString(sum[:8]) + ".sock"
+	primary := filepath.Join(r.dataDir, "sockets", name)
+	if len(primary) < sunPathMax {
+		return primary
+	}
+	return filepath.Join(os.TempDir(), debug.Package+"-"+name)
+}
+
+// sunPathMax is the conservative upper bound for the sockaddr_un
+// sun_path field across the platforms we target: 104 on macOS (incl.
+// NUL), 108 on Linux. Using the smaller value means a path that fits
+// here fits everywhere.
+const sunPathMax = 104
 
 var _ schemeapi.Executor = wrapCloser{}
 

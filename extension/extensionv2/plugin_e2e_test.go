@@ -149,6 +149,7 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 				dataDir,
 				e2eBrowser{},
 				execScheme,
+				execScheme,
 				extension.GrantAll(),
 				texttest.NopEditor(),
 				prompt,

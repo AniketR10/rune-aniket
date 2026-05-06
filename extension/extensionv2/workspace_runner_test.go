@@ -146,7 +146,8 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(
 		exec,
-		nil, // grantor is not used by StartCommand
+		exec, // separate extExecutor not exercised here
+		nil,  // grantor is not used by StartCommand
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
@@ -165,9 +166,66 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 	assert.Contains(t, exec.cmd.Env, "FOO=bar")
 	assert.Contains(t, exec.cmd.Env, "RUNE_SOCKET=/tmp/ext.sock")
 	assert.Contains(t, exec.cmd.Env, "RUNE_DATADIR=/tmp/ext-data")
-	assert.NotEmpty(t, exec.cmd.Dir)
+	// cmd.Dir is left untouched: the host-side fileScheme defaults
+	// it to its own resolved workspace path when empty, and
+	// pre-resolving here mishandled SSH URIs containing "~". See
+	// TestWorkspaceRunnerStartCommandDoesNotDoubleResolveDir for
+	// the regression that made us drop the override.
+	assert.Empty(t, exec.cmd.Dir,
+		"workspaceRunner must not synthesize cmd.Dir; that's the "+
+			"host-side fileScheme's job")
 	assert.Equal(t, "/bin/zsh", exec.cmd.Path)
 	assert.Equal(t, []string{"--login", "-i"}, exec.cmd.Args)
+}
+
+// TestWorkspaceRunnerStartCommandDoesNotDoubleResolveDir reproduces the
+// SSH terminal-open bug where workspaceRunner.StartCommand pre-resolved
+// cmd.Dir from m.workspace by calling ExpandPathWithURI(uri.Path(),
+// uri). For an ssh URI like ssh://test@host/~/src/blue ExpandPath sees
+// path="/~/src/blue", treats the leading "/~/" as a home-relative
+// prefix, and joins it under user.HomeDir = uri.Path() = "/~/src/blue".
+// The result is "/~/src/blue/src/blue" — a path that doesn't exist
+// anywhere, so the remote fileScheme's child fork chdirs into nothing
+// and surfaces "fork/exec /usr/bin/bash: no such file or directory"
+// (Go reports child-side chdir failures through the same path as the
+// exec failure).
+//
+// The fix is to stop synthesizing cmd.Dir from m.workspace at all: the
+// host-side fileScheme already defaults Dir to its own resolved
+// workspace path when cmd.Dir is empty, so this layer's contribution
+// is at best redundant and at worst path-doubles when ~ is involved.
+func TestWorkspaceRunnerStartCommandDoesNotDoubleResolveDir(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("ssh://test@10.0.0.9/~/src/blue")
+	require.NoError(t, err)
+
+	exec := &recordingExecutor{}
+	runner := newWorkspaceRunner(
+		exec, exec, nil, uri,
+		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys,
+	)
+
+	_, err = runner.StartCommand(context.Background(), workspaceapi.Cmd{
+		// vte sends empty Path: the host-side fileScheme owns
+		// resolution. We don't care what Path the executor sees
+		// here; we care that cmd.Dir does not get a doubled,
+		// non-existent path.
+	})
+	require.NoError(t, err)
+
+	got := exec.snapshotCmd().Dir
+	// The bug: ExpandPathWithURI returns "/~/src/blue/src/blue"
+	// because uri.Path() is used both as HomeDir and cwdFn. Either
+	// leave Dir empty (and let the host fileScheme default it) or
+	// pass a non-doubled path; "/~/src/blue/src/blue" is never OK.
+	assert.NotContains(t, got, "src/blue/src/blue",
+		"workspaceRunner must not double-expand the workspace path "+
+			"when computing cmd.Dir; the host-side fileScheme already "+
+			"knows the resolved workspace path. Got Dir=%q", got)
 }
 
 func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
@@ -184,7 +242,8 @@ func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
 
 	runner := newWorkspaceRunner(
 		&recordingExecutor{},
-		nil, // grantor is not used by StartCommand
+		&recordingExecutor{}, // separate extExecutor not exercised here
+		nil,                  // grantor is not used by StartCommand
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
@@ -225,7 +284,8 @@ func TestWorkspaceRunnerRunCarriesExtensionID(t *testing.T) {
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(
 		exec,
-		nil, // grantor is not used before process execution in this test
+		exec, // separate extExecutor not exercised here
+		nil,  // grantor is not used before process execution in this test
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
@@ -247,6 +307,91 @@ func TestWorkspaceRunnerRunCarriesExtensionID(t *testing.T) {
 	assert.Equal(t, 1, states[0].StartCount)
 }
 
+// TestWorkspaceRunnerRunSSHWorkspaceUsesExtExecutor locks in the
+// contract that extensions launched via Run() on a remote (ssh://)
+// workspace are routed through the *local* extExecutor, never the
+// remote workspace executor. Extensions are user-owned local
+// binaries; routing them through the SSH gRPC stream surfaces as
+// "start command: lost connection to remote" under load and ignores
+// the IDE host's filesystem entirely.
+func TestWorkspaceRunnerRunSSHWorkspaceUsesExtExecutor(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("ssh://user@host/home/user/project")
+	require.NoError(t, err)
+
+	dataDir := t.TempDir()
+	cmdExec := &recordingExecutor{}
+	extExec := &recordingExecutor{}
+	runner := newWorkspaceRunner(
+		cmdExec, // workspace executor (would route to remote)
+		extExec, // local executor for extension binaries
+		nil,
+		uri,
+		"/tmp/ext.sock",
+		dataDir,
+		[]byte("cert"),
+		keys,
+	)
+	require.NoError(t, runner.Run("ext-id", "/bin/ext", config.NopConfig()))
+
+	assert.NotZero(t, len(extExec.pids),
+		"Run() must dispatch extension binaries to the *local* "+
+			"extExecutor, not the workspace's command executor")
+	assert.Zero(t, len(cmdExec.pids),
+		"Run() must NOT touch the workspace's command executor; that "+
+			"path is reserved for vte/term StartCommand calls that "+
+			"need workspace-bound stdio (pty fds, remote files)")
+	assert.Equal(t, dataDir, extExec.snapshotCmd().Dir,
+		"makeCommand sets dataDir for non-file workspaces so "+
+			"extensions can chdir into a path that exists on the IDE host")
+}
+
+// TestWorkspaceRunnerStartCommandRoutesToWorkspaceExecutor pins down
+// the other half of the dual-executor split: ad-hoc StartCommand
+// calls (used by vte.Component to open terminals, by plugins to
+// shell out, etc.) must go to the workspace's executor — even when
+// a separate extExecutor is configured. That's the only way pty
+// fds and remote-file stdio reach the host where they live.
+func TestWorkspaceRunnerStartCommandRoutesToWorkspaceExecutor(t *testing.T) {
+	t.Parallel()
+
+	keys, err := auth.GenerateKeys()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("ssh://user@host/home/user/project")
+	require.NoError(t, err)
+
+	cmdExec := &recordingExecutor{}
+	extExec := &recordingExecutor{}
+	runner := newWorkspaceRunner(
+		cmdExec,
+		extExec,
+		nil,
+		uri,
+		"/tmp/ext.sock",
+		t.TempDir(),
+		[]byte("cert"),
+		keys,
+	)
+
+	_, err = runner.StartCommand(context.Background(), workspaceapi.Cmd{
+		Path: "/bin/zsh",
+	})
+	require.NoError(t, err)
+
+	assert.NotZero(t, len(cmdExec.pids),
+		"StartCommand must reach the workspace's executor so "+
+			"workspace-bound stdio (pty, remote files) is routed to "+
+			"the host where the workspace lives")
+	assert.Zero(t, len(extExec.pids),
+		"StartCommand must NOT use the local extExecutor; that "+
+			"executor only knows about the IDE host's filesystem")
+}
+
 func TestWorkspaceRunnerRunRejectsDuplicateRunningID(t *testing.T) {
 	t.Parallel()
 
@@ -255,7 +400,8 @@ func TestWorkspaceRunnerRunRejectsDuplicateRunningID(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
 
-	runner := newWorkspaceRunner(&recordingExecutor{}, nil, uri,
+	exec0 := &recordingExecutor{}
+	runner := newWorkspaceRunner(exec0, exec0, nil, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -273,7 +419,7 @@ func TestWorkspaceRunnerStopExtensionMarksStateStopped(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec, nil, uri,
+	runner := newWorkspaceRunner(exec, exec, nil, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -295,7 +441,8 @@ func TestWorkspaceRunnerStopExtensionRecordsReason(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
 
-	runner := newWorkspaceRunner(&recordingExecutor{}, nil, uri,
+	exec1 := &recordingExecutor{}
+	runner := newWorkspaceRunner(exec1, exec1, nil, uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -317,7 +464,7 @@ func TestWorkspaceRunnerRestartReusesStoredCommandAndConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &protocolDrivingExecutor{extensionID: "test-extension"}
-	runner := newWorkspaceRunner(exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 	cfg := config.MapConfig(map[string]any{"foo": "bar"})
 	require.NoError(t, runner.Run("test-extension", "/bin/ext --serve", cfg))
@@ -347,7 +494,7 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 
 	done := make(chan error, 1)
@@ -396,7 +543,7 @@ func TestWorkspaceRunnerStartExtensionReturnsProtocolError(t *testing.T) {
 	require.NoError(t, err)
 
 	exec := &recordingExecutor{}
-	runner := newWorkspaceRunner(exec, extension.GrantAll(), uri,
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 
 	done := make(chan error, 1)
@@ -436,7 +583,8 @@ func TestWorkspaceRunnerStartExtensionReturnsStartCommandError(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///tmp")
 	require.NoError(t, err)
 
-	runner := newWorkspaceRunner(startErrorExecutor{err: errors.New("boom")}, extension.GrantAll(), uri,
+	exec := startErrorExecutor{err: errors.New("boom")}
+	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
 
 	err = runner.startExtension(context.Background(), "test-extension", "/bin/ext", config.NopConfig())

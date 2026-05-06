@@ -2449,7 +2449,6 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.ScheduleNextTick = c.scheduleNextTick
 	ret.RingBell = c.ringBell
 	ret.MinWidth = defaultMinWidth
-	ret.ZdotDir = c.zdotDir
 	return ret
 }
 

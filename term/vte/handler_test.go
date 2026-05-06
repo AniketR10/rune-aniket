@@ -392,3 +392,56 @@ func (n nopNotifications) UpdateNotificationProgress(
 ) error {
 	return nil
 }
+
+// TestHandlerHandleReturnsHandledWithoutPtyEcho pins the regression
+// where a slow pty round-trip (e.g. an SSH workspace pty whose output
+// arrives via workspacerpc) caused vte.Handler.Handle to return
+// handled=false even though the keypress had already been written to
+// the pty. The IDE sequencer would then treat the unhandled key as a
+// candidate for sequence matching ("g" is a prefix of "gg"/"gf") and
+// re-issue it on timeout, surfacing duplicated input ("g" -> "gg").
+func TestHandlerHandleReturnsHandledWithoutPtyEcho(t *testing.T) {
+	t.Parallel()
+
+	// Use a real shell only to keep parity with other handler tests:
+	// what we exercise is the Handle return contract, not echo.
+	cases := []vtetest.Case{
+		{"",
+			`$ ▐                 
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+	}
+	cfg := DefaultConfig()
+	handler, _ := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+	// Force the pty-echo wait window to effectively zero so the test
+	// reproducibly exercises the path where Handle returns BEFORE
+	// any update arrives from the pty. This mirrors the production
+	// failure mode where an SSH workspace pty round-trips bytes via
+	// workspacerpc and the echo arrives well after handleTimeout.
+	handler.handleTimeout = time.Nanosecond
+
+	// Drive Handle directly with a key event and assert handled=true
+	// returns even if no pty update arrives within handleTimeout. The
+	// underlying contract: writing to the pty is the moment the event
+	// is "consumed" by vte.Handler.
+	exit, handled := handler.Handle(term.Event{
+		Type: term.EventKey,
+		Ch:   'g',
+		Raw:  []byte("g"),
+	})
+	assert.False(t, exit)
+	assert.True(t, handled,
+		"vte.Handler.Handle must return handled=true once the event "+
+			"is written to the pty, regardless of whether the pty "+
+			"echo round-trip completed within handleTimeout. "+
+			"Otherwise, callers chaining into a key sequencer "+
+			"(e.g. ide/ex) duplicate input on slow remote ptys.")
+}
