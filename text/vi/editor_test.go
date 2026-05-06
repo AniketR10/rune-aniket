@@ -282,6 +282,23 @@ func TestEditorRegistersIndentCommand(t *testing.T) {
 	assert.NotContains(t, wr.sub[cwd.String()], text.CommandReindent)
 }
 
+// TestEditorAppliesDefaultConfig ensures Editor seeds viConfig with
+// defaultviHandlerImplConfig values so that downstream consumers (e.g.
+// vctrlcmd.SubscribeGitCommands) receive non-nil dependencies such as
+// notifications. Regression test for a nil pointer dereference in the
+// :gitlink command path when no WithNotifications option was passed.
+func TestEditorAppliesDefaultConfig(t *testing.T) {
+	ed := Editor().(*viEditor)
+	require.NotNil(t, ed.config.notifications,
+		"viEditor.config.notifications must default to a non-nil "+
+			"implementation so that command handlers like :gitlink do not "+
+			"panic when WithNotifications is not provided")
+	require.NotNil(t, ed.config.clipboard,
+		"viEditor.config.clipboard must default to a non-nil register")
+	require.NotNil(t, ed.config.scheduleNextTick,
+		"viEditor.config.scheduleNextTick must default to a non-nil func")
+}
+
 type workspaceRegistry struct {
 	sub map[string]map[string]text.CommandHandler
 }

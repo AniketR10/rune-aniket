@@ -54,7 +54,7 @@ func (a publisherEventsAdapter) UnsubscribeEvents(sub text.EventHandler) (bool, 
 
 // Editor returns a Vi text.Editor.
 func Editor(opts ...Option) text.Editor {
-	ret := &viEditor{opts: opts}
+	ret := &viEditor{opts: opts, config: defaultviHandlerImplConfig()}
 	for _, o := range opts {
 		o(&ret.config)
 	}

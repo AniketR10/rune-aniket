@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,6 +54,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -286,6 +288,136 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGitlinkIntegration exercises the :gitlink command end-to-end
+// against a real on-disk git repository, using the same editor wiring
+// production uses (newBuiltinModal/ModelessEditor →
+// vctrlcmd.SubscribeGitCommands). It is a regression guard for a nil
+// pointer dereference at vctrlcmd/remote_web_link.go:195: vi.Editor
+// did not seed its viConfig with defaults, so the notifications
+// interface forwarded into copyRemoteURL was nil and Notify panicked
+// the moment :gitlink completed successfully.
+//
+// The test asserts that:
+//   - :gitlink does not panic;
+//   - the resulting URL is copied to the clipboard;
+//   - a success notification is rendered on screen with the URL of
+//     the file currently open at the cursor position.
+func TestGitlinkIntegration(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not available")
+	}
+
+	for _, mode := range []string{editorModeModal, editorModeModeless} {
+		t.Run(mode, func(t *testing.T) {
+			dir, commit, relFile := setupGitlinkRepo(t)
+
+			cfg := defaultConfigWithWrap(false)
+			editorCfg := cfg.cfg["editor"].(map[string]any)
+			editorCfg["mode"] = mode
+			cfg.cfg["editor"] = editorCfg
+			require.Equal(t, mode, cfg.editorMode())
+
+			uri, err := workspaceapi.ParseURI("file://" + dir)
+			require.NoError(t, err)
+			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+				nopShutdownShaderConfig())
+			require.NoError(t, m.addOrCreateWorkspace(uri))
+			t.Cleanup(func() { _ = m.Close() })
+
+			h := newSafeHandler(m)
+
+			expectedURL := fmt.Sprintf(
+				"https://github.com/unstablebuild/gitproj/blob/%s/%s#L1",
+				commit, relFile)
+
+			// Open the file via :edit so the full vi/modeless
+			// editor wrapper chain (SubscribeGitCommands included)
+			// is installed for the file's text.Handler — exactly
+			// the path that panicked in production. Then run
+			// :gitlink. The notification box wraps "copied <url>"
+			// at 11 columns (15 cols wide minus borders/padding)
+			// and spans the full editor height, occluding the
+			// status row. Asserting the rendered framebuffer
+			// guarantees the notification reached Draw, not just
+			// Notify.
+			cases := []handlertest.SequenceTestCase{{
+				InputSequence: `<c-\\>edit<space>` + relFile +
+					`<enter><c-\\>gitlink<enter>`,
+				Expected: strings.Join([]string{
+					"┌────────────────────────────────────────────────────────────────┌─────────────┐",
+					"│o guasacaca.md                                                  │ copied      │",
+					"├────────────────────────────────────────────────────────────────│ https://git │",
+					"│▐i                                                              │ hub.com/uns │",
+					"│                                                                │ tablebuild/ │",
+					"│                                                                │ gitproj/blo │",
+					"│                                                                │ b/d8b96a860 │",
+					"│                                                                │ 305b0c87524 │",
+					"│                                                                │ da7eaae159f │",
+					"├────────────────────────────────────────────────────────────────│ 25dd233db/r ┤",
+					"│1 1  2 2                                                                      │",
+					"└──────────────────────────────────────────────────────────────────────────────┘",
+				}, "\n"),
+			}}
+			require.NotPanics(t, func() {
+				handlertest.RunHandlerSequence(t, h, 80, 12, cases)
+			})
+
+			paste, err := m.clip.Paste(clipboard.DefaultRegisterID)
+			require.NoError(t, err)
+			assert.Equal(t, expectedURL, paste.Text,
+				":gitlink must copy the web URL of the file "+
+					"under the cursor to the clipboard")
+		})
+	}
+}
+
+// setupGitlinkRepo creates a git repo in a fresh temp dir with a
+// single committed file under recipes/ and a github origin remote.
+// Author/committer dates are pinned so the resulting commit hash is
+// deterministic across runs and across machines.
+func setupGitlinkRepo(t *testing.T) (dir, commit, relFile string) {
+	t.Helper()
+	dir = t.TempDir()
+	// EvalSymlinks because git returns canonical paths on macOS
+	// (/private/var/folders/...) and the workspace path must match
+	// for vctrl.RelPath to succeed.
+	canonical, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	dir = canonical
+
+	relFile = filepath.Join("recipes", "guasacaca.md")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "recipes"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, relFile), []byte("hi\n"), 0o644))
+
+	gitEnv := append(os.Environ(),
+		"GIT_AUTHOR_NAME=test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+		"GIT_AUTHOR_DATE=2020-01-01T00:00:00Z",
+		"GIT_COMMITTER_DATE=2020-01-01T00:00:00Z",
+	)
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"remote", "add", "origin",
+			"https://github.com/unstablebuild/gitproj.git"},
+		{"add", "."},
+		{"commit", "-q", "-m", "initial"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = gitEnv
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	commit = strings.TrimSpace(string(out))
+	return
 }
 
 func TestSetTabNameWithAttrIntegration(t *testing.T) {

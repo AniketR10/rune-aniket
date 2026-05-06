@@ -129,19 +129,18 @@ func TestCommandHandler(t *testing.T) {
 		require.NoError(t, err)
 		paste, err := h.clip.Paste(clipboard.DefaultRegisterID)
 
+		expected := "https://git.unstable.build/unstablebuild/gitproj6" +
+			"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0" +
+			"/recipes/guasacaca.md#L4"
+
 		assert.Len(t, testNoti.msg, 1)
 		assertNoti(t, testNoti.msg[0],
 			browserapi.LevelSuccess,
-			"web url copied to clipboard",
+			"copied "+expected,
 		)
 
 		require.NoError(t, err)
-		assert.Equal(t,
-			"https://git.unstable.build/unstablebuild/gitproj6"+
-				"/src/commit/5367f818c4e7092a224ae0f32da1b7bab8843cc0"+
-				"/recipes/guasacaca.md#L4",
-			paste.Text,
-		)
+		assert.Equal(t, expected, paste.Text)
 	})
 }
 

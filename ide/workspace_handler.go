@@ -235,6 +235,11 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithAutoCenter(true),
 		vi.WithWindowManager(currentWorkspaceWindowManager{root: h}),
+		// Route per-file command handlers (e.g. :gitlink → notify
+		// "copied <url>") through the focused workspace's
+		// notifications container so the message renders on screen
+		// instead of being dropped into nopNotifications{}.
+		vi.WithNotifications(h.notifications.current()),
 	)
 	return vi.Editor(viOpts...)
 }
@@ -265,6 +270,8 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
 		modeless.WithWorkspaceCommandRegistry(cwd, h),
 		modeless.WithAutoCenter(true),
+		// See newBuiltinModalEditor for why we route notifications.
+		modeless.WithNotifications(h.notifications.current()),
 	)
 }
 
@@ -929,16 +936,18 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
 	textOpts := h.textOpts(cfg, parser)
-	vctrlService := vctrl.NopService()
-	if cfg.auxiliaryBarGit() || cfg.gitIconsEnabled() {
-		vctrlService, err = gogit.NewService(uri, cwd)
-		if err != nil {
-			h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",
-				uri.Path(), err)
-			vctrlService = vctrl.NopService()
-		} else {
-			vctrlService = vctrl.SyncService(vctrlService, new(sync.Mutex))
-		}
+	// Always attempt to construct a real vctrl.Service so file-level
+	// git commands (e.g. :gitlink) work even when the user has not
+	// enabled aux-bar git decorations. gogit.NewService falls back to
+	// a lazy lookup when no .git is found at the workspace root, so
+	// it is safe to call unconditionally on non-git workspaces.
+	vctrlService, err := gogit.NewService(uri, cwd)
+	if err != nil {
+		h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",
+			uri.Path(), err)
+		vctrlService = vctrl.NopService()
+	} else {
+		vctrlService = vctrl.SyncService(vctrlService, new(sync.Mutex))
 	}
 
 	ed, err := h.newEditor(uri, cfg, vctrlService)

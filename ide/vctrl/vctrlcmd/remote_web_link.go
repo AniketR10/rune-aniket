@@ -186,7 +186,7 @@ func (c *copyRemoteURL) clipboardCopy(text string) error {
 		return fmt.Errorf("copy web URL: %w", err)
 	}
 
-	return c.notify(browserapi.LevelSuccess, "web url copied to clipboard")
+	return c.notify(browserapi.LevelSuccess, "copied %s", text)
 }
 
 func (c *copyRemoteURL) notify(
