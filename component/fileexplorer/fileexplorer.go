@@ -117,14 +117,12 @@ type Component struct {
 
 	// orphans holds rowIDs removed by the most recent user edit
 	// (together with the rendered text that was on that row at the
-	// time of removal). It is drained in OnDidEdit to repopulate
-	// freshly-inserted rows whose content matches a removed entry —
-	// this preserves identity across vi's `dd` + `p` flow, which
-	// otherwise wipes the deleted row's id before the paste can
-	// reuse it. Only the current edit's orphans are kept; the pool
-	// resets at the start of every OnDidEdit so stale ids don't
-	// leak across unrelated edits.
+	// time of removal).
 	orphans []orphanRow
+
+	// dirty is true when the buffer holds user edits that have not
+	// yet been flushed (or discarded by a refresh).
+	dirty bool
 }
 
 type orphanRow struct {
@@ -150,34 +148,40 @@ func New(
 	if buf == nil {
 		return nil, fmt.Errorf("fileexplorer: buffer is required")
 	}
-	cfg = normalizeConfig(cfg)
 	c := &Component{
-		fs:     fs,
-		buf:    buf,
-		root:   root,
-		cfg:    cfg,
-		nextID: firstRowID,
+		fs:   fs,
+		buf:  buf,
+		root: root,
+		cfg:  normalizeConfig(cfg),
 	}
+	if err := c.init(); err != nil {
+		return nil, err
+	}
+	buf.Subscribe(c)
+	return c, nil
+}
 
+func (c *Component) init() error {
+	c.nextID = firstRowID
+	c.rowIDs = nil
+	c.orphans = nil
+	c.dirty = false
 	c.baseTree = &node{
-		uri:      root,
+		uri:      c.root,
 		isDir:    true,
 		expanded: true,
 		depth:    -1,
 	}
-	if err := readChildren(fs, c.baseTree); err != nil {
-		return nil, err
+	if err := readChildren(c.fs, c.baseTree); err != nil {
+		return err
 	}
 	c.assignIDs(c.baseTree)
-
 	c.rewriteBufferFromTree(c.baseTree)
 	// Pin undo at the initial render so the user can never `u`
 	// their way back to an empty buffer: a Flush at that point
 	// would interpret the blank view as "delete every file".
 	c.buf.ResetVersion()
-	buf.Subscribe(c)
-
-	return c, nil
+	return nil
 }
 
 func normalizeConfig(cfg Config) Config {
@@ -415,6 +419,18 @@ func (c *Component) DryFlush() *ChangeSet {
 	return computeChangeSet(c.baseTree, view)
 }
 
+// HasPendingEdits returns true when the user has edited the buffer
+// since the last Flush/Refresh.
+func (c *Component) HasPendingEdits() bool {
+	return c.dirty
+}
+
+// Refresh discards any unflushed buffer edits and rebuilds the
+// rendered tree from disk.
+func (c *Component) Refresh() error {
+	return c.init()
+}
+
 // Flush runs the same logic as DryFlush and, if there are no
 // conflicts, executes the ordered operations on the filesystem. On
 // success, the base tree is updated to match the applied changes and
@@ -439,6 +455,7 @@ func (c *Component) Flush() (*ChangeSet, error) {
 	c.assignIDs(view)
 	c.baseTree = view.deepCopy()
 	c.rewriteBufferFromTree(c.baseTree)
+	c.dirty = false
 	return cs, nil
 }
 
@@ -1090,6 +1107,12 @@ func (c *Component) OnDidEdit(
 	if c.internal {
 		return
 	}
+	// Any external buffer edit makes the in-memory rendering
+	// diverge from the canonical tree. The flag is cleared on
+	// Flush (operations applied) or Refresh (edits discarded);
+	// HasPendingEdits is implemented by reading it directly so
+	// FS-event hot paths don't re-parse the buffer.
+	c.dirty = true
 	oldLines := strings.Count(old, "\n")
 	newLines := to.Y - from.Y
 

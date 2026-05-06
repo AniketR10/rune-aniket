@@ -24,8 +24,10 @@
 package ide
 
 import (
+	"context"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -37,6 +39,18 @@ import (
 )
 
 var _ browser.ScrollableFloating = (*fileExplorerHandler)(nil)
+
+// fileExplorerFSEvents lists the textapi event types the file
+// explorer handler subscribes to. They are exactly the FS-watcher
+// events the workspace dispatches when files appear/disappear/
+// change under the workspace root, not the in-IDE editor lifecycle
+// events (Open/Close/Edit/...).
+var fileExplorerFSEvents = []textapi.EventType{
+	textapi.EventTypeCreate,
+	textapi.EventTypeChange,
+	textapi.EventTypeRemove,
+	textapi.EventTypeRename,
+}
 
 // fileExplorerSpanHPad is the horizontal padding applied around the
 // file explorer's editor content so that there is breathing room on
@@ -66,6 +80,14 @@ type fileExplorerHandler struct {
 
 	win    browser.Window
 	target browser.Window
+
+	// pendingRefresh is set when an FS event arrives while the
+	// explorer is visible AND has unflushed user edits. The
+	// refresh is deferred until either the user successfully
+	// flushes (replayed from forceFlush after Flush) or the
+	// explorer is closed via the toggle (replayed from
+	// onWindowClosed); the latter discards the pending edits.
+	pendingRefresh bool
 }
 
 func newFileExplorerHandler(
@@ -119,6 +141,114 @@ func (h *fileExplorerHandler) Handle(ev term.Event) (exit, handled bool) {
 		return false, true
 	}
 	return false, true
+}
+
+// Handle implements text.EventHandler. Filesystem watcher events
+// dispatched through ex.comp arrive here and drive the explorer's
+// reactive refresh policy:
+//
+//   - URI outside the explorer's root (or root itself): ignored.
+//   - Window not visible: discard unflushed buffer edits and
+//     refresh the tree from disk now. The user can't see the
+//     buffer state, so silently bringing it in sync with the FS
+//     keeps the next open consistent.
+//   - Window visible and no pending edits: refresh now.
+//   - Window visible with pending edits: defer the refresh until
+//     the user resolves the edits — either by flushing them
+//     successfully (forceFlush replays the pending refresh) or
+//     by closing the explorer (onWindowClosed replays it,
+//     dropping the unflushed edits).
+//
+// Always returns false so the handler stays subscribed for the
+// lifetime of the cached fileExplorerHandler.
+func (h *fileExplorerHandler) onFSEvent(_ context.Context, ev textapi.Event) bool {
+	if !h.eventApplies(ev) {
+		return false
+	}
+	if !h.windowVisible() {
+		// Discard unflushed buffer edits and refresh now: the
+		// user cannot see them and the on-disk tree is the new
+		// source of truth.
+		h.refreshTree()
+		h.pendingRefresh = false
+		return false
+	}
+	if h.comp.HasPendingEdits() {
+		// Wait until the user resolves their edits (flush or
+		// close). Multiple events while dirty collapse into one
+		// pending refresh.
+		h.pendingRefresh = true
+		return false
+	}
+	h.refreshTree()
+	h.pendingRefresh = false
+	return false
+}
+
+// eventApplies returns true when ev refers to a path strictly
+// under the explorer's root. The root itself is excluded so we
+// don't refresh on every save of a workspace-level file (the root
+// directory's mtime updates do not affect the rendered tree).
+func (h *fileExplorerHandler) eventApplies(ev textapi.Event) bool {
+	root := h.comp.Root()
+	if !workspaceapi.HasPrefix(ev.URI, root) {
+		return false
+	}
+	return ev.URI.Path() != root.Path()
+}
+
+// windowVisible reports whether the explorer split is currently
+// shown to the user. The handler is cached across toggles, so
+// h.win can be a previously-closed Window even when the explorer
+// is no longer rendered; treat such windows as not visible.
+func (h *fileExplorerHandler) windowVisible() bool {
+	return h.win != nil && !h.win.Closed()
+}
+
+// refreshTree calls comp.Refresh and reports any error through the
+// host's notification channel. The tree's buffer is replaced
+// in-place so the editor's cursor needs to be re-clamped to the
+// new bounds, mirroring enterAtCursor.
+func (h *fileExplorerHandler) refreshTree() {
+	if err := h.comp.Refresh(); err != nil {
+		h.host.SetError(err)
+		return
+	}
+	if h.ed != nil {
+		h.clampCursorToBuffer()
+	}
+	h.syncWidth()
+}
+
+// clampCursorToBuffer keeps the editor cursor inside the buffer
+// bounds after a Refresh that may have shrunk the rendered tree.
+func (h *fileExplorerHandler) clampCursorToBuffer() {
+	pos := h.ed.CursorAtScroll()
+	rows := h.ed.CellView().Rows()
+	if rows == 0 {
+		_ = h.ed.SetCursorAtScroll(term.Coordinates{})
+		return
+	}
+	if pos.Y >= rows {
+		pos.Y = rows - 1
+	}
+	cols := h.ed.CellView().Columns(pos.Y)
+	if pos.X > cols {
+		pos.X = cols
+	}
+	_ = h.ed.SetCursorAtScroll(pos)
+}
+
+// onWindowClosed is called by ex.fexplorer when the explorer is
+// toggled off. If a refresh was pending (i.e. an FS event arrived
+// while the user had unflushed edits), run it now and discard
+// those edits — they would conflict with the new on-disk state.
+func (h *fileExplorerHandler) onWindowClosed() {
+	if !h.pendingRefresh {
+		return
+	}
+	h.refreshTree()
+	h.pendingRefresh = false
 }
 
 func (h *fileExplorerHandler) Draw(w term.Writer) {
@@ -256,6 +386,14 @@ func (h *fileExplorerHandler) openApplyPrompt(ops []fileexplorercomp.Operation) 
 				h.host.SetError(err)
 				return
 			}
+			// A pending refresh queued while the user was
+			// editing has now been resolved; replay it so the
+			// just-written tree picks up any concurrent FS
+			// changes that arrived during the edit.
+			if h.pendingRefresh {
+				h.refreshTree()
+				h.pendingRefresh = false
+			}
 		}, func() error {
 			return nil
 		}))
@@ -392,6 +530,14 @@ func (h *fileExplorerHandler) targetWindow() browser.Window {
 		return win
 	}
 	return nil
+}
+
+// fsEventHandler returns a text.EventHandler that this
+// fileExplorerHandler can be subscribed with via
+// (*text.Component).SubscribeEvents. The returned handler stays
+// alive for the lifetime of the cached fileExplorerHandler.
+func (h *fileExplorerHandler) fsEventHandler() text.EventHandler {
+	return text.FuncEventHandler(h.onFSEvent)
 }
 
 type exFileExplorerHost struct {

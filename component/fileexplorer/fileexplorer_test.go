@@ -2024,6 +2024,116 @@ func mustParseURI(s string) workspaceapi.URI {
 	return u
 }
 
+// TestHasPendingEditsClean reports false when the buffer matches
+// the canonical rendering and there are no FS operations to apply.
+func TestHasPendingEditsClean(t *testing.T) {
+	c, _, _ := newComp(t, map[string][]mockEntry{
+		"/project": {{name: "a.go"}},
+	}, Config{})
+	require.False(t, c.HasPendingEdits())
+}
+
+// TestHasPendingEditsAfterEdit reports true once the user mutates
+// the buffer in a way that would translate to FS operations.
+func TestHasPendingEditsAfterEdit(t *testing.T) {
+	c, buf, _ := newComp(t, map[string][]mockEntry{
+		"/project": {{name: "a.go"}},
+	}, Config{})
+	buf.ReplaceContext(context.Background(),
+		buf.String()+"\n new.go")
+	require.True(t, c.HasPendingEdits())
+}
+
+// TestRefreshAddsNewFile reflects an externally-created file in
+// the rendered tree without requiring a re-open.
+func TestRefreshAddsNewFile(t *testing.T) {
+	dirs := map[string][]mockEntry{
+		"/project": {{name: "a.go"}},
+	}
+	c, buf, mfs := newComp(t, dirs, Config{})
+	before := buf.String()
+	require.Contains(t, before, "a.go")
+
+	mfs.dirs["/project"] = append(mfs.dirs["/project"],
+		mockEntry{name: "b.go"})
+
+	require.NoError(t, c.Refresh())
+	after := buf.String()
+	require.Contains(t, after, "a.go")
+	require.Contains(t, after, "b.go")
+}
+
+// TestRefreshRemovesDeletedFile reflects an externally-deleted
+// file in the rendered tree.
+func TestRefreshRemovesDeletedFile(t *testing.T) {
+	dirs := map[string][]mockEntry{
+		"/project": {{name: "a.go"}, {name: "b.go"}},
+	}
+	c, buf, mfs := newComp(t, dirs, Config{})
+	require.Contains(t, buf.String(), "b.go")
+
+	mfs.dirs["/project"] = []mockEntry{{name: "a.go"}}
+
+	require.NoError(t, c.Refresh())
+	after := buf.String()
+	require.Contains(t, after, "a.go")
+	require.NotContains(t, after, "b.go")
+}
+
+// TestRefreshRebuildsFromScratch documents the simplifying
+// invariant of Refresh: it takes the same load path as a fresh
+// New, so any prior expand/collapse state is discarded and only
+// the root directory is read from disk. Subdirectories load
+// lazily on ExpandNodeAt, just like on initial open.
+func TestRefreshRebuildsFromScratch(t *testing.T) {
+	dirs := map[string][]mockEntry{
+		"/project": {
+			{name: "src", isDir: true},
+			{name: "README.md"},
+		},
+		"/project/src": {
+			{name: "main.go"},
+		},
+	}
+	c, buf, mfs := newComp(t, dirs, Config{})
+	// Expand src so its children appear in the rendered tree.
+	c.ExpandNodeAt(term.Coordinates{Y: 0})
+	require.Contains(t, buf.String(), "main.go")
+
+	// Externally add files at the root and inside src.
+	mfs.dirs["/project"] = append(mfs.dirs["/project"],
+		mockEntry{name: "TODO.md"})
+	mfs.dirs["/project/src"] = append(mfs.dirs["/project/src"],
+		mockEntry{name: "util.go"})
+
+	require.NoError(t, c.Refresh())
+	out := buf.String()
+	require.Contains(t, out, "TODO.md",
+		"new root entry must appear")
+	require.NotContains(t, out, "main.go",
+		"src must be collapsed after Refresh")
+	require.NotContains(t, out, "util.go",
+		"unexpanded subdir must not be read from disk")
+}
+
+// TestRefreshDiscardsUnflushedBufferEdits is a property that
+// callers must know about: Refresh re-renders the canonical tree
+// from disk, dropping any unflushed in-buffer edits. Callers that
+// want to preserve user edits must gate on HasPendingEdits().
+func TestRefreshDiscardsUnflushedBufferEdits(t *testing.T) {
+	c, buf, _ := newComp(t, map[string][]mockEntry{
+		"/project": {{name: "a.go"}},
+	}, Config{})
+	canonical := buf.String()
+	buf.ReplaceContext(context.Background(),
+		canonical+"\n typed.go")
+	require.True(t, c.HasPendingEdits())
+
+	require.NoError(t, c.Refresh())
+	require.Equal(t, canonical, buf.String())
+	require.False(t, c.HasPendingEdits())
+}
+
 // --- mock filesystem ---
 
 type mockEntry struct {

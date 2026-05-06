@@ -34,6 +34,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -386,6 +387,148 @@ func TestFileExplorerConfirmMessageFormat(t *testing.T) {
 		require.True(t, strings.HasPrefix(line, "- **"),
 			"expected markdown list item, got %q", line)
 	}
+}
+
+// TestFileExplorerHandlerFSEventRefreshesWhenVisibleAndClean
+// asserts that an FS event arriving while the explorer is visible
+// with no pending buffer edits triggers an immediate refresh that
+// picks up the newly-created file.
+func TestFileExplorerHandlerFSEventRefreshesWhenVisibleAndClean(t *testing.T) {
+	dirs := map[string][]explorerMockEntry{
+		"/project": {{name: "a.go", isDir: false}},
+	}
+	h, _ := newTestFileExplorerHandler(t, dirs)
+	require.Contains(t, h.ed.CellView().String(), "a.go")
+	require.NotContains(t, h.ed.CellView().String(), "b.go")
+
+	// Externally add a sibling file.
+	dirs["/project"] = append(dirs["/project"],
+		explorerMockEntry{name: "b.go", isDir: false})
+
+	uri, err := workspaceapi.ParseURI("file:///project/b.go")
+	require.NoError(t, err)
+	ev := textapi.Event{Type: textapi.EventTypeCreate, URI: uri}
+	require.False(t, h.onFSEvent(context.Background(), ev))
+
+	require.Contains(t, h.ed.CellView().String(), "a.go")
+	require.Contains(t, h.ed.CellView().String(), "b.go")
+	require.False(t, h.pendingRefresh)
+}
+
+// TestFileExplorerHandlerFSEventDefersWhilePending asserts that
+// an FS event arriving while the user has unflushed buffer edits
+// does not clobber those edits — it queues a refresh that is
+// replayed only after the user resolves the edits (flush or
+// close).
+func TestFileExplorerHandlerFSEventDefersWhilePending(t *testing.T) {
+	dirs := map[string][]explorerMockEntry{
+		"/project": {{name: "a.go", isDir: false}},
+	}
+	h, _ := newTestFileExplorerHandler(t, dirs)
+	buf := h.buf
+	canonical := buf.String()
+	// Mutate the buffer to simulate an unflushed user edit.
+	buf.ReplaceContext(context.Background(), canonical+"\n typed.go")
+	require.True(t, h.comp.HasPendingEdits())
+	dirty := buf.String()
+
+	dirs["/project"] = append(dirs["/project"],
+		explorerMockEntry{name: "b.go", isDir: false})
+	uri, err := workspaceapi.ParseURI("file:///project/b.go")
+	require.NoError(t, err)
+	require.False(t, h.onFSEvent(context.Background(),
+		textapi.Event{Type: textapi.EventTypeCreate, URI: uri}))
+
+	require.True(t, h.pendingRefresh)
+	// The user's pending edit must be preserved verbatim.
+	require.Equal(t, dirty, buf.String())
+	require.NotContains(t, buf.String(), "b.go")
+}
+
+// TestFileExplorerHandlerOnWindowClosedReplaysPending asserts that
+// closing the explorer with a pending refresh discards unflushed
+// buffer edits and applies the deferred refresh so the next open
+// shows the up-to-date tree.
+func TestFileExplorerHandlerOnWindowClosedReplaysPending(t *testing.T) {
+	dirs := map[string][]explorerMockEntry{
+		"/project": {{name: "a.go", isDir: false}},
+	}
+	h, _ := newTestFileExplorerHandler(t, dirs)
+	buf := h.buf
+	canonical := buf.String()
+	buf.ReplaceContext(context.Background(), canonical+"\n typed.go")
+	dirs["/project"] = append(dirs["/project"],
+		explorerMockEntry{name: "b.go", isDir: false})
+	uri, err := workspaceapi.ParseURI("file:///project/b.go")
+	require.NoError(t, err)
+	require.False(t, h.onFSEvent(context.Background(),
+		textapi.Event{Type: textapi.EventTypeCreate, URI: uri}))
+	require.True(t, h.pendingRefresh)
+
+	h.onWindowClosed()
+
+	require.False(t, h.pendingRefresh)
+	require.Contains(t, buf.String(), "a.go")
+	require.Contains(t, buf.String(), "b.go")
+	// The user's unflushed edit was discarded by the refresh.
+	require.NotContains(t, buf.String(), "typed.go")
+}
+
+// TestFileExplorerHandlerFSEventRefreshesWhenWindowClosed asserts
+// that when the explorer's window is closed (i.e. the explorer is
+// not visible to the user), an FS event refreshes the tree
+// immediately and discards any unflushed buffer edits.
+func TestFileExplorerHandlerFSEventRefreshesWhenWindowClosed(t *testing.T) {
+	dirs := map[string][]explorerMockEntry{
+		"/project": {{name: "a.go", isDir: false}},
+	}
+	h, _ := newTestFileExplorerHandler(t, dirs)
+	buf := h.buf
+	canonical := buf.String()
+	buf.ReplaceContext(context.Background(), canonical+"\n typed.go")
+	// Simulate the explorer window being closed via the toggle.
+	require.NoError(t, h.win.Close())
+
+	dirs["/project"] = append(dirs["/project"],
+		explorerMockEntry{name: "b.go", isDir: false})
+	uri, err := workspaceapi.ParseURI("file:///project/b.go")
+	require.NoError(t, err)
+	require.False(t, h.onFSEvent(context.Background(),
+		textapi.Event{Type: textapi.EventTypeCreate, URI: uri}))
+
+	require.False(t, h.pendingRefresh)
+	require.Contains(t, buf.String(), "a.go")
+	require.Contains(t, buf.String(), "b.go")
+	require.NotContains(t, buf.String(), "typed.go")
+}
+
+// TestFileExplorerHandlerFSEventOutsideRootIgnored asserts that
+// FS events for paths not strictly under the explorer's root
+// (including the root itself) do not trigger a refresh.
+func TestFileExplorerHandlerFSEventOutsideRootIgnored(t *testing.T) {
+	dirs := map[string][]explorerMockEntry{
+		"/project": {{name: "a.go", isDir: false}},
+	}
+	h, _ := newTestFileExplorerHandler(t, dirs)
+	before := h.buf.String()
+
+	// Add a file on disk that should NOT be picked up because the
+	// FS event is for a path outside the root.
+	dirs["/project"] = append(dirs["/project"],
+		explorerMockEntry{name: "b.go", isDir: false})
+
+	for _, p := range []string{
+		"file:///elsewhere/x.go", // outside root entirely
+		"file:///project",        // root itself
+	} {
+		uri, err := workspaceapi.ParseURI(p)
+		require.NoError(t, err)
+		require.False(t, h.onFSEvent(context.Background(),
+			textapi.Event{Type: textapi.EventTypeCreate, URI: uri}))
+	}
+
+	require.False(t, h.pendingRefresh)
+	require.Equal(t, before, h.buf.String())
 }
 
 func newTestFileExplorerHandler(t *testing.T, dirs map[string][]explorerMockEntry) (*fileExplorerHandler, *testFileExplorerHost) {

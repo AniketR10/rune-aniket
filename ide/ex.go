@@ -1680,6 +1680,18 @@ func (e *ex) initFileExplorer() error {
 			return fmt.Errorf("file explorer: wrap component: %w", err)
 		}
 		e.fileExplorerHandler = wrapped
+		// Subscribe to filesystem watcher events so the
+		// rendered tree stays in sync with on-disk changes
+		// (created/changed/removed/renamed files under the
+		// workspace root). The handler is cached for the
+		// lifetime of the ex, so a single subscription is
+		// enough — no Unsubscribe is needed on toggle close.
+		if err := e.comp.SubscribeEvents(
+			fileExplorerFSEvents, wrapped.fsEventHandler(),
+		); err != nil {
+			return fmt.Errorf(
+				"file explorer: subscribe fs events: %w", err)
+		}
 	} else {
 		// Keep the target in sync with the latest focus.
 		e.fileExplorerHandler.SetTargetWindow(e.fileExplorerTarget)
@@ -1718,6 +1730,13 @@ func (e *ex) fexplorer(_ context.Context, args ...string) error {
 		prev := e.fileExplorerTarget
 		_ = e.fileExplorerWin.Close()
 		e.fileExplorerWin = nil
+		// Closing the explorer with unflushed buffer edits
+		// implicitly discards them. If an FS event arrived
+		// while the user was editing, replay it now so the
+		// next open shows the up-to-date tree.
+		if e.fileExplorerHandler != nil {
+			e.fileExplorerHandler.onWindowClosed()
+		}
 		if prev != nil && !prev.Closed() {
 			_, _ = e.comp.SetFocus(prev)
 		}
