@@ -206,13 +206,29 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			return
 		}
 
-		curr := wm.focus
-		// make sure that if Handle above closed second to last window
-		// we are not closing last window
+		// Close the original tile that produced the exit signal. There
+		// are two cases the conditions below must distinguish:
+		//   1) Handle did not change the layout: wm.focus still equals
+		//      focus. Shift focus to a sibling and close the tile.
+		//   2) Handle opened a floating window (e.g. a recovery prompt
+		//      via Component.Prompt) that took over wm.focus mid-Handle.
+		//      In that case the original tile must still be closed so
+		//      the user is not left with a stranded non-tab split (see
+		//      RUNE-139). Do not call ShiftFocus because the floating
+		//      prompt is the intended new focus.
+		//   3) Handle itself swapped focus to another tile (e.g. opened
+		//      a new tile and shifted focus). Skip closing.
 		size := wm.comp.SizeTiles()
-		if curr.ID() == focus.ID() && size != 1 {
+		if focus.Closed() || size == 1 {
+			return
+		}
+		curr := wm.focus
+		switch {
+		case curr.ID() == focus.ID():
 			wm.ShiftFocus()
-			curr.Close()
+			focus.Close()
+		case curr.IsFloating():
+			focus.Close()
 		}
 	}
 

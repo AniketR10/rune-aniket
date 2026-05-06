@@ -88,14 +88,20 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 	msg := fmt.Sprintf("File %s is already open by another process "+
 		"or an edit session for this file crashed.", file)
 
+	// Pick the window where the recovered file should ultimately land.
+	// Prefer the window currently in focus, but only if it is a regular
+	// tab window. If the focused window is a floating prompt or a
+	// non-tab tiled handler (e.g. a fuzzy-search/finder split, see
+	// RUNE-139), the recovered file would otherwise be installed into a
+	// transient handler's window. In that case, fall back to a sibling
+	// tile via Shiftable() so the file ends up in the previous (real)
+	// tab window.
 	invokeWindow := c.comp.Focus()
-	if invokeWindow.IsFloating() {
-		// NOTE: opened recovery prompt from another prompt or floating window.
-		// User probably wants to set the content of a tiled window,
-		// not a floating window
+	_, focusIsTab := c.comp.FocusTab()
+	if invokeWindow.IsFloating() || !focusIsTab {
 		nextWindow, ok := c.comp.Shiftable()
-		// this should always be true, since the last tile can never be closed
-		// and Shiftable/ShiftFocus only return tiled windows.
+		// this should always be true, since the last tile can never be
+		// closed and Shiftable/ShiftFocus only return tiled windows.
 		if ok {
 			invokeWindow = nextWindow
 		}
@@ -148,6 +154,15 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 					c.log(log.ErrorLevel, "recovery prompt: %v", err)
 					_, _ = c.Notify(browserapi.LevelError, "%v", err)
 				}
+				// Without this, the finder split lingers visible until the user types a key.
+				if perr := c.PublishEvent(term.Event{Type: term.EventNone}); perr != nil {
+					c.log(log.DebugLevel, "recovery prompt: publish wakeup: %v", perr)
+				}
 			},
-			func() error { return nil }))
+			func() error {
+				if perr := c.PublishEvent(term.Event{Type: term.EventNone}); perr != nil {
+					c.log(log.DebugLevel, "recovery prompt: publish wakeup: %v", perr)
+				}
+				return nil
+			}))
 }

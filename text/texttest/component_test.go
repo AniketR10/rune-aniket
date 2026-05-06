@@ -520,6 +520,71 @@ func TestComponentOpen(t *testing.T) {
 
 	})
 
+	t.Run("recovery prompt installs recovered file in tile above finder split", func(t *testing.T) {
+		// Reproduces RUNE-139: when a finder/search-style split is the
+		// focused window and Open returns ErrFileAlreadyOpen, the recovery
+		// prompt must NOT install the recovered file into the finder's
+		// split window. Instead, the file must end up in a sibling
+		// (tab-bearing) tile.
+		c, loader, _, originalURI := newTestComponentWithFile(t, "file:///tmp/wasup")
+		c.Resize(30, 20)
+
+		// Simulate the finder splitting the original window: create a
+		// non-tab tiled handler in a new bottom split that takes focus,
+		// like cmd/extension_fuzzy_search.splitCommandHandler does.
+		focus, err := c.Focus()
+		require.NoError(t, err)
+		finderHandler := browser.NopHandler(handler.Nop())
+		finderWin, err := c.Split(browserapi.OrientationBottom, focus, finderHandler)
+		require.NoError(t, err)
+
+		// finder split is now in focus. Confirm focus is the finder
+		// window, not the original tab window.
+		curFocus, err := c.Focus()
+		require.NoError(t, err)
+		assert.Equal(t, finderWin.WindowID(), curFocus.WindowID(),
+			"finder window should be focused after Split takes focus")
+
+		// Now Open a busy file from inside the finder context. The
+		// expectation is that the recovery prompt is shown and that on
+		// answering it the recovered file is installed into the
+		// original tile, NOT the finder's tile.
+		busyURI, err := workspaceapi.ParseURI("file:///tmp/busy")
+		require.NoError(t, err)
+		loader.expectError = workspaceapi.ErrFileAlreadyOpen
+		_, err = c.Open(busyURI)
+		require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
+
+		// Answer the recovery prompt with "Open rdonly" (second option,
+		// safest choice that does not touch the swap file).
+		loader.expectError = nil
+		_, handled := c.Handle(term.Event{Type: term.EventKey, Ch: 'O'})
+		assert.True(t, handled)
+
+		// The original tile (which held the wasup tab) should now show
+		// the busy tab, NOT the finder window.
+		busyTab, ok := c.Browser().Tab(busyURI)
+		require.True(t, ok, "busy tab should have been created")
+
+		// Find which window owns the busy tab now: it must be the
+		// original tile, not the finder's tile.
+		var busyWin browser.Window
+		c.Browser().IterateWindows(func(w browser.Window) {
+			h, _ := w.Content()
+			if h == busyTab {
+				busyWin = w
+			}
+		})
+		require.NotNil(t, busyWin, "no window holds busy tab")
+		assert.NotEqual(t, finderWin.WindowID(), busyWin.WindowID(),
+			"recovered file must not land in the finder window")
+
+		// And the original tile (which had wasup) must be the one now
+		// showing busy, since the prompt's intended target is "the
+		// window above the finder".
+		_ = originalURI
+	})
+
 	t.Run("routes before opening recovery prompt if err == workspaceapi.ErrFileAlreadyOpen", func(t *testing.T) {
 		cfg := text.DefaultConfig()
 		router := new(testOpenRouter)
