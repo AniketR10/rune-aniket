@@ -2134,6 +2134,97 @@ func TestRefreshDiscardsUnflushedBufferEdits(t *testing.T) {
 	require.False(t, c.HasPendingEdits())
 }
 
+// TestIgnoreFiltersOutMatchingEntries verifies that entries whose
+// URI matches the configured ignore matcher are filtered out of
+// the rendered tree at every level of the hierarchy.
+//
+// This is a regression test for RUNE-143: prior to the fix the file
+// explorer rendered every entry returned by FileSystem.ReadDir,
+// surfacing noise such as `.git/`, `*.swp` files and anything
+// listed in `.gitignore`. The rest of the IDE (workspace event
+// dispatcher, fuzzy finder, idetask watcher) all hide those
+// entries via vctrl.Matcher; the explorer now does the same.
+//
+// The test covers:
+//   - top-level ignored file (e.g. "noisy.swp")
+//   - top-level ignored directory (e.g. ".git/")
+//   - a non-ignored sibling (e.g. "main.go") that must remain
+//   - filtering is applied lazily on expand: an ignored file
+//     inside a non-ignored directory must be hidden when the
+//     parent is expanded
+func TestIgnoreFiltersOutMatchingEntries(t *testing.T) {
+	dirs := map[string][]mockEntry{
+		"/project": {
+			{name: ".git", isDir: true},
+			{name: "main.go", isDir: false},
+			{name: "noisy.swp", isDir: false},
+			{name: "src", isDir: true},
+		},
+		"/project/.git": {{name: "HEAD", isDir: false}},
+		"/project/src":  {{name: "app.go"}, {name: "tmp.swp"}},
+	}
+	cfg := Config{Ignore: suffixIgnore{".git", ".swp"}}
+	c, buf, _ := newComp(t, dirs, cfg)
+
+	// Top-level: .git/ and noisy.swp are filtered, main.go and
+	// src/ stay.
+	assert.Equal(t, "\uf4d3 src/\n\uf40d main.go", buf.String())
+
+	// Expanding src/ must also filter ignored siblings.
+	_, _ = c.ExpandNodeAt(term.Coordinates{Y: 0})
+	assert.Equal(t,
+		"\uf07c src/\n│   \uf40d app.go\n\uf40d main.go",
+		buf.String())
+
+	// NodeAt skips ignored entries entirely — there is no row for
+	// .git or .swp files at any depth.
+	for y := range 3 {
+		uri, ok := c.NodeAt(term.Coordinates{Y: y})
+		require.True(t, ok, "row %d", y)
+		assert.NotContains(t, uri.Path(), ".git")
+		assert.NotContains(t, uri.Path(), ".swp")
+	}
+}
+
+// TestIgnoreNilDefaultsToNoFiltering documents the zero-value
+// behavior of Config.Ignore: a nil matcher is equivalent to
+// vctrl.NopMatcher(false), preserving the pre-RUNE-143 default of
+// "show every entry the FileSystem reports".
+func TestIgnoreNilDefaultsToNoFiltering(t *testing.T) {
+	dirs := map[string][]mockEntry{
+		"/project": {
+			{name: ".git", isDir: true},
+			{name: "main.go", isDir: false},
+		},
+		"/project/.git": {},
+	}
+	c, buf, _ := newComp(t, dirs, Config{})
+	assert.Equal(t, "\uf4d3 .git/\n\uf40d main.go", buf.String())
+	_ = c
+}
+
+// suffixIgnore is a minimal Matcher used by the ignore tests. It
+// matches any URI whose path ends with one of the configured
+// suffixes (e.g. ".git", ".swp"). Using a tiny in-test matcher
+// instead of vctrl.MatcherFromPatterns avoids coupling the
+// component test to the gitignore parser; the integration with
+// vctrl.LoadGitignore is exercised at the IDE layer in
+// ide/fileexplorer_test.go and ide/workspace_handler_test.go.
+type suffixIgnore []string
+
+func (s suffixIgnore) Match(uri workspaceapi.URI, _ bool) bool {
+	return s.MatchRelPath(uri.Path(), false)
+}
+
+func (s suffixIgnore) MatchRelPath(p string, _ bool) bool {
+	for _, suf := range s {
+		if strings.HasSuffix(p, suf) {
+			return true
+		}
+	}
+	return false
+}
+
 // --- mock filesystem ---
 
 type mockEntry struct {

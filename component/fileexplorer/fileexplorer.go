@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/text"
 )
 
@@ -79,6 +80,16 @@ type Config struct {
 	// tcell.ColorGray so they recede visually behind file names,
 	// matching the indent guides.
 	IconAttr term.Attributes
+	// Ignore filters out entries whose URI matches the matcher.
+	// Used to hide e.g. `.git/`, `*.swp`, and anything listed in
+	// the workspace's `.gitignore` — the same noise the rest of
+	// the IDE (workspace event dispatcher, fuzzy finder,
+	// idetask watcher) hides via vctrl.Matcher.
+	//
+	// A nil value means "no filtering" and is equivalent to
+	// vctrl.NopMatcher(false); New normalizes nil to that
+	// matcher so readChildren can call it unconditionally.
+	Ignore vctrl.Matcher
 }
 
 // Component renders a file tree into a shared *cell.Buffer. It
@@ -172,7 +183,7 @@ func (c *Component) init() error {
 		expanded: true,
 		depth:    -1,
 	}
-	if err := readChildren(c.fs, c.baseTree); err != nil {
+	if err := readChildren(c.fs, c.cfg.Ignore, c.baseTree); err != nil {
 		return err
 	}
 	c.assignIDs(c.baseTree)
@@ -208,6 +219,9 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.IconAttr == (term.Attributes{}) {
 		cfg.IconAttr = term.Attributes{Fg: tcell.ColorGray}
+	}
+	if cfg.Ignore == nil {
+		cfg.Ignore = vctrl.NopMatcher(false)
 	}
 	return cfg
 }
@@ -342,13 +356,13 @@ func (c *Component) ExpandNodeAt(
 		}
 	} else {
 		if target.children == nil {
-			if err := readChildren(c.fs, target); err != nil {
+			if err := readChildren(c.fs, c.cfg.Ignore, target); err != nil {
 				return workspaceapi.URI{}, false
 			}
 			c.assignIDs(target)
 			if baseNode := c.findNodeByID(c.baseTree, id); baseNode != nil {
 				if baseNode.children == nil {
-					if err := readChildren(c.fs, baseNode); err == nil {
+					if err := readChildren(c.fs, c.cfg.Ignore, baseNode); err == nil {
 						c.copyIDsToBase(target, baseNode)
 					}
 				}
@@ -541,7 +555,7 @@ func (c *Component) syncExpandedToBase(view *node) {
 			}
 			if vc.expanded {
 				if baseNode.children == nil && vc.children != nil {
-					_ = readChildren(c.fs, baseNode)
+					_ = readChildren(c.fs, c.cfg.Ignore, baseNode)
 					c.copyIDsToBase(vc, baseNode)
 				}
 				baseNode.expanded = true
@@ -561,7 +575,7 @@ func (c *Component) expandAtDepth(n *node, depth int) {
 	for _, child := range n.children {
 		if child.isDir && child.depth == depth {
 			if child.children == nil {
-				_ = readChildren(c.fs, child)
+				_ = readChildren(c.fs, c.cfg.Ignore, child)
 				c.assignIDs(child)
 			}
 			child.expanded = true

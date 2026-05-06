@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package fileexplorer
 
 import (
@@ -31,6 +30,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/vctrl"
 )
 
 type node struct {
@@ -76,7 +76,7 @@ type parsedEntry struct {
 }
 
 func readChildren(
-	fs workspaceapi.FileSystem, n *node,
+	fs workspaceapi.FileSystem, ignore vctrl.Matcher, n *node,
 ) error {
 	entries, err := fs.ReadDir(n.uri.Path())
 	if err != nil {
@@ -84,9 +84,13 @@ func readChildren(
 	}
 	children := make([]*node, 0, len(entries))
 	for _, e := range entries {
+		childURI := workspaceapi.Join(n.uri, e.Name())
+		if ignore != nil && ignore.Match(childURI, e.IsDir()) {
+			continue
+		}
 		child := &node{
 			name:   e.Name(),
-			uri:    workspaceapi.Join(n.uri, e.Name()),
+			uri:    childURI,
 			isDir:  e.IsDir(),
 			depth:  n.depth + 1,
 			parent: n,

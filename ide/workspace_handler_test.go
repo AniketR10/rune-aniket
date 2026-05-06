@@ -305,12 +305,12 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 //  1. Open the explorer via :fexplorer; alpha.go and beta.go must
 //     render in the tree.
 //  2. Close the explorer via :fexplorer (toggle).
-//  3. Write gamma.go directly to disk so the FS watcher fires a
-//     create event under the workspace root. Going through :edit/
-//     :write would also fire the watcher, but vi creates
-//     `.gamma.go.swp` while the editor is open, which then races
-//     with the assertion frame; bypassing the editor here keeps
-//     the test focused on the FS-reactivity contract.
+//  3. Open and write gamma.go via :edit / :write so the FS watcher
+//     fires a create event under the workspace root. vi
+//     transiently creates `.gamma.go.swp` while the editor is
+//     open, but the explorer's gitignore-derived ignore matcher
+//     (RUNE-143) hides `*.swp` so the swap file does not pollute
+//     the rendered tree.
 //  4. Re-open the explorer via :fexplorer; the rendered tree must
 //     now include gamma.go.
 //
@@ -368,22 +368,34 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"│1 1  2 2                    │",
 		"└────────────────────────────┘",
 	}, "\n")
+	editorFrame := strings.Join([]string{
+		"┌────────────────────────────┐",
+		"│o gamma.go                  │",
+		"├────────────────────────────┤",
+		"│hell▐                       │",
+		"│                            │",
+		"│                      NORMAL│",
+		"├────────────────────────────┤",
+		"│1 1  2 2                    │",
+		"└────────────────────────────┘",
+	}, "\n")
 	// Final frame after re-opening the explorer: the on-disk
 	// gamma.go entry must have been picked up by the FS-watcher
-	// subscription and rendered in the tree.
+	// subscription and rendered in the tree. The buffer pane on
+	// the right still shows the gamma.go editor opened in step 3.
 	reopenedFrame := strings.Join([]string{
 		"┌────────────────────────────┐",
-		"│                            │",
+		"│o gamma.go                  │",
 		"┌────────────┐┌──────────────┤",
-		"│ ▐ alpha.go ││              │",
-		"│ o beta.go  ││workspaceWallp│",
-		"│ o gamma.go ││              │",
+		"│ ▐ alpha.go ││hello         │",
+		"│ o beta.go  ││              │",
+		"│ o gamma.go ││        NORMAL│",
 		"├────────────┘└──────────────┤",
 		"│1 1  2 2                    │",
 		"└────────────────────────────┘",
 	}, "\n")
 
-	// Steps 1–2: drive the production handler chain with
+	// Steps 1–3: drive the production handler chain with
 	// RunHandlerSequence and assert the exact rendered frame at
 	// each step. The toggle is invoked via :fexplorer rather than
 	// a <tab> key binding because the test config's empty
@@ -394,6 +406,9 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 	//  1. Open the file explorer: both pre-existing files must
 	//     render in the tree.
 	//  2. Close the file explorer with the toggle command.
+	//  3. :edit gamma.go, type "hello", :write — flushes the new
+	//     file to disk under the workspace root which fires the
+	//     FS watcher.
 	handlertest.RunHandlerSequence(t, h, width, height,
 		[]handlertest.SequenceTestCase{
 			{
@@ -404,18 +419,12 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 				InputSequence: "<c-\\\\>fexplorer<enter>",
 				Expected:      closedFrame,
 			},
+			{
+				InputSequence: "<c-\\\\>edit<space>gamma.go<enter>" +
+					"ihello<esc><c-\\\\>write<enter>",
+				Expected: editorFrame,
+			},
 		})
-
-	// Step 3: write a new file directly to disk under the
-	// workspace root. The FS watcher fires a create event that
-	// the cached file explorer handler must consume and use to
-	// invalidate its tree. Going through :edit/:write inside vi
-	// would also fire the watcher, but vi additionally creates a
-	// `.gamma.go.swp` while the editor is open, which races with
-	// the assertion frame; writing directly keeps the test
-	// focused on the FS-reactivity contract.
-	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "gamma.go"), []byte("g"), 0o644))
 
 	// Step 4: re-open the explorer; the rendered frame must now
 	// include gamma.go alongside the pre-existing entries. The FS

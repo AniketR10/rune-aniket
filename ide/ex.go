@@ -61,6 +61,7 @@ import (
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/plugin"
+	"unstable.build/go-tui/ide/vctrl"
 	tterm "unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
@@ -1611,45 +1612,29 @@ func (e *ex) toggleCompanionTerminal() error {
 }
 
 func (e *ex) initFileExplorer() error {
-	// Capture current focus (the window the user came from) BEFORE
-	// creating the file explorer split; this window will be used as
-	// the target for opening files from the explorer. Save it
-	// before constructing the handler so the handler receives it.
 	prev, _ := e.comp.Focus()
 	if !prev.Closed() {
 		e.fileExplorerTarget = prev
 	}
 
-	// Create the component/buffer/editor/handler only the first time
-	// the file explorer is opened. Subsequent toggles reuse them.
-	// Re-calling e.ed.Edit on the same URI would re-subscribe the
-	// editor's per-file command handlers (fold/location/git) at the
-	// vi.Editor's internal fileCmdRegistry, which fails with
-	// "command already registered" if the previous Close path didn't
-	// fully unwind those subscriptions.
 	if e.fileExplorerHandler == nil {
 		rootURI, err := e.workspace.URI(".")
 		if err != nil {
 			return fmt.Errorf("file explorer: resolve root: %w", err)
 		}
 		buf := cell.NewBuffer()
+		ignore, err := vctrl.LoadGitignore(e.workspace)
+		if err != nil {
+			e.log(log.WarnLevel,
+				"file explorer: load gitignore: %v", err)
+			ignore = vctrl.NopMatcher(false)
+		}
 		comp, err := fileexplorercomp.New(buf, e.workspace, rootURI, fileexplorercomp.Config{
-			// Reuse the editor's IconSet so the explorer's glyphs
-			// (dir icon, default file icon, per-extension overrides)
-			// stay in sync with the tab bar and other IDE chrome.
-			Icons: e.config.Icons,
-			// Match the text editor's tabspaces so `>>` / `<<` in
-			// vi land the cursor on depth boundaries — the tree is
-			// rendered in the same cell buffer the editor shows.
+			Icons:       e.config.Icons,
 			IndentWidth: e.config.Tabspaces,
-			// Indent guide attributes; defaults to gray (see
-			// text.DefaultConfig) and can be overridden via
-			// editor.file_explorer.indent_attr.
-			IndentAttr: e.config.FileExplorerIndentAttr,
-			// Icon attributes; defaults to gray (see
-			// text.DefaultConfig) and can be overridden via
-			// editor.file_explorer.icon_attr.
-			IconAttr: e.config.FileExplorerIconAttr,
+			IndentAttr:  e.config.FileExplorerIndentAttr,
+			IconAttr:    e.config.FileExplorerIconAttr,
+			Ignore:      ignore,
 		})
 		if err != nil {
 			return fmt.Errorf("file explorer: create component: %w", err)
@@ -1658,12 +1643,6 @@ func (e *ex) initFileExplorer() error {
 		if err != nil {
 			return fmt.Errorf("file explorer: parse uri: %w", err)
 		}
-		// Defensive: if the explorer URI is already open as a regular
-		// tab (e.g. a stale session cache restored it before filters
-		// were in place), remove that tab first. Otherwise e.ed.Edit
-		// below would re-subscribe per-file fold/location/git
-		// commands for the same URI and fail with
-		// "command already registered".
 		if existing, ok := e.comp.Resource(uri); ok {
 			if err := e.comp.RemoveTab(existing); err != nil {
 				return fmt.Errorf("file explorer: remove stale tab: %w", err)
@@ -1680,12 +1659,6 @@ func (e *ex) initFileExplorer() error {
 			return fmt.Errorf("file explorer: wrap component: %w", err)
 		}
 		e.fileExplorerHandler = wrapped
-		// Subscribe to filesystem watcher events so the
-		// rendered tree stays in sync with on-disk changes
-		// (created/changed/removed/renamed files under the
-		// workspace root). The handler is cached for the
-		// lifetime of the ex, so a single subscription is
-		// enough — no Unsubscribe is needed on toggle close.
 		if err := e.comp.SubscribeEvents(
 			fileExplorerFSEvents, wrapped.fsEventHandler(),
 		); err != nil {
