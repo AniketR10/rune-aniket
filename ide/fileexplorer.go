@@ -102,9 +102,11 @@ func (h *fileExplorerHandler) SetTargetWindow(win browser.Window) {
 
 func (h *fileExplorerHandler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type == term.EventKey && ev.Mod == 0 && ev.Key == term.KeyEnter {
-		if handled = h.enterAtCursor(); handled {
-			h.syncWidth()
-			return false, true
+		if !h.ed.IsSearchMode() {
+			if handled = h.enterAtCursor(); handled {
+				h.syncWidth()
+				return false, true
+			}
 		}
 	}
 	exit, handled = h.span.Handle(ev)

@@ -824,6 +824,11 @@ func (h *editorHandler) Resource() workspaceapi.URI {
 func (h *editorHandler) SetWrap(wrap bool) {
 	h.less.Scroll().Wrap = wrap
 }
+
+func (h *editorHandler) IsSearchMode() bool {
+	return h.less.Mode() == handler.LessSearchMode
+}
+
 func (t *editorHandler) ShowCommandBar(show bool) {
 	t.less.ShowCommandBar(show)
 }

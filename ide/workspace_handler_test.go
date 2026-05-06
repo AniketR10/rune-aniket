@@ -145,6 +145,149 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+// TestFileExplorerEnterDelegatesIntegration exercises the real
+// :fexplorer integration path with both real text.Editor
+// implementations (vi-style modal and modeless). Regression
+// coverage for RUNE-138: when the file explorer's inner editor
+// reports IsSearchMode() == true, pressing <Enter> must delegate
+// to the inner editor (committing the search) rather than be
+// captured by the outer fileExplorerHandler as expand-or-open.
+//
+// The IsSearchMode() signal must propagate from the leaf editor
+// handler (vi.Vi or modeless.editorHandler) up through every
+// wrapper that text.Editor.Edit installs — text.Publisher's
+// cursorPublisher, fold/location/indent/comment/git command
+// wrappers, status/aux/icons bars — and reach
+// fileExplorerHandler.ed.IsSearchMode(). Because text.Handler
+// declares IsSearchMode(), this propagation happens through
+// interface embedding on each wrapper.
+//
+// vi has a key-driven inline search ('/'), so for modal we drive
+// the bug repro end-to-end: '/findme<Enter>' must finish the
+// search and not toggle the tree. modeless does not have a
+// key-driven inline search (text search in modeless is surfaced
+// through a separate fuzzy_search extension command), so we
+// instead assert the non-search-mode behavior is preserved end-
+// to-end: <Enter> still toggles the tree exactly as before.
+func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
+	cases := []struct {
+		name string
+		mode string
+	}{
+		{name: "modal", mode: editorModeModal},
+		{name: "modeless", mode: editorModeModeless},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dir, "findme.txt"), []byte("hi"), 0o644))
+			require.NoError(t, os.MkdirAll(
+				filepath.Join(dir, "subdir"), 0o755))
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dir, "subdir", "child.txt"),
+				[]byte("hi"), 0o644))
+
+			cfg := defaultConfigWithWrap(false)
+			editorCfg := cfg.cfg["editor"].(map[string]any)
+			editorCfg["mode"] = tc.mode
+			cfg.cfg["editor"] = editorCfg
+			require.Equal(t, tc.mode, cfg.editorMode())
+
+			uri, err := workspaceapi.ParseURI("file://" + dir)
+			require.NoError(t, err)
+			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+				nopShutdownShaderConfig())
+			require.NoError(t, m.addOrCreateWorkspace(uri))
+			t.Cleanup(func() { _ = m.Close() })
+
+			h := newSafeHandler(m)
+			h.Resize(40, 12)
+
+			ex := m.focusEx()
+			require.NotNil(t, ex)
+			require.NoError(t, ex.fexplorer(context.Background()))
+			require.NotNil(t, ex.fileExplorerWin,
+				"file explorer must be open")
+			require.NotNil(t, ex.fileExplorerHandler)
+
+			explorer := ex.fileExplorerHandler
+			require.False(t, explorer.ed.IsSearchMode(),
+				"IsSearchMode must propagate through the full "+
+					"wrapper chain and report false initially")
+
+			beforeRows := explorer.ed.CellView().Rows()
+			require.Greater(t, beforeRows, 0)
+
+			switch tc.mode {
+			case editorModeModal:
+				// Bug repro: enter search mode and type a query.
+				_, handled := h.Handle(term.Event{
+					Type: term.EventKey, Ch: '/',
+				})
+				require.True(t, handled,
+					"'/' must enter vi search mode")
+				require.True(t, explorer.ed.IsSearchMode(),
+					"vi must be in search mode after '/'")
+
+				for _, r := range "findme" {
+					_, handled = h.Handle(term.Event{
+						Type: term.EventKey, Ch: r,
+					})
+					require.True(t, handled,
+						"typed char %q must be handled", r)
+				}
+				require.True(t, explorer.ed.IsSearchMode(),
+					"vi must still be in search mode while "+
+						"typing the query")
+
+				_, handled = h.Handle(term.Event{
+					Type: term.EventKey, Key: term.KeyEnter,
+				})
+				require.True(t, handled,
+					"<Enter> must be handled")
+				// Bug regression: <Enter> in search mode must
+				// commit the search and exit search mode rather
+				// than be captured by the outer file explorer.
+				require.False(t, explorer.ed.IsSearchMode(),
+					"<Enter> in search mode must commit the "+
+						"inner search and exit search mode")
+				require.Equal(t, beforeRows,
+					explorer.ed.CellView().Rows(),
+					"<Enter> in search mode must not expand "+
+						"or collapse a tree node")
+				for _, tab := range ex.comp.Browser().Tabs() {
+					require.NotEqual(t,
+						"file://"+filepath.Join(dir, "findme.txt"),
+						tab.URI().String(),
+						"<Enter> in search mode must not open "+
+							"a file from the explorer")
+				}
+
+			case editorModeModeless:
+				// modeless has no key-driven inline search in the
+				// explorer; verify the non-search-mode behavior
+				// still holds end-to-end through the full
+				// wrapper chain. With the cursor on the first
+				// (directory) row, <Enter> must expand the tree
+				// — i.e. row count increases.
+				_, handled := h.Handle(term.Event{
+					Type: term.EventKey, Key: term.KeyEnter,
+				})
+				require.True(t, handled,
+					"<Enter> must be handled")
+				require.False(t, explorer.ed.IsSearchMode(),
+					"modeless must not be in search mode after "+
+						"<Enter> on a non-search context")
+				require.NotEqual(t, beforeRows,
+					explorer.ed.CellView().Rows(),
+					"<Enter> outside search mode must still "+
+						"toggle the tree (regression guard)")
+			}
+		})
+	}
+}
+
 func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)

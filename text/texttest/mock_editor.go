@@ -200,6 +200,9 @@ func (t *TestEditorHandler) Dimensions() (int, int) {
 	return text.ViewDimensions(t.parent.buf.View())
 }
 
+// IsSearchMode satisfies text.Handler.
+func (t *TestEditorHandler) IsSearchMode() bool { return false }
+
 func (e *TestEditor) SubscribeCommand(cmd textapi.CommandManual, h text.CommandHandler) error {
 	return nil
 }

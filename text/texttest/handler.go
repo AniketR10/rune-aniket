@@ -130,6 +130,9 @@ func (t *TestHandler) SetDefaultAttributes(attr term.Attributes) {
 // so it reports (0, 0).
 func (t *TestHandler) Dimensions() (int, int) { return 0, 0 }
 
+// IsSearchMode satisfies text.Handler.
+func (t *TestHandler) IsSearchMode() bool { return false }
+
 // CursorAtScroll satisfies text.Handler.
 func (t *TestHandler) CursorAtScroll() term.Coordinates {
 	return term.Coordinates{}

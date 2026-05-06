@@ -533,6 +533,8 @@ func (e *testHandler) SetDefaultAttributes(attr term.Attributes) {
 
 func (*testHandler) Dimensions() (int, int) { return 0, 0 }
 
+func (*testHandler) IsSearchMode() bool { return false }
+
 func (h *testHandler) CursorAtScroll() term.Coordinates {
 	return term.Coordinates{Y: h.cursor}
 }

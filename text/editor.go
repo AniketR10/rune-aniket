@@ -106,6 +106,15 @@ type Handler interface {
 	// truncation should size the hosting window to at least these
 	// dimensions. Satisfies component.Floating.
 	Dimensions() (width, height int)
+
+	// IsSearchMode reports whether the handler is currently
+	// consuming keystrokes for an interactive search prompt
+	// (e.g. `/` or `?` in vi, Cmd-F in modeless). When true,
+	// outer handlers that wrap a Handler must delegate <Enter>
+	// (and other search-completing keys) to the inner Handler
+	// so the search can be committed instead of being captured
+	// for an unrelated shortcut.
+	IsSearchMode() bool
 }
 
 // EventPublisher wraps subscribing and unsubscribing to file events.

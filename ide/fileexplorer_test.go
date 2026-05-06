@@ -138,6 +138,31 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 	}
 }
 
+func TestFileExplorerHandlerEnterDelegatesWhileSearching(t *testing.T) {
+	h, host := newTestFileExplorerHandler(t, map[string][]explorerMockEntry{
+		"/project": {
+			{name: "src", isDir: true},
+			{name: "findme.txt", isDir: false},
+		},
+		"/project/src": {
+			{name: "main.go", isDir: false},
+		},
+	})
+	h.Resize(20, 6)
+	beforeRows := h.ed.CellView().Rows()
+
+	keys, err := term.ParseKeys("/findme<enter>")
+	require.NoError(t, err)
+	for _, key := range keys {
+		h.Handle(term.Event{Ch: key.Ch, Mod: key.Mod, Key: key.Key, Type: term.EventKey})
+	}
+
+	require.False(t, h.ed.IsSearchMode())
+	require.Empty(t, host.opened)
+	require.Equal(t, beforeRows, h.ed.CellView().Rows())
+	require.Equal(t, 1, h.ed.CursorAtScroll().Y)
+}
+
 func TestFileExplorerHandlerRuntimeLikeDimensionsAndRender(t *testing.T) {
 	buf := cell.NewBuffer()
 	comp, err := fileexplorercomp.New(buf, &explorerMockFS{dirs: map[string][]explorerMockEntry{

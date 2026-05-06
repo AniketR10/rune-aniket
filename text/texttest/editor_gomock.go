@@ -172,6 +172,20 @@ func (mr *MockHandlerMockRecorder) LocationLists() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocationLists", reflect.TypeOf((*MockHandler)(nil).LocationLists))
 }
 
+// IsSearchMode mocks base method.
+func (m *MockHandler) IsSearchMode() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsSearchMode")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsSearchMode indicates an expected call of IsSearchMode.
+func (mr *MockHandlerMockRecorder) IsSearchMode() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSearchMode", reflect.TypeOf((*MockHandler)(nil).IsSearchMode))
+}
+
 // MaxSeekOffset mocks base method.
 func (m *MockHandler) MaxSeekOffset() int {
 	m.ctrl.T.Helper()
