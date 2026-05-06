@@ -48,8 +48,8 @@ import (
 	"github.com/unstablebuild/blue/release/gcsrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
-	"unstable.build/go-tui/cmd/ox-api/oxapi"
-	"unstable.build/go-tui/cmd/ox-api/auth"
+	"github.com/unstablebuild/ox-api/api/oxapi"
+	"github.com/unstablebuild/ox-api/auth"
 	"unstable.build/go-tui/handler/handlertest"
 	goide "unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
@@ -66,10 +66,10 @@ func TestReleaseInstallE2E(t *testing.T) {
 		t.Skip("set OXAPI_TEST_GCS_BUCKET and service-account ADC to run real GCS integration")
 	}
 
-	priv := loadKey(t, "../testdata/jwk-priv.json")
-	pub1 := loadKey(t, "../testdata/jwk-pub1.json.pub")
-	pub2 := loadKey(t, "../testdata/jwk-pub2.json.pub")
-	pub3 := loadKey(t, "../testdata/jwk-pub3.json.pub")
+	priv := loadKey(t, "../ox-api/testdata/jwk-priv.json")
+	pub1 := loadKey(t, "../ox-api/testdata/jwk-pub1.json.pub")
+	pub2 := loadKey(t, "../ox-api/testdata/jwk-pub2.json.pub")
+	pub3 := loadKey(t, "../ox-api/testdata/jwk-pub3.json.pub")
 	keys := blueauth.StaticAsymmetricKeys(priv, pub1, pub2, pub3)
 
 	rpcToken, err := blueauth.SignToken(priv,

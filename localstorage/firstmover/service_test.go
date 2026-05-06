@@ -25,7 +25,7 @@ import (
 	"github.com/unstablebuild/blue/document/doctest"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
-	"unstable.build/go-tui/cmd/ox-api/bluestore"
+	"github.com/unstablebuild/ox-api/bluestore"
 )
 
 func TestDefaultConfiguration(t *testing.T) {

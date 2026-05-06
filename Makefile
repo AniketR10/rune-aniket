@@ -5,7 +5,7 @@ GOTESTFLAGSNORACE = -timeout 240s
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
 GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
-OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
+OXAPI_GOFLAGS=
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -162,7 +162,7 @@ $(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/rune && $(CGO_ENABLED) $(GO) build $(RUNE_GOFLAGS) -o ../../$@
 
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
-	@cd cmd/ox-api && $(CGO_ENABLED) $(GO) build $(OXAPI_GOFLAGS) -o ../../$@
+	@cd cmd/ox-api && $(CGO_ENABLED) $(GO) build $(OXAPI_GOFLAGS) -o ../../$@ .
 
 $(BIN)/claudeimport: $(EXECSRC) $(LIBSRC) $(BIN)
 	@cd cmd/claudeimport && $(CGO_ENABLED) $(GO) build $(GOFLAGS) -o ../../$@

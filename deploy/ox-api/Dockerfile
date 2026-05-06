@@ -22,7 +22,7 @@ RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
 RUN ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
 RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 RUN go env -w GOPRIVATE="github.com/unstablebuild,unstable.build/*"
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /bin/ox-api ./cmd/ox-api
+RUN cd cmd/ox-api && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /bin/ox-api .
 
 # use clean image with no deps or install
 FROM --platform=linux/amd64 alpine:latest

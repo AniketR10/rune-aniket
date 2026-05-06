@@ -41,7 +41,7 @@ import (
 	"github.com/unstablebuild/blue/document/doctest"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"unstable.build/go-tui/cmd/ox-api/bluestore"
+	"github.com/unstablebuild/ox-api/bluestore"
 	"unstable.build/go-tui/workspace"
 )
 

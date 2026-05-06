@@ -44,8 +44,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/credentials/oauth"
-	"unstable.build/go-tui/cmd/ox-api/api"
-	"unstable.build/go-tui/cmd/ox-api/auth"
+	"github.com/unstablebuild/ox-api/api"
+	"github.com/unstablebuild/ox-api/auth"
 	"unstable.build/go-tui/debug"
 )
 
