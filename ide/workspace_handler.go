@@ -140,8 +140,13 @@ type workspaceManagerHandler struct {
 	frame        bool
 	reloadConfig func() (ideConfig, error)
 
-	union           handler.FrameUnion
-	bar             handler.Tabs
+	union handler.FrameUnion
+	bar   handler.Tabs
+	// barIdxToSlot maps a bar tab index (as returned by handler.Tabs.TabAt)
+	// to the workspace slot index in h.workspaces. When middle slots are
+	// empty (nil), the bar skips them, so the bar tab index does not
+	// equal the slot index.
+	barIdxToSlot    []int
 	focusProxy      handler.Proxy
 	width, height   int
 	workspaces      [workspaceSlots]*workspaceHandler
@@ -471,7 +476,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	h.bar.Init()
-	h.bar.OnClick = h.switchToWorkspace
+	h.bar.OnClick = h.onBarTabClick
 	h.bar.SetAttr(cfg.focusTabAttr(), cfg.nonFocusTabAttr(),
 		cfg.windowFrameAttr(), cfg.windowFrameAttr())
 	h.bar.SetFrameCharSet(cfg.windowFrameCharset())
@@ -670,6 +675,7 @@ func (h *workspaceManagerHandler) makeWorkspaceTabName(
 func (h *workspaceManagerHandler) Resize(width, height int) {
 	h.width, h.height = width, height
 	h.bar.RemoveAll()
+	h.barIdxToSlot = h.barIdxToSlot[:0]
 
 	drawBar := h.drawBar()
 	if drawBar {
@@ -680,6 +686,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 		if w != nil {
 			name := h.makeWorkspaceTabName(i, w)
 			idx := h.bar.Add(rune(int(h.workspacesIcon)+i), name)
+			h.barIdxToSlot = append(h.barIdxToSlot, i)
 			if w.attentionAttr != (term.Attributes{}) {
 				h.bar.SetTabAttr(idx, w.attentionAttr)
 				h.bar.SetTabName(idx, name+h.tabAttentionNameSuffix)
@@ -692,6 +699,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 			}
 		} else if i == h.focus {
 			idx := h.bar.Add(0, h.makeWorkspaceTabName(i, w))
+			h.barIdxToSlot = append(h.barIdxToSlot, i)
 			barFocusIdx = idx
 		}
 	}
@@ -750,6 +758,17 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 	// resize for bottom workspace bar to disappear
 	h.Resize(h.width, h.height)
 	return true
+}
+
+// onBarTabClick translates a bar tab index (sequential among visible
+// tabs) to the workspace slot index before switching. The bar may skip
+// empty middle slots, so a direct slot lookup would otherwise focus the
+// wrong workspace.
+func (h *workspaceManagerHandler) onBarTabClick(barIdx int) bool {
+	if barIdx < 0 || barIdx >= len(h.barIdxToSlot) {
+		return false
+	}
+	return h.switchToWorkspace(h.barIdxToSlot[barIdx])
 }
 
 func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {

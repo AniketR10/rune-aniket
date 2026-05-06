@@ -3899,6 +3899,212 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+// TestWorkspaceBarTabClickIntegration is a black-box regression suite
+// for the bottom workspace bar's mouse routing. Each case builds a
+// (possibly sparse) workspace layout via the manager's internal
+// helpers, dispatches a single term.EventMouse/MouseLeft event at
+// chosen bar coordinates, and asserts the resulting screen with
+// handlertest.RunHandlerSequence. Verification is purely from the
+// rendered Draw output, never via private fields.
+//
+// The bar config sets focus_tab_attr to {bg: blue} so the focused tab's
+// name cells render as the writer's BackgroundCh ('·'). That makes
+// which slot gained focus directly observable in the expected string.
+//
+// Bar layout in numbers mode renders one bar tab per visible workspace
+// as "<icon> <name>" with a two-space separator. With single-digit
+// names each tab spans 5 columns (icon + space + name + separator).
+func TestWorkspaceBarTabClickIntegration(t *testing.T) {
+	const (
+		width  = 30
+		height = 9
+		// barY is the on-screen Y of the workspace bar's tab row. The
+		// bar sits one row above the bottom border.
+		barY = height - 2
+	)
+
+	// screen builds the expected Draw output. The bar string encodes
+	// the focused slot via '·' on the focused name (see writer setup).
+	screen := func(bar string) string {
+		return `┌────────────────────────────┐
+│                            │
+├────────────────────────────┤
+│                            │
+│     workspaceWallpaper     │
+│                            │
+├────────────────────────────┤
+` + bar + `
+└────────────────────────────┘`
+	}
+
+	type clickCase struct {
+		name string
+		// filled[i] indicates whether slot i should be populated.
+		filled []bool
+		// focusSlot is the slot to focus before the click.
+		focusSlot int
+		// mouseX is the X column of the click on the bar row.
+		mouseX int
+		// expected is the rendered screen after the click.
+		expected string
+	}
+
+	cases := []clickCase{
+		// Dense layout (3 filled): "1 1  2 2  3 3". Each filled tab
+		// is 5 cells wide (icon + space + name + 2-space sep), so
+		// tab 0 spans X∈[0,5], tab 1 spans X∈[6,10], tab 2 spans
+		// X∈[11,15].
+		{
+			name:      "dense_click_first_tab_focuses_slot_1",
+			filled:    []bool{true, true, true},
+			focusSlot: 2, mouseX: 1,
+			expected: screen("│1 ·  2 2  3 3               │"),
+		},
+		{
+			name:      "dense_click_middle_tab_focuses_slot_2",
+			filled:    []bool{true, true, true},
+			focusSlot: 0, mouseX: 7,
+			expected: screen("│1 1  2 ·  3 3               │"),
+		},
+		{
+			name:      "dense_click_last_tab_focuses_slot_3",
+			filled:    []bool{true, true, true},
+			focusSlot: 0, mouseX: 12,
+			expected: screen("│1 1  2 2  3 ·               │"),
+		},
+		{
+			name:      "dense_click_far_past_last_tab_keeps_focus",
+			filled:    []bool{true, true, true},
+			focusSlot: 0, mouseX: width - 2,
+			expected: screen("│1 ·  2 2  3 3               │"),
+		},
+
+		// Single empty middle slot — the original RUNE-126 bug. Bar
+		// renders "1 1  3 3"; widths 5/5 → tab 0 X∈[0,5], tab 1
+		// X∈[6,10]. Clicking inside tab 1 must focus slot 3, not 2.
+		{
+			name:      "middle_gap_click_first_visible_tab_focuses_slot_1",
+			filled:    []bool{true, false, true},
+			focusSlot: 2, mouseX: 1,
+			expected: screen("│1 ·  3 3                    │"),
+		},
+		{
+			name:      "middle_gap_click_second_visible_tab_focuses_slot_3",
+			filled:    []bool{true, false, true},
+			focusSlot: 0, mouseX: 7,
+			expected: screen("│1 1  3 ·                    │"),
+		},
+		{
+			name:      "middle_gap_click_past_last_visible_tab_keeps_focus",
+			filled:    []bool{true, false, true},
+			focusSlot: 0, mouseX: 15,
+			expected: screen("│1 ·  3 3                    │"),
+		},
+
+		// Two consecutive empty middle slots: bar renders "1 1  4 4".
+		{
+			name:      "double_gap_click_second_visible_tab_focuses_slot_4",
+			filled:    []bool{true, false, false, true},
+			focusSlot: 0, mouseX: 7,
+			expected: screen("│1 1  4 ·                    │"),
+		},
+
+		// Focused empty middle slot: bar renders "1 1  2    3 3".
+		// The focused-but-empty entry has no icon, so its width is
+		// only 3 cells (sep + name) → widths 5/3/5 → tab spans
+		// X∈[0,5], X∈[6,8], X∈[9,13].
+		// Clicking the left or right filled tab moves focus off the
+		// empty slot, which then disappears from the bar — the bar
+		// collapses back to the dense two-tab layout.
+		{
+			name:      "focused_empty_middle_click_left_filled_focuses_slot_1",
+			filled:    []bool{true, false, true},
+			focusSlot: 1, mouseX: 1,
+			expected: screen("│1 ·  3 3                    │"),
+		},
+		{
+			name:      "focused_empty_middle_click_right_filled_focuses_slot_3",
+			filled:    []bool{true, false, true},
+			focusSlot: 1, mouseX: 10,
+			expected: screen("│1 1  3 ·                    │"),
+		},
+
+		// Focused empty first slot: bar renders "1  2 2  3 3" with
+		// widths 3/5/5 → tab 0 X∈[0,3], tab 1 X∈[4,8], tab 2 X∈[9,13].
+		// Clicking tab 1 or tab 2 unfocuses slot 0, so its empty
+		// entry vanishes and the bar collapses left.
+		{
+			name:      "focused_empty_first_click_second_visible_focuses_slot_2",
+			filled:    []bool{false, true, true},
+			focusSlot: 0, mouseX: 5,
+			expected: screen("│2 ·  3 3                    │"),
+		},
+		{
+			name:      "focused_empty_first_click_third_visible_focuses_slot_3",
+			filled:    []bool{false, true, true},
+			focusSlot: 0, mouseX: 10,
+			expected: screen("│2 2  3 ·                    │"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := defaultConfigWithWrap(false)
+			cfg.scheduleNextTick = func(fn func()) bool {
+				fn()
+				return true
+			}
+			// Configure attrs so the focused tab's name renders as
+			// '·' (the writer's BackgroundCh) and the unfocused
+			// tabs render as their literal name characters.
+			cfg.cfg["browser"] = map[string]any{
+				"workspace_bar":      "number",
+				"focus_tab_attr":     map[string]any{"bg": "blue"},
+				"non_focus_tab_attr": map[string]any{"bg": "default"},
+			}
+			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "",
+				nopShutdownShaderConfig())
+			t.Cleanup(func() { require.NoError(t, m.Close()) })
+
+			// Build the layout via internal helpers under m.mu so we
+			// don't race with the FS-event dispatcher goroutines
+			// addWorkspace spawns.
+			m.mu.Lock()
+			for range tc.filled {
+				uri, err := workspaceapi.ParseURI("file://" + t.TempDir())
+				require.NoError(t, err)
+				require.NoError(t, m.addOrCreateWorkspace(uri))
+			}
+			for i, f := range tc.filled {
+				if f {
+					continue
+				}
+				require.True(t, m.switchToWorkspace(i))
+				_, _, err := m.closeWorkspace()
+				require.NoError(t, err)
+			}
+			require.True(t, m.switchToWorkspace(tc.focusSlot))
+			m.mu.Unlock()
+
+			// Black-box verification: route the mouse click through
+			// the full handler chain and assert the rendered screen
+			// via RunHandlerSequence with no key input.
+			h := newSafeHandler(m)
+			writer := term.NewStringWriter(width, height)
+			writer.BackgroundCh = '·'
+			h.Resize(width, height)
+			h.Handle(term.Event{
+				Type: term.EventMouse, Key: term.MouseLeft,
+				MouseX: tc.mouseX, MouseY: barY,
+			})
+			handlertest.RunHandlerSequenceWriter(t, writer, h,
+				width, height, []handlertest.SequenceTestCase{
+					{InputSequence: "", Expected: tc.expected},
+				})
+		})
+	}
+}
+
 func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 	m := newTestWorkspaceManagerHandler(t, defaultCfg(), nil, nopShutdownShaderConfig())
 	t.Cleanup(func() { m.Close() })
