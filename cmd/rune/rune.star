@@ -497,7 +497,7 @@ config = {
                 ],
                 "completer": [
                     "{history}",
-                    "{file}",
+                    "{dirs}",
                 ],
             },
         },
