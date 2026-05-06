@@ -243,6 +243,121 @@ func TestFacility(t *testing.T) {
 		assert.False(t, f.put(stray))
 		assert.Equal(t, 0, f.Capacity())
 	})
+
+	t.Run("Get is served from the pool when warm", func(t *testing.T) {
+		t.Parallel()
+		var called atomic.Int64
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
+			called.Add(1)
+			return newTestVte(f), nil
+		})
+		// initCap synchronously fires off two news.
+		assert.Equal(t, int64(2), called.Load())
+
+		// First Get: pool has 2, take one, pool now has 1 (no
+		// refill because len(pool) > 0 after pop).
+		_, err := f.Get()
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), called.Load())
+
+		// Second Get: pool has 1, take it, pool empty so refill -> 1 new call.
+		_, err = f.Get()
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), called.Load())
+	})
+
+	t.Run("Get blocks until initCap delivers a pre-warmed VTE", func(t *testing.T) {
+		t.Parallel()
+		// Use New(...) so that initCap runs asynchronously - this is
+		// the exact race that defeats the warm pool in production.
+		release := make(chan struct{})
+		var newCalls atomic.Int64
+		b := nopBrowser{}
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+		scheme, err := workspacetest.NewNopScheme("file:///tmp")(
+			context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		nop := scheme.(*workspacetest.NopScheme)
+		nop.NewPtyFunc = func(ctx context.Context) (workspaceapi.Pty, error) {
+			// Block initCap until the test releases it.
+			<-release
+			newCalls.Add(1)
+			return workspaceapi.Pty{
+				Master: scheme.NewFile(0, ""),
+				Slave:  scheme.NewFile(1, ""),
+			}, nil
+		}
+		nop.StartCommandFunc = func(context.Context, workspaceapi.Cmd) (workspaceapi.Pid, error) {
+			return 0, nil
+		}
+		f := New(b, b, scheme, scheme, b, vte.DefaultConfig(), 2)
+		t.Cleanup(func() { _ = f.Close() })
+
+		// Issue a Get before initCap can deliver any VTE. It must not
+		// fall through to the from-scratch path; it must wait for the
+		// pool to be populated.
+		got := make(chan VTE, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			v, err := f.Get()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			got <- v
+		}()
+
+		// Give the goroutine a chance to enter Get and observe the
+		// empty pool. With the bug, Get would immediately call
+		// f.new(false) and return.
+		select {
+		case <-got:
+			t.Fatal("Get returned before initCap delivered a VTE")
+		case err := <-errCh:
+			t.Fatalf("Get returned an unexpected error: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		// Release initCap so it can populate the pool.
+		close(release)
+
+		select {
+		case <-got:
+		case err := <-errCh:
+			t.Fatalf("Get returned an unexpected error: %v", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Get blocked indefinitely waiting for initCap")
+		}
+	})
+
+	t.Run("initCap does not resurrect a closed pool", func(t *testing.T) {
+		t.Parallel()
+		release := make(chan struct{})
+		f := new(Facility)
+		f.cond = sync.NewCond(&f.mu)
+		f.initialCapacity = 3
+		f.pendingInit = 3
+		f.new = func(bool) (VTE, error) {
+			<-release
+			return newTestVte(f), nil
+		}
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			f.initCap(3)
+		}()
+
+		// Close while initCap is mid-flight.
+		require.NoError(t, f.Close())
+		close(release)
+		<-done
+
+		// The pool must remain empty - initCap must not re-populate
+		// it after Close.
+		assert.Equal(t, 0, f.Capacity())
+	})
 }
 
 type nopBrowser struct {

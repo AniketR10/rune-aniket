@@ -58,9 +58,15 @@ type VTE interface {
 // that start with no initial commands,
 type Facility struct {
 	mu     sync.Mutex
+	cond   *sync.Cond
 	pool   []VTE
 	closed bool
 	new    func(bool) (VTE, error)
+	// pendingInit counts how many VTEs are still being created by
+	// initCap. Get() blocks on cond while the pool is empty and
+	// pendingInit > 0 so callers do not race the warm-up goroutines.
+	pendingInit     int
+	initialCapacity int
 }
 
 // New allocates storage for a new Facility and initializes it.
@@ -76,6 +82,9 @@ func New(
 		config.HeightHint = config.WidthHint / 2
 	}
 	ret := new(Facility)
+	ret.cond = sync.NewCond(&ret.mu)
+	ret.initialCapacity = initialCapacity
+	ret.pendingInit = initialCapacity
 	ret.new = func(initialAlloc bool) (VTE, error) {
 		ret.log(log.TraceLevel, "called pool.New, width hint: %d, height hint: %d",
 			config.WidthHint, config.HeightHint)
@@ -95,6 +104,13 @@ func New(
 	return ret
 }
 
+// InitialCapacity returns the configured initial capacity.
+func (f *Facility) InitialCapacity() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.initialCapacity
+}
+
 // Capacity returns the current capacity.
 func (f *Facility) Capacity() int {
 	f.mu.Lock()
@@ -107,6 +123,13 @@ func (f *Facility) Capacity() int {
 func (f *Facility) Get() (VTE, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	// Wait for initCap to deliver at least one VTE so that the
+	// configured initial capacity is honoured before the first Get
+	// falls through to the from-scratch path.
+	for len(f.pool) == 0 && f.pendingInit > 0 && !f.closed {
+		f.cond.Wait()
+	}
 
 	if len(f.pool) != 0 {
 		head := f.pool[0]
@@ -141,6 +164,10 @@ func (f *Facility) Close() (ret error) {
 	defer f.mu.Unlock()
 
 	f.closed = true
+	// wake up any Get callers waiting on initCap.
+	if f.cond != nil {
+		f.cond.Broadcast()
+	}
 	pool := f.pool
 	f.pool = nil
 	for _, vte := range pool {
@@ -154,31 +181,41 @@ func (f *Facility) Close() (ret error) {
 const maxPoolSize = 10
 
 func (f *Facility) initCap(initialCapacity int) {
-	pool := make([]VTE, initialCapacity)
+	if f.cond == nil {
+		f.cond = sync.NewCond(&f.mu)
+	}
+	// pendingInit is normally seeded by New; ensure it is set when
+	// initCap is invoked directly (e.g. by the test helper).
+	f.mu.Lock()
+	if f.pendingInit < initialCapacity {
+		f.pendingInit = initialCapacity
+	}
+	f.mu.Unlock()
 
 	var wg sync.WaitGroup
 	wg.Add(initialCapacity)
-	for i := range initialCapacity {
+	for range initialCapacity {
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			vte, err := f.new(true)
-			if err == nil {
-				pool[i] = vte
-			} else {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.pendingInit--
+			defer f.cond.Broadcast()
+			if err != nil {
 				f.log(log.WarnLevel, "new vte: %v", err)
+				return
 			}
+			// Do not resurrect a closed pool: dispose the
+			// just-created VTE instead of leaking it back in.
+			if f.closed {
+				_ = vte.Close()
+				return
+			}
+			f.pool = append(f.pool, vte)
 		})
 	}
 	wg.Wait()
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	for _, vte := range pool {
-		if vte != nil {
-			f.pool = append(f.pool, vte)
-		}
-	}
 }
 
 func (f *Facility) put(v VTE) bool {
@@ -195,6 +232,9 @@ func (f *Facility) put(v VTE) bool {
 
 	v.ClearPrimaryBuffer()
 	f.pool = append(f.pool, v)
+	if f.cond != nil {
+		f.cond.Broadcast()
+	}
 	return true
 }
 

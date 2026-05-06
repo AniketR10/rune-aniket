@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -108,6 +109,12 @@ type ex struct {
 	workspaceURI workspaceapi.URI
 	closed       bool
 	reservoir    *vtereservoir.Facility
+	// initialReservoirCapacity preserves the configured pool size so
+	// that setExecutor can re-create the reservoir without racing
+	// against the asynchronous initCap (Capacity() returns the
+	// momentary length of the pool, which is usually 0 right after
+	// extension load).
+	initialReservoirCapacity int
 	// do not use directly, use notifications below instead
 	// which is able to dispatch cross-workspace cues.
 	container            *notifications.Container
@@ -228,13 +235,14 @@ func (e *ex) init(
 	e.tm = tm
 	e.comp.SubscribeWindow((*windowSubscriber)(e))
 	if initialVTECapacity != 0 {
+		e.initialReservoirCapacity = initialVTECapacity
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
 			e.workspace, e.executor, e.tm, e.emulatorConfig, initialVTECapacity)
 	}
 	e.newEmulatorHandler = func(cmdAndArgs []string) (
 		vtereservoir.VTE, error,
 	) {
-		if len(cmdAndArgs) == 0 && e.reservoir != nil {
+		if e.reservoir != nil && argsMatchEmulatorShell(cmdAndArgs, e.emulatorConfig.CommandAndArgs) {
 			e.log(log.TraceLevel, "getting vte instance from reservoir")
 			return e.reservoir.Get()
 		}
@@ -299,7 +307,8 @@ func (e *ex) setExecutor(exe schemeapi.Executor, wsExec *workspaceshell.Executor
 	if e.reservoir != nil {
 		_ = e.reservoir.Close()
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
-			e.workspace, e.executor, e.tm, e.emulatorConfig, e.reservoir.Capacity())
+			e.workspace, e.executor, e.tm, e.emulatorConfig,
+			e.initialReservoirCapacity)
 	}
 }
 
@@ -2516,6 +2525,17 @@ func onFocusChangeTab(t *browser.Tab, isInFocus bool) {
 }
 
 var _ component.Scrollable = vteAdapter{}
+
+// argsMatchEmulatorShell reports whether the requested
+// terminal command is satisfied by the configured shell, in which
+// case the warm reservoir can serve it. An empty argument list
+// always falls back to the default shell so it matches.
+func argsMatchEmulatorShell(cmdAndArgs, configured []string) bool {
+	if len(cmdAndArgs) == 0 {
+		return true
+	}
+	return slices.Equal(cmdAndArgs, configured)
+}
 
 // adapts vte.Handler to vtereservoir.VTE
 type vteAdapter struct {

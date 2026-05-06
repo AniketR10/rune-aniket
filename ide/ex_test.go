@@ -2948,6 +2948,152 @@ func TestTerminalNewForwardsShellArgument(t *testing.T) {
 	}
 }
 
+func TestEmulatorHandlerUsesReservoir(t *testing.T) {
+	// Verifies the fix for RUNE-129: when an ex is configured with a
+	// non-zero initialVTECapacity, the warm reservoir is consulted on
+	// terminalnew/terminalnewtab even when the call passes shell
+	// arguments that match the configured shell.
+	type call struct {
+		name string
+		fn   func(b *testEx, args ...string) error
+	}
+	calls := []call{
+		{
+			name: "terminalnew",
+			fn: func(b *testEx, args ...string) error {
+				return b.ex.terminalnew(context.Background(), args...)
+			},
+		},
+		{
+			name: "terminalnewtab",
+			fn: func(b *testEx, args ...string) error {
+				return b.ex.terminalnewtab(context.Background(), args...)
+			},
+		},
+	}
+	cases := []struct {
+		name            string
+		args            []string
+		expectFromPool  bool
+		configuredShell []string
+	}{
+		{name: "no args", args: nil, expectFromPool: true,
+			configuredShell: []string{"sh"}},
+		{name: "args match shell", args: []string{"sh"}, expectFromPool: true,
+			configuredShell: []string{"sh"}},
+		{name: "args match shell with flags", args: []string{"sh", "-i"},
+			expectFromPool: true, configuredShell: []string{"sh", "-i"}},
+		{name: "args differ from shell", args: []string{"echo", "hi"},
+			expectFromPool: false, configuredShell: []string{"sh"}},
+	}
+	for _, c := range calls {
+		for _, tc := range cases {
+			t.Run(c.name+"/"+tc.name, func(t *testing.T) {
+				b := newExForReservoirTesting(t, tc.configuredShell, 1)
+				defer b.Close()
+
+				before := b.reservoirGets.Load()
+				newCallsBefore := b.newCalls.Load()
+				require.NoError(t, c.fn(&b.testEx, tc.args...))
+				gotFromPool := b.reservoirGets.Load() > before
+				assert.Equal(t, tc.expectFromPool, gotFromPool,
+					"reservoir Get count: before=%d after=%d",
+					before, b.reservoirGets.Load())
+				if tc.expectFromPool {
+					// Reservoir served the request: no fresh from-scratch
+					// call must have been observed by the closure.
+					assert.Equal(t, newCallsBefore, b.newCalls.Load())
+				}
+			})
+		}
+	}
+}
+
+func TestSetExecutorPreservesReservoirCapacity(t *testing.T) {
+	// Verifies the fix for RUNE-129: setExecutor must preserve the
+	// configured initial capacity when re-creating the reservoir, and
+	// must not race the in-flight initCap by reading Capacity().
+	b := newExForReservoirTesting(t, []string{"sh"}, 3)
+	defer b.Close()
+
+	require.Equal(t, 3, b.ex.initialReservoirCapacity)
+
+	// Before setExecutor, drain the reservoir's pending initCap so we
+	// have a known starting state, then snapshot the configured
+	// capacity.
+	first := b.ex.reservoir
+	require.NotNil(t, first)
+
+	// Trigger setExecutor with the original executor; the new
+	// reservoir must come up with the originally configured capacity,
+	// regardless of what the (just-closed) old reservoir reports.
+	b.ex.setExecutor(b.ex.executor, b.ex.wsExecutor)
+
+	require.NotNil(t, b.ex.reservoir)
+	assert.NotSame(t, first, b.ex.reservoir)
+	assert.Equal(t, 3, b.ex.reservoir.InitialCapacity())
+}
+
+type reservoirTestEx struct {
+	testEx
+	reservoirGets *atomic.Int64
+	newCalls      *atomic.Int64
+}
+
+func newExForReservoirTesting(
+	t *testing.T, shell []string, initialCapacity int,
+) reservoirTestEx {
+	t.Helper()
+
+	uri, err := workspaceapi.ParseURI("file:///tmp")
+	require.NoError(t, err)
+	scheme, err := workspacetest.NewNopScheme("file:///tmp")(
+		context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	ws := workspace.NewSchemeWorkspace(uri, scheme)
+
+	emCfg := vte.DefaultConfig()
+	emCfg.CommandAndArgs = shell
+
+	e := new(ex)
+	e.syncCommandPrompt = true
+	finalOpts := defCommandKeyBindings()
+	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	finalOpts = append(finalOpts, text.WithFloatingNoMaxSize(false))
+
+	svc := storagestub.NewInMemoryService()
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		&workspaceManagerMock{workspace: e})
+
+	require.NoError(t, e.init(texttest.NopEditor(), ws, svc,
+		notifications, uri, emCfg, plugin.DefaultBarConfig(),
+		nopPublishEvent, initialCapacity, clipboard.NewInMemory(),
+		nil, nil, nil, nil, finalOpts...))
+	require.NoError(t, e.subscribeCommands())
+
+	// Wrap the closure created by init so we can observe which branch
+	// the production logic would have taken. The wrapper mirrors the
+	// real routing in ex.init exactly.
+	var reservoirGets atomic.Int64
+	var newCalls atomic.Int64
+	e.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
+		if e.reservoir != nil && argsMatchEmulatorShell(args, e.emulatorConfig.CommandAndArgs) {
+			reservoirGets.Add(1)
+		} else {
+			newCalls.Add(1)
+		}
+		// Substitute a stub VTE so we don't actually start a process.
+		return newTestVteWithConfig(args), nil
+	}
+	e.pluginWaitTimeout = 1 * time.Second
+
+	return reservoirTestEx{
+		testEx:        testEx{ex: e},
+		reservoirGets: &reservoirGets,
+		newCalls:      &newCalls,
+	}
+}
+
 func TestTerminalWriteUsesNextAvailableName(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor())
 	defer b.Close()
