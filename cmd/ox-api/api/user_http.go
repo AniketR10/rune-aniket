@@ -35,8 +35,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/unstablebuild/blue/logging/trace"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"unstable.build/go-tui/cmd/rune/api/account"
-	"unstable.build/go-tui/cmd/rune/api/user"
+	"unstable.build/go-tui/cmd/ox-api/api/account"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
 )
 
 const (

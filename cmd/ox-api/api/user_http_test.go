@@ -36,8 +36,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune/api/account"
-	"unstable.build/go-tui/cmd/rune/api/user"
+	"unstable.build/go-tui/cmd/ox-api/api/account"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
 )
 
 var (

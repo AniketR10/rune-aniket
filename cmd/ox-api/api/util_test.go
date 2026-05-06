@@ -38,9 +38,9 @@ import (
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"unstable.build/go-tui/cmd/rune/api/account"
-	"unstable.build/go-tui/cmd/rune/api/user"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/api/account"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 func setupTestRouter(accStore account.Store, userStore user.Store) *httprouter.Router {

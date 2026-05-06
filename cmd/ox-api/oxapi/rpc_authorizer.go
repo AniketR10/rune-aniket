@@ -32,7 +32,7 @@ import (
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 // RPCAuthorizer returns an auth.Authorizer of an rpc User.

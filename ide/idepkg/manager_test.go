@@ -52,7 +52,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
-	"unstable.build/go-tui/localstorage/bluestore"
+	"unstable.build/go-tui/cmd/ox-api/bluestore"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 

@@ -33,7 +33,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"golang.org/x/oauth2"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 	"unstable.build/go-tui/cmd/rune/crashreport"
 )
 

@@ -26,7 +26,7 @@ package account
 import (
 	"time"
 
-	"unstable.build/go-tui/cmd/rune/api/user"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
 )
 
 // ID represents an account identifier.

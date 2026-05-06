@@ -34,9 +34,9 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
-	"unstable.build/go-tui/cmd/rune/api/account"
-	"unstable.build/go-tui/cmd/rune/api/user"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/api/account"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 // WebAuthorizer returns an auth.Authorizer of an rpc User.

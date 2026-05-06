@@ -48,8 +48,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"unstable.build/go-tui/cmd/ox-api/oxapi"
 	"unstable.build/go-tui/cmd/ox-api/oxapi/pagerduty"
-	"unstable.build/go-tui/cmd/rune/api"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/api"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 const (

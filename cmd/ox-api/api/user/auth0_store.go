@@ -40,7 +40,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
 	"golang.org/x/oauth2/clientcredentials"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 const (

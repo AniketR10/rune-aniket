@@ -49,7 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/cmd/ox-api/oxapi"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 	"unstable.build/go-tui/handler/handlertest"
 	goide "unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"

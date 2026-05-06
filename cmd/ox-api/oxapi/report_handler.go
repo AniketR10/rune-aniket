@@ -39,7 +39,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	blueauth "github.com/unstablebuild/blue/auth"
 	"gopkg.in/yaml.v3"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 const (

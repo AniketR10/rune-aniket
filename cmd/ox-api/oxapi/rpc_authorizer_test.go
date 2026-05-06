@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	blueauth "github.com/unstablebuild/blue/auth"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 func TestRPCAuthorizerReportsRoute(t *testing.T) {

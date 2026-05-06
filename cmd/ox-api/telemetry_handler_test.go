@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	blueauth "github.com/unstablebuild/blue/auth"
 	"unstable.build/go-tui/cmd/ox-api/oxapi"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 const symmetricKey = "12345678901234567890123456789012"

@@ -45,7 +45,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"unstable.build/go-tui/localstorage/bluestore"
+	"unstable.build/go-tui/cmd/ox-api/bluestore"
 )
 
 func tcpListener() (net.Listener, error) {

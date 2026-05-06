@@ -15,7 +15,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/document/doctest"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
-	"unstable.build/go-tui/localstorage/bluestore"
+	"unstable.build/go-tui/cmd/ox-api/bluestore"
 )
 
 func TestStorageConcurrentInstances(t *testing.T) {

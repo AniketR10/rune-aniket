@@ -44,9 +44,9 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"go.uber.org/atomic"
 	"unstable.build/go-tui/cmd/ox-api/oxapi"
-	"unstable.build/go-tui/cmd/rune/api/account"
-	"unstable.build/go-tui/cmd/rune/api/user"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/api/account"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 var (

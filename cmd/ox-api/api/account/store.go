@@ -27,7 +27,7 @@ import (
 	"context"
 
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/cmd/rune/api/user"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
 )
 
 // Store abstracts account persistence to durable storage.

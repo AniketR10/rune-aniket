@@ -30,8 +30,8 @@ import (
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
-	"unstable.build/go-tui/cmd/rune/api/user"
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 // newGranter returns a Granter of RPCUser.

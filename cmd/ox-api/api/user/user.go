@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"time"
 
-	"unstable.build/go-tui/cmd/rune/auth"
+	"unstable.build/go-tui/cmd/ox-api/auth"
 )
 
 // ID represents a user identifier.

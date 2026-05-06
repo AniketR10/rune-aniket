@@ -39,11 +39,11 @@ import (
 	"github.com/unstablebuild/blue/logging/trace"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/gcsrelease"
-	"unstable.build/go-tui/cmd/rune/api"
-	"unstable.build/go-tui/cmd/rune/api/account"
-	"unstable.build/go-tui/cmd/rune/api/user"
-	"unstable.build/go-tui/cmd/rune/auth"
-	"unstable.build/go-tui/localstorage/bluestore"
+	"unstable.build/go-tui/cmd/ox-api/api"
+	"unstable.build/go-tui/cmd/ox-api/api/account"
+	"unstable.build/go-tui/cmd/ox-api/api/user"
+	"unstable.build/go-tui/cmd/ox-api/auth"
+	"unstable.build/go-tui/cmd/ox-api/bluestore"
 )
 
 //go:embed install.sh
