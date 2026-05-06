@@ -46,54 +46,33 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 )
 
-// NewService attempts to locate the .git directory
-// by traversing the filesystem tree, starting at the root
-// of the workspace. If no .git is found, then it is assumed
-// that there might be one or more .git directories under the
-// workspace file tree.
+// NewService attempts to locate the .git directory by traversing the
+// filesystem tree, starting at the root of the workspace. If no .git is
+// found, then it is assumed that there might be one or more .git
+// directories under the workspace file tree.
+//
+// The returned service does not cache a *git.Repository: each call that
+// needs one opens a fresh repository via getRepo. This avoids stale
+// pack-index caches when the on-disk packs are rewritten out-of-band by
+// external `git` operations (`git gc`, `git fetch`, worktree-driven
+// repacks, etc.). See RUNE-133.
 func NewService(
 	workspace workspaceapi.URI, scheme schemeapi.Scheme,
 ) (vctrl.Service, error) {
-	root, err := getRoot(scheme, workspace.Path())
-	if err != nil {
-		return NewServiceWithStorage(workspace, "", nil, scheme), nil
-	}
-	shim := billyScheme{Scheme: scheme}
-	storage, err := resolveGitStorage(shim, root)
-	if err != nil {
-		return nil, err
-	}
-	repo, err := git.Open(storage, shim)
-	if err != nil {
-		return nil, fmt.Errorf("open repository at %s: %w", root, err)
-	}
-	return NewServiceWithStorage(workspace, root, repo, scheme), nil
-}
-
-// NewServiceWithStorage opens a git repository with the given storage and worktree.
-// If root and repo are empty, then the returned service will lazily attempt to locate
-// the .git directories on a per request basis.
-func NewServiceWithStorage(
-	workspace workspaceapi.URI,
-	root string,
-	repo *git.Repository,
-	scheme schemeapi.Scheme,
-) vctrl.Service {
+	root, _ := getRoot(scheme, workspace.Path())
 	ret := svc{
 		scheme:    scheme,
 		workspace: workspace,
 		root:      root,
-		repo:      repo,
 	}
 	ret.log(log.TraceLevel, "initialized with root %s", root)
-	return ret
+	return ret, nil
 }
 
 type svc struct {
 	scheme    schemeapi.Scheme
 	workspace workspaceapi.URI
 	root      string
-	repo      *git.Repository
 }
 
 func (s svc) ListRemotes(ctx context.Context, path workspaceapi.URI) ([]string, error) {
@@ -130,7 +109,7 @@ func (s svc) Diff(ctx context.Context, file workspaceapi.URI) (
 			len(diff.Hunks), file, time.Since(start))
 	}()
 
-	repo, err := s.resolveRepo(file)
+	repo, err := s.getRepo(file)
 	if err != nil {
 		return
 	}
@@ -195,11 +174,7 @@ func (s svc) CurrentCommit(ctx context.Context, path workspaceapi.URI) (
 	if err != nil {
 		return
 	}
-	ret, err = s.currentCommit(repo)
-	if err == nil || s.repo == nil {
-		return
-	}
-	return s.currentCommit(s.repo)
+	return s.currentCommit(repo)
 }
 
 func (s svc) currentCommit(repo *git.Repository) (ret string, err error) {
@@ -223,11 +198,7 @@ func (s svc) ShortRef(ctx context.Context, path workspaceapi.URI) (
 	if err != nil {
 		return
 	}
-	ret, err = s.shortRef(repo)
-	if err == nil || s.repo == nil {
-		return
-	}
-	return s.currentCommit(s.repo)
+	return s.shortRef(repo)
 }
 
 func (s svc) shortRef(repo *git.Repository) (ret string, err error) {
@@ -279,19 +250,6 @@ func (s svc) RelPath(ctx context.Context, path string) (string, error) {
 
 func (s svc) getRoot(file string) (string, error) {
 	return getRoot(s.scheme, file)
-}
-
-// resolveRepo returns the pre-loaded workspace repo when the file belongs
-// to it (verified by comparing git roots), otherwise opens the file's own
-// repository via getRepo.
-func (s svc) resolveRepo(file workspaceapi.URI) (*git.Repository, error) {
-	if s.repo != nil {
-		root, err := s.getRoot(file.Path())
-		if err == nil && root == s.root {
-			return s.repo, nil
-		}
-	}
-	return s.getRepo(file)
 }
 
 // getRepo opens the git repository that contains the given file.

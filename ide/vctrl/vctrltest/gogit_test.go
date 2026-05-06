@@ -181,6 +181,66 @@ func TestGogitDiffSameWorkspace(t *testing.T) {
 	assert.Equal(t, "baba-ganoush.md", filepath.Base(res.OrigName))
 }
 
+func TestGogitDiffSurvivesExternalRepack(t *testing.T) {
+	// Regression test for RUNE-133: when external git operations rewrite
+	// packs (e.g. `git gc`), the gogit service must not return
+	// `get HEAD commit object: object not found` because of a stale
+	// in-process pack index cache.
+	tmpDir, err := os.MkdirTemp("", "gogit-repack-*")
+	require.NoError(t, err)
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	repo := filepath.Join(tmpDir, "repo")
+	relPath := "a.txt"
+	initGitRepo(t, repo, relPath, "hi\n")
+
+	// Initial aggressive gc to ensure objects start out packed.
+	runGit(t, repo, "gc", "--aggressive", "--prune=now")
+
+	workspaceURI, err := workspaceapi.ParseURI("file://" + repo)
+	require.NoError(t, err)
+	svc := setupGogitService(t, workspaceURI)
+
+	fileURI, err := workspaceapi.ParseURI("file://" + filepath.Join(repo, relPath))
+	require.NoError(t, err)
+
+	// First diff: warms the cached storage / pack index.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, relPath), []byte("hi\nworld\n"), 0644))
+	first, err := svc.Diff(context.Background(), fileURI)
+	require.NoError(t, err, "initial diff should succeed")
+	require.NotZero(t, len(first.Hunks), "initial diff should detect changes")
+
+	// Out-of-band repo mutation: commit and aggressively repack so the
+	// previously-cached pack hashes no longer exist on disk.
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "c2")
+	runGit(t, repo, "gc", "--aggressive", "--prune=now")
+
+	// Modify the working copy and diff again. With a stale cached repo
+	// this fails with `get HEAD commit object: object not found`.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, relPath), []byte("hi\nworld\nmore\n"), 0644))
+	second, err := svc.Diff(context.Background(), fileURI)
+	require.NoError(t, err, "diff after external repack should succeed")
+	assert.NotZero(t, len(second.Hunks), "diff after external repack should detect changes")
+}
+
+// runGit runs a git subcommand in dir with deterministic author/committer.
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+}
+
 // initGitRepo creates a git repo at root with a single committed file.
 func initGitRepo(t *testing.T, root, relPath, content string) {
 	t.Helper()
