@@ -13,8 +13,20 @@ DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64" CGO_CFLAGS="-arch x86_
 
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
 GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
-RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
 OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
+
+# RUNE_ENV selects the API endpoints baked into the binary.
+#   - dev (default): point at api.unstable.build / rpc.unstable.build
+#   - prod         : point at api.rune.build / rpc.rune.build
+# Distribution / release rules below set RUNE_ENV=prod so user-facing builds
+# always target production. Local `make rune` keeps the dev defaults.
+RUNE_ENV ?= dev
+PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443
+# Use `=` (recursive) so $(RUNE_ENV) is re-evaluated when RUNE_GOFLAGS is expanded
+# in a recipe — this lets target-specific overrides such as
+# `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive
+# prerequisites without affecting the default `make rune` build.
+RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
 
 TARGET := $(abspath $(ROOT_DIR)/target)
 RUNE_RELEASE_DIR := $(TARGET)/rune_darwin_app
@@ -240,15 +252,17 @@ linux-cross-compile:
 		--build-arg RUNE_BUILD_TAG="$(VERSION)" \
 		--build-arg RUNE_BUILD_COMMIT="$(COMMIT)" \
 		--build-arg RUNE_RELEASE_TAR="$(RUNE_LINUX_RELEASE_TAR)" \
+		--build-arg RUNE_ENV="$(RUNE_ENV)" \
 		--output type=local,dest=$(RUNE_LINUX_OUTPUT_DIR) \
 		.
 
 release-linux-amd64:
-	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz $(MAKE) linux-cross-compile
+	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
 
 release-linux-arm64:
-	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz $(MAKE) linux-cross-compile
+	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
 
+dist-linux-amd64: RUNE_ENV := prod
 dist-linux-amd64: release-linux-amd64
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_amd64/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
@@ -256,6 +270,7 @@ dist-linux-amd64: release-linux-amd64
 		BLUE_TARGET_ARCH=amd64 \
 		./cmd/rune/dist.sh
 
+dist-linux-arm64: RUNE_ENV := prod
 dist-linux-arm64: release-linux-arm64
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
@@ -263,6 +278,7 @@ dist-linux-arm64: release-linux-arm64
 		BLUE_TARGET_ARCH=arm64 \
 		./cmd/rune/dist.sh
 
+dist-darwin-arm64: RUNE_ENV := prod
 dist-darwin-arm64: dmg-notarize
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME) \
@@ -270,6 +286,7 @@ dist-darwin-arm64: dmg-notarize
 		BLUE_TARGET_ARCH=arm64 \
 		./cmd/rune/dist.sh
 
+dist-darwin-amd64: RUNE_ENV := prod
 dist-darwin-amd64: dmg-amd64-notarize
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME_AMD64) \

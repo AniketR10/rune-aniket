@@ -11,6 +11,10 @@ ARG GIT_SSH_KEY
 ARG RUNE_BUILD_TAG
 ARG RUNE_BUILD_COMMIT
 ARG RUNE_RELEASE_TAR
+# RUNE_ENV selects the baked-in API endpoints. "dev" (default) keeps the
+# api.unstable.build / rpc.unstable.build defaults compiled into the source;
+# "prod" overrides them with api.rune.build / rpc.rune.build via -ldflags -X.
+ARG RUNE_ENV=dev
 
 WORKDIR /src
 
@@ -102,12 +106,16 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	esac; \
 	export CC CXX PKG_CONFIG_PATH; \
 	mkdir -p /out/rune.app/bin /out/rune.app/lib; \
+	PROD_LDFLAGS=""; \
+	if [ "$RUNE_ENV" = "prod" ]; then \
+		PROD_LDFLAGS="-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443"; \
+	fi; \
 	CGO_LDFLAGS='-Wl,-rpath,$ORIGIN/../lib' \
 	GOOS=$TARGETOS \
 	GOARCH=$TARGETARCH \
 	/usr/local/go/bin/go build \
 		-tags=ebitensinglethread \
-		-ldflags="-X unstable.build/go-tui/debug.Tag=$RUNE_BUILD_TAG -X unstable.build/go-tui/debug.Commit=$RUNE_BUILD_COMMIT -X unstable.build/go-tui/debug.Package=rune" \
+		-ldflags="-X unstable.build/go-tui/debug.Tag=$RUNE_BUILD_TAG -X unstable.build/go-tui/debug.Commit=$RUNE_BUILD_COMMIT -X unstable.build/go-tui/debug.Package=rune $PROD_LDFLAGS" \
 		-o /out/rune.app/bin/rune \
 		./cmd/rune; \
 	\

@@ -30,11 +30,18 @@ import (
 )
 
 const (
-	defaultGRPCEndpointAddress = "rpc.unstable.build:443"
-
-	defaultHTTPEndpointAddress = "https://api.unstable.build"
-
 	defaultTelemetryPeriod = 5 * time.Minute
+)
+
+// DefaultHTTPEndpointAddress and DefaultGRPCEndpointAddress are the
+// API endpoints baked into the binary at build time. They default to
+// the development API; release builds override them via `-ldflags -X`
+// to point at the production API. They are package-level variables
+// (not constants) so the linker can replace them; do not assign to
+// them at runtime.
+var (
+	DefaultHTTPEndpointAddress = "https://api.unstable.build"
+	DefaultGRPCEndpointAddress = "rpc.unstable.build:443"
 )
 
 // defaultReleaseCollection returns the Firestore collection name for
@@ -47,8 +54,8 @@ func defaultReleaseCollection() string {
 // returned by NewAPI.
 func DefaultConfig() Config {
 	return Config{
-		HTTPEndpointAddress: defaultHTTPEndpointAddress,
-		GRPCEndpointAddress: defaultGRPCEndpointAddress,
+		HTTPEndpointAddress: DefaultHTTPEndpointAddress,
+		GRPCEndpointAddress: DefaultGRPCEndpointAddress,
 		InsecureTransport:   false,
 		TelemetryPeriod:     defaultTelemetryPeriod,
 		ReleaseCollection:   defaultReleaseCollection(),
