@@ -32,9 +32,15 @@ RUN cd cmd/ox-api && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -l
 FROM --platform=linux/amd64 alpine:latest
 ARG GCP_PROJECT="unstable-build-blue-dev"
 ENV GCP_PROJECT=$GCP_PROJECT
+# OXAPI_PUBLIC_URL is the public-facing HTTPS URL clients use to reach
+# this service. ox-api passes it through `-A` so DefaultNativeConfig
+# advertises a TokenURL on the right host. Override at build time
+# via --build-arg OXAPI_PUBLIC_URL=https://api.rune.build for prod.
+ARG OXAPI_PUBLIC_URL="https://api.unstable.build"
+ENV OXAPI_PUBLIC_URL=$OXAPI_PUBLIC_URL
 COPY --from=build /bin/ox-api /bin/ox-api
 
 EXPOSE 4433
 EXPOSE 3001
 
-CMD [ "sh", "-c", "/bin/ox-api -G 4433 -P 3001 -p ${GCP_PROJECT} -H 0.0.0.0 -I -J" ]
+CMD [ "sh", "-c", "/bin/ox-api -G 4433 -P 3001 -p ${GCP_PROJECT} -A ${OXAPI_PUBLIC_URL} -H 0.0.0.0 -I -J" ]
