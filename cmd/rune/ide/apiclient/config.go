@@ -45,7 +45,10 @@ var (
 )
 
 // defaultReleaseCollection returns the Firestore collection name for
-// the current platform, e.g. "rune-release-darwin-arm64".
+// the current platform, e.g. "rune-release-darwin-arm64". The prefix
+// is shared across dev and prod intentionally: collections live in
+// per-environment GCP projects, so there's no risk of collision and
+// no need to flip the name per build.
 func defaultReleaseCollection() string {
 	return fmt.Sprintf("rune-release-%s-%s", runtime.GOOS, runtime.GOARCH)
 }
