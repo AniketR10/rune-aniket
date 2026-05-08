@@ -54,11 +54,16 @@ make rune-release-linux-amd64   # -> target/rune_linux_amd64/rune-release-linux-
 make rune-release-linux-arm64   # -> target/rune_linux_arm64/rune-release-linux-arm64-<tag>.tar.gz
 ```
 
-To build, package, and upload via `bluectl release upload`:
+To build, package, and upload to the public downloads bucket:
 
 ```bash
-make rune-dist-linux-amd64
-make rune-dist-linux-arm64
+# Production (gs://downloads.rune.build, prod API endpoints baked in)
+make rune-prod-dist-linux-amd64
+make rune-prod-dist-linux-arm64
+
+# Staging (gs://downloads.unstable.build, dev API endpoints baked in)
+make rune-staging-dist-linux-amd64
+make rune-staging-dist-linux-arm64
 ```
 
 ## Release layout

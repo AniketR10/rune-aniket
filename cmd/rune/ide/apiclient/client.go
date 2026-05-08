@@ -261,8 +261,17 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		log.Warnf("could not fetch oauth2 configuration, fallback to builtin: %v", err)
 		conf = auth.DefaultNativeConfig(a.httpEndpointURL)
 	}
-	log.Infof("acquiring new oauth2 token source against API %v. token=%v, valid=%v",
-		conf.Endpoint.TokenURL, token != nil, token.Valid())
+	log.Infof("acquiring new oauth2 token source: "+
+		"http=%v grpc=%v config_url=%v "+
+		"auth_url=%v token_url=%v jwks_url=%v api_url=%v signup_url=%v "+
+		"client_id=%v scopes=%v "+
+		"token=%v valid=%v",
+		a.config.HTTPEndpointAddress, a.config.GRPCEndpointAddress,
+		a.httpEndpointURL.JoinPath(auth.ServeConfigPath),
+		conf.Endpoint.AuthURL, conf.Endpoint.TokenURL, conf.JWKSURL,
+		conf.APIURL, conf.SignupURL,
+		conf.ClientID, conf.Scopes,
+		token != nil, token.Valid())
 
 	if token != nil {
 		// use component lifecycle ctx rather than this rpc's ctx

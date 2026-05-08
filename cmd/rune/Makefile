@@ -28,6 +28,15 @@ PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpoint
 # prerequisites without affecting the default `make rune` build.
 RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
 
+# Public download buckets that dist.sh uploads release tarballs / DMGs to.
+# `prod-dist-*` targets push to PROD_DOWNLOADS_BUCKET (user-facing) while
+# `staging-dist-*` targets push to STAGING_DOWNLOADS_BUCKET (internal).
+PROD_DOWNLOADS_BUCKET    ?= gs://downloads.rune.build
+STAGING_DOWNLOADS_BUCKET ?= gs://downloads.unstable.build
+# DIST_BUCKET is set per-target by prod-dist-* / staging-dist-* and threaded
+# into dist.sh via the DOWNLOADS_BUCKET env var.
+DIST_BUCKET ?= $(PROD_DOWNLOADS_BUCKET)
+
 TARGET := $(abspath $(ROOT_DIR)/target)
 RUNE_RELEASE_DIR := $(TARGET)/rune_darwin_app
 APP_NAME := Rune.app
@@ -50,8 +59,11 @@ endif
 
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
 	docker-build docker-run linux-cross-compile \
-	release-linux-amd64 release-linux-arm64 dist-linux-amd64 dist-linux-arm64 \
-	dist-darwin-arm64 dist-darwin-amd64 app-delve
+	release-linux-amd64 release-linux-arm64 \
+	dist-linux-amd64 dist-linux-arm64 dist-darwin-arm64 dist-darwin-amd64 \
+	prod-dist-linux-amd64 prod-dist-linux-arm64 prod-dist-darwin-amd64 prod-dist-darwin-arm64 \
+	staging-dist-linux-amd64 staging-dist-linux-arm64 staging-dist-darwin-amd64 staging-dist-darwin-arm64 \
+	app-delve
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
@@ -262,37 +274,80 @@ release-linux-amd64:
 release-linux-arm64:
 	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
 
-dist-linux-amd64: RUNE_ENV := prod
+# dist-* are the underlying upload rules. They build the artifact via
+# their prerequisite (cross-compile or DMG-notarize) and publish to
+# $(DIST_BUCKET). They do NOT pin RUNE_ENV or DIST_BUCKET themselves —
+# callers (prod-dist-* / staging-dist-*) set those via target-specific
+# variables which propagate to all prerequisites in the same make
+# invocation.
 dist-linux-amd64: release-linux-amd64
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_amd64/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
+		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		./cmd/rune/dist.sh
 
-dist-linux-arm64: RUNE_ENV := prod
 dist-linux-arm64: release-linux-arm64
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
+		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		./cmd/rune/dist.sh
 
-dist-darwin-arm64: RUNE_ENV := prod
 dist-darwin-arm64: dmg-notarize
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME) \
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=arm64 \
+		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		./cmd/rune/dist.sh
 
-dist-darwin-amd64: RUNE_ENV := prod
 dist-darwin-amd64: dmg-amd64-notarize
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME_AMD64) \
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=amd64 \
+		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		./cmd/rune/dist.sh
+
+# prod-dist-*: build with prod ldflags (api.rune.build / rpc.rune.build:443)
+# and upload to $(PROD_DOWNLOADS_BUCKET).
+prod-dist-linux-amd64:  RUNE_ENV := prod
+prod-dist-linux-amd64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64:  dist-linux-amd64
+
+prod-dist-linux-arm64:  RUNE_ENV := prod
+prod-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64:  dist-linux-arm64
+
+prod-dist-darwin-amd64: RUNE_ENV := prod
+prod-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-darwin-amd64: dist-darwin-amd64
+
+prod-dist-darwin-arm64: RUNE_ENV := prod
+prod-dist-darwin-arm64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-darwin-arm64: dist-darwin-arm64
+
+# staging-dist-*: build with the default dev ldflags
+# (api.unstable.build / rpc.unstable.build:443) and upload to
+# $(STAGING_DOWNLOADS_BUCKET).
+staging-dist-linux-amd64:  RUNE_ENV := dev
+staging-dist-linux-amd64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64:  dist-linux-amd64
+
+staging-dist-linux-arm64:  RUNE_ENV := dev
+staging-dist-linux-arm64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64:  dist-linux-arm64
+
+staging-dist-darwin-amd64: RUNE_ENV := dev
+staging-dist-darwin-amd64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-darwin-amd64: dist-darwin-amd64
+
+staging-dist-darwin-arm64: RUNE_ENV := dev
+staging-dist-darwin-arm64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-darwin-arm64: dist-darwin-arm64
 
 clean:
 	@rm -rf $(RUNE_RELEASE_DIR)

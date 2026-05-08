@@ -43,8 +43,10 @@ RELEASE_FILES=$(wildcard release/*)
 	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
-	rune-dist-linux-amd64 rune-dist-linux-arm64 \
-	rune-dist-darwin-arm64 rune-dist-darwin-amd64 \
+	rune-prod-dist-linux-amd64 rune-prod-dist-linux-arm64 \
+	rune-prod-dist-darwin-arm64 rune-prod-dist-darwin-amd64 \
+	rune-staging-dist-linux-amd64 rune-staging-dist-linux-arm64 \
+	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps llamacpp-libs llamacpp-init \
 	fuzz fuzz-list
 
@@ -247,17 +249,34 @@ rune-release-linux-amd64:
 rune-release-linux-arm64:
 	@$(MAKE) -C cmd/rune release-linux-arm64
 
-rune-dist-linux-amd64: clean
-	@$(MAKE) -C cmd/rune dist-linux-amd64
+# rune-prod-dist-* / rune-staging-dist-*: build a release artifact and
+# upload it to the corresponding public download bucket.
+#
+#   prod    -> gs://downloads.rune.build       (api.rune.build / rpc.rune.build:443)
+#   staging -> gs://downloads.unstable.build   (api.unstable.build / rpc.unstable.build:443)
+rune-prod-dist-linux-amd64: clean
+	@$(MAKE) -C cmd/rune prod-dist-linux-amd64
 
-rune-dist-linux-arm64: clean
-	@$(MAKE) -C cmd/rune dist-linux-arm64
+rune-prod-dist-linux-arm64: clean
+	@$(MAKE) -C cmd/rune prod-dist-linux-arm64
 
-rune-dist-darwin-arm64: clean
-	@$(MAKE) -C cmd/rune dist-darwin-arm64
+rune-prod-dist-darwin-arm64: clean
+	@$(MAKE) -C cmd/rune prod-dist-darwin-arm64
 
-rune-dist-darwin-amd64: clean
-	@$(MAKE) -C cmd/rune dist-darwin-amd64
+rune-prod-dist-darwin-amd64: clean
+	@$(MAKE) -C cmd/rune prod-dist-darwin-amd64
+
+rune-staging-dist-linux-amd64: clean
+	@$(MAKE) -C cmd/rune staging-dist-linux-amd64
+
+rune-staging-dist-linux-arm64: clean
+	@$(MAKE) -C cmd/rune staging-dist-linux-arm64
+
+rune-staging-dist-darwin-arm64: clean
+	@$(MAKE) -C cmd/rune staging-dist-darwin-arm64
+
+rune-staging-dist-darwin-amd64: clean
+	@$(MAKE) -C cmd/rune staging-dist-darwin-amd64
 
 rune-app-amd64:
 	@$(MAKE) -C cmd/rune app-amd64
