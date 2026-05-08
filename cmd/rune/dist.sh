@@ -8,9 +8,15 @@
 #
 # Optional:
 #   DOWNLOADS_BUCKET    - GCS bucket (default: gs://downloads.rune.build)
+#   DOWNLOAD_HOST       - public HTTP origin used to print download URLs
+#                         (default: https://<bucket-fqdn>). Use
+#                         https://storage.googleapis.com/<bucket> for
+#                         buckets that are NOT fronted by an HTTPS load
+#                         balancer with a custom domain.
 set -e
 
 DOWNLOADS_BUCKET="${DOWNLOADS_BUCKET:-gs://downloads.rune.build}"
+DOWNLOAD_HOST="${DOWNLOAD_HOST:-https://${DOWNLOADS_BUCKET#gs://}}"
 
 GIT_TAG=$(git describe --tags --dirty)
 
@@ -67,5 +73,5 @@ echo "Publishing to ${gcs_dir}/${versioned} ..."
 gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${versioned}"
 gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${latest}"
 echo "Public download URLs:"
-echo "  https://${DOWNLOADS_BUCKET#gs://}/${gcs_arch}/${versioned}"
-echo "  https://${DOWNLOADS_BUCKET#gs://}/${gcs_arch}/${latest}"
+echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${versioned}"
+echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${latest}"

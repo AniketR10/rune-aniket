@@ -33,9 +33,20 @@ RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.bu
 # `staging-dist-*` targets push to STAGING_DOWNLOADS_BUCKET (internal).
 PROD_DOWNLOADS_BUCKET    ?= gs://downloads.rune.build
 STAGING_DOWNLOADS_BUCKET ?= gs://downloads.unstable.build
-# DIST_BUCKET is set per-target by prod-dist-* / staging-dist-* and threaded
-# into dist.sh via the DOWNLOADS_BUCKET env var.
-DIST_BUCKET ?= $(PROD_DOWNLOADS_BUCKET)
+
+# Public HTTP origin printed by dist.sh and (for ox-api builds) baked
+# into the install.sh download URL via -ldflags. Prod uses the custom
+# domain backed by a GCS-fronting HTTPS load balancer; staging is
+# served straight off the bucket via the generic storage.googleapis.com
+# origin (no custom-domain LB stood up for it).
+PROD_DOWNLOAD_HOST       ?= https://downloads.rune.build
+STAGING_DOWNLOAD_HOST    ?= https://storage.googleapis.com/downloads.unstable.build
+
+# DIST_BUCKET / DIST_DOWNLOAD_HOST are set per-target by prod-dist-* /
+# staging-dist-* and threaded into dist.sh via DOWNLOADS_BUCKET and
+# DOWNLOAD_HOST.
+DIST_BUCKET       ?= $(PROD_DOWNLOADS_BUCKET)
+DIST_DOWNLOAD_HOST ?= $(PROD_DOWNLOAD_HOST)
 
 TARGET := $(abspath $(ROOT_DIR)/target)
 RUNE_RELEASE_DIR := $(TARGET)/rune_darwin_app
@@ -286,6 +297,7 @@ dist-linux-amd64: release-linux-amd64
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
 dist-linux-arm64: release-linux-arm64
@@ -294,6 +306,7 @@ dist-linux-arm64: release-linux-arm64
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
 dist-darwin-arm64: dmg-notarize
@@ -302,6 +315,7 @@ dist-darwin-arm64: dmg-notarize
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=arm64 \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
 dist-darwin-amd64: dmg-amd64-notarize
@@ -310,24 +324,29 @@ dist-darwin-amd64: dmg-amd64-notarize
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=amd64 \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
 # prod-dist-*: build with prod ldflags (api.rune.build / rpc.rune.build:443)
 # and upload to $(PROD_DOWNLOADS_BUCKET).
 prod-dist-linux-amd64:  RUNE_ENV := prod
 prod-dist-linux-amd64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-amd64:  dist-linux-amd64
 
 prod-dist-linux-arm64:  RUNE_ENV := prod
 prod-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-arm64:  dist-linux-arm64
 
 prod-dist-darwin-amd64: RUNE_ENV := prod
 prod-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-darwin-amd64: dist-darwin-amd64
 
 prod-dist-darwin-arm64: RUNE_ENV := prod
 prod-dist-darwin-arm64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-darwin-arm64: dist-darwin-arm64
 
 # staging-dist-*: build with the default dev ldflags
@@ -335,18 +354,22 @@ prod-dist-darwin-arm64: dist-darwin-arm64
 # $(STAGING_DOWNLOADS_BUCKET).
 staging-dist-linux-amd64:  RUNE_ENV := dev
 staging-dist-linux-amd64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-amd64:  dist-linux-amd64
 
 staging-dist-linux-arm64:  RUNE_ENV := dev
 staging-dist-linux-arm64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64:  dist-linux-arm64
 
 staging-dist-darwin-amd64: RUNE_ENV := dev
 staging-dist-darwin-amd64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-amd64: dist-darwin-amd64
 
 staging-dist-darwin-arm64: RUNE_ENV := dev
 staging-dist-darwin-arm64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-arm64: dist-darwin-arm64
 
 clean:
