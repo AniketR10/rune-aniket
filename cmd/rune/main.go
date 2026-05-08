@@ -484,12 +484,11 @@ func runTUI(
 		return 1
 	}
 
-	conn, client, cerr := setupReleaseManager(i, i.Storage())
+	client, cerr := setupReleaseManager(i, i.Storage())
 	if cerr != nil {
 		log.Warnf("could not setup release manager: %v", cerr)
 		// continue with nil client
 	}
-	defer conn.Close()
 	defer client.Close()
 
 	err = subscribeOtherCommands(i, client, cerr, *flagConfigPath)
@@ -677,12 +676,11 @@ func runGUI(
 		options = append(options, gui.WithPosition(x, y))
 	}
 
-	conn, client, cerr := setupReleaseManager(i, storage)
+	client, cerr := setupReleaseManager(i, storage)
 	if cerr != nil {
 		log.Warnf("could not setup release manager: %v", cerr)
 		// continue with nil client
 	}
-	defer conn.Close()
 	defer client.Close()
 
 	// update IDE's default attributes with the theme's attributes
@@ -743,7 +741,7 @@ func renderOffset() (x int, y int) {
 }
 
 func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
-	*grpc.ClientConn, *apiclient.Client, error,
+	*apiclient.Client, error,
 ) {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
@@ -754,22 +752,18 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	client, err := apiclient.New(i.Notifications(), storage, apicfg, *flagDataPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("new api client: %v", err)
+		return nil, fmt.Errorf("new api client: %v", err)
 	}
 	if client.TelemetryEnabled() {
 		if err := i.SubscribeEvents(apiclient.TelemetryEvents(), client); err != nil {
 			log.Warnf("subscribe api client to file events: %v", err)
 		}
 	}
-	conn, err := client.Dial()
-	if err != nil {
-		return nil, nil, fmt.Errorf("dial to api: %v", err)
-	}
 	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
 	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
 	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
 	i.SetReleaseManager(releaseManager)
-	return conn, client, nil
+	return client, nil
 }
 
 func doRunTUI(mu *sync.Mutex, i *ide.IDE) error {
