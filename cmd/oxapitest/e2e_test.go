@@ -46,10 +46,10 @@ import (
 	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/blue/release/docrelease"
 	"github.com/unstablebuild/blue/release/gcsrelease"
-	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"golang.org/x/oauth2"
 	"github.com/unstablebuild/ox-api/api/oxapi"
 	"github.com/unstablebuild/ox-api/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"golang.org/x/oauth2"
 	"unstable.build/go-tui/handler/handlertest"
 	goide "unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
@@ -143,6 +143,9 @@ func TestReleaseInstallE2E(t *testing.T) {
 		}},
 		oxapi.RPCAuthorizer("issues", []string{"releases"}),
 		stubReportStore{}, oxapi.ReportConfig{},
+		nil,
+		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
