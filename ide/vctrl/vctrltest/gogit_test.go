@@ -99,6 +99,79 @@ func TestGogitDiffWorktree(t *testing.T) {
 	assert.NotZero(t, res.Hunks, "should have detected the worktree modification")
 }
 
+func TestGogitDiffFileMissingFromHEAD(t *testing.T) {
+	// Regression test for RUNE-131: diffing a brand-new file that does
+	// not exist in HEAD must not return an error. Instead, the diff
+	// should be a full-additions diff against an empty committed side.
+	reposPath := setupGitRepos(t)
+
+	repoPath := filepath.Join(reposPath, "gitproj2_one-file-diff")
+	newFileRel := filepath.Join("recipes", "new-file.md")
+	newFileAbs := filepath.Join(repoPath, newFileRel)
+
+	content := "line one\nline two\nline three\n"
+	require.NoError(t, os.WriteFile(newFileAbs, []byte(content), 0644))
+
+	workspaceURI, err := workspaceapi.ParseURI("file://" + repoPath)
+	require.NoError(t, err)
+	svc := setupGogitService(t, workspaceURI)
+
+	uri, err := workspaceapi.ParseURI("file://" + newFileAbs)
+	require.NoError(t, err)
+	res, err := svc.Diff(context.Background(), uri)
+	require.NoError(t, err, "Diff must succeed when file is missing from HEAD")
+	require.NotZero(t, len(res.Hunks),
+		"should produce a full-additions diff against empty committed side")
+	assertFullAdditionsDiff(t, res)
+}
+
+func TestGogitDiffWorktreeFileMissingFromHEAD(t *testing.T) {
+	// Regression test for RUNE-131: same as TestGogitDiffFileMissingFromHEAD,
+	// but the file lives inside a worktree branched off from HEAD. The
+	// new file is not committed on either branch.
+	reposPath := setupGitRepos(t)
+
+	mainRepoPath := filepath.Join(reposPath, "gitproj2_one-file-diff")
+	worktreePath := filepath.Join(reposPath, "worktree-missing")
+	cmd := exec.Command("git", "worktree", "add", "-b", "wt-branch", worktreePath)
+	cmd.Dir = mainRepoPath
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git worktree add: %s", out)
+
+	newFileAbs := filepath.Join(worktreePath, "recipes", "new-file.md")
+	content := "first\nsecond\nthird\n"
+	require.NoError(t, os.WriteFile(newFileAbs, []byte(content), 0644))
+
+	worktreeCwdURI, err := workspaceapi.ParseURI("file://" + worktreePath)
+	require.NoError(t, err)
+	svc := setupGogitService(t, worktreeCwdURI)
+
+	uri, err := workspaceapi.ParseURI("file://" + newFileAbs)
+	require.NoError(t, err)
+	res, err := svc.Diff(context.Background(), uri)
+	require.NoError(t, err, "Diff must succeed for a new file in a worktree")
+	require.NotZero(t, len(res.Hunks),
+		"should produce a full-additions diff against empty committed side")
+	assertFullAdditionsDiff(t, res)
+}
+
+// assertFullAdditionsDiff asserts that every body line in every hunk is
+// either an empty line or starts with '+', i.e. there are no removals or
+// context lines (which is what we expect when diffing against an empty
+// committed side).
+func assertFullAdditionsDiff(t *testing.T, res vctrl.FileDiff) {
+	t.Helper()
+	for _, hunk := range res.Hunks {
+		for _, line := range strings.Split(hunk.Body, "\n") {
+			if line == "" {
+				continue
+			}
+			assert.True(t, strings.HasPrefix(line, "+"),
+				"expected only '+' lines in full-additions diff, got %q", line)
+		}
+	}
+}
+
 func TestGogitDiffCrossWorkspace(t *testing.T) {
 	// Regression test for RUNE-8: opening a file from a different workspace
 	// must not diff it against the current workspace repository when the

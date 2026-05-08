@@ -38,6 +38,7 @@ import (
 	"github.com/go-git/go-billy/v6"
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/cache"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/storage/filesystem"
 	"github.com/go-git/go-git/v6/storage/filesystem/dotgit"
 	log "github.com/sirupsen/logrus"
@@ -136,17 +137,25 @@ func (s svc) diff(ctx context.Context, path workspaceapi.URI, repo *git.Reposito
 		return
 	}
 	committedFile, err := head.File(relpath)
-	if err != nil {
+	var committed string
+	switch {
+	case errors.Is(err, object.ErrFileNotFound):
+		// File not present in HEAD (e.g. brand-new file or file added
+		// on a different branch) is a valid state, not an error. Treat
+		// the committed side as empty so we still produce a
+		// full-additions diff.
 		s.log(log.DebugLevel, "file %s not found in HEAD commit (%s)",
 			path.Path(), headRef.Hash())
+		err = nil
+	case err != nil:
 		err = fmt.Errorf("decode file: %w", err)
 		return
-	}
-
-	committed, err := committedFile.Contents()
-	if err != nil {
-		err = fmt.Errorf("get file content from commit: %w", err)
-		return
+	default:
+		committed, err = committedFile.Contents()
+		if err != nil {
+			err = fmt.Errorf("get file content from commit: %w", err)
+			return
+		}
 	}
 
 	worktreeFile, werr := s.scheme.Open(path.Path())
