@@ -514,6 +514,14 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 				h.incArgsCompleteMode(!h.bracketedPaste, sync)
 			}
 			h.cancelPreview()
+			// Cancel any in-flight completion before dispatching: the
+			// dispatcher may run synchronously on the UI goroutine
+			// (e.g. opening a workspace) and we don't want a still
+			// running completer (e.g. a recursive walkdir) thrashing
+			// the FS while the dispatcher does its work.
+			h.mu.Lock()
+			h.cancelCompletionPush("dispatch")
+			h.mu.Unlock()
 			quit, handled = h.dispatchCommand()
 			h.reset()
 		case term.KeyEsc:

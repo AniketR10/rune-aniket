@@ -583,6 +583,99 @@ func TestCommandHandlerDispatch(t *testing.T) {
 	}
 }
 
+// TestCommandHandlerCancelsCompletionBeforeDispatch ensures that the
+// active completion's context is canceled before the dispatcher runs
+// when the user presses Enter. This prevents an in-flight completion
+// (e.g. a recursive walkdir traversal) from continuing to fight for
+// resources while the synchronous dispatcher does its work.
+//
+// The test runs in async mode (cfg.Sync = false) so that the
+// completer's iterator can stay in flight while the dispatcher runs;
+// in sync mode the iterator is always drained before the dispatcher
+// is invoked, which masks the regression.
+func TestCommandHandlerCancelsCompletionBeforeDispatch(t *testing.T) {
+	storage := storagestub.NewInMemoryService()
+	cfg := testDefaultConfig()
+	cfg.ShowManualAfter = 1 * time.Hour
+	cfg.Sync = false
+
+	dispatchCalled := make(chan struct{})
+	var (
+		mu               sync.Mutex
+		lastCompCtx      context.Context
+		ctxErrAtDispatch error
+	)
+
+	completer := FuncCompleter(func(
+		ctx context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		mu.Lock()
+		lastCompCtx = ctx
+		mu.Unlock()
+		return &fakeBlockingIter{ctx: ctx}, "", nil
+	})
+	dispatcher := FuncDispatcher(func(_ string, _ ...string) bool {
+		mu.Lock()
+		ctxErrAtDispatch = lastCompCtx.Err()
+		mu.Unlock()
+		close(dispatchCalled)
+		return false
+	})
+
+	b := NewPrompt(
+		storage, completer, dispatcher,
+		term.NopInterrupter(),
+		testNoManualCommands([]string{"workspacenew"}),
+		cfg,
+	)
+	defer b.Close()
+
+	for _, ch := range "workspacenew /tmp" {
+		b.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+	b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	select {
+	case <-dispatchCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatcher was not called")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, lastCompCtx, "completer must have been invoked")
+	assert.ErrorIs(t, ctxErrAtDispatch, context.Canceled,
+		"completion context must be canceled before dispatcher runs")
+}
+
+// fakeBlockingIter is an iterator.Iterator[string] that emits a
+// single value and then blocks on Next until its context is canceled.
+type fakeBlockingIter struct {
+	ctx       context.Context
+	delivered bool
+}
+
+func (f *fakeBlockingIter) Next(ctx context.Context) (string, bool) {
+	if !f.delivered {
+		f.delivered = true
+		return "opt", true
+	}
+	select {
+	case <-ctx.Done():
+	case <-f.ctx.Done():
+	}
+	return "", false
+}
+
+func (f *fakeBlockingIter) Close() error { return nil }
+
+func (f *fakeBlockingIter) Err() error {
+	if err := f.ctx.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func TestCommandHandlerEditMode(t *testing.T) {
 	feedKeys := func(t *testing.T, h interface {
 		Handle(term.Event) (bool, bool)
