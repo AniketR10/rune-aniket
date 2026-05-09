@@ -124,8 +124,13 @@ func (c *Component) Init(config Config) {
 	c.union.Bottom = config.FrameUnionCharSet.Bottom
 	c.union.Frame = c.config.Frame && c.config.FrameUnion
 
-	c.tabs.SetAttr(config.FocusTabAttr, config.NonFocusTabAttr,
-		config.WindowManagerConfig.FrameAttr, config.WindowManagerConfig.FrameAttr)
+	frameAttr := config.WindowManagerConfig.FrameAttr
+	frameAttr.Attrs |= term.AttrVerticalRenderOffset
+	focusTabAttr := config.FocusTabAttr
+	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusTabAttr := config.NonFocusTabAttr
+	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	c.tabs.SetAttr(focusTabAttr, nonFocusTabAttr, frameAttr, frameAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 
 	// if tab bar offset is set, the remove frame from tabs

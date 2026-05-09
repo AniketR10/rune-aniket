@@ -477,8 +477,13 @@ func (h *workspaceManagerHandler) init(
 
 	h.bar.Init()
 	h.bar.OnClick = h.onBarTabClick
-	h.bar.SetAttr(cfg.focusTabAttr(), cfg.nonFocusTabAttr(),
-		cfg.windowFrameAttr(), cfg.windowFrameAttr())
+	frameAttr := cfg.windowFrameAttr()
+	frameAttr.Attrs |= term.AttrVerticalRenderOffset
+	focusTabAttr := cfg.focusTabAttr()
+	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusTabAttr := cfg.nonFocusTabAttr()
+	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	h.bar.SetAttr(focusTabAttr, nonFocusTabAttr, frameAttr, frameAttr)
 	h.bar.SetFrameCharSet(cfg.windowFrameCharset())
 	h.bar.SetBorder(cfg.frame())
 

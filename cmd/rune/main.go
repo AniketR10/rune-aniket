@@ -551,8 +551,6 @@ func runGUI(
 		}
 	}
 
-	barTabOffset, barTabHeight := barTabDimensions()
-	workspacesTabOffset, workspacesTabHeight := workspacesTabDimensions()
 	var lastTabsClick time.Time
 	var clickCount int
 	var g *gui.GUI
@@ -564,10 +562,10 @@ func runGUI(
 		ide.WithLocker(mu),
 		ide.WithConfigFilename(workspaceConfigFilename),
 		ide.WithDefaultWallpaper(makeWallpaper()),
-		ide.WithTabBarOffset(barTabOffset),
-		ide.WithTabBarHeight(barTabHeight),
-		ide.WithWorkspacesBarHeight(workspacesTabHeight),
-		ide.WithWorkspacesBarOffset(workspacesTabOffset),
+		ide.WithTabBarOffset(12),
+		ide.WithTabBarHeight(2),
+		ide.WithWorkspacesBarHeight(2),
+		ide.WithWorkspacesBarOffset(1),
 		ide.WithWorkspacesIcon('1'),
 		ide.WithWorkspacesBarFrame(false),
 		ide.WithDefaultConfigStarlark(defaultStarlarkConfig, true, false),

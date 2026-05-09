@@ -312,14 +312,16 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	cells := writer.Cells()
 
 	expectedIconAttr := windowFocusIconAttr
+	expectedFocusTabAttr := cfg.FocusTabAttr
+	expectedFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
 	assert.Equal(t, 'A', cells[0].Ch)
 	assert.Equal(t, term.Attributes{}, cells[0].Attributes)
 	assert.Equal(t, 'a', cells[2].Ch)
-	assert.Equal(t, cfg.FocusTabAttr, cells[2].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes)
 	assert.Equal(t, 'B', cells[5].Ch)
 	assert.Equal(t, expectedIconAttr, cells[5].Attributes)
 	assert.Equal(t, 'b', cells[7].Ch)
-	assert.Equal(t, cfg.FocusTabAttr, cells[7].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
 
 	require.True(t, b.FocusLeft())
 	writer = term.NewStringWriter(width, height)
@@ -329,11 +331,11 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	assert.Equal(t, 'A', cells[0].Ch)
 	assert.Equal(t, expectedIconAttr, cells[0].Attributes)
 	assert.Equal(t, 'a', cells[2].Ch)
-	assert.Equal(t, cfg.FocusTabAttr, cells[2].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes)
 	assert.Equal(t, 'B', cells[5].Ch)
 	assert.Equal(t, term.Attributes{}, cells[5].Attributes)
 	assert.Equal(t, 'b', cells[7].Ch)
-	assert.Equal(t, cfg.FocusTabAttr, cells[7].Attributes)
+	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
 }
 
 func TestComponentRestoreTileLayout(t *testing.T) {

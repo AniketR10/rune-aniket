@@ -941,6 +941,7 @@ if tui:
             "focus_element_attr":attr(fg = "#c6c6c6", bg = "#1e1e1e", flags = ["bold"]),
         },
         "browser": {
+            "union_frames": True,
             "window_manager": {
                 "dim":                   True,
                 "frame":                 True,
