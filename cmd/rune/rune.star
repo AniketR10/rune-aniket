@@ -639,11 +639,11 @@ config = {
         },
         # Separator characters used to space out tab names.
         "tab_name_separator": "   ",
-        "focus_tab_attr":          attr(fg = "white", bg = "default", flags = ["bold"]),
+        "focus_tab_attr":          attr(fg = "default", bg = "default"),
         "dirty_tab_attr":          attr(fg = "red", bg = "default", flags = ["italic"]),
-        "non_focus_tab_attr":      attr(fg = "silver", bg = "default"),
-        "focus_tab_icon_attr":     attr(fg = "yellow", bg = "default"),
-        "non_focus_tab_icon_attr": attr(fg = "silver", bg = "default"),
+        "non_focus_tab_attr":      attr(fg = "default", bg = "default"),
+        "focus_tab_icon_attr":     attr(fg = "red", bg = "default"),
+        "non_focus_tab_icon_attr": attr(fg = "default", bg = "default"),
         # Prompt configuration used when Rune asks the user questions.
         "prompt": {
             "text_attr":       attr(bg = "gray", flag = "bold"),

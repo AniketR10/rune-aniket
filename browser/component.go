@@ -39,18 +39,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/markdown"
 	thandler "unstable.build/go-tui/handler"
 )
 
 var _ browserapi.Handler = (*Component)(nil)
-
-var defaultFocusWindowTabIconAttr = term.Attributes{
-	Fg:    tcell.ColorSilver,
-	Attrs: tcell.AttrBold,
-}
 
 // Component renders a browser-like tui.Compontent and exposes an API
 // to open new windows, add new tabs, and switch between tabs.
@@ -128,12 +122,8 @@ func (c *Component) Init(config Config) {
 	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
 	nonFocusTabAttr := config.NonFocusTabAttr
 	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
-	focusIconAttr := config.FocusTabIconAttr
-	focusIconAttr.Attrs |= term.AttrVerticalRenderOffset
-	nonFocusIconAttr := config.NonFocusTabIconAttr
-	nonFocusIconAttr.Attrs |= term.AttrVerticalRenderOffset
 	c.tabs.SetAttr(focusTabAttr, nonFocusTabAttr,
-		focusIconAttr, nonFocusIconAttr, frameAttr, frameAttr)
+		c.focusTabIconAttr(), c.nonFocusTabIconAttr(), frameAttr, frameAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 
 	// if tab bar offset is set, the remove frame from tabs
@@ -651,7 +641,7 @@ func (c *Component) Draw(w term.Writer) {
 	if c.dirtyTabs {
 		c.tabs.ResetFocus()
 		for id, t := range c.buffers {
-			c.tabs.SetIconAttr(id, c.config.NonFocusTabIconAttr)
+			c.tabs.SetIconAttr(id, c.nonFocusTabIconAttr())
 			if !t.free {
 				c.tabs.SetFocus(id)
 			}
@@ -663,7 +653,7 @@ func (c *Component) Draw(w term.Writer) {
 				t, ok := browserTabAtWindow(win)
 				if ok {
 					// reset tab override attributes
-					c.tabs.SetIconAttr(c.findTabID(t), term.Attributes{})
+					c.tabs.SetIconAttr(c.findTabID(t), c.focusTabIconAttr())
 				}
 			}
 		}
@@ -1402,6 +1392,18 @@ func (c *Component) newBrowserContent(content browserapi.Handler) browserapi.Han
 		return &browserScrollableContent{browserContent: bc}
 	}
 	return &bc
+}
+
+func (c *Component) focusTabIconAttr() term.Attributes {
+	focusIconAttr := c.config.FocusTabIconAttr
+	focusIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	return focusIconAttr
+}
+
+func (c *Component) nonFocusTabIconAttr() term.Attributes {
+	nonFocusIconAttr := c.config.NonFocusTabIconAttr
+	nonFocusIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	return nonFocusIconAttr
 }
 
 func (c *Component) unwrapContent(content browserapi.Handler) browserapi.Handler {

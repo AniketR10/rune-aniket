@@ -289,12 +289,10 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	cfg.Frame = false
 	cfg.FrameUnion = false
 	cfg.Dim = false
+	windowFocusIconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+	cfg.FocusTabIconAttr = windowFocusIconAttr
 
 	b := NewComponent(cfg)
-	windowFocusIconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
-	// TODO we must now invert: rather than having a windowFocusIconAttr
-	// we now reset the non focus window icon to the passed from config non focus icon attr
-	b.config.focusWindowTabIconAttr = windowFocusIconAttr
 
 	uriA, err := workspaceapi.ParseURI("file:///a")
 	require.NoError(t, err)
