@@ -67,13 +67,12 @@ type Component struct {
 	height    int
 	nextSplit browserapi.Orientation
 
-	dirtyTabs              bool
-	focusWindow            thandler.Window
-	focusWindowTabIconAttr term.Attributes
-	config                 Config
-	buffers                []*Tab
-	windows                map[uint64]*browserWindow
-	prompts                map[string]Window
+	dirtyTabs   bool
+	focusWindow thandler.Window
+	config      Config
+	buffers     []*Tab
+	windows     map[uint64]*browserWindow
+	prompts     map[string]Window
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -86,7 +85,6 @@ func NewComponent(config Config) *Component {
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
-	c.focusWindowTabIconAttr = defaultFocusWindowTabIconAttr
 	c.windows = make(map[uint64]*browserWindow)
 
 	c.nextSplit = browserapi.OrientationRight
@@ -130,7 +128,12 @@ func (c *Component) Init(config Config) {
 	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
 	nonFocusTabAttr := config.NonFocusTabAttr
 	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
-	c.tabs.SetAttr(focusTabAttr, nonFocusTabAttr, frameAttr, frameAttr)
+	focusIconAttr := config.FocusTabIconAttr
+	focusIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusIconAttr := config.NonFocusTabIconAttr
+	nonFocusIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	c.tabs.SetAttr(focusTabAttr, nonFocusTabAttr,
+		focusIconAttr, nonFocusIconAttr, frameAttr, frameAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 
 	// if tab bar offset is set, the remove frame from tabs
@@ -648,7 +651,7 @@ func (c *Component) Draw(w term.Writer) {
 	if c.dirtyTabs {
 		c.tabs.ResetFocus()
 		for id, t := range c.buffers {
-			c.tabs.SetIconAttr(id, term.Attributes{})
+			c.tabs.SetIconAttr(id, c.config.NonFocusTabIconAttr)
 			if !t.free {
 				c.tabs.SetFocus(id)
 			}
@@ -659,7 +662,8 @@ func (c *Component) Draw(w term.Writer) {
 			if ok {
 				t, ok := browserTabAtWindow(win)
 				if ok {
-					c.tabs.SetIconAttr(c.findTabID(t), c.focusWindowTabIconAttr)
+					// reset tab override attributes
+					c.tabs.SetIconAttr(c.findTabID(t), term.Attributes{})
 				}
 			}
 		}

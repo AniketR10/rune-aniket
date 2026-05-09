@@ -483,7 +483,12 @@ func (h *workspaceManagerHandler) init(
 	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
 	nonFocusTabAttr := cfg.nonFocusTabAttr()
 	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
-	h.bar.SetAttr(focusTabAttr, nonFocusTabAttr, frameAttr, frameAttr)
+	focusTabIconAttr := cfg.focusTabIconAttr()
+	focusTabIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusTabIconAttr := cfg.nonFocusTabIconAttr()
+	nonFocusTabIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	h.bar.SetAttr(focusTabAttr, nonFocusTabAttr,
+		focusTabIconAttr, nonFocusTabIconAttr, frameAttr, frameAttr)
 	h.bar.SetFrameCharSet(cfg.windowFrameCharset())
 	h.bar.SetBorder(cfg.frame())
 
@@ -874,8 +879,8 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
 		text.WithShellMaxHistory(cfg.shellMaxHistory()),
 		text.WithCommandHistoryKey(cfg.commandHistoryKey()),
-		text.WithFocusTabAttr(cfg.focusTabAttr()),
-		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr()),
+		text.WithFocusTabAttr(cfg.focusTabAttr(), cfg.focusTabIconAttr()),
+		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr(), cfg.nonFocusTabIconAttr()),
 		text.WithWallpaper(cfg.wallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithIconSet(cfg.icons()),

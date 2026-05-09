@@ -475,17 +475,19 @@ func WithNotifications(n browser.Notifications) Option {
 
 // WithFocusTabAttr returns an Option that configures the attributes of a
 // Components's tab in focus.
-func WithFocusTabAttr(attr term.Attributes) Option {
+func WithFocusTabAttr(attr, iconAttr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.FocusTabAttr = attr
+		cfg.FocusTabIconAttr = iconAttr
 	}
 }
 
 // WithNonFocusTabAttr returns an Option that configures the attributes of a
 // Components's tabs that are not in focus.
-func WithNonFocusTabAttr(attr term.Attributes) Option {
+func WithNonFocusTabAttr(attr, iconAttr term.Attributes) Option {
 	return func(cfg *Config) {
 		cfg.NonFocusTabAttr = attr
+		cfg.NonFocusTabIconAttr = iconAttr
 	}
 }
 

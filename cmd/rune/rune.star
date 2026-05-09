@@ -639,9 +639,11 @@ config = {
         },
         # Separator characters used to space out tab names.
         "tab_name_separator": "   ",
-        "focus_tab_attr":     attr(fg = "blue", bg = "default", flags = ["bold"]),
-        "dirty_tab_attr":     attr(fg = "red", bg = "default", flags = ["italic"]),
-        "non_focus_tab_attr": attr(fg = "default_dim", bg = "default"),
+        "focus_tab_attr":          attr(fg = "white", bg = "default", flags = ["bold"]),
+        "dirty_tab_attr":          attr(fg = "red", bg = "default", flags = ["italic"]),
+        "non_focus_tab_attr":      attr(fg = "silver", bg = "default"),
+        "focus_tab_icon_attr":     attr(fg = "yellow", bg = "default"),
+        "non_focus_tab_icon_attr": attr(fg = "silver", bg = "default"),
         # Prompt configuration used when Rune asks the user questions.
         "prompt": {
             "text_attr":       attr(bg = "gray", flag = "bold"),
@@ -960,9 +962,11 @@ if tui:
                 "top":    "┬",
                 "bottom": "┴",
             },
-            "focus_tab_attr":      attr(fg = "#c6c6c6", bg = "#1e1e1e", flags = ["bold"]),
-            "dirty_tab_attr":      attr(fg = "#D34728", bg = "#1e1e1e", flags = ["italic"]),
-            "non_focus_tab_attr":  attr(fg = "gray", bg = "#1e1e1e"),
+            "focus_tab_attr":          attr(fg = "#c6c6c6", bg = "#1e1e1e", flags = ["bold"]),
+            "dirty_tab_attr":          attr(fg = "#D34728", bg = "#1e1e1e", flags = ["italic"]),
+            "non_focus_tab_attr":      attr(fg = "gray", bg = "#1e1e1e"),
+            "focus_tab_icon_attr":     attr(fg = "#c6c6c6", bg = "#1e1e1e", flags = ["bold"]),
+            "non_focus_tab_icon_attr": attr(fg = "gray", bg = "#1e1e1e"),
             "prompt": {
                 "text_attr":       attr(fg = "default", bg = "#1e1e1e"),
                 "highlight_attr":  attr(fg = "#c6c6c6", bg = "default", flag = "reverse"),

@@ -266,7 +266,7 @@ func TestWindowDraw(t *testing.T) {
 				if ok {
 					tab, ok := browserTabAtWindow(win)
 					if ok {
-						b.tabs.SetIconAttr(b.findTabID(tab), b.focusWindowTabIconAttr)
+						b.tabs.SetIconAttr(b.findTabID(tab), term.Attributes{})
 					}
 				}
 			}
@@ -292,7 +292,9 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 
 	b := NewComponent(cfg)
 	windowFocusIconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
-	b.focusWindowTabIconAttr = windowFocusIconAttr
+	// TODO we must now invert: rather than having a windowFocusIconAttr
+	// we now reset the non focus window icon to the passed from config non focus icon attr
+	b.config.focusWindowTabIconAttr = windowFocusIconAttr
 
 	uriA, err := workspaceapi.ParseURI("file:///a")
 	require.NoError(t, err)
@@ -312,10 +314,12 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	cells := writer.Cells()
 
 	expectedIconAttr := windowFocusIconAttr
+	expectedIconAttr.Attrs |= term.AttrVerticalRenderOffset
 	expectedFocusTabAttr := cfg.FocusTabAttr
 	expectedFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	expectedDefaultIconAttr := term.Attributes{Attrs: term.AttrVerticalRenderOffset}
 	assert.Equal(t, 'A', cells[0].Ch)
-	assert.Equal(t, term.Attributes{}, cells[0].Attributes)
+	assert.Equal(t, expectedDefaultIconAttr, cells[0].Attributes)
 	assert.Equal(t, 'a', cells[2].Ch)
 	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes)
 	assert.Equal(t, 'B', cells[5].Ch)
@@ -333,7 +337,7 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	assert.Equal(t, 'a', cells[2].Ch)
 	assert.Equal(t, expectedFocusTabAttr, cells[2].Attributes)
 	assert.Equal(t, 'B', cells[5].Ch)
-	assert.Equal(t, term.Attributes{}, cells[5].Attributes)
+	assert.Equal(t, expectedDefaultIconAttr, cells[5].Attributes)
 	assert.Equal(t, 'b', cells[7].Ch)
 	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
 }

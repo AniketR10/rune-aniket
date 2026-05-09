@@ -58,14 +58,16 @@ type Tabs struct {
 	width, height int
 	offsetIdx     int
 
-	border         bool
-	focusAttr      term.Attributes
-	nonFocusAttr   term.Attributes
-	backgroundAttr term.Attributes
-	frameAttr      term.Attributes
-	frameBorders   component.FrameCharSet
-	separator      string
-	dirty          bool
+	border           bool
+	focusAttr        term.Attributes
+	nonFocusAttr     term.Attributes
+	focusIconAttr    term.Attributes
+	nonFocusIconAttr term.Attributes
+	backgroundAttr   term.Attributes
+	frameAttr        term.Attributes
+	frameBorders     component.FrameCharSet
+	separator        string
+	dirty            bool
 }
 
 func newListFrame(
@@ -113,11 +115,14 @@ func (t *Tabs) Init() {
 	t.dirty = true
 }
 
-// SetAttr sets the attributes of the text in focus, text not in focus, the tabs
-// frame and the tabs background.
-func (t *Tabs) SetAttr(focusTab, tab, frame, background term.Attributes) {
+// SetAttr sets the attributes of the text in focus, text not in focus, the icon
+// of the tab in focus, the icon of tabs not in focus, the tabs frame and the tabs
+// background.
+func (t *Tabs) SetAttr(focusTab, tab, focusIcon, icon, frame, background term.Attributes) {
 	t.focusAttr = focusTab
 	t.nonFocusAttr = tab
+	t.focusIconAttr = focusIcon
+	t.nonFocusIconAttr = icon
 	t.backgroundAttr = background
 	t.frameAttr = frame
 	t.fileListFrame = newListFrame(t.backgroundAttr,
@@ -393,16 +398,19 @@ func (t *Tabs) prepareFileList() {
 	var focusPos, next term.Coordinates
 	for i, tab := range t.tabs {
 		attr := tab.attr
+		iconAttr := tab.iconAttr
 		if tab.focus {
 			focusPos = next
 			focusLen = len(tab.name)
 			attr = term.AttributesUnion(t.focusAttr, attr)
+			iconAttr = term.AttributesUnion(t.focusIconAttr, iconAttr)
 		} else {
 			attr = term.AttributesUnion(t.nonFocusAttr, attr)
+			iconAttr = term.AttributesUnion(t.nonFocusIconAttr, iconAttr)
 		}
 
 		if tab.icon != 0 {
-			next = t.fileListBuf.InsertWithAttr(next, tab.icon, tab.iconAttr)
+			next = t.fileListBuf.InsertWithAttr(next, tab.icon, iconAttr)
 			next = t.fileListBuf.Insert(next, ' ')
 		}
 		_, next = t.fileListBuf.InsertStringWithAttr(

@@ -247,7 +247,8 @@ func TestTabsDrawIconAttr(t *testing.T) {
 	focusAttr := term.Attributes{Fg: tcell.ColorWhite}
 	nonFocusAttr := term.Attributes{Fg: tcell.ColorBlue}
 	iconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
-	l.SetAttr(focusAttr, nonFocusAttr, term.Attributes{}, term.Attributes{})
+	l.SetAttr(focusAttr, nonFocusAttr, term.Attributes{}, term.Attributes{},
+		term.Attributes{}, term.Attributes{})
 
 	l.Add('A', "alpha")
 	l.Add('B', "beta")
@@ -267,6 +268,41 @@ func TestTabsDrawIconAttr(t *testing.T) {
 	assert.Equal(t, 'B', cells[9].Ch)
 	assert.Equal(t, iconAttr, cells[9].Attributes)
 	assert.Equal(t, term.Attributes{}, cells[10].Attributes)
+	assert.Equal(t, 'b', cells[11].Ch)
+	assert.Equal(t, nonFocusAttr, cells[11].Attributes)
+}
+
+// TestTabsSetAttrIconAttrs verifies SetAttr's focus/non-focus icon attributes
+// are applied to tab icons that don't have a per-tab icon attr override, and
+// that per-tab overrides take precedence (via AttributesUnion semantics).
+func TestTabsSetAttrIconAttrs(t *testing.T) {
+	l := NewTabs()
+	l.SetBorder(false)
+	l.Resize(30, 1)
+
+	focusAttr := term.Attributes{Fg: tcell.ColorWhite}
+	nonFocusAttr := term.Attributes{Fg: tcell.ColorBlue}
+	focusIconAttr := term.Attributes{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+	nonFocusIconAttr := term.Attributes{Fg: tcell.ColorRed}
+	l.SetAttr(focusAttr, nonFocusAttr, focusIconAttr, nonFocusIconAttr,
+		term.Attributes{}, term.Attributes{})
+
+	l.Add('A', "alpha")
+	l.Add('B', "beta")
+	l.ResetFocus()
+	l.SetFocus(0)
+
+	w := term.NewStringWriter(30, 1)
+	l.Draw(w)
+	cells := w.Cells()
+
+	assert.Equal(t, 'A', cells[0].Ch)
+	assert.Equal(t, focusIconAttr, cells[0].Attributes)
+	assert.Equal(t, 'a', cells[2].Ch)
+	assert.Equal(t, focusAttr, cells[2].Attributes)
+
+	assert.Equal(t, 'B', cells[9].Ch)
+	assert.Equal(t, nonFocusIconAttr, cells[9].Attributes)
 	assert.Equal(t, 'b', cells[11].Ch)
 	assert.Equal(t, nonFocusAttr, cells[11].Attributes)
 }

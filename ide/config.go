@@ -970,6 +970,16 @@ func (c ideConfig) nonFocusTabAttr() term.Attributes {
 		browser.DefaultConfig().NonFocusTabAttr)
 }
 
+func (c ideConfig) focusTabIconAttr() term.Attributes {
+	return c.getBrowserAttr("focus_tab_icon_attr",
+		browser.DefaultConfig().FocusTabIconAttr)
+}
+
+func (c ideConfig) nonFocusTabIconAttr() term.Attributes {
+	return c.getBrowserAttr("non_focus_tab_icon_attr",
+		browser.DefaultConfig().NonFocusTabIconAttr)
+}
+
 func (c ideConfig) dirtyTabAttr() term.Attributes {
 	return c.getBrowserAttr("dirty_tab_attr",
 		text.DefaultConfig().DirtyTabAttr)

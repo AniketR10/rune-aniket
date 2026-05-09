@@ -40,6 +40,8 @@ func DefaultConfig() Config {
 		Wallpaper:           NopWallpaper(),
 		FocusTabAttr:        term.Attributes{Fg: tcell.ColorWhite},
 		NonFocusTabAttr:     term.Attributes{Fg: tcell.ColorRed},
+		FocusTabIconAttr:    term.Attributes{},
+		NonFocusTabIconAttr: term.Attributes{},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		FrameUnion:          handler.DefaultWindowManagerConfig().Frame,
@@ -83,13 +85,15 @@ type Config struct {
 	Notifications
 	Wallpaper Wallpaper
 
-	FocusTabAttr     term.Attributes
-	NonFocusTabAttr  term.Attributes
-	TabBarOffset     int
-	TabBarHeight     int
-	TabNameSeparator string
-	FrameUnion       bool
-	OnTabsClick      func(int) bool
+	FocusTabAttr        term.Attributes
+	NonFocusTabAttr     term.Attributes
+	FocusTabIconAttr    term.Attributes
+	NonFocusTabIconAttr term.Attributes
+	TabBarOffset        int
+	TabBarHeight        int
+	TabNameSeparator    string
+	FrameUnion          bool
+	OnTabsClick         func(int) bool
 
 	PromptConfig
 
