@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 func TestCommandOutputLinesCompleterCloseSignals(t *testing.T) {
@@ -558,6 +560,79 @@ func TestDirsCompleterFiltersHidden(t *testing.T) {
 		assert.False(t, strings.HasPrefix(filepath.Base(name), "."),
 			"DirsCompleter should not return hidden entry %q", name)
 	}
+}
+
+// TestDirsCompleterSkipsHiddenDirsTraversal asserts that the
+// DirsCompleter does not descend into hidden directories. Walking
+// into them is wasteful (the entries would be filtered from the
+// output anyway) and on real workspaces it triggers expensive
+// recursion through directories like .git or .hg that contain
+// thousands of files and starve the rest of the system.
+func TestDirsCompleterSkipsHiddenDirsTraversal(t *testing.T) {
+	t.Parallel()
+	fix := newCompleterFixture(t)
+
+	// Drop a deep tree under .hiddenDir so that walking into it
+	// would generate many ReadDir calls if traversal were not
+	// skipped at the source.
+	for _, sub := range []string{
+		".hiddenDir/inner",
+		".hiddenDir/inner/deeper",
+		".hiddenDir/inner/deeper/more",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(fix.root, sub), 0o700))
+	}
+
+	tracking := &trackingReader{inner: fix.reader}
+	c := DirsCompleter(tracking)
+
+	it, _, err := c.Complete(context.Background(), []string{"workspacenew"})
+	require.NoError(t, err)
+	_ = collectAll(t, it)
+
+	for _, p := range tracking.snapshot() {
+		// The path may be absolute, relative, or include the
+		// fixture root prefix, so check every component for a
+		// leading dot.
+		for _, part := range strings.Split(filepath.ToSlash(p), "/") {
+			assert.False(t, strings.HasPrefix(part, "."),
+				"DirsCompleter must not ReadDir into hidden directory: %q", p)
+		}
+	}
+}
+
+// trackingReader wraps a walkdir.Reader and records every path
+// passed to ReadDir so tests can assert traversal does not enter
+// directories that the completer is supposed to skip.
+type trackingReader struct {
+	inner walkdir.Reader
+	mu    sync.Mutex
+	calls []string
+}
+
+func (r *trackingReader) URI(p string) (workspaceapi.URI, error) {
+	return r.inner.URI(p)
+}
+
+func (r *trackingReader) OpenFile(p string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+	return r.inner.OpenFile(p, flag, perm)
+}
+
+func (r *trackingReader) Stat(p string) (os.FileInfo, error) { return r.inner.Stat(p) }
+
+func (r *trackingReader) ReadDir(p string) ([]os.DirEntry, error) {
+	r.mu.Lock()
+	r.calls = append(r.calls, p)
+	r.mu.Unlock()
+	return r.inner.ReadDir(p)
+}
+
+func (r *trackingReader) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.calls))
+	copy(out, r.calls)
+	return out
 }
 
 // TestFilePathCompleterRejectsUnsupported verifies that pathological

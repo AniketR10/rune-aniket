@@ -165,6 +165,43 @@ func TestLoadGitignore(t *testing.T) {
 	})
 }
 
+// TestHiddenBaseMatcher exercises the standalone Matcher returned
+// by HiddenBaseMatcher. The matcher must accept any path whose
+// basename starts with a dot and reject every other path,
+// regardless of whether the path has intermediate components.
+func TestHiddenBaseMatcher(t *testing.T) {
+	m := HiddenBaseMatcher()
+
+	cases := []struct {
+		relpath string
+		isDir   bool
+		want    bool
+	}{
+		{".git", true, true},
+		{".DS_Store", false, true},
+		{"sub/.git", true, true},
+		{"sub/.gitignore", false, true},
+		{"src", true, false},
+		{"src/main.go", false, false},
+		{"a/b.c/d", false, false},
+		{".", true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.relpath, func(t *testing.T) {
+			assert.Equal(t, tc.want,
+				m.MatchRelPath(tc.relpath, tc.isDir),
+				"MatchRelPath(%q, %v)", tc.relpath, tc.isDir)
+		})
+	}
+
+	// Match goes through workspaceapi.URI: only the basename
+	// portion of the path drives the decision.
+	cwd := newScheme(t)
+	assert.True(t, m.Match(makeURI(t, cwd, ".git"), true))
+	assert.True(t, m.Match(makeURI(t, cwd, "deep/.git"), true))
+	assert.False(t, m.Match(makeURI(t, cwd, "src"), true))
+}
+
 func newScheme(t *testing.T) schemeapi.Scheme {
 	uri, err := workspaceapi.ParseURI("memory:///tmp")
 	require.NoError(t, err)

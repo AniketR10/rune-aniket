@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"mvdan.cc/sh/v3/shell"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -94,6 +95,15 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 	traverse := func(
 		ctx context.Context, w walkdir.Reader, root string,
 	) (iterator.Iterator[string], error) {
+		if dirOnly {
+			// Skip recursion into dot directories at the source.
+			// The post-iter filter below would discard them anyway,
+			// but descending into e.g. .git on a real workspace
+			// triggers thousands of ReadDir/Open syscalls that
+			// starve the rest of the system while the user is just
+			// completing a directory path.
+			ctx = walkdir.WithContextFilter(ctx, vctrl.HiddenBaseMatcher())
+		}
 		fn := walkdir.ListFiles
 		if dirOnly {
 			fn = walkdir.ListDirs

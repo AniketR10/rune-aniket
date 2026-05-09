@@ -62,6 +62,19 @@ func NopMatcher(match bool) Matcher {
 	return nopMatcher{match: match}
 }
 
+// HiddenBaseMatcher returns a Matcher that matches any entry whose
+// final path component begins with a dot (e.g. .git, .DS_Store,
+// .vscode). It is used by callers that want to skip hidden entries
+// without configuring a full gitignore matcher — for example
+// interactive directory completion or the file explorer.
+//
+// The returned matcher only inspects the path's basename, so it
+// never produces false positives based on intermediate components
+// (a/b.c/d is not considered hidden).
+func HiddenBaseMatcher() Matcher {
+	return hiddenBaseMatcher{}
+}
+
 type uriMatcher struct {
 	cwduri  workspaceapi.URI
 	matcher gitignore.Matcher
@@ -87,4 +100,14 @@ func (n nopMatcher) Match(uri workspaceapi.URI, isDir bool) bool {
 
 func (n nopMatcher) MatchRelPath(string, bool) bool {
 	return n.match
+}
+
+type hiddenBaseMatcher struct{}
+
+func (hiddenBaseMatcher) Match(uri workspaceapi.URI, _ bool) bool {
+	return strings.HasPrefix(filepath.Base(uri.Path()), ".")
+}
+
+func (hiddenBaseMatcher) MatchRelPath(relpath string, _ bool) bool {
+	return strings.HasPrefix(filepath.Base(relpath), ".")
 }
