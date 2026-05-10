@@ -118,12 +118,13 @@ func (c *Component) Init(config Config) {
 
 	frameAttr := config.WindowManagerConfig.FrameAttr
 	frameAttr.Attrs |= term.AttrVerticalRenderOffset
+	bgAttr := term.Attributes{Bg: frameAttr.Bg}
 	focusTabAttr := config.FocusTabAttr
 	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
 	nonFocusTabAttr := config.NonFocusTabAttr
 	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
 	c.tabs.SetAttr(focusTabAttr, nonFocusTabAttr,
-		c.focusTabIconAttr(), c.nonFocusTabIconAttr(), frameAttr, frameAttr)
+		c.focusTabIconAttr(), c.nonFocusTabIconAttr(), frameAttr, bgAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
 
 	// if tab bar offset is set, the remove frame from tabs

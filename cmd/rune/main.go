@@ -562,7 +562,7 @@ func runGUI(
 		ide.WithLocker(mu),
 		ide.WithConfigFilename(workspaceConfigFilename),
 		ide.WithDefaultWallpaper(makeWallpaper()),
-		ide.WithTabBarOffset(12),
+		ide.WithTabBarOffset(13),
 		ide.WithTabBarHeight(2),
 		ide.WithWorkspacesBarHeight(2),
 		ide.WithWorkspacesBarOffset(1),
@@ -647,7 +647,6 @@ func runGUI(
 	themes := getGUIColorThemes(browser, cfg)
 	initialTheme := themes[defaultColorTheme]
 
-	offsetx, offsety := renderOffset()
 	options := []gui.Option{
 		gui.WithColorThemes(defaultColorTheme, themes),
 		gui.WithFontDPI(getGUIFontDPI(browser, cfg)),
@@ -655,7 +654,7 @@ func runGUI(
 		gui.WithFontFamily(getGUIFontFamily(browser, cfg)),
 		gui.WithColumnWidthOffset(getGUIColumnWidthOffset(browser, cfg)),
 		gui.WithLineHeightOffset(getGUILineHeightOffset(browser, cfg)),
-		gui.WithRenderOffset(offsetx, offsety),
+		gui.WithRenderOffset(0, 10),
 		gui.WithLigatures(getGUILigatures(browser, cfg)),
 		gui.WithTransparentWindow(transparentWindow),
 		gui.WithBackgroundBlur(getGUIBackgroundBlur(browser, cfg)),
@@ -724,18 +723,6 @@ func runGUI(
 	saveLastPosition(storage, g)
 	_ = i.Close()
 	return 0
-}
-
-func barTabDimensions() (offset int, height int) {
-	return 12, 3
-}
-
-func workspacesTabDimensions() (offset int, height int) {
-	return 1, 3
-}
-
-func renderOffset() (x int, y int) {
-	return 0, 10
 }
 
 func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (

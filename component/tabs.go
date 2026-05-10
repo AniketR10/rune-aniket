@@ -77,7 +77,7 @@ func newListFrame(
 	scroll := new(Scroll)
 	scroll.InitPerformance(buf)
 	scroll.Attributes = scrollAttr
-	background := term.Cell{Attributes: scroll.Attributes}
+	background := term.Cell{Attributes: term.Attributes{Bg: scroll.Attributes.Bg}}
 	spanCfg := component.SpanConfig{
 		ContentAlignment: component.AlignmentCentered,
 		PadVertical:      -1,

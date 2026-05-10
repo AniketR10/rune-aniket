@@ -340,6 +340,60 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
 }
 
+// TestNonFocusTabAttrRespectedWithFrameFg is a regression test for
+// non_focus_tab_attr being overridden by the window manager's frame_attr
+// foreground. The tabs Scroll background used to share frame_attr (gray
+// in the production rune.star), and any tab name whose configured fg
+// was ColorDefault picked up that gray fg instead of the configured
+// non_focus_tab_attr default. Verify that a free (non-focused) tab
+// renders with NonFocusTabAttr (Fg=ColorDefault) even when frame_attr
+// has a non-default Fg.
+func TestNonFocusTabAttrRespectedWithFrameFg(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+	// simulate user-configured frame_attr with a non-default foreground
+	// (the production rune.star sets this to gray).
+	cfg.WindowManagerConfig.FrameAttr = term.Attributes{Fg: tcell.ColorGray}
+	cfg.FocusTabAttr = term.Attributes{Fg: tcell.ColorBlue}
+	cfg.NonFocusTabAttr = term.Attributes{} // i.e. fg=default,bg=default
+
+	b := NewComponent(cfg)
+
+	// open two tabs in the same window so the first ends up free.
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 0, "a", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tabA))
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 0, "b", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tabB))
+
+	width, height := 20, 5
+	b.Resize(width, height)
+	writer := term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells := writer.Cells()
+
+	expectedFocus := cfg.FocusTabAttr
+	expectedFocus.Attrs |= term.AttrVerticalRenderOffset
+	expectedNonFocus := cfg.NonFocusTabAttr
+	expectedNonFocus.Attrs |= term.AttrVerticalRenderOffset
+
+	// "a" is free (not bound to any window) and must render with
+	// NonFocusTabAttr; "b" is bound to the focused window and renders
+	// with FocusTabAttr.
+	assert.Equal(t, 'a', cells[0].Ch)
+	assert.Equal(t, expectedNonFocus, cells[0].Attributes,
+		"non-focused tab name must render with NonFocusTabAttr, not frame fg")
+	assert.Equal(t, 'b', cells[3].Ch)
+	assert.Equal(t, expectedFocus, cells[3].Attributes,
+		"focused tab name must render with FocusTabAttr")
+}
+
 func TestComponentRestoreTileLayout(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Frame = false
