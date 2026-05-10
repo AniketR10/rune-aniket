@@ -101,19 +101,67 @@ func newStdRemote(
 	if err != nil {
 		return nil, err
 	}
-	auths, err := authMethodsFromURI(ctx, cfg, uri, ui)
+	hostkeyCallback, err := buildHostkeyCallback(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	var hostkeyCallback ssh.HostKeyCallback
-	if cfg.insecure {
-		hostkeyCallback = ssh.InsecureIgnoreHostKey()
-	} else {
-		hostkeyCallback, err = defaultHostkeyCallback(cfg.knownHostsPath)
-		if err != nil {
+	// Resolve the effective key list once. Empty cfg.privateKeys means
+	// "try the canonical ~/.ssh/id_* defaults", which mirrors OpenSSH.
+	keyPaths := cfg.privateKeys
+	if len(keyPaths) == 0 {
+		keyPaths = defaultIdentityFiles()
+	}
+
+	// Single-attempt path. Preserves the original ordering (URI password
+	// → all configured keys in one PublicKeysCallback → password →
+	// kbd-interactive) so the chained AuthenticationMethods flow and
+	// every other matrix scenario keep behaving exactly as before.
+	if len(keyPaths) <= 1 {
+		return dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback,
+			keyPaths, true /* includeFallbacks */)
+	}
+
+	// Two or more keys: redial per key so that server limits like
+	// MaxAuthTries=1 don't burn the budget on the first (wrong) key
+	// before the right one gets a turn. Interactive fallbacks
+	// (password, kbd-interactive) run only on the final attempt to
+	// avoid prompting the user once per failed key.
+	hostport := hostPortFromURI(uri)
+	var lastErr error
+	for i, kp := range keyPaths {
+		last := i == len(keyPaths)-1
+		r, err := dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback,
+			[]string{kp}, last)
+		if err == nil {
+			return r, nil
+		}
+		if !shouldRetryWithNextKey(err) {
 			return nil, err
 		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		// Defensive: keyPaths was non-empty so the loop must have set
+		// lastErr on every miss. Surface a generic auth failure rather
+		// than returning nil if this invariant is ever broken.
+		return nil, fmt.Errorf("ssh authentication to %s failed: no keys succeeded", hostport)
+	}
+	return nil, lastErr
+}
+
+// dialOnce performs a single TCP+SSH handshake using the given key
+// paths. When includeFallbacks is true the password and (optionally)
+// keyboard-interactive auth methods are wired in alongside the
+// pubkey method, exactly mirroring the original single-attempt flow.
+func dialOnce(
+	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
+	username string, hostkeyCallback ssh.HostKeyCallback,
+	keyPaths []string, includeFallbacks bool,
+) (remote, error) {
+	auths, err := authMethodsFromURI(ctx, cfg, uri, ui, keyPaths, includeFallbacks)
+	if err != nil {
+		return nil, err
 	}
 	conf := &ssh.ClientConfig{
 		User:            username,
@@ -121,14 +169,38 @@ func newStdRemote(
 		Auth:            auths,
 		Timeout:         cfg.timeout,
 	}
-
 	hostport := hostPortFromURI(uri)
 	conn, err := ssh.Dial("tcp", hostport, conf)
 	if err != nil {
 		return nil, translateDialError(hostport, len(cfg.privateKeys) > 0, err)
 	}
-	ret := &stdRemote{parentCtx: ctx, client: conn, quitCh: make(chan struct{})}
-	return ret, nil
+	return &stdRemote{parentCtx: ctx, client: conn, quitCh: make(chan struct{})}, nil
+}
+
+func buildHostkeyCallback(cfg sshConfig) (ssh.HostKeyCallback, error) {
+	if cfg.insecure {
+		return ssh.InsecureIgnoreHostKey(), nil
+	}
+	return defaultHostkeyCallback(cfg.knownHostsPath)
+}
+
+// shouldRetryWithNextKey reports whether a failed dial attempt is the
+// kind of failure that another key might recover from. Hard errors
+// (host key mismatch, host unreachable, server requires keys but we
+// have none, context cancellation) are not retryable: the next key
+// would only reproduce the same failure.
+func shouldRetryWithNextKey(err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, ErrHostKeyMismatch),
+		errors.Is(err, ErrHostUnreachable),
+		errors.Is(err, ErrAuthRequiredKey),
+		errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
+		return false
+	}
+	return true
 }
 
 func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
@@ -223,6 +295,7 @@ func (r *stdRemote) Close() error {
 // only sees prompts that can succeed.
 func authMethodsFromURI(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
+	keyPaths []string, includeFallbacks bool,
 ) ([]ssh.AuthMethod, error) {
 	var auths []ssh.AuthMethod
 
@@ -232,9 +305,17 @@ func authMethodsFromURI(
 	}
 
 	// 2. Configured private keys (with on-demand passphrase prompts).
-	auths = append(auths, ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
-		return gatherSigners(ctx, cfg, ui)
-	}))
+	//    Skip when no keys are available so we don't advertise an empty
+	//    pubkey method to a chained-auth server.
+	if len(keyPaths) > 0 {
+		auths = append(auths, ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
+			return gatherSigners(ctx, keyPaths, ui)
+		}))
+	}
+
+	if !includeFallbacks {
+		return auths, nil
+	}
 
 	// 3. Interactive password fallback, retried up to 3 times. We track
 	//    whether the previous attempt succeeded by observing two
@@ -275,20 +356,11 @@ func authMethodsFromURI(
 	return auths, nil
 }
 
-// gatherSigners parses configured private key paths into ssh.Signer values.
+// gatherSigners parses the given private key paths into ssh.Signer values.
 // When a key file is encrypted, ui.PromptSecret is used to collect the
 // passphrase. Keys that fail to parse are notified to the user but skipped,
 // so a single broken key does not prevent the others from being tried.
-func gatherSigners(ctx context.Context, cfg sshConfig, ui UI) ([]ssh.Signer, error) {
-	keyPaths := cfg.privateKeys
-	if len(keyPaths) == 0 {
-		// Mirror OpenSSH behaviour: if no keys are configured, try the
-		// canonical default identity files under ~/.ssh/. This is a
-		// common, low-risk strategy (the same one OpenSSH uses by
-		// default) and avoids forcing users to spell out paths in
-		// workspace config when their keys are in the standard location.
-		keyPaths = defaultIdentityFiles()
-	}
+func gatherSigners(ctx context.Context, keyPaths []string, ui UI) ([]ssh.Signer, error) {
 	var signers []ssh.Signer
 	for _, keyPath := range keyPaths {
 		signer, err := signerForKey(ctx, keyPath, ui)
@@ -432,9 +504,13 @@ func translateDialError(hostport string, hasKeys bool, err error) error {
 
 // parseAdvertisedMethods extracts the comma-separated list of methods the
 // server advertised from a Go ssh failure message of the form
-//   "...attempted methods [<tried>], no supported methods remain"
+//
+//	"...attempted methods [<tried>], no supported methods remain"
+//
 // or
-//   "ssh: handshake failed: ssh: unable to authenticate, attempted methods [...], no supported methods remain"
+//
+//	"ssh: handshake failed: ssh: unable to authenticate, attempted methods [...], no supported methods remain"
+//
 // We don't have direct access to the failure packet from a public API, so
 // the message text is the only source of this information.
 func parseAdvertisedMethods(msg string) []string {
@@ -459,7 +535,6 @@ func parseAdvertisedMethods(msg string) []string {
 	}
 	return out
 }
-
 
 func defaultHostkeyCallback(override string) (ssh.HostKeyCallback, error) {
 	knownHostsPath := override
@@ -507,4 +582,3 @@ func currentHomePath() (string, error) {
 	}
 	return u.HomeDir, nil
 }
-

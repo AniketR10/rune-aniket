@@ -435,9 +435,13 @@ func TestKbdInteractiveAuth(t *testing.T) {
 }
 
 // TestMaxAuthTriesOne pins behavior when the server caps total
-// authentication attempts at 1. Offering a wrong key first burns
-// the budget before the right key gets a turn, so the dial must
-// fail cleanly with an auth error rather than hang or panic.
+// authentication attempts at 1. The Go ssh client offers every
+// signer returned by PublicKeysCallback within a single TCP
+// connection, so the server severs the connection after the wrong
+// key is offered first. newStdRemote therefore redials with a
+// fresh connection per configured key, which lets the right key
+// authenticate on its own connection and brings MaxAuthTries=1
+// hosts to a clean success.
 func TestMaxAuthTriesOne(t *testing.T) {
 	SkipIfNoDocker(t)
 	EnsureImage(t)
@@ -451,8 +455,9 @@ func TestMaxAuthTriesOne(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("ssh://test@" + c.HostPort + "/")
 	require.NoError(t, err)
 
-	// Wrong key first, right key second. Under MaxAuthTries=1 the
-	// server severs the connection after the wrong key is offered.
+	// Wrong key first, right key second. Per-key redial means the
+	// wrong key burns one connection, the right key authenticates
+	// on a fresh one.
 	wrong := PrivateKeyPath(t, "id_ed25519_wrong")
 	right := PrivateKeyPath(t, "id_ed25519")
 
@@ -463,15 +468,14 @@ func TestMaxAuthTriesOne(t *testing.T) {
 			Insecure:    true,
 			Timeout:     20 * time.Second,
 		})
-	require.Error(t, err,
-		"MaxAuthTries=1 must surface as an auth failure when the "+
-			"first signer offered is wrong; we don't get a second "+
-			"chance to offer the good key, and the dial must end "+
-			"cleanly rather than retry-loop forever")
+	require.NoError(t, err,
+		"MaxAuthTries=1 with [wrong, right] keys must succeed via "+
+			"per-key redial; if this fails newStdRemote is not "+
+			"opening a fresh connection for the next key after the "+
+			"server severs the first one")
 	assert.Empty(t, ui.prompts,
-		"MaxAuthTries=1 with no password fallback must not prompt "+
-			"the user; otherwise we'd be asking for credentials the "+
-			"server has already refused to accept; saw %v", ui.prompts)
+		"per-key redial must not prompt the user when one of the "+
+			"configured keys authenticates; saw %v", ui.prompts)
 }
 
 // TestAllowUsersDeniesUser pins the case where a user exists on

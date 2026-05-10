@@ -317,6 +317,8 @@ verify_remote_rune() {
   local out
   if ! out="$(ssh \
       -i "$key" \
+      -o IdentitiesOnly=yes \
+      -o IdentityAgent=none \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
       -o BatchMode=yes \

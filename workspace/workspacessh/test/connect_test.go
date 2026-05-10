@@ -66,3 +66,60 @@ func TestConnectSchemeEndToEnd(t *testing.T) {
 	require.NoError(t, err, "Stat over the connected workspace should succeed")
 	assert.NotNil(t, fi)
 }
+
+// TestConnectSchemeMultiKeyRedialBootstrap exercises the full
+// scheme bootstrap (auth + whichCommand + Stat) on a server that
+// caps MaxAuthTries to 1, with [wrong, right] keys configured.
+// The pure-auth TestMaxAuthTriesOne stops the moment auth
+// succeeds and never invokes the post-auth bootstrap, so it
+// can't catch a regression where the per-key redial leaves the
+// scheme in a state that breaks subsequent remote operations
+// (e.g. dropped client config, cached failure, missing remote
+// binary install in scenario scripts). This test guards that
+// bigger surface.
+func TestConnectSchemeMultiKeyRedialBootstrap(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+
+	c := StartContainer(t, SSHDScenario{
+		PublicKeyFile:     "/id_ed25519.pub",
+		ExtraSSHDConfig:   "MaxAuthTries 1\n",
+		InstallRuneBinary: true,
+	})
+
+	wrong := PrivateKeyPath(t, "id_ed25519_wrong")
+	right := PrivateKeyPath(t, "id_ed25519")
+
+	uri, err := workspaceapi.ParseURI(
+		fmt.Sprintf("ssh://test@%s/tmp", c.HostPort))
+	require.NoError(t, err)
+
+	cfg := config.MapConfig(map[string]any{
+		"private_keys": []any{wrong, right},
+		"timeout":      "20s",
+		"insecure":     true,
+	})
+
+	schemeFn := workspacessh.New(&errorUI{})
+	scheme, err := schemeFn(context.Background(), cfg, uri)
+	require.NoError(t, err)
+	defer scheme.Close()
+
+	// Stat triggers the connect path. Loop briefly to absorb
+	// the maintainConnection goroutine's first publish.
+	deadline := time.Now().Add(20 * time.Second)
+	var fi any
+	for time.Now().Before(deadline) {
+		fi, err = scheme.Stat("/tmp")
+		if err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.NoError(t, err,
+		"per-key redial under MaxAuthTries=1 must complete the full "+
+			"scheme bootstrap, not just the auth handshake; if this "+
+			"fails it usually means the second key authenticates but "+
+			"the bootstrap then can't find `rune` on the remote")
+	assert.NotNil(t, fi)
+}

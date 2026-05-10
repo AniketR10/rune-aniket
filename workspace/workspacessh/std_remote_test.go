@@ -181,6 +181,43 @@ func TestStdRemoteAuthCallbacks(t *testing.T) {
 	})
 }
 
+// TestStdRemoteMultiKeyRetry pins the per-connection retry that lets a
+// dial recover after a wrong key is offered first against a server
+// that caps MaxAuthTries to 1. The Go ssh client offers every signer
+// returned by PublicKeysCallback within the same TCP connection, so
+// the only way to survive MaxAuthTries=1 is to redial with the next
+// key after a rejection. If newStdRemote ever drops that loop, the
+// first wrong key burns the budget and the right key never gets a
+// chance — exactly the failure mode the manual scenario 05 covers.
+func TestStdRemoteMultiKeyRetry(t *testing.T) {
+	rightPath, rightPub := generateClientKey(t)
+	wrongPath, _ := generateClientKey(t)
+
+	srvCfg := &ssh.ServerConfig{
+		MaxAuthTries: 1,
+		PublicKeyCallback: func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			if string(key.Marshal()) == string(rightPub.Marshal()) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("unknown key")
+		},
+	}
+	srv := startInProcessServer(t, srvCfg)
+
+	ui := &recordingUI{}
+	cfg := configForCallbackTest(t, srv, []string{wrongPath, rightPath})
+	uri := uriForServer(t, srv, "")
+
+	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	require.NoError(t, err,
+		"with MaxAuthTries=1 the server severs the first connection "+
+			"after the wrong key; the dial must retry on a fresh "+
+			"connection with the next configured key")
+	_ = r.Close()
+	assert.Empty(t, ui.prompts,
+		"per-key retry must not prompt the user; saw %v", ui.prompts)
+}
+
 // TestDefaultIdentityFiles confirms that when ssh.private_keys is empty
 // we fall back to canonical ~/.ssh/id_* keys discovered on disk. This is
 // the exact scenario where a user expects pubkey auth to "just work"
