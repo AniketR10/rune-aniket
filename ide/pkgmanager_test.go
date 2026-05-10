@@ -73,9 +73,11 @@ func TestPackageManagerConcurrent(t *testing.T) {
 	cfg := defaultCfg()
 	var m *testWorkspaceManagerHandler
 	var mu sync.Mutex
+	// Sync scheduler — production hosts (gui.Update / tui.Run)
+	// dispatch UserFunc while holding the IDE locker. This stub
+	// runs fn on the calling goroutine without locking; the test
+	// caller is responsible for whatever ordering it needs.
 	cfg.scheduleNextTick = func(fn func()) bool {
-		mu.Lock()
-		defer mu.Unlock()
 		fn()
 		return true
 	}
@@ -1161,13 +1163,15 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
-	if cfg.scheduleNextTick == nil {
-		cfg.scheduleNextTick = func(fn func()) bool {
-			mu.Lock()
-			defer mu.Unlock()
-			fn()
-			return true
-		}
+	// pkgmanager tests drive the install prompt synchronously: a
+	// LibDir call schedules the Prompt to open and hands back an
+	// iterator that blocks until the user picks an option. With
+	// the async default scheduler the Prompt would open after the
+	// test starts dispatching keys, races and deadlocks. Use a
+	// sync scheduler that runs fn on the calling goroutine.
+	cfg.scheduleNextTick = func(fn func()) bool {
+		fn()
+		return true
 	}
 
 	dir, err := os.MkdirTemp("", "")
@@ -1270,13 +1274,11 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
-	if cfg.scheduleNextTick == nil {
-		cfg.scheduleNextTick = func(fn func()) bool {
-			mu.Lock()
-			defer mu.Unlock()
-			fn()
-			return true
-		}
+	// Sync scheduler — see the matching block in
+	// newTestWorkspaceManagerHandlerForPkgManager.
+	cfg.scheduleNextTick = func(fn func()) bool {
+		fn()
+		return true
 	}
 
 	storage2 := localstorage.New(context.Background(), dir, doctoml.Marshaler())

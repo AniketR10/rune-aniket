@@ -2058,13 +2058,16 @@ func (s *queuedScheduler) Flush(lock sync.Locker) {
 		fn := s.pending[0]
 		s.pending = s.pending[1:]
 		s.mu.Unlock()
+		// Mirror the host event loop's UserFunc dispatch
+		// (gui.Update / tui.Run): the lock is held while fn
+		// runs so callbacks observe a consistent IDE state.
 		if lock != nil {
 			lock.Lock()
-			fn()
-			lock.Unlock()
-			continue
 		}
 		fn()
+		if lock != nil {
+			lock.Unlock()
+		}
 	}
 }
 

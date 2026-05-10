@@ -160,12 +160,38 @@ type workspaceManagerHandler struct {
 	openPrevFilesEx *ex
 	openPrevWindows map[uint64]browser.Window
 	shaderRunner    *shaderRunner
+	// pending tracks workspaces whose Phase B (async build) is in
+	// flight. Entries are added in Phase A (under h.mu) and removed
+	// in Phase C (also under h.mu). The pending slot index reserves
+	// position in h.workspaces so concurrent addWorkspace calls do
+	// not collide.
+	pending map[string]*pendingWorkspace
+	// pendingWG counts in-flight Phase B builds (and the scheduled
+	// Phase C closure they enqueue). Tests use it via
+	// waitForWorkspaces to block until all installs land. Production
+	// code never inspects it.
+	pendingWG sync.WaitGroup
 }
 
 type openFileTarget struct {
 	workspaceIdx int
 	workspace    *workspaceHandler
 	tab          *browser.Tab
+}
+
+// pendingWorkspace describes an addWorkspace request whose Phase B build
+// is running in a goroutine. It reserves a slot in h.workspaces so other
+// addWorkspace calls (and slot-finding helpers) can see it while the
+// async build is in progress, and exposes a cancel hook so that the slot
+// can be torn down (e.g. via :workspaceclose) before install finishes.
+type pendingWorkspace struct {
+	uri       workspaceapi.URI
+	slot      int
+	cancelCtx func()
+	// canceled is set by Phase C / closeWorkspace when the install
+	// must be aborted; the goroutine and the install closure both
+	// check it before installing the handler.
+	canceled atomic.Bool
 }
 
 type visibleWorkspaceManager struct {
@@ -397,6 +423,14 @@ func (h *workspaceManagerHandler) init(
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
+	// The host event loop (term/gui/gui.go's (*GUI).Update,
+	// rune-go-sdk's tui.Run) is contracted to hold the shared IDE
+	// locker around every UserFunc it dispatches. Callbacks
+	// scheduled via cfg.scheduleNextTick therefore already run
+	// serialized with the rest of the IDE state machine — no
+	// extra wrapping required, and any extra h.mu.Lock() here
+	// would self-deadlock the event loop because *sync.Mutex is
+	// not reentrant.
 	h.scheduleNextTick = cfg.scheduleNextTick
 	h.configPath = cfg.configPath
 	h.reloadConfig = reloadConfig
@@ -419,6 +453,7 @@ func (h *workspaceManagerHandler) init(
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
 	h.tabBarHeight = tabBarHeight
+	h.pending = make(map[string]*pendingWorkspace)
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
@@ -949,33 +984,199 @@ func cleanedExtensionConfig(cfg map[string]any) map[string]any {
 	return m
 }
 
+// addWorkspace begins loading a workspace for the given URI. It is split
+// into three phases:
+//
+//  1. Phase A (synchronous, on the event loop, holding h.mu when called
+//     by init): validate the request, deduplicate by URI, reserve a
+//     pending slot, and create the underlying workspace.Workspace via
+//     the manager. None of these steps may block on remote IO.
+//
+//  2. Phase B (goroutine): perform the blocking work — load the
+//     workspace overlay config (cwd.OpenFile), construct the git
+//     vctrl.Service (cwd.Stat), build the editor / ex / cursor history
+//     / extensions runner. This is where SSH workspaces typically wait
+//     for the first connection attempt and any associated UI prompts.
+//
+//  3. Phase C (scheduled back onto the event loop via scheduleNextTick):
+//     install the constructed workspaceHandler into h.workspaces,
+//     subscribe commands/events, switch focus, spawn the FS watcher
+//     goroutine and run session restore.
+//
+// addWorkspace returns synchronously after Phase A so the event loop is
+// not blocked while Phase B is in progress; if Phase A fails the caller
+// receives an error immediately. Phase B/C errors are surfaced via the
+// notifications system since the caller has already returned.
+//
+// The slot index argument follows the original semantics: -1 picks the
+// next available slot; otherwise the given slot is reserved (used by
+// commandReloadWorkspace which needs to land back in the same slot).
 func (h *workspaceManagerHandler) addWorkspace(
-	uri workspaceapi.URI, shouldRestore, promptRecommended bool, i int,
+	uri workspaceapi.URI, shouldRestore, promptRecommended bool, slot int,
 ) error {
+	if i, ok := h.findInstalledSlot(uri); ok {
+		h.switchToWorkspace(i)
+		return nil
+	}
+	if h.isPending(uri) {
+		_, _ = h.notifications.current().Notify(browserapi.LevelWarn,
+			"workspace %q is already loading", uri.String())
+		return nil
+	}
+	cwd, ctx, cancel, err := h.createWorkspaceScheme(uri)
+	if err != nil {
+		return err
+	}
+	pending, err := h.reservePendingSlot(uri, slot, cancel)
+	if err != nil {
+		cancel()
+		return err
+	}
+	h.pendingWG.Add(1)
+	go debug.CapturePanicReport(func() {
+		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
+		// scheduleNextTick may legitimately return false if the
+		// host event loop is not running (e.g. tests that exercise
+		// the IDE without tui.Run, or the loop has already exited).
+		// In that case the install closure never runs, so we still
+		// need to release pendingWG and tear down the reservation —
+		// otherwise drainPendingWorkspaces would hang forever and a
+		// reserved-but-empty slot would leak in h.pending.
+		scheduled := h.scheduleNextTick(func() {
+			defer h.pendingWG.Done()
+			h.installPendingWorkspace(pending, uri, ctx, cancel,
+				cwd, built, buildErr, shouldRestore, promptRecommended)
+		})
+		if !scheduled {
+			h.mu.Lock()
+			delete(h.pending, uri.String())
+			h.mu.Unlock()
+			cancel()
+			h.pendingWG.Done()
+		}
+	})
+	return nil
+}
+
+// findInstalledSlot returns the index of an already-installed workspace
+// whose URI matches uri.
+func (h *workspaceManagerHandler) findInstalledSlot(uri workspaceapi.URI) (int, bool) {
 	for i, w := range h.workspaces {
 		if w == nil {
 			continue
 		}
 		if w.uri.Equal(uri) {
-			h.switchToWorkspace(i)
-			return nil
+			return i, true
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cwd, err := h.workspace.AddWorkspace(ctx, uri)
-	if err != nil {
-		cancel()
-		return fmt.Errorf("create new workspace for %q: %w", uri, err)
-	}
+	return -1, false
+}
 
+// isPending reports whether a Phase B build is currently running for
+// the given URI.
+func (h *workspaceManagerHandler) isPending(uri workspaceapi.URI) bool {
+	_, ok := h.pending[uri.String()]
+	return ok
+}
+
+// createWorkspaceScheme is Phase A's only call into workspace.Manager.
+// It constructs the underlying workspace.Workspace plus a per-handler
+// lifetime context that the Phase B goroutine and the FS watcher
+// share — distinct from the *scheme's* parent context.
+//
+// The scheme is always built with context.Background() as its parent.
+// Schemes manage their own internal lifecycle via Close() (e.g.
+// remoteScheme.Close cancels its own ctx, closes the ssh session and
+// stops the maintainConnection goroutine), and workspace.Manager
+// caches schemes by URI: closeWorkspaceKeepScheme on :workspacereload
+// deliberately reuses the cached entry, so cancelling the per-handler
+// ctx must NOT propagate into the scheme. Otherwise the next dial /
+// stat / pty call short-circuits with context.Canceled before it
+// reaches the wire (the bug TestIntegrationIDEWorkspaceReloadOverSSH
+// reproduces).
+//
+// workspace.Manager.AddWorkspace itself does not block on remote IO —
+// for SSH it returns a remoteScheme whose first connection attempt
+// happens in a background goroutine — so this is safe to call from
+// the event loop.
+func (h *workspaceManagerHandler) createWorkspaceScheme(uri workspaceapi.URI) (
+	workspace.Workspace, context.Context, context.CancelFunc, error,
+) {
+	cwd, err := h.workspace.AddWorkspace(context.Background(), uri)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create new workspace for %q: %w", uri, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	return cwd, ctx, cancel, nil
+}
+
+// reservePendingSlot picks (or validates) the slot the workspace will
+// occupy and records a pendingWorkspace entry so concurrent
+// addWorkspace calls and nextAvailableWorkspace see the slot as taken.
+// It must be called with whatever locking discipline the caller already
+// uses (init holds h.mu; commandAddWorkspace runs single-threaded on
+// the event loop).
+func (h *workspaceManagerHandler) reservePendingSlot(
+	uri workspaceapi.URI, slot int, cancel context.CancelFunc,
+) (*pendingWorkspace, error) {
+	if slot == -1 {
+		var ok bool
+		slot, ok = h.nextAvailableWorkspace()
+		if !ok {
+			return nil, fmt.Errorf("no available workspaces")
+		}
+	}
+	if slot < 0 || slot >= len(h.workspaces) {
+		return nil, fmt.Errorf("invalid workspace slot %d", slot)
+	}
+	if h.workspaces[slot] != nil {
+		return nil, fmt.Errorf("workspace slot %d is occupied", slot)
+	}
+	pending := &pendingWorkspace{
+		uri:       uri,
+		slot:      slot,
+		cancelCtx: cancel,
+	}
+	h.pending[uri.String()] = pending
+	return pending, nil
+}
+
+// builtWorkspace bundles the heavyweight artifacts produced by Phase B
+// so installPendingWorkspace can install them atomically on the event
+// loop.
+type builtWorkspace struct {
+	cfg                 ideConfig
+	configErr           error
+	wh                  *workspaceHandler
+	ex                  *ex
+	runner              extension.Runner
+	cursorHistoryCloser io.Closer
+}
+
+// buildWorkspaceAsync runs the blocking IO and heavy construction in a
+// goroutine. It MUST NOT touch h.workspaces, h.pending or any other
+// event-loop-owned state directly: results are handed back via the
+// returned builtWorkspace and consumed under the event-loop lock by
+// installPendingWorkspace.
+func (h *workspaceManagerHandler) buildWorkspaceAsync(
+	uri workspaceapi.URI, cwd workspace.Workspace,
+	pending *pendingWorkspace,
+) (*builtWorkspace, error) {
 	cfg, configErr := h.reloadConfig()
 	// Ensure ideConfig used for textOpts can resolve `{history}` placeholders
 	// in command alias completer chains. Use the same partitioned storage
 	// the command Prompt uses so the doc IDs line up.
 	cfg.storage = h.ideStorage
-	_, wConfigErr := loadWorkspaceConfig(h.workspaceConfigFilename, cwd, uri, &cfg)
-	if wConfigErr != nil {
-		configErr = multierror.Append(configErr, fmt.Errorf("workspace config: %w", wConfigErr))
+	// reloadConfig returns a fresh ideConfig that didn't go through
+	// ide.New / ide.WithScheduleNextTick wiring, so propagate the
+	// host scheduler captured in init. Downstream consumers
+	// (debugshell, lsp, etc.) require it to be non-nil.
+	cfg.scheduleNextTick = h.scheduleNextTick
+	if _, wConfigErr := loadWorkspaceConfig(
+		h.workspaceConfigFilename, cwd, uri, &cfg,
+	); wConfigErr != nil {
+		configErr = multierror.Append(configErr,
+			fmt.Errorf("workspace config: %w", wConfigErr))
 	}
 
 	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
@@ -996,22 +1197,28 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	ed, err := h.newEditor(uri, cfg, vctrlService)
 	if err != nil {
-		cancel()
-		return fmt.Errorf("new editor: %w", err)
+		return nil, fmt.Errorf("new editor: %w", err)
 	}
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	// while only routing to other currently visible IDE workspaces.
 	visibleManager := visibleWorkspaceManager{parent: h, manager: h.workspace}
-	multicwd := workspace.Multi(ctx, visibleManager, cwd, uri)
+	// Multi may construct *new* schemes for URIs outside the
+	// workspace (loadExtraneous / recoverExtraneous below). Those
+	// schemes are cached by workspace.Manager and outlive any
+	// individual workspaceHandler — ditto the rationale in
+	// createWorkspaceScheme: the scheme parent must be Background
+	// so :workspacereload tearing down ctx never leaves a cached
+	// extraneous scheme with a canceled context.
+	multicwd := workspace.Multi(context.Background(), visibleManager, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	ex, err := newEx(ed, multicwd, h.ideStorage, h.notifications, uri,
-		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent, h.initialVTECapacity,
-		h.clip, h.macro, h.dispatchOnPreview, tm, parser, textOpts...)
+		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent,
+		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
+		tm, parser, textOpts...)
 	if err != nil {
-		cancel()
-		return fmt.Errorf("new ex: %w", err)
+		return nil, fmt.Errorf("new ex: %w", err)
 	}
 	ex.commandEditor = h.newCommandPromptEditor(cfg)
 	apibrowser := newBrowserAdapter(ex.Browser())
@@ -1021,31 +1228,120 @@ func (h *workspaceManagerHandler) addWorkspace(
 		h.scheduleNextTick,
 	)
 	if err != nil {
-		cancel()
-		return fmt.Errorf("install cursor history: %w", err)
+		return nil, fmt.Errorf("install cursor history: %w", err)
 	}
 	tm.tm = ex.Browser()
-	if err := h.subscribeAllCommands(ex); err != nil {
-		_ = cursorHistoryCloser.Close()
-		cancel()
-		return err
-	}
-	if err = h.subscribeAllEvents(cfg, ex); err != nil {
-		_ = cursorHistoryCloser.Close()
-		cancel()
-		return err
-	}
 
 	wh := &workspaceHandler{
 		vctrlService:        vctrlService,
 		cursorHistoryCloser: cursorHistoryCloser,
-		cancelCtx:           cancel,
+		cancelCtx:           pending.cancelCtx,
 		uri:                 uri,
 		ex:                  ex,
 		cwd:                 cwd,
 	}
 	tm.workspace = wh
 
+	wsExec := workspaceshell.NewExecutor(
+		workspaceExecutorAdapter{e: cwd})
+	trackedCwd := &trackedWorkspace{Workspace: cwd, exec: wsExec}
+	extExec, err := newExtensionsExecutor()
+	if err != nil {
+		_ = cursorHistoryCloser.Close()
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Error building extensions executor: %v", err)
+		log.Errorf("build extensions executor for workspace %s: %v",
+			uri.String(), err)
+		return nil, fmt.Errorf("new extensions executor: %w", err)
+	}
+	runner, err := h.buildExtensions(cfg, uri, trackedCwd, ex, extExec)
+	if err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Error building channel for extensions and plugins: %v", err)
+		log.Errorf("build extensions for workspace %s: %v",
+			uri.String(), err)
+	} else {
+		exec, isExecutor := runner.(schemeapi.Executor)
+		if isExecutor {
+			ex.setExecutor(exec, wsExec, extExec.shell)
+		}
+		wh.Extensions.Store(runner)
+	}
+
+	built := &builtWorkspace{
+		cfg:                 cfg,
+		configErr:           configErr,
+		wh:                  wh,
+		ex:                  ex,
+		runner:              runner,
+		cursorHistoryCloser: cursorHistoryCloser,
+	}
+	return built, nil
+}
+
+// installPendingWorkspace runs on the event loop after Phase B
+// completes. It either tears down the partial state on error, or
+// installs the constructed workspaceHandler into h.workspaces, runs
+// command/event subscription, switches focus, spawns the FS watcher
+// goroutine and runs session restore.
+func (h *workspaceManagerHandler) installPendingWorkspace(
+	pending *pendingWorkspace,
+	uri workspaceapi.URI,
+	ctx context.Context,
+	cancel context.CancelFunc,
+	cwd workspace.Workspace,
+	built *builtWorkspace,
+	buildErr error,
+	shouldRestore, promptRecommended bool,
+) {
+	// Phase C is invoked from the host event loop's UserFunc
+	// dispatch (gui.Update / tui.Run), which already holds h.mu —
+	// so we run with the IDE lock held without re-locking here.
+	delete(h.pending, uri.String())
+
+	// closeWorkspace can flag the pending entry as canceled while
+	// Phase B is in progress; in that case the cancelCtx has already
+	// been called. Drop the partially built artifacts so we don't
+	// install a workspace the user closed.
+	if pending.canceled.Load() {
+		if built != nil {
+			h.discardBuiltWorkspace(built)
+		}
+		cancel()
+		return
+	}
+
+	if buildErr != nil {
+		log.Errorf("load workspace %s: %v", uri.String(), buildErr)
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"Failed to load workspace %s: %v", uri.String(), buildErr)
+		cancel()
+		return
+	}
+
+	// subscribeAllCommands / subscribeAllEvents touch event-loop-owned
+	// state (per-ex command registries, the publisher), so they live in
+	// Phase C even though they are CPU-only.
+	if err := h.subscribeAllCommands(built.ex); err != nil {
+		_ = built.cursorHistoryCloser.Close()
+		cancel()
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"subscribe workspace commands: %v", err)
+		return
+	}
+	if err := h.subscribeAllEvents(built.cfg, built.ex); err != nil {
+		_ = built.cursorHistoryCloser.Close()
+		cancel()
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"subscribe workspace events: %v", err)
+		return
+	}
+
+	// FS watcher goroutine — we keep this naked goroutine tied to ctx
+	// rather than to pending so that closeWorkspace's cancel() shuts
+	// it down naturally.
+	ex := built.ex
+	wh := built.wh
 	go debug.CapturePanicReport(func() {
 		start := time.Now()
 		// to preserve the order of events we don't want to spawn
@@ -1074,86 +1370,106 @@ func (h *workspaceManagerHandler) addWorkspace(
 		dispatchFilesystemEvents(ctx, ex, h.mu, ch, ignores)
 	})
 
-	wsExec := workspaceshell.NewExecutor(
-		workspaceExecutorAdapter{e: cwd})
-	trackedCwd := &trackedWorkspace{Workspace: cwd, exec: wsExec}
-	extExec, err := newExtensionsExecutor()
-	if err != nil {
-		_, _ = h.notifications.current().Notify(browserapi.LevelError,
-			"Error building extensions executor: %v", err)
-		log.Errorf("build extensions executor for workspace %s: %v",
-			uri.String(), err)
-		cancel()
-		return fmt.Errorf("new extensions executor: %w", err)
-	}
-	runner, err := h.buildExtensions(cfg, uri, trackedCwd, ex, extExec)
-	if err != nil {
-		_, _ = h.notifications.current().Notify(browserapi.LevelError,
-			"Error building channel for extensions and plugins: %v", err)
-		log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
-	} else {
-		exec, isExecutor := runner.(schemeapi.Executor)
-		if isExecutor {
-			ex.setExecutor(exec, wsExec, extExec.shell)
-		}
-		wh.Extensions.Store(runner)
+	if built.runner != nil {
 		// load async to speed up workspace initialization
 		go debug.CapturePanicReport(func() {
-			h.initExtensions(runner, cfg)
+			h.initExtensions(built.runner, built.cfg)
 		})
 	}
 
-	if i == -1 {
-		var ok bool
-		i, ok = h.nextAvailableWorkspace()
-		if !ok {
-			cancel()
-			return fmt.Errorf("no available workspaces")
-		}
-	}
-
-	h.workspaces[i] = wh
+	h.workspaces[pending.slot] = wh
 	h.workspaceCount++
-	h.switchToWorkspace(i)
+	h.switchToWorkspace(pending.slot)
 
-	h.logNonFatalErrs(wh.Browser(), configErr, cfg.errors)
+	h.logNonFatalErrs(wh.Browser(), built.configErr, built.cfg.errors)
 
-	prevSessionFiles := h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
-	hasOpenTerminalSessions := false
-	hasOpenTaskSessions := false
-	var workspaceLayout tcomponent.TileLayout
-	var hasWorkspaceLayout bool
+	prevSessionFiles, hasTermSessions, hasTaskSessions, layout, hasLayout, err :=
+		h.resolveSessionRestoreState(ex, uri, shouldRestore)
+	if err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"resolve session state for %s: %v", uri.String(), err)
+		return
+	}
+	if !shouldRestore || (len(prevSessionFiles) == 0 && !hasTermSessions && !hasTaskSessions) {
+		return
+	}
+	if promptRecommended && !built.cfg.autoRestore() {
+		h.openRestorePrompt(ex, uri, prevSessionFiles, hasTermSessions,
+			hasTaskSessions, layout, hasLayout)
+		return
+	}
+	if err := h.restorePreviousSession(ex, prevSessionFiles, hasTermSessions,
+		hasTaskSessions, layout, hasLayout); err != nil {
+		_, _ = h.notifications.current().Notify(browserapi.LevelError,
+			"restore previous session: %v", err)
+	}
+}
+
+// resolveSessionRestoreState consults stored session metadata for uri
+// and either returns previously open files / windows / layouts (when
+// shouldRestore is true) or clears them (when shouldRestore is false,
+// e.g. autoRestore disabled).
+func (h *workspaceManagerHandler) resolveSessionRestoreState(
+	ex *ex, uri workspaceapi.URI, shouldRestore bool,
+) (
+	prevSessionFiles []file,
+	hasTermSessions bool,
+	hasTaskSessions bool,
+	layout tcomponent.TileLayout,
+	hasLayout bool,
+	err error,
+) {
+	prevSessionFiles = h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
 	if shouldRestore {
-		hasOpenTerminalSessions, err = ex.hasOpenTerminalSessions(context.Background())
+		hasTermSessions, err = ex.hasOpenTerminalSessions(context.Background())
 		if err != nil {
-			return fmt.Errorf("load open terminal sessions: %w", err)
+			err = fmt.Errorf("load open terminal sessions: %w", err)
+			return
 		}
-		hasOpenTaskSessions, err = ex.hasOpenTaskSessions(context.Background())
+		hasTaskSessions, err = ex.hasOpenTaskSessions(context.Background())
 		if err != nil {
-			return fmt.Errorf("load open task sessions: %w", err)
+			err = fmt.Errorf("load open task sessions: %w", err)
+			return
 		}
-		workspaceLayout, hasWorkspaceLayout, err = ex.loadWorkspaceLayout(context.Background())
+		layout, hasLayout, err = ex.loadWorkspaceLayout(context.Background())
 		if err != nil {
-			return fmt.Errorf("load workspace layout: %w", err)
+			err = fmt.Errorf("load workspace layout: %w", err)
+			return
 		}
-	} else if err := ex.clearOpenTerminalSessions(context.Background()); err != nil {
-		return fmt.Errorf("clear open terminal sessions: %w", err)
-	} else if err := ex.clearOpenTaskSessions(context.Background()); err != nil {
-		return fmt.Errorf("clear open task sessions: %w", err)
-	} else if err := ex.clearWorkspaceLayout(context.Background()); err != nil {
-		return fmt.Errorf("clear workspace layout: %w", err)
+		return
 	}
-	if !shouldRestore || (len(prevSessionFiles) == 0 && !hasOpenTerminalSessions && !hasOpenTaskSessions) {
-		return nil
+	if cerr := ex.clearOpenTerminalSessions(context.Background()); cerr != nil {
+		err = fmt.Errorf("clear open terminal sessions: %w", cerr)
+		return
 	}
+	if cerr := ex.clearOpenTaskSessions(context.Background()); cerr != nil {
+		err = fmt.Errorf("clear open task sessions: %w", cerr)
+		return
+	}
+	if cerr := ex.clearWorkspaceLayout(context.Background()); cerr != nil {
+		err = fmt.Errorf("clear workspace layout: %w", cerr)
+		return
+	}
+	return
+}
 
-	if promptRecommended && !cfg.autoRestore() {
-		h.openRestorePrompt(ex, uri, prevSessionFiles, hasOpenTerminalSessions,
-			hasOpenTaskSessions, workspaceLayout, hasWorkspaceLayout)
-		return nil
+// discardBuiltWorkspace tears down a Phase B build whose install was
+// canceled (via closeWorkspace before Phase C ran).
+func (h *workspaceManagerHandler) discardBuiltWorkspace(built *builtWorkspace) {
+	if built == nil {
+		return
 	}
-	return h.restorePreviousSession(ex, prevSessionFiles, hasOpenTerminalSessions,
-		hasOpenTaskSessions, workspaceLayout, hasWorkspaceLayout)
+	if built.cursorHistoryCloser != nil {
+		_ = built.cursorHistoryCloser.Close()
+	}
+	if built.runner != nil {
+		if c, ok := built.runner.(io.Closer); ok {
+			_ = c.Close()
+		}
+	}
+	if built.ex != nil {
+		_ = built.ex.Close()
+	}
 }
 
 func lspConfig(cfg ideConfig) config.Config {
@@ -1388,20 +1704,41 @@ func (h *workspaceManagerHandler) restoreWorkspaceWindows(
 }
 func (h *workspaceManagerHandler) nextAvailableWorkspace() (idx int, ok bool) {
 	for i := h.focus; i >= 0 && i < len(h.workspaces); i++ {
-		if h.workspaces[i] == nil {
-			ok = true
-			idx = i
-			return
+		if h.slotIsFree(i) {
+			return i, true
 		}
 	}
 	for i := 0; i < h.focus && i < len(h.workspaces); i++ {
-		if h.workspaces[i] == nil {
-			ok = true
-			idx = i
-			return
+		if h.slotIsFree(i) {
+			return i, true
 		}
 	}
-	return
+	return 0, false
+}
+
+// slotIsFree reports whether slot i has neither an installed
+// workspaceHandler nor an in-flight pending build reserving it.
+func (h *workspaceManagerHandler) slotIsFree(i int) bool {
+	if h.workspaces[i] != nil {
+		return false
+	}
+	for _, p := range h.pending {
+		if p.slot == i {
+			return false
+		}
+	}
+	return true
+}
+
+// pendingForFocus returns the pending build (if any) reserving the
+// currently focused slot.
+func (h *workspaceManagerHandler) pendingForFocus() (*pendingWorkspace, bool) {
+	for _, p := range h.pending {
+		if p.slot == h.focus {
+			return p, true
+		}
+	}
+	return nil, false
 }
 
 func (h *workspaceManagerHandler) logNonFatalErrs(
@@ -1489,6 +1826,18 @@ func (h *workspaceManagerHandler) closeWorkspaceKeepScheme() (
 func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
 	workspaceapi.URI, []workspaceapi.URI, error,
 ) {
+	// If the focused slot is currently a pending build (Phase B in
+	// progress), tear it down: cancel the context so any blocking IO
+	// returns and mark the pending entry so installPendingWorkspace
+	// drops the partial build instead of installing it.
+	if pending, ok := h.pendingForFocus(); ok {
+		uri := pending.uri
+		pending.canceled.Store(true)
+		pending.cancelCtx()
+		delete(h.pending, uri.String())
+		h.history.recordCloseWorkspace(uri)
+		return uri, nil, nil
+	}
 	if h.focusHandler() == h.empty {
 		return workspaceapi.URI{}, nil, errors.New("workspace tab is empty")
 	}
@@ -1602,6 +1951,15 @@ func (h *workspaceManagerHandler) moveWorkspace(args ...string) error {
 }
 
 func (h *workspaceManagerHandler) Close() (ret error) {
+	// Cancel any in-flight pending builds so their goroutines can
+	// exit and their finalize closures (when they eventually run) see
+	// canceled and discard the partially built artifacts instead of
+	// installing them after Close.
+	for k, p := range h.pending {
+		p.canceled.Store(true)
+		p.cancelCtx()
+		delete(h.pending, k)
+	}
 	for _, hm := range h.workspaces {
 		if hm == nil {
 			continue

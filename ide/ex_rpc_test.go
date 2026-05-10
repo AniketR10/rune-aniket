@@ -86,11 +86,19 @@ func (h *safeHandler) Draw(w term.Writer) {
 }
 func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	exit, handled = h.Handler.Handle(ev)
 	// workaround search.List non-determinism
 	if w, ok := h.Handler.(interface{ Wait() }); ok {
 		w.Wait()
+	}
+	h.mu.Unlock()
+	// addWorkspace runs Phase B/C asynchronously: a goroutine
+	// builds the workspace and then schedules install via
+	// scheduleNextTick. After the test has released h.mu the
+	// install goroutine can acquire it and finish, so wait here for
+	// any pending workspaces to install before the next test step.
+	if drainer, ok := h.Handler.(interface{ drainPendingWorkspaces() }); ok {
+		drainer.drainPendingWorkspaces()
 	}
 	return
 }

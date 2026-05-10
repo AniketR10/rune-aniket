@@ -42,6 +42,22 @@ import (
 	"unstable.build/go-tui/ide"
 )
 
+// hostScheduleNextTick mirrors a host event loop's UserFunc dispatch:
+// fn runs on a fresh goroutine while holding mu, exactly like
+// gui.Update does before invoking ev.UserFunc(). Tests use this to
+// preserve the production contract that scheduled callbacks observe
+// IDE state under the host lock.
+func hostScheduleNextTick(mu sync.Locker) func(func()) bool {
+	return func(fn func()) bool {
+		go func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		}()
+		return true
+	}
+}
+
 func TestE2E(t *testing.T) {
 	t.Parallel()
 	t.Run("sed arg substitution and single quote grouping works", func(t *testing.T) {
@@ -74,11 +90,15 @@ command:
 		var mu sync.Mutex
 		i, err := ide.New(dir, config.Name(), dir,
 			ide.WithLocker(&mu),
+			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
 		)
 		require.NoError(t, err)
 
 		handler := i.Ready()
+		// addWorkspace is async; wait for the cwd workspace install
+		// to land before driving keyboard input or opening files.
+		i.WaitWorkspaces()
 		mu.Lock()
 		require.NoError(t, i.Open(uri))
 		mu.Unlock()
@@ -204,11 +224,13 @@ command:
 		i, err := ide.New(dir, config.Name(), dir,
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
+			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
 		)
 		require.NoError(t, err)
 
 		handler := i.Ready()
+		i.WaitWorkspaces()
 
 		filename1, err := filepath.Abs(filepath.Join(dir, "ide.cwd"))
 		require.NoError(t, err)

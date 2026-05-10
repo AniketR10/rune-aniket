@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -145,6 +146,20 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				secondURI, err := workspaceapi.CurrentUserHostURI(secondFile)
 				require.NoError(t, err)
 				handleKeys(t, tc, ":workspacenew<space>"+secondWorkspace+"<enter>")
+				// :workspacenew kicks off async addWorkspace; wait for
+				// the new workspace to install before opening a file
+				// in it (otherwise Open lands on the home workspace).
+				deadline := time.Now().Add(5 * time.Second)
+				for time.Now().Before(deadline) {
+					flushMacroHarness(tc)
+					tc.ide.workspaceHandler.mu.Lock()
+					hasPending := len(tc.ide.workspaceHandler.pending) > 0
+					tc.ide.workspaceHandler.mu.Unlock()
+					if !hasPending {
+						break
+					}
+					time.Sleep(time.Millisecond)
+				}
 				withLockedIDE(t, tc.mu, func() {
 					require.NoError(t, tc.ide.Open(secondURI))
 				})
@@ -497,6 +512,25 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 	_ = i.Ready()
 	tc := &macroIntegrationHarness{mu: mu, events: events, ide: i, scheduler: scheduler}
 	tc.h = &macroTestHandler{tc: tc}
+
+	// addWorkspace is async: New kicks off Phase B in a goroutine and
+	// Phase C lands the install via scheduleNextTick. With our test
+	// scheduler that means the install is queued into scheduler. Wait
+	// for any pending workspace to be enqueued and installed by
+	// repeatedly flushing the scheduler — flushMacroHarness only
+	// drains what's already queued, so we loop until no entries
+	// remain in h.pending.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		flushMacroHarness(tc)
+		i.workspaceHandler.mu.Lock()
+		hasPending := len(i.workspaceHandler.pending) > 0
+		i.workspaceHandler.mu.Unlock()
+		if !hasPending {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 
 	withLockedIDE(t, mu, func() {
 		require.NoError(t, i.Open(uri))

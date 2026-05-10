@@ -166,6 +166,18 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 	return i.workspaceHandler.openURI(file, true /* focus */)
 }
 
+// WaitWorkspaces blocks until every async addWorkspace launched by
+// the IDE has either installed its workspace or had its pending
+// reservation cleaned up. Use this after constructing the IDE — and
+// before driving keyboard input or calling Open — when you want to
+// be sure the cwd workspace is fully wired in. Production code does
+// not need it: the event loop pumps install callbacks naturally as
+// part of its tick. Callers must NOT hold the IDE locker (set via
+// WithLocker) when invoking this — installs need to acquire it.
+func (i *IDE) WaitWorkspaces() {
+	i.workspaceHandler.pendingWG.Wait()
+}
+
 // SetReleaseManager sets the release.Manager of the IDE.
 // This should be called before Run or Handler are called for the first time.
 func (i *IDE) SetReleaseManager(m release.Manager) {

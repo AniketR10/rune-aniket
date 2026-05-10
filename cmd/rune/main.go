@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -265,6 +267,9 @@ func startWorkspaceServer() int {
 }
 
 func main() {
+	go debug.CapturePanicReport(func() {
+		log.Println(http.ListenAndServe("localhost:8112", nil))
+	})
 	if err := flag.CommandLine.MarkHidden("rune-http-address"); err != nil {
 		panic(err)
 	}

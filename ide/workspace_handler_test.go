@@ -86,6 +86,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.drainPendingWorkspaces()
 
 	h := newSafeHandler(m)
 	// jumptolocation is registered on a per-file basis, so the following tests
@@ -594,13 +595,6 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	uri1, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
 	cfg := defaultConfigWithWrap(false)
-	var mu sync.Mutex
-	cfg.scheduleNextTick = func(cb func()) bool {
-		mu.Lock()
-		defer mu.Unlock()
-		cb()
-		return true
-	}
 	var wg sync.WaitGroup
 	cfg.ringBell = func() {
 		wg.Done()
@@ -608,6 +602,7 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.drainPendingWorkspaces()
 	m.tabAttentionNameSuffix = "*"
 
 	h := newSafeHandler(m)
@@ -624,9 +619,14 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 │1 1  2 2                    │
 └─────━━━────────────────────┘`},
 	}
-	mu.Lock()
+	// safeHandler internally serializes Resize/Draw/Handle on
+	// m.mu, so no manual lock is required here. The default
+	// scheduleNextTick stub installed by
+	// newTestWorkspaceManagerHandlerWithManagerAndExtensions
+	// dispatches scheduled callbacks under m.mu on a fresh
+	// goroutine, so any host-scheduled work is already
+	// serialized with handler input through the same lock.
 	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
-	mu.Unlock()
 	keys, err := term.ParseKeys("sleep<space>2<space>&&<space>printf<space>'\\\\a'<enter>")
 	require.NoError(t, err)
 	wg.Add(1)
@@ -674,9 +674,7 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 │1 1  2 2*                   │
 └━━━─────────────────────────┘`},
 	}
-	mu.Lock()
 	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
-	mu.Unlock()
 	require.NoError(t, m.Close())
 }
 
@@ -695,7 +693,9 @@ func TestCrossWorkspaceNotifications(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.drainPendingWorkspaces()
 	require.NoError(t, m.addOrCreateWorkspace(uri2))
+	m.drainPendingWorkspaces()
 
 	m.workspaces[0].notifications.Notify(browserapi.LevelError, "sh")
 
@@ -731,6 +731,7 @@ func TestCustomLocations(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.drainPendingWorkspaces()
 
 	h := newSafeHandler(m)
 	cases := []handlertest.SequenceTestCase{
@@ -893,6 +894,7 @@ func TestApostropheMarkJump(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.drainPendingWorkspaces()
 
 	h := newSafeHandler(m)
 	cases := []handlertest.SequenceTestCase{
@@ -997,10 +999,6 @@ func TestEditFileURIRedirectsToWorkspaceWithOpenFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(sharedPath, []byte("shared"), 0o666))
 
 	cfg := defaultConfigWithWrap(false)
-	cfg.scheduleNextTick = func(fn func()) bool {
-		fn()
-		return true
-	}
 	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, tmp1, nopShutdownShaderConfig())
 	defer func() {
 		require.NoError(t, m.Close())
@@ -1009,6 +1007,7 @@ func TestEditFileURIRedirectsToWorkspaceWithOpenFile(t *testing.T) {
 	uri2, err := workspaceapi.ParseURI("file://" + tmp2)
 	require.NoError(t, err)
 	require.NoError(t, m.addOrCreateWorkspace(uri2))
+	m.drainPendingWorkspaces()
 
 	sharedURI, err := workspaceapi.ParseURI("file://" + sharedPath)
 	require.NoError(t, err)
@@ -1060,10 +1059,12 @@ func TestReadfileCrossWorkspaceIntegration(t *testing.T) {
 	uri1, err := workspaceapi.ParseURI("file://" + tmp1)
 	require.NoError(t, err)
 	require.NoError(t, m.addOrCreateWorkspace(uri1))
+	m.drainPendingWorkspaces()
 
 	uri2, err := workspaceapi.ParseURI("file://" + tmp2)
 	require.NoError(t, err)
 	require.NoError(t, m.addOrCreateWorkspace(uri2))
+	m.drainPendingWorkspaces()
 
 	require.True(t, m.switchToWorkspace(0))
 	currentURI, err := workspaceapi.ParseURI("file://" + currentPath)
@@ -1109,10 +1110,12 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 		uri1, err := workspaceapi.ParseURI("file://" + tmp1)
 		require.NoError(t, err)
 		require.NoError(t, m.addOrCreateWorkspace(uri1))
+		m.drainPendingWorkspaces()
 
 		uri2, err := workspaceapi.ParseURI("file://" + tmp2)
 		require.NoError(t, err)
 		require.NoError(t, m.addOrCreateWorkspace(uri2))
+		m.drainPendingWorkspaces()
 
 		return m
 	}
@@ -1426,10 +1429,17 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		mu := new(sync.Mutex)
 		if cfg.scheduleNextTick == nil {
+			// Mirror the production host event loop
+			// (gui.Update / tui.Run): dispatched UserFuncs run
+			// while holding the same locker the IDE was wired
+			// with, on a fresh goroutine to keep the scheduler
+			// non-reentrant.
 			cfg.scheduleNextTick = func(fn func()) bool {
-				mu.Lock()
-				defer mu.Unlock()
-				fn()
+				go func() {
+					mu.Lock()
+					defer mu.Unlock()
+					fn()
+				}()
 				return true
 			}
 		}
@@ -1448,6 +1458,7 @@ func TestWorkspaceConfig(t *testing.T) {
 			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil)
 		require.NoError(t, err)
 		defer m.Close()
+		m.drainPendingWorkspaces()
 
 		assert.EqualValues(t, mockConfig, passed)
 
@@ -1499,6 +1510,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		m.mu.Lock()
 		require.NoError(t, m.commandReloadWorkspace())
 		m.mu.Unlock()
+		m.drainPendingWorkspaces()
 		assert.EqualValues(t, mockConfig, passed)
 
 		require.NoError(t, m.Close())
@@ -2508,6 +2520,9 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		require.Equal(t, 0, m.workspaceCount)
 
 		require.NoError(t, m.addWorkspace(uri, true, false, -1))
+		m.mu.Unlock()
+		m.waitForWorkspace(t, uri)
+		m.mu.Lock()
 		m.Resize(80, 24)
 		ex2 := m.exHandler(m.focusHandler())
 		tabs := ex2.comp.Tabs()
@@ -2717,6 +2732,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		require.Equal(t, 1, ex1.comp.Browser().FloatingWindows())
 
 		require.NoError(t, m.commandReloadWorkspace())
+		m.drainPendingWorkspaces()
 		m.Resize(80, 24)
 		ex2 := m.exHandler(m.focusHandler())
 		require.Equal(t, 0, ex2.comp.Browser().FloatingWindows())
@@ -3064,6 +3080,7 @@ func TestAutoSaveIntegration(t *testing.T) {
 			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
 				nopShutdownShaderConfig())
 			require.NoError(t, m.addOrCreateWorkspace(uri))
+			m.drainPendingWorkspaces()
 			t.Cleanup(func() { _ = m.Close() })
 
 			require.NotNil(t, rec, "autoSaver was not constructed; "+
@@ -3828,6 +3845,12 @@ func TestWorkspaceCommands(t *testing.T) {
 
 	require.NoError(t, m.addOrCreateWorkspace(uri2))
 	require.NoError(t, m.addOrCreateWorkspace(uri3))
+	// Release mu so the install goroutines (Phase B) can lock it
+	// when they reach the rollback path / WaitGroup, then drain
+	// pending workspaces, then re-acquire mu.
+	m.mu.Unlock()
+	m.drainPendingWorkspaces()
+	m.mu.Lock()
 
 	err = m.SubscribeCommandForWorkspace(uri2, xyzCmd, sub)
 	require.NoError(t, err)
@@ -4523,6 +4546,10 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 
 	mu := new(sync.Mutex)
 	if cfg.scheduleNextTick == nil {
+		// Default scheduleNextTick stub mirrors the host event
+		// loop's UserFunc dispatch (gui.Update at
+		// term/gui/gui.go:248): fn runs on a fresh goroutine
+		// while holding mu, the same locker init receives.
 		cfg.scheduleNextTick = func(fn func()) bool {
 			go func() {
 				mu.Lock()
@@ -4544,7 +4571,49 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil)
 
 	require.NoError(t, err)
+	if uri != nil {
+		// addWorkspace is now async: init kicks off Phase B in a
+		// goroutine and Phase C lands the install via
+		// scheduleNextTick. Tests built on top of this helper expect
+		// the boot workspace to be installed by the time they start
+		// interacting with the handler, so block here until that has
+		// happened (or fail with a clear deadline).
+		m.waitForWorkspace(t, *uri)
+	}
 	return m
+}
+
+// waitForWorkspace blocks until uri has been installed into
+// h.workspaces (i.e. Phase C ran and the pending entry was drained).
+// It is the test counterpart to the async addWorkspace contract:
+// production code returns to the event loop immediately while Phase B
+// runs, so tests that immediately read m.focusHandler() / m.workspaces
+// must wait first.
+func (m *testWorkspaceManagerHandler) waitForWorkspace(
+	t *testing.T, uri workspaceapi.URI,
+) {
+	t.Helper()
+	const timeout = 10 * time.Second
+	const interval = 5 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+	for {
+		m.mu.Lock()
+		_, installed := m.findInstalledSlot(uri)
+		_, pending := m.pending[uri.String()]
+		m.mu.Unlock()
+		if installed {
+			return
+		}
+		if !pending && time.Now().After(deadline) {
+			t.Fatalf("waitForWorkspace: %s never installed and "+
+				"no pending entry within %s", uri.String(), timeout)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("waitForWorkspace: %s still pending after %s",
+				uri.String(), timeout)
+		}
+		time.Sleep(interval)
+	}
 }
 
 func newTestWorkspaceManagerHandlerWithDir(
@@ -4677,6 +4746,14 @@ func (t *testWorkspaceManagerHandler) Handle(ev term.Event) (bool, bool) {
 	return quit, handle
 }
 
+// drainPendingWorkspaces blocks until h.pending is empty. The caller
+// must NOT hold h.mu; we acquire it briefly each iteration to read
+// the pending map and release it so the install goroutine queued by
+// scheduleNextTick can run.
+func (t *testWorkspaceManagerHandler) drainPendingWorkspaces() {
+	t.workspaceManagerHandler.pendingWG.Wait()
+}
+
 func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]any{
 		"clipboard": "memory",
@@ -4715,10 +4792,6 @@ func defaultCfg() ideConfig {
 			"progress_bar": false,
 		},
 	},
-		scheduleNextTick: func(fn func()) bool {
-			fn()
-			return true
-		},
 		configPath: "not-empty",
 	}
 }
