@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -69,36 +68,33 @@ func (e *goExtension) ExtendWorkspace(
 	wm := w.WindowManager(ctx)
 	notify := w.Notifications(ctx)
 
-	rootURI, err := cfg.GetString("workspace.root")
-	if err != nil || rootURI == "" {
-		// Fall back to current working directory.
-		cwd, cwdErr := os.Getwd()
-		if cwdErr != nil {
-			return fmt.Errorf("go extension: workspace.root not configured and cannot get cwd: %w", cwdErr)
-		}
-		rootURI = "file://" + cwd
+	cwd, err := w.FileSystem(ctx).URI(".")
+	if err != nil {
+		return fmt.Errorf("resolve cwd uri: %w", err)
 	}
+	// gopls runs on the same host as the workspace files (locally for a
+	// local workspace, or on the remote host for a remote one), so rewrite
+	// the URI to the file:// scheme expected by the language server.
+	rootURI := fmt.Sprintf("file://%s", cwd.Path())
 
 	params, err := goplsInitializeParams(rootURI)
 	if err != nil {
-		return fmt.Errorf("go extension: build init params: %w", err)
+		return fmt.Errorf("build init params: %w", err)
 	}
 	_, err = lsp.Initialize(ctx, params)
 	if err != nil {
-		return fmt.Errorf("go extension: initialize gopls: %w", err)
+		return fmt.Errorf("initialize gopls: %w", err)
 	}
-	slog.Info("go extension: gopls initialized")
+	slog.Info("gopls initialized")
 
 	parser := w.Parser(ctx)
 	executor := w.Executor(ctx)
 	manual, handler, err := newGoHandler(lsp, editor, wm, notify, parser, executor)
 	if err != nil {
-		return fmt.Errorf("go extension: create handler: %w", err)
+		return fmt.Errorf("create handler: %w", err)
 	}
 	if err := w.RegisterCommand(manual, handler); err != nil {
-		return fmt.Errorf("go extension: register command: %w", err)
+		return fmt.Errorf("register command: %w", err)
 	}
-	slog.Info("go extension: 'go' command registered")
-
 	return nil
 }
