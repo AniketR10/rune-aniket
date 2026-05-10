@@ -476,6 +476,7 @@ config = {
                 '!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1',
                 'workspacenew $RUNE_DATADIR/worktrees/$1',
                 'workspacerename $1',
+                "shaderrun shine 600ms",
             ],
             "worktreeopen": {
                 "command": [
@@ -485,16 +486,16 @@ config = {
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
             "worktreeremove": {
-                "command": "!! git worktree remove $1",
+                "command": [
+                    "!! git worktree remove $1",
+                    "shaderrun embers 600ms",
+                ],
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
             # Open a workspace and play the shine shader as a visual
             # confirmation that the new workspace was opened.
             "wopen": {
-                "command": [
-                    "workspacenew $1",
-                    "shaderrun shine 600ms",
-                ],
+                "command": "workspacenew $1",
                 "completer": [
                     "{history}",
                     "{dirs}",
