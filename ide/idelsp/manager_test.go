@@ -56,6 +56,83 @@ func TestManagerMaxRetriesPropagatesFromConfig(t *testing.T) {
 	})
 }
 
+// TestDidChangeWatchedFiles_invalidatesOnDelete locks in the fix for
+// RUNE-AGENT-72: a workspace/didChangeWatchedFiles batch that contains
+// a Deleted event must call Callback.InvalidateAllPending so subsequent
+// WaitFileProcessed calls block until gopls re-publishes diagnostics
+// for unrelated files in the same package. Non-deletion batches must
+// not trigger the invalidation.
+func TestDidChangeWatchedFiles_invalidatesOnDelete(t *testing.T) {
+	t.Parallel()
+	uri := makeURI(t, "file:///workspace")
+
+	t.Run("deletion event triggers InvalidateAllPending", func(t *testing.T) {
+		t.Parallel()
+		callback := &testCallback{}
+		m := New(uri, nil, nil, nil, nil, nil,
+			Config{Callback: callback, NoInitializeServer: true})
+		t.Cleanup(func() { _ = m.Close() })
+
+		err := m.DidChangeWatchedFiles(context.Background(),
+			semanticapi.DidChangeWatchedFilesParams{
+				Changes: []semanticapi.FileEvent{
+					{URI: "file:///workspace/a.go", Type: semanticapi.FileChangeTypeChanged},
+					{URI: "file:///workspace/b.go", Type: semanticapi.FileChangeTypeDeleted},
+				},
+			})
+		require.NoError(t, err)
+
+		callback.mu.Lock()
+		got := callback.invalidateAllPendingCount
+		callback.mu.Unlock()
+		assert.Equal(t, 1, got)
+	})
+
+	t.Run("rename-as-delete+create triggers InvalidateAllPending", func(t *testing.T) {
+		t.Parallel()
+		callback := &testCallback{}
+		m := New(uri, nil, nil, nil, nil, nil,
+			Config{Callback: callback, NoInitializeServer: true})
+		t.Cleanup(func() { _ = m.Close() })
+
+		err := m.DidChangeWatchedFiles(context.Background(),
+			semanticapi.DidChangeWatchedFilesParams{
+				Changes: []semanticapi.FileEvent{
+					{URI: "file:///workspace/old.go", Type: semanticapi.FileChangeTypeDeleted},
+					{URI: "file:///workspace/new.go", Type: semanticapi.FileChangeTypeCreated},
+				},
+			})
+		require.NoError(t, err)
+
+		callback.mu.Lock()
+		got := callback.invalidateAllPendingCount
+		callback.mu.Unlock()
+		assert.Equal(t, 1, got)
+	})
+
+	t.Run("add+change only does not trigger InvalidateAllPending", func(t *testing.T) {
+		t.Parallel()
+		callback := &testCallback{}
+		m := New(uri, nil, nil, nil, nil, nil,
+			Config{Callback: callback, NoInitializeServer: true})
+		t.Cleanup(func() { _ = m.Close() })
+
+		err := m.DidChangeWatchedFiles(context.Background(),
+			semanticapi.DidChangeWatchedFilesParams{
+				Changes: []semanticapi.FileEvent{
+					{URI: "file:///workspace/a.go", Type: semanticapi.FileChangeTypeCreated},
+					{URI: "file:///workspace/b.go", Type: semanticapi.FileChangeTypeChanged},
+				},
+			})
+		require.NoError(t, err)
+
+		callback.mu.Lock()
+		got := callback.invalidateAllPendingCount
+		callback.mu.Unlock()
+		assert.Equal(t, 0, got)
+	})
+}
+
 // TestWatchServerRestartsOnConnLoss locks in the fix that watchServer
 // listens on srv.conn.Done() in addition to the process watcher.
 // Closing the IDE-side jsonrpc2 conn while the gopls process is still

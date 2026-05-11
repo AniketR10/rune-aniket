@@ -722,6 +722,23 @@ func (h *CallbackHandler) FileDidChange(uri string, version int32) {
 	}
 }
 
+// InvalidateAllPending marks every tracked URI as having an
+// unversioned pending change. This is used when an out-of-band
+// workspace event (such as a file deletion) can cause the LSP
+// server to asynchronously re-typecheck and re-publish
+// diagnostics for unrelated files. After this call, the next
+// WaitFileProcessed for any tracked URI will block until that
+// URI's next publishDiagnostics push arrives (or the fallback
+// timeout fires).
+func (h *CallbackHandler) InvalidateAllPending() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, state := range h.fileVersions {
+		state.pendingUnversioned = true
+	}
+}
+
 // WaitFileProcessed blocks until the LSP server has processed
 // the latest known version for the given URI, or until the
 // context is cancelled. A fallback timeout of 5s is applied

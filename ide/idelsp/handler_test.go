@@ -702,6 +702,66 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		// not the 5s fallback.
 		require.Less(t, elapsed, 500*time.Millisecond)
 	})
+
+	t.Run("InvalidateAllPending blocks wait for unrelated URI until next publish", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uA := "file:///tmp/a.go"
+		uB := "file:///tmp/b.go"
+
+		// Register both URIs and bring them to a fully processed state
+		// so a plain WaitFileProcessed would return immediately.
+		h.FileDidChange(uA, 1)
+		h.FileDidChange(uB, 1)
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uA,
+			Version: 1,
+		}))
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uB,
+			Version: 1,
+		}))
+		// Sanity: without invalidation the wait returns immediately.
+		require.NoError(t, h.WaitFileProcessed(t.Context(), uB))
+
+		// Invalidate all tracked URIs (simulates a delete event in
+		// DidChangeWatchedFiles).
+		h.InvalidateAllPending()
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uB)
+		}()
+
+		// The wait must block until the next publishDiagnostics push
+		// for uB. A push for an unrelated URI must not release it.
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned too early: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uA,
+			Version: 2,
+		}))
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned after unrelated push: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uB,
+			Version: 2,
+		}))
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for diagnostics after invalidation")
+		}
+	})
 }
 
 func TestClassifyCompilerDiagnostic(t *testing.T) {

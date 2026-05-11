@@ -232,6 +232,8 @@ func (c *e2eCallback) DiagnosticRefresh(_ context.Context) error {
 
 func (c *e2eCallback) FileDidChange(_ string, _ int32) {}
 
+func (c *e2eCallback) InvalidateAllPending() {}
+
 func (c *e2eCallback) WaitFileProcessed(_ context.Context, _ string) error {
 	return nil
 }

@@ -627,6 +627,8 @@ func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
 
 func (c *testCallback) FileDidChange(_ string, _ int32) {}
 
+func (c *testCallback) InvalidateAllPending() {}
+
 func (c *testCallback) WaitFileProcessed(_ context.Context, _ string) error {
 	return nil
 }

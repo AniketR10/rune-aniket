@@ -58,6 +58,15 @@ var ErrNoServer = errors.New("no language server")
 type Callback interface {
 	semanticapi.LSPCallback
 	FileDidChange(uri string, version int32)
+	// InvalidateAllPending marks every URI tracked by the callback
+	// as having a pending unversioned change, so that the next
+	// WaitFileProcessed call for any of those URIs blocks until a
+	// fresh publishDiagnostics push arrives. This is used when an
+	// out-of-band workspace event (e.g. a file deletion) can
+	// invalidate diagnostics for unrelated files in the same
+	// package, and we want to avoid returning a stale snapshot from
+	// the LSP cache.
+	InvalidateAllPending()
 	WaitFileProcessed(ctx context.Context, uri string) error
 }
 

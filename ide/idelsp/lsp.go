@@ -1197,8 +1197,21 @@ func (m *Manager) DidChangeWatchedFiles(
 	ctx context.Context,
 	params semanticapi.DidChangeWatchedFilesParams,
 ) error {
+	var hasDeletion bool
 	for _, change := range params.Changes {
 		m.fileDidChangeOOB(change.URI)
+		if change.Type == semanticapi.FileChangeTypeDeleted {
+			hasDeletion = true
+		}
+	}
+	// A deletion (or rename, which is delivered as a Deleted+Created
+	// pair) can force gopls to re-typecheck dependent packages
+	// asynchronously and re-publish diagnostics for unrelated open
+	// files. Mark all tracked URIs as pending so subsequent
+	// WaitFileProcessed calls block until the next push arrives,
+	// avoiding a stale snapshot from the LSP cache.
+	if hasDeletion {
+		m.callback.InvalidateAllPending()
 	}
 	return m.broadcastNotify(
 		ctx, workspaceapi.URI{},
