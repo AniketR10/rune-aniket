@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package debugshell exposes a "debugger" command usable from the
 // ideshell REPL and from the editor command prompt. It wraps a
 // debugapi.Debugger and maintains a single active debug session.
@@ -136,6 +135,12 @@ type Handler struct {
 	// per session. Created at launch/attach time; closed on
 	// session terminate. Nil when no session is active.
 	output *outputSink
+	// launchInit is a one-shot channel armed by cmdLaunch /
+	// cmdAttach and closed when the adapter delivers a
+	// *dap.InitializedEvent. The launch iterator blocks on
+	// it so the prompt stays "busy" until the debuggee has
+	// actually initialized. Nil when no launch is in flight.
+	launchInit chan struct{}
 }
 
 type sessionPhase int
@@ -259,6 +264,14 @@ func (h *Handler) OnEvent(ev dap.EventMessage) {
 		h.appendOutput(out)
 	}
 	h.notifyMilestone(ev)
+	if _, ok := ev.(*dap.InitializedEvent); ok {
+		// Release any in-flight launch/attach iterator
+		// waiting on the InitializedEvent so the user sees
+		// the prompt return to idle alongside the
+		// "Debuggee initialized." line emitted by the
+		// session iterator.
+		h.signalLaunchInit()
+	}
 	// Hold mu across the send so resetSession/OnClose cannot
 	// nil out and close the channel between us reading it and
 	// us sending into it. The send is non-blocking; the
@@ -329,6 +342,33 @@ func (h *Handler) pushRenderedStackTrace(frames []dap.StackFrame) {
 	select {
 	case h.events <- sessionEvent{rendered: body}:
 	default:
+	}
+}
+
+// armLaunchInit allocates a fresh one-shot channel used by
+// the launch iterator to block until the adapter delivers a
+// *dap.InitializedEvent. Any previously-armed channel is
+// replaced (and left to be GC'd) so a second launch within
+// the same session does not inherit stale state.
+func (h *Handler) armLaunchInit() chan struct{} {
+	ch := make(chan struct{})
+	h.mu.Lock()
+	h.launchInit = ch
+	h.mu.Unlock()
+	return ch
+}
+
+// signalLaunchInit closes the currently-armed launchInit
+// channel and clears the field so it is closed at most once.
+// Safe to call when no launch is in flight: the call is a
+// no-op in that case.
+func (h *Handler) signalLaunchInit() {
+	h.mu.Lock()
+	ch := h.launchInit
+	h.launchInit = nil
+	h.mu.Unlock()
+	if ch != nil {
+		close(ch)
 	}
 }
 
@@ -888,6 +928,11 @@ func (h *Handler) OnClose(reason string) {
 	// gets its own log file. The file itself is left on disk
 	// for the user to inspect post-mortem.
 	h.stopOutputCapture()
+	// Release any launch iterator still blocked waiting for
+	// InitializedEvent so the user's prompt is not left
+	// hanging when the session ends early (adapter crash,
+	// debuggee refused to start, etc.).
+	h.signalLaunchInit()
 	h.mu.Lock()
 	ch := h.events
 	h.events = nil
@@ -918,6 +963,7 @@ func (h *Handler) OnClose(reason string) {
 func (h *Handler) resetSession() {
 	h.clearInstalledLocations()
 	h.stopOutputCapture()
+	h.signalLaunchInit()
 	h.mu.Lock()
 	ch := h.events
 	h.events = nil

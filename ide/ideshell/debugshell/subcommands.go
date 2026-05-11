@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package debugshell
 
 import (
@@ -449,7 +448,14 @@ func (h *Handler) cmdLaunch(
 		Program: args[0],
 		Args:    append([]string{}, args[1:]...),
 	}
+	// Arm the InitializedEvent channel before dispatching
+	// Launch so the iterator we return is guaranteed to see
+	// the event even if the adapter is extremely fast.
+	initCh := h.armLaunchInit()
 	if err := h.dbg.Launch(ctx, sid, lArgs); err != nil {
+		// Launch failed: release the channel we just armed
+		// to avoid leaking a one-shot blocker.
+		h.signalLaunchInit()
 		// Leave the sink open: the session is still
 		// initialized and the user may retry or terminate.
 		return nil, fmt.Errorf("launch: %w", err)
@@ -467,7 +473,7 @@ func (h *Handler) cmdLaunch(
 	}
 	out = append(out,
 		"Run `debugger configured` when configuration is complete.")
-	return lines(out...), nil
+	return newLaunchIterator(out, initCh), nil
 }
 
 func (h *Handler) cmdAttach(
@@ -507,7 +513,9 @@ func (h *Handler) cmdAttach(
 	if err != nil {
 		return nil, fmt.Errorf("attach: %w", err)
 	}
+	initCh := h.armLaunchInit()
 	if err := h.dbg.Attach(ctx, sid, aArgs); err != nil {
+		h.signalLaunchInit()
 		// Leave the sink open: the session is still
 		// initialized and the user may retry or terminate.
 		return nil, fmt.Errorf("attach: %w", err)
@@ -525,7 +533,7 @@ func (h *Handler) cmdAttach(
 	}
 	out = append(out,
 		"Run `debugger configured` when configuration is complete.")
-	return lines(out...), nil
+	return newLaunchIterator(out, initCh), nil
 }
 
 func (h *Handler) cmdConfigured(

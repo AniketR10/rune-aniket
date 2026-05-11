@@ -776,6 +776,144 @@ func TestHandler_LaunchThenConfigured(t *testing.T) {
 	require.Equal(t, 1, dbg.configDoneCalls)
 }
 
+// TestHandler_LaunchBlocksUntilInitializedEvent verifies that
+// the iterator returned by `debugger launch` stays open after
+// emitting its static lines so the prompt remains visibly
+// busy while the adapter is bringing the debuggee up. The
+// iterator must complete only once a *dap.InitializedEvent
+// has been delivered (the same event that prints "Debuggee
+// initialized." through the session iterator).
+func TestHandler_LaunchBlocksUntilInitializedEvent(t *testing.T) {
+	h, dbg, _ := newTestHandler(t)
+	ctx := context.Background()
+	initSession(t, h, dbg, "go")
+
+	it, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName,
+		Args: []string{subLaunch, "/bin/prog"},
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, it)
+	t.Cleanup(func() { _ = it.Close() })
+
+	// Drain in a goroutine so the test can observe when the
+	// iterator transitions from blocked to finished.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := it.Next(ctx); !ok {
+				return
+			}
+		}
+	}()
+
+	// Iterator must still be running after the static
+	// lines have been drained.
+	select {
+	case <-done:
+		t.Fatal("iterator completed before InitializedEvent")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	require.NotNil(t, dbg.subscriber)
+	dbg.subscriber.OnEvent(&dap.InitializedEvent{
+		Event: dap.Event{Event: "initialized"},
+	})
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("iterator did not complete after InitializedEvent")
+	}
+}
+
+// TestHandler_LaunchIteratorReturnsOnContextCancel verifies
+// that cancelling the caller's context releases the launch
+// iterator promptly when the adapter is slow, so Ctrl-C
+// returns control to the prompt.
+func TestHandler_LaunchIteratorReturnsOnContextCancel(t *testing.T) {
+	h, dbg, _ := newTestHandler(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	initSession(t, h, dbg, "go")
+
+	it, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName,
+		Args: []string{subLaunch, "/bin/prog"},
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, it)
+	t.Cleanup(func() { _ = it.Close() })
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := it.Next(ctx); !ok {
+				return
+			}
+		}
+	}()
+
+	// Give the iterator a moment to reach the blocking
+	// section, then cancel.
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("iterator did not return after context cancel")
+	}
+}
+
+// TestHandler_AttachBlocksUntilInitializedEvent mirrors the
+// launch test for the attach path so both subcommands keep
+// the prompt busy until the adapter signals initialization.
+func TestHandler_AttachBlocksUntilInitializedEvent(t *testing.T) {
+	h, dbg, _ := newTestHandler(t)
+	ctx := context.Background()
+	initSession(t, h, dbg, "go")
+
+	it, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName,
+		Args: []string{subAttach, "1234"},
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, it)
+	t.Cleanup(func() { _ = it.Close() })
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := it.Next(ctx); !ok {
+				return
+			}
+		}
+	}()
+
+	// Iterator must still be running after the static
+	// lines have been drained.
+	select {
+	case <-done:
+		t.Fatal("iterator completed before InitializedEvent")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	require.NotNil(t, dbg.subscriber)
+	dbg.subscriber.OnEvent(&dap.InitializedEvent{
+		Event: dap.Event{Event: "initialized"},
+	})
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("attach iterator did not complete after InitializedEvent")
+	}
+}
+
 func TestHandler_Attach(t *testing.T) {
 	h, dbg, _ := newTestHandler(t)
 	ctx := context.Background()

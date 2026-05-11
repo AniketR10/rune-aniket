@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package debugshell
 
 import (
@@ -373,6 +372,76 @@ func (s *sessionIterator) runOnClose() {
 
 func (s *sessionIterator) Err() error   { return nil }
 func (s *sessionIterator) Close() error { return nil }
+
+// newLaunchIterator returns an iterator that yields the
+// `static` strings first, then a "Waiting for debuggee to
+// initialize…" progress line, then blocks until either init
+// is closed (signalled when *dap.InitializedEvent arrives)
+// or ctx is cancelled. The iterator never delivers a
+// terminal value beyond those lines — its purpose is to keep
+// the prompt visibly busy while the adapter is bringing the
+// debuggee up.
+//
+// init may be nil, in which case the iterator ends after the
+// static lines have been emitted (used as a fallback when
+// arming the channel was not possible).
+func newLaunchIterator(
+	static []string, init <-chan struct{},
+) iterator.Iterator[component.Responsive] {
+	return &launchIterator{
+		static: static,
+		init:   init,
+	}
+}
+
+type launchIterator struct {
+	static     []string
+	init       <-chan struct{}
+	idx        int
+	progressed bool
+	waited     bool
+	cancelled  bool
+	done       bool
+}
+
+func (l *launchIterator) Next(ctx context.Context) (component.Responsive, bool) {
+	if l.done {
+		return nil, false
+	}
+	if l.idx < len(l.static) {
+		s := l.static[l.idx]
+		l.idx++
+		return line(s), true
+	}
+	if l.init == nil {
+		l.done = true
+		return nil, false
+	}
+	if !l.progressed {
+		l.progressed = true
+		return line("Waiting for debuggee to initialize…"), true
+	}
+	if l.waited {
+		l.done = true
+		if l.cancelled {
+			return line("Wait cancelled."), true
+		}
+		return nil, false
+	}
+	l.waited = true
+	select {
+	case <-l.init:
+		l.done = true
+		return nil, false
+	case <-ctx.Done():
+		l.cancelled = true
+		l.done = true
+		return line("Wait cancelled."), true
+	}
+}
+
+func (l *launchIterator) Err() error   { return nil }
+func (l *launchIterator) Close() error { return nil }
 
 // formatDAPEvent renders a DAP event as a short markdown
 // snippet. The convention is to wrap the event payload in a
