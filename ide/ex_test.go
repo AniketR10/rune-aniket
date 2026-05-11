@@ -865,7 +865,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	cases = []handlertest.SequenceTestCase{
 		{"", `┌──┐
-│..│
+│o │
 ├II┤
 IIII`},
 	}
@@ -2572,7 +2572,7 @@ func TestCommandAliases(t *testing.T) {
 └──────────────────┘`},
 		{":e x.go>",
 			`┌──────────────────┐
-│..  o wi.go  o x..│
+│o a.  o wi  o x.go│
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│

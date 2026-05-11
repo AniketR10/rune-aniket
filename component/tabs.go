@@ -26,6 +26,7 @@ package component
 import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
@@ -38,6 +39,24 @@ var (
 	defaultFrameAttr    = term.Attributes{Fg: tcell.ColorRed}
 	defaultSeparator    = "  "
 )
+
+// minTabCellWidth is the smallest cell width a non-focused tab can shrink
+// to. The focused tab is never shrunk below its full label width unless
+// the inner width is smaller than that label.
+const minTabCellWidth = 1
+
+// tabCellLayout describes how a single tab is rendered: which tab (idx)
+// and how many cells of the bar it occupies.
+type tabCellLayout struct {
+	idx   int
+	width int
+}
+
+// tabLayout is the rendered geometry of all visible tabs.
+type tabLayout struct {
+	cells    []tabCellLayout
+	padAfter int
+}
 
 type tab struct {
 	name     string
@@ -56,7 +75,8 @@ type Tabs struct {
 	fileListFrame tui.Component
 	tabs          []*tab
 	width, height int
-	offsetIdx     int
+	focusIdx      int
+	layout        tabLayout
 
 	border           bool
 	focusAttr        term.Attributes
@@ -183,6 +203,7 @@ func (t *Tabs) ResetFocus() {
 	for _, tab := range t.tabs {
 		tab.focus = false
 	}
+	t.focusIdx = 0
 	t.dirty = true
 }
 
@@ -190,6 +211,7 @@ func (t *Tabs) ResetFocus() {
 // this method will panic.
 func (t *Tabs) SetFocus(idx int) {
 	t.tabs[idx].focus = true
+	t.focusIdx = idx
 	t.dirty = true
 }
 
@@ -295,6 +317,7 @@ func (t *Tabs) Add(icon rune, name string) int {
 	if t.tabs == nil {
 		t.tabs = make([]*tab, 1)
 		tt.focus = true
+		t.focusIdx = 0
 		t.tabs[0] = tt
 		return 0
 	}
@@ -305,7 +328,9 @@ func (t *Tabs) Add(icon rune, name string) int {
 
 // Remove removes the tab at idx.
 func (t *Tabs) Remove(idx int) bool {
+	focused := t.currentFocusTab()
 	t.doRemoveTab(idx)
+	t.restoreFocusIdx(focused)
 	t.dirty = true
 	return true
 }
@@ -315,9 +340,11 @@ func (t *Tabs) MoveRight(idx int) bool {
 	if idx >= len(t.tabs)-1 {
 		return false
 	}
+	focused := t.currentFocusTab()
 	tt := t.doRemoveTab(idx)
 	idx++
 	t.doInsertTab(idx, tt)
+	t.restoreFocusIdx(focused)
 	t.dirty = true
 	return true
 }
@@ -327,9 +354,11 @@ func (t *Tabs) MoveLeft(idx int) bool {
 	if idx <= 0 {
 		return false
 	}
+	focused := t.currentFocusTab()
 	tt := t.doRemoveTab(idx)
 	idx--
 	t.doInsertTab(idx, tt)
+	t.restoreFocusIdx(focused)
 	t.dirty = true
 	return true
 }
@@ -339,8 +368,10 @@ func (t *Tabs) MoveTo(curridx, idx int) bool {
 	if curridx < 0 || idx < 0 || curridx >= len(t.tabs) || idx >= len(t.tabs) {
 		return false
 	}
+	focused := t.currentFocusTab()
 	tt := t.doRemoveTab(curridx)
 	t.doInsertTab(idx, tt)
+	t.restoreFocusIdx(focused)
 	t.dirty = true
 	return true
 }
@@ -349,6 +380,7 @@ func (t *Tabs) MoveTo(curridx, idx int) bool {
 func (t *Tabs) RemoveAll() bool {
 	ret := t.Size() != 0
 	t.tabs = t.tabs[:0]
+	t.focusIdx = 0
 	t.dirty = true
 	return ret
 }
@@ -356,22 +388,58 @@ func (t *Tabs) RemoveAll() bool {
 // TabAt returns the idx of the tab at pos, or panics if pos is
 // out of bounds.
 func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
-	x := 0
-	idx := -1
-
-	for i, z := range t.tabs[t.offsetIdx:] {
-		if z.icon != 0 {
-			x += 2
-		}
-		x += len(t.separator)
-		x += len(z.name)
-		if x >= pos.X {
-			idx = i
-			break
-		}
+	if len(t.tabs) == 0 {
+		return -1, false
 	}
 
-	return t.offsetIdx + idx, idx != -1
+	// If we have a current layout (the component has been drawn at
+	// least once), use it: it is the authoritative geometry.
+	if len(t.layout.cells) > 0 {
+		posX := pos.X
+		if t.borderActive() {
+			if posX <= 0 {
+				return t.layout.cells[0].idx, true
+			}
+			posX--
+		}
+		sepLen := len(t.separator)
+		x := 0
+		for i, cell := range t.layout.cells {
+			end := x + cell.width
+			if posX >= x && posX < end {
+				return cell.idx, true
+			}
+			x = end
+			if i < len(t.layout.cells)-1 {
+				if posX >= x && posX < x+sepLen {
+					return cell.idx, true
+				}
+				x += sepLen
+			}
+		}
+		return -1, false
+	}
+
+	// Fallback: no layout computed yet (component never drawn / never
+	// resized). Hit-test against a natural-width layout so callers can
+	// resolve clicks before a draw cycle has happened.
+	sepLen := len(t.separator)
+	x := 0
+	for i, tab := range t.tabs {
+		w := tabFullWidth(tab)
+		end := x + w
+		if pos.X >= x && pos.X < end {
+			return i, true
+		}
+		x = end
+		if i < len(t.tabs)-1 {
+			if pos.X >= x && pos.X < x+sepLen {
+				return i, true
+			}
+			x += sepLen
+		}
+	}
+	return 0, true
 }
 
 // Tab returns the name of the tab at idx.
@@ -389,76 +457,301 @@ func (t *Tabs) Size() int {
 
 func (t *Tabs) prepareFileList() {
 	t.fileListBuf.Reset()
+	t.layout = tabLayout{}
 
 	if t.width == 0 || t.height == 0 {
 		return
 	}
 
-	var focusLen int
-	var focusPos, next term.Coordinates
-	for i, tab := range t.tabs {
-		attr := tab.attr
-		iconAttr := tab.iconAttr
-		if tab.focus {
-			focusPos = next
-			focusLen = len(tab.name)
-			attr = term.AttributesUnion(t.focusAttr, attr)
-			if iconAttr == nil {
-				iconAttr = &t.focusIconAttr
-			}
-		} else {
-			attr = term.AttributesUnion(t.nonFocusAttr, attr)
-			if iconAttr == nil {
-				iconAttr = &t.nonFocusIconAttr
-			}
-		}
+	t.layout = t.calculateLayout()
+	if len(t.layout.cells) == 0 {
+		return
+	}
 
-		if tab.icon != 0 {
-			next = t.fileListBuf.InsertWithAttr(next, tab.icon, *iconAttr)
-			next = t.fileListBuf.Insert(next, ' ')
-		}
-		_, next = t.fileListBuf.InsertStringWithAttr(
-			next, tab.name, attr)
-
-		if i < len(t.tabs)-1 {
+	next := term.Coordinates{}
+	for i, cell := range t.layout.cells {
+		next = t.insertTabCell(next, cell)
+		if i < len(t.layout.cells)-1 {
 			_, next = t.fileListBuf.InsertString(next, t.separator)
 		}
 	}
+	for i := 0; i < t.layout.padAfter; i++ {
+		next = t.fileListBuf.Insert(next, ' ')
+	}
+}
 
-	t.offsetIdx = 0
-	lenSeparator := len(t.separator)
-	var effectiveWidth int
-	if frame, ok := t.fileListFrame.(*component.Frame); ok {
-		effectiveWidth, _ = frame.ContentSize()
+// insertTabCell writes a single tab into the buffer using exactly
+// cell.width cells. When cell.width >= the tab's full width the label is
+// rendered in full; otherwise the icon (if any) is written first and the
+// rest of the cells are filled with as many name graphemes as fit.
+func (t *Tabs) insertTabCell(pos term.Coordinates, cell tabCellLayout) term.Coordinates {
+	tab := t.tabs[cell.idx]
+	attr := tab.attr
+	iconAttr := tab.iconAttr
+	if tab.focus {
+		attr = term.AttributesUnion(t.focusAttr, attr)
+		if iconAttr == nil {
+			iconAttr = &t.focusIconAttr
+		}
 	} else {
-		effectiveWidth = t.width
-	}
-	for i := 0; i < len(t.tabs) && focusLen+focusPos.X > effectiveWidth; i++ {
-		z := t.tabs[i]
-		lenTab := len(z.name)
-		if z.icon != 0 {
-			lenTab += 2
+		attr = term.AttributesUnion(t.nonFocusAttr, attr)
+		if iconAttr == nil {
+			iconAttr = &t.nonFocusIconAttr
 		}
-		if i < len(t.tabs)-1 {
-			lenTab += lenSeparator
-		}
-		_, str := t.fileListBuf.Delete(term.Coordinates{}, term.Coordinates{X: lenTab})
-		focusPos.X -= len(str)
-		next.X -= len(str)
-		t.offsetIdx++
 	}
 
-	if t.offsetIdx > 0 {
-		separator := ".." + t.separator
-		t.fileListBuf.InsertStringWithAttr(term.Coordinates{},
-			separator, t.nonFocusAttr)
+	remaining := cell.width
+	if tab.icon != 0 {
+		iconWidth := runeCellWidth(tab.icon)
+		if remaining >= iconWidth {
+			pos = t.fileListBuf.InsertWithAttr(pos, tab.icon, *iconAttr)
+			remaining -= iconWidth
+			if remaining > 0 {
+				pos = t.fileListBuf.Insert(pos, ' ')
+				remaining--
+			}
+		} else {
+			// No room for the icon: fill the cell with blanks.
+			for remaining > 0 {
+				pos = t.fileListBuf.Insert(pos, ' ')
+				remaining--
+			}
+			return pos
+		}
 	}
 
-	if t.fileListBuf.Columns(0) > effectiveWidth && effectiveWidth > 2 {
-		from := term.Coordinates{X: effectiveWidth - 2}
-		t.fileListBuf.TruncateRowFrom(from)
-		t.fileListBuf.InsertStringWithAttr(from, "..", t.nonFocusAttr)
+	name := []rune(tab.name)
+	nameLen, usedNameWidth := runesThatFit(name, remaining)
+	for _, r := range name[:nameLen] {
+		pos = t.fileListBuf.InsertWithAttr(pos, r, attr)
 	}
+	remaining -= usedNameWidth
+	for remaining > 0 {
+		pos = t.fileListBuf.Insert(pos, ' ')
+		remaining--
+	}
+	return pos
+}
+
+// calculateLayout decides the visible window of tabs and the width
+// allocated to each. See the algorithm description in tabs_test.go.
+func (t *Tabs) calculateLayout() tabLayout {
+	innerW := t.innerWidth()
+	if len(t.tabs) == 0 || innerW <= 0 {
+		return tabLayout{}
+	}
+
+	sepLen := len(t.separator)
+	fullWidths := make([]int, len(t.tabs))
+	totalFull := 0
+	for i, tab := range t.tabs {
+		fullWidths[i] = tabFullWidth(tab)
+		totalFull += fullWidths[i]
+	}
+
+	// Fast path: everything fits at full width.
+	if totalFull+sepLen*(len(t.tabs)-1) <= innerW {
+		layout := tabLayout{cells: make([]tabCellLayout, len(t.tabs))}
+		for i := range t.tabs {
+			layout.cells[i] = tabCellLayout{idx: i, width: fullWidths[i]}
+		}
+		layout.padAfter = innerW - totalFull - sepLen*(len(t.tabs)-1)
+		return layout
+	}
+
+	focusIdx := t.focusedIndex()
+	start, end := t.visibleRangeForFocus(focusIdx, fullWidths[focusIdx], sepLen, innerW)
+	if start > end {
+		return tabLayout{}
+	}
+
+	visibleCount := end - start + 1
+	cellBudget := innerW - sepLen*(visibleCount-1)
+	if cellBudget < 0 {
+		cellBudget = 0
+	}
+
+	widths := make([]int, len(t.tabs))
+	focusWidth := fullWidths[focusIdx]
+	if focusWidth > cellBudget {
+		focusWidth = cellBudget
+	}
+	if focusWidth < 0 {
+		focusWidth = 0
+	}
+	widths[focusIdx] = focusWidth
+
+	remaining := cellBudget - focusWidth
+	nonFocusedCount := visibleCount - 1
+	if nonFocusedCount > 0 {
+		fairShare := remaining / nonFocusedCount
+		leftover := remaining - fairShare*nonFocusedCount
+
+		// First pass: equal share + the first `leftover` non-focused
+		// tabs (in visible order) get +1, all capped at full width.
+		used := 0
+		nfIdx := 0
+		for i := start; i <= end; i++ {
+			if i == focusIdx {
+				continue
+			}
+			w := fairShare
+			if nfIdx < leftover {
+				w++
+			}
+			if w < minTabCellWidth {
+				w = minTabCellWidth
+			}
+			if w > fullWidths[i] {
+				w = fullWidths[i]
+			}
+			widths[i] = w
+			used += w
+			nfIdx++
+		}
+
+		// Second pass: distribute any surplus from caps to the leftmost
+		// non-focused tabs that still have room.
+		surplus := remaining - used
+		for surplus > 0 {
+			progressed := false
+			for i := start; i <= end && surplus > 0; i++ {
+				if i == focusIdx {
+					continue
+				}
+				if widths[i] < fullWidths[i] {
+					widths[i]++
+					surplus--
+					progressed = true
+				}
+			}
+			if !progressed {
+				break
+			}
+		}
+	}
+
+	layout := tabLayout{cells: make([]tabCellLayout, 0, visibleCount)}
+	used := 0
+	for i := start; i <= end; i++ {
+		w := widths[i]
+		if w <= 0 {
+			continue
+		}
+		layout.cells = append(layout.cells, tabCellLayout{idx: i, width: w})
+		used += w
+	}
+	used += sepLen * max(0, len(layout.cells)-1)
+	if used < innerW {
+		layout.padAfter = innerW - used
+	}
+	return layout
+}
+
+// visibleRangeForFocus returns the inclusive [start, end] indices of
+// tabs that should be visible. Tabs farther from focusIdx are dropped
+// first when even minTabCellWidth cannot fit all of them. On ties the
+// start side is dropped.
+func (t *Tabs) visibleRangeForFocus(focusIdx, focusFullWidth, sepLen, innerW int) (int, int) {
+	start, end := 0, len(t.tabs)-1
+	for start < end {
+		count := end - start + 1
+		minTotal := focusFullWidth + (count-1)*minTabCellWidth + (count-1)*sepLen
+		if minTotal <= innerW {
+			break
+		}
+		if focusIdx-start >= end-focusIdx {
+			start++
+		} else {
+			end--
+		}
+	}
+	return start, end
+}
+
+func (t *Tabs) focusedIndex() int {
+	if t.focusIdx >= 0 && t.focusIdx < len(t.tabs) {
+		if t.tabs[t.focusIdx].focus {
+			return t.focusIdx
+		}
+	}
+	for i, tab := range t.tabs {
+		if tab.focus {
+			return i
+		}
+	}
+	return 0
+}
+
+func (t *Tabs) currentFocusTab() *tab {
+	if t.focusIdx >= 0 && t.focusIdx < len(t.tabs) {
+		return t.tabs[t.focusIdx]
+	}
+	return nil
+}
+
+func (t *Tabs) restoreFocusIdx(focused *tab) {
+	if focused != nil {
+		for i, tab := range t.tabs {
+			if tab == focused {
+				t.focusIdx = i
+				return
+			}
+		}
+	}
+	for i, tab := range t.tabs {
+		if tab.focus {
+			t.focusIdx = i
+			return
+		}
+	}
+	if t.focusIdx >= len(t.tabs) {
+		if len(t.tabs) == 0 {
+			t.focusIdx = 0
+		} else {
+			t.focusIdx = len(t.tabs) - 1
+		}
+	}
+}
+
+func (t *Tabs) innerWidth() int {
+	if t.borderActive() {
+		return max(0, t.width-2)
+	}
+	return t.width
+}
+
+func (t *Tabs) borderActive() bool {
+	return t.border && t.width >= 3 && t.height >= 3
+}
+
+func tabFullWidth(t *tab) int {
+	if t.icon != 0 {
+		return stringCellWidth(t.name) + runeCellWidth(t.icon) + 1
+	}
+	return stringCellWidth(t.name)
+}
+
+func stringCellWidth(s string) int {
+	return graphemecluster.StringWidth(s)
+}
+
+func runeCellWidth(r rune) int {
+	return stringCellWidth(string(r))
+}
+
+// runesThatFit returns how many runes from the prefix fit into budget
+// cells, and the actual cell width consumed.
+func runesThatFit(runes []rune, budget int) (int, int) {
+	used := 0
+	for i, r := range runes {
+		w := runeCellWidth(r)
+		if used+w > budget {
+			return i, used
+		}
+		used += w
+	}
+	return len(runes), used
 }
 
 func (t *Tabs) doRemoveTab(idx int) *tab {
