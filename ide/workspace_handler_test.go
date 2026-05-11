@@ -1447,7 +1447,8 @@ func TestWorkspaceConfig(t *testing.T) {
 		shRunner := new(shaderRunner)
 		shRunner.init(
 			handler.Nop(), term.NopInterrupter(), term.Attributes{},
-			nopShutdownShaderConfig(), component.FrameCharSetDefault())
+			nopShutdownShaderConfig(), loadingShaderConfig{}, openShaderConfig{},
+			component.FrameCharSetDefault())
 		storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager,
 			notificationsConfig(), cfg, storage, dir,
@@ -4542,7 +4543,8 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
-		shutdownShaderCfg, component.FrameCharSetDefault())
+		shutdownShaderCfg, loadingShaderConfig{}, openShaderConfig{},
+		component.FrameCharSetDefault())
 
 	mu := new(sync.Mutex)
 	if cfg.scheduleNextTick == nil {

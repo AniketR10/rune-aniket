@@ -230,6 +230,37 @@ func WithShutdownShader(
 	}
 }
 
+// WithLoadingShader configures the IDE to play the given Shader
+// animation while a workspace is being loaded by addWorkspace.
+//
+// The shader runs for at most a fixed visual budget; if the load
+// completes earlier, the loading shader is replaced by the shader
+// configured via [WithOpenShader] (if any). If the load takes
+// longer, the shader self-finishes and the UI is drawn normally
+// while loading continues in the background.
+func WithLoadingShader(
+	shaderFn func(term.Attributes) shader.Shader,
+	fps int,
+) Option {
+	return func(opts *options) {
+		opts.loadingShaderFn = shaderFn
+		opts.loadingShaderFPS = fps
+	}
+}
+
+// WithOpenShader configures the IDE to play the given Shader
+// animation when a workspace finishes loading. Has no effect if
+// no loading shader is configured via [WithLoadingShader].
+func WithOpenShader(
+	shaderFn func(term.Attributes) shader.Shader,
+	fps int,
+) Option {
+	return func(opts *options) {
+		opts.openShaderFn = shaderFn
+		opts.openShaderFPS = fps
+	}
+}
+
 // WithTabBarOffset configures the IDE to render
 // with a tab bar x offset in cells to accomodate
 // perhaps another UI element.
@@ -315,6 +346,10 @@ type options struct {
 	shutdownShaderFn       func(term.Attributes) shader.Shader
 	shutdownShaderDuration time.Duration
 	shutdownShaderFPS      int
+	loadingShaderFn        func(term.Attributes) shader.Shader
+	loadingShaderFPS       int
+	openShaderFn           func(term.Attributes) shader.Shader
+	openShaderFPS          int
 	zdotDir                string
 }
 

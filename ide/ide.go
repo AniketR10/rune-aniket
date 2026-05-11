@@ -378,8 +378,16 @@ func (i *IDE) init(
 			duration: op.shutdownShaderDuration,
 		}
 	}
+	loadingShaderCfg := loadingShaderConfig{
+		shader: op.loadingShaderFn,
+		fps:    op.loadingShaderFPS,
+	}
+	openShaderCfg := openShaderConfig{
+		shader: op.openShaderFn,
+		fps:    op.openShaderFPS,
+	}
 	i.root.init(i.workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
-		i.ideConfig.windowFrameCharset())
+		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
 	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 }
 

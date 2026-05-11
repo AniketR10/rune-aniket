@@ -1032,6 +1032,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancel()
 		return err
 	}
+	h.shaderRunner.startLoading()
 	h.pendingWG.Add(1)
 	go debug.CapturePanicReport(func() {
 		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
@@ -1298,6 +1299,18 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	// dispatch (gui.Update / tui.Run), which already holds h.mu —
 	// so we run with the IDE lock held without re-locking here.
 	delete(h.pending, uri.String())
+
+	// Stop the loading shader as the very last thing this
+	// addWorkspace lifecycle does. We schedule one more tick so
+	// any Phase C state mutations (h.workspaces[slot] = wh,
+	// switchToWorkspace, session restore) have flushed to a Draw
+	// before the loading shader is replaced by the open shader.
+	// If no loading/open shader is configured, this is a no-op.
+	defer func() {
+		h.scheduleNextTick(func() {
+			h.shaderRunner.stopLoading()
+		})
+	}()
 
 	// closeWorkspace can flag the pending entry as canceled while
 	// Phase B is in progress; in that case the cancelCtx has already

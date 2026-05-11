@@ -43,6 +43,16 @@ import (
 const (
 	defaultShaderFPS      = 30
 	defaultShaderDuration = 1 * time.Second
+	// loadingShaderDuration is the visual budget for the shader
+	// drawn while a workspace is being loaded by addWorkspace. The
+	// load itself is not bounded by this; if it takes longer the
+	// shader simply self-finishes (shader.Component.done = true)
+	// and the underlying UI is drawn normally. If the load
+	// completes first, the runner swaps in the open shader.
+	loadingShaderDuration = 10 * time.Second
+	// openShaderDuration is the run time of the shader played
+	// when a workspace finishes installing.
+	openShaderDuration = 600 * time.Millisecond
 )
 
 type shutdownShaderConfig struct {
@@ -59,6 +69,24 @@ func nopShutdownShaderConfig() shutdownShaderConfig {
 	}
 }
 
+// loadingShaderConfig describes the shader played while a
+// workspace is loading. The duration is fixed
+// (loadingShaderDuration); only the shader factory and fps are
+// configurable. If shader is nil, no loading shader is played.
+type loadingShaderConfig struct {
+	shader func(term.Attributes) shader.Shader
+	fps    int
+}
+
+// openShaderConfig describes the shader played when a workspace
+// finishes installing. The duration is fixed
+// (openShaderDuration); only the shader factory and fps are
+// configurable. If shader is nil, no open shader is played.
+type openShaderConfig struct {
+	shader func(term.Attributes) shader.Shader
+	fps    int
+}
+
 // used as the root tui.Handler to dynamically run shaders
 type shaderRunner struct {
 	tui.Handler
@@ -68,6 +96,8 @@ type shaderRunner struct {
 	fc                component.FrameCharSet
 	width, height     int
 	shutdownShaderCfg shutdownShaderConfig
+	loadingShaderCfg  loadingShaderConfig
+	openShaderCfg     openShaderConfig
 }
 
 func (r *shaderRunner) HandleCommand(ctx context.Context, cmd textapi.Command) (
@@ -273,12 +303,16 @@ func (r *shaderRunner) init(
 	interrupter term.Interrupter,
 	defAttr term.Attributes,
 	shutdownShaderCfg shutdownShaderConfig,
+	loadingShaderCfg loadingShaderConfig,
+	openShaderCfg openShaderConfig,
 	fc component.FrameCharSet,
 ) {
 	r.Handler = root
 	r.interrupter = interrupter
 	r.defAttr = defAttr
 	r.shutdownShaderCfg = shutdownShaderCfg
+	r.loadingShaderCfg = loadingShaderCfg
+	r.openShaderCfg = openShaderCfg
 	r.fc = fc
 
 	// Initialize zero shader so we can treat field always as non-nil.
@@ -311,6 +345,38 @@ func (r *shaderRunner) runShutdownShader() {
 		r.shutdownShaderCfg.shader(r.defAttr),
 		r.shutdownShaderCfg.fps,
 		r.shutdownShaderCfg.duration)
+}
+
+// startLoading is called every time addWorkspace begins loading
+// a workspace. It (re)starts the loading shader, cancelling any
+// shader currently playing. No-op when no loading shader was
+// configured.
+func (r *shaderRunner) startLoading() {
+	if r.loadingShaderCfg.shader == nil {
+		return
+	}
+	r.runShader(
+		r.loadingShaderCfg.shader(r.defAttr),
+		r.loadingShaderCfg.fps,
+		loadingShaderDuration)
+}
+
+// stopLoading is called when an addWorkspace lifecycle
+// completes. It swaps in the open shader (or cancels back to
+// Nop if no open shader was configured). No-op when no loading
+// shader was configured.
+func (r *shaderRunner) stopLoading() {
+	if r.loadingShaderCfg.shader == nil {
+		return
+	}
+	if r.openShaderCfg.shader == nil {
+		r.cancel()
+		return
+	}
+	r.runShader(
+		r.openShaderCfg.shader(r.defAttr),
+		r.openShaderCfg.fps,
+		openShaderDuration)
 }
 
 func (r *shaderRunner) Draw(w term.Writer) {

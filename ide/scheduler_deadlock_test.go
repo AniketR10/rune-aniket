@@ -85,7 +85,8 @@ func TestScheduleNextTickDoesNotReacquireHostLock(t *testing.T) {
 
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
-		nopShutdownShaderConfig(), component.FrameCharSetDefault())
+		nopShutdownShaderConfig(), loadingShaderConfig{}, openShaderConfig{},
+		component.FrameCharSetDefault())
 
 	h := new(workspaceManagerHandler)
 	err = h.init(nil, homeURI, manager,

@@ -1162,7 +1162,8 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	interrupter := term.NopInterrupter()
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
-		shutdownShaderCfg, component.FrameCharSetDefault())
+		shutdownShaderCfg, loadingShaderConfig{}, openShaderConfig{},
+		component.FrameCharSetDefault())
 	// pkgmanager tests drive the install prompt synchronously: a
 	// LibDir call schedules the Prompt to open and hands back an
 	// iterator that blocks until the user picks an option. With
@@ -1273,7 +1274,8 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
-		shutdownShaderCfg, component.FrameCharSetDefault())
+		shutdownShaderCfg, loadingShaderConfig{}, openShaderConfig{},
+		component.FrameCharSetDefault())
 	// Sync scheduler — see the matching block in
 	// newTestWorkspaceManagerHandlerForPkgManager.
 	cfg.scheduleNextTick = func(fn func()) bool {
