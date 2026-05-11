@@ -402,15 +402,19 @@ func (m *Manager) handle(ev textapi.Event) error {
 }
 
 // fileDidChangeOOB notifies the callback about an out-of-band file
-// change (file watcher event). If the file is already open and has
-// a tracked version, we skip the notification because the versioned
-// edit path (EventTypeEdit → didChange) already handles tracking.
-// For files not open in the editor we signal an unversioned change
-// so WaitFileProcessed knows there is a pending change.
+// change (file watcher event, or a workspace/didChangeWatchedFiles
+// triggered by a tool such as apply_patch). It is signaled as an
+// unversioned change so WaitFileProcessed blocks until the next
+// publishDiagnostics arrives.
+//
+// We mark the URI pending unconditionally, including when the file
+// is open in the editor: OOB events are delivered on a different
+// path than EventTypeEdit (which performs its own versioned
+// FileDidChange), and tools like apply_patch write to disk without
+// going through the editor at all. Skipping open files here used to
+// cause check_file_errors to return a stale snapshot from the LSP
+// cache after an apply_patch update.
 func (m *Manager) fileDidChangeOOB(uri string) {
-	if _, ok := m.getFile(uri); ok {
-		return
-	}
 	m.callback.FileDidChange(uri, 0)
 }
 

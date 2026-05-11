@@ -133,6 +133,46 @@ func TestDidChangeWatchedFiles_invalidatesOnDelete(t *testing.T) {
 	})
 }
 
+// TestDidChangeWatchedFiles_marksOpenFilePending locks in the fix for
+// RUNE-AGENT-72 (round 2): when an apply_patch-style Changed event
+// arrives for a file that is also open in the editor, the manager
+// must still mark the URI as pending so a subsequent
+// WaitFileProcessed blocks until gopls re-publishes diagnostics.
+// Previously fileDidChangeOOB short-circuited for open files,
+// causing check_file_errors to return a stale pre-patch snapshot.
+func TestDidChangeWatchedFiles_marksOpenFilePending(t *testing.T) {
+	t.Parallel()
+	uri := makeURI(t, "file:///workspace")
+	callback := &testCallback{}
+	m := New(uri, nil, nil, nil, nil, nil,
+		Config{Callback: callback, NoInitializeServer: true})
+	t.Cleanup(func() { _ = m.Close() })
+
+	// Simulate the file being open in the editor.
+	openURI := makeURI(t, "file:///workspace/open.go")
+	m.mu.Lock()
+	m.files[openURI.String()] = newFile(openURI, "package open\n", "go")
+	m.mu.Unlock()
+
+	// An apply_patch-style Changed event arrives for the open file.
+	err := m.DidChangeWatchedFiles(context.Background(),
+		semanticapi.DidChangeWatchedFilesParams{
+			Changes: []semanticapi.FileEvent{
+				{URI: openURI.String(), Type: semanticapi.FileChangeTypeChanged},
+			},
+		})
+	require.NoError(t, err)
+
+	// The callback must have received a FileDidChange so a
+	// subsequent WaitFileProcessed will block.
+	callback.mu.Lock()
+	got := callback.fileDidChangeCalls
+	callback.mu.Unlock()
+	require.Len(t, got, 1)
+	assert.Equal(t, openURI.String(), got[0].uri)
+	assert.Equal(t, int32(0), got[0].version)
+}
+
 // TestWatchServerRestartsOnConnLoss locks in the fix that watchServer
 // listens on srv.conn.Done() in addition to the process watcher.
 // Closing the IDE-side jsonrpc2 conn while the gopls process is still

@@ -2751,6 +2751,12 @@ type testCallback struct {
 	onDiagnostics  func(semanticapi.PublishDiagnosticsParams)
 
 	invalidateAllPendingCount int
+	fileDidChangeCalls        []fileDidChangeCall
+}
+
+type fileDidChangeCall struct {
+	uri     string
+	version int32
 }
 
 func (c *testCallback) ShowMessage(
@@ -2887,7 +2893,12 @@ func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
 
-func (c *testCallback) FileDidChange(_ string, _ int32) {}
+func (c *testCallback) FileDidChange(uri string, version int32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.fileDidChangeCalls = append(c.fileDidChangeCalls,
+		fileDidChangeCall{uri: uri, version: version})
+}
 
 func (c *testCallback) InvalidateAllPending() {
 	c.mu.Lock()
