@@ -304,6 +304,73 @@ func TestAuthorizerRevokeREPLResurrectsNeverDecision(t *testing.T) {
 	assert.Equal(t, 1, prompter.calls)
 }
 
+// Two persisted command-scoped decisions for the same plugin and
+// permission but different commands must produce distinct list entries
+// and distinct IDs so that `authorizer revoke <id>` targets exactly one
+// of them.
+func TestAuthorizerListAndRevokeREPLDistinguishCommandScopedDecisions(t *testing.T) {
+	t.Parallel()
+
+	storage := storagestub.NewInMemoryService()
+	ext := testPluginExtension(nil)
+	authorizer := newTestAuthorizerCore(nil, storage)
+
+	identity := pluginPermissionIdentity{Path: ext.Path, Args: ext.Args}
+	grep := pluginPermissionCommandDetail{
+		Path: "/usr/bin/grep", Args: []string{"foo"}, Dir: "/tmp",
+	}
+	rm := pluginPermissionCommandDetail{
+		Path: "/bin/rm", Args: []string{"-rf", "foo"}, Dir: "/tmp",
+	}
+	grepKeys := pluginPermissionCommandStorageKeys(ext.Path, ext.Args,
+		extensionapi.PermissionExecute, grep)
+	rmKeys := pluginPermissionCommandStorageKeys(ext.Path, ext.Args,
+		extensionapi.PermissionExecute, rm)
+	require.Len(t, grepKeys, 1)
+	require.Len(t, rmKeys, 1)
+	require.NotEqual(t, grepKeys[0], rmKeys[0])
+
+	require.NoError(t, authorizer.setStoredDecision(context.Background(),
+		grepKeys[0], identity, extensionapi.PermissionExecute, &grep,
+		pluginPermissionDecisionAllow))
+	require.NoError(t, authorizer.setStoredDecision(context.Background(),
+		rmKeys[0], identity, extensionapi.PermissionExecute, &rm,
+		pluginPermissionDecisionAllow))
+
+	entries, err := authorizer.storedDecisions(context.Background())
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.NotEqual(t, entries[0].ID(), entries[1].ID(),
+		"command-scoped decisions for the same plugin/permission must have distinct IDs")
+	assert.NotEqual(t, entries[0].Display(), entries[1].Display(),
+		"command-scoped decisions for the same plugin/permission must have distinct displays")
+
+	// Locate the grep entry by its key and revoke it by ID.
+	var grepEntry pluginPermissionStoredDecisionEntry
+	for _, entry := range entries {
+		if entry.Key == grepKeys[0] {
+			grepEntry = entry
+			break
+		}
+	}
+	require.NotEmpty(t, grepEntry.Key)
+
+	_, err = authorizerREPLHandler{authorizer: authorizer}.HandleCommand(
+		context.Background(), repl.Command{
+			Name: authorizerREPLCommand,
+			Args: []string{authorizerREPLCommandRevoke, grepEntry.ID()},
+		}, repl.NopProgressWriter())
+	require.NoError(t, err)
+
+	var stored storedPermissionDecision
+	err = storage.Get(context.Background(), grepKeys[0], &stored)
+	assert.ErrorIs(t, err, storageapi.ErrNotFound,
+		"revoking by ID must delete exactly the grep decision")
+	require.NoError(t, storage.Get(context.Background(), rmKeys[0], &stored),
+		"revoking by ID must leave the rm decision intact")
+	assert.Equal(t, pluginPermissionDecisionAllow, stored.Decision)
+}
+
 func responsiveStrings(t *testing.T, items []component.Responsive) []string {
 	t.Helper()
 	out := make([]string, 0, len(items))

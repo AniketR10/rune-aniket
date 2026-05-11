@@ -197,6 +197,7 @@ type pluginPermissionStoredDecisionEntry struct {
 	Permission string
 	Scope      string
 	Expires    time.Time
+	Command    *pluginPermissionCommandDetail
 }
 
 func (e pluginPermissionStoredDecisionEntry) Display() string {
@@ -208,6 +209,9 @@ func (e pluginPermissionStoredDecisionEntry) Display() string {
 		scope = "persisted"
 	}
 	ret := fmt.Sprintf("%s %s %s %s %v", scope, e.Decision, e.Permission, e.Path, e.Args)
+	if e.Command != nil {
+		ret += " cmd " + pluginPermissionExactCommandLabel(*e.Command)
+	}
 	if !e.Expires.IsZero() {
 		ret += fmt.Sprintf(" expires %s", e.Expires.Format(time.RFC3339))
 	}
@@ -227,8 +231,12 @@ func (e pluginPermissionStoredDecisionEntry) ID() string {
 		sanitizePluginPermissionIDPart(e.Decision),
 		sanitizePluginPermissionIDPart(e.Permission),
 		sanitizePluginPermissionIDPart(programBaseName(e.Path)),
-		shortPluginPermissionKey(e.Key),
 	}
+	if e.Command != nil {
+		parts = append(parts,
+			sanitizePluginPermissionIDPart(programBaseName(e.Command.Path)))
+	}
+	parts = append(parts, shortPluginPermissionKey(e.Key))
 	return strings.Join(parts, ":")
 }
 
@@ -267,12 +275,25 @@ func programBaseName(path string) string {
 }
 
 func shortPluginPermissionKey(key string) string {
+	// Use the final ":"-delimited segment so that command-scoped keys —
+	// which append a per-command identity hash after the program hash and
+	// permission — disambiguate. Fall back to the program-hash segment
+	// (index 2) for permission-only keys with no trailing segment.
 	parts := strings.Split(key, ":")
-	if len(parts) >= 3 && parts[2] != "" {
-		if len(parts[2]) <= 8 {
-			return parts[2]
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == "" {
+			continue
 		}
-		return parts[2][:8]
+		// Skip the well-known prefix segments so we don't return e.g.
+		// "plugin-permissions" for a malformed key.
+		if i <= 1 {
+			break
+		}
+		seg := parts[i]
+		if len(seg) > 8 {
+			seg = seg[:8]
+		}
+		return sanitizePluginPermissionIDPart(seg)
 	}
 	if len(key) <= 8 {
 		return sanitizePluginPermissionIDPart(key)
@@ -314,14 +335,19 @@ func (a *Authorizer) storedDecisions(
 		if stored.Key == "" || !isPermissionStorageKey(stored.Key) {
 			continue
 		}
-		ret = append(ret, pluginPermissionStoredDecisionEntry{
+		entry := pluginPermissionStoredDecisionEntry{
 			Key:        stored.Key,
 			Decision:   stored.Decision,
 			Path:       stored.Path,
 			Args:       append([]string(nil), stored.Args...),
 			Permission: string(stored.Permission),
 			Scope:      "persisted",
-		})
+		}
+		if stored.Command.Path != "" {
+			cmd := copyPluginPermissionCommandDetail(stored.Command)
+			entry.Command = &cmd
+		}
+		ret = append(ret, entry)
 	}
 	sort.Slice(ret, func(i, j int) bool {
 		return ret[i].Display() < ret[j].Display()
@@ -340,7 +366,7 @@ func (a *Authorizer) transientDecisions(
 	a.purgeExpiredOnceDecisionsLocked(now)
 	ret := make([]pluginPermissionStoredDecisionEntry, 0, len(a.once))
 	for key, decision := range a.once {
-		ret = append(ret, pluginPermissionStoredDecisionEntry{
+		entry := pluginPermissionStoredDecisionEntry{
 			Key:        key,
 			Decision:   decision.Decision,
 			Path:       decision.Path,
@@ -348,7 +374,12 @@ func (a *Authorizer) transientDecisions(
 			Permission: string(decision.Permission),
 			Scope:      "transient",
 			Expires:    decision.Expires,
-		})
+		}
+		if decision.Command.Path != "" {
+			cmd := copyPluginPermissionCommandDetail(decision.Command)
+			entry.Command = &cmd
+		}
+		ret = append(ret, entry)
 	}
 	sort.Slice(ret, func(i, j int) bool {
 		return ret[i].Display() < ret[j].Display()
