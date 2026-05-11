@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package debugshell
 
 import (
@@ -79,6 +78,23 @@ import (
 // (initialized, stopped, terminated, exited) into deterministic
 // signals tests can wait on.
 
+// sumFirstStmtLine is the 1-based line number of the first
+// executable statement of the Sum function in
+// testdata/buggy/main.go (`total := 0`). The tests use this
+// instead of a literal so the breakpoint target survives
+// edits to the surrounding file (license header, package
+// comment, blank lines, etc.).
+//
+// sumBlankLineStart is a 1-based line at-or-just-before the
+// blank line inside Sum's body (between `total := 0` and the
+// `for` loop). It is used as the starting point for
+// blankLineNear so the test reliably picks the blank line
+// whose immediately-following line is executable.
+const (
+	sumFirstStmtLine  = 45
+	sumBlankLineStart = 45
+)
+
 func TestE2E_Launch(t *testing.T) {
 	t.Parallel()
 	dlvBin := findDlv(t)
@@ -105,7 +121,7 @@ func TestE2E_Launch(t *testing.T) {
 	h.waitMilestone(t, "initialized", 10*time.Second)
 
 	// 4. set a breakpoint at the first executable line of Sum.
-	h.setBreakpoint(t, mainPath, 35)
+	h.setBreakpoint(t, mainPath, sumFirstStmtLine)
 
 	// 5. mark configuration done.
 	_, err = h.run(ctx, subConfigured)
@@ -236,7 +252,7 @@ func TestE2E_BreakpointOnEmptyLine(t *testing.T) {
 	// without binding when used as a breakpoint target. Drive
 	// the prompt-side toggle so the parser-driven adjustment
 	// runs end-to-end.
-	emptyLine := blankLineNear(t, mainPath, 36)
+	emptyLine := blankLineNear(t, mainPath, sumBlankLineStart)
 	hndl, err := h.runPromptOnHandler(ctx, mainPath,
 		term.Coordinates{Y: emptyLine - 1}, subSetBreakpoint)
 	require.NoError(t, err)
@@ -374,7 +390,7 @@ func TestE2E_Attach(t *testing.T) {
 	h.waitMilestone(t, "initialized", 15*time.Second)
 
 	// 4. set a breakpoint at the first executable line of Sum.
-	h.setBreakpoint(t, mainPath, 35)
+	h.setBreakpoint(t, mainPath, sumFirstStmtLine)
 
 	// 5. configurationDone resumes the attached process.
 	_, err = h.run(ctx, subConfigured)
@@ -1596,7 +1612,7 @@ func TestE2E_CtrlCDoesNotStopEventStream(t *testing.T) {
 	// a breakpoint, then simulate Ctrl-C BEFORE configured.
 	// The cancel must not affect subsequent event flow.
 	h.waitMilestone(t, "initialized", 10*time.Second)
-	h.setBreakpoint(t, mainPath, 35)
+	h.setBreakpoint(t, mainPath, sumFirstStmtLine)
 
 	// >>> Ctrl-C <<<
 	initCancel()

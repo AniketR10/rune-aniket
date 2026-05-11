@@ -55,8 +55,8 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
-	runectl, err := exec.LookPath("runectl")
-	require.NoError(t, err, "runectl is not installed or not in PATH")
+	runectl := findRunectl(t)
+	var err error
 	runectl, err = filepath.EvalSymlinks(runectl)
 	require.NoError(t, err)
 
@@ -297,4 +297,27 @@ func (e2eBrowser) NotifyOnce(browserapi.NotificationLevel, string, ...any) (stri
 
 func (e2eBrowser) UpdateNotificationProgress(string, string, int64, int64) error {
 	return nil
+}
+
+// findRunectl locates the runectl binary or skips the test
+// when none is available on the system. Mirrors findGopls /
+// findDlv used elsewhere in the repo: the e2e suite is a
+// development-time integration test, not a hard CI gate, so
+// missing tooling should skip rather than fail the run.
+func findRunectl(t *testing.T) string {
+	t.Helper()
+	if bin, err := exec.LookPath("runectl"); err == nil {
+		return bin
+	}
+	for _, p := range []string{
+		filepath.Join(os.Getenv("HOME"), ".rune", "bin", "runectl"),
+		filepath.Join(os.Getenv("HOME"), "go", "bin", "runectl"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	t.Skip("runectl not found in PATH, ~/.rune/bin, or ~/go/bin; " +
+		"build it via `make -C cmd/runectl build` to enable this test")
+	return ""
 }
