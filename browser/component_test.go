@@ -25,6 +25,7 @@ package browser
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -392,6 +393,64 @@ func TestNonFocusTabAttrRespectedWithFrameFg(t *testing.T) {
 	assert.Equal(t, 'b', cells[3].Ch)
 	assert.Equal(t, expectedFocus, cells[3].Attributes,
 		"focused tab name must render with FocusTabAttr")
+}
+
+// TestFocusedLastTabVisibleWithTabBarOffset is a regression test for a bug
+// where the focused tab (the rightmost one) was being clipped off-screen
+// because the underlying component.Tabs was being resized to the full
+// component width while a TabBarOffset visually shifted the bar to the
+// right, leaving the trailing portion of the bar outside the visible
+// viewport. The fix is to subtract TabBarOffset from the width passed to
+// the Tabs component so the resize algorithm operates on the actual
+// viewport width and the focused tab is rendered in the visible area.
+func TestFocusedLastTabVisibleWithTabBarOffset(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+	cfg.TabBarOffset = 8
+
+	b := NewComponent(cfg)
+
+	names := []string{"alpha", "beta", "gamma", "delta", "epsilon", "zeta"}
+	tabs := make([]*Tab, len(names))
+	for i, n := range names {
+		uri, err := workspaceapi.ParseURI("file:///" + n)
+		require.NoError(t, err)
+		tabs[i] = b.NewTab(uri, 0, n, newTestHandler(), nil)
+	}
+	// Focus the last tab.
+	require.NoError(t, b.Focus().SetContent(tabs[len(tabs)-1]))
+
+	// Width is intentionally smaller than the sum of every tab at full
+	// width, so the resize algorithm has to shrink non-focused tabs to
+	// keep the focused (last) tab fully visible inside the available
+	// inner width: width 40 minus offset 8 = 32 cells of bar.
+	const width = 40
+	const height = 5
+	b.Resize(width, height)
+	writer := term.NewStringWriter(width, height)
+	b.Draw(writer)
+	require.NoError(t, writer.Flush())
+	rows := strings.Split(writer.String(), "\n")
+	require.GreaterOrEqual(t, len(rows), 1)
+
+	// The focused tab label must be fully visible somewhere on the top
+	// bar — not clipped at the right edge.
+	bar := rows[0]
+	require.Contains(t, bar, "zeta",
+		"focused (last) tab label must be visible inside the viewport: %q", bar)
+
+	// Sanity: at least one preceding tab must have been truncated for
+	// "zeta" to fit (otherwise the algorithm wasn't exercised).
+	truncated := 0
+	for _, n := range names[:len(names)-1] {
+		if !strings.Contains(bar, n) {
+			truncated++
+		}
+	}
+	assert.Greater(t, truncated, 0,
+		"expected at least one non-focused tab to be shrunk: %q", bar)
 }
 
 func TestComponentRestoreTileLayout(t *testing.T) {

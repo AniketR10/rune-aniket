@@ -46,6 +46,33 @@ import (
 
 var _ browserapi.Handler = (*Component)(nil)
 
+// offsetTabs is the tabs bar wrapped in a virtual writer offset so the
+// bar visually starts at TabBarOffset. The underlying component.Tabs is
+// resized to (width - offset) so the resize algorithm operates on the
+// actually visible viewport — otherwise the focused tab would render
+// past the right edge of the viewport.
+type offsetTabs struct {
+	handler.Virtual[*thandler.Tabs]
+	offset int
+}
+
+func newOffsetTabs(tabs *thandler.Tabs, offset int) *offsetTabs {
+	v := &offsetTabs{offset: offset}
+	v.C = tabs
+	v.Move(term.Coordinates{X: offset})
+	return v
+}
+
+// Resize : tui.Component
+func (v *offsetTabs) Resize(width, height int) {
+	inner := width - v.offset
+	if inner < 0 {
+		inner = 0
+	}
+	v.Virtual.Resize(width, height)
+	v.C.Resize(inner, height)
+}
+
 // Component renders a browser-like tui.Compontent and exposes an API
 // to open new windows, add new tabs, and switch between tabs.
 //
@@ -130,10 +157,7 @@ func (c *Component) Init(config Config) {
 	// if tab bar offset is set, the remove frame from tabs
 	// and install via union and no frame unioning.
 	if config.TabBarOffset > 0 {
-		vtabs := &handler.Virtual[*thandler.Tabs]{
-			Virtual: component.Virtual[*thandler.Tabs]{C: &c.tabs},
-		}
-		vtabs.Move(term.Coordinates{X: config.TabBarOffset})
+		vtabs := newOffsetTabs(&c.tabs, config.TabBarOffset)
 		c.tabs.SetBorder(false)
 		c.union.UnionTopFrame(vtabs, c.tabsSize(), false)
 	} else {
