@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package debugshell
 
 import (
@@ -49,7 +48,8 @@ const breakpointsLocationID = "debugger/breakpoints"
 // "set-breakpoint", which installs a breakpoint at the cursor's
 // current line.
 type PromptHandler struct {
-	h *Handler
+	h         *Handler
+	openShell func(ctx context.Context, args ...string) error
 }
 
 // NewPromptHandler returns a text.CommandHandler that routes
@@ -60,6 +60,19 @@ func NewPromptHandler(h *Handler) PromptHandler {
 	return PromptHandler{h: h}
 }
 
+// WithOpenShell wires a callback used when ":debugger" is invoked
+// with no arguments. The callback typically opens (or focuses) the
+// companion shell tab and submits "debugger" on its prompt, making
+// the bare ":debugger" command an alias for ":shell debugger".
+// When unset, the no-args invocation returns the legacy usage
+// error.
+func (p PromptHandler) WithOpenShell(
+	fn func(ctx context.Context, args ...string) error,
+) PromptHandler {
+	p.openShell = fn
+	return p
+}
+
 var _ text.CommandHandler = PromptHandler{}
 
 // HandleCommand satisfies text.CommandHandler.
@@ -68,6 +81,9 @@ func (p PromptHandler) HandleCommand(ctx context.Context, cmd textapi.Command) e
 		return fmt.Errorf("unexpected command: %s", cmd.Name)
 	}
 	if len(cmd.Args) == 0 {
+		if p.openShell != nil {
+			return p.openShell(ctx, CommandName)
+		}
 		return errors.New("usage: debugger <subcommand> [...]")
 	}
 	switch cmd.Args[0] {

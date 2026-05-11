@@ -40,7 +40,9 @@ import (
 // markdown renders content via the local markdown component.
 // On parse error, falls back to a plain responsive string.
 func markdown(content string) iterator.Iterator[component.Responsive] {
-	md, err := tuimarkdown.New(content)
+	cfg := tuimarkdown.DefaultConfig()
+	cfg.HeaderPrefix = false
+	md, err := tuimarkdown.NewWithConfig(content, cfg)
 	if err != nil {
 		r := component.NewResponsiveString(content, component.StringResponsiveConfig{})
 		return iterator.FromSlice([]component.Responsive{r})

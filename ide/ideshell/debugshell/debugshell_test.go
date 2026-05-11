@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package debugshell
 
 import (
@@ -1818,4 +1817,41 @@ func TestFormatStackTraceIncludesInstructionPointer(t *testing.T) {
 		"first frame's IP must be rendered for disassemble use")
 	assert.NotContains(t, body, "ip: ``",
 		"frames without IP must not render an empty ip line")
+}
+
+// TestPromptHandler_NoArgs_OpensShell verifies that invoking
+// ":debugger" with no arguments calls the WithOpenShell callback
+// with "debugger" as a single arg, so the editor command opens
+// (or focuses) the companion shell tab and submits "debugger" on
+// its prompt.
+func TestPromptHandler_NoArgs_OpensShell(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	var gotArgs []string
+	var called int
+	ph := NewPromptHandler(h).WithOpenShell(
+		func(_ context.Context, args ...string) error {
+			called++
+			gotArgs = append([]string(nil), args...)
+			return nil
+		},
+	)
+	err := ph.HandleCommand(context.Background(), textapi.Command{
+		Name: CommandName,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, called)
+	assert.Equal(t, []string{CommandName}, gotArgs)
+}
+
+// TestPromptHandler_NoArgs_NoCallback ensures that when no
+// WithOpenShell callback is wired, the legacy usage error is
+// preserved so callers that do not opt in keep their behaviour.
+func TestPromptHandler_NoArgs_NoCallback(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+	ph := NewPromptHandler(h)
+	err := ph.HandleCommand(context.Background(), textapi.Command{
+		Name: CommandName,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "usage: debugger")
 }

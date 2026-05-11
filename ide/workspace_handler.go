@@ -1214,7 +1214,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 		log.Errorf("register debugger repl command: %v", err)
 	}
 	if err := ex.comp.SubscribeCommand(dbgMan,
-		debugshell.NewPromptHandler(dbgHandler)); err != nil {
+		debugshell.NewPromptHandler(dbgHandler).
+			WithOpenShell(ex.shellnewtab)); err != nil {
 		log.Errorf("subscribe debugger command prompt: %v", err)
 	}
 	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser, callbacks)

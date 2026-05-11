@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package debugshell
 
 import (
@@ -30,6 +29,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	tuimarkdown "unstable.build/go-tui/component/markdown"
 )
 
 // Subcommand names. Exported so callers (typically language
@@ -172,22 +172,20 @@ func Manual() textapi.CommandManual {
 // command.
 func helpLines() iterator.Iterator[component.Responsive] {
 	var b strings.Builder
-	b.WriteString("# debugger\n\n")
-	b.WriteString("Control a debug session via the Debug Adapter Protocol.\n\n")
-	b.WriteString("```\nUsage: debugger <subcommand> [...]\n```\n\n")
-	b.WriteString("## Sequence\n\n")
+	b.WriteString("## Quick start\n")
 	b.WriteString("- `debugger initialize go`\n")
 	b.WriteString("- `debugger launch ./cmd/myprog` or `debugger attach 1234`\n")
-	b.WriteString("- `:debugger set-breakpoint` as needed before `debugger configured`\n")
-	b.WriteString("- `debugger configured`\n\n")
-	b.WriteString("## Session lifecycle\n\n")
+	b.WriteString("- Navigate to a location with your cursor and invoke ")
+	b.WriteString("`debugger set-breakpoint` command prompt command to set a breakpoint.\n")
+	b.WriteString("- `debugger configured`\n")
+	b.WriteString("## Session lifecycle\n")
 	b.WriteString("- **`initialize`** `<langID>` — Create a debug session for the language\n")
 	b.WriteString("- **`launch`** `<program>` `[args...]` — Send Launch\n")
 	b.WriteString("- **`attach`** `<pid|program>` — Send Attach\n")
 	b.WriteString("- **`configured`** — Send all in-memory breakpoints, then ConfigurationDone\n")
 	b.WriteString("- **`terminate`** — End the current debug session\n")
-	b.WriteString("- **`restart`** — Restart the current debug session\n\n")
-	b.WriteString("## Execution\n\n")
+	b.WriteString("- **`restart`** — Restart the current debug session\n")
+	b.WriteString("## Execution\n")
 	b.WriteString("- **`continue`** `[thread-id]` — Resume execution\n")
 	b.WriteString("- **`next`** `[thread-id]` — Step over\n")
 	b.WriteString("- **`step-in`** `[thread-id]` — Step into\n")
@@ -195,15 +193,14 @@ func helpLines() iterator.Iterator[component.Responsive] {
 	b.WriteString("- **`step-back`** `[thread-id]` — Step backward\n")
 	b.WriteString("- **`reverse-continue`** `[thread-id]` — Reverse-continue\n")
 	b.WriteString("- **`pause`** `[thread-id]` — Pause execution\n")
-	b.WriteString("- **`goto`** `<target>` — Jump to a goto target\n\n")
-	b.WriteString("## Introspection\n\n")
+	b.WriteString("- **`goto`** `<target>` — Jump to a goto target\n")
+	b.WriteString("## Introspection\n")
 	b.WriteString("- **`threads`** — List threads\n")
 	b.WriteString("- **`stack-trace`** `[thread-id]` — Show the call stack\n")
 	b.WriteString("- **`scopes`** `[frame-id]` — Show scopes for a frame\n")
 	b.WriteString("- **`variables`** `[ref]` — Show variables for a scope\n")
 	b.WriteString("- **`modules`** — Show loaded modules\n")
-	b.WriteString("- **`loaded-sources`** — Show loaded sources\n\n")
-	b.WriteString("## Mutation\n\n")
+	b.WriteString("- **`loaded-sources`** — Show loaded sources\n")
 	b.WriteString("- **`set-breakpoint`** — Toggle a breakpoint at the cursor ")
 	b.WriteString("(use the command prompt: `:debugger set-breakpoint`); breakpoints are kept ")
 	b.WriteString("in memory and sent on `configured`\n")
@@ -216,5 +213,19 @@ func helpLines() iterator.Iterator[component.Responsive] {
 	b.WriteString("pointer of a stack frame: run `debugger stack-trace` after a stop and copy the ")
 	b.WriteString("`ip:` field of the frame you want to inspect. Example: ")
 	b.WriteString("`debugger disassemble 0x10b3a40 32`.\n")
-	return markdown(b.String())
+	return helpMarkdown(b.String())
+}
+
+// helpMarkdown renders the debugger help text with no extra
+// paragraph spacing between sections so the manual stays compact.
+// Falls back to the default markdown renderer on parse error.
+func helpMarkdown(content string) iterator.Iterator[component.Responsive] {
+	cfg := tuimarkdown.DefaultConfig()
+	cfg.HeaderPrefix = false
+	cfg.ParagraphSpacing = 0
+	md, err := tuimarkdown.NewWithConfig(content, cfg)
+	if err != nil {
+		return markdown(content)
+	}
+	return iterator.FromSlice([]component.Responsive{md})
 }

@@ -1134,6 +1134,55 @@ func TestShellCommandPastesArgument(t *testing.T) {
 	assert.Equal(t, prev, len(doc.Items))
 }
 
+// TestDebuggerCommandOpensShellWithDebugger verifies that running
+// `:debugger` with no arguments behaves like `:shell debugger`:
+// the companion shell tab is opened (or focused) and the literal
+// command "debugger" is submitted on its prompt. The integration
+// is wired in workspace_handler.go via
+// debugshell.PromptHandler.WithOpenShell(ex.shellnewtab), so
+// driving shellnewtab directly with "debugger" exercises the same
+// code path that the prompt handler will invoke.
+func TestDebuggerCommandOpensShellWithDebugger(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/debugger-noargs")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	svc := storagestub.NewInMemoryService()
+	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	// First call: companion shell tab is created and "debugger"
+	// is submitted, which the repl persists to history.
+	require.NoError(t, b.shellnewtab(context.Background(), "debugger"))
+	var doc struct{ Items []string }
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	require.NotEmpty(t, doc.Items)
+	assert.Equal(t, "debugger", doc.Items[len(doc.Items)-1])
+
+	// The shell tab must be the companion ideshell handler.
+	tabs := b.comp.Tabs()
+	require.Len(t, tabs, 1)
+	_, ok := tabs[0].Handler().(*ideshell.Handler)
+	assert.True(t, ok)
+
+	// Second call reuses the existing companion shell tab and
+	// re-submits "debugger" on its prompt.
+	require.NoError(t, b.shellnewtab(context.Background(), "debugger"))
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	assert.Equal(t, "debugger", doc.Items[len(doc.Items)-1])
+}
+
 // TestShellCommandPersistsHistory verifies that commands entered into
 // the IDE shell are persisted to the shared storageapi.Service via the
 // shellHistoryDocumentID, and that a second ex booted on the same
