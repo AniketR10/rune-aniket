@@ -48,18 +48,19 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-linux-amd64 rune-staging-dist-linux-arm64 \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps llamacpp-libs llamacpp-init \
+	ox-api-init \
 	fuzz fuzz-list
 
 LLAMACPP_STAMP=$(TARGET)/llamacpp-libs.stamp
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-default: .git/hooks/pre-commit $(EXECS) $(CLAUDEIMPORT)
+default: .git/hooks/pre-commit deps $(EXECS) $(CLAUDEIMPORT)
 
 debug: GOFLAGS=-race
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-debug: $(EXECS) $(CLAUDEIMPORT)
+debug: deps $(EXECS) $(CLAUDEIMPORT)
 
 sixdev: GOFLAGS=-race
 sixdev: CGO_ENABLED=CGO_ENABLED=1
@@ -75,7 +76,7 @@ rune-agent: $(BIN)/rune-agent
 
 ox-api: CGO_ENABLED=CGO_ENABLED=1
 ox-api: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-ox-api: $(BIN)/ox-api
+ox-api: ox-api-init $(BIN)/ox-api
 
 claudeimport: CGO_ENABLED=CGO_ENABLED=1
 claudeimport: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -363,13 +364,18 @@ notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
 
 # deps brings in git-managed prerequisites that are needed for local builds.
-deps: llamacpp-init
+deps: llamacpp-init ox-api-init
 
 # llamacpp-init makes sure the llama.cpp git submodule is checked out. It is
 # safe to run repeatedly; the submodule Makefile is also defensive about
 # running on a populated tree.
 llamacpp-init:
 	@ git submodule update --init --recursive cmd/rune-agent/llm/llamacpp/llama.cpp
+
+# ox-api-init makes sure the ox-api git submodule is checked out so the
+# cmd/ox-api package compiles. Safe to run repeatedly.
+ox-api-init:
+	@ git submodule update --init --recursive cmd/ox-api
 
 # llamacpp-libs builds the static libraries that the llamacpp cgo bindings
 # link against. Skipped silently when the libs are already present and
