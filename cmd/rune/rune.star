@@ -503,7 +503,7 @@ config = {
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.
         "key_bindings": {
-            "<tab>":          "fexplorer",
+            "<shift-tab>":    "fexplorer",
             "<m-r>":          "history",
             "<m-,>":          "config",
             "<m-q>":          "quit",
