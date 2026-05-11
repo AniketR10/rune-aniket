@@ -631,17 +631,20 @@ func (t *Component) Snapshot() (Snapshot, error) {
 // into this live terminal emulator's primary buffer. It restores rendered
 // buffer contents, cursor position, title and scroll offset while leaving the
 // currently running pty process intact.
+//
+// The snapshot's Width/Height are used as the authoritative layout
+// dimensions for the restored cells, since those cells were laid out at
+// that geometry. After loading the cells, this method routes through the
+// regular Resize path so the pty winsize, parser-handler buffers and
+// scroll component all converge on the snapshot dimensions through a
+// single, well-tested code path. Without this, a follow-up Resize with
+// dimensions that happen to match the component's stale live width/height
+// would short-circuit at Resize's "same size" early return, leaving the
+// pty winsize at its kernel default; the shell would then write narrow
+// output into primBuf (the user-visible "main\n?\n)\nblue" cascade) until
+// the user manually resized the tile.
 func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordinates, err error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	width, height := t.width, t.height
-	if width <= 0 {
-		width = snapshot.Width
-	}
-	if height <= 0 {
-		height = snapshot.Height
-	}
+	width, height := snapshot.Width, snapshot.Height
 	if width <= 0 {
 		width = 1
 	}
@@ -649,6 +652,12 @@ func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordina
 		height = 1
 	}
 
+	// Replace primBuf contents and reset live dimensions under t.mu.
+	// Live dimensions are cleared so the follow-up Resize below cannot
+	// short-circuit at its "same size" early-return; this is the
+	// invariant that previously broke when t.width was preset by the
+	// reservoir / Facility.Resize path and matched the tile size.
+	t.mu.Lock()
 	t.parserHandler.sync.primBuf.Restore(
 		term.CloneCells(snapshot.Primary.Cells), snapshot.Primary.Cursor, width, height)
 	t.parserHandler.useAlt = false
@@ -656,13 +665,24 @@ func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordina
 	if snapshot.Title != "" {
 		t.parserHandler.title = snapshot.Title
 	}
-	t.width = width
-	t.height = height
-	t.parserHandler.tabs.resize(width)
 	t.scroll.InitPerformance(&t.parserHandler.sync.primBuf.Cells)
 	t.scroll.InvertOffset = true
 	t.scroll.SetTabspaces(1)
-	t.scroll.Resize(width, height)
+	t.width = 0
+	t.height = 0
+	t.mu.Unlock()
+
+	// Drive the snapshot dimensions through the regular Resize path so
+	// SetPtySize, parserHandler.Resize and scroll.Resize all run via the
+	// same code as a normal window-manager Resize. Resize takes t.mu
+	// (transitively via parserHandler.Resize), so it must run with the
+	// lock released.
+	if err = t.Resize(width, height); err != nil {
+		return cursor, err
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	offset := snapshot.ScrollOffset
 	maxOffset := t.scroll.MaxOffset()
 	offset.X = max(0, min(offset.X, maxOffset.X))

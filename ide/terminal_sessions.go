@@ -250,9 +250,6 @@ func (e *ex) restoreTerminalSessionTab(
 			_ = t.Close()
 			return nil, err
 		}
-		if err := h.RestoreFromSnapshot(doc.Snapshot); err != nil {
-			return nil, err
-		}
 	}
 	return tab, nil
 }

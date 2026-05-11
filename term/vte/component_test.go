@@ -425,3 +425,86 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 	writer.Flush()
 	assert.Equal(t, expected, writer.String())
 }
+
+// recordingExecutor records calls to SetPtySize so tests can assert the
+// component drives the pty winsize via the schemeapi.Terminal contract.
+type recordingExecutor struct {
+	testExecutor
+	setPtySize []ptySize
+}
+
+type ptySize struct {
+	width, height int
+}
+
+func (e *recordingExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {
+	e.setPtySize = append(e.setPtySize, ptySize{width: width, height: height})
+	return nil
+}
+
+// TestComponentRestoreFromSnapshotDrivesSetPtySize reproduces a bug where
+// a freshly-restored Component would keep its pre-restore width/height (e.g.
+// the warm-reservoir WidthHint or a stale workspace size propagated via
+// Facility.Resize) without driving that value into the pty via SetPtySize.
+// When the window manager subsequently called Resize with dimensions that
+// happened to match those stale values (a common case: snapshot was taken
+// at the same workspace size), Component.Resize early-returned and never
+// reached SetPtySize. The pty winsize stayed at the kernel default, the
+// shell wrote 1-column output into primBuf, and the user saw a vertical
+// "main\n?\n)\nblue\n…" cascade until they manually resized the tile.
+//
+// The fix unifies restore through the regular Resize path: after restoring
+// the cells, RestoreFromSnapshot drives the snapshot dimensions through
+// Component.Resize so SetPtySize is invoked exactly once via the same
+// well-tested code path used by the window manager.
+func TestComponentRestoreFromSnapshotDrivesSetPtySize(t *testing.T) {
+	t.Parallel()
+
+	tm := mockTabManager{}
+	exe := &recordingExecutor{}
+	cfg := DefaultConfig()
+	comp, err := NewComponent(exe, exe, &tm, cfg)
+	require.NoError(t, err)
+
+	const w, h = 80, 24
+
+	// simulate the warm reservoir / Facility.Resize path: live dimensions
+	// are already (w, h) before RestoreFromSnapshot is called.
+	require.NoError(t, comp.Resize(w, h))
+	require.Equal(t, w, comp.width)
+	require.Equal(t, h, comp.height)
+
+	exe.setPtySize = nil
+
+	snap := Snapshot{
+		Version: terminalSnapshotVersion,
+		Width:   w,
+		Height:  h,
+		Primary: ScreenSnapshot{
+			Cells:  [][]term.Cell{{{Ch: 'h'}, {Ch: 'i'}}},
+			Cursor: term.Coordinates{X: 2, Y: 0},
+		},
+	}
+
+	_, err = comp.RestoreFromSnapshot(snap)
+	require.NoError(t, err)
+
+	// RestoreFromSnapshot must drive the snapshot's dimensions through
+	// the regular Resize path so SetPtySize is called even when the
+	// live width/height already match the snapshot dimensions. Without
+	// this, the pty stays at its kernel-default winsize and the shell
+	// renders into a 0/1-column buffer.
+	require.NotEmpty(t, exe.setPtySize,
+		"RestoreFromSnapshot must call SetPtySize via the regular Resize path")
+	assert.Equal(t, ptySize{width: w, height: h},
+		exe.setPtySize[len(exe.setPtySize)-1])
+	assert.Equal(t, w, comp.width)
+	assert.Equal(t, h, comp.height)
+
+	// The window manager's follow-up Resize at the tile's dimensions
+	// (matching the snapshot dimensions) is now a legitimate no-op.
+	exe.setPtySize = nil
+	require.NoError(t, comp.Resize(w, h))
+	assert.Empty(t, exe.setPtySize,
+		"follow-up Resize at the same size is a legitimate no-op")
+}
