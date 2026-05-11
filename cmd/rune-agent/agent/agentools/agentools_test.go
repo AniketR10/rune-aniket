@@ -841,6 +841,29 @@ func TestBash_args_do_not_include_program_name(t *testing.T) {
 		"Args must not include the program name; the executor adds it from Path")
 }
 
+func TestBash_env_is_nil_so_host_inherits(t *testing.T) {
+	// The bash tool runs inside the rune-agent extension process whose
+	// os.Environ() may be missing PATH entries the user expects (e.g.
+	// Homebrew on macOS GUI launch). When Env is nil, the host executor
+	// falls back to its own os.Environ(), which carries the shell-loaded
+	// PATH and gui.env overrides. Setting Env from the extension would
+	// shadow those values because Go's os/exec lets the last duplicate
+	// key win.
+	var recorded workspaceapi.Cmd
+	rec := &recordingExec{startFn: func(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+		recorded = cmd
+		if cmd.Watcher != nil {
+			cmd.Watcher.WatchProcess() <- nil
+		}
+		return 1, nil
+	}}
+	tool := newBash(rec, dirURI("/workspace"))
+	tool.Execute(context.Background(), `{"command": "true", "description": "noop"}`)
+
+	assert.Nil(t, recorded.Env,
+		"Env must be nil so the host executor inherits its own environment")
+}
+
 func TestBash(t *testing.T) {
 	tests := []struct {
 		name     string

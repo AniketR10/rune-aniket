@@ -28,7 +28,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
@@ -126,10 +125,14 @@ func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResu
 	watcher := newProcessWatcher()
 
 	cmd := workspaceapi.Cmd{
-		Path:    "bash",
-		Args:    []string{"-c", args.Command},
-		Dir:     workDir,
-		Env:     os.Environ(),
+		Path: "bash",
+		Args: []string{"-c", args.Command},
+		Dir:  workDir,
+		// Env is intentionally nil: the host executor falls back to its
+		// own os.Environ(), which carries the shell-loaded PATH and any
+		// gui.env overrides. Setting Env from the extension would shadow
+		// those values because Go's os/exec lets the last duplicate key
+		// win when merging.
 		Stdout:  &buf,
 		Stderr:  &buf,
 		Watcher: watcher,
