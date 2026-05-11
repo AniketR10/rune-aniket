@@ -29,3 +29,13 @@ repos:
         files: \.go
         name: validate_license
         entry: make license
+
+-   repo: local
+    hooks:
+    -   id: make_test
+        language: system
+        name: make_test
+        # Run the full test suite before allowing a commit.
+        entry: make test
+        pass_filenames: false
+        types: [go]
