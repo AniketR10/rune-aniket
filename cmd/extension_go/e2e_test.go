@@ -1961,7 +1961,7 @@ func TestE2EHandleOpenWorksWithNoInitializeServer(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, mgr.Close()) })
 
 	ctx := context.Background()
-	params, err := goplsInitializeParams(rootURI)
+	params, err := goplsInitializeParams(rootURI, goplsDebugOptions{})
 	require.NoError(t, err)
 
 	_, err = mgr.Initialize(ctx, params)
@@ -2059,7 +2059,7 @@ func TestE2EHandleOpenRaceWithInitialize(t *testing.T) {
 
 	// Now Initialize — this creates the gopls server and sends
 	// didOpen for pending files as part of server init.
-	params, err := goplsInitializeParams(rootURI)
+	params, err := goplsInitializeParams(rootURI, goplsDebugOptions{})
 	require.NoError(t, err)
 
 	_, err = mgr.Initialize(ctx, params)
@@ -2144,7 +2144,7 @@ func TestE2EHandleOpenCloseRaceWithInitialize(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Initialize — should NOT send didOpen (file was closed).
-	params, err := goplsInitializeParams(rootURI)
+	params, err := goplsInitializeParams(rootURI, goplsDebugOptions{})
 	require.NoError(t, err)
 
 	_, err = mgr.Initialize(ctx, params)

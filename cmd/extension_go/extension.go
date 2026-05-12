@@ -27,9 +27,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 )
 
 // NewExtension returns the Go extension and its metadata.
@@ -77,7 +81,8 @@ func (e *goExtension) ExtendWorkspace(
 	// the URI to the file:// scheme expected by the language server.
 	rootURI := fmt.Sprintf("file://%s", cwd.Path())
 
-	params, err := goplsInitializeParams(rootURI)
+	dbg := readGoplsDebugOptions(cfg)
+	params, err := goplsInitializeParams(rootURI, dbg)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
@@ -85,7 +90,12 @@ func (e *goExtension) ExtendWorkspace(
 	if err != nil {
 		return fmt.Errorf("initialize gopls: %w", err)
 	}
-	slog.Info("gopls initialized")
+	slog.Info("gopls initialized",
+		"rpc_trace", dbg.RPCTrace,
+		"logfile", dbg.LogFile,
+		"debug_addr", dbg.DebugAddr,
+		"trace", string(dbg.Trace),
+	)
 
 	parser := w.Parser(ctx)
 	executor := w.Executor(ctx)
@@ -97,4 +107,82 @@ func (e *goExtension) ExtendWorkspace(
 		return fmt.Errorf("register command: %w", err)
 	}
 	return nil
+}
+
+// readGoplsDebugOptions extracts the optional `debug` sub-config of the
+// Go extension. Missing keys leave the corresponding field at its zero
+// value (debugging disabled). Unknown values for `trace` fall back to
+// "off" so a typo cannot crash the workspace bring-up.
+//
+// Example rune.star:
+//
+//	"extensions": {
+//	    "go": {
+//	        "path": "extension_go",
+//	        "config": {
+//	            "debug": {
+//	                "rpc_trace": True,
+//	                "logfile":   "~/.rune/logs/lsp/gopls.log",
+//	                "addr":      "localhost:6060",
+//	                "trace":     "verbose",
+//	            },
+//	        },
+//	    },
+//	}
+func readGoplsDebugOptions(cfg config.Config) goplsDebugOptions {
+	var opts goplsDebugOptions
+	if cfg == nil {
+		return opts
+	}
+	dbg, err := cfg.GetConfig("debug")
+	if err != nil || dbg == nil {
+		return opts
+	}
+	if v, err := dbg.GetBool("rpc_trace"); err == nil {
+		opts.RPCTrace = v
+	}
+	if v, err := dbg.GetString("logfile"); err == nil {
+		resolved, rerr := resolveLogFile(v)
+		if rerr != nil {
+			slog.Warn("gopls debug logfile disabled",
+				"logfile", v, "error", rerr)
+		} else {
+			opts.LogFile = resolved
+		}
+	}
+	if v, err := dbg.GetString("addr"); err == nil {
+		opts.DebugAddr = v
+	}
+	if v, err := dbg.GetString("trace"); err == nil {
+		switch semanticapi.TraceValue(v) {
+		case semanticapi.TraceValueOff,
+			semanticapi.TraceValueMessages,
+			semanticapi.TraceValueVerbose:
+			opts.Trace = semanticapi.TraceValue(v)
+		}
+	}
+	return opts
+}
+
+// resolveLogFile expands a leading "~" / "~/" against $HOME and ensures
+// the parent directory exists. gopls exits with status 2 when it cannot
+// create the file passed to `-logfile`, so doing this here keeps a
+// missing directory from bricking workspace bring-up. The literal
+// "auto" is passed through unchanged; gopls itself maps it to a
+// per-pid file under $TMPDIR.
+func resolveLogFile(path string) (string, error) {
+	if path == "" || path == "auto" {
+		return path, nil
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir: %w", err)
+		}
+		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("create logfile dir: %w", err)
+	}
+	return path, nil
 }

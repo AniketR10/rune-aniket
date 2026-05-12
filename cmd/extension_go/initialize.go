@@ -26,14 +26,38 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 )
 
-func goplsInitializeParams(rootURI string) (semanticapi.InitializeParams, error) {
+// goplsDebugOptions controls gopls debug instrumentation. Each field maps to a
+// gopls `serve` flag (-rpc.trace, -logfile, -debug) or to the LSP $/logTrace
+// channel (Trace). All fields are optional; the zero value disables debugging.
+type goplsDebugOptions struct {
+	// RPCTrace adds `-rpc.trace` to the gopls command, causing gopls to
+	// log every JSON-RPC message it sends/receives.
+	RPCTrace bool
+	// LogFile adds `-logfile=PATH` to the gopls command. The literal
+	// "auto" makes gopls write to a per-pid file under $TMPDIR.
+	LogFile string
+	// DebugAddr adds `-debug=ADDR` to the gopls command, enabling the
+	// gopls HTTP debug endpoint (pprof, /rpc, /cache, /session/*, …) at
+	// http://ADDR/. Example: "localhost:6060".
+	DebugAddr string
+	// Trace sets the InitializeParams.trace value, which controls
+	// $/logTrace messages from the server. Valid values are "off",
+	// "messages", and "verbose".
+	Trace semanticapi.TraceValue
+}
+
+func goplsInitializeParams(
+	rootURI string, dbg goplsDebugOptions,
+) (semanticapi.InitializeParams, error) {
+	command := goplsCommand(dbg)
 	initOptions := map[string]any{
 		"langID":         "go",
-		"command":        "gopls serve",
+		"command":        command,
 		"semanticTokens": true,
 		"codelenses": map[string]any{
 			"gc_details":         true,
@@ -186,5 +210,24 @@ func goplsInitializeParams(rootURI string) (semanticapi.InitializeParams, error)
 		RootURI:           rootURI,
 		Capabilities:      json.RawMessage(capabilitiesData),
 		InitializeOptions: json.RawMessage(initOptionsData),
+		Trace:             dbg.Trace,
 	}, nil
+}
+
+// goplsCommand builds the gopls invocation. Debug flags are top-level
+// flags on the gopls binary itself and must appear *before* the `serve`
+// subcommand; placing them after `serve` makes gopls exit with status 2.
+func goplsCommand(dbg goplsDebugOptions) string {
+	parts := []string{"gopls"}
+	if dbg.RPCTrace {
+		parts = append(parts, "-rpc.trace")
+	}
+	if dbg.LogFile != "" {
+		parts = append(parts, "-logfile="+dbg.LogFile)
+	}
+	if dbg.DebugAddr != "" {
+		parts = append(parts, "-debug="+dbg.DebugAddr)
+	}
+	parts = append(parts, "serve")
+	return strings.Join(parts, " ")
 }

@@ -157,7 +157,7 @@ func initGoplsFromDir(
 
 	ctx := context.Background()
 
-	params, err := goplsInitializeParams(rootURI)
+	params, err := goplsInitializeParams(rootURI, goplsDebugOptions{})
 	require.NoError(t, err)
 
 	_, err = mgr.Initialize(ctx, params)
@@ -292,7 +292,7 @@ func initGoplsWithApplyEdit(
 
 	ctx := context.Background()
 
-	params, err := goplsInitializeParams(rootURI)
+	params, err := goplsInitializeParams(rootURI, goplsDebugOptions{})
 	require.NoError(t, err)
 
 	_, err = mgr.Initialize(ctx, params)
