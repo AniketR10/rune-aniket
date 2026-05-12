@@ -36,21 +36,55 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 )
 
-// grepProgramNames lists the search programs we want to intercept. They
-// are matched after stripping the directory part, so absolute paths and
-// `command grep` style invocations are also covered.
+// grepProgramNames lists the search and text-pattern programs we want
+// to intercept. They are matched after stripping the directory part
+// (so /usr/bin/grep matches) and after stripping a leading backslash
+// (so `\grep` matches — that idiom bypasses shell aliases). Includes:
+//   - grep family: grep, egrep, fgrep, rgrep, plus compression
+//     wrappers (zgrep, zegrep, zfgrep, bzgrep, bzegrep, bzfgrep,
+//     xzgrep, xzegrep, xzfgrep, lzgrep, lzegrep, lzfgrep) and
+//     PCRE/PCRE2/ugrep variants.
+//   - alternative searchers: rg (ripgrep), ripgrep, ag (the silver
+//     searcher), ack, ack-grep.
+//   - text processors used as ad-hoc pattern matchers in lieu of
+//     grep: sed, gsed, awk, gawk, mawk, nawk, perl. These are
+//     included because models routinely substitute `sed -n
+//     '/foo/p'` or `awk '/foo/'` when grep is unavailable.
 var grepProgramNames = map[string]bool{
-	"grep": true,
-	"rg":   true,
-	"ag":   true,
-	"ack":  true,
+	// grep family.
+	"grep": true, "egrep": true, "fgrep": true, "rgrep": true,
+	"zgrep": true, "zegrep": true, "zfgrep": true,
+	"bzgrep": true, "bzegrep": true, "bzfgrep": true,
+	"xzgrep": true, "xzegrep": true, "xzfgrep": true,
+	"lzgrep": true, "lzegrep": true, "lzfgrep": true,
+	"pcregrep": true, "pcre2grep": true, "ugrep": true,
+	// alternative searchers.
+	"rg": true, "ripgrep": true,
+	"ag": true, "ack": true, "ack-grep": true,
+	// text processors used as pattern matchers.
+	"sed": true, "gsed": true,
+	"awk": true, "gawk": true, "mawk": true, "nawk": true,
+	"perl": true,
 }
 
-// grepWrapperPrograms invoke another command as their effective
-// payload. When one of these is the program word, we keep scanning
-// the remaining literal arguments for a grep-like program name so
-// `find . | xargs grep foo` is intercepted just like a plain
-// `grep foo` would be.
+// grepWrapperPrograms run another command as their effective payload.
+// When we see one of these as the program word (or anywhere in the
+// argument chain after one), we keep scanning the remaining literal
+// arguments for a grep-like program name so wrappers like:
+//
+//	xargs grep foo
+//	sudo grep foo
+//	timeout 5 grep foo
+//	env LC_ALL=C grep foo
+//	git grep foo
+//	find . -name '*.go' -exec grep foo {} \;
+//
+// are all intercepted just like a plain `grep foo` would be.
+//
+// `find` is intentionally included even though its `-exec` syntax can
+// in theory match `-name grep` (a search for files literally named
+// "grep"). That ambiguity is not seen in practice; the cost of
+// missing `find -exec grep` evasion is much higher.
 var grepWrapperPrograms = map[string]bool{
 	"xargs":    true,
 	"env":      true,
@@ -66,14 +100,21 @@ var grepWrapperPrograms = map[string]bool{
 	"timeout":  true,
 	"stdbuf":   true,
 	"parallel": true,
+	"git":      true,
+	"hg":       true,
+	"jj":       true,
+	"fossil":   true,
+	"find":     true,
 }
 
 // isGrepInvocation reports whether the script invokes grep/rg/ag/ack
-// anywhere — directly, behind pipes, inside command substitution, after
-// env assignments, on either side of && / ||, or as a redirection
-// source/target. The previous "bare grep only" check let the model
-// trivially escape with `grep ... 2>/dev/null | sort` or `cat | grep`,
-// so we now treat any of those wrappers as a positive match.
+// as the first stage of execution — directly, behind &&/||, inside
+// command substitution, after env assignments, or as a redirection
+// source/target. We deliberately allow grep/sed/awk/perl when they
+// appear as a downstream stage of a pipeline (e.g. `cat file | grep
+// foo`, `find . | xargs grep foo`, `git ls-files | xargs sed`)
+// because in that role they are filtering data that is already on
+// stdin rather than performing a filesystem search.
 //
 // Known gap: we do not re-parse the body of `bash -c "..."`. A model
 // determined enough to wrap grep in a subshell string still gets
@@ -121,7 +162,18 @@ func commandMentionsGrep(cmd syntax.Command) bool {
 	case *syntax.CallExpr:
 		return callExprMentionsGrep(c)
 	case *syntax.BinaryCmd:
-		// && || | |& — any side may carry grep.
+		if c.Op == syntax.Pipe || c.Op == syntax.PipeAll {
+			// Pipelines parse left-associatively: `a | b | c` becomes
+			// BinaryCmd{X: BinaryCmd{X: a, Y: b}, Y: c}. We descend
+			// only into the left subtree so we ultimately inspect the
+			// leftmost (first) stage of the pipeline. Downstream
+			// stages are intentionally ignored: a model running `cat
+			// file | grep foo`, `find . | xargs grep`, or `cmd1 |
+			// cmd2 | grep` is using grep as an output filter, not as
+			// a filesystem searcher, and that is allowed.
+			return stmtMentionsGrep(c.X)
+		}
+		// && and || — both sides are independent commands.
 		return stmtMentionsGrep(c.X) || stmtMentionsGrep(c.Y)
 	case *syntax.Subshell:
 		return stmtsMentionGrep(c.Stmts)
@@ -147,6 +199,11 @@ func commandMentionsGrep(cmd syntax.Command) bool {
 			return commandMentionsGrep(c.Body.Cmd)
 		}
 		return false
+	case *syntax.TimeClause:
+		// `time grep foo` — time is a reserved keyword in bash.
+		return stmtMentionsGrep(c.Stmt)
+	case *syntax.CoprocClause:
+		return stmtMentionsGrep(c.Stmt)
 	default:
 		return false
 	}
@@ -174,36 +231,75 @@ func callExprMentionsGrep(call *syntax.CallExpr) bool {
 			return true
 		}
 	}
-	// Walk literal words starting at args[0]. If we see a grep-like
-	// program, return true. If we see a wrapper program (xargs, env,
-	// sudo, ...), keep walking — wrappers turn the next literal word
-	// into the effective program. Unknown literal words break the
-	// chain so `echo grep` does not get flagged.
-	literalChain := true
-	for i, w := range call.Args {
+	if len(call.Args) == 0 {
+		return false
+	}
+	// First: any argument may contain a $(grep ...) or <(grep ...)
+	// substitution, regardless of what the leading program is.
+	// This catches `echo $(grep foo)`, `diff <(grep a) <(grep b)`,
+	// and other patterns where a non-search command's input is
+	// produced by grep.
+	for _, w := range call.Args {
 		if wordMentionsGrep(w) {
 			return true
 		}
-		if !literalChain {
-			continue
-		}
+	}
+	// Second: walk literal program words and chain through wrappers.
+	// The rules:
+	//
+	//   1. A literal word whose base name is a grep program matches.
+	//   2. The leading program word is allowed to be a wrapper
+	//      (xargs, sudo, env, git, find, ...). Once we have seen a
+	//      wrapper, every subsequent literal word is scanned for a
+	//      grep program — flags, wrapper-arguments, sub-commands
+	//      and find-action arguments are all transparent to us, so
+	//      `timeout 5 grep`, `git grep`, and `find . -exec grep ...`
+	//      all match.
+	//   3. If args[0] is neither a wrapper nor a grep program, we
+	//      stop literal scanning so `echo grep foo` does NOT match.
+	seenWrapper := false
+	for i, w := range call.Args {
 		name, ok := literalProgramName(w)
 		if !ok {
-			literalChain = false
+			// Non-literal word (variable expansion, expansion-only
+			// arg, etc.). If we have already seen a wrapper, keep
+			// scanning; otherwise stop.
+			if !seenWrapper {
+				return false
+			}
 			continue
 		}
-		base := filepath.Base(name)
+		base := filepath.Base(stripLeadingBackslash(name))
 		if grepProgramNames[base] {
 			return true
 		}
-		// Only continue scanning past flags or known wrappers.
-		isFlag := strings.HasPrefix(name, "-")
-		isWrapper := i == 0 && grepWrapperPrograms[base]
-		if !isFlag && !isWrapper {
-			literalChain = false
+		if grepWrapperPrograms[base] {
+			if i == 0 || seenWrapper {
+				seenWrapper = true
+				continue
+			}
 		}
+		if seenWrapper {
+			// Wrapper args (numbers, paths, sub-commands, flags)
+			// are transparent to us; keep scanning for grep.
+			continue
+		}
+		// Leading non-wrapper, non-grep program — `echo grep foo`,
+		// `make build`, etc. Stop scanning.
+		return false
 	}
 	return false
+}
+
+// stripLeadingBackslash removes a single leading backslash from a
+// command name. In an unquoted shell context `\grep` is the same as
+// `grep` (the backslash suppresses alias expansion). The parser
+// preserves the raw source so we normalize here.
+func stripLeadingBackslash(s string) string {
+	if len(s) > 1 && s[0] == '\\' {
+		return s[1:]
+	}
+	return s
 }
 
 // literalProgramName extracts the literal value of a command-name word.
@@ -363,16 +459,18 @@ func (g grepGuard) decideGrep(ctx context.Context) (rejected, decided bool) {
 		return false, false
 	}
 	resp, err := prompter.Prompt(ctx, agent.PromptRequest{
-		Title:  "Allow grep?",
+		Title:  "Allow text search?",
 		Header: "grep",
-		Body: "The model is trying to run `grep`/`rg`. Rune has builtin " +
-			"semantic search tools that are usually better. Allow this " +
-			"call anyway?",
+		Body: "The model is trying to run a text-search/pattern tool " +
+			"(grep, rg, ag, ack, awk, sed, perl, or a wrapper such as " +
+			"`git grep` / `xargs grep`). Rune has builtin semantic " +
+			"search tools that are usually better. Allow this call " +
+			"anyway?",
 		Options: []agent.PromptOption{
 			{Value: "yes", Label: "Yes", Description: "Allow this single call"},
-			{Value: "always", Label: "Always", Description: "Allow grep; remember the choice"},
+			{Value: "always", Label: "Always", Description: "Allow text-search; remember the choice"},
 			{Value: "no", Label: "No", Description: "Reject this single call"},
-			{Value: "never", Label: "Never", Description: "Reject grep; remember the choice"},
+			{Value: "never", Label: "Never", Description: "Reject text-search; remember the choice"},
 		},
 	})
 	if err != nil {
