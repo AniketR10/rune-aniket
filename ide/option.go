@@ -233,31 +233,43 @@ func WithShutdownShader(
 // WithLoadingShader configures the IDE to play the given Shader
 // animation while a workspace is being loaded by addWorkspace.
 //
-// The shader runs for at most a fixed visual budget; if the load
-// completes earlier, the loading shader is replaced by the shader
-// configured via [WithOpenShader] (if any). If the load takes
-// longer, the shader self-finishes and the UI is drawn normally
-// while loading continues in the background.
+// duration is the lifetime of the underlying [shader.Component]; it is
+// decoupled from the visual length of the effect itself (e.g.
+// [shader.GrayFadeParams.FadeFrames]) so callers can pick a "fade then
+// hold" budget that outlives the animation. If the load completes
+// before duration elapses, the loading shader is replaced by the
+// shader configured via [WithOpenShader] (if any). If the load takes
+// longer, the shader self-finishes and the UI is drawn normally while
+// loading continues in the background. Passing duration <= 0 uses an
+// internal default.
 func WithLoadingShader(
 	shaderFn func(term.Attributes) shader.Shader,
 	fps int,
+	duration time.Duration,
 ) Option {
 	return func(opts *options) {
 		opts.loadingShaderFn = shaderFn
 		opts.loadingShaderFPS = fps
+		opts.loadingShaderDuration = duration
 	}
 }
 
 // WithOpenShader configures the IDE to play the given Shader
-// animation when a workspace finishes loading. Has no effect if
-// no loading shader is configured via [WithLoadingShader].
+// animation when a workspace finishes loading. Has no effect if no
+// loading shader is configured via [WithLoadingShader].
+//
+// duration is the lifetime of the underlying [shader.Component]; the
+// open shader runs for this long after the loading shader finishes.
+// Passing duration <= 0 uses an internal default.
 func WithOpenShader(
 	shaderFn func(term.Attributes) shader.Shader,
 	fps int,
+	duration time.Duration,
 ) Option {
 	return func(opts *options) {
 		opts.openShaderFn = shaderFn
 		opts.openShaderFPS = fps
+		opts.openShaderDuration = duration
 	}
 }
 
@@ -348,8 +360,10 @@ type options struct {
 	shutdownShaderFPS      int
 	loadingShaderFn        func(term.Attributes) shader.Shader
 	loadingShaderFPS       int
+	loadingShaderDuration  time.Duration
 	openShaderFn           func(term.Attributes) shader.Shader
 	openShaderFPS          int
+	openShaderDuration     time.Duration
 	zdotDir                string
 }
 

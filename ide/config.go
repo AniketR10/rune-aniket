@@ -364,6 +364,52 @@ func (c ideConfig) commandHistoryKey() (ret term.KeyComb) {
 	return
 }
 
+// animationsLoadingWorkspace returns whether the loading-workspace
+// animation is enabled. Defaults to true when the rune.star config
+// does not declare an `animations.loading_workspace` key. Returning
+// false here suppresses the loading shader entirely.
+//
+// Errors during type assertion are recorded under
+// "animations.loading_workspace" in c.errors and the default (true)
+// is returned so an invalid config never accidentally disables the
+// animation.
+func (c ideConfig) animationsLoadingWorkspace() bool {
+	return c.animationsBool("loading_workspace")
+}
+
+// animationsOpenWorkspace returns whether the open-workspace
+// animation is enabled. See [ideConfig.animationsLoadingWorkspace]
+// for semantics.
+func (c ideConfig) animationsOpenWorkspace() bool {
+	return c.animationsBool("open_workspace")
+}
+
+func (c ideConfig) animationsBool(key string) bool {
+	if c.cfg == nil {
+		return true
+	}
+	anims, ok := c.cfg["animations"]
+	if !ok {
+		return true
+	}
+	m, ok := anims.(map[string]any)
+	if !ok {
+		c.errors["animations"] = fmt.Errorf("expected dict, got %T", anims)
+		return true
+	}
+	v, ok := m[key]
+	if !ok {
+		return true
+	}
+	b, ok := v.(bool)
+	if !ok {
+		c.errors["animations."+key] = fmt.Errorf(
+			"expected bool, got %T", v)
+		return true
+	}
+	return b
+}
+
 func (c ideConfig) prompt() (config.Config, bool) {
 	b, ok := c.browser()
 	if !ok {

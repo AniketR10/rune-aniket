@@ -379,12 +379,24 @@ func (i *IDE) init(
 		}
 	}
 	loadingShaderCfg := loadingShaderConfig{
-		shader: op.loadingShaderFn,
-		fps:    op.loadingShaderFPS,
+		shader:   op.loadingShaderFn,
+		fps:      op.loadingShaderFPS,
+		duration: op.loadingShaderDuration,
 	}
 	openShaderCfg := openShaderConfig{
-		shader: op.openShaderFn,
-		fps:    op.openShaderFPS,
+		shader:   op.openShaderFn,
+		fps:      op.openShaderFPS,
+		duration: op.openShaderDuration,
+	}
+	// Suppress the loading/open workspace animations when the
+	// rune.star config explicitly disables them. Defaults are
+	// enabled. The open shader has no effect without a loading
+	// shader, so disabling loading effectively disables both.
+	if !i.ideConfig.animationsLoadingWorkspace() {
+		loadingShaderCfg.shader = nil
+	}
+	if !i.ideConfig.animationsOpenWorkspace() {
+		openShaderCfg.shader = nil
 	}
 	i.root.init(i.workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())

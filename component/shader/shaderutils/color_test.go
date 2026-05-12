@@ -294,3 +294,39 @@ func TestSampleGradient(t *testing.T) {
 		})
 	}
 }
+
+func TestDesaturateColor(t *testing.T) {
+	// amount=0: passthrough.
+	c := tcell.NewRGBColor(200, 50, 10)
+	assert.Equal(t, c, DesaturateColor(c, 0, tcell.ColorDefault))
+
+	// amount=1: each cell collapses to its own luminance gray, not a
+	// fixed shared gray. Cells with different RGB stay distinct.
+	red := DesaturateColor(tcell.NewRGBColor(255, 0, 0), 1, tcell.ColorDefault)
+	green := DesaturateColor(tcell.NewRGBColor(0, 255, 0), 1, tcell.ColorDefault)
+	rr, rg, rb := red.RGB()
+	gr, gg, gb := green.RGB()
+	assert.Equal(t, rr, rg)
+	assert.Equal(t, rr, rb)
+	assert.Equal(t, gr, gg)
+	assert.Equal(t, gr, gb)
+	assert.NotEqual(t, rr, gr, "different sources should not collapse to the same gray")
+
+	// Amount clamped above 1 behaves like amount=1.
+	clamped := DesaturateColor(tcell.NewRGBColor(255, 0, 0), 2, tcell.ColorDefault)
+	assert.Equal(t, red, clamped)
+
+	// ColorDefault is resolved before computing luminance.
+	resolved := DesaturateColor(tcell.ColorDefault, 1, tcell.NewRGBColor(255, 255, 255))
+	r, g, b := resolved.RGB()
+	assert.Equal(t, int32(255), r)
+	assert.Equal(t, int32(255), g)
+	assert.Equal(t, int32(255), b)
+
+	// Unresolvable defaults are returned unchanged so the terminal keeps
+	// rendering them natively.
+	assert.Equal(t,
+		tcell.ColorDefault,
+		DesaturateColor(tcell.ColorDefault, 1, tcell.ColorDefault),
+	)
+}

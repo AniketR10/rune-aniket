@@ -103,3 +103,45 @@ func SampleGradient(factor float64, gradient []tcell.Color) tcell.Color {
 
 	return InterpolateColor(tDec, col1, col2, 0)
 }
+
+// DesaturateColor returns a color whose saturation has been reduced by
+// amount in [0, 1]. amount=0 returns color unchanged; amount=1 returns
+// the per-channel gray with the same luminance (the ITU-R BT.601 weighted
+// average of the RGB components). Intermediate values are a linear blend
+// between color and that gray.
+//
+// Unlike interpolating toward a single fixed gray, this preserves each
+// cell's relative brightness so the result reads as the same color with
+// its hue removed rather than every cell collapsing to one shade.
+//
+// If color is [tcell.ColorDefault] it is resolved with resolveDefault.
+// If after resolution color cannot be expressed as RGB, color is
+// returned unchanged so the terminal keeps rendering it natively.
+func DesaturateColor(
+	color tcell.Color, amount float64, resolveDefault tcell.Color,
+) tcell.Color {
+	if amount <= 0 {
+		return color
+	}
+	if amount > 1 {
+		amount = 1
+	}
+	resolved := color
+	if resolved == tcell.ColorDefault {
+		resolved = resolveDefault
+	}
+	if resolved.Hex() < 0 {
+		return color
+	}
+	r, g, b := resolved.RGB()
+	lum := 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
+	if amount >= 1 {
+		l := int32(math.Round(lum))
+		return tcell.NewRGBColor(l, l, l)
+	}
+	return tcell.NewRGBColor(
+		int32(math.Round(float64(r)+(lum-float64(r))*amount)),
+		int32(math.Round(float64(g)+(lum-float64(g))*amount)),
+		int32(math.Round(float64(b)+(lum-float64(b))*amount)),
+	)
+}

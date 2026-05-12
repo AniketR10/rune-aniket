@@ -1300,17 +1300,18 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	// so we run with the IDE lock held without re-locking here.
 	delete(h.pending, uri.String())
 
-	// Stop the loading shader as the very last thing this
-	// addWorkspace lifecycle does. We schedule one more tick so
-	// any Phase C state mutations (h.workspaces[slot] = wh,
-	// switchToWorkspace, session restore) have flushed to a Draw
-	// before the loading shader is replaced by the open shader.
-	// If no loading/open shader is configured, this is a no-op.
-	defer func() {
-		h.scheduleNextTick(func() {
-			h.shaderRunner.stopLoading()
-		})
-	}()
+	// Stop the loading shader at the very end of this Phase C, *in the
+	// same event-loop turn*. We previously deferred stopLoading through
+	// scheduleNextTick so the new workspace would Draw once before the
+	// open shader took over, but that drew the freshly-installed
+	// workspace in full color for a frame between the gray-fade loading
+	// shader and the burn open shader, breaking the chained transition.
+	// captureOpenShaderCells already snapshots the pre-switch screen
+	// before switchToWorkspace, so the burn has everything it needs to
+	// start immediately and there is no reason to give the new workspace
+	// a frame to render first. If no loading/open shader is configured,
+	// this is a no-op.
+	defer h.shaderRunner.stopLoading()
 
 	// closeWorkspace can flag the pending entry as canceled while
 	// Phase B is in progress; in that case the cancelCtx has already
@@ -1389,6 +1390,11 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 			h.initExtensions(built.runner, built.cfg)
 		})
 	}
+
+	// Capture the current root before switching slots so the open shader can
+	// burn away the previous screen. Capturing inside the shader would be too
+	// late: by its first Draw, the newly opened workspace is already focused.
+	h.shaderRunner.captureOpenShaderCells()
 
 	h.workspaces[pending.slot] = wh
 	h.workspaceCount++

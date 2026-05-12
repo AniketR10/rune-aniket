@@ -115,6 +115,13 @@ func (s *Component) Close() error {
 	return nil
 }
 
+// Total returns the number of frames this Component was constructed to
+// run (duration / (1s/fps)). Exposed for tests that need to assert
+// on the shader's configured lifetime.
+func (c *Component) Total() int {
+	return c.total
+}
+
 func (c *Component) interrupt(ctx context.Context) {
 	cadence := time.Duration(int(time.Second) / c.fps)
 	ticker := time.NewTicker(cadence)

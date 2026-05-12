@@ -25,6 +25,7 @@ package ide
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -48,7 +49,11 @@ func fakeLoadingShader() func(term.Attributes) shader.Shader {
 
 func newTestShaderRunner(loading, open loadingShaderConfig) *shaderRunner {
 	r := new(shaderRunner)
-	openCfg := openShaderConfig{shader: open.shader, fps: open.fps}
+	openCfg := openShaderConfig{
+		shader:   open.shader,
+		fps:      open.fps,
+		duration: open.duration,
+	}
 	r.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
 		nopShutdownShaderConfig(), loading, openCfg,
 		component.FrameCharSetDefault())
@@ -122,4 +127,50 @@ func TestShaderRunnerStopLoadingFallsBackToCancelWithoutOpen(t *testing.T) {
 	r.stopLoading()
 	assert.NotSame(t, loadingComp, r.shader,
 		"stopLoading without an open shader must cancel the active one")
+}
+
+// TestShaderRunnerStartLoadingUsesConfiguredDuration verifies that the
+// loading shader's containing shader.Component is sized using the
+// duration configured on loadingShaderConfig, so callers can decouple
+// the visual fade length from the host-component lifetime instead of
+// being bound to a hard-coded shaderRunner constant.
+func TestShaderRunnerStartLoadingUsesConfiguredDuration(t *testing.T) {
+	const (
+		fps    = 30
+		dur    = 4 * time.Second
+		expect = int(dur) / (int(time.Second) / fps) // shader.Component.total
+	)
+	loading := loadingShaderConfig{
+		shader:   fakeLoadingShader(),
+		fps:      fps,
+		duration: dur,
+	}
+	r := newTestShaderRunner(loading, loadingShaderConfig{})
+
+	r.startLoading()
+	assert.Equal(t, expect, r.shader.Total(),
+		"startLoading must use the configured duration")
+}
+
+// TestShaderRunnerStopLoadingUsesConfiguredOpenDuration verifies that
+// the open shader's containing shader.Component is sized using the
+// duration configured on openShaderConfig.
+func TestShaderRunnerStopLoadingUsesConfiguredOpenDuration(t *testing.T) {
+	const (
+		fps    = 30
+		dur    = 2500 * time.Millisecond
+		expect = int(dur) / (int(time.Second) / fps)
+	)
+	loading := loadingShaderConfig{shader: fakeLoadingShader(), fps: fps}
+	open := loadingShaderConfig{
+		shader:   fakeLoadingShader(),
+		fps:      fps,
+		duration: dur,
+	}
+	r := newTestShaderRunner(loading, open)
+
+	r.startLoading()
+	r.stopLoading()
+	assert.Equal(t, expect, r.shader.Total(),
+		"stopLoading must use the configured open-shader duration")
 }

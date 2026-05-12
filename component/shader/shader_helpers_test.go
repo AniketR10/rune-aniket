@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,21 +21,48 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package shader_test
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/component/shader/glslshader"
+	"github.com/unstablebuild/tcell/v3"
 )
 
-// openShaderFPS is the cadence at which the shader played when a
-// workspace finishes loading is animated.
-const openShaderFPS = 30
+func makeCharCells(cols, rows int) [][]term.Cell {
+	out := make([][]term.Cell, rows)
+	for y := range rows {
+		out[y] = make([]term.Cell, cols)
+		for x := range cols {
+			out[y][x] = term.Cell{
+				Ch:         'A',
+				Width:      1,
+				Attributes: term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack},
+			}
+		}
+	}
+	return out
+}
 
-// openShader returns the shader played when a workspace finishes
-// loading. A short diagonal shine sweep is enough to acknowledge
-// the transition without slowing the user down.
-func openShader(defaultAttr term.Attributes) shader.Shader {
-	return glslshader.Shine(glslshader.DefaultShineParams(), defaultAttr)
+func makeBlankCells(cols, rows int) [][]term.Cell {
+	out := make([][]term.Cell, rows)
+	for y := range rows {
+		out[y] = make([]term.Cell, cols)
+		for x := range cols {
+			out[y][x] = term.Cell{
+				Ch:         ' ',
+				Width:      1,
+				Attributes: term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack},
+			}
+		}
+	}
+	return out
+}
+
+func cloneCells(in [][]term.Cell) [][]term.Cell {
+	out := make([][]term.Cell, len(in))
+	for y, row := range in {
+		out[y] = make([]term.Cell, len(row))
+		copy(out[y], row)
+	}
+	return out
 }

@@ -242,6 +242,24 @@ config = {
     "shell": {
         "max_history": 2000,
     },
+    # Toggle workspace transition animations.
+    #
+    # Both default to True. Setting either to False suppresses the
+    # corresponding animation; everything else (init/shutdown
+    # shaders, the :shaderrun command, ...) is unaffected.
+    #
+    # The open animation is only ever played after a loading
+    # animation, so disabling "loading_workspace" effectively
+    # disables both.
+    "animations": {
+        # Plays while a workspace is being installed
+        # (addWorkspace). The default gray-fade desaturates the
+        # screen to signal the IDE is busy.
+        "loading_workspace": True,
+        # Plays when a workspace finishes installing. The default
+        # is a quick burn sweep that reveals the new content.
+        "open_workspace":    True,
+    },
     "gui": {
         # Add or remove pixels from the font's default column width.
         "column-width-offset": -1,

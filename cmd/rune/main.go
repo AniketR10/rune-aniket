@@ -476,8 +476,8 @@ func runTUI(
 			func(defaultAttr term.Attributes) shader.Shader {
 				return shutdownShader(defaultAttr)
 			}, 30, shutdownShaderDuration),
-		ide.WithLoadingShader(loadingShader, loadingShaderFPS),
-		ide.WithOpenShader(openShader, openShaderFPS),
+		ide.WithLoadingShader(loadingShader, loadingShaderFPS, loadingShaderDuration),
+		ide.WithOpenShader(openShader, openShaderFPS, openShaderDuration),
 		ide.WithLocker(mu),
 		ide.WithConfigFilename(workspaceConfigFilename),
 		ide.WithDefaultWallpaper(makeWallpaper()),
@@ -570,8 +570,8 @@ func runGUI(
 		ide.WithExtensionsRunner(runner),
 		ide.WithInitShader(initShader, initShaderFPS, initShaderDuration),
 		ide.WithShutdownShader(shutdownShader, 30, shutdownShaderDuration),
-		ide.WithLoadingShader(loadingShader, loadingShaderFPS),
-		ide.WithOpenShader(openShader, openShaderFPS),
+		ide.WithLoadingShader(loadingShader, loadingShaderFPS, loadingShaderDuration),
+		ide.WithOpenShader(openShader, openShaderFPS, openShaderDuration),
 		ide.WithLocker(mu),
 		ide.WithConfigFilename(workspaceConfigFilename),
 		ide.WithDefaultWallpaper(makeWallpaper()),
