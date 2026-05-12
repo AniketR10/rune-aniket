@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"errors"
 	"os"
 	"sync"
 	"testing"
@@ -35,6 +36,8 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/ox-api/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -445,6 +448,47 @@ func TestPackageManagerIntegration(t *testing.T) {
 	handlertest.TestHandlerSequence(t, h, 40, 15, cases)
 
 	require.NoError(t, m.Close())
+}
+
+// TestPkgManager_LibDir_NotAuthenticated verifies that LibDir does not
+// surface auth.ErrNotAuthenticated to the caller — it must be converted
+// to storageapi.ErrNotFound so that callers such as syntax.Tree.downloadFiles
+// silently skip the missing package rather than logging an error.
+func TestPkgManager_LibDir_NotAuthenticated(t *testing.T) {
+	t.Parallel()
+	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.ExpectReturnErr(auth.ErrNotAuthenticated)
+
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+	defer m.Close()
+
+	_, err := m.pkgmanager.LibDir(context.Background(), "go")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, storageapi.ErrNotFound),
+		"expected storageapi.ErrNotFound, got %v", err)
+}
+
+// TestPkgManager_HandlePkgInstall_NotAuthenticated verifies that the
+// interactive :pkginstall command suppresses ErrNotAuthenticated and
+// surfaces a "Run :login to ..." notification instead of bubbling up
+// a raw error.
+func TestPkgManager_HandlePkgInstall_NotAuthenticated(t *testing.T) {
+	t.Parallel()
+	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.ExpectReturnErr(auth.ErrNotAuthenticated)
+
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+	defer m.Close()
+
+	err := m.pkgmanager.HandleCommand(context.Background(), textapi.Command{
+		Name: cmdPkgInstall,
+		Args: []string{"go"},
+	})
+	require.NoError(t, err, "expected ErrNotAuthenticated to be suppressed into a notification")
 }
 
 func TestPackageManagerPreviewIntegration(t *testing.T) {

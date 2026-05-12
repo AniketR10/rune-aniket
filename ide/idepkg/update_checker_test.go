@@ -25,12 +25,14 @@ package idepkg
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -131,6 +133,27 @@ func TestCheckForUpdates(t *testing.T) {
 		require.Len(t, updates, 1)
 		assert.Equal(t, "go", updates[0].Package)
 	})
+
+	t.Run("returns ErrNotAuthenticated when release manager is unauthenticated", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go", Latest: "2"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "go", Version: "1"},
+		})
+		m, n, rm, _ := newTestManager(t, pkgs, versions)
+
+		n.SetWg(1)
+		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		require.NoError(t, err)
+		n.Wait()
+
+		rm.ExpectReturnErr(auth.ErrNotAuthenticated)
+
+		uc := NewUpdateChecker(m)
+		_, err = uc.CheckForUpdates(context.Background())
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, auth.ErrNotAuthenticated))
+	})
 }
 
 func TestStart(t *testing.T) {
@@ -166,6 +189,29 @@ func TestStart(t *testing.T) {
 
 		active = n.Active()
 		assert.Empty(t, active, "expected no notification due to throttle")
+	})
+
+	t.Run("silently skips when not authenticated", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go", Latest: "2"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "go", Version: "1"},
+		})
+		m, n, rm, _ := newTestManager(t, pkgs, versions)
+
+		n.SetWg(1)
+		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		require.NoError(t, err)
+		n.Wait()
+
+		rm.ExpectReturnErr(auth.ErrNotAuthenticated)
+
+		uc := NewUpdateChecker(m)
+		n.Reset()
+		uc.run(context.Background())
+
+		assert.Empty(t, n.Active(),
+			"update checker must not surface notifications when unauthenticated")
 	})
 
 	t.Run("sends notification when updates available", func(t *testing.T) {

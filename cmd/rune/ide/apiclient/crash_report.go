@@ -26,10 +26,13 @@ package apiclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/unstablebuild/ox-api/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"unstable.build/go-tui/cmd/rune/crashreport"
 )
 
@@ -59,6 +62,13 @@ func (a *Client) PostReport(ctx context.Context, payload crashreport.Payload) er
 	// Use the OAuth token source for authenticated requests.
 	token, err := a.tokenSource.Token()
 	if err != nil {
+		if errors.Is(err, auth.ErrNotAuthenticated) {
+			// Crash reports are kept on local disk; uploading requires the
+			// user to authenticate.
+			_, _ = a.notifications.Notify(browserapi.LevelWarn,
+				"Run the `login` command to upload pending crash reports.")
+			return auth.ErrNotAuthenticated
+		}
 		return fmt.Errorf("get auth token: %w", err)
 	}
 	if token.Valid() {

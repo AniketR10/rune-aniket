@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -154,6 +155,12 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 
 	version, err := m.getLatestVersion(ctx, pkgID)
 	if err != nil {
+		if errors.Is(err, auth.ErrNotAuthenticated) {
+			_, _ = m.n.NotifyOnce(browserapi.LevelWarn,
+				"Some language packages require authentication. "+
+					"Run the `login` command to enable them.")
+			return nil, storageapi.ErrNotFound
+		}
 		if errors.Is(err, storageapi.ErrNotFound) || errors.Is(err, document.ErrNotFound) {
 			return nil, storageapi.ErrNotFound
 		}
@@ -181,6 +188,16 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 }
 
 func (m *pkgManager) HandleCommand(ctx context.Context, cmd textapi.Command) error {
+	err := m.handleCommandInner(ctx, cmd)
+	if errors.Is(err, auth.ErrNotAuthenticated) {
+		_, nerr := m.n.Notify(browserapi.LevelWarn,
+			"Run the `login` command to manage packages.")
+		return nerr
+	}
+	return err
+}
+
+func (m *pkgManager) handleCommandInner(ctx context.Context, cmd textapi.Command) error {
 	switch cmd.Name {
 	case cmdPkgInstall:
 		return m.handlePkgInstall(ctx, cmd)

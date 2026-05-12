@@ -33,6 +33,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -98,6 +99,10 @@ func (uc *UpdateChecker) CheckForUpdates(ctx context.Context) ([]Update, error) 
 
 		u, err := uc.checkPackage(ctx, pkgID)
 		if err != nil {
+			if errors.Is(err, auth.ErrNotAuthenticated) {
+				// Skip the entire run silently; the user has not logged in.
+				return nil, err
+			}
 			uc.m.log(log.WarnLevel, "update check for %s: %v", pkgID, err)
 			continue
 		}
@@ -197,6 +202,10 @@ func (uc *UpdateChecker) run(ctx context.Context) {
 
 	updates, err := uc.CheckForUpdates(ctx)
 	if err != nil {
+		if errors.Is(err, auth.ErrNotAuthenticated) {
+			// Update check is opportunistic; skip silently when not authenticated.
+			return
+		}
 		uc.m.log(log.WarnLevel, "check for updates: %v", err)
 		return
 	}

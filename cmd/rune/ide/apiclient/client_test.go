@@ -24,11 +24,18 @@
 package apiclient
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/ox-api/auth"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
 
@@ -108,4 +115,82 @@ func TestNewPanicsOnZeroPeriodWithTelemetryEnabled(t *testing.T) {
 	config.TelemetryPeriod = 0
 	config.HTTPEndpointAddress = "http://localhost"
 	_, _ = New(nil, storagestub.NewInMemoryService(), config, t.TempDir())
+}
+
+// fakeOAuthServer responds with a minimal /config endpoint and a 400
+// invalid_grant on /token so the test cannot accidentally complete a flow.
+func fakeOAuthServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	return srv
+}
+
+type nopNotifier struct{}
+
+func (nopNotifier) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "", nil
+}
+func (nopNotifier) NotifyOnce(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "", nil
+}
+func (nopNotifier) UpdateNotificationProgress(string, string, int64, int64) error {
+	return nil
+}
+
+func TestClient_TokenSource_NoImplicitBrowserFlow(t *testing.T) {
+	srv := fakeOAuthServer(t)
+	defer srv.Close()
+
+	config := DefaultConfig()
+	config.HTTPEndpointAddress = srv.URL
+
+	client, err := New(nopNotifier{}, storagestub.NewInMemoryService(), config, t.TempDir())
+	require.NoError(t, err)
+	defer client.Close()
+
+	var browserCalls atomic.Int32
+	client.openBrowser = func(*url.URL) error {
+		browserCalls.Add(1)
+		return nil
+	}
+
+	_, err = client.OAuthTokenSource().Token()
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, auth.ErrNotAuthenticated),
+		"expected ErrNotAuthenticated, got %v", err)
+	assert.Equal(t, int32(0), browserCalls.Load(),
+		"browser must not be opened when :login was not invoked")
+}
+
+func TestClient_Login_AttemptsBrowserFlow(t *testing.T) {
+	srv := fakeOAuthServer(t)
+	defer srv.Close()
+
+	config := DefaultConfig()
+	config.HTTPEndpointAddress = srv.URL
+
+	client, err := New(nopNotifier{}, storagestub.NewInMemoryService(), config, t.TempDir())
+	require.NoError(t, err)
+	defer client.Close()
+
+	browserCalls := make(chan struct{}, 1)
+	client.openBrowser = func(*url.URL) error {
+		select {
+		case browserCalls <- struct{}{}:
+		default:
+		}
+		// Return an error to short-circuit the underlying oauth2 flow so
+		// the test does not hang waiting for the redirect.
+		return errors.New("test: browser not actually opened")
+	}
+
+	require.NoError(t, client.Login(t.Context()))
+
+	select {
+	case <-browserCalls:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected browser to be opened by :login flow")
+	}
 }

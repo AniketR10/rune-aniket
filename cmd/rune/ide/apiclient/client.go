@@ -36,6 +36,8 @@ import (
 	blueauth "github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/logging/trace"
+	"github.com/unstablebuild/ox-api/api"
+	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -44,8 +46,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/credentials/oauth"
-	"github.com/unstablebuild/ox-api/api"
-	"github.com/unstablebuild/ox-api/auth"
 	"unstable.build/go-tui/debug"
 )
 
@@ -72,6 +72,8 @@ type Client struct {
 	isLogin              atomic.Bool
 	telemetry            *telemetry
 	telemetryTokenSource *auth.CachedTokenSource
+	// openBrowser opens a URL in the user's browser. Indirected for testing.
+	openBrowser func(*url.URL) error
 }
 
 // New returns allocates storage for a new Client and initializes it.
@@ -88,6 +90,9 @@ func New(
 		dataDir:         dataDir,
 		httpEndpointURL: httpEndpointURL,
 		notifications:   n,
+		openBrowser: func(u *url.URL) error {
+			return browser.Browse(u)
+		},
 	}
 	authStorage := storageapi.WithPartition(storage, "auth")
 	ret.storage = authStorage
@@ -285,14 +290,14 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		return nil, auth.ErrUnavailable
 	}
 
-	var msg string
 	if !a.isLogin.Load() {
-		msg = "Need to login first before using the Rune API. " +
-			"Please follow instructions in web browser"
-	} else {
-		msg = "Please follow instructions in web browser"
+		// Do not implicitly open a browser for background or incidental
+		// callers. The user must explicitly invoke the login command.
+		return nil, auth.ErrNotAuthenticated
 	}
-	_, err = a.notifications.Notify(browserapi.LevelInfo, msg)
+
+	_, err = a.notifications.Notify(browserapi.LevelInfo,
+		"Please follow instructions in web browser")
 	if err != nil {
 		return nil, fmt.Errorf("notify: %w", err)
 	}
@@ -304,7 +309,7 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		if err != nil {
 			return err
 		}
-		if err := browser.Browse(u); err != nil {
+		if err := a.openBrowser(u); err != nil {
 			return fmt.Errorf("%v. "+
 				"Make sure that $BROWSER environment variable is set correctly",
 				err)
