@@ -718,6 +718,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 		}
 	}
 	h.bar.SetFocus(barFocusIdx)
+	h.bar.SetHighlight(barFocusIdx)
 	h.empty.Resize(width, height)
 	// bar needs to be drawn last so frame union characters
 	// are drawn last

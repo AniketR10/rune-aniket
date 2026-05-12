@@ -607,7 +607,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, {func() {
 				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, handler.NopPromptHandler())
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    
@@ -644,7 +644,7 @@ func TestComponentPrompt(t *testing.T) {
 						func() error { return nil }))
 				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, handler.NopPromptHandler())
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    
@@ -659,7 +659,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, {func() {
 				c.Resize(10, 6)
 			}, `
-┌━━━━━━━─┐              
+┌────────┐              
 │x music │              
 ├────────┤              
 │  Rosa  │              
@@ -674,7 +674,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, {func() {
 				c.Resize(24, 8)
 			}, `
-┌━━━━━━━───────────────┐
+┌──────────────────────┐
 │x music               │
 ├──────────────────────┤
 │                      │
@@ -689,7 +689,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, {func() {
 				c.Resize(20, 12)
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    
@@ -704,7 +704,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    
@@ -719,7 +719,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, {func() {
 				c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    
@@ -790,7 +790,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
 					handler.NopPromptHandler())
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    
@@ -822,7 +822,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
 				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
 			}, `
-┌━━━━━━━───────────┐    
+┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
 ┌──────────────────┐    

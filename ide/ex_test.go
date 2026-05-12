@@ -784,7 +784,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	cases = []handlertest.SequenceTestCase{
 		{"",
-			`┌────────━━━━━━────┐
+			`┌──────────────────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
 │AAAAAAAA││GGGGGGGG│
@@ -795,7 +795,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │ZZZZZZZZ││GGGGGGGG│
 └────────┘└────────┘`},
 		{":<111111111",
-			`┌────────━━━━━━────┐
+			`┌──────────────────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
 │AAAAAAAA││GGGGGGGG│
@@ -817,7 +817,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	cases = []handlertest.SequenceTestCase{
 		{"",
-			`┌────────━━━━━━────┐
+			`┌──────────────────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
 │$$$$$$$$││GGGGGGGG│
@@ -2749,7 +2749,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 └──└────────────────────────────────┘──┘`,
 		},
 		{":windowclose>:windowclose>:edit a>:! sh -c 'sleep 20 && echo %'>",
-			`┌━━━───────────────────────────────────┐
+			`┌──────────────────────────────────────┐
 │o a                                   │
 ├──┌────────────────────────────────┐──┤
 │  │ ▀                            0s│  │
@@ -3457,7 +3457,7 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":terminalnew>:! sh>:windowmove left>:windowmove right>",
-			`┌━━━━┌─────────────┐
+			`┌────┌─────────────┐
 │o aa│ cannot      │
 ├───┌│ move        │
 │   ││ ▐indow in   │
@@ -3511,7 +3511,7 @@ func TestResizeWindows(t *testing.T) {
 └───────┘└─────────┘`,
 		},
 		{":windowsplit down>:windowresize min height>",
-			`┌━━━━━─────────────┐
+			`┌──────────────────┐
 │o aaa             │
 ├───────┐┌─────────┤
 │       ││AAAAAAAAA│
@@ -3523,7 +3523,7 @@ func TestResizeWindows(t *testing.T) {
 └───────┘└─────────┘`,
 		},
 		{":windowresize max height>",
-			`┌━━━━━─────────────┐
+			`┌──────────────────┐
 │o aaa             │
 ├───────┐┌─────────┤
 │       ││AAAAAAAAA│
@@ -3535,7 +3535,7 @@ func TestResizeWindows(t *testing.T) {
 └───────┘└─────────┘`,
 		},
 		{":windowresize max width>",
-			`┌━━━━━─────────────┐
+			`┌──────────────────┐
 │o aaa             │
 ├─┐┌───────────────┤
 │ ││AAAAAAAAAAAAAAA│
@@ -3547,7 +3547,7 @@ func TestResizeWindows(t *testing.T) {
 └─┘└───────────────┘`,
 		},
 		{":windowresize min width>",
-			`┌━━━━━─────────────┐
+			`┌──────────────────┐
 │o aaa             │
 ├───────────────┐┌─┤
 │               ││A│
@@ -3559,7 +3559,7 @@ func TestResizeWindows(t *testing.T) {
 └───────────────┘└─┘`,
 		},
 		{":windowresize reset>",
-			`┌━━━━━─────────────┐
+			`┌──────────────────┐
 │o aaa             │
 ├────────┐┌────────┤
 │        ││AAAAAAAA│
@@ -3571,7 +3571,7 @@ func TestResizeWindows(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":windowresize decrease height>:windowresize decrease width>",
-			`┌━━━━━─────────────┐
+			`┌──────────────────┐
 │o aaa             │
 ├─────────┐┌───────┤
 │         ││AAAAAAA│
@@ -4445,7 +4445,7 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 			{":windowsplit right>:tabnext>:tabnext>",
-				`┌────────────────━━━━━━━─────┐
+				`┌─────────━━━━━──────────────┐
 │x asset  o abc  X build     │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4461,7 +4461,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 			{":taskclose validateAssets>",
-				`┌───────━━━━━━━──────────────┐
+				`┌━━━━━───────────────────────┐
 │o abc  X build              │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4525,7 +4525,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 └─────────────┘└─────────────┘`},
 			{":tasknewtab build -- go build ./...>",
-				`┌────────────────━━━━━━━─────┐
+				`┌────────────────────────────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┤
 ┌────────────────────────────┐
@@ -4557,7 +4557,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 └─────────────┘└─────────────┘`},
 			{":tabclose>",
-				`┌───────━━━━━━━──────────────┐
+				`┌━━━━━───────────────────────┐
 │o abc  8 tests              │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -5018,7 +5018,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":notificationCloseAll>:windowsplit right>:tabprevious>",
-			`┌────────────━━━━━━━━━━──────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o caliu.go  o boira.go      │
 ├─────────────┐┌─────────────┐
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
@@ -5034,7 +5034,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 		{":tabmove right>",
-			`┌━━━━━━━━━━──────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o boira.go  o caliu.go      │
 ├─────────────┐┌─────────────┐
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│

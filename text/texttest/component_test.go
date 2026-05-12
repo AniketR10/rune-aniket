@@ -350,7 +350,7 @@ func TestComponentOpen(t *testing.T) {
 
 		tests := []comptest.TestCase{
 			{nil, `
-┌━━━━━━━─────────────────────┐
+┌────────────────────────────┐
 │o wasup                     │
 ├────────────────────────────┤
 │                            │
@@ -379,7 +379,7 @@ func TestComponentOpen(t *testing.T) {
 				_, err = c.Open(uri)
 				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
 			}, `
-┌━━━━━━━─────────────────────┐
+┌────────────────────────────┐
 │o wasup                     │
 ├────────────────────────────┤
 │                            │
@@ -441,7 +441,7 @@ func TestComponentOpen(t *testing.T) {
 				_, err = c.Open(uri2)
 				require.Equal(t, workspaceapi.ErrFileAlreadyOpen, err)
 			}, `
-┌─────────━━━━━━─────────────┐
+┌────────────────────────────┐
 │o wasup  o busy             │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -467,7 +467,7 @@ func TestComponentOpen(t *testing.T) {
 				_, handled := c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 				assert.True(t, handled)
 			}, `
-┌─────────────────━━━━━━─────┐
+┌────────────────────────────┐
 │o wasup  o busy  o more     │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -678,7 +678,7 @@ func TestComponentOpen(t *testing.T) {
 
 		tests := []comptest.TestCase{
 			{nil, `
-┌━━━━━━━─────────────────────┐
+┌────────────────────────────┐
 │o wasup                     │
 ├────────────────────────────┤
 │                            │
@@ -705,7 +705,7 @@ func TestComponentOpen(t *testing.T) {
 
 				require.NoError(t, c.SetTabName(uri, "whatevs", term.Attributes{}))
 			}, `
-┌━━━━━━━━━───────────────────┐
+┌────────────────────────────┐
 │o whatevs                   │
 ├────────────────────────────┤
 │                            │

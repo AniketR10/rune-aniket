@@ -674,6 +674,10 @@ func (c *Component) Draw(w term.Writer) {
 				c.tabs.SetFocus(id)
 			}
 		}
+		// SetFocus above also enables the highlight as a side effect;
+		// reset it so the highlight is only drawn for the tab bound to
+		// the focused window (mirroring the icon-attr logic below).
+		c.tabs.ResetHighlight()
 
 		if c.focusWindow != (thandler.Window{}) {
 			win, ok := c.findWindow(c.focusWindow.ID())
@@ -682,6 +686,7 @@ func (c *Component) Draw(w term.Writer) {
 				if ok {
 					// reset tab override attributes
 					c.tabs.SetIconAttr(c.findTabID(t), c.focusTabIconAttr())
+					c.tabs.SetFocus(c.findTabID(t))
 				}
 			}
 		}

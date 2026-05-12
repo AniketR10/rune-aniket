@@ -341,6 +341,64 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
 }
 
+// TestWindowFocusTabHighlightCueFollowsFocus verifies that when multiple
+// tabs are bound to different tiles, only the focused window's tab
+// renders the focus-frame highlight; switching window focus moves the
+// highlight to the newly focused tab.
+func TestWindowFocusTabHighlightCueFollowsFocus(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+	cfg.FocusTabHighlightChar = '━'
+	cfg.TabBarHeight = 2
+
+	b := NewComponent(cfg)
+
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 'A', "a", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tabA))
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 'B', "b", newTestHandler(), nil)
+	_, ok := b.Split(browserapi.OrientationRight, b.Focus(), tabB)
+	require.True(t, ok)
+
+	width, height := 20, 5
+	b.Resize(width, height)
+	writer := term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells := writer.Cells()
+
+	// After Split, the new right tile is focused, so tab B carries
+	// the highlight (cells 5..7) and tab A does not (cells 0..2).
+	for x := 0; x < 3; x++ {
+		assert.NotEqual(t, '━', cells[x].Ch,
+			"tab A must not be highlighted at x=%d", x)
+	}
+	for x := 5; x < 8; x++ {
+		assert.Equal(t, '━', cells[x].Ch,
+			"tab B must be highlighted at x=%d", x)
+	}
+
+	require.True(t, b.FocusLeft())
+	writer = term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells = writer.Cells()
+
+	// After focusing left, the highlight moves to tab A.
+	for x := 0; x < 3; x++ {
+		assert.Equal(t, '━', cells[x].Ch,
+			"tab A must be highlighted after focus left at x=%d", x)
+	}
+	for x := 5; x < 8; x++ {
+		assert.NotEqual(t, '━', cells[x].Ch,
+			"tab B must not be highlighted after focus left at x=%d", x)
+	}
+}
+
 // TestNonFocusTabAttrRespectedWithFrameFg is a regression test for
 // non_focus_tab_attr being overridden by the window manager's frame_attr
 // foreground. The tabs Scroll background used to share frame_attr (gray

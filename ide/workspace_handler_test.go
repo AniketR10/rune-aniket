@@ -384,7 +384,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 	// subscription and rendered in the tree. The buffer pane on
 	// the right still shows the gamma.go editor opened in step 3.
 	reopenedFrame := strings.Join([]string{
-		"┌━━━━━━━━━━──────────────────┐",
+		"┌────────────────────────────┐",
 		"│o gamma.go                  │",
 		"┌────────────┐┌──────────────┤",
 		"│ ▐ alpha.go ││hello         │",
@@ -2026,7 +2026,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 			{":quit>",
-				`┌━━━━━━━───────────┐
+				`┌──────────────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │                  │
@@ -2073,7 +2073,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 			{":quit>",
-				`┌━━━━━━━───────────┐
+				`┌──────────────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │                  │
@@ -2615,7 +2615,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		// the empty top-left tile (which has no editor and therefore
 		// no cursor), so the visible cursor that was present in
 		// wantLayoutBeforeReload disappears from the rendered frame.
-		wantLayoutAfterReload := `┌──────────────━━━━━━━━━━━━────────────────────────────────────────────────────┐
+		wantLayoutAfterReload := `┌──────────────────────────────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
 ├┌────────────────────────┐┌────────────────────────┐┌─────────────────────────┤
 ││                        ││                        ││                         │
@@ -2639,7 +2639,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 ││                        ││                        ││           ││            │
 ││                        ││                  NORMAL││           ││      NORMAL│
 └└────────────────────────┘└────────────────────────┘└───────────┘└────────────┘`
-		wantTaskFocus := `┌──────────────━━━━━━━━━━━━────────────────────────────────────────────────────┐
+		wantTaskFocus := `┌──────────────────────────────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
 ├────────────────────────┐┌─────────────────────────┐┌─────────────────────────┤
 │                        ││                         ││                         │

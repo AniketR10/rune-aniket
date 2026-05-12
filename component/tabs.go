@@ -24,6 +24,8 @@
 package component
 
 import (
+	"fmt"
+
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
@@ -80,6 +82,7 @@ type Tabs struct {
 	tabs          []*tab
 	width, height int
 	focusIdx      int
+	highlightIdx  int
 	layout        tabLayout
 
 	border           bool
@@ -132,6 +135,7 @@ func (t *Tabs) Init() {
 	t.focusAttr = defaultFocusAttr
 	t.nonFocusAttr = defaultNonFocusAttr
 	t.focusFrameChar = defaultFocusFrameChar
+	t.highlightIdx = -1
 	t.frameBorders = component.FrameCharSetDefault()
 	t.fileListBuf = new(cell.Buffer)
 	t.fileListBuf.InitPerformance(1, 10, ' ')
@@ -230,11 +234,13 @@ func (t *Tabs) Draw(w term.Writer) {
 }
 
 // drawFocusHighlight overlays the focus-frame rune on y=0 across the
-// columns occupied by the focused tab's cell. No-op when there are no
-// tabs, when the bar has no second row to host labels (h<2) or when
-// nothing is drawable.
+// columns occupied by the highlighted tab's cell. No-op when the
+// highlight is disabled (highlightIdx < 0), when there are no tabs,
+// when the bar has no second row to host labels (h<2) or when nothing
+// is drawable.
 func (t *Tabs) drawFocusHighlight(w term.Writer) {
-	if t.height < 2 || t.width <= 0 || len(t.layout.cells) == 0 {
+	if t.highlightIdx < 0 || t.height < 2 ||
+		t.width <= 0 || len(t.layout.cells) == 0 {
 		return
 	}
 	xLeft := 0
@@ -246,7 +252,7 @@ func (t *Tabs) drawFocusHighlight(w term.Writer) {
 	innerX := 0
 	sepLen := len(t.separator)
 	for i, cell := range t.layout.cells {
-		if cell.idx == t.focusIdx {
+		if cell.idx == t.highlightIdx {
 			for dx := 0; dx < cell.width; dx++ {
 				x := xLeft + innerX + dx
 				if x < xLeft || x >= xRight {
@@ -258,7 +264,6 @@ func (t *Tabs) drawFocusHighlight(w term.Writer) {
 					Attributes: t.focusFrameAttr,
 				})
 			}
-			return
 		}
 		innerX += cell.width
 		if i < len(t.layout.cells)-1 {
@@ -273,6 +278,7 @@ func (t *Tabs) ResetFocus() {
 		tab.focus = false
 	}
 	t.focusIdx = 0
+	t.highlightIdx = -1
 	t.dirty = true
 }
 
@@ -281,6 +287,24 @@ func (t *Tabs) ResetFocus() {
 func (t *Tabs) SetFocus(idx int) {
 	t.tabs[idx].focus = true
 	t.focusIdx = idx
+	t.highlightIdx = idx
+	t.dirty = true
+}
+
+// ResetHighlight disables the focus-frame highlight overlay. After this
+// call no tab is highlighted until SetHighlight is invoked.
+func (t *Tabs) ResetHighlight() {
+	t.highlightIdx = -1
+	t.dirty = true
+}
+
+// SetHighlight enables the focus-frame highlight overlay on the tab at
+// idx. If the tab at idx does not exist, this method will panic.
+func (t *Tabs) SetHighlight(idx int) {
+	if idx < 0 || idx >= len(t.tabs) {
+		panic(fmt.Sprintf("Tabs.SetHighlight: idx %d out of range", idx))
+	}
+	t.highlightIdx = idx
 	t.dirty = true
 }
 
@@ -387,6 +411,7 @@ func (t *Tabs) Add(icon rune, name string) int {
 		t.tabs = make([]*tab, 1)
 		tt.focus = true
 		t.focusIdx = 0
+		t.highlightIdx = 0
 		t.tabs[0] = tt
 		return 0
 	}
@@ -398,8 +423,10 @@ func (t *Tabs) Add(icon rune, name string) int {
 // Remove removes the tab at idx.
 func (t *Tabs) Remove(idx int) bool {
 	focused := t.currentFocusTab()
+	highlighted := t.currentHighlightTab()
 	t.doRemoveTab(idx)
 	t.restoreFocusIdx(focused)
+	t.restoreHighlightIdx(highlighted)
 	t.dirty = true
 	return true
 }
@@ -410,10 +437,12 @@ func (t *Tabs) MoveRight(idx int) bool {
 		return false
 	}
 	focused := t.currentFocusTab()
+	highlighted := t.currentHighlightTab()
 	tt := t.doRemoveTab(idx)
 	idx++
 	t.doInsertTab(idx, tt)
 	t.restoreFocusIdx(focused)
+	t.restoreHighlightIdx(highlighted)
 	t.dirty = true
 	return true
 }
@@ -424,10 +453,12 @@ func (t *Tabs) MoveLeft(idx int) bool {
 		return false
 	}
 	focused := t.currentFocusTab()
+	highlighted := t.currentHighlightTab()
 	tt := t.doRemoveTab(idx)
 	idx--
 	t.doInsertTab(idx, tt)
 	t.restoreFocusIdx(focused)
+	t.restoreHighlightIdx(highlighted)
 	t.dirty = true
 	return true
 }
@@ -438,9 +469,11 @@ func (t *Tabs) MoveTo(curridx, idx int) bool {
 		return false
 	}
 	focused := t.currentFocusTab()
+	highlighted := t.currentHighlightTab()
 	tt := t.doRemoveTab(curridx)
 	t.doInsertTab(idx, tt)
 	t.restoreFocusIdx(focused)
+	t.restoreHighlightIdx(highlighted)
 	t.dirty = true
 	return true
 }
@@ -759,6 +792,13 @@ func (t *Tabs) currentFocusTab() *tab {
 	return nil
 }
 
+func (t *Tabs) currentHighlightTab() *tab {
+	if t.highlightIdx >= 0 && t.highlightIdx < len(t.tabs) {
+		return t.tabs[t.highlightIdx]
+	}
+	return nil
+}
+
 func (t *Tabs) restoreFocusIdx(focused *tab) {
 	if focused != nil {
 		for i, tab := range t.tabs {
@@ -781,6 +821,20 @@ func (t *Tabs) restoreFocusIdx(focused *tab) {
 			t.focusIdx = len(t.tabs) - 1
 		}
 	}
+}
+
+func (t *Tabs) restoreHighlightIdx(highlighted *tab) {
+	if highlighted == nil {
+		t.highlightIdx = -1
+		return
+	}
+	for i, tab := range t.tabs {
+		if tab == highlighted {
+			t.highlightIdx = i
+			return
+		}
+	}
+	t.highlightIdx = -1
 }
 
 func (t *Tabs) innerWidth() int {
