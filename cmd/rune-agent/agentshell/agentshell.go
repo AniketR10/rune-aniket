@@ -36,7 +36,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
-	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -49,6 +48,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
@@ -126,7 +126,7 @@ func New(
 	store dialoguemanager.Store,
 	registry *agent.Registry,
 	agentsConfig *agent.Cfg,
-	cfg config.Config,
+	cfg configedit.Config,
 	skillRegistry *skills.SkillRegistry,
 	cwd workspaceapi.URI,
 	fs workspaceapi.FileSystem,
@@ -185,7 +185,7 @@ type shell struct {
 	store               dialoguemanager.Store
 	registry            *agent.Registry
 	agentsConfig        *agent.Cfg
-	cfg                 config.Config
+	cfg                 configedit.Config
 	mcpInfo             MCPInfo
 	wm                  browserapi.WindowManager
 	svc                 llm.Service
@@ -1235,10 +1235,11 @@ func (s *shell) showConfig() iterator.Iterator[component.Responsive] {
 	b.WriteString("## Configuration\n\n")
 
 	// Show per-provider API keys (masked).
+	ctx := context.Background()
 	for _, provider := range []string{"openai", "anthropic", "gemini"} {
 		val := ""
-		if pcfg, err := s.cfg.GetConfig(provider); err == nil {
-			if key, err := pcfg.GetString("api_key"); err == nil {
+		if pcfg, err := s.cfg.GetConfig(provider).Resolve(ctx); err == nil {
+			if key, err := pcfg.GetString("api_key").Resolve(ctx); err == nil {
 				val = key
 			}
 		}
@@ -1275,7 +1276,7 @@ func (s *shell) handleMaxTokens(args []string) (iterator.Iterator[component.Resp
 	if err != nil || n <= 0 {
 		return nil, fmt.Errorf("invalid max_tokens value %q: must be a positive integer", args[0])
 	}
-	if err := SetMaxTokens(s.fs, s.cwd, n); err != nil {
+	if err := setMaxTokens(context.Background(), s.cfg, n); err != nil {
 		return nil, fmt.Errorf("set max_tokens: %w", err)
 	}
 	if s.setMaxTokens != nil {
@@ -1418,7 +1419,10 @@ func (s *shell) listSkillDirs() iterator.Iterator[component.Responsive] {
 }
 
 func (s *shell) addSkillDir(dir string) (iterator.Iterator[component.Responsive], error) {
-	if err := AddSkillDir(s.fs, s.cwd, dir); err != nil {
+	if err := addSkillDir(context.Background(), s.cfg, dir); err != nil {
+		if errors.Is(err, configedit.ErrAlreadyPresent) {
+			return nil, fmt.Errorf("directory %q is already in the skills config", dir)
+		}
 		return nil, fmt.Errorf("update config: %w", err)
 	}
 	added, err := s.skillRegistry.AddDir(dir)
@@ -1437,7 +1441,10 @@ func (s *shell) addSkillDir(dir string) (iterator.Iterator[component.Responsive]
 }
 
 func (s *shell) removeSkillDir(dir string) (iterator.Iterator[component.Responsive], error) {
-	if err := RemoveSkillDir(s.fs, s.cwd, dir); err != nil {
+	if err := removeSkillDir(context.Background(), s.cfg, dir); err != nil {
+		if errors.Is(err, configedit.ErrNotPresent) {
+			return nil, fmt.Errorf("directory %q is not in the skills config", dir)
+		}
 		return nil, fmt.Errorf("update config: %w", err)
 	}
 	s.skillRegistry.RemoveDir(dir) //nolint:errcheck
@@ -1974,14 +1981,15 @@ func markdownOutput(content string) iterator.Iterator[component.Responsive] {
 	return iterator.FromSlice([]component.Responsive{md})
 }
 
-func configValue(cfg config.Config, key string) string {
-	if v, err := cfg.GetString(key); err == nil {
+func configValue(cfg configedit.Getter, key string) string {
+	ctx := context.Background()
+	if v, err := cfg.GetString(key).Resolve(ctx); err == nil {
 		return v
 	}
-	if v, err := cfg.GetFloat(key); err == nil {
+	if v, err := cfg.GetFloat(key).Resolve(ctx); err == nil {
 		return fmt.Sprintf("%g", v)
 	}
-	if v, err := cfg.GetInt(key); err == nil {
+	if v, err := cfg.GetInt(key).Resolve(ctx); err == nil {
 		return fmt.Sprintf("%d", v)
 	}
 	return ""

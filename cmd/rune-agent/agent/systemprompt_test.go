@@ -70,17 +70,23 @@ func TestProviderToolAddendum(t *testing.T) {
 		a := ProviderToolAddendum("anthropic")
 		assert.Contains(t, a, "CRITICAL: TOOL SELECTION")
 		assert.Contains(t, a, "find_definition")
-		assert.Contains(t, a, "format_file")
-		assert.Contains(t, a, "NOT grep")
+		assert.Contains(t, a, "find_references")
+		assert.Contains(t, a, "search_symbols")
+		assert.Contains(t, a, "outline_file")
+		assert.Contains(t, a, "search_content")
 		assert.Contains(t, a, "bash")
+		assert.NotContains(t, a, "grep_files")
 	})
 
 	t.Run("openai addendum", func(t *testing.T) {
 		a := ProviderToolAddendum("openai")
 		assert.Contains(t, a, "CRITICAL: TOOL SELECTION")
 		assert.Contains(t, a, "find_definition")
+		assert.Contains(t, a, "search_symbols")
+		assert.Contains(t, a, "outline_file")
 		assert.Contains(t, a, "exec_command")
-		assert.Contains(t, a, "NOT grep_files")
+		assert.Contains(t, a, "grep_files")
+		assert.NotContains(t, a, "search_content")
 	})
 
 	t.Run("llamacpp addendum", func(t *testing.T) {
@@ -88,8 +94,7 @@ func TestProviderToolAddendum(t *testing.T) {
 		assert.Contains(t, a, "CRITICAL: TOOL SELECTION")
 		assert.Contains(t, a, "find_definition")
 		assert.Contains(t, a, "exec_command")
-		assert.Contains(t, a, "When tools are available")
-		assert.Contains(t, a, "tool instead of merely describing")
+		assert.Contains(t, a, "grep_files")
 	})
 
 	t.Run("unknown provider returns empty", func(t *testing.T) {

@@ -38,6 +38,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
 	"unstable.build/go-tui/rpc/rpctest"
@@ -145,7 +146,7 @@ func TestAnthropicE2E_ToolUse(t *testing.T) {
 	c, _ := testClient(t)
 	ctx := context.Background()
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{}, configedit.NopConfig())
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.Tools("")
 	require.NotEmpty(t, tools)
@@ -186,7 +187,7 @@ func TestAnthropicE2E_MultiTurn(t *testing.T) {
 	c, _ := testClient(t)
 	ctx := context.Background()
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{}, configedit.NopConfig())
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.Tools("")
 
@@ -244,7 +245,7 @@ func TestAnthropicE2E_PromptCaching(t *testing.T) {
 	c, _ := testClient(t)
 	ctx := context.Background()
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{}, configedit.NopConfig())
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.Tools("")
 

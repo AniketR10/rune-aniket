@@ -41,6 +41,31 @@ import (
 
 // nopFileSystem and osFileSystem are defined in agent_test.go (same package).
 
+// noopPrompter is a Prompter that never asks the user anything and
+// returns an error if anything tries to. NewGoroutineSpawner requires
+// a non-nil prompter; tests that do not exercise prompting use this.
+type noopPrompter struct{}
+
+func (noopPrompter) Prompt(context.Context, PromptRequest) (PromptResponse, error) {
+	return PromptResponse{}, fmt.Errorf("noopPrompter: prompt not supported in tests")
+}
+
+func TestNewGoroutineSpawner_panics_on_nil_prompter(t *testing.T) {
+	assert.PanicsWithValue(t,
+		"agent.NewGoroutineSpawner: prompter must not be nil",
+		func() {
+			NewGoroutineSpawner(
+				newMockStore(),
+				func(string) (llm.Service, string, error) { return nil, "", nil },
+				NewConfig(nil),
+				skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+				NoMemory(), "", "s", "a", workspaceapi.URI{},
+				nil,
+			)
+		},
+	)
+}
+
 func TestGoroutineSpawner_Run(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -143,7 +168,7 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 				newMockStore(), factory, cfg,
 				skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 				NoMemory(), "",
-				"session-1", tt.agentID, workspaceapi.URI{},
+				"session-1", tt.agentID, workspaceapi.URI{}, noopPrompter{},
 			)
 
 			handle, err := spawner.Run(
@@ -187,6 +212,7 @@ func TestGoroutineSpawner_Run_uses_request_model(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"session-1", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 
 	// Run without Model: should use the agent definition's model.
@@ -238,6 +264,7 @@ func TestGoroutineSpawner_RunWithCleanup(t *testing.T) {
 		NoMemory(), "",
 		"psession",
 		"agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
 		return "sub-agent-agent-fixed-id"
@@ -282,6 +309,7 @@ func TestGoroutineSpawner_RunWithAllowedTools(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"session", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.SetRegistry(NewRegistry(readTool, bashTool))
 
@@ -326,6 +354,7 @@ func TestGoroutineSpawner_Run_streams_events(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"session", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.SetRegistry(NewRegistry(readTool))
 
@@ -407,6 +436,7 @@ func TestGoroutineSpawner_Run_no_tool_deadline(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"session", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.SetRegistry(NewRegistry(blockTool))
 
@@ -462,6 +492,7 @@ func TestGoroutineSpawner_Run_caller_cancel_propagates(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"session", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.SetRegistry(NewRegistry(blockTool))
 
@@ -517,6 +548,7 @@ func TestGoroutineSpawner_RunWithLabel(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"parent-session", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
 		idCounter++
@@ -583,6 +615,7 @@ You are a planner.`
 			newMockStore(),
 			func(string) (llm.Service, string, error) { return svc, "test", nil },
 			baseCfg, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
+			noopPrompter{},
 		)
 	}
 
@@ -643,6 +676,7 @@ You are a planner.`
 			newMockStore(),
 			func(string) (llm.Service, string, error) { return svc, "test", nil },
 			restrictedCfg, reg, NoMemory(), "", "s1", "parent", workspaceapi.URI{},
+			noopPrompter{},
 		)
 		handle, err := spawner.Run(context.Background(), RunRequest{
 			AgentID: "planner",
@@ -664,6 +698,7 @@ You are a planner.`
 			newMockStore(),
 			func(string) (llm.Service, string, error) { return svc, "test", nil },
 			cfgWithPlanner, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
+			noopPrompter{},
 		)
 		handle, err := spawner.Run(context.Background(), RunRequest{
 			AgentID: "planner",
@@ -694,6 +729,7 @@ func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
 		"session", "agent", workspaceapi.URI{},
+		noopPrompter{},
 	)
 	spawner.GenerateDialogueID = func(_ context.Context, _ string) string {
 		return "sub-agent-agent-seed"

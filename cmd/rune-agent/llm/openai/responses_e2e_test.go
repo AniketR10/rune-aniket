@@ -37,6 +37,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	"unstable.build/go-tui/rpc/rpctest"
@@ -69,7 +70,7 @@ func TestResponsesE2E(t *testing.T) {
 	require.True(t, openai.IsResponsesOnlyModel(model), "test model must be responses-only")
 
 	// Collect real tool definitions from agent/agentools.
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{}, configedit.NopConfig())
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.AllTools()
 	require.NotEmpty(t, tools, "expected at least one tool definition")
@@ -185,7 +186,7 @@ func TestResponsesE2E_MultiTurn(t *testing.T) {
 
 	model := openai.GPT5Dot3Codex
 
-	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{})
+	agentTools, _ := agentools.DefaultTools(nil, nil, workspaceapi.URI{}, disconnectedTestLSP(t), agentools.Config{}, configedit.NopConfig())
 	registry := agent.NewRegistry(agentTools...)
 	tools := registry.AllTools()
 

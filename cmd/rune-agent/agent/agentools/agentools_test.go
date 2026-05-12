@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -142,7 +143,7 @@ func dirURI(dir string) workspaceapi.URI {
 }
 
 func TestDefaultTools(t *testing.T) {
-	tools, tracker := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), nil, Config{})
+	tools, tracker := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), nil, Config{}, configedit.NopConfig())
 	require.Len(t, tools, 6)
 	require.NotNil(t, tracker)
 
@@ -191,9 +192,9 @@ func TestDefinitions(t *testing.T) {
 		{"search_content", newSearch(fs, dirURI(dir), NewFileTracker()), "search_content"},
 		{"find_files", newFindFiles(fs, dirURI(dir), NewFileTracker()), "find_files"},
 		{"list_dir", NewListDir(fs, dirURI(dir)), "list_dir"},
-		{"bash", newBash(ex, dirURI(dir)), "bash"},
+		{"bash", newBash(ex, dirURI(dir), configedit.NopConfig()), "bash"},
 		{"compact", newCompact(), "compact"},
-		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir)), "exec_command"},
+		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir), configedit.NopConfig()), "exec_command"},
 		{"write_stdin", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), "write_stdin"},
 	}
 	for _, tt := range tests {
@@ -267,10 +268,10 @@ func TestSummary(t *testing.T) {
 		{"find with path", newFindFiles(fs, dirURI(dir), NewFileTracker()), `{"pattern":"*.go","path":"lib"}`, `"*.go" in lib`},
 		{"find invalid json", newFindFiles(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
 		// bash — Summary always returns the command (not description).
-		{"bash with description returns command", newBash(ex, dirURI(dir)), `{"command":"go test ./...","description":"Run all tests"}`, "go test ./..."},
-		{"bash empty description returns command", newBash(ex, dirURI(dir)), `{"command":"go test ./...","description":""}`, "go test ./..."},
-		{"bash no description returns command", newBash(ex, dirURI(dir)), `{"command":"go test ./..."}`, "go test ./..."},
-		{"bash invalid json", newBash(ex, dirURI(dir)), `bad`, ""},
+		{"bash with description returns command", newBash(ex, dirURI(dir), configedit.NopConfig()), `{"command":"go test ./...","description":"Run all tests"}`, "go test ./..."},
+		{"bash empty description returns command", newBash(ex, dirURI(dir), configedit.NopConfig()), `{"command":"go test ./...","description":""}`, "go test ./..."},
+		{"bash no description returns command", newBash(ex, dirURI(dir), configedit.NopConfig()), `{"command":"go test ./..."}`, "go test ./..."},
+		{"bash invalid json", newBash(ex, dirURI(dir), configedit.NopConfig()), `bad`, ""},
 		// web_fetch
 		{"web_fetch", NewWebFetch(&stubFetcher{}), `{"url":"https://example.com"}`, "https://example.com"},
 		{"web_fetch invalid json", NewWebFetch(&stubFetcher{}), `bad`, ""},
@@ -283,8 +284,8 @@ func TestSummary(t *testing.T) {
 		{"list_dir", NewListDir(fs, dirURI(dir)), `{"dir_path":"/tmp/project"}`, ".../tmp/project"},
 		{"list_dir invalid json", NewListDir(fs, dirURI(dir)), `bad`, ""},
 		// exec_command
-		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir)), `{"cmd":"echo hello"}`, "echo hello"},
-		{"exec_command invalid json", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir)), `bad`, ""},
+		{"exec_command", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir), configedit.NopConfig()), `{"cmd":"echo hello"}`, "echo hello"},
+		{"exec_command invalid json", NewExecCommand(NewSessionManager(context.Background(), ex, nil), dirURI(dir), configedit.NopConfig()), `bad`, ""},
 		// write_stdin
 		{"write_stdin with chars", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), `{"session_id":1000,"chars":"hello\n"}`, "session 1000: hello\n"},
 		{"write_stdin poll", NewWriteStdin(NewSessionManager(context.Background(), ex, nil)), `{"session_id":1000,"chars":""}`, "poll session 1000"},
@@ -832,7 +833,7 @@ func TestBash_args_do_not_include_program_name(t *testing.T) {
 		}
 		return 1, nil
 	}}
-	tool := newBash(rec, dirURI("/workspace"))
+	tool := newBash(rec, dirURI("/workspace"), configedit.NopConfig())
 	tool.Execute(context.Background(), `{"command": "ls -R .", "description": "List files recursively"}`)
 
 	assert.Equal(t, "bash", recorded.Path)
@@ -857,7 +858,7 @@ func TestBash_env_is_nil_so_host_inherits(t *testing.T) {
 		}
 		return 1, nil
 	}}
-	tool := newBash(rec, dirURI("/workspace"))
+	tool := newBash(rec, dirURI("/workspace"), configedit.NopConfig())
 	tool.Execute(context.Background(), `{"command": "true", "description": "noop"}`)
 
 	assert.Nil(t, recorded.Env,
@@ -936,7 +937,7 @@ func TestBash(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := setupWorkspace(t)
-			tool := newBash(localExec{}, dirURI(dir))
+			tool := newBash(localExec{}, dirURI(dir), configedit.NopConfig())
 
 			ctx := context.Background()
 			if tt.ctx != nil {
@@ -958,7 +959,7 @@ func TestBash_execute_uses_caller_context_without_adding_deadline(t *testing.T) 
 		}
 		return 1, nil
 	}}
-	tool := newBash(rec, dirURI("/workspace"))
+	tool := newBash(rec, dirURI("/workspace"), configedit.NopConfig())
 	tool.Execute(context.Background(), `{"command": "echo hi", "description": "test"}`)
 
 	_, ok := capturedCtx.Deadline()
@@ -966,7 +967,7 @@ func TestBash_execute_uses_caller_context_without_adding_deadline(t *testing.T) 
 }
 
 func TestBash_definition_does_not_expose_timeout_parameter(t *testing.T) {
-	tool := newBash(localExec{}, dirURI("/workspace"))
+	tool := newBash(localExec{}, dirURI("/workspace"), configedit.NopConfig())
 	def := tool.Definition()
 	params, ok := def.Function.Parameters.(map[string]any)
 	require.True(t, ok)
@@ -1231,7 +1232,7 @@ func setupWorkspace(t *testing.T) string {
 
 func TestDefaultTools_wiresApplyPatchLSP(t *testing.T) {
 	lsp := &stubLSP{}
-	tools, _ := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), lsp, Config{})
+	tools, _ := DefaultTools(localFS{}, localExec{}, dirURI("/workspace"), lsp, Config{}, configedit.NopConfig())
 
 	// Verify the apply_patch tool got the lsp reference.
 	var found bool

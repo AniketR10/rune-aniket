@@ -48,6 +48,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/debug"
@@ -171,7 +172,7 @@ func NewAgentPhase(name, description, systemPrompt string,
 			if err != nil {
 				return fmt.Errorf("resolve cwd URI: %w", err)
 			}
-			tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{})
+			tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{}, configedit.NopConfig())
 			registry := agent.NewRegistry(tools...)
 			skillRegistry := skills.NewRegistry(deps.FS, cwd, nil, deps.Notifications)
 			store := newEphemeralStore()
@@ -538,7 +539,7 @@ func dreamDialogue(
 	if err != nil {
 		return fmt.Errorf("resolve cwd URI: %w", err)
 	}
-	tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{})
+	tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{}, configedit.NopConfig())
 	registry := agent.NewRegistry(tools...)
 	skillRegistry := skills.NewRegistry(deps.FS, cwd, nil, deps.Notifications)
 	store := newEphemeralStore()
@@ -819,7 +820,7 @@ func fixUpgradeCompat(ctx context.Context, ch chan<- Progress, deps Deps, fromVe
 		if err != nil {
 			return fmt.Errorf("resolve cwd URI: %w", err)
 		}
-		tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{})
+		tools, _ := agentools.DefaultTools(deps.FS, deps.Exec, cwd, deps.LSP, agentools.Config{}, configedit.NopConfig())
 		reg := agent.NewRegistry(tools...)
 		skillReg := skills.NewRegistry(deps.FS, cwd, nil, deps.Notifications)
 		store := newEphemeralStore()

@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 )
 
 func newTestExecCommand(t *testing.T) (*execCommandTool, *SessionManager) {
@@ -37,7 +38,7 @@ func newTestExecCommand(t *testing.T) (*execCommandTool, *SessionManager) {
 	mgr := NewSessionManager(context.Background(), localExec{}, nil)
 	t.Cleanup(func() { _ = mgr.Close() })
 	dir := t.TempDir()
-	tool := NewExecCommand(mgr, dirURI(dir)).(*execCommandTool)
+	tool := NewExecCommand(mgr, dirURI(dir), configedit.NopConfig()).(*execCommandTool)
 	return tool, mgr
 }
 

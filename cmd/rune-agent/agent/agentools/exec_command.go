@@ -31,6 +31,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -41,8 +42,9 @@ const (
 )
 
 type execCommandTool struct {
-	mgr *SessionManager
-	cwd workspaceapi.URI
+	mgr   *SessionManager
+	cwd   workspaceapi.URI
+	guard grepGuard
 }
 
 type execCommandArgs struct {
@@ -62,9 +64,21 @@ type execCommandOutput struct {
 
 // NewExecCommand creates an exec_command tool backed by the given
 // SessionManager. It is intended as an OpenAI-specific override that
-// replaces the stateless bash tool with persistent sessions.
-func NewExecCommand(mgr *SessionManager, cwd workspaceapi.URI) agent.Tool {
-	return &execCommandTool{mgr: mgr, cwd: cwd}
+// replaces the stateless bash tool with persistent sessions. The guard
+// intercepts bare grep invocations: it reads force_builtin_tools from
+// cfg, asks the user (via agent.PrompterFromContext) when the key is
+// absent, and persists "Always"/"Never" choices back into cfg so
+// subsequent resolves observe the new value in the same session.
+func NewExecCommand(
+	mgr *SessionManager,
+	cwd workspaceapi.URI,
+	cfg configedit.Config,
+) agent.Tool {
+	return &execCommandTool{
+		mgr: mgr,
+		cwd: cwd,
+		guard: newGrepGuard(cfg),
+	}
 }
 
 func (t *execCommandTool) Definition() llm.Tool {
@@ -122,7 +136,7 @@ func (t *execCommandTool) Summary(arguments string) string {
 	return args.Cmd
 }
 
-func (t *execCommandTool) Execute(_ context.Context, arguments string) agent.ToolResult {
+func (t *execCommandTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args execCommandArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
@@ -130,6 +144,15 @@ func (t *execCommandTool) Execute(_ context.Context, arguments string) agent.Too
 
 	if args.Cmd == "" {
 		return agent.ToolResult{Content: "error: cmd must not be empty", IsError: true}
+	}
+
+	if isBareGrepCommand(args.Cmd) {
+		if rejected, decided := t.guard.decideGrep(ctx); decided && rejected {
+			return agent.ToolResult{
+				Content: builtinToolsErrorMessage("openai"),
+				IsError: true,
+			}
+		}
 	}
 
 	workDir := t.cwd.Path()

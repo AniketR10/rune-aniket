@@ -128,50 +128,50 @@ func skillsPromptSection(loaded []skills.Skill) string {
 	return b.String()
 }
 
-// ProviderToolAddendum returns a provider-specific addendum that reinforces
-// the use of built-in semantic tools over shell commands. The addendum is
-// appended to the system prompt at agent creation time.
-// It returns an empty string for unknown providers.
+// ProviderToolAddendum returns a provider-specific addendum that
+// reinforces the use of built-in semantic tools over shell commands.
+// The addendum is appended to the system prompt at agent creation
+// time. It returns an empty string for unknown providers.
 func ProviderToolAddendum(provider string) string {
+	var shellTool, searchTool string
 	switch provider {
 	case "anthropic":
-		return `
-
-=== CRITICAL: TOOL SELECTION ===
-You MUST use the built-in semantic tools instead of shell commands:
-• find_definition / search_symbols / outline_file — NOT grep, rg, or bash
-• format_file / rename_symbol — NOT gofmt, sed, or bash
-• read_file — NOT cat, head, tail, or bash
-• search_content / find_files — NOT grep, find, or bash
-Using bash or shell commands for tasks that have a dedicated tool is
-INCORRECT and produces inferior results.`
-
-	case "openai", "codex":
-		return `
-
-=== CRITICAL: TOOL SELECTION ===
-You MUST use the built-in semantic tools instead of shell commands:
-• find_definition / search_symbols / outline_file — NOT grep_files or exec_command
-• format_file / rename_symbol — NOT gofmt, sed, or exec_command
-• read_file — NOT cat, head, tail, or exec_command
-Using exec_command for tasks that have a dedicated tool is INCORRECT and
-produces inferior results.`
-
-	case "llamacpp":
-		return `
-
-=== CRITICAL: TOOL SELECTION ===
-You MUST use the built-in semantic tools instead of shell commands:
-• find_definition / search_symbols / outline_file — NOT grep_files or exec_command
-• format_file / rename_symbol — NOT gofmt, sed, or exec_command
-• read_file — NOT cat, head, tail, or exec_command
-Using exec_command for tasks that have a dedicated tool is INCORRECT and
-produces inferior results.
-
-When tools are available and one would help answer the user's request, call the
-tool instead of merely describing that you would use it.`
-
+		shellTool, searchTool = "bash", "search_content"
+	case "openai", "codex", "llamacpp":
+		shellTool, searchTool = "exec_command", "grep_files"
 	default:
 		return ""
 	}
+	return fmt.Sprintf(`
+
+=== CRITICAL: TOOL SELECTION ===
+You MUST use Rune's built-in semantic tools instead of shell commands.
+Using %s for tasks that have a dedicated tool is INCORRECT and
+produces inferior results.
+
+Symbol-aware tools (these understand code structure, not just text).
+Reach for them first when you are looking at code:
+
+  1. Given a known symbol name (function, type, variable, method):
+     • find_definition     — locate where the symbol is defined.
+     • find_references     — list every use site of the symbol.
+     • find_implementations — list concrete types that satisfy an
+                              interface.
+     • describe_symbol     — show the symbol's type signature and
+                              doc comment without reading the file.
+
+  2. When the exact symbol name is unknown:
+     • search_symbols      — fuzzy search by partial/approximate name.
+
+  3. When you need a file's structure (what it defines):
+     • outline_file        — list the top-level symbols. Prefer this
+                              over read_file when you only need to
+                              know what a file contains.
+
+Only when you are searching for non-symbol text (a literal string, an
+error message, a comment, a config value), use %s.
+
+grep/rg/ag invocations through %s may be intercepted and rejected;
+the tools above are faster and more accurate for symbol queries.`,
+		shellTool, searchTool, shellTool)
 }

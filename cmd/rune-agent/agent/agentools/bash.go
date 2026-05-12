@@ -31,6 +31,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
@@ -39,8 +40,9 @@ const (
 )
 
 type bashTool struct {
-	exec workspaceapi.Executor
-	cwd  workspaceapi.URI
+	exec  workspaceapi.Executor
+	cwd   workspaceapi.URI
+	guard grepGuard
 }
 
 type bashArgs struct {
@@ -49,10 +51,24 @@ type bashArgs struct {
 	WorkingDir  string `json:"working_dir"`
 }
 
-func newBash(exec workspaceapi.Executor, cwd workspaceapi.URI) agent.Tool {
-	return &bashTool{exec: exec, cwd: cwd}
+// newBash builds a bash tool. The guard intercepts bare grep
+// invocations: it reads force_builtin_tools from cfg, asks the user
+// (via agent.PrompterFromContext) when the key is absent, and
+// persists "Always"/"Never" choices back into cfg so subsequent
+// resolves observe the new value in the same session.
+func newBash(
+	exec workspaceapi.Executor,
+	cwd workspaceapi.URI,
+	cfg configedit.Config,
+) agent.Tool {
+	return &bashTool{
+		exec: exec,
+		cwd:  cwd,
+		guard: newGrepGuard(cfg),
+	}
 }
 
+// Definition returns the LLM tool definition for bash.
 func (t *bashTool) Definition() llm.Tool {
 	return llm.Tool{
 		Type: llm.ToolTypeFunction,
@@ -102,6 +118,7 @@ with no dedicated tool.`,
 	}
 }
 
+// Summary returns a short human-readable summary of the tool arguments.
 func (t *bashTool) Summary(arguments string) string {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
@@ -110,10 +127,20 @@ func (t *bashTool) Summary(arguments string) string {
 	return args.Command
 }
 
+// Execute runs the bash command.
 func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
+	}
+
+	if isBareGrepCommand(args.Command) {
+		if rejected, decided := t.guard.decideGrep(ctx); decided && rejected {
+			return agent.ToolResult{
+				Content: builtinToolsErrorMessage("anthropic"),
+				IsError: true,
+			}
+		}
 	}
 
 	workDir := t.cwd.Path()

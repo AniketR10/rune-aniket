@@ -59,6 +59,7 @@ type GoroutineSpawner struct {
 	agentID             string
 	workspace           workspaceapi.URI
 	hookRunner          *hooks.Runner
+	prompter            Prompter
 
 	// GenerateDialogueID, when non-nil, replaces the default
 	// petname generator for child dialogue IDs. Intended for testing.
@@ -68,6 +69,11 @@ type GoroutineSpawner struct {
 // NewGoroutineSpawner creates a GoroutineSpawner for the
 // given session. Call SetRegistry before any Run calls
 // to provide the tool registry (see SetRegistry).
+//
+// prompter is mandatory; it is propagated to sub-agents via
+// agent.Config so per-call tool decisions (e.g. the grep guard)
+// can ask the user. Pass a no-op prompter when sub-agents must
+// never block on input. Panics if prompter is nil.
 func NewGoroutineSpawner(
 	store dialoguemanager.Store, serviceFactory ServiceFactory,
 	config *Cfg,
@@ -76,7 +82,11 @@ func NewGoroutineSpawner(
 	projectInstructions string,
 	sessionKey, agentID string,
 	workspace workspaceapi.URI,
+	prompter Prompter,
 ) *GoroutineSpawner {
+	if prompter == nil {
+		panic("agent.NewGoroutineSpawner: prompter must not be nil")
+	}
 	return &GoroutineSpawner{
 		store:               store,
 		serviceFactory:      serviceFactory,
@@ -87,6 +97,7 @@ func NewGoroutineSpawner(
 		sessionKey:          sessionKey,
 		agentID:             agentID,
 		workspace:           workspace,
+		prompter:            prompter,
 	}
 }
 
@@ -203,6 +214,7 @@ func (s *GoroutineSpawner) Run(
 		Provider:            provider,
 		SubAgent:            true,
 		Workspace:           s.workspace,
+		Prompter:            s.prompter,
 	})
 
 	// Sub-agent runs inherit the caller's cancellation but have no

@@ -41,6 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
@@ -53,10 +54,11 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	configedit "unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 )
@@ -313,7 +315,7 @@ func TestHandleCommand(t *testing.T) {
 			name: "max_tokens without value shows global config",
 			cmd:  repl.Command{Name: "max_tokens"},
 			setup: func(d *testDeps) {
-				d.cfg = stubConfig{ints: map[string]int{"max_tokens": 8192}}
+				d.cfg = configedit.FromSnapshot(stubConfig{ints: map[string]int{"max_tokens": 8192}})
 			},
 			assertOut: func(t *testing.T, text string) {
 				if !strings.Contains(text, "8192") {
@@ -1202,7 +1204,7 @@ type testDeps struct {
 	store         *memStore
 	registry      *agent.Registry
 	agentsConfig  *agent.Cfg
-	cfg           config.Config
+	cfg           configedit.Config
 	opts          []Option
 	wm            *stubWindowManager
 	skillRegistry *skills.SkillRegistry
@@ -1285,7 +1287,7 @@ func newTestDeps() *testDeps {
 				AllowAny:     true,
 			},
 		}),
-		cfg: stubConfig{
+		cfg: configedit.FromSnapshot(stubConfig{
 			strings: map[string]string{
 				"base_url":      "https://api.openai.com",
 				"default_model": "gpt-4",
@@ -1298,7 +1300,7 @@ func newTestDeps() *testDeps {
 					strings: map[string]string{"api_key": "sk-secret-key-1234"},
 				},
 			},
-		},
+		}),
 		storage:       storagestub.NewInMemoryService(),
 		notifications: stubNotifications{},
 		localRegistry: localReg,

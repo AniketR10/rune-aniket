@@ -75,6 +75,13 @@ type Config struct {
 	// well-defined points in the agent loop (SessionStart,
 	// PostToolUse, Stop, PreCompact, etc.). A nil runner is a no-op.
 	Hooks *hooks.Runner
+
+	// Prompter, when non-nil, is propagated to tool executions through
+	// the context so that tools (e.g. bash) can block and ask the user
+	// for input. A nil prompter is allowed; tools that need user input
+	// must handle this case (typically by allowing the operation or
+	// returning an error).
+	Prompter Prompter
 }
 
 // Memory represents a single recalled memory entry.
@@ -931,6 +938,7 @@ func (a *Agent) run(
 							toolCtx = WithHooks(toolCtx, a.config.Hooks)
 							toolCtx = WithWorkspaceURI(toolCtx, a.config.Workspace)
 							toolCtx = WithDialogueID(toolCtx, dialogueID)
+							toolCtx = WithPrompter(toolCtx, a.config.Prompter)
 							toolStart := time.Now()
 							result = info.tool.Execute(toolCtx, info.call.Function.Arguments)
 							dur = time.Since(toolStart)

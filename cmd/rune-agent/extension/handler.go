@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -244,7 +245,8 @@ func withLLMServiceStorage(ctx context.Context, storage storageapi.Service) llmS
 // If newClient is nil, openai.NewClient is used for non-Anthropic providers.
 // If newAnthropicClient is nil, anthropic.NewClient is used for Anthropic.
 func newLLMService(
-	cfg config.Config,
+	ctx context.Context,
+	cfg configedit.Getter,
 	reg llmregistry.Registry,
 	model string,
 	newClient clientConstructor,
@@ -285,13 +287,13 @@ func newLLMService(
 		}
 		apiKey = codexCred.AccessToken
 	} else if entry.Provider != "ollama" {
-		if pcfg, err := cfg.GetConfig(entry.Provider); err == nil {
-			if key, err := pcfg.GetString("api_key"); err == nil {
+		if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
+			if key, err := pcfg.GetString("api_key").Resolve(ctx); err == nil {
 				apiKey = key
-			} else if !errors.Is(err, config.ErrNotFound) {
+			} else if !errors.Is(err, configedit.ErrNotFound) {
 				return nil, fmt.Errorf("get %q api_key from config: %w", entry.Provider, err)
 			}
-		} else if !errors.Is(err, config.ErrNotFound) {
+		} else if !errors.Is(err, configedit.ErrNotFound) {
 			return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
 		}
 		if apiKey == "" {
@@ -305,35 +307,35 @@ func newLLMService(
 	var maxTokens int
 	var debugHTTP bool
 
-	if v, err := cfg.GetFloat("temperature"); err == nil {
+	if v, err := cfg.GetFloat("temperature").Resolve(ctx); err == nil {
 		temperature = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'temperature' from config: %w", err)
 	}
-	if v, err := cfg.GetFloat("top_p"); err == nil {
+	if v, err := cfg.GetFloat("top_p").Resolve(ctx); err == nil {
 		topP = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'top_p' from config: %w", err)
 	}
-	if v, err := cfg.GetInt("max_tokens"); err == nil {
+	if v, err := cfg.GetInt("max_tokens").Resolve(ctx); err == nil {
 		maxTokens = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'max_tokens' from config: %w", err)
 	}
-	if v, err := cfg.GetBool("debug_http"); err == nil {
+	if v, err := cfg.GetBool("debug_http").Resolve(ctx); err == nil {
 		debugHTTP = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'debug_http' from config: %w", err)
 	}
 
 	// <provider>.base_url overrides per entry base url and default in config.
-	if pcfg, err := cfg.GetConfig(entry.Provider); err == nil {
-		if key, err := pcfg.GetString("base_url"); err == nil {
+	if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
+		if key, err := pcfg.GetString("base_url").Resolve(ctx); err == nil {
 			entry.BaseURL = key
-		} else if !errors.Is(err, config.ErrNotFound) {
+		} else if !errors.Is(err, configedit.ErrNotFound) {
 			return nil, fmt.Errorf("get %q base_url from config: %w", entry.Provider, err)
 		}
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
 	}
 
@@ -349,13 +351,13 @@ func newLLMService(
 			DebugHTTP:   debugHTTP,
 		}
 		acfg.BaseURL = entry.BaseURL
-		if pcfg, err := cfg.GetConfig(entry.Provider); err == nil {
-			if v, err := pcfg.GetString("cache_control"); err == nil && v != "" {
+		if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
+			if v, err := pcfg.GetString("cache_control").Resolve(ctx); err == nil && v != "" {
 				acfg.CacheControl = v
-			} else if err != nil && !errors.Is(err, config.ErrNotFound) {
+			} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
 				return nil, fmt.Errorf("get %q cache_control from config: %w", entry.Provider, err)
 			}
-			if v, err := pcfg.GetString("reasoning_effort"); err == nil && v != "" {
+			if v, err := pcfg.GetString("reasoning_effort").Resolve(ctx); err == nil && v != "" {
 				switch llm.ReasoningEffort(v) {
 				case llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
 					llm.ReasoningEffortHigh, llm.ReasoningEffortMax:
@@ -364,7 +366,7 @@ func newLLMService(
 					return nil, fmt.Errorf("invalid %q reasoning_effort value %q: "+
 						"must be low, medium, high, or max", entry.Provider, v)
 				}
-			} else if err != nil && !errors.Is(err, config.ErrNotFound) {
+			} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
 				return nil, fmt.Errorf("get %q reasoning_effort from config: %w", entry.Provider, err)
 			}
 		}
@@ -401,13 +403,13 @@ func newLLMService(
 	}
 
 	// Read per-provider OpenAI settings.
-	if pcfg, err := cfg.GetConfig(entry.Provider); err == nil {
-		if v, err := pcfg.GetBool("force_responses_api"); err == nil {
+	if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
+		if v, err := pcfg.GetBool("force_responses_api").Resolve(ctx); err == nil {
 			c.ForceResponsesAPI = v
-		} else if !errors.Is(err, config.ErrNotFound) {
+		} else if !errors.Is(err, configedit.ErrNotFound) {
 			return nil, fmt.Errorf("get %q force_responses_api from config: %w", entry.Provider, err)
 		}
-		if v, err := pcfg.GetString("reasoning_effort"); err == nil && v != "" {
+		if v, err := pcfg.GetString("reasoning_effort").Resolve(ctx); err == nil && v != "" {
 			switch llm.ReasoningEffort(v) {
 			case llm.ReasoningEffortNone, llm.ReasoningEffortMinimal,
 				llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
@@ -417,27 +419,27 @@ func newLLMService(
 				return nil, fmt.Errorf("invalid %q reasoning_effort value %q: "+
 					"must be none, minimal, low, medium, high or xhigh", entry.Provider, v)
 			}
-		} else if err != nil && !errors.Is(err, config.ErrNotFound) {
+		} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
 			return nil, fmt.Errorf("get %q reasoning_effort from config: %w", entry.Provider, err)
 		}
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
 	}
 	if entry.Provider == codex.LLMProvider {
 		c.ForceResponsesAPI = true
 	}
 
-	if v, err := cfg.GetFloat("frequency_penalty"); err == nil {
+	if v, err := cfg.GetFloat("frequency_penalty").Resolve(ctx); err == nil {
 		c.FrequencyPenalty = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'frequency_penalty' from config: %w", err)
 	}
-	if v, err := cfg.GetFloat("presence_penalty"); err == nil {
+	if v, err := cfg.GetFloat("presence_penalty").Resolve(ctx); err == nil {
 		c.PresencePenalty = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'presence_penalty' from config: %w", err)
 	}
-	if v, err := cfg.GetString("reasoning_summary"); err == nil && v != "" {
+	if v, err := cfg.GetString("reasoning_summary").Resolve(ctx); err == nil && v != "" {
 		switch llm.ReasoningSummary(v) {
 		case llm.ReasoningSummaryAuto, llm.ReasoningSummaryConcise,
 			llm.ReasoningSummaryDetailed, llm.ReasoningSummaryDisabled:
@@ -446,12 +448,12 @@ func newLLMService(
 			return nil, fmt.Errorf("invalid 'reasoning_summary' value %q: "+
 				"must be auto, concise, detailed, or disabled", v)
 		}
-	} else if err != nil && !errors.Is(err, config.ErrNotFound) {
+	} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'reasoning_summary' from config: %w", err)
 	}
-	if v, err := cfg.GetInt("max_completion_tokens"); err == nil {
+	if v, err := cfg.GetInt("max_completion_tokens").Resolve(ctx); err == nil {
 		c.MaxCompletionTokens = v
-	} else if !errors.Is(err, config.ErrNotFound) {
+	} else if !errors.Is(err, configedit.ErrNotFound) {
 		return nil, fmt.Errorf("get 'max_completion_tokens' from config: %w", err)
 	}
 
@@ -533,7 +535,8 @@ func newCommandEventHandler(
 	}
 
 	lsp := w.LSP(ctx)
-	tools, tracker := agentools.DefaultTools(fs, executor, cwd, lsp, toolsCfg)
+	cfg := configedit.NewConfig(fs, cwd, pconfig)
+	tools, tracker := agentools.DefaultTools(fs, executor, cwd, lsp, toolsCfg, cfg)
 
 	fetcher := webfetch.NewHTTPFetcher(webfetch.DefaultConfig())
 	tools = append(tools, agentools.NewWebFetch(fetcher))
@@ -585,7 +588,7 @@ func newCommandEventHandler(
 	ret.defaultEffort = llm.ReasoningEffortHigh
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.ed = ed
-	ret.config = pconfig
+	ret.config = cfg
 	ret.mcpManager = mcpManager
 	ret.baseTools = tools
 	ret.toolRegistry = agent.NewRegistry(tools...)
@@ -594,13 +597,13 @@ func newCommandEventHandler(
 	ret.toolRegistry.RegisterOverrides(openai.LLMProvider,
 		agentools.NewGrepFiles(fs, cwd, tracker),
 		agentools.NewListDir(fs, cwd),
-		agentools.NewExecCommand(ret.sessionMgr, cwd),
+		agentools.NewExecCommand(ret.sessionMgr, cwd, cfg),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
 	ret.toolRegistry.RegisterOverrides(codex.LLMProvider,
 		agentools.NewGrepFiles(fs, cwd, tracker),
 		agentools.NewListDir(fs, cwd),
-		agentools.NewExecCommand(ret.sessionMgr, cwd),
+		agentools.NewExecCommand(ret.sessionMgr, cwd, cfg),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
 	ret.toolRegistry.RegisterExclusions(openai.LLMProvider,
@@ -982,7 +985,7 @@ type aiEditorHandler struct {
 	o                  browserapi.ResourceOpener
 	p                  term.Interrupter
 	db                 storageapi.Service
-	config             config.Config
+	config             configedit.Config
 	skillRegistry      *skills.SkillRegistry
 	plansDir           string
 	memoryDataPath     string
@@ -1045,7 +1048,7 @@ func (h *aiEditorHandler) newServiceWithProgress(
 	if entry.Provider == llamacpp.LLMProvider {
 		svc, err = newLlamaCppService(entry, progress)
 	} else {
-		svc, err = newLLMService(h.config, h.modelRegistry, model,
+		svc, err = newLLMService(h.ctx, h.config, h.modelRegistry, model,
 			h.newClient, h.newAnthropicClient, withLLMServiceStorage(h.ctx, h.db))
 	}
 	if err != nil {
@@ -1414,6 +1417,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		memRecaller,
 		h.projectInstructions,
 		sessionKey, agentID, h.cwd,
+		prompter,
 	)
 	spawner.GenerateDialogueID = h.generateDialogueID
 	childEvents := make(chan agent.ChildEvent, 64)
@@ -1467,6 +1471,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 			Provider:            chatEntry.Provider,
 			Workspace:           h.cwd,
 			Hooks:               h.hookRunner,
+			Prompter:            prompter,
 		},
 	)
 	if effort := h.getDefaultEffort(); effort != "" {
@@ -1581,6 +1586,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 		}
 		return svc, entry.Provider, nil
 	}
+	prompter := &tuiPrompter{tx: tx, noti: h.n}
 	spawner := agent.NewGoroutineSpawner(
 		h.dialogueStore, serviceFactory,
 		h.agentsConfig,
@@ -1588,6 +1594,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 		agent.NoMemory(),
 		h.projectInstructions,
 		queryID, "query", h.cwd,
+		prompter,
 	)
 	spawner.SetRegistry(agent.NewRegistry(h.baseTools...))
 	spawner.GenerateDialogueID = h.generateDialogueID
@@ -2602,7 +2609,7 @@ type commandAdapter struct {
 	// can switch the backing LLM service mid-conversation.
 	agent              *agent.Agent
 	modelRegistry      llmregistry.Registry
-	config             config.Config
+	config             configedit.Config
 	ctx                context.Context
 	storage            storageapi.Service
 	newClient          clientConstructor
@@ -2616,7 +2623,7 @@ type commandAdapter struct {
 }
 
 func (a *commandAdapter) newService(model string) (llm.Service, error) {
-	svc, err := newLLMService(a.config, a.modelRegistry, model,
+	svc, err := newLLMService(a.ctx, a.config, a.modelRegistry, model,
 		a.newClient, a.newAnthropicClient, withLLMServiceStorage(a.ctx, a.storage))
 	if err != nil {
 		return nil, err

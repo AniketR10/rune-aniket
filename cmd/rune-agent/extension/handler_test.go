@@ -79,6 +79,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
 	"unstable.build/go-tui/cmd/rune-agent/agentshell"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
@@ -851,7 +852,7 @@ func TestCreateAgentCompletions_SendsBreakOnCancel(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test", workspaceapi.URI{},
+		nil, "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -930,7 +931,7 @@ func TestCreateAgentCompletions_NormalFlowSendsBreak(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test", workspaceapi.URI{},
+		nil, "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -996,7 +997,7 @@ func TestCreateAgentCompletions_TruncatedTurnShowsGuidance(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test", workspaceapi.URI{},
+		nil, "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -1076,7 +1077,7 @@ func TestCreateAgentCompletions_EmitsOneBreakPerCompletedTurn(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		nil, "", "test", "test", workspaceapi.URI{},
+		nil, "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -1202,7 +1203,7 @@ You are a planner.`),
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig([]agent.Definition{{ID: "default", Model: "test-model", AllowAny: true}}),
-		skillReg, agent.NoMemory(), "", "test", "default", workspaceapi.URI{},
+		skillReg, agent.NoMemory(), "", "test", "default", workspaceapi.URI{}, noopPrompter{},
 	)
 	spawner.SetRegistry(agent.NewRegistry())
 	childEvents := make(chan agent.ChildEvent, 64)
@@ -1323,7 +1324,7 @@ You are an isolated sub-agent.`),
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig([]agent.Definition{{ID: "default", Model: "test-model", AllowAny: true}}),
-		skillReg, agent.NoMemory(), "", "test", "default", workspaceapi.URI{},
+		skillReg, agent.NoMemory(), "", "test", "default", workspaceapi.URI{}, noopPrompter{},
 	)
 	spawner.SetRegistry(agent.NewRegistry())
 	childEvents := make(chan agent.ChildEvent, 64)
@@ -1548,7 +1549,7 @@ func TestNewLLMService_resolves_model_from_registry(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "test-model", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "test-model", nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, svc)
 	assert.Equal(t, 128000, svc.ContextWindow())
@@ -1559,7 +1560,7 @@ func TestNewLLMService_unknown_model_returns_error(t *testing.T) {
 	reg := llmregistry.NewStatic()
 	cfg := stubConfig{}
 
-	_, err := newLLMService(cfg, reg, "nonexistent-model", nil, nil)
+	_, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "nonexistent-model", nil, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found in registry")
 }
@@ -1574,7 +1575,7 @@ func TestNewLLMService_llamacpp_requires_base_url(t *testing.T) {
 		BaseURL:       "",
 	})
 
-	_, err := newLLMService(stubConfig{}, reg, "local.gguf", nil, nil)
+	_, err := newLLMService(context.Background(), configedit.FromSnapshot(stubConfig{}), reg, "local.gguf", nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no local path")
 }
@@ -1595,7 +1596,7 @@ func TestNewLLMService_llamacpp_loads_from_registry_base_url(t *testing.T) {
 		BaseURL:       "/nonexistent/llamacpp-test.gguf",
 	})
 
-	_, err := newLLMService(stubConfig{}, reg, "huggingface.co/example/model:q4", nil, nil)
+	_, err := newLLMService(context.Background(), configedit.FromSnapshot(stubConfig{}), reg, "huggingface.co/example/model:q4", nil, nil)
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "api_key")
 	assert.Contains(t, err.Error(), "llamacpp")
@@ -1637,7 +1638,7 @@ func TestNewLLMService_registry_base_url_overrides_config(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "local-model", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "local-model", nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, svc)
 	// The registry entry's BaseURL should be used, not the config's.
@@ -1658,7 +1659,7 @@ func TestNewLLMService_missing_api_key_returns_error(t *testing.T) {
 
 	cfg := stubConfig{} // no provider config at all
 
-	_, err := newLLMService(cfg, reg, "claude-opus-4-6", nil, nil)
+	_, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "claude-opus-4-6", nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no api_key configured for provider")
 	assert.Contains(t, err.Error(), "anthropic")
@@ -1682,7 +1683,7 @@ func TestNewLLMService_custom_provider_model(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "my-custom-model", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "my-custom-model", nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, svc)
 	assert.Equal(t, 32000, svc.ContextWindow())
@@ -1745,7 +1746,7 @@ func TestNewLLMService_codexUsesStoredCredential(t *testing.T) {
 	var gotToken string
 	var gotConfig llmopenai.Config
 	var gotModels map[string]int
-	svc, err := newLLMService(stubConfig{}, reg, codex.GPT5Dot4,
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(stubConfig{}), reg, codex.GPT5Dot4,
 		func(token string, c llmopenai.Config, models map[string]int) llm.Service {
 			gotToken = token
 			gotConfig = c
@@ -1775,7 +1776,7 @@ func TestNewLLMService_codexMissingCredentialReturnsLoginHint(t *testing.T) {
 	codex.RegisterModels(reg)
 	db := storagestub.NewInMemoryService()
 
-	_, err := newLLMService(stubConfig{}, reg, codex.GPT5Dot4, nil, nil,
+	_, err := newLLMService(context.Background(), configedit.FromSnapshot(stubConfig{}), reg, codex.GPT5Dot4, nil, nil,
 		withLLMServiceStorage(context.Background(), db))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "agent providers codex login")
@@ -1802,7 +1803,7 @@ func TestNewLLMService_empty_registry_base_url_keeps_config(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "gpt-4", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "gpt-4", nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, svc)
 	assert.Equal(t, 8192, svc.ContextWindow())
@@ -1847,7 +1848,7 @@ func TestNewLLMService_config_change_applies_to_next_call(t *testing.T) {
 	}
 
 	// First service creation + completion: should use key-alpha.
-	svc1, err := newLLMService(cfg, reg, "test-model", nil, nil)
+	svc1, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "test-model", nil, nil)
 	require.NoError(t, err)
 	it1, err := svc1.CreateCompletion(context.Background(), llm.Request{
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "hi"}},
@@ -1871,7 +1872,7 @@ func TestNewLLMService_config_change_applies_to_next_call(t *testing.T) {
 	}
 
 	// Second service creation + completion: should use key-beta.
-	svc2, err := newLLMService(cfg, reg, "test-model", nil, nil)
+	svc2, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "test-model", nil, nil)
 	require.NoError(t, err)
 	it2, err := svc2.CreateCompletion(context.Background(), llm.Request{
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "hi"}},
@@ -1921,7 +1922,7 @@ func TestNewLLMService_openai_reasoning_effort_from_provider_config(t *testing.T
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "gpt-test",
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "gpt-test",
 		func(_ string, c llmopenai.Config, models map[string]int) llm.Service {
 			got = c
 			return &agentMockService{contextWindow: models[c.Model]}
@@ -1954,7 +1955,7 @@ func TestNewLLMService_openai_global_reasoning_effort_ignored(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "gpt-test",
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "gpt-test",
 		func(_ string, c llmopenai.Config, models map[string]int) llm.Service {
 			got = c
 			return &agentMockService{contextWindow: models[c.Model]}
@@ -1988,7 +1989,7 @@ func TestNewLLMService_anthropic_reasoning_effort_from_provider_config(t *testin
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "claude-test", nil,
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "claude-test", nil,
 		func(_ string, c anthropic.Config, models map[string]int) llm.Service {
 			got = c
 			return &agentMockService{contextWindow: models[c.Model]}
@@ -2021,7 +2022,7 @@ func TestNewLLMService_anthropic_global_reasoning_effort_ignored(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "claude-test", nil,
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "claude-test", nil,
 		func(_ string, c anthropic.Config, models map[string]int) llm.Service {
 			got = c
 			return &agentMockService{contextWindow: models[c.Model]}
@@ -2057,7 +2058,7 @@ func TestNewLLMService_anthropic_base_url_from_registry(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "claude-test", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "claude-test", nil, nil)
 	require.NoError(t, err)
 
 	it, err := svc.CreateCompletion(context.Background(), llm.Request{
@@ -2102,7 +2103,7 @@ func TestNewLLMService_anthropic_base_url_from_config(t *testing.T) {
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "claude-test", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "claude-test", nil, nil)
 	require.NoError(t, err)
 
 	it, err := svc.CreateCompletion(context.Background(), llm.Request{
@@ -2155,7 +2156,7 @@ func TestNewLLMService_anthropic_registry_base_url_overrides_config(t *testing.T
 		},
 	}
 
-	svc, err := newLLMService(cfg, reg, "claude-test", nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, "claude-test", nil, nil)
 	require.NoError(t, err)
 
 	it, err := svc.CreateCompletion(context.Background(), llm.Request{
@@ -2505,7 +2506,7 @@ func newTestAIEditorHandler(t *testing.T, svc *agentMockService) testAIEditorDep
 		skillRegistry: skillReg,
 		cwd:           cwd,
 		fs:            nopFileSystem{},
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
 		localRegistry: newTestLocalRegistry(t),
@@ -2673,7 +2674,7 @@ func newTestAIEditorHandlerWithServer(t *testing.T, serverURL string) testAIEdit
 	})
 
 	// Create the initial service via the real path for queryAgent.
-	svc, err := newLLMService(cfg, reg, llmopenai.GPT3Dot5Turbo, nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, llmopenai.GPT3Dot5Turbo, nil, nil)
 	require.NoError(t, err)
 
 	h := &aiEditorHandler{
@@ -2694,7 +2695,7 @@ func newTestAIEditorHandlerWithServer(t *testing.T, serverURL string) testAIEdit
 		skillRegistry: skillReg,
 		cwd:           cwd,
 		fs:            nopFileSystem{},
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
 		localRegistry: newTestLocalRegistry(t),
@@ -2761,7 +2762,7 @@ func newTestAIEditorHandlerWithServerAndRealStore(t *testing.T, serverURL string
 		return nil
 	})
 
-	svc, err := newLLMService(cfg, reg, llmopenai.GPT3Dot5Turbo, nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, llmopenai.GPT3Dot5Turbo, nil, nil)
 	require.NoError(t, err)
 
 	h := &aiEditorHandler{
@@ -2780,7 +2781,7 @@ func newTestAIEditorHandlerWithServerAndRealStore(t *testing.T, serverURL string
 		skillRegistry:     skillReg,
 		cwd:               cwd,
 		fs:                nopFileSystem{},
-		config:            cfg,
+		config:            configedit.FromSnapshot(cfg),
 		resources:         make(map[string]string),
 		agentsConfig:      agent.NewConfig(nil),
 		localRegistry:     newTestLocalRegistry(t),
@@ -2871,7 +2872,7 @@ func newTestAIEditorHandlerWithServerAndRPCStore(t *testing.T, serverURL string)
 		return nil
 	})
 
-	svc, err := newLLMService(cfg, reg, llmopenai.GPT3Dot5Turbo, nil, nil)
+	svc, err := newLLMService(context.Background(), configedit.FromSnapshot(cfg), reg, llmopenai.GPT3Dot5Turbo, nil, nil)
 	require.NoError(t, err)
 
 	h := &aiEditorHandler{
@@ -2890,7 +2891,7 @@ func newTestAIEditorHandlerWithServerAndRPCStore(t *testing.T, serverURL string)
 		skillRegistry:     skillReg,
 		cwd:               cwd,
 		fs:                nopFileSystem{},
-		config:            cfg,
+		config:            configedit.FromSnapshot(cfg),
 		resources:         make(map[string]string),
 		agentsConfig:      agent.NewConfig(nil),
 		localRegistry:     newTestLocalRegistry(t),
@@ -4955,7 +4956,7 @@ func TestAIEditorHandler_model_switch_propagates_to_agent_skill(t *testing.T) {
 		skillRegistry: skillReg,
 		cwd:           cwd,
 		fs:            nopFileSystem{},
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		resources:     make(map[string]string),
 		agentsConfig: agent.NewConfig([]agent.Definition{{
 			ID:       "default",
@@ -6832,7 +6833,7 @@ func TestAIEditorHandler_chat_compact_normalizes_stored_history_before_summarize
 		skillRegistry: skillReg,
 		cwd:           cwd,
 		fs:            nopFileSystem{},
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
 		localRegistry: newTestLocalRegistry(t),
@@ -8874,7 +8875,7 @@ func TestAIEditorHandler_chat_read_file_image(t *testing.T) {
 	deps.handler.cwd = cwd
 
 	// Wire real tools via DefaultTools so the real read_file processes images.
-	tools, _ := agentools.DefaultTools(testLocalFS{}, nopExecutor{}, cwd, deps.handler.lsp, agentools.Config{})
+	tools, _ := agentools.DefaultTools(testLocalFS{}, nopExecutor{}, cwd, deps.handler.lsp, agentools.Config{}, configedit.NopConfig())
 	deps.handler.baseTools = tools
 
 	flusher := openChatAndGetTab(t, deps)
@@ -8958,7 +8959,7 @@ func TestAIEditorHandler_chat_read_file_with_spaces_renders_success(t *testing.T
 	require.NoError(t, err)
 	deps.handler.cwd = cwd
 
-	tools, _ := agentools.DefaultTools(fs, nopExecutor{}, cwd, deps.handler.lsp, agentools.Config{})
+	tools, _ := agentools.DefaultTools(fs, nopExecutor{}, cwd, deps.handler.lsp, agentools.Config{}, configedit.NopConfig())
 	deps.handler.baseTools = tools
 	deps.handler.toolRegistry = agent.NewRegistry(tools...)
 	deps.handler.queryAgent = agent.NewAgent(
@@ -9268,7 +9269,7 @@ func TestCommandAdapterModelSwitchPreservesAudit(t *testing.T) {
 	adapter := &commandAdapter{
 		auditStore:    auditStore,
 		modelRegistry: reg,
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		newClient: func(string, llmopenai.Config, map[string]int) llm.Service {
 			return inner
 		},
@@ -9387,7 +9388,7 @@ func TestAIEditorHandler_chat_model_switch_uses_provider_tools(t *testing.T) {
 		skillRegistry: skillReg,
 		cwd:           cwd,
 		fs:            nopFileSystem{},
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
 		localRegistry: newTestLocalRegistry(t),
@@ -9582,7 +9583,7 @@ func TestAIEditorHandler_exec_command_and_write_stdin_integration(t *testing.T) 
 	sessionMgr.Clock = func() time.Time { return fixedTime }
 	t.Cleanup(func() { _ = sessionMgr.Close() })
 
-	execTool := agentools.NewExecCommand(sessionMgr, cwd)
+	execTool := agentools.NewExecCommand(sessionMgr, cwd, configedit.NopConfig())
 	writeTool := agentools.NewWriteStdin(sessionMgr)
 
 	toolRegistry := agent.NewRegistry()
@@ -9608,7 +9609,7 @@ func TestAIEditorHandler_exec_command_and_write_stdin_integration(t *testing.T) 
 		skillRegistry: skillReg,
 		cwd:           cwd,
 		fs:            nopFileSystem{},
-		config:        cfg,
+		config:        configedit.FromSnapshot(cfg),
 		resources:     make(map[string]string),
 		agentsConfig:  agent.NewConfig(nil),
 		localRegistry: newTestLocalRegistry(t),
@@ -10662,7 +10663,7 @@ func TestAgent_MemoryInjectedOncePerRun(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		memRecaller, "", "test", "test", workspaceapi.URI{},
+		memRecaller, "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -10751,7 +10752,7 @@ func TestAgent_MemoryRecallRenderedInTree(t *testing.T) {
 	spawner := agent.NewGoroutineSpawner(
 		store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 		agent.NewConfig(nil), skillReg,
-		memRecaller, "", "test", "test", workspaceapi.URI{},
+		memRecaller, "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 	)
 	childEvents := make(chan agent.ChildEvent, 64)
 
@@ -11154,7 +11155,7 @@ func TestAgent_NormalizeStoredDialogueBeforeLLMCall(t *testing.T) {
 			spawner := agent.NewGoroutineSpawner(
 				store, func(string) (llm.Service, string, error) { return svc, "test", nil },
 				agent.NewConfig(nil), skillReg,
-				agent.NoMemory(), "", "test", "test", workspaceapi.URI{},
+				agent.NoMemory(), "", "test", "test", workspaceapi.URI{}, noopPrompter{},
 			)
 			childEvents := make(chan agent.ChildEvent, 64)
 
@@ -11316,13 +11317,13 @@ func TestAIEditorHandler_chat_task_progress_renders_checklist(t *testing.T) {
 		ContextWindow: 128000,
 	})
 	deps.handler.modelRegistry = reg
-	deps.handler.config = stubConfig{
+	deps.handler.config = configedit.FromSnapshot(stubConfig{
 		configs: map[string]config.Config{
 			"anthropic": stubConfig{
 				strings: map[string]string{"api_key": "test-key"},
 			},
 		},
-	}
+	})
 	deps.handler.defaultModel = "anthropic-test-model"
 	deps.handler.queryDefaultModel = "anthropic-test-model"
 	deps.handler.newAnthropicClient = func(string, anthropic.Config, map[string]int) llm.Service {
@@ -11940,7 +11941,7 @@ func TestAIEditorHandler_model_switch_no_empty_text_blocks(t *testing.T) {
 				skillRegistry: skillReg,
 				cwd:           cwd,
 				fs:            nopFileSystem{},
-				config:        cfg,
+				config:        configedit.FromSnapshot(cfg),
 				resources:     make(map[string]string),
 				agentsConfig:  agent.NewConfig(nil),
 				localRegistry: newTestLocalRegistry(t),

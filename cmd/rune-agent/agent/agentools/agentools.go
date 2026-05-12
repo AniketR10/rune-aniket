@@ -28,6 +28,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -42,20 +43,29 @@ type Config struct {
 // DefaultTools returns all available tools pre-configured with the
 // workspace working directory and the shared FileTracker that should
 // be passed to LSPTools and SyntaxTools.
+//
+// cfg is mandatory: the bash tool needs it to intercept bare grep
+// invocations (read force_builtin_tools, prompt the user, persist
+// "Always"/"Never" choices). Tests that have no workspace
+// configuration should pass configedit.NopConfig().
 func DefaultTools(
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
 	cwd workspaceapi.URI,
 	lsp semanticapi.LSP,
-	cfg Config,
+	toolsCfg Config,
+	cfg configedit.Config,
 ) ([]agent.Tool, *FileTracker) {
+	if cfg == nil {
+		panic("agentools.DefaultTools: cfg must not be nil; pass configedit.NopConfig() in tests")
+	}
 	tracker := NewFileTracker()
 	return []agent.Tool{
-		newReadFile(fs, cwd, tracker, cfg.MaxLineBytes),
+		newReadFile(fs, cwd, tracker, toolsCfg.MaxLineBytes),
 		newApplyPatch(fs, cwd, tracker, lsp),
 		newSearch(fs, cwd, tracker),
 		newFindFiles(fs, cwd, tracker),
-		newBash(exec, cwd),
+		newBash(exec, cwd, cfg),
 		newCompact(),
 	}, tracker
 }

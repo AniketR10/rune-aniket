@@ -38,6 +38,7 @@ const (
 	hooksRunnerKey
 	workspaceURIKey
 	dialogueIDKey
+	prompterKey
 )
 
 // WithParentToolCallID returns a context carrying the parent tool call ID.
@@ -96,5 +97,20 @@ func WithDialogueID(ctx context.Context, id string) context.Context {
 // DialogueIDFromContext extracts the dialogue ID from the context.
 func DialogueIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(dialogueIDKey).(string)
+	return v
+}
+
+// WithPrompter returns a context carrying the agent's prompter so that
+// tools (e.g. bash) can block and ask the user a question while the
+// agent loop is running. A nil prompter is allowed; tools should treat
+// it as "no prompter available".
+func WithPrompter(ctx context.Context, p Prompter) context.Context {
+	return context.WithValue(ctx, prompterKey, p)
+}
+
+// PrompterFromContext extracts the prompter from the context. Returns
+// nil when none was attached.
+func PrompterFromContext(ctx context.Context) Prompter {
+	v, _ := ctx.Value(prompterKey).(Prompter)
 	return v
 }
