@@ -313,10 +313,10 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	cells := writer.Cells()
 
 	expectedIconAttr := windowFocusIconAttr
-	expectedIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	expectedIconAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	expectedFocusTabAttr := cfg.FocusTabAttr
-	expectedFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
-	expectedDefaultIconAttr := term.Attributes{Attrs: term.AttrVerticalRenderOffset}
+	expectedFocusTabAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
+	expectedDefaultIconAttr := term.Attributes{Attrs: term.AttrNegativeVerticalRenderOffset}
 	assert.Equal(t, 'A', cells[0].Ch)
 	assert.Equal(t, expectedDefaultIconAttr, cells[0].Attributes)
 	assert.Equal(t, 'a', cells[2].Ch)
@@ -380,9 +380,9 @@ func TestNonFocusTabAttrRespectedWithFrameFg(t *testing.T) {
 	cells := writer.Cells()
 
 	expectedFocus := cfg.FocusTabAttr
-	expectedFocus.Attrs |= term.AttrVerticalRenderOffset
+	expectedFocus.Attrs |= term.AttrNegativeVerticalRenderOffset
 	expectedNonFocus := cfg.NonFocusTabAttr
-	expectedNonFocus.Attrs |= term.AttrVerticalRenderOffset
+	expectedNonFocus.Attrs |= term.AttrNegativeVerticalRenderOffset
 
 	// "a" is free (not bound to any window) and must render with
 	// NonFocusTabAttr; "b" is bound to the focused window and renders

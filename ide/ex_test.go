@@ -628,7 +628,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │                  │
 └──────────────────┘`},
 		{":edit a.go>",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go            │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -639,7 +639,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{"a",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go            │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
@@ -650,7 +650,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{":edit /tmp/o.go>",
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -661,7 +661,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
@@ -672,7 +672,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
@@ -683,7 +683,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{"$", // simulates ctrl-l
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
@@ -694,7 +694,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{"$", // simulates ctrl-l
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
@@ -705,7 +705,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{":tcl>",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go            │
 ├──────────────────┤
 │DDDDDDDDDDDDDDDDDD│
@@ -716,7 +716,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │DDDDDDDDDDDDDDDDDD│
 └──────────────────┘`},
 		{":wq!^^^^^",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go            │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
@@ -727,7 +727,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":<",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go            │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
@@ -738,7 +738,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":edit o.go>1111",
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
@@ -749,7 +749,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{"$$##",
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │GGGGGGGGGGGGGGGGGG│
@@ -784,7 +784,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	cases = []handlertest.SequenceTestCase{
 		{"",
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
 │AAAAAAAA││GGGGGGGG│
@@ -795,7 +795,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │ZZZZZZZZ││GGGGGGGG│
 └────────┘└────────┘`},
 		{":<111111111",
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
 │AAAAAAAA││GGGGGGGG│
@@ -817,7 +817,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 
 	cases = []handlertest.SequenceTestCase{
 		{"",
-			`┌──────────────────┐
+			`┌────────━━━━━━────┐
 │o a.go  o o.go    │
 ├────────┐┌────────┤
 │$$$$$$$$││GGGGGGGG│
@@ -839,7 +839,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	cases = []handlertest.SequenceTestCase{
 		// test CommandKeyBindings
 		{"4$$$",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go  o o.go    │
 ├──────────────────┤
 │HHHHHHHHHHHHHHHHHH│
@@ -850,7 +850,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 │HHHHHHHHHHHHHHHHHH│
 └──────────────────┘`},
 		{":tcall>:edit o.go>bcde####",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o o.go            │
 ├──────────────────┤
 │IIIIIIIIIIIIIIIIII│
@@ -864,7 +864,7 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 	handlertest.TestHandlerSequence(t, bh, 20, 10, cases)
 
 	cases = []handlertest.SequenceTestCase{
-		{"", `┌──┐
+		{"", `┌━━┐
 │o │
 ├II┤
 IIII`},
@@ -875,7 +875,7 @@ IIII`},
 	require.NoError(t, err)
 	cases = []handlertest.SequenceTestCase{
 		{"",
-			`┌────┌─────────────┐
+			`┌━━━━┌─────────────┐
 │o o.│ wasup: Z    │
 ├────└─────────────┘
 │IIIIIIIIIIIIIIIIII│
@@ -1021,7 +1021,7 @@ IIII`},
 	// test case for issue #27
 	cases = []handlertest.SequenceTestCase{
 		{":edit ait^^^aix^^^^ airsoft.map>",
-			`┌──────────────────────────────────┌─────────────┐
+			`┌────────────────━━━━━━━━━━━━━─────┌─────────────┐
 │o o.go  o bugz  o airsoft.map     │ cannot      │
 ├──────────────────────────────────│ reload      │
 │0000000000000000000000000000000000│ this        │
@@ -1062,7 +1062,7 @@ func TestShellCommandOpensTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{
 			InputSequence: "<c-\\\\>shell<enter>help<enter>",
-			Expected: "┌──────────────────┐\n" +
+			Expected: "┌━━━━━━━───────────┐\n" +
 				"│ shell           │\n" +
 				"├──────────────────┤\n" +
 				"│  available       │\n" +
@@ -1211,7 +1211,7 @@ func TestShellCommandPersistsHistory(t *testing.T) {
 	handlertest.RunHandlerSequence(t, b, 20, 10, []handlertest.SequenceTestCase{
 		{
 			InputSequence: "<c-\\\\>shell<enter>help<enter>",
-			Expected: "┌──────────────────┐\n" +
+			Expected: "┌━━━━━━━───────────┐\n" +
 				"│\ue691 shell           │\n" +
 				"├──────────────────┤\n" +
 				"│> help            │\n" +
@@ -1358,7 +1358,7 @@ func TestBrowserHandlerInterrupts(t *testing.T) {
 func TestMultipleFilesStartup(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"",
-			`┌──────────────────┐
+			`┌────────━━━━━━━───┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -1369,7 +1369,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{"aa",
-			`┌──────────────────┐
+			`┌────────━━━━━━━───┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
@@ -1380,7 +1380,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`},
 		{"#", // simulates ctrl-h
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -1391,7 +1391,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{"#:reloadfile>",
-			`┌──────────────────┐
+			`┌────────━━━━━━━───┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │DDDDDDDDDDDDDDDDDD│
@@ -1619,7 +1619,7 @@ eeeeeeeeeeeee▐
 func TestExKeySequence(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"zgl",
-			`┌──────────────────┐
+			`┌━━━━━━━━──────────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -1630,7 +1630,7 @@ func TestExKeySequence(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{"g",
-			`┌──────────────────┐
+			`┌──────────━━━─────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
@@ -1641,7 +1641,7 @@ func TestExKeySequence(t *testing.T) {
 │BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{"go",
-			`┌──────────────────┐
+			`┌──────────━━━─────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
 │DDDDDDDDDDDDDDDDDD│
@@ -1654,7 +1654,7 @@ func TestExKeySequence(t *testing.T) {
 		// 2 seconds of wait should be plenty for sequencer to deem 'g' sequence
 		// stale and re-issue event.
 		{"g____________________",
-			`┌──────────────────┐
+			`┌──────────━━━─────┐
 │o 10k.go  o 2     │
 ├──────────────────┤
 │CCCCCCCCCCCCCCCCCC│
@@ -1737,7 +1737,7 @@ func TestExKeySequence(t *testing.T) {
 func TestExTabIntegration(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"",
-			`┌──────────────────┐
+			`┌━━━━━━━━━─────────┐
 │x Fieshta  x Pahty│
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -2393,7 +2393,7 @@ func (*testShellREPLHandler) Help(
 func TestCommandHistory(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit a.go>:edit wi.go>1234",
-			`┌──────────────────┐
+			`┌────────━━━━━━━───┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
@@ -2404,7 +2404,7 @@ func TestCommandHistory(t *testing.T) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{"::::>",
-			`┌──────────────────┐
+			`┌────────━━━━━━━───┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
@@ -2514,7 +2514,7 @@ func (s *closeCountingPartition) Close() error {
 func TestCloseOtherWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>:windowsplit>:windowsplit>:windowfocus left>:windowfocus left>",
-			`┌──────────────────┐
+			`┌━━━━━━━━━━────────┐
 │o hello.go        │
 ┌────┐┌─────┐┌─────┤
 │AAAA││     ││     │
@@ -2525,7 +2525,7 @@ func TestCloseOtherWindows(t *testing.T) {
 │AAAA││     ││     │
 └────┘└─────┘└─────┘`},
 		{":windowcloseall>",
-			`┌──────────────────┐
+			`┌━━━━━━━━━━────────┐
 │o hello.go        │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -2549,7 +2549,7 @@ func TestCloseOtherWindows(t *testing.T) {
 func TestCommandAliases(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":todo>1234",
-			`┌──────────────────┐
+			`┌────────━━━━━━━───┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │EEEEEEEEEEEEEEEEEE│
@@ -2560,7 +2560,7 @@ func TestCommandAliases(t *testing.T) {
 │EEEEEEEEEEEEEEEEEE│
 └──────────────────┘`},
 		{":bp>",
-			`┌──────────────────┐
+			`┌━━━━━━────────────┐
 │o a.go  o wi.go   │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -2571,7 +2571,7 @@ func TestCommandAliases(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 		{":e x.go>",
-			`┌──────────────────┐
+			`┌────────────━━━━━━┐
 │o a.  o wi  o x.go│
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -2749,7 +2749,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 └──└────────────────────────────────┘──┘`,
 		},
 		{":windowclose>:windowclose>:edit a>:! sh -c 'sleep 20 && echo %'>",
-			`┌──────────────────────────────────────┐
+			`┌━━━───────────────────────────────────┐
 │o a                                   │
 ├──┌────────────────────────────────┐──┤
 │  │ ▀                            0s│  │
@@ -2854,7 +2854,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 └──────────────────┘`,
 		},
 		{":!>:windowconverttab companion X>", // ` simulates ctrl-v
-			`┌──────────────────┐
+			`┌━━━━━━━━━━━───────┐
 │X companion       │
 ├──────────────────┤
 │sh ▐              │
@@ -2866,7 +2866,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 └──────────────────┘`,
 		},
 		{":!>:!>",
-			`┌──────────────────┐
+			`┌━━━━━━━━━━━───────┐
 │X companion       │
 ├──────────────────┤
 │sh ▐              │
@@ -3343,7 +3343,7 @@ func TestExUsesSharedIDEStorage(t *testing.T) {
 func TestFullScreen(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowsplit>:edit aaa>:edit bbb>:windowtogglemaximize>",
-			`┌──────────────────┐
+			`┌───────━━━━━──────┐
 │o aaa  o bbb      │
 ├─┐┌───────────────┐
 │ ││AAAAAAAAAAAAAAA│
@@ -3355,7 +3355,7 @@ func TestFullScreen(t *testing.T) {
 └─┘└───────────────┘`,
 		},
 		{":windowmax>",
-			`┌──────────────────┐
+			`┌───────━━━━━──────┐
 │o aaa  o bbb      │
 ├────────┐┌────────┐
 │        ││AAAAAAAA│
@@ -3397,7 +3397,7 @@ func TestFullScreen(t *testing.T) {
 func TestMoveWindowContent(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowsplit>:edit aaa>:windowmove left>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ┌────────┐┌────────┤
 │AAAAAAAA││        │
@@ -3409,7 +3409,7 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":windowmove right>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├────────┐┌────────┐
 │        ││AAAAAAAA│
@@ -3421,7 +3421,7 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":windowsplit down>:windowfocus up>:windowmove down>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├────────┐┌────────┤
 │        ││        │
@@ -3433,7 +3433,7 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":windowmove up>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├────────┐┌────────┐
 │        ││AAAAAAAA│
@@ -3445,7 +3445,7 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":windowmove left>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ┌────────┐┌────────┤
 │AAAAAAAA││        │
@@ -3457,7 +3457,7 @@ func TestMoveWindowContent(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":terminalnew>:! sh>:windowmove left>:windowmove right>",
-			`┌────┌─────────────┐
+			`┌━━━━┌─────────────┐
 │o aa│ cannot      │
 ├───┌│ move        │
 │   ││ ▐indow in   │
@@ -3499,7 +3499,7 @@ func TestMoveWindowContent(t *testing.T) {
 func TestResizeWindows(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowsplit>:edit aaa>:windowresize increase width>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├───────┐┌─────────┐
 │       ││AAAAAAAAA│
@@ -3511,7 +3511,7 @@ func TestResizeWindows(t *testing.T) {
 └───────┘└─────────┘`,
 		},
 		{":windowsplit down>:windowresize min height>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├───────┐┌─────────┤
 │       ││AAAAAAAAA│
@@ -3523,7 +3523,7 @@ func TestResizeWindows(t *testing.T) {
 └───────┘└─────────┘`,
 		},
 		{":windowresize max height>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├───────┐┌─────────┤
 │       ││AAAAAAAAA│
@@ -3535,7 +3535,7 @@ func TestResizeWindows(t *testing.T) {
 └───────┘└─────────┘`,
 		},
 		{":windowresize max width>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├─┐┌───────────────┤
 │ ││AAAAAAAAAAAAAAA│
@@ -3547,7 +3547,7 @@ func TestResizeWindows(t *testing.T) {
 └─┘└───────────────┘`,
 		},
 		{":windowresize min width>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├───────────────┐┌─┤
 │               ││A│
@@ -3559,7 +3559,7 @@ func TestResizeWindows(t *testing.T) {
 └───────────────┘└─┘`,
 		},
 		{":windowresize reset>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├────────┐┌────────┤
 │        ││AAAAAAAA│
@@ -3571,7 +3571,7 @@ func TestResizeWindows(t *testing.T) {
 └────────┘└────────┘`,
 		},
 		{":windowresize decrease height>:windowresize decrease width>",
-			`┌──────────────────┐
+			`┌━━━━━─────────────┐
 │o aaa             │
 ├─────────┐┌───────┤
 │         ││AAAAAAA│
@@ -3766,7 +3766,7 @@ reloadfile!
 func TestRenameTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>:tabrename 8berSucks>",
-			`┌──────────────────┐
+			`┌━━━━━━━━━━━───────┐
 │o 8berSucks       │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -3791,7 +3791,7 @@ func TestEventNone(t *testing.T) {
 	t.Run("delegates to underlying handler", func(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{"🎉edit hello.go>",
-				`┌──────────────────┐
+				`┌━━━━━━━━━━────────┐
 │o hello.go        │
 ├──────────────────┤
 │AAAAAAAAAAAAAAAAAA│
@@ -3816,7 +3816,7 @@ func TestEventNone(t *testing.T) {
 
 		cases = []handlertest.SequenceTestCase{
 			{"",
-				`┌──────────────────┐
+				`┌━━━━━━━━━━────────┐
 │o hello.go        │
 ├──────────────────┤
 │BBBBBBBBBBBBBBBBBB│
@@ -4024,7 +4024,7 @@ func TestTerminalOnFocus(t *testing.T) {
 func TestSwitchToTab(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>B:edit world.go>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -4041,7 +4041,7 @@ func TestSwitchToTab(t *testing.T) {
 └────────────────────────────┘`},
 
 		{":tabfocus ",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -4057,7 +4057,7 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{"1>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -4073,7 +4073,7 @@ func TestSwitchToTab(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{"2 world.go>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
@@ -4089,7 +4089,7 @@ func TestSwitchToTab(t *testing.T) {
 │MMMMMMMMMMMMMMMMMMMMMMMMMMMM│
 └────────────────────────────┘`},
 		{"1 hell>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
@@ -4105,7 +4105,7 @@ func TestSwitchToTab(t *testing.T) {
 │TTTTTTTTTTTTTTTTTTTTTTTTTTTT│
 └────────────────────────────┘`},
 		{"2 notexist.go>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
@@ -4121,7 +4121,7 @@ func TestSwitchToTab(t *testing.T) {
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
 		{":tabfocus 3>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go  o world.go      │
 ├────────────────────────────┤
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
@@ -4137,7 +4137,7 @@ func TestSwitchToTab(t *testing.T) {
 │bbbbbbbbbbbbbbbbbbbbbbbbbbbb│
 └────────────────────────────┘`},
 		{":tabfocus 0>",
-			`┌──────────────┌─────────────┐
+			`┌━━━━━━━━━━────┌─────────────┐
 │o hello.go  o │ the first   │
 ├──────────────│ tab is 1    │
 │bbbbbbbbbbbbbb└─────────────┘
@@ -4365,7 +4365,7 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 └└───────────────────────────┘`},
 			{":windowconverttab asset x>",
-				`┌────────────────────────────┐
+				`┌━━━━━━━─────────────────────┐
 │x asset                     │
 ├┌───────────────────────────┤
 ││                           │
@@ -4381,7 +4381,7 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 └└───────────────────────────┘`},
 			{":edit abc>:write>",
-				`┌────────────────────────────┐
+				`┌─────────━━━━━──────────────┐
 │x asset  o abc              │
 ├┌───────────────────────────┤
 ││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -4397,7 +4397,7 @@ func TestRunStopTasks(t *testing.T) {
 ││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └└───────────────────────────┘`},
 			{":tabprevious>",
-				`┌────────────────────────────┐
+				`┌━━━━━━━─────────────────────┐
 │x asset  o abc              │
 ├┌───────────────────────────┤
 ││                           │
@@ -4413,7 +4413,7 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 └└───────────────────────────┘`},
 			{":windowfocus left>:windowconverttab build X>",
-				`┌────────────────────────────┐
+				`┌────────────────━━━━━━━─────┐
 │x asset  o abc  X build     │
 ├────────────────────────────┤
 │                            │
@@ -4429,7 +4429,7 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 			{":tabprevious>:tabprevious>:tabprevious>",
-				`┌────────────────────────────┐
+				`┌────────────────━━━━━━━─────┐
 │x asset  o abc  X build     │
 ├────────────────────────────┤
 │                            │
@@ -4445,7 +4445,7 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 			{":windowsplit right>:tabnext>:tabnext>",
-				`┌────────────────────────────┐
+				`┌────────────────━━━━━━━─────┐
 │x asset  o abc  X build     │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4461,7 +4461,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 			{":taskclose validateAssets>",
-				`┌────────────────────────────┐
+				`┌───────━━━━━━━──────────────┐
 │o abc  X build              │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4477,7 +4477,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 			{":taskclose build>",
-				`┌────────────────────────────┐
+				`┌━━━━━───────────────────────┐
 │o abc                       │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4493,7 +4493,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 			{":windowfocus left>:tasknewtab tests -- go test ./...>",
-				`┌────────────────────────────┐
+				`┌───────━━━━━━━──────────────┐
 │o abc  8 tests              │
 ┌─────────────┐┌─────────────┤
 │             ││AAAAAAAAAAAAA│
@@ -4509,7 +4509,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 			{":windowfocus right>:tasknewtab build -- go build ./...>",
-				`┌────────────────────────────┐
+				`┌────────────────━━━━━━━─────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┐
 │             ││             │
@@ -4525,7 +4525,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 └─────────────┘└─────────────┘`},
 			{":tasknewtab build -- go build ./...>",
-				`┌────────────────────────────┐
+				`┌────────────────━━━━━━━─────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┤
 ┌────────────────────────────┐
@@ -4541,7 +4541,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 └─────────────┘└─────────────┘`},
 			{"y",
-				`┌────────────────────────────┐
+				`┌────────────────━━━━━━━─────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┐
 │             ││             │
@@ -4557,7 +4557,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 └─────────────┘└─────────────┘`},
 			{":tabclose>",
-				`┌────────────────────────────┐
+				`┌───────━━━━━━━──────────────┐
 │o abc  8 tests              │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4573,7 +4573,7 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 			{":taskclose tests>",
-				`┌────────────────────────────┐
+				`┌━━━━━───────────────────────┐
 │o abc                       │
 ├─────────────┐┌─────────────┐
 │             ││AAAAAAAAAAAAA│
@@ -4601,7 +4601,7 @@ func TestEcho(t *testing.T) {
 	t.Run("events get dispatched", func(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{`:edit hello.go>:echo 01234>`,
-				`┌────────────────────────────┐
+				`┌━━━━━━━━━━──────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -4684,7 +4684,7 @@ func TestEcho(t *testing.T) {
 	t.Run("{prompt} instruction", func(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{`:echo {prompt}edit\<space\>hello.go\<enter\>>`,
-				`┌────────────────────────────┐
+				`┌━━━━━━━━━━──────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -4906,7 +4906,7 @@ func TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion(t *testing.T) {
 func TestMoveTabs(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit caliu.go>:edit boira.go>b",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -4922,7 +4922,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove 1>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o boira.go  o caliu.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -4938,7 +4938,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove 99>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -4954,7 +4954,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove left>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o boira.go  o caliu.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -4970,7 +4970,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove left>",
-			`┌──────────────┌─────────────┐
+			`┌━━━━━━━━━━────┌─────────────┐
 │o boira.go  o │ tab is      │
 ├──────────────│ already at  │
 │BBBBBBBBBBBBBB│ the start   │
@@ -4986,7 +4986,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":notificationCloseAll>:tabmove right>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5002,7 +5002,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":tabmove right>",
-			`┌──────────────┌─────────────┐
+			`┌────────────━━┌─────────────┐
 │o caliu.go  o │ tab is      │
 ├──────────────│ already at  │
 │BBBBBBBBBBBBBB│ the end of  │
@@ -5018,7 +5018,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":notificationCloseAll>:windowsplit right>:tabprevious>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├─────────────┐┌─────────────┐
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
@@ -5034,7 +5034,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 		{":tabmove right>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o boira.go  o caliu.go      │
 ├─────────────┐┌─────────────┐
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
@@ -5050,7 +5050,7 @@ func TestMoveTabs(t *testing.T) {
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
 └─────────────┘└─────────────┘`},
 		{":windowfocus left>:tabmove right>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ┌─────────────┐┌─────────────┤
 │BBBBBBBBBBBBB││AAAAAAAAAAAAA│
@@ -5080,7 +5080,7 @@ func TestMoveTabs(t *testing.T) {
 func TestViewForceWrite(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":view caliu.go>b",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o caliu.go                  │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5096,7 +5096,7 @@ func TestViewForceWrite(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":write>",
-			`┌──────────────┌─────────────┐
+			`┌━━━━━━━━━━────┌─────────────┐
 │o caliu.go    │ flush:      │
 ├──────────────│ file is     │
 │BBBBBBBBBBBBBB│ not         │
@@ -5112,7 +5112,7 @@ func TestViewForceWrite(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":notificationCloseAll>:write!>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o caliu.go                  │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5128,7 +5128,7 @@ func TestViewForceWrite(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":write>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o caliu.go                  │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5158,7 +5158,7 @@ func TestViewForceWrite(t *testing.T) {
 func TestViewForceWriteAll(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":view caliu.go>:view boira.go>b",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5174,7 +5174,7 @@ func TestViewForceWriteAll(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":writeall>",
-			`┌──────────────┌─────────────┐
+			`┌────────────━━┌─────────────┐
 │o caliu.go  o │ 2 errors    │
 ├──────────────│ occurred:   │
 │BBBBBBBBBBBBBB│ flush:      │
@@ -5190,7 +5190,7 @@ func TestViewForceWriteAll(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":notificationCloseAll>:writeall!>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5206,7 +5206,7 @@ func TestViewForceWriteAll(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 		{":writeall>",
-			`┌────────────────────────────┐
+			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
 ├────────────────────────────┤
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5236,7 +5236,7 @@ func TestViewForceWriteAll(t *testing.T) {
 func TestIntegrationUndoAfterOpen(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit<space>enm.go<enter>u",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━────────────────────┐
 │o enm.go                    │
 ├────────────────────────────┤
 │▐                           │
@@ -5288,7 +5288,7 @@ func TestCopyPath(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			cases := []handlertest.SequenceTestCase{
 				{fmt.Sprintf(":edit hello.go>%s>", tcase.cmd),
-					`┌────┌─────────────┐
+					`┌━━━━┌─────────────┐
 │o he│ file path   │
 ├────│ copied to   │
 │AAAA│ clipboard   │
@@ -5419,7 +5419,7 @@ func testCopyToClipboard(
 ) {
 	cases := []handlertest.SequenceTestCase{
 		{":edit hello.go>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -5435,7 +5435,7 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{":clipboardpaste>",
-			`┌──────────────┌─────────────┐
+			`┌━━━━━━━━━━────┌─────────────┐
 │o hello.go    │ nothing to  │
 ├──────────────│ paste       │
 │AAAAAAAAAAAAAA└─────────────┘
@@ -5451,7 +5451,7 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{":noticloseall>:clipboardcopy>",
-			`┌──────────────┌─────────────┐
+			`┌━━━━━━━━━━────┌─────────────┐
 │o hello.go    │ copied to   │
 ├──────────────│ clipboard   │
 │AAAAAAAAAAAAAA└─────────────┘
@@ -5467,7 +5467,7 @@ func testCopyToClipboard(
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 └────────────────────────────┘`},
 		{":noticloseall>:clipboardpaste>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
@@ -5483,7 +5483,7 @@ func testCopyToClipboard(
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
 └────────────────────────────┘`},
 		{":####",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o hello.go                  │
 ├────────────────────────────┤
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│

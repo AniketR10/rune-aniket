@@ -1235,7 +1235,7 @@ func testTabIntegration(t *testing.T,
 	t.Run("switches to a tab upon call to SetContent", func(t *testing.T) {
 		cases := []handlertest.SequenceTestCase{
 			{"",
-				`┌──────────────────┐
+				`┌──────━━━━────────┐
 │x $$  x ##        │
 ├──────────────────┤
 │##################│

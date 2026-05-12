@@ -40,6 +40,10 @@ var (
 	defaultSeparator    = "  "
 )
 
+// defaultFocusFrameChar is the highlight rune drawn on the top row over
+// the focused tab's cell columns. U+2501 BOX DRAWINGS HEAVY HORIZONTAL.
+const defaultFocusFrameChar = '━'
+
 // minTabCellWidth is the smallest cell width a non-focused tab can shrink
 // to. The focused tab is never shrunk below its full label width unless
 // the inner width is smaller than that label.
@@ -85,6 +89,8 @@ type Tabs struct {
 	nonFocusIconAttr term.Attributes
 	backgroundAttr   term.Attributes
 	frameAttr        term.Attributes
+	focusFrameAttr   term.Attributes
+	focusFrameChar   rune
 	frameBorders     component.FrameCharSet
 	separator        string
 	dirty            bool
@@ -125,6 +131,7 @@ func (t *Tabs) Init() {
 	t.border = true
 	t.focusAttr = defaultFocusAttr
 	t.nonFocusAttr = defaultNonFocusAttr
+	t.focusFrameChar = defaultFocusFrameChar
 	t.frameBorders = component.FrameCharSetDefault()
 	t.fileListBuf = new(cell.Buffer)
 	t.fileListBuf.InitPerformance(1, 10, ' ')
@@ -136,15 +143,18 @@ func (t *Tabs) Init() {
 }
 
 // SetAttr sets the attributes of the text in focus, text not in focus, the icon
-// of the tab in focus, the icon of tabs not in focus, the tabs frame and the tabs
-// background.
-func (t *Tabs) SetAttr(focusTab, tab, focusIcon, icon, frame, background term.Attributes) {
+// of the tab in focus, the icon of tabs not in focus, the focus-frame highlight
+// drawn on top of the focused tab, the tabs frame and the tabs background.
+func (t *Tabs) SetAttr(
+	focusTab, tab, focusIcon, icon, focusFrame, frame, background term.Attributes,
+) {
 	t.focusAttr = focusTab
 	t.nonFocusAttr = tab
 	t.focusIconAttr = focusIcon
 	t.nonFocusIconAttr = icon
 	t.backgroundAttr = background
 	t.frameAttr = frame
+	t.focusFrameAttr = focusFrame
 	t.fileListFrame = newListFrame(t.backgroundAttr,
 		t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
 	t.fileListFrame.Resize(t.width, t.height)
@@ -181,6 +191,13 @@ func (t *Tabs) SetFrameCharSet(fb component.FrameCharSet) {
 	t.dirty = true
 }
 
+// SetFocusFrameChar defines the rune drawn on the top row of the tab bar
+// over the focused tab's cell columns. The default is `━` (U+2501).
+func (t *Tabs) SetFocusFrameChar(r rune) {
+	t.focusFrameChar = r
+	t.dirty = true
+}
+
 // Resize : tui.Component
 func (t *Tabs) Resize(width, height int) {
 	t.width, t.height = width, height
@@ -195,7 +212,59 @@ func (t *Tabs) Draw(w term.Writer) {
 		t.dirty = false
 	}
 
-	t.fileListFrame.Draw(w)
+	// In borderless mode with at least 2 rows, push the labels down by
+	// one row so y=0 is reserved for the focus highlight. Bordered mode
+	// already places labels on y>=1 because the frame occupies y=0.
+	if !t.border && t.height >= 2 {
+		vw := &component.VirtualWriter{
+			Writer: w,
+			Offset: term.Coordinates{Y: 1},
+			Width:  t.width,
+			Height: t.height - 1,
+		}
+		t.fileListFrame.Draw(vw)
+	} else {
+		t.fileListFrame.Draw(w)
+	}
+	t.drawFocusHighlight(w)
+}
+
+// drawFocusHighlight overlays the focus-frame rune on y=0 across the
+// columns occupied by the focused tab's cell. No-op when there are no
+// tabs, when the bar has no second row to host labels (h<2) or when
+// nothing is drawable.
+func (t *Tabs) drawFocusHighlight(w term.Writer) {
+	if t.height < 2 || t.width <= 0 || len(t.layout.cells) == 0 {
+		return
+	}
+	xLeft := 0
+	xRight := t.width
+	if t.border {
+		xLeft = 1
+		xRight = t.width - 1
+	}
+	innerX := 0
+	sepLen := len(t.separator)
+	for i, cell := range t.layout.cells {
+		if cell.idx == t.focusIdx {
+			for dx := 0; dx < cell.width; dx++ {
+				x := xLeft + innerX + dx
+				if x < xLeft || x >= xRight {
+					continue
+				}
+				w.SetCell(term.Coordinates{X: x, Y: 0}, term.Cell{
+					Width:      1,
+					Ch:         t.focusFrameChar,
+					Attributes: t.focusFrameAttr,
+				})
+			}
+			return
+		}
+		innerX += cell.width
+		if i < len(t.layout.cells)-1 {
+			innerX += sepLen
+		}
+	}
 }
 
 // ResetFocus resets the focus of all the tabs to false.
@@ -396,7 +465,7 @@ func (t *Tabs) TabAt(pos term.Coordinates) (int, bool) {
 	// least once), use it: it is the authoritative geometry.
 	if len(t.layout.cells) > 0 {
 		posX := pos.X
-		if t.borderActive() {
+		if t.border {
 			if posX <= 0 {
 				return t.layout.cells[0].idx, true
 			}
@@ -715,14 +784,10 @@ func (t *Tabs) restoreFocusIdx(focused *tab) {
 }
 
 func (t *Tabs) innerWidth() int {
-	if t.borderActive() {
+	if t.border {
 		return max(0, t.width-2)
 	}
 	return t.width
-}
-
-func (t *Tabs) borderActive() bool {
-	return t.border && t.width >= 3 && t.height >= 3
 }
 
 func tabFullWidth(t *tab) int {

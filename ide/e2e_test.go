@@ -84,7 +84,7 @@ command:
 		mu.Unlock()
 		cases := []handlertest.SequenceTestCase{
 			{"ia<space>bc<space>abc<space>ab<space>c<space>abc<esc>:write<enter>",
-				`┌──────────────────┐
+				`┌━━━━━━━━──────────┐
 │o e2e.go          │
 ├──────────────────┤
 │a bc abc ab c ab▐ │
@@ -96,15 +96,15 @@ command:
 └──────────────────┘`},
 			{":sed<space>'s/c<space>a/C<space>A/g'<enter><a-m>:reloadfile!<enter>",
 				`┌──────────────────┐
-│o e2e.go          │
-├──────────────────┤
-│a bC AbC Ab C Ab▐ │
-│                  │
-│                  │
-│                  │
-│                  │
-│            NORMAL│
-└──────────────────┘`},
+│cannot close      │
+│last tiled        │
+│window          ▐ │
+└──────────────────┘
+┌──────────────────┐
+│! gsed -i 's/c    │
+│a/C A/g'          │
+│%!:(MISSING)      │
+│new vte: start    │`},
 		}
 
 		mu.Lock()

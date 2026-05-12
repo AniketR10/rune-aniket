@@ -42,6 +42,8 @@ func DefaultConfig() Config {
 		NonFocusTabAttr:     term.Attributes{Fg: tcell.ColorRed},
 		FocusTabIconAttr:    term.Attributes{},
 		NonFocusTabIconAttr: term.Attributes{},
+		FocusTabHighlightAttr: term.Attributes{Fg: tcell.ColorYellow},
+		FocusTabHighlightChar: '━',
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		FrameUnion:          handler.DefaultWindowManagerConfig().Frame,
@@ -89,6 +91,8 @@ type Config struct {
 	NonFocusTabAttr     term.Attributes
 	FocusTabIconAttr    term.Attributes
 	NonFocusTabIconAttr term.Attributes
+	FocusTabHighlightAttr term.Attributes
+	FocusTabHighlightChar rune
 	TabBarOffset        int
 	TabBarHeight        int
 	TabNameSeparator    string

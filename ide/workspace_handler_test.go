@@ -92,7 +92,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 	// file-level subscriptions across a file's lifecycle.
 	cases := []handlertest.SequenceTestCase{
 		{":edit dakar.md>igentleman>driver>gentleman<:write>/gentleman>:jumptolocation next search>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -102,7 +102,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next search>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │▐entleman                   │
@@ -112,7 +112,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":tabclose>:edit dakar.md>/gentleman>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -122,7 +122,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next search>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │▐entleman                   │
@@ -132,7 +132,7 @@ func TestFileCommandRegistryIntegration(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":foldexpandall>", // this fails if not installed correctly
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │▐entleman                   │
@@ -369,7 +369,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"└────────────────────────────┘",
 	}, "\n")
 	editorFrame := strings.Join([]string{
-		"┌────────────────────────────┐",
+		"┌━━━━━━━━━━──────────────────┐",
 		"│o gamma.go                  │",
 		"├────────────────────────────┤",
 		"│hell▐                       │",
@@ -384,7 +384,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 	// subscription and rendered in the tree. The buffer pane on
 	// the right still shows the gamma.go editor opened in step 3.
 	reopenedFrame := strings.Join([]string{
-		"┌────────────────────────────┐",
+		"┌━━━━━━━━━━──────────────────┐",
 		"│o gamma.go                  │",
 		"┌────────────┐┌──────────────┤",
 		"│ ▐ alpha.go ││hello         │",
@@ -510,7 +510,7 @@ func TestGitlinkIntegration(t *testing.T) {
 				InputSequence: `<c-\\>edit<space>` + relFile +
 					`<enter><c-\\>gitlink<enter>`,
 				Expected: strings.Join([]string{
-					"┌────────────────────────────────────────────────────────────────┌─────────────┐",
+					"┌━━━━━━━━━━━━━━──────────────────────────────────────────────────┌─────────────┐",
 					"│o guasacaca.md                                                  │ copied      │",
 					"├────────────────────────────────────────────────────────────────│ https://git │",
 					"│▐i                                                              │ hub.com/uns │",
@@ -614,7 +614,7 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{InputSequence: "<c-\\\\>terminalnewtab<enter>" +
 			"<c-\\\\>tabrename<space>terminal<enter>", // avoid dynamic tty name
-			Expected: `┌────────────────────────────┐
+			Expected: `┌━━━━━━━━━━──────────────────┐
 │$ terminal                  │
 ├────────────────────────────┤
 │▐                           │
@@ -735,7 +735,7 @@ func TestCustomLocations(t *testing.T) {
 	h := newSafeHandler(m)
 	cases := []handlertest.SequenceTestCase{
 		{":edit dakar.md>igentleman<:locationcreate mylist>a>driver<:locationcreate mylist>a>gentleman<:write>:locationcreate mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -745,7 +745,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation previous mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -755,7 +755,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation previous mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentlema▐                   │
@@ -765,7 +765,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":locationdelete mork>",
-			`┌──────────────┌─────────────┐
+			`┌━━━━━━━━━━────┌─────────────┐
 │o dakar.md    │ there's no  │
 ├──────────────│ location    │
 │gentlema▐     │ at the      │
@@ -775,7 +775,7 @@ func TestCustomLocations(t *testing.T) {
 │              │ for given   │
 └──────────────│ location    │`},
 		{":noticloseall>:locationdelete mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentlema▐                   │
@@ -785,7 +785,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -795,7 +795,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -805,7 +805,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -815,7 +815,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":locationdeleteall mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -825,7 +825,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -835,7 +835,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{"k:locationtoggle mylist>j:locationtoggle mylist>:jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentl▐man                   │
@@ -845,7 +845,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentleman                   │
@@ -855,7 +855,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":locationtoggle mylist>:jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentl▐man                   │
@@ -865,7 +865,7 @@ func TestCustomLocations(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 		{":jumptolocation next mylist>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │gentl▐man                   │
@@ -898,7 +898,7 @@ func TestApostropheMarkJump(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		// Create file with leading spaces on a line, set mark at column 6
 		{InputSequence: "<c-\\\\>edit<space>test.md<enter>i<space><space><space>hello<enter>world<esc><c-\\\\>write<enter>k$ma",
-			Expected: `┌────────────────────────────┐
+			Expected: `┌━━━━━━━━━───────────────────┐
 │o test.md                   │
 ├────────────────────────────┤
 │   hell▐                    │
@@ -909,7 +909,7 @@ func TestApostropheMarkJump(t *testing.T) {
 └────────────────────────────┘`},
 		// Move to next line
 		{InputSequence: "j",
-			Expected: `┌────────────────────────────┐
+			Expected: `┌━━━━━━━━━───────────────────┐
 │o test.md                   │
 ├────────────────────────────┤
 │   hello                    │
@@ -920,7 +920,7 @@ func TestApostropheMarkJump(t *testing.T) {
 └────────────────────────────┘`},
 		// 'a jumps to first non-blank character on marked line
 		{InputSequence: "'a",
-			Expected: `┌────────────────────────────┐
+			Expected: `┌━━━━━━━━━───────────────────┐
 │o test.md                   │
 ├────────────────────────────┤
 │   ▐ello                    │
@@ -931,7 +931,7 @@ func TestApostropheMarkJump(t *testing.T) {
 └────────────────────────────┘`},
 		// Move away again
 		{InputSequence: "j",
-			Expected: `┌────────────────────────────┐
+			Expected: `┌━━━━━━━━━───────────────────┐
 │o test.md                   │
 ├────────────────────────────┤
 │   hello                    │
@@ -942,7 +942,7 @@ func TestApostropheMarkJump(t *testing.T) {
 └────────────────────────────┘`},
 		// `a jumps to exact mark position (column 6)
 		{InputSequence: "`a",
-			Expected: `┌────────────────────────────┐
+			Expected: `┌━━━━━━━━━───────────────────┐
 │o test.md                   │
 ├────────────────────────────┤
 │   hell▐                    │
@@ -964,7 +964,7 @@ func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 	h := newSafeHandler(m)
 	cases := []handlertest.SequenceTestCase{
 		{"<c-\\\\>edit<space>dakar.md<enter>",
-			`┌────────────────────────────┐
+			`┌━━━━━━━━━━──────────────────┐
 │o dakar.md                  │
 ├────────────────────────────┤
 │▐                           │
@@ -1144,7 +1144,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━━──────────────────┐
 │o ········                  │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1168,7 +1168,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to1<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━━──────────────────┐
 │o ········                  │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1195,7 +1195,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━━──────────────────┐
 │o ········                  │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1219,7 +1219,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━━──────────────────┐
 │o ········                  │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1251,7 +1251,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━━━─────────────────┐
 │o ·········                 │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1275,7 +1275,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━━━─────────────────┐
 │o ·········                 │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1302,7 +1302,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 			sequences: []handlertest.SequenceTestCase{
 				{
 					InputSequence: "<c-\\\\>openCase<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━───────────────────┐
 │o ·······                   │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1326,7 +1326,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
-					Expected: `┌────────────────────────────┐
+					Expected: `┌━━━━━━━━━───────────────────┐
 │o ·······                   │
 ├────────────────────────────┤
 │▐ackage main                │
@@ -1672,7 +1672,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp",
-			`┌──────────────────┐
+			`┌━━━━━━━━━━━───────┐
 │o 12345aZZ*       │
 ├──────────────────┤
 │hell▐             │
@@ -1683,7 +1683,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp:workspacerelo>", // un-saved
-			`┌──────────────────┐
+			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
 │▐                 │
@@ -1694,7 +1694,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 		{":edit /tmp/12345aZZ>ihello<yyp:w>:workspacerelo>", // saved
-			`┌──────────────────┐
+			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
 │hell▐             │
@@ -1705,7 +1705,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 		{":edit memory\\:///12345aZZ>ihello<yyp:w>:workspacerelo>", // full uri
-			`┌──────────────────┐
+			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
 │hell▐             │
@@ -1729,7 +1729,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		// prompt resets cache (use file scheme to avoid needing
 		// to use ':' to indicate memory scheme)
 		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>y:noticloseall>",
-			`┌──────────────────┐
+			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
 │▐                 │
@@ -1872,7 +1872,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │1 1  4 4          │
 └──────────────────┘`},
 		{":wofo 4>:workspacenew memory\\:///tmp2>:edit memory\\:///tmp2/12>:workspacerelo>", // reloads non-primary workspace
-			`┌──────────────────┐
+			`┌━━━━──────────────┐
 │o 12              │
 ├──────────────────┤
 │▐                 │
@@ -2015,7 +2015,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 
 		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
-				`┌──────────────────┐
+				`┌━━━━━━━───────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │hola▐             │
@@ -2026,7 +2026,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 			{":quit>",
-				`┌──────────────────┐
+				`┌━━━━━━━───────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │                  │
@@ -2062,7 +2062,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 
 		cases := []handlertest.SequenceTestCase{
 			{"ihola <",
-				`┌──────────────────┐
+				`┌━━━━━━━───────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │hola▐             │
@@ -2073,7 +2073,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 			{":quit>",
-				`┌──────────────────┐
+				`┌━━━━━━━───────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │                  │
@@ -2116,7 +2116,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 
 			cases := []handlertest.SequenceTestCase{
 				{"ihola <",
-					`┌──────────────────┐
+					`┌━━━━━━━───────────┐
 │o 1234*  o 4567   │
 ├──────────────────┤
 │hola▐             │
@@ -2238,7 +2238,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 				cases := []handlertest.SequenceTestCase{
 					{"",
-						`┌──────────────────┐
+						`┌━━━━━━────────────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │▐                 │
@@ -2272,7 +2272,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │  Yes        No   │
 └──────────────────┘`},
 					{"y",
-						`┌──────────────────┐
+						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │▐                 │
@@ -2295,7 +2295,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 				cases := []handlertest.SequenceTestCase{
 					{"",
-						`┌──────────────────┐
+						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │▐                 │
@@ -2337,7 +2337,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 				cases := []handlertest.SequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationcloseall>",
-						`┌──────────────────┐
+						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │hello             │
@@ -2357,7 +2357,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 				cases = []handlertest.SequenceTestCase{
 					{"",
-						`┌──────────────────┐
+						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │hello             │
@@ -2368,7 +2368,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 					{"i\na\nb\nc\nd\ne\nf<:write>",
-						`┌──────────────────┐
+						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │b                 │
@@ -2388,7 +2388,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 				cases = []handlertest.SequenceTestCase{
 					{"",
-						`┌──────────────────┐
+						`┌────────━━━━━━────┐
 │o 1234  o 4567    │
 ├──────────────────┤
 │b                 │
@@ -2414,7 +2414,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 
 				cases := []handlertest.SequenceTestCase{
 					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationcloseall>",
-						`┌──────────────────┐
+						`┌─────━━━──────────┐
 │o A  o B          │
 ├──────────────────┤
 │hello             │
@@ -2425,7 +2425,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 					{":workspacerelo>",
-						`┌──────────────────┐
+						`┌─────━━━──────────┐
 │o A  o B          │
 ├──────────────────┤
 │hello             │
@@ -2436,7 +2436,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 					{"i\na\nb\nc\nd\ne\nf<:write>",
-						`┌──────────────────┐
+						`┌─────━━━──────────┐
 │o A  o B          │
 ├──────────────────┤
 │b                 │
@@ -2447,7 +2447,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 │            NORMAL│
 └──────────────────┘`},
 					{":workspacerelo>",
-						`┌──────────────────┐
+						`┌─────━━━──────────┐
 │o A  o B          │
 ├──────────────────┤
 │b                 │
@@ -2585,7 +2585,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			&uri, cfg, runner, nil, dir, nil, nopShutdownShaderConfig())
 
-		wantLayoutBeforeReload := `┌──────────────────────────────────────────────────────────────────────────────┐
+		wantLayoutBeforeReload := `┌──────────────━━━━━━━━━━━━────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
 ├┌────────────────────────┐┌────────────────────────┐┌─────────────────────────┤
 ││                        ││▐                       ││                         │
@@ -2615,7 +2615,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		// the empty top-left tile (which has no editor and therefore
 		// no cursor), so the visible cursor that was present in
 		// wantLayoutBeforeReload disappears from the rendered frame.
-		wantLayoutAfterReload := `┌──────────────────────────────────────────────────────────────────────────────┐
+		wantLayoutAfterReload := `┌──────────────━━━━━━━━━━━━────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
 ├┌────────────────────────┐┌────────────────────────┐┌─────────────────────────┤
 ││                        ││                        ││                         │
@@ -2639,7 +2639,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 ││                        ││                        ││           ││            │
 ││                        ││                  NORMAL││           ││      NORMAL│
 └└────────────────────────┘└────────────────────────┘└───────────┘└────────────┘`
-		wantTaskFocus := `┌──────────────────────────────────────────────────────────────────────────────┐
+		wantTaskFocus := `┌──────────────━━━━━━━━━━━━────────────────────────────────────────────────────┐
 │o nested.txt  o middle.txt                                                    │
 ├────────────────────────┐┌─────────────────────────┐┌─────────────────────────┤
 │                        ││                         ││                         │
@@ -3447,7 +3447,7 @@ func TestExternalEvents(t *testing.T) {
 
 		cases := []handlertest.SequenceTestCase{
 			{":edit a>", // existing workspace
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o a                         │
 ├────────────────────────────┤
 │▐                           │
@@ -3463,7 +3463,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 			{"iabc<:write>", // edit + flush
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o a                         │
 ├────────────────────────────┤
 │ab▐                         │
@@ -3495,7 +3495,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 			{fmt.Sprintf(":workspacenew %s>:edit b>", dir2), // new workspace
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
 │▐                           │
@@ -3511,7 +3511,7 @@ func TestExternalEvents(t *testing.T) {
 │1 1  2 2                    │
 └────────────────────────────┘`},
 			{"iabc<:write>", // edit + flush
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
 │ab▐                         │
@@ -3543,7 +3543,7 @@ func TestExternalEvents(t *testing.T) {
 │1 1  2 2                    │
 └────────────────────────────┘`},
 			{":wofo 8>:edit c>", // empty workspace
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o c                         │
 ├────────────────────────────┤
 │▐                           │
@@ -3559,7 +3559,7 @@ func TestExternalEvents(t *testing.T) {
 │1 1  2 2  8                 │
 └────────────────────────────┘`},
 			{"iabc<:write>", // edit + flush
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o c                         │
 ├────────────────────────────┤
 │ab▐                         │
@@ -3623,7 +3623,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 			{":edit a>",
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o a                         │
 ├────────────────────────────┤
 │▐bc                         │
@@ -3639,7 +3639,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 └────────────────────────────┘`},
 			{"iabc<:write>",
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o a                         │
 ├────────────────────────────┤
 │ab▐abc                      │
@@ -3671,7 +3671,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 └────────────────────────────┘`},
 			{fmt.Sprintf(":workspacenew %s>:edit b>", dir2), // new workspace
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
 │▐bc                         │
@@ -3687,7 +3687,7 @@ func TestExternalEvents(t *testing.T) {
 │1 1  2 2                    │
 └────────────────────────────┘`},
 			{"iabc<:write>",
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
 │ab▐abc                      │
@@ -3719,7 +3719,7 @@ func TestExternalEvents(t *testing.T) {
 │1 1  2 2                    │
 └────────────────────────────┘`},
 			{":wofo 8>:edit c>",
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o c                         │
 ├────────────────────────────┤
 │▐bc                         │
@@ -3735,7 +3735,7 @@ func TestExternalEvents(t *testing.T) {
 │1 1  2 2  8                 │
 └────────────────────────────┘`},
 			{"iabc<:write>",
-				`┌────────────────────────────┐
+				`┌━━━─────────────────────────┐
 │o c                         │
 ├────────────────────────────┤
 │ab▐abc                      │

@@ -478,20 +478,23 @@ func (h *workspaceManagerHandler) init(
 	h.bar.Init()
 	h.bar.OnClick = h.onBarTabClick
 	frameAttr := cfg.windowFrameAttr()
-	frameAttr.Attrs |= term.AttrVerticalRenderOffset
+	frameAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	backgroundAttr := term.Attributes{Bg: frameAttr.Bg}
 	focusTabAttr := cfg.focusTabAttr()
-	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	focusTabAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	nonFocusTabAttr := cfg.nonFocusTabAttr()
-	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusTabAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	focusTabIconAttr := cfg.focusTabIconAttr()
-	focusTabIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	focusTabIconAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	nonFocusTabIconAttr := cfg.nonFocusTabIconAttr()
-	nonFocusTabIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusTabIconAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
+	highlightAttr := cfg.highlightTabAttr()
 	h.bar.SetAttr(focusTabAttr, nonFocusTabAttr,
-		focusTabIconAttr, nonFocusTabIconAttr, frameAttr, backgroundAttr)
+		focusTabIconAttr, nonFocusTabIconAttr,
+		highlightAttr, frameAttr, backgroundAttr)
 	h.bar.SetFrameCharSet(cfg.windowFrameCharset())
 	h.bar.SetBorder(cfg.frame())
+	h.bar.SetFocusFrameChar(cfg.highlightTabChar())
 
 	h.union.Init(&h.focusProxy)
 	h.union.Attributes = cfg.windowFrameAttr()
@@ -882,6 +885,8 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithCommandHistoryKey(cfg.commandHistoryKey()),
 		text.WithFocusTabAttr(cfg.focusTabAttr(), cfg.focusTabIconAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr(), cfg.nonFocusTabIconAttr()),
+		text.WithFocusTabHighlightAttr(cfg.highlightTabAttr()),
+		text.WithFocusTabHighlightChar(cfg.highlightTabChar()),
 		text.WithWallpaper(cfg.wallpaper()),
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithIconSet(cfg.icons()),

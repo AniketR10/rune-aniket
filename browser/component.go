@@ -144,15 +144,18 @@ func (c *Component) Init(config Config) {
 	c.union.Frame = c.config.Frame && c.config.FrameUnion
 
 	frameAttr := config.WindowManagerConfig.FrameAttr
-	frameAttr.Attrs |= term.AttrVerticalRenderOffset
+	highlightAttr := config.FocusTabHighlightAttr
+	frameAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	bgAttr := term.Attributes{Bg: frameAttr.Bg}
 	focusTabAttr := config.FocusTabAttr
-	focusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	focusTabAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	nonFocusTabAttr := config.NonFocusTabAttr
-	nonFocusTabAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusTabAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	c.tabs.SetAttr(focusTabAttr, nonFocusTabAttr,
-		c.focusTabIconAttr(), c.nonFocusTabIconAttr(), frameAttr, bgAttr)
+		c.focusTabIconAttr(), c.nonFocusTabIconAttr(),
+		highlightAttr, frameAttr, bgAttr)
 	c.tabs.SetFrameCharSet(config.WindowManagerConfig.FrameCharSet)
+	c.tabs.SetFocusFrameChar(config.FocusTabHighlightChar)
 
 	// if tab bar offset is set, the remove frame from tabs
 	// and install via union and no frame unioning.
@@ -1421,13 +1424,13 @@ func (c *Component) newBrowserContent(content browserapi.Handler) browserapi.Han
 
 func (c *Component) focusTabIconAttr() term.Attributes {
 	focusIconAttr := c.config.FocusTabIconAttr
-	focusIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	focusIconAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	return focusIconAttr
 }
 
 func (c *Component) nonFocusTabIconAttr() term.Attributes {
 	nonFocusIconAttr := c.config.NonFocusTabIconAttr
-	nonFocusIconAttr.Attrs |= term.AttrVerticalRenderOffset
+	nonFocusIconAttr.Attrs |= term.AttrNegativeVerticalRenderOffset
 	return nonFocusIconAttr
 }
 

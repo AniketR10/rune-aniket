@@ -980,6 +980,30 @@ func (c ideConfig) nonFocusTabIconAttr() term.Attributes {
 		browser.DefaultConfig().NonFocusTabIconAttr)
 }
 
+func (c ideConfig) highlightTabAttr() term.Attributes {
+	return c.getBrowserAttr("focus_tab_highlight_attr",
+		browser.DefaultConfig().FocusTabHighlightAttr)
+}
+
+func (c ideConfig) highlightTabChar() rune {
+	def := browser.DefaultConfig().FocusTabHighlightChar
+	cfg, ok := c.browser()
+	if !ok {
+		return def
+	}
+	s, err := cfg.GetString("focus_tab_highlight_char")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["browser.focus_tab_highlight_char"] = err
+		}
+		return def
+	}
+	for _, r := range s {
+		return r
+	}
+	return def
+}
+
 func (c ideConfig) dirtyTabAttr() term.Attributes {
 	return c.getBrowserAttr("dirty_tab_attr",
 		text.DefaultConfig().DirtyTabAttr)

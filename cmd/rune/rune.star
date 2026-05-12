@@ -644,6 +644,8 @@ config = {
         "non_focus_tab_attr":      attr(fg = "gray", bg = "default"),
         "focus_tab_icon_attr":     attr(fg = "yellow", bg = "default"),
         "non_focus_tab_icon_attr": attr(fg = "silver", bg = "default"),
+        "focus_tab_highlight_attr": attr(fg = "yellow", bg = "default"),
+        "focus_tab_highlight_char": "\U0001fb3C",
         # Prompt configuration used when Rune asks the user questions.
         "prompt": {
             "text_attr":       attr(bg = "gray", flag = "bold"),
@@ -967,6 +969,8 @@ if tui:
             "non_focus_tab_attr":      attr(fg = "gray", bg = "#1e1e1e"),
             "focus_tab_icon_attr":     attr(fg = "#c6c6c6", bg = "#1e1e1e", flags = ["bold"]),
             "non_focus_tab_icon_attr": attr(fg = "gray", bg = "#1e1e1e"),
+            "focus_tab_highlight_attr": attr(fg = "yellow", bg = "#1e1e1e"),
+            "focus_tab_highlight_char": "━",
             "prompt": {
                 "text_attr":       attr(fg = "default", bg = "#1e1e1e"),
                 "highlight_attr":  attr(fg = "#c6c6c6", bg = "default", flag = "reverse"),

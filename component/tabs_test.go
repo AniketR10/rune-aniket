@@ -57,7 +57,7 @@ func TestTabsDraw(t *testing.T) {
                     `,
 		}, {
 			func() { l.Add('X', "Atzari") }, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │X Atzari          │
 │                  │
 ├──────────────────┤
@@ -68,7 +68,7 @@ func TestTabsDraw(t *testing.T) {
                     `,
 		}, {
 			func() { l.Resize(20, 9) }, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │                  │
 │                  │
 │                  │
@@ -82,7 +82,7 @@ func TestTabsDraw(t *testing.T) {
 				l.Add('$', "Saturn")
 				l.Resize(20, 4)
 			}, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │X Atzari  $ Saturn│
 │                  │
 ├──────────────────┤
@@ -96,7 +96,7 @@ func TestTabsDraw(t *testing.T) {
 				assert.True(t, l.MoveLeft(1))
 				assert.False(t, l.MoveLeft(0))
 			}, `
-┌──────────────────┐
+┌──────────━━━━━━━━┐
 │$ Saturn  X Atzari│
 │                  │
 ├──────────────────┤
@@ -109,7 +109,7 @@ func TestTabsDraw(t *testing.T) {
 			func() {
 				assert.True(t, l.MoveTo(1, 0))
 			}, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │X Atzari  $ Saturn│
 │                  │
 ├──────────────────┤
@@ -122,7 +122,7 @@ func TestTabsDraw(t *testing.T) {
 			func() {
 				assert.True(t, l.MoveTo(0, 1))
 			}, `
-┌──────────────────┐
+┌──────────━━━━━━━━┐
 │$ Saturn  X Atzari│
 │                  │
 ├──────────────────┤
@@ -136,7 +136,7 @@ func TestTabsDraw(t *testing.T) {
 				assert.True(t, l.MoveRight(0))
 				assert.False(t, l.MoveRight(1))
 			}, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │X Atzari  $ Saturn│
 │                  │
 ├──────────────────┤
@@ -160,7 +160,7 @@ func TestTabsDraw(t *testing.T) {
 		// two non-focused tabs (3 each → "$ S", "X O").
 		{
 			func() { l.Add('X', "Other") }, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │X Atzari  $ S  X O│
 │                  │
 ├──────────────────┤
@@ -176,7 +176,7 @@ func TestTabsDraw(t *testing.T) {
 		// non-focused tab. Widths: Saturn=2, Other=1, Things=1.
 		{
 			func() { l.Add('X', "Things") }, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │X Atzari  $   X  X│
 │                  │
 ├──────────────────┤
@@ -191,7 +191,7 @@ func TestTabsDraw(t *testing.T) {
 		// non-focused tabs. Widths: Atzari=2, Saturn=2, Things=1.
 		{
 			func() { l.SetFocus(2) }, `
-┌──────────────────┐
+┌────────━━━━━━━───┐
 │X   $   X Other  X│
 │                  │
 ├──────────────────┤
@@ -209,7 +209,7 @@ func TestTabsDraw(t *testing.T) {
 		// 18 - 7 - 3*2 = 5 over 3 → widths 2,2,1.
 		{
 			func() { l.Add('#', "Morsins"); l.Add('#', "Morsillonins") }, `
-┌──────────────────┐
+┌────━━━━━━━───────┐
 │$   X Other  X   #│
 │                  │
 ├──────────────────┤
@@ -224,7 +224,7 @@ func TestTabsDraw(t *testing.T) {
 		// 2 = 2 columns.
 		{
 			func() { l.SetFocus(5) }, `
-┌──────────────────┐
+┌────━━━━━━━━━━━━━━┐
 │#   # Morsillonins│
 │                  │
 ├──────────────────┤
@@ -284,6 +284,90 @@ $  X  X Things  #  #
 	comptest.TestComponent(t, l, w, tests)
 }
 
+// TestTabsDrawFocusHighlightBorderless verifies that in borderless mode at
+// h>=2 (the production tab-bar config: TabBarHeight=2, frame=false), tab
+// labels render on y=1 and the focused-tab columns on y=0 get the focus
+// highlight rune. The non-focused tab columns (and the separator gap) on
+// y=0 stay blank.
+func TestTabsDrawFocusHighlightBorderless(t *testing.T) {
+	l := NewTabs()
+	l.SetBorder(false)
+	l.Resize(20, 2)
+
+	w := term.NewStringWriter(20, 2)
+
+	tests := []comptest.TestCase{
+		// Single focused tab "A alpha" (full=7) at innerW=20.
+		// Fast path: 7 ≤ 20. Layout: A alpha + 13 trailing pad.
+		// Highlight on y=0 covers columns [0..6].
+		{
+			func() { l.Add('A', "alpha") }, `
+━━━━━━━             
+A alpha             `,
+		},
+		// Two tabs A alpha (focused) + B beta. innerW=20, fast path
+		// (7+6+2=15 ≤ 20). Highlight columns [0..6].
+		{
+			func() { l.Add('B', "beta") }, `
+━━━━━━━             
+A alpha  B beta     `,
+		},
+		// Focus moves to B beta (idx 1). Cell starts at column 9
+		// (7 + 2 sep), width=6 → highlight columns [9..14].
+		{
+			func() { l.SetFocus(1) }, `
+         ━━━━━━     
+A alpha  B beta     `,
+		},
+	}
+
+	comptest.TestComponent(t, l, w, tests)
+}
+
+// TestTabsDrawFocusHighlightCharAttr verifies SetFocusFrameChar overrides
+// the highlight rune and that the focusFrame attr passed to SetAttr is
+// applied to the highlight cells (and only those — non-focused columns on
+// the highlight row stay unattributed).
+func TestTabsDrawFocusHighlightCharAttr(t *testing.T) {
+	l := NewTabs()
+	l.SetBorder(false)
+	l.Resize(20, 2)
+
+	focusFrameAttr := term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold}
+	l.SetAttr(term.Attributes{}, term.Attributes{},
+		term.Attributes{}, term.Attributes{},
+		focusFrameAttr, term.Attributes{}, term.Attributes{})
+	l.SetFocusFrameChar('▀')
+
+	l.Add('A', "alpha")
+	l.Add('B', "beta")
+	l.SetFocus(1)
+
+	w := term.NewStringWriter(20, 2)
+	l.Draw(w)
+	cells := w.Cells()
+
+	// y=0, columns [9..14] hold the focus highlight; outside that range
+	// the row is left untouched by Tabs.Draw (Ch=0).
+	for x := 0; x < 20; x++ {
+		c := cells[x]
+		if x >= 9 && x <= 14 {
+			assert.Equal(t, '▀', c.Ch, "expected highlight rune at x=%d", x)
+			assert.Equal(t, focusFrameAttr, c.Attributes,
+				"expected focus-frame attr at x=%d", x)
+		} else {
+			assert.NotEqual(t, '▀', c.Ch,
+				"unexpected highlight at x=%d", x)
+			assert.Equal(t, term.Attributes{}, c.Attributes,
+				"expected no attr at x=%d on highlight row", x)
+		}
+	}
+
+	// y=1 carries the labels (sanity).
+	assert.Equal(t, 'A', cells[20+0].Ch)
+	assert.Equal(t, 'B', cells[20+9].Ch)
+}
+
 func TestTabsDrawIconAttr(t *testing.T) {
 	l := NewTabs()
 	l.SetBorder(false)
@@ -293,7 +377,7 @@ func TestTabsDrawIconAttr(t *testing.T) {
 	nonFocusAttr := term.Attributes{Fg: tcell.ColorBlue}
 	iconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
 	l.SetAttr(focusAttr, nonFocusAttr, term.Attributes{}, term.Attributes{},
-		term.Attributes{}, term.Attributes{})
+		term.Attributes{}, term.Attributes{}, term.Attributes{})
 
 	l.Add('A', "alpha")
 	l.Add('B', "beta")
@@ -330,7 +414,7 @@ func TestTabsSetAttrIconAttrs(t *testing.T) {
 	focusIconAttr := term.Attributes{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}
 	nonFocusIconAttr := term.Attributes{Fg: tcell.ColorRed}
 	l.SetAttr(focusAttr, nonFocusAttr, focusIconAttr, nonFocusIconAttr,
-		term.Attributes{}, term.Attributes{})
+		term.Attributes{}, term.Attributes{}, term.Attributes{})
 
 	l.Add('A', "alpha")
 	l.Add('B', "beta")
@@ -373,7 +457,7 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
                     `,
 		}, {
 			func() { l.Add('#', "Atzari") }, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │# Atzari          │
 │                  │
 └──────────────────┘
@@ -391,7 +475,7 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
 			func() {
 				l.Add('#', "Saturn")
 			}, `
-┌──────────────────┐
+┌━━━━━━━━──────────┐
 │# Atzari | # Satur│
 │                  │
 └──────────────────┘
@@ -443,7 +527,7 @@ func TestTabsDrawResize(t *testing.T) {
 				l.Add('C', "gamma")
 				l.Add('D', "delta")
 			}, `
-┌──────────────────────────────────────┐
+┌━━━━━━━───────────────────────────────┐
 │A alpha  B beta  C gamma  D delta     │
 │                                      │
 └──────────────────────────────────────┘`,
@@ -460,7 +544,7 @@ func TestTabsDrawResize(t *testing.T) {
 		// Widths: A=7, B=6, C=6, D=6, E=5.
 		{
 			func() { l.Add('E', "epsilon") }, `
-┌──────────────────────────────────────┐
+┌━━━━━━━───────────────────────────────┐
 │A alpha  B beta  C gamm  D delt  E eps│
 │                                      │
 └──────────────────────────────────────┘`,
@@ -471,7 +555,7 @@ func TestTabsDrawResize(t *testing.T) {
 		// Widths: A=6, B=5, C=5, D=5, E=9.
 		{
 			func() { l.ResetFocus(); l.SetFocus(4) }, `
-┌──────────────────────────────────────┐
+┌─────────────────────────────━━━━━━━━━┐
 │A alph  B bet  C gam  D del  E epsilon│
 │                                      │
 └──────────────────────────────────────┘`,
@@ -482,7 +566,7 @@ func TestTabsDrawResize(t *testing.T) {
 		//   A=4, B=4, C=4, D=4, F=3 (all under caps).
 		{
 			func() { l.Add('F', "zeta") }, `
-┌──────────────────────────────────────┐
+┌────────────────────────━━━━━━━━━─────┐
 │A al  B be  C ga  D de  E epsilon  F z│
 │                                      │
 └──────────────────────────────────────┘`,
@@ -495,7 +579,7 @@ func TestTabsDrawResize(t *testing.T) {
 		//   A=2, B=2, C=2, D=2, F=1.
 		{
 			func() { l.Resize(30, 4) }, `
-┌────────────────────────────┐          
+┌────────────────━━━━━━━━━───┐          
 │A   B   C   D   E epsilon  F│          
 │                            │          
 └────────────────────────────┘          `,
@@ -509,7 +593,7 @@ func TestTabsDrawResize(t *testing.T) {
 		// fairShare = 1, leftover 0 → C=1, D=1, F=1.
 		{
 			func() { l.Resize(20, 4) }, `
-┌──────────────────┐                    
+┌──────━━━━━━━━━───┐                    
 │C  D  E epsilon  F│                    
 │                  │                    
 └──────────────────┘                    `,
@@ -523,7 +607,7 @@ func TestTabsDrawResize(t *testing.T) {
 		//   B=2, C=2, D=1.
 		{
 			func() { l.ResetFocus(); l.SetFocus(0) }, `
-┌──────────────────┐                    
+┌━━━━━━━───────────┐                    
 │A alpha  B   C   D│                    
 │                  │                    
 └──────────────────┘                    `,
@@ -537,7 +621,7 @@ func TestTabsDrawResize(t *testing.T) {
 		//   B=2, D=2, E=1.
 		{
 			func() { l.ResetFocus(); l.SetFocus(2) }, `
-┌──────────────────┐                    
+┌────━━━━━━━───────┐                    
 │B   C gamma  D   E│                    
 │                  │                    
 └──────────────────┘                    `,

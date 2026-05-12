@@ -88,7 +88,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 			run: func(t *testing.T, tc *macroIntegrationHarness) {
 				handleKeys(t, tc, ":record<space>a<enter>:tabrename<space>macroed<enter>:record<space>a<enter>")
 				handleKeys(t, tc, ":notificationcloseall<enter>")
-				require.Equal(t, `┌──────────────────────────────────────┐
+				require.Equal(t, `┌━━━━━━━━━─────────────────────────────┐
 │o macroed                             │
 ├──────────────────────────────────────┤
 │▐                                     │
@@ -102,7 +102,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 └──────────────────────────────────────┘`, drawIDE(t, tc))
 				handleKeys(t, tc, ":tabrename<space>reset<enter>")
 				handleKeys(t, tc, ":notificationcloseall<enter>")
-				require.Equal(t, `┌──────────────────────────────────────┐
+				require.Equal(t, `┌━━━━━━━───────────────────────────────┐
 │o reset                               │
 ├──────────────────────────────────────┤
 │▐                                     │
@@ -119,7 +119,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				tc.drainPublishedEvents(t)
 				handleKeys(t, tc, ":notificationcloseall<enter>")
 
-				require.Equal(t, `┌──────────────────────────────────────┐
+				require.Equal(t, `┌━━━━━━━━━─────────────────────────────┐
 │o macroed                             │
 ├──────────────────────────────────────┤
 │▐                                     │
@@ -177,7 +177,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				tc.drainPublishedEvents(t)
 				handleKeys(t, tc, ":record<space>b<enter>:notificationcloseall<enter>")
 
-				require.Equal(t, `┌──────────────────────────────────────┐
+				require.Equal(t, `┌━━━━━━━━━─────────────────────────────┐
 │o macroed                             │
 ├──────────────────────────────────────┤
 │▐                                     │
@@ -194,7 +194,7 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				tc.drainPublishedEvents(t)
 				handleKeys(t, tc, ":notificationcloseall<enter>")
 
-				require.Equal(t, `┌──────────────────────────────────────┐
+				require.Equal(t, `┌━━━━━━━━━─────────────────────────────┐
 │o macroed                             │
 ├──────────────────────────────────────┤
 │▐                                     │

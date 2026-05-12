@@ -491,6 +491,22 @@ func WithNonFocusTabAttr(attr, iconAttr term.Attributes) Option {
 	}
 }
 
+// WithFocusTabHighlightAttr returns an Option that configures the attributes
+// of the highlight rune drawn on top of the focused tab.
+func WithFocusTabHighlightAttr(attr term.Attributes) Option {
+	return func(cfg *Config) {
+		cfg.FocusTabHighlightAttr = attr
+	}
+}
+
+// WithFocusTabHighlightChar returns an Option that configures the rune drawn
+// on top of the focused tab.
+func WithFocusTabHighlightChar(r rune) Option {
+	return func(cfg *Config) {
+		cfg.FocusTabHighlightChar = r
+	}
+}
+
 // WithCommandKeyBinding maps key to issue cmd.
 func WithCommandKeyBinding(key term.KeyComb, cmdAndArgs [][]string) Option {
 	return func(cfg *Config) {

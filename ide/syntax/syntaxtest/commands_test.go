@@ -158,7 +158,7 @@ func TestCommandsIntegration(t *testing.T) {
 			require.NoError(t, err)
 			assert.True(t, handled)
 		}, Expected: `
-┌────────────────────────────┐
+┌━━━━━━━━────────────────────┐
 │o fai.go                    │
 ├────────────────────────────┤
 │    for i := 0; i < 10; i++ │
@@ -207,7 +207,7 @@ func TestCommandsIntegration(t *testing.T) {
 	tests = []comptest.TestCase{
 		{Action: func() {
 		}, Expected: `
-┌────────────────────────────┐
+┌━━━━━━━━────────────────────┐
 │o fai.go                    │
 ├────────────────────────────┤
 │package main                │
@@ -228,7 +228,7 @@ func TestCommandsIntegration(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, handled)
 		}, Expected: `
-┌────────────────────────────┐
+┌━━━━━━━━────────────────────┐
 │o fai.go                    │
 ├────────────────────────────┤
 │    for i := 0; i < 10; i++ │

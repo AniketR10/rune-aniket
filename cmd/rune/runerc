@@ -1,0 +1,1113 @@
+# logging file path. This property is not reloaded on reloadWorkspace.
+log_path: ~/.rune/debug.log
+# log level. This property is not reloaded on reloadWorkspace.
+log_level: info # error, debug, trace
+
+# LSP configuration
+lsp:
+  # Determine the icons used on the auxiliary bar, when rendering LSP diagnostics,
+  # if 'editor.aux_bar.icons' is set to true and so displaying icons on the
+  # side bar is enabled.
+  icons:
+    error: "✖"
+    warning: "▲"
+    information: "◉"
+    hint: "󰌵"
+
+gui:
+  # Set the font family. If set to empty, a builtin font is loaded.
+  # Use the builtin guifont command to browse the fonts installed
+  # on your system.
+  #font-family: ""
+
+  # Set the font size.
+  #font-size: 13
+
+  # Add or remove pixels from the font's default column width.
+  column-width-offset: -1
+
+  # Add or remove pixels from the font's default line height.
+  line-height-offset: 0
+
+  # Define the theme to use, from the list of available themes
+  # in `themes` below. Leave empty to use the default colors.
+  default_theme: "romero"
+
+  # Themes available to the `guitheme` command and the `default_theme`
+  # variable above. A theme consists of a list of color name to hex value mappings
+  # that override the default colors values.
+  #
+  # There's 3 special keys: `foreground`, `background` and `cursor`, which define
+  # the default foreground, background and cursor colors; the rest is an optional
+  # list of mappings between W3C color names and their corresponding RGB hex values.
+  # Run the `colorPalette` command for a full list of named colors.
+  #
+  # Overriding the classic 16 ANSI colors should suffice for most applications.
+  themes:
+    furman:
+      foreground: "#a9b7c5"
+      background: "#202020"
+      black: "#1d1f21"
+      maroon: "sienna"
+      green: "#678455"
+      olive: "#C07C41"
+      navy: "#585858"
+      purple: "#8E73A2"
+      #silver: "#d7aef5"
+      teal: "#498d8e"
+      silver: "#b4b4b4"
+      gray: "#3d3f41"
+      red: "#B95A53"
+      lime: "#649149"
+      yellow: "#c4742e"
+      blue: "#808080"
+      magenta: "#c683c4"
+      cyan: "#70dadb"
+      white: "#a9b7c5"
+      cursor: "magenta"
+
+    romero:
+      foreground: "#bbc2cf"
+      background: "#000000"
+      black: "#000000"
+      maroon: "#ff2400"
+      green: "#98be65"
+      olive: "#ecbe7b"
+      navy: "#5f0000"
+      purple: "#e50000"
+      teal: "#46d9ff"
+      silver: "#bbc2cf"
+      gray: "#282c34"
+      red: "#990000"
+      lime: "#98be65"
+      yellow: "#ecbe7b"
+      blue: "#ba0e2e"
+      magenta: "#ff6c6b"
+      cyan: "#46d9ff"
+      white: "#bbc2cf"
+      cursor: "#e50000"
+
+    carmack:
+      foreground: "#D0C6AB"
+      background: "#080808"
+      black: "#080808"
+      #maroon: "#e6c547"
+      maroon: "#4d2a1c"
+      green: "#98be65"
+      olive: "darkorange"
+      navy: "#98971a"
+      teal: "#46d9ff"
+      purple: "#456e88"
+      silver: "#d0b7ab"
+      # gray: "#282c34"
+      gray: "#231B0E"
+      red: "saddlebrown"
+      lime: "greenyellow"
+      yellow: "#ecbe7b"
+      blue: "#d79921"
+      magenta: "#83a58e"
+      cyan: "skyblue"
+      white: "#D0C6AB"
+      cursor: "#b5bd68"
+
+    reynolds:
+      foreground: "#ebdbb2"
+      background: "#121212"
+      black: "#121212"
+      maroon: "#e6c547"
+      green: "#00ff00"
+      olive: "darkolivegreen"
+      navy: "seagreen"
+      purple: "#458588"
+      teal: "darkturquoise"
+      silver: "#bbc2cf"
+      gray: "#282c34"
+      red: "saddlebrown"
+      lime: "#d7ff00"
+      yellow: "goldenrod"
+      blue: "limegreen"
+      magenta: "#83a598"
+      cyan: "#46d9ff"
+      white: "#ebdbb2"
+      cursor: "#00ff00"
+
+    brevik:
+      foreground: "#e6e4dc"
+      background: "#080808"
+      black: "#080808"
+      maroon: "#501c1f"
+      green: "#31601e"
+      olive: "#b9984d"
+      purple: brown
+      navy: "indigo"
+      teal: darkslategrey
+      silver: "#bbc2cf"
+      gray: "#282c34"
+      red: "#cd2e20"
+      lime: "#31601e"
+      yellow: "#b9984d"
+      blue: "#8700ff"
+      magenta: "#d70000"
+      cyan: "#0000ff"
+      white: "#e6e4dc"
+      cursor: "#cd2e20"
+
+    # https://github.com/rainglow/vscode
+    thompson:
+      foreground: "#ffffff"
+      background: "#0f1114"
+      cursor: "#ba0e2e"
+      black: "#222936"
+      maroon: "#ba0e2e"
+      green:  "#6ab0a3"
+      olive: "#52708b"
+      navy: "#508aaa"
+      purple: "#508aaa"
+      teal: "#6ab0a3"
+      silver: "#ffffff"
+      gray: "#3f4d64"
+      red: "#ba0e2e"
+      lime:  "#6ab0a3"
+      yellow: "#52708b"
+      blue: "#508aaa"
+      magenta: "#508aaa"
+      cyan: "#6ab0a3"
+      white: "#ffffff"
+
+    pike:
+      foreground: "#000000"
+      background: "#ffffea"
+      black: "#000000"
+      maroon: "#c44646"
+      green: "#427840"
+      olive: "#775500"
+      navy: "#000000"
+      purple: "#003366"
+      teal: "#003366"
+      silver: "#000000"
+      gray: "#6e6e9e"
+      red: "#ca7c5e"
+      lime: "limegreen"
+      yellow: "#080877"
+      blue: "#003366"
+      cyan: "#6e6e9e"
+      magenta: "#6e6e9e"
+      white: "#ffffea"
+      cursor: "red"
+
+    hopper:
+      foreground: "#c1c1c1"
+      background: "#000000"
+      black: "#000000"
+      maroon: "#616161"
+      green: "#a8a8a8"
+      olive: "#c4c4c4"
+      navy: "#1c1c1c"
+      purple: "#444444"
+      teal: "#b1b1b1"
+      silver: "#c1c1c1"
+      gray: "#2c2c2c"
+      red: "#121212"
+      lime: "#a8a8a8"
+      yellow: "#c4c4c4"
+      blue: "#454545"
+      magenta: "#989898"
+      cyan: "#b1b1b1"
+      white: "#c1c1c1"
+      cursor: "#444444"
+
+    kernighan:
+      foreground: "#cccccc"
+      background: "#0c0c0c"
+      black: "#0c0c0c"
+      maroon: "#c50f1f"
+      green: "#13a10e"
+      olive: "#c19c00"
+      navy: "#0037da"
+      purple: "#881798"
+      teal: "#3a96dd"
+      silver: "#cccccc"
+      gray: "#767676"
+      red: "#e74856"
+      lime: "#16c60c"
+      yellow: "#f9f1a5"
+      blue: "#3b78ff"
+      magenta: "#b4009e"
+      cyan: "#61d6d6"
+      white: "#f2f2f2"
+      cursor: "#e74856"
+
+    wozniak:
+      foreground: "#D8D1E2"
+      background: "#120F1D"
+      gray: "#1E1C22"
+      black: "#1D192B"
+      maroon: "#F33E70"
+      green: "#2DA074"
+      olive: "#E4FB8A"
+      navy: "#3B2E58"
+      purple: "#8F46FF"
+      teal: "#00FFD1"
+      silver: "#B0A8BF"
+      red: "#6346FF"
+      lime: "#23C07B"
+      yellow: "#FE45FF"
+      blue: "#6346FF"
+      magenta: "#D1E67D"
+      cyan: "#0F93f6"
+      white: "#D4D0D4"
+      cursor: "#23C07B"
+
+    auge:
+      foreground: "#d9d9d9"
+      background: "#270d06"
+      black: "#330000"
+      maroon: "darkred"
+      green: "#ff6600"
+      olive: "#ff9900"
+      navy: "#ffcc00"
+      purple: "#ff6600"
+      teal: "#ff9900"
+      silver: "#d9d9d9"
+      gray: "#663300"
+      red: "#ff3300"
+      lime: "#ff9966"
+      yellow: "#ffcc99"
+      blue: "#ffcc33"
+      magenta: "#ff9966"
+      cyan: "#ffcc99"
+      white: "#d9d9d9"
+      cursor: "#ff9966"
+
+    ritchie:
+      foreground: "#fffbf6"
+      background: "#101421"
+      black: "#2e2e2e"
+      maroon: "#eb4129"
+      green: "#abe047"
+      olive: "#f6c744"
+      navy: "#47a0f3"
+      purple: "#7b5cb0"
+      teal: "#64dbed"
+      silver: "#e5e9f0"
+      gray: "#565656"
+      red: "#ec5357"
+      lime: "#c0e17d"
+      yellow: "#f9da6a"
+      blue: "#49a4f8"
+      magenta: "#a47de9"
+      cyan: "#99faf2"
+      white: "#ffffff"
+      cursor: "#c0e17d"
+
+    kelleher:
+      foreground: "#ffffff"
+      background: "#000000"
+      black: "#1a1a1a"
+      maroon: "#f4005f"
+      green: "#98e024"
+      olive: "#fa8419"
+      navy: "#9d65ff"
+      purple: "#f4005f"
+      teal: "#58d1eb"
+      silver: "#c4c5b5"
+      gray: "#625e4c"
+      red: "#f4005f"
+      lime: "#98e024"
+      yellow: "#e0d561"
+      blue: "#9d65ff"
+      magenta: "#f4005f"
+      cyan: "#58d1eb"
+      white: "#f6f6ef"
+      cursor: "#98e024"
+
+    sanfilippo:
+      foreground: "#c7c7c7"
+      background: "#000000"
+      black: "#616161"
+      maroon: "#ff8272"
+      green: "#b4fa72"
+      olive: "#fefdc2"
+      navy: "#a5d5fe"
+      purple: "#ff8ffd"
+      teal: "#d0d1fe"
+      silver: "#f1f1f1"
+      gray: "#8e8e8e"
+      red: "#ffc4bd"
+      lime: "#d6fcb9"
+      yellow: "#fefdd5"
+      blue: "#c1e3fe"
+      magenta: "#ffb1fe"
+      cyan: "#e5e6fe"
+      white: "#fffeff"
+      cursor: "#d6fcb9"
+
+    greig:
+      foreground: "#ffffff"
+      background: "#262335"
+      black: "#262335"
+      maroon: "#fe4450"
+      green: "#72f1b8"
+      olive: "#f3e70f"
+      navy: "#03edf9"
+      purple: "#ff7edb"
+      teal: "#03edf9"
+      silver: "#ffffff"
+      gray: "#614d85"
+      red: "#fe4450"
+      lime: "#72f1b8"
+      yellow: "#fede5d"
+      blue: "#03edf9"
+      magenta: "#ff7edb"
+      cyan: "#03edf9"
+      white: "#ffffff"
+      cursor: "#fe4450"
+
+    mullen:
+      foreground: "#ccccce"
+      background: "#0d0d1b"
+      black: "#282828"
+      maroon: "#ca1444"
+      green: "#789aba"
+      olive: "#b3879f"
+      navy: "#95569b"
+      purple: "#cb6fa1"
+      teal: "#fb6e93"
+      silver: "#cf98c1"
+      gray: "#98218e"
+      red: "#cb515d"
+      lime: "#5a87b1"
+      yellow: "#f2a297"
+      blue: "#9a77b1"
+      magenta: "#9c61ab"
+      cyan: "#f4436f"
+      white: "#ebdbb2"
+      cursor: "#5a87b1"
+
+  # Define the positive or negative line height offset applied to the
+  # default line height.
+  #line-height-offset: 0
+
+  # Set the DPI. By default DPI is calculated dynamically based
+  # on the monitor's device scale factor. If set manually,
+  # the DPI will not be re-calculated when moving across screens
+  # with different device scale factors.
+  #dpi: 72
+
+  # Enables or disables transparent window rendering, effectively enabling
+  # or disabling the guiopacity command.
+  enable_transparent_window: true
+
+  # Sets the initial window opacity,
+  # if enable_transparent_window is set to true.
+  window_opacity:
+    fg: 1
+    bg: 1
+
+  # Sets the initial window background blur,
+  # if enable_transparent_window is set to true,
+  # and the window background opacity is not 1.
+  window_blur_radius: 100
+
+  # Define arbitrary environment variables to be inherited
+  # by all processes spawn by the GUI.
+  #env:
+  #  my_var: my_val
+
+  # Enable or disable font ligatures. Font ligatures are a typographic
+  # feature that joins two or more letters into a single glyph or
+  # shape, at the expense of rendering performance (i.e. =>, ->, etc.)
+  ligatures: false
+
+# clipboard defines whether to use the system clipboard
+# or not ('system' vs 'memory'). If system is used, then
+# copy and paste functions are shared with the host system.
+clipboard: "system"
+
+editor:
+  # mode determines what kind of editor to use. Options are
+  # 'modal', which simulates vi/vim and 'modeless' which
+  # works like the rest of text editors.
+  mode: modal
+  modal:
+    # default text attributes
+    attr:
+      fg: default
+      bg: default
+    # search and message bar attributes
+    bar_attr:
+      fg: default
+      bg: default
+    # search results attributes
+    search_attr:
+      fg: grey
+      bg: yellow
+  # Enable or disable syntax-driven indentation.
+  autoindent: true
+  # Highlights are the colors and styles to be used for syntax highlighting.
+  highlights:
+    function:
+      fg: default
+    function.builtin:
+      fg: yellow
+    function.method:
+      fg: default
+    type:
+      fg: default
+    property:
+      fg: default
+    variable:
+      fg: default
+    operator:
+      fg: default
+    keyword:
+      fg: yellow
+    string:
+      fg: magenta
+    escape:
+      fg: default
+    number:
+      fg: red
+    constant.builtin:
+      fg: default
+    comment:
+      fg: blue
+    markup.heading:
+      fg: yellow
+      flags: bold
+    markup.raw:
+      fg: magenta
+    markup.raw.delimiter:
+      fg: yellow
+    markup.link:
+      fg: cyan
+      flags: underline
+    markup.link.url:
+      fg: cyan
+      flags: underline
+    markup.link.label:
+      fg: yellow
+      flags: underline
+    markup.link.text:
+      fg: cyan
+      flags: underline
+    markup.list:
+      fg: yellow
+      flags: bold
+    markup.quote:
+      fg: blue
+      flags: italic
+    markup.strong:
+      fg: yellow
+      flags: bold
+    markup.italic:
+      fg: yellow
+      flags: italic
+    markup.strikethrough:
+      fg: blue
+      flags: strikethrough
+    markup.underline:
+      fg: yellow
+      flags: underline
+    markup.math:
+      fg: magenta
+    text.title:
+      fg: yellow
+      flags: bold
+    text.literal:
+      fg: magenta
+    text.uri:
+      fg: cyan
+      flags: underline
+    text.reference:
+      fg: yellow
+      flags: underline
+    text.emphasis:
+      fg: yellow
+      flags: italic
+    text.strong:
+      fg: yellow
+      flags: bold
+  # status_bar section configures the editor's bottom status bar.
+  status_bar:
+    # enabled determines whether the editor renders the status bar at all
+    enabled: true
+    # layout determines the layout of the status bar.
+    # The following components are available:
+    #  - Status: the status message determined by the editor.
+    #  - Filepath: the path of the file being edited, relative to the workspace.
+    #  - GitShortRef: the git reference pointed at by HEAD.
+    #  - GitDiffAdd: the number of lines added.
+    #  - GitDiffDel: the number of lines deleted.
+    #  - ShiftRight: up until this component, all components are aligned left.
+    #  - CursorColumn: cursor column
+    #  - CursorLine: cursor line
+    #  - TotalLines: total number of lines in the file
+    #  - Language: language parser status indicator
+    # Each component can have custom attributes via a pipe operator "|".
+    # The supported functions are the following:
+    #  - bg <color>: set the background color as a hex value or a W3C named color.
+    #  - fg <color>: set the foreground color as a hex value or a W3C named color.
+    #  - bold: set the text style as bold
+    #  - italic: set the text style as italic
+	#  - underline: set the text style as underline
+	#  - reverse: reverse the text foreground and background
+	#  - dim: dim the foreground color
+    # The specified attributes are applied to nearby cells, until a double blank
+    # space is encountered. This allows applying attributes to contiguous component
+    # suffixes and prefixes precisely. For example, the following "red" background
+    # applies to the Filepath component and the "file" string, whereas the "blue"
+    # background applies to the "<" prefix, the TotalLines component and the ">" suffix:
+    # layout: '{{ .Filepath | bg "red" }} file  <{{ .TotalLines | bg "blue" }}>'
+    layout: ' {{ .Status | bg "red" | fg "white" | bold }} █▓▒░  {{ .Filepath | fg "silver" }}  {{ .GitShortRef | fg "silver" }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn | fg "silver" }}:{{ .CursorLine | fg "silver" }}  {{ .TotalLines | fg "silver" }} lines  ░▒▓█ {{ .Language | bold | fg "silver" | bg "red"}} '
+    # background_attr determines the default background field of all the bar's components,
+    # for instance, when a component's attributes are not specified via
+    # layout, i.e. {{ .Status | bg "red" }}.
+    background_attr:
+      bg: gray
+    # foreground_error_attr determines the error color attributes for errors
+    # displayed at the status bar. Both 'bg' and 'flags' properties are ignored.
+    foreground_error_attr:
+      fg: yellow
+  # aux_bar section configures the editor's auxiliary bar on the left,
+  # which is a vertical bar with line-wise data, situated on the left side
+  # of every open file tab.
+  aux_bar:
+    # enabled determines whether the editor renders the auxiliary bar at all.
+    enabled: true
+    # folds enables or disables rendering fold marks.
+    folds: true
+    # git enables or disables rendering the diff between
+    # the open file's work tree and HEAD. Options are:
+    # - bar: render a separate bar for diff data
+    # - inline: color line numbers if 'lines' option is enabled.
+    # - all: combine 'inline' with 'bar'
+    # - disabled: no git information is displayed
+    git: inline
+    icons: true
+    # lines enables or disables rendering the line number.
+    # options are 'disabled', 'absolute' and 'relative'.
+    lines: absolute
+    # highlight_cursor determines whether to highlight the cursor
+    # position at the bar.
+    highlight_cursor: true
+    git_del_inline_attr:
+      fg: maroon
+      flags: bold
+    git_add_inline_attr:
+      fg: green
+      flags: bold
+    git_del_locations_attr:
+      bg: maroon
+      flags: dim
+    git_add_locations_attr:
+      bg: green
+      flags: dim
+    line_number_attr:
+      fg: gray
+      bg: default
+    highlight_cursor_attr:
+      fg: white
+      bg: gray
+      flags: bold
+  # initial_folds determines whether the editor hides certain folds,
+  # which vary by language, when opening a file.
+  initial_folds: true
+  # Icons for tabs. If the file extension
+  # is in the given map, the given character is used as icon,
+  # otherwise 'default' is used.
+  # Subsequent workspaces use subsequent codepoints in the font.
+  # The key 'terminal' is used to configure the icon of a terminal's tab.
+  icons:
+    directory: 
+    default: 
+    terminal: 
+    # .go: 
+
+frame_theme: &frame true
+focus_frame_charset_theme: &focus_frame_charset
+  horizontaltop: '▔'
+  horizontalbottom: '▁'
+  verticalright: '▕'
+  verticalleft: '▏'
+  topleft: '🭽'
+  topright: '🭾'
+  bottomleft: '🭼'
+  bottomright: '🭿'
+frame_charset_theme: &frame_charset
+  horizontaltop: '▔'
+  horizontalbottom: '▁'
+  verticalright: '▕'
+  verticalleft: '▏'
+  topleft: '🭽'
+  topright: '🭾'
+  bottomleft: '🭼'
+  bottomright: '🭿'
+frameunion_charset_theme: &frameunion_charset
+  left: '🭽'
+  right: '🭾'
+  top: '🭿'
+  bottom: '🭼'
+frame_attr_theme: &frame_attr
+  fg: gray
+  bg: default
+focus_frame_attr_theme: &focus_frame_attr
+  fg: silver
+  bg: default
+
+# the keys in 'extensions' are arbitrary and for
+# identification purposes only. They contain the
+# path and configuration for each of the extensions
+# that are to be run alongside the editor.
+extensions:
+  # This extension adds a command colorPalette which opens a new window
+  # and shows all the colors available to configure in the various
+  # styles thorought this configuration.
+  color_palette:
+    path: extension_color_palette
+  # This extension adds fuzzy file, line, and syntax search commands to the editor.
+  fuzzy_search:
+    path: extension_fuzzy_search
+    config:
+      file:
+        ## Command to use instead of native list files implementation.
+        ## The recommended commands are the silver searcher and ripgrep.
+        #command: rg -l ""
+        # Whether search is case sensitive
+        case_sensitive: true
+        # Search algorithm. Options are fuzzy, contains and equal.
+        algo: fuzzy
+        # Key binding used to cycle through history.
+        history_key: <m-p>
+        # Max history stored
+        history: 50000
+        # Colors
+        element_attr:
+          fg: default
+          bg: default
+          flags:
+            - dim
+        matched_text_attr:
+          fg: blue
+          bg: default
+          flags:
+            - bold
+        count_attr:
+          fg: default
+          bg: default
+        focus_element_attr:
+          fg: purple
+          bg: default
+      line:
+        ## Command to use instead of native list files implementation.
+        ## The recommended commands are the silver searcher and ripgrep.
+        #command: rg --color never -n --no-heading --max-columns 500 ""
+        # Whether search is case sensitive
+        case_sensitive: true
+        # Search algorithm. Options are fuzzy, contains and equal.
+        algo: fuzzy
+        # Key binding used to cycle through history.
+        history_key: <m-\\>
+        # Max history stored
+        history: 2000
+        # Colors
+        element_attr:
+          fg: default
+          bg: default
+          flags:
+            - dim
+        matched_text_attr:
+          fg: blue
+          bg: default
+          flags:
+            - bold
+        count_attr:
+          fg: default
+          bg: default
+        focus_element_attr:
+          fg: purple
+          bg: default
+      syntax:
+        case_sensitive: true
+        algo: fuzzy
+# Configuration for the command prompt.
+command:
+  # Key to open the command prompt.
+  key: ":" # if editor.mode = "modal"
+  # Key to toggle between command list and command history in the prompt.
+  history_key: "<m-r>"
+  # Max number of commands stored in history.
+  max_history: 20000
+  # Configure arbitrary command alises.
+  aliases:
+    # Aliases can be used to prioritize commands over others. For instance
+    # when typing 'e', tipically 'echo' would take priority. We can
+    # add an alias from 'e' to 'edit' to change that.
+    e:
+      command: edit # the command that we want to trigger or a list of commands:
+        # - commandA
+        # - commandB
+      # completer options are 'history', 'files', 'dirs', '! <command>'
+      # or a list of hardcoded options:
+      completer: files
+        # - optionA
+        # - optionB
+    w: write
+    # If an alias includes '$<number>' as an argument
+    # it will be replaced as the positional argument passed to dispatched alias.
+    # If a command includes '%' as an argument, it will be replaced with
+    # the current file path. To escape a '%' character, you can pass '%%',
+    # and the same can be done for escaping a dollar sign: $$1 is passed as $1,
+    # rather than substituting it for the first argument to an alias.
+    # For instance, invoking 'sed s/foo/bar/g', will result
+    # in the following ! gsed -i s/foo/bar/g <filename>
+    sed: "!! gsed -i $1 %"
+
+    # Furthermore, aliases can be used to create shortcuts to command
+    # and argument combinations that are recurrently used. If we want to
+    # use the default completer (history), a simple string to string
+    # mapping is sufficient.
+    gitnextchange: jumptolocation next gitchange
+    gitprevchange: jumptolocation previous gitchange
+    lspnextdiagnostic: jumptolocation next lsp-diagnostics
+    lspprevdiagnostic: jumptolocation previous lsp-diagnostics
+
+    # You can also add combinations of commands to be run
+    # as a single command.
+    # searchtext and searchfile can be tailored to specific use cases
+    # by passing a program that applies different filters.
+    # searchtextnotest: searchtext rg -n --no-heading -g '!*test.go' ""
+    searchdiff: searchtext git diff -U0 --no-ext-diff | awk '/^diff --git|^diff --cc/ { file = $3; sub(/^a\//, "", file); } /^@@/ || /^@@@/ { split($3, nums, ","); gsub(/[^0-9]/, "", nums[1]); line_number = nums[1]; first_change = 1; } /^[-+]/ && first_change { print file ":" line_number ":" " " $0; first_change = 0; }'
+    gitblame: "! git blame %"
+    gitdiff: "! git diff"
+    shadercancel: shaderrun nop 500ms
+    # echo is a powerful command that allows you to programmatically inject
+    # keyboard events back into the event loop, enabling more powerful commands.
+    # The {prompt} instruction can be used to generically open the command prompt,
+    # without having to worry about the key combination used to open the command prompt.
+    tabnew: echo {prompt}edit<space>
+    tabsearch: echo {prompt}tabfocus<space>
+    workspacesearch: echo {prompt}workspacefocus<space>
+    # The {wait} instruction can be used to wait for the command prompt
+    # search list completion to finish.
+    # For example, the following alias utilizes the power of echo to repeat
+    # the last echo sequence.
+    # editfirst: echo {prompt}edit<space>{wait}<tab><enter>
+    # git worktree commands
+    worktreenew:
+      - '!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1'
+      - workspacenew $RUNE_DATADIR/worktrees/$1
+      - workspacerename $1
+    worktreeopen:
+      command:
+        - workspacenew $RUNE_DATADIR/worktrees/$1
+        - workspacerename $1
+      completer: '! $SHELL -c ''git worktree list | tail -n +2 | cut -d" " -f1 | xargs -n1 basename'''
+    worktreeremove:
+      command: '!! git worktree remove $1'
+      completer: '! $SHELL -c ''git worktree list | tail -n +2 | cut -d" " -f1 | xargs -n1 basename'''
+  # Configure bindings from key combinations to commands.
+  key_bindings:
+    <m-r>: history
+    <tab>: fexplorer
+    <m-,>: config
+    <m-q>: quit
+    <m-=>: guifontsize increase
+    <m-->: guifontsize decrease
+    <m-t>: tabnew
+    <alt-enter>: echo {prompt}windowconverttab<space>
+    <a-w>: tabclose
+    <a-l>: tabnext
+    <a-h>: tabprevious
+    <m-n>: windownew
+    <m-c>: clipboardcopy
+    <m-v>: clipboardpaste
+    <a-`>: tabsearch
+    <a-1>: tabfocus 1
+    <a-2>: tabfocus 2
+    <a-3>: tabfocus 3
+    <a-4>: tabfocus 4
+    <a-5>: tabfocus 5
+    <a-6>: tabfocus 6
+    <a-7>: tabfocus 7
+    <a-8>: tabfocus 8
+    <a-9>: tabfocus 9
+    <a-s-l>: tabmove right
+    <a-s-h>: tabmove left
+    <a-s-1>: tabmove 1
+    <a-s-2>: tabmove 2
+    <a-s-3>: tabmove 3
+    <a-s-4>: tabmove 4
+    <a-s-5>: tabmove 5
+    <a-s-6>: tabmove 6
+    <a-s-7>: tabmove 7
+    <a-s-8>: tabmove 8
+    <a-s-9>: tabmove 9
+    <m-h>: windowfocus left
+    <m-l>: windowfocus right
+    <m-j>: windowfocus down
+    <m-k>: windowfocus up
+    <s-m-h>: windowmove left
+    <s-m-l>: windowmove right
+    <s-m-j>: windowmove down
+    <s-m-k>: windowmove up
+    <s-m-backspace>: windowresize reset
+    <s-m-+>:
+      - windowresize max width
+      - windowresize max height
+    <s-m-->:
+      - windowresize min width
+      - windowresize min height
+    <s-m-up>: windowresize increase height
+    <s-m-down>: windowresize decrease height
+    <s-m-left>: windowresize decrease width
+    <s-m-right>: windowresize increase width
+    <m-w>: windowclose
+    <c-m-h>: windowdefaultsplit h
+    <c-m-v>: windowdefaultsplit v
+    <s-m-f>: windowtogglemaximize
+    <a-f>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>
+    <a-v>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>
+    <a-s>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>
+    <a-j>: lspnextdiagnostic
+    <a-k>: lspprevdiagnostic
+    <a-t>: lsp hover
+    <a-s-t>: echo {prompt}lsp<space>hover<space>
+    <a-e>: lsp references
+    <a-s-e>: echo {prompt}lsp<space>references<space>
+    <a-g>: lsp definition
+    <a-s-g>: echo {prompt}lsp<space>definition<space>
+    <a-i>: lsp implementation
+    <a-s-i>: echo {prompt}lsp<space>implementation<space>
+    <c-o>: cursorhistory prev
+    <c-i>: cursorhistory next
+    <a-b>: lsp format
+    <c-space>: lsp complete
+    <a-m>: go organize-imports
+    <a-s-j>: gitnextchange
+    <a-s-k>: gitprevchange
+    <m-enter>: terminalneworsplit
+    <s-m-enter>: "!"
+    <m-`>: workspacesearch
+    <m-1>: workspacefocus 1
+    <m-2>: workspacefocus 2
+    <m-3>: workspacefocus 3
+    <m-4>: workspacefocus 4
+    <m-5>: workspacefocus 5
+    <m-6>: workspacefocus 6
+    <m-7>: workspacefocus 7
+    <m-8>: workspacefocus 8
+    <m-9>: workspacefocus 9
+    <s-m-1>: workspacemove 1
+    <s-m-2>: workspacemove 2
+    <s-m-3>: workspacemove 3
+    <s-m-4>: workspacemove 4
+    <s-m-5>: workspacemove 5
+    <s-m-6>: workspacemove 6
+    <s-m-7>: workspacemove 7
+    <s-m-8>: workspacemove 8
+    <s-m-9>: workspacemove 9
+  # Colors
+  element_attr:
+    fg: default
+    bg: default
+    flags:
+      - dim
+  manual_attr:
+    fg: default
+    bg: default
+  matched_text_attr:
+    fg: blue
+    bg: default
+    flags:
+      - bold
+  focus_element_attr:
+    fg: purple
+    bg: default
+
+browser:
+  # When multiple workspaces are open, this setting controls what the
+  # workspace bar shows: the workspace’s simplified path ("path"),
+  # its number only ("number"), or nothing at all (false), effectively disabling
+  # the bar.
+  workspace_bar: path
+  window_manager:
+    dim: true
+    frame: *frame
+    frame_attr: *frame_attr
+    focus_frame_attr: *focus_frame_attr
+    frame_charset: *frame_charset
+    focus_frame_charset: *focus_frame_charset
+    scroll_bar_attr:
+      fg: blue
+      bg: default
+    scroll_bar_char: '▐'
+    scroll_bar_hover_char: '█'
+  union_frames: false
+  frameunion_charset: *frameunion_charset
+  # separator characters used to space out tab names
+  tab_name_separator: "   "
+  focus_tab_attr:
+    fg: blue
+    bg: default
+    flags:
+      - bold
+  dirty_tab_attr:
+    fg: red
+    bg: default
+    flags:
+      - italic
+  non_focus_tab_attr:
+    fg: default_dim
+    bg: default
+  focus_tab_highlight_attr:
+    fg: yellow
+    bg: default
+  focus_tab_highlight_char: "🬼"
+  # Prompt configuration. This prompted is used by the editor
+  # to ask questions to the user.
+  prompt:
+    # Colors
+    text_attr:
+      bg: gray
+      flag: bold
+    highlight_attr:
+      bg: red
+      flag: bold
+    background_attr:
+      fg: default
+      bg: default
+
+# Workspaces configuration. This configuration is never reloaded.
+workspace:
+  # Configuration for remote workspaces to connect over SSH.
+  ssh:
+    # Use a shell different than the one configured by the remote system.
+    # shell: ""
+    # Maximum amount of time for the TCP connection to establish.
+    timeout: 5s
+    # private_keys:
+    #  - ~/.ssh/id_rsa
+    # Instead of using private_keys and a go native implementation
+    # of ssh, use the given command to start an ssh session. This could be
+    # useful for environments which deploy a highly customized ~/.ssh/config.
+    # The command should contain '%h' to subsitute for the workspace's host
+    # and '%p' if custom ports are needed. If this option is set, private_keys,
+    # insecure, and timeout are ignored.
+    # command: ssh -q %h
+
+  # Whether to automatically restore the previous session's files, terminal sessions
+  # and window layout. If set to false, the user is asked via a prompt.
+  auto_restore: true
+
+  # Workspace wallpaper
+  # Override the default Rune wallpaper with your ASCII art.
+  #wallpaper: myAsciiArt
+
+  # Override the default Rune wallpaper with a PNG image that
+  # gets encoded into ASCII.
+  #wallpaper_image: /path/to/image.png
+
+  # Density characters used to encode wallpaper_image. They should be sorted
+  # from less density to more density, i.e. '   `_.,-*=+:;cba!?0123456789$W#@'
+  #wallpaper_density_characters: ' ▓▓▓▓'
+
+  # The following attributes do not apply to the default wallpaper
+  wallpaper_attr:
+    fg: blue
+    bg: default
+  wallpaper_background_attr:
+    bg: default
+
+notifications:
+  auto_close: 5s
+  padding: 1
+  progress_bar: true
+  progress_format:
+    start: "\U00100000"
+    current: "\U00100001"
+    current_tip: "\U00100002"
+    remain: "\U00100003"
+    end: "\U00100004"
+  attr:
+    fg: default
+    bg: default
+  background_attr:
+    fg: default
+    bg: default
+  frame_charset: *frame_charset
+
+terminal:
+  # Default shell to use rather than what's provided by the OS via $SHELL.
+  #shell: bash
+  # Whether to respect the title set by the shell.
+  dynamic_tab_name: true
+  # Whether to enable the terminal's modal mode when pressing <esc>.
+  modal: true
+  # Overrides the default trigger to move the cursor to the start of the prompt line
+  # and trigger the bell (the terminal's audible bell) with a custom escape sequence. This
+  # setting is required to use the terminal's modal mode for non-standard shells (i.e. fish)
+  # which don't trigger a bell with the default escape sequence.
+  # This usually requires configuration on the shell side: for instance to bind an escape sequence
+  # to the bell trigger when using the fish shell, you can add the following to your fish shell config:
+  # `bind \cg 'printf "\a"'`. Furthermore, it's important to note that it's assumed that after calling
+  # this trigger, the cursor is at the start of the line, thus if shell doesn't support ctrl-a to move
+  # to the start of the line, a key sequence for that must be mapped as well.
+  # For example, the following is the bell trigger for <ctrl-a><ctrl-g>:
+  #bell_trigger: "\x01\x07"
+  # Max terminal lines. Increasing this value slows down terminal resizing linearly.
+  max_lines: 1000
+  # This determines the initial number of terminal emulator instances to allocate in the
+  # reservoir, effectively speeding up opening new terminal emulators. You should change
+  # this if your shell is slow at initializing.
+  # A value of 0 deactivates the reservoir and all new terminals will be freshly initialized.
+  initial_reservoir: 0
+  # Colors
+  attr:
+    fg: default
+    bg: default
+  selection_attr:
+    flags: reverse
+  # Defines the tab name attributes when a bell is received and
+  # window is not in focus.
+  needs_attention_attr:
+    fg: red
+    flags: blink
+  # plugin configures the behavior of programs executed via the `!` command.
+  plugin:
+    # bar_layout determines the layout of the either top or bottom status bar.
+    # The following components are available:
+	#  - Command: renders the full command and args of the running program.
+	#  - StatusIcon: renders the status of the program as an icon or animation if running.
+	#  - ExitStatus: renders the exit status after the program is done running.
+	#  - Elapsed: renders the time the program has been running.
+	#  - AlignRight: indicates that the following components need to be aligned to the right.
+	#  - AlignCenter indicates that the following components need to centered.
+    # Each component can have custom attributes via a pipe operator "|".
+    # The supported functions are the following:
+    #  - bg <color>: set the background color as a hex value or a W3C named color.
+    #  - fg <color>: set the foreground color as a hex value or a W3C named color.
+    #  - bold: set the text style as bold
+    #  - italic: set the text style as italic
+	#  - underline: set the text style as underline
+	#  - reverse: reverse the text foreground and background
+	#  - dim: dim the foreground color
+    # The specified attributes are applied to nearby cells, until a double blank
+    # space is encountered. This allows applying attributes to contiguous component
+    # suffixes and prefixes precisely:
+    # bar_layout: '{{ .StatusIcon | fg "yellow" | bg "red" }} RED  <{{ .Elapsed | bg "blue" }}>'
+    # For example, in this case the "red" background applies to the StatusIcon component and
+    # the "RED" string, whereas the "blue" background applies to the "<" prefix,
+    # the Elapsed component and the ">" suffix.
+    bar_layout: ' {{ .StatusIcon | bg "gray" | fg "white" }} █▓▒░{{ .AlignCenter}}{{ .Command | fg "white" | bold }}{{ .AlignRight }}  ░▒▓█ {{ .Elapsed | fg "white" | bg "gray" }} '
+    status_error_icon: ""
+    status_error_attr:
+      fg: red
+    status_success_icon: ""
+    status_success_attr:
+      fg: green
+    animation: "⠃⠅⠆⠘⠨⠰⠉⠒⠤⠑⠡⠢⠊⠌⠔⠇⠸⠎⠱⠣⠜⠪⠕⠋⠙⠓⠚⠍⠩⠥⠬⠖⠲⠦⠴⠏⠹⠧⠼⠫⠝⠮⠵⠺⠗⠞⠳⠛⠭⠶⠟⠻⠷⠾⠯⠽⠿"
+    bar_background_attr:
+      bg: default
+    # Determines whether bar should be rendered at the bottom or the top.
+    bar_align_bottom: false

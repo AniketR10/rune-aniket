@@ -331,7 +331,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 
 	sequenceCases := []handlertest.SequenceTestCase{
 		{
-			"ggi\n", `┌────────────────────────────┐
+			"ggi\n", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │                            │
@@ -348,7 +348,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ukO\n", `┌────────────────────────────┐
+			"<ukO\n", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │                            │
@@ -365,7 +365,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ujo", `┌────────────────────────────┐
+			"<ujo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -382,7 +382,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjo", `┌────────────────────────────┐
+			"<ugg0jjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -399,7 +399,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjo", `┌────────────────────────────┐
+			"<ugg0jjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -416,7 +416,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -433,7 +433,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -450,7 +450,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjofunc hello() {\nfmt.Println(\"\")\n\t}", `┌────────────────────────────┐
+			"<ugg0jjjjjjofunc hello() {\nfmt.Println(\"\")\n\t}", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -467,7 +467,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n}\t)", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n}\t)", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │###### (                    │
@@ -484,7 +484,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n^}\t)", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjogo debug(func() {\nfmt.Println(\"\")\n^}\t)", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │###### (                    │
@@ -501,7 +501,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -518,7 +518,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -535,7 +535,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │                            │
@@ -552,7 +552,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │###### (                    │
@@ -569,7 +569,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │    #####                   │
@@ -586,7 +586,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │                            │
@@ -603,7 +603,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<ugg0jjjjjjjjjjjjjo", `┌────────────────────────────┐
+			"<ugg0jjjjjjjjjjjjjo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │    ########################│
@@ -620,7 +620,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggGO", `┌────────────────────────────┐
+			"<uggGO", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │    }                       │
@@ -637,7 +637,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggGo", `┌────────────────────────────┐
+			"<uggGo", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │}                           │
@@ -654,7 +654,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjjO", `┌────────────────────────────┐
+			"<uggjjjO", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -671,7 +671,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uggjjO", `┌────────────────────────────┐
+			"<uggjjO", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -688,7 +688,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<uGO", `┌────────────────────────────┐
+			"<uGO", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │    }                       │
@@ -705,7 +705,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"<kcc", `┌────────────────────────────┐
+			"<kcc", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │    }                       │
@@ -865,7 +865,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases := []handlertest.SingleTestCase{
 		{
 			term.Event{Ch: 'g', Type: term.EventKey}, `
-┌────────────────────────────┐
+┌######──────────────────────┐
 │# ####                      │
 ├────────────────────────────┤
 │    }                       │
@@ -891,7 +891,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{Ch: 'g', Type: term.EventKey}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -917,7 +917,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -943,7 +943,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -969,7 +969,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -995,7 +995,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1021,7 +1021,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1047,7 +1047,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	cases = []handlertest.SingleTestCase{
 		{
 			term.Event{}, `
-┌────────────────────────────┐
+┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1072,7 +1072,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	sequenceCases := []handlertest.SequenceTestCase{
 		{
-			"", `┌────────────────────────────┐
+			"", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1089,7 +1089,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"uu", `┌────────────────────────────┐
+			"uu", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1106,7 +1106,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"G", `┌────────────────────────────┐
+			"G", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │    }                       │
@@ -1123,7 +1123,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"VkkkkkkduVkkkkkkkkkkkkkkkkkkdugg", `┌────────────────────────────┐
+			"VkkkkkkduVkkkkkkkkkkkkkkkkkkdugg", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1140,7 +1140,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 └────────────────────────────┘`,
 		},
 		{
-			"ggjjjjjjjjjwi/* <$i*/<", `┌────────────────────────────┐
+			"ggjjjjjjjjjwi/* <$i*/<", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │####### main                │
@@ -1165,7 +1165,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	require.NoError(t, comp.Flush(win))
 	sequenceCases = []handlertest.SequenceTestCase{
 		{
-			"", `┌────────────────────────────┐
+			"", `┌######──────────────────────┐
 │# ####                      │
 ├────────────────────────────┤
 │####### main                │
@@ -1186,7 +1186,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	sequenceCases = []handlertest.SequenceTestCase{
 		{
-			"Gofunc helloWorld(){\n\tfmt.Println(\"hello world\")\n}", `┌────────────────────────────┐
+			"Gofunc helloWorld(){\n\tfmt.Println(\"hello world\")\n}", `┌#######─────────────────────┐
 │# #####                     │
 ├────────────────────────────┤
 │##### fileContent = ########│
