@@ -29,6 +29,7 @@ import (
 	"path"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ernestrc/sensible/find"
 	"github.com/stretchr/testify/assert"
@@ -696,6 +697,75 @@ func TestViEditUnit(t *testing.T) {
 		assert.Equal(t, term.Coordinates{X: 12}, to)
 		assert.Equal(t, "", old)
 		assert.Equal(t, 0, actualBellsRung)
+	})
+
+	// Pins the invariant that bulk-replacing a cell.Buffer's contents
+	// (as AltBuffer.restore does for snapshot restore) preserves both
+	// *cell.Buffer and *rawCells identity. Without this invariant,
+	// any cached editor pointer (e.g. v.sync.editor, captured by
+	// scroll.Buffer().WithEditor in newSyncState) would silently go
+	// stale: v.sync.editor.Edit would write into a dead rawCells,
+	// AltBuffer.WriteAt would see CellAt(at) == nil forever, and the
+	// recursion InsertAt ↔ WriteAt would peg a CPU core during
+	// terminal-session restore.
+	t.Run("restore preserves cached editor target", func(t *testing.T) {
+		t.Parallel()
+		comp := newTestParentComponent("hi", term.Coordinates{})
+		var vi viHandler
+		vi.doInit(comp, DefaultConfig())
+
+		// Run the assertions on a watchdogged goroutine so a
+		// regression that causes WriteAt ↔ InsertAt to spin (the
+		// original symptom) fails the test fast instead of hanging
+		// the suite.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+
+			buf := comp.scroll.Buffer()
+			bufPtr := buf
+			require.NotEmpty(t, buf.RawCells())
+
+			// Snapshot the current editor that v.sync.editor points
+			// at; ResetCells must not invalidate it.
+			cachedEditor := vi.sync.editor
+
+			// Mutate buffer contents through the same path
+			// AltBuffer.restore uses.
+			newCells := term.StringToCells("restored")
+			buf.ResetCells(newCells)
+
+			require.Equal(t, bufPtr, comp.scroll.Buffer(),
+				"*cell.Buffer identity must survive ResetCells; "+
+					"otherwise viHandler.v.sync.* and "+
+					"component.Scroll.buf go stale")
+			require.Equal(t, "restored", buf.String(),
+				"buffer contents must reflect the ResetCells payload")
+
+			// Drive an Edit through the cached editor — exactly
+			// what the vte parser does via viHandler.Edit on a
+			// screen-context write. If ResetCells had replaced
+			// the *rawCells, cachedEditor would still point at
+			// the dead instance and this Edit would either be a
+			// no-op or panic. Either way, the new contents
+			// wouldn't appear via buf.String().
+			_, _, _ = cachedEditor.Edit(
+				vtescreen.NewContext(context.Background()),
+				term.Coordinates{Y: 0, X: 8},
+				term.Coordinates{Y: 0, X: 8},
+				"!")
+			assert.Equal(t, "restored!", buf.String(),
+				"cached v.sync.editor must continue to mutate "+
+					"the current rawCells after ResetCells")
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("restore-preserves-cached-editor watchdog tripped; " +
+				"likely a regression of the AltBuffer.restore identity " +
+				"invariant causing WriteAt ↔ InsertAt to recurse")
+		}
 	})
 
 	suite := []struct {

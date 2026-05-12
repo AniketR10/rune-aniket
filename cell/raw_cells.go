@@ -75,6 +75,28 @@ func (c *rawCells) resetWithCap(rowCap, columnCap int) {
 	c.zwjPos = term.Coordinates{}
 }
 
+// adoptCells discards this rawCells' contents and adopts cells in place.
+// The *rawCells identity (and therefore any Editor/View pinned to it via
+// cell.Buffer) is preserved. Intended for bulk reloads (e.g. snapshot
+// restore) that must not be observable as an Edit.
+//
+// columnCap/rowCap/fillInChar are left intact — they're configuration,
+// not content. The cells slice is adopted directly; callers must clone
+// when the source slice is shared.
+//
+// Panics if cells is empty: rawCells maintains the invariant that there
+// is always at least one row, and silently substituting a fresh row
+// would break the caller's expectation that the passed slice is the
+// authoritative content.
+func (c *rawCells) adoptCells(cells [][]term.Cell) {
+	if len(cells) == 0 {
+		panic("rawCells.adoptCells: cells must contain at least one row")
+	}
+	c.cells = cells
+	c.zwj = false
+	c.zwjPos = term.Coordinates{}
+}
+
 func assertValidCoords(pos term.Coordinates) {
 	if pos.X < 0 || pos.Y < 0 {
 		panic(fmt.Sprintf("invalid coordinates: %+v", pos))

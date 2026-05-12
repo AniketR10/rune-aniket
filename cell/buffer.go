@@ -254,6 +254,34 @@ func (b *Buffer) ReplaceContext(ctx context.Context, str string) {
 	b.editor.Edit(ctx, from, to, str)
 }
 
+// ResetCells replaces this Buffer's contents in place with a deep copy
+// of cells. Unlike Replace, it does NOT route through the Editor chain —
+// any Editor installed via WithEditor and any subscribers are bypassed.
+// Use for snapshot restore and similar bulk reloads where preserving the
+// *cell.Buffer / *rawCells identity matters and the change is not a
+// user-observable edit.
+//
+// In performance mode the copy uses a single contiguous slab so the
+// rowsContiguous fast path applies; otherwise a row-by-row copy is used.
+// The caller's slice is never aliased.
+//
+// Panics if cells is empty: the Buffer always maintains the invariant
+// that there is at least one row. Callers wanting to clear a buffer
+// should use Reset or ResetPerformanceCapacity instead.
+func (b *Buffer) ResetCells(cells [][]term.Cell) {
+	if len(cells) == 0 {
+		panic("cell.Buffer.ResetCells: cells must contain at least one row")
+	}
+	var copied [][]term.Cell
+	if b.undoer == nil {
+		// performance mode: keep rows contiguous in one slab.
+		copied = copyCellsContiguous(make([][]term.Cell, len(cells)), cells)
+	} else {
+		copied = term.CopyCells(make([][]term.Cell, len(cells)), cells)
+	}
+	b.cells.adoptCells(copied)
+}
+
 // ConflateRow is equivalent to calling ConflateRowContext
 // with context.Background.
 func (b *Buffer) ConflateRow(y int) (x int, ok bool) {

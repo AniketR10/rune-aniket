@@ -423,8 +423,9 @@ func (e *testExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {
 // so tests can assert on env, path, args, etc.
 type recordingExecutor struct {
 	testExecutor
-	mu  sync.Mutex
-	cmd workspaceapi.Cmd
+	mu         sync.Mutex
+	cmd        workspaceapi.Cmd
+	setPtySize []ptySize
 }
 
 func (e *recordingExecutor) StartCommand(
@@ -491,18 +492,15 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 	assert.Equal(t, expected, writer.String())
 }
 
-// recordingExecutor records calls to SetPtySize so tests can assert the
+// ptySize captures a single SetPtySize call so tests can assert the
 // component drives the pty winsize via the schemeapi.Terminal contract.
-type recordingExecutor struct {
-	testExecutor
-	setPtySize []ptySize
-}
-
 type ptySize struct {
 	width, height int
 }
 
 func (e *recordingExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.setPtySize = append(e.setPtySize, ptySize{width: width, height: height})
 	return nil
 }

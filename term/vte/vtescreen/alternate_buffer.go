@@ -108,19 +108,25 @@ func (b *AltBuffer) restore(cells [][]term.Cell, cursor term.Coordinates, width,
 	if height <= 0 {
 		height = max(1, len(cells))
 	}
-	if len(cells) == 0 {
-		cells = [][]term.Cell{{}}
-	}
 
 	b.width = width
 	b.height = height
 	b.topScrollableRegion = 0
 	b.bottomScrollableRegion = height
-	b.Cells = *cell.CellsToBufferPerformance(cells, b.defaultChar)
-	b.Cells.ResetCapacity(width)
-	b.scroll.InitPerformance(&b.Cells)
-	b.scroll.SetTabspaces(1)
-	b.scroll.InvertOffset = true
+	// Mutate in place. *cell.Buffer and *rawCells identities are
+	// preserved so any Editor/View pinned by viHandler or
+	// component.Scroll remains valid across the restore.
+	if len(cells) == 0 {
+		// ResetPerformanceCapacity preserves *cell.Buffer / *rawCells
+		// identity while clearing all rows back to a single empty
+		// row — exactly the invariant needed for an empty snapshot.
+		b.Cells.ResetPerformanceCapacity(height, width)
+		b.resetLinesTrim(0, height, true, b.defaultChar)
+	} else {
+		b.Cells.ResetCells(cells)
+		b.Cells.ResetCapacity(width)
+	}
+	// b.scroll already points at &b.Cells; only Resize is needed.
 	b.scroll.Resize(width, height)
 	b.cursor.position = cursor
 	if b.cursor.Charsets == nil {

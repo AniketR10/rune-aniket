@@ -588,6 +588,104 @@ func TestBufferReset(t *testing.T) {
 	})
 }
 
+// recordingEditor counts Edit invocations so tests can assert whether a
+// Buffer routed a mutation through its installed Editor chain.
+type recordingEditor struct {
+	delegate Editor
+	calls    int
+}
+
+func (e *recordingEditor) Edit(
+	ctx context.Context, start, end term.Coordinates, str string,
+) (from, to term.Coordinates, old string) {
+	e.calls++
+	if e.delegate != nil {
+		return e.delegate.Edit(ctx, start, end, str)
+	}
+	return start, start, ""
+}
+
+func TestBufferResetCells(t *testing.T) {
+	t.Run("preserves Buffer/rawCells identity and bypasses Editor and subscribers", func(t *testing.T) {
+		b := NewBuffer()
+		_, err := b.ReadFrom(strings.NewReader("hello\nworld"))
+		require.NoError(t, err)
+
+		// Install a recording editor on top of the existing editor
+		// chain so we can detect whether ResetCells routes through it.
+		rec := &recordingEditor{delegate: b.WithEditor(nil)}
+		b.WithEditor(rec)
+
+		// Install a subscriber so we can detect whether ResetCells
+		// notifies the publisher.
+		sub := &testSubscriber{}
+		b.Subscribe(sub)
+
+		bufPtr := b
+
+		newCells := term.StringToCells("restored\ncontents")
+		b.ResetCells(newCells)
+
+		assert.Same(t, bufPtr, b, "*Buffer identity must be preserved")
+		assert.Equal(t, "restored\ncontents", b.String(),
+			"buffer contents must reflect the ResetCells payload")
+		assert.Equal(t, 0, rec.calls,
+			"ResetCells must NOT route through the installed Editor")
+		assert.Equal(t, 0, sub.onWillEdit,
+			"ResetCells must NOT notify Subscribers (OnWillEdit)")
+		assert.Equal(t, 0, sub.onDidEdit,
+			"ResetCells must NOT notify Subscribers (OnDidEdit)")
+	})
+
+	t.Run("panics on empty cells", func(t *testing.T) {
+		b := NewBuffer()
+		assert.Panics(t, func() { b.ResetCells(nil) },
+			"ResetCells must panic on empty cells; the Buffer's "+
+				"at-least-one-row invariant is the caller's "+
+				"responsibility")
+		assert.Panics(t, func() { b.ResetCells([][]term.Cell{}) })
+	})
+
+	t.Run("does not alias the caller's slice", func(t *testing.T) {
+		b := NewBuffer()
+		src := term.StringToCells("hello")
+		b.ResetCells(src)
+
+		// Mutate the source after the call; the buffer must not see it.
+		src[0][0].Ch = 'X'
+		assert.Equal(t, "hello", b.String(),
+			"ResetCells must deep-copy the caller's cells")
+	})
+
+	t.Run("subsequent Edit through cached Editor mutates the new contents", func(t *testing.T) {
+		// This pins the actual *rawCells-identity guarantee: an
+		// Editor handle captured before ResetCells must keep editing
+		// the same buffer afterwards. If ResetCells silently swapped
+		// *rawCells (the original AltBuffer.restore bug), this Edit
+		// would either no-op or panic, and the result would not
+		// appear via b.String().
+		b := new(Buffer)
+		b.InitPerformance(64, 64, ' ')
+		_, err := b.ReadFrom(strings.NewReader("stale"))
+		require.NoError(t, err)
+
+		// b.Editor() returns the safeEditor wrapping the current
+		// underlying editor; for performance buffers, b.editor IS
+		// the *rawCells.
+		cached := b.Editor()
+		b.ResetCells(term.StringToCells("fresh"))
+
+		_, _, _ = cached.Edit(
+			context.Background(),
+			term.Coordinates{Y: 0, X: 5},
+			term.Coordinates{Y: 0, X: 5},
+			"!")
+		assert.Equal(t, "fresh!", b.String(),
+			"cached Editor must continue to mutate b's rawCells "+
+				"after ResetCells (identity preservation)")
+	})
+}
+
 func TestBufferDeleteLine(t *testing.T) {
 	tsuite := []struct {
 		from, to term.Coordinates
