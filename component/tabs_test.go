@@ -368,6 +368,78 @@ func TestTabsDrawFocusHighlightCharAttr(t *testing.T) {
 	assert.Equal(t, 'B', cells[20+9].Ch)
 }
 
+// TestTabsDrawHighlightDisabled verifies that setting the focus-frame
+// rune to 0 disables the highlight overlay entirely (no character is
+// painted on the highlight row).
+func TestTabsDrawHighlightDisabled(t *testing.T) {
+	l := NewTabs()
+	l.SetBorder(false)
+	l.Resize(20, 2)
+	l.SetAttr(term.Attributes{}, term.Attributes{},
+		term.Attributes{}, term.Attributes{},
+		term.Attributes{Fg: tcell.ColorRed}, term.Attributes{}, term.Attributes{})
+	l.SetFocusFrameChar(0)
+	l.Add('A', "alpha")
+	l.Add('B', "beta")
+	l.SetFocus(1)
+
+	w := term.NewStringWriter(20, 2)
+	l.Draw(w)
+	cells := w.Cells()
+
+	// y=0 (the highlight row) must be left untouched.
+	for x := 0; x < 20; x++ {
+		assert.Equal(t, rune(0), cells[x].Ch,
+			"highlight row must be empty at x=%d", x)
+		assert.Equal(t, term.Attributes{}, cells[x].Attributes,
+			"highlight row must carry no attr at x=%d", x)
+	}
+}
+
+// TestTabsDrawBottomHighlight verifies SetBottomHighlight(true) renders
+// the focus-frame highlight on the bottom row of the tab bar and keeps
+// labels anchored to y=0 in borderless mode (no y=1 push-down).
+func TestTabsDrawBottomHighlight(t *testing.T) {
+	l := NewTabs()
+	l.SetBorder(false)
+	l.SetBottomHighlight(true)
+	l.Resize(20, 2)
+
+	focusFrameAttr := term.Attributes{Fg: tcell.ColorRed}
+	l.SetAttr(term.Attributes{}, term.Attributes{},
+		term.Attributes{}, term.Attributes{},
+		focusFrameAttr, term.Attributes{}, term.Attributes{})
+	l.SetFocusFrameChar('━')
+
+	l.Add('A', "alpha")
+	l.Add('B', "beta")
+	l.SetFocus(1)
+
+	w := term.NewStringWriter(20, 2)
+	l.Draw(w)
+	cells := w.Cells()
+
+	// y=0 carries the labels. "A alpha" then "  " separator then
+	// "B beta" starting at column 9.
+	assert.Equal(t, 'A', cells[0].Ch)
+	assert.Equal(t, 'B', cells[9].Ch)
+
+	// y=1 (the bottom row in a height=2 borderless bar) carries the
+	// highlight only over the focused tab's cell columns (9..14).
+	for x := 0; x < 20; x++ {
+		c := cells[20+x]
+		if x >= 9 && x <= 14 {
+			assert.Equal(t, '━', c.Ch,
+				"expected highlight rune at x=%d on bottom row", x)
+			assert.Equal(t, focusFrameAttr, c.Attributes,
+				"expected focus-frame attr at x=%d on bottom row", x)
+		} else {
+			assert.NotEqual(t, '━', c.Ch,
+				"unexpected highlight at x=%d on bottom row", x)
+		}
+	}
+}
+
 func TestTabsDrawIconAttr(t *testing.T) {
 	l := NewTabs()
 	l.SetBorder(false)

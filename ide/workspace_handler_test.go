@@ -355,7 +355,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"│            ││              │",
 		"├────────────┘└──────────────┤",
 		"│1 1  2 2                    │",
-		"└────────────────────────────┘",
+		"└─────━━━────────────────────┘",
 	}, "\n")
 	closedFrame := strings.Join([]string{
 		"┌────────────────────────────┐",
@@ -366,7 +366,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"│                            │",
 		"├────────────────────────────┤",
 		"│1 1  2 2                    │",
-		"└────────────────────────────┘",
+		"└─────━━━────────────────────┘",
 	}, "\n")
 	editorFrame := strings.Join([]string{
 		"┌━━━━━━━━━━──────────────────┐",
@@ -377,7 +377,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"│                      NORMAL│",
 		"├────────────────────────────┤",
 		"│1 1  2 2                    │",
-		"└────────────────────────────┘",
+		"└─────━━━────────────────────┘",
 	}, "\n")
 	// Final frame after re-opening the explorer: the on-disk
 	// gamma.go entry must have been picked up by the FS-watcher
@@ -392,7 +392,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		"│ o gamma.go ││        NORMAL│",
 		"├────────────┘└──────────────┤",
 		"│1 1  2 2                    │",
-		"└────────────────────────────┘",
+		"└─────━━━────────────────────┘",
 	}, "\n")
 
 	// Steps 1–3: drive the production handler chain with
@@ -521,7 +521,7 @@ func TestGitlinkIntegration(t *testing.T) {
 					"│                                                                │ da7eaae159f │",
 					"├────────────────────────────────────────────────────────────────│ 25dd233db/r ┤",
 					"│1 1  2 2                                                                      │",
-					"└──────────────────────────────────────────────────────────────────────────────┘",
+					"└─────━━━──────────────────────────────────────────────────────────────────────┘",
 				}, "\n"),
 			}}
 			require.NotPanics(t, func() {
@@ -622,7 +622,7 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 	}
 	mu.Lock()
 	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
@@ -672,7 +672,7 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2*                   │
-└────────────────────────────┘`},
+└━━━─────────────────────────┘`},
 	}
 	mu.Lock()
 	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
@@ -710,7 +710,7 @@ func TestCrossWorkspaceNotifications(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 #  2 #                    │
-└────────────────────────────┘`},
+└─────###────────────────────┘`},
 	}
 	handlertest.RunHandlerSequenceWriter(t, newWriterForAttrTesting(30, 9),
 		h, 30, 9, cases)
@@ -972,7 +972,7 @@ func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1                           │
-└────────────────────────────┘`},
+└━───────────────────────────┘`},
 		{"<c-\\\\>tabclose<enter>",
 			`┌────────────────────────────┐
 │                            │
@@ -982,7 +982,7 @@ func TestOpenFilesinEmptyWorkspace(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1                           │
-└────────────────────────────┘`},
+└━───────────────────────────┘`},
 	}
 	handlertest.RunHandlerSequence(t, h, 30, 9, cases)
 
@@ -1152,7 +1152,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 ·  2 2                    │
-└────────────────────────────┘`,
+└━━━─────────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
@@ -1164,7 +1164,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to1<enter>",
@@ -1176,7 +1176,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 ·  2 2                    │
-└────────────────────────────┘`,
+└━━━─────────────────────────┘`,
 				},
 			},
 		},
@@ -1203,7 +1203,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to1<enter>",
@@ -1215,7 +1215,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 ·  2 2                    │
-└────────────────────────────┘`,
+└━━━─────────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
@@ -1227,7 +1227,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 			},
 		},
@@ -1259,7 +1259,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to1<enter>",
@@ -1271,7 +1271,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 ·  2 2                    │
-└────────────────────────────┘`,
+└━━━─────────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
@@ -1283,7 +1283,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 			},
 		},
@@ -1310,7 +1310,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to1<enter>",
@@ -1322,7 +1322,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 ·  2 2                    │
-└────────────────────────────┘`,
+└━━━─────────────────────────┘`,
 				},
 				{
 					InputSequence: "<c-\\\\>to2<enter>",
@@ -1334,7 +1334,7 @@ func TestCrossWorkspaceOpenRoutingIntegration(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 ·                    │
-└────────────────────────────┘`,
+└─────━━━────────────────────┘`,
 				},
 			},
 		},
@@ -1760,7 +1760,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 1  3            │
-└──────────────────┘`},
+└─────━────────────┘`},
 		{":woc>",
 			`┌──────────────────┐
 │                  │
@@ -1771,7 +1771,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1                 │
-└──────────────────┘`},
+└━─────────────────┘`},
 		{":q!>",
 			`┌──────────────────┐
 │                  │
@@ -1793,7 +1793,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1                 │
-└──────────────────┘`},
+└━─────────────────┘`},
 		{":wofo 100>",
 			`┌────┌─────────────┐
 │    │ invalid     │
@@ -1815,7 +1815,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 1  2 2          │
-└──────────────────┘`},
+└─────━━━──────────┘`},
 		{"123456789",
 			`┌──────────────────┐
 │                  │
@@ -1826,7 +1826,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 1  9            │
-└──────────────────┘`},
+└─────━────────────┘`},
 		{"2:wonew>", // uses tmp dir as workspace in the absence of a uri
 			`┌──────────────────┐
 │                  │
@@ -1837,7 +1837,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 1  2 2          │
-└──────────────────┘`},
+└─────━━━──────────┘`},
 		{"2:wofo>",
 			`┌────┌─────────────┐
 │    │ invalid     │
@@ -1848,7 +1848,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │    │ workspace   │
 ├────│ number      ┤
 │1 1  2            │
-└──────────────────┘`},
+└─────━────────────┘`},
 		{":wofo 3>:addBlaBla>",
 			`┌──────────────────┐
 │                  │
@@ -1859,7 +1859,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 1  3 3          │
-└──────────────────┘`},
+└─────━━━──────────┘`},
 		{":wofo 4>:workspacenew memory\\:///>", // can give path as arg to workspacenew
 			`┌──────────────────┐
 │                  │
@@ -1870,7 +1870,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 1  4 4          │
-└──────────────────┘`},
+└─────━━━──────────┘`},
 		{":wofo 4>:workspacenew memory\\:///tmp2>:edit memory\\:///tmp2/12>:workspacerelo>", // reloads non-primary workspace
 			`┌━━━━──────────────┐
 │o 12              │
@@ -1881,7 +1881,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │            NORMAL│
 ├──────────────────┤
 │1 1  4 4          │
-└──────────────────┘`},
+└─────━━━──────────┘`},
 		{":workspacerename bla>:wofo 4>",
 			`┌──────────────────┐
 │                  │
@@ -1892,7 +1892,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1 bla  4          │
-└──────────────────┘`},
+└───────━──────────┘`},
 	}
 	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 }
@@ -2848,7 +2848,7 @@ func TestInitializeNoCwd(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1                 │
-└──────────────────┘`},
+└━─────────────────┘`},
 	}
 	h := newSafeHandler(m)
 	handlertest.TestHandlerSequence(t, h, 20, 10, cases)
@@ -2871,7 +2871,7 @@ func TestInitializeNotifications(t *testing.T) {
 │                  │
 ├──────────────────┤
 │1                 │
-└──────────────────┘`},
+└━─────────────────┘`},
 	}
 	h := newSafeHandler(m)
 	m.notifications.current().NotifyOnce(browserapi.LevelWarn, "6:14am")
@@ -3228,7 +3228,7 @@ func TestMoveWorkspace(t *testing.T) {
 │          workspaceWallpaper          │
 ├──────────────────────────────────────┤
 │2 2  3 3                              │
-└──────────────────────────────────────┘`},
+└─────━━━──────────────────────────────┘`},
 		{":womo 1>",
 			`┌──────────────────────────────────────┐
 │                                      │
@@ -3236,7 +3236,7 @@ func TestMoveWorkspace(t *testing.T) {
 │          workspaceWallpaper          │
 ├──────────────────────────────────────┤
 │1 1  2 2                              │
-└──────────────────────────────────────┘`},
+└━━━───────────────────────────────────┘`},
 		{":wofo 1>:womo left>",
 			`┌────────────────────────┌─────────────┐
 │                        │ workspace   │
@@ -3244,7 +3244,7 @@ func TestMoveWorkspace(t *testing.T) {
 │          workspaceWallp│ at the      │
 ├────────────────────────│ first slot  ┤
 │1 1  2 2                              │
-└──────────────────────────────────────┘`},
+└━━━───────────────────────────────────┘`},
 		{":noticloseall>:womo 9>:womo right>",
 			`┌────────────────────────┌─────────────┐
 │                        │ workspace   │
@@ -3252,7 +3252,7 @@ func TestMoveWorkspace(t *testing.T) {
 │          workspaceWallp│ at the      │
 ├────────────────────────│ last slot   ┤
 │2 2  9 9                              │
-└──────────────────────────────────────┘`},
+└─────━━━──────────────────────────────┘`},
 	}
 	handlertest.TestHandlerSequence(t, h, 40, 7, cases)
 
@@ -3509,7 +3509,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 			{"iabc<:write>", // edit + flush
 				`┌━━━─────────────────────────┐
 │o b                         │
@@ -3525,7 +3525,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 			{":tabclose>", // close
 				`┌────────────────────────────┐
 │                            │
@@ -3541,7 +3541,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 			{":wofo 8>:edit c>", // empty workspace
 				`┌━━━─────────────────────────┐
 │o c                         │
@@ -3557,7 +3557,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2  8                 │
-└────────────────────────────┘`},
+└──────────━─────────────────┘`},
 			{"iabc<:write>", // edit + flush
 				`┌━━━─────────────────────────┐
 │o c                         │
@@ -3573,7 +3573,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2  8                 │
-└────────────────────────────┘`},
+└──────────━─────────────────┘`},
 			{":tabclose>", // close
 				`┌────────────────────────────┐
 │                            │
@@ -3589,7 +3589,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  8                 │
-└────────────────────────────┘`},
+└──────────━─────────────────┘`},
 		}
 		h := newSafeHandler(m)
 		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
@@ -3685,7 +3685,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 			{"iabc<:write>",
 				`┌━━━─────────────────────────┐
 │o b                         │
@@ -3701,7 +3701,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 			{":tabclose>",
 				`┌────────────────────────────┐
 │                            │
@@ -3717,7 +3717,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 			{":wofo 8>:edit c>",
 				`┌━━━─────────────────────────┐
 │o c                         │
@@ -3733,7 +3733,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2  8                 │
-└────────────────────────────┘`},
+└──────────━─────────────────┘`},
 			{"iabc<:write>",
 				`┌━━━─────────────────────────┐
 │o c                         │
@@ -3749,7 +3749,7 @@ func TestExternalEvents(t *testing.T) {
 │                      NORMAL│
 ├────────────────────────────┤
 │1 1  2 2  8                 │
-└────────────────────────────┘`},
+└──────────━─────────────────┘`},
 			{":tabclose>",
 				`┌────────────────────────────┐
 │                            │
@@ -3765,7 +3765,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  8                 │
-└────────────────────────────┘`},
+└──────────━─────────────────┘`},
 		}
 
 		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
@@ -3851,7 +3851,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└━━━─────────────────────────┘`},
 		{":workspacefocus 2>:tttt>:xyz>",
 			`┌────────────────────────────┐
 │                            │
@@ -3867,7 +3867,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 		{":workspacefocus 3>:tttt>:xyz>",
 			`┌──────────────┌─────────────┐
 │              │ unknown     │
@@ -3883,7 +3883,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ "tttt"      │
 ├──────────────└─────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└──────────━━━───────────────┘`},
 	}
 	h := newSafeHandler(m)
 	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
@@ -3913,7 +3913,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└━━━─────────────────────────┘`},
 		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
 			`┌──────────────┌─────────────┐
 │              │ unknown     │
@@ -3929,7 +3929,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
 			`┌──────────────┌─────────────┐
 │              │ unknown     │
@@ -3945,7 +3945,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ "tttt"      │
 ├──────────────└─────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└──────────━━━───────────────┘`},
 	}
 
 	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
@@ -3974,7 +3974,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ alias "xyz" │
 ├──────────────└─────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└━━━─────────────────────────┘`},
 		{":noticloseall>:workspacefocus 2>:tttt>:xyz>",
 			`┌──────────────┌─────────────┐
 │              │ unknown     │
@@ -3990,7 +3990,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ "tttt"      │
 ├──────────────└─────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 		{":noticloseall>:workspacefocus 3>:tttt>:xyz>",
 			`┌──────────────┌─────────────┐
 │              │ unknown     │
@@ -4006,7 +4006,7 @@ func TestWorkspaceCommands(t *testing.T) {
 │              │ "tttt"      │
 ├──────────────└─────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└──────────━━━───────────────┘`},
 	}
 
 	handlertest.TestHandlerSequence(t, h, 30, 15, cases)
@@ -4089,7 +4089,14 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 
 	// screen builds the expected Draw output. The bar string encodes
 	// the focused slot via '·' on the focused name (see writer setup).
-	screen := func(bar string) string {
+	// hlStart/hlLen describe the focus-frame highlight rendered on the
+	// bottom border row over the focused tab's cell columns.
+	screen := func(bar string, hlStart, hlLen int) string {
+		// Build the bottom border: '└' + 28 box chars + '┘'.
+		bottom := []rune("└────────────────────────────┘")
+		for i := 0; i < hlLen; i++ {
+			bottom[1+hlStart+i] = '━'
+		}
 		return `┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -4098,7 +4105,7 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 ` + bar + `
-└────────────────────────────┘`
+` + string(bottom)
 	}
 
 	type clickCase struct {
@@ -4122,25 +4129,25 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 			name:      "dense_click_first_tab_focuses_slot_1",
 			filled:    []bool{true, true, true},
 			focusSlot: 2, mouseX: 1,
-			expected: screen("│1 ·  2 2  3 3               │"),
+			expected: screen("│1 ·  2 2  3 3               │", 0, 3),
 		},
 		{
 			name:      "dense_click_middle_tab_focuses_slot_2",
 			filled:    []bool{true, true, true},
 			focusSlot: 0, mouseX: 7,
-			expected: screen("│1 1  2 ·  3 3               │"),
+			expected: screen("│1 1  2 ·  3 3               │", 5, 3),
 		},
 		{
 			name:      "dense_click_last_tab_focuses_slot_3",
 			filled:    []bool{true, true, true},
 			focusSlot: 0, mouseX: 12,
-			expected: screen("│1 1  2 2  3 ·               │"),
+			expected: screen("│1 1  2 2  3 ·               │", 10, 3),
 		},
 		{
 			name:      "dense_click_far_past_last_tab_keeps_focus",
 			filled:    []bool{true, true, true},
 			focusSlot: 0, mouseX: width - 2,
-			expected: screen("│1 ·  2 2  3 3               │"),
+			expected: screen("│1 ·  2 2  3 3               │", 0, 3),
 		},
 
 		// Single empty middle slot — the original RUNE-126 bug. Bar
@@ -4150,19 +4157,19 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 			name:      "middle_gap_click_first_visible_tab_focuses_slot_1",
 			filled:    []bool{true, false, true},
 			focusSlot: 2, mouseX: 1,
-			expected: screen("│1 ·  3 3                    │"),
+			expected: screen("│1 ·  3 3                    │", 0, 3),
 		},
 		{
 			name:      "middle_gap_click_second_visible_tab_focuses_slot_3",
 			filled:    []bool{true, false, true},
 			focusSlot: 0, mouseX: 7,
-			expected: screen("│1 1  3 ·                    │"),
+			expected: screen("│1 1  3 ·                    │", 5, 3),
 		},
 		{
 			name:      "middle_gap_click_past_last_visible_tab_keeps_focus",
 			filled:    []bool{true, false, true},
 			focusSlot: 0, mouseX: 15,
-			expected: screen("│1 ·  3 3                    │"),
+			expected: screen("│1 ·  3 3                    │", 0, 3),
 		},
 
 		// Two consecutive empty middle slots: bar renders "1 1  4 4".
@@ -4170,7 +4177,7 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 			name:      "double_gap_click_second_visible_tab_focuses_slot_4",
 			filled:    []bool{true, false, false, true},
 			focusSlot: 0, mouseX: 7,
-			expected: screen("│1 1  4 ·                    │"),
+			expected: screen("│1 1  4 ·                    │", 5, 3),
 		},
 
 		// Focused empty middle slot: bar renders "1 1  2    3 3".
@@ -4184,13 +4191,13 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 			name:      "focused_empty_middle_click_left_filled_focuses_slot_1",
 			filled:    []bool{true, false, true},
 			focusSlot: 1, mouseX: 1,
-			expected: screen("│1 ·  3 3                    │"),
+			expected: screen("│1 ·  3 3                    │", 0, 3),
 		},
 		{
 			name:      "focused_empty_middle_click_right_filled_focuses_slot_3",
 			filled:    []bool{true, false, true},
 			focusSlot: 1, mouseX: 10,
-			expected: screen("│1 1  3 ·                    │"),
+			expected: screen("│1 1  3 ·                    │", 5, 3),
 		},
 
 		// Focused empty first slot: bar renders "1  2 2  3 3" with
@@ -4201,13 +4208,13 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 			name:      "focused_empty_first_click_second_visible_focuses_slot_2",
 			filled:    []bool{false, true, true},
 			focusSlot: 0, mouseX: 5,
-			expected: screen("│2 ·  3 3                    │"),
+			expected: screen("│2 ·  3 3                    │", 0, 3),
 		},
 		{
 			name:      "focused_empty_first_click_third_visible_focuses_slot_3",
 			filled:    []bool{false, true, true},
 			focusSlot: 0, mouseX: 10,
-			expected: screen("│2 2  3 ·                    │"),
+			expected: screen("│2 2  3 ·                    │", 5, 3),
 		},
 	}
 
@@ -4330,7 +4337,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 		{fmt.Sprintf(":workspacenew %s>", tempDir2), // not fully specified
 			`┌────────────────────────────┐
 │                            │
@@ -4351,7 +4358,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2                    │
-└────────────────────────────┘`},
+└─────━━━────────────────────┘`},
 		{"y>",
 			`┌────────────────────────────┐
 │                            │
@@ -4372,7 +4379,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │1 1  2 2  3 3               │
-└────────────────────────────┘`},
+└──────────━━━───────────────┘`},
 	}
 
 	h := newSafeHandler(m)

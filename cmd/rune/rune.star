@@ -645,7 +645,7 @@ config = {
         "focus_tab_icon_attr":     attr(fg = "yellow", bg = "default"),
         "non_focus_tab_icon_attr": attr(fg = "silver", bg = "default"),
         "focus_tab_highlight_attr": attr(fg = "yellow", bg = "default"),
-        "focus_tab_highlight_char": "\U0001fb3C",
+        "focus_tab_highlight_char":  "\U00100006",
         # Prompt configuration used when Rune asks the user questions.
         "prompt": {
             "text_attr":       attr(bg = "gray", flag = "bold"),
@@ -663,6 +663,9 @@ config = {
         # Attributes for custom ASCII or image wallpapers.
         "wallpaper_attr":            attr(fg = "blue", bg = "default"),
         "wallpaper_background_attr": attr(bg = "default"),
+        # Character drawn on the bottom row of the workspace tab bar to
+        # highlight the workspace currently in focus.
+        "focus_tab_highlight_char":  "",
     },
     # Notification pop-up configuration.
     "notifications": {
@@ -980,6 +983,7 @@ if tui:
         "workspace": {
             "wallpaper_attr":            attr(fg = "#D34728", bg = "#1e1e1e"),
             "wallpaper_background_attr": attr(bg = "#1e1e1e"),
+            "focus_tab_highlight_char":  "━",
         },
         "notifications": {
             "attr":            attr(fg = "default", bg = "#1e1e1e"),

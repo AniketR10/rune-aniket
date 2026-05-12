@@ -716,8 +716,14 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 			}, colorFillAlphaStep3)
 		}
 
+	// character at the end of so transition is smoother ▇▆▅▄▃▂
+	case '\U00100005':
+		ok = m.blockGlyph(dr, [][]bool{
+			{false}, {false}, {false}, {false}, {false}, {false}, {false}, {true},
+		})
+
 	// tab top highlight
-	case '\U0001fb3C':
+	case '\U00100006':
 		ok = m.blockGlyph(dr, [][]bool{
 			{true},
 			{false},
@@ -729,10 +735,17 @@ func (m *custom) Glyph(dot fixed.Point26_6, r rune) (
 			{false},
 		})
 
-	// character at the end of so transition is smoother ▇▆▅▄▃▂
-	case '\U00100005':
+	// tab bottom highlight
+	case '\U00100007':
 		ok = m.blockGlyph(dr, [][]bool{
-			{false}, {false}, {false}, {false}, {false}, {false}, {false}, {true},
+			{false},
+			{false},
+			{false},
+			{false},
+			{false},
+			{false},
+			{false},
+			{true},
 		})
 	}
 

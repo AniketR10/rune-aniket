@@ -94,6 +94,7 @@ type Tabs struct {
 	frameAttr        term.Attributes
 	focusFrameAttr   term.Attributes
 	focusFrameChar   rune
+	bottomHighlight  bool
 	frameBorders     component.FrameCharSet
 	separator        string
 	dirty            bool
@@ -202,6 +203,17 @@ func (t *Tabs) SetFocusFrameChar(r rune) {
 	t.dirty = true
 }
 
+// SetBottomHighlight controls where the focus-frame highlight is drawn.
+// When true the highlight is rendered on the bottom row of the tab bar
+// (above the bottom frame in bordered mode), and labels stay anchored
+// to y=0 in borderless mode. When false (the default) the highlight is
+// drawn on the top row and labels are pushed down by one row in
+// borderless mode.
+func (t *Tabs) SetBottomHighlight(on bool) {
+	t.bottomHighlight = on
+	t.dirty = true
+}
+
 // Resize : tui.Component
 func (t *Tabs) Resize(width, height int) {
 	t.width, t.height = width, height
@@ -219,7 +231,11 @@ func (t *Tabs) Draw(w term.Writer) {
 	// In borderless mode with at least 2 rows, push the labels down by
 	// one row so y=0 is reserved for the focus highlight. Bordered mode
 	// already places labels on y>=1 because the frame occupies y=0.
-	if !t.border && t.height >= 2 {
+	// When the highlight is rendered at the bottom, labels stay
+	// anchored to y=0 in both modes — the highlight overlays the
+	// bottom frame row in bordered mode and the trailing blank row in
+	// borderless mode.
+	if !t.border && t.height >= 2 && !t.bottomHighlight {
 		vw := &component.VirtualWriter{
 			Writer: w,
 			Offset: term.Coordinates{Y: 1},
@@ -240,7 +256,8 @@ func (t *Tabs) Draw(w term.Writer) {
 // is drawable.
 func (t *Tabs) drawFocusHighlight(w term.Writer) {
 	if t.highlightIdx < 0 || t.height < 2 ||
-		t.width <= 0 || len(t.layout.cells) == 0 {
+		t.width <= 0 || len(t.layout.cells) == 0 ||
+		t.focusFrameChar == 0 {
 		return
 	}
 	xLeft := 0
@@ -248,6 +265,10 @@ func (t *Tabs) drawFocusHighlight(w term.Writer) {
 	if t.border {
 		xLeft = 1
 		xRight = t.width - 1
+	}
+	y := 0
+	if t.bottomHighlight {
+		y = t.height - 1
 	}
 	innerX := 0
 	sepLen := len(t.separator)
@@ -258,7 +279,7 @@ func (t *Tabs) drawFocusHighlight(w term.Writer) {
 				if x < xLeft || x >= xRight {
 					continue
 				}
-				w.SetCell(term.Coordinates{X: x, Y: 0}, term.Cell{
+				w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{
 					Width:      1,
 					Ch:         t.focusFrameChar,
 					Attributes: t.focusFrameAttr,

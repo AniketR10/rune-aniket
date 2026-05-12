@@ -447,6 +447,41 @@ func TestConfigDefault(t *testing.T) {
 	assertDefaultConfig(t, ret)
 }
 
+// TestHighlightTabCharEmptyDisables asserts that an explicitly empty
+// focus_tab_highlight_char value disables the highlight (returns 0)
+// while an absent key falls back to the browser default.
+func TestHighlightTabCharEmptyDisables(t *testing.T) {
+	def := browser.DefaultConfig().FocusTabHighlightChar
+
+	// key absent → default
+	cfg := &ideConfig{cfg: map[string]any{
+		"browser":   map[string]any{},
+		"workspace": map[string]any{},
+	}, errors: map[string]error{}}
+	assert.Equal(t, def, cfg.highlightTabChar(),
+		"absent browser.focus_tab_highlight_char must fall back to default")
+	assert.Equal(t, def, cfg.workspaceHighlightTabChar(),
+		"absent workspace.focus_tab_highlight_char must fall back to default")
+
+	// key present and empty → disabled (rune 0)
+	cfg = &ideConfig{cfg: map[string]any{
+		"browser":   map[string]any{"focus_tab_highlight_char": ""},
+		"workspace": map[string]any{"focus_tab_highlight_char": ""},
+	}, errors: map[string]error{}}
+	assert.Equal(t, rune(0), cfg.highlightTabChar(),
+		"empty browser.focus_tab_highlight_char must disable the highlight")
+	assert.Equal(t, rune(0), cfg.workspaceHighlightTabChar(),
+		"empty workspace.focus_tab_highlight_char must disable the highlight")
+
+	// key present and non-empty → first rune
+	cfg = &ideConfig{cfg: map[string]any{
+		"browser":   map[string]any{"focus_tab_highlight_char": "▔"},
+		"workspace": map[string]any{"focus_tab_highlight_char": "▁"},
+	}, errors: map[string]error{}}
+	assert.Equal(t, '▔', cfg.highlightTabChar())
+	assert.Equal(t, '▁', cfg.workspaceHighlightTabChar())
+}
+
 func TestConfigDecodeError(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)

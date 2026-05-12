@@ -998,10 +998,13 @@ func (c ideConfig) highlightTabChar() rune {
 		}
 		return def
 	}
+	// An explicitly empty string means: disable the highlight (no
+	// rune is painted). Use the configured default only when the key
+	// is absent — handled by ErrNotFound above.
 	for _, r := range s {
 		return r
 	}
-	return def
+	return 0
 }
 
 func (c ideConfig) dirtyTabAttr() term.Attributes {
@@ -2279,6 +2282,28 @@ func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
 func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_background_attr",
 		term.Attributes{})
+}
+
+func (c ideConfig) workspaceHighlightTabChar() rune {
+	def := browser.DefaultConfig().FocusTabHighlightChar
+	cfg, ok := c.getConfig(config.MapConfig(c.cfg), "workspace")
+	if !ok {
+		return def
+	}
+	s, err := cfg.GetString("focus_tab_highlight_char")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.focus_tab_highlight_char"] = err
+		}
+		return def
+	}
+	// An explicitly empty string means: disable the highlight (no
+	// rune is painted). Use the configured default only when the key
+	// is absent — handled by ErrNotFound above.
+	for _, r := range s {
+		return r
+	}
+	return 0
 }
 
 func (c ideConfig) terminalDefaultAttr() term.Attributes {

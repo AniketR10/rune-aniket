@@ -1019,6 +1019,10 @@ workspace:
   wallpaper_background_attr:
     bg: default
 
+  # Character drawn on the bottom row of the workspace tab bar to
+  # highlight the workspace currently in focus.
+  focus_tab_highlight_char: "━"
+
 notifications:
   auto_close: 5s
   padding: 1
