@@ -89,7 +89,7 @@ func (t *toolAdapter) Definition() llm.Tool {
 		Function: llm.FunctionDefinition{
 			Name:        t.serverName + "_" + t.mcpTool.Name,
 			Description: t.mcpTool.Description,
-			Parameters:  t.mcpTool.InputSchema,
+			Parameters:  sanitizeMCPInputSchema(t.serverName, t.mcpTool.Name, t.mcpTool.InputSchema),
 		},
 	}
 }
