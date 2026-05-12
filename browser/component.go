@@ -120,9 +120,19 @@ func (c *Component) Init(config Config) {
 			return ret
 		}
 		t := c.buffers[id]
+		// If the tab is already bound to a window, switch focus to that
+		// window rather than trying to move the tab into the focused
+		// window. Clicking the tab of an already-focused window is a no-op.
+		if win, ok := t.Window(); ok {
+			bwin := win.(*browserWindow)
+			if bwin != c.Focus().(*browserWindow) {
+				c.SetFocus(bwin)
+			}
+			return true
+		}
 		bwin := c.Focus().(*browserWindow)
 		err := c.tryUpdateWindowContent(bwin, t, bwin.win.Content().(browserapi.Handler))
-		if err != nil && err != browserapi.ErrTabNotFree {
+		if err != nil {
 			c.setError(err)
 		}
 		return true

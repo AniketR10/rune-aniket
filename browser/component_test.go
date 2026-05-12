@@ -399,6 +399,121 @@ func TestWindowFocusTabHighlightCueFollowsFocus(t *testing.T) {
 	}
 }
 
+// TestTabClickFocusesOwningWindow verifies that clicking a tab bound to
+// a non-focused window switches focus to that window (instead of
+// returning ErrTabNotFree silently).
+func TestTabClickFocusesOwningWindow(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+	cfg.FocusTabHighlightChar = '━'
+	cfg.TabBarHeight = 2
+
+	b := NewComponent(cfg)
+
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 'A', "a", newTestHandler(), nil)
+	leftWin := b.Focus()
+	require.NoError(t, leftWin.SetContent(tabA))
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 'B', "b", newTestHandler(), nil)
+	rightWin, ok := b.Split(browserapi.OrientationRight, leftWin, tabB)
+	require.True(t, ok)
+	require.Equal(t, rightWin, b.Focus())
+
+	width, height := 20, 5
+	b.Resize(width, height)
+	writer := term.NewStringWriter(width, height)
+	b.Draw(writer)
+
+	// Click tab A (id 0) — it is bound to the left, non-focused window.
+	require.True(t, b.tabs.OnClick(0))
+	assert.Equal(t, leftWin, b.Focus(),
+		"clicking a tab bound to another window must focus that window")
+
+	writer = term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells := writer.Cells()
+	for x := 0; x < 3; x++ {
+		assert.Equal(t, '━', cells[x].Ch,
+			"tab A must be highlighted after click at x=%d", x)
+	}
+	for x := 5; x < 8; x++ {
+		assert.NotEqual(t, '━', cells[x].Ch,
+			"tab B must not be highlighted after click at x=%d", x)
+	}
+}
+
+// TestTabClickOnFocusedTabIsNoOp verifies that clicking the tab of the
+// currently-focused window does not change focus or surface an error.
+func TestTabClickOnFocusedTabIsNoOp(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+
+	b := NewComponent(cfg)
+
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 'A', "a", newTestHandler(), nil)
+	leftWin := b.Focus()
+	require.NoError(t, leftWin.SetContent(tabA))
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 'B', "b", newTestHandler(), nil)
+	rightWin, ok := b.Split(browserapi.OrientationRight, leftWin, tabB)
+	require.True(t, ok)
+	require.Equal(t, rightWin, b.Focus())
+
+	b.Resize(20, 5)
+
+	// Click tab B (id 1) — already bound to the focused window.
+	require.True(t, b.tabs.OnClick(1))
+	assert.Equal(t, rightWin, b.Focus(),
+		"clicking the tab of the focused window must not change focus")
+}
+
+// TestTabClickFreeTabLoadsIntoFocusedWindow guards the unchanged
+// free-tab path: clicking a free tab swaps it into the focused window.
+func TestTabClickFreeTabLoadsIntoFocusedWindow(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+
+	b := NewComponent(cfg)
+
+	// Open two tabs in the same window so the first ends up free.
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 'A', "a", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tabA))
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 'B', "b", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tabB))
+
+	// tabA is now free; tabB occupies the focused window.
+	_, bound := tabA.Window()
+	require.False(t, bound, "tabA must be free before click")
+
+	b.Resize(20, 5)
+
+	require.True(t, b.tabs.OnClick(0))
+
+	focused, ok := b.FocusTab()
+	require.True(t, ok)
+	assert.Equal(t, tabA, focused,
+		"clicking a free tab must load it into the focused window")
+}
+
 // TestNonFocusTabAttrRespectedWithFrameFg is a regression test for
 // non_focus_tab_attr being overridden by the window manager's frame_attr
 // foreground. The tabs Scroll background used to share frame_attr (gray
