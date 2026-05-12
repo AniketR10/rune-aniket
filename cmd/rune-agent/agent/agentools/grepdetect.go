@@ -46,23 +46,40 @@ var grepProgramNames = map[string]bool{
 	"ack":  true,
 }
 
-// grepDetectNoForkBuiltins are shell built-ins that do not fork a
-// separate process. A bare grep invocation may be preceded by any number
-// of these without changing the fact that the only forked command is
-// grep.
-var grepDetectNoForkBuiltins = map[string]bool{
-	"cd": true, "pushd": true, "popd": true,
-	"export": true, "set": true, "unset": true,
-	"readonly": true, "local": true, "declare": true, "typeset": true,
-	"alias": true, "unalias": true,
-	":": true, "true": true, "false": true,
+// grepWrapperPrograms invoke another command as their effective
+// payload. When one of these is the program word, we keep scanning
+// the remaining literal arguments for a grep-like program name so
+// `find . | xargs grep foo` is intercepted just like a plain
+// `grep foo` would be.
+var grepWrapperPrograms = map[string]bool{
+	"xargs":    true,
+	"env":      true,
+	"time":     true,
+	"command":  true,
+	"exec":     true,
+	"sudo":     true,
+	"doas":     true,
+	"nohup":    true,
+	"nice":     true,
+	"ionice":   true,
+	"watch":    true,
+	"timeout":  true,
+	"stdbuf":   true,
+	"parallel": true,
 }
 
-// isBareGrepCommand reports whether script reduces to a single forked
-// invocation of grep/rg/ag/ack, optionally preceded by no-fork builtins
-// such as `cd <path>`, with no pipes, redirections, command
-// substitutions, or other forked commands.
-func isBareGrepCommand(script string) bool {
+// isGrepInvocation reports whether the script invokes grep/rg/ag/ack
+// anywhere — directly, behind pipes, inside command substitution, after
+// env assignments, on either side of && / ||, or as a redirection
+// source/target. The previous "bare grep only" check let the model
+// trivially escape with `grep ... 2>/dev/null | sort` or `cat | grep`,
+// so we now treat any of those wrappers as a positive match.
+//
+// Known gap: we do not re-parse the body of `bash -c "..."`. A model
+// determined enough to wrap grep in a subshell string still gets
+// through, but the canonical evasion patterns from real chats no
+// longer work.
+func isGrepInvocation(script string) bool {
 	script = strings.TrimSpace(script)
 	if script == "" {
 		return false
@@ -71,109 +88,128 @@ func isBareGrepCommand(script string) bool {
 	if err != nil || file == nil {
 		return false
 	}
-	sawGrep := false
 	for _, stmt := range file.Stmts {
-		ok, hit := grepStmt(stmt)
-		if !ok {
-			return false
-		}
-		if hit {
-			if sawGrep {
-				return false
-			}
-			sawGrep = true
+		if stmtMentionsGrep(stmt) {
+			return true
 		}
 	}
-	return sawGrep
+	return false
 }
 
-// grepStmt walks a single statement. It returns (ok, hit) where ok is
-// false if the statement contains anything we cannot reduce (pipes,
-// redirections to files, command substitution, unknown forked commands)
-// and hit is true if this statement is the bare grep invocation.
-func grepStmt(stmt *syntax.Stmt) (bool, bool) {
+// stmtMentionsGrep returns true if the statement or any of its
+// pipeline/redirection components invokes a grep-like program.
+func stmtMentionsGrep(stmt *syntax.Stmt) bool {
 	if stmt == nil {
-		return true, false
+		return false
 	}
-	// Any redirection (>, >>, <, etc.) breaks the "bare grep" shape.
-	if len(stmt.Redirs) > 0 {
-		return false, false
+	// Redirections (e.g. `< $(grep ...)`) may themselves contain a
+	// command substitution that invokes grep.
+	for _, r := range stmt.Redirs {
+		if wordMentionsGrep(r.Word) || wordMentionsGrep(r.Hdoc) {
+			return true
+		}
 	}
-	return grepCommand(stmt.Cmd)
+	return commandMentionsGrep(stmt.Cmd)
 }
 
-func grepCommand(cmd syntax.Command) (bool, bool) {
+// commandMentionsGrep walks every command shape the parser can produce
+// and reports whether grep appears anywhere inside.
+func commandMentionsGrep(cmd syntax.Command) bool {
 	switch c := cmd.(type) {
+	case nil:
+		return false
 	case *syntax.CallExpr:
-		return grepCallExpr(c)
+		return callExprMentionsGrep(c)
 	case *syntax.BinaryCmd:
-		// Only && and ; (handled at statement level) chains are
-		// acceptable. Treat ||, |, and |& as opaque since they affect
-		// how grep's output is consumed.
-		if c.Op != syntax.AndStmt {
-			return false, false
-		}
-		okX, hitX := grepStmt(c.X)
-		if !okX {
-			return false, false
-		}
-		okY, hitY := grepStmt(c.Y)
-		if !okY {
-			return false, false
-		}
-		if hitX && hitY {
-			return false, false
-		}
-		return true, hitX || hitY
-	default:
-		return false, false
-	}
-}
-
-func grepCallExpr(call *syntax.CallExpr) (bool, bool) {
-	if len(call.Assigns) > 0 {
-		// Pure environment assignments aren't grep; treat any leading
-		// VAR=val assignment as opaque so we don't accidentally allow a
-		// grep invocation with environment injection through.
-		if len(call.Args) == 0 {
-			return true, false
-		}
-		return false, false
-	}
-	if len(call.Args) == 0 {
-		return true, false
-	}
-	name, ok := grepLiteralWord(call.Args[0])
-	if !ok {
-		return false, false
-	}
-	base := filepath.Base(name)
-	if grepDetectNoForkBuiltins[base] {
-		// A no-fork builtin like `cd /tmp` is allowed; ensure its args
-		// don't contain command substitution.
-		for _, w := range call.Args[1:] {
-			if !grepArgWordPure(w) {
-				return false, false
+		// && || | |& — any side may carry grep.
+		return stmtMentionsGrep(c.X) || stmtMentionsGrep(c.Y)
+	case *syntax.Subshell:
+		return stmtsMentionGrep(c.Stmts)
+	case *syntax.Block:
+		return stmtsMentionGrep(c.Stmts)
+	case *syntax.IfClause:
+		return stmtsMentionGrep(c.Cond) ||
+			stmtsMentionGrep(c.Then) ||
+			commandMentionsGrep(c.Else)
+	case *syntax.WhileClause:
+		return stmtsMentionGrep(c.Cond) || stmtsMentionGrep(c.Do)
+	case *syntax.ForClause:
+		return stmtsMentionGrep(c.Do)
+	case *syntax.CaseClause:
+		for _, item := range c.Items {
+			if stmtsMentionGrep(item.Stmts) {
+				return true
 			}
 		}
-		return true, false
-	}
-	if !grepProgramNames[base] {
-		return false, false
-	}
-	// The forked command is grep. Reject if any argument contains
-	// command substitution, process substitution, or other forks.
-	for _, w := range call.Args[1:] {
-		if !grepArgWordPure(w) {
-			return false, false
+		return false
+	case *syntax.FuncDecl:
+		if c.Body != nil {
+			return commandMentionsGrep(c.Body.Cmd)
 		}
+		return false
+	default:
+		return false
 	}
-	return true, true
 }
 
-// grepLiteralWord returns the literal value of a word in command-name
-// position. Variable expansion or command substitution is not allowed.
-func grepLiteralWord(word *syntax.Word) (string, bool) {
+func stmtsMentionGrep(stmts []*syntax.Stmt) bool {
+	for _, s := range stmts {
+		if stmtMentionsGrep(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// callExprMentionsGrep checks whether a simple command invokes grep,
+// taking into account leading environment assignments (`FOO=bar grep
+// ...`) and any grep tucked inside argument-level command substitution.
+func callExprMentionsGrep(call *syntax.CallExpr) bool {
+	if call == nil {
+		return false
+	}
+	// `VAR=$(grep ...)` style — env values may themselves contain grep.
+	for _, a := range call.Assigns {
+		if wordMentionsGrep(a.Value) {
+			return true
+		}
+	}
+	// Walk literal words starting at args[0]. If we see a grep-like
+	// program, return true. If we see a wrapper program (xargs, env,
+	// sudo, ...), keep walking — wrappers turn the next literal word
+	// into the effective program. Unknown literal words break the
+	// chain so `echo grep` does not get flagged.
+	literalChain := true
+	for i, w := range call.Args {
+		if wordMentionsGrep(w) {
+			return true
+		}
+		if !literalChain {
+			continue
+		}
+		name, ok := literalProgramName(w)
+		if !ok {
+			literalChain = false
+			continue
+		}
+		base := filepath.Base(name)
+		if grepProgramNames[base] {
+			return true
+		}
+		// Only continue scanning past flags or known wrappers.
+		isFlag := strings.HasPrefix(name, "-")
+		isWrapper := i == 0 && grepWrapperPrograms[base]
+		if !isFlag && !isWrapper {
+			literalChain = false
+		}
+	}
+	return false
+}
+
+// literalProgramName extracts the literal value of a command-name word.
+// Returns ("", false) if the word contains expansions or substitutions
+// that we cannot statically resolve.
+func literalProgramName(word *syntax.Word) (string, bool) {
 	if word == nil || len(word.Parts) == 0 {
 		return "", false
 	}
@@ -203,31 +239,34 @@ func grepLiteralWord(word *syntax.Word) (string, bool) {
 	return name, true
 }
 
-// grepArgWordPure reports whether word can be evaluated without forking
-// another process: literals, single/double-quoted strings (with no
-// command substitution inside), parameter and arithmetic expansions are
-// allowed; command and process substitutions are not.
-func grepArgWordPure(word *syntax.Word) bool {
+// wordMentionsGrep returns true when a word contains a command or
+// process substitution that itself invokes grep. Plain literals and
+// parameter expansions are ignored.
+func wordMentionsGrep(word *syntax.Word) bool {
 	if word == nil {
-		return true
+		return false
 	}
-	return grepArgPartsPure(word.Parts)
+	return partsMentionGrep(word.Parts)
 }
 
-func grepArgPartsPure(parts []syntax.WordPart) bool {
+func partsMentionGrep(parts []syntax.WordPart) bool {
 	for _, part := range parts {
 		switch p := part.(type) {
-		case *syntax.Lit, *syntax.SglQuoted, *syntax.ParamExp, *syntax.ArithmExp:
-			// pure
-		case *syntax.DblQuoted:
-			if !grepArgPartsPure(p.Parts) {
-				return false
+		case *syntax.CmdSubst:
+			if stmtsMentionGrep(p.Stmts) {
+				return true
 			}
-		default:
-			return false
+		case *syntax.ProcSubst:
+			if stmtsMentionGrep(p.Stmts) {
+				return true
+			}
+		case *syntax.DblQuoted:
+			if partsMentionGrep(p.Parts) {
+				return true
+			}
 		}
 	}
-	return true
+	return false
 }
 
 // forceBuiltinToolsKey is the configedit key consulted by the bash/

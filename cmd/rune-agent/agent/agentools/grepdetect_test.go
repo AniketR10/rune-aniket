@@ -29,12 +29,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsBareGrepCommand(t *testing.T) {
+func TestIsGrepInvocation(t *testing.T) {
 	tests := []struct {
 		name   string
 		script string
 		want   bool
 	}{
+		// Plain forms.
 		{"plain grep", "grep foo .", true},
 		{"plain rg", "rg foo", true},
 		{"plain ag", "ag foo", true},
@@ -43,29 +44,44 @@ func TestIsBareGrepCommand(t *testing.T) {
 		{"cd then grep", "cd /tmp && grep foo .", true},
 		{"cd then grep with quoted path", `cd "/tmp" && grep foo .`, true},
 		{"absolute path grep", "/usr/bin/grep foo .", true},
-		{"grep with semicolon after cd via two stmts", "cd /tmp; grep foo .", true},
+		{"cd; grep via two stmts", "cd /tmp; grep foo .", true},
 
-		{"piped grep", "grep foo | head", false},
-		{"grep with stdout redirect", "grep foo > out", false},
-		{"grep with stdin redirect", "grep foo < in", false},
-		{"two forked commands", "ls && grep foo", false},
-		{"nested via bash -c", `bash -c "grep foo ."`, false},
-		{"grep inside command substitution arg", "echo $(grep foo)", false},
-		{"grep with command substitution arg", "grep $(echo foo) .", false},
-		{"or chain", "grep foo || true", false},
+		// Evasion patterns: trivial wrappers around grep that the
+		// model was using to slip past the previous "bare grep only"
+		// detector. All of these must now be intercepted.
+		{"piped grep", "grep foo | head", true},
+		{"grep then sort", "grep -rl foo . 2>/dev/null | sort -u", true},
+		{"grep with stdout redirect", "grep foo > out", true},
+		{"grep with stderr redirect", "grep foo 2>/dev/null", true},
+		{"grep with stdin redirect", "grep foo < in", true},
+		{"ls && grep", "ls && grep foo", true},
+		{"grep && grep", "grep foo && grep bar", true},
+		{"or chain", "grep foo || true", true},
+		{"env assignment then grep", "FOO=bar grep foo", true},
+		{"grep inside command substitution", "echo $(grep foo)", true},
+		{"grep with command substitution arg", "grep $(echo foo) .", true},
+		{"cat | grep", "cat file | grep foo", true},
+		{"find | xargs grep", "find . | xargs grep foo", true},
+
+		// Negatives.
 		{"empty script", "", false},
 		{"only whitespace", "   \t\n", false},
 		{"only cd", "cd /tmp", false},
+		{"only sort", "sort file", false},
+		{"non-grep pipeline", "cat foo | head", false},
 		{"malformed shell", "grep 'unterminated", false},
 		{"non-grep command", "ls -la", false},
-		{"two greps via &&", "grep foo && grep bar", false},
-		{"leading env assignment then grep", "FOO=bar grep foo", false},
+		{"grep as literal arg to echo", "echo grep foo", false},
+		// Known evasion limitation: we don't re-parse the body of
+		// `bash -c "..."`, so this stays false. Documenting it here
+		// to make the gap explicit.
+		{"bash -c wraps grep (known gap)", `bash -c "grep foo ."`, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isBareGrepCommand(tt.script)
-			assert.Equal(t, tt.want, got, "isBareGrepCommand(%q)", tt.script)
+			got := isGrepInvocation(tt.script)
+			assert.Equal(t, tt.want, got, "isGrepInvocation(%q)", tt.script)
 		})
 	}
 }

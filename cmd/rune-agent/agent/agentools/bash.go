@@ -134,7 +134,7 @@ func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResu
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
 	}
 
-	if isBareGrepCommand(args.Command) {
+	if isGrepInvocation(args.Command) {
 		if rejected, decided := t.guard.decideGrep(ctx); decided && rejected {
 			return agent.ToolResult{
 				Content: builtinToolsErrorMessage("anthropic"),

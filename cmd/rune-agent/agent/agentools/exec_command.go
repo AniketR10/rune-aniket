@@ -146,7 +146,7 @@ func (t *execCommandTool) Execute(ctx context.Context, arguments string) agent.T
 		return agent.ToolResult{Content: "error: cmd must not be empty", IsError: true}
 	}
 
-	if isBareGrepCommand(args.Cmd) {
+	if isGrepInvocation(args.Cmd) {
 		if rejected, decided := t.guard.decideGrep(ctx); decided && rejected {
 			return agent.ToolResult{
 				Content: builtinToolsErrorMessage("openai"),
