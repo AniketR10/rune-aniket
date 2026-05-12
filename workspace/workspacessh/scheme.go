@@ -269,15 +269,21 @@ func (s *scheme) connectScheme(
 
 	// NOTE: the next checks are to avoid error messages getting lost when
 	// trying to connect so we can provide better error messages
+	//
+	// Skipped entirely when the user opts in via
+	// `workspace.ssh.skip_preflight = True` — typically to play nicely
+	// with servers that have a tight MaxSessions budget, since each
+	// pre-flight probe opens its own session channel.
+	if !s.cfg.skipPreflight {
+		err = s.whichCommand(ctx, remote, remoteWorkspaceServerBin)
+		if err != nil {
+			return nil, err
+		}
 
-	err = s.whichCommand(ctx, remote, remoteWorkspaceServerBin)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.workspaceExists(ctx, remote, uri)
-	if err != nil {
-		return nil, err
+		err = s.workspaceExists(ctx, remote, uri)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	ses, err := remote.NewSession()

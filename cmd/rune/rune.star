@@ -675,7 +675,10 @@ config = {
     # Workspace configuration. This configuration is never reloaded.
     "workspace": {
         # Configuration for remote workspaces connected over SSH.
-        "ssh":          {"timeout": "5s"},
+        "ssh":          {
+            "timeout":         "5s",
+            "skip_preflight":  True,
+        },
         # Automatically restore the previous session's files, terminals, and
         # window layout.
         "auto_restore": True,

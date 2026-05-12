@@ -209,6 +209,51 @@ func TestConnectSchemeUsesRune(t *testing.T) {
 		"expected at least one command to invoke `rune`; saw %+v", rec.commands)
 }
 
+// TestConnectSchemeSkipPreflight asserts that when
+// sshConfig.skipPreflight is true, connectScheme does NOT issue the
+// `which rune` and `ls <path>` pre-flight probes. Each probe opens a
+// fresh SSH session channel, so skipping them is the user-visible
+// escape hatch on servers with a tight MaxSessions budget (manual
+// scenario workspace/workspacessh/manual_test/12_max_sessions_one.sh).
+func TestConnectSchemeSkipPreflight(t *testing.T) {
+	rec := &recordingRemote{}
+
+	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	defer s.cancelCtx()
+	s.cfg.skipPreflight = true
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
+		return rec, nil
+	}
+	s.getUser = func() (*user.User, error) {
+		return &user.User{Username: "test", HomeDir: "/home/test"}, nil
+	}
+	s.ui = errorUI{}
+	uri, err := workspaceapi.ParseURI("ssh://test@example.com/tmp")
+	require.NoError(t, err)
+	s.user, s.homedir, s.hostPort, s.basePath, err = parseWorkspaceURI(uri, s.getUser)
+	require.NoError(t, err)
+
+	closeHook := func(error) {}
+	scheme, err := s.connectScheme(context.Background(), uri, closeHook)
+	require.NoError(t, err)
+	if scheme != nil {
+		_ = scheme.Close()
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	require.Len(t, rec.commands, 1,
+		"skip_preflight must avoid the `which` and `ls` probes; only "+
+			"the rune workspace-server invocation should be issued. "+
+			"Got %+v", rec.commands)
+	assert.Equal(t, "rune", rec.commands[0].Path,
+		"the only command issued must be the rune workspace server")
+	assert.Contains(t, rec.commands[0].Args, "-x",
+		"rune workspace server should be started with -x; got %+v",
+		rec.commands[0])
+}
+
 func TestIntegrationCanWorkspaceURI(t *testing.T) {
 	tsuite := []struct {
 		workspaceURI string

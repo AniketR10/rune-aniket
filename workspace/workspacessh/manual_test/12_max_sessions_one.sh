@@ -13,6 +13,14 @@
 #     terminal in the workspace, etc.) may surface as gRPC
 #     stream errors. We want to confirm the errors are
 #     reasonable and don't loop forever.
+#
+# This scenario sets `skip_preflight: true` in the workspace
+# config — the escape hatch for tight MaxSessions budgets. Without
+# it, every reconnect attempt opens two extra session channels
+# (`which rune` and `ls <path>`) on top of the long-lived
+# workspace-server session and races itself with `connect failed
+# (open failed)` errors that surface in the IDE on unrelated
+# operations (pty, edit, command completion, config decode).
 
 source "$(dirname "$0")/_lib.sh"
 
@@ -35,6 +43,7 @@ verify_remote_rune "$CID" "${HP##*:}" "$KEY"
 CFG="$(write_rune_config "command: \"\"
 private_keys: [\"$KEY\"]
 insecure: true
+skip_preflight: true
 timeout: \"20s\"")"
 print_rune_run "$CFG" "ssh://test@$HP/tmp"
 

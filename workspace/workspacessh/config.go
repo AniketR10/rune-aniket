@@ -49,6 +49,16 @@ type sshConfig struct {
 	// knownHostsPath overrides the default ~/.ssh/known_hosts path. Empty
 	// means use the default.
 	knownHostsPath string
+	// skipPreflight disables the `which rune` and `ls <path>` checks
+	// that connectScheme runs before spawning the workspace server.
+	// Useful when the remote sshd is configured with a tight
+	// MaxSessions budget (the pre-flight uses one extra channel each)
+	// or when the user wants the slowest path on the connect critical
+	// path. The pre-flight is purely diagnostic: it surfaces friendlier
+	// errors when the binary is missing or the path doesn't exist; if
+	// skipped, those failures will instead manifest as a less-helpful
+	// startup error from the rune worker itself.
+	skipPreflight bool
 }
 
 func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
@@ -80,6 +90,10 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	if err != nil && err != config.ErrNotFound {
 		retErr = multierr.Append(retErr, err)
 	}
+	skipPreflight, err := cfg.GetBool("skip_preflight")
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
 	if retErr != nil {
 		retErr = fmt.Errorf("could not load ssh config: %s", retErr)
 		return
@@ -92,6 +106,7 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	ret.insecure = insecure
 	ret.kbdInteractive = kbdInteractive
 	ret.knownHostsPath = knownHosts
+	ret.skipPreflight = skipPreflight
 	return
 }
 
