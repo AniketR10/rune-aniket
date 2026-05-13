@@ -69,23 +69,25 @@ type Getter interface {
 }
 
 // Setter is the write-only view of a Config. All setters persist the
-// change to disk and update the in-memory overlay so subsequent
+// change and update the in-memory overlay so subsequent
 // Getter.GetX(key).Resolve(ctx) calls observe the new value
-// immediately.
+// immediately. When ephemeral is true the value is only written to
+// the in-memory overlay and is not persisted to .rune/config.yaml;
+// the change is visible within the same process but lost on restart.
 type Setter interface {
-	SetBool(ctx context.Context, key string, v bool) error
-	SetInt(ctx context.Context, key string, v int) error
-	SetFloat(ctx context.Context, key string, v float64) error
-	SetString(ctx context.Context, key string, v string) error
+	SetBool(ctx context.Context, key string, v bool, ephemeral bool) error
+	SetInt(ctx context.Context, key string, v int, ephemeral bool) error
+	SetFloat(ctx context.Context, key string, v float64, ephemeral bool) error
+	SetString(ctx context.Context, key string, v string, ephemeral bool) error
 
 	// AppendStringSlice adds v to the string sequence at key,
 	// creating the sequence if absent. Returns ErrAlreadyPresent if
 	// v is already in the sequence.
-	AppendStringSlice(ctx context.Context, key string, v string) error
+	AppendStringSlice(ctx context.Context, key string, v string, ephemeral bool) error
 
 	// RemoveStringSlice removes v from the string sequence at key.
 	// Returns ErrNotPresent if v is not in the sequence.
-	RemoveStringSlice(ctx context.Context, key string, v string) error
+	RemoveStringSlice(ctx context.Context, key string, v string, ephemeral bool) error
 }
 
 // Config is the read+write view. Most callers should pass a Config so

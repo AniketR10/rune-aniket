@@ -294,23 +294,23 @@ func (e *editor) Iterate(fn func(key string, value any)) {
 
 // --- Setter implementation --------------------------------------------------
 
-func (e *editor) SetBool(_ context.Context, key string, v bool) error {
-	return e.setScalar(key, v, "!!bool", strconv.FormatBool(v))
+func (e *editor) SetBool(_ context.Context, key string, v, ephemeral bool) error {
+	return e.setScalar(key, v, "!!bool", strconv.FormatBool(v), ephemeral)
 }
 
-func (e *editor) SetInt(_ context.Context, key string, v int) error {
-	return e.setScalar(key, v, "!!int", strconv.Itoa(v))
+func (e *editor) SetInt(_ context.Context, key string, v int, ephemeral bool) error {
+	return e.setScalar(key, v, "!!int", strconv.Itoa(v), ephemeral)
 }
 
-func (e *editor) SetFloat(_ context.Context, key string, v float64) error {
-	return e.setScalar(key, v, "!!float", strconv.FormatFloat(v, 'g', -1, 64))
+func (e *editor) SetFloat(_ context.Context, key string, v float64, ephemeral bool) error {
+	return e.setScalar(key, v, "!!float", strconv.FormatFloat(v, 'g', -1, 64), ephemeral)
 }
 
-func (e *editor) SetString(_ context.Context, key string, v string) error {
-	return e.setScalar(key, v, "!!str", v)
+func (e *editor) SetString(_ context.Context, key string, v string, ephemeral bool) error {
+	return e.setScalar(key, v, "!!str", v, ephemeral)
 }
 
-func (e *editor) AppendStringSlice(_ context.Context, key, v string) error {
+func (e *editor) AppendStringSlice(_ context.Context, key, v string, ephemeral bool) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -321,14 +321,16 @@ func (e *editor) AppendStringSlice(_ context.Context, key, v string) error {
 		}
 	}
 	updated := append(append([]any(nil), current...), v)
-	if err := e.persistSequence(key, updated); err != nil {
-		return err
+	if !ephemeral {
+		if err := e.persistSequence(key, updated); err != nil {
+			return err
+		}
 	}
 	e.overlay[key] = updated
 	return nil
 }
 
-func (e *editor) RemoveStringSlice(_ context.Context, key, v string) error {
+func (e *editor) RemoveStringSlice(_ context.Context, key, v string, ephemeral bool) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -344,18 +346,22 @@ func (e *editor) RemoveStringSlice(_ context.Context, key, v string) error {
 		return ErrNotPresent
 	}
 	updated := append(append([]any(nil), current[:idx]...), current[idx+1:]...)
-	if err := e.persistSequence(key, updated); err != nil {
-		return err
+	if !ephemeral {
+		if err := e.persistSequence(key, updated); err != nil {
+			return err
+		}
 	}
 	e.overlay[key] = updated
 	return nil
 }
 
-func (e *editor) setScalar(key string, overlayValue any, tag, encoded string) error {
+func (e *editor) setScalar(key string, overlayValue any, tag, encoded string, ephemeral bool) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if err := e.persistScalar(key, tag, encoded); err != nil {
-		return err
+	if !ephemeral {
+		if err := e.persistScalar(key, tag, encoded); err != nil {
+			return err
+		}
 	}
 	e.overlay[key] = overlayValue
 	return nil

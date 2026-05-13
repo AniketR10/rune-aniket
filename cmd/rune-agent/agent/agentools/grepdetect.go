@@ -378,12 +378,13 @@ func partsMentionGrep(parts []syntax.WordPart) bool {
 // false = always allow; absent = ask the user.
 const forceBuiltinToolsKey = "force_builtin_tools"
 
-// setForceBuiltinTools persists force_builtin_tools to the workspace
-// config. Subsequent Resolve calls on the corresponding configedit.Bool
-// observe the new value because cfg.SetBool updates the in-memory
-// overlay.
-func setForceBuiltinTools(ctx context.Context, cfg configedit.Setter, v bool) error {
-	return cfg.SetBool(ctx, forceBuiltinToolsKey, v)
+// setForceBuiltinTools updates force_builtin_tools via cfg.
+// When ephemeral is false the value is persisted to .rune/config.yaml;
+// when true it is only written to the in-memory overlay and lost on
+// restart. Subsequent Resolve calls on the corresponding configedit.Bool
+// observe the new value either way.
+func setForceBuiltinTools(ctx context.Context, cfg configedit.Setter, v, ephemeral bool) error {
+	return cfg.SetBool(ctx, forceBuiltinToolsKey, v, ephemeral)
 }
 
 // builtinToolsErrorMessage returns the canonical message returned to
@@ -467,18 +468,26 @@ func (g grepGuard) decideGrep(ctx context.Context) (rejected, decided bool) {
 		return false, false
 	}
 	resp, err := prompter.Prompt(ctx, agent.PromptRequest{
-		Title:  "Allow text search?",
+		Title:  "Allow grep via shell?",
 		Header: "grep",
-		Body: "The model is trying to run a text-search/pattern tool " +
-			"(grep, rg, ag, ack, awk, sed, perl, or a wrapper such as " +
-			"`git grep` / `xargs grep`). Rune has builtin semantic " +
-			"search tools that are usually better. Allow this call " +
-			"anyway?",
+		Body: "The model is trying to search code by shelling out to a " +
+			"text-pattern tool (grep, rg, ag, ack, awk, sed, perl, or a " +
+			"wrapper such as `git grep` / `xargs grep`). Rune ships " +
+			"builtin tools that are usually better: semantic " +
+			"symbol-based search (find_definition, find_references, " +
+			"find_implementations, search_symbols) and the structured " +
+			"`search_content` text search. Allow the shell call anyway?",
 		Options: []agent.PromptOption{
 			{Value: "yes", Label: "Yes", Description: "Allow this single call"},
-			{Value: "always", Label: "Always", Description: "Allow text-search; remember the choice"},
+			{Value: "always", Label: "Always",
+				Description: "Always allow; remember the choice"},
+			{Value: "session_yes", Label: "Yes, this session",
+				Description: "Allow for the rest of this session"},
 			{Value: "no", Label: "No", Description: "Reject this single call"},
-			{Value: "never", Label: "Never", Description: "Reject text-search; remember the choice"},
+			{Value: "never", Label: "Never",
+				Description: "Always reject; remember the choice"},
+			{Value: "session_no", Label: "Not this session",
+				Description: "Reject for the rest of this session"},
 		},
 	})
 	if err != nil {
@@ -493,15 +502,25 @@ func (g grepGuard) decideGrep(ctx context.Context) (rejected, decided bool) {
 	case "yes":
 		return false, true
 	case "always":
-		if err := setForceBuiltinTools(ctx, g.cfg, false); err != nil {
+		if err := setForceBuiltinTools(ctx, g.cfg, false, false); err != nil {
 			slog.Warn("persist force_builtin_tools=false", "error", err)
+		}
+		return false, true
+	case "session_yes":
+		if err := setForceBuiltinTools(ctx, g.cfg, false, true); err != nil {
+			slog.Warn("set force_builtin_tools=false (session)", "error", err)
 		}
 		return false, true
 	case "no":
 		return true, true
 	case "never":
-		if err := setForceBuiltinTools(ctx, g.cfg, true); err != nil {
+		if err := setForceBuiltinTools(ctx, g.cfg, true, false); err != nil {
 			slog.Warn("persist force_builtin_tools=true", "error", err)
+		}
+		return true, true
+	case "session_no":
+		if err := setForceBuiltinTools(ctx, g.cfg, true, true); err != nil {
+			slog.Warn("set force_builtin_tools=true (session)", "error", err)
 		}
 		return true, true
 	default:

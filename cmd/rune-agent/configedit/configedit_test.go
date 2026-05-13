@@ -86,8 +86,8 @@ func TestEditor_overlay_takes_precedence_over_snapshot(t *testing.T) {
 	assert.Equal(t, 1000, n)
 
 	// Override via Setter — Resolve must now return the new value.
-	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", false))
-	require.NoError(t, cfg.SetInt(ctx, "max_tokens", 2000))
+	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", false, false))
+	require.NoError(t, cfg.SetInt(ctx, "max_tokens", 2000, false))
 
 	v, err = cfg.GetBool("force_builtin_tools").Resolve(ctx)
 	require.NoError(t, err)
@@ -103,9 +103,9 @@ func TestEditor_persists_writes_to_disk(t *testing.T) {
 	cfg := configedit.NewConfig(osFS{}, cwd, nil)
 	ctx := context.Background()
 
-	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", true))
-	require.NoError(t, cfg.SetInt(ctx, "max_tokens", 4096))
-	require.NoError(t, cfg.SetString(ctx, "agents_file", "AGENTS.md"))
+	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", true, false))
+	require.NoError(t, cfg.SetInt(ctx, "max_tokens", 4096, false))
+	require.NoError(t, cfg.SetString(ctx, "agents_file", "AGENTS.md", false))
 
 	content := readConfigFile(t, root)
 	assert.Contains(t, content, "force_builtin_tools: true")
@@ -113,6 +113,59 @@ func TestEditor_persists_writes_to_disk(t *testing.T) {
 	assert.Contains(t, content, "agents_file: AGENTS.md")
 	assert.Contains(t, content, "extensions")
 	assert.Contains(t, content, "rune-agent")
+}
+
+func TestEditor_ephemeral_does_not_persist_to_disk(t *testing.T) {
+	root, cwd := dirURI(t)
+	cfg := configedit.NewConfig(osFS{}, cwd, nil)
+	ctx := context.Background()
+
+	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", true, true))
+	require.NoError(t, cfg.SetInt(ctx, "max_tokens", 4096, true))
+	require.NoError(t, cfg.SetString(ctx, "agents_file", "AGENTS.md", true))
+	require.NoError(t, cfg.AppendStringSlice(ctx, "skills", "a/path", true))
+
+	// Subsequent reads observe the overlay values.
+	v, err := cfg.GetBool("force_builtin_tools").Resolve(ctx)
+	require.NoError(t, err)
+	assert.True(t, v)
+	n, err := cfg.GetInt("max_tokens").Resolve(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 4096, n)
+	s, err := cfg.GetString("agents_file").Resolve(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "AGENTS.md", s)
+	sl, err := cfg.GetSlice("skills").Resolve(ctx)
+	require.NoError(t, err)
+	require.Len(t, sl, 1)
+	assert.Equal(t, "a/path", sl[0])
+
+	// But .rune/config.yaml must not have been created.
+	_, err = os.Stat(filepath.Join(root, ".rune", "config.yaml"))
+	assert.True(t, os.IsNotExist(err), "ephemeral writes must not create the config file")
+}
+
+func TestEditor_ephemeral_does_not_overwrite_existing_file(t *testing.T) {
+	root, cwd := dirURI(t)
+	cfg := configedit.NewConfig(osFS{}, cwd, nil)
+	ctx := context.Background()
+
+	// Persist one value so the file exists with known content.
+	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", false, false))
+	before := readConfigFile(t, root)
+
+	// Ephemeral overrides must not modify the file.
+	require.NoError(t, cfg.SetBool(ctx, "force_builtin_tools", true, true))
+	require.NoError(t, cfg.AppendStringSlice(ctx, "skills", "a/path", true))
+	require.NoError(t, cfg.RemoveStringSlice(ctx, "skills", "a/path", true))
+
+	after := readConfigFile(t, root)
+	assert.Equal(t, before, after, "ephemeral writes must not touch the file")
+
+	// And the overlay still reflects the ephemeral value.
+	v, err := cfg.GetBool("force_builtin_tools").Resolve(ctx)
+	require.NoError(t, err)
+	assert.True(t, v)
 }
 
 func TestEditor_missing_key_returns_ErrNotFound(t *testing.T) {
@@ -127,24 +180,24 @@ func TestEditor_AppendStringSlice_and_RemoveStringSlice(t *testing.T) {
 	cfg := configedit.NewConfig(osFS{}, cwd, nil)
 	ctx := context.Background()
 
-	require.NoError(t, cfg.AppendStringSlice(ctx, "skills", "a/path"))
-	require.NoError(t, cfg.AppendStringSlice(ctx, "skills", "b/path"))
+	require.NoError(t, cfg.AppendStringSlice(ctx, "skills", "a/path", false))
+	require.NoError(t, cfg.AppendStringSlice(ctx, "skills", "b/path", false))
 
 	got, err := cfg.GetSlice("skills").Resolve(ctx)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 
-	dup := cfg.AppendStringSlice(ctx, "skills", "a/path")
+	dup := cfg.AppendStringSlice(ctx, "skills", "a/path", false)
 	assert.ErrorIs(t, dup, configedit.ErrAlreadyPresent)
 
-	require.NoError(t, cfg.RemoveStringSlice(ctx, "skills", "a/path"))
+	require.NoError(t, cfg.RemoveStringSlice(ctx, "skills", "a/path", false))
 
 	got, err = cfg.GetSlice("skills").Resolve(ctx)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "b/path", got[0])
 
-	miss := cfg.RemoveStringSlice(ctx, "skills", "missing")
+	miss := cfg.RemoveStringSlice(ctx, "skills", "missing", false)
 	assert.ErrorIs(t, miss, configedit.ErrNotPresent)
 
 	content := readConfigFile(t, root)
@@ -173,8 +226,8 @@ func TestNopConfig(t *testing.T) {
 	ctx := context.Background()
 	_, err := cfg.GetBool("x").Resolve(ctx)
 	assert.ErrorIs(t, err, configedit.ErrNotFound)
-	assert.NoError(t, cfg.SetBool(ctx, "x", true))
-	assert.NoError(t, cfg.AppendStringSlice(ctx, "y", "z"))
+	assert.NoError(t, cfg.SetBool(ctx, "x", true, false))
+	assert.NoError(t, cfg.AppendStringSlice(ctx, "y", "z", false))
 }
 
 func TestEditor_Resolve_zero_value_returns_ErrNotFound(t *testing.T) {

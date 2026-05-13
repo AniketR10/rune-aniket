@@ -24,17 +24,17 @@ const (
 // updates the in-memory overlay so subsequent
 // cfg.GetInt(maxTokensKey).Resolve(ctx) calls observe the new value.
 func setMaxTokens(ctx context.Context, cfg configedit.Setter, n int) error {
-	return cfg.SetInt(ctx, maxTokensKey, n)
+	return cfg.SetInt(ctx, maxTokensKey, n, false)
 }
 
 // addSkillDir appends dir to the global "skills" sequence. Returns
 // configedit.ErrAlreadyPresent when dir is already configured.
 func addSkillDir(ctx context.Context, cfg configedit.Setter, dir string) error {
-	return cfg.AppendStringSlice(ctx, skillsKey, dir)
+	return cfg.AppendStringSlice(ctx, skillsKey, dir, false)
 }
 
 // removeSkillDir removes dir from the "skills" sequence. Returns
 // configedit.ErrNotPresent when dir is not configured.
 func removeSkillDir(ctx context.Context, cfg configedit.Setter, dir string) error {
-	return cfg.RemoveStringSlice(ctx, skillsKey, dir)
+	return cfg.RemoveStringSlice(ctx, skillsKey, dir, false)
 }

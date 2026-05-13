@@ -341,7 +341,7 @@ func TestNewGrepGuard_StoresCfgAndBoolView(t *testing.T) {
 }
 
 func TestDecideGrep(t *testing.T) {
-	const promptTitle = "Allow text search?"
+	const promptTitle = "Allow grep via shell?"
 
 	t.Run("config true rejects without prompting", func(t *testing.T) {
 		mp := &mockPrompter{}
@@ -447,6 +447,36 @@ func TestDecideGrep(t *testing.T) {
 		assert.True(t, cfg.setCalls[0])
 	})
 
+	t.Run("session_yes stores ephemeral and allows", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"session_yes"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := newMemConfig()
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+		assert.Empty(t, cfg.setCalls)
+		require.Len(t, cfg.ephemeralCalls, 1)
+		assert.False(t, cfg.ephemeralCalls[0])
+	})
+
+	t.Run("session_no stores ephemeral and rejects", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"session_no"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := newMemConfig()
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+		assert.Empty(t, cfg.setCalls)
+		require.Len(t, cfg.ephemeralCalls, 1)
+		assert.True(t, cfg.ephemeralCalls[0])
+	})
+
 	t.Run("unknown choice rejects", func(t *testing.T) {
 		mp := &mockPrompter{
 			responses: []agent.PromptResponse{{Values: []string{"maybe"}}},
@@ -492,6 +522,30 @@ func TestDecideGrep(t *testing.T) {
 		assert.True(t, decided)
 		assert.True(t, rejected)
 	})
+
+	t.Run("session_yes with cfg SetBool error still allows", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"session_yes"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := &failingSetCfg{err: errors.New("oom")}
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+	})
+
+	t.Run("session_no with cfg SetBool error still rejects", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"session_no"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := &failingSetCfg{err: errors.New("oom")}
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+	})
 }
 
 // failingSetCfg is a memConfig whose SetBool returns an error, used to
@@ -507,7 +561,7 @@ func (f *failingSetCfg) GetBool(string) configedit.Bool {
 	})
 }
 
-func (f *failingSetCfg) SetBool(context.Context, string, bool) error {
+func (f *failingSetCfg) SetBool(context.Context, string, bool, bool) error {
 	return f.err
 }
 

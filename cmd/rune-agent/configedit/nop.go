@@ -48,12 +48,12 @@ func (nopConfig) GetAttribute(string) Attribute { return Attribute{} }
 func (nopConfig) GetConfig(string) ConfigValue  { return ConfigValue{} }
 func (nopConfig) Iterate(func(string, any))     {}
 
-func (nopConfig) SetBool(context.Context, string, bool) error             { return nil }
-func (nopConfig) SetInt(context.Context, string, int) error               { return nil }
-func (nopConfig) SetFloat(context.Context, string, float64) error         { return nil }
-func (nopConfig) SetString(context.Context, string, string) error         { return nil }
-func (nopConfig) AppendStringSlice(context.Context, string, string) error { return nil }
-func (nopConfig) RemoveStringSlice(context.Context, string, string) error { return nil }
+func (nopConfig) SetBool(context.Context, string, bool, bool) error             { return nil }
+func (nopConfig) SetInt(context.Context, string, int, bool) error               { return nil }
+func (nopConfig) SetFloat(context.Context, string, float64, bool) error         { return nil }
+func (nopConfig) SetString(context.Context, string, string, bool) error         { return nil }
+func (nopConfig) AppendStringSlice(context.Context, string, string, bool) error { return nil }
+func (nopConfig) RemoveStringSlice(context.Context, string, string, bool) error { return nil }
 
 // FromSnapshot returns a Config that reads from the given SDK config
 // snapshot and ignores all writes (they succeed without persisting).
@@ -73,9 +73,9 @@ type readOnlyConfig struct {
 	*snapshotGetter
 }
 
-func (*readOnlyConfig) SetBool(context.Context, string, bool) error             { return nil }
-func (*readOnlyConfig) SetInt(context.Context, string, int) error               { return nil }
-func (*readOnlyConfig) SetFloat(context.Context, string, float64) error         { return nil }
-func (*readOnlyConfig) SetString(context.Context, string, string) error         { return nil }
-func (*readOnlyConfig) AppendStringSlice(context.Context, string, string) error { return nil }
-func (*readOnlyConfig) RemoveStringSlice(context.Context, string, string) error { return nil }
+func (*readOnlyConfig) SetBool(context.Context, string, bool, bool) error             { return nil }
+func (*readOnlyConfig) SetInt(context.Context, string, int, bool) error               { return nil }
+func (*readOnlyConfig) SetFloat(context.Context, string, float64, bool) error         { return nil }
+func (*readOnlyConfig) SetString(context.Context, string, string, bool) error         { return nil }
+func (*readOnlyConfig) AppendStringSlice(context.Context, string, string, bool) error { return nil }
+func (*readOnlyConfig) RemoveStringSlice(context.Context, string, string, bool) error { return nil }

@@ -24,10 +24,11 @@ import (
 // exercise the grep guard. It stores only force_builtin_tools because
 // that is the only key the guard reads or writes.
 type memConfig struct {
-	mu       sync.Mutex
-	hasForce bool
-	force    bool
-	setCalls []bool
+	mu             sync.Mutex
+	hasForce       bool
+	force          bool
+	setCalls       []bool
+	ephemeralCalls []bool
 }
 
 func newMemConfig() *memConfig { return &memConfig{} }
@@ -61,22 +62,26 @@ func (m *memConfig) GetAttribute(string) configedit.Attribute { return configedi
 func (m *memConfig) GetConfig(string) configedit.ConfigValue  { return configedit.ConfigValue{} }
 func (m *memConfig) Iterate(func(string, any))                {}
 
-func (m *memConfig) SetBool(_ context.Context, key string, v bool) error {
+func (m *memConfig) SetBool(_ context.Context, key string, v, ephemeral bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if key == forceBuiltinToolsKey {
 		m.hasForce = true
 		m.force = v
-		m.setCalls = append(m.setCalls, v)
+		if ephemeral {
+			m.ephemeralCalls = append(m.ephemeralCalls, v)
+		} else {
+			m.setCalls = append(m.setCalls, v)
+		}
 	}
 	return nil
 }
 
-func (m *memConfig) SetInt(context.Context, string, int) error               { return nil }
-func (m *memConfig) SetFloat(context.Context, string, float64) error         { return nil }
-func (m *memConfig) SetString(context.Context, string, string) error         { return nil }
-func (m *memConfig) AppendStringSlice(context.Context, string, string) error { return nil }
-func (m *memConfig) RemoveStringSlice(context.Context, string, string) error { return nil }
+func (m *memConfig) SetInt(context.Context, string, int, bool) error               { return nil }
+func (m *memConfig) SetFloat(context.Context, string, float64, bool) error         { return nil }
+func (m *memConfig) SetString(context.Context, string, string, bool) error         { return nil }
+func (m *memConfig) AppendStringSlice(context.Context, string, string, bool) error { return nil }
+func (m *memConfig) RemoveStringSlice(context.Context, string, string, bool) error { return nil }
 
 // ctxWithPrompter returns a context carrying p so bash/exec_command
 // can pull it back out via agent.PrompterFromContext.
@@ -145,6 +150,52 @@ func TestBash_force_builtin_tools(t *testing.T) {
 		assert.Equal(t, int32(0), n.Load())
 		require.Len(t, cfg.setCalls, 1)
 		assert.True(t, cfg.setCalls[0])
+	})
+
+	t.Run("absent + session_yes runs and stores ephemeral, no disk persist", func(t *testing.T) {
+		ex, n := makeExec()
+		mp := &mockPrompter{responses: []agent.PromptResponse{{Values: []string{"session_yes"}}}}
+		cfg := newMemConfig()
+		tool := newBash(ex, dirURI("/tmp"), cfg)
+		res := tool.Execute(ctxWithPrompter(mp), grepCmd)
+		assert.False(t, res.IsError, res.Content)
+		assert.Equal(t, int32(1), n.Load())
+		assert.Empty(t, cfg.setCalls)
+		require.Len(t, cfg.ephemeralCalls, 1)
+		assert.False(t, cfg.ephemeralCalls[0])
+	})
+
+	t.Run("absent + session_no rejects and stores ephemeral, no disk persist", func(t *testing.T) {
+		ex, n := makeExec()
+		mp := &mockPrompter{responses: []agent.PromptResponse{{Values: []string{"session_no"}}}}
+		cfg := newMemConfig()
+		tool := newBash(ex, dirURI("/tmp"), cfg)
+		res := tool.Execute(ctxWithPrompter(mp), grepCmd)
+		assert.True(t, res.IsError)
+		assert.Equal(t, int32(0), n.Load())
+		assert.Empty(t, cfg.setCalls)
+		require.Len(t, cfg.ephemeralCalls, 1)
+		assert.True(t, cfg.ephemeralCalls[0])
+	})
+
+	t.Run("session choice takes effect in same session (no second prompt)", func(t *testing.T) {
+		ex, n := makeExec()
+		mp := &mockPrompter{responses: []agent.PromptResponse{{Values: []string{"session_no"}}}}
+		cfg := newMemConfig()
+		tool := newBash(ex, dirURI("/tmp"), cfg)
+
+		// First call: user picks "Not this session"; rejected, stored in
+		// overlay only.
+		res := tool.Execute(ctxWithPrompter(mp), grepCmd)
+		assert.True(t, res.IsError)
+		require.Len(t, mp.calls, 1)
+
+		// Second call: must NOT prompt; overlay reads through.
+		res = tool.Execute(ctxWithPrompter(mp), grepCmd)
+		assert.True(t, res.IsError)
+		assert.Equal(t, int32(0), n.Load())
+		assert.Len(t, mp.calls, 1, "prompter must not be called a second time")
+		assert.Empty(t, cfg.setCalls)
 	})
 
 	t.Run("persisted choice takes effect in same session (no second prompt)", func(t *testing.T) {
