@@ -25,12 +25,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
@@ -82,7 +84,8 @@ func (e *goExtension) ExtendWorkspace(
 	rootURI := fmt.Sprintf("file://%s", cwd.Path())
 
 	dbg := readGoplsDebugOptions(cfg)
-	params, err := goplsInitializeParams(rootURI, dbg)
+	goplsBin := resolveGoplsForWorkspace(ctx, w, cfg, notify, cwd.Scheme())
+	params, err := goplsInitializeParams(rootURI, dbg, goplsBin)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
@@ -120,6 +123,7 @@ func (e *goExtension) ExtendWorkspace(
 //	    "go": {
 //	        "path": "extension_go",
 //	        "config": {
+//	            "lsp_path": "/usr/local/bin/gopls",
 //	            "debug": {
 //	                "rpc_trace": True,
 //	                "logfile":   "~/.rune/logs/lsp/gopls.log",
@@ -185,4 +189,73 @@ func resolveLogFile(path string) (string, error) {
 		return "", fmt.Errorf("create logfile dir: %w", err)
 	}
 	return path, nil
+}
+
+// readGoplsLspPath reads the optional top-level `lsp_path` config key.
+// Validation: must be a non-empty string with no spaces (the LSP
+// command is split on space, so spaces would corrupt argv). Failures
+// surface as a warn notification so the user gets a clear error
+// instead of an obscure runtime failure later on.
+func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) string {
+	if cfg == nil {
+		return ""
+	}
+	v, err := cfg.GetString("lsp_path")
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			return ""
+		}
+		if notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.go.config.lsp_path must be a string: %v", err)
+		}
+		return ""
+	}
+	if v == "" {
+		return ""
+	}
+	if strings.ContainsRune(v, ' ') {
+		if notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.go.config.lsp_path must be an absolute path "+
+					"without spaces, got %q", v)
+		}
+		return ""
+	}
+	return v
+}
+
+// resolveGoplsForWorkspace orchestrates gopls binary resolution on the
+// workspace host. It returns an absolute path on success or the empty
+// string when the workspace has no Go project files (in which case
+// gopls is never started) or every resolution strategy failed (in
+// which case a warn notification has been emitted and the caller
+// falls back to the bare "gopls" command).
+func resolveGoplsForWorkspace(
+	ctx context.Context,
+	w *extensionapi.Workspace,
+	cfg config.Config,
+	notify browserapi.Notifications,
+	scheme string,
+) string {
+	fs := w.FileSystem(ctx)
+	if !hasGoProjectFiles(ctx, fs) {
+		return ""
+	}
+	lspPath := readGoplsLspPath(cfg, notify)
+	bin, err := resolveGoplsBinary(ctx, fs, w.Executor(ctx), lspPath)
+	if err == nil {
+		return bin
+	}
+	msg := "We could not locate the gopls executable, please set the " +
+		"extensions.go.config.lsp_path property in your config and " +
+		"reload the workspace"
+	if scheme == "file" {
+		msg = "We could not locate the gopls executable, please " +
+			"reinstall the go extension"
+	}
+	if notify != nil {
+		_, _ = notify.Notify(browserapi.LevelWarn, msg)
+	}
+	return ""
 }

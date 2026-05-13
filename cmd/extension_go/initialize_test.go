@@ -21,23 +21,29 @@ func TestGoplsCommand(t *testing.T) {
 	cases := []struct {
 		name string
 		dbg  goplsDebugOptions
+		bin  string
 		want string
 	}{
-		{"default", goplsDebugOptions{}, "gopls serve"},
-		{"rpc trace only", goplsDebugOptions{RPCTrace: true}, "gopls -rpc.trace serve"},
-		{"logfile only", goplsDebugOptions{LogFile: "/tmp/gopls.log"},
+		{"default", goplsDebugOptions{}, "", "gopls serve"},
+		{"rpc trace only", goplsDebugOptions{RPCTrace: true}, "", "gopls -rpc.trace serve"},
+		{"logfile only", goplsDebugOptions{LogFile: "/tmp/gopls.log"}, "",
 			"gopls -logfile=/tmp/gopls.log serve"},
-		{"debug addr only", goplsDebugOptions{DebugAddr: "localhost:6060"},
+		{"debug addr only", goplsDebugOptions{DebugAddr: "localhost:6060"}, "",
 			"gopls -debug=localhost:6060 serve"},
 		{"all flags", goplsDebugOptions{
 			RPCTrace:  true,
 			LogFile:   "auto",
 			DebugAddr: "localhost:6060",
-		}, "gopls -rpc.trace -logfile=auto -debug=localhost:6060 serve"},
+		}, "", "gopls -rpc.trace -logfile=auto -debug=localhost:6060 serve"},
+		{"custom bin path", goplsDebugOptions{}, "/opt/gopls", "/opt/gopls serve"},
+		{"custom bin path with flags",
+			goplsDebugOptions{RPCTrace: true, LogFile: "/tmp/g.log"},
+			"/opt/gopls",
+			"/opt/gopls -rpc.trace -logfile=/tmp/g.log serve"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, goplsCommand(tc.dbg))
+			assert.Equal(t, tc.want, goplsCommand(tc.dbg, tc.bin))
 		})
 	}
 }
@@ -48,7 +54,7 @@ func TestGoplsInitializeParamsCommandAndTrace(t *testing.T) {
 		LogFile:   "/tmp/gopls.log",
 		DebugAddr: "localhost:6060",
 		Trace:     semanticapi.TraceValueVerbose,
-	})
+	}, "")
 	require.NoError(t, err)
 	assert.Equal(t, semanticapi.TraceValueVerbose, params.Trace)
 

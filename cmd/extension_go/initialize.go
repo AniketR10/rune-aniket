@@ -52,9 +52,9 @@ type goplsDebugOptions struct {
 }
 
 func goplsInitializeParams(
-	rootURI string, dbg goplsDebugOptions,
+	rootURI string, dbg goplsDebugOptions, binPath string,
 ) (semanticapi.InitializeParams, error) {
-	command := goplsCommand(dbg)
+	command := goplsCommand(dbg, binPath)
 	initOptions := map[string]any{
 		"langID":         "go",
 		"command":        command,
@@ -217,8 +217,15 @@ func goplsInitializeParams(
 // goplsCommand builds the gopls invocation. Debug flags are top-level
 // flags on the gopls binary itself and must appear *before* the `serve`
 // subcommand; placing them after `serve` makes gopls exit with status 2.
-func goplsCommand(dbg goplsDebugOptions) string {
-	parts := []string{"gopls"}
+//
+// binPath overrides the binary location. When empty, the bare name
+// "gopls" is used and the executor must resolve it through $PATH.
+func goplsCommand(dbg goplsDebugOptions, binPath string) string {
+	bin := binPath
+	if bin == "" {
+		bin = "gopls"
+	}
+	parts := []string{bin}
 	if dbg.RPCTrace {
 		parts = append(parts, "-rpc.trace")
 	}
