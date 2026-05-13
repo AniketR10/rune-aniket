@@ -202,6 +202,7 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
 				nopShutdownShaderConfig())
 			require.NoError(t, m.addOrCreateWorkspace(uri))
+			m.drainPendingWorkspaces()
 			t.Cleanup(func() { _ = m.Close() })
 
 			h := newSafeHandler(m)
@@ -209,7 +210,15 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 
 			ex := m.focusEx()
 			require.NotNil(t, ex)
-			require.NoError(t, ex.fexplorer(context.Background()))
+			// ex.fexplorer constructs newFileExplorerHandler, which the
+			// async FS-watcher goroutine spawned by Phase C reads from
+			// under m.mu. Take m.mu while building the explorer so its
+			// internal state is published before the watcher dispatches
+			// a Create event into eventApplies.
+			m.mu.Lock()
+			err = ex.fexplorer(context.Background())
+			m.mu.Unlock()
+			require.NoError(t, err)
 			require.NotNil(t, ex.fileExplorerWin,
 				"file explorer must be open")
 			require.NotNil(t, ex.fileExplorerHandler)
@@ -342,6 +351,7 @@ func TestFileExplorerReactsToFilesystemChangesIntegration(t *testing.T) {
 		defaultConfigWithWrap(false), dir, t.TempDir(),
 		nopShutdownShaderConfig())
 	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.drainPendingWorkspaces()
 	t.Cleanup(func() { _ = m.Close() })
 
 	h := newSafeHandler(m)
@@ -489,6 +499,7 @@ func TestGitlinkIntegration(t *testing.T) {
 			m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
 				nopShutdownShaderConfig())
 			require.NoError(t, m.addOrCreateWorkspace(uri))
+			m.drainPendingWorkspaces()
 			t.Cleanup(func() { _ = m.Close() })
 
 			h := newSafeHandler(m)
@@ -662,6 +673,23 @@ func TestSetTabNameWithAttrIntegration(t *testing.T) {
 		require.True(t, handled, "%s", ev.KeyComb().String())
 	}
 	wg.Wait()
+	// SetTabName routes the attention attribute through
+	// f.parent.scheduleNextTick, which under the default test stub
+	// dispatches on a fresh goroutine. The bell fires from the vte
+	// parser path before that scheduled tick runs, so wg.Wait above
+	// only proves the bell was rung — it does not guarantee the
+	// attention attr propagated to workspaces[1] yet. Block here
+	// until the bar tab actually reflects the attention attr so the
+	// final render is deterministic.
+	require.Eventually(t, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if len(m.workspaces) < 2 || m.workspaces[1] == nil {
+			return false
+		}
+		return m.workspaces[1].attentionAttr != (term.Attributes{})
+	}, 5*time.Second, 5*time.Millisecond,
+		"workspace attention attr never propagated after bell")
 	cases = []handlertest.SequenceTestCase{
 		{InputSequence: "",
 			Expected: `┌────────────────────────────┐
@@ -4245,10 +4273,6 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := defaultConfigWithWrap(false)
-			cfg.scheduleNextTick = func(fn func()) bool {
-				fn()
-				return true
-			}
 			// Configure attrs so the focused tab's name renders as
 			// '·' (the writer's BackgroundCh) and the unfocused
 			// tabs render as their literal name characters.
@@ -4261,15 +4285,19 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 				nopShutdownShaderConfig())
 			t.Cleanup(func() { require.NoError(t, m.Close()) })
 
-			// Build the layout via internal helpers under m.mu so we
-			// don't race with the FS-event dispatcher goroutines
-			// addWorkspace spawns.
-			m.mu.Lock()
+			// addWorkspace is async; the default scheduleNextTick
+			// stub serialises Phase C under m.mu on a fresh
+			// goroutine. Drive each install fully (Phase B+C)
+			// before invoking the next internal helper so the
+			// subsequent switch/close calls observe a consistent
+			// h.workspaces snapshot.
 			for range tc.filled {
 				uri, err := workspaceapi.ParseURI("file://" + t.TempDir())
 				require.NoError(t, err)
 				require.NoError(t, m.addOrCreateWorkspace(uri))
+				m.drainPendingWorkspaces()
 			}
+			m.mu.Lock()
 			for i, f := range tc.filled {
 				if f {
 					continue

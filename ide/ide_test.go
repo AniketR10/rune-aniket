@@ -133,6 +133,12 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NotNil(t, i.workspace)
 		require.NotNil(t, i.clipboard)
 
+		// addWorkspace launches the workspace install (Phase B) in a
+		// goroutine; closeResources must wait for that to finish
+		// before tearing down the workspace.Manager, otherwise an
+		// in-flight vtereservoir StartCommand races with the manager
+		// closing the file scheme's open *os.Files.
+		i.WaitWorkspaces()
 		assert.NoError(t, i.closeResources())
 	})
 
