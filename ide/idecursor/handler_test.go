@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -135,4 +136,50 @@ func TestHandlerCompleteOrdersEntries(t *testing.T) {
 		vals = append(vals, v)
 	}
 	assert.Equal(t, []string{"a.go:2:2", "c.go:4:4"}, vals)
+}
+
+// retryCreateOnceStore wraps an in-memory storageapi.Service and
+// simulates the firstmover retry-on-transient-failure behaviour that
+// can produce ErrAlreadyExists on the second Create attempt: the
+// underlying write actually succeeded on the first call, but the
+// caller saw a transport error and the retry now races with itself.
+// load must treat that ErrAlreadyExists as success rather than
+// surfacing it as a fatal init error to the workspace manager.
+type retryCreateOnceStore struct {
+	storageapi.Service
+	createAlreadyExistsOnce bool
+}
+
+func (s *retryCreateOnceStore) Create(ctx context.Context, id string, doc any) error {
+	if !s.createAlreadyExistsOnce {
+		s.createAlreadyExistsOnce = true
+		// Simulate that the first Create succeeded on the backend
+		// but the retry sees the doc already exists.
+		if err := s.Service.Create(ctx, id, doc); err != nil {
+			return err
+		}
+		return storageapi.ErrAlreadyExists
+	}
+	return s.Service.Create(ctx, id, doc)
+}
+
+func TestWithHistoryToleratesAlreadyExistsOnCreate(t *testing.T) {
+	store := &retryCreateOnceStore{Service: storagestub.NewInMemoryService()}
+	ed := texttest.NopEditorWithCallback(func() {})
+	ws, err := workspaceapi.ParseURI("file:///workspace")
+	require.NoError(t, err)
+	closer, err := WithHistory(ed, store, &stubOpener{}, &stubWM{}, stubFS{},
+		nil, stubWorkspaceManager{}, ws,
+		func(fn func()) bool { fn(); return true })
+	require.NoError(t, err, "ErrAlreadyExists on retried Create must "+
+		"not propagate as a load failure")
+	require.NotNil(t, closer)
+	require.NoError(t, closer.Close())
+
+	// Sanity: the document the second WithHistory would see is the
+	// one persisted by the first Create attempt — not a brand-new
+	// in-memory shadow that drops history.
+	var doc historyDocument
+	require.NoError(t, store.Get(context.Background(), documentID(ws), &doc))
+	assert.Equal(t, ws.String(), doc.WorkspaceURI)
 }

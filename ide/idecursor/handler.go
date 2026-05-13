@@ -256,10 +256,25 @@ func (h *handler) Complete(ctx context.Context, cmd textapi.Command) (
 
 func (h *handler) load(ctx context.Context) error {
 	err := h.store.Get(ctx, h.docID, &h.doc)
-	if errors.Is(err, storageapi.ErrNotFound) {
-		return h.store.Create(ctx, h.docID, &h.doc)
+	if err == nil {
+		return nil
 	}
-	return err
+	if !errors.Is(err, storageapi.ErrNotFound) {
+		return err
+	}
+	// firstmover.Service retries transient transport errors. A
+	// retried Create can race with the original (now-succeeded)
+	// Create, in which case the second attempt sees
+	// ErrAlreadyExists. The doc is ours either way, so treat
+	// ErrAlreadyExists as success and re-read the persisted
+	// state so h.doc reflects what is on disk.
+	if err := h.store.Create(ctx, h.docID, &h.doc); err != nil {
+		if !errors.Is(err, storageapi.ErrAlreadyExists) {
+			return err
+		}
+		return h.store.Get(ctx, h.docID, &h.doc)
+	}
+	return nil
 }
 
 func (h *handler) persistState(ctx context.Context) error {
