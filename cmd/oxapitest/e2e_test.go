@@ -146,6 +146,7 @@ func TestReleaseInstallE2E(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
