@@ -180,9 +180,17 @@ func commandMentionsGrep(cmd syntax.Command) bool {
 	case *syntax.Block:
 		return stmtsMentionGrep(c.Stmts)
 	case *syntax.IfClause:
-		return stmtsMentionGrep(c.Cond) ||
-			stmtsMentionGrep(c.Then) ||
-			commandMentionsGrep(c.Else)
+		if stmtsMentionGrep(c.Cond) || stmtsMentionGrep(c.Then) {
+			return true
+		}
+		// c.Else is a typed-nil *IfClause when there is no
+		// elif/else branch. A typed-nil pointer wrapped in the
+		// syntax.Command interface does not match `case nil` in this
+		// switch, so we must avoid passing it through the interface.
+		if c.Else == nil {
+			return false
+		}
+		return commandMentionsGrep(c.Else)
 	case *syntax.WhileClause:
 		return stmtsMentionGrep(c.Cond) || stmtsMentionGrep(c.Do)
 	case *syntax.ForClause:
@@ -195,10 +203,10 @@ func commandMentionsGrep(cmd syntax.Command) bool {
 		}
 		return false
 	case *syntax.FuncDecl:
-		if c.Body != nil {
-			return commandMentionsGrep(c.Body.Cmd)
-		}
-		return false
+		// Delegate to stmtMentionsGrep so a nil Body, a nil Cmd
+		// interface, and any redirections on the body are all handled
+		// uniformly.
+		return stmtMentionsGrep(c.Body)
 	case *syntax.TimeClause:
 		// `time grep foo` — time is a reserved keyword in bash.
 		return stmtMentionsGrep(c.Stmt)

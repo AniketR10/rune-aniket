@@ -24,9 +24,16 @@
 package agentools
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
+
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 )
 
 func TestIsGrepInvocation(t *testing.T) {
@@ -160,6 +167,16 @@ func TestIsGrepInvocation(t *testing.T) {
 		{"only whitespace", "   \t\n", false},
 		{"only cd", "cd /tmp", false},
 		{"only sort", "sort file", false},
+		// Regression: an `if` without an `else` branch used to panic
+		// because syntax.IfClause.Else is a typed-nil *IfClause, which
+		// dereferences when wrapped in a syntax.Command interface.
+		{"if without else", "if true; then echo hi; fi", false},
+		{"if/elif without else", "if true; then a; elif false; then b; fi", false},
+		// Regression: function declarations with a body that is a
+		// compound command must be inspected as a full Stmt so a nil
+		// inner Cmd does not panic and so redirections on the body
+		// are scanned.
+		{"function body uses grep with redirect", `f() { grep foo; } > out; f`, true},
 		{"non-grep pipeline", "cat foo | head", false},
 		{"malformed shell", "grep 'unterminated", false},
 		{"non-grep command", "ls -la", false},
@@ -205,6 +222,60 @@ func TestIsGrepInvocation(t *testing.T) {
 		{"variable program name (known gap)", "gr=grep; $gr foo", false},
 		// eval body is a literal we do not re-parse.
 		{"eval wraps grep (known gap)", `eval "grep foo"`, false},
+
+		// --- additional parser-walker coverage -------------------------
+		// coproc clauses (CoprocClause branch).
+		{"coproc grep", "coproc grep foo file", true},
+		{"coproc named with grep body", `coproc MYCO { grep foo file; }`, true},
+		{"coproc non-grep", "coproc cat file", false},
+
+		// Subshell / Block branches with no grep.
+		{"subshell no grep", "( echo hi )", false},
+		{"brace block no grep", "{ echo hi; }", false},
+
+		// CaseClause with all-non-grep arms exercises the "return false"
+		// tail of the for-range loop.
+		{"case no grep in any arm", `case $x in a) echo hi;; b) echo bye;; esac`, false},
+		{"case grep in non-first arm", `case $x in a) echo hi;; b) grep foo;; esac`, true},
+
+		// ForClause with no grep in its body.
+		{"for body no grep", `for f in a b; do echo "$f"; done`, false},
+
+		// FuncDecl body redirections are scanned (Body Stmt redirs).
+		{"function with no grep", `f() { echo hi; }; f`, false},
+		{"function body redir uses grep", `f() { echo hi; } > $(grep -l foo); f`, true},
+
+		// Constructs we currently treat as "not a grep invocation".
+		// These reach the `default` branch of commandMentionsGrep.
+		{"arithmetic command", "(( i++ ))", false},
+		{"test clause", `[[ -f x ]]`, false},
+		{"let clause", "let x=1", false},
+		{"declare clause", "declare -a arr", false},
+
+		// CallExpr with no Args (only assignments) — Assigns are
+		// already exercised above; this also covers the empty-Args
+		// short-circuit path.
+		{"env assignment only, no command", "VAR=value", false},
+
+		// Wrapper followed by a non-literal program word — exercises
+		// the "seenWrapper && !ok ⇒ continue" branch.
+		{"sudo then variable program", `sudo $CMD grep foo`, true},
+		{"sudo only variable program (no grep)", `sudo $CMD other`, false},
+
+		// Words built from concatenated literal+single+double quotes —
+		// exercises the literalProgramName builder loop.
+		{"concatenated literal program name", `gr"e"p foo`, true},
+		{"single-quote concat program name", `gr'ep' foo`, true},
+
+		// DblQuoted containing a command substitution exercises the
+		// recursive partsMentionGrep DblQuoted branch.
+		{"dblquoted contains cmd subst grep", `echo "x $(grep foo) y"`, true},
+		{"dblquoted parameter expansion only", `echo "x ${VAR} y"`, false},
+
+		// Word with a literal containing whitespace cannot be a real
+		// program name. Build it via a here-doc-style redir target
+		// where leading-whitespace tokens parse as one Word.
+		{"empty double-quoted program", `"" foo`, false},
 	}
 
 	for _, tt := range tests {
@@ -238,5 +309,257 @@ func TestBuiltinToolsErrorMessage(t *testing.T) {
 		msg := builtinToolsErrorMessage("codex")
 		assert.Contains(t, msg, "grep_files")
 		assert.NotContains(t, msg, "search_content")
+	})
+}
+
+// errConfig is a memConfig variant whose GetBool returns a non-ErrNotFound
+// error, exercising the slog.Warn fallthrough in decideGrep.
+type errConfig struct {
+	memConfig
+	err error
+}
+
+func (e *errConfig) GetBool(string) configedit.Bool {
+	return configedit.NewBool(func(context.Context) (bool, error) {
+		return false, e.err
+	})
+}
+
+func TestNewGrepGuard_PanicsOnNilConfig(t *testing.T) {
+	assert.PanicsWithValue(t,
+		"agentools: grepGuard cfg must not be nil",
+		func() { _ = newGrepGuard(nil) })
+}
+
+func TestNewGrepGuard_StoresCfgAndBoolView(t *testing.T) {
+	cfg := withForce(true)
+	g := newGrepGuard(cfg)
+	require.NotNil(t, g.cfg)
+	v, err := g.forceBuiltinTools.Resolve(context.Background())
+	require.NoError(t, err)
+	assert.True(t, v)
+}
+
+func TestDecideGrep(t *testing.T) {
+	const promptTitle = "Allow text search?"
+
+	t.Run("config true rejects without prompting", func(t *testing.T) {
+		mp := &mockPrompter{}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		g := newGrepGuard(withForce(true))
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+		assert.Empty(t, mp.calls)
+	})
+
+	t.Run("config false allows without prompting", func(t *testing.T) {
+		mp := &mockPrompter{}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		g := newGrepGuard(withForce(false))
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+		assert.Empty(t, mp.calls)
+	})
+
+	t.Run("config error other than ErrNotFound falls through to prompt", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"yes"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		g := newGrepGuard(&errConfig{err: errors.New("boom")})
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+		require.Len(t, mp.calls, 1)
+	})
+
+	t.Run("absent and nil prompter falls back to allow undecided", func(t *testing.T) {
+		g := newGrepGuard(newMemConfig())
+		rejected, decided := g.decideGrep(context.Background())
+		assert.False(t, decided)
+		assert.False(t, rejected)
+	})
+
+	t.Run("prompter error rejects single call", func(t *testing.T) {
+		mp := &mockPrompter{err: errors.New("dismissed")}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		g := newGrepGuard(newMemConfig())
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+		require.Len(t, mp.calls, 1)
+		assert.Equal(t, promptTitle, mp.calls[0].Title)
+	})
+
+	t.Run("yes allows, does not persist", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"yes"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := newMemConfig()
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+		assert.Empty(t, cfg.setCalls)
+	})
+
+	t.Run("no rejects, does not persist", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"no"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := newMemConfig()
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+		assert.Empty(t, cfg.setCalls)
+	})
+
+	t.Run("always persists false and allows", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"always"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := newMemConfig()
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+		require.Len(t, cfg.setCalls, 1)
+		assert.False(t, cfg.setCalls[0])
+	})
+
+	t.Run("never persists true and rejects", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"never"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := newMemConfig()
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+		require.Len(t, cfg.setCalls, 1)
+		assert.True(t, cfg.setCalls[0])
+	})
+
+	t.Run("unknown choice rejects", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"maybe"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		g := newGrepGuard(newMemConfig())
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+	})
+
+	t.Run("empty response values rejects", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: nil}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		g := newGrepGuard(newMemConfig())
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+	})
+
+	t.Run("always with cfg SetBool error still allows", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"always"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := &failingSetCfg{err: errors.New("disk full")}
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.False(t, rejected)
+	})
+
+	t.Run("never with cfg SetBool error still rejects", func(t *testing.T) {
+		mp := &mockPrompter{
+			responses: []agent.PromptResponse{{Values: []string{"never"}}},
+		}
+		ctx := agent.WithPrompter(context.Background(), mp)
+		cfg := &failingSetCfg{err: errors.New("disk full")}
+		g := newGrepGuard(cfg)
+		rejected, decided := g.decideGrep(ctx)
+		assert.True(t, decided)
+		assert.True(t, rejected)
+	})
+}
+
+// failingSetCfg is a memConfig whose SetBool returns an error, used to
+// exercise the slog.Warn branches in the always/never code paths.
+type failingSetCfg struct {
+	memConfig
+	err error
+}
+
+func (f *failingSetCfg) GetBool(string) configedit.Bool {
+	return configedit.NewBool(func(context.Context) (bool, error) {
+		return false, configedit.ErrNotFound
+	})
+}
+
+func (f *failingSetCfg) SetBool(context.Context, string, bool) error {
+	return f.err
+}
+
+// The remaining tests target defensive nil-guards on internal helpers
+// that the parser does not currently produce but which the code is
+// written to tolerate. They are exercised directly to lock the
+// guarantees in place.
+
+func TestStmtMentionsGrep_NilStmt(t *testing.T) {
+	assert.False(t, stmtMentionsGrep(nil))
+}
+
+func TestCommandMentionsGrep_NilInterface(t *testing.T) {
+	assert.False(t, commandMentionsGrep(nil))
+}
+
+func TestCommandMentionsGrep_UnknownCommandType(t *testing.T) {
+	// ArithmCmd is reachable as the parser type but our switch
+	// intentionally has no case for it, so it falls to the default
+	// branch.
+	assert.False(t, commandMentionsGrep(&syntax.ArithmCmd{}))
+}
+
+func TestCallExprMentionsGrep_Nil(t *testing.T) {
+	assert.False(t, callExprMentionsGrep(nil))
+}
+
+func TestLiteralProgramName(t *testing.T) {
+	t.Run("nil word", func(t *testing.T) {
+		_, ok := literalProgramName(nil)
+		assert.False(t, ok)
+	})
+	t.Run("empty parts", func(t *testing.T) {
+		_, ok := literalProgramName(&syntax.Word{})
+		assert.False(t, ok)
+	})
+	t.Run("dblquoted containing non-literal inner part", func(t *testing.T) {
+		// "$(grep)" is a DblQuoted whose inner part is a CmdSubst,
+		// not a Lit; literalProgramName must reject the word.
+		w := &syntax.Word{Parts: []syntax.WordPart{
+			&syntax.DblQuoted{Parts: []syntax.WordPart{
+				&syntax.CmdSubst{},
+			}},
+		}}
+		_, ok := literalProgramName(w)
+		assert.False(t, ok)
+	})
+	t.Run("unknown word part type", func(t *testing.T) {
+		w := &syntax.Word{Parts: []syntax.WordPart{
+			&syntax.ParamExp{},
+		}}
+		_, ok := literalProgramName(w)
+		assert.False(t, ok)
 	})
 }
