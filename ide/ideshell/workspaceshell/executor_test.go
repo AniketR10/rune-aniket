@@ -186,6 +186,74 @@ func TestStartTracksProcess(t *testing.T) {
 	assert.Contains(t, out, "-rpc.trace")
 }
 
+func TestFormatCmd(t *testing.T) {
+	cases := []struct {
+		name string
+		info processInfo
+		want string
+	}{
+		{
+			name: "path and args",
+			info: processInfo{path: "/bin/ls", args: []string{"-l"}},
+			want: "/bin/ls -l",
+		},
+		{
+			name: "path only",
+			info: processInfo{path: "/bin/sleep"},
+			want: "/bin/sleep",
+		},
+		{
+			name: "empty path is rendered as login shell",
+			info: processInfo{},
+			want: "(login shell)",
+		},
+		{
+			name: "empty path with args still shows args",
+			info: processInfo{args: []string{"--login", "-i"}},
+			want: "(login shell) --login -i",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, formatCmd(tc.info))
+		})
+	}
+}
+
+func TestHandleCommandStatusEmptyPathRendersLoginShell(t *testing.T) {
+	// Regression: term/vte spawns the user's login shell by passing
+	// an empty Cmd.Path (the protocol contract). The actual binary is
+	// resolved inside the file scheme, so the workspaceshell tracker
+	// only sees an empty path. process status/tree/info must not
+	// render an empty cell for these entries.
+	mock := newMockExecutor()
+	exec := NewExecutor(mock)
+	exec.now = fixedTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	ctx := context.Background()
+	pid, err := exec.Start(ctx, workspaceapi.Cmd{})
+	require.NoError(t, err)
+
+	statusIter := exec.handleStatus()
+	defer func() { _ = statusIter.Close() }()
+	statusOut := collectRenderedText(t, statusIter)
+	assert.Contains(t, statusOut, "(login shell)")
+
+	treeIter := exec.handleTree()
+	defer func() { _ = treeIter.Close() }()
+	treeOut := collectRenderedText(t, treeIter)
+	assert.Contains(t, treeOut, "(login shell)")
+
+	infoIter, err := exec.HandleCommand(ctx, repl.Command{
+		Name: "process",
+		Args: []string{"info", strconv.Itoa(int(pid))},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = infoIter.Close() }()
+	infoOut := collectRenderedText(t, infoIter)
+	assert.Contains(t, infoOut, "(login shell)")
+}
+
 func fixedTime(t time.Time) func() time.Time {
 	return func() time.Time { return t }
 }

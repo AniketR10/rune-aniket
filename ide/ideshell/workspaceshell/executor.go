@@ -312,10 +312,7 @@ func (e *Executor) handleStatus() iterator.Iterator[component.Responsive] {
 	e.mu.RLock()
 	entries := make([]psEntry, 0, len(e.processes))
 	for _, info := range e.processes {
-		cmd := info.path
-		if len(info.args) > 0 {
-			cmd += " " + strings.Join(info.args, " ")
-		}
+		cmd := formatCmd(info)
 		lastErr := "—"
 		if s := e.stats[info.key]; s != nil {
 			lastErr = formatLastErr(s.lastErr)
@@ -336,10 +333,7 @@ func (e *Executor) handleAudit() iterator.Iterator[component.Responsive] {
 	e.mu.RLock()
 	entries := make([]psEntry, 0, len(e.history))
 	for _, info := range e.history {
-		cmd := info.path
-		if len(info.args) > 0 {
-			cmd += " " + strings.Join(info.args, " ")
-		}
+		cmd := formatCmd(info)
 		uptime := now.Sub(info.started)
 		if !info.ended.IsZero() {
 			uptime = info.ended.Sub(info.started)
@@ -396,10 +390,7 @@ func (e *Executor) handleTree() iterator.Iterator[component.Responsive] {
 
 	var walk func(info processInfo, depth int)
 	walk = func(info processInfo, depth int) {
-		cmd := info.path
-		if len(info.args) > 0 {
-			cmd += " " + strings.Join(info.args, " ")
-		}
+		cmd := formatCmd(info)
 		indent := strings.Repeat("  ", depth)
 		ppidStr := "—"
 		if info.parent != 0 {
@@ -455,10 +446,7 @@ func (e *Executor) handleInfo(
 		return nil, fmt.Errorf("process %d not found", pid)
 	}
 
-	cmd := info.path
-	if len(info.args) > 0 {
-		cmd += " " + strings.Join(info.args, " ")
-	}
+	cmd := formatCmd(info)
 
 	uptime := now.Sub(info.started)
 	if !info.ended.IsZero() {
@@ -514,6 +502,25 @@ func formatLastErr(err error) string {
 		return s
 	}
 	return s[:maxLen-1] + "…"
+}
+
+// formatCmd renders a tracked process's command for display.
+// Empty info.path means the process was started via the
+// workspaceapi "use the user's login shell" protocol contract
+// (Cmd.Path == ""). The actual binary is resolved inside the
+// file scheme — possibly on a remote host for SSH workspaces —
+// so the tracker never sees a concrete path. Render a stable
+// placeholder so process status/tree/info don't show an empty
+// cell for these entries.
+func formatCmd(info processInfo) string {
+	path := info.path
+	if path == "" {
+		path = "(login shell)"
+	}
+	if len(info.args) > 0 {
+		return path + " " + strings.Join(info.args, " ")
+	}
+	return path
 }
 
 func formatDuration(d time.Duration) string {
