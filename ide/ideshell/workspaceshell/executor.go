@@ -440,6 +440,11 @@ func (e *Executor) handleInfo(
 	now := e.now()
 	e.mu.RLock()
 	info, ok := e.processes[pid]
+	fromHistory := false
+	if !ok {
+		info, ok = e.history[pid]
+		fromHistory = ok
+	}
 	var stats *cmdStats
 	if ok {
 		stats = e.stats[info.key]
@@ -455,8 +460,15 @@ func (e *Executor) handleInfo(
 		cmd += " " + strings.Join(info.args, " ")
 	}
 
+	uptime := now.Sub(info.started)
+	if !info.ended.IsZero() {
+		uptime = info.ended.Sub(info.started)
+	}
+
 	lastErr := "—"
-	if stats != nil {
+	if info.lastErr != nil {
+		lastErr = formatLastErr(info.lastErr)
+	} else if stats != nil {
 		lastErr = formatLastErr(stats.lastErr)
 	}
 
@@ -471,9 +483,15 @@ func (e *Executor) handleInfo(
 		fmt.Sprintf("- **Command:** `%s`", cmd),
 		fmt.Sprintf("- **Directory:** `%s`", info.dir),
 		fmt.Sprintf("- **Started:** %s", info.started.Format(time.RFC3339)),
-		fmt.Sprintf("- **Uptime:** %s", formatDuration(now.Sub(info.started))),
-		fmt.Sprintf("- **Last Error:** %s", lastErr),
+		fmt.Sprintf("- **Uptime:** %s", formatDuration(uptime)),
 	}
+	if fromHistory {
+		infoLines = append(infoLines,
+			fmt.Sprintf("- **Ended:** %s",
+				info.ended.Format(time.RFC3339)))
+	}
+	infoLines = append(infoLines,
+		fmt.Sprintf("- **Last Error:** %s", lastErr))
 
 	if len(info.env) > 0 {
 		infoLines = append(infoLines, "- **Environment:**")

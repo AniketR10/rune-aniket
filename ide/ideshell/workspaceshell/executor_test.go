@@ -838,6 +838,54 @@ func TestHandleCommandInfoNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestHandleCommandInfoErrored(t *testing.T) {
+	mock := newMockExecutor()
+	exec := NewExecutor(mock)
+	started := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	exec.now = fixedTime(started)
+
+	ctx := context.Background()
+	pid, err := exec.Start(ctx, workspaceapi.Cmd{
+		Path: "/usr/bin/gopls",
+		Args: []string{"-rpc.trace"},
+		Dir:  "/home/user/project",
+	})
+	require.NoError(t, err)
+
+	// Advance time 10 minutes, then simulate exit with an error.
+	exec.now = fixedTime(started.Add(10 * time.Minute))
+	mock.exitProcessWithError(pid, errors.New("boom"))
+
+	// Wait for the exit goroutine to fully finish updating history.
+	// We must observe the goroutine after it released e.mu so that
+	// any subsequent mutation of exec.now is race-free.
+	assert.Eventually(t, func() bool {
+		exec.mu.RLock()
+		defer exec.mu.RUnlock()
+		_, running := exec.processes[pid]
+		return !running
+	}, time.Second, time.Millisecond)
+
+	// Advance time further to confirm uptime is frozen at ended-started.
+	exec.now = fixedTime(started.Add(1 * time.Hour))
+
+	iter, err := exec.HandleCommand(ctx, repl.Command{
+		Name: "process",
+		Args: []string{"info", strconv.Itoa(int(pid))},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out := collectRenderedText(t, iter)
+	assert.Contains(t, out, "PID:")
+	assert.Contains(t, out, "gopls -rpc.trace")
+	assert.Contains(t, out, "Uptime:")
+	assert.Contains(t, out, "10m0s")
+	assert.Contains(t, out, "Ended:")
+	assert.Contains(t, out, "Last Error:")
+	assert.Contains(t, out, "boom")
+}
+
 func TestHandleCommandInfoNoArgs(t *testing.T) {
 	exec := NewExecutor(newMockExecutor())
 	ctx := context.Background()
