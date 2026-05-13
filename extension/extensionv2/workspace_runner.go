@@ -25,10 +25,14 @@ package extensionv2
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -95,6 +99,7 @@ type extensionRunState struct {
 	lastErr    error
 	startCount int
 	readiness  *extensionReadiness
+	logPath    string
 }
 
 type extensionRunStateSnapshot struct {
@@ -106,6 +111,7 @@ type extensionRunStateSnapshot struct {
 	Running    bool
 	LastErr    error
 	StartCount int
+	LogPath    string
 }
 
 var _ schemeapi.Executor = (*workspaceRunner)(nil)
@@ -184,7 +190,8 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 	ctx, cancel := context.WithCancel(m.ctx)
 	ctx = processctx.ContextWithExtensionID(ctx, id)
 	readiness := newExtensionReadiness()
-	cmd, err := m.makeCommand(ctx, id, cmdAndArgs, config, readiness)
+	logPath := extensionLogPath(m.workspace, id)
+	cmd, err := m.makeCommand(ctx, id, cmdAndArgs, config, readiness, logPath)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("make command: %w", err)
@@ -215,6 +222,7 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 	state.lastErr = nil
 	state.startCount++
 	state.readiness = readiness
+	state.logPath = logPath
 	m.mu.Unlock()
 
 	return nil
@@ -223,7 +231,22 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 // Close stops all extensions and cleans up all resources associated
 // with this Runner.
 func (m *workspaceRunner) Close() error {
-	m.cancelCtx() // kills all extensions
+	// Cancelling the runner context terminates each extension
+	// process; the per-extension waitCh goroutine fires
+	// setExtensionExit which closes the collector (and its log file)
+	// after exec.Cmd.Wait returns. We only need to drop the on-disk
+	// log files here; the OS would clean them on reboot but doing it
+	// eagerly keeps /tmp tidy.
+	m.cancelCtx()
+	m.mu.Lock()
+	paths := make([]string, 0, len(m.states))
+	for _, state := range m.states {
+		paths = append(paths, state.logPath)
+	}
+	m.mu.Unlock()
+	for _, p := range paths {
+		_ = os.Remove(p)
+	}
 	return nil
 }
 
@@ -239,19 +262,9 @@ func (m *workspaceRunner) log(level log.Level, msg string, args ...any) {
 
 func (m *workspaceRunner) makeCommand(
 	ctx context.Context, extensionID, path string, config config.Config,
-	readiness *extensionReadiness,
+	readiness *extensionReadiness, logPath string,
 ) (ret workspaceapi.Cmd, err error) {
 	waitCh := make(chan error)
-	go debug.CapturePanicReport(func() {
-		select {
-		case err := <-waitCh:
-			m.setExtensionExit(extensionID, err)
-			if err != nil {
-				m.log(log.ErrorLevel, "extension %s exit: %v", extensionID, err)
-			}
-		case <-m.ctx.Done():
-		}
-	})
 	// allow args to be passed to extensions
 	argv := strings.Split(path, " ")
 	ret = workspaceapi.Cmd{
@@ -264,11 +277,11 @@ func (m *workspaceRunner) makeCommand(
 	// if local workspace, then do set dir in a best effort for
 	// extensions that do not use APIs and call os functions directly.
 	if m.workspace.Scheme() == workspace.FileScheme {
-		var err error
-		ret.Dir, err = workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
-		if err != nil {
+		var werr error
+		ret.Dir, werr = workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
+		if werr != nil {
 			err = fmt.Errorf("could not expand workspace "+
-				"path: %q: %w", m.workspace.Path(), err)
+				"path: %q: %w", m.workspace.Path(), werr)
 			return workspaceapi.Cmd{}, err
 		}
 	}
@@ -277,7 +290,32 @@ func (m *workspaceRunner) makeCommand(
 	if err != nil {
 		return workspaceapi.Cmd{}, err
 	}
-	ret.Stdin, ret.Stdout, ret.Stderr = m.makeProtocolExchange(extensionID, config, readiness)
+	stdin, stdout, stderr, collector, err := m.makeProtocolExchange(
+		extensionID, config, readiness, logPath)
+	if err != nil {
+		return workspaceapi.Cmd{}, err
+	}
+	ret.Stdin, ret.Stdout, ret.Stderr = stdin, stdout, stderr
+	// The watcher goroutine owns the collector's lifecycle: it must
+	// close it only after exec.Cmd.Wait has returned (signalled by
+	// waitCh), which is the one moment we know the stderr-copy
+	// goroutine has stopped writing. Closing from any other
+	// goroutine (stopExtension, runner Close, m.ctx.Done) would race
+	// with that writer. If m.ctx is cancelled first we don't close
+	// the collector at all; the log file lives in os.TempDir and is
+	// unlinked from workspaceRunner.Close, and the FD is released on
+	// process exit.
+	go debug.CapturePanicReport(func() {
+		select {
+		case exitErr := <-waitCh:
+			_ = collector.Close()
+			m.setExtensionExit(extensionID, exitErr)
+			if exitErr != nil {
+				m.log(log.ErrorLevel, "extension %s exit: %v", extensionID, exitErr)
+			}
+		case <-m.ctx.Done():
+		}
+	})
 	return
 }
 
@@ -329,19 +367,25 @@ func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []s
 }
 
 func (m *workspaceRunner) makeProtocolExchange(
-	extensionID string, cfg config.Config, readiness *extensionReadiness,
+	extensionID string, cfg config.Config, readiness *extensionReadiness, logPath string,
 ) (
-	io.Reader, io.Writer, io.Writer,
+	io.Reader, io.Writer, io.Writer, *logCollector, error,
 ) {
 	protocol := newProtocol(m.ctx, m.grantor, extensionID, m.socket,
 		m.dataDir, m.tlsCert, m.cfg.insecureAuth, cfg, m.keys, readiness)
-	collector := newCollector(extensionID, m.workspace)
+	logFile, err := os.OpenFile(logPath,
+		os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf(
+			"open extension %q log file %q: %w", extensionID, logPath, err)
+	}
+	collector := newCollector(extensionID, m.workspace, logFile)
 	stdout := errIntercept{
 		m:           m,
 		extensionID: extensionID,
 		protocol:    protocol,
 	}
-	return protocol, stdout, collector
+	return protocol, stdout, collector, collector, nil
 }
 
 func (m *workspaceRunner) setExtensionExit(extensionID string, err error) {
@@ -373,6 +417,7 @@ func (m *workspaceRunner) listExtensions() []extensionRunStateSnapshot {
 			Running:    state.running,
 			LastErr:    state.lastErr,
 			StartCount: state.startCount,
+			LogPath:    state.logPath,
 		})
 	}
 	m.mu.Unlock()
@@ -398,6 +443,7 @@ func (m *workspaceRunner) extension(id string) (extensionRunStateSnapshot, bool)
 		Running:    state.running,
 		LastErr:    state.lastErr,
 		StartCount: state.startCount,
+		LogPath:    state.logPath,
 	}, true
 }
 
@@ -466,6 +512,9 @@ func (m *workspaceRunner) stopExtension(extensionID string, reason error) {
 	state.lastErr = reason
 	readiness := state.readiness
 	m.mu.Unlock()
+	// Cancelling triggers the watcher goroutine spawned in
+	// makeCommand, which closes the collector after the stderr-copy
+	// goroutine completes. Doing it here would race with that writer.
 	readiness.Set(reason)
 	if cancel != nil {
 		cancel()
@@ -474,6 +523,17 @@ func (m *workspaceRunner) stopExtension(extensionID string, reason error) {
 
 func makeLogLevelEnv(l log.Level) string {
 	return fmt.Sprintf("%s=%s", extensionapi.EnvLogLevel, l)
+}
+
+// extensionLogPath returns the per-extension stderr log file path
+// inside the OS temp directory. The filename is derived from a SHA-256
+// hash of the workspace URI and the extension id so that:
+//   - the same (workspace, id) pair maps to the same path, and
+//   - different workspaces (or ids) get distinct files.
+func extensionLogPath(ws workspaceapi.URI, extensionID string) string {
+	sum := sha256.Sum256([]byte(ws.String() + "\x00" + extensionID))
+	return filepath.Join(os.TempDir(),
+		fmt.Sprintf("rune-extension-%s.log", hex.EncodeToString(sum[:])[:16]))
 }
 
 type errIntercept struct {

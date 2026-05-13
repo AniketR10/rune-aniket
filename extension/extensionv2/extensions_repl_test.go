@@ -25,6 +25,8 @@ package extensionv2
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -76,12 +78,13 @@ func TestRegisterExtensionsREPLCommand(t *testing.T) {
 	require.NoError(t, registerExtensionsREPLCommand(runner, editor))
 	require.Equal(t, 1, editor.calls)
 	assert.Equal(t, extensionsREPLCommand, editor.manual.Name)
-	require.Len(t, editor.manual.Commands, 5)
+	require.Len(t, editor.manual.Commands, 6)
 	assert.Equal(t, extensionsREPLCommandStatus, editor.manual.Commands[0].Name)
 	assert.Equal(t, extensionsREPLCommandInfo, editor.manual.Commands[1].Name)
 	assert.Equal(t, extensionsREPLCommandStart, editor.manual.Commands[2].Name)
 	assert.Equal(t, extensionsREPLCommandStop, editor.manual.Commands[3].Name)
 	assert.Equal(t, extensionsREPLCommandRestart, editor.manual.Commands[4].Name)
+	assert.Equal(t, extensionsREPLCommandLogs, editor.manual.Commands[5].Name)
 	assert.NotNil(t, editor.handler)
 }
 
@@ -265,6 +268,7 @@ func TestExtensionsREPLCompleteSubcommandsAndIDs(t *testing.T) {
 		extensionsREPLCommandStart,
 		extensionsREPLCommandStop,
 		extensionsREPLCommandRestart,
+		extensionsREPLCommandLogs,
 	}, items)
 
 	it, err = handler.Complete(context.Background(), extensionsREPLCommand, []string{"st"})
@@ -341,6 +345,184 @@ func TestExtensionsREPLErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse config json")
 }
 
+func TestExtensionsREPLLogsUnknown(t *testing.T) {
+	t.Parallel()
+
+	handler := extensionsREPLHandler{runner: newTestWorkspaceRunner(t)}
+	_, err := handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs, "missing"},
+	}, repl.NopProgressWriter())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `extension "missing" not found`)
+}
+
+func TestExtensionsREPLLogsUsage(t *testing.T) {
+	t.Parallel()
+
+	handler := extensionsREPLHandler{runner: newTestWorkspaceRunner(t)}
+	_, err := handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs},
+	}, repl.NopProgressWriter())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "usage: extensions logs <id>")
+
+	_, err = handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs, "alpha", "--tail"},
+	}, repl.NopProgressWriter())
+	require.Error(t, err)
+
+	_, err = handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs, "alpha", "--tail", "nope"},
+	}, repl.NopProgressWriter())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--tail expects")
+}
+
+// TestExtensionsREPLLogsTailFileRemoved exercises the only path that
+// can produce "No logs captured yet.": the log file was deleted
+// externally between Run and the `logs --tail` invocation.
+func TestExtensionsREPLLogsTailFileRemoved(t *testing.T) {
+	t.Parallel()
+
+	runner := newTestWorkspaceRunner(t)
+	require.NoError(t, runner.Run("alpha", "/bin/ext", config.NopConfig()))
+	runner.mu.Lock()
+	logPath := runner.states["alpha"].logPath
+	runner.mu.Unlock()
+	require.NoError(t, os.Remove(logPath))
+
+	handler := extensionsREPLHandler{runner: runner}
+	it, err := handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs, "alpha", "--tail", "10"},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	items, err := sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"No logs captured yet."}, extensionsResponsiveStrings(t, items))
+}
+
+func TestExtensionsREPLLogsTail(t *testing.T) {
+	t.Parallel()
+
+	runner := newTestWorkspaceRunner(t)
+	require.NoError(t, runner.Run("alpha", "/bin/ext", config.NopConfig()))
+	runner.mu.Lock()
+	logPath := runner.states["alpha"].logPath
+	runner.mu.Unlock()
+	require.NotEmpty(t, logPath)
+
+	var b strings.Builder
+	for i := 0; i < 5; i++ {
+		fmt.Fprintf(&b, "line-%d\n", i)
+	}
+	require.NoError(t, os.WriteFile(logPath, []byte(b.String()), 0o600))
+
+	handler := extensionsREPLHandler{runner: runner}
+	it, err := handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs, "alpha", "--tail", "2"},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	items, err := sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	out := extensionsResponsiveStrings(t, items)
+	require.GreaterOrEqual(t, len(out), 3)
+	assert.Contains(t, out[0], "Log file: ")
+	assert.Contains(t, out[0], logPath)
+	assert.Equal(t, []string{"line-3", "line-4"}, out[len(out)-2:])
+
+	// --tail 0 returns all lines.
+	it, err = handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandLogs, "alpha", "--tail", "0"},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	items, err = sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	out = extensionsResponsiveStrings(t, items)
+	require.Len(t, out, 6) // header + 5 lines
+	assert.Equal(t,
+		[]string{"line-0", "line-1", "line-2", "line-3", "line-4"},
+		out[1:],
+	)
+}
+
+func TestExtensionsREPLLogsCompletion(t *testing.T) {
+	t.Parallel()
+
+	runner := newTestWorkspaceRunner(t)
+	require.NoError(t, runner.Run("alpha", "/bin/ext", config.NopConfig()))
+	handler := extensionsREPLHandler{runner: runner}
+
+	it, err := handler.Complete(context.Background(), extensionsREPLCommand, nil)
+	require.NoError(t, err)
+	items, err := sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Contains(t, items, extensionsREPLCommandLogs)
+
+	it, err = handler.Complete(context.Background(), extensionsREPLCommand, []string{"lo"})
+	require.NoError(t, err)
+	items, err = sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{extensionsREPLCommandLogs}, items)
+
+	it, err = handler.Complete(context.Background(), extensionsREPLCommand,
+		[]string{extensionsREPLCommandLogs, "al"})
+	require.NoError(t, err)
+	items, err = sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alpha"}, items)
+
+	// After `logs <id>`, the next slot should offer --tail.
+	it, err = handler.Complete(context.Background(), extensionsREPLCommand,
+		[]string{extensionsREPLCommandLogs, "alpha", ""})
+	require.NoError(t, err)
+	items, err = sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--tail"}, items)
+
+	it, err = handler.Complete(context.Background(), extensionsREPLCommand,
+		[]string{extensionsREPLCommandLogs, "alpha", "--t"})
+	require.NoError(t, err)
+	items, err = sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--tail"}, items)
+
+	// After `logs <id> --tail`, completion is silent: the user must
+	// supply a numeric argument.
+	it, err = handler.Complete(context.Background(), extensionsREPLCommand,
+		[]string{extensionsREPLCommandLogs, "alpha", "--tail", ""})
+	require.NoError(t, err)
+	items, err = sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Empty(t, items)
+}
+
+func TestExtensionsREPLInfoShowsLogPath(t *testing.T) {
+	t.Parallel()
+
+	runner := newTestWorkspaceRunner(t)
+	require.NoError(t, runner.Run("alpha", "/bin/ext", config.NopConfig()))
+	handler := extensionsREPLHandler{runner: runner}
+
+	it, err := handler.HandleCommand(context.Background(), repl.Command{
+		Name: extensionsREPLCommand,
+		Args: []string{extensionsREPLCommandInfo, "alpha"},
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	items, err := sdkiterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	out := extensionsResponsiveStringsWithWidth(t, items, 320)
+	flattened := strings.Join(strings.Fields(strings.Join(out, "\n")), " ")
+	assert.Contains(t, flattened, "Log file")
+	assert.Contains(t, flattened, "rune-extension-")
+}
+
 func newTestWorkspaceRunner(t *testing.T) *workspaceRunner {
 	t.Helper()
 	return newTestWorkspaceRunnerWithExecutor(t, &recordingExecutor{})
@@ -350,12 +532,21 @@ func newTestWorkspaceRunnerWithExecutor(t *testing.T, exec schemeapi.Executor) *
 	t.Helper()
 	keys, err := auth.GenerateKeys()
 	require.NoError(t, err)
-	uri, err := workspaceapi.ParseURI("file:///tmp")
+	// Use a per-test workspace URI so per-extension log files (derived
+	// from workspace+id) do not collide across parallel tests.
+	uri, err := workspaceapi.ParseURI("file:///tmp/" + sanitizeTestName(t.Name()))
 	require.NoError(t, err)
-	return newWorkspaceRunner(
+	runner := newWorkspaceRunner(
 		exec, exec, extension.GrantAll(), uri,
 		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys,
 	)
+	t.Cleanup(func() { _ = runner.Close() })
+	return runner
+}
+
+func sanitizeTestName(name string) string {
+	r := strings.NewReplacer("/", "_", " ", "_")
+	return r.Replace(name)
 }
 
 func extensionsResponsiveStrings(t *testing.T, items []component.Responsive) []string {

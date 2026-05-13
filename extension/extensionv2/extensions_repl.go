@@ -24,9 +24,11 @@
 package extensionv2
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,13 +52,16 @@ const (
 	extensionsREPLCommandStart   = "start"
 	extensionsREPLCommandStop    = "stop"
 	extensionsREPLCommandRestart = "restart"
+	extensionsREPLCommandLogs    = "logs"
 )
 
-func registerExtensionsREPLCommand(runner *workspaceRunner, editor text.Editor) error {
+func registerExtensionsREPLCommand(
+	runner *workspaceRunner, editor text.Editor,
+) error {
 	return editor.RegisterREPLCommand(textapi.CommandManual{
 		Name:     extensionsREPLCommand,
 		Summary:  "Manage workspace extensions.",
-		Synopsis: "<status|info|start|stop|restart> ...",
+		Synopsis: "<status|info|start|stop|restart|logs> ...",
 		Commands: []textapi.CommandManual{
 			{Name: extensionsREPLCommandStatus, Summary: "Show workspace extension status."},
 			{Name: extensionsREPLCommandInfo, Summary: "Show detailed workspace extension information.", Synopsis: "<id>"},
@@ -67,6 +72,11 @@ func registerExtensionsREPLCommand(runner *workspaceRunner, editor text.Editor) 
 			},
 			{Name: extensionsREPLCommandStop, Summary: "Stop a running workspace extension.", Synopsis: "<id>"},
 			{Name: extensionsREPLCommandRestart, Summary: "Restart a known workspace extension.", Synopsis: "<id>"},
+			{
+				Name:     extensionsREPLCommandLogs,
+				Summary:  "Show the captured stderr logs of an extension.",
+				Synopsis: "<id> [--tail N]",
+			},
 		},
 	}, extensionsREPLHandler{runner: runner})
 }
@@ -92,6 +102,8 @@ func (h extensionsREPLHandler) HandleCommand(
 		return h.handleStop(cmd.Args[1:])
 	case extensionsREPLCommandRestart:
 		return h.handleRestart(ctx, cmd.Args[1:])
+	case extensionsREPLCommandLogs:
+		return h.handleLogs(cmd.Args[1:])
 	default:
 		return nil, fmt.Errorf("unknown extensions subcommand %q", cmd.Args[0])
 	}
@@ -106,6 +118,7 @@ func (h extensionsREPLHandler) Complete(
 		extensionsREPLCommandStart,
 		extensionsREPLCommandStop,
 		extensionsREPLCommandRestart,
+		extensionsREPLCommandLogs,
 	}
 	if len(args) == 0 {
 		return iterator.FromSlice(subcommands), nil
@@ -120,7 +133,21 @@ func (h extensionsREPLHandler) Complete(
 		return iterator.FromSlice(ret), nil
 	}
 	if args[0] != extensionsREPLCommandStop && args[0] != extensionsREPLCommandRestart &&
-		args[0] != extensionsREPLCommandInfo {
+		args[0] != extensionsREPLCommandInfo && args[0] != extensionsREPLCommandLogs {
+		return iterator.Empty[string](), nil
+	}
+	if args[0] == extensionsREPLCommandLogs && len(args) >= 3 {
+		// After `logs <id>`: complete the optional `--tail` flag
+		// (or stay silent once it has been entered and is awaiting a
+		// numeric argument).
+		last := args[len(args)-1]
+		prev := args[len(args)-2]
+		if prev == "--tail" {
+			return iterator.Empty[string](), nil
+		}
+		if strings.HasPrefix("--tail", last) {
+			return iterator.FromSlice([]string{"--tail"}), nil
+		}
 		return iterator.Empty[string](), nil
 	}
 	prefix := args[len(args)-1]
@@ -261,10 +288,127 @@ func (h extensionsREPLHandler) handleRestart(
 	return extensionsREPLLines(fmt.Sprintf("Restarted extension %s", args[0])), nil
 }
 
+func (h extensionsREPLHandler) handleLogs(
+	args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("usage: extensions logs <id> [--tail N]")
+	}
+	id := args[0]
+	// Default to 0 (no limit). The user can Ctrl-C the iterator if
+	// the file is large; the file path is also surfaced in the
+	// header so they can open it externally.
+	tail := 0
+	rest := args[1:]
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case "--tail":
+			if i+1 >= len(rest) {
+				return nil, fmt.Errorf("usage: extensions logs <id> [--tail N]")
+			}
+			n, err := strconv.Atoi(rest[i+1])
+			if err != nil || n < 0 {
+				return nil, fmt.Errorf("--tail expects a non-negative integer, got %q", rest[i+1])
+			}
+			tail = n
+			i++
+		default:
+			return nil, fmt.Errorf("unknown extensions logs argument %q", rest[i])
+		}
+	}
+	state, ok := h.runner.extension(id)
+	if !ok {
+		return nil, fmt.Errorf("extension %q not found", id)
+	}
+	return newLogFileIterator(state.LogPath, tail)
+}
+
+// newLogFileIterator returns an iterator that emits a header line
+// followed by the contents of logPath one line at a time. When
+// tail > 0 the iterator emits only the last tail lines; tail == 0
+// emits every line. If the file does not exist the iterator yields
+// a single "No logs captured yet." line. The underlying file is
+// closed by the iterator's Close.
+func newLogFileIterator(
+	logPath string, tail int,
+) (iterator.Iterator[component.Responsive], error) {
+	f, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return extensionsREPLLines("No logs captured yet."), nil
+		}
+		return nil, fmt.Errorf("open log file %q: %w", logPath, err)
+	}
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+	// With --tail N>0 we scan the whole file up-front and keep just
+	// the last N lines in a ring buffer. The iterator then replays
+	// them. tail == 0 streams every line directly from the scanner.
+	var ring []string
+	if tail > 0 {
+		ring = make([]string, 0, tail)
+		for scanner.Scan() {
+			if len(ring) == tail {
+				ring = append(ring[1:], scanner.Text())
+			} else {
+				ring = append(ring, scanner.Text())
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("scan log file %q: %w", logPath, err)
+		}
+	}
+
+	emittedHeader := false
+	ringIdx := 0
+	return iterator.FromFunc(
+		func(context.Context) (component.Responsive, bool, error) {
+			if !emittedHeader {
+				emittedHeader = true
+				return logFileHeader(logPath), true, nil
+			}
+			if ring != nil {
+				if ringIdx >= len(ring) {
+					return nil, false, nil
+				}
+				line := ring[ringIdx]
+				ringIdx++
+				return responsiveString(line), true, nil
+			}
+			if scanner.Scan() {
+				return responsiveString(scanner.Text()), true, nil
+			}
+			if err := scanner.Err(); err != nil {
+				return nil, false, fmt.Errorf("scan log file %q: %w", logPath, err)
+			}
+			return nil, false, nil
+		},
+		f.Close,
+	), nil
+}
+
+// logFileHeader renders the log file path as a bold markdown line
+// so the path stands out from the (potentially long) stream of log
+// lines that follow. Falls back to a plain string if markdown
+// rendering fails.
+func logFileHeader(logPath string) component.Responsive {
+	md, err := markdown.New(fmt.Sprintf("**Log file:** `%s`", logPath))
+	if err != nil {
+		return responsiveString(fmt.Sprintf("Log file: %s", logPath))
+	}
+	return md
+}
+
+func responsiveString(s string) component.Responsive {
+	return component.NewResponsiveString(s, component.StringResponsiveConfig{})
+}
+
 func extensionsREPLHelp() iterator.Iterator[component.Responsive] {
 	return extensionsREPLLines(
-		"Usage: extensions <status|info|start|stop|restart>",
-		"Show status/info, start, stop, or restart workspace extensions.",
+		"Usage: extensions <status|info|start|stop|restart|logs>",
+		"Show status/info/logs, start, stop, or restart workspace extensions.",
 	)
 }
 
@@ -326,6 +470,7 @@ func extensionsInfoMarkdown(state extensionRunStateSnapshot) string {
 	fmt.Fprintf(&b, "| Uptime | %s |\n", extensionsMarkdownTableCell(uptime))
 	fmt.Fprintf(&b, "| Command | %s |\n", extensionsInfoValue(state.CmdAndArgs))
 	fmt.Fprintf(&b, "| Last error | %s |\n", extensionsInfoValue(lastErr))
+	fmt.Fprintf(&b, "| Log file | %s |\n", extensionsInfoValue(state.LogPath))
 
 	flatCfg := extensionsFlattenConfig(state.Config)
 	if len(flatCfg) == 0 {

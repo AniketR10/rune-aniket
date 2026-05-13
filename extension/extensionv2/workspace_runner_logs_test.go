@@ -1,0 +1,43 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+
+package extensionv2
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
+
+func TestExtensionLogPathStableAndUnique(t *testing.T) {
+	t.Parallel()
+
+	ws1, err := workspaceapi.ParseURI("file:///tmp/a")
+	require.NoError(t, err)
+	ws2, err := workspaceapi.ParseURI("file:///tmp/b")
+	require.NoError(t, err)
+
+	p1 := extensionLogPath(ws1, "alpha")
+	p1again := extensionLogPath(ws1, "alpha")
+	p2 := extensionLogPath(ws1, "beta")
+	p3 := extensionLogPath(ws2, "alpha")
+
+	assert.Equal(t, p1, p1again, "same inputs should produce same path")
+	assert.NotEqual(t, p1, p2, "different ids should produce different paths")
+	assert.NotEqual(t, p1, p3, "different workspaces should produce different paths")
+
+	assert.Equal(t,
+		filepath.Clean(os.TempDir()),
+		filepath.Clean(filepath.Dir(p1)),
+	)
+	name := filepath.Base(p1)
+	matched, err := regexp.MatchString(`^rune-extension-[0-9a-f]{16}\.log$`, name)
+	require.NoError(t, err)
+	assert.True(t, matched, "filename %q does not match expected pattern", name)
+}

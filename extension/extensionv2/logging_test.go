@@ -26,8 +26,10 @@ package extensionv2
 import (
 	"bytes"
 	"math/rand"
+	"os"
 	"testing"
 
+	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
@@ -147,7 +149,10 @@ func TestLoggingCollector(t *testing.T) {
 	var buf bytes.Buffer
 	left, _ := buf.Write([]byte(data))
 
-	collector := newCollector("abc", workspaceapi.URI{})
+	logFile, err := os.CreateTemp(t.TempDir(), "logging-test-*.log")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(logFile.Name()) })
+	collector := newCollector("abc", workspaceapi.URI{}, logFile)
 	collector.logger = logger
 	for left > 0 {
 		n := rand.Intn(left)
@@ -170,4 +175,58 @@ func TestLoggingCollector(t *testing.T) {
 	assert.Equal(t, "unsubscribing subscriber sub=0x14000a47800: unsubscribed called. subscribers=map[0:[0x14001a84900 0x14001483c80 0x14001a326f0 0x14001a32930 0x14001a32e40 0x14001d1ef60] 3:[0x14001a84900 0x14001483c80 0x14001a326f0 0x14001a32930 0x14001a32e40 0x14001d1ef60] 4:[0x14001483c80 0x14001d1ef60] 7:[0x14001a84900 0x14001483c80 0x14001a32e40] 8:[0x14001171830]]",
 		entry.Data["msg"])
 	assert.Equal(t, "2025-08-06T18:43:43+02:00", entry.Data["time"])
+}
+
+func TestLoggingCollectorRoutesToFile(t *testing.T) {
+	logger, hook := logtest.NewNullLogger()
+	logger.SetLevel(log.TraceLevel)
+
+	logFile, err := os.CreateTemp(t.TempDir(), "logging-route-test-*.log")
+	require.NoError(t, err)
+
+	collector := newCollector("ext-id", workspaceapi.URI{}, logFile)
+	collector.logger = logger
+
+	_, err = collector.Write([]byte(`{"level":"info","msg":"hello"}` + "\n"))
+	require.NoError(t, err)
+	_, err = collector.Write([]byte("panic: not json\n"))
+	require.NoError(t, err)
+
+	// JSON record: logged structurally to logrus...
+	require.Len(t, hook.AllEntries(), 1)
+	assert.Equal(t, log.InfoLevel, hook.LastEntry().Level)
+	assert.Equal(t, "hello", hook.LastEntry().Data["msg"])
+	assert.Equal(t, "ext-id", hook.LastEntry().Data[logging.KeyThread])
+
+	// ...and also rendered to the per-extension log file in text
+	// form, alongside the raw non-JSON line written verbatim.
+	require.NoError(t, logFile.Sync())
+	contents, err := os.ReadFile(logFile.Name())
+	require.NoError(t, err)
+	got := string(contents)
+	assert.Contains(t, got, "hello",
+		"structured records should be teed to the log file in text form")
+	assert.Contains(t, got, "level=info")
+	assert.Contains(t, got, "panic: not json",
+		"non-JSON lines should be written verbatim to the log file")
+}
+
+func BenchmarkLoggingCollectorWrite(b *testing.B) {
+	logger, _ := logtest.NewNullLogger()
+	logger.SetLevel(log.InfoLevel)
+
+	logFile, err := os.CreateTemp(b.TempDir(), "logging-bench-*.log")
+	require.NoError(b, err)
+	c := newCollector("ext-id", workspaceapi.URI{}, logFile)
+	c.logger = logger
+
+	line := []byte(`{"level":"info","msg":"hello","class":"benchmark"}` + "\n")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := c.Write(line); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
