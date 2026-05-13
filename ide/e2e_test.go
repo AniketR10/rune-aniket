@@ -70,18 +70,27 @@ func TestE2E(t *testing.T) {
 		file, err := os.Create(filepath.Join(dir, "e2e.go"))
 		require.NoError(t, err)
 
+		// Drop a tiny test-local sed wrapper into the workspace dir so
+		// the alias does not depend on whether gsed/GNU sed happens
+		// to be installed on the host. /usr/bin/sed -i.bak is portable
+		// between BSD (macOS) and GNU sed.
+		sedStub := filepath.Join(dir, "sedstub")
+		require.NoError(t, os.WriteFile(sedStub, []byte(
+			"#!/bin/sh\n"+
+				"/usr/bin/sed -i.bak \"$2\" \"$3\"\n"+
+				"rm -f \"$3.bak\"\n",
+		), 0o755))
+
 		_, err = config.Seek(0, 0)
 		require.NoError(t, err)
-		_, err = config.WriteString(`
+		_, err = config.WriteString(fmt.Sprintf(`
 editor:
   mode: modal
 command:
   key: ":"
   aliases:
-    sed: "! gsed -i $1 %"
-  key_bindings:
-    <a-m>: windowclose
-`)
+    sed: "!! %s -i $1 %%"
+`, sedStub))
 		require.NoError(t, err)
 
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
@@ -114,17 +123,18 @@ command:
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-			{":sed<space>'s/c<space>a/C<space>A/g'<enter><a-m>:reloadfile!<enter>",
-				`┌──────────────────┐
-│cannot close      │
-│last tiled        │
-│window          ▐ │
-└──────────────────┘
-┌──────────────────┐
-│! gsed -i 's/c    │
-│a/C A/g'          │
-│%!:(MISSING)      │
-│new vte: start    │`},
+			{":sed<space>'s/c<space>a/C<space>A/g'<enter>" +
+				":notificationcloseall<enter>:reloadfile!<enter>",
+				`┌━━━━━━━━──────────┐
+│o e2e.go          │
+├──────────────────┤
+│a bC AbC Ab C Ab▐ │
+│                  │
+│                  │
+│                  │
+│                  │
+│            NORMAL│
+└──────────────────┘`},
 		}
 
 		mu.Lock()
