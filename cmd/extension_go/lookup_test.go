@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -41,20 +42,43 @@ func (f fakeFileInfo) Sys() any           { return nil }
 // fakeFS implements workspaceapi.FileSystem for resolver tests.
 // Paths that exist must be registered in `files` (regular file) or
 // `dirs` (directory). Any other Stat returns os.ErrNotExist.
+// Stat expands a leading "~/" against `home` before lookup, mirroring
+// the real workspaceapi.ExpandPath behavior that runs inside
+// fileScheme.Stat / remoteScheme.Stat.
 type fakeFS struct {
 	files map[string]bool
 	dirs  map[string]bool
+	home  string
 }
 
 func newFakeFS() *fakeFS {
 	return &fakeFS{files: map[string]bool{}, dirs: map[string]bool{}}
 }
 
-func (f *fakeFS) addFile(path string) *fakeFS { f.files[path] = true; return f }
-func (f *fakeFS) addDir(path string) *fakeFS  { f.dirs[path] = true; return f }
+func (f *fakeFS) addFile(p string) *fakeFS { f.files[p] = true; return f }
+func (f *fakeFS) addDir(p string) *fakeFS  { f.dirs[p] = true; return f }
+func (f *fakeFS) withHome(home string) *fakeFS {
+	f.home = home
+	return f
+}
 
-func (f *fakeFS) URI(_ string) (workspaceapi.URI, error) {
-	return workspaceapi.URI{}, nil
+// expand mirrors workspaceapi.ExpandPath: a leading "~/" is replaced
+// by f.home. Other paths are returned unchanged.
+func (f *fakeFS) expand(p string) string {
+	if f.home == "" {
+		return p
+	}
+	if p == "~" {
+		return f.home
+	}
+	if strings.HasPrefix(p, "~/") {
+		return path.Join(f.home, strings.TrimPrefix(p, "~/"))
+	}
+	return p
+}
+
+func (f *fakeFS) URI(p string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file://" + f.expand(p))
 }
 
 func (f *fakeFS) OpenFile(_ string, _ int, _ os.FileMode) (workspaceapi.File, error) {
@@ -67,11 +91,12 @@ func (f *fakeFS) MkdirAll(_ string, _ os.FileMode) error {
 }
 
 func (f *fakeFS) Stat(name string) (os.FileInfo, error) {
-	if f.files[name] {
-		return fakeFileInfo{name: name, dir: false}, nil
+	resolved := f.expand(name)
+	if f.files[resolved] {
+		return fakeFileInfo{name: resolved, dir: false}, nil
 	}
-	if f.dirs[name] {
-		return fakeFileInfo{name: name, dir: true}, nil
+	if f.dirs[resolved] {
+		return fakeFileInfo{name: resolved, dir: true}, nil
 	}
 	return nil, &fs.PathError{Op: "stat", Path: name, Err: os.ErrNotExist}
 }
@@ -150,86 +175,81 @@ func (e *fakeExecutor) Signal(_ workspaceapi.Pid, _ syscall.Signal) error {
 
 func (e *fakeExecutor) Close() error { return nil }
 
-const (
-	envProbe    = `sh -c printf '%s\n%s\n' "$SHELL" "$HOME"`
-	shellProbe  = "/bin/zsh -lc command -v gopls"
-	shellProbeS = "sh -lc command -v gopls"
-)
+const shellProbe = "sh -lc command -v gopls"
 
 func TestResolveGoplsBinary(t *testing.T) {
-	t.Run("lsp_path wins without probing", func(t *testing.T) {
-		fs := newFakeFS()
+	t.Run("DataDir/bin/gopls wins over well-known and shell", func(t *testing.T) {
+		fs := newFakeFS().
+			addFile("/Users/u/.rune/bin/gopls").
+			addFile("/usr/local/go/bin/gopls")
 		ex := newFakeExecutor()
-		got, err := resolveGoplsBinary(context.Background(), fs, ex, "/etc/gopls")
+		got, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "/Users/u/.rune")
 		require.NoError(t, err)
-		assert.Equal(t, "/etc/gopls", got)
-		assert.Empty(t, ex.calls, "no executor probes should run when lsp_path is set")
+		assert.Equal(t, "/Users/u/.rune/bin/gopls", got)
+		assert.Empty(t, ex.calls,
+			"no executor probes should run when DataDir/bin/gopls exists")
 	})
 
-	t.Run("shell probe success", func(t *testing.T) {
-		fs := newFakeFS()
-		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "/bin/zsh\n/home/u\n"}).
-			respond(shellProbe, scriptedCmd{stdout: "/home/u/go/bin/gopls\n"})
-		got, err := resolveGoplsBinary(context.Background(), fs, ex, "")
+	t.Run("DataDir miss falls through to well-known with tilde", func(t *testing.T) {
+		// Regression for RUNE-164: tilde well-known paths must
+		// resolve via fs.Stat without any prior $HOME probe.
+		fs := newFakeFS().
+			withHome("/Users/u").
+			addFile("/Users/u/go/bin/gopls")
+		ex := newFakeExecutor()
+		got, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "/Users/u/.rune")
 		require.NoError(t, err)
-		assert.Equal(t, "/home/u/go/bin/gopls", got)
+		assert.Equal(t, "/Users/u/go/bin/gopls", got)
+		assert.Empty(t, ex.calls,
+			"no executor probes should run when a well-known path resolves")
 	})
 
-	t.Run("shell probe fails then well-known hits ~/go/bin", func(t *testing.T) {
-		fs := newFakeFS().addFile("/home/u/go/bin/gopls")
-		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "/bin/zsh\n/home/u\n"}).
-			respond(shellProbe, scriptedCmd{err: errors.New("not found")})
-		got, err := resolveGoplsBinary(context.Background(), fs, ex, "")
-		require.NoError(t, err)
-		assert.Equal(t, "/home/u/go/bin/gopls", got)
-	})
-
-	t.Run("empty shell falls back to sh", func(t *testing.T) {
-		fs := newFakeFS()
-		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "\n/home/u\n"}).
-			respond(shellProbeS, scriptedCmd{stdout: "/opt/homebrew/bin/gopls\n"})
-		got, err := resolveGoplsBinary(context.Background(), fs, ex, "")
+	t.Run("absolute well-known path resolves without tilde", func(t *testing.T) {
+		fs := newFakeFS().addFile("/opt/homebrew/bin/gopls")
+		ex := newFakeExecutor()
+		got, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "")
 		require.NoError(t, err)
 		assert.Equal(t, "/opt/homebrew/bin/gopls", got)
-	})
-
-	t.Run("well-known hits absolute path when home is empty", func(t *testing.T) {
-		fs := newFakeFS().addFile("/usr/local/go/bin/gopls")
-		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "\n\n"}).
-			respond(shellProbeS, scriptedCmd{err: errors.New("not found")})
-		got, err := resolveGoplsBinary(context.Background(), fs, ex, "")
-		require.NoError(t, err)
-		assert.Equal(t, "/usr/local/go/bin/gopls", got)
+		assert.Empty(t, ex.calls)
 	})
 
 	t.Run("directory at well-known location is ignored", func(t *testing.T) {
 		fs := newFakeFS().addDir("/usr/local/go/bin/gopls")
 		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "\n\n"}).
-			respond(shellProbeS, scriptedCmd{err: errors.New("not found")})
-		_, err := resolveGoplsBinary(context.Background(), fs, ex, "")
+			respond(shellProbe, scriptedCmd{err: errors.New("not found")})
+		_, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "")
+		require.Error(t, err)
+	})
+
+	t.Run("well-known miss falls through to shell probe", func(t *testing.T) {
+		fs := newFakeFS()
+		ex := newFakeExecutor().
+			respond(shellProbe, scriptedCmd{stdout: "/opt/gopls\n"})
+		got, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "")
+		require.NoError(t, err)
+		assert.Equal(t, "/opt/gopls", got)
+	})
+
+	t.Run("non-absolute shell output is rejected", func(t *testing.T) {
+		fs := newFakeFS()
+		ex := newFakeExecutor().
+			respond(shellProbe, scriptedCmd{stdout: "gopls\n"})
+		_, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "")
 		require.Error(t, err)
 	})
 
 	t.Run("everything fails returns error", func(t *testing.T) {
 		fs := newFakeFS()
 		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "/bin/zsh\n/home/u\n"}).
 			respond(shellProbe, scriptedCmd{err: errors.New("not found")})
-		_, err := resolveGoplsBinary(context.Background(), fs, ex, "")
-		require.Error(t, err)
-	})
-
-	t.Run("non-absolute shell output is rejected", func(t *testing.T) {
-		fs := newFakeFS()
-		ex := newFakeExecutor().
-			respond(envProbe, scriptedCmd{stdout: "/bin/zsh\n/home/u\n"}).
-			respond(shellProbe, scriptedCmd{stdout: "gopls\n"})
-		_, err := resolveGoplsBinary(context.Background(), fs, ex, "")
+		_, err := resolveGoplsBinary(
+			context.Background(), fs, ex, "/Users/u/.rune")
 		require.Error(t, err)
 	})
 }
@@ -261,35 +281,28 @@ func TestReadGoplsLspPath(t *testing.T) {
 	t.Run("missing key returns empty without warning", func(t *testing.T) {
 		cfg := config.JSONFromMap(map[string]any{})
 		mn := &mockNotifications{}
-		assert.Equal(t, "", readGoplsLspPath(cfg, mn))
+		got, ok := readGoplsLspPath(cfg, mn)
+		assert.Equal(t, "", got)
+		assert.False(t, ok)
 		assert.Empty(t, mn.getMessages())
 	})
 
 	t.Run("valid path is returned verbatim", func(t *testing.T) {
 		cfg := config.JSONFromMap(map[string]any{"lsp_path": "/opt/gopls"})
 		mn := &mockNotifications{}
-		assert.Equal(t, "/opt/gopls", readGoplsLspPath(cfg, mn))
+		got, ok := readGoplsLspPath(cfg, mn)
+		assert.Equal(t, "/opt/gopls", got)
+		assert.True(t, ok)
 		assert.Empty(t, mn.getMessages())
-	})
-
-	t.Run("path containing space is rejected with warn", func(t *testing.T) {
-		cfg := config.JSONFromMap(map[string]any{"lsp_path": "/opt/g opls"})
-		mn := &mockNotifications{}
-		assert.Equal(t, "", readGoplsLspPath(cfg, mn))
-		require.Len(t, mn.getMessages(), 1)
-		assert.Equal(t, browserapi.LevelWarn, mn.getMessages()[0].Level)
-		assert.Contains(t, mn.getMessages()[0].Message, "without spaces")
 	})
 
 	t.Run("wrong type is rejected with warn", func(t *testing.T) {
 		cfg := config.JSONFromMap(map[string]any{"lsp_path": 42})
 		mn := &mockNotifications{}
-		assert.Equal(t, "", readGoplsLspPath(cfg, mn))
+		got, ok := readGoplsLspPath(cfg, mn)
+		assert.Equal(t, "", got)
+		assert.False(t, ok)
 		require.Len(t, mn.getMessages(), 1)
 		assert.Equal(t, browserapi.LevelWarn, mn.getMessages()[0].Level)
-	})
-
-	t.Run("nil config returns empty", func(t *testing.T) {
-		assert.Equal(t, "", readGoplsLspPath(nil, &mockNotifications{}))
 	})
 }

@@ -37,14 +37,16 @@ import (
 
 // goplsResolutionTimeout caps the total time spent probing the workspace
 // host for a gopls binary so a hung remote shell cannot stall
-// workspace bring-up.
-const goplsResolutionTimeout = 3 * time.Second
+// workspace bring-up. Only the shell probe consumes meaningful time;
+// the DataDir and well-known checks are local Stat calls.
+const goplsResolutionTimeout = 5 * time.Second
 
-// wellKnownGoplsPaths lists the paths the resolver Stat's when the
-// shell probe fails. Paths beginning with "~/" are resolved against
-// $HOME on the workspace host (skipped if $HOME cannot be read).
+// wellKnownGoplsPaths lists the paths the resolver Stats after the
+// per-workspace `<DataDir>/bin/gopls` check fails. Tilde-prefixed
+// paths are passed verbatim to fs.Stat, which routes them through
+// workspaceapi.ExpandPath so "~/" expands against the workspace
+// host's $HOME without any extra shell round-trip.
 var wellKnownGoplsPaths = []string{
-	"~/.rune/bin/gopls",
 	"~/go/bin/gopls",
 	"/usr/local/go/bin/gopls",
 	"/opt/homebrew/bin/gopls",
@@ -69,92 +71,62 @@ func hasGoProjectFiles(_ context.Context, fs workspaceapi.FileSystem) bool {
 // or an error if every strategy failed; the caller is responsible for
 // surfacing the failure to the user.
 //
-// Resolution order:
-//  1. lspPath verbatim, when non-empty (config override wins).
-//  2. `$SHELL -lc 'command -v gopls'` through the workspace executor.
-//  3. fs.Stat against wellKnownGoplsPaths in order.
+// Resolution order (cheapest, most deterministic first):
+//  1. <dataDir>/bin/gopls — the standard package-install location.
+//     Rune installs gopls there, so this is the answer for the vast
+//     majority of workspaces.
+//  2. fs.Stat against wellKnownGoplsPaths in order. Tilde paths are
+//     expanded by fs.Stat via workspaceapi.ExpandPath against the
+//     workspace host's $HOME.
+//  3. `sh -lc 'command -v gopls'` through the workspace executor, as
+//     a last resort for users who installed gopls outside the
+//     well-known set.
+//
+// The `lsp_path` config override is handled by the caller in
+// resolveGoplsForWorkspace and bypasses this function entirely.
 func resolveGoplsBinary(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
-	lspPath string,
+	dataDir string,
 ) (string, error) {
-	if lspPath != "" {
-		return lspPath, nil
+	candidate := path.Join(dataDir, "bin", "gopls")
+	if info, err := fs.Stat(candidate); err == nil && info != nil && !info.IsDir() {
+		return candidate, nil
+	}
+
+	if bin, ok := probeWellKnown(fs); ok {
+		return bin, nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, goplsResolutionTimeout)
 	defer cancel()
-
-	shell, home := probeEnv(ctx, exec)
-
-	if bin, err := probeShellLookup(ctx, exec, shell); err == nil {
-		return bin, nil
-	}
-
-	if bin, ok := probeWellKnown(fs, home); ok {
+	if bin, err := probeShellLookup(ctx, exec); err == nil {
 		return bin, nil
 	}
 
 	return "", errors.New("gopls binary not found on workspace host")
 }
 
-// probeEnv reads $SHELL and $HOME from the workspace host by running
-// `sh -c 'printf ...'`. Either value may be empty if the probe fails
-// or the variable is unset.
-func probeEnv(
-	ctx context.Context, exec workspaceapi.Executor,
-) (shell, home string) {
-	var stdout bytes.Buffer
-	ch := make(chan error, 1)
-	cmd := workspaceapi.Cmd{
-		Path:    "sh",
-		Args:    []string{"-c", `printf '%s\n%s\n' "$SHELL" "$HOME"`},
-		Stdout:  &stdout,
-		Watcher: workspaceapi.ChanProcessWatcher(ch),
-	}
-	if _, err := exec.Start(ctx, cmd); err != nil {
-		return "", ""
-	}
-	select {
-	case err := <-ch:
-		if err != nil {
-			return "", ""
-		}
-	case <-ctx.Done():
-		return "", ""
-	}
-	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
-	if len(lines) > 0 {
-		shell = strings.TrimSpace(lines[0])
-	}
-	if len(lines) > 1 {
-		home = strings.TrimSpace(lines[1])
-	}
-	return shell, home
-}
-
-// probeShellLookup runs `<shell> -lc 'command -v gopls'` and returns
-// the absolute path printed by the shell, or an error if the probe
-// failed or returned a non-absolute path. If shell is empty, "sh" is
-// used.
+// probeShellLookup runs `sh -lc 'command -v gopls'` through the
+// workspace executor and returns the absolute path printed by the
+// shell, or an error if the probe failed or returned a non-absolute
+// path. The login flag is preserved so users whose gopls lives only
+// on the interactive PATH still get resolved.
 func probeShellLookup(
-	ctx context.Context, exec workspaceapi.Executor, shell string,
+	ctx context.Context, exec workspaceapi.Executor,
 ) (string, error) {
-	if shell == "" {
-		shell = "sh"
-	}
 	var stdout, stderr bytes.Buffer
 	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
-		Path:    shell,
+		Path:    "sh",
 		Args:    []string{"-lc", "command -v gopls"},
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 		Watcher: workspaceapi.ChanProcessWatcher(ch),
 	}
 	if _, err := exec.Start(ctx, cmd); err != nil {
-		return "", fmt.Errorf("start %s: %w", shell, err)
+		return "", fmt.Errorf("start sh: %w", err)
 	}
 	select {
 	case err := <-ch:
@@ -179,20 +151,19 @@ func probeShellLookup(
 	return "", fmt.Errorf("shell probe produced no absolute path: %q", out)
 }
 
-// probeWellKnown Stat's each well-known location in order, returning
+// probeWellKnown Stats each well-known location in order and returns
 // the first path that exists and is not a directory. Tilde-prefixed
-// paths are skipped when home is empty.
-func probeWellKnown(
-	fs workspaceapi.FileSystem, home string,
-) (string, bool) {
+// candidates are expanded via fs.URI (which calls
+// workspaceapi.ExpandPath against the workspace host's $HOME) before
+// being returned, so the resolver always hands a fully-resolved
+// absolute path to gopls.
+func probeWellKnown(fs workspaceapi.FileSystem) (string, bool) {
 	for _, candidate := range wellKnownGoplsPaths {
-		full := candidate
-		if strings.HasPrefix(candidate, "~/") {
-			if home == "" {
-				continue
-			}
-			full = path.Join(home, strings.TrimPrefix(candidate, "~/"))
+		uri, err := fs.URI(candidate)
+		if err != nil {
+			continue
 		}
+		full := uri.Path()
 		info, err := fs.Stat(full)
 		if err != nil || info == nil || info.IsDir() {
 			continue

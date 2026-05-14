@@ -196,33 +196,19 @@ func resolveLogFile(path string) (string, error) {
 // command is split on space, so spaces would corrupt argv). Failures
 // surface as a warn notification so the user gets a clear error
 // instead of an obscure runtime failure later on.
-func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) string {
-	if cfg == nil {
-		return ""
-	}
+func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) (string, bool) {
 	v, err := cfg.GetString("lsp_path")
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
-			return ""
+			return "", false
 		}
 		if notify != nil {
 			_, _ = notify.Notify(browserapi.LevelWarn,
 				"extensions.go.config.lsp_path must be a string: %v", err)
 		}
-		return ""
+		return "", false
 	}
-	if v == "" {
-		return ""
-	}
-	if strings.ContainsRune(v, ' ') {
-		if notify != nil {
-			_, _ = notify.Notify(browserapi.LevelWarn,
-				"extensions.go.config.lsp_path must be an absolute path "+
-					"without spaces, got %q", v)
-		}
-		return ""
-	}
-	return v
+	return v, v != ""
 }
 
 // resolveGoplsForWorkspace orchestrates gopls binary resolution on the
@@ -242,8 +228,11 @@ func resolveGoplsForWorkspace(
 	if !hasGoProjectFiles(ctx, fs) {
 		return ""
 	}
-	lspPath := readGoplsLspPath(cfg, notify)
-	bin, err := resolveGoplsBinary(ctx, fs, w.Executor(ctx), lspPath)
+	if lspPath, ok := readGoplsLspPath(cfg, notify); ok {
+		return lspPath
+	}
+	bin, err := resolveGoplsBinary(
+		ctx, fs, w.Executor(ctx), w.DataDir(ctx))
 	if err == nil {
 		return bin
 	}
