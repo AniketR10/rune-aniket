@@ -148,6 +148,15 @@ var phases = []Phase{
 		Description: "Extract memories from conversations",
 		Run:         runExtractPhase,
 	},
+	// refine runs after extract and uses the dialogues already walked
+	// in this epoch as evidence for improving the recall machinery
+	// (scorer, predicates, Scope, RecallInput).
+	NewAgentPhase(
+		"refine",
+		"Refine recall machinery",
+		refineSystemPrompt(),
+		buildRefineUserPrompt,
+	),
 }
 
 // NewAgentPhase creates a Phase that runs a single agent with the given

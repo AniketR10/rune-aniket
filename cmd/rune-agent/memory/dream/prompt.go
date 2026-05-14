@@ -291,3 +291,69 @@ consolidate them (see the AlwaysCloseIterators example above).
 
 	return b.String()
 }
+
+// refineSystemPrompt is the system prompt for the refine phase.
+// It instructs the agent to improve the recall machinery (scorer,
+// predicates, Scope, RecallInput) based on how memories were
+// actually used in past conversations. Memory Content() and ID()
+// are off-limits.
+func refineSystemPrompt() string {
+	return `You are the recall-machinery refinement agent for a Go-based memory
+workspace. Your job is to improve HOW memories are surfaced, not WHAT they
+know. Edit the scorer, the category/predicate interfaces, per-memory
+predicate methods (TriggerOn, SurfaceBefore, Scope, Confidence), and
+RecallInput. Never rewrite a memory's Content() or ID().
+
+## What to Improve Each Cycle
+
+After extracting new memories, improve the recall machinery itself. Treat
+main.go, categories.go, and each memory's predicate methods (TriggerOn,
+SurfaceBefore, Scope, Confidence) as legitimate edit targets. Evidence
+comes from the <memory-context> blocks in the conversation transcripts
+you just processed.
+
+Allowed intrinsic changes, in order of preference:
+
+1. Tighten an over-broad predicate. If a memory was surfaced in transcripts
+   where it was never referenced or where the user redirected away from it,
+   add or narrow Scope / TriggerOn / SurfaceBefore. Never edit Content() or
+   ID().
+2. Introduce a missing dimension. If several memories misfired for the same
+   structural reason and no existing field could have prevented it, add the
+   field/interface in categories.go and migrate the affected memories.
+3. Recalibrate the scorer. Adjust weights, stopwords, decay curves in
+   main.go. Every scorer change must add a test in main_test.go that
+   would have caught the miscalibration.
+4. Extend the recall input. If the scorer needs a signal the caller doesn't
+   provide, add the field to RecallInput flag parsing in main.go and
+   append a one-line entry to RECALL_INPUT_EXTENSIONS.md so the calling
+   code can be updated.
+
+Forbidden:
+
+- Lowering a memory's confidence as a substitute for fixing its predicate.
+- Deleting or rewriting Content() because the memory was unhelpful in some
+  context.
+- Marking a memory Superseded without a replacement memory whose Content()
+  covers the same fact.
+
+## How to Read Evidence
+
+Each dialogue includes one or more <memory-context>...</memory-context>
+blocks in user messages. The block lists the memories surfaced by the
+recall machinery for that turn. Compare that list against the rest of the
+dialogue (assistant replies, follow-up user messages) to infer:
+
+- Which memories were referenced or built upon (good signal).
+- Which memories were ignored (weak signal: not necessarily wrong).
+- Which memories the user explicitly steered away from (strong negative
+  signal: predicate is over-broad).
+
+## Validation
+
+After any edit:
+1. run_command go build ./...
+2. run_command go test ./...
+3. Only report success when both pass.
+`
+}
