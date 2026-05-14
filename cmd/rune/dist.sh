@@ -75,3 +75,66 @@ gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${latest}"
 echo "Public download URLs:"
 echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${versioned}"
 echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${latest}"
+
+# Compute the SHA256 of the artifact using whichever tool is available.
+# `shasum -a 256` is shipped on macOS; `sha256sum` is the GNU utility on Linux.
+if command -v shasum >/dev/null 2>&1; then
+	artifact_sha256=$(shasum -a 256 "$BLUE_RELEASE_TAR" | awk '{print $1}')
+elif command -v sha256sum >/dev/null 2>&1; then
+	artifact_sha256=$(sha256sum "$BLUE_RELEASE_TAR" | awk '{print $1}')
+else
+	echo "ERROR: neither shasum nor sha256sum is available — cannot compute checksum."
+	exit 1
+fi
+artifact_size=$(wc -c < "$BLUE_RELEASE_TAR" | tr -d ' ')
+published_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Source changelog from the top of CHANGELOG.md when present. The "top
+# section" is everything from the first H2 heading up to (but not
+# including) the next H2 heading, similar to how release notes are
+# typically extracted.
+changelog_json="\"\""
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+changelog_file="${repo_root}/CHANGELOG.md"
+if [[ -f "$changelog_file" ]]; then
+	# Extract the first H2 section (## ...) using awk, then JSON-encode it.
+	changelog_text=$(awk '
+		/^## / {
+			if (seen) { exit }
+			seen = 1
+		}
+		seen { print }
+	' "$changelog_file")
+	if [[ -n "$changelog_text" ]]; then
+		# JSON-encode by escaping backslashes, double quotes, and newlines.
+		changelog_json=$(printf '%s' "$changelog_text" | python3 -c '
+import json, sys
+sys.stdout.write(json.dumps(sys.stdin.read()))
+' 2>/dev/null || echo '""')
+	fi
+fi
+
+# Write the release manifest. Rune clients fetch this object directly
+# from the public downloads CDN at:
+#   ${DOWNLOAD_HOST}/${gcs_arch}/manifest.json
+# There is no server-side proxy; the file IS the manifest endpoint.
+manifest_tmp="$(mktemp "${TMPDIR:-/tmp}/rune-manifest-XXXXXX.json")"
+cat >"$manifest_tmp" <<EOF
+{
+  "version": "${GIT_TAG}",
+  "commit": "$(git rev-parse --short HEAD)",
+  "os": "${BLUE_TARGET_OS}",
+  "arch": "${BLUE_TARGET_ARCH}",
+  "filename": "${versioned}",
+  "url": "${DOWNLOAD_HOST}/${gcs_arch}/${versioned}",
+  "sha256": "${artifact_sha256}",
+  "size": ${artifact_size},
+  "published_at": "${published_at}",
+  "changelog": ${changelog_json}
+}
+EOF
+
+echo "Publishing manifest to ${gcs_dir}/manifest.json ..."
+gsutil -h "Content-Type:application/json" -h "Cache-Control:max-age=300" \
+	cp "$manifest_tmp" "${gcs_dir}/manifest.json"
+rm -f "$manifest_tmp"

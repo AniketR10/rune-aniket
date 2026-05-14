@@ -21,7 +21,7 @@ OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package
 # Distribution / release rules below set RUNE_ENV=prod so user-facing builds
 # always target production. Local `make rune` keeps the dev defaults.
 RUNE_ENV ?= dev
-PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443
+PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(PROD_DOWNLOAD_HOST)
 # Use `=` (recursive) so $(RUNE_ENV) is re-evaluated when RUNE_GOFLAGS is expanded
 # in a recipe — this lets target-specific overrides such as
 # `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive

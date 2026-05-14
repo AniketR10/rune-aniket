@@ -1,0 +1,327 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package ideupgrade
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+)
+
+func newTestManager(t *testing.T, baseURL string, current string, now func() time.Time) *Manager {
+	t.Helper()
+	storage := storagestub.NewInMemoryService()
+	cfg := Config{
+		CurrentVersion: current,
+		Arch:           "darwin-arm64",
+		ManifestURL:    baseURL,
+		Storage:        storage,
+		HTTPClient:     http.DefaultClient,
+		Now:            now,
+		InitialDelay:   time.Millisecond,
+		CheckPeriod:    24 * time.Hour,
+	}
+	mgr, err := newWithPlatformOps(cfg, &fakePlatformOps{})
+	require.NoError(t, err)
+	return mgr
+}
+
+func TestManagerFetchManifest(t *testing.T) {
+	manifest := Manifest{
+		Version:  "v1.2.3",
+		OS:       "darwin",
+		Arch:     "arm64",
+		Filename: "Rune-v1.2.3.dmg",
+		URL:      "https://example.invalid/Rune-v1.2.3.dmg",
+		SHA256:   "abc",
+		Size:     42,
+	}
+
+	var requested atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested.Add(1)
+		require.Equal(t, "/darwin-arm64/manifest.json", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(manifest)
+	}))
+	t.Cleanup(srv.Close)
+
+	tests := []struct {
+		name    string
+		current string
+		setup   func(*Manager)
+		wantHas bool
+	}{
+		{
+			name:    "newer version returns hit",
+			current: "v1.0.0",
+			wantHas: true,
+		},
+		{
+			name:    "same version is no-op",
+			current: "v1.2.3",
+			wantHas: false,
+		},
+		{
+			name:    "skipped version is no-op",
+			current: "v1.0.0",
+			setup: func(m *Manager) {
+				m.skipVersion(context.Background(), "v1.2.3")
+			},
+			wantHas: false,
+		},
+		{
+			name:    "remind_after in future is no-op",
+			current: "v1.0.0",
+			setup: func(m *Manager) {
+				m.remindLater(context.Background())
+			},
+			wantHas: false,
+		},
+		{
+			name:    "empty current version skips",
+			current: "",
+			wantHas: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+			mgr := newTestManager(t, srv.URL, tc.current, now)
+			if tc.setup != nil {
+				tc.setup(mgr)
+			}
+			got, has, err := mgr.fetchManifest(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tc.wantHas, has)
+			if tc.current != "" && tc.wantHas {
+				require.Equal(t, manifest.Version, got.Version)
+			}
+		})
+	}
+}
+
+func TestManagerFetchManifestErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		handler    http.HandlerFunc
+		wantErr    string
+		wantHasHit bool
+	}{
+		{
+			name: "404 is treated as no manifest",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.NotFound(w, nil)
+			},
+			wantErr:    "",
+			wantHasHit: false,
+		},
+		{
+			// GCS returns 403 (not 404) when a public-read object
+			// does not exist, because the caller doesn't have
+			// permission to enumerate the bucket. Treat it the
+			// same as 404 so a not-yet-published manifest is a
+			// silent "you're up to date" rather than a noisy
+			// surfaced error.
+			name: "403 is treated as no manifest",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+			},
+			wantErr:    "",
+			wantHasHit: false,
+		},
+		{
+			name: "500 is an error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "boom", http.StatusInternalServerError)
+			},
+			wantErr: "status 500",
+		},
+		{
+			name: "missing required fields is an error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"version":"v9.9.9"}`))
+			},
+			wantErr: "missing required fields",
+		},
+		{
+			name: "not json at all is a decode error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`not a json document <html>...`))
+			},
+			wantErr: "decode manifest",
+		},
+		{
+			name: "empty body is a decode error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+			},
+			wantErr: "decode manifest",
+		},
+		{
+			name: "truncated json is a decode error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"version":"v9.9.9","url":"https://x/y"`))
+			},
+			wantErr: "decode manifest",
+		},
+		{
+			name: "wrong field type is a decode error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				// `size` should be an int but is a string.
+				_, _ = w.Write([]byte(
+					`{"version":"v9","url":"u","sha256":"s","size":"big"}`))
+			},
+			wantErr: "decode manifest",
+		},
+		{
+			name: "missing version is a required-field error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(
+					`{"url":"https://x/y","sha256":"abc"}`))
+			},
+			wantErr: "missing required fields",
+		},
+		{
+			name: "missing url is a required-field error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(
+					`{"version":"v9","sha256":"abc"}`))
+			},
+			wantErr: "missing required fields",
+		},
+		{
+			name: "missing sha256 is a required-field error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(
+					`{"version":"v9","url":"https://x/y"}`))
+			},
+			wantErr: "missing required fields",
+		},
+		{
+			name: "oversized body is truncated and fails to decode",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				// Open a JSON object then write >1 MiB of padding inside
+				// a string value. fetchManifest caps reads at 1 MiB so
+				// the body never closes, producing a decode error.
+				_, _ = w.Write([]byte(`{"version":"v9","url":"u","sha256":"s","changelog":"`))
+				pad := make([]byte, 1<<20)
+				for i := range pad {
+					pad[i] = 'a'
+				}
+				_, _ = w.Write(pad)
+				_, _ = w.Write([]byte(`"}`))
+			},
+			wantErr: "decode manifest",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(tc.handler)
+			t.Cleanup(srv.Close)
+			now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+			mgr := newTestManager(t, srv.URL, "v1.0.0", now)
+			_, has, err := mgr.fetchManifest(context.Background())
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				require.Equal(t, tc.wantHasHit, has)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
+func TestManagerThrottle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"version":"v9","os":"darwin","arch":"arm64","filename":"f","url":"u","sha256":"s"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	now := time.Unix(1_700_000_000, 0)
+	clock := now
+	mgr := newTestManager(t, srv.URL, "v1", func() time.Time { return clock })
+	require.False(t, mgr.isThrottled(context.Background()))
+
+	mgr.persistChecked(context.Background())
+	require.True(t, mgr.isThrottled(context.Background()))
+
+	clock = now.Add(25 * time.Hour)
+	require.False(t, mgr.isThrottled(context.Background()))
+}
+
+func TestManifestEndpoint(t *testing.T) {
+	tests := []struct {
+		base, arch, want string
+	}{
+		{"https://downloads.rune.build", "darwin-arm64",
+			"https://downloads.rune.build/darwin-arm64/manifest.json"},
+		{"https://downloads.rune.build/", "linux-amd64",
+			"https://downloads.rune.build/linux-amd64/manifest.json"},
+		// Any base-path prefix is preserved so callers can host the
+		// downloads CDN under a sub-path if needed.
+		{"https://example.test/cdn", "linux-arm64",
+			"https://example.test/cdn/linux-arm64/manifest.json"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.base+"+"+tc.arch, func(t *testing.T) {
+			got, err := manifestEndpoint(tc.base, tc.arch)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+
+			// Sanity-check the result is parseable.
+			_, err = url.Parse(got)
+			require.NoError(t, err)
+			require.True(t, strings.HasSuffix(got, "/"+tc.arch+"/manifest.json"))
+		})
+	}
+}
+
+func TestNewRequiresFields(t *testing.T) {
+	_, err := New(Config{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Storage")
+
+	_, err = New(Config{Storage: storagestub.NewInMemoryService()})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ManifestURL")
+}

@@ -260,6 +260,20 @@ config = {
         # is a quick burn sweep that reveals the new content.
         "open_workspace":    True,
     },
+    # Self-upgrade configuration. Rune polls a public manifest endpoint
+    # to discover new releases and prompts before installing them.
+    "upgrade": {
+        # When True, Rune periodically checks for a newer release and
+        # prompts to install it. Set to False to opt out — the
+        # `:upgrade` command continues to work either way.
+        "auto_check_enabled": True,
+        # How often the background check runs. Accepts any Go duration
+        # string (e.g. "12h", "168h").
+        "check_period":       "24h",
+        # Release channel. Reserved for future use; only "stable" is
+        # currently honoured.
+        "channel":            "stable",
+    },
     "gui": {
         # Add or remove pixels from the font's default column width.
         "column-width-offset": -1,

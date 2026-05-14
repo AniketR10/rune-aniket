@@ -514,6 +514,19 @@ func runTUI(
 			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
 		})
 
+	upgradeCtx, upgradeCancel := context.WithCancel(context.Background())
+	defer upgradeCancel()
+	upgradeMgr := scheduleUpgradeCheck(upgradeCtx, i, apiclient.DefaultDownloadsHost,
+		func(fn func()) bool {
+			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
+		})
+	if err := subscribeUpgradeCommands(i, upgradeMgr); err != nil {
+		log.Errorf("subscribe upgrade commands: %v", err)
+	}
+	defer func() {
+		_ = upgradeMgr.Close()
+	}()
+
 	var ret error
 	if err := doRunTUI(mu, i); err != nil {
 		ret = multierr.Append(ret, err)
@@ -722,6 +735,19 @@ func runGUI(
 		func(fn func()) bool {
 			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
 		})
+
+	upgradeCtx, upgradeCancel := context.WithCancel(context.Background())
+	defer upgradeCancel()
+	upgradeMgr := scheduleUpgradeCheck(upgradeCtx, i, apiclient.DefaultDownloadsHost,
+		func(fn func()) bool {
+			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
+		})
+	if err := subscribeUpgradeCommands(i, upgradeMgr); err != nil {
+		log.Errorf("subscribe upgrade commands: %v", err)
+	}
+	defer func() {
+		_ = upgradeMgr.Close()
+	}()
 
 	err = g.Run("Rune")
 	if err != nil && !errors.Is(err, gui.ErrHandlerExited) {

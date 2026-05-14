@@ -44,6 +44,16 @@ var (
 	DefaultGRPCEndpointAddress = "rpc.unstable.build:443"
 )
 
+// DefaultDownloadsHost is the public CDN origin that hosts the
+// per-arch release manifest (`<host>/<os>-<arch>/manifest.json`) and
+// artifacts. The in-product `:upgrade` flow reads from this host.
+//
+// Defaults to the staging downloads bucket. Production release builds
+// override it via `-ldflags -X` to point at the prod CDN — users
+// should never have to think about this. Not a constant so the linker
+// can replace it; do not assign to it at runtime.
+var DefaultDownloadsHost = "https://storage.googleapis.com/downloads.unstable.build"
+
 // defaultReleaseCollection returns the Firestore collection name for
 // the current platform, e.g. "rune-release-darwin-arm64". The prefix
 // is shared across dev and prod intentionally: collections live in

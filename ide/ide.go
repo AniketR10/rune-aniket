@@ -150,6 +150,14 @@ func (i *IDE) Browser() browser.Browser {
 	return i.workspaceHandler.focusBrowser()
 }
 
+// WindowManager returns a browserapi.WindowManager that routes calls
+// to the workspace currently in focus. Use this when registering UI
+// elements (e.g. floating prompts) that need to remain attached to
+// the focused workspace as the user switches between them.
+func (i *IDE) WindowManager() browserapi.WindowManager {
+	return currentWorkspaceWindowManager{root: i.workspaceHandler}
+}
+
 // Storage returns persistent storage acrosss IDE instances, given
 // the same data dir passed in ide.New, or ide.NewRecovery.
 func (i *IDE) Storage() storageapi.Service {
