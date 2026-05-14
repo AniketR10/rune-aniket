@@ -34,13 +34,8 @@ RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.bu
 PROD_DOWNLOADS_BUCKET    ?= gs://downloads.rune.build
 STAGING_DOWNLOADS_BUCKET ?= gs://downloads.unstable.build
 
-# Public HTTP origin printed by dist.sh and (for ox-api builds) baked
-# into the install.sh download URL via -ldflags. Prod uses the custom
-# domain backed by a GCS-fronting HTTPS load balancer; staging is
-# served straight off the bucket via the generic storage.googleapis.com
-# origin (no custom-domain LB stood up for it).
 PROD_DOWNLOAD_HOST       ?= https://downloads.rune.build
-STAGING_DOWNLOAD_HOST    ?= https://storage.googleapis.com/downloads.unstable.build
+STAGING_DOWNLOAD_HOST    ?= https://downloads.unstable.build
 
 # DIST_BUCKET / DIST_DOWNLOAD_HOST are set per-target by prod-dist-* /
 # staging-dist-* and threaded into dist.sh via DOWNLOADS_BUCKET and

@@ -52,7 +52,7 @@ var (
 // override it via `-ldflags -X` to point at the prod CDN — users
 // should never have to think about this. Not a constant so the linker
 // can replace it; do not assign to it at runtime.
-var DefaultDownloadsHost = "https://storage.googleapis.com/downloads.unstable.build"
+var DefaultDownloadsHost = "https://downloads.unstable.build"
 
 // defaultReleaseCollection returns the Firestore collection name for
 // the current platform, e.g. "rune-release-darwin-arm64". The prefix
