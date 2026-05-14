@@ -736,6 +736,8 @@ func permissionActionText(permission extensionapi.Permission) string {
 		return "communicate with LSP servers"
 	case extensionapi.PermissionDebugger:
 		return "communicate with DAP servers"
+	case extensionapi.PermissionLLM:
+		return "use the host LLM service"
 	default:
 		return fmt.Sprintf("access permission %s", permission)
 	}

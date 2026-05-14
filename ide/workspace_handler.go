@@ -45,6 +45,7 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -123,6 +124,7 @@ type workspaceManagerHandler struct {
 	extensionRunner    ExtensionsRunner
 	sixDir             string
 	configPath         string
+	llmService         llmapi.Service
 	frameCharSet       component.FrameCharSet
 	tabBarOffset       int
 	tabBarHeight       int
@@ -1655,6 +1657,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 	}
 	res = extension.MergeResourceMap(res, extension.SemanticResources(lsp))
 	res = extension.MergeResourceMap(res, extension.DebugResources(dap))
+	if h.llmService != nil {
+		res = extension.MergeResourceMap(res, extension.LLMResources(h.llmService))
+	}
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
