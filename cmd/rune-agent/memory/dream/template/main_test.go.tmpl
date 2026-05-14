@@ -211,6 +211,69 @@ func TestFetchConversation_InterfaceCompliance(t *testing.T) {
 	}
 }
 
+func TestInScope_UnscopedAlwaysIn(t *testing.T) {
+	m := testMemory{}
+	if !inScope(m, []string{"/some/workspace"}) {
+		t.Fatal("expected unscoped memory to always be in scope")
+	}
+}
+
+func TestInScope_ScopedMatchingWorkspace(t *testing.T) {
+	m := testScopedMemory{workspaces: []string{"/repo/rune"}}
+	if !inScope(m, []string{"/repo/rune"}) {
+		t.Fatal("expected scoped memory matching workspace to be in scope")
+	}
+}
+
+func TestInScope_ScopedDisjointWorkspace(t *testing.T) {
+	m := testScopedMemory{workspaces: []string{"/repo/rune"}}
+	if inScope(m, []string{"/repo/docs-rune"}) {
+		t.Fatal("expected scoped memory with disjoint workspace to be out of scope")
+	}
+}
+
+func TestInScope_ScopedEmptyWorkspacesAlwaysIn(t *testing.T) {
+	m := testScopedMemory{workspaces: nil}
+	if !inScope(m, []string{"/repo/rune"}) {
+		t.Fatal("expected scoped memory with empty Workspaces to always be in scope")
+	}
+}
+
+func TestInScope_CallerWithoutWorkspaceDoesNotFilter(t *testing.T) {
+	m := testScopedMemory{workspaces: []string{"/repo/rune"}}
+	if !inScope(m, nil) {
+		t.Fatal("expected no filtering when caller did not declare a workspace")
+	}
+}
+
+func TestScore_IDWordMatch_StopwordsIgnored(t *testing.T) {
+	m := testIDOnlyMemory{id: "rune-agent-memory"}
+	// "rune", "agent", "memory" are all stopwords; should not score.
+	s := score(m, nil, nil, "rune agent memory module")
+	if s != 0 {
+		t.Fatalf("expected stopword-only ID match to score 0, got %f", s)
+	}
+}
+
+func TestScore_IDWordMatch_CappedAtTwo(t *testing.T) {
+	m := testIDOnlyMemory{id: "alpha-beta-gamma-delta-epsilon"}
+	s := score(m, nil, nil, "alpha beta gamma delta epsilon")
+	// Five distinct non-stopword hits should be capped at 2.
+	if s != 2 {
+		t.Fatalf("expected ID-word score capped at 2, got %f", s)
+	}
+}
+
+func TestScore_TriggerBeatsIDWord(t *testing.T) {
+	idMemory := testIDOnlyMemory{id: "alpha-beta-gamma-delta-epsilon"}
+	trigMemory := testEpisodicMemory{} // file trigger "iterator.go" scores 3
+	idScore := score(idMemory, nil, nil, "alpha beta gamma delta epsilon")
+	trigScore := score(trigMemory, []string{"iterator.go"}, nil, "")
+	if trigScore <= idScore {
+		t.Fatalf("expected trigger score (%f) to beat ID-word score (%f)", trigScore, idScore)
+	}
+}
+
 // --- Test types ---
 
 type testMemory struct{}
@@ -278,5 +341,29 @@ func (testDependentMemory) ID() string         { return "test-dependent" }
 func (testDependentMemory) Content() string    { return "dependent memory content" }
 func (testDependentMemory) DependsOn() []string { return []string{"test-memory"} }
 func (testDependentMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}
+
+type testScopedMemory struct {
+	workspaces []string
+}
+
+func (testScopedMemory) ID() string      { return "test-scoped" }
+func (testScopedMemory) Content() string { return "scoped memory content" }
+func (testScopedMemory) FetchConversation(context.Context) (Dialogue, error) {
+	return Dialogue{}, nil
+}
+func (m testScopedMemory) Scope() Scope { return Scope{Workspaces: m.workspaces} }
+
+// testIDOnlyMemory is a semantic memory whose only signal is its ID.
+// It implements no triggers, so its score comes entirely from
+// ID-word matching.
+type testIDOnlyMemory struct {
+	id string
+}
+
+func (m testIDOnlyMemory) ID() string      { return m.id }
+func (testIDOnlyMemory) Content() string   { return "id-only content" }
+func (testIDOnlyMemory) FetchConversation(context.Context) (Dialogue, error) {
 	return Dialogue{}, nil
 }

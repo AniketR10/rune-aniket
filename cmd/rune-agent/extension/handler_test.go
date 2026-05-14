@@ -10607,7 +10607,7 @@ type mockMemoryRecaller struct {
 	delay    time.Duration // simulated recall latency
 }
 
-func (m *mockMemoryRecaller) Recall(_ context.Context, _ []string, _ string) ([]agent.Memory, error) {
+func (m *mockMemoryRecaller) Recall(_ context.Context, _ []string, _ string, _ string) ([]agent.Memory, error) {
 	if m.delay > 0 {
 		time.Sleep(m.delay)
 	}

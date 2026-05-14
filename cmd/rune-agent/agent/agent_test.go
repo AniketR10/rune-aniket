@@ -3959,7 +3959,7 @@ type staticMemory struct {
 	memories []Memory
 }
 
-func (m staticMemory) Recall(_ context.Context, _ []string, _ string) ([]Memory, error) {
+func (m staticMemory) Recall(_ context.Context, _ []string, _ string, _ string) ([]Memory, error) {
 	return m.memories, nil
 }
 

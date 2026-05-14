@@ -93,7 +93,7 @@ type Memory struct {
 // MemoryRecaller retrieves relevant memories for the current context.
 // Implementations should return (nil, nil) when no memories match.
 type MemoryRecaller interface {
-	Recall(ctx context.Context, files []string, task string) ([]Memory, error)
+	Recall(ctx context.Context, files []string, task string, workspaceRoot string) ([]Memory, error)
 }
 
 // NoMemory returns a MemoryRecaller that always reports no memories.
@@ -102,7 +102,7 @@ func NoMemory() MemoryRecaller { return noMemory{} }
 
 type noMemory struct{}
 
-func (noMemory) Recall(_ context.Context, _ []string, _ string) ([]Memory, error) {
+func (noMemory) Recall(_ context.Context, _ []string, _ string, _ string) ([]Memory, error) {
 	return nil, nil
 }
 
@@ -477,7 +477,7 @@ func (a *Agent) run(
 	// (see below). Memory is recalled once per Run; "every turn" means
 	// every user message / Run() call.
 	recallStart := time.Now()
-	memories, memErr := a.memory.Recall(ctx, a.resourceFiles(), userMessage)
+	memories, memErr := a.memory.Recall(ctx, a.resourceFiles(), userMessage, a.config.Workspace.Path())
 	recallDuration := time.Since(recallStart)
 	if memErr != nil {
 		log.Warn("memory recall failed", "error", memErr)

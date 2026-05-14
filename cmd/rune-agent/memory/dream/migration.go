@@ -64,6 +64,36 @@ After checking:
 3. Only report success when both pass.`,
 		Description: "Added claude.go with FetchClaudeDialogue for Claude Code conversation sources",
 	},
+	4: {
+		From: 3, To: 4,
+		FixPrompt: `You are a code migration agent. The workspace gained an optional Scope dimension:
+
+    type Scope struct {
+        Workspaces []string
+        Repos      []string
+        Languages  []string
+        PathGlobs  []string
+    }
+
+    type ScopedMemory interface {
+        Scope() Scope
+    }
+
+The change is additive: memories that do not implement ScopedMemory are unscoped
+and surface anywhere. main.go now accepts -workspace-root and -workspaces flags
+and filters scoped memories whose Workspaces are disjoint from the caller's set.
+
+No memory file requires changes for the workspace to compile. As an optional
+improvement, you MAY add a Scope() method to existing memories when the scope
+can be inferred from the memory's Content() or its TriggerOn().Files (e.g.
+memories about repository-specific code paths). Do NOT modify Content() or ID().
+
+After any edits:
+1. Run: run_command go build ./...
+2. Run: run_command go test ./...
+3. Only report success when both pass.`,
+		Description: "Added optional Scope dimension and workspace-aware recall filter",
+	},
 }
 
 func init() {

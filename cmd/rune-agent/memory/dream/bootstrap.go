@@ -40,7 +40,7 @@ import (
 //go:embed template
 var templateFS embed.FS
 
-const templateVersion = 3
+const templateVersion = 4
 
 // bootstrapAction describes the action taken by bootstrap.
 type bootstrapAction int

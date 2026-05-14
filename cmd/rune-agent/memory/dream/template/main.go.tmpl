@@ -26,6 +26,8 @@ func main() {
 		budget         int
 		listCategories bool
 		conversation   string
+		workspaceRoot  string
+		workspaces     string
 	)
 
 	flag.StringVar(&files, "files", "", "comma-separated list of current file paths")
@@ -34,6 +36,8 @@ func main() {
 	flag.IntVar(&budget, "budget", 10, "maximum number of memories to surface")
 	flag.BoolVar(&listCategories, "list-categories", false, "list all memories with their categories")
 	flag.StringVar(&conversation, "conversation", "", "memory ID whose source conversation to fetch and print")
+	flag.StringVar(&workspaceRoot, "workspace-root", "", "absolute path of the current workspace root")
+	flag.StringVar(&workspaces, "workspaces", "", "comma-separated list of reachable workspace roots")
 	flag.Parse()
 
 	if conversation != "" {
@@ -65,6 +69,20 @@ func main() {
 
 	filesList := splitCSV(files)
 	errorsList := splitCSV(errs)
+	workspaceList := splitCSV(workspaces)
+	if workspaceRoot != "" {
+		// Ensure workspaceRoot is included in the workspace set.
+		found := false
+		for _, w := range workspaceList {
+			if w == workspaceRoot {
+				found = true
+				break
+			}
+		}
+		if !found {
+			workspaceList = append(workspaceList, workspaceRoot)
+		}
+	}
 
 	// Build supersession set: IDs that have been superseded.
 	superseded := make(map[string]bool)
@@ -85,6 +103,9 @@ func main() {
 	var results []scored
 	for _, m := range registry {
 		if superseded[m.ID()] {
+			continue
+		}
+		if !inScope(m, workspaceList) {
 			continue
 		}
 		s := score(m, filesList, errorsList, task)
@@ -180,20 +201,50 @@ func score(m Memory, files, errors []string, task string) float64 {
 		}
 	}
 
-	// ID word matching against full context.
+	// ID word matching against full context. Stopwords are skipped
+	// because they appear in almost every conversation and would
+	// otherwise dominate the score with noise. The contribution is
+	// capped at 2 so that ID-word coincidence cannot beat a real
+	// trigger match (file=3, error=2).
 	context := strings.ToLower(strings.Join(append(append(files, errors...), task), " "))
 	idWords := strings.FieldsFunc(m.ID(), func(r rune) bool {
 		return r == '-' || r == '_'
 	})
+	idHits := 0
 	for _, w := range idWords {
-		if strings.Contains(context, strings.ToLower(w)) {
-			s++
+		lw := strings.ToLower(w)
+		if idStopwords[lw] {
+			continue
+		}
+		if strings.Contains(context, lw) {
+			idHits++
 		}
 	}
+	if idHits > 2 {
+		idHits = 2
+	}
+	s += float64(idHits)
 
 	s *= relevance(m)
 
 	return s
+}
+
+// idStopwords are words that appear in many memory IDs and the
+// surrounding agent context. Matching them is pure noise.
+var idStopwords = map[string]bool{
+	"memory": true,
+	"agent":  true,
+	"rune":   true,
+	"the":    true,
+	"for":    true,
+	"and":    true,
+	"with":   true,
+	"in":     true,
+	"of":     true,
+	"to":     true,
+	"a":      true,
+	"is":     true,
 }
 
 // relevance computes temporal decay. Semantic memories don't decay.
@@ -226,6 +277,33 @@ func relevance(m Memory) float64 {
 // containsFold reports whether s contains substr, case-insensitive.
 func containsFold(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// inScope reports whether a memory's declared Scope is compatible
+// with the caller's workspace context. Memories that do not
+// implement ScopedMemory are unscoped and always in scope. A
+// scoped memory with an empty Workspaces list applies anywhere.
+func inScope(m Memory, workspaces []string) bool {
+	scoped, ok := m.(ScopedMemory)
+	if !ok {
+		return true
+	}
+	scope := scoped.Scope()
+	if len(scope.Workspaces) == 0 {
+		return true
+	}
+	if len(workspaces) == 0 {
+		// Caller did not declare a workspace; do not filter.
+		return true
+	}
+	for _, declared := range scope.Workspaces {
+		for _, w := range workspaces {
+			if declared == w {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // splitCSV splits a comma-separated string, trimming whitespace and

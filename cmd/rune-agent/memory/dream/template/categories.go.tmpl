@@ -127,6 +127,26 @@ type Confident interface {
 	Confidence() Confidence
 }
 
+// --- Scope ---
+
+// Scope declares where a memory applies. An empty field means
+// "applies anywhere along that dimension". The recall engine
+// filters out scoped memories whose Scope is disjoint from the
+// caller's workspace/repo/language context. Memories that do not
+// implement ScopedMemory are unscoped and always pass the filter.
+type Scope struct {
+	Workspaces []string // workspace roots this memory applies to
+	Repos      []string // repo names or origins
+	Languages  []string // programming languages
+	PathGlobs  []string // path globs within the workspace
+}
+
+// ScopedMemory is implemented by memories whose applicability is
+// limited to particular workspaces, repos, languages, or paths.
+type ScopedMemory interface {
+	Scope() Scope
+}
+
 // --- Relationship interfaces ---
 
 // DependsOn indicates this memory depends on other memories by ID.

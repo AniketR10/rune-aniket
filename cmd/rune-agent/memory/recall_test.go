@@ -226,7 +226,7 @@ func TestRecaller_NotAvailable(t *testing.T) {
 	}
 
 	r := NewRecaller(fs, exec, "/data/memory")
-	_, err := r.Recall(context.Background(), nil, "fix the bug")
+	_, err := r.Recall(context.Background(), nil, "fix the bug", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not available")
 }
@@ -244,7 +244,7 @@ func TestRecaller_Available(t *testing.T) {
 	}
 
 	r := NewRecaller(fs, exec, "/data/memory")
-	memories, err := r.Recall(context.Background(), nil, "fix the bug")
+	memories, err := r.Recall(context.Background(), nil, "fix the bug", "")
 	require.NoError(t, err)
 	require.Len(t, memories, 1)
 	assert.Equal(t, "mem-1", memories[0].ID)

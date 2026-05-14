@@ -65,13 +65,16 @@ func NewRecaller(
 
 // Recall returns relevant memories for the given context, or an error
 // if the workspace is not bootstrapped or the query engine fails.
-func (r *Recaller) Recall(ctx context.Context, files []string, task string) ([]agent.Memory, error) {
+func (r *Recaller) Recall(
+	ctx context.Context, files []string, task string, workspaceRoot string,
+) ([]agent.Memory, error) {
 	if !Available(r.fs, r.dataPath) {
 		return nil, errors.New("memory module not available")
 	}
 	raw, err := Recall(ctx, r.exec, r.dataPath, RecallInput{
-		Files: files,
-		Task:  task,
+		Files:         files,
+		Task:          task,
+		WorkspaceRoot: workspaceRoot,
 	})
 	if err != nil {
 		return nil, err
@@ -111,10 +114,12 @@ func parseMemories(raw string) []agent.Memory {
 
 // RecallInput holds parameters for Recall.
 type RecallInput struct {
-	Files  []string
-	Errors []string
-	Task   string
-	Budget int // 0 uses default (10).
+	Files         []string
+	Errors        []string
+	Task          string
+	Budget        int // 0 uses default (10).
+	WorkspaceRoot string
+	Workspaces    []string
 }
 
 // Recall runs the memory query engine (`go run .`) with the given
@@ -138,6 +143,12 @@ func Recall(
 	}
 	if input.Task != "" {
 		args = append(args, "-task", input.Task)
+	}
+	if input.WorkspaceRoot != "" {
+		args = append(args, "-workspace-root", input.WorkspaceRoot)
+	}
+	if len(input.Workspaces) > 0 {
+		args = append(args, "-workspaces", strings.Join(input.Workspaces, ","))
 	}
 	args = append(args, "-budget", strconv.Itoa(budget))
 
