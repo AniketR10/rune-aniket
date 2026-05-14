@@ -1409,7 +1409,9 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if h.generatePlanPath != nil {
 		exitPlan.GeneratePlanPath = h.generatePlanPath
 	}
-	memRecaller := memory.NewRecaller(h.fs, h.executor, h.memoryPath)
+	memRecaller := memory.NewGuardedRecaller(
+		memory.NewRecaller(h.fs, h.executor, h.memoryPath), h.config,
+	)
 	spawner := agent.NewGoroutineSpawner(
 		h.dialogueStore, serviceFactory,
 		h.agentsConfig,
