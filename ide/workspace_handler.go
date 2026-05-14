@@ -90,6 +90,7 @@ const (
 	cmdReloadWorkspace   = "workspacereload"
 	cmdAddWorkspace      = "workspacenew"
 	cmdRenameWorkspace   = "workspacerename"
+	cmdWorkspaceReady    = "workspaceready"
 	cmdMacroRecord       = "record"
 	workspaceSlots       = 9
 )
@@ -166,6 +167,14 @@ type workspaceManagerHandler struct {
 	// position in h.workspaces so concurrent addWorkspace calls do
 	// not collide.
 	pending map[string]*pendingWorkspace
+	// lastReservedPending tracks the most recently reserved
+	// pendingWorkspace whose Phase B is still in flight. It is set
+	// in reservePendingSlot and cleared in installPendingWorkspace
+	// or doCloseWorkspace when the pending entry it points at is
+	// torn down. The `workspaceready` command consults this to
+	// decide whether to enqueue against the most recent pending
+	// build or dispatch inline.
+	lastReservedPending *pendingWorkspace
 	// pendingWG counts in-flight Phase B builds (and the scheduled
 	// Phase C closure they enqueue). Tests use it via
 	// waitForWorkspaces to block until all installs land. Production
@@ -192,6 +201,12 @@ type pendingWorkspace struct {
 	// must be aborted; the goroutine and the install closure both
 	// check it before installing the handler.
 	canceled atomic.Bool
+	// onReady holds commands enqueued by `workspaceready` while this
+	// pending build is in flight. They are dispatched against the
+	// freshly-installed workspace's ex in installPendingWorkspace,
+	// in the same event-loop turn as switchToWorkspace, so callers
+	// observe them as if issued by the new workspace itself.
+	onReady [][]string
 }
 
 type visibleWorkspaceManager struct {
@@ -1051,6 +1066,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 		if !scheduled {
 			h.mu.Lock()
 			delete(h.pending, uri.String())
+			if h.lastReservedPending == pending {
+				h.lastReservedPending = nil
+			}
 			h.mu.Unlock()
 			cancel()
 			h.pendingWG.Done()
@@ -1139,6 +1157,11 @@ func (h *workspaceManagerHandler) reservePendingSlot(
 		cancelCtx: cancel,
 	}
 	h.pending[uri.String()] = pending
+	// Track the most recently reserved pending workspace so a
+	// follow-up `workspaceready` issued in the same alias (before
+	// focus has switched) attaches to this build rather than the
+	// previously focused workspace's ex.
+	h.lastReservedPending = pending
 	return pending, nil
 }
 
@@ -1299,6 +1322,9 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	// dispatch (gui.Update / tui.Run), which already holds h.mu —
 	// so we run with the IDE lock held without re-locking here.
 	delete(h.pending, uri.String())
+	if h.lastReservedPending == pending {
+		h.lastReservedPending = nil
+	}
 
 	// Stop the loading shader at the very end of this Phase C, *in the
 	// same event-loop turn*. We previously deferred stopLoading through
@@ -1399,6 +1425,21 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	h.workspaces[pending.slot] = wh
 	h.workspaceCount++
 	h.switchToWorkspace(pending.slot)
+
+	// Drain any commands enqueued via `workspaceready` while this
+	// pending build was in flight. They run against the freshly
+	// focused ex, in the same event-loop turn, so semantics match
+	// "the new workspace just opened and then ran these commands".
+	for _, cmd := range pending.onReady {
+		if len(cmd) == 0 {
+			continue
+		}
+		if err := ex.dispatchCommand(cmd[0], cmd[1:]...); err != nil {
+			_, _ = h.notifications.current().Notify(browserapi.LevelError,
+				"workspaceready %s: %v", cmd[0], err)
+		}
+	}
+	pending.onReady = nil
 
 	h.logNonFatalErrs(wh.Browser(), built.configErr, built.cfg.errors)
 
@@ -1826,6 +1867,26 @@ func (h *workspaceManagerHandler) commandRenameWorkspace(args ...string) error {
 	return nil
 }
 
+// commandWorkspaceReady defers another command until the most-recently
+// reserved pending workspace has finished installing. If no pending
+// workspace exists, the command is dispatched inline against the
+// currently focused ex. It is intended for aliases like `worktreenew`
+// that fire `workspacenew` and then want a follow-up step (e.g.
+// `workspacerename $1`) to run on the *new* workspace rather than the
+// previously focused one.
+func (h *workspaceManagerHandler) commandWorkspaceReady(args ...string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("expected at least one argument with the command to run")
+	}
+	if h.lastReservedPending != nil {
+		cmd := append([]string(nil), args...)
+		h.lastReservedPending.onReady = append(h.lastReservedPending.onReady, cmd)
+		return nil
+	}
+	ex := h.exHandler(h.focusHandler())
+	return ex.dispatchCommand(args[0], args[1:]...)
+}
+
 func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
 	return h.doCloseWorkspace(true)
 }
@@ -1854,6 +1915,9 @@ func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
 		pending.canceled.Store(true)
 		pending.cancelCtx()
 		delete(h.pending, uri.String())
+		if h.lastReservedPending == pending {
+			h.lastReservedPending = nil
+		}
 		h.history.recordCloseWorkspace(uri)
 		return uri, nil, nil
 	}
@@ -2187,6 +2251,16 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9)",
 			},
 			handler: (*workspaceManagerHandler).moveWorkspace,
+		},
+		cmdWorkspaceReady: {
+			handler: (*workspaceManagerHandler).commandWorkspaceReady,
+			man: textapi.CommandManual{
+				Summary: "Runs another workspace command once the most recently " +
+					"issued `workspacenew` has finished loading. If no workspace is " +
+					"currently being loaded, the command is dispatched immediately " +
+					"against the focused workspace.",
+				Synopsis: "command [args...]",
+			},
 		},
 	}
 	return h.subscribeInternalCommands(ex, workspaceActiveCommands)

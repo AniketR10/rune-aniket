@@ -6,7 +6,7 @@ aliases = {
     "worktreenew": [
         '!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1',
         "workspacenew $RUNE_DATADIR/worktrees/$1",
-        "workspacerename $1",
+        "workspaceready workspacerename $1",
     ],
 }
 

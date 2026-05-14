@@ -129,7 +129,7 @@ config = {
             "worktreenew": [
                 "!! git worktree add",
                 "workspacenew",
-                "workspacerename",
+                "workspaceready workspacerename",
             ],
         },
     },
@@ -144,7 +144,7 @@ config = {
 	assert.Equal(t, []any{
 		"!! git worktree add",
 		"workspacenew",
-		"workspacerename",
+		"workspaceready workspacerename",
 	}, aliases["worktreenew"])
 	assert.Equal(t, []any{"dim", "bold"}, cfg["flags"])
 	assert.Equal(t, []any{1, 2, 3}, cfg["ints"])
@@ -237,7 +237,7 @@ func TestStarlarkSampleEndToEnd(t *testing.T) {
 	assert.Equal(t, []any{
 		`!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1`,
 		"workspacenew $RUNE_DATADIR/worktrees/$1",
-		"workspacerename $1",
+		"workspaceready workspacerename $1",
 	}, aliases["worktreenew"])
 }
 

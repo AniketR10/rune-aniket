@@ -4959,3 +4959,155 @@ func TestCloseWorkspaceRemovesClosedWorkspaceFromManager(t *testing.T) {
 	require.False(t, manager.HasWorkspace(uri),
 		"closing a workspace must remove it from workspace.Manager so its scheme can be GC'd")
 }
+
+// TestWorkspaceReadyCommand exercises the `workspaceready` event-loop
+// primitive that defers a command until the most-recently-issued
+// pending workspace finishes installing. This is what makes the
+// `worktreenew` alias's `workspacerename $1` step run on the new
+// workspace rather than on the previously focused one.
+func TestWorkspaceReadyCommand(t *testing.T) {
+	t.Run("dispatches inline when nothing is pending", func(t *testing.T) {
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithDir(t,
+			defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		require.Nil(t, m.lastReservedPending)
+		require.NoError(t,
+			m.commandWorkspaceReady(cmdRenameWorkspace, "inline"))
+		require.Equal(t, "inline", m.workspaces[m.focus].tabname,
+			"workspaceready with no pending must dispatch inline "+
+				"against the focused workspace")
+	})
+
+	t.Run("defers until pending workspace is installed", func(t *testing.T) {
+		dir1 := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithDir(t,
+			defaultConfigWithWrap(false), dir1, nopShutdownShaderConfig())
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+		firstSlot := m.focus
+
+		dir2 := t.TempDir()
+		uri2, err := workspaceapi.ParseURI("memory://" + dir2)
+		require.NoError(t, err)
+
+		m.mu.Lock()
+		require.NoError(t, m.addOrCreateWorkspace(uri2))
+		require.NotNil(t, m.lastReservedPending,
+			"addWorkspace must reserve a pending entry "+
+				"and record it as the most recent")
+		require.Equal(t, uri2.String(),
+			m.lastReservedPending.uri.String())
+		require.NoError(t,
+			m.commandWorkspaceReady(cmdRenameWorkspace, "deferred"))
+		// The previously focused workspace must NOT be renamed
+		// while the new build is still pending — that is the
+		// whole point of `workspaceready`.
+		require.Equal(t, "", m.workspaces[firstSlot].tabname)
+		m.mu.Unlock()
+
+		m.drainPendingWorkspaces()
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		newSlot, ok := m.findInstalledSlot(uri2)
+		require.True(t, ok, "new workspace must be installed")
+		require.NotNil(t, m.workspaces[newSlot])
+		require.Equal(t, "deferred", m.workspaces[newSlot].tabname,
+			"queued workspacerename must apply to the freshly "+
+				"installed workspace")
+		require.Equal(t, "", m.workspaces[firstSlot].tabname,
+			"the previously focused workspace must remain "+
+				"unrenamed")
+		require.Nil(t, m.lastReservedPending,
+			"installPendingWorkspace must clear lastReservedPending")
+	})
+
+	t.Run("queue is dropped when pending is canceled", func(t *testing.T) {
+		dir1 := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithDir(t,
+			defaultConfigWithWrap(false), dir1, nopShutdownShaderConfig())
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+		firstSlot := m.focus
+
+		// Reserve a pending workspace manually so we can cancel it
+		// before Phase C runs without racing with the goroutine.
+		dir2 := t.TempDir()
+		uri2, err := workspaceapi.ParseURI("memory://" + dir2)
+		require.NoError(t, err)
+
+		m.mu.Lock()
+		_, cancel := context.WithCancel(context.Background())
+		pending, err := m.reservePendingSlot(uri2, -1, cancel)
+		require.NoError(t, err)
+		require.Same(t, pending, m.lastReservedPending)
+
+		require.NoError(t,
+			m.commandWorkspaceReady(cmdRenameWorkspace, "dropped"))
+		require.Len(t, pending.onReady, 1)
+
+		// Focus the pending slot so doCloseWorkspace cancels the
+		// pending entry (its branch keys off pendingForFocus).
+		m.focus = pending.slot
+		_, _, err = m.doCloseWorkspace(true)
+		require.NoError(t, err)
+		require.Nil(t, m.lastReservedPending,
+			"canceling the pending entry must clear "+
+				"lastReservedPending")
+
+		// Switch focus back and ensure the queued command never ran.
+		m.focus = firstSlot
+		require.Equal(t, "", m.workspaces[firstSlot].tabname)
+		m.mu.Unlock()
+	})
+
+	t.Run("attaches to most recently reserved pending", func(t *testing.T) {
+		dir1 := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithDir(t,
+			defaultConfigWithWrap(false), dir1, nopShutdownShaderConfig())
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		// Reserve two pending workspaces back-to-back; the second
+		// must be selected by workspaceready.
+		dirA := t.TempDir()
+		uriA, err := workspaceapi.ParseURI("memory://" + dirA)
+		require.NoError(t, err)
+		dirB := t.TempDir()
+		uriB, err := workspaceapi.ParseURI("memory://" + dirB)
+		require.NoError(t, err)
+
+		m.mu.Lock()
+		_, cancelA := context.WithCancel(context.Background())
+		pendingA, err := m.reservePendingSlot(uriA, -1, cancelA)
+		require.NoError(t, err)
+		_, cancelB := context.WithCancel(context.Background())
+		pendingB, err := m.reservePendingSlot(uriB, -1, cancelB)
+		require.NoError(t, err)
+		require.Same(t, pendingB, m.lastReservedPending)
+
+		require.NoError(t,
+			m.commandWorkspaceReady(cmdRenameWorkspace, "onB"))
+		require.Empty(t, pendingA.onReady,
+			"the older pending workspace must not receive the queued "+
+				"command")
+		require.Len(t, pendingB.onReady, 1)
+
+		// Tear down both pending entries so Close doesn't leak
+		// reservations or hang waiting for Phase B goroutines that
+		// were never launched.
+		pendingA.canceled.Store(true)
+		pendingA.cancelCtx()
+		delete(m.pending, uriA.String())
+		pendingB.canceled.Store(true)
+		pendingB.cancelCtx()
+		delete(m.pending, uriB.String())
+		m.lastReservedPending = nil
+		m.mu.Unlock()
+	})
+}

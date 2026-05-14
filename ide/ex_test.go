@@ -4884,7 +4884,7 @@ func TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion(t *testing.T) {
 	const (
 		runeStarPluginCmd       = `!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1`
 		runeStarWorkspaceCmd    = `workspacenew $RUNE_DATADIR/worktrees/$1`
-		runeStarWorkspaceRename = `workspacerename $1`
+		runeStarWorkspaceRename = `workspaceready workspacerename $1`
 		worktreeName            = "tabs-refresh-gpt"
 	)
 	dataDir := t.TempDir()

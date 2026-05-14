@@ -507,13 +507,13 @@ config = {
             "worktreenew": [
                 '!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1',
                 'workspacenew $RUNE_DATADIR/worktrees/$1',
-                'workspacerename $1',
-                "shaderrun shine 600ms",
+                'workspaceready workspacerename $1',
             ],
             "worktreeopen": {
                 "command": [
                     "workspacenew $RUNE_DATADIR/worktrees/$1",
-                    "workspacerename $1",
+                    "workspaceready workspacerename $1",
+                    "workspaceready shaderrun shine 600ms",
                 ],
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
