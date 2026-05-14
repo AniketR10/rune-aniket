@@ -793,6 +793,25 @@ func (f *file) flush(force bool) error {
 		return workspaceapi.ErrStaleData
 	}
 
+	// Publish the post-rename mtime to lastFlush BEFORE Rename,
+	// not after. The Rename below triggers a scheme FS Write
+	// event; the IDE's event-watcher goroutine acquires the host
+	// IDE lock (not f.mu) and calls Stat + LastFlush to decide
+	// whether the on-disk change came from us. If we wait to set
+	// lastFlush until after initFiles, that goroutine can win the
+	// race and see lastFlush at its pre-flush value while Stat
+	// already returns the post-rename mtime — triggering the
+	// "Discard your changes / Discard external changes" prompt
+	// for our own write.
+	//
+	// Rename is a directory-entry operation that preserves the
+	// underlying inode's mtime, so the file at origTarget after
+	// Rename has exactly swapInfoModTime — the swap's mtime
+	// captured by the last copyFlushSwapFile / initSwap Stat.
+	f.mu.Lock()
+	f.lastFlush = f.swapInfoModTime
+	f.mu.Unlock()
+
 	if f.orig != nil {
 		_ = f.orig.Close()
 	}
@@ -813,6 +832,9 @@ func (f *file) flush(force bool) error {
 	}
 
 	f.unflushed = false
+	// Re-publish using the freshly-stat'd inode mtime in case the
+	// scheme (e.g. a remote one) reports a slightly different time
+	// than the swap's pre-rename Stat.
 	f.mu.Lock()
 	f.lastFlush = f.infoModTime
 	f.mu.Unlock()

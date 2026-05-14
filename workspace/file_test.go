@@ -38,6 +38,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	gomock "go.uber.org/mock/gomock"
@@ -1726,4 +1727,83 @@ func TestFileReloadAsync(t *testing.T) {
 	require.NotNil(t, ch)
 	res := <-ch
 	require.NoError(t, res)
+}
+
+// TestFileFlushPublishesLastFlushBeforeRename verifies that by the
+// time the underlying scheme observes the Rename call (which triggers
+// the FS Write event), f.LastFlush() already returns the post-rename
+// mtime. Otherwise an FS-watcher goroutine that wakes up during the
+// rename can see lastFlush at its pre-flush value while Stat already
+// reports the new mtime — falsely concluding the file changed
+// externally and showing the "Discard your changes / Discard external
+// changes" prompt for our own write.
+func TestFileFlushPublishesLastFlushBeforeRename(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	inner, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	var (
+		observed    time.Time
+		swapPreRen  time.Time
+		renameCount int
+	)
+	hook := &renameHookScheme{Scheme: inner}
+
+	f, err := newFile(hook, fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// First flush to establish a baseline lastFlush so we can
+	// distinguish it from the post-rename mtime captured below.
+	require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
+	prevLastFlush := f.LastFlush()
+
+	// Sleep enough that the second flush's swap mtime is strictly
+	// after the first flush's. Filesystems vary in mtime
+	// granularity; 20ms is conservative for typical local FSes.
+	time.Sleep(20 * time.Millisecond)
+	buf.WriteString("more data")
+
+	hook.onRename = func(oldpath, newpath string) {
+		renameCount++
+		// Capture the swap's mtime right before the underlying
+		// Rename runs. After rename this is the orig file's mtime.
+		if info, statErr := inner.Stat(oldpath); statErr == nil {
+			swapPreRen = info.ModTime()
+		}
+		// LastFlush must already reflect the post-rename mtime.
+		observed = f.LastFlush()
+	}
+
+	ch, err := f.Flush(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, <-ch)
+
+	require.Equal(t, 1, renameCount, "Rename hook must have fired")
+	require.False(t, swapPreRen.IsZero(), "swap stat before rename failed")
+	assert.True(t, observed.Equal(swapPreRen),
+		"LastFlush observed at Rename time (%s) must match the swap's "+
+			"pre-rename mtime (%s) so concurrent FS event handlers do "+
+			"not see a stale lastFlush",
+		observed, swapPreRen)
+	assert.False(t, observed.Equal(prevLastFlush),
+		"observed lastFlush %s must differ from the pre-flush value %s",
+		observed, prevLastFlush)
+}
+
+// renameHookScheme wraps a schemeapi.Scheme so a test can observe and
+// inject behaviour around Rename. All other methods delegate
+// transparently.
+type renameHookScheme struct {
+	schemeapi.Scheme
+	onRename func(oldpath, newpath string)
+}
+
+func (s *renameHookScheme) Rename(oldpath, newpath string) error {
+	if s.onRename != nil {
+		s.onRename(oldpath, newpath)
+	}
+	return s.Scheme.Rename(oldpath, newpath)
 }
