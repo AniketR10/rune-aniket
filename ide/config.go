@@ -77,6 +77,7 @@ const (
 	inputCurrent         = "current"
 	editorModeModal      = "modal"
 	editorModeModeless   = "modeless"
+	editorModeBYOE       = "byoe"
 	keyCommandAliases    = "aliases"
 	keyCommandKey        = "key"
 	keyCommandHistoryKey = "history_key"
@@ -1369,6 +1370,51 @@ func (c ideConfig) virtual() (config.Config, bool) {
 	return c.getConfig(b, "virtual")
 }
 
+// byoe returns the `editor.byoe` configuration block, if any.
+func (c ideConfig) byoe() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	b, ok := c.editor()
+	if !ok {
+		return nil, false
+	}
+	return c.getConfig(b, "byoe")
+}
+
+// byoeCommand returns the argv template for the external editor.
+func (c ideConfig) byoeCommand() string {
+	cfg, ok := c.byoe()
+	if !ok {
+		return ""
+	}
+	s, err := cfg.GetString("command")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.byoe.command"] = err
+		}
+		return ""
+	}
+	return s
+}
+
+// byoeGoto returns the Rune key sequence template used to position the
+// external editor's cursor. Empty when unset or invalid.
+func (c ideConfig) byoeGoto() string {
+	cfg, ok := c.byoe()
+	if !ok {
+		return ""
+	}
+	s, err := cfg.GetString("goto")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.byoe.goto"] = err
+		}
+		return ""
+	}
+	return s
+}
+
 func (c ideConfig) editorMode() (ret string) {
 	ret = "modal"
 	if c.cfg == nil {
@@ -1386,7 +1432,7 @@ func (c ideConfig) editorMode() (ret string) {
 		return
 	}
 	switch mode {
-	case editorModeModal, editorModeModeless:
+	case editorModeModal, editorModeModeless, editorModeBYOE:
 		ret = mode
 	}
 	return

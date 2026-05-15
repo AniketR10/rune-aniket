@@ -100,6 +100,18 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 	if !open {
 		return
 	}
+	if isExternallyManagedEditor(ex.ed) {
+		// Externally-managed editors (e.g. byoe) install their own
+		// watcher and rewrite the cell.Buffer mirror directly. The
+		// IDE-level watcher must not call ReloadTab or surface the
+		// "changed on disk and was reloaded" notification — that
+		// would duplicate work and spam the user every time the
+		// external editor saves.
+		ex.log(log.TraceLevel,
+			"skipping ide-level fs change for %s: external editor",
+			uri.Name())
+		return
+	}
 
 	var modTime time.Time
 	lastFlush, _ := ex.comp.LastFlush(t)

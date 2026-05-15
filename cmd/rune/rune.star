@@ -295,8 +295,11 @@ config = {
         "themes":               GUI_THEMES,
     },
     "editor": {
-        # 'modal' simulates vi/vim while 'modeless' works like conventional
-        # text editors.
+        # 'modal' simulates vi/vim, 'modeless' works like conventional text
+        # editors, and 'byoe' (bring-your-own-editor) hands editing off to an
+        # external TUI editor process running inside a Rune-managed vte. Rune
+        # keeps owning the tab, the on-disk file, and IDE-wide commands; the
+        # external editor owns the buffer contents and the cursor.
         "mode":       "modal",
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
@@ -314,6 +317,53 @@ config = {
             "bar_attr":    attr(fg = "default", bg = "default"),
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
+        },
+        # External editor configuration, only consulted when mode == "byoe".
+        #
+        # `command` is the argv template Rune executes inside a vte to open a
+        # file. Available substitutions:
+        #   {file}  absolute path to the file to open (always required)
+        #   {line}  1-based line number for the initial cursor
+        #   {col}   1-based column number for the initial cursor
+        #
+        # `goto` is a Rune key sequence (handler.ParseSequence syntax) that,
+        # when injected into the vte, makes the editor place its cursor at
+        # {line}/{col}. The same {line}/{col} substitutions are recognised
+        # inside the sequence string. Leave empty to disable :goto / mouse
+        # click-to-line for this editor.
+        #
+        # Examples (uncomment one or write your own):
+        #
+        # Vim / Neovim
+        #   "command": 'vim "+call cursor({line}, {col})" {file}',
+        #   "goto":    "<esc>:{line}<enter>{col}|",
+        #
+        # Neovim
+        #   "command": 'nvim "+call cursor({line}, {col})" {file}',
+        #   "goto":    "<esc>:{line}<enter>{col}|",
+        #
+        # Helix
+        #   "command": "hx {file}:{line}:{col}",
+        #   "goto":    "<esc>:goto<space>{line}<enter>",
+        #
+        # Kakoune
+        #   "command": "kak {file} +{line}:{col}",
+        #   "goto":    "<esc>:edit<space>-existing<space>{file}<space>{line}<space>{col}<enter>",
+        #
+        # Micro
+        #   "command": "micro {file}:{line}:{col}",
+        #   "goto":    "<c-l>{line}:{col}<enter>",
+        #
+        # Emacs (no window system)
+        #   "command": "emacs -nw +{line}:{col} {file}",
+        #   "goto":    "<a-x>goto-line<enter>{line}<enter>",
+        #
+        # Nano
+        #   "command": "nano +{line},{col} {file}",
+        #   "goto":    "<c-_>{line},{col}<enter>",
+        "byoe": {
+            "command": 'vim "+call cursor({line}, {col})" {file}',
+            "goto":    "<esc>:{line}<enter>{col}|",
         },
         "indents": {
             "chatito": "spaces",

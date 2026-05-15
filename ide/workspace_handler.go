@@ -78,6 +78,7 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -241,7 +242,8 @@ func (m visibleWorkspaceManager) UnregisterScheme(scheme string) error {
 }
 
 func (h *workspaceManagerHandler) newEditor(
-	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
+	cwd workspaceapi.URI, ws workspace.Workspace, tm browser.TabManager,
+	cfg ideConfig, svc vctrl.Service,
 ) (
 	text.Editor, error,
 ) {
@@ -250,6 +252,8 @@ func (h *workspaceManagerHandler) newEditor(
 		return h.newBuiltinModalEditor(cwd, cfg, svc), nil
 	case editorModeModeless:
 		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
+	case editorModeBYOE:
+		return h.newBYOEEditor(cwd, ws, tm, cfg)
 	default:
 		panic("invalid editor mode")
 	}
@@ -321,6 +325,40 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	)
 }
 
+// newBYOEEditor returns a byoe editor that hosts the user-configured
+// external TUI editor inside a Rune-managed vte. All workspace deps
+// (workspace, tab manager, notifications, event publisher) are
+// resolved up front; the editor is fully usable as soon as it
+// returns. editor.byoe.command must already be validated by
+// validateConfig — an empty command here is a programmer error.
+func (h *workspaceManagerHandler) newBYOEEditor(
+	cwd workspaceapi.URI, ws workspace.Workspace,
+	tm browser.TabManager, cfg ideConfig,
+) (text.Editor, error) {
+	return byoe.New(
+		cfg.byoeCommand(),
+		cfg.byoeGoto(),
+		cfg.scheduleNextTick,
+		ws,
+		cwd,
+		h.notifications.current(),
+		byoe.PublisherFunc(h.publishEvent),
+		ws, // terminal
+		ws, // executor
+		tm,
+		cfg.terminalConfig(),
+	), nil
+}
+
+// isExternallyManagedEditor reports whether ed manages its own buffer
+// contents out of band (e.g. via an external TUI editor process). Used
+// by the workspace handler to disable IDE-side write/reload paths that
+// would fight the external editor.
+func isExternallyManagedEditor(ed text.Editor) bool {
+	e, ok := ed.(text.ExternallyManagedEditor)
+	return ok && e.IsExternal()
+}
+
 // newCommandPromptEditor returns the command.Editor adapter used by
 // the command Prompt's modal edit mode. It bypasses text.Editor.Edit
 // (which layers status / icons / location / aux bars on top of the
@@ -340,7 +378,11 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 			clipboard:        h.clip,
 			autoPair:         cfg.editorAutoPair(),
 		}
-	case editorModeModal:
+	case editorModeModal, editorModeBYOE:
+		// The command prompt is always Rune-native — there is no way
+		// to host it inside the external editor's vte. byoe uses the
+		// vi-based prompt because its default command key (':') and
+		// keymap match the modal flavor.
 		return viCommandPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),
@@ -483,14 +525,15 @@ func (h *workspaceManagerHandler) init(
 	// to prevent unecessary resource consumption
 	homeParser := syntax.NewParser(h.homeWorkspace, h.pkgmanager, h.homeURI)
 	globalOpts := h.textOpts(cfg, homeParser)
-	// do not pass a real version control for home workspace
-	ed, err := h.newEditor(homeDirUri, cfg, vctrl.NopService())
+	tm := new(workspaceTabManager)
+	tm.parent = h
+	// do not pass a real version control for home workspace.
+	// newEditor runs after tm is allocated so editors that embed a
+	// vte (e.g. byoe) receive the workspace's tab manager up front.
+	ed, err := h.newEditor(homeDirUri, h.homeWorkspace, tm, cfg, vctrl.NopService())
 	if err != nil {
 		return fmt.Errorf("new editor: %v", err)
 	}
-
-	tm := new(workspaceTabManager)
-	tm.parent = h
 	h.empty, err = newEx(ed, homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.publishEvent, 0 /* vte capacity */, h.clip, h.macro,
@@ -1220,11 +1263,6 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		vctrlService = vctrl.SyncService(vctrlService, new(sync.Mutex))
 	}
 
-	ed, err := h.newEditor(uri, cfg, vctrlService)
-	if err != nil {
-		return nil, fmt.Errorf("new editor: %w", err)
-	}
-
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	// while only routing to other currently visible IDE workspaces.
 	visibleManager := visibleWorkspaceManager{parent: h, manager: h.workspace}
@@ -1238,6 +1276,14 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	multicwd := workspace.Multi(context.Background(), visibleManager, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
+	// newEditor runs after multicwd + tm are allocated so editors
+	// that embed a vte (e.g. byoe) receive the workspace tab
+	// manager and the workspace handle up front, with no late
+	// binding required.
+	ed, err := h.newEditor(uri, multicwd, tm, cfg, vctrlService)
+	if err != nil {
+		return nil, fmt.Errorf("new editor: %w", err)
+	}
 	ex, err := newEx(ed, multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent,
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
@@ -2432,7 +2478,13 @@ func (h *workspaceManagerHandler) subscribeAllEvents(
 	if err := h.subscribeExternalEvents(ex, h.externalEvents...); err != nil {
 		return err
 	}
-	if cfg.editorAutoSave() {
+	if cfg.editorAutoSave() && !isExternallyManagedEditor(ex.ed) {
+		// In externally-managed editor modes (e.g. byoe) the
+		// external editor process owns saving. Rune's mirror buffer
+		// is rewritten by a workspace watcher on every external
+		// save, which would trigger autoSaver edits that race the
+		// external editor's writes and surface ErrStaleData
+		// warnings on every keystroke. Skip the subscription.
 		saver := autoSaverFactory(&ex.comp, ex.notifications,
 			cfg.scheduleNextTick, defaultAutoSaveDelay)
 		if err := ex.comp.SubscribeEvents(autoSaveEvents, saver); err != nil {

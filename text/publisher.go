@@ -63,9 +63,18 @@ func (p *Publisher) Init() {
 // and wraps root with a Handler that dispatches EventTypeCursor events.
 // It also subscribes to scroll changes to dispatch EventTypeScroll, and
 // subscribes to buffer updates to dispatch EventTypeEdit.
+//
+// cursor MUST be non-nil. Editors that do not own a *Cursor (e.g.
+// text/byoe, which hosts an external TUI editor inside a vte and
+// therefore has no Rune-side cursor at all) must use
+// PublishExternalEdit instead.
 func (p *Publisher) PublishEdit(
 	resource workspaceapi.URI, buf *cell.Buffer, root Handler, cursor *Cursor,
 ) Handler {
+	if cursor == nil {
+		panic("text.Publisher.PublishEdit: cursor is nil; " +
+			"use PublishExternalEdit for cursor-less editors")
+	}
 	h := &cursorPublisher{
 		buf:     buf,
 		parent:  p,
@@ -103,6 +112,39 @@ func (p *Publisher) PublishEdit(
 	cursor.SubscribeScroll(csub)
 
 	return h
+}
+
+// PublishExternalEdit publishes EventTypeOpen, EventTypeFocus and
+// EventTypeEdit (via buffer subscription) for an editor that does NOT
+// own a *Cursor. Scroll, cursor and selection events are not
+// published because there is no Rune-side cursor to observe; the
+// external editor process (and its host vte) owns the cursor and
+// scrolling instead.
+//
+// The returned handler is root unchanged: callers must wire the
+// handler into the tab system directly. This avoids the
+// cursorPublisher wrapper, which dereferences the cursor on every
+// keypress.
+func (p *Publisher) PublishExternalEdit(
+	resource workspaceapi.URI, buf *cell.Buffer, root Handler,
+) Handler {
+	ctx := context.Background()
+
+	p.dispatchEvent(ctx, textapi.Event{
+		Type:     textapi.EventTypeOpen,
+		URI:      resource,
+		Resource: root,
+		Content:  buf.String(),
+	})
+	p.dispatchEvent(ctx, textapi.Event{
+		Type:     textapi.EventTypeFocus,
+		URI:      resource,
+		Resource: root,
+	})
+
+	bsub := CellSubscriber(resource, root, p)
+	buf.Subscribe(bsub)
+	return root
 }
 
 // SubscribeEvents subsribes sub to ev.

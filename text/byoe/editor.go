@@ -1,0 +1,242 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+// Package byoe implements a "bring-your-own-editor" text.Editor that
+// hosts an external TUI editor (vim, neovim, helix, kakoune, …) inside
+// a Rune-managed vte. Rune keeps owning the tab, the cell.Buffer
+// (read-only mirror of disk), and IDE-wide commands; the external
+// editor owns the editing UX and is the source of truth for buffer
+// contents.
+package byoe
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
+)
+
+// New allocates a new byoe Editor. All dependencies are mandatory
+// positional arguments to make missing wiring a compile-time error
+// at every call site and avoid nil-via-options programming. New
+// panics if any interface argument is nil (programmer error) and
+// also panics if the configured goto template cannot be parsed —
+// validateBYOE enforces both at config-load time so a panic here
+// indicates the IDE skipped validation.
+//
+// The command and gotoTemplate arguments are the validated user
+// strings from editor.byoe.command and editor.byoe.goto. cwd carries
+// the workspace used for file watches and file reads; terminal and
+// executor are usually `cwd` itself but are passed separately so
+// tests can inject lighter stubs. publisher routes terminal events
+// (resize, focus, interrupt) back into Rune's main event loop;
+// notifications surfaces watcher / pty errors; tabManager updates the
+// tab name as the external editor runs. vteCfg carries the terminal
+// theme, bell trigger, max scrollback, and scheduleNextTick base
+// from the IDE-wide terminal configuration; New overrides
+// CommandAndArgs, Modal, and ScheduleNextTick to byoe-appropriate
+// values.
+func New(
+	command, gotoTemplate string,
+	scheduleNextTick func(func()) bool,
+	cwd workspace.Workspace,
+	workspaceURI workspaceapi.URI,
+	notifications browserapi.Notifications,
+	publisher browser.EventPublisher,
+	terminal schemeapi.Terminal,
+	executor schemeapi.Executor,
+	tabManager browser.TabManager,
+	vteCfg vte.Config,
+) *Editor {
+	switch {
+	case command == "":
+		panic("byoe.New: command is required")
+	case scheduleNextTick == nil:
+		panic("byoe.New: scheduleNextTick is required")
+	case cwd == nil:
+		panic("byoe.New: cwd is required")
+	case notifications == nil:
+		panic("byoe.New: notifications is required")
+	case publisher == nil:
+		panic("byoe.New: publisher is required")
+	case terminal == nil:
+		panic("byoe.New: terminal is required")
+	case executor == nil:
+		panic("byoe.New: executor is required")
+	case tabManager == nil:
+		panic("byoe.New: tabManager is required")
+	}
+	tpl, err := parseGotoTemplate(gotoTemplate)
+	if err != nil {
+		panic("byoe.New: invalid gotoTemplate: " + err.Error())
+	}
+	ret := &Editor{
+		command:          command,
+		gotoTemplate:     tpl,
+		scheduleNextTick: scheduleNextTick,
+		cwd:              cwd,
+		workspaceURI:     workspaceURI,
+		notifications:    notifications,
+		publisher:        publisher,
+		terminal:         terminal,
+		executor:         executor,
+		tabManager:       tabManager,
+		vteCfg:           vteCfg,
+	}
+	ret.pub.Init()
+	return ret
+}
+
+// Editor implements text.Editor. Its zero value is not usable; use
+// the New constructor.
+type Editor struct {
+	command          string
+	gotoTemplate     gotoTemplate
+	scheduleNextTick func(func()) bool
+	cwd              workspace.Workspace
+	workspaceURI     workspaceapi.URI
+	notifications    browserapi.Notifications
+	publisher        browser.EventPublisher
+	terminal         schemeapi.Terminal
+	executor         schemeapi.Executor
+	tabManager       browser.TabManager
+	vteCfg           vte.Config
+
+	pub text.Publisher
+}
+
+// IsExternal satisfies text.ExternallyManagedEditor.
+func (e *Editor) IsExternal() bool { return true }
+
+// Edit opens file in a fresh vte hosting the configured external
+// editor. The returned handler reads/writes through the vte; Rune
+// mirrors the on-disk file into buf via a workspace watcher.
+func (e *Editor) Edit(
+	ctx context.Context,
+	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) (text.Handler, error) {
+	// Substitute {file}/{line}/{col} into the configured argv
+	// template, then hand the resulting string to vte as a
+	// single-element slice. vte.Component.createPty joins
+	// CommandAndArgs with spaces and then runs shell.Fields on the
+	// joined string to do POSIX-style tokenisation, so tokenising
+	// here too would double-process the input (quoted segments
+	// would lose their quotes and bare punctuation such as the
+	// parentheses in `vim "+call cursor(1, 1)" {file}` would
+	// re-tokenise as syntax errors). Pre-substituted-string in,
+	// shell.Fields out, no double-tokenisation.
+	cmdStr := substituteCommand(e.command, file.Path(), 1, 1)
+
+	cfg := e.vteCfg
+	cfg.CommandAndArgs = []string{cmdStr}
+	cfg.Modal = false
+	cfg.ScheduleNextTick = e.scheduleNextTick
+
+	vteH, err := vte.NewHandler(
+		e.publisher, e.notifications,
+		e.terminal, e.executor, e.tabManager, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("byoe: new vte handler: %w", err)
+	}
+
+	h := newHandler(vteH, buf, file, e.gotoTemplate,
+		e.cwd, e.notifications, e.scheduleNextTick)
+	return e.pub.PublishExternalEdit(file, buf, h), nil
+}
+
+// SubscribeCommand returns an error: byoe does not host Rune-side
+// editing commands.
+func (e *Editor) SubscribeCommand(textapi.CommandManual, text.CommandHandler) error {
+	return errors.New("not supported")
+}
+
+// RegisterREPLCommand returns an error: byoe does not host Rune-side
+// editing commands.
+func (e *Editor) RegisterREPLCommand(textapi.CommandManual, textapi.REPLHandler) error {
+	return errors.New("not supported")
+}
+
+// REPLCommands returns nil.
+func (e *Editor) REPLCommands() []textapi.CommandManual { return nil }
+
+// UnsubscribeCommand returns an error: nothing was ever registered.
+func (e *Editor) UnsubscribeCommand(string) error { return errors.New("not supported") }
+
+// UnregisterREPLCommand returns an error: nothing was ever registered.
+func (e *Editor) UnregisterREPLCommand(string) error { return errors.New("not supported") }
+
+// Editor returns an error: byoe does not track multiple handlers.
+func (e *Editor) Editor(workspaceapi.URI) (text.Handler, error) {
+	return nil, errors.New("not supported")
+}
+
+// SubscribeEvents forwards subscriptions to the internal Publisher.
+func (e *Editor) SubscribeEvents(
+	evs []textapi.EventType, sub text.EventHandler,
+) error {
+	e.pub.SubscribeEvents(evs, sub)
+	return nil
+}
+
+// UnsubscribeEvents forwards unsubscriptions to the internal Publisher.
+func (e *Editor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
+	return e.pub.UnsubscribeEvents(sub), nil
+}
+
+// substituteCommand expands {file}/{line}/{col} placeholders inside
+// the argv template before shell tokenisation. line/col are 1-based.
+func substituteCommand(tpl, file string, line, col int) string {
+	repl := strings.NewReplacer(
+		"{file}", file,
+		"{line}", strconv.Itoa(line),
+		"{col}", strconv.Itoa(col),
+	)
+	return repl.Replace(tpl)
+}
+
+// readAll reads the full contents of path from cwd's filesystem.
+func readAll(cwd workspace.Workspace, path string) (string, error) {
+	f, err := cwd.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}

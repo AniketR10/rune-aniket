@@ -475,3 +475,163 @@ func (r testRunner) Run(extensionID, path string, config config.Config) error {
 func (r testRunner) Close() error {
 	return nil
 }
+
+// TestIDEBYOEMisconfigurationFallsBackToDefault is an end-to-end
+// guard against byoe.New panics when the user's config selects
+// `editor.mode = "byoe"` but does not supply both required fields
+// (`editor.byoe.command` containing {file}, and `editor.byoe.goto`).
+// validateBYOE rewrites the mode back to "modal" so the IDE boots
+// with the built-in modal editor; this test asserts that the
+// rewrite actually happens at the config layer so the workspace
+// handler never reaches byoe.New on a misconfigured input.
+//
+// Reproduces the panic chain that motivated this guard:
+//
+//	byoe.New: command is required
+//	byoe.New: invalid gotoTemplate: ...
+//
+// Either panic would crash the IDE on startup when a user
+// previously experimented with `editor.mode = "byoe"` and removed
+// only part of the byoe block.
+func TestIDEBYOEMisconfigurationFallsBackToDefault(t *testing.T) {
+	cases := []struct {
+		name   string
+		byoe   string // YAML body inserted under editor:byoe
+		hasKey bool   // when false, omit the byoe block entirely
+	}{
+		{
+			name:   "no byoe block at all",
+			hasKey: false,
+		},
+		{
+			name: "empty command, valid goto",
+			byoe: `    command: ""
+    goto: "<esc>:{line}<enter>{col}|"`,
+			hasKey: true,
+		},
+		{
+			name: "command without {file}, valid goto",
+			byoe: `    command: "vim"
+    goto: "<esc>:{line}<enter>{col}|"`,
+			hasKey: true,
+		},
+		{
+			name: "valid command, empty goto",
+			byoe: `    command: "vim {file}"
+    goto: ""`,
+			hasKey: true,
+		},
+		{
+			name:   "valid command, missing goto field",
+			byoe:   `    command: "vim {file}"`,
+			hasKey: true,
+		},
+		{
+			name: "valid command, invalid goto",
+			byoe: `    command: "vim {file}"
+    goto: "<bogus-key>"`,
+			hasKey: true,
+		},
+		{
+			name: "empty command, empty goto",
+			byoe: `    command: ""
+    goto: ""`,
+			hasKey: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, _ := makeTestFiles(t)
+			cfg := "editor:\n  mode: byoe\n"
+			if tc.hasKey {
+				cfg += "  byoe:\n" + tc.byoe + "\n"
+			}
+			require.NoError(t,
+				os.WriteFile(configFile.Name(), []byte(cfg), 0666))
+
+			dir, err := os.MkdirTemp("", "")
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+			cwdURI, err := workspaceapi.CurrentUserHostURI(".")
+			require.NoError(t, err)
+
+			// Use init() rather than New() so we can introspect
+			// the post-load ideConfig before any workspace
+			// handler reaches byoe.New. init() must not panic
+			// for any of these inputs: validateBYOE rewrites
+			// the mode back to "modal" before the workspace
+			// handler instantiates the editor.
+			i := new(IDE)
+			require.NotPanics(t, func() {
+				err = i.init(cwdURI.String(),
+					configFile.Name(), dir,
+					WithPublishEvent(nopPublishEvent),
+					WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+					WithLocker(new(sync.Mutex)))
+			}, "IDE init must not panic for misconfigured byoe; "+
+				"validateBYOE must rewrite editor.mode to a "+
+				"safe fallback before reaching byoe.New")
+			require.NoError(t, err,
+				"IDE init must still succeed for "+
+					"misconfigured byoe; validateBYOE "+
+					"surfaces a non-fatal config error and "+
+					"the IDE boots with the fallback mode")
+
+			assert.NotEqual(t, "byoe", i.ideConfig.editorMode(),
+				"after validateBYOE, editor.mode must not "+
+					"remain byoe; got %q",
+				i.ideConfig.editorMode())
+			assert.Equal(t, "modal", i.ideConfig.editorMode(),
+				"validateBYOE falls back to the safe "+
+					"default mode (modal); a different "+
+					"value means the validator regressed "+
+					"or a new code path skipped the "+
+					"rewrite")
+
+			assert.NoError(t, i.closeResources())
+		})
+	}
+}
+
+// TestIDEBYOEWellFormedConfigDoesNotFallBack guards against an
+// over-eager validateBYOE that would rewrite legitimate byoe
+// configurations back to "modal". This is the positive
+// counterexample to TestIDEBYOEMisconfigurationFallsBackToDefault.
+func TestIDEBYOEWellFormedConfigDoesNotFallBack(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	const cfg = `editor:
+  mode: byoe
+  byoe:
+    command: "vim {file}"
+    goto: "<esc>:{line}<enter>{col}|"
+`
+	require.NoError(t,
+		os.WriteFile(configFile.Name(), []byte(cfg), 0666))
+
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	cwdURI, err := workspaceapi.CurrentUserHostURI(".")
+	require.NoError(t, err)
+
+	i := new(IDE)
+	require.NotPanics(t, func() {
+		err = i.init(cwdURI.String(),
+			configFile.Name(), dir,
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(new(sync.Mutex)))
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "byoe", i.ideConfig.editorMode(),
+		"a complete byoe config (command + goto) must be "+
+			"preserved through validateBYOE")
+	assert.Equal(t, "vim {file}", i.ideConfig.byoeCommand())
+	assert.Equal(t, "<esc>:{line}<enter>{col}|", i.ideConfig.byoeGoto())
+
+	assert.NoError(t, i.closeResources())
+}

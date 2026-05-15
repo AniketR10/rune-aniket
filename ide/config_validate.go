@@ -25,6 +25,7 @@ package ide
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
@@ -38,6 +39,10 @@ func validateConfig(cfg map[string]any) (err error) {
 	}
 
 	if err = validateCommandPrompt(&c, cfg); err != nil {
+		return
+	}
+
+	if err = validateBYOE(&c, cfg); err != nil {
 		return
 	}
 	return
@@ -85,4 +90,101 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 		}
 	}
 	return
+}
+
+// validateBYOE checks that editor.byoe.command is well-formed when the
+// editor mode is "byoe". On failure it rewrites editor.mode back to
+// "modal" so the IDE still boots, and returns a descriptive error.
+// editor.byoe.goto is required and validated too. If the configured
+// goto is empty or unparseable, editor.mode is rewritten back to
+// "modal": byoe relies on goto to position the cursor (e.g. on :goto
+// and click-to-line), so an unset/invalid goto is a misconfiguration,
+// not a soft default.
+func validateBYOE(c *ideConfig, cfg map[string]any) (err error) {
+	if c.editorMode() != editorModeBYOE {
+		return
+	}
+	command := c.byoeCommand()
+	if command == "" || !strings.Contains(command, "{file}") {
+		// Rewrite editor.mode back to modal so the IDE boots.
+		if ed, ok := cfg["editor"].(map[string]any); ok {
+			ed["mode"] = editorModeModal
+		}
+		return fmt.Errorf("editor.byoe.command is required and must contain " +
+			"{file} when editor.mode = \"byoe\"; falling back to \"modal\"")
+	}
+	gotoTpl := c.byoeGoto()
+	if gotoTpl == "" {
+		if ed, ok := cfg["editor"].(map[string]any); ok {
+			ed["mode"] = editorModeModal
+		}
+		return fmt.Errorf("editor.byoe.goto is required when " +
+			"editor.mode = \"byoe\"; falling back to \"modal\"")
+	}
+	if perr := parseGotoTemplate(gotoTpl); perr != nil {
+		if ed, ok := cfg["editor"].(map[string]any); ok {
+			ed["mode"] = editorModeModal
+		}
+		return fmt.Errorf("editor.byoe.goto is invalid: %w; "+
+			"falling back to \"modal\"", perr)
+	}
+	return
+}
+
+// parseGotoTemplate splits tpl around {line}/{col} placeholders and
+// validates that each literal segment parses with term.ParseKeys.
+// Returns nil if the template is well-formed.
+func parseGotoTemplate(tpl string) error {
+	segments := splitGotoTemplate(tpl)
+	for _, seg := range segments {
+		if seg.placeholder != "" {
+			continue
+		}
+		if seg.literal == "" {
+			continue
+		}
+		if _, perr := term.ParseKeys(seg.literal); perr != nil {
+			return fmt.Errorf("segment %q: %w", seg.literal, perr)
+		}
+	}
+	return nil
+}
+
+// gotoSegment is either a literal key sequence string or a {line}/{col}
+// placeholder.
+type gotoSegment struct {
+	literal     string
+	placeholder string // "line" or "col"
+}
+
+// splitGotoTemplate splits tpl into literal/placeholder segments.
+// Unknown {...} placeholders are treated as literal text.
+func splitGotoTemplate(tpl string) []gotoSegment {
+	var out []gotoSegment
+	for tpl != "" {
+		lineIdx := strings.Index(tpl, "{line}")
+		colIdx := strings.Index(tpl, "{col}")
+		var idx int
+		var name string
+		var width int
+		switch {
+		case lineIdx == -1 && colIdx == -1:
+			out = append(out, gotoSegment{literal: tpl})
+			return out
+		case lineIdx == -1:
+			idx, name, width = colIdx, "col", len("{col}")
+		case colIdx == -1:
+			idx, name, width = lineIdx, "line", len("{line}")
+		case lineIdx < colIdx:
+			idx, name, width = lineIdx, "line", len("{line}")
+		default:
+			idx, name, width = colIdx, "col", len("{col}")
+		}
+		if idx > 0 {
+			out = append(out, gotoSegment{literal: tpl[:idx]})
+		}
+		out = append(out, gotoSegment{placeholder: name})
+		tpl = tpl[idx+width:]
+	}
+	return out
 }

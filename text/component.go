@@ -432,6 +432,14 @@ func (c *Component) openFileTab(
 		return t, nil
 	}
 
+	// Editors that manage their buffer contents out of band (e.g. byoe
+	// hosting an external TUI editor) are the source of truth for file
+	// contents; Rune's mirror buffer must stay read-only so the dirty-tab
+	// path, flusher, and recovery prompt all do the right thing.
+	if ed, ok := c.ed.(ExternallyManagedEditor); ok && ed.IsExternal() {
+		readOnly = true
+	}
+
 	buf := cell.NewBuffer()
 	var handler browserapi.Handler
 	var fc workspace.FlusherCloser
