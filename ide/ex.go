@@ -2463,15 +2463,6 @@ func (e *ex) Close() (ret error) {
 	}
 	e.closed = true
 	e.sequencer.Reset()
-	if err := e.saveWorkspaceLayout(context.Background()); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if err := e.saveOpenTaskSessions(context.Background()); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if err := e.saveOpenTerminalSessions(context.Background()); err != nil {
-		ret = multierror.Append(ret, err)
-	}
 	if err := e.comp.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}

@@ -29,15 +29,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
-	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/ide/idetask"
+	"unstable.build/go-tui/ide/idehistory"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -51,15 +50,10 @@ var yesNoKeyCombs = []term.KeyComb{{Ch: 'y'}, {Ch: 'n'}}
 func (h *workspaceManagerHandler) openRestorePrompt(
 	ex *ex,
 	workspaceURI workspaceapi.URI,
-	cache []file,
-	restoreTerminals bool,
-	restoreTasks bool,
-	layout tcomponent.TileLayout,
-	hasLayout bool,
+	state idehistory.State,
 ) {
 	promptHandler := newOpenRestorePromptHandler(
-		h, ex, workspaceURI, cache, restoreTerminals, restoreTasks, layout, hasLayout,
-		yesOpt, noOpt,
+		h, ex, workspaceURI, state, yesOpt, noOpt,
 	).(*openRestorePromptHandler)
 	promptWindow := ex.comp.Prompt(
 		"Do you want to **restore** the previous session?",
@@ -74,22 +68,14 @@ func newOpenRestorePromptHandler(
 	wm *workspaceManagerHandler,
 	ex *ex,
 	workspaceURI workspaceapi.URI,
-	cache []file,
-	restoreTerminals bool,
-	restoreTasks bool,
-	layout tcomponent.TileLayout,
-	hasLayout bool,
+	state idehistory.State,
 	restoreCwdOption, noRestoreOption string,
 ) handler.PromptHandler {
 	return &openRestorePromptHandler{
 		wm:               wm,
 		ex:               ex,
 		workspaceURI:     workspaceURI,
-		cache:            cache,
-		restoreTerminals: restoreTerminals,
-		restoreTasks:     restoreTasks,
-		layout:           layout,
-		hasLayout:        hasLayout,
+		state:            state,
 		restoreCwdOption: restoreCwdOption,
 		noRestoreOption:  noRestoreOption,
 	}
@@ -100,11 +86,7 @@ type openRestorePromptHandler struct {
 	ex               *ex
 	workspaceURI     workspaceapi.URI
 	promptWindow     browser.Window
-	cache            []file
-	restoreTerminals bool
-	restoreTasks     bool
-	layout           tcomponent.TileLayout
-	hasLayout        bool
+	state            idehistory.State
 	restoreCwdOption string
 	noRestoreOption  string
 }
@@ -120,19 +102,10 @@ func (h *openRestorePromptHandler) OnSelect(idx int, option string) {
 
 	switch option {
 	case h.restoreCwdOption:
-		err = h.wm.restorePreviousSession(h.ex, h.cache, h.restoreTerminals,
-			h.restoreTasks, h.layout, h.hasLayout)
+		err = h.wm.restorePreviousSession(h.ex, h.state)
 	case h.noRestoreOption:
-		h.wm.history.resetWorkspaceCache(h.workspaceURI)
-		if h.restoreTerminals {
-			err = h.ex.clearOpenTerminalSessions(context.Background())
-		}
-		if h.restoreTasks {
-			err = multierror.Append(err,
-				h.ex.clearOpenTaskSessions(context.Background())).ErrorOrNil()
-		}
-		err = multierror.Append(err,
-			h.ex.clearWorkspaceLayout(context.Background())).ErrorOrNil()
+		err = h.wm.state.ClearWorkspaceState(
+			context.Background(), h.workspaceURI)
 	}
 
 	if err != nil {

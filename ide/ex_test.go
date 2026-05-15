@@ -3250,24 +3250,14 @@ func TestOpenTerminalSessionsPersistAndRestore(t *testing.T) {
 
 	require.NoError(t, b.ex.terminalnewtab(context.Background(), "first terminal"))
 	require.NoError(t, b.ex.terminalnewtab(context.Background(), "second terminal"))
-	require.NoError(t, b.ex.saveOpenTerminalSessions(context.Background()))
-
-	var first terminalSessionDocument
-	require.NoError(t, b.ex.storage.Get(context.Background(),
-		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)), &first))
-	require.Equal(t, terminalSessionAutoName(b.ex.workspaceURI, 0), first.Name)
-	require.Contains(t, term.CellsToString(first.Snapshot.ActiveCells()), "first terminal")
-
-	var second terminalSessionDocument
-	require.NoError(t, b.ex.storage.Get(context.Background(),
-		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 1)), &second))
-	require.Equal(t, terminalSessionAutoName(b.ex.workspaceURI, 1), second.Name)
-	require.Contains(t, term.CellsToString(second.Snapshot.ActiveCells()), "second terminal")
+	sessions := exSnapshotter{ex: b.ex}.Terminals()
+	require.Len(t, sessions, 2)
+	require.Contains(t, term.CellsToString(sessions[0].Snapshot.ActiveCells()), "first terminal")
+	require.Contains(t, term.CellsToString(sessions[1].Snapshot.ActiveCells()), "second terminal")
 
 	restored := newExForTesting(t, texttest.NopEditor())
 	defer restored.Close()
-	restored.ex.storage = b.ex.storage
-	require.NoError(t, restored.ex.restoreOpenTerminalSessions(context.Background(), nil))
+	require.NoError(t, restoreOpenTerminalSessions(restored.ex, sessions, nil))
 
 	tabs := restored.ex.comp.Tabs()
 	require.Len(t, tabs, 2)
@@ -3282,36 +3272,12 @@ func TestOpenTerminalSessionsPersistAndRestore(t *testing.T) {
 	require.ElementsMatch(t, []string{"first terminal", "second terminal"}, restoredCommands)
 }
 
-func TestOpenTerminalSessionsClearedWhenNoTerminalTabsAreOpen(t *testing.T) {
-	b := newExForTesting(t, texttest.NopEditor())
-	defer b.Close()
-
-	require.NoError(t, b.ex.storage.Set(context.Background(),
-		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)), terminalSessionDocument{
-			Kind: terminalSessionDocumentKind,
-			Name: terminalSessionAutoName(b.ex.workspaceURI, 0),
-		}))
-
-	require.NoError(t, b.ex.saveOpenTerminalSessions(context.Background()))
-
-	var doc terminalSessionDocument
-	err := b.ex.storage.Get(context.Background(),
-		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)), &doc)
-	require.ErrorIs(t, err, storageapi.ErrNotFound)
-}
-
-func TestTerminalSessionCompletionSkipsOpenSessionSnapshots(t *testing.T) {
+func TestTerminalSessionCompletionListsUserSavedSessions(t *testing.T) {
 	b := newExForTesting(t, texttest.NopEditor())
 	defer b.Close()
 
 	require.NoError(t, b.ex.storage.Set(context.Background(), terminalSessionDocumentID("manual"),
 		terminalSessionDocument{Kind: terminalSessionDocumentKind, Name: "manual"}))
-	require.NoError(t, b.ex.storage.Set(context.Background(),
-		terminalSessionDocumentID(terminalSessionAutoName(b.ex.workspaceURI, 0)),
-		terminalSessionDocument{
-			Kind: terminalSessionDocumentKind,
-			Name: terminalSessionAutoName(b.ex.workspaceURI, 0),
-		}))
 
 	it, _, err := b.ex.completeTerminalSessions(context.Background(), textapi.Command{})
 	require.NoError(t, err)

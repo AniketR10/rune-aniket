@@ -1,295 +1,430 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
-//
-// NOTICE: All information contained herein is, and remains the property of COMPANY.
-// The intellectual and technical concepts contained herein are proprietary to
-// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
-// and are protected by trade secret or copyright law. Dissemination of this information
-// or reproduction of this material is strictly forbidden unless prior written permission
-// is obtained from COMPANY. Access to the source code contained herein is hereby
-// forbidden to anyone except current COMPANY employees, managers or contractors who
-// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
-//
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 
 package ide
 
 import (
-	"context"
-	"net/url"
-	"sort"
-	"time"
+	"fmt"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/text"
+	"github.com/ernestrc/go-multierror"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"unstable.build/go-tui/browser"
+	tcomponent "unstable.build/go-tui/component"
+	"unstable.build/go-tui/ide/idehistory"
+	"unstable.build/go-tui/ide/idetask"
+	"unstable.build/go-tui/term/vte/vtereservoir"
+	"unstable.build/go-tui/workspace"
 )
 
-var (
-	historyEventInterests = []textapi.EventType{
-		textapi.EventTypeOpen,
-		textapi.EventTypeClose,
-		textapi.EventTypeFlush,
-		textapi.EventTypeEdit,
-		textapi.EventTypeCursor,
+// exSnapshotter satisfies idehistory.Snapshotter by reading from an
+// ex's components.
+type exSnapshotter struct {
+	ex *ex
+}
+
+// Terminals snapshots every open terminal in the ex into
+// idehistory.TerminalSession records.
+func (s exSnapshotter) Terminals() []idehistory.TerminalSession {
+	e := s.ex
+	tabs, terminals := openTerminalSessionWindowsForState(e)
+	var ret []idehistory.TerminalSession
+	for _, tab := range e.comp.Tabs() {
+		terminal, ok := tab.Handler().(vtereservoir.VTE)
+		if !ok {
+			continue
+		}
+		window := tabs[tab]
+		if !window.visible {
+			window.tab = true
+		}
+		snap, err := terminal.Snapshot()
+		if err != nil {
+			continue
+		}
+		if snap.Title == "" {
+			snap.Title = openTerminalSessionTitle(e, tab, terminal, "")
+		}
+		ret = append(ret, idehistory.TerminalSession{
+			Name:     "", // auto-generated at restore time
+			Snapshot: snap,
+			Tab:      window.tab,
+			Visible:  window.visible,
+			Focus:    window.focus,
+			WindowID: window.windowID,
+		})
 	}
-)
-
-const (
-	historyDocumentKind   = "history"
-	historyDocumentPrefix = "history:"
-)
-
-type file struct {
-	Dirty     bool
-	OpenAt    time.Time
-	Cursor    term.Coordinates
-	URIString string
-	WindowID  uint64
-}
-
-type cache struct {
-	Kind  string
-	Files map[string]file
-}
-
-func historyDocumentID(uri workspaceapi.URI) string {
-	return historyDocumentPrefix + url.QueryEscape(uri.String())
-}
-
-type history struct {
-	svc   storageapi.Service
-	cache map[string]cache
-}
-
-func newHistory(storage storageapi.Service) *history {
-	ret := &history{
-		svc:   storage,
-		cache: make(map[string]cache),
+	for _, win := range terminals {
+		snap, err := win.terminal.Snapshot()
+		if err != nil {
+			continue
+		}
+		if snap.Title == "" {
+			snap.Title = openTerminalSessionTitle(e, nil, win.terminal, "")
+		}
+		ret = append(ret, idehistory.TerminalSession{
+			Snapshot: snap,
+			Tab:      win.window.tab,
+			Visible:  win.window.visible,
+			Focus:    win.window.focus,
+			WindowID: win.window.windowID,
+		})
 	}
 	return ret
 }
 
-func (h *history) log(level log.Level, msg string, args ...any) {
-	if !log.IsLevelEnabled(level) {
-		return
+// Tasks snapshots every running task in the ex.
+func (s exSnapshotter) Tasks() []idehistory.TaskSession {
+	e := s.ex
+	if e.tasks == nil {
+		return nil
 	}
-	log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
-		Logf(level, msg, args...)
-}
-
-func (h *history) loadWorkspaceData(uri workspaceapi.URI, restore bool) {
-	const cacheSetTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
-	defer cancel()
-
-	uriStr := uri.String()
-
-	var workspace cache
-	err := h.svc.Get(ctx, historyDocumentID(uri), &workspace)
-	if err != nil && err != storageapi.ErrNotFound {
-		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
-			Warnf("could not persist updated cache to durable storage: %v", err)
-	}
-
-	if !restore || err != nil {
-		h.log(log.TraceLevel, "reseting cache for workspace: %s", uriStr)
-		h.resetWorkspaceCache(uri)
-	} else {
-		// do not trust what's coming from storage
-		if workspace.Files == nil {
-			workspace.Files = make(map[string]file)
+	var ret []idehistory.TaskSession
+	for _, info := range e.tasks.ListTasks() {
+		if len(info.CmdAndArgs) == 0 {
+			continue
 		}
-		h.cache[uriStr] = workspace
+		ret = append(ret, idehistory.TaskSession{
+			TaskName:                 info.Name,
+			Filter:                   info.Filter,
+			Cmd:                      info.CmdAndArgs[0],
+			Args:                     append([]string(nil), info.CmdAndArgs[1:]...),
+			MinimizeAlignment:        info.MinimizeAlignment,
+			WindowID:                 info.WindowID,
+			WindowMinimized:          info.WindowMinimized,
+			WindowMinimizedAlignment: info.WindowMinimizedAlignment,
+		})
 	}
-	h.log(log.TraceLevel, "loaded workspace %s cache from storage: %v", uriStr, h.cache)
+	return ret
 }
 
-func (h *history) recordAddWorkspace(
-	uri workspaceapi.URI, ed text.Editor, restore bool,
-) (ret []file) {
-	h.loadWorkspaceData(uri, restore)
+func (s exSnapshotter) Layout() (tcomponent.TileLayout, bool) {
+	layout := s.ex.comp.Browser().TileLayout()
+	return layout, true
+}
 
-	uriStr := uri.String()
-	err := ed.SubscribeEvents(historyEventInterests,
-		&workspaceHistory{svc: h.svc, uri: uriStr, cache: h.cache})
-	if err != nil {
-		h.log(log.ErrorLevel, "could not subscribe to file events: %v", err)
-	}
-	mapFiles := h.cache[uriStr].Files
-	ret = make([]file, 0, len(h.cache))
-	for _, f := range mapFiles {
-		ret = append(ret, f)
-	}
-	h.log(log.TraceLevel, "record add workspace: %v", ret)
-	sort.Slice(ret, func(i, j int) bool {
-		return ret[i].OpenAt.Before(ret[j].OpenAt)
+func (s exSnapshotter) FileWindowIDs() map[string]uint64 {
+	ret := make(map[string]uint64)
+	s.ex.comp.Browser().IterateWindows(func(win browser.Window) {
+		content, err := win.Content()
+		if err != nil {
+			return
+		}
+		tab, ok := content.(*browser.Tab)
+		if !ok {
+			return
+		}
+		if _, ok := tab.Closer().(workspace.FlusherCloser); !ok {
+			return
+		}
+		ret[tab.URI().String()] = win.WindowID()
 	})
 	return ret
 }
 
-func (h *history) recordWorkspaceFileWindows(
-	workspaceURI workspaceapi.URI,
-	fileWindows map[string]uint64,
+type openTerminalWindow struct {
+	tab      bool
+	visible  bool
+	focus    bool
+	windowID uint64
+}
+
+type openTerminalWindowTerminal struct {
+	terminal vtereservoir.VTE
+	window   openTerminalWindow
+}
+
+func openTerminalSessionWindowsForState(e *ex) (
+	map[*browser.Tab]openTerminalWindow, []openTerminalWindowTerminal,
 ) {
-	workspaceCache, ok := h.cache[workspaceURI.String()]
-	if !ok {
-		return
+	tabs := make(map[*browser.Tab]openTerminalWindow)
+	var terminals []openTerminalWindowTerminal
+	e.comp.Browser().IterateWindows(func(win browser.Window) {
+		if win.IsFloating() {
+			return
+		}
+		content, err := win.Content()
+		if err != nil {
+			return
+		}
+		focus, _ := win.Focus()
+		window := openTerminalWindow{
+			visible:  true,
+			focus:    focus,
+			windowID: win.WindowID(),
+		}
+		if tab, ok := content.(*browser.Tab); ok {
+			if _, ok := tab.Handler().(vtereservoir.VTE); ok {
+				window.tab = true
+				tabs[tab] = window
+			}
+			return
+		}
+		terminal, ok := content.(vtereservoir.VTE)
+		if !ok {
+			return
+		}
+		terminals = append(terminals, openTerminalWindowTerminal{
+			terminal: terminal,
+			window:   window,
+		})
+	})
+	return tabs, terminals
+}
+
+func openTerminalSessionTitle(
+	e *ex,
+	tab *browser.Tab,
+	terminal vtereservoir.VTE,
+	fallback string,
+) string {
+	if tab != nil {
+		name, _, ok := e.comp.Browser().TabName(tab.URI())
+		if ok && name != "" {
+			return name
+		}
 	}
-	for uri, windowID := range fileWindows {
-		f, ok := workspaceCache.Files[uri]
+	if title := terminal.Title(); title != "" {
+		return title
+	}
+	return fallback
+}
+
+// restoreOpenTerminalSessions restores the terminal sessions from state
+// into the given ex, mirroring the legacy two-pass restore: first into
+// any pre-existing windows mapped by WindowID, then sequentially split
+// the remaining visible ones, and finally hydrate any hidden tab
+// snapshots.
+func restoreOpenTerminalSessions(
+	e *ex, sessions []idehistory.TerminalSession,
+	windows map[uint64]browser.Window,
+) error {
+	ret := new(multierror.Error)
+	if len(sessions) == 0 {
+		return nil
+	}
+	// auto-assign deterministic names for sessions missing one.
+	for i := range sessions {
+		if sessions[i].Name == "" {
+			sessions[i].Name = fmt.Sprintf("__terminal-%06d", i)
+		}
+	}
+	restored := make(map[string]bool)
+	var focus browser.Window
+	for _, doc := range sessions {
+		if len(windows) == 0 || !doc.Visible || doc.WindowID == 0 {
+			continue
+		}
+		win, ok := windows[doc.WindowID]
 		if !ok {
 			continue
 		}
-		f.WindowID = windowID
-		workspaceCache.Files[uri] = f
+		content, err := newTerminalSessionContentFromState(e, doc)
+		if err != nil {
+			ret = multierror.Append(ret,
+				fmt.Errorf("restore open terminal session %q: %w", doc.Name, err))
+			continue
+		}
+		if err := win.SetContent(content); err != nil {
+			_ = content.Close()
+			ret = multierror.Append(ret,
+				fmt.Errorf("restore open terminal session %q: %w", doc.Name, err))
+			continue
+		}
+		restored[doc.Name] = true
+		if doc.Focus {
+			focus = win
+		}
 	}
-	h.cache[workspaceURI.String()] = workspaceCache
+	if focus != nil {
+		e.comp.Browser().SetFocus(focus)
+	}
+	visibleDocs := make([]idehistory.TerminalSession, 0, len(sessions))
+	for _, doc := range sessions {
+		if restored[doc.Name] || !doc.Visible {
+			continue
+		}
+		visibleDocs = append(visibleDocs, doc)
+	}
+	ret = multierror.Append(ret, restoreOpenTerminalSessionsSequential(e, visibleDocs))
+	ret = multierror.Append(ret, restoreHiddenOpenTerminalSessionTabs(e, sessions))
+	return ret.ErrorOrNil()
 }
 
-func (h *history) recordCloseWorkspace(uri workspaceapi.URI) {
-	for uri, cache := range h.cache {
-		persistUpdateCache(h.svc, uri, cache)
+func restoreHiddenOpenTerminalSessionTabs(
+	e *ex, sessions []idehistory.TerminalSession,
+) error {
+	ret := new(multierror.Error)
+	for _, doc := range sessions {
+		if doc.Visible || !doc.Tab {
+			continue
+		}
+		if _, err := newTerminalSessionContentFromState(e, doc); err != nil {
+			ret = multierror.Append(ret,
+				fmt.Errorf("restore open terminal session %q: %w", doc.Name, err))
+		}
 	}
-	// no need to unsubscibe as everything will be garbage collected
-	// and workspaceHistory has protection against receiving events
-	// once already deleted.
-	delete(h.cache, uri.String())
+	return ret.ErrorOrNil()
 }
 
-func (h *history) dirtyFilesOpen() (ret bool) {
-	for _, w := range h.cache {
-		for _, f := range w.Files {
-			if f.Dirty {
-				return true
+func restoreOpenTerminalSessionsSequential(
+	e *ex, sessions []idehistory.TerminalSession,
+) error {
+	ret := new(multierror.Error)
+	var focus browser.Window
+	for _, doc := range sessions {
+		win, err := restoreOpenTerminalSessionSequential(e, doc, focus)
+		if err != nil {
+			ret = multierror.Append(ret,
+				fmt.Errorf("restore open terminal session %q: %w", doc.Name, err))
+			continue
+		}
+		if win != nil && doc.Focus {
+			focus = win
+		}
+	}
+	if focus != nil {
+		e.comp.Browser().SetFocus(focus)
+	}
+	return ret.ErrorOrNil()
+}
+
+func restoreOpenTerminalSessionSequential(
+	e *ex, doc idehistory.TerminalSession, prev browser.Window,
+) (browser.Window, error) {
+	content, err := newTerminalSessionContentFromState(e, doc)
+	if err != nil {
+		return nil, err
+	}
+	if !doc.Visible {
+		return nil, nil
+	}
+	if prev == nil {
+		win := e.invokeWindow()
+		if err := win.SetContent(content); err != nil {
+			return nil, err
+		}
+		return win, nil
+	}
+	win, err := e.comp.Split(browserapi.OrientationDefault, prev, content)
+	if err != nil {
+		return nil, err
+	}
+	return win, nil
+}
+
+func newTerminalSessionContentFromState(
+	e *ex, doc idehistory.TerminalSession,
+) (browserapi.Handler, error) {
+	h, err := e.newTerminalSessionHandler(doc.Name, doc.Snapshot)
+	if err != nil {
+		return nil, err
+	}
+	if !doc.Tab {
+		return h, nil
+	}
+	tab, err := newTerminalSessionTabFromState(e, doc, h)
+	if err != nil {
+		return nil, err
+	}
+	return tab, nil
+}
+
+func newTerminalSessionTabFromState(
+	e *ex, doc idehistory.TerminalSession, h vtereservoir.VTE,
+) (*browser.Tab, error) {
+	uri, err := terminalSessionURI(doc.Name)
+	if err != nil {
+		return nil, err
+	}
+	title := doc.Name
+	if doc.Snapshot.Title != "" {
+		title = doc.Snapshot.Title
+	}
+	t, err := e.comp.Tab(uri, e.config.Icons.Terminal, title, h)
+	if err != nil {
+		_ = h.Close()
+		return nil, fmt.Errorf("wm.Tab: %w", err)
+	}
+	tab := t.(*browser.Tab)
+	tab.Subscribe((*tabSubscriber)(e))
+	return tab, nil
+}
+
+// restoreOpenTaskSessions restores tasks from state into the given ex.
+func restoreOpenTaskSessions(e *ex, sessions []idehistory.TaskSession) error {
+	if e.tasks == nil {
+		return nil
+	}
+	ret := new(multierror.Error)
+	for _, doc := range sessions {
+		name := doc.TaskName
+		if name == "" {
+			name = doc.Name
+		}
+		if name == "" || doc.Cmd == "" {
+			continue
+		}
+		task := idetask.Task{
+			Name:              name,
+			Filter:            doc.Filter,
+			Cmd:               doc.Cmd,
+			Args:              append([]string(nil), doc.Args...),
+			MinimizeAlignment: doc.MinimizeAlignment,
+		}
+		if err := e.tasks.RunTask(task); err != nil {
+			ret = multierror.Append(ret,
+				fmt.Errorf("restore task %q: %w", name, err))
+			continue
+		}
+		if win := taskWindow(e, name); win != nil {
+			if doc.WindowMinimized {
+				minimizeWindow(win, doc.WindowMinimizedAlignment)
+			} else {
+				win.Unminimize()
 			}
 		}
 	}
-	return false
+	return ret.ErrorOrNil()
 }
 
-func (h *history) resetWorkspaceCache(uri workspaceapi.URI) {
-	const cacheSetTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
-	defer cancel()
-
-	fresh := cache{Kind: historyDocumentKind, Files: make(map[string]file)}
-	h.cache[uri.String()] = fresh
-
-	err := h.svc.Set(ctx, historyDocumentID(uri), fresh)
-	if err != nil {
-		h.log(log.WarnLevel, "could not persist new cache to durable storage: %v", err)
-		return
-	}
-	h.log(log.TraceLevel, "persisted new cache for workspace %s", uri.String())
-}
-
-type workspaceHistory struct {
-	uri   string
-	cache map[string]cache
-	svc   storageapi.Service
-}
-
-func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
-	workspaceCache, ok := h.cache[h.uri]
-	if !ok {
-		return true // we're done if workspace was deleted
-	}
-
-	// do not assume dispatch of events is correct
-	if ev.URI == (workspaceapi.URI{}) {
-		return false
-	}
-
-	evUriStr := ev.URI.String()
-	// Never record the file explorer's in-memory buffer. It is
-	// managed by ex.initFileExplorer as a singleton editor; letting
-	// it participate in session history would cause the next session
-	// to restore it as a tab, which then calls Edit a second time
-	// on the same URI and fails with "command already registered".
-	if evUriStr == fileExplorerURI {
-		return false
-	}
-	prev, ok := workspaceCache.Files[evUriStr]
-
-	switch ev.Type {
-	case textapi.EventTypeOpen:
-		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, prev.Cursor, false, time.Now(), prev.WindowID)
-		persistUpdateCache(h.svc, h.uri, workspaceCache)
-	case textapi.EventTypeClose:
-		delete(workspaceCache.Files, evUriStr)
-		persistUpdateCache(h.svc, h.uri, workspaceCache)
-	case textapi.EventTypeFlush:
-		// EventTypeFlush might or might not be from an open file.
-		// When change is out-of-band, do not persist
-		// otherwise next session files might include files
-		// that were never open.
-		if ok {
-			workspaceCache.Files[evUriStr] = makeFile(
-				evUriStr, prev.Cursor, false, prev.OpenAt, prev.WindowID)
-			persistUpdateCache(h.svc, h.uri, workspaceCache)
+func taskWindow(e *ex, name string) browser.Window {
+	var ret browser.Window
+	e.comp.Browser().IterateWindows(func(win browser.Window) {
+		if ret != nil {
+			return
 		}
-	case textapi.EventTypeCursor:
-		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, ev.From, prev.Dirty, prev.OpenAt, prev.WindowID)
-		// do not store on cursor, as it could significantly impact performance
-	case textapi.EventTypeEdit:
-		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, prev.Cursor, true, prev.OpenAt, prev.WindowID)
-		// do not store on edit, as it could significantly impact performance
-	}
-
-	return false
+		content, err := win.Content()
+		if err != nil {
+			return
+		}
+		task, ok := content.(*idetask.Task)
+		if !ok {
+			return
+		}
+		if task.Info().Name == name {
+			ret = win
+		}
+	})
+	return ret
 }
 
-func makeFile(
-	uri string,
-	cursor term.Coordinates,
-	dirty bool,
-	updated time.Time,
-	windowID uint64,
-) file {
-	return file{
-		Dirty:     dirty,
-		URIString: uri,
-		Cursor:    cursor,
-		OpenAt:    updated,
-		WindowID:  windowID,
-	}
-}
 
-func persistUpdateCache(svc storageapi.Service, uri string, cache cache) {
-	const cacheSetTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), cacheSetTimeout)
-	defer cancel()
-
-	workspaceURI, err := workspaceapi.ParseURI(uri)
-	if err != nil {
-		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
-			Warnf("could not persist updated cache: parse workspace uri %q: %v", uri, err)
-		return
+// minimizeWindow snaps win to the configured alignment.
+//
+// This helper lives in ide/ rather than idehistory/ because it touches
+// the IDE's browser.Window — idehistory is concerned only with
+// persistence.
+func minimizeWindow(win browser.Window, alignment component.Alignment) {
+	switch alignment {
+	case component.AlignmentTop:
+		win.MinimizeUp(0)
+	case component.AlignmentBottom:
+		win.MinimizeDown(0)
+	case component.AlignmentLeft:
+		win.MinimizeLeft(0)
+	default:
+		win.MinimizeRight(0)
 	}
-	cache.Kind = historyDocumentKind
-	err = svc.Set(ctx, historyDocumentID(workspaceURI), cache)
-	if err != nil {
-		log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
-			Warnf("could not persist updated cache to durable storage: %v", err)
-		return
-	}
-	log.WithFields(log.Fields{logging.KeyClass: "ide.history"}).
-		Tracef("persisted updated cache for workspace %s", uri)
 }

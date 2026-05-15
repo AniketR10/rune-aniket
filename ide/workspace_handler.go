@@ -69,6 +69,7 @@ import (
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idecursor"
 	"unstable.build/go-tui/ide/idedebug"
+	"unstable.build/go-tui/ide/idehistory"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 	"unstable.build/go-tui/ide/idemacro"
@@ -130,7 +131,7 @@ type workspaceManagerHandler struct {
 	tabAttentionNameSuffix  string
 	workspaceBarKind        workspaceBarKind
 	userHome                string
-	history                 *history
+	state                   *idehistory.Store
 	workspacesBarHeight     int
 	workspacesIcon          rune
 	externalCommands        map[string]externalCommand
@@ -158,7 +159,7 @@ type workspaceManagerHandler struct {
 	homeWorkspace   workspace.Workspace
 	empty           *ex
 	homeRunner      extension.Runner
-	openPrevFiles   []file
+	openPrevFiles   []idehistory.File
 	openPrevFilesEx *ex
 	openPrevWindows map[uint64]browser.Window
 	shaderRunner    *shaderRunner
@@ -607,7 +608,7 @@ func (h *workspaceManagerHandler) init(
 	h.union.Top = charset.Top
 	h.union.Bottom = charset.Bottom
 	h.workspaceBarKind = cfg.workspaceBarKind()
-	h.history = newHistory(h.ideStorage)
+	h.state = idehistory.New(h.ideStorage)
 
 	// best effort
 	user, err := user.Current()
@@ -906,7 +907,7 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	if !h.exitPromptOpen {
-		hasDirtyFilesOpen := h.history.dirtyFilesOpen()
+		hasDirtyFilesOpen := h.state.DirtyFilesOpen()
 		h.exitPromptOpen = true
 		h.openConfirmExitPrompt(exHandler, hasDirtyFilesOpen)
 		h.shaderRunner.runShutdownShader()
@@ -1490,74 +1491,33 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 
 	h.logNonFatalErrs(wh.Browser(), built.configErr, built.cfg.errors)
 
-	prevSessionFiles, hasTermSessions, hasTaskSessions, layout, hasLayout, err :=
-		h.resolveSessionRestoreState(ex, uri, shouldRestore)
+	state, err := h.state.LoadWorkspaceState(ctx, uri)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
-			"resolve session state for %s: %v", uri.String(), err)
+			"load workspace state for %s: %v", uri.String(), err)
 		return
 	}
-	if !shouldRestore || (len(prevSessionFiles) == 0 && !hasTermSessions && !hasTaskSessions) {
+	fexplorerURI, _ := workspaceapi.ParseURI(fileExplorerURI)
+	wh.historyCloser = h.state.SubscribeEvents(
+		ctx, uri, &ex.comp, exSnapshotter{ex: ex}, fexplorerURI)
+	if !shouldRestore {
+		if err := h.state.ClearWorkspaceState(ctx, uri); err != nil {
+			_, _ = h.notifications.current().Notify(browserapi.LevelError,
+				"clear workspace state for %s: %v", uri.String(), err)
+		}
+		return
+	}
+	if state.IsEmpty() {
 		return
 	}
 	if promptRecommended && !built.cfg.autoRestore() {
-		h.openRestorePrompt(ex, uri, prevSessionFiles, hasTermSessions,
-			hasTaskSessions, layout, hasLayout)
+		h.openRestorePrompt(ex, uri, state)
 		return
 	}
-	if err := h.restorePreviousSession(ex, prevSessionFiles, hasTermSessions,
-		hasTaskSessions, layout, hasLayout); err != nil {
+	if err := h.restorePreviousSession(ex, state); err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"restore previous session: %v", err)
 	}
-}
-
-// resolveSessionRestoreState consults stored session metadata for uri
-// and either returns previously open files / windows / layouts (when
-// shouldRestore is true) or clears them (when shouldRestore is false,
-// e.g. autoRestore disabled).
-func (h *workspaceManagerHandler) resolveSessionRestoreState(
-	ex *ex, uri workspaceapi.URI, shouldRestore bool,
-) (
-	prevSessionFiles []file,
-	hasTermSessions bool,
-	hasTaskSessions bool,
-	layout tcomponent.TileLayout,
-	hasLayout bool,
-	err error,
-) {
-	prevSessionFiles = h.history.recordAddWorkspace(uri, ex.Editor(), shouldRestore)
-	if shouldRestore {
-		hasTermSessions, err = ex.hasOpenTerminalSessions(context.Background())
-		if err != nil {
-			err = fmt.Errorf("load open terminal sessions: %w", err)
-			return
-		}
-		hasTaskSessions, err = ex.hasOpenTaskSessions(context.Background())
-		if err != nil {
-			err = fmt.Errorf("load open task sessions: %w", err)
-			return
-		}
-		layout, hasLayout, err = ex.loadWorkspaceLayout(context.Background())
-		if err != nil {
-			err = fmt.Errorf("load workspace layout: %w", err)
-			return
-		}
-		return
-	}
-	if cerr := ex.clearOpenTerminalSessions(context.Background()); cerr != nil {
-		err = fmt.Errorf("clear open terminal sessions: %w", cerr)
-		return
-	}
-	if cerr := ex.clearOpenTaskSessions(context.Background()); cerr != nil {
-		err = fmt.Errorf("clear open task sessions: %w", cerr)
-		return
-	}
-	if cerr := ex.clearWorkspaceLayout(context.Background()); cerr != nil {
-		err = fmt.Errorf("clear workspace layout: %w", cerr)
-		return
-	}
-	return
 }
 
 // discardBuiltWorkspace tears down a Phase B build whose install was
@@ -1721,7 +1681,7 @@ func (h *workspaceManagerHandler) addOrCreateWorkspace(
 }
 
 func (h *workspaceManagerHandler) openPrevSessionFiles(
-	ex *ex, files []file, windows map[uint64]browser.Window,
+	ex *ex, files []idehistory.File, windows map[uint64]browser.Window,
 ) (err error) {
 	invokeWindow := ex.invokeWindow()
 	for _, f := range files {
@@ -1730,16 +1690,10 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 		// otherwise ex.initFileExplorer would call Edit a second
 		// time on the same URI and fail with
 		// "command already registered".
-		if f.URIString == fileExplorerURI {
+		if f.URI.String() == fileExplorerURI {
 			continue
 		}
-		uri, uerr := workspaceapi.ParseURI(f.URIString)
-		// do not hard error, otherwise changes to storage representation
-		// could prevent user from opening editor at all
-		if uerr != nil {
-			log.Warnf("parse uri from previous session file: %v", uerr)
-			continue
-		}
+		uri := f.URI
 		win := invokeWindow
 		if f.WindowID != 0 {
 			if mappedWin, ok := windows[f.WindowID]; ok {
@@ -1759,42 +1713,40 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 
 func (h *workspaceManagerHandler) restorePreviousSession(
 	ex *ex,
-	files []file,
-	restoreTerminals bool,
-	restoreTasks bool,
-	layout tcomponent.TileLayout,
-	hasLayout bool,
+	state idehistory.State,
 ) error {
 	ret := new(multierror.Error)
+	layout := state.Layout
 	layout.Floating = nil
-	windows := h.restoreWorkspaceWindows(ex, files, restoreTerminals,
-		layout, hasLayout)
+	restoreTerminals := len(state.Terminals) > 0
+	windows := h.restoreWorkspaceWindows(ex, state.Files, restoreTerminals,
+		layout, state.HasLayout)
 	if restoreTerminals {
 		ret = multierror.Append(ret,
-			ex.restoreOpenTerminalSessions(context.Background(), windows))
+			restoreOpenTerminalSessions(ex, state.Terminals, windows))
 	}
-	if restoreTasks {
+	if len(state.Tasks) > 0 {
 		ret = multierror.Append(ret,
-			ex.restoreOpenTaskSessions(context.Background()))
+			restoreOpenTaskSessions(ex, state.Tasks))
 	}
-	if len(files) == 0 {
+	if len(state.Files) == 0 {
 		return ret.ErrorOrNil()
 	}
 	if h.width == 0 || h.height == 0 {
 		// if restoreSession is called on an size 0,0 handler
 		// then cursor is not properly set.
-		h.openPrevFiles = files
+		h.openPrevFiles = state.Files
 		h.openPrevWindows = windows
 		h.openPrevFilesEx = ex
 		return ret.ErrorOrNil()
 	}
-	ret = multierror.Append(ret, h.openPrevSessionFiles(ex, files, windows))
+	ret = multierror.Append(ret, h.openPrevSessionFiles(ex, state.Files, windows))
 	return ret.ErrorOrNil()
 }
 
 func (h *workspaceManagerHandler) restoreWorkspaceWindows(
 	ex *ex,
-	files []file,
+	files []idehistory.File,
 	restoreTerminals bool,
 	layout tcomponent.TileLayout,
 	hasLayout bool,
@@ -1965,7 +1917,10 @@ func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
 		if h.lastReservedPending == pending {
 			h.lastReservedPending = nil
 		}
-		h.history.recordCloseWorkspace(uri)
+		if err := h.state.ClearWorkspaceState(
+			context.Background(), uri); err != nil {
+			log.Warnf("clear workspace state %s: %v", uri.String(), err)
+		}
 		return uri, nil, nil
 	}
 	if h.focusHandler() == h.empty {
@@ -1986,8 +1941,7 @@ func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
 		}
 	}
 
-	h.history.recordWorkspaceFileWindows(uri, hm.ex.fileWindowIDs())
-	h.history.recordCloseWorkspace(uri)
+	h.persistWorkspaceStateOnClose(hm)
 	var err error
 	if removeFromManager {
 		err = hm.closeAndRemove()
@@ -2094,8 +2048,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		if hm == nil {
 			continue
 		}
-		h.history.recordWorkspaceFileWindows(hm.uri, hm.ex.fileWindowIDs())
-		h.history.recordCloseWorkspace(hm.uri)
+		h.persistWorkspaceStateOnClose(hm)
 		if err := hm.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
@@ -2140,9 +2093,10 @@ type workspaceHandler struct {
 	// garbage-collected. It is NOT closed in Close(), which is also invoked
 	// on full-IDE shutdown where the workspace.Manager is owned by the
 	// caller.
-	cwd       workspace.Workspace
-	closeOnce sync.Once
-	closeErr  error
+	cwd           workspace.Workspace
+	closeOnce     sync.Once
+	closeErr      error
+	historyCloser io.Closer
 }
 
 func (hm *workspaceHandler) Close() error {
@@ -2558,6 +2512,17 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 	panic("unknown focus handler")
 
+}
+
+func (h *workspaceManagerHandler) persistWorkspaceStateOnClose(hm *workspaceHandler) {
+	if err := h.state.StoreWorkspaceStateForClose(
+		context.Background(), hm.uri, exSnapshotter{ex: hm.ex}); err != nil {
+		log.Warnf("persist workspace state %s: %v", hm.uri.String(), err)
+	}
+	if hm.historyCloser != nil {
+		_ = hm.historyCloser.Close()
+		hm.historyCloser = nil
+	}
 }
 
 func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {

@@ -1,0 +1,369 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+
+// Package idehistory consolidates all persisted workspace session state
+// (open files, file→window mapping, tile layout, open terminal sessions,
+// open task sessions) behind a single Store.
+package idehistory
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	tcomponent "unstable.build/go-tui/component"
+	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/text"
+)
+
+const (
+	workspaceStateDocumentKind   = "workspace-state"
+	workspaceStateDocumentPrefix = "workspace-state:"
+)
+
+// State is the unified workspace state persisted by Store.
+type State struct {
+	Files     []File
+	Layout    tcomponent.TileLayout
+	HasLayout bool
+	Terminals []TerminalSession
+	Tasks     []TaskSession
+}
+
+// IsEmpty reports whether there's nothing worth restoring. A persisted
+// layout alone is not considered worth restoring: the IDE always saves
+// a layout on workspace close, so observing a layout with no
+// files/terminals/tasks is the common "empty workspace" case and
+// triggering restore on it produces an empty-but-visible window.
+func (s State) IsEmpty() bool {
+	return len(s.Files) == 0 &&
+		len(s.Terminals) == 0 &&
+		len(s.Tasks) == 0
+}
+
+// File describes a file that was open in the previous session.
+type File struct {
+	URI      workspaceapi.URI
+	Dirty    bool
+	OpenAt   time.Time
+	Cursor   term.Coordinates
+	WindowID uint64
+}
+
+// TerminalSession is a serialized open-terminal session.
+type TerminalSession struct {
+	Name     string
+	Snapshot vte.Snapshot
+	Tab      bool
+	Visible  bool
+	Focus    bool
+	WindowID uint64
+}
+
+// TaskSession is a serialized open-task session.
+type TaskSession struct {
+	Name                     string
+	TaskName                 string
+	Filter                   string
+	Cmd                      string
+	Args                     []string
+	MinimizeAlignment        component.Alignment
+	WindowID                 uint64
+	WindowMinimized          bool
+	WindowMinimizedAlignment component.Alignment
+}
+
+// Snapshotter supplies live workspace state when the Store needs to
+// persist a fresh snapshot at close/reload time.
+type Snapshotter interface {
+	Terminals() []TerminalSession
+	Tasks() []TaskSession
+	Layout() (tcomponent.TileLayout, bool)
+	FileWindowIDs() map[string]uint64
+}
+
+// Store persists workspace state directly through a storageapi.Service.
+// Calls are synchronous; the caller is responsible for not invoking
+// Store from contexts that cannot tolerate I/O latency.
+//
+// Store is not safe for concurrent use. It expects to be called from
+// a single goroutine (typically the IDE event loop).
+type Store struct {
+	storage storageapi.Service
+	trackers map[string]*tracker
+}
+
+// New constructs a Store backed by storage. The Store does NOT take
+// ownership of storage and never calls Close on it.
+func New(storage storageapi.Service) *Store {
+	return &Store{
+		storage:  storage,
+		trackers: make(map[string]*tracker),
+	}
+}
+
+// StoreWorkspaceState writes state for uri.
+func (s *Store) StoreWorkspaceState(
+	ctx context.Context, uri workspaceapi.URI, state State,
+) error {
+	doc := newWorkspaceStateDocument(uri, state)
+	if err := s.storage.Set(ctx, workspaceStateDocumentID(uri), doc); err != nil {
+		return fmt.Errorf(
+			"idehistory: store %q: %w", uri.String(), err)
+	}
+	return nil
+}
+
+// StoreWorkspaceStateForClose writes the workspace state at
+// close/reload time. It seeds the state from the in-memory tracker
+// (preserving file cursors and the most recent open/flush events) and
+// enriches it with the live terminal/task/layout/window-ID snapshot
+// produced by snap.
+//
+// When no tracker is registered for uri the written state still
+// contains a fresh terminal/task/layout snapshot but an empty file
+// list — callers that need the file list must therefore
+// SubscribeEvents earlier.
+func (s *Store) StoreWorkspaceStateForClose(
+	ctx context.Context, uri workspaceapi.URI, snap Snapshotter,
+) error {
+	state, _ := s.trackerSnapshot(uri)
+	if snap != nil {
+		if winIDs := snap.FileWindowIDs(); len(winIDs) > 0 {
+			for i, f := range state.Files {
+				if wid, ok := winIDs[f.URI.String()]; ok {
+					f.WindowID = wid
+					state.Files[i] = f
+				}
+			}
+		}
+		layout, hasLayout := snap.Layout()
+		state.Layout = layout
+		state.HasLayout = hasLayout
+		state.Terminals = snap.Terminals()
+		state.Tasks = snap.Tasks()
+	}
+	return s.StoreWorkspaceState(ctx, uri, state)
+}
+
+// ClearWorkspaceState deletes the persisted state for uri.
+func (s *Store) ClearWorkspaceState(
+	ctx context.Context, uri workspaceapi.URI,
+) error {
+	id := workspaceStateDocumentID(uri)
+	if err := s.storage.Delete(ctx, id); err != nil &&
+		!errors.Is(err, storageapi.ErrNotFound) {
+		return fmt.Errorf("idehistory: clear %q: %w", uri.String(), err)
+	}
+	return nil
+}
+
+// LoadWorkspaceState returns the persisted state for uri. If no state
+// is persisted yet, the zero State is returned.
+func (s *Store) LoadWorkspaceState(
+	ctx context.Context, uri workspaceapi.URI,
+) (State, error) {
+	var doc workspaceStateDocument
+	err := s.storage.Get(ctx, workspaceStateDocumentID(uri), &doc)
+	if errors.Is(err, storageapi.ErrNotFound) {
+		return State{}, nil
+	}
+	if err != nil {
+		return State{}, fmt.Errorf(
+			"idehistory: load %q: %w", uri.String(), err)
+	}
+	return doc.toState(), nil
+}
+
+// SubscribeEvents subscribes to ed's events and maintains the
+// in-memory File list + cursor map for uri. snap is invoked when the
+// tracker needs terminal/task/layout context for the next Store call.
+// The returned Closer unsubscribes.
+//
+// skip lists URIs whose events must be ignored entirely — typically
+// pseudo-buffers like the file explorer that must never enter the
+// persisted file list.
+func (s *Store) SubscribeEvents(
+	ctx context.Context,
+	uri workspaceapi.URI, ed text.Editor, snap Snapshotter,
+	skip ...workspaceapi.URI,
+) io.Closer {
+	skipSet := make(map[string]struct{}, len(skip))
+	for _, u := range skip {
+		skipSet[u.String()] = struct{}{}
+	}
+	t := &tracker{
+		store: s,
+		uri:   uri,
+		snap:  snap,
+		ctx:   ctx,
+		files: make(map[string]File),
+		skip:  skipSet,
+	}
+	err := ed.SubscribeEvents([]textapi.EventType{
+		textapi.EventTypeOpen,
+		textapi.EventTypeClose,
+		textapi.EventTypeFlush,
+		textapi.EventTypeEdit,
+		textapi.EventTypeCursor,
+	}, t)
+	if err != nil {
+		log.WithFields(log.Fields{logging.KeyClass: "ide.idehistory"}).
+			Errorf("subscribe editor events: %v", err)
+	}
+	t.ed = ed
+	s.trackers[uri.String()] = t
+	return t
+}
+
+// DirtyFilesOpen reports whether any file tracked by any active
+// SubscribeEvents subscriber is currently dirty. The shutdown prompt
+// uses this to ask the user before quitting with unsaved changes.
+func (s *Store) DirtyFilesOpen() bool {
+	for _, t := range s.trackers {
+		for _, f := range t.files {
+			if f.Dirty {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+type workspaceStateDocument struct {
+	Kind         string
+	WorkspaceURI string
+	Files        []fileDoc
+	Layout       tcomponent.TileLayout
+	HasLayout    bool
+	Terminals    []terminalDoc
+	Tasks        []taskDoc
+}
+
+type fileDoc struct {
+	URI      string
+	Dirty    bool
+	OpenAt   time.Time
+	Cursor   term.Coordinates
+	WindowID uint64
+}
+
+type terminalDoc struct {
+	Name     string
+	Snapshot vte.Snapshot
+	Tab      bool
+	Visible  bool
+	Focus    bool
+	WindowID uint64
+}
+
+type taskDoc struct {
+	Name                     string
+	TaskName                 string
+	Filter                   string
+	Cmd                      string
+	Args                     []string
+	MinimizeAlignment        component.Alignment
+	WindowID                 uint64
+	WindowMinimized          bool
+	WindowMinimizedAlignment component.Alignment
+}
+
+func workspaceStateDocumentID(uri workspaceapi.URI) string {
+	return workspaceStateDocumentPrefix + url.QueryEscape(uri.String())
+}
+
+func newWorkspaceStateDocument(
+	uri workspaceapi.URI, state State,
+) workspaceStateDocument {
+	doc := workspaceStateDocument{
+		Kind:         workspaceStateDocumentKind,
+		WorkspaceURI: uri.String(),
+		Layout:       state.Layout,
+		HasLayout:    state.HasLayout,
+	}
+	for _, f := range state.Files {
+		doc.Files = append(doc.Files, fileDoc{
+			URI:      f.URI.String(),
+			Dirty:    f.Dirty,
+			OpenAt:   f.OpenAt,
+			Cursor:   f.Cursor,
+			WindowID: f.WindowID,
+		})
+	}
+	for _, t := range state.Terminals {
+		doc.Terminals = append(doc.Terminals, terminalDoc(t))
+	}
+	for _, t := range state.Tasks {
+		doc.Tasks = append(doc.Tasks, taskDoc{
+			Name:                     t.Name,
+			TaskName:                 t.TaskName,
+			Filter:                   t.Filter,
+			Cmd:                      t.Cmd,
+			Args:                     append([]string(nil), t.Args...),
+			MinimizeAlignment:        t.MinimizeAlignment,
+			WindowID:                 t.WindowID,
+			WindowMinimized:          t.WindowMinimized,
+			WindowMinimizedAlignment: t.WindowMinimizedAlignment,
+		})
+	}
+	return doc
+}
+
+func (d workspaceStateDocument) toState() State {
+	state := State{
+		Layout:    normalizeTileLayout(d.Layout),
+		HasLayout: d.HasLayout,
+	}
+	for _, f := range d.Files {
+		uri, err := workspaceapi.ParseURI(f.URI)
+		if err != nil {
+			continue
+		}
+		state.Files = append(state.Files, File{
+			URI:      uri,
+			Dirty:    f.Dirty,
+			OpenAt:   f.OpenAt,
+			Cursor:   f.Cursor,
+			WindowID: f.WindowID,
+		})
+	}
+	for _, t := range d.Terminals {
+		state.Terminals = append(state.Terminals, TerminalSession(t))
+	}
+	for _, t := range d.Tasks {
+		state.Tasks = append(state.Tasks, TaskSession{
+			Name:                     t.Name,
+			TaskName:                 t.TaskName,
+			Filter:                   t.Filter,
+			Cmd:                      t.Cmd,
+			Args:                     append([]string(nil), t.Args...),
+			MinimizeAlignment:        t.MinimizeAlignment,
+			WindowID:                 t.WindowID,
+			WindowMinimized:          t.WindowMinimized,
+			WindowMinimizedAlignment: t.WindowMinimizedAlignment,
+		})
+	}
+	return state
+}
+
+func normalizeTileLayout(layout tcomponent.TileLayout) tcomponent.TileLayout {
+	if len(layout.Floating) == 0 {
+		layout.Floating = nil
+	}
+	for i := range layout.Children {
+		layout.Children[i] = normalizeTileLayout(layout.Children[i])
+	}
+	return layout
+}
