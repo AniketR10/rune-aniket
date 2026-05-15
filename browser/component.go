@@ -187,6 +187,9 @@ func (c *Component) NewTab(
 	resource workspaceapi.URI, icon rune, name string,
 	h browserapi.Handler, f io.Closer,
 ) *Tab {
+	if c.config.TabOverrideIcon != 0 {
+		icon = c.config.TabOverrideIcon
+	}
 	t := newTab(c, resource, h, f)
 	c.buffers = append(c.buffers, t)
 	c.tabs.Add(icon, name)

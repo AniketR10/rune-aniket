@@ -517,6 +517,15 @@ func WithFocusTabHighlightChar(r rune) Option {
 	}
 }
 
+// WithTabOverrideIcon returns an Option that forces every tab icon
+// rendered by the browser to r. A zero rune disables the override and
+// keeps the per-source icons supplied by callers of NewTab.
+func WithTabOverrideIcon(r rune) Option {
+	return func(cfg *Config) {
+		cfg.Config.TabOverrideIcon = r
+	}
+}
+
 // WithCommandKeyBinding maps key to issue cmd.
 func WithCommandKeyBinding(key term.KeyComb, cmdAndArgs [][]string) Option {
 	return func(cfg *Config) {

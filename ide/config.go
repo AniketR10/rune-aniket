@@ -1060,15 +1060,15 @@ func (c ideConfig) dirtyTabAttr() term.Attributes {
 
 func (c ideConfig) icons() (ret text.IconSet) {
 	ret = text.DefaultConfig().Icons
-	e, ok := c.editor()
+	b, ok := c.browser()
 	if !ok {
 		return
 	}
 
-	m, err := e.GetMap("icons")
+	m, err := b.GetMap("icons")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.icons"] = err
+			c.errors["browser.icons"] = err
 		}
 		return
 	}
@@ -1092,13 +1092,34 @@ func (c ideConfig) icons() (ret text.IconSet) {
 	for k, v := range m {
 		vstr, ok := v.(string)
 		if !ok {
-			c.errors[fmt.Sprintf("editor.icons.%s", k)] =
+			c.errors[fmt.Sprintf("browser.icons.%s", k)] =
 				errors.New("expected a map of strings")
 		} else if vstr != "" {
 			ret.Extensions[k] = []rune(vstr)[0]
 		}
 	}
 	return ret
+}
+
+// tabOverrideIcon reads browser.tab_override_icon and returns the
+// first rune of the configured string. A zero rune means "no override":
+// tabs keep the icons supplied by their callers.
+func (c ideConfig) tabOverrideIcon() rune {
+	cfg, ok := c.browser()
+	if !ok {
+		return 0
+	}
+	s, err := cfg.GetString("tab_override_icon")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["browser.tab_override_icon"] = err
+		}
+		return 0
+	}
+	for _, r := range s {
+		return r
+	}
+	return 0
 }
 
 func (c ideConfig) getSpecialIcon(m map[string]any, key string) (ret rune) {
@@ -1108,7 +1129,7 @@ func (c ideConfig) getSpecialIcon(m map[string]any, key string) (ret rune) {
 	}
 	iconStr, ok := iconIfc.(string)
 	if !ok {
-		c.errors[fmt.Sprintf("editor.icons.%s", key)] =
+		c.errors[fmt.Sprintf("browser.icons.%s", key)] =
 			errors.New("expected a string")
 	} else if iconStr != "" {
 		ret = []rune(iconStr)[0]

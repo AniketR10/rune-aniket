@@ -142,12 +142,6 @@ editor:
         function:
             fg: green
             bg: yellow
-    icons:
-        default: x
-        terminal: '&'
-        shell: '8'
-        .go: $
-        .py: 1 # ignored
 
 input_mode:
   - mouse
@@ -250,6 +244,12 @@ browser:
     workspace_bar: false
     tab_name_separator: 'XX'
     tabspaces: 4
+    icons:
+        default: x
+        terminal: '&'
+        shell: '8'
+        .go: $
+        .py: 1 # ignored
     prompt:
         width: 20
         height: 10
@@ -480,6 +480,31 @@ func TestHighlightTabCharEmptyDisables(t *testing.T) {
 	}, errors: map[string]error{}}
 	assert.Equal(t, '▔', cfg.highlightTabChar())
 	assert.Equal(t, '▁', cfg.workspaceHighlightTabChar())
+}
+
+// TestTabOverrideIcon asserts browser.tab_override_icon parses
+// correctly: absent → 0 (no override), empty → 0, non-empty → first
+// rune.
+func TestTabOverrideIcon(t *testing.T) {
+	// key absent → 0
+	cfg := &ideConfig{cfg: map[string]any{
+		"browser": map[string]any{},
+	}, errors: map[string]error{}}
+	assert.Equal(t, rune(0), cfg.tabOverrideIcon(),
+		"absent browser.tab_override_icon must return rune 0")
+
+	// key empty → 0
+	cfg = &ideConfig{cfg: map[string]any{
+		"browser": map[string]any{"tab_override_icon": ""},
+	}, errors: map[string]error{}}
+	assert.Equal(t, rune(0), cfg.tabOverrideIcon(),
+		"empty browser.tab_override_icon must return rune 0")
+
+	// key present and non-empty → first rune
+	cfg = &ideConfig{cfg: map[string]any{
+		"browser": map[string]any{"tab_override_icon": "●"},
+	}, errors: map[string]error{}}
+	assert.Equal(t, '●', cfg.tabOverrideIcon())
 }
 
 func TestConfigDecodeError(t *testing.T) {

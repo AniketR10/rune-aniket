@@ -398,14 +398,6 @@ config = {
         # Whether certain language-specific folds start hidden when a file is
         # opened.
         "initial_folds": True,
-        # Icons for tabs; `terminal` is used for terminal tabs while `default`
-        # is the fallback for files.
-        "icons": {
-            "default":  "",
-            "terminal": "",
-            "directory": "",
-            "open_directory": "",
-        },
         # file_explorer configures the :fexplorer tree view. Indent
         # and icon attributes default to gray so the guides and glyphs
         # recede visually behind file names.
@@ -671,7 +663,6 @@ config = {
             "bottom": "🭼",
         },
         # Separator characters used to space out tab names.
-        "tab_name_separator": "   ",
         "focus_tab_attr":          attr(fg = "silver", bg = "default"),
         "dirty_tab_attr":          attr(fg = "red", bg = "default", flags = ["italic"]),
         "non_focus_tab_attr":      attr(fg = "gray", bg = "default"),
@@ -679,6 +670,20 @@ config = {
         "non_focus_tab_icon_attr": attr(fg = "silver", bg = "default"),
         "focus_tab_highlight_attr": attr(fg = "red", bg = "default"),
         "focus_tab_highlight_char":  "\U00100006",
+        # Icons for tabs; `terminal` is used for terminal tabs while
+        # `default` is the fallback for files.
+        "icons": {
+            "default":  "",
+            "terminal": "",
+            "directory": "",
+            "open_directory": "",
+        },
+        # If set, every tab icon rendered by the browser is forced
+        # to this single rune, ignoring per-source icons (file
+        # glyphs, `browser.icons`, terminal/shell icons, etc.).
+        # Empty disables.
+        "tab_override_icon": "",
+        "tab_name_separator": "   ",
         # Prompt configuration used when Rune asks the user questions.
         "prompt": {
             "text_attr":       attr(bg = "gray", flag = "bold"),

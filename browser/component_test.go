@@ -341,6 +341,42 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	assert.Equal(t, expectedFocusTabAttr, cells[7].Attributes)
 }
 
+// TestNewTabHonorsTabOverrideIcon verifies that when
+// Config.TabOverrideIcon is set, every tab icon rendered in the tab
+// bar uses that single rune regardless of the icon argument passed to
+// NewTab.
+func TestNewTabHonorsTabOverrideIcon(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+	cfg.TabOverrideIcon = '●'
+
+	b := NewComponent(cfg)
+
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	tabA := b.NewTab(uriA, 'A', "a", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tabA))
+
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+	tabB := b.NewTab(uriB, 'B', "b", newTestHandler(), nil)
+	_, ok := b.Split(browserapi.OrientationRight, b.Focus(), tabB)
+	require.True(t, ok)
+
+	width, height := 20, 5
+	b.Resize(width, height)
+	writer := term.NewStringWriter(width, height)
+	b.Draw(writer)
+	cells := writer.Cells()
+
+	assert.Equal(t, '●', cells[0].Ch, "first tab icon must be overridden")
+	assert.Equal(t, 'a', cells[2].Ch)
+	assert.Equal(t, '●', cells[5].Ch, "second tab icon must be overridden")
+	assert.Equal(t, 'b', cells[7].Ch)
+}
+
 // TestWindowFocusTabHighlightCueFollowsFocus verifies that when multiple
 // tabs are bound to different tiles, only the focused window's tab
 // renders the focus-frame highlight; switching window focus moves the

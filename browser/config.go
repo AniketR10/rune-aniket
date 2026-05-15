@@ -93,6 +93,10 @@ type Config struct {
 	NonFocusTabIconAttr term.Attributes
 	FocusTabHighlightAttr term.Attributes
 	FocusTabHighlightChar rune
+	// TabOverrideIcon, when non-zero, forces every tab icon
+	// rendered by this Component to this rune, regardless of the
+	// icon passed to NewTab by callers.
+	TabOverrideIcon     rune
 	TabBarOffset        int
 	TabBarHeight        int
 	TabNameSeparator    string

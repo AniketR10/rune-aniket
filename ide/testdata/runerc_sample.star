@@ -30,6 +30,8 @@ config = {
             "keyword": {"fg": "yellow"},
             "string": {"fg": "magenta"},
         },
+    },
+    "browser": {
         "icons": {
             "default": "X",
             "terminal": "T",
