@@ -1,0 +1,202 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+
+package llamacpp
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"unstable.build/go-tui/llm/llamacpp/ociregistry"
+)
+
+func TestWrapPullError(t *testing.T) {
+	t.Parallel()
+	ref := Reference{Host: "hf.co", Repository: "owner/repo", Tag: "latest"}
+	other := errors.New("network blew up")
+	cases := []struct {
+		name    string
+		in      error
+		want    error  // exact identity for pass-through and nil
+		wantSub string // substring for wrapped errors
+	}{
+		{name: "nil passes through", in: nil, want: nil},
+		{name: "passes through unknown errors", in: other, want: other},
+		{
+			name:    "ErrNotGGUFRepo wrapped with -GGUF hint",
+			in:      ociregistry.ErrNotGGUFRepo,
+			wantSub: "-GGUF",
+		},
+		{
+			name:    "ErrNotFound wrapped with host",
+			in:      ociregistry.ErrNotFound,
+			wantSub: "hf.co",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wrapPullError(tc.in, ref)
+			if tc.want != nil || tc.in == nil {
+				if got != tc.want {
+					t.Fatalf("wrapPullError(%v) = %v, want %v", tc.in, got, tc.want)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("wrapPullError(%v) returned nil, want wrapped", tc.in)
+			}
+			if !strings.Contains(got.Error(), tc.wantSub) {
+				t.Fatalf("wrapPullError(%v) = %q, want substring %q", tc.in, got, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestModelDigest(t *testing.T) {
+	t.Parallel()
+	t.Run("nil PullResult", func(t *testing.T) {
+		if got := modelDigest(nil); got != "" {
+			t.Fatalf("modelDigest(nil) = %q, want empty", got)
+		}
+	})
+	t.Run("nil Manifest", func(t *testing.T) {
+		pr := &ociregistry.PullResult{}
+		if got := modelDigest(pr); got != "" {
+			t.Fatalf("modelDigest(empty) = %q, want empty", got)
+		}
+	})
+	t.Run("manifest without model layer", func(t *testing.T) {
+		pr := &ociregistry.PullResult{Manifest: &ociregistry.Manifest{
+			Layers: []ociregistry.Descriptor{
+				{MediaType: ociregistry.MediaTypeOllamaProjector, Digest: "sha256:proj"},
+			},
+		}}
+		if got := modelDigest(pr); got != "" {
+			t.Fatalf("modelDigest(no model) = %q, want empty", got)
+		}
+	})
+	t.Run("returns model digest", func(t *testing.T) {
+		pr := &ociregistry.PullResult{Manifest: &ociregistry.Manifest{
+			Layers: []ociregistry.Descriptor{
+				{MediaType: ociregistry.MediaTypeOllamaModel, Digest: "sha256:abc"},
+			},
+		}}
+		if got := modelDigest(pr); got != "sha256:abc" {
+			t.Fatalf("modelDigest = %q, want sha256:abc", got)
+		}
+	})
+}
+
+// buildMiniGGUF returns a path to a minimal but well-formed GGUF v3 header
+// that exposes general.architecture=llama and llama.context_length=ctx so
+// readGGUFContextLength succeeds. Used to drive the registry's
+// real-blob metadata path (refreshContextWindow → storeContextWindow →
+// loadContextWindow) end to end without depending on a multi-GiB model.
+func buildMiniGGUF(t *testing.T, ctx uint32) []byte {
+	t.Helper()
+	b := newGGUFBuilder(t)
+	b.setNKV(2)
+	b.writeKVString("general.architecture", "llama")
+	b.writeKVTyped("llama.context_length", ggufTypeUint32, func(buf *bytes.Buffer) {
+		binary.Write(buf, binary.LittleEndian, ctx)
+	})
+	return b.buf.Bytes()
+}
+
+// TestRegistry_ContextWindow_PersistsAcrossReopen drives the full
+// metadata-cache path against a real (mini) GGUF blob:
+//
+//   - first Get reads the GGUF header (refreshContextWindow path is
+//     also implicit via Download→refresh, but Get→contextWindowForBlob
+//     is the user-visible entry point);
+//   - the value is written to the persistent storage (storeContextWindow);
+//   - a second Registry pointed at the same root surfaces the value
+//     via loadContextWindow without re-parsing the file.
+func TestRegistry_ContextWindow_PersistsAcrossReopen(t *testing.T) {
+	dir := t.TempDir()
+	storage := storagestub.NewInMemoryService()
+	t.Cleanup(func() { _ = storage.Close() })
+
+	r1, err := NewRegistry(dir, WithStorage(storage))
+	if err != nil {
+		t.Fatalf("NewRegistry 1: %v", err)
+	}
+
+	// Hand-craft an Ollama-style cache layout with a real GGUF blob.
+	body := buildMiniGGUF(t, 12345)
+	digest := digestSHA256(body)
+	blobDir := filepath.Join(r1.Root(), "blobs")
+	if err := os.MkdirAll(blobDir, 0o755); err != nil {
+		t.Fatalf("mkdir blobs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blobDir, "sha256-"+digest[len("sha256:"):]), body, 0o644); err != nil {
+		t.Fatalf("write blob: %v", err)
+	}
+	mDir := filepath.Join(r1.Root(), "manifests", "hf.co", "owner", "real-GGUF")
+	if err := os.MkdirAll(mDir, 0o755); err != nil {
+		t.Fatalf("mkdir manifests: %v", err)
+	}
+	manifest := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json",` +
+		`"layers":[{"mediaType":"application/vnd.ollama.image.model","digest":"` + digest +
+		`","size":` + itoa(len(body)) + `}]}`)
+	if err := os.WriteFile(filepath.Join(mDir, "latest"), manifest, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	e, ok := r1.Get(context.Background(), "hf.co/owner/real-GGUF:latest")
+	if !ok {
+		t.Fatal("Get: not found")
+	}
+	if e.ContextWindow != 12345 {
+		t.Fatalf("ContextWindow = %d, want 12345 from mini GGUF", e.ContextWindow)
+	}
+
+	// Persistent record is now in storage; a fresh Registry on the same
+	// root must see the cached value without re-reading the file.
+	r2, err := NewRegistry(dir, WithStorage(storage))
+	if err != nil {
+		t.Fatalf("NewRegistry 2: %v", err)
+	}
+	if got, found := r2.loadContextWindow(digest); !found || got != 12345 {
+		t.Fatalf("loadContextWindow(%s) = (%d, %v), want (12345, true)", digest, got, found)
+	}
+}
+
+// digestSHA256 hashes b with sha256 and returns the canonical "sha256:<hex>" form.
+func digestSHA256(b []byte) string {
+	h := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }

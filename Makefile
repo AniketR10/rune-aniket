@@ -54,12 +54,14 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-linux-amd64 rune-staging-dist-linux-arm64 \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps llamacpp-libs llamacpp-init \
+	rune-llamacpp-libs rune-llamacpp-init \
 	ox-api-init docs-init \
 	fuzz fuzz-list \
 	manual-ssh-test \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 LLAMACPP_STAMP=$(TARGET)/llamacpp-libs.stamp
+RUNE_LLAMACPP_STAMP=$(TARGET)/rune-llamacpp-libs.stamp
 
 # bluectl config matrix. Each leaf config pins BOTH auth.project-id and
 # release.collection so the publishing env + destination bucket are
@@ -108,11 +110,11 @@ claudeimport: $(CLAUDEIMPORT)
 	@ pre-commit install
 
 test: CI=$(CI)
-test: $(LLAMACPP_STAMP)
+test: $(LLAMACPP_STAMP) $(RUNE_LLAMACPP_STAMP)
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
 test: CI=$(CI)
-test-no-race: $(LLAMACPP_STAMP)
+test-no-race: $(LLAMACPP_STAMP) $(RUNE_LLAMACPP_STAMP)
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
 coverage: $(BIN)
@@ -131,7 +133,7 @@ FUZZTIME ?= 10s
 FUZZ_PKG ?= ./...
 FUZZ_TEST_FLAGS ?= -race -parallel=1 -count=1
 
-fuzz: $(LLAMACPP_STAMP)
+fuzz: $(LLAMACPP_STAMP) $(RUNE_LLAMACPP_STAMP)
 	@ set -e; \
 	pkgs=$$(go list -f '{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}' $(FUZZ_PKG)); \
 	for pkg in $$pkgs; do \
@@ -185,7 +187,7 @@ clean:
 $(BIN):
 	@mkdir $(BIN)
 
-$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init
+$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init $(RUNE_LLAMACPP_STAMP)
 	@cd cmd/rune && $(CGO_ENABLED) $(GO) build $(RUNE_GOFLAGS) -o ../../$@
 
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
@@ -434,13 +436,20 @@ notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
 
 # deps brings in git-managed prerequisites that are needed for local builds.
-deps: llamacpp-init ox-api-init docs-init
+deps: llamacpp-init rune-llamacpp-init ox-api-init docs-init
 
 # llamacpp-init makes sure the llama.cpp git submodule is checked out. It is
 # safe to run repeatedly; the submodule Makefile is also defensive about
 # running on a populated tree.
 llamacpp-init:
 	@ git submodule update --init --recursive cmd/rune-agent/llm/llamacpp/llama.cpp
+
+# rune-llamacpp-init initialises the second llama.cpp submodule attached to
+# the rune-side llm/llamacpp tree. The rune-agent and rune trees share the
+# same upstream URL but maintain independent submodule checkouts during the
+# migration; the rune-agent entry will be removed once the migration lands.
+rune-llamacpp-init:
+	@ git submodule update --init --recursive llm/llamacpp/llama.cpp
 
 # ox-api-init makes sure the ox-api git submodule is checked out so the
 # cmd/ox-api package compiles. Safe to run repeatedly.
@@ -464,3 +473,12 @@ $(LLAMACPP_STAMP): deps
 	@ touch $@
 
 llamacpp-libs: $(LLAMACPP_STAMP)
+
+# rune-llamacpp-libs builds the static libraries used by rune/llm/llamacpp.
+# Mirrors llamacpp-libs but points at the rune-side submodule and Makefile.
+$(RUNE_LLAMACPP_STAMP): rune-llamacpp-init
+	@ mkdir -p $(dir $@)
+	@ $(MAKE) -C llm/llamacpp libs
+	@ touch $@
+
+rune-llamacpp-libs: $(RUNE_LLAMACPP_STAMP)

@@ -231,6 +231,101 @@ config = {
             "hint":        "󰌵",
         },
     },
+    # LLM models configuration. The router reads these keys directly to
+    # construct provider clients. Each provider sub-key carries the bits
+    # specific to that backend (api_key, base_url, ...). Legacy top-level
+    # `openai`/`anthropic` blocks live in rune-agent's own settings tree
+    # and are NOT consulted here.
+    "models": {
+        # Default model selected when callers do not specify one.
+        "default": "gpt-5.4",
+        # Global sampling and budgeting parameters.
+        "temperature":           0,
+        "top_p":                 0,
+        "max_tokens":            0,
+        "max_completion_tokens": 0,
+        "frequency_penalty":     0,
+        "presence_penalty":      0,
+        # Reasoning summary preference for providers that support it.
+        # Valid: "auto", "concise", "detailed", "disabled".
+        "reasoning_summary":     "auto",
+        # When True, the router logs HTTP request/response details.
+        "debug_http":            False,
+        "openai": {
+            "api_key":             "",
+            "base_url":            "",
+            # "" lets the model decide; otherwise one of
+            # none, minimal, low, medium, high, xhigh, max.
+            "reasoning_effort":    "",
+            "force_responses_api": False,
+        },
+        "anthropic": {
+            "api_key":          "",
+            "base_url":         "",
+            "reasoning_effort": "",
+            # "ephemeral", "5m", "1h", or "" to disable prompt caching.
+            "cache_control":    "",
+        },
+        "gemini": {
+            "api_key": "",
+        },
+        "codex": {
+            "base_url": "",
+        },
+        "custom": {
+            "url":     "",
+            "api_key": "",
+            # Map of model name -> context window in tokens.
+            "available_models": {},
+        },
+        "local": {
+            # llamacpp cache root. Empty means $RUNE_DATADIR/models.
+            "models_cache_dir":   "",
+            # Logical batch size (n_batch). 0 picks the llama.cpp default.
+            "batch_size":         0,
+            # Number of layers to offload to the GPU. Negative offloads
+            # every layer the backend supports.
+            "n_gpu_layers":       -1,
+            # Generation thread count. 0 lets llama.cpp pick.
+            "threads":            0,
+            # Enable flash-attention when supported by the backend.
+            "flash_attention":    False,
+            # Caps tokens generated per completion. 0 means "until EOG".
+            "max_output_tokens": 0,
+            # Overrides the chat template embedded in the GGUF.
+            "chat_template":      "",
+            # Minimum chunk size (tokens) for KV-cache shift-reuse. 0
+            # disables shift-reuse (falls back to LCP-only matching).
+            "n_cache_reuse":      0,
+            # Sampler chain. Leaving any value at zero inherits the
+            # llama.cpp upstream default. Keys mirror SamplerParams
+            # exactly.
+            "sampling": {
+                "seed":            0xFFFFFFFF,
+                "temperature":     0.8,
+                "top_k":           40,
+                "top_p":           0.95,
+                "min_p":           0.05,
+                "repeat_penalty":  1.0,
+                "repeat_last_n":   64,
+                "freq_penalty":    0,
+                "presence_penalty":0,
+                "typical_p":       0,
+                "top_n_sigma":     0,
+                "mirostat":        0,
+                "mirostat_tau":    0,
+                "mirostat_eta":    0,
+                "dynatemp_range":  0,
+                "dynatemp_exponent": 0,
+                "xtc_probability": 0,
+                "xtc_threshold":   0,
+                "dry_multiplier":  0,
+                "dry_base":        0,
+                "dry_allowed_length": 0,
+                "dry_penalty_last_n": 0,
+            },
+        },
+    },
     "shell": {
         "max_history": 2000,
     },

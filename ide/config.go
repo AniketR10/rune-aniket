@@ -49,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/llm"
 	yaml "gopkg.in/yaml.v3"
 	tconfig "unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/browser"
@@ -173,6 +174,194 @@ func (c ideConfig) debugger() (config.Config, bool) {
 	}
 	cfg, ok := c.getConfig(config.MapConfig(c.cfg), "debugger")
 	return cfg, ok
+}
+
+// llmConfig returns the typed llm.Config the rune-side LLM router
+// consumes. It starts from llm.DefaultConfig() and overlays any values
+// found under the `models.*` block. Missing keys keep their default
+// value, matching every other helper in this file. Before returning,
+// it validates the result so the router never sees an invalid config
+// at runtime.
+func (c ideConfig) llmConfig() llm.Config {
+	out := llm.DefaultConfig()
+	if c.cfg == nil {
+		c.recordLLMValidationError(llm.ValidateConfig(out))
+		return out
+	}
+	models, ok := c.getConfig(config.MapConfig(c.cfg), "models")
+	if !ok {
+		c.recordLLMValidationError(llm.ValidateConfig(out))
+		return out
+	}
+	overrideString(models, "default", &out.Default)
+	overrideString(models, "reasoning_summary", &out.ReasoningSummary)
+	overrideBool(models, "debug_http", &out.DebugHTTP)
+
+	if openai, ok := c.getConfig(models, "openai"); ok {
+		overrideString(openai, "api_key", &out.OpenAI.APIKey)
+		overrideString(openai, "base_url", &out.OpenAI.BaseURL)
+		overrideString(openai, "reasoning_effort", &out.OpenAI.ReasoningEffort)
+		overrideBool(openai, "force_responses_api", &out.OpenAI.ForceResponsesAPI)
+	}
+	if anthropic, ok := c.getConfig(models, "anthropic"); ok {
+		overrideString(anthropic, "api_key", &out.Anthropic.APIKey)
+		overrideString(anthropic, "base_url", &out.Anthropic.BaseURL)
+		overrideString(anthropic, "reasoning_effort", &out.Anthropic.ReasoningEffort)
+		overrideString(anthropic, "cache_control", &out.Anthropic.CacheControl)
+	}
+	if gemini, ok := c.getConfig(models, "gemini"); ok {
+		overrideString(gemini, "api_key", &out.Gemini.APIKey)
+	}
+	if codex, ok := c.getConfig(models, "codex"); ok {
+		overrideString(codex, "base_url", &out.Codex.BaseURL)
+	}
+	if custom, ok := c.getConfig(models, "custom"); ok {
+		overrideString(custom, "url", &out.Custom.URL)
+		overrideString(custom, "api_key", &out.Custom.APIKey)
+		if m, err := custom.GetMap("available_models"); err == nil && len(m) > 0 {
+			out.Custom.AvailableModels = make(map[string]int, len(m))
+			for name, v := range m {
+				switch n := v.(type) {
+				case int:
+					out.Custom.AvailableModels[name] = n
+				case int64:
+					out.Custom.AvailableModels[name] = int(n)
+				case float64:
+					out.Custom.AvailableModels[name] = int(n)
+				}
+			}
+		}
+	}
+	if local, ok := c.getConfig(models, "local"); ok {
+		overrideString(local, "models_cache_dir", &out.Local.ModelsCacheDir)
+		overrideUint32Into(local, "batch_size", &out.Local.Service.BatchSize)
+		overrideIntInto(local, "n_gpu_layers", &out.Local.Service.NGPULayers)
+		overrideIntInto(local, "threads", &out.Local.Service.Threads)
+		overrideBool(local, "flash_attention", &out.Local.Service.FlashAttention)
+		overrideIntInto(local, "max_output_tokens", &out.Local.Service.MaxOutputTokens)
+		overrideString(local, "chat_template", &out.Local.Service.ChatTemplate)
+		overrideIntInto(local, "n_cache_reuse", &out.Local.Service.NCacheReuse)
+
+		if sampling, ok := c.getConfig(local, "sampling"); ok {
+			s := &out.Local.Service.Sampling
+			overrideUint32Into(sampling, "seed", &s.Seed)
+			overrideFloat32Into(sampling, "temperature", &s.Temperature)
+			overrideIntInto(sampling, "top_k", &s.TopK)
+			overrideFloat32Into(sampling, "top_p", &s.TopP)
+			overrideFloat32Into(sampling, "min_p", &s.MinP)
+			overrideFloat32Into(sampling, "repeat_penalty", &s.RepeatPenalty)
+			overrideIntInto(sampling, "repeat_last_n", &s.RepeatLastN)
+			overrideFloat32Into(sampling, "freq_penalty", &s.FreqPenalty)
+			overrideFloat32Into(sampling, "presence_penalty", &s.PresencePenalty)
+			if setFloat32WithFlag(sampling, "typical_p", &s.TypicalP) {
+				s.HasTypicalP = true
+			}
+			if setFloat32WithFlag(sampling, "top_n_sigma", &s.TopNSigma) {
+				s.HasTopNSigma = true
+			}
+			overrideInt32Into(sampling, "mirostat", &s.Mirostat)
+			if setFloat32WithFlag(sampling, "mirostat_tau", &s.MirostatTau) {
+				s.HasMirostatTau = true
+			}
+			if setFloat32WithFlag(sampling, "mirostat_eta", &s.MirostatEta) {
+				s.HasMirostatEta = true
+			}
+			overrideFloat32Into(sampling, "dynatemp_range", &s.DynaTempRange)
+			overrideFloat32Into(sampling, "dynatemp_exponent", &s.DynaTempExponent)
+			overrideFloat32Into(sampling, "xtc_probability", &s.XtcProbability)
+			overrideFloat32Into(sampling, "xtc_threshold", &s.XtcThreshold)
+			overrideFloat32Into(sampling, "dry_multiplier", &s.DryMultiplier)
+			if setFloat32WithFlag(sampling, "dry_base", &s.DryBase) {
+				s.HasDryBase = true
+			}
+			if setInt32WithFlag(sampling, "dry_allowed_length", &s.DryAllowedLength) {
+				s.HasDryAllowedLength = true
+			}
+			if setInt32WithFlag(sampling, "dry_penalty_last_n", &s.DryPenaltyLastN) {
+				s.HasDryPenaltyLastN = true
+			}
+		}
+	}
+	c.recordLLMValidationError(llm.ValidateConfig(out))
+	return out
+}
+
+// recordLLMValidationError stores err under the `models` key in c.errors
+// so the standard config-error reporter surfaces it like every other
+// typed validation failure.
+func (c ideConfig) recordLLMValidationError(err error) {
+	if err == nil {
+		return
+	}
+	c.errors["models"] = err
+}
+
+// overrideString sets *dst to the string value at key in cfg when the
+// key resolves successfully. Missing/typed-mismatched keys leave dst
+// unchanged, preserving any default the caller seeded.
+func overrideString(cfg config.Config, key string, dst *string) {
+	if v, err := cfg.GetString(key); err == nil {
+		*dst = v
+	}
+}
+
+func overrideBool(cfg config.Config, key string, dst *bool) {
+	if v, err := cfg.GetBool(key); err == nil {
+		*dst = v
+	}
+}
+
+func overrideIntInto(cfg config.Config, key string, dst *int) {
+	if v, err := cfg.GetInt(key); err == nil {
+		*dst = v
+	}
+}
+
+func overrideUint32Into(cfg config.Config, key string, dst *uint32) {
+	if v, err := cfg.GetInt(key); err == nil && v >= 0 {
+		*dst = uint32(v) // #nosec G115 -- guarded above
+	}
+}
+
+func overrideInt32Into(cfg config.Config, key string, dst *int32) {
+	if v, err := cfg.GetInt(key); err == nil {
+		*dst = int32(v) // #nosec G115 -- starlark ints fit; out-of-range is config error
+	}
+}
+
+func overrideFloat32Into(cfg config.Config, key string, dst *float32) {
+	if v, err := cfg.GetFloat(key); err == nil {
+		*dst = float32(v)
+		return
+	}
+	// Starlark integers come through as int when the literal has no
+	// decimal point; accept those for numeric knobs.
+	if v, err := cfg.GetInt(key); err == nil {
+		*dst = float32(v)
+	}
+}
+
+// setFloat32WithFlag is overrideFloat32Into with an "explicitly set" flag.
+// Returns true when the key was found and the destination was updated.
+func setFloat32WithFlag(cfg config.Config, key string, dst *float32) bool {
+	if v, err := cfg.GetFloat(key); err == nil {
+		*dst = float32(v)
+		return true
+	}
+	if v, err := cfg.GetInt(key); err == nil {
+		*dst = float32(v)
+		return true
+	}
+	return false
+}
+
+// setInt32WithFlag is overrideInt32Into with an "explicitly set" flag.
+func setInt32WithFlag(cfg config.Config, key string, dst *int32) bool {
+	if v, err := cfg.GetInt(key); err == nil {
+		*dst = int32(v) // #nosec G115 -- range-checked in validation
+		return true
+	}
+	return false
 }
 
 // debuggerConfigs extracts the `debugger.<langID>` adapter

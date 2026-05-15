@@ -382,6 +382,63 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 	assert.Equal(t, 2000, cfg.shellMaxHistory())
 }
 
+// TestRuneStarModelsConfig verifies the shipped rune.star renders a
+// `models` block with the documented sub-keys. This locks the schema so
+// downstream loaders can rely on the keys being present.
+func TestRuneStarModelsConfig(t *testing.T) {
+	data, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+
+	cfg, err := decodeStarlarkConfig(starlarkConfigSource{
+		src:      data,
+		filename: "rune.star",
+		params:   map[string]any{"mode": "modal", "tui": false},
+	})
+	require.NoError(t, err)
+
+	models, ok := cfg["models"].(map[string]any)
+	require.True(t, ok, "models block missing")
+	assert.Equal(t, "gpt-5.4", models["default"])
+	assert.Equal(t, "auto", models["reasoning_summary"])
+	assert.Equal(t, false, models["debug_http"])
+
+	for _, prov := range []string{"openai", "anthropic", "gemini", "codex", "custom", "local"} {
+		_, ok := models[prov].(map[string]any)
+		assert.Truef(t, ok, "models.%s missing", prov)
+	}
+
+	openai := models["openai"].(map[string]any)
+	assert.Contains(t, openai, "api_key")
+	assert.Contains(t, openai, "base_url")
+	assert.Contains(t, openai, "reasoning_effort")
+	assert.Contains(t, openai, "force_responses_api")
+
+	local := models["local"].(map[string]any)
+	assert.Contains(t, local, "models_cache_dir")
+	assert.Contains(t, local, "n_gpu_layers")
+	assert.Contains(t, local, "threads")
+	assert.Contains(t, local, "flash_attention")
+	assert.Contains(t, local, "batch_size")
+	assert.Contains(t, local, "max_output_tokens")
+	assert.Contains(t, local, "chat_template")
+	assert.Contains(t, local, "n_cache_reuse")
+	sampling, ok := local["sampling"].(map[string]any)
+	require.True(t, ok, "models.local.sampling missing")
+	for _, key := range []string{
+		"seed", "temperature", "top_k", "top_p", "min_p",
+		"repeat_penalty", "repeat_last_n",
+		"freq_penalty", "presence_penalty",
+		"typical_p", "top_n_sigma",
+		"mirostat", "mirostat_tau", "mirostat_eta",
+		"dynatemp_range", "dynatemp_exponent",
+		"xtc_probability", "xtc_threshold",
+		"dry_multiplier", "dry_base",
+		"dry_allowed_length", "dry_penalty_last_n",
+	} {
+		assert.Containsf(t, sampling, key, "models.local.sampling.%s missing", key)
+	}
+}
+
 func TestDecodeStarlarkOverlayRead(t *testing.T) {
 	base := map[string]any{
 		"editor":     map[string]any{"mode": "modal"},

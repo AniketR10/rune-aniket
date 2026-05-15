@@ -45,7 +45,6 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -76,9 +75,11 @@ import (
 	"unstable.build/go-tui/ide/idemacro"
 	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
+	"unstable.build/go-tui/ide/llmshell"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
+	"unstable.build/go-tui/llm/llmrouter"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/text/byoefallback"
@@ -124,7 +125,7 @@ type workspaceManagerHandler struct {
 	extensionRunner    ExtensionsRunner
 	sixDir             string
 	configPath         string
-	llmService         llmapi.Service
+	llmRouter          *llmrouter.Router
 	frameCharSet       component.FrameCharSet
 	tabBarOffset       int
 	tabBarHeight       int
@@ -465,6 +466,14 @@ func (h *workspaceManagerHandler) init(
 
 	h.storage = storage
 	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
+	// Construct the LLM router from the typed models.* config block.
+	// The router owns every provider client plus the llama.cpp local
+	// registry; the rest of the IDE treats it as an llmapi.Service.
+	router, err := llmrouter.New(cfg.llmConfig(), sixDir, h.storage)
+	if err != nil {
+		return fmt.Errorf("init llm router: %w", err)
+	}
+	h.llmRouter = router
 	// Ensure ideConfig — used to assemble alias completer chains during
 	// textOpts — can resolve `{history}` against the same partitioned
 	// storage the command Prompt writes to. The Prompt persists command
@@ -1657,8 +1666,17 @@ func (h *workspaceManagerHandler) buildExtensions(
 	}
 	res = extension.MergeResourceMap(res, extension.SemanticResources(lsp))
 	res = extension.MergeResourceMap(res, extension.DebugResources(dap))
-	if h.llmService != nil {
-		res = extension.MergeResourceMap(res, extension.LLMResources(h.llmService))
+	res = extension.MergeResourceMap(res, extension.LLMResources(h.llmRouter))
+
+	// Register the top-level `models` REPL command. The llmshell
+	// reads the local llama.cpp registry directly off the router.
+	llmHandler := llmshell.New(llmshell.Config{
+		Router:        h.llmRouter,
+		LocalRegistry: h.llmRouter.LocalRegistry(),
+		Storage:       h.storage,
+	})
+	if err := ex.comp.RegisterREPLCommand(llmshell.Manual(), llmHandler); err != nil {
+		log.Errorf("register llm repl command: %v", err)
 	}
 
 	dataDir := h.sixDir

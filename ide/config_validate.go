@@ -29,6 +29,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/llm"
 	"unstable.build/go-tui/text"
 )
 
@@ -44,6 +45,10 @@ func validateConfig(cfg map[string]any) (err error) {
 	}
 
 	if err = validateBYOE(&c, cfg); err != nil {
+		return
+	}
+
+	if err = llm.ValidateConfig(c.llmConfig()); err != nil {
 		return
 	}
 	return
