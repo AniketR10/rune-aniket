@@ -185,18 +185,21 @@ func (e *Handler) Snapshot() (Snapshot, error) {
 	return e.comp.Snapshot()
 }
 
-// RestoreFromSnapshot restores a saved terminal snapshot into this live
-// terminal emulator.
+// RestoreFromSnapshot restores a saved terminal snapshot into this
+// live terminal emulator.
+//
+// Component.RestoreFromSnapshot mutates the primary buffer cells in
+// place — the *cell.Buffer identity (and therefore every editor/scroll
+// reference that viHandler captured at init) is preserved. The only
+// state that becomes stale on the vi side is the cursor and the scroll
+// offset, so we just refresh those rather than re-initialising vi.
 func (e *Handler) RestoreFromSnapshot(snapshot Snapshot) error {
 	cursor, err := e.comp.RestoreFromSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
 	if e.modalEnabled {
-		e.vi.restorePrimaryScroll()
-		if e.viMode {
-			e.vi.setCursorAtScroll(cursor)
-		}
+		e.vi.setCursorAtScroll(cursor)
 	}
 	return nil
 }
@@ -210,9 +213,6 @@ func (e *Handler) ClearPrimaryBuffer() (ok bool) {
 	ok = e.comp.ClearPrimaryBuffer()
 	if !ok {
 		return
-	}
-	if e.modalEnabled {
-		e.vi.resetCopyState()
 	}
 	if e.viMode {
 		// re-entering vi mode will reset cursor/offset for vi handler

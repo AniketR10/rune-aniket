@@ -76,20 +76,6 @@ type viHandler struct {
 	}
 }
 
-type viSyncState struct {
-	mu        sync.Locker
-	vi        *vi.Vi
-	scroll    *component.Scroll
-	vteScroll *component.Scroll
-	editor    cell.Editor
-	selector  *cell.Buffer
-}
-
-type viCopyState struct {
-	vi     *vi.Vi
-	editor cell.Editor
-}
-
 // for dependency injection purposes
 type parentComponent interface {
 	PrimaryScroll() *component.Scroll
@@ -109,109 +95,39 @@ func (v *viHandler) init(comp *Component, config Config) {
 }
 
 func (v *viHandler) doInit(comp parentComponent, config Config) {
-	v.comp = comp
-	v.config = config
-	opts := v.viOptions()
-	v.applyCopyState(v.newCopyState(comp, opts))
-	v.applySyncState(v.newSyncState(comp, opts))
-}
-
-func (v *viHandler) restorePrimaryScroll() {
-	opts := v.viOptions()
-	syncState := v.newSyncState(v.comp, opts)
-	syncState.resize(v.width, v.height)
-	copyState := v.newCopyState(v.comp, opts)
-	copyState.resize(v.width, v.height)
-
-	mu := v.sync.mu
-	mu.Lock()
-	defer mu.Unlock()
-	v.applySyncState(syncState)
-
-	v.copy.mu.Lock()
-	defer v.copy.mu.Unlock()
-	v.applyCopyState(copyState)
-}
-
-func (v *viHandler) resetCopyState() {
-	copyState := v.newCopyState(v.comp, v.viOptions())
-	copyState.resize(v.width, v.height)
-	v.copy.mu.Lock()
-	defer v.copy.mu.Unlock()
-	v.applyCopyState(copyState)
-}
-
-func (v *viHandler) newSyncState(comp parentComponent, opts []vi.Option) viSyncState {
-	// do not share scroll (we don't want vi messing around with the offsets
-	// of the vte parser, which gets complicated quickly to maintain and keep sync
-	// but share buffer, so updates are synced.
-	vteScroll := comp.PrimaryScroll()
-	scroll := new(component.Scroll)
-	scroll.InitPerformance(vteScroll.Buffer())
-	scroll.InvertOffset = true
-	syncVi := new(vi.Vi)
-	syncVi.InitWithScroll(scroll, comp.URI(), text.IndentRuneTab, 0, opts...)
-	return viSyncState{
-		mu:        comp.Locker(),
-		vi:        syncVi,
-		scroll:    scroll,
-		vteScroll: vteScroll,
-		editor:    scroll.Buffer().WithEditor(v),
-		selector:  scroll.Buffer(),
+	opts := []vi.Option{
+		vi.WithResAttr(config.SelectionAttributes),
+		vi.WithAttr(config.Attributes),
+		vi.WithWrap(false),
+		vi.WithCursorCorrections(false),
+		vi.WithClipboard(config.Clipboard),
+		vi.WithTabspaces(1),
 	}
-}
-
-func (v *viHandler) newCopyState(comp parentComponent, opts []vi.Option) viCopyState {
 	copyBuffer := new(cell.Buffer)
 	copyBuffer.InitPerformance(120, 80, vtescreen.DefaultChar)
 	copyScroll := new(component.Scroll)
 	copyScroll.InitPerformance(copyBuffer)
 	copyScroll.InvertOffset = true
-	copyVi := new(vi.Vi)
-	copyVi.InitWithScroll(copyScroll, comp.URI(), text.IndentRuneTab, 0, opts...)
-	return viCopyState{
-		vi:     copyVi,
-		editor: copyScroll.Buffer().WithEditor(copyEditor{v: v}),
-	}
-}
+	v.copy.vi = new(vi.Vi)
+	v.copy.vi.InitWithScroll(copyScroll, comp.URI(), text.IndentRuneTab, 0, opts...)
+	v.copy.editor = copyScroll.Buffer().WithEditor(copyEditor{v: v})
 
-func (v *viHandler) applySyncState(state viSyncState) {
-	v.sync.mu = state.mu
-	v.sync.vi = state.vi
-	v.sync.scroll = state.scroll
-	v.sync.vteScroll = state.vteScroll
-	v.sync.editor = state.editor
-	v.sync.selector = state.selector
-}
+	vi := new(vi.Vi)
+	// do not share scroll (we don't want vi messing around with the offsets
+	// of the vte parser, which gets complicated quickly to maintain and keep sync
+	// but share buffer, so updates are synced.
+	v.sync.scroll = new(component.Scroll)
+	v.sync.vteScroll = comp.PrimaryScroll()
+	v.sync.scroll.InitPerformance(v.sync.vteScroll.Buffer())
+	v.sync.scroll.InvertOffset = true
+	vi.InitWithScroll(v.sync.scroll, comp.URI(), text.IndentRuneTab, 0, opts...)
+	v.sync.vi = vi
+	v.sync.selector = v.sync.scroll.Buffer()
+	v.sync.mu = comp.Locker()
+	v.sync.editor = v.sync.scroll.Buffer().WithEditor(v)
 
-func (v *viHandler) applyCopyState(state viCopyState) {
-	v.copy.vi = state.vi
-	v.copy.editor = state.editor
-}
-
-func (s viSyncState) resize(width, height int) {
-	if width == 0 && height == 0 {
-		return
-	}
-	s.vi.Resize(width, height)
-}
-
-func (s viCopyState) resize(width, height int) {
-	if width == 0 && height == 0 {
-		return
-	}
-	s.vi.Resize(width, height)
-}
-
-func (v *viHandler) viOptions() []vi.Option {
-	return []vi.Option{
-		vi.WithResAttr(v.config.SelectionAttributes),
-		vi.WithAttr(v.config.Attributes),
-		vi.WithWrap(false),
-		vi.WithCursorCorrections(false),
-		vi.WithClipboard(v.config.Clipboard),
-		vi.WithTabspaces(1),
-	}
+	v.comp = comp
+	v.config = config
 }
 
 func (v *viHandler) Handle(ev term.Event) (exit, handled bool) {

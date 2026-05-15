@@ -658,7 +658,7 @@ func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordina
 	// reservoir / Facility.Resize path and matched the tile size.
 	t.mu.Lock()
 	t.parserHandler.sync.primBuf.Restore(
-		term.CloneCells(snapshot.Primary.Cells), snapshot.Primary.Cursor, width, height)
+		snapshot.Primary.Cells, snapshot.Primary.Cursor, width, height)
 	t.parserHandler.useAlt = false
 	t.parserHandler.sync.buf = t.parserHandler.sync.primBuf
 	if snapshot.Title != "" {

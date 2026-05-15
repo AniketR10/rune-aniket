@@ -671,7 +671,15 @@ func TestViEditUnit(t *testing.T) {
 		assert.Equal(t, "b\nb", comp.scroll.Buffer().String())
 	})
 
-	t.Run("restore primary scroll refreshes editable buffers", func(t *testing.T) {
+	// Mirrors the production restore path: vte.Component.RestoreFromSnapshot
+	// rewrites primary-buffer cells in place (preserving *cell.Buffer
+	// identity) and the cursor moves. Handler.RestoreFromSnapshot then
+	// calls vi.setCursorAtScroll(newCursor). The viHandler is NOT
+	// re-initialised; doing so on top of itself produced a
+	// self-referential editor chain (v.sync.editor == v) which made
+	// v.Edit recurse forever and pegged the event loop after a
+	// remote-workspace snapshot restore.
+	t.Run("restore refreshes editable buffer in place", func(t *testing.T) {
 		t.Parallel()
 		comp := newTestParentComponent("$ stale ", term.Coordinates{X: 2})
 		var vi viHandler
@@ -684,13 +692,17 @@ func TestViEditUnit(t *testing.T) {
 		vi.remote = newTestRemote(comp.scroll, comp.cursor)
 		vi.Resize(18, 18)
 
-		restored := newTestParentComponent("$ restored ", term.Coordinates{X: 11})
-		comp.scroll = restored.scroll
-		comp.cursor = restored.cursor
-		vi.restorePrimaryScroll()
+		// Mimic what vte.Component.RestoreFromSnapshot does: rewrite
+		// the existing primary buffer's cells in place and move the
+		// cursor. *cell.Buffer / *component.Scroll identity is
+		// preserved.
+		comp.scroll.Buffer().ResetCells(term.StringToCells("$ restored "))
+		comp.cursor = term.Coordinates{X: 11}
+		vi.setCursorAtScroll(comp.cursor)
 		vi.remote = newTestRemote(comp.scroll, comp.cursor)
 
-		from, to, old := vi.Edit(context.Background(), comp.cursor, comp.cursor, "X")
+		from, to, old := vi.Edit(context.Background(),
+			comp.cursor, comp.cursor, "X")
 
 		assert.Equal(t, "$ restored X", comp.scroll.Buffer().String())
 		assert.Equal(t, term.Coordinates{X: 11}, from)
@@ -765,6 +777,40 @@ func TestViEditUnit(t *testing.T) {
 			t.Fatal("restore-preserves-cached-editor watchdog tripped; " +
 				"likely a regression of the AltBuffer.restore identity " +
 				"invariant causing WriteAt ↔ InsertAt to recurse")
+		}
+	})
+
+	// Pins the invariant that drove the original goroutine freeze:
+	// the viHandler created at vte.Handler.Init time installs itself
+	// as the primary buffer's editor via WithEditor(v); a screen-context
+	// Edit on v must NOT recurse into v.sync.editor.Edit because
+	// v.sync.editor must be the previous (real) cell editor, not v
+	// itself. Calling vi.doInit a second time onto the same buffer
+	// used to break this invariant; the snapshot restore path now
+	// keeps the viHandler in place so the chain stays correct.
+	t.Run("sync editor is not self-referential after init", func(t *testing.T) {
+		t.Parallel()
+		comp := newTestParentComponent("hi", term.Coordinates{})
+		var v viHandler
+		v.doInit(comp, DefaultConfig())
+
+		// Drive a screen-context Edit on a watchdogged goroutine so
+		// a regression that re-introduces v.sync.editor == v fails
+		// fast instead of hanging the suite.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _, _ = v.Edit(
+				vtescreen.NewContext(context.Background()),
+				term.Coordinates{Y: 0, X: 2},
+				term.Coordinates{Y: 0, X: 2},
+				"!")
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("viHandler.Edit recursed indefinitely; " +
+				"v.sync.editor likely points back at v")
 		}
 	})
 
