@@ -215,3 +215,17 @@ func (w managerWorkspace) Close() error {
 	w.m.removeWorkspace(w.uri)
 	return ret
 }
+
+// OnDisconnect forwards to the wrapped workspace's RemoteScheme
+// when present. The embedded Workspace interface field does not
+// promote OnDisconnect (RemoteScheme is an optional interface);
+// without this explicit forwarder, callers that type-assert the
+// value returned by Manager.AddWorkspace against RemoteScheme
+// would silently miss SSH transport drops and leave dead VTEs in
+// the reservoir after reconnect.
+func (w managerWorkspace) OnDisconnect() <-chan struct{} {
+	if rs, ok := w.Workspace.(RemoteScheme); ok {
+		return rs.OnDisconnect()
+	}
+	return nil
+}

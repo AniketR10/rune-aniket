@@ -244,6 +244,113 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 0, f.Capacity())
 	})
 
+	t.Run("Reset drains the warm pool and lets Get re-allocate", func(t *testing.T) {
+		t.Parallel()
+		// Track every VTE the factory builds so we can assert that
+		// the ones warm at Reset time were closed.
+		var mu sync.Mutex
+		var all []*testVte
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
+			v := newTestVte(f)
+			mu.Lock()
+			all = append(all, v)
+			mu.Unlock()
+			return v, nil
+		})
+		require.Equal(t, 2, f.Capacity())
+
+		mu.Lock()
+		preReset := append([]*testVte(nil), all...)
+		mu.Unlock()
+
+		require.NoError(t, f.Reset())
+
+		assert.Equal(t, 0, f.Capacity(),
+			"Reset must empty the pool so the next Get re-allocates")
+		for _, v := range preReset {
+			assert.True(t, v.calledClose,
+				"Reset must Close every warm VTE so it is not "+
+					"handed out bound to the dead transport")
+		}
+
+		v, err := f.Get()
+		require.NoError(t, err)
+		require.NotNil(t, v)
+	})
+
+	t.Run("Reset is a no-op after Close", func(t *testing.T) {
+		t.Parallel()
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			return newTestVte(f), nil
+		})
+		require.NoError(t, f.Close())
+		require.NoError(t, f.Reset())
+	})
+
+	t.Run("remote scheme OnDisconnect drains the pool and exits", func(t *testing.T) {
+		t.Parallel()
+		// Drive watchRemoteScheme directly with an in-memory fake
+		// to keep the test independent of the workspacessh package.
+		// Use recordingVTE rather than testVte so Close does not
+		// peek at f.pool without locking (which would race against
+		// the concurrent Reset below).
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			return newRecordingVTE(), nil
+		})
+		f.ctx, f.cancelCtx = context.WithCancel(context.Background())
+		require.Equal(t, 1, f.Capacity())
+
+		rs := newFakeRemoteScheme()
+		watcherDone := make(chan struct{})
+		go func() {
+			defer close(watcherDone)
+			f.watchRemoteScheme(rs.OnDisconnect())
+		}()
+
+		rs.broadcastDisconnect()
+
+		// One-shot contract: after the single disconnect signal,
+		// the watcher resets the pool and exits. Re-arming would
+		// busy-loop on a permanently-closed channel.
+		select {
+		case <-watcherDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("watchRemoteScheme must exit after the " +
+				"one-shot disconnect signal fires")
+		}
+		require.Equal(t, 0, f.Capacity(),
+			"watchRemoteScheme must Reset the pool when "+
+				"OnDisconnect fires")
+
+		require.NoError(t, f.Close())
+	})
+
+	t.Run("watchRemoteScheme exits when facility ctx is cancelled", func(t *testing.T) {
+		t.Parallel()
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			return newRecordingVTE(), nil
+		})
+		f.ctx, f.cancelCtx = context.WithCancel(context.Background())
+
+		rs := newFakeRemoteScheme()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			f.watchRemoteScheme(rs.OnDisconnect())
+		}()
+
+		// No disconnect: the watcher must still exit when the
+		// facility shuts down, otherwise it leaks past Close.
+		f.cancelCtx()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("watchRemoteScheme must exit when the facility " +
+				"context is cancelled")
+		}
+		require.NoError(t, f.Close())
+	})
+
 	t.Run("Get is served from the pool when warm", func(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int64
@@ -388,11 +495,33 @@ func (n nopBrowser) SetTabName(workspaceapi.URI, string, term.Attributes) error 
 func newTestFacility(
 	initCap int, newFn func(*Facility) (VTE, error),
 ) *Facility {
-	f := new(Facility)
-	f.new = func(bool) (VTE, error) { return newFn(f) }
-	f.initCap(initCap)
+	// Build the facility via the same internal entrypoint
+	// production [New] uses, injecting the test factory so
+	// every test exercises the real lifecycle wiring (cond,
+	// ctx/cancelCtx, pendingInit, remote-scheme watcher) — no
+	// hand-rolled construction or private-field poking.
+	f := newWithFactory(
+		func(f *Facility, _ bool) (VTE, error) { return newFn(f) },
+		nopTerminal{}, initCap)
+	// initCap runs asynchronously in production; wait for it to
+	// settle so callers observing Capacity / called counters
+	// immediately after construction see a fully resolved pool,
+	// mirroring the synchronous semantics the previous helper
+	// provided.
+	f.WaitForInitialFill()
 	return f
 }
+
+// nopTerminal satisfies the schemeapi.Terminal slot required by
+// [newWithFactory]. The test factory replaces vte.NewHandler so
+// these methods are never actually called; the only reason they
+// exist is to type-check.
+type nopTerminal struct{}
+
+func (nopTerminal) NewPty(context.Context) (workspaceapi.Pty, error) {
+	return workspaceapi.Pty{}, nil
+}
+func (nopTerminal) SetPtySize(workspaceapi.Pty, int, int) error { return nil }
 
 var _ VTE = (*testVte)(nil)
 
@@ -498,3 +627,65 @@ func (v *testVte) ClearPrimaryBuffer() bool {
 	v.clearedPrimary = true
 	return true
 }
+
+// fakeRemoteScheme mirrors workspace.RemoteScheme for tests that
+// exercise Facility.watchRemoteScheme without spinning up a real
+// SSH transport. The disconnect channel is allocated once at
+// construction and closed once by broadcastDisconnect — matching
+// the production contract (see workspace.RemoteScheme).
+type fakeRemoteScheme struct {
+	ch              chan struct{}
+	closeOnce       sync.Once
+	nilOnDisconnect bool
+}
+
+func newFakeRemoteScheme() *fakeRemoteScheme {
+	return &fakeRemoteScheme{ch: make(chan struct{})}
+}
+
+func (r *fakeRemoteScheme) OnDisconnect() <-chan struct{} {
+	if r.nilOnDisconnect {
+		return nil
+	}
+	return r.ch
+}
+
+func (r *fakeRemoteScheme) broadcastDisconnect() {
+	r.closeOnce.Do(func() { close(r.ch) })
+}
+
+// recordingVTE is a minimal VTE used by the remote-scheme tests.
+// Unlike testVte it does not peek at Facility internals from
+// Close, so it is safe to drive across goroutines while another
+// goroutine mutates the pool.
+type recordingVTE struct {
+	component.String
+	closed atomic.Bool
+}
+
+func newRecordingVTE() *recordingVTE {
+	r := new(recordingVTE)
+	r.String = component.NewString("")
+	return r
+}
+
+func (r *recordingVTE) Handle(term.Event) (bool, bool) { return false, false }
+func (r *recordingVTE) SeekUp() bool                   { return false }
+func (r *recordingVTE) SeekDown() bool                 { return false }
+func (r *recordingVTE) SeekOffset() int                { return 0 }
+func (r *recordingVTE) MaxSeekOffset() int             { return 0 }
+func (r *recordingVTE) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
+}
+func (r *recordingVTE) Selection() (string, bool)              { return "", false }
+func (r *recordingVTE) Dimensions() (int, int)                 { return 0, 0 }
+func (r *recordingVTE) OnFocusChange(bool)                     {}
+func (r *recordingVTE) SetDefaultAttributes(term.Attributes)   {}
+func (r *recordingVTE) Snapshot() (vte.Snapshot, error)        { return vte.Snapshot{}, nil }
+func (r *recordingVTE) RestoreFromSnapshot(vte.Snapshot) error { return nil }
+func (r *recordingVTE) IsComplete() bool                       { return false }
+func (r *recordingVTE) URI() workspaceapi.URI                  { return workspaceapi.URI{} }
+func (r *recordingVTE) Title() string                          { return "" }
+func (r *recordingVTE) UsedAlternateBuffer() bool              { return false }
+func (r *recordingVTE) ClearPrimaryBuffer() bool               { return true }
+func (r *recordingVTE) Close() error                           { r.closed.Store(true); return nil }

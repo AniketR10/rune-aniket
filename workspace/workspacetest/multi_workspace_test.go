@@ -144,3 +144,48 @@ func (m *mockManager) Workspace(file workspaceapi.URI) (workspace.Workspace, boo
 	}
 	return m.workspace, true, nil
 }
+
+// TestMultiForwardsRemoteScheme guards against the regression
+// where workspace.Multi only exposes the embedded Workspace's
+// promoted method set, hiding OnDisconnect on schemes that
+// satisfy workspace.RemoteScheme. The VTE reservoir performs a
+// terminal.(workspace.RemoteScheme) assertion on the workspace
+// it receives; if Multi (which wraps every workspace handed to
+// newEx) does not surface OnDisconnect, no disconnect watcher
+// is ever installed and the pool keeps handing out VTEs bound
+// to the dead SSH transport.
+func TestMultiForwardsRemoteScheme(t *testing.T) {
+	ctx := context.Background()
+	uri := parseURI(t, "memory:///")
+
+	memScheme, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	disconnectCh := make(chan struct{})
+	cwd := remoteWorkspace{
+		Workspace:    workspace.NewSchemeWorkspace(uri, memScheme),
+		disconnectCh: disconnectCh,
+	}
+	m := workspace.Multi(ctx, &mockManager{}, cwd, uri)
+
+	rs, ok := m.(workspace.RemoteScheme)
+	require.True(t, ok,
+		"workspace.Multi must expose OnDisconnect when the "+
+			"underlying workspace implements RemoteScheme; "+
+			"otherwise vtereservoir cannot detect SSH transport "+
+			"drops and dead terminals persist after reconnect")
+	require.Equal(t, (<-chan struct{})(disconnectCh), rs.OnDisconnect(),
+		"Multi.OnDisconnect must return the underlying "+
+			"workspace's disconnect channel")
+}
+
+// remoteWorkspace is a workspace.Workspace that also satisfies
+// workspace.RemoteScheme by surfacing a caller-controlled
+// disconnect channel. Used by TestMultiForwardsRemoteScheme.
+type remoteWorkspace struct {
+	workspace.Workspace
+	disconnectCh chan struct{}
+}
+
+func (r remoteWorkspace) OnDisconnect() <-chan struct{} {
+	return r.disconnectCh
+}

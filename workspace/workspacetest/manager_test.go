@@ -212,6 +212,39 @@ func TestManager(t *testing.T) {
 
 		require.NoError(t, m.Close())
 	})
+
+	// Manager wraps every workspace returned by AddWorkspace in
+	// a managerWorkspace, which embeds workspace.Workspace via
+	// an interface field — so OnDisconnect is NOT promoted into
+	// the wrapper's method set even when the underlying scheme
+	// implements workspace.RemoteScheme. Without an explicit
+	// forwarder, vtereservoir.New's terminal.(RemoteScheme)
+	// type-assertion would always fail at runtime for SSH
+	// workspaces because the Manager's wrapper hides the
+	// optional interface.
+	t.Run("AddWorkspace result forwards RemoteScheme.OnDisconnect", func(t *testing.T) {
+		m := workspace.NewManagerWithWorkspaceFunc(config.NopConfig(),
+			func(uri workspaceapi.URI, _ schemeapi.Scheme) workspace.Workspace {
+				return remoteWorkspace{
+					Workspace:    workspace.NewSchemeWorkspace(uri, &NopScheme{}),
+					disconnectCh: make(chan struct{}),
+				}
+			})
+		require.NoError(t, m.RegisterScheme("test", NewNopScheme("test")))
+
+		w, err := m.AddWorkspace(ctx, parseURI(t, "test:///tmp/"))
+		require.NoError(t, err)
+
+		rs, ok := w.(workspace.RemoteScheme)
+		require.True(t, ok,
+			"managerWorkspace must expose OnDisconnect when the "+
+				"wrapped workspace implements RemoteScheme; otherwise "+
+				"vtereservoir cannot detect SSH transport drops and "+
+				"dead terminals persist after reconnect")
+		require.NotNil(t, rs.OnDisconnect())
+
+		require.NoError(t, m.Close())
+	})
 }
 
 func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {

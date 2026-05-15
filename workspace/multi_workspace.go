@@ -107,3 +107,19 @@ func (m multi) recoverExtraneous(
 	}
 	return workspace.Recover(file, swapFilePath, buf, force)
 }
+
+// OnDisconnect forwards to the wrapped workspace's RemoteScheme
+// when present. The embedded Workspace's method set does not
+// include OnDisconnect (RemoteScheme is an optional interface), so
+// without this explicit forwarder a multi value would not satisfy
+// RemoteScheme even when the underlying workspace does — and
+// callers like vtereservoir.New that type-assert against
+// RemoteScheme to install transport-drop watchers would silently
+// skip installation, leaving dead VTEs in the pool after SSH
+// reconnects.
+func (m multi) OnDisconnect() <-chan struct{} {
+	if rs, ok := m.Workspace.(RemoteScheme); ok {
+		return rs.OnDisconnect()
+	}
+	return nil
+}

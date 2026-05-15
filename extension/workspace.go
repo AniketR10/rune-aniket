@@ -107,6 +107,16 @@ type trackingWorkspace struct {
 	server    *tworkspacerpc.Server
 }
 
+// OnDisconnect forwards [workspace.RemoteScheme.OnDisconnect] when the
+// embedded Workspace's underlying scheme is remote. Returns nil
+// for local workspaces.
+func (w *trackingWorkspace) OnDisconnect() <-chan struct{} {
+	if rs, ok := w.Workspace.(workspace.RemoteScheme); ok {
+		return rs.OnDisconnect()
+	}
+	return nil
+}
+
 func (w *trackingWorkspace) Command(ctx context.Context, cmd workspaceapi.Cmd) (
 	workspaceapi.Pid, error,
 ) {

@@ -43,6 +43,33 @@ type Workspace interface {
 	schemeapi.Scheme
 }
 
+// RemoteScheme is implemented by schemes whose underlying transport
+// can drop and reconnect (e.g. SSH). The signal published by
+// OnDisconnect must be interpreted as "every file descriptor handed out
+// by this scheme up to now is invalid": clients are expected to
+// drop cached handles, reset pools and reload whatever they need
+// against a freshly-resolved transport on demand.
+//
+// Each call to OnDisconnect returns a channel that is closed once on
+// the next transport drop. Subsequent calls return a fresh channel
+// for the next transition, so a single caller can re-arm after
+// reacting to a drop:
+//
+//	for {
+//	    select {
+//	    case <-rs.OnDisconnect():
+//	        invalidate()
+//	    case <-ctx.Done():
+//	        return
+//	    }
+//	}
+//
+// Local schemes do not implement RemoteScheme; callers should type-
+// assert and degrade silently when the assertion fails.
+type RemoteScheme interface {
+	OnDisconnect() <-chan struct{}
+}
+
 // Loader abstracts the ability to load resource data into a working buffer
 // and provide a FlusherCloser to manage flushing data to storage.
 type Loader interface {

@@ -56,6 +56,11 @@ const (
 		"and workspace.ssh.shell configuration, if you have any."
 )
 
+// ErrSSHConnectionClosed is reported by the gRPC dialer's close
+// hook when the underlying SSH transport drops mid-session.
+// Exposed so callers can match it via errors.Is.
+var ErrSSHConnectionClosed = errors.New("ssh connection closed unexpectedly")
+
 // New returns a schemeapi.SchemeFunc capable of managing files over an ssh
 // connection. ui drives the interactive auth flow (passphrase / password /
 // kbd-interactive prompts). It is intended to be installed into a workspace
@@ -338,7 +343,7 @@ func (s *scheme) connectScheme(
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */
 				func() {
-					closeHook(errors.New("ssh connection closed unexpectedly"))
+					closeHook(ErrSSHConnectionClosed)
 				})
 		}))
 	if err != nil {

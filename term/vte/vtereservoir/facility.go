@@ -24,6 +24,7 @@
 package vtereservoir
 
 import (
+	"context"
 	"sync"
 
 	"github.com/ernestrc/go-multierror"
@@ -37,6 +38,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/workspace"
 )
 
 // VTE abstracts a vte.Handler.
@@ -67,6 +69,12 @@ type Facility struct {
 	// pendingInit > 0 so callers do not race the warm-up goroutines.
 	pendingInit     int
 	initialCapacity int
+
+	// ctx and cancelCtx bound the lifetime of the remote-scheme
+	// invalidation watcher started by New; cancelCtx is invoked
+	// from Close so the watcher goroutine exits.
+	ctx       context.Context
+	cancelCtx context.CancelFunc
 }
 
 // New allocates storage for a new Facility and initializes it.
@@ -81,11 +89,7 @@ func New(
 	if config.HeightHint == 0 {
 		config.HeightHint = config.WidthHint / 2
 	}
-	ret := new(Facility)
-	ret.cond = sync.NewCond(&ret.mu)
-	ret.initialCapacity = initialCapacity
-	ret.pendingInit = initialCapacity
-	ret.new = func(initialAlloc bool) (VTE, error) {
+	newVTE := func(ret *Facility, initialAlloc bool) (VTE, error) {
 		ret.log(log.TraceLevel, "called pool.New, width hint: %d, height hint: %d",
 			config.WidthHint, config.HeightHint)
 		i, err := vte.NewHandler(publisher, n, terminal, executor, tm, config)
@@ -97,10 +101,55 @@ func New(
 		}
 		return &vteAdapter{Handler: i, f: ret}, nil
 	}
+	return newWithFactory(newVTE, terminal, initialCapacity)
+}
+
+// newWithFactory builds a Facility around a caller-supplied VTE
+// factory. Tests use it to inject in-memory VTEs without spinning
+// up a real schemeapi.Terminal; production callers go through
+// [New] which constructs the standard vte.NewHandler factory.
+//
+// Keeping the factory injection on a single internal entrypoint
+// means the lifecycle wiring (cond, ctx/cancelCtx, pendingInit,
+// remote-scheme watcher) lives in exactly one place — tests
+// exercise the same path real callers do, so a regression in
+// New's wiring shows up in unit tests rather than only in
+// integration.
+//
+// initCap runs asynchronously (matching production semantics).
+// Callers that need to observe a fully warmed pool synchronously
+// — primarily tests asserting allocation counts — must wait for
+// it explicitly; see [Facility.WaitForInitialFill].
+func newWithFactory(
+	newVTE func(*Facility, bool) (VTE, error),
+	terminal schemeapi.Terminal,
+	initialCapacity int,
+) *Facility {
+	ret := new(Facility)
+	ret.cond = sync.NewCond(&ret.mu)
+	ret.initialCapacity = initialCapacity
+	ret.pendingInit = initialCapacity
+	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
+	ret.new = func(initialAlloc bool) (VTE, error) {
+		return newVTE(ret, initialAlloc)
+	}
 
 	go debug.CapturePanicReport(func() {
 		ret.initCap(initialCapacity)
 	})
+
+	// If the underlying scheme can drop and reconnect, watch for
+	// invalidation signals and reset the pool so the next Get does
+	// not hand out a VTE bound to the dead transport.
+	if rs, ok := terminal.(workspace.RemoteScheme); ok {
+		ch := rs.OnDisconnect()
+		if ch != nil {
+			go debug.CapturePanicReport(func() {
+				ret.watchRemoteScheme(ch)
+			})
+		}
+	}
+
 	return ret
 }
 
@@ -116,6 +165,22 @@ func (f *Facility) Capacity() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.pool)
+}
+
+// WaitForInitialFill blocks until the asynchronous initial warm-up
+// kicked off by [New] has settled — i.e. every initCap goroutine
+// has either delivered a VTE into the pool or surfaced an error.
+// Returns immediately on a closed facility. Production callers do
+// not need this: [Get] already waits for at least one warm VTE.
+// It exists so tests asserting allocation counts (or any other
+// post-warm-up state) can synchronize without poking private
+// fields.
+func (f *Facility) WaitForInitialFill() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for f.pendingInit > 0 && !f.closed {
+		f.cond.Wait()
+	}
 }
 
 // Get selects an arbitrary vte from the [Facility], removes it from the
@@ -160,16 +225,22 @@ func (f *Facility) Resize(width, height int) {
 
 // Close closes all vtes associated with this Facility.
 func (f *Facility) Close() (ret error) {
+	if f.cancelCtx != nil {
+		f.cancelCtx()
+	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.closed = true
 	// wake up any Get callers waiting on initCap.
-	if f.cond != nil {
-		f.cond.Broadcast()
-	}
+	f.cond.Broadcast()
+	f.reset()
+	return
+}
+
+func (f *Facility) reset() (ret error) {
 	pool := f.pool
 	f.pool = nil
+	f.mu.Unlock()
+
 	for _, vte := range pool {
 		if err := vte.Close(); err != nil {
 			ret = multierror.Append(ret, err)
@@ -178,12 +249,42 @@ func (f *Facility) Close() (ret error) {
 	return
 }
 
+// Reset disposes every VTE currently pooled in this Facility.
+// Intended for callers that have detected the underlying transport
+// has been invalidated and that handing out cached VTEs would
+// surface a confusing failure on the next Read/Write. The next Get
+// re-allocates lazily against whatever the executor returns at
+// that moment. No-op on a closed Facility.
+func (f *Facility) Reset() (ret error) {
+	f.mu.Lock()
+	if f.closed {
+		f.mu.Unlock()
+		return nil
+	}
+	f.reset()
+	return
+}
+
+// watchRemoteScheme drains the warm pool the first time the remote
+// scheme reports a transport drop, so the next Get builds against
+// whatever the transport resolves to next. OnDisconnect is a
+// one-shot signal (see workspace.RemoteScheme) — looping here
+// would busy-spin on a permanently closed channel — so the watcher
+// exits after the single Reset. Also exits if the facility is
+// closed before any drop occurs.
+func (f *Facility) watchRemoteScheme(ch <-chan struct{}) {
+	select {
+	case <-ch:
+		if err := f.Reset(); err != nil {
+			f.log(log.WarnLevel, "reset on remote scheme invalidation: %v", err)
+		}
+	case <-f.ctx.Done():
+	}
+}
+
 const maxPoolSize = 10
 
 func (f *Facility) initCap(initialCapacity int) {
-	if f.cond == nil {
-		f.cond = sync.NewCond(&f.mu)
-	}
 	// pendingInit is normally seeded by New; ensure it is set when
 	// initCap is invoked directly (e.g. by the test helper).
 	f.mu.Lock()
@@ -232,9 +333,7 @@ func (f *Facility) put(v VTE) bool {
 
 	v.ClearPrimaryBuffer()
 	f.pool = append(f.pool, v)
-	if f.cond != nil {
-		f.cond.Broadcast()
-	}
+	f.cond.Broadcast()
 	return true
 }
 

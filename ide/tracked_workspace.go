@@ -41,6 +41,17 @@ type trackedWorkspace struct {
 	exec *workspaceshell.Executor
 }
 
+// OnDisconnect forwards [workspace.RemoteScheme.OnDisconnect] when the
+// embedded Workspace's underlying scheme is remote. Returns nil
+// for local workspaces, which callers interpret as "no transport
+// invalidation events will ever fire".
+func (w *trackedWorkspace) OnDisconnect() <-chan struct{} {
+	if rs, ok := w.Workspace.(workspace.RemoteScheme); ok {
+		return rs.OnDisconnect()
+	}
+	return nil
+}
+
 func (w *trackedWorkspace) StartCommand(
 	ctx context.Context, cmd workspaceapi.Cmd,
 ) (workspaceapi.Pid, error) {

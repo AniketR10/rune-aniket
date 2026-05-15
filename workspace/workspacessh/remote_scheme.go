@@ -49,6 +49,19 @@ var (
 	retryStrategy = retry.ExponentialStrategy(100*time.Millisecond, 5*time.Second)
 )
 
+// Exported sentinel errors so callers (e.g. the VTE reservoir) can
+// match transport-level disconnects via errors.Is.
+var (
+	// ErrLostConnection is reported when an established remote
+	// connection drops without a more specific error from the
+	// transport.
+	ErrLostConnection = errors.New("lost connection to remote")
+
+	// ErrRemoteClosed is reported when the remoteScheme is closed
+	// explicitly by the caller.
+	ErrRemoteClosed = errors.New("remote closed")
+)
+
 type connectSchemeFn func(ctx context.Context,
 	uri workspaceapi.URI, closeHook func(error)) (schemeapi.Scheme, error)
 
@@ -76,6 +89,25 @@ type remoteScheme struct {
 	// otherwise we need to worry about synchronizing deletes
 	// on runtime finalizer's
 	files sync.Map
+
+	// disconnectCh is allocated once at construction and closed
+	// exactly once on the first transport drop (or on Close).
+	// OnDisconnect always returns this same channel: a stable
+	// pre-allocated handle means observers can subscribe at any
+	// time without coordination, and once-semantics fall out of
+	// "close a channel handed out before anyone read it".
+	disconnectCh chan struct{}
+	// disconnectOnce guards close(disconnectCh) so repeated
+	// closeHook firings or a Close after a drop don't double-close
+	// the channel.
+	disconnectOnce sync.Once
+
+	// closed is set once Close has run. Once true, the scheme is
+	// terminal: setError must not overwrite ErrRemoteClosed and
+	// OnDisconnect must always return an already-closed channel so
+	// observers do not block on a re-armed channel that will never
+	// fire again.
+	closed atomic.Bool
 }
 
 func (s *remoteScheme) maintainConnection(
@@ -146,7 +178,7 @@ func (s *remoteScheme) maintainConnection(
 				if currState != nil {
 					st := currState.(state)
 					if st.lastSessionError == nil {
-						err = errors.New("lost connection to remote")
+						err = ErrLostConnection
 						logger.Warn(err)
 						s.setError(logger, err)
 					} else {
@@ -194,11 +226,30 @@ func isRetryableConnectError(err error) bool {
 }
 
 func (s *remoteScheme) setError(logger *log.Entry, err error) {
+	// state() relies on (err != nil) <=> (scheme == nil); never
+	// store a (nil, nil) state or callers will nil-deref the
+	// downstream scheme. The remote-side process can exit cleanly
+	// (closeHook in scheme.go fires with err==nil) so default the
+	// stored error to a typed sentinel here.
+	if err == nil {
+		err = ErrLostConnection
+	}
+	// Once Close has run, the terminal ErrRemoteClosed sentinel is
+	// authoritative. A late closeHook firing after Close must not
+	// overwrite it (callers rely on errors.Is(err, ErrRemoteClosed)
+	// to distinguish "we shut down" from "transport flaked"). We
+	// still want to broadcast on this transition because the
+	// previous scheme (if any) needs to be torn down and observers
+	// should wake up.
+	if s.closed.Load() {
+		err = ErrRemoteClosed
+	}
 	prevState := s.currState.Swap(state{lastSessionError: err})
 	if prevState != nil && prevState.(state).scheme != nil {
-		err := prevState.(state).scheme.Close()
-		logger.Tracef("closed previous remote scheme: %v", err)
+		closeErr := prevState.(state).scheme.Close()
+		logger.Tracef("closed previous remote scheme: %v", closeErr)
 	}
+	s.broadcastDisconnect()
 }
 
 // newRemoteScheme constructs a remoteScheme and starts a background
@@ -214,6 +265,7 @@ func newRemoteScheme(
 		uri:          uri,
 		closeChan:    make(chan struct{}),
 		firstAttempt: make(chan struct{}),
+		disconnectCh: make(chan struct{}),
 	}
 	ret.currState.Store(state{lastSessionError: errors.New("not connected yet")})
 	ret.ctx, ret.cancelCtx = context.WithCancel(ctx)
@@ -236,6 +288,13 @@ func (s *remoteScheme) state() (err error, scheme schemeapi.Scheme) { //nolint:s
 	select {
 	case <-s.firstAttempt:
 	case <-s.ctx.Done():
+		// If Close cancelled the ctx, surface the dedicated
+		// terminal sentinel so callers can distinguish "we shut
+		// down" from a generic context.Canceled (e.g. errors.Is
+		// checks in the VTE reservoir and watcher loops).
+		if s.closed.Load() {
+			return ErrRemoteClosed, nil
+		}
 		return s.ctx.Err(), nil
 	}
 	currState := s.currState.Load().(state)
@@ -485,7 +544,14 @@ func (s *remoteScheme) SetPtySize(pty workspaceapi.Pty, width, height int) error
 }
 
 func (s *remoteScheme) Close() (ret error) {
-	prevState := s.currState.Swap(state{lastSessionError: errors.New("remote closed")})
+	// Mark closed before touching state so any concurrent
+	// closeHook fired by the underlying transport observes the
+	// terminal sentinel via setError and does not race the swap
+	// below.
+	if !s.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+	prevState := s.currState.Swap(state{lastSessionError: ErrRemoteClosed})
 	if prevState != nil && prevState.(state).scheme != nil {
 		// no need to close files before closing scheme to avoid
 		// closing connection before telling the remote workspace to close
@@ -494,8 +560,43 @@ func (s *remoteScheme) Close() (ret error) {
 		close(s.closeChan)
 		prevState.(state).scheme.Close()
 	}
+	// Broadcast unconditionally so observers waiting on a re-armed
+	// OnDisconnect channel (e.g. a Facility watcher started after a
+	// previous disconnect) wake up and exit cleanly. After this
+	// point OnDisconnect returns an already-closed channel forever.
+	s.broadcastDisconnect()
 	s.cancelCtx()
 	return
+}
+
+// OnDisconnect satisfies [workspace.RemoteScheme]: it returns the
+// same stable channel for the entire lifetime of the remoteScheme.
+// The channel is closed exactly once when the underlying transport
+// drops (or Close is called), so:
+//   - subscribing before a drop blocks on the channel until the
+//     drop fires;
+//   - subscribing after a drop returns an already-closed channel
+//     and the receive returns immediately;
+//   - the channel is never re-opened. The semantic is
+//     "invalidate everything once" — callers that want to track
+//     subsequent drops should call OnDisconnect on a freshly
+//     resolved remoteScheme.
+//
+// The signal must be interpreted as "every file descriptor handed
+// out by this scheme up to now is invalid"; callers should drop
+// cached handles and reload against a freshly-resolved transport.
+func (s *remoteScheme) OnDisconnect() <-chan struct{} {
+	return s.disconnectCh
+}
+
+// broadcastDisconnect closes the disconnect channel exactly once,
+// waking every observer currently blocked on OnDisconnect. Safe to
+// call repeatedly (e.g. by closeHook firing on each transport
+// flap and by Close).
+func (s *remoteScheme) broadcastDisconnect() {
+	s.disconnectOnce.Do(func() {
+		close(s.disconnectCh)
+	})
 }
 
 // wrap watcher to ensure that one of bluectx.First ctxs gets canceled

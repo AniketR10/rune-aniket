@@ -36,9 +36,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/mock/gomock"
+	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/schemetest"
 	"unstable.build/go-tui/workspace/workspaceapitest"
 )
+
+var _ workspace.RemoteScheme = (*remoteScheme)(nil)
 
 func TestRemoteScheme(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("ssh://unsable.build/home/ernie")
@@ -151,6 +154,145 @@ func TestRemoteScheme(t *testing.T) {
 		expectSchemeClose(t, mock, scheme)
 		f := scheme.NewFile(1299, "blabla")
 		require.Nil(t, f)
+	})
+
+	// Reproducer: closeHook(nil) — which fires when the remote
+	// process exits cleanly or s.ctx is cancelled before any
+	// transport error — used to store (scheme=nil, err=nil) into
+	// currState. state() then returned (nil, nil) and the next
+	// scheme call (e.g. StopWatch from the FS-watcher defer in
+	// ide.installPendingWorkspace) nil-derefed the embedded
+	// schemeapi.Scheme.
+	t.Run("closeHook(nil) does not poison currState", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx := context.Background()
+		mock := schemetest.NewMockScheme(ctrl)
+		hookCh := make(chan func(error), 1)
+		scheme := newRemoteScheme(ctx, func(
+			_ context.Context, _ workspaceapi.URI, hook func(error),
+		) (schemeapi.Scheme, error) {
+			select {
+			case hookCh <- hook:
+			default:
+			}
+			return mock, nil
+		}, uri)
+		t.Cleanup(func() {
+			mock.EXPECT().Close().Return(nil).AnyTimes()
+			_ = scheme.Close()
+		})
+
+		// Wait for connect to land.
+		mock.EXPECT().Close().Return(nil).AnyTimes()
+		closeHook := <-hookCh
+
+		// Fire the close hook with a nil error (mirrors a clean
+		// remote process exit). State must still surface a typed
+		// disconnect error so callers short-circuit instead of
+		// dereferencing a nil scheme.
+		closeHook(nil)
+
+		// StopWatch is the call site that crashed in production
+		// (see ide.installPendingWorkspace FS-watcher defer). Any
+		// other scheme method exercises the same state() path.
+		err := scheme.StopWatch(42)
+		require.Error(t, err,
+			"after a closeHook(nil) disconnect, scheme methods must "+
+				"return a typed error rather than nil-deref the "+
+				"underlying scheme")
+		require.ErrorIs(t, err, ErrLostConnection)
+	})
+
+	t.Run("OnDisconnect is a stable channel closed once on transport drop", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		var mu sync.Mutex
+		ctx := context.Background()
+
+		mock := schemetest.NewMockScheme(ctrl)
+		hookCh := make(chan func(error), 1)
+		mu.Lock()
+		scheme := newRemoteScheme(ctx, func(
+			_ context.Context, uri workspaceapi.URI, hook func(error),
+		) (schemeapi.Scheme, error) {
+			select {
+			case hookCh <- hook:
+			default:
+			}
+			return mock, nil
+		}, uri)
+		mu.Unlock()
+
+		rs, ok := scheme.(*remoteScheme)
+		require.True(t, ok)
+
+		// OnDisconnect must hand out the same stable channel
+		// across calls so observers can subscribe before any
+		// transport drop without coordinating with each other.
+		ch := rs.OnDisconnect()
+		require.NotNil(t, ch)
+		require.Equal(t, ch, rs.OnDisconnect(),
+			"OnDisconnect must return a stable channel: "+
+				"creating a fresh one per call would force "+
+				"callers to coordinate or miss signals")
+
+		// The channel closes on the first transport drop.
+		// Semantic: every FD this scheme handed out so far is
+		// invalid; observers drop their caches.
+		mock.EXPECT().Close().Return(nil).AnyTimes()
+		closeHook := <-hookCh
+		closeHook(errors.New("kaboom"))
+
+		select {
+		case <-ch:
+		case <-time.After(2 * time.Second):
+			t.Fatal("OnDisconnect channel must close on transport drop")
+		}
+
+		// After the drop the same channel is still returned so
+		// late subscribers wake up immediately, and the runtime
+		// does not need to track per-observer state.
+		require.Equal(t, ch, rs.OnDisconnect(),
+			"OnDisconnect must keep returning the same "+
+				"(now-closed) channel after a drop")
+
+		// A second close hook firing on the same remoteScheme
+		// (e.g. SSH transport flapping) must not panic via
+		// double-close of the disconnect channel.
+		closeHook(errors.New("kaboom again"))
+
+		require.NoError(t, scheme.Close())
+	})
+
+	t.Run("Close fires OnDisconnect for waiting observers", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx := context.Background()
+		mock := schemetest.NewMockScheme(ctrl)
+		scheme := newRemoteScheme(ctx, func(
+			_ context.Context, _ workspaceapi.URI, _ func(error),
+		) (schemeapi.Scheme, error) {
+			return mock, nil
+		}, uri)
+		mock.EXPECT().Close().Return(nil).AnyTimes()
+
+		rs, ok := scheme.(*remoteScheme)
+		require.True(t, ok)
+		ch := rs.OnDisconnect()
+
+		// Closing the scheme must wake observers that were
+		// blocked on OnDisconnect; otherwise watcher goroutines
+		// would leak past shutdown.
+		require.NoError(t, scheme.Close())
+		select {
+		case <-ch:
+		case <-time.After(2 * time.Second):
+			t.Fatal("OnDisconnect channel must close on Close")
+		}
 	})
 }
 

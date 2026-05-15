@@ -39,6 +39,16 @@ type schemeWorkspace struct {
 	schemeapi.Scheme
 }
 
+// OnDisconnect forwards [RemoteScheme.OnDisconnect] when the embedded scheme
+// supports it. Returns nil for local schemes, which means callers
+// must check for nil before selecting on the returned channel.
+func (w *schemeWorkspace) OnDisconnect() <-chan struct{} {
+	if rs, ok := w.Scheme.(RemoteScheme); ok {
+		return rs.OnDisconnect()
+	}
+	return nil
+}
+
 // NewSchemeWorkspace wraps a schemeapi.Scheme and implements a workspace.Loader,
 // effectively converting a schemeapi.Scheme into a workspace.Workspace.
 func NewSchemeWorkspace(w workspaceapi.URI, p schemeapi.Scheme) Workspace {
