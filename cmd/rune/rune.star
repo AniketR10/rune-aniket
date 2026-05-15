@@ -682,7 +682,7 @@ config = {
         # to this single rune, ignoring per-source icons (file
         # glyphs, `browser.icons`, terminal/shell icons, etc.).
         # Empty disables.
-        "tab_override_icon": "",
+        "tab_override_icon": "",
         "tab_name_separator": "   ",
         # Prompt configuration used when Rune asks the user questions.
         "prompt": {
