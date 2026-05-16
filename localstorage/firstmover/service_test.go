@@ -322,6 +322,94 @@ func TestCustomRetryableErrors(t *testing.T) {
 	}
 }
 
+// TestSetSucceedsWhenBackendIsSlowerThanMethodRetryCadence guards
+// against the regression where firstmover wrapped every storage call
+// in context.WithTimeout(ctx, MethodRetryCadence), so a backend that
+// took longer than the cadence to write produced a chain of
+// DeadlineExceeded retries against itself and ultimately failed —
+// even when the caller passed context.Background(). The expected
+// behavior is: the caller's deadline governs how long an attempt
+// may take; firstmover only re-attempts on actual transport errors
+// (Unavailable, leader CloseError, connection reset, …), not on a
+// timeout that was caused by the backend simply being slow.
+func TestSetSucceedsWhenBackendIsSlowerThanMethodRetryCadence(t *testing.T) {
+	lockFile := makeTempLockFile(t)
+	cfg := testConfig() // MethodRetryCadence = 20ms
+	mock := &slowSetService{
+		svc:   storagestub.NewInMemoryService(),
+		delay: 10 * cfg.MethodRetryCadence,
+	}
+	leader := New(mock, lockFile, cfg)
+	t.Cleanup(func() { _ = leader.Close() })
+
+	require.NoError(t, leader.Set(context.Background(),
+		"slow-but-not-broken", &testStruct{A: "ok"}))
+
+	assert.Equal(t, int64(1), mock.calls.Load(),
+		"slow Set must complete in a single attempt; "+
+			"firstmover must not retry on its own self-imposed timeout")
+
+	var out testStruct
+	require.NoError(t, leader.Get(context.Background(),
+		"slow-but-not-broken", &out))
+	assert.Equal(t, "ok", out.A)
+}
+
+// slowSetService delegates Set to an in-memory backend after a
+// configurable delay. All other methods are passthroughs.
+type slowSetService struct {
+	svc   storageapi.Service
+	delay time.Duration
+	calls atomic.Int64
+}
+
+func (s *slowSetService) Set(ctx context.Context, ID string, doc any) error {
+	s.calls.Add(1)
+	select {
+	case <-time.After(s.delay):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return s.svc.Set(ctx, ID, doc)
+}
+
+func (s *slowSetService) Get(ctx context.Context, ID string, doc any) error {
+	return s.svc.Get(ctx, ID, doc)
+}
+
+func (s *slowSetService) Create(ctx context.Context, ID string, doc any) error {
+	return s.svc.Create(ctx, ID, doc)
+}
+
+func (s *slowSetService) Update(
+	ctx context.Context, ID string, updates []storageapi.Update,
+	preconds ...storageapi.Precondition,
+) error {
+	return s.svc.Update(ctx, ID, updates, preconds...)
+}
+
+func (s *slowSetService) Delete(ctx context.Context, ID string) error {
+	return s.svc.Delete(ctx, ID)
+}
+
+func (s *slowSetService) List(
+	ctx context.Context, filters []storageapi.Filter,
+) (storageapi.Iterator, error) {
+	return s.svc.List(ctx, filters)
+}
+
+func (s *slowSetService) Partition(name string) (storageapi.Service, error) {
+	partitioned, err := s.svc.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	return &slowSetService{svc: partitioned, delay: s.delay}, nil
+}
+
+func (s *slowSetService) Close() error {
+	return s.svc.Close()
+}
+
 func makeFollower(svc storageapi.Service, lockFile string, cfg Config) (storageapi.Service, func()) {
 	var temp testStruct
 	leader := New(svc, lockFile, cfg)

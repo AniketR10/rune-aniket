@@ -148,7 +148,7 @@ func (s *Service) Init(svc storageapi.Service, lockFile string, cfg Config) {
 	s.maxFollowFailures = int(cfg.TimeToCoup / (cfg.DialTimeout + cfg.ConnectRetryCadence))
 	s.retryStrategy = retry.CombinedStrategy(
 		retry.SequentialStrategy(cfg.MethodRetryCadence),
-		retry.LimitStrategy(uint(cfg.TimeToCoup/cfg.MethodRetryCadence*2)),
+		retry.LimitStrategy(uint(cfg.TimeToCoup/cfg.MethodRetryCadence)),
 	)
 	s.receiveRetryStrategy = retry.SequentialStrategy(cfg.ReceiveRetryCadence)
 	s.connectRetryStrategy = retry.SequentialStrategy(cfg.ConnectRetryCadence)
@@ -190,7 +190,7 @@ func (s *Service) Create(ctx context.Context, ID string, doc interface{}) error 
 		active := s.active
 		s.mu.Unlock()
 		err := active.Create(ctx, ID, doc)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -204,7 +204,7 @@ func (s *Service) Set(ctx context.Context, ID string, doc interface{}) error {
 		active := s.active
 		s.mu.Unlock()
 		err := active.Set(ctx, ID, doc)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -221,7 +221,7 @@ func (s *Service) Update(
 		active := s.active
 		s.mu.Unlock()
 		err := active.Update(ctx, ID, updates, preconds...)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -235,7 +235,7 @@ func (s *Service) Get(ctx context.Context, ID string, doc interface{}) error {
 		active := s.active
 		s.mu.Unlock()
 		err := active.Get(ctx, ID, doc)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -249,7 +249,7 @@ func (s *Service) Delete(ctx context.Context, ID string) error {
 		active := s.active
 		s.mu.Unlock()
 		err := active.Delete(ctx, ID)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -268,7 +268,7 @@ func (s *Service) List(ctx context.Context, filters []storageapi.Filter) (
 		active := s.active
 		s.mu.Unlock()
 		it, err = active.List(ctx, filters)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 	return
 }
@@ -300,7 +300,7 @@ func (s *Service) Publish(
 	}
 	return s.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		err := s.pubsub.publish(ctx, topic, msg)
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -323,7 +323,7 @@ func (s *Service) Subscribe(
 			return false, nil
 		}
 		i++
-		return s.isRetriableError(err), err
+		return s.isRetriableError(ctx, err), err
 	})
 }
 
@@ -352,8 +352,8 @@ func (s *Service) Receive(
 		}
 		s.mu.Unlock()
 		data, err = s.pubsub.receive(ctx, topic)
-		return s.isRetriableError(err), err
-	}, s.receiveRetryStrategy, s.cfg.ReceiveRetryCadence)
+		return s.isRetriableError(ctx, err), err
+	}, s.receiveRetryStrategy)
 	return
 }
 
@@ -789,9 +789,9 @@ func (s *Service) leadOrFollow() {
 	}
 }
 
-func (s *Service) isRetriableError(err error) bool {
+func (s *Service) isRetriableError(ctx context.Context, err error) bool {
 	// for readibility's sake, do not coalesce all branches into a boolean value
-	if err == nil {
+	if err == nil || ctx.Err() != nil {
 		return false
 	}
 
@@ -821,20 +821,17 @@ func (s *Service) isRetriableError(err error) bool {
 func (s *Service) retryHandleDocErrs(
 	ctx context.Context, fn func(ctx context.Context) (bool, error),
 ) error {
-	return s.retryHandleDocErrsWithStrategy(ctx, fn, s.retryStrategy, s.cfg.MethodRetryCadence)
+	return s.retryHandleDocErrsWithStrategy(ctx, fn, s.retryStrategy)
 }
 
 func (s *Service) retryHandleDocErrsWithStrategy(
 	ctx context.Context, fn func(ctx context.Context) (bool, error),
-	retryStrategy retry.Strategy, retryCadence time.Duration,
+	retryStrategy retry.Strategy,
 ) error {
 	var err error
 	retryErr := retry.Retry(ctx, retryStrategy, func(ctx context.Context) (bool, error) {
-		sctx, cancel := context.WithTimeout(ctx, retryCadence)
-
 		var shouldRetry bool
-		shouldRetry, err = fn(sctx)
-		cancel()
+		shouldRetry, err = fn(ctx)
 		if !shouldRetry {
 			// return nil so retryErr is nil and we know that we need to
 			// return original error
