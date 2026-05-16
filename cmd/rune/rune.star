@@ -1,13 +1,5 @@
 # Rune default configuration, in Starlark form.
 #
-# This replaces the legacy runerc (YAML baseline), runerc.modeless (modeless
-# overrides), and runerc.tui (TUI overrides) triple with a single programmable
-# source. Callers may branch on the following predeclared globals:
-#
-#   mode    - "modal" (default) or "modeless"
-#   tui     - True when rendering to a plain terminal, False when rendering
-#             in the native GUI window.
-#
 # The script's final top-level `config` dict is handed to the Rune config
 # loader exactly as if it had been written in YAML.
 #
