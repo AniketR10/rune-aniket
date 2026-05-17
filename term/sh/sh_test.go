@@ -444,10 +444,7 @@ func TestFileCompletion(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "mycmd"), []byte("#!/bin/sh\n"), 0755))
 	t.Setenv("PATH", binDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(dir))
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	t.Chdir(dir)
 
 	mock := &mockHandler{}
 	h := New(mock)

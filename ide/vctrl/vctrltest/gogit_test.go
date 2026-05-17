@@ -26,7 +26,6 @@ package vctrltest
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -69,10 +69,7 @@ func TestGogitDiffWorktree(t *testing.T) {
 
 	// Create a worktree from the main repo
 	worktreePath := filepath.Join(reposPath, "worktree1")
-	cmd := exec.Command("git", "worktree", "add", worktreePath, "HEAD")
-	cmd.Dir = mainRepoPath
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git worktree add: %s", out)
+	testgit.Run(t, mainRepoPath, "worktree", "add", worktreePath, "HEAD")
 
 	// Verify .git is a file (not a directory) in the worktree
 	info, err := os.Stat(filepath.Join(worktreePath, ".git"))
@@ -133,10 +130,7 @@ func TestGogitDiffWorktreeFileMissingFromHEAD(t *testing.T) {
 
 	mainRepoPath := filepath.Join(reposPath, "gitproj2_one-file-diff")
 	worktreePath := filepath.Join(reposPath, "worktree-missing")
-	cmd := exec.Command("git", "worktree", "add", "-b", "wt-branch", worktreePath)
-	cmd.Dir = mainRepoPath
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git worktree add: %s", out)
+	testgit.Run(t, mainRepoPath, "worktree", "add", "-b", "wt-branch", worktreePath)
 
 	newFileAbs := filepath.Join(worktreePath, "recipes", "new-file.md")
 	content := "first\nsecond\nthird\n"
@@ -270,7 +264,7 @@ func TestGogitDiffSurvivesExternalRepack(t *testing.T) {
 	initGitRepo(t, repo, relPath, "hi\n")
 
 	// Initial aggressive gc to ensure objects start out packed.
-	runGit(t, repo, "gc", "--aggressive", "--prune=now")
+	testgit.Run(t, repo, "gc", "--aggressive", "--prune=now")
 
 	workspaceURI, err := workspaceapi.ParseURI("file://" + repo)
 	require.NoError(t, err)
@@ -287,9 +281,9 @@ func TestGogitDiffSurvivesExternalRepack(t *testing.T) {
 
 	// Out-of-band repo mutation: commit and aggressively repack so the
 	// previously-cached pack hashes no longer exist on disk.
-	runGit(t, repo, "add", ".")
-	runGit(t, repo, "commit", "-m", "c2")
-	runGit(t, repo, "gc", "--aggressive", "--prune=now")
+	testgit.Run(t, repo, "add", ".")
+	testgit.Run(t, repo, "commit", "-m", "c2")
+	testgit.Run(t, repo, "gc", "--aggressive", "--prune=now")
 
 	// Modify the working copy and diff again. With a stale cached repo
 	// this fails with `get HEAD commit object: object not found`.
@@ -297,21 +291,6 @@ func TestGogitDiffSurvivesExternalRepack(t *testing.T) {
 	second, err := svc.Diff(context.Background(), fileURI)
 	require.NoError(t, err, "diff after external repack should succeed")
 	assert.NotZero(t, len(second.Hunks), "diff after external repack should detect changes")
-}
-
-// runGit runs a git subcommand in dir with deterministic author/committer.
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=test",
-		"GIT_AUTHOR_EMAIL=test@test.com",
-		"GIT_COMMITTER_NAME=test",
-		"GIT_COMMITTER_EMAIL=test@test.com",
-	)
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git %v: %s", args, out)
 }
 
 // initGitRepo creates a git repo at root with a single committed file.
@@ -325,16 +304,7 @@ func initGitRepo(t *testing.T, root, relPath, content string) {
 		{"add", "."},
 		{"commit", "-m", "initial"},
 	} {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test",
-			"GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=test",
-			"GIT_COMMITTER_EMAIL=test@test.com",
-		)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
+		testgit.Run(t, root, args...)
 	}
 }
 

@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 )
 
 func TestParseDialogueID(t *testing.T) {
@@ -88,25 +89,12 @@ func TestResolveGitIdentity(t *testing.T) {
 		return resolved
 	}
 
-	// gitCmd runs a git command in dir and fails the test on error.
-	gitCmd := func(t *testing.T, dir string, args ...string) {
-		t.Helper()
-		c := exec.Command("git", args...)
-		c.Dir = dir
-		c.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test",
-		)
-		out, err := c.CombinedOutput()
-		require.NoError(t, err, "git %v failed: %s", args, out)
-	}
-
 	// initRepo creates a git repo with one commit in a temp dir.
 	initRepo := func(t *testing.T) string {
 		t.Helper()
 		dir := realPath(t, t.TempDir())
-		gitCmd(t, dir, "init", "-q")
-		gitCmd(t, dir, "commit", "--allow-empty", "-m", "init", "-q")
+		testgit.Run(t, dir, "init", "-q")
+		testgit.Run(t, dir, "commit", "--allow-empty", "-m", "init", "-q")
 		return dir
 	}
 
@@ -152,7 +140,7 @@ func TestResolveGitIdentity(t *testing.T) {
 			setup: func(t *testing.T) (workspaceapi.URI, func()) {
 				main := initRepo(t)
 				wt := realPath(t, t.TempDir())
-				gitCmd(t, main, "worktree", "add", "-q", wt, "-b", "feature")
+				testgit.Run(t, main, "worktree", "add", "-q", wt, "-b", "feature")
 				uri, _ := workspaceapi.ParseURI("file://" + main)
 				return uri, func() {}
 			},
@@ -179,7 +167,7 @@ func TestResolveGitIdentity(t *testing.T) {
 			setup: func(t *testing.T) (workspaceapi.URI, func()) {
 				main := initRepo(t)
 				wt := realPath(t, t.TempDir())
-				gitCmd(t, main, "worktree", "add", "-q", wt, "-b", "feature")
+				testgit.Run(t, main, "worktree", "add", "-q", wt, "-b", "feature")
 				uri, _ := workspaceapi.ParseURI("file://" + wt)
 				return uri, func() {}
 			},
@@ -194,7 +182,7 @@ func TestResolveGitIdentity(t *testing.T) {
 			setup: func(t *testing.T) (workspaceapi.URI, func()) {
 				main := initRepo(t)
 				wt := realPath(t, t.TempDir())
-				gitCmd(t, main, "worktree", "add", "-q", wt, "-b", "feature")
+				testgit.Run(t, main, "worktree", "add", "-q", wt, "-b", "feature")
 				// Return both paths via the cleanup for assertion.
 				t.Setenv("TEST_WT_PATH", wt)
 				t.Setenv("TEST_MAIN_PATH", main)
@@ -229,8 +217,8 @@ func TestResolveGitIdentity(t *testing.T) {
 				main := initRepo(t)
 				wt1 := realPath(t, t.TempDir())
 				wt2 := realPath(t, t.TempDir())
-				gitCmd(t, main, "worktree", "add", "-q", wt1, "-b", "feat-1")
-				gitCmd(t, main, "worktree", "add", "-q", wt2, "-b", "feat-2")
+				testgit.Run(t, main, "worktree", "add", "-q", wt1, "-b", "feat-1")
+				testgit.Run(t, main, "worktree", "add", "-q", wt2, "-b", "feat-2")
 				uri, _ := workspaceapi.ParseURI("file://" + main)
 				return uri, func() {}
 			},
@@ -243,7 +231,7 @@ func TestResolveGitIdentity(t *testing.T) {
 			setup: func(t *testing.T) (workspaceapi.URI, func()) {
 				main := initRepo(t)
 				wt := realPath(t, t.TempDir())
-				gitCmd(t, main, "worktree", "add", "-q", "--detach", wt, "HEAD")
+				testgit.Run(t, main, "worktree", "add", "-q", "--detach", wt, "HEAD")
 				uri, _ := workspaceapi.ParseURI("file://" + main)
 				return uri, func() {}
 			},
@@ -257,7 +245,7 @@ func TestResolveGitIdentity(t *testing.T) {
 				main := initRepo(t)
 				wt := filepath.Join(realPath(t, t.TempDir()), "my-feature")
 				require.NoError(t, os.MkdirAll(filepath.Dir(wt), 0o755))
-				gitCmd(t, main, "worktree", "add", "-q", wt, "-b", "my-feature")
+				testgit.Run(t, main, "worktree", "add", "-q", wt, "-b", "my-feature")
 				t.Setenv("TEST_WT_PATH", wt)
 				uri, _ := workspaceapi.ParseURI("file://" + main)
 				return uri, func() {}

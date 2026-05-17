@@ -44,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 )
 
 func TestDream(t *testing.T) {
@@ -784,8 +785,7 @@ func TestDreamPipelineGitIntegration(t *testing.T) {
 	// workspace files. The "dream: update memories" commit only appears if
 	// the agent actually writes files (here the mock LLM returns text only,
 	// so there is nothing new to commit).
-	out, err := exec.Command("git", "-C", dir, "log", "--format=%s", "--reverse").CombinedOutput()
-	require.NoError(t, err, "git log: %s", out)
+	out := testgit.Run(t, dir, "log", "--format=%s", "--reverse")
 	commits := strings.Split(strings.TrimSpace(string(out)), "\n")
 
 	require.GreaterOrEqual(t, len(commits), 1, "at least the bootstrap commit")

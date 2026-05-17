@@ -51,6 +51,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/handler/search"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -277,10 +278,7 @@ func TestHandlerGitChangesAlias(t *testing.T) {
 	// `git diff HEAD`.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "g.go"),
 		[]byte("hello\nworld\n"), 0o644))
-	gitAdd := exec.Command("git", "add", "g.go")
-	gitAdd.Dir = dir
-	out, err := gitAdd.CombinedOutput()
-	require.NoError(t, err, "git add g.go: %s", out)
+	testgit.Run(t, dir, "add", "g.go")
 
 	const awkScript = `awk 'BEGIN { cmd = "git diff HEAD --no-color -U0";` +
 		` while ((cmd | getline line) > 0) { if (substr(line, 1, 6) ==` +
@@ -659,10 +657,7 @@ func newGitRepo(t *testing.T, fc fileContent) string {
 		"commit", "-q", "-m", "init",
 	})
 	for _, args := range gitArgs {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
+		testgit.Run(t, dir, args...)
 	}
 	return dir
 }

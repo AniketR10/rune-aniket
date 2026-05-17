@@ -89,6 +89,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 	llmopenai "unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 )
 
 // builtinSkillsSystemMsg is the system message injected by the agent loop
@@ -3688,8 +3689,7 @@ func TestAIEditorHandler_dream_via_shell(t *testing.T) {
 		_, statErr := os.Stat(filepath.Join(memPath, ".git"))
 		assert.NoError(t, statErr, "memory workspace should be a git repo")
 
-		out, gitErr := exec.Command("git", "-C", memPath, "log", "--oneline", "--format=%s").CombinedOutput()
-		require.NoError(t, gitErr, "git log should succeed")
+		out := testgit.Run(t, memPath, "log", "--oneline", "--format=%s")
 		commits := strings.Split(strings.TrimSpace(string(out)), "\n")
 		assert.Equal(t, []string{"initialize memory module"}, commits)
 	}

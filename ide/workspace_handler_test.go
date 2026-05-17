@@ -66,6 +66,7 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idetask"
+	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
@@ -568,14 +569,10 @@ func setupGitlinkRepo(t *testing.T) (dir, commit, relFile string) {
 	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, relFile), []byte("hi\n"), 0o644))
 
-	gitEnv := append(os.Environ(),
-		"GIT_AUTHOR_NAME=test",
-		"GIT_AUTHOR_EMAIL=test@test.com",
-		"GIT_COMMITTER_NAME=test",
-		"GIT_COMMITTER_EMAIL=test@test.com",
+	dateEnv := []string{
 		"GIT_AUTHOR_DATE=2020-01-01T00:00:00Z",
 		"GIT_COMMITTER_DATE=2020-01-01T00:00:00Z",
-	)
+	}
 	for _, args := range [][]string{
 		{"init", "-q", "-b", "main"},
 		{"remote", "add", "origin",
@@ -583,15 +580,13 @@ func setupGitlinkRepo(t *testing.T) (dir, commit, relFile string) {
 		{"add", "."},
 		{"commit", "-q", "-m", "initial"},
 	} {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = gitEnv
+		cmd := testgit.Command(t, dir, args...)
+		cmd.Env = append(cmd.Env, dateEnv...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	require.NoError(t, err)
+	out := testgit.Run(t, dir, "rev-parse", "HEAD")
 	commit = strings.TrimSpace(string(out))
 	return
 }
