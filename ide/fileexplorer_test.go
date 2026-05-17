@@ -28,10 +28,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -46,6 +49,83 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
 )
+
+func TestFileExplorerBYOEEnter(t *testing.T) {
+	if _, err := exec.LookPath("vim"); err != nil {
+		t.Skip("vim binary not available")
+	}
+
+	// EvalSymlinks: macOS t.TempDir() returns /var/... but the FS
+	// scheme canonicalises to /private/var/... so URI lookup must
+	// match.
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(
+		filepath.Join(dir, "subdir"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "subdir", "child.txt"),
+		[]byte("hi"), 0o644))
+
+	cfg := defaultConfigWithWrap(false)
+	editorCfg := cfg.cfg["editor"].(map[string]any)
+	editorCfg["mode"] = "byoe"
+	editorCfg["byoe"] = map[string]any{
+		"command": `vim -Nu NONE -n "+call cursor({line}, {col})" {file}`,
+		"goto":    "<esc>:{line}<enter>{col}|",
+	}
+	cfg.ringBell = func() {}
+	require.Equal(t, "byoe", cfg.editorMode())
+	// The byoefallback default is modeless; verify it propagated so
+	// downstream behaviour (Enter toggles, no vi search) matches.
+	require.Equal(t, "modeless", cfg.byoeFallback())
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+		nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.drainPendingWorkspaces()
+
+	h := newSafeHandler(m)
+	h.Resize(40, 12)
+
+	ex := m.focusEx()
+	require.NotNil(t, ex)
+	assert.True(t, ex.ed.IsExternal(),
+		"byoe workspace must remain externally managed even when "+
+			"some URIs route to the fallback")
+
+	m.mu.Lock()
+	err = ex.fexplorer(context.Background())
+	m.mu.Unlock()
+	require.NoError(t, err, "fexplorer must open under byoe via the "+
+		"byoefallback router for memory:///fexplorer")
+	require.NotNil(t, ex.fileExplorerWin,
+		"file explorer window must be present")
+	require.NotNil(t, ex.fileExplorerHandler,
+		"file explorer handler must be cached")
+
+	explorer := ex.fileExplorerHandler
+	beforeRows := explorer.ed.CellView().Rows()
+	require.Greater(t, beforeRows, 0,
+		"explorer tree must render at least one row")
+
+	// With cursor on the first (directory) row, <Enter> must expand
+	// the tree. The modeless fallback delivers <Enter> to the inner
+	// editor handler, which the file explorer interprets as
+	// expand-or-open since it is not in search mode.
+	_, handled := h.Handle(term.Event{
+		Type: term.EventKey, Key: term.KeyEnter,
+	})
+	require.True(t, handled, "<Enter> must be handled")
+	require.False(t, explorer.ed.IsSearchMode(),
+		"modeless fallback must not enter search mode on <Enter>")
+	assert.NotEqual(t, beforeRows, explorer.ed.CellView().Rows(),
+		"<Enter> on a directory row must toggle the tree")
+}
 
 func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 	tests := []struct {

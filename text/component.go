@@ -436,7 +436,7 @@ func (c *Component) openFileTab(
 	// hosting an external TUI editor) are the source of truth for file
 	// contents; Rune's mirror buffer must stay read-only so the dirty-tab
 	// path, flusher, and recovery prompt all do the right thing.
-	if ed, ok := c.ed.(ExternallyManagedEditor); ok && ed.IsExternal() {
+	if c.ed.IsExternal() {
 		readOnly = true
 	}
 
@@ -1042,6 +1042,9 @@ func (c *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
 	}
 	return ret || ed, nil
 }
+
+// IsExternal delegates to the underlying Editor.
+func (c *Component) IsExternal() bool { return c.ed.IsExternal() }
 
 // Commands returns a list of commands registered via SubscribeCommand
 // or via Config.CommandAliases.

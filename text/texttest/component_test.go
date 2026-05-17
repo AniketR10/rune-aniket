@@ -2188,6 +2188,7 @@ func TestFlush(t *testing.T) {
 		mock.EXPECT().CellView().
 			Return(cell.NewBuffer().View()).Times(1)
 		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(true), gomock.Any()).Return(mock, nil)
+		mockEditor.EXPECT().IsExternal().Return(false).AnyTimes()
 
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))
@@ -2255,6 +2256,7 @@ func TestReload(t *testing.T) {
 		mock.EXPECT().CursorAtScroll().
 			Return(term.Coordinates{}).Times(1)
 		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mock, nil)
+		mockEditor.EXPECT().IsExternal().Return(false).AnyTimes()
 
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))

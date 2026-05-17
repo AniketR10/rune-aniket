@@ -356,6 +356,11 @@ config = {
         "byoe": {
             "command": 'vim "+call cursor({line}, {col})" {file}',
             "goto":    "<esc>:{line}<enter>{col}|",
+            # Rune-native editor used to serve URIs the external editor
+            # cannot meaningfully edit (memory:// pseudo-URIs such as
+            # the file explorer's tab). Valid values are "modal" or
+            # "modeless".
+            "fallback": "modal",
         },
         "indents": {
             "chatito": "spaces",

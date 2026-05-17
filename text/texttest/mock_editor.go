@@ -278,3 +278,7 @@ func (e *TestEditor) Subscribers() map[textapi.EventType][]text.EventHandler {
 func (e *TestEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("nope")
 }
+
+// IsExternal reports false. Tests that need true should embed
+// TestEditor and override IsExternal locally.
+func (*TestEditor) IsExternal() bool { return false }

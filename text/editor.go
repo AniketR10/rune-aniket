@@ -156,6 +156,15 @@ type Editor interface {
 	// command. Returns ErrCommandNotRegistered if no such command is
 	// registered.
 	UnregisterREPLCommand(string) error
+
+	// IsExternal reports whether this editor manages its buffer
+	// contents out of band (e.g. via an external TUI editor
+	// process). When true, callers must treat every file opened
+	// through Edit as read-only on the Rune side and skip
+	// Rune-level write/reload paths (auto-save, dirty-tab markers,
+	// FS-event reload notifications). Editors that own their
+	// buffer in-process return false.
+	IsExternal() bool
 }
 
 // NewREPLHandler returns a REPL handler backed by router.

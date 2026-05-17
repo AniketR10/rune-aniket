@@ -35,14 +35,15 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-// externalEditor wraps a TestEditor and reports itself as an
-// externally-managed editor via text.ExternallyManagedEditor.
+// externalEditor wraps a TestEditor and reports itself as
+// externally-managed.
 type externalEditor struct {
 	*TestEditor
 	readOnlyObserved *bool
 }
 
-func (e externalEditor) IsExternal() bool { return true }
+// IsExternal overrides TestEditor.IsExternal to return true.
+func (externalEditor) IsExternal() bool { return true }
 
 func (e externalEditor) Edit(
 	ctx context.Context,
@@ -68,7 +69,7 @@ func (l recordingLoader) Load(
 }
 
 // TestExternalEditorForcesReadOnly verifies that opening a file in a
-// Component backed by an ExternallyManagedEditor forces readOnly=true
+// Component backed by an external Editor forces readOnly=true
 // at both the editor.Edit and workspace.Load layer, regardless of what
 // the caller passed to OpenFileTab.
 func TestExternalEditorForcesReadOnly(t *testing.T) {

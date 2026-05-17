@@ -173,3 +173,6 @@ func (e *viEditor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 	ok := e.Publisher.UnsubscribeEvents(sub)
 	return ok, nil
 }
+
+// IsExternal reports false: vi manages its buffer in process.
+func (*viEditor) IsExternal() bool { return false }

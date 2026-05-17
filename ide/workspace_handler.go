@@ -80,6 +80,7 @@ import (
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/byoe"
+	"unstable.build/go-tui/text/byoefallback"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -254,7 +255,7 @@ func (h *workspaceManagerHandler) newEditor(
 	case editorModeModeless:
 		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
 	case editorModeBYOE:
-		return h.newBYOEEditor(cwd, ws, tm, cfg)
+		return h.newBYOEFallbackEditor(cwd, ws, tm, cfg, svc), nil
 	default:
 		panic("invalid editor mode")
 	}
@@ -326,17 +327,26 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	)
 }
 
-// newBYOEEditor returns a byoe editor that hosts the user-configured
-// external TUI editor inside a Rune-managed vte. All workspace deps
-// (workspace, tab manager, notifications, event publisher) are
-// resolved up front; the editor is fully usable as soon as it
-// returns. editor.byoe.command must already be validated by
-// validateConfig — an empty command here is a programmer error.
-func (h *workspaceManagerHandler) newBYOEEditor(
+// newBYOEFallbackEditor returns a byoefallback router that hosts the
+// user-configured external TUI editor (file://, ssh://) and a
+// Rune-native fallback editor (memory:// and any other scheme).
+// editor.byoe.command / .goto must already be validated by
+// validateConfig — invalid values here are a programmer error.
+func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 	cwd workspaceapi.URI, ws workspace.Workspace,
-	tm browser.TabManager, cfg ideConfig,
-) (text.Editor, error) {
-	return byoe.New(
+	tm browser.TabManager, cfg ideConfig, svc vctrl.Service,
+) text.Editor {
+	var fallback text.Editor
+	switch cfg.byoeFallback() {
+	case editorFallbackModeless:
+		fallback = h.newBuiltinModelessEditor(cwd, cfg, svc)
+	default:
+		// editorFallbackModal and any unexpected value
+		// (validateBYOE rewrites unknown to "modal" before this
+		// point).
+		fallback = h.newBuiltinModalEditor(cwd, cfg, svc)
+	}
+	return byoefallback.New(
 		cfg.byoeCommand(),
 		cfg.byoeGoto(),
 		cfg.scheduleNextTick,
@@ -348,16 +358,8 @@ func (h *workspaceManagerHandler) newBYOEEditor(
 		ws, // executor
 		tm,
 		cfg.terminalConfig(),
-	), nil
-}
-
-// isExternallyManagedEditor reports whether ed manages its own buffer
-// contents out of band (e.g. via an external TUI editor process). Used
-// by the workspace handler to disable IDE-side write/reload paths that
-// would fight the external editor.
-func isExternallyManagedEditor(ed text.Editor) bool {
-	e, ok := ed.(text.ExternallyManagedEditor)
-	return ok && e.IsExternal()
+		fallback,
+	)
 }
 
 // newCommandPromptEditor returns the command.Editor adapter used by
@@ -2432,7 +2434,7 @@ func (h *workspaceManagerHandler) subscribeAllEvents(
 	if err := h.subscribeExternalEvents(ex, h.externalEvents...); err != nil {
 		return err
 	}
-	if cfg.editorAutoSave() && !isExternallyManagedEditor(ex.ed) {
+	if cfg.editorAutoSave() && !ex.ed.IsExternal() {
 		// In externally-managed editor modes (e.g. byoe) the
 		// external editor process owns saving. Rune's mirror buffer
 		// is rewritten by a workspace watcher on every external

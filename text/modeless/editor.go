@@ -171,3 +171,7 @@ func (e *editor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 	ok := e.pub.UnsubscribeEvents(sub)
 	return ok, nil
 }
+
+// IsExternal reports false: the modeless editor manages its buffer
+// in process.
+func (*editor) IsExternal() bool { return false }

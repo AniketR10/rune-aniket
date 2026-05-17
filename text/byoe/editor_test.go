@@ -36,7 +36,6 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term/vte"
-	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -134,11 +133,10 @@ var _ schemeapi.Terminal = stubTerminal{}
 var _ schemeapi.Executor = stubExecutor{}
 var _ browser.TabManager = stubTabManager{}
 
-// TestEditorIsExternal verifies the byoe editor satisfies the
-// text.ExternallyManagedEditor tag interface.
+// TestEditorIsExternal verifies the byoe editor reports
+// IsExternal()==true.
 func TestEditorIsExternal(t *testing.T) {
-	var ext text.ExternallyManagedEditor = newTestEditor()
-	assert.True(t, ext.IsExternal())
+	assert.True(t, newTestEditor().IsExternal())
 }
 
 // TestNewPanicsOnMissingArgument exercises every required-argument

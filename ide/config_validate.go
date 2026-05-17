@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
@@ -128,7 +129,41 @@ func validateBYOE(c *ideConfig, cfg map[string]any) (err error) {
 		return fmt.Errorf("editor.byoe.goto is invalid: %w; "+
 			"falling back to \"modal\"", perr)
 	}
+	if err = validateBYOEFallback(c, cfg); err != nil {
+		return
+	}
 	return
+}
+
+// validateBYOEFallback ensures editor.byoe.fallback, when set, is one
+// of "modal" or "modeless". Unrecognised values are rewritten to
+// "modeless" so the IDE still boots with the documented default. An
+// absent fallback key is treated as valid and uses the default.
+func validateBYOEFallback(c *ideConfig, cfg map[string]any) error {
+	byoe, ok := c.byoe()
+	if !ok {
+		return nil
+	}
+	raw, err := byoe.GetString("fallback")
+	if err != nil {
+		if err == config.ErrNotFound {
+			return nil
+		}
+		return fmt.Errorf("editor.byoe.fallback: %w", err)
+	}
+	switch raw {
+	case "", editorFallbackModal, editorFallbackModeless:
+		return nil
+	}
+	if ed, ok := cfg["editor"].(map[string]any); ok {
+		if b, ok := ed["byoe"].(map[string]any); ok {
+			b["fallback"] = editorFallbackModeless
+		}
+	}
+	return fmt.Errorf("editor.byoe.fallback must be %q or %q; got %q, "+
+		"falling back to %q",
+		editorFallbackModal, editorFallbackModeless, raw,
+		editorFallbackModeless)
 }
 
 // parseGotoTemplate splits tpl around {line}/{col} placeholders and

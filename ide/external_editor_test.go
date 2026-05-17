@@ -38,8 +38,8 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-// externalEditorStub is a minimal text.Editor that also reports itself
-// as externally-managed via text.ExternallyManagedEditor.
+// externalEditorStub is a minimal text.Editor that reports
+// IsExternal()==true.
 type externalEditorStub struct{}
 
 func (externalEditorStub) IsExternal() bool { return true }
@@ -76,43 +76,6 @@ func (externalEditorStub) SubscribeEvents([]textapi.EventType, text.EventHandler
 
 func (externalEditorStub) UnsubscribeEvents(text.EventHandler) (bool, error) {
 	return false, nil
-}
-
-// plainEditor is a minimal text.Editor that does NOT implement
-// text.ExternallyManagedEditor; the negative case for
-// isExternallyManagedEditor.
-type plainEditor struct{}
-
-func (plainEditor) Edit(
-	context.Context, workspaceapi.URI, *cell.Buffer, bool, bool,
-) (text.Handler, error) {
-	return nil, errors.New("not used")
-}
-
-func (plainEditor) SubscribeCommand(textapi.CommandManual, text.CommandHandler) error {
-	return nil
-}
-
-func (plainEditor) RegisterREPLCommand(textapi.CommandManual, textapi.REPLHandler) error {
-	return nil
-}
-
-func (plainEditor) REPLCommands() []textapi.CommandManual         { return nil }
-func (plainEditor) UnsubscribeCommand(string) error               { return nil }
-func (plainEditor) UnregisterREPLCommand(string) error            { return nil }
-func (plainEditor) Editor(workspaceapi.URI) (text.Handler, error) { return nil, nil }
-func (plainEditor) SubscribeEvents([]textapi.EventType, text.EventHandler) error {
-	return nil
-}
-func (plainEditor) UnsubscribeEvents(text.EventHandler) (bool, error) { return false, nil }
-
-func TestIsExternallyManagedEditor(t *testing.T) {
-	assert.True(t, isExternallyManagedEditor(externalEditorStub{}),
-		"editor that returns IsExternal()=true must be detected")
-	assert.False(t, isExternallyManagedEditor(plainEditor{}),
-		"editor without ExternallyManagedEditor must report false")
-	assert.False(t, isExternallyManagedEditor(nil),
-		"nil editor must report false")
 }
 
 // TestSubscribeAllEventsSkipsAutoSaveForExternalEditor exercises the

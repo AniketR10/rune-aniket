@@ -49,26 +49,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-// New allocates a new byoe Editor. All dependencies are mandatory
-// positional arguments to make missing wiring a compile-time error
-// at every call site and avoid nil-via-options programming. New
-// panics if any interface argument is nil (programmer error) and
-// also panics if the configured goto template cannot be parsed —
-// validateBYOE enforces both at config-load time so a panic here
-// indicates the IDE skipped validation.
-//
-// The command and gotoTemplate arguments are the validated user
-// strings from editor.byoe.command and editor.byoe.goto. cwd carries
-// the workspace used for file watches and file reads; terminal and
-// executor are usually `cwd` itself but are passed separately so
-// tests can inject lighter stubs. publisher routes terminal events
-// (resize, focus, interrupt) back into Rune's main event loop;
-// notifications surfaces watcher / pty errors; tabManager updates the
-// tab name as the external editor runs. vteCfg carries the terminal
-// theme, bell trigger, max scrollback, and scheduleNextTick base
-// from the IDE-wide terminal configuration; New overrides
-// CommandAndArgs, Modal, and ScheduleNextTick to byoe-appropriate
-// values.
+// New allocates a new byoe Editor.
 func New(
 	command, gotoTemplate string,
 	scheduleNextTick func(func()) bool,
@@ -138,7 +119,8 @@ type Editor struct {
 	pub text.Publisher
 }
 
-// IsExternal satisfies text.ExternallyManagedEditor.
+// IsExternal reports true: byoe hosts an external TUI editor that
+// owns the buffer contents.
 func (e *Editor) IsExternal() bool { return true }
 
 // Edit opens file in a fresh vte hosting the configured external

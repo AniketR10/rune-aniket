@@ -71,16 +71,18 @@ import (
 )
 
 const (
-	inputEsc             = "esc"
-	inputAlt             = "alt"
-	inputMouse           = "mouse"
-	inputCurrent         = "current"
-	editorModeModal      = "modal"
-	editorModeModeless   = "modeless"
-	editorModeBYOE       = "byoe"
-	keyCommandAliases    = "aliases"
-	keyCommandKey        = "key"
-	keyCommandHistoryKey = "history_key"
+	inputEsc               = "esc"
+	inputAlt               = "alt"
+	inputMouse             = "mouse"
+	inputCurrent           = "current"
+	editorModeModal        = "modal"
+	editorModeModeless     = "modeless"
+	editorModeBYOE         = "byoe"
+	editorFallbackModal    = "modal"
+	editorFallbackModeless = "modeless"
+	keyCommandAliases      = "aliases"
+	keyCommandKey          = "key"
+	keyCommandHistoryKey   = "history_key"
 )
 
 var (
@@ -1413,6 +1415,29 @@ func (c ideConfig) byoeGoto() string {
 		return ""
 	}
 	return s
+}
+
+// byoeFallback returns the Rune-native fallback editor used by the
+// byoefallback router for URIs that BYOE cannot serve (e.g.
+// memory://). Valid values are "modal" or "modeless"; defaults to
+// "modeless".
+func (c ideConfig) byoeFallback() string {
+	cfg, ok := c.byoe()
+	if !ok {
+		return editorFallbackModeless
+	}
+	s, err := cfg.GetString("fallback")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.byoe.fallback"] = err
+		}
+		return editorFallbackModeless
+	}
+	switch s {
+	case editorFallbackModal, editorFallbackModeless:
+		return s
+	}
+	return editorFallbackModeless
 }
 
 func (c ideConfig) editorMode() (ret string) {

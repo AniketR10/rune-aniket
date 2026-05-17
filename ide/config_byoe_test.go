@@ -144,3 +144,67 @@ func TestValidateBYOEAcceptsKnownTemplates(t *testing.T) {
 		assert.NoError(t, err, "template %q must parse", tpl)
 	}
 }
+
+// TestByoeFallbackDefaults asserts the accessor returns "modeless"
+// when no fallback key is set (the documented default).
+func TestByoeFallbackDefaults(t *testing.T) {
+	cfg := ideConfig{
+		cfg: map[string]any{
+			"editor": map[string]any{
+				"mode": "byoe",
+				"byoe": map[string]any{
+					"command": "vim {file}",
+					"goto":    "<esc>:{line}<enter>",
+				},
+			},
+		},
+		errors: map[string]error{},
+	}
+	assert.Equal(t, "modeless", cfg.byoeFallback())
+}
+
+// TestByoeFallbackExplicitValues asserts both "modal" and "modeless"
+// round-trip through the accessor.
+func TestByoeFallbackExplicitValues(t *testing.T) {
+	for _, want := range []string{"modal", "modeless"} {
+		t.Run(want, func(t *testing.T) {
+			cfg := ideConfig{
+				cfg: map[string]any{
+					"editor": map[string]any{
+						"mode": "byoe",
+						"byoe": map[string]any{
+							"command":  "vim {file}",
+							"goto":     "<esc>:{line}<enter>",
+							"fallback": want,
+						},
+					},
+				},
+				errors: map[string]error{},
+			}
+			assert.Equal(t, want, cfg.byoeFallback())
+		})
+	}
+}
+
+// TestValidateBYOEFallbackInvalidValueRewrites verifies an unknown
+// fallback string is rewritten to "modeless" so the IDE still boots.
+func TestValidateBYOEFallbackInvalidValueRewrites(t *testing.T) {
+	cfg := map[string]any{
+		"editor": map[string]any{
+			"mode": "byoe",
+			"byoe": map[string]any{
+				"command":  "vim {file}",
+				"goto":     "<esc>:{line}<enter>",
+				"fallback": "bogus",
+			},
+		},
+	}
+	err := validateConfig(cfg)
+	require.Error(t, err)
+
+	ic := ideConfig{cfg: cfg, errors: map[string]error{}}
+	assert.Equal(t, "modeless", ic.byoeFallback(),
+		"invalid fallback must be rewritten to %q", "modeless")
+	// editor.mode remains "byoe" since command/goto are valid.
+	assert.Equal(t, "byoe", ic.editorMode())
+}
