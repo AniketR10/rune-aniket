@@ -34,6 +34,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -404,13 +405,109 @@ func (c ideConfig) animationsBool(key string) bool {
 	if !ok {
 		return true
 	}
-	b, ok := v.(bool)
-	if !ok {
+	switch tp := v.(type) {
+	case bool:
+		return tp
+	case map[string]any:
+		enabled, ok := tp["enabled"]
+		if !ok {
+			return true
+		}
+		b, ok := enabled.(bool)
+		if !ok {
+			c.errors["animations."+key+".enabled"] = fmt.Errorf(
+				"expected bool, got %T", enabled)
+			return true
+		}
+		return b
+	default:
 		c.errors["animations."+key] = fmt.Errorf(
-			"expected bool, got %T", v)
+			"expected bool or dict, got %T", v)
 		return true
 	}
-	return b
+}
+
+// animationsDict returns the dict associated with
+// `animations.<key>` when the key is configured as a dict. Returns
+// nil and false for missing keys or bool-form values. Type errors are
+// already surfaced by animationsBool/the section guard.
+func (c ideConfig) animationsDict(key string) (map[string]any, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	anims, ok := c.cfg["animations"]
+	if !ok {
+		return nil, false
+	}
+	m, ok := anims.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	v, ok := m[key]
+	if !ok {
+		return nil, false
+	}
+	d, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return d, true
+}
+
+// animationsOpenWorkspaceShader returns the configured shader name
+// override for the open-workspace animation, if any. Records a soft
+// error under "animations.open_workspace.shader" when the value is
+// the wrong type or not a known shader name.
+func (c ideConfig) animationsOpenWorkspaceShader() (string, bool) {
+	d, ok := c.animationsDict("open_workspace")
+	if !ok {
+		return "", false
+	}
+	v, ok := d["shader"]
+	if !ok {
+		return "", false
+	}
+	name, ok := v.(string)
+	if !ok {
+		c.errors["animations.open_workspace.shader"] = fmt.Errorf(
+			"expected string, got %T", v)
+		return "", false
+	}
+	if name == "" {
+		return "", false
+	}
+	if !slices.Contains(namedShaderNames(), name) {
+		c.errors["animations.open_workspace.shader"] = fmt.Errorf(
+			"unknown shader %q", name)
+		return "", false
+	}
+	return name, true
+}
+
+// animationsOpenWorkspaceDuration returns the configured duration
+// override for the open-workspace animation, if any. Accepts any Go
+// duration string. Records a soft error on type/parse failure.
+func (c ideConfig) animationsOpenWorkspaceDuration() (time.Duration, bool) {
+	d, ok := c.animationsDict("open_workspace")
+	if !ok {
+		return 0, false
+	}
+	v, ok := d["duration"]
+	if !ok {
+		return 0, false
+	}
+	s, ok := v.(string)
+	if !ok {
+		c.errors["animations.open_workspace.duration"] = fmt.Errorf(
+			"expected duration string, got %T", v)
+		return 0, false
+	}
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		c.errors["animations.open_workspace.duration"] = err
+		return 0, false
+	}
+	return dur, true
 }
 
 func (c ideConfig) prompt() (config.Config, bool) {

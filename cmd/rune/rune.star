@@ -243,6 +243,14 @@ config = {
     # The open animation is only ever played after a loading
     # animation, so disabling "loading_workspace" effectively
     # disables both.
+    #
+    # "open_workspace" also accepts a dict to override the shader
+    # name and lifetime used for the open transition:
+    #
+    #
+    # "shader" accepts any of the names listed by :shaderrun and
+    # "duration" accepts any Go duration string. Both keys are
+    # optional and fall back to the built-in defaults.
     "animations": {
         # Plays while a workspace is being installed
         # (addWorkspace). The default gray-fade desaturates the
@@ -250,7 +258,11 @@ config = {
         "loading_workspace": True,
         # Plays when a workspace finishes installing. The default
         # is a quick burn sweep that reveals the new content.
-        "open_workspace":    True,
+        "open_workspace": {
+            "enabled":  True,
+            "shader":   "shine",
+            "duration": "1s",
+        },
     },
     # Self-upgrade configuration. Rune polls a public manifest endpoint
     # to discover new releases and prompts before installing them.

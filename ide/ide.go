@@ -47,6 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -423,6 +424,21 @@ func (i *IDE) init(
 	}
 	if !i.ideConfig.animationsOpenWorkspace() {
 		openShaderCfg.shader = nil
+	}
+	// Apply rune.star overrides for the open-workspace shader, if
+	// any. The shader override uses the showroom defaults exposed by
+	// :shaderrun; duration replaces the runtime-provided lifetime.
+	if name, ok := i.ideConfig.animationsOpenWorkspaceShader(); ok {
+		fps := openShaderCfg.fps
+		fc := i.ideConfig.windowFrameCharset()
+		dur := openShaderCfg.duration
+		openShaderCfg.shader = func(defAttr term.Attributes) shader.Shader {
+			s, _ := buildNamedShader(name, defAttr, fps, dur, fc)
+			return s
+		}
+	}
+	if dur, ok := i.ideConfig.animationsOpenWorkspaceDuration(); ok {
+		openShaderCfg.duration = dur
 	}
 	i.root.init(i.workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())

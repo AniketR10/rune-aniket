@@ -24,10 +24,15 @@
 package ide
 
 import (
+	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/shader"
 )
 
 func newAnimConfig(t *testing.T, src string) ideConfig {
@@ -125,4 +130,193 @@ func TestAnimationsSectionWrongType(t *testing.T) {
 	assert.True(t, c.animationsLoadingWorkspace())
 	assert.True(t, c.animationsOpenWorkspace())
 	require.Contains(t, c.errors, "animations")
+}
+
+// TestAnimationsOpenWorkspaceDictEnabledFalse verifies that the dict
+// form with `enabled = False` disables the open animation.
+func TestAnimationsOpenWorkspaceDictEnabledFalse(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "enabled": False,
+        },
+    },
+}
+`)
+	assert.False(t, c.animationsOpenWorkspace())
+	assert.Empty(t, c.errors)
+}
+
+// TestAnimationsOpenWorkspaceDictEnabledMissingDefaultsTrue verifies
+// that omitting `enabled` in the dict keeps the animation enabled.
+func TestAnimationsOpenWorkspaceDictEnabledMissingDefaultsTrue(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "shader": "burn",
+        },
+    },
+}
+`)
+	assert.True(t, c.animationsOpenWorkspace())
+	assert.Empty(t, c.errors)
+}
+
+// TestAnimationsOpenWorkspaceShaderAndDuration verifies that valid
+// shader name and duration overrides are returned and produce no
+// errors.
+func TestAnimationsOpenWorkspaceShaderAndDuration(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "shader":   "burn",
+            "duration": "1500ms",
+        },
+    },
+}
+`)
+	name, ok := c.animationsOpenWorkspaceShader()
+	assert.True(t, ok)
+	assert.Equal(t, "burn", name)
+
+	dur, ok := c.animationsOpenWorkspaceDuration()
+	assert.True(t, ok)
+	assert.Equal(t, 1500*time.Millisecond, dur)
+	assert.Empty(t, c.errors)
+}
+
+// TestAnimationsOpenWorkspaceShaderUnknown records a soft error and
+// returns no override.
+func TestAnimationsOpenWorkspaceShaderUnknown(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "shader": "definitelyNotAShader",
+        },
+    },
+}
+`)
+	_, ok := c.animationsOpenWorkspaceShader()
+	assert.False(t, ok)
+	require.Contains(t, c.errors, "animations.open_workspace.shader")
+}
+
+// TestAnimationsOpenWorkspaceShaderWrongType records a soft error.
+func TestAnimationsOpenWorkspaceShaderWrongType(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "shader": 42,
+        },
+    },
+}
+`)
+	_, ok := c.animationsOpenWorkspaceShader()
+	assert.False(t, ok)
+	require.Contains(t, c.errors, "animations.open_workspace.shader")
+}
+
+// TestAnimationsOpenWorkspaceDurationInvalid records a soft error.
+func TestAnimationsOpenWorkspaceDurationInvalid(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "duration": "not-a-duration",
+        },
+    },
+}
+`)
+	_, ok := c.animationsOpenWorkspaceDuration()
+	assert.False(t, ok)
+	require.Contains(t, c.errors, "animations.open_workspace.duration")
+}
+
+// TestAnimationsOpenWorkspaceDurationWrongType records a soft error
+// for a non-string duration value.
+func TestAnimationsOpenWorkspaceDurationWrongType(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "duration": 1500,
+        },
+    },
+}
+`)
+	_, ok := c.animationsOpenWorkspaceDuration()
+	assert.False(t, ok)
+	require.Contains(t, c.errors, "animations.open_workspace.duration")
+}
+
+// TestAnimationsOpenWorkspaceDictEnabledWrongType records a soft
+// error under `.enabled` and keeps the animation enabled.
+func TestAnimationsOpenWorkspaceDictEnabledWrongType(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "open_workspace": {
+            "enabled": "yes",
+        },
+    },
+}
+`)
+	assert.True(t, c.animationsOpenWorkspace())
+	require.Contains(t, c.errors, "animations.open_workspace.enabled")
+}
+
+// TestIDEOpenShaderConfigOverrideAppliesToRoot wires up an IDE the
+// same way cmd/rune does (Starlark default config + WithOpenShader)
+// and asserts that an `animations.open_workspace.shader` override in
+// the Starlark config replaces the [WithOpenShader] factory used by
+// the shader runner. This is the end-to-end behavior the rune.star
+// surface is supposed to drive.
+func TestIDEOpenShaderConfigOverrideAppliesToRoot(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	require.NoError(t, os.WriteFile(configFile.Name(), []byte(""), 0666))
+
+	starlarkSrc := `
+config = {
+    "animations": {
+        "open_workspace": {
+            "enabled":  True,
+            "shader":   "shine",
+            "duration": "1s",
+        },
+    },
+}
+`
+	dir := t.TempDir()
+
+	sentinelCalled := false
+	sentinel := func(term.Attributes) shader.Shader {
+		sentinelCalled = true
+		return shader.Nop()
+	}
+
+	i := new(IDE)
+	require.NoError(t, i.init(".", configFile.Name(), dir,
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(new(sync.Mutex)),
+		WithDefaultConfigStarlark(starlarkSrc, true, true),
+		WithOpenShader(sentinel, 60, 200*time.Millisecond),
+	))
+	t.Cleanup(func() { _ = i.closeResources() })
+
+	require.NotNil(t, i.root.openShaderCfg.shader,
+		"open shader must be configured")
+
+	_ = i.root.openShaderCfg.shader(term.Attributes{})
+	assert.False(t, sentinelCalled,
+		"rune.star override must replace the WithOpenShader factory; "+
+			"the sentinel from WithOpenShader was invoked instead")
+
+	assert.Equal(t, time.Second, i.root.openShaderCfg.duration,
+		"open shader duration override must be applied")
 }
