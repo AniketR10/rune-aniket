@@ -43,6 +43,7 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 	iterator.Iterator[string], error,
 ) {
 	workers := workerCountFromContext(ctx)
+	bufSize := max(scanBufferSizeFromContext(ctx), bufio.MaxScanTokenSize)
 	files := make(chan string)
 	lines := make(chan string)
 	closeWaitCh := make(chan struct{})
@@ -56,7 +57,7 @@ func ReadLines(ctx context.Context, w Reader, paths iterator.Iterator[string]) (
 		go debug.CapturePanicReport(func() {
 
 			defer wg.Done()
-			readFileWorker(ctx, w, lines, files, err)
+			readFileWorker(ctx, w, bufSize, lines, files, err)
 
 		})
 	}
@@ -144,11 +145,11 @@ func readFile(ctx context.Context, w Reader, buffer []byte, file string, lines c
 }
 
 func readFileWorker(
-	ctx context.Context, w Reader,
+	ctx context.Context, w Reader, bufSize int,
 	lines chan string, files chan string,
 	err *error,
 ) {
-	buffer := make([]byte, bufio.MaxScanTokenSize)
+	buffer := make([]byte, bufSize)
 	for {
 		select {
 		case <-ctx.Done():

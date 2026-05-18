@@ -24,6 +24,7 @@
 package agentools
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -153,6 +154,29 @@ func TestSearchConversations_MatchesAcrossConversations(t *testing.T) {
 	// Output lines should follow the "path:line:content" walkdir format.
 	lines := strings.Split(strings.TrimRight(result.Content, "\n"), "\n")
 	assert.GreaterOrEqual(t, len(lines), 2)
+}
+
+// TestSearchConversations_MatchesInLargeSingleLineSession reproduces the bug
+// where session files whose JSON is serialized on a single line longer than
+// bufio.MaxScanTokenSize (64 KiB) were silently skipped by the underlying
+// bufio.Scanner, causing search_conversations to miss real matches.
+func TestSearchConversations_MatchesInLargeSingleLineSession(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Build a single user message whose Content exceeds 64 KiB so that the
+	// resulting JSON is one line well past bufio.MaxScanTokenSize.
+	padding := strings.Repeat("padding ", (bufio.MaxScanTokenSize/8)+1)
+	writeSessionFile(t, dir, "big-conv", []llm.Message{
+		{Role: llm.RoleUser, Content: padding + " needle-token " + padding},
+	})
+
+	tool := &searchConversationsTool{fs: localFS{root: dir}, sessionsDir: dir}
+	result := tool.Execute(context.Background(), `{"pattern":"needle-token"}`)
+	require.False(t, result.IsError)
+	assert.Contains(t, result.Content, "needle-token",
+		"search_conversations should match patterns inside session JSON that "+
+			"is serialized as a single line larger than bufio.MaxScanTokenSize")
 }
 
 func TestSearchConversations_NoMatches(t *testing.T) {

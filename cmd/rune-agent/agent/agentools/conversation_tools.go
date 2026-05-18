@@ -45,6 +45,13 @@ import (
 // unexported.
 const conversationAuditPrefix = "audit:"
 
+// sessionScanBufferSize is the per-file scan buffer used by
+// search_conversations when calling walkdir.ReadLines. Session JSON files
+// are serialized on a single line; the largest observed session on disk
+// is ~34 MB, so 64 MiB leaves comfortable headroom while keeping a hard
+// upper bound on memory growth.
+const sessionScanBufferSize = 64 * 1024 * 1024
+
 type listConversationsTool struct {
 	store       dialoguemanager.Store
 	sessionsDir string
@@ -187,6 +194,12 @@ func (t *searchConversationsTool) Execute(ctx context.Context, arguments string)
 	}
 
 	walkCtx := boundedWalkdirContext(ctx)
+	// Session JSON files are serialized on a single line and routinely exceed
+	// walkdir's default 64 KiB scan buffer; without a larger cap,
+	// walkdir.ReadLines silently drops them via bufio.ErrTooLong and
+	// search_conversations would miss real matches. 64 MiB comfortably
+	// covers observed sessions (largest seen ~34 MB) with room to grow.
+	walkCtx = walkdir.ContextWithScanBufferSize(walkCtx, sessionScanBufferSize)
 	paths, err := walkdir.ListFiles(walkCtx, t.fs, t.sessionsDir)
 	if err != nil {
 		return agent.ToolResult{

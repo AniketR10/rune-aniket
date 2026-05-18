@@ -40,3 +40,23 @@ func workerCountFromContext(ctx context.Context) int {
 	}
 	return workers
 }
+
+type scanBufferSizeContextKey struct{}
+
+// ContextWithScanBufferSize returns a context configured to use the given
+// per-file scan buffer size (in bytes) for ReadLines. Files containing a
+// single line longer than the default bufio.MaxScanTokenSize (64 KiB) are
+// otherwise silently skipped by the underlying scanner; callers that know
+// their inputs may contain long lines (e.g. single-line JSON documents) can
+// raise this cap. Non-positive values are ignored by walkdir operations.
+func ContextWithScanBufferSize(ctx context.Context, size int) context.Context {
+	return context.WithValue(ctx, scanBufferSizeContextKey{}, size)
+}
+
+func scanBufferSizeFromContext(ctx context.Context) int {
+	size, ok := ctx.Value(scanBufferSizeContextKey{}).(int)
+	if !ok || size <= 0 {
+		return 0
+	}
+	return size
+}
