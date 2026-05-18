@@ -57,14 +57,34 @@ func NewMemoryScheme(
 	ctx context.Context, cfg config.Config, workspace workspaceapi.URI,
 ) (schemeapi.Scheme, error) {
 	ret := new(memoryScheme)
-	err := ret.init(workspace)
+	err := ret.init(MemoryScheme, workspace)
 	if err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
+// NewInMemorySchemeFunc returns a schemeapi.SchemeFunc that constructs an
+// in-memory backed Scheme for URIs that use the given scheme name. The
+// returned scheme behaves like NewMemoryScheme but is bound to scheme
+// rather than the built-in "memory" scheme. This is useful for embedding
+// virtual filesystems (e.g. bundled documentation) under a custom URI
+// scheme.
+func NewInMemorySchemeFunc(scheme string) schemeapi.SchemeFunc {
+	return func(
+		ctx context.Context, cfg config.Config, workspace workspaceapi.URI,
+	) (schemeapi.Scheme, error) {
+		ret := new(memoryScheme)
+		err := ret.init(scheme, workspace)
+		if err != nil {
+			return nil, err
+		}
+		return ret, nil
+	}
+}
+
 type memoryScheme struct {
+	scheme         string
 	workspace      workspaceapi.URI
 	mu             sync.Locker
 	files          map[string]*memFile
@@ -74,10 +94,11 @@ type memoryScheme struct {
 	nextWatchpoint *atomic.Int64
 }
 
-func (m *memoryScheme) init(workspace workspaceapi.URI) error {
-	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != MemoryScheme {
+func (m *memoryScheme) init(scheme string, workspace workspaceapi.URI) error {
+	if workspace.Host() != "" || workspace.User() != "" || workspace.Scheme() != scheme {
 		return errors.New("invalid memory URI")
 	}
+	m.scheme = scheme
 	m.workspace = workspace
 	m.watchpoints = make(map[schemeapi.Event][]chan<- schemeapi.EventInfo)
 	m.watchpointIDs = make(map[int64]chan<- schemeapi.EventInfo)
@@ -267,12 +288,26 @@ func (m *memoryScheme) Lstat(path string) (os.FileInfo, error) {
 	uriStr := uri.String()
 	m.mu.Lock()
 	f, ok := m.files[uriStr]
-	m.mu.Unlock()
-	if !ok {
-		return nil, os.ErrNotExist
+	if ok {
+		m.mu.Unlock()
+		return f.Stat()
 	}
-
-	return f.Stat()
+	// No file exists at this exact URI. The path may still describe an
+	// implicit directory: a directory exists iff at least one file URI
+	// is stored beneath it. We hold the lock while scanning to keep
+	// observation consistent with concurrent Create/Remove.
+	prefix := uriStr + "/"
+	for other := range m.files {
+		if strings.HasPrefix(other, prefix) {
+			m.mu.Unlock()
+			return memFileInfo{
+				filename: filepath.Base(uri.Path()),
+				isDir:    true,
+			}, nil
+		}
+	}
+	m.mu.Unlock()
+	return nil, os.ErrNotExist
 }
 
 func (m *memoryScheme) Stat(path string) (os.FileInfo, error) {
@@ -317,7 +352,7 @@ func (m *memoryScheme) URI(path string) (workspaceapi.URI, error) {
 	if err != nil {
 		return workspaceapi.URI{}, err
 	}
-	uriStr := "memory://" + absPath
+	uriStr := m.scheme + "://" + absPath
 	return workspaceapi.ParseURI(uriStr)
 }
 
@@ -345,7 +380,7 @@ func (m *memoryScheme) Chroot(path string) (schemeapi.Scheme, error) {
 		return nil, err
 	}
 	nm := new(memoryScheme)
-	err = nm.init(uri)
+	err = nm.init(m.scheme, uri)
 	if err != nil {
 		return nil, err
 	}
@@ -436,25 +471,50 @@ func (m *memoryScheme) ReadDir(name string) (
 		return nil, errors.New("not a directory")
 	}
 
-	name = info.Name()
+	// Resolve name to its canonical absolute URI path. info.Name() is
+	// not enough for nested directories because it is just the basename
+	// (an intermediate dir has no stored URI of its own); we need the
+	// full prefix to slice file URIs against.
+	dirURI, err := m.URI(name)
+	if err != nil {
+		return nil, err
+	}
+	prefix := dirURI.Path()
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Walk every file URI and bucket immediate children. A grandchild
+	// like prefix + "a/b" contributes an immediate-child directory
+	// entry "a"; a direct child like prefix + "leaf" contributes a
+	// regular file entry. seen dedupes when multiple files live under
+	// the same immediate child directory.
+	seen := make(map[string]bool)
 	var ret []os.DirEntry
 	for uri := range m.files {
-		uri, err := workspaceapi.ParseURI(uri)
+		u, err := workspaceapi.ParseURI(uri)
 		if err != nil {
 			panic("could not parse internal uri")
 		}
-		path := uri.Path()
-		if !strings.HasPrefix(path, name) {
+		p := u.Path()
+		if !strings.HasPrefix(p, prefix) {
 			continue
 		}
-		// Rel(Join(Base ensures that path is always relative to base workspace path
-		filename, _ := filepath.Rel(m.workspace.Path(), filepath.Join(m.workspace.Path(), filepath.Base(path)))
+		rest := p[len(prefix):]
+		if rest == "" {
+			continue
+		}
+		childName, _, isDir := strings.Cut(rest, "/")
+		if seen[childName] {
+			continue
+		}
+		seen[childName] = true
 		ret = append(ret, memFileInfo{
-			filename: filename,
+			filename: childName,
+			isDir:    isDir,
 		})
 	}
 	// deterministic output

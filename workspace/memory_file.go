@@ -209,6 +209,9 @@ func (t memFileInfo) Size() int64 {
 
 // Mode satisfies os.FileInfo.
 func (t memFileInfo) Mode() os.FileMode {
+	if t.isDir {
+		return t.mode | os.ModeDir
+	}
 	return t.mode
 }
 
@@ -234,6 +237,9 @@ func (t memFileInfo) Name() string {
 
 // Type satisfies os.FileInfo.
 func (t memFileInfo) Type() os.FileMode {
+	if t.isDir {
+		return os.ModeDir
+	}
 	return 0 // 0 is regular files
 }
 

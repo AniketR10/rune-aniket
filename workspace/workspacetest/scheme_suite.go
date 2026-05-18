@@ -1295,6 +1295,114 @@ func TestWorkspaceSchemeReadDir(
 			assert.Equal(t, "file1", entries[1].Name())
 		}
 	})
+
+	// Nested-layout suite. These tests describe the directory
+	// semantics that every conforming schemeapi.Scheme must satisfy
+	// for ReadDir/Stat. They were added when memoryScheme was
+	// flattening nested URIs to the workspace root via filepath.Base,
+	// which made nested files unreachable through the editor's
+	// "completion → open" path (entries listed by basename did not
+	// resolve back to a real URI).
+	t.Run("nested", func(t *testing.T) {
+		t.Run("workspace root only lists immediate children, dirs marked as such", func(t *testing.T) {
+			scheme := schemeFn(t)
+			defer scheme.Close()
+
+			require.NoError(t, scheme.MkdirAll("./a/b", 0o777))
+			_, cleanup := createTestFile(t, scheme, "./a/b/leaf.txt", "leaf")
+			defer cleanup()
+
+			_, cleanup = createTestFile(t, scheme, "./root.txt", "root")
+			defer cleanup()
+
+			entries, err := scheme.ReadDir(".")
+			require.NoError(t, err)
+
+			names := make(map[string]bool, len(entries))
+			for _, e := range entries {
+				names[e.Name()] = e.IsDir()
+			}
+			assert.Contains(t, names, "a", "intermediate dir must appear at root")
+			assert.True(t, names["a"], "intermediate dir entry must report IsDir=true")
+			assert.Contains(t, names, "root.txt", "root-level file must appear at root")
+			assert.False(t, names["root.txt"], "root-level file entry must report IsDir=false")
+			assert.NotContains(t, names, "leaf.txt",
+				"deeply nested file must not surface at the workspace root")
+			assert.NotContains(t, names, "b",
+				"deeply nested dir must not surface at the workspace root")
+		})
+
+		t.Run("descending into a subdirectory lists only its immediate children", func(t *testing.T) {
+			scheme := schemeFn(t)
+			defer scheme.Close()
+
+			require.NoError(t, scheme.MkdirAll("./a/b", 0o777))
+			_, cleanup := createTestFile(t, scheme, "./a/b/leaf.txt", "leaf")
+			defer cleanup()
+			_, cleanup = createTestFile(t, scheme, "./a/sibling.txt", "sibling")
+			defer cleanup()
+
+			entries, err := scheme.ReadDir("./a")
+			require.NoError(t, err)
+
+			names := make(map[string]bool, len(entries))
+			for _, e := range entries {
+				names[e.Name()] = e.IsDir()
+			}
+			assert.Contains(t, names, "b", "subdir must list its child dir")
+			assert.True(t, names["b"], "child dir entry must report IsDir=true")
+			assert.Contains(t, names, "sibling.txt", "subdir must list its child file")
+			assert.False(t, names["sibling.txt"], "child file entry must report IsDir=false")
+			assert.NotContains(t, names, "leaf.txt",
+				"grandchild file must not surface at the parent level")
+		})
+
+		t.Run("Stat on an intermediate directory reports IsDir=true", func(t *testing.T) {
+			scheme := schemeFn(t)
+			defer scheme.Close()
+
+			require.NoError(t, scheme.MkdirAll("./a/b", 0o777))
+			_, cleanup := createTestFile(t, scheme, "./a/b/leaf.txt", "leaf")
+			defer cleanup()
+
+			for _, p := range []string{"./a", "./a/b"} {
+				info, err := scheme.Stat(p)
+				require.NoErrorf(t, err, "Stat(%q)", p)
+				assert.Truef(t, info.IsDir(), "Stat(%q).IsDir", p)
+			}
+		})
+
+		// fs.DirEntry consumers like walkdir.ListFiles dispatch on
+		// DirEntry.Type() — not DirEntry.IsDir() — to decide whether
+		// to recurse. Each directory entry must therefore carry the
+		// os.ModeDir bit in Type() so recursive walkers can find the
+		// subdirectories created above.
+		t.Run("directory entries carry os.ModeDir in Type()", func(t *testing.T) {
+			scheme := schemeFn(t)
+			defer scheme.Close()
+
+			require.NoError(t, scheme.MkdirAll("./a/b", 0o777))
+			_, cleanup := createTestFile(t, scheme, "./a/b/leaf.txt", "leaf")
+			defer cleanup()
+
+			entries, err := scheme.ReadDir(".")
+			require.NoError(t, err)
+
+			var found bool
+			for _, e := range entries {
+				if e.Name() != "a" {
+					continue
+				}
+				found = true
+				assert.Truef(t, e.IsDir(), "entry %q must report IsDir=true", e.Name())
+				assert.NotZerof(t, e.Type()&os.ModeDir,
+					"entry %q.Type() must have ModeDir set; got %v", e.Name(), e.Type())
+				assert.Truef(t, e.Type().IsDir(),
+					"entry %q.Type().IsDir must be true; got %v", e.Name(), e.Type())
+			}
+			require.True(t, found, "expected directory entry 'a' to be listed")
+		})
+	})
 }
 
 func TestWorkspaceSchemeMkdirAll(
