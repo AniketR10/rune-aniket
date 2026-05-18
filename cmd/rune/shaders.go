@@ -60,9 +60,18 @@ const (
 	openShaderFPS = 60
 
 	// openShaderDuration is the lifetime of the open shader's
-	// [shader.Component] — how long the burn sweep runs after the
-	// workspace finishes loading.
-	openShaderDuration = 1200 * time.Millisecond
+	// [shader.Component]. The first portion runs the burn sweep at
+	// full intensity; the last [openShaderFadeOutDuration] fades the
+	// burn output back to the live workspace cells via a cross-fade
+	// transition with [shader.Nop] so the new content emerges
+	// smoothly instead of snapping into place.
+	openShaderDuration = 2 * time.Second
+
+	// openShaderFadeOutDuration is how long the trailing cross-fade
+	// from the burn output to the live cells lasts. Must be strictly
+	// less than [openShaderDuration]; the burn sweep itself plays
+	// during the leading openShaderDuration-openShaderFadeOutDuration.
+	openShaderFadeOutDuration = 100 * time.Millisecond
 )
 
 // loadingShader returns the shader played while a workspace is
@@ -94,15 +103,68 @@ func openShader(defaultAttr term.Attributes) shader.Shader {
 	params.BurnSymbols = []rune{
 		'░', '▒', '▓', '█', '█', '▓', '▒', '░',
 	}
-	params.BurnDuration = 0.25
-	params.SmokeChance = 0
-	//params.SmokeSymbols = []rune{
-	//	'▀', '▐', '▄', '▌',
-	//}
-	//params.SmokeRise = 0.8
-	//params.SmokeMaxRise = 10
+	params.BurnDuration = 0.05
+	params.SmokeChance = 0.01
+	params.SmokeSymbols = []rune{
+		'.', '▀', '▄', 'o',
+	}
+	params.SmokeRise = 0.99
+	params.SmokeMaxRise = 20
 
-	return shader.Burn(params, defaultAttr)
+	burn := shader.Burn(params, defaultAttr)
+
+	// Cross-fade the trailing portion of the open shader into the
+	// live cells. The change point sits exactly between the burn
+	// finish and the shader's end so the overlap is the full
+	// openShaderFadeOutDuration window centred on that boundary —
+	// half blending burn out and half blending the workspace in. A
+	// long fade keeps the workspace from "popping" into view at the
+	// end of the burn.
+	fadeOutPerc := float64(openShaderFadeOutDuration) / float64(openShaderDuration)
+	wrapped := shader.TransitionCrossFade(
+		shader.TransitionCrossFadeParams{
+			ChangeAtPerc: 1.0 - fadeOutPerc/2.0,
+			OverlapPerc:  fadeOutPerc,
+		},
+		defaultAttr,
+		burn,
+		shader.Nop(),
+	)
+	// Expose the burn's snapshot/desaturation hooks through the
+	// cross-fade wrapper so the loading→open chain continues to
+	// work: shaderRunner.stopLoading() type-asserts the returned
+	// shader for these interfaces.
+	return &openShaderShader{Shader: wrapped, burn: burn}
+}
+
+// openShaderShader pairs a cross-fade wrapper with the underlying
+// burn so the runner's pre-shader hooks (initial cells, initial
+// desaturation) still reach the burn after wrapping. The cross-fade
+// itself is opaque to those hooks because it has no concept of an
+// initial snapshot.
+type openShaderShader struct {
+	shader.Shader
+	burn shader.Shader
+}
+
+// SetInitialCells forwards to the wrapped burn so the open shader
+// keeps the pre-switch screen as its base layer.
+func (s *openShaderShader) SetInitialCells(cells [][]term.Cell) {
+	if sh, ok := s.burn.(interface {
+		SetInitialCells([][]term.Cell)
+	}); ok {
+		sh.SetInitialCells(cells)
+	}
+}
+
+// SetInitialDesaturation forwards to the wrapped burn so the open
+// shader starts from the loading shader's terminal desaturation.
+func (s *openShaderShader) SetInitialDesaturation(amount float64) {
+	if sh, ok := s.burn.(interface {
+		SetInitialDesaturation(amount float64)
+	}); ok {
+		sh.SetInitialDesaturation(amount)
+	}
 }
 
 func shutdownShader(defaultAttr term.Attributes) shader.Shader {

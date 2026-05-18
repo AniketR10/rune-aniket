@@ -260,8 +260,8 @@ config = {
         # is a quick burn sweep that reveals the new content.
         "open_workspace": {
             "enabled":  True,
-            "shader":   "shine",
-            "duration": "1s",
+            #"shader":   "burn",
+            #"duration": "1s",
         },
     },
     # Self-upgrade configuration. Rune polls a public manifest endpoint
