@@ -120,6 +120,21 @@ func WithExtension(p Extension) Option {
 	}
 }
 
+// WithScheme registers a custom workspace scheme on the IDE's
+// workspace.Manager. The given fn is invoked to construct the scheme
+// when a workspace with a URI of the given scheme is opened.
+//
+// Registering a scheme name that is already in use causes IDE
+// initialization to fail with an error.
+func WithScheme(scheme string, fn schemeapi.SchemeFunc) Option {
+	return func(opts *options) {
+		if opts.schemes == nil {
+			opts.schemes = make(map[string]schemeapi.SchemeFunc)
+		}
+		opts.schemes[scheme] = fn
+	}
+}
+
 // WithConfigFilename defines the base filename of the IDE configuration
 // to be expected in a workspace's directory.
 func WithConfigFilename(filename string) Option {
@@ -343,6 +358,7 @@ type options struct {
 	locker              sync.Locker
 	dispatchOnPreview   map[string]PreviewFunc
 	extensions          map[string]Extension
+	schemes             map[string]schemeapi.SchemeFunc
 	workspaceConfig     string
 	defaultWallpaper    browser.Wallpaper
 	defaultConfig       string

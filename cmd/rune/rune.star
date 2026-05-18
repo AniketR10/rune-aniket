@@ -572,6 +572,9 @@ config = {
                     "{dirs}",
                 ],
             },
+            # Open the embedded Rune documentation as an in-memory
+            # workspace served by the "docs" scheme.
+            "docs":           "workspacenew docs:///",
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.
         "key_bindings": {

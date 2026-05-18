@@ -343,6 +343,13 @@ func (i *IDE) init(
 		return fmt.Errorf("register memory scheme: %w", err)
 	}
 
+	// register user-provided schemes via ide.WithScheme
+	for scheme, fn := range op.schemes {
+		if err := workspaceManager.RegisterScheme(scheme, fn); err != nil {
+			return fmt.Errorf("register %q scheme: %w", scheme, err)
+		}
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("user home dir: %v", err)

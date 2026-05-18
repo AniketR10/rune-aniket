@@ -54,7 +54,7 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-linux-amd64 rune-staging-dist-linux-arm64 \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps llamacpp-libs llamacpp-init \
-	ox-api-init \
+	ox-api-init docs-init \
 	fuzz fuzz-list \
 	manual-ssh-test \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
@@ -185,7 +185,7 @@ clean:
 $(BIN):
 	@mkdir $(BIN)
 
-$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN)
+$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init
 	@cd cmd/rune && $(CGO_ENABLED) $(GO) build $(RUNE_GOFLAGS) -o ../../$@
 
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
@@ -434,7 +434,7 @@ notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
 
 # deps brings in git-managed prerequisites that are needed for local builds.
-deps: llamacpp-init ox-api-init
+deps: llamacpp-init ox-api-init docs-init
 
 # llamacpp-init makes sure the llama.cpp git submodule is checked out. It is
 # safe to run repeatedly; the submodule Makefile is also defensive about
@@ -446,6 +446,12 @@ llamacpp-init:
 # cmd/ox-api package compiles. Safe to run repeatedly.
 ox-api-init:
 	@ git submodule update --init --recursive cmd/ox-api
+
+# docs-init makes sure the cmd/rune/docs git submodule is checked out so the
+# //go:embed directives in cmd/rune/docs_scheme.go find the markdown sources
+# that back the in-memory docs:// workspace scheme. Safe to run repeatedly.
+docs-init:
+	@ git submodule update --init --recursive cmd/rune/docs
 
 # llamacpp-libs builds the static libraries that the llamacpp cgo bindings
 # link against. Skipped silently when the libs are already present and
