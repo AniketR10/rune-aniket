@@ -5940,7 +5940,7 @@ func TestFileCursorIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// installs unix reader
-			m := workspace.NewManager(config.NopConfig())
+			m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 			require.NoError(t, err)
 			err = m.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 			require.NoError(t, err)
@@ -7358,4 +7358,13 @@ func TestWrapSelectedParagraphBlockSelection(t *testing.T) {
 				"content mismatch")
 		})
 	}
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

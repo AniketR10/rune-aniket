@@ -37,6 +37,10 @@ import (
 type schemeWorkspace struct {
 	w workspaceapi.URI
 	schemeapi.Scheme
+	// scheduleNextTick is forwarded into newFile/newFileRecover so
+	// reload's buffer mutations run on the host event loop. See
+	// workspace.file for details.
+	scheduleNextTick func(func()) bool
 }
 
 // OnDisconnect forwards [RemoteScheme.OnDisconnect] when the embedded scheme
@@ -51,15 +55,26 @@ func (w *schemeWorkspace) OnDisconnect() <-chan struct{} {
 
 // NewSchemeWorkspace wraps a schemeapi.Scheme and implements a workspace.Loader,
 // effectively converting a schemeapi.Scheme into a workspace.Workspace.
-func NewSchemeWorkspace(w workspaceapi.URI, p schemeapi.Scheme) Workspace {
+//
+// scheduleNextTick is forwarded into the loaded file's reload
+// goroutine so cell.Buffer mutations always run on the host event
+// loop. It must not be nil.
+func NewSchemeWorkspace(
+	w workspaceapi.URI, p schemeapi.Scheme,
+	scheduleNextTick func(func()) bool,
+) Workspace {
 	ret := new(schemeWorkspace)
-	ret.Init(w, p)
+	ret.Init(w, p, scheduleNextTick)
 	return ret
 }
 
-func (w *schemeWorkspace) Init(uri workspaceapi.URI, p schemeapi.Scheme) {
+func (w *schemeWorkspace) Init(
+	uri workspaceapi.URI, p schemeapi.Scheme,
+	scheduleNextTick func(func()) bool,
+) {
 	w.w = uri
 	w.Scheme = p
+	w.scheduleNextTick = scheduleNextTick
 }
 
 func (w *schemeWorkspace) Recover(
@@ -90,7 +105,7 @@ func (w *schemeWorkspace) Recover(
 	path := workspaceapi.RelPath(w.w, uri)
 	swapPath := workspaceapi.RelPath(w.w, swapURI)
 
-	ret, err = newFileRecover(w.Scheme, path, swapPath, buf, force)
+	ret, err = newFileRecover(w.Scheme, path, swapPath, buf, force, w.scheduleNextTick)
 	return
 }
 
@@ -122,7 +137,7 @@ func (w *schemeWorkspace) Load(
 	path := workspaceapi.RelPath(w.w, uri)
 	swapDirPath := workspaceapi.RelPath(w.w, swapDir)
 
-	ret, err = newFile(w.Scheme, path, buf, swapDirPath, readOnly)
+	ret, err = newFile(w.Scheme, path, buf, swapDirPath, readOnly, w.scheduleNextTick)
 	if err == os.ErrNotExist {
 		if readOnly {
 			err = errors.New("cannot open file that doesn't exist in read-only")

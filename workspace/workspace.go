@@ -124,6 +124,12 @@ var ErrNoFlushInProgress = errors.New("no save in progress for this buffer")
 // today: the work goroutine continues until the transport responds,
 // at which point its result is discarded and a new flush may be
 // started.
+//
+// Reload's result channel only fires after the post-read cell.Buffer
+// mutations have been dispatched onto the host event loop and
+// completed. This guarantees that buffer subscribers (which may touch
+// UI-owned state from OnWillEdit/OnDidEdit) run on the event-loop
+// goroutine rather than on the async worker that performed disk I/O.
 type FlusherCloser interface {
 	Flush(ctx context.Context) (<-chan error, error)
 	ForceFlush(ctx context.Context) (<-chan error, error)

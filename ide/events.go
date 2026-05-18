@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/workspace"
 )
 
 func dispatchFilesystemEvents(
@@ -159,41 +161,12 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 
 	switch flag {
 	case schemeapi.Create, schemeapi.Write:
-		// Filesystem-watcher-triggered reloads run synchronously
-		// inside the host's IDE lock to preserve the pre-async
-		// invariant that buffer/tab-attr mutations are serialized
-		// with UI reads. The async path exists for user-initiated
-		// :write/:reloadfile where the UI must stay responsive on
-		// a stuck remote scheme.
-		ch, err := ex.comp.ReloadTab(context.Background(), t)
-		if err == nil {
-			err = <-ch
-		}
-		if err != nil {
-			_, _ = ex.comp.Notify(browserapi.LevelError,
-				"Failed to reload file %s: %v", uri.Name(), err)
-			break
-		}
-		_, _ = ex.comp.Notify(browserapi.LevelInfo,
-			"File '%s' changed on disk and does not have unflushed "+
-				"changes so it was reloaded", uri.Name())
+		startReloadAndNotify(ex, uri, t, "changed on disk")
 
 	case schemeapi.Rename:
 		_, err := ex.workspace.Stat(uri.Path())
 		if err == nil {
-			ch, rerr := ex.comp.ReloadTab(context.Background(), t)
-			if rerr == nil {
-				rerr = <-ch
-			}
-			if rerr != nil {
-				_, _ = ex.comp.Notify(browserapi.LevelError,
-					"Failed to reload renamed file %s: %v", uri.Name(), rerr)
-				return
-			}
-			_, _ = ex.comp.Notify(browserapi.LevelInfo,
-				"File '%s' was renamed on disk and does not have "+
-					"unflushed changes so it was reloaded",
-				uri.Name())
+			startReloadAndNotify(ex, uri, t, "was renamed on disk")
 			return
 		}
 		if os.IsNotExist(err) {
@@ -210,4 +183,29 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 		// don't manage schemeapi.Remove: it's sometimes dispatched
 		// in conjunction with other events so it's not useful.
 	}
+}
+
+// startReloadAndNotify kicks off an async reload via ex.flusher and
+// emits a user-facing notification once the underlying reparse has
+// settled. The reparse that gates the reload result is scheduled
+// onto the host event loop (see syntax.Tree.wrapReparse) so the
+// awaiter must run off the host goroutine; ex.flusher schedules the
+// final callback back onto the host scheduler, where the
+// notification is safe to emit.
+func startReloadAndNotify(
+	ex *ex, uri workspaceapi.URI, t browserapi.Handler, reason string,
+) {
+	err := ex.flusher.reloadAsync(uri, t, func() {
+		_, _ = ex.comp.Notify(browserapi.LevelInfo,
+			"File '%s' %s and does not have unflushed changes "+
+				"so it was reloaded", uri.Name(), reason)
+	})
+	if err == nil || errors.Is(err, workspace.ErrFlushInProgress) {
+		// ErrFlushInProgress just means another reload (or save) for
+		// the same URI is already running; that one will dispatch its
+		// own notification.
+		return
+	}
+	_, _ = ex.comp.Notify(browserapi.LevelError,
+		"Failed to reload file %s: %v", uri.Name(), err)
 }

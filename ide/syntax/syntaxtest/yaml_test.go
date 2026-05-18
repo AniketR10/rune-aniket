@@ -80,7 +80,7 @@ func newYAMLTestCase(
 			ScheduleNextTick: scfg.ScheduleNextTick,
 		}),
 	)
-	w := workspace.NewSchemeWorkspace(uri, scheme)
+	w := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	tcfg := text.DefaultConfig()
 	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	tcfg.Syntax = scfg
@@ -117,7 +117,7 @@ func TestYAMLEnterUsesSpaceIndentIntegration(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	_, h := newEditFileName(t, comp, yamlContent, "config.yaml")
+	_, h := newEditFileName(t, mu, comp, yamlContent, "config.yaml")
 	mu.Unlock()
 	wg.Wait()
 
@@ -154,7 +154,7 @@ func TestYAMLShiftRightUsesSpaceIndentIntegration(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	_, h := newEditFileName(t, comp, yamlContent, "config.yaml")
+	_, h := newEditFileName(t, mu, comp, yamlContent, "config.yaml")
 	mu.Unlock()
 	wg.Wait()
 
@@ -191,7 +191,7 @@ func TestYAMLVisualShiftRightUsesSpaceIndentIntegration(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	_, h := newEditFileName(t, comp, yamlContent, "config.yaml")
+	_, h := newEditFileName(t, mu, comp, yamlContent, "config.yaml")
 	mu.Unlock()
 	wg.Wait()
 

@@ -513,7 +513,7 @@ func TestLoadWorkspaceConfigStar(t *testing.T) {
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	defer ws.Close()
 
 	isConfigErr, err := loadWorkspaceConfig("config.star", ws, uri, c)
@@ -548,7 +548,7 @@ config["extensions"]["git"]["config"]["nested"]["override"] = "star"
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	defer ws.Close()
 
 	isConfigErr, err := loadWorkspaceConfig("config.star", ws, uri, c)
@@ -592,7 +592,7 @@ func TestLoadWorkspaceConfigYAML(t *testing.T) {
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	defer ws.Close()
 
 	isConfigErr, err := loadWorkspaceConfig("config.yaml", ws, uri, c)

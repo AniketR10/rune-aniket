@@ -127,7 +127,7 @@ func TestCanWorkspaceURI(t *testing.T) {
 
 			fileScheme, err := newTestFileScheme(inWorkspaceURI)
 			require.NoError(t, err)
-			inWorkspace := NewSchemeWorkspace(inWorkspaceURI, fileScheme)
+			inWorkspace := NewSchemeWorkspace(inWorkspaceURI, fileScheme, inlineSchedule)
 
 			// sut
 			actualOut, err := CanWorkspaceURI(inWorkspace, inURI)
@@ -146,7 +146,7 @@ func TestCanWorkspaceURIFileSchemeCanManageOutOfTreeFile(t *testing.T) {
 
 	fileScheme, err := newTestFileScheme(workspaceURI)
 	require.NoError(t, err)
-	inWorkspace := NewSchemeWorkspace(workspaceURI, fileScheme)
+	inWorkspace := NewSchemeWorkspace(workspaceURI, fileScheme, inlineSchedule)
 
 	actualOut, err := CanWorkspaceURI(inWorkspace, uri)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestIsWorkspaceURI(t *testing.T) {
 
 	fileScheme, err := newTestFileScheme(workspaceURI)
 	require.NoError(t, err)
-	inWorkspace := NewSchemeWorkspace(workspaceURI, fileScheme)
+	inWorkspace := NewSchemeWorkspace(workspaceURI, fileScheme, inlineSchedule)
 
 	t.Run("in tree", func(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("file:///project/pkg/file.go")

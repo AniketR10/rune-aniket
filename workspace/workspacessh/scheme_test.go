@@ -290,7 +290,7 @@ func TestIntegrationCanWorkspaceURI(t *testing.T) {
 			require.NoError(t, err)
 
 			fileScheme := newNopScheme(t, inWorkspaceURI)
-			inWorkspace := workspace.NewSchemeWorkspace(inWorkspaceURI, fileScheme)
+			inWorkspace := workspace.NewSchemeWorkspace(inWorkspaceURI, fileScheme, inlineSchedule)
 
 			// sut
 			actual, err := workspace.IsWorkspaceURI(inWorkspace, inURI)
@@ -309,7 +309,7 @@ func TestIntegrationManagerIsWorkspaceFile(t *testing.T) {
 	sshWorkspaceURI, err := workspaceapi.ParseURI("ssh://ernest.photography/~/")
 	require.NoError(t, err)
 
-	manager := workspace.NewManager(config.NopConfig())
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
 	require.NoError(t, manager.RegisterScheme(Scheme,
 		func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
@@ -524,4 +524,13 @@ func newNopScheme(t *testing.T, workspaceURI workspaceapi.URI) *scheme {
 	s, err := newTestScheme(config.NopConfig(), workspaceURI, nil)
 	require.NoError(t, err)
 	return s.(*scheme)
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

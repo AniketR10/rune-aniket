@@ -51,10 +51,12 @@ var _ FlusherCloser = (*file)(nil)
 
 // file implements the sync (swap file) logic
 type file struct {
-	// used by Flush, Close and worker only
-	// since async work goroutine only starts after
-	// file has been fully initialized
+	// wg tracks in-flight copy-swap work scheduled by edit
+	// subscribers (OnWillEdit Add / OnDidEdit or worker Done).
+	// asyncWG tracks in-flight Flush/ForceFlush/Reload goroutines.
 	wg      sync.WaitGroup
+	asyncWG sync.WaitGroup
+
 	ch      chan struct{}
 	mu      sync.Mutex
 	content string
@@ -73,26 +75,23 @@ type file struct {
 	delayedError    error
 	unflushed       bool
 	lastFlush       time.Time
-	// asyncWG tracks in-flight Flush/ForceFlush/Reload goroutines so
-	// Close can wait for them before tearing down resources.
-	asyncWG sync.WaitGroup
-	// flushing is true while an async Flush/ForceFlush/Reload is in
-	// flight. Guarded by mu. Gates concurrent attempts via
-	// ErrFlushInProgress, and makes OnDidEdit defer its swap write
-	// until the async op completes.
-	flushing bool
-	// pendingEdits is set by OnDidEdit when an edit arrives while
-	// flushing == true. The async goroutine consumes it on completion
-	// to enqueue a catch-up swap write against the freshly opened
-	// swap file.
-	pendingEdits bool
+	flushing        bool
+	pendingEdits    bool
+	// scheduleNextTick dispatches buffer-mutation work for async
+	// operations (reload) back onto the host event loop.
+	scheduleNextTick func(func()) bool
 }
 
-func newFile(p schemeapi.Scheme, path string, buf *cell.Buffer, swapDir string, readOnly bool) (
-	*file, error,
-) {
+func newFile(
+	p schemeapi.Scheme, path string, buf *cell.Buffer, swapDir string,
+	readOnly bool, scheduleNextTick func(func()) bool,
+) (*file, error) {
+	if scheduleNextTick == nil {
+		return nil, errors.New("workspace.newFile: scheduleNextTick must not be nil")
+	}
 	ret := new(file)
 	ret.scheme = p
+	ret.scheduleNextTick = scheduleNextTick
 
 	err := ret.init(path, buf, swapDir, readOnly)
 	if err != nil {
@@ -101,11 +100,18 @@ func newFile(p schemeapi.Scheme, path string, buf *cell.Buffer, swapDir string, 
 	return ret, nil
 }
 
-func newFileRecover(p schemeapi.Scheme, path, swapFilePath string, buf *cell.Buffer, force bool) (
+func newFileRecover(
+	p schemeapi.Scheme, path, swapFilePath string, buf *cell.Buffer,
+	force bool, scheduleNextTick func(func()) bool,
+) (
 	*file, error,
 ) {
+	if scheduleNextTick == nil {
+		return nil, errors.New("workspace.newFileRecover: scheduleNextTick must not be nil")
+	}
 	ret := new(file)
 	ret.scheme = p
+	ret.scheduleNextTick = scheduleNextTick
 
 	err := ret.initRecover(path, swapFilePath, buf, force)
 	if err != nil {
@@ -566,11 +572,44 @@ func (f *file) Reload(ctx context.Context) (<-chan error, error) {
 	return f.startAsync(ctx, true, f.reload)
 }
 
-// reload performs the synchronous reload work. It must be invoked
-// from the async goroutine (via startAsync) so that f.reloading and
-// the worker quiescing protocol hold.
+// reload replaces the in-memory buffer with the on-disk contents of
+// f.orig. It is the worker half of Reload and must be invoked from
+// the async goroutine spawned by startAsync.
+//
+// # Concurrency contract
+//
+// reload competes with three other actors over f's state:
+//
+//   - the copy-swap worker goroutine (setupCopySwapWorker), which
+//     consumes f.ch and writes the swap file;
+//   - the subscriber callbacks OnWillEdit/OnDidEdit, which run on
+//     the host event-loop goroutine and enqueue copy-swap work;
+//   - the host event-loop goroutine itself, which owns f.buf.
+//
+// reload sets f.reloading = true so OnDidEdit short-circuits any
+// edit that lands during the reload (the buffer is about to be
+// overwritten from disk; intervening edits are by definition
+// stale). It then f.wg.Wait()s for any in-flight OnWillEdit/Add to
+// drain and for the copy-swap worker to finish its current pass, so
+// that the swap descriptor we are about to close is not being
+// written to.
+//
+// Unlike flush, reload does not use the swap file as a staging
+// buffer: it closes the old swap (and removes it from disk), then
+// reopens orig/swap via initFiles. Because reload destroys the swap
+// rather than coordinating writes against it, the post-work
+// catch-up copy-swap pass is suppressed (suppressCopySwap=true in
+// Reload) — there is no pending copy-swap work to run.
+//
+// Disk I/O (open + read) runs on this worker goroutine. The
+// resulting cell.Buffer mutations and the f.lastFlush publish are
+// scheduled onto the host event loop via f.scheduleNextTick so
+// buffer subscribers (notably text.editorFlusherCloser, which
+// touches UI-owned state from OnDidEdit) run on the event-loop
+// goroutine. The worker blocks on the done channel before returning,
+// preserving the startAsync invariant that the result channel only
+// fires once the buffer is fully reloaded.
 func (f *file) reload() error {
-	// stop worker and copy swap while we're reloading swap
 	f.reloading = true
 	defer func() {
 		f.reloading = false
@@ -578,8 +617,6 @@ func (f *file) reload() error {
 
 	f.wg.Wait()
 
-	// re-init files, if any of these error, we either
-	// don't care or it'll cause an error in initFiles
 	if f.orig != nil {
 		_ = f.orig.Close()
 	}
@@ -597,38 +634,41 @@ func (f *file) reload() error {
 		return errors.New("cannot reload a file that doesn't exist on disk")
 	}
 
-	// read from file into buffer
 	data, err := io.ReadAll(f.orig)
 	if err != nil {
-		_, _ = f.orig.Seek(0, 0) // avoid partially read file
+		_, _ = f.orig.Seek(0, 0)
 		return fmt.Errorf("read from file: %w", err)
 	}
-	// ensure that data is erased regardless of view installed
-	f.buf.Reset()
-	f.buf.InsertString(term.Coordinates{}, string(data))
-
-	if !f.view.EndsWithEOL() {
-		f.buf.WriteString("\n")
-	}
-
 	_, err = f.orig.Seek(0, 0)
 	if err != nil {
 		return fmt.Errorf("seek: %w", err)
 	}
-	f.mu.Lock()
-	f.lastFlush = f.infoModTime
-	f.mu.Unlock()
+
+	done := make(chan struct{})
+	contents := string(data)
+	infoModTime := f.infoModTime
+	scheduled := f.scheduleNextTick(func() {
+		defer close(done)
+		f.buf.Reset()
+		f.buf.InsertString(term.Coordinates{}, contents)
+
+		if !f.view.EndsWithEOL() {
+			f.buf.WriteString("\n")
+		}
+
+		f.mu.Lock()
+		f.lastFlush = infoModTime
+		f.mu.Unlock()
+	})
+	if !scheduled {
+		return errors.New("reload: scheduleNextTick rejected callback")
+	}
+	<-done
 	return nil
 }
 
-// startAsync runs work on a background goroutine and returns a
-// buffered channel that will receive the result. Returns
-// ErrFlushInProgress if another async op is in flight. If
-// suppressKick is true (reload), the pendingEdits catch-up worker
-// kick is skipped — reload intentionally resets the buffer to the
-// on-disk contents and edits in flight are discarded by design.
 func (f *file) startAsync(
-	ctx context.Context, suppressKick bool, work func() error,
+	ctx context.Context, suppressCopySwap bool, work func() error,
 ) (<-chan error, error) {
 	f.mu.Lock()
 	if f.flushing {
@@ -648,11 +688,11 @@ func (f *file) startAsync(
 
 		f.mu.Lock()
 		f.flushing = false
-		kick := !suppressKick && f.pendingEdits && f.swap != nil
+		runCopySwap := !suppressCopySwap && f.pendingEdits && f.swap != nil
 		f.pendingEdits = false
 		f.mu.Unlock()
 
-		if kick {
+		if runCopySwap {
 			f.wg.Add(1)
 			select {
 			case f.ch <- struct{}{}:
@@ -673,18 +713,39 @@ func (f *file) startAsync(
 	return ch, nil
 }
 
+// flush stages the current buffer contents into the swap file and
+// then renames swap → orig, atomically replacing the on-disk file.
+// It is the worker half of Flush/ForceFlush and must be invoked
+// from the async goroutine spawned by startAsync.
+//
+// # Concurrency contract
+//
+// flush competes with the copy-swap worker goroutine and the
+// OnWillEdit/OnDidEdit subscribers for the swap file descriptor:
+//
+//   - the worker writes f.buf.String() into f.swap whenever an
+//     edit signals f.ch;
+//   - flush also writes f.swap (via copyFlushSwapFile) and then
+//     renames it onto f.orig, so it must be the sole writer for
+//     the duration of the rename.
+//
+// startAsync set f.flushing = true before invoking flush. Edits
+// that land while flushing is true do not enqueue copy-swap work;
+// instead OnDidEdit sets f.pendingEdits = true and the post-work
+// runCopySwap branch in startAsync re-enqueues a single catch-up
+// copy-swap pass (suppressCopySwap=false in Flush/ForceFlush) so
+// those edits reach the next swap file after the rename. flush
+// itself then waits on f.wg.Wait() to make sure no copy-swap pass
+// is mid-write when it takes over the descriptor.
+//
+// Unlike reload, flush keeps and reuses the swap file: it is the
+// staging buffer that makes the disk write atomic. Stale-data
+// detection (ErrStaleData) compares on-disk mod times against
+// f.swapInfoModTime / f.infoModTime so concurrent external writes
+// are surfaced unless the caller passed force=true.
 func (f *file) flush(force bool) error {
 	f.wg.Wait()
 
-	// If a previous recoverFiles call failed partway (e.g. the
-	// scheme was still flaky when the user retried :write right
-	// after a reconnect), f.swap may be nil even though the file
-	// isn't actually read-only. Retry recovery once before
-	// declaring the file unwritable so the next :write is not
-	// stuck on a stale state. We skip this for genuinely
-	// read-only files (readOnly == true) where initFiles
-	// purposefully left swap nil. force flushes always proceed —
-	// they handle f.swap == nil themselves further down.
 	if f.swap == nil && !force && !f.readOnly && f.fileName != "" {
 		if rerr := f.recoverFiles(); rerr != nil {
 			return workspaceapi.ErrFileIsNotWritable
@@ -700,17 +761,6 @@ func (f *file) flush(force bool) error {
 	if err != nil {
 		f.delayedError = nil
 		if !f.copyFlushSwapFile(f.buf.String()) {
-			// Replay failed. The most likely cause is that the
-			// underlying scheme dropped (e.g. ssh transport died,
-			// scheme reconnected) and our cached file descriptors
-			// are stale against the new session. Try recovering
-			// the file handles and retry the copy once before
-			// giving up. If recovery still fails we surface the
-			// most recent error so the user can see what's wrong.
-			// Capture the replay's swap-file error before recovery
-			// (recovery clears f.delayedError on success) so we can
-			// fall back to it when recovery itself fails — keeping
-			// the user-facing "swap file error <name>: ..." surface.
 			replayErr := f.delayedError
 			if replayErr == nil {
 				replayErr = err
@@ -793,21 +843,6 @@ func (f *file) flush(force bool) error {
 		return workspaceapi.ErrStaleData
 	}
 
-	// Publish the post-rename mtime to lastFlush BEFORE Rename,
-	// not after. The Rename below triggers a scheme FS Write
-	// event; the IDE's event-watcher goroutine acquires the host
-	// IDE lock (not f.mu) and calls Stat + LastFlush to decide
-	// whether the on-disk change came from us. If we wait to set
-	// lastFlush until after initFiles, that goroutine can win the
-	// race and see lastFlush at its pre-flush value while Stat
-	// already returns the post-rename mtime — triggering the
-	// "Discard your changes / Discard external changes" prompt
-	// for our own write.
-	//
-	// Rename is a directory-entry operation that preserves the
-	// underlying inode's mtime, so the file at origTarget after
-	// Rename has exactly swapInfoModTime — the swap's mtime
-	// captured by the last copyFlushSwapFile / initSwap Stat.
 	f.mu.Lock()
 	f.lastFlush = f.swapInfoModTime
 	f.mu.Unlock()
@@ -832,9 +867,6 @@ func (f *file) flush(force bool) error {
 	}
 
 	f.unflushed = false
-	// Re-publish using the freshly-stat'd inode mtime in case the
-	// scheme (e.g. a remote one) reports a slightly different time
-	// than the swap's pre-rename Stat.
 	f.mu.Lock()
 	f.lastFlush = f.infoModTime
 	f.mu.Unlock()
@@ -848,15 +880,10 @@ func (f *file) Close() (ret error) {
 		return errors.New("trying to Close an uninitialized file")
 	}
 
-	// wait for any in-flight async Flush/ForceFlush/Reload before
-	// tearing down resources they may still be using
 	f.asyncWG.Wait()
 
 	f.fileName = ""
 
-	// Wait for all async work to complete.
-	// Calling goroutine should be the same goroutine
-	// that calls OnDidEdit so no more work should be added
 	f.wg.Wait()
 
 	if f.ch != nil {

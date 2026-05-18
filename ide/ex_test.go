@@ -354,7 +354,7 @@ func TestFileExplorerOpenFile(t *testing.T) {
 	require.NoError(t, err)
 	touchTestFile(t, scheme, "alpha.go")
 
-	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
@@ -396,7 +396,7 @@ func TestFileExplorerToggleTwice(t *testing.T) {
 	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
 		uri, texttest.NopWorkspaceRegistry(),
 	))
-	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 		ed, vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
@@ -440,7 +440,7 @@ func TestFileExplorerOpenFileThenToggle(t *testing.T) {
 	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
 		uri, texttest.NopWorkspaceRegistry(),
 	))
-	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 		ed, vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
 		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
@@ -494,7 +494,7 @@ func TestFileExplorerToggleViaTabKey(t *testing.T) {
 	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
 		uri, wsReg,
 	))
-	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 		ed, vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(),
 		text.WithCommandKey(testCommandKey),
@@ -551,7 +551,7 @@ func TestFileExplorerRestoredAsTabNotDuplicated(t *testing.T) {
 	ed := vi.Editor(vi.WithWorkspaceCommandRegistry(
 		uri, wsReg,
 	))
-	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 		ed, vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(),
 		text.WithCommandKey(testCommandKey),
@@ -2836,7 +2836,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 	require.NoError(t, err)
 	defer fileScheme.Close()
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingTerminal(t, workspace,
 		modeless.Editor(),
 		vte.DefaultConfig(), nopPublishEvent, opts...)
@@ -2968,7 +2968,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 	os.Setenv("PS1", "sh ")
 	defer os.Setenv("PS1", ps1)
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingTerminal(t, workspace,
 		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
 	defer b.Close()
@@ -3154,7 +3154,7 @@ func newExForReservoirTesting(
 	scheme, err := workspacetest.NewNopScheme("file:///tmp")(
 		context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 
 	emCfg := vte.DefaultConfig()
 	emCfg.CommandAndArgs = shell
@@ -3406,7 +3406,7 @@ func TestFullScreen(t *testing.T) {
 	require.NoError(t, err)
 	defer fileScheme.Close()
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingWithWorkspace(t, workspace,
 		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(), opts...)
@@ -3508,7 +3508,7 @@ func TestMoveWindowContent(t *testing.T) {
 	require.NoError(t, err)
 	defer fileScheme.Close()
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingWithWorkspace(t, workspace,
 		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(), opts...)
@@ -3622,7 +3622,7 @@ func TestResizeWindows(t *testing.T) {
 	require.NoError(t, err)
 	defer fileScheme.Close()
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingWithWorkspace(t, workspace,
 		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
 		clipboard.NewInMemory(), opts...)
@@ -3774,7 +3774,7 @@ reloadfile!
 		require.NoError(t, err)
 		touchTestFile(t, scheme, "daworg")
 		touchTestFile(t, scheme, "retalls")
-		b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 			texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
 			clipboard.NewInMemory(), opts...)
 		t.Cleanup(func() { _ = b.Close() })
@@ -3891,7 +3891,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.NoError(t, err)
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		testConfig := vte.DefaultConfig()
-		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
@@ -3946,7 +3946,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.NoError(t, err)
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		testConfig := vte.DefaultConfig()
-		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newEmulatorHandler = func([]string) (vtereservoir.VTE, error) {
@@ -3996,7 +3996,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.NoError(t, err)
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		testConfig := vte.DefaultConfig()
-		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
+		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
@@ -5273,7 +5273,7 @@ func TestIntegrationUndoAfterOpen(t *testing.T) {
 	require.NoError(t, err)
 	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	e := newExForTestingWithWorkspace(t, workspace, vi.Editor(),
 		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(),
 		text.WithCommandKey(term.KeyComb{Ch: ':'}),
@@ -5416,7 +5416,7 @@ func newExForTestingFileWorkspace(
 	require.NoError(t, err)
 	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	e := newExForTestingWithWorkspace(t, workspace, vi.Editor(),
 		vte.DefaultConfig(), nopPublishEvent, clip,
 		text.WithCommandKey(testCommandKey),
@@ -5703,7 +5703,7 @@ func newExForTestingTasks(t *testing.T) (testEx, *sync.Mutex, func()) {
 	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
 	defer fileScheme.Close()
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	vteConfig := vte.DefaultConfig()
 	vteConfig.ScheduleNextTick = func(fn func()) bool {
 		go func() {

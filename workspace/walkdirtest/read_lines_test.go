@@ -77,7 +77,7 @@ func TestReadLines(t *testing.T) {
 			require.NoError(t, err)
 			scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 			require.NoError(t, err)
-			workspace := workspace.NewSchemeWorkspace(uri, scheme)
+			workspace := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 
 			for _, file := range tcase.inFiles {
 				f, werr := scheme.OpenFile(file.fullPath, os.O_CREATE, 0)
@@ -113,4 +113,13 @@ func TestReadLines(t *testing.T) {
 			assert.NoError(t, itOut.Close())
 		})
 	}
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

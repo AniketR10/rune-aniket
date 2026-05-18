@@ -294,7 +294,7 @@ func newFixture(t *testing.T, dir string, store storageapi.Service) *fixture {
 
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), workspaceURI)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(workspaceURI, scheme)
+	ws := workspace.NewSchemeWorkspace(workspaceURI, scheme, inlineSchedule)
 
 	cfgc := text.DefaultConfig()
 
@@ -563,3 +563,12 @@ var _ browserapi.ResourceOpener = testBrowserAdapter{}
 var _ browserapi.WindowManager = testBrowserAdapter{}
 
 var _ workspace.WorkspaceManager = testWorkspaceManager{}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
+}

@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1398,7 +1399,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 	t.Run("passes default scheme config to SchemeFunc", func(t *testing.T) {
 		cfg := defaultCfg()
-		manager := workspace.NewManager(cfg.workspace())
+		manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 		workspaceConfig := cfg.cfg["workspace"].(map[string]any)
 		workspaceConfig[workspace.MemoryScheme] = mockConfig
 
@@ -1421,7 +1422,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 	t.Run("notifies user if config decode fails but does not hard error", func(t *testing.T) {
 		cfg := defaultCfg()
-		manager := workspace.NewManager(cfg.workspace())
+		manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 		workspaceConfig := cfg.cfg["workspace"].(map[string]any)
 		workspaceConfig[workspace.MemoryScheme] = mockConfig
 
@@ -1505,7 +1506,7 @@ func TestWorkspaceConfig(t *testing.T) {
 
 	t.Run("does not reload workspace config", func(t *testing.T) {
 		cfg := defaultCfg()
-		manager := workspace.NewManager(cfg.workspace())
+		manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 		workspaceConfig := cfg.cfg["workspace"].(map[string]any)
 		workspaceConfig[workspace.MemoryScheme] = mockConfig
 
@@ -1557,7 +1558,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 				},
 			},
 		}
-		manager := workspace.NewManager(cfg.workspace())
+		manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 
 		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
 
@@ -1619,7 +1620,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		})
 		cfg := defaultCfg()
 		cfg.cfg = map[string]any{}
-		manager := workspace.NewManager(cfg.workspace())
+		manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 
 		manager.RegisterScheme(workspace.MemoryScheme, workspace.NewMemoryScheme)
 
@@ -2361,7 +2362,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				t.Cleanup(func() {
 					_ = os.RemoveAll(dir)
 				})
-				manager := workspace.NewManager(config.NopConfig())
+				manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 				require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 					workspace.NewMemoryScheme))
 				uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory:///%s", dir))
@@ -2509,7 +2510,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.RemoveAll(dir)
 		})
-		manager := workspace.NewManager(config.NopConfig())
+		manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 			workspace.NewMemoryScheme))
 		const terminalWorkspaceScheme = "terminaltest"
@@ -2606,7 +2607,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.RemoveAll(dir)
 		})
-		manager := workspace.NewManager(config.NopConfig())
+		manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 			workspace.NewMemoryScheme))
 		const terminalWorkspaceScheme = "terminaltest"
@@ -2773,7 +2774,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 		t.Cleanup(func() {
 			_ = os.RemoveAll(dir)
 		})
-		manager := workspace.NewManager(config.NopConfig())
+		manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 			workspace.NewMemoryScheme))
 		const terminalWorkspaceScheme = "terminaltest"
@@ -4079,7 +4080,7 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	t.Cleanup(func() {
 		os.RemoveAll(dir)
 	})
-	manager := workspace.NewManager(config.NopConfig())
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 
@@ -4565,6 +4566,26 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	onTabsClick func(int) bool,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
+	return newTestWorkspaceManagerHandlerWithManagerMu(t, manager,
+		nil, nil, uri, cfg, runner, extensions, dir, onTabsClick,
+		shutdownShaderCfg)
+}
+
+// newTestWorkspaceManagerHandlerWithManagerMu is like
+// newTestWorkspaceManagerHandlerWithManagerAndExtensions but allows
+// callers that built the manager themselves (so they could give it
+// the same test scheduler used for cfg.scheduleNextTick) to thread
+// the shared event-loop mutex and drain function in. Pass nil mu/
+// drain to fall back to the default behaviour, where the helper
+// builds the scheduler bound to its own mu.
+func newTestWorkspaceManagerHandlerWithManagerMu(
+	t *testing.T, manager *workspace.Manager,
+	mu *sync.Mutex, drainSched func(),
+	uri *workspaceapi.URI, cfg ideConfig, runner ExtensionsRunner,
+	extensions map[string]Extension, dir string,
+	onTabsClick func(int) bool,
+	shutdownShaderCfg shutdownShaderConfig,
+) *testWorkspaceManagerHandler {
 	homeURI, err := workspaceapi.ParseURI("memory:///home")
 	require.NoError(t, err)
 
@@ -4578,46 +4599,16 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		shutdownShaderCfg, loadingShaderConfig{}, openShaderConfig{},
 		component.FrameCharSetDefault())
 
-	mu := new(sync.Mutex)
-	// schedTracker counts scheduled-but-not-yet-run callbacks
-	// emitted by the default cfg.scheduleNextTick stub below.
-	// Tests drain by waiting on Cond until the count hits zero.
-	// Using a WaitGroup here trips the race detector because
-	// schedWG.Add can race with schedWG.Wait.
-	var schedMu sync.Mutex
-	schedCond := sync.NewCond(&schedMu)
-	var schedCount int
-	// trackSched is true when we install the default stub below;
-	// only then should m.schedWG point to the tracked WaitGroup.
-	trackSched := false
+	if mu == nil {
+		mu = new(sync.Mutex)
+	}
+	// If cfg.scheduleNextTick was not pre-installed by the caller,
+	// install the default tracked test scheduler bound to mu so it
+	// mirrors the event-loop dispatch. The manager scheduler must
+	// also point at this scheduler (callers that build the manager
+	// outside this helper should use newTestScheduler).
 	if cfg.scheduleNextTick == nil {
-		// Default scheduleNextTick stub mirrors the host event
-		// loop's UserFunc dispatch (gui.Update at
-		// term/gui/gui.go:248): fn runs on a fresh goroutine
-		// while holding mu, the same locker init receives.
-		// We also track every scheduled callback via schedCond so
-		// tests can drain queued callbacks before asserting on
-		// Draw output (see testWorkspaceManagerHandler.drainSched).
-		cfg.scheduleNextTick = func(fn func()) bool {
-			schedMu.Lock()
-			schedCount++
-			schedMu.Unlock()
-			go func() {
-				defer func() {
-					schedMu.Lock()
-					schedCount--
-					if schedCount == 0 {
-						schedCond.Broadcast()
-					}
-					schedMu.Unlock()
-				}()
-				mu.Lock()
-				defer mu.Unlock()
-				fn()
-			}()
-			return true
-		}
-		trackSched = true
+		cfg.scheduleNextTick, drainSched = newTestScheduler(mu)
 	}
 
 	notiConfig := notificationsConfig()
@@ -4640,16 +4631,89 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		// happened (or fail with a clear deadline).
 		m.waitForWorkspace(t, *uri)
 	}
-	if trackSched {
-		m.schedDrain = func() {
+	m.schedDrain = drainSched
+	return m
+}
+
+// newTestScheduler returns a scheduleNextTick stub bound to mu that
+// mirrors the host event loop's UserFunc dispatch (gui.Update at
+// term/gui/gui.go:248): fn runs on a fresh goroutine while holding
+// mu. Every scheduled callback is tracked via a Cond so callers can
+// drain queued callbacks before asserting on Draw output (see
+// testWorkspaceManagerHandler.drainSched).
+//
+// The returned drain function waits until all scheduled callbacks
+// have run, including any callbacks scheduled by previously-running
+// callbacks. It yields between iterations because async chains drop
+// the in-flight count to zero briefly between hops; without yielding
+// a single drain can observe an intermediate clean count and return
+// mid-chain.
+func newTestScheduler(mu sync.Locker) (
+	sched func(func()) bool, drain func(),
+) {
+	// Using a WaitGroup trips the race detector because Add can
+	// race with Wait; use an explicit count guarded by a Cond.
+	var schedMu sync.Mutex
+	schedCond := sync.NewCond(&schedMu)
+	var schedCount int
+	sched = func(fn func()) bool {
+		schedMu.Lock()
+		schedCount++
+		schedMu.Unlock()
+		go func() {
+			defer func() {
+				schedMu.Lock()
+				schedCount--
+				if schedCount == 0 {
+					schedCond.Broadcast()
+				}
+				schedMu.Unlock()
+			}()
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		}()
+		return true
+	}
+	drain = func() {
+		schedMu.Lock()
+		for schedCount > 0 {
+			schedCond.Wait()
+		}
+		schedMu.Unlock()
+		for i := 0; i < 4; i++ {
+			runtime.Gosched()
 			schedMu.Lock()
-			for schedCount > 0 {
-				schedCond.Wait()
-			}
+			pending := schedCount > 0
 			schedMu.Unlock()
+			if pending {
+				schedMu.Lock()
+				for schedCount > 0 {
+					schedCond.Wait()
+				}
+				schedMu.Unlock()
+				i = -1
+			}
 		}
 	}
-	return m
+	return sched, drain
+}
+
+// buildTestSchedulerForCfg builds a fresh mu + tracked test
+// scheduler and installs the scheduler on cc.scheduleNextTick if it
+// is not already set. The returned mu and drain func are intended to
+// be threaded through newTestWorkspaceManagerHandlerWithManagerMu so
+// the workspace.Manager, the IDE event-loop locker and the cfg
+// scheduler all share the same goroutine/lock pair.
+func buildTestSchedulerForCfg(cc *ideConfig) (
+	*sync.Mutex, func(func()) bool, func(),
+) {
+	mu := new(sync.Mutex)
+	sched, drain := newTestScheduler(mu)
+	if cc.scheduleNextTick == nil {
+		cc.scheduleNextTick = sched
+	}
+	return mu, sched, drain
 }
 
 // waitForWorkspace blocks until uri has been installed into
@@ -4689,7 +4753,8 @@ func newTestWorkspaceManagerHandlerWithDir(
 	t *testing.T, cc ideConfig, dir string,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
-	manager := workspace.NewManager(config.NopConfig())
+	mu, sched, drain := buildTestSchedulerForCfg(&cc)
+	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
@@ -4712,7 +4777,7 @@ func newTestWorkspaceManagerHandlerWithDir(
 		dataDir = dir
 	}
 	runner := FuncExtensionsRunner(testRunnerFn)
-	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+	return newTestWorkspaceManagerHandlerWithManagerMu(t, manager, mu, drain,
 		uri, cc, runner, nil, dataDir, nil, shutdownShaderCfg)
 }
 
@@ -4726,7 +4791,8 @@ func newTestWorkspaceManagerHandlerWithDirs(
 	t *testing.T, cc ideConfig, dir, dataDir string,
 	shutdownShaderCfg shutdownShaderConfig,
 ) *testWorkspaceManagerHandler {
-	manager := workspace.NewManager(config.NopConfig())
+	mu, sched, drain := buildTestSchedulerForCfg(&cc)
+	manager := workspace.NewManager(config.NopConfig(), sched)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
@@ -4746,7 +4812,7 @@ func newTestWorkspaceManagerHandlerWithDirs(
 		dataDir = d
 	}
 	runner := FuncExtensionsRunner(testRunnerFn)
-	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+	return newTestWorkspaceManagerHandlerWithManagerMu(t, manager, mu, drain,
 		uri, cc, runner, nil, dataDir, nil, shutdownShaderCfg)
 }
 
@@ -4932,7 +4998,7 @@ func TestCloseWorkspaceRemovesClosedWorkspaceFromManager(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
-	manager := workspace.NewManager(config.NopConfig())
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
 
@@ -5105,4 +5171,13 @@ func TestWorkspaceReadyCommand(t *testing.T) {
 		m.lastReservedPending = nil
 		m.mu.Unlock()
 	})
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

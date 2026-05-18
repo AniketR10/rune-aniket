@@ -47,7 +47,7 @@ func TestManager(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns ErrSchemeAlreadyRegistered when same scheme is registered twice", func(t *testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
@@ -56,7 +56,7 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("registers scheme to be used by AddWorkspace", func(*testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
@@ -78,7 +78,7 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("removes Workspace upon call to workspace.Close", func(*testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
@@ -102,7 +102,7 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("AddWorkspace creates a new Workspace if URI is different", func(*testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
@@ -134,7 +134,7 @@ func TestManager(t *testing.T) {
 
 	t.Run("Workspace returns ANY workspace capable "+
 		"of handling a uri, as defined by IsWorkspaceURI", func(*testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 
@@ -157,7 +157,7 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("register same scheme twice returns error", func(t *testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test", NewNopScheme("test"))
 		require.NoError(t, err)
 		err = m.RegisterScheme("test", NewNopScheme("test"))
@@ -165,7 +165,7 @@ func TestManager(t *testing.T) {
 	})
 
 	t.Run("buubles up scheme constructor errors", func(t *testing.T) {
-		m := workspace.NewManager(config.NopConfig())
+		m := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		err := m.RegisterScheme("test",
 			func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
 				return nil, errors.New("boom")
@@ -187,7 +187,7 @@ func TestManager(t *testing.T) {
 			"file": map[string]any{
 				"kk": "vv",
 			},
-		}))
+		}), inlineSchedule)
 
 		var called bool
 		err := m.RegisterScheme("test", func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
@@ -224,9 +224,10 @@ func TestManager(t *testing.T) {
 	// optional interface.
 	t.Run("AddWorkspace result forwards RemoteScheme.OnDisconnect", func(t *testing.T) {
 		m := workspace.NewManagerWithWorkspaceFunc(config.NopConfig(),
-			func(uri workspaceapi.URI, _ schemeapi.Scheme) workspace.Workspace {
+			inlineSchedule,
+			func(uri workspaceapi.URI, _ schemeapi.Scheme, _ func(func()) bool) workspace.Workspace {
 				return remoteWorkspace{
-					Workspace:    workspace.NewSchemeWorkspace(uri, &NopScheme{}),
+					Workspace:    workspace.NewSchemeWorkspace(uri, &NopScheme{}, inlineSchedule),
 					disconnectCh: make(chan struct{}),
 				}
 			})
@@ -260,7 +261,7 @@ func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("default workspace is NOT able to load files from other schemes", func(t *testing.T) {
-		manager := workspace.NewManager(config.NopConfig())
+		manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		require.NoError(t, manager.RegisterScheme("finn", NewNopScheme("finn")))
 		require.NoError(t, manager.RegisterScheme("jake", NewNopScheme("jake")))
 
@@ -275,7 +276,7 @@ func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
 	})
 
 	t.Run("default workspace wrapped with multi is able to load files from other schemes", func(t *testing.T) {
-		manager := workspace.NewManager(config.NopConfig())
+		manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 		require.NoError(t, manager.RegisterScheme("finn", workspace.LoggingScheme("finn", NewNopScheme("finn"))))
 		require.NoError(t, manager.RegisterScheme("jake", workspace.LoggingScheme("jake", NewNopScheme("jake"))))
 

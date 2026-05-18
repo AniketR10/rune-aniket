@@ -368,8 +368,9 @@ func (t *internalTree) ForceFlush(ctx context.Context) (<-chan error, error) {
 }
 
 // wrapReparse forwards the inner channel's result and triggers a
-// re-parse on completion (regardless of success/failure, matching the
-// previous sync behaviour).
+// re-parse on completion. The channel result is sent only after the
+// scheduled re-parse runs so callers may rely on a channel send
+// meaning "ready and reparsed".
 func (t *internalTree) wrapReparse(
 	inner <-chan error, err error,
 ) (<-chan error, error) {
@@ -379,9 +380,11 @@ func (t *internalTree) wrapReparse(
 	out := make(chan error, 1)
 	go func() {
 		res := <-inner
-		t.reparse()
-		out <- res
-		close(out)
+		t.config.ScheduleNextTick(func() {
+			t.reparse()
+			out <- res
+			close(out)
+		})
 	}()
 	return out, nil
 }

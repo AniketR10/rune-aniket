@@ -1180,7 +1180,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	t.Cleanup(func() {
 		_ = os.RemoveAll(dir)
 	})
-	manager := workspace.NewManager(cfg.workspace())
+	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
 	notiCfg := notificationsConfig()
@@ -1229,7 +1229,7 @@ func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
 	t.Cleanup(func() {
 		_ = os.RemoveAll(dir)
 	})
-	manager := workspace.NewManager(cfg.workspace())
+	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 	ret := newTestWorkspaceManagerHandlerWithReleaseManager(t, manager,
 		cfg, FuncExtensionsRunner(testRunnerFn), nil, nil, dir, nil,

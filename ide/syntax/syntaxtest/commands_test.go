@@ -259,11 +259,20 @@ func newTestComponentWithFile(
 	require.NoError(t, err)
 	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
-	loader := workspace.NewSchemeWorkspace(uri, scheme)
+	loader := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	c, err := text.NewComponent(vi.Editor(), loader, cfg)
 	require.NoError(t, err)
 	_, err = c.OpenFileTab(filename, false)
 	require.NoError(t, err)
 	c.Browser().PreviousTab(c.Browser().Focus())
 	return c, pkg
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

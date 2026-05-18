@@ -88,10 +88,9 @@ var (
 
 // ErrFlushPendingQuit is returned by :q and :wq when one or more
 // buffers have an outstanding async save in flight. The user can
-// wait for the save to complete, cancel it with :writecancel, or
-// force the quit via :q! / :writeforcequit!.
+// wait for the save to complete or force the quit via :q! / :wq.
 var ErrFlushPendingQuit = errors.New(
-	"save in progress; wait, run :writecancel, or use :q! / :wq")
+	"save in progress; wait or use :q! / :wq")
 
 type pluginHandler interface {
 	browserapi.Floating
@@ -801,17 +800,6 @@ func (e *ex) quit(_ context.Context, args ...string) error {
 	return nil
 }
 
-// writeCancel cancels the in-flight flush for the focused tab, if
-// any. The underlying scheme call (e.g. gRPC Rename) cannot be
-// aborted; its result will be discarded when it eventually returns.
-func (e *ex) writeCancel(_ context.Context, args ...string) error {
-	uri, _, ok := e.focusTab()
-	if !ok {
-		return workspace.ErrNoFlushInProgress
-	}
-	return e.flusher.cancel(uri)
-}
-
 // waitInflight blocks until all in-flight async Flush/ForceFlush/
 // Reload awaiter goroutines have completed and their completion
 // callbacks have been dispatched through sched. This is intended
@@ -992,7 +980,12 @@ func (e *ex) reloadfile(_ context.Context, args ...string) error {
 	if !ok {
 		return textapi.ErrInvalidReload
 	}
-	return e.flusher.reload(t.URI(), t)
+	// :reloadfile is fire-and-forget: the reload runs on a
+	// background goroutine and a reparse is scheduled back onto
+	// the host event loop via syntax.Tree.wrapReparse. Awaiting
+	// the result synchronously here would deadlock that reparse
+	// against the host mutex.
+	return e.flusher.reloadAsync(t.URI(), t, nil)
 }
 
 func (e *ex) splitDirectionChange(_ context.Context, args ...string) error {

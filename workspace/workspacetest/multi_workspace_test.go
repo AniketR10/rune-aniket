@@ -71,13 +71,13 @@ func TestMultiWorkspace(t *testing.T) {
 		t.Run(tcase.desc, func(t *testing.T) {
 			memScheme, err := workspace.NewMemoryScheme(ctx, config.NopConfig(), tcase.defURI)
 			require.NoError(t, err)
-			cwd := workspace.NewSchemeWorkspace(tcase.defURI, memScheme)
+			cwd := workspace.NewSchemeWorkspace(tcase.defURI, memScheme, inlineSchedule)
 			mockManager := &mockManager{}
 			if tcase.wantOtherWorkspace {
 				uri := parseURI(t, "test:///")
 				scheme, err := NewNopScheme(uri.Scheme())(ctx, config.NopConfig(), uri)
 				require.NoError(t, err)
-				mockManager.workspace = workspace.NewSchemeWorkspace(uri, scheme)
+				mockManager.workspace = workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 			}
 			cwd = workspace.Multi(ctx, mockManager, cwd, tcase.defURI)
 
@@ -128,7 +128,7 @@ func (m *mockManager) AddWorkspace(ctx context.Context, uri workspaceapi.URI) (
 	if err != nil {
 		return nil, err
 	}
-	return workspace.NewSchemeWorkspace(uri, scheme), nil
+	return workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule), nil
 }
 
 func (m *mockManager) Workspace(file workspaceapi.URI) (workspace.Workspace, bool, error) {
@@ -162,7 +162,7 @@ func TestMultiForwardsRemoteScheme(t *testing.T) {
 	require.NoError(t, err)
 	disconnectCh := make(chan struct{})
 	cwd := remoteWorkspace{
-		Workspace:    workspace.NewSchemeWorkspace(uri, memScheme),
+		Workspace:    workspace.NewSchemeWorkspace(uri, memScheme, inlineSchedule),
 		disconnectCh: disconnectCh,
 	}
 	m := workspace.Multi(ctx, &mockManager{}, cwd, uri)

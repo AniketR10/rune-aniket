@@ -35,8 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/idehistory"
+	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -400,7 +400,7 @@ func (h *areYouSurePrompt) reopen() {
 func (h *areYouSurePrompt) discard() {
 	h.selected = true
 	if h.reload {
-		if err := h.ex.flusher.reloadAsync(h.uri, h.h); err != nil {
+		if err := h.ex.flusher.reloadAsync(h.uri, h.h, nil); err != nil {
 			_, _ = h.ex.comp.Notify(browserapi.LevelError,
 				"failed to reload tab: %v", err)
 		}

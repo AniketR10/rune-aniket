@@ -41,7 +41,11 @@ var _ SchemeManager = (*Manager)(nil)
 // It allows clients to register new Schemes and add new workspaces.
 type Manager struct {
 	cfg           config.Config
-	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme) Workspace
+	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme, func(func()) bool) Workspace
+	// scheduleNextTick is forwarded to workspaceFunc so each
+	// workspace's loaded files can dispatch buffer mutations back
+	// onto the host event loop.
+	scheduleNextTick func(func()) bool
 
 	schemes    map[string]schemeapi.SchemeFunc
 	workspaces map[string]managerWorkspace
@@ -51,19 +55,20 @@ type Manager struct {
 // with the default workspace constructor (NewSchemeWorkspace).
 // See Manager.Init for more details.
 func NewManager(
-	cfg config.Config,
+	cfg config.Config, scheduleNextTick func(func()) bool,
 ) *Manager {
-	return NewManagerWithWorkspaceFunc(cfg, NewSchemeWorkspace)
+	return NewManagerWithWorkspaceFunc(cfg, scheduleNextTick, NewSchemeWorkspace)
 }
 
 // NewManagerWithWorkspaceFunc allocates storage for a new Manager and initializes it
 // with the given workspace constructor. See Manager.Init for more details.
 func NewManagerWithWorkspaceFunc(
 	cfg config.Config,
-	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme) Workspace,
+	scheduleNextTick func(func()) bool,
+	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme, func(func()) bool) Workspace,
 ) *Manager {
 	ret := new(Manager)
-	ret.Init(cfg, workspaceFunc)
+	ret.Init(cfg, scheduleNextTick, workspaceFunc)
 	return ret
 }
 
@@ -71,12 +76,14 @@ func NewManagerWithWorkspaceFunc(
 // under the file:// scheme.
 func (m *Manager) Init(
 	cfg config.Config,
-	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme) Workspace,
+	scheduleNextTick func(func()) bool,
+	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme, func(func()) bool) Workspace,
 ) {
 	m.cfg = cfg
 	m.schemes = make(map[string]schemeapi.SchemeFunc)
 	m.workspaces = make(map[string]managerWorkspace)
 	m.workspaceFunc = workspaceFunc
+	m.scheduleNextTick = scheduleNextTick
 }
 
 // RegisterScheme registers a new scheme for the given scheme and uses fn
@@ -151,7 +158,7 @@ func (m *Manager) AddWorkspace(
 		return nil, fmt.Errorf("new workspace %q: %w", uri, err)
 	}
 
-	workspace := m.workspaceFunc(uri, scheme)
+	workspace := m.workspaceFunc(uri, scheme, m.scheduleNextTick)
 	managerWorkspace := managerWorkspace{uri: uri, m: m, Workspace: workspace}
 	m.workspaces[uri.String()] = managerWorkspace
 

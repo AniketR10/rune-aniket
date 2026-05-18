@@ -32,7 +32,10 @@ import (
 	os "os"
 	"path"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -123,7 +126,7 @@ func openFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := newFile(scheme, filename, buf, swapDir, readOnly)
+	l, err := newFile(scheme, filename, buf, swapDir, readOnly, inlineSchedule)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +145,7 @@ func recoverFile(
 	if err != nil {
 		return nil, err
 	}
-	l, err := newFileRecover(scheme, filename, recoverFilename, buf, force)
+	l, err := newFileRecover(scheme, filename, recoverFilename, buf, force, inlineSchedule)
 	if err != nil {
 		return nil, err
 	}
@@ -1751,7 +1754,7 @@ func TestFileFlushPublishesLastFlushBeforeRename(t *testing.T) {
 	)
 	hook := &renameHookScheme{Scheme: inner}
 
-	f, err := newFile(hook, fileObj.Name(), buf, "", false)
+	f, err := newFile(hook, fileObj.Name(), buf, "", false, inlineSchedule)
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -1806,4 +1809,412 @@ func (s *renameHookScheme) Rename(oldpath, newpath string) error {
 		s.onRename(oldpath, newpath)
 	}
 	return s.Scheme.Rename(oldpath, newpath)
+}
+
+// TestFileReloadBufferMutationOnEventLoop guards the invariant
+// that file.reload's cell.Buffer mutations and the lastFlush
+// update run on the host event loop, not on the async worker
+// goroutine. Buffer subscribers (notably text.editorFlusherCloser)
+// touch UI-owned state from OnDidEdit; if reload mutates the
+// buffer from a background goroutine those callbacks race with
+// the event loop.
+func TestFileReloadBufferMutationOnEventLoop(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	scheme, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	// Worker goroutine ID is captured the moment the worker enters
+	// scheduleNextTick; the scheduler asserts every buffer mutation
+	// runs on a different goroutine (i.e. the simulated event loop).
+	var (
+		mu             sync.Mutex
+		workerGID      uint64
+		schedulerGID   uint64
+		mutationGIDs   []uint64
+		schedulerCalls int
+	)
+
+	loopCh := make(chan func(), 4)
+	loopDone := make(chan struct{})
+	go func() {
+		schedulerGID = goroutineID()
+		close(loopDone)
+		for fn := range loopCh {
+			fn()
+		}
+	}()
+	<-loopDone
+
+	sched := func(fn func()) bool {
+		mu.Lock()
+		workerGID = goroutineID()
+		schedulerCalls++
+		mu.Unlock()
+		loopCh <- fn
+		return true
+	}
+
+	f, err := newFile(scheme, fileObj.Name(), buf, "", false, sched)
+	require.NoError(t, err)
+	defer func() {
+		close(loopCh)
+		_ = f.Close()
+	}()
+
+	sub := &reloadGIDSubscriber{
+		onEdit: func() {
+			mu.Lock()
+			mutationGIDs = append(mutationGIDs, goroutineID())
+			mu.Unlock()
+		},
+	}
+	buf.Subscribe(sub)
+
+	// First reload kicks the buffer-mutation scheduler at least once.
+	ch, err := f.Reload(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, <-ch)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, schedulerCalls, 1,
+		"reload must schedule buffer mutations onto the event loop")
+	require.NotEmpty(t, mutationGIDs,
+		"reload should emit at least one OnWillEdit/OnDidEdit")
+	for _, gid := range mutationGIDs {
+		require.NotEqual(t, workerGID, gid,
+			"buffer mutation ran on the async worker goroutine "+
+				"instead of the scheduled event-loop goroutine; "+
+				"subscribers race with the host event loop")
+		require.Equal(t, schedulerGID, gid,
+			"buffer mutation ran on an unexpected goroutine "+
+				"(expected the scheduler/event-loop goroutine)")
+	}
+}
+
+type reloadGIDSubscriber struct {
+	onEdit func()
+}
+
+func (s *reloadGIDSubscriber) OnWillEdit(
+	_ context.Context, _, _ term.Coordinates, _ string,
+) {
+	s.onEdit()
+}
+
+func (s *reloadGIDSubscriber) OnDidEdit(
+	_ context.Context, _, _ term.Coordinates, _ string,
+) {
+	s.onEdit()
+}
+
+// TestFileFlushRejectedDuringInFlightReload guards the shared
+// startAsync gate: while a Reload is in flight (f.flushing=true),
+// any concurrent Flush/ForceFlush/Reload must short-circuit with
+// ErrFlushInProgress instead of racing the worker.
+func TestFileFlushRejectedDuringInFlightReload(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	f, err := openFile(fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	f.mu.Lock()
+	f.flushing = true
+	f.mu.Unlock()
+
+	ch, err := f.Flush(context.Background())
+	assert.Nil(t, ch)
+	assert.ErrorIs(t, err, ErrFlushInProgress)
+
+	ch, err = f.ForceFlush(context.Background())
+	assert.Nil(t, ch)
+	assert.ErrorIs(t, err, ErrFlushInProgress)
+
+	ch, err = f.Reload(context.Background())
+	assert.Nil(t, ch)
+	assert.ErrorIs(t, err, ErrFlushInProgress)
+
+	f.mu.Lock()
+	f.flushing = false
+	f.mu.Unlock()
+}
+
+// TestFileEditsDuringFlushReachDiskViaCatchUp guards the
+// suppressCopySwap=false branch of startAsync: edits that land
+// while Flush owns the swap file must be captured by pendingEdits
+// and re-staged via the post-work runCopySwap pass so they reach
+// the next swap file. Without this catch-up an edit racing with
+// the rename would be silently dropped.
+func TestFileEditsDuringFlushReachDiskViaCatchUp(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	inner, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	// renameGate blocks the underlying Rename until the test has
+	// applied a buffer edit. That edit lands while f.flushing is
+	// true, so OnDidEdit must record it in pendingEdits and the
+	// post-work catch-up must stage it onto a fresh swap file.
+	renameGate := make(chan struct{})
+	editApplied := make(chan struct{})
+	hook := &renameHookScheme{Scheme: inner}
+
+	f, err := newFile(hook, fileObj.Name(), buf, "", false, inlineSchedule)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// First Flush establishes a clean baseline on disk; no hook
+	// installed yet so the rename runs to completion immediately.
+	require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
+	hook.onRename = func(_, _ string) {
+		<-editApplied
+		<-renameGate
+	}
+
+	// Replace the buffer with a known initial value, then start
+	// the Flush that will be intercepted at Rename.
+	buf.Reset()
+	buf.WriteString("baseline")
+	flushCh, err := f.Flush(context.Background())
+	require.NoError(t, err)
+
+	// Spin until startAsync has marked flushing=true; from this
+	// point any edit must be recorded in pendingEdits.
+	require.Eventually(t, func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.flushing
+	}, time.Second, time.Millisecond, "Flush goroutine never set flushing=true")
+
+	// Apply a concurrent edit. OnDidEdit must observe flushing=true
+	// and stash the edit in pendingEdits without enqueuing a
+	// copy-swap (the worker is locked out of the swap file).
+	buf.WriteString(" + concurrent edit")
+	close(editApplied)
+
+	// Allow the Rename to proceed and the Flush goroutine to
+	// observe pendingEdits and enqueue the catch-up.
+	close(renameGate)
+	require.NoError(t, <-flushCh)
+
+	// Block until the catch-up copy-swap pass has finished writing
+	// the swap file.
+	f.wg.Wait()
+
+	// A subsequent successful Flush renames the catch-up swap onto
+	// orig so we can read the final on-disk contents.
+	require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
+
+	got, err := os.ReadFile(fileObj.Name())
+	require.NoError(t, err)
+	assert.Equal(t, "baseline + concurrent edit\n", string(got),
+		"edit applied during in-flight Flush must reach disk via "+
+			"the post-flush catch-up copy-swap pass")
+}
+
+// TestFileEditsDuringReloadAreDiscarded guards the
+// suppressCopySwap=true branch of startAsync and reload's
+// f.reloading short-circuit: edits arriving during a reload must
+// be dropped (reload is overwriting the buffer from disk, so any
+// intervening user edit is by definition stale), and the
+// pendingEdits-driven catch-up must NOT run because reload
+// destroys the swap file rather than coordinating writes against
+// it.
+func TestFileEditsDuringReloadAreDiscarded(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	inner, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	// reload's first interaction with the scheme is to Remove the
+	// old swap file. We use that as the "reload has engaged"
+	// signal: reloadEntered fires when reload's goroutine reaches
+	// Remove (and therefore has already set f.reloading=true).
+	reloadEntered := make(chan struct{})
+	removeGate := make(chan struct{})
+	hook := &removeHookScheme{
+		Scheme: inner,
+		onRemove: func(string) {
+			select {
+			case <-reloadEntered:
+			default:
+				close(reloadEntered)
+			}
+			<-removeGate
+		},
+	}
+
+	f, err := newFile(hook, fileObj.Name(), buf, "", false, inlineSchedule)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Establish a known on-disk baseline that reload will restore.
+	require.NoError(t, os.WriteFile(fileObj.Name(),
+		[]byte("on-disk baseline\n"), 0o600))
+
+	// Drive a Reload in the background.
+	reloadCh, err := f.Reload(context.Background())
+	require.NoError(t, err)
+
+	// Wait for reload to enter the swap-Remove scheme call;
+	// f.reloading=true was set before that, on the same goroutine,
+	// so the following edit is guaranteed to be observed by
+	// OnDidEdit with reloading=true.
+	select {
+	case <-reloadEntered:
+	case <-time.After(time.Second):
+		t.Fatal("reload goroutine never reached the swap-Remove hook")
+	}
+
+	// Apply an edit mid-reload. OnDidEdit sees f.reloading=true,
+	// balances the WaitGroup, and returns without setting
+	// pendingEdits or enqueuing copy-swap work.
+	buf.WriteString(" + stale edit racing reload")
+
+	// Allow reload to finish.
+	close(removeGate)
+	require.NoError(t, <-reloadCh)
+
+	// Reload completed; pendingEdits must be false (no catch-up to
+	// run) and the buffer must reflect the on-disk contents.
+	f.mu.Lock()
+	pendingEdits := f.pendingEdits
+	f.mu.Unlock()
+	assert.False(t, pendingEdits,
+		"reload must not flag pendingEdits; suppressCopySwap=true "+
+			"means there is no catch-up copy-swap pass")
+	// cell.Buffer.String() may omit a trailing newline depending on
+	// the view; the key invariant is that the racing edit must NOT
+	// be present in the buffer.
+	assert.Equal(t, "on-disk baseline",
+		strings.TrimRight(buf.String(), "\n"),
+		"reload must overwrite the buffer with on-disk contents, "+
+			"discarding any concurrent edits")
+}
+
+// TestFileFlushReloadStress exercises the startAsync gate under
+// real concurrency: many goroutines race Flush, ForceFlush and
+// Reload against a single file. Edits are deliberately not driven
+// concurrently because cell.Buffer expects a single writer (the
+// host event loop) and the file's worker reads the buffer from a
+// background goroutine; racing edits with flush would surface a
+// real but orthogonal cell.Buffer access pattern bug, not the
+// startAsync gate we are exercising here. Failure modes the
+// -race detector should catch include:
+//   - simultaneous Flush+Reload mutating swap/orig without the
+//     flushing gate;
+//   - reload short-circuiting copy-swap work that flush expected
+//     to drain via f.wg.Wait.
+//
+// The test asserts no panics, no data races (under -race), and
+// that every concurrent attempt either succeeds or fails with the
+// flushing-gate sentinel ErrFlushInProgress — never an unexpected
+// error.
+func TestFileFlushReloadStress(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stress test skipped in -short mode")
+	}
+	buf, fileObj := newIntegrationTestCase(t, true)
+	f, err := openFile(fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	const (
+		workers    = 8
+		iterations = 25
+	)
+
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(seed int) {
+			defer wg.Done()
+			rng := rand.New(rand.NewSource(int64(seed) + 1))
+			for range iterations {
+				switch rng.Intn(3) {
+				case 0:
+					ch, ferr := f.Flush(context.Background())
+					if ferr == nil {
+						_ = <-ch
+					} else if !errors.Is(ferr, ErrFlushInProgress) {
+						t.Errorf("unexpected Flush error: %v", ferr)
+						return
+					}
+				case 1:
+					ch, ferr := f.ForceFlush(context.Background())
+					if ferr == nil {
+						_ = <-ch
+					} else if !errors.Is(ferr, ErrFlushInProgress) {
+						t.Errorf("unexpected ForceFlush error: %v", ferr)
+						return
+					}
+				case 2:
+					ch, ferr := f.Reload(context.Background())
+					if ferr == nil {
+						_ = <-ch
+					} else if !errors.Is(ferr, ErrFlushInProgress) {
+						t.Errorf("unexpected Reload error: %v", ferr)
+						return
+					}
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	// Drain any pending copy-swap pass that the last edit kicked
+	// off so Close does not race with the worker.
+	f.wg.Wait()
+}
+
+// removeHookScheme wraps a schemeapi.Scheme so a test can observe
+// and inject behaviour around Remove. All other methods delegate
+// transparently.
+type removeHookScheme struct {
+	schemeapi.Scheme
+	onRemove func(name string)
+}
+
+func (s *removeHookScheme) Remove(name string) error {
+	if s.onRemove != nil {
+		s.onRemove(name)
+	}
+	return s.Scheme.Remove(name)
+}
+
+// goroutineID returns the calling goroutine's ID by parsing the
+// runtime stack header. Test-only; the format is stable in modern
+// Go releases.
+func goroutineID() uint64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	line := buf[:n]
+	// "goroutine 12345 [running]:\n..."
+	const prefix = "goroutine "
+	if !strings.HasPrefix(string(line), prefix) {
+		return 0
+	}
+	rest := string(line[len(prefix):])
+	end := strings.IndexByte(rest, ' ')
+	if end < 0 {
+		return 0
+	}
+	id, err := strconv.ParseUint(rest[:end], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

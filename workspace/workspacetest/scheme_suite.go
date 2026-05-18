@@ -356,7 +356,7 @@ func TestWorkspaceLoadIntegration(
 		defer scheme.Close()
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "myFile")
 		swapDir := workspaceapi.Join(uri, ".")
 		buf := cell.NewBuffer()
@@ -383,7 +383,7 @@ func TestWorkspaceLoadIntegration(
 
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "myExistingFile")
 		swapDir := workspaceapi.Join(uri, ".")
 		buf := cell.NewBuffer()
@@ -413,7 +413,7 @@ func TestWorkspaceLoadIntegration(
 
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "file")
 		swapuri := workspaceapi.Join(uri, ".file.swp")
 		buf := cell.NewBuffer()
@@ -438,7 +438,7 @@ func TestWorkspaceLoadIntegration(
 
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "file")
 		swapuri := workspaceapi.Join(uri, ".file.swp")
 		buf := cell.NewBuffer()
@@ -460,7 +460,7 @@ func TestWorkspaceLoadIntegration(
 		defer scheme.Close()
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "myCloseTest")
 		swapDir := workspaceapi.Join(uri, ".")
 
@@ -494,7 +494,7 @@ func TestWorkspaceLoadIntegration(
 
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "dataAtRestTest")
 		swapfileuri := workspaceapi.Join(uri, ".dataAtRestTest.swp")
 		swapDir := workspaceapi.Join(uri, ".")
@@ -527,7 +527,7 @@ func TestWorkspaceLoadIntegration(
 		defer scheme.Close()
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
-		wp := workspace.NewSchemeWorkspace(uri, scheme)
+		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "myCloseTest")
 		swapDir := workspaceapi.Join(uri, ".")
 
@@ -1585,4 +1585,13 @@ func TestWorkspaceSchemeWatch(
 
 		require.NoError(t, scheme.StopWatch(id))
 	})
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

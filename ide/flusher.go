@@ -26,8 +26,8 @@ package ide
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -47,27 +47,29 @@ type flusherTarget interface {
 
 // flusher coordinates async save / reload operations for an ex.
 //
-// It owns per-URI in-flight cancellation state and the awaiter
-// goroutines that surface results as browser notifications scheduled
-// through sched. Each public method that starts work returns the
-// synchronous start-error from the underlying FlushTab / ReloadTab /
-// OverwriteTab call, plus the busy sentinel workspace.ErrFlushInProgress
-// when another async op is already in flight for the same URI.
+// Each public method starts work via the embedded
+// text.Component, then tracks the awaiter goroutine so tests /
+// shutdown can drain pending notifications. The underlying
+// workspace.FlusherCloser (workspace/file.go) is the single
+// source of truth for the per-URI "one async op at a time"
+// invariant — it returns workspace.ErrFlushInProgress directly
+// when a second op is started while one is in flight.
 //
-// The flusher is the single owner of the inflight map and the awaiter
-// WaitGroup: ex must not touch either directly so the invariants
-// around scheduling, notification ordering, and cancellation stay
-// local to this file.
+// Cancellation is intentionally absent: blocking file I/O cannot
+// be aborted in a cross-platform way, and even if we plumbed ctx
+// through the scheme layer the underlying os/fs syscall would
+// still need to return before the file's `flushing` flag clears.
+// The flusher therefore does not store cancel funcs.
 type flusher struct {
 	comp          flusherTarget
 	notifications browserapi.Notifications
 	sched         func(func()) bool
 
-	mu sync.Mutex
-	// files maps each URI with an in-flight async op to its cancel
-	// function. Entries are removed by the completion callback that
-	// runs on the sched goroutine.
-	files map[workspaceapi.URI]context.CancelFunc
+	// inflight counts awaiter goroutines that have not yet
+	// dispatched their completion callback. Reads from :q / :wq
+	// use this to refuse exit while saves are pending; tests use
+	// `wait` to drain it.
+	inflight atomic.Int64
 
 	// wg tracks awaiter goroutines so tests / shutdown can drain
 	// outstanding work.
@@ -96,7 +98,6 @@ func newFlusher(
 		comp:          comp,
 		notifications: notifications,
 		sched:         sched,
-		files:         make(map[workspaceapi.URI]context.CancelFunc),
 	}
 }
 
@@ -122,15 +123,11 @@ func (f *flusher) flushAndThen(
 	uri workspaceapi.URI, h browserapi.Handler,
 	force bool, onSuccess func(),
 ) error {
-	start := func(ctx context.Context) (<-chan error, error) {
-		return f.comp.FlushTab(ctx, h)
-	}
+	method := f.comp.FlushTab
 	if force {
-		start = func(ctx context.Context) (<-chan error, error) {
-			return f.comp.ForceFlushTab(ctx, h)
-		}
+		method = f.comp.ForceFlushTab
 	}
-	return f.startAsync(uri, opSave, start, onSuccess)
+	return f.startAsync(uri, opSave, f.startWith(method, h), onSuccess)
 }
 
 // overwrite starts an async overwrite for the tab at uri/h. The
@@ -138,82 +135,25 @@ func (f *flusher) flushAndThen(
 func (f *flusher) overwrite(
 	uri workspaceapi.URI, h browserapi.Handler,
 ) error {
-	return f.startAsync(uri, opOverwrite,
-		func(ctx context.Context) (<-chan error, error) {
-			return f.comp.OverwriteTab(ctx, h)
-		}, nil)
+	return f.startAsync(uri, opOverwrite, f.startWith(f.comp.OverwriteTab, h), nil)
 }
 
 // reloadAsync starts an async reload for the tab at uri/h. Used by
-// prompt-driven reloads where the user shouldn't have to wait for
-// the underlying scheme to respond before the prompt is dismissed.
+// prompt-driven reloads and filesystem-watcher reloads where the
+// user shouldn't have to wait for the underlying scheme (or a
+// scheduler-driven reparse) to respond before the host event loop
+// makes progress.
 func (f *flusher) reloadAsync(
-	uri workspaceapi.URI, h browserapi.Handler,
+	uri workspaceapi.URI, h browserapi.Handler, onSuccess func(),
 ) error {
-	return f.startAsync(uri, opReload,
-		func(ctx context.Context) (<-chan error, error) {
-			return f.comp.ReloadTab(ctx, h)
-		}, nil)
+	return f.startAsync(uri, opReload, f.startWith(f.comp.ReloadTab, h), onSuccess)
 }
 
-// reload runs a synchronous reload for uri/h, cancelling any prior
-// in-flight op for the same URI first. Intended for :reloadfile,
-// which is user-initiated and must show the new content immediately.
-func (f *flusher) reload(
-	uri workspaceapi.URI, h browserapi.Handler,
-) error {
-	f.mu.Lock()
-	prev, busy := f.files[uri]
-	f.mu.Unlock()
-	if busy {
-		// Cancel the prior in-flight op and wait for its awaiter
-		// to settle before starting a fresh reload. :reloadfile is
-		// forceful by user intent — it should win over any
-		// speculative background reload the filesystem watcher
-		// started.
-		prev()
-		f.wg.Wait()
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := f.comp.ReloadTab(ctx, h)
-	if err != nil {
-		cancel()
-		return err
-	}
-	f.mu.Lock()
-	f.files[uri] = cancel
-	f.mu.Unlock()
-	rerr := <-ch
-	f.mu.Lock()
-	delete(f.files, uri)
-	f.mu.Unlock()
-	if rerr != nil && !errors.Is(rerr, context.Canceled) {
-		return fmt.Errorf("reload: %w", rerr)
-	}
-	return nil
-}
-
-// cancel cancels the in-flight async op for uri (if any). Returns
-// workspace.ErrNoFlushInProgress when nothing is pending. The
-// underlying scheme call cannot be aborted; its result is discarded
-// when it eventually returns.
-func (f *flusher) cancel(uri workspaceapi.URI) error {
-	f.mu.Lock()
-	c, ok := f.files[uri]
-	f.mu.Unlock()
-	if !ok {
-		return workspace.ErrNoFlushInProgress
-	}
-	c()
-	return nil
-}
-
-// inFlightCount reports how many URIs have an outstanding async op.
+// inFlightCount reports how many awaiter goroutines are still
+// pending. Used by :q / :wq to refuse exit while saves are pending.
 // Used by :q / :wq to refuse exit while saves are pending.
 func (f *flusher) inFlightCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.files)
+	return int(f.inflight.Load())
 }
 
 // wait blocks until every awaiter goroutine has delivered its
@@ -223,36 +163,40 @@ func (f *flusher) wait() {
 	f.wg.Wait()
 }
 
+// startWith adapts a (ctx, handler) -> chan method to the
+// (ctx) -> chan signature startAsync expects, partially applying h.
+func (f *flusher) startWith(
+	m func(context.Context, browserapi.Handler) (<-chan error, error),
+	h browserapi.Handler,
+) func(context.Context) (<-chan error, error) {
+	return func(ctx context.Context) (<-chan error, error) {
+		return m(ctx, h)
+	}
+}
+
 func (f *flusher) startAsync(
 	uri workspaceapi.URI,
 	kind flusherOp,
 	start func(ctx context.Context) (<-chan error, error),
 	onSuccess func(),
 ) error {
-	// We hold mu only for the busy check; the underlying start call
-	// runs without the lock so a slow scheme can't stall other
-	// flushers. Re-acquire mu briefly to register the cancel.
-	f.mu.Lock()
-	if _, busy := f.files[uri]; busy {
-		f.mu.Unlock()
-		return workspace.ErrFlushInProgress
-	}
-	f.mu.Unlock()
-	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := start(ctx)
+	// The underlying workspace.FlusherCloser is the single owner of
+	// the per-URI "one in-flight op at a time" invariant; if a
+	// second op is started while one is in flight, start() returns
+	// workspace.ErrFlushInProgress directly.
+	ch, err := start(context.Background())
 	if err != nil {
-		cancel()
 		return err
 	}
-	f.mu.Lock()
-	f.files[uri] = cancel
-	f.mu.Unlock()
+	f.inflight.Add(1)
 	f.wg.Add(1)
 	go debug.CapturePanicReport(func() {
 		defer f.wg.Done()
+		defer f.inflight.Add(-1)
 		ferr := <-ch
-		// sched must dispatch onto the UI goroutine so map
-		// mutations and notifications happen on a single thread.
+		// sched must dispatch onto the UI goroutine so
+		// notifications and onSuccess hooks happen on a single
+		// thread.
 		f.sched(func() { f.onDone(uri, kind, ferr, onSuccess) })
 	})
 	return nil
@@ -261,9 +205,6 @@ func (f *flusher) startAsync(
 func (f *flusher) onDone(
 	uri workspaceapi.URI, kind flusherOp, err error, onSuccess func(),
 ) {
-	f.mu.Lock()
-	delete(f.files, uri)
-	f.mu.Unlock()
 	if err == nil {
 		if onSuccess != nil {
 			onSuccess()
@@ -274,25 +215,26 @@ func (f *flusher) onDone(
 	switch kind {
 	case opSave:
 		switch {
-		case errors.Is(err, context.Canceled):
-			_, _ = f.notifications.Notify(browserapi.LevelInfo,
-				"save cancelled for '%s'", name)
 		case errors.Is(err, workspaceapi.ErrStaleData),
 			errors.Is(err, workspaceapi.ErrFileIsNotWritable):
 			_, _ = f.notifications.Notify(browserapi.LevelWarn,
 				"save '%s': %v", name, err)
+		case errors.Is(err, workspace.ErrFlushInProgress):
+			// Concurrent save kicked while one was in flight;
+			// the in-flight op will surface its own result.
+			return
 		default:
 			_, _ = f.notifications.Notify(browserapi.LevelError,
 				"save '%s': %v", name, err)
 		}
 	case opOverwrite:
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, workspace.ErrFlushInProgress) {
 			return
 		}
 		_, _ = f.notifications.Notify(browserapi.LevelError,
 			"failed to overwrite tab: %v", err)
 	case opReload:
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, workspace.ErrFlushInProgress) {
 			return
 		}
 		_, _ = f.notifications.Notify(browserapi.LevelError,

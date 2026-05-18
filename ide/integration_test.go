@@ -51,7 +51,7 @@ func newIntegrationTestCase(t *testing.T, content string) (
 	workspaceURI, err := workspaceapi.CurrentUserHostURI(tempDir)
 	require.NoError(t, err)
 
-	manager := workspace.NewManager(config.NopConfig())
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
 	require.NoError(t, manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme))
 	w, err := manager.AddWorkspace(context.Background(), workspaceURI)
 	require.NoError(t, err)

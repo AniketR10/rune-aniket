@@ -326,7 +326,7 @@ func (i *IDE) init(
 
 	// register default schemes
 	workspaceManager := workspace.NewManagerWithWorkspaceFunc(
-		i.ideConfig.workspace(), workspace.NewSchemeWorkspace)
+		i.ideConfig.workspace(), op.scheduleFn, workspace.NewSchemeWorkspace)
 	err := workspaceManager.RegisterScheme(
 		workspacessh.Scheme,
 		workspacessh.New(newWorkspaceWindowManagerUI(i)),

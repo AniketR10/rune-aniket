@@ -128,7 +128,7 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		mu.Lock()
 
 		tmu.Lock()
-		_, h := newEditFile(t, comp, fileContent)
+		_, h := newEditFile(t, tmu, comp, fileContent)
 		tmu.Unlock()
 
 		cref, ok := h.(*text.StatusBar)
@@ -187,7 +187,7 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		mu.Lock()
 
 		tmu.Lock()
-		_, h := newEditFile(t, comp, fileContent)
+		_, h := newEditFile(t, tmu, comp, fileContent)
 		tmu.Unlock()
 
 		cref, ok := h.(*text.StatusBar)
@@ -247,7 +247,7 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		mu.Lock()
 
 		tmu.Lock()
-		_, h := newEditFileName(t, comp, "abc", strconv.Itoa(int(rand.Int())))
+		_, h := newEditFileName(t, tmu, comp, "abc", strconv.Itoa(int(rand.Int())))
 
 		cref, ok := h.(*text.StatusBar)
 		tree, ok := cref.Buffer().View().(*syntax.Tree)
@@ -325,7 +325,7 @@ func TestTreeIndentsIntegration(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	newEditFile(t, comp, fileContent)
+	newEditFile(t, mu, comp, fileContent)
 	mu.Unlock()
 	wg.Wait()
 
@@ -773,7 +773,7 @@ func TestEdgeCaseIndents(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	newEditFile(t, comp, fileContent)
+	newEditFile(t, mu, comp, fileContent)
 	mu.Unlock()
 	wg.Wait()
 
@@ -831,7 +831,7 @@ func TestTreeHighlightsMissingHighlightsFile(t *testing.T) {
 	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
 
 	mu.Lock()
-	_, h := newEditFile(t, comp, fileContent)
+	_, h := newEditFile(t, mu, comp, fileContent)
 	mu.Unlock()
 	cref, ok := h.(*text.StatusBar)
 	require.True(t, ok)
@@ -856,7 +856,7 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	ed, _ := newEditFile(t, comp, fileContent)
+	ed, _ := newEditFile(t, mu, comp, fileContent)
 	mu.Unlock()
 	wg.Wait()
 
@@ -1473,6 +1473,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			Folds:      true,
 			Indents:    true,
 			Highlights: true,
+			Progress:   1,
 		}, actual)
 
 		require.NoError(t, tree.Close())
@@ -1509,7 +1510,7 @@ func TestTreeStateIntegration(t *testing.T) {
 		mu.Lock()
 
 		tmu.Lock()
-		_, h := newEditFile(t, comp, fileContent)
+		_, h := newEditFile(t, tmu, comp, fileContent)
 		tmu.Unlock()
 
 		cref, ok := h.(*text.StatusBar)
@@ -1567,7 +1568,7 @@ func TestTreeStateIntegration(t *testing.T) {
 		mu.Lock()
 
 		tmu.Lock()
-		_, h := newEditFileName(t, comp, "abc", strconv.Itoa(int(rand.Int())))
+		_, h := newEditFileName(t, tmu, comp, "abc", strconv.Itoa(int(rand.Int())))
 
 		cref, ok := h.(*text.StatusBar)
 		tree, ok := cref.Buffer().View().(*syntax.Tree)
@@ -1606,6 +1607,7 @@ func TestTreeStateIntegration(t *testing.T) {
 			Folds:      true,
 			Indents:    true,
 			Highlights: false,
+			Progress:   1,
 		}, actual)
 		cleanup()
 	})
@@ -1839,7 +1841,10 @@ func TestTreeCommentCoverageIntegration(t *testing.T) {
 		stateIt := tree.State()
 		state, _ := stateIt.Next(context.Background())
 		_ = stateIt.Close()
-		assert.Equal(t, syntax.State{LangID: "go", Folds: true, Indents: true, Highlights: true}, state)
+		assert.Equal(t, syntax.State{
+			LangID: "go", Folds: true, Indents: true, Highlights: true,
+			Progress: 1,
+		}, state)
 		require.True(t, ok)
 		assert.Equal(t, []term.Range{
 			{Start: term.Coordinates{Y: 2, X: 0}, End: term.Coordinates{Y: 2, X: len("// alpha")}},
@@ -1876,7 +1881,10 @@ func TestTreeCommentCoverageIntegration(t *testing.T) {
 		stateIt := tree.State()
 		state, _ := stateIt.Next(context.Background())
 		_ = stateIt.Close()
-		assert.Equal(t, syntax.State{LangID: "go", Folds: true, Indents: true, Highlights: true}, state)
+		assert.Equal(t, syntax.State{
+			LangID: "go", Folds: true, Indents: true, Highlights: true,
+			Progress: 1,
+		}, state)
 		require.True(t, ok)
 		assert.Equal(t, []term.Range{{
 			Start: term.Coordinates{Y: 2, X: 0},
@@ -1928,14 +1936,17 @@ func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterat
 
 var i atomic.Int32
 
-func newEditFile(t *testing.T, comp *text.Component, content string) (
+func newEditFile(t *testing.T, mu sync.Locker, comp *text.Component, content string) (
 	cell.Editor, text.Handler,
 ) {
 	i := i.Add(1)
-	return newEditFileName(t, comp, content, strconv.Itoa(int(i))+".go")
+	return newEditFileName(t, mu, comp, content, strconv.Itoa(int(i))+".go")
 }
 
-func newEditFileName(t *testing.T, comp *text.Component, content string, filename string) (
+func newEditFileName(
+	t *testing.T, mu sync.Locker, comp *text.Component,
+	content string, filename string,
+) (
 	cell.Editor, text.Handler,
 ) {
 	uri, err := workspaceapi.ParseURI("memory:///" + filename)
@@ -1954,7 +1965,15 @@ func newEditFileName(t *testing.T, comp *text.Component, content string, filenam
 	{
 		ch, err := comp.FlushTab(context.Background(), tab)
 		require.NoError(t, err)
-		require.NoError(t, <-ch)
+		// Release the scheduler mutex while waiting on the flush
+		// channel: with async wrapReparse, the channel result is sent
+		// from inside a ScheduleNextTick callback that needs the same
+		// mutex. Re-acquire before returning so callers can continue
+		// to assume the mutex is held.
+		mu.Unlock()
+		err = <-ch
+		mu.Lock()
+		require.NoError(t, err)
 	}
 
 	err = comp.Browser().Focus().SetContent(tab)
@@ -1995,7 +2014,7 @@ func newTestCase(
 		Publisher:        texttest.NopEditor(),
 		ScheduleNextTick: cfg.ScheduleNextTick,
 	}))
-	w := workspace.NewSchemeWorkspace(uri, scheme)
+	w := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 	tcfg := text.DefaultConfig()
 	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	tcfg.Syntax = cfg
@@ -2070,7 +2089,7 @@ func newTreeWithPkgManagerContent(
 
 	wg.Add(1)
 	mu.Lock()
-	_, h := newEditFile(t, comp, content)
+	_, h := newEditFile(t, mu, comp, content)
 	mu.Unlock()
 	wg.Wait()
 	cref, ok := h.(*text.StatusBar)

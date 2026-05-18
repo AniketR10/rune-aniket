@@ -163,7 +163,7 @@ func TestReadFile(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			workspace := workspace.NewSchemeWorkspace(workspaceURI, scheme)
+			workspace := workspace.NewSchemeWorkspace(workspaceURI, scheme, inlineSchedule)
 
 			cfg := text.DefaultConfig()
 			cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
@@ -202,4 +202,13 @@ func TestReadFile(t *testing.T) {
 			assert.Equal(t, tcase.expectedResult, term.CellsToString(cells))
 		})
 	}
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

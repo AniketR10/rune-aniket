@@ -64,7 +64,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 
 			scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), cwd)
 			require.NoError(t, err)
-			loader := workspace.NewSchemeWorkspace(cwd, scheme)
+			loader := workspace.NewSchemeWorkspace(cwd, scheme, inlineSchedule)
 
 			ed, err := text.NewComponent(simpleEd, loader, cfg)
 			require.NoError(t, err)
@@ -231,4 +231,13 @@ func makeURI(t *testing.T, uriStr string) workspaceapi.URI {
 
 func setHasType(t textapi.EventType, evs []textapi.EventType) bool {
 	return slices.Contains(evs, t)
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }

@@ -188,6 +188,16 @@ func TestEventDispatching(t *testing.T) {
 	})
 
 	t.Run("is goroutine safe", func(t *testing.T) {
+		// Production callers serialize filesystem events on a
+		// single goroutine (dispatchFilesystemEvents in
+		// workspace_handler.go loops over the scheme's event
+		// channel). dispatchFilesystemEvent locks mu internally
+		// so concurrent fan-out is safe only when callers also
+		// take mu before invoking it; without that, the
+		// off-thread reload worker that writes tab attrs via
+		// editorFlusherCloser.OnDidEdit races a concurrent
+		// IsDirty read in handleFSChange. Mirror the production
+		// caller's invariant here.
 		var mu sync.Mutex
 		ignores := vctrl.NopMatcher(false)
 
@@ -200,12 +210,21 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Write, u: testURI}
 
 		n := 1000
+		dispatchMu := &sync.Mutex{}
 		var wg sync.WaitGroup
 		wg.Add(n)
 		for range n {
 			go func() {
 				defer wg.Done()
+				dispatchMu.Lock()
+				defer dispatchMu.Unlock()
 				dispatchFilesystemEvent(x, &mu, ignores, fsev)
+				// Reloads are async: the worker that writes
+				// dirty tab attrs via OnDidEdit continues
+				// after dispatchFilesystemEvent returns.
+				// Drain it before another dispatch reads
+				// IsDirty from the host goroutine.
+				x.waitInflight()
 			}()
 		}
 		for i := range n {
@@ -598,7 +617,7 @@ func newExForEventTesting(t *testing.T) *ex {
 	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
 	require.NoError(t, err)
 
-	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 
 	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
 		vte.DefaultConfig(), nopPublishEvent, opts...)

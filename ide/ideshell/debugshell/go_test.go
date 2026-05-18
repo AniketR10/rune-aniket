@@ -1182,7 +1182,7 @@ func newIDEHarness(t *testing.T, dlvBin, dir string) *ideHarness {
 		context.Background(), config.NopConfig(), uri,
 	)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme)
+	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 
 	ed := vi.Editor(vi.WithStatusBarConfig(false, text.StatusBarConfig{
 		Publisher:        texttest.NopEditor(),
@@ -1663,4 +1663,13 @@ func TestE2E_CtrlCDoesNotStopEventStream(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("drain goroutine did not exit after terminate")
 	}
+}
+
+// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
+// that runs fn on the calling goroutine. Test-only: production code
+// must use the host event-loop scheduler so reload's buffer
+// mutations do not run on a worker goroutine.
+func inlineSchedule(fn func()) bool {
+	fn()
+	return true
 }
