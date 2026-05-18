@@ -1,0 +1,24 @@
+[3mFile Edit Options Buffers Tools Text Help
+[0m// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Package pem implements the PEM data encoding, which originated in Privacy
+// Enhanced Mail. The most common use of PEM encoding today is in TLS keys and
+// certificates. See RFC 1421.
+package pem
+
+import (
+        "bytes"
+        "encoding/base64"
+        "errors"
+        "io"
+        "slices"
+        "strings"
+)
+
+// A Block represents a PEM encoded structure.
+//
+// The encoded form is:
+[30m[48;5;250m-UU-:---  F1  [1msample.txt  [0m[30m[48;5;250m   Top   L1     (Text) -------------------------------
+[39m[49mFor information about GNU Emacs and the GNU system, type [38;5;152m[48;5;236mC-h C-a[39m[49m.

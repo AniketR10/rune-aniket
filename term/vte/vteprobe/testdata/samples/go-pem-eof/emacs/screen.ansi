@@ -1,0 +1,24 @@
+[3mFile Edit Options Buffers Tools Text Help
+[0m        }
+        _, err := out.Write([]byte(b.Type + "-----\n"))
+        return err
+}
+
+// EncodeToMemory returns the PEM encoding of b.
+//
+// If b has invalid headers and cannot be encoded,
+// EncodeToMemory returns nil. If it is important to
+// report details about this error case, use [Encode] instead.
+func EncodeToMemory(b *Block) []byte {
+        var buf bytes.Buffer
+        if err := Encode(&buf, b); err != nil {
+                return nil
+        }
+        return buf.Bytes()
+}
+
+
+
+
+[30m[48;2;191;191;191m-UU-:---  F1  [1msample.txt  [0m[30m[48;2;191;191;191m   Bot   L325   (Text) -------------------------------
+[39m[49mFor information about GNU Emacs and the GNU system, type [38;2;173;216;230m[48;2;48;48;48mC-h C-a[39m[49m.

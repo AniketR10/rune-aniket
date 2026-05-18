@@ -1,0 +1,24 @@
+package main
+
+import "fmt"
+
+func main() {
+        fmt.Println("hello, world")
+}
+
+// trailing
+// content
+// for tests
+// EOF
+[94m~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+[39m<ktrees/byod/term/cursorinfer/testdata/sample.txt" [noeol] 12L, 116B

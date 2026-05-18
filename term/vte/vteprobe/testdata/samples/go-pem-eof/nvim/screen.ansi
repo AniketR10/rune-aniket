@@ -1,0 +1,23 @@
+        b64.Close()
+        breaker.Close()
+
+        if _, err := out.Write(pemEnd[1:]); err != nil {
+                return err
+        }
+        _, err := out.Write([]byte(b.Type + "-----\n"))
+        return err
+}
+
+// EncodeToMemory returns the PEM encoding of b.
+//
+// If b has invalid headers and cannot be encoded,
+// EncodeToMemory returns nil. If it is important to
+// report details about this error case, use [Encode] instead.
+func EncodeToMemory(b *Block) []byte {
+        var buf bytes.Buffer
+        if err := Encode(&buf, b); err != nil {
+                return nil
+        }
+        return buf.Bytes()
+}
+[1;7mterm/vte/vteprobe/testdata/samples/go-pem-eof/sample.txt      325,6          Bot

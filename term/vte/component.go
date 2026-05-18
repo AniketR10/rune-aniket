@@ -606,6 +606,22 @@ func (t *Component) PrimaryScroll() *component.Scroll {
 	return t.parserHandler.sync.primBuf.Scroll()
 }
 
+// AlternateScroll returns the alternate buffer's underlying
+// component.Scroll. Callers can reach the rendered cells via
+// Scroll.Buffer().RawCells() and the cursor via the buffer's own
+// CursorAtScreen, without copying. Combined with PrimaryScroll and
+// IsAltBuffer, this lets analyses (e.g. vteprobe) work directly
+// against the live grid of whichever screen the embedded program is
+// drawing into.
+//
+// As with PrimaryScroll, callers are responsible for not holding the
+// returned reference across mutations of the underlying VTE state.
+func (t *Component) AlternateScroll() *component.Scroll {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.sync.altBuf.Scroll()
+}
+
 // Snapshot returns a durable snapshot of the terminal's primary rendered
 // buffer. It captures primary history plus visible screen, but it does not
 // attempt to persist the live pty process or alternate-screen program state.

@@ -1,0 +1,24 @@
+[3mFile Edit Options Buffers Tools Text Help
+[0mpackage main
+
+import "fmt"
+
+func main() {
+        fmt.Println("hello, world")
+}
+
+// trailing
+// content
+// for tests
+// EOF
+
+
+
+
+
+
+
+
+
+[30m[48;5;250m-UU-:---  F1  [1msample.txt  [0m[30m[48;5;250m   All   L1     (Text) -------------------------------
+[39m[49mFor information about GNU Emacs and the GNU system, type [38;5;152m[48;5;236mC-h C-a[39m[49m.

@@ -484,6 +484,69 @@ func TestComponentCreatePtySetsTerminalEnv(t *testing.T) {
 	}
 }
 
+// TestComponentAlternateScroll verifies AlternateScroll mirrors
+// PrimaryScroll for the alternate buffer: callers can reach the rendered
+// cells via Scroll.Buffer().RawCells() and the cursor via
+// CursorAtScreen, without any cloning. The inference layer
+// (term/vte/vteprobe) and BYOE's editorHandler rely on these two
+// accessors plus IsAltBuffer to read the rendered grid of whichever
+// screen the embedded program is drawing into.
+func TestComponentAlternateScroll(t *testing.T) {
+	t.Parallel()
+
+	t.Run("primary", func(t *testing.T) {
+		t.Parallel()
+		comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+			&mockTabManager{}, DefaultConfig())
+		require.NoError(t, err)
+		ph := comp.parserHandler
+		ph.sync.primBuf.SetDefaultChar(' ')
+		ph.sync.altBuf.SetDefaultChar(' ')
+		require.NoError(t, comp.Resize(5, 3))
+
+		resetBuffer(t, ph, "abcde\nfg   \n     ")
+		ph.setCursorAtScreen(term.Coordinates{X: 2, Y: 1}, false)
+
+		assert.False(t, comp.IsAltBuffer(),
+			"primary must be the active buffer by default")
+		scroll := comp.PrimaryScroll()
+		require.NotNil(t, scroll)
+		assert.Equal(t, term.Coordinates{X: 2, Y: 1},
+			comp.CursorAtScreen(),
+			"primary cursor must match what was set")
+		assert.Equal(t, "abcde\nfg   \n     ",
+			term.CellsToString(scroll.Buffer().RawCells()),
+			"primary cells must match the active buffer contents")
+	})
+
+	t.Run("alternate", func(t *testing.T) {
+		t.Parallel()
+		comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+			&mockTabManager{}, DefaultConfig())
+		require.NoError(t, err)
+		ph := comp.parserHandler
+		ph.sync.primBuf.SetDefaultChar(' ')
+		ph.sync.altBuf.SetDefaultChar(' ')
+		require.NoError(t, comp.Resize(5, 3))
+
+		// Swap to the alternate screen first, then populate it.
+		ph.SetPrivateMode(vteparser.PrivateModeSwapScreenAndSetRestoreCursor)
+		require.True(t, comp.IsAltBuffer(),
+			"alt buffer must be active after DECSET 1049")
+		resetBuffer(t, ph, "ALT  \nBUF  \n     ")
+		ph.setCursorAtScreen(term.Coordinates{X: 3, Y: 0}, false)
+
+		scroll := comp.AlternateScroll()
+		require.NotNil(t, scroll)
+		assert.Equal(t, term.Coordinates{X: 3, Y: 0},
+			comp.CursorAtScreen(),
+			"alt cursor must match what was set")
+		assert.Equal(t, "ALT  \nBUF  \n     ",
+			term.CellsToString(scroll.Buffer().RawCells()),
+			"alt cells must match the active buffer contents")
+	})
+}
+
 func assertDraw(t *testing.T, comp *Component, expected string) {
 	t.Helper()
 	writer := term.NewStringWriter(comp.width, comp.height)

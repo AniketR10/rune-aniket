@@ -1,0 +1,84 @@
+package complex
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// ErrTimeout signals that an operation exceeded its budget.
+var ErrTimeout = errors.New("complex: timeout exceeded")
+
+// Server reproduces a few patterns that have historically tripped
+// cursorinfer's heuristics: a long line that wraps in an 80-col
+// terminal, deep nested indentation, plus content that looks like
+// gutter (" 1 ") or fold markers ("+-- 3 lines") at the start of
+// genuine source lines.
+type Server struct {
+	name    string
+	indices [][]int
+	notes   map[string]string
+}
+
+func (s *Server) Handle(ctx context.Context, req string) (string, error) {
+	if s == nil {
+		return "", ErrTimeout
+	}
+	switch {
+	case strings.HasPrefix(req, "+-- 3 lines"):
+		// Not a fold placeholder: we want cursorinfer to keep this
+		// row anchored to a real file line rather than treat it as
+		// folded content.
+		return "literal placeholder", nil
+	case strings.Contains(req, " 1 "):
+		// A space-padded numeric prefix that looks gutter-ish.
+		return "numeric-prefix payload", nil
+	default:
+		var b strings.Builder
+		for i, row := range s.indices {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%d:[", i)
+			for j, v := range row {
+				if j > 0 {
+					b.WriteByte(',')
+				}
+				fmt.Fprintf(&b, "%d", v)
+			}
+			b.WriteByte(']')
+		}
+		return b.String(), nil
+	}
+}
+
+// LongLine intentionally overflows an 80-column terminal so the
+// soft-wrap path is exercised when this file is opened in a non-wrap-
+// aware mode. Editors that wrap will render two visual rows for a
+// single file line; cursorinfer must map the continuation row back to
+// this same file line.
+const LongLine = "this is a very long string literal designed to wrap once across an eighty-column terminal so the cursorinfer wrap path is exercised."
+
+// TabsAtTwo uses 2-space indentation rendered visually as 4/6 cells
+// when expanded with tabstop=2. Mixed with TabsAtFour below this gives
+// the alignment routine enough signal to discriminate tabstops.
+func TabsAtTwo() {
+	for i := 0; i < 4; i++ {
+		fmt.Println(i)
+	}
+}
+
+func TabsAtFour() {
+	for i := 0; i < 4; i++ {
+		if i%2 == 0 {
+			fmt.Println("even", i)
+		} else {
+			fmt.Println("odd", i)
+		}
+	}
+}
+
+// trailing comment line
+// trailing comment line
+// EOF marker

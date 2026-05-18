@@ -1,0 +1,24 @@
+package complex
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "strings"
+)
+
+// ErrTimeout signals that an operation exceeded its budget.
+var ErrTimeout = errors.New("complex: timeout exceeded")
+
+// Server reproduces a few patterns that have historically tripped
+// cursorinfer's heuristics: a long line that wraps in an 80-col
+// terminal, deep nested indentation, plus content that looks like
+// gutter (" 1 ") or fold markers ("+-- 3 lines") at the start of
+// genuine source lines.
+type Server struct {
+        name    string
+        indices [][]int
+        notes   map[string]string
+}
+
+<sorinfer/testdata/samples/go-complex/sample.txt" [noeol] 84L, 2269B

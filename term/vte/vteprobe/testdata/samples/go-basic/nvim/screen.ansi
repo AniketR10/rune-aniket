@@ -1,0 +1,23 @@
+package main
+
+import "fmt"
+
+func main() {
+        fmt.Println("hello, world")
+}
+
+// trailing
+// content
+// for tests
+// EOF
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[94m~[39m
+[1;7mterm/cursorinfer/testdata/sample.txt                          1,1            All

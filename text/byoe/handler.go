@@ -34,8 +34,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/term/vte/vteprobe"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
@@ -55,6 +57,12 @@ type editorHandler struct {
 	cwd              workspace.Workspace
 	notifications    browserapi.Notifications
 	scheduleNextTick func(func()) bool
+
+	// probe maps the embedded editor's screen-relative cursor back to
+	// a file (line, col) by structurally aligning the rendered cell
+	// grid against the file content. It carries no editor-specific
+	// knowledge; see term/vte/vteprobe.
+	probe *vteprobe.Cursor
 
 	watchID     int
 	watchActive bool
@@ -80,6 +88,21 @@ func newHandler(
 		notifications:    notifications,
 		scheduleNextTick: scheduleNextTick,
 		cancelCtx:        cancel,
+		probe: vteprobe.New(
+			cwd,
+			// Common editor tabstops, ordered by frequency. First
+			// value wins ties so vim/nvim defaults to 8.
+			[]int{8, 4, 2},
+			// Confidence floor: anything below this means the
+			// rendered screen does not align with the file (cursor
+			// on a chrome row, mid-load, alt-screen menu, …) and
+			// CursorAtScroll falls back to (0, 0).
+			0.6,
+			// Upper bound on the file size we are willing to slurp
+			// for inference. 8 MiB easily covers source files; on
+			// anything larger Infer returns ErrUnknown.
+			8<<20,
+		),
 	}
 	h.startWatcher(ctx)
 	return h
@@ -159,10 +182,39 @@ func (h *editorHandler) replaceBuffer(data string) {
 // Resource satisfies text.Handler.
 func (h *editorHandler) Resource() workspaceapi.URI { return h.resource }
 
-// CursorAtScroll returns zero — v1 byoe has no IPC back from the
-// external editor.
+// CursorAtScroll asks vteprobe to map the embedded editor's
+// screen-relative cursor back to a file position by aligning the
+// rendered cell grid against the on-disk file. The first revision is
+// intentionally naive: snapshot the active buffer on every call, run
+// a fresh inference, and return zero on any failure. There is no
+// caching beyond what vteprobe.Cursor already does internally for
+// file contents.
 func (h *editorHandler) CursorAtScroll() term.Coordinates {
-	return term.Coordinates{}
+	comp := h.Handler.Component()
+	if comp == nil {
+		return term.Coordinates{}
+	}
+	// Reach straight into the live grid of whichever screen the
+	// embedded program is drawing into. Scroll.Buffer().RawCells()
+	// returns the underlying [][]term.Cell without copying; the call
+	// to Infer must complete before the next VTE write mutates that
+	// grid, which it does because CursorAtScroll runs on the host
+	// event loop alongside vte writes.
+	var scroll *component.Scroll
+	if comp.IsAltBuffer() {
+		scroll = comp.AlternateScroll()
+	} else {
+		scroll = comp.PrimaryScroll()
+	}
+	if scroll == nil {
+		return term.Coordinates{}
+	}
+	res, err := h.probe.Infer(context.Background(), h.resource,
+		scroll.Buffer().RawCells(), comp.CursorAtScreen())
+	if err != nil {
+		return term.Coordinates{}
+	}
+	return res.CursorAtScroll
 }
 
 // SetCursorAtScroll injects the configured goto sequence into the

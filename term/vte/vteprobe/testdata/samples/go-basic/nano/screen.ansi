@@ -1,0 +1,24 @@
+[3mFile: /Users/ernestrc/.rune/worktrees/byod/term/cursorinfer/testdata/sample.txt
+
+[0mpackage main
+
+import "fmt"
+
+func main() {
+        fmt.Println("hello, world")
+}
+
+// trailing
+// content
+// for tests
+// EOF
+
+
+
+
+
+
+
+
+[3m^G[0m Get Help  [3m^O[0m WriteOut  [3m^R[0m Read File [3m^Y[0m Prev Pg   [3m^K[0m Cut Text  [3m^C[0m Cur Pos
+[3m^X[0m Exit      [3m^J[0m Justify   [3m^W[0m Where is  [3m^V[0m Next Pg   [3m^U[0m UnCut Text[3m^T[0m To Spell
