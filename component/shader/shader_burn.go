@@ -314,6 +314,13 @@ func (s *burn) Shade(frame, total int, cells [][]term.Cell) {
 			cells[y][x].Ch = s.BurnSymbols[symIdx]
 			cells[y][x].Width = 1
 			cells[y][x].Fg = shaderutils.SampleGradient(frac, s.BurnGradient)
+			// Burn-glyph cells overwrite whatever the wrapped
+			// component drew. Clear the renderer's vertical
+			// half-cell offset hints that were inherited from the
+			// source (e.g. tabbar/statusbar rows): the burn glyph
+			// is its own visual layer and should sit on the cell
+			// grid, not on the chrome's render offset.
+			cells[y][x].Attrs &^= burnGlyphStripAttrs
 			activeBurn[y][x] = true
 		}
 	}
@@ -380,9 +387,21 @@ func (s *burn) Shade(frame, total int, cells [][]term.Cell) {
 				tcell.NewRGBColor(80, 79, 79),
 				s.defaultAttr.Fg,
 			)
+			// Rising-particle cells overwrite the target cell;
+			// see the active-burn site for rationale.
+			cells[targetY][targetX].Attrs &^= burnGlyphStripAttrs
 		}
 	}
 }
+
+// burnGlyphStripAttrs is the set of cell attrs cleared on cells the
+// burn shader actively overwrites. These hints are meant for the
+// glyph drawn by the wrapped component (tabbars, statusbars, etc.);
+// when burn replaces that glyph with a fire symbol or a rising
+// character, leaving the hints in place renders the new glyph
+// shifted by half a cell on chrome rows.
+const burnGlyphStripAttrs = term.AttrVerticalRenderOffset |
+	term.AttrNegativeVerticalRenderOffset
 
 func (s *burn) ensureInitialCells(cells [][]term.Cell) {
 	if sameCellShape(s.initialCells, cells) {

@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shadertest"
@@ -358,4 +359,44 @@ func burnGlyphCoords(cells [][]term.Cell, symbols []rune) []burnTestCoord {
 		}
 	}
 	return out
+}
+
+// TestBurn_ClearsRenderOffsetAttrsOnBurnedCells guards that the Burn
+// shader strips term.AttrVerticalRenderOffset/
+// AttrNegativeVerticalRenderOffset from cells whose glyph it actively
+// overwrites. The renderer applies these hints to whatever character
+// is in the cell, so leaving them in place when burn replaces a
+// chrome-row glyph with a fire symbol renders the new glyph shifted
+// by half a cell. Cells the burn hasn't crossed yet must keep their
+// original attrs.
+func TestBurn_ClearsRenderOffsetAttrsOnBurnedCells(t *testing.T) {
+	params := shader.DefaultBurnParams()
+	params.SmokeChance = 0
+	sh := shader.Burn(params, term.Attributes{})
+
+	const (
+		cols  = 8
+		rows  = 4
+		total = 20
+	)
+	in := makeCharCells(cols, rows)
+	mask := term.AttrVerticalRenderOffset | term.AttrNegativeVerticalRenderOffset
+	for y := range in {
+		for x := range in[y] {
+			in[y][x].Attrs |= mask
+		}
+	}
+
+	// Drive the burn to a mid-frame where some cells should be
+	// actively rendering the fire glyph.
+	sh.Shade(total/2, total, in)
+
+	burning := burnGlyphCoords(in, params.BurnSymbols)
+	require.NotEmpty(t, burning,
+		"expected at least one cell to be rendering a burn glyph at mid-frame")
+	for _, c := range burning {
+		assert.Zerof(t, in[c.y][c.x].Attrs&mask,
+			"burning cell (%d,%d) must have render-offset attrs cleared",
+			c.x, c.y)
+	}
 }
