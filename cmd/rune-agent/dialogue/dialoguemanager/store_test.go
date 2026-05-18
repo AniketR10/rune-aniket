@@ -37,7 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type listFailingBackend struct {
@@ -61,9 +61,9 @@ func TestStoreCreateStoresMessagesOutsideBackendDocument(t *testing.T) {
 	messagesDir := t.TempDir()
 	s := NewStore(backend, messagesDir)
 
-	msgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: "system"},
-		{Role: llm.RoleUser, Content: "hello"},
+	msgs := []llmapi.Message{
+		{Role: llmapi.RoleSystem, Content: "system"},
+		{Role: llmapi.RoleUser, Content: "hello"},
 	}
 	require.NoError(t, s.Create(ctx, Dialogue{ID: "d1", Messages: msgs}))
 
@@ -96,7 +96,7 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 	// Create initial dialogue.
 	err := s.Create(ctx, Dialogue{
 		ID:       "d1",
-		Messages: []llm.Message{{Role: llm.RoleSystem, Content: "hello"}},
+		Messages: []llmapi.Message{{Role: llmapi.RoleSystem, Content: "hello"}},
 	})
 	require.NoError(t, err)
 
@@ -104,7 +104,7 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 	require.NoError(t, err)
 
 	// First append with usage.
-	usage1 := llm.DialogueUsage{
+	usage1 := llmapi.DialogueUsage{
 		TokensSent:        100,
 		TokensReceived:    20,
 		TokensReasoned:    5,
@@ -115,9 +115,9 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 		InferenceDuration: 800 * time.Millisecond,
 		ToolCallDuration:  200 * time.Millisecond,
 	}
-	err = s.AppendMessages(ctx, d, []llm.Message{
-		{Role: llm.RoleUser, Content: "hi"},
-		{Role: llm.RoleAssistant, Content: "hey"},
+	err = s.AppendMessages(ctx, d, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hi"},
+		{Role: llmapi.RoleAssistant, Content: "hey"},
 	}, usage1)
 	require.NoError(t, err)
 
@@ -135,7 +135,7 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 	assert.Equal(t, 200*time.Millisecond, d.Usage.ToolCallDuration)
 
 	// Second append — usage should accumulate on top of the first.
-	usage2 := llm.DialogueUsage{
+	usage2 := llmapi.DialogueUsage{
 		TokensSent:        150,
 		TokensReceived:    30,
 		TokensReasoned:    8,
@@ -146,9 +146,9 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 		InferenceDuration: 1500 * time.Millisecond,
 		ToolCallDuration:  500 * time.Millisecond,
 	}
-	err = s.AppendMessages(ctx, d, []llm.Message{
-		{Role: llm.RoleUser, Content: "more"},
-		{Role: llm.RoleAssistant, Content: "sure"},
+	err = s.AppendMessages(ctx, d, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "more"},
+		{Role: llmapi.RoleAssistant, Content: "sure"},
 	}, usage2)
 	require.NoError(t, err)
 
@@ -175,8 +175,8 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	// Create initial dialogue with some existing usage.
 	err := s.Create(ctx, Dialogue{
 		ID:       "d1",
-		Messages: []llm.Message{{Role: llm.RoleSystem, Content: "hello"}},
-		Usage: llm.DialogueUsage{
+		Messages: []llmapi.Message{{Role: llmapi.RoleSystem, Content: "hello"}},
+		Usage: llmapi.DialogueUsage{
 			TokensSent:  50,
 			Completions: 1,
 		},
@@ -193,7 +193,7 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	err = backend.Update(ctx, "d1",
 		[]storageapi.Update{
 			{FieldPath: []string{"Version"}, Value: 2},
-			{FieldPath: []string{"Usage"}, Value: llm.DialogueUsage{
+			{FieldPath: []string{"Usage"}, Value: llmapi.DialogueUsage{
 				TokensSent:     70,
 				TokensReceived: 10,
 				Completions:    2,
@@ -207,13 +207,13 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	// First attempt will fail (precondition: Version=1, but storage has Version=2).
 	// ConsistentUpdate retries: re-reads (gets Version=2, Usage with TokensSent=70),
 	// then accumulates our new usage on top of the fresh state.
-	newUsage := llm.DialogueUsage{
+	newUsage := llmapi.DialogueUsage{
 		TokensSent:     30,
 		TokensReceived: 5,
 		Completions:    1,
 	}
-	err = s.AppendMessages(ctx, staleDialogue, []llm.Message{
-		{Role: llm.RoleUser, Content: "question"},
+	err = s.AppendMessages(ctx, staleDialogue, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "question"},
 	}, newUsage)
 	require.NoError(t, err)
 
@@ -242,17 +242,17 @@ func TestStoreAppendMessagesRecoversWhenMessagesFileIsMissing(t *testing.T) {
 	require.NoError(t, backend.Create(ctx, "d1", &stored))
 
 	d := Dialogue{ID: "d1"}
-	err := s.AppendMessages(ctx, d, []llm.Message{
-		{Role: llm.RoleUser, Content: "hello"},
-		{Role: llm.RoleAssistant, Content: "world"},
-	}, llm.DialogueUsage{Completions: 1})
+	err := s.AppendMessages(ctx, d, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hello"},
+		{Role: llmapi.RoleAssistant, Content: "world"},
+	}, llmapi.DialogueUsage{Completions: 1})
 	require.NoError(t, err)
 
 	got, err := s.Get(ctx, "d1")
 	require.NoError(t, err)
-	assert.Equal(t, []llm.Message{
-		{Role: llm.RoleUser, Content: "hello"},
-		{Role: llm.RoleAssistant, Content: "world"},
+	assert.Equal(t, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hello"},
+		{Role: llmapi.RoleAssistant, Content: "world"},
 	}, got.Messages)
 	assert.Equal(t, 1, got.Usage.Completions)
 	_, err = os.Stat(missingPath)
@@ -295,9 +295,9 @@ func TestStoreMessageCountAccuracy(t *testing.T) {
 	// Create sets MessageCount.
 	err := s.Create(ctx, Dialogue{
 		ID: "d1",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, Content: "hi"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, Content: "hi"},
 		},
 	})
 	require.NoError(t, err)
@@ -307,9 +307,9 @@ func TestStoreMessageCountAccuracy(t *testing.T) {
 	assert.Equal(t, 2, d.MessageCount, "Create should set MessageCount")
 
 	// AppendMessages updates MessageCount.
-	err = s.AppendMessages(ctx, Dialogue{ID: "d1"}, []llm.Message{
-		{Role: llm.RoleAssistant, Content: "sure thing"},
-	}, llm.DialogueUsage{})
+	err = s.AppendMessages(ctx, Dialogue{ID: "d1"}, []llmapi.Message{
+		{Role: llmapi.RoleAssistant, Content: "sure thing"},
+	}, llmapi.DialogueUsage{})
 	require.NoError(t, err)
 
 	d, err = s.Get(ctx, "d1")
@@ -367,9 +367,9 @@ func TestStoreListConsistency(t *testing.T) {
 	// AppendMessages is reflected in List.
 	dB, err := s.Get(ctx, "b")
 	require.NoError(t, err)
-	require.NoError(t, s.AppendMessages(ctx, dB, []llm.Message{
-		{Role: llm.RoleAssistant, Content: "reply"},
-	}, llm.DialogueUsage{}))
+	require.NoError(t, s.AppendMessages(ctx, dB, []llmapi.Message{
+		{Role: llmapi.RoleAssistant, Content: "reply"},
+	}, llmapi.DialogueUsage{}))
 
 	it, err = s.List(ctx)
 	require.NoError(t, err)
@@ -391,10 +391,10 @@ func TestStoreListReadsHeaderRecordsOnly(t *testing.T) {
 		ID:      "chat-1",
 		AgentID: "agent-1",
 		Model:   "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
 		},
-		Usage: llm.DialogueUsage{TokensSent: 10},
+		Usage: llmapi.DialogueUsage{TokensSent: 10},
 	}))
 
 	// Corrupt only the full dialogue record in a way that would break List if it
@@ -427,8 +427,8 @@ func TestStoreListDoesNotCallBackendList(t *testing.T) {
 		ID:      "chat-1",
 		AgentID: "agent-1",
 		Model:   "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
 		},
 	}))
 
@@ -462,10 +462,10 @@ func TestStoreListBootstrapsLegacyRawDialogueRecords(t *testing.T) {
 		WorkspaceURI: "file:///tmp/project",
 		Version:      2,
 		MessageCount: 1,
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
 		},
-		Usage:     llm.DialogueUsage{TokensSent: 12},
+		Usage:     llmapi.DialogueUsage{TokensSent: 12},
 		UpdatedAt: time.Now(),
 	}
 
@@ -518,8 +518,8 @@ func TestStoreConcurrentCreatesDoNotLoseIndexEntries(t *testing.T) {
 				ID:      id,
 				AgentID: "agent",
 				Model:   "gpt-4o",
-				Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: id},
+				Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: id},
 				},
 			})
 		}(i)
@@ -556,8 +556,8 @@ func TestStoreBootstrapMergesConcurrentCreate(t *testing.T) {
 		AgentID:      "agent-legacy",
 		Model:        "gpt-4o",
 		MessageCount: 1,
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
 		},
 		UpdatedAt: time.Now().Add(-time.Minute),
 	}
@@ -595,8 +595,8 @@ func TestStoreBootstrapMergesConcurrentCreate(t *testing.T) {
 			ID:      "new-chat",
 			AgentID: "agent-new",
 			Model:   "gpt-4o",
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "hi"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "hi"},
 			},
 		})
 	}()
@@ -631,12 +631,12 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 		ID:      "chat-1",
 		AgentID: "agent-42",
 		Model:   "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "system prompt"},
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, Content: "hi there"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "system prompt"},
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, Content: "hi there"},
 		},
-		Usage: llm.DialogueUsage{
+		Usage: llmapi.DialogueUsage{
 			TokensSent:     100,
 			TokensReceived: 50,
 			Completions:    2,
@@ -645,9 +645,9 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 	require.NoError(t, s.Create(ctx, original))
 
 	// Bump version via AppendMessages so the original has Version > 1.
-	require.NoError(t, s.AppendMessages(ctx, original, []llm.Message{
-		{Role: llm.RoleUser, Content: "follow-up"},
-	}, llm.DialogueUsage{TokensSent: 10}))
+	require.NoError(t, s.AppendMessages(ctx, original, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "follow-up"},
+	}, llmapi.DialogueUsage{TokensSent: 10}))
 
 	// Read the fully populated dialogue.
 	orig, err := s.Get(ctx, "chat-1")
@@ -656,9 +656,9 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 	require.True(t, orig.Version > 1, "should have version > 1 after append")
 
 	// Perform ArchiveAndReplace.
-	compactedMsgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: "system prompt"},
-		{Role: llm.RoleUser, Content: "summary of prior conversation"},
+	compactedMsgs := []llmapi.Message{
+		{Role: llmapi.RoleSystem, Content: "system prompt"},
+		{Role: llmapi.RoleUser, Content: "summary of prior conversation"},
 	}
 	err = s.ArchiveAndReplace(ctx, ArchiveAndReplaceParams{
 		Dialogue:           orig,
@@ -747,7 +747,7 @@ func TestStoreCreateRoundTripsApprovedPlan(t *testing.T) {
 			Path: "/tmp/plan.md",
 			Body: "## Step 1\nDo something",
 		},
-		Messages: []llm.Message{{Role: llm.RoleSystem, Content: "sys"}},
+		Messages: []llmapi.Message{{Role: llmapi.RoleSystem, Content: "sys"}},
 	}
 	require.NoError(t, s.Create(ctx, d))
 
@@ -774,8 +774,8 @@ func TestStoreSharedInstanceConcurrentUpserts(t *testing.T) {
 			ID:      fmt.Sprintf("d-%d", i),
 			AgentID: "a",
 			Model:   "m",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
 			},
 		}))
 	}
@@ -798,9 +798,9 @@ func TestStoreSharedInstanceConcurrentUpserts(t *testing.T) {
 				errCh <- fmt.Errorf("worker %d get: %w", i, err)
 				return
 			}
-			err = s.AppendMessages(ctx, d, []llm.Message{
-				{Role: llm.RoleUser, Content: fmt.Sprintf("msg-%d", i)},
-			}, llm.DialogueUsage{})
+			err = s.AppendMessages(ctx, d, []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: fmt.Sprintf("msg-%d", i)},
+			}, llmapi.DialogueUsage{})
 			if err != nil {
 				errCh <- fmt.Errorf("worker %d append: %w", i, err)
 				return
@@ -841,10 +841,10 @@ func TestStoreArchiveAndReplaceConcurrentContention(t *testing.T) {
 			ID:      id,
 			AgentID: fmt.Sprintf("agent-%d", i),
 			Model:   "gpt-4o",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "system prompt"},
-				{Role: llm.RoleUser, Content: "hello"},
-				{Role: llm.RoleAssistant, Content: "hi there"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "system prompt"},
+				{Role: llmapi.RoleUser, Content: "hello"},
+				{Role: llmapi.RoleAssistant, Content: "hi there"},
 			},
 		}))
 	}
@@ -871,8 +871,8 @@ func TestStoreArchiveAndReplaceConcurrentContention(t *testing.T) {
 			err = s.ArchiveAndReplace(ctx, ArchiveAndReplaceParams{
 				Dialogue:           d,
 				ArchivedDialogueID: fmt.Sprintf("chat-%d-archive", i),
-				Messages: []llm.Message{
-					{Role: llm.RoleSystem, Content: "compacted"},
+				Messages: []llmapi.Message{
+					{Role: llmapi.RoleSystem, Content: "compacted"},
 				},
 			})
 			if err != nil {
@@ -905,7 +905,7 @@ func TestStoreArchiveAndReplaceFailsForMissingDialogue(t *testing.T) {
 	err := s.ArchiveAndReplace(ctx, ArchiveAndReplaceParams{
 		Dialogue:           Dialogue{ID: "nonexistent"},
 		ArchivedDialogueID: "nonexistent-archive",
-		Messages:           []llm.Message{{Role: llm.RoleUser, Content: "hi"}},
+		Messages:           []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
 	})
 	assert.NoError(t, err, "ArchiveAndReplace should succeed since dialogue is provided in params")
 }
@@ -948,8 +948,8 @@ func TestStoreCreateDeleteRecreateCycle(t *testing.T) {
 	require.NoError(t, s.Create(ctx, Dialogue{
 		ID:    "cycle",
 		Model: "v1",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "first"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "first"},
 		},
 	}))
 	assert.Equal(t, []string{"cycle"}, listIDs())
@@ -963,9 +963,9 @@ func TestStoreCreateDeleteRecreateCycle(t *testing.T) {
 	require.NoError(t, s.Create(ctx, Dialogue{
 		ID:    "cycle",
 		Model: "v2",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "a"},
-			{Role: llm.RoleAssistant, Content: "b"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "a"},
+			{Role: llmapi.RoleAssistant, Content: "b"},
 		},
 	}))
 	hdrs := listHeaders()
@@ -1037,12 +1037,12 @@ func TestStoreMultipleRapidMutations(t *testing.T) {
 	assert.NotContains(t, ids, "r3")
 
 	// AppendMessages to 2 remaining dialogues.
-	require.NoError(t, s.AppendMessages(ctx, Dialogue{ID: "r0"}, []llm.Message{
-		{Role: llm.RoleUser, Content: "updated"},
-	}, llm.DialogueUsage{}))
-	require.NoError(t, s.AppendMessages(ctx, Dialogue{ID: "r2"}, []llm.Message{
-		{Role: llm.RoleUser, Content: "also updated"},
-	}, llm.DialogueUsage{}))
+	require.NoError(t, s.AppendMessages(ctx, Dialogue{ID: "r0"}, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "updated"},
+	}, llmapi.DialogueUsage{}))
+	require.NoError(t, s.AppendMessages(ctx, Dialogue{ID: "r2"}, []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "also updated"},
+	}, llmapi.DialogueUsage{}))
 
 	hdrs = listHeaders()
 	require.Len(t, hdrs, 3)

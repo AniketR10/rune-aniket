@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // nopFileSystem and osFileSystem are defined in agent_test.go (same package).
@@ -56,7 +56,7 @@ func TestNewGoroutineSpawner_panics_on_nil_prompter(t *testing.T) {
 		func() {
 			NewGoroutineSpawner(
 				newMockStore(),
-				func(string) (llm.Service, string, error) { return nil, "", nil },
+				func(string) (llmapi.Service, llmapi.ModelEntry, error) { return nil, llmapi.ModelEntry{}, nil },
 				NewConfig(nil),
 				skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 				NoMemory(), "", "s", "a", workspaceapi.URI{},
@@ -161,8 +161,8 @@ func TestGoroutineSpawner_Run(t *testing.T) {
 					stopResponse("reply text"),
 				},
 			}
-			factory := func(model string) (llm.Service, string, error) {
-				return svc, "test", nil
+			factory := func(model string) (llmapi.Service, llmapi.ModelEntry, error) {
+				return svc, llmapi.ModelEntry{Name: "test"}, nil
 			}
 			spawner := NewGoroutineSpawner(
 				newMockStore(), factory, cfg,
@@ -199,13 +199,13 @@ func TestGoroutineSpawner_Run_uses_request_model(t *testing.T) {
 
 	var mu sync.Mutex
 	var requestedModels []string
-	factory := func(model string) (llm.Service, string, error) {
+	factory := func(model string) (llmapi.Service, llmapi.ModelEntry, error) {
 		mu.Lock()
 		requestedModels = append(requestedModels, model)
 		mu.Unlock()
 		return &mockService{
 			responses: []mockResponse{stopResponse("ok")},
-		}, "openai", nil
+		}, llmapi.ModelEntry{Name: "test", Provider: "openai"}, nil
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(), factory, cfg,
@@ -256,8 +256,8 @@ func TestGoroutineSpawner_RunWithCleanup(t *testing.T) {
 	store := newMockStore()
 	spawner := NewGoroutineSpawner(
 		store,
-		func(string) (llm.Service, string, error) {
-			return svc, "test", nil
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test"}, nil
 		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
@@ -304,7 +304,7 @@ func TestGoroutineSpawner_RunWithAllowedTools(t *testing.T) {
 
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -349,7 +349,9 @@ func TestGoroutineSpawner_Run_streams_events(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llm.Service, string, error) { return svc, "openai", nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) {
+			return svc, llmapi.ModelEntry{Name: "test", Provider: "openai"}, nil
+		},
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -431,7 +433,7 @@ func TestGoroutineSpawner_Run_no_tool_deadline(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -487,7 +489,7 @@ func TestGoroutineSpawner_Run_caller_cancel_propagates(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -543,7 +545,7 @@ func TestGoroutineSpawner_RunWithLabel(t *testing.T) {
 	}
 	spawner := NewGoroutineSpawner(
 		newMockStore(),
-		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -613,7 +615,7 @@ You are a planner.`
 		svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
 		return NewGoroutineSpawner(
 			newMockStore(),
-			func(string) (llm.Service, string, error) { return svc, "test", nil },
+			func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 			baseCfg, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
 			noopPrompter{},
 		)
@@ -674,7 +676,7 @@ You are a planner.`
 		svc := &mockService{responses: []mockResponse{stopResponse("ok")}}
 		spawner := NewGoroutineSpawner(
 			newMockStore(),
-			func(string) (llm.Service, string, error) { return svc, "test", nil },
+			func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 			restrictedCfg, reg, NoMemory(), "", "s1", "parent", workspaceapi.URI{},
 			noopPrompter{},
 		)
@@ -696,7 +698,7 @@ You are a planner.`
 		svc := &mockService{responses: []mockResponse{stopResponse("config-reply")}}
 		spawner := NewGoroutineSpawner(
 			newMockStore(),
-			func(string) (llm.Service, string, error) { return svc, "test", nil },
+			func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 			cfgWithPlanner, reg, NoMemory(), "", "s1", "agent", workspaceapi.URI{},
 			noopPrompter{},
 		)
@@ -724,7 +726,7 @@ func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
 
 	spawner := NewGoroutineSpawner(
 		store,
-		func(string) (llm.Service, string, error) { return svc, "test", nil },
+		func(string) (llmapi.Service, llmapi.ModelEntry, error) { return svc, llmapi.ModelEntry{Name: "test"}, nil },
 		cfg,
 		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
 		NoMemory(), "",
@@ -735,12 +737,12 @@ func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
 		return "sub-agent-agent-seed"
 	}
 
-	parentMessages := []llm.Message{
+	parentMessages := []llmapi.Message{
 		// The parent system prompt MUST be filtered by the caller before
 		// handing messages to the spawner; the spawner itself does not
 		// filter. This test passes only user/assistant turns.
-		{Role: llm.RoleUser, Content: "Add feature X"},
-		{Role: llm.RoleAssistant, Content: "Ok, I'll work on X"},
+		{Role: llmapi.RoleUser, Content: "Add feature X"},
+		{Role: llmapi.RoleAssistant, Content: "Ok, I'll work on X"},
 	}
 
 	handle, err := spawner.Run(context.Background(), RunRequest{
@@ -758,14 +760,14 @@ func TestGoroutineSpawner_Run_seeds_initial_messages(t *testing.T) {
 	// Expected order: child system prompt, parent user, parent assistant,
 	// then the current sub-agent user message.
 	require.GreaterOrEqual(t, len(d.Messages), 4)
-	assert.Equal(t, llm.RoleSystem, d.Messages[0].Role)
+	assert.Equal(t, llmapi.RoleSystem, d.Messages[0].Role)
 	assert.Equal(t, "you are a sub-agent", d.Messages[0].Content,
 		"child system prompt must come from the skill/agent, not the parent")
-	assert.Equal(t, llm.RoleUser, d.Messages[1].Role)
+	assert.Equal(t, llmapi.RoleUser, d.Messages[1].Role)
 	assert.Equal(t, "Add feature X", d.Messages[1].Content)
-	assert.Equal(t, llm.RoleAssistant, d.Messages[2].Role)
+	assert.Equal(t, llmapi.RoleAssistant, d.Messages[2].Role)
 	assert.Equal(t, "Ok, I'll work on X", d.Messages[2].Content)
-	assert.Equal(t, llm.RoleUser, d.Messages[3].Role)
+	assert.Equal(t, llmapi.RoleUser, d.Messages[3].Role)
 	assert.Equal(t, "now plan the implementation", d.Messages[3].Content)
 }
 

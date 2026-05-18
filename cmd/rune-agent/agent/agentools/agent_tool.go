@@ -33,7 +33,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // NewAgentTool creates an "agent" tool backed by the given
@@ -71,10 +71,10 @@ type agentArgs struct {
 	Cleanup      string `json:"cleanup"`
 }
 
-func (t *agentTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *agentTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "agent",
 			Description: t.buildDescription(),
 			Parameters: map[string]any{

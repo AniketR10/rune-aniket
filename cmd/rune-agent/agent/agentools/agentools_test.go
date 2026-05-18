@@ -42,7 +42,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // localFS implements workspaceapi.FileSystem using local OS calls for testing.
@@ -157,7 +157,7 @@ func TestDefaultTools(t *testing.T) {
 	}
 	for _, tool := range tools {
 		def := tool.Definition()
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		name := def.Function.Name
 		_, ok := expectedNames[name]
 		assert.True(t, ok, "unexpected tool name: %s", name)
@@ -174,7 +174,7 @@ func TestSessionTools(t *testing.T) {
 	require.Len(t, tools, 1)
 
 	def := tools[0].Definition()
-	assert.Equal(t, llm.ToolTypeFunction, def.Type)
+	assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 	assert.Equal(t, "agent", def.Function.Name)
 }
 
@@ -200,7 +200,7 @@ func TestDefinitions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			def := tt.tool.Definition()
-			assert.Equal(t, llm.ToolTypeFunction, def.Type)
+			assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 			assert.Equal(t, tt.wantName, def.Function.Name)
 			assert.NotEmpty(t, def.Function.Description)
 			assert.NotNil(t, def.Function.Parameters)
@@ -534,8 +534,8 @@ func TestReadFile_image(t *testing.T) {
 		assert.Contains(t, result.Content, "Read image file: test.png")
 		assert.Contains(t, result.Content, "image/png")
 		require.Len(t, result.MultiContent, 2)
-		assert.Equal(t, llm.ContentPartTypeText, result.MultiContent[0].Type)
-		assert.Equal(t, llm.ContentPartTypeImageURL, result.MultiContent[1].Type)
+		assert.Equal(t, llmapi.ContentPartTypeText, result.MultiContent[0].Type)
+		assert.Equal(t, llmapi.ContentPartTypeImageURL, result.MultiContent[1].Type)
 		assert.True(t, strings.HasPrefix(result.MultiContent[1].ImageURL, "data:image/png;base64,"))
 	})
 
@@ -593,8 +593,8 @@ func TestReadFile_imagePathWithSpaces(t *testing.T) {
 	assert.False(t, result.IsError)
 	assert.Equal(t, "Read image file: Screenshot 2026-03-25 at 6.55.08 AM.png (73 bytes, image/png)", result.Content)
 	require.Len(t, result.MultiContent, 2)
-	assert.Equal(t, llm.ContentPartTypeText, result.MultiContent[0].Type)
-	assert.Equal(t, llm.ContentPartTypeImageURL, result.MultiContent[1].Type)
+	assert.Equal(t, llmapi.ContentPartTypeText, result.MultiContent[0].Type)
+	assert.Equal(t, llmapi.ContentPartTypeImageURL, result.MultiContent[1].Type)
 	assert.Contains(t, result.MultiContent[1].ImageURL, "data:image/png;base64,")
 }
 

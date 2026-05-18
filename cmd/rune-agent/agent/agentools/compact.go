@@ -27,17 +27,17 @@ import (
 	"context"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type compactTool struct{}
 
 func newCompact() agent.Tool { return &compactTool{} }
 
-func (t *compactTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *compactTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "compact",
 			Description: "Compact the conversation by summarizing it into a fresh dialogue. " +
 				"Use this when the conversation has grown large and older tool results " +

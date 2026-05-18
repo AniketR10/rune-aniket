@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // benchDialogueStore creates a dialoguemanager.Store backed by an in-memory
@@ -45,14 +45,14 @@ func benchDialogueStore(b *testing.B, n, numMessages int, wsURI string) dialogue
 	backend := storagestub.NewInMemoryService()
 	store := dialoguemanager.NewStore(backend, b.TempDir())
 
-	msgs := make([]llm.Message, numMessages)
+	msgs := make([]llmapi.Message, numMessages)
 	for i := range msgs {
-		msgs[i] = llm.Message{
-			Role:    llm.RoleUser,
+		msgs[i] = llmapi.Message{
+			Role:    llmapi.RoleUser,
 			Content: fmt.Sprintf("message content %d — this simulates a realistic user prompt with moderate length", i),
 		}
 		if i%2 == 1 {
-			msgs[i].Role = llm.RoleAssistant
+			msgs[i].Role = llmapi.RoleAssistant
 			msgs[i].Content = fmt.Sprintf("assistant response %d — this is a longer response to simulate real usage with code blocks and explanations that take up more space in the serialized form", i)
 		}
 	}

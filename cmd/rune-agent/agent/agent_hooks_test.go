@@ -18,7 +18,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestHooks_PostToolUseBlock(t *testing.T) {
@@ -47,9 +47,9 @@ func TestHooks_PostToolUseBlock(t *testing.T) {
 	// The model's second turn must see the replaced content.
 	d, ok := store.getDialogue("d")
 	require.True(t, ok)
-	var lastTool *llm.Message
+	var lastTool *llmapi.Message
 	for i := range d.Messages {
-		if d.Messages[i].Role == llm.RoleTool {
+		if d.Messages[i].Role == llmapi.RoleTool {
 			lastTool = &d.Messages[i]
 		}
 	}
@@ -85,7 +85,7 @@ func TestHooks_StopContinuationGuard(t *testing.T) {
 	require.True(t, ok)
 	var assistantCount int
 	for _, m := range d.Messages {
-		if m.Role == llm.RoleAssistant {
+		if m.Role == llmapi.RoleAssistant {
 			assistantCount++
 		}
 	}
@@ -93,7 +93,7 @@ func TestHooks_StopContinuationGuard(t *testing.T) {
 	// The injected continuation reason must show up as a user message.
 	var foundCont bool
 	for _, m := range d.Messages {
-		if m.Role == llm.RoleUser && strings.Contains(m.Content, "keep going") {
+		if m.Role == llmapi.RoleUser && strings.Contains(m.Content, "keep going") {
 			foundCont = true
 		}
 	}
@@ -118,9 +118,9 @@ func TestHooks_SessionStartAdditionalContext(t *testing.T) {
 
 	d, ok := store.getDialogue("d")
 	require.True(t, ok)
-	var userMsg *llm.Message
+	var userMsg *llmapi.Message
 	for i := range d.Messages {
-		if d.Messages[i].Role == llm.RoleUser {
+		if d.Messages[i].Role == llmapi.RoleUser {
 			userMsg = &d.Messages[i]
 			break
 		}
@@ -139,16 +139,16 @@ func TestHooks_PreCompactManualBlocked(t *testing.T) {
 	store := newMockStore()
 	d := dialoguemanager.Dialogue{
 		ID: "d-pre",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "hi"},
-			{Role: llm.RoleAssistant, Content: "hello"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "hi"},
+			{Role: llmapi.RoleAssistant, Content: "hello"},
 		},
 	}
 	require.NoError(t, store.Create(context.Background(), d))
 	svc := &mockService{responses: []mockResponse{stopResponse("Summary")}}
 
-	_, _, err := CompactDialogue(context.Background(), svc, store, d, WithCompactHooks(runner))
+	_, _, err := CompactDialogue(context.Background(), svc, llmapi.ModelEntry{}, store, d, WithCompactHooks(runner))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no compact")
 }

@@ -47,12 +47,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/component/markdown"
 	mdhandler "unstable.build/go-tui/handler/markdown"
@@ -83,14 +82,14 @@ func WithHistorySystemPrompt(show bool) Option {
 }
 
 // WithAuditStore sets the audit store for the audit command.
-func WithAuditStore(store *llm.AuditStore) Option {
+func WithAuditStore(store *audit.Store) Option {
 	return func(s *shell) { s.auditStore = store }
 }
 
 // WithEffort wires the effort command to a getter/setter pair so that
 // the agentshell can display and modify the global default reasoning
 // effort that applies to all new chats.
-func WithEffort(get func() llm.ReasoningEffort, set func(llm.ReasoningEffort)) Option {
+func WithEffort(get func() llmapi.ReasoningEffort, set func(llmapi.ReasoningEffort)) Option {
 	return func(s *shell) {
 		s.getEffort = get
 		s.setEffort = set
@@ -106,22 +105,14 @@ func WithMaxTokens(get func() int, set func(int)) Option {
 	}
 }
 
-// WithServiceFactory configures lazy llm.Service construction by model name.
-// This is primarily used by the subscribed REPL command so startup does not
-// depend on eagerly creating a default model client.
-func WithServiceFactory(fn func(string) (llm.Service, error)) Option {
-	return func(s *shell) { s.serviceFactory = fn }
-}
-
 // CommandName is the parent REPL command exposed by the agent shell.
 const CommandName = "agent"
 
 // New returns a REPL handler backed by the agent shell.
-// It panics if wm, skillRegistry, fs, or localRegistry is nil.
+// It panics if wm, llmSvc, skillRegistry, or fs is nil.
 func New(
 	wm browserapi.WindowManager,
-	svc llm.Service,
-	modelRegistry llmregistry.Registry,
+	llmSvc llmapi.Service,
 	defaultModel string,
 	store dialoguemanager.Store,
 	registry *agent.Registry,
@@ -135,12 +126,13 @@ func New(
 	lsp semanticapi.LSP,
 	parser syntaxapi.Parser,
 	notifications browserapi.Notifications,
-	dataPath string,
-	localRegistry *llamacpp.Registry,
 	opts ...Option,
 ) textapi.REPLHandler {
 	if wm == nil {
 		panic("agentshell: WindowManager must not be nil")
+	}
+	if llmSvc == nil {
+		panic("agentshell: llmapi.Service must not be nil")
 	}
 	if skillRegistry == nil {
 		panic("agentshell: SkillRegistry must not be nil")
@@ -148,13 +140,9 @@ func New(
 	if fs == nil {
 		panic("agentshell: FileSystem must not be nil")
 	}
-	if localRegistry == nil {
-		panic("agentshell: local llamacpp.Registry must not be nil")
-	}
 	s := &shell{
 		wm:            wm,
-		svc:           svc,
-		modelRegistry: modelRegistry,
+		llmSvc:        llmSvc,
 		defaultModel:  defaultModel,
 		store:         store,
 		registry:      registry,
@@ -168,8 +156,6 @@ func New(
 		lsp:           lsp,
 		parser:        parser,
 		notifications: notifications,
-		dataPath:      dataPath,
-		localRegistry: localRegistry,
 	}
 	for _, o := range opts {
 		o(s)
@@ -180,7 +166,6 @@ func New(
 var _ textapi.REPLHandler = (*shell)(nil)
 
 type shell struct {
-	modelRegistry       llmregistry.Registry
 	defaultModel        string
 	store               dialoguemanager.Store
 	registry            *agent.Registry
@@ -188,9 +173,9 @@ type shell struct {
 	cfg                 configedit.Config
 	mcpInfo             MCPInfo
 	wm                  browserapi.WindowManager
-	svc                 llm.Service
+	llmSvc              llmapi.Service
 	historySystemPrompt bool
-	auditStore          *llm.AuditStore
+	auditStore          *audit.Store
 	skillRegistry       *skills.SkillRegistry
 	cwd                 workspaceapi.URI
 	fs                  workspaceapi.FileSystem
@@ -199,13 +184,10 @@ type shell struct {
 	lsp                 semanticapi.LSP
 	parser              syntaxapi.Parser
 	notifications       browserapi.Notifications
-	dataPath            string
-	getEffort           func() llm.ReasoningEffort
-	setEffort           func(llm.ReasoningEffort)
+	getEffort           func() llmapi.ReasoningEffort
+	setEffort           func(llmapi.ReasoningEffort)
 	getMaxTokens        func() int
 	setMaxTokens        func(int)
-	serviceFactory      func(string) (llm.Service, error)
-	localRegistry       *llamacpp.Registry
 }
 
 var commandNames = []string{
@@ -216,12 +198,10 @@ var commandNames = []string{
 	"effort",
 	"exit",
 	"help",
-	"local",
 	"mcp",
 	"max_tokens",
 	"model",
 	"models",
-	"providers",
 	"skills",
 	"system-prompt",
 	"tools",
@@ -308,14 +288,11 @@ func Manual() textapi.CommandManual {
 	return commandManual
 }
 
-func (s *shell) serviceForModel(model string) (llm.Service, error) {
-	if s.serviceFactory != nil {
-		return s.serviceFactory(model)
-	}
-	if s.svc == nil {
+func (s *shell) serviceForModel(_ string) (llmapi.Service, error) {
+	if s.llmSvc == nil {
 		return nil, errors.New("llm service not available")
 	}
-	return s.svc, nil
+	return s.llmSvc, nil
 }
 
 func subcommandManual(path []string) (textapi.CommandManual, string, bool) {
@@ -435,8 +412,6 @@ func (s *shell) handleCommand(
 		return s.handleChats(ctx, cmd.Args)
 	case "models":
 		return s.listModels(), nil
-	case "providers":
-		return s.handleProviders(ctx, cmd.Args)
 	case "model":
 		return s.model(ctx, cmd.Args)
 	case "tools":
@@ -457,8 +432,6 @@ func (s *shell) handleCommand(
 		return s.handleDream(ctx, cmd.Args)
 	case "effort":
 		return s.handleEffort(cmd.Args)
-	case "local":
-		return s.handleLocal(ctx, cmd.Args, pw)
 	case "exit":
 		return s.exit()
 	default:
@@ -587,19 +560,6 @@ func (s *shell) Complete(
 		return s.completeSkills(ctx, args)
 	case "chats":
 		return s.completeChats(ctx, args)
-	case "local":
-		if len(args) == 0 {
-			return iterator.FromSlice([]string{"list", "download", "delete"}), nil
-		}
-		if len(args) == 1 {
-			return iterator.FromSlice(filterNames([]string{"list", "download", "delete"}, args[0])), nil
-		}
-		if len(args) == 2 && args[0] == "delete" {
-			return s.completeLocalDelete(args[1]), nil
-		}
-		return iterator.FromSlice[string](nil), nil
-	case "providers":
-		return s.completeProviders(args), nil
 	}
 
 	if len(args) > 1 {
@@ -622,9 +582,6 @@ func (s *shell) Complete(
 func (s *shell) Help(
 	_ context.Context, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
-	if len(args) == 2 && args[0] == "local" && args[1] == "download" {
-		return markdownOutput(downloadUsage), nil
-	}
 	man, fullName, ok := subcommandManual(args)
 	if !ok {
 		return nil, fmt.Errorf("unknown command: %s", strings.Join(args, " "))
@@ -643,7 +600,7 @@ func (s *shell) listModels() iterator.Iterator[component.Responsive] {
 		ctx      int
 		provider string
 	}
-	it := s.modelRegistry.Models()
+	it := s.llmSvc.Models()
 	defer func() { _ = it.Close() }()
 	var entries []entry
 	for {
@@ -669,77 +626,6 @@ func (s *shell) listModels() iterator.Iterator[component.Responsive] {
 	return markdownOutput(b.String())
 }
 
-func (s *shell) handleLocal(
-	ctx context.Context, args []string, pw repl.ProgressWriter,
-) (iterator.Iterator[component.Responsive], error) {
-	if len(args) == 0 {
-		return nil, errors.New("usage: local <list|download|delete> [args]")
-	}
-	switch args[0] {
-	case "list":
-		if len(args) != 1 {
-			return nil, errors.New("usage: local list")
-		}
-		return s.listLocalModels(), nil
-	case "download":
-		return s.handleDownload(ctx, args[1:], pw)
-	case "delete":
-		return s.handleLocalDelete(ctx, args[1:])
-	default:
-		return nil, fmt.Errorf("unknown local subcommand: %s", args[0])
-	}
-}
-
-func (s *shell) listLocalModels() iterator.Iterator[component.Responsive] {
-	refs, err := s.localRegistry.CachedReferences()
-	if err != nil {
-		return markdownOutput(fmt.Sprintf("local list: %v", err))
-	}
-	if len(refs) == 0 {
-		return markdownOutput("*(no local models downloaded)*")
-	}
-	var b strings.Builder
-	b.WriteString("## Local Models\n\n")
-	for _, ref := range refs {
-		fmt.Fprintf(&b, "- **%s**\n", ref.String())
-	}
-	return markdownOutput(b.String())
-}
-
-func (s *shell) handleLocalDelete(
-	ctx context.Context, args []string,
-) (iterator.Iterator[component.Responsive], error) {
-	if len(args) != 1 {
-		return nil, errors.New("usage: local delete <reference>")
-	}
-	ref, err := llamacpp.ParseReference(args[0])
-	if err != nil {
-		return nil, fmt.Errorf("parse reference: %w", err)
-	}
-	if err := s.localRegistry.Delete(ctx, ref); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("%s is not present in the local cache", ref.String())
-		}
-		return nil, fmt.Errorf("local delete %s: %w", ref.String(), err)
-	}
-	return markdownOutput(fmt.Sprintf("Deleted `%s` from the local cache", ref.String())), nil
-}
-
-func (s *shell) completeLocalDelete(prefix string) iterator.Iterator[string] {
-	refs, err := s.localRegistry.CachedReferences()
-	if err != nil {
-		return iterator.FromSlice[string](nil)
-	}
-	var out []string
-	for _, ref := range refs {
-		name := ref.String()
-		if strings.HasPrefix(name, prefix) {
-			out = append(out, name)
-		}
-	}
-	return iterator.FromSlice(out)
-}
-
 func (s *shell) model(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
@@ -759,7 +645,7 @@ func (s *shell) model(
 
 func (s *shell) listTools() iterator.Iterator[component.Responsive] {
 	tools := s.registry.AllTools()
-	slices.SortFunc(tools, func(a, b llm.Tool) int {
+	slices.SortFunc(tools, func(a, b llmapi.Tool) int {
 		return strings.Compare(a.Function.Name, b.Function.Name)
 	})
 	if len(tools) == 0 {
@@ -892,7 +778,7 @@ func (s *shell) showHistory(
 	return iterator.Empty[component.Responsive](), nil
 }
 
-func formatHistoryMarkdown(msgs []llm.Message, includeSystem bool) string {
+func formatHistoryMarkdown(msgs []llmapi.Message, includeSystem bool) string {
 	if len(msgs) == 0 {
 		return ""
 	}
@@ -911,17 +797,17 @@ func formatHistoryMarkdown(msgs []llm.Message, includeSystem bool) string {
 		var section strings.Builder
 
 		switch msg.Role {
-		case llm.RoleSystem:
+		case llmapi.RoleSystem:
 			if !includeSystem {
 				continue
 			}
 			fmt.Fprintf(&section, "> **system:** %s", msg.Content)
 
-		case llm.RoleUser:
+		case llmapi.RoleUser:
 			section.WriteString("# User\n\n")
 			section.WriteString(msg.Content)
 
-		case llm.RoleAssistant:
+		case llmapi.RoleAssistant:
 			section.WriteString("# Assistant\n\n")
 			if msg.ReasoningContent != "" {
 				fmt.Fprintf(&section, "> %s\n\n", msg.ReasoningContent)
@@ -936,7 +822,7 @@ func formatHistoryMarkdown(msgs []llm.Message, includeSystem bool) string {
 				fmt.Fprintf(&section, "\n**Tool Call:** %s\n```\n%s\n```", tc.Function.Name, tc.Function.Arguments)
 			}
 
-		case llm.RoleTool:
+		case llmapi.RoleTool:
 			name := msg.Name
 			if name == "" {
 				name = toolNames[msg.ToolCallID]
@@ -992,7 +878,7 @@ func (s *shell) showAudit(
 	return iterator.Empty[component.Responsive](), nil
 }
 
-func formatAuditMarkdown(entries []llm.AuditEntry) string {
+func formatAuditMarkdown(entries []audit.Entry) string {
 	var b strings.Builder
 
 	for i, e := range entries {
@@ -1043,13 +929,13 @@ func formatAuditMarkdown(entries []llm.AuditEntry) string {
 	return b.String()
 }
 
-func formatAuditMessage(b *strings.Builder, msg llm.Message) {
+func formatAuditMessage(b *strings.Builder, msg llmapi.Message) {
 	switch msg.Role {
-	case llm.RoleSystem:
+	case llmapi.RoleSystem:
 		fmt.Fprintf(b, "> **system:** %s\n", msg.Content)
-	case llm.RoleUser:
+	case llmapi.RoleUser:
 		fmt.Fprintf(b, "**user:** %s\n", msg.Content)
-	case llm.RoleAssistant:
+	case llmapi.RoleAssistant:
 		if msg.ReasoningContent != "" {
 			fmt.Fprintf(b, "> *reasoning:* %s\n\n", msg.ReasoningContent)
 		}
@@ -1060,7 +946,7 @@ func formatAuditMessage(b *strings.Builder, msg llm.Message) {
 			fmt.Fprintf(b, "\n**tool call** %s (`%s`):\n```\n%s\n```\n",
 				tc.ID, tc.Function.Name, tc.Function.Arguments)
 		}
-	case llm.RoleTool:
+	case llmapi.RoleTool:
 		name := msg.Name
 		if name == "" {
 			name = msg.ToolCallID
@@ -1089,7 +975,7 @@ func (s *shell) exportConversation(
 	var count int
 	for _, msg := range d.Messages {
 		switch msg.Role {
-		case llm.RoleUser:
+		case llmapi.RoleUser:
 			if count > 0 {
 				_, _ = fmt.Fprintln(f)
 			}
@@ -1097,7 +983,7 @@ func (s *shell) exportConversation(
 			_, _ = fmt.Fprintln(f)
 			_, _ = fmt.Fprintln(f, msg.Content)
 			count++
-		case llm.RoleAssistant:
+		case llmapi.RoleAssistant:
 			if msg.Content == "" {
 				continue
 			}
@@ -1127,7 +1013,7 @@ func (s *shell) exportConversation(
 type auditExportEntry struct {
 	DialogueID string `json:"DialogueID"`
 	Turn       int    `json:"Turn"`
-	llm.AuditEntry
+	audit.Entry
 }
 
 func (s *shell) exportAudit(
@@ -1152,7 +1038,7 @@ func (s *shell) exportAudit(
 		if err := enc.Encode(auditExportEntry{
 			DialogueID: id,
 			Turn:       i + 1,
-			AuditEntry: e,
+			Entry:      e,
 		}); err != nil {
 			return nil, fmt.Errorf("write entry %d: %w", i+1, err)
 		}
@@ -1176,7 +1062,11 @@ func (s *shell) compactConversation(
 		return nil, fmt.Errorf("create llm service: %w", err)
 	}
 
-	_, _, err = agent.CompactDialogue(ctx, svc, s.store, d)
+	model, ok := svc.GetModel(ctx, llmapi.ModelEntry{Name: s.defaultModel})
+	if !ok {
+		return nil, fmt.Errorf("model %q not found", s.defaultModel)
+	}
+	_, _, err = agent.CompactDialogue(ctx, svc, model, s.store, d)
 	if err != nil {
 		return nil, fmt.Errorf("compact conversation %q: %w", id, err)
 	}
@@ -1198,9 +1088,9 @@ func (s *shell) clearConversation(
 		return nil, fmt.Errorf("archive conversation %q: %w", id, err)
 	}
 	// Keep the system prompt so the conversation remains usable.
-	var clearedMsgs []llm.Message
-	if len(d.Messages) > 0 && d.Messages[0].Role == llm.RoleSystem {
-		clearedMsgs = []llm.Message{d.Messages[0]}
+	var clearedMsgs []llmapi.Message
+	if len(d.Messages) > 0 && d.Messages[0].Role == llmapi.RoleSystem {
+		clearedMsgs = []llmapi.Message{d.Messages[0]}
 	}
 	if err := s.store.ArchiveAndReplace(ctx, dialoguemanager.ArchiveAndReplaceParams{
 		Dialogue:           d,
@@ -1286,14 +1176,14 @@ func (s *shell) handleMaxTokens(args []string) (iterator.Iterator[component.Resp
 }
 
 // validEffortLevels lists the allowed reasoning effort values.
-var validEffortLevels = []llm.ReasoningEffort{
-	llm.ReasoningEffortNone,
-	llm.ReasoningEffortMinimal,
-	llm.ReasoningEffortLow,
-	llm.ReasoningEffortMedium,
-	llm.ReasoningEffortHigh,
-	llm.ReasoningEffortXHigh,
-	llm.ReasoningEffortMax,
+var validEffortLevels = []llmapi.ReasoningEffort{
+	llmapi.ReasoningEffortNone,
+	llmapi.ReasoningEffortMinimal,
+	llmapi.ReasoningEffortLow,
+	llmapi.ReasoningEffortMedium,
+	llmapi.ReasoningEffortHigh,
+	llmapi.ReasoningEffortXHigh,
+	llmapi.ReasoningEffortMax,
 }
 
 func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Responsive], error) {
@@ -1303,12 +1193,12 @@ func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Respons
 	if len(args) == 0 {
 		current := s.getEffort()
 		if current == "" {
-			current = llm.ReasoningEffortHigh
+			current = llmapi.ReasoningEffortHigh
 		}
 		return markdownOutput(fmt.Sprintf("Current effort level: **%s**", current)), nil
 	}
 
-	level := llm.ReasoningEffort(args[0])
+	level := llmapi.ReasoningEffort(args[0])
 	valid := false
 	for _, v := range validEffortLevels {
 		if level == v {
@@ -1494,7 +1384,7 @@ func (s *shell) completeDialogueIDs(ctx context.Context) (iterator.Iterator[stri
 }
 
 func (s *shell) completeModelAndDialogueIDs(ctx context.Context) (iterator.Iterator[string], error) {
-	modelNames := iterator.Map(s.modelRegistry.Models(), func(e llmregistry.ModelEntry) string {
+	modelNames := iterator.Map(s.llmSvc.Models(), func(e llmapi.ModelEntry) string {
 		return e.Name
 	})
 	dialogueIDs, err := s.completeDialogueIDs(ctx)
@@ -1775,7 +1665,7 @@ func (h *forkPickerHandler) drawSeparator(w term.Writer) {
 	}
 }
 
-func forkPreviewMarkdown(msg llm.Message) string {
+func forkPreviewMarkdown(msg llmapi.Message) string {
 	preview := strings.TrimSpace(msg.Content)
 	if preview != "" {
 		return preview
@@ -1839,18 +1729,18 @@ func nextForkID(ctx context.Context, store dialoguemanager.Store, dialogueID str
 
 // forkCandidates returns the user/assistant messages from msgs as labelled
 // candidates for the fork picker.
-func forkCandidates(messages []llm.Message) []forkCandidate {
+func forkCandidates(messages []llmapi.Message) []forkCandidate {
 	candidates := make([]forkCandidate, 0, len(messages))
 	for i, msg := range messages {
 		switch msg.Role {
-		case llm.RoleUser:
+		case llmapi.RoleUser:
 			icon := ""
 			candidates = append(candidates, forkCandidate{
 				messageIndex: i,
 				label:        fmt.Sprintf("%s %s", icon, truncatePreview(messagePreview(msg), 80)),
 				preview:      forkPreviewMarkdown(msg),
 			})
-		case llm.RoleAssistant:
+		case llmapi.RoleAssistant:
 			if strings.TrimSpace(msg.Content) == "" {
 				continue
 			}
@@ -1865,7 +1755,7 @@ func forkCandidates(messages []llm.Message) []forkCandidate {
 }
 
 // messagePreview returns a single-line preview of a message's content.
-func messagePreview(msg llm.Message) string {
+func messagePreview(msg llmapi.Message) string {
 	preview := strings.TrimSpace(msg.Content)
 	if preview == "" && len(msg.ToolCalls) > 0 {
 		preview = fmt.Sprintf("(%s tool call)", msg.ToolCalls[0].Function.Name)
@@ -1942,7 +1832,7 @@ func (s *shell) forkDialogue(ctx context.Context, d dialoguemanager.Dialogue, me
 	}
 
 	end := messageIndex + 1
-	for end < len(d.Messages) && d.Messages[end].Role == llm.RoleTool {
+	for end < len(d.Messages) && d.Messages[end].Role == llmapi.RoleTool {
 		end++
 	}
 

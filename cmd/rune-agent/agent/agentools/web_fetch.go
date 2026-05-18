@@ -31,7 +31,7 @@ import (
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 const (
@@ -53,10 +53,10 @@ func NewWebFetch(f webfetch.Fetcher) agent.Tool {
 	return &webFetchTool{fetcher: f}
 }
 
-func (t *webFetchTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *webFetchTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "web_fetch",
 			Description: `Fetch a web page and extract its text content. Returns the page title,
 final URL, extraction method, and the extracted text.

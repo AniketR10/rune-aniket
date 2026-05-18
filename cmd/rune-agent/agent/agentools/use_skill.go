@@ -31,7 +31,7 @@ import (
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // NewSkillTool creates a skill tool backed by a skill registry.
@@ -58,10 +58,10 @@ type skillArgs struct {
 	Args string `json:"args,omitempty"`
 }
 
-func (t *skillTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *skillTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "skill",
 			Description: `Load and execute a skill by name. When the user's request matches a
 skill listed in the system-reminder, call this tool BEFORE generating

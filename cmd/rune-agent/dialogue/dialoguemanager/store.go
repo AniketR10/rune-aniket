@@ -34,11 +34,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 const storeIndexRecordID = "dialogue-index"
@@ -54,7 +54,7 @@ type Store interface {
 	Create(context.Context, Dialogue) error
 	Get(context.Context, string) (Dialogue, error)
 	Delete(context.Context, string) error
-	AppendMessages(context.Context, Dialogue, []llm.Message, llm.DialogueUsage) error
+	AppendMessages(context.Context, Dialogue, []llmapi.Message, llmapi.DialogueUsage) error
 	ArchiveAndReplace(context.Context, ArchiveAndReplaceParams) error
 	List(context.Context) (iterator.Iterator[DialogueHeader], error)
 }
@@ -89,8 +89,8 @@ type Dialogue struct {
 	Version      int
 	MessageCount int
 	MessagesPath string
-	Messages     []llm.Message
-	Usage        llm.DialogueUsage
+	Messages     []llmapi.Message
+	Usage        llmapi.DialogueUsage
 	UpdatedAt    time.Time
 }
 
@@ -104,7 +104,7 @@ type storedDialogue struct {
 	Version      int
 	MessageCount int
 	MessagesPath string
-	Usage        llm.DialogueUsage
+	Usage        llmapi.DialogueUsage
 	UpdatedAt    time.Time
 }
 
@@ -120,7 +120,7 @@ type DialogueHeader struct {
 	SubAgent        bool
 	Version         int
 	MessageCount    int
-	Usage           llm.DialogueUsage
+	Usage           llmapi.DialogueUsage
 	UpdatedAt       time.Time
 }
 
@@ -213,13 +213,13 @@ func (s store) ensureMessagesDir() error {
 	return os.MkdirAll(s.messagesDir, 0o700)
 }
 
-func (s store) readMessages(path string) ([]llm.Message, error) {
+func (s store) readMessages(path string) ([]llmapi.Message, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open dialogue messages %q: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
-	var msgs []llm.Message
+	var msgs []llmapi.Message
 	if err := json.NewDecoder(f).Decode(&msgs); err != nil {
 		return nil, fmt.Errorf("decode dialogue messages %q: %w", path, err)
 	}
@@ -229,7 +229,7 @@ func (s store) readMessages(path string) ([]llm.Message, error) {
 	return msgs, nil
 }
 
-func (s store) writeMessages(path string, msgs []llm.Message) error {
+func (s store) writeMessages(path string, msgs []llmapi.Message) error {
 	if path == "" {
 		return fmt.Errorf("messages path is empty")
 	}
@@ -274,17 +274,17 @@ func (s store) getStoredDialogue(
 	return doc, nil
 }
 
-func (s store) loadDialogueMessages(d Dialogue) ([]llm.Message, error) {
+func (s store) loadDialogueMessages(d Dialogue) ([]llmapi.Message, error) {
 	if d.MessagesPath == "" {
 		if len(d.Messages) == 0 {
 			return nil, nil
 		}
-		return append([]llm.Message(nil), d.Messages...), nil
+		return append([]llmapi.Message(nil), d.Messages...), nil
 	}
 	return s.readMessages(d.MessagesPath)
 }
 
-func (s store) rollbackMessages(path string, msgs []llm.Message) {
+func (s store) rollbackMessages(path string, msgs []llmapi.Message) {
 	if path == "" {
 		return
 	}
@@ -306,7 +306,7 @@ type ArchiveAndReplaceParams struct {
 	// ArchivedDialogueID is the ID under which the old messages are archived.
 	ArchivedDialogueID string
 	// Messages is the replacement message slice for the active dialogue.
-	Messages []llm.Message
+	Messages []llmapi.Message
 	// ApprovedPlan is the replacement approved-plan state for the active dialogue.
 	// When nil, the active dialogue will have no approved plan metadata.
 	ApprovedPlan *ApprovedPlan
@@ -502,7 +502,7 @@ func (s store) ArchiveAndReplace(ctx context.Context, p ArchiveAndReplaceParams)
 		archived.MessagesPath = s.messagesPathForID(archived.ID)
 	}
 
-	replaced.Messages = append([]llm.Message(nil), p.Messages...)
+	replaced.Messages = append([]llmapi.Message(nil), p.Messages...)
 	replaced.ApprovedPlan = p.ApprovedPlan
 	replaced.MessageCount = len(replaced.Messages)
 	replaced.Version = 1
@@ -586,7 +586,7 @@ func (s store) Delete(
 }
 
 func (s store) AppendMessages(
-	ctx context.Context, d Dialogue, msgs []llm.Message, usage llm.DialogueUsage,
+	ctx context.Context, d Dialogue, msgs []llmapi.Message, usage llmapi.DialogueUsage,
 ) error {
 	updated := Dialogue{}
 	current, err := s.getStoredDialogue(ctx, d.ID)
@@ -602,7 +602,7 @@ func (s store) AppendMessages(
 		}
 	}
 	updated = current
-	updated.Messages = append(append([]llm.Message(nil), currentMessages...), msgs...)
+	updated.Messages = append(append([]llmapi.Message(nil), currentMessages...), msgs...)
 	updated.MessageCount = len(updated.Messages)
 	updated.UpdatedAt = time.Now()
 	updated.Version = current.Version + 1

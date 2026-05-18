@@ -31,18 +31,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
-// ServiceFactory creates an LLM service for the given model.
-// It returns the service, the provider name (e.g. "openai",
-// "anthropic"), and any error.
-type ServiceFactory func(model string) (llm.Service, string, error)
+// ServiceFactory resolves an LLM service for the given model name.
+// It returns the service, the fully populated ModelEntry (carrying
+// the resolved Provider and ContextWindow used by the agent loop),
+// and any error.
+type ServiceFactory func(model string) (llmapi.Service, llmapi.ModelEntry, error)
 
 // GoroutineSpawner is a per-session Spawner that runs
 // sub-agents as goroutines. Each chat session creates its
@@ -174,7 +175,7 @@ func (s *GoroutineSpawner) Run(
 		model = CurrentModel(ctx)
 	}
 
-	svc, provider, err := s.serviceFactory(model)
+	svc, entry, err := s.serviceFactory(model)
 	if err != nil {
 		return RunHandle{}, fmt.Errorf("create service for model %q: %w", model, err)
 	}
@@ -211,7 +212,7 @@ func (s *GoroutineSpawner) Run(
 		ProjectInstructions: s.projectInstructions,
 		SessionKey:          sessionKey,
 		AgentID:             agentID,
-		Provider:            provider,
+		Model:               entry,
 		SubAgent:            true,
 		Workspace:           s.workspace,
 		Prompter:            s.prompter,
@@ -233,8 +234,8 @@ func (s *GoroutineSpawner) Run(
 	// freshly-created sub-agent dialogue (same WorkspaceURI source,
 	// same SubAgent flag, same AgentID/Model).
 	if len(req.InitialMessages) > 0 {
-		seed := make([]llm.Message, 0, 1+len(req.InitialMessages))
-		seed = append(seed, llm.Message{Role: llm.RoleSystem, Content: prompt})
+		seed := make([]llmapi.Message, 0, 1+len(req.InitialMessages))
+		seed = append(seed, llmapi.Message{Role: llmapi.RoleSystem, Content: prompt})
 		seed = append(seed, req.InitialMessages...)
 		if createErr := s.store.Create(runCtx, dialoguemanager.Dialogue{
 			ID:           dialogueID,

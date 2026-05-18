@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type stubFetcher struct {
@@ -114,7 +114,7 @@ func TestWebFetch(t *testing.T) {
 		tool := NewWebFetch(&stubFetcher{})
 		def := tool.Definition()
 
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		assert.Equal(t, "web_fetch", def.Function.Name)
 		assert.NotEmpty(t, def.Function.Description)
 		assert.NotNil(t, def.Function.Parameters)

@@ -1,8 +1,3 @@
-
-[submodule "cmd/rune-agent/llm/llamacpp/llama.cpp"]
-	path = cmd/rune-agent/llm/llamacpp/llama.cpp
-	url = https://github.com/ggml-org/llama.cpp.git
-	ignore = untracked
 [submodule "cmd/ox-api"]
 	path = cmd/ox-api
 	url = https://github.com/unstablebuild/ox-api.git

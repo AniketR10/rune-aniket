@@ -232,8 +232,7 @@ func (f *Facility) Close() (ret error) {
 	f.closed = true
 	// wake up any Get callers waiting on initCap.
 	f.cond.Broadcast()
-	f.reset()
-	return
+	return f.reset()
 }
 
 func (f *Facility) reset() (ret error) {
@@ -261,8 +260,7 @@ func (f *Facility) Reset() (ret error) {
 		f.mu.Unlock()
 		return nil
 	}
-	f.reset()
-	return
+	return f.reset()
 }
 
 // watchRemoteScheme drains the warm pool the first time the remote

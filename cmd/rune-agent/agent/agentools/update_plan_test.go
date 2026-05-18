@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestUpdatePlanTool(t *testing.T) {
@@ -167,7 +167,7 @@ func TestUpdatePlanTool(t *testing.T) {
 		tool := NewUpdatePlan(&mockProgressUpdater{})
 		def := tool.Definition()
 
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		assert.Equal(t, "update_plan", def.Function.Name)
 		assert.Contains(t, def.Function.Description, "Updates the task plan")
 	})

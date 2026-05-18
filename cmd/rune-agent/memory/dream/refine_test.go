@@ -30,14 +30,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestDialogueHasMemoryContext(t *testing.T) {
 	t.Run("returns true when user message contains memory-context block", func(t *testing.T) {
 		d := dialoguemanager.Dialogue{
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "<memory-context>\n[m1] foo\n</memory-context>\n\nhello"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "<memory-context>\n[m1] foo\n</memory-context>\n\nhello"},
 			},
 		}
 		assert.True(t, dialogueHasMemoryContext(d))
@@ -45,9 +45,9 @@ func TestDialogueHasMemoryContext(t *testing.T) {
 
 	t.Run("returns false when user message has no block", func(t *testing.T) {
 		d := dialoguemanager.Dialogue{
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "plain question"},
-				{Role: llm.RoleAssistant, Content: "<memory-context>not in user msg</memory-context>"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "plain question"},
+				{Role: llmapi.RoleAssistant, Content: "<memory-context>not in user msg</memory-context>"},
 			},
 		}
 		assert.False(t, dialogueHasMemoryContext(d))
@@ -55,8 +55,8 @@ func TestDialogueHasMemoryContext(t *testing.T) {
 
 	t.Run("returns false when only opening tag is present", func(t *testing.T) {
 		d := dialoguemanager.Dialogue{
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "<memory-context> unclosed"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "<memory-context> unclosed"},
 			},
 		}
 		assert.False(t, dialogueHasMemoryContext(d))
@@ -68,8 +68,8 @@ func TestBuildRefineUserPrompt(t *testing.T) {
 		deps := validDeps(t, t.TempDir())
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "no recall block"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "no recall block"},
 				}},
 			},
 		}
@@ -88,12 +88,12 @@ func TestBuildRefineUserPrompt(t *testing.T) {
 		deps := validDeps(t, t.TempDir())
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "<memory-context>\n[m1] foo\n</memory-context>\n\nhelp"},
-					{Role: llm.RoleAssistant, Content: "sure"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "<memory-context>\n[m1] foo\n</memory-context>\n\nhelp"},
+					{Role: llmapi.RoleAssistant, Content: "sure"},
 				}},
-				{ID: "d2", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "no block here"},
+				{ID: "d2", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "no block here"},
 				}},
 			},
 		}

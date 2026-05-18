@@ -31,18 +31,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/cmd/rune-agent/agentshell"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
 )
 
 // NewExtension returns an extension and its metadata.
-func NewExtension(
-	registry llmregistry.Registry,
-	defaultModel string,
-) (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
-	return &workspaceExtension{
-			defaultModel: defaultModel,
-			registry:     registry,
-		}, extensionapi.Metadata{
+func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
+	return &workspaceExtension{}, extensionapi.Metadata{
 			DeveloperID:    "Unstable Build",
 			DeveloperEmail: "it@unstable.build",
 			DeveloperKey:   "064D4ABCFA6D9338",
@@ -90,19 +83,17 @@ var (
 		extensionapi.PermissionTerminal,
 		extensionapi.PermissionSyntaxTree,
 		extensionapi.PermissionLSP,
+		extensionapi.PermissionLLM,
 	}
 )
 
-type workspaceExtension struct {
-	defaultModel string
-	registry     llmregistry.Registry
-}
+type workspaceExtension struct{}
 
 func (e *workspaceExtension) ExtendWorkspace(
 	ctx context.Context, w *extensionapi.Workspace, cfg config.Config,
 ) error {
-	h, err := newCommandEventHandler(ctx, w.Editor(ctx), w, cfg,
-		e.registry, e.defaultModel)
+	defaultModel, _ := cfg.GetString("default_model")
+	h, err := newCommandEventHandler(ctx, w.Editor(ctx), w, cfg, defaultModel)
 	if err != nil {
 		return err
 	}

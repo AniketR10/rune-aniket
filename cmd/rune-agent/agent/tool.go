@@ -29,14 +29,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // ToolResult is the result of executing a tool.
 type ToolResult struct {
 	Content           string
-	MultiContent      []llm.ContentPart // Image/multi-modal content for user-message injection.
+	MultiContent      []llmapi.ContentPart // Image/multi-modal content for user-message injection.
 	IsError           bool
 	Compact           bool // Signals that the agent should compact the conversation.
 	ClearContext      bool // Signals that the agent should clear the conversation context.
@@ -47,7 +47,7 @@ type ToolResult struct {
 
 // Tool is a capability that the agent can invoke via the LLM.
 type Tool interface {
-	Definition() llm.Tool
+	Definition() llmapi.Tool
 	Execute(ctx context.Context, arguments string) ToolResult
 	// Summary returns a short human-readable description of the
 	// arguments for display in the TUI. On parse error it returns
@@ -182,13 +182,13 @@ func (r *Registry) WithFilteredTools(allowedNames []string) *Registry {
 	return filtered
 }
 
-// Tools returns llm.Tool definitions for all registered tools,
+// Tools returns llmapi.Tool definitions for all registered tools,
 // resolved for provider, sorted by name for deterministic ordering.
 // Stable ordering is critical for prompt caching — the cache
 // breakpoint is on the last tool definition.
-func (r *Registry) Tools(provider string) []llm.Tool {
+func (r *Registry) Tools(provider string) []llmapi.Tool {
 	resolved := r.resolvedTools(provider)
-	ret := make([]llm.Tool, 0, len(resolved))
+	ret := make([]llmapi.Tool, 0, len(resolved))
 	for _, t := range resolved {
 		ret = append(ret, t.Definition())
 	}
@@ -196,10 +196,10 @@ func (r *Registry) Tools(provider string) []llm.Tool {
 	return ret
 }
 
-// AllTools returns llm.Tool definitions for all base tools,
+// AllTools returns llmapi.Tool definitions for all base tools,
 // ignoring provider overrides, sorted by name.
-func (r *Registry) AllTools() []llm.Tool {
-	ret := make([]llm.Tool, 0, len(r.tools))
+func (r *Registry) AllTools() []llmapi.Tool {
+	ret := make([]llmapi.Tool, 0, len(r.tools))
 	for _, t := range r.tools {
 		ret = append(ret, t.Definition())
 	}
@@ -207,8 +207,8 @@ func (r *Registry) AllTools() []llm.Tool {
 	return ret
 }
 
-func sortTools(tools []llm.Tool) {
-	slices.SortFunc(tools, func(a, b llm.Tool) int {
+func sortTools(tools []llmapi.Tool) {
+	slices.SortFunc(tools, func(a, b llmapi.Tool) int {
 		return strings.Compare(a.Function.Name, b.Function.Name)
 	})
 }
@@ -256,7 +256,7 @@ type Event struct {
 	Type               EventType
 	Text               string             // For EventText: the text chunk
 	Reasoning          string             // For EventReasoning: reasoning chunk
-	FinishReason       llm.FinishReason   // For EventDone: why the turn ended
+	FinishReason       llmapi.FinishReason   // For EventDone: why the turn ended
 	ToolCallID         string             // For EventToolCall/EventToolResult: unique call identifier
 	ToolName           string             // For EventToolCall/EventToolResult
 	ToolArgs           string             // For EventToolCall: JSON arguments
@@ -266,8 +266,8 @@ type Event struct {
 	ToolStartTime      time.Time          // For EventToolCall: when the tool call was announced
 	ToolDuration       time.Duration      // For EventToolResult: how long the tool took
 	Error              error              // For EventError
-	RateLimit          *llm.RateLimitInfo // For EventRateLimitWarning
-	Usage              llm.DialogueUsage  // For EventUsageUpdate: cumulative token usage
+	RateLimit          *llmapi.RateLimitInfo // For EventRateLimitWarning
+	Usage              llmapi.DialogueUsage  // For EventUsageUpdate: cumulative token usage
 	DroppedToolCallIDs []string           // For EventToolsDropped: tool call IDs removed from history
 	ArchivedDialogueID string             // For EventCompacted: ID under which old messages were archived
 	Context            ContextSnapshot    // For EventUsageUpdate/EventDone: point-in-time context state

@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -56,10 +56,10 @@ func newSearch(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileT
 	return &searchTool{fs: wfs, cwd: cwd, tracker: tracker}
 }
 
-func (t *searchTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *searchTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "search_content",
 			Description: `Search for a regex pattern in file contents across the workspace.
 Recursively walks the directory tree starting from path (defaults to

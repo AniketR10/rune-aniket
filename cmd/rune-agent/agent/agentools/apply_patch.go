@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/applypatch"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type applyPatchTool struct {
@@ -57,10 +57,10 @@ func newApplyPatch(
 	return &applyPatchTool{fs: fs, cwd: cwd, tracker: tracker, lsp: lsp}
 }
 
-func (t *applyPatchTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *applyPatchTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "apply_patch",
 			Description: `Apply a patch to create, update, or delete files. The patch uses a unified diff format.
 

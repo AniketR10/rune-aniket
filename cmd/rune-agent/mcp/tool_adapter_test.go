@@ -32,7 +32,7 @@ import (
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type greetArgs struct {
@@ -101,7 +101,7 @@ func TestToolAdapterDefinition(t *testing.T) {
 	}
 
 	def := adapter.Definition()
-	assert.Equal(t, llm.ToolTypeFunction, def.Type)
+	assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 	assert.Equal(t, "myserver_greet", def.Function.Name)
 	assert.Equal(t, "Say hello", def.Function.Description)
 	assert.NotNil(t, def.Function.Parameters)

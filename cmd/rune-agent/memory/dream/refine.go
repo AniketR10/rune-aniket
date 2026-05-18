@@ -32,7 +32,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 const (
@@ -98,7 +98,7 @@ func buildRefineUserPrompt(ctx context.Context, deps Deps) (string, error) {
 // dialogue carries a <memory-context> block.
 func dialogueHasMemoryContext(d dialoguemanager.Dialogue) bool {
 	for _, msg := range d.Messages {
-		if msg.Role != llm.RoleUser {
+		if msg.Role != llmapi.RoleUser {
 			continue
 		}
 		if strings.Contains(msg.Content, memoryContextOpenTag) &&

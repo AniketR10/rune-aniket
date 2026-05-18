@@ -35,7 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestAgentTool(t *testing.T) {
@@ -100,7 +100,7 @@ func TestAgentTool(t *testing.T) {
 		tool := NewAgentTool(&mockSpawner{}, nil, nil, nil)
 		def := tool.Definition()
 
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		assert.Equal(t, "agent", def.Function.Name)
 		assert.NotEmpty(t, def.Function.Description)
 		assert.NotNil(t, def.Function.Parameters)

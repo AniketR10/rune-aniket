@@ -45,7 +45,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestAgentRun(t *testing.T) {
@@ -71,10 +71,10 @@ func TestAgentRun(t *testing.T) {
 				d, ok := store.getDialogue("d")
 				require.True(t, ok)
 				assert.Len(t, d.Messages, 3) // system + user + assistant
-				assert.Equal(t, llm.RoleSystem, d.Messages[0].Role)
+				assert.Equal(t, llmapi.RoleSystem, d.Messages[0].Role)
 				assert.Equal(t, "test", d.Messages[0].Content)
-				assert.Equal(t, llm.RoleUser, d.Messages[1].Role)
-				assert.Equal(t, llm.RoleAssistant, d.Messages[2].Role)
+				assert.Equal(t, llmapi.RoleUser, d.Messages[1].Role)
+				assert.Equal(t, llmapi.RoleAssistant, d.Messages[2].Role)
 				assert.Equal(t, "Hello world!", d.Messages[2].Content)
 			},
 		},
@@ -104,7 +104,7 @@ func TestAgentRun(t *testing.T) {
 				secondReq := svc.requests[1]
 				var foundToolMsg bool
 				for _, msg := range secondReq.Messages {
-					if msg.Role == llm.RoleTool && msg.ToolCallID == "call_1" {
+					if msg.Role == llmapi.RoleTool && msg.ToolCallID == "call_1" {
 						foundToolMsg = true
 						assert.Equal(t, "tool output", msg.Content)
 					}
@@ -117,10 +117,10 @@ func TestAgentRun(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "tool_a", Arguments: "{}"}},
-						{ID: "c2", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "tool_b", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "tool_a", Arguments: "{}"}},
+						{ID: "c2", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "tool_b", Arguments: "{}"}},
 					},
 				},
 				stopResponse("both done"),
@@ -141,7 +141,7 @@ func TestAgentRun(t *testing.T) {
 				require.Equal(t, 2, svc.getCallCount())
 				var toolMsgCount int
 				for _, msg := range svc.requests[1].Messages {
-					if msg.Role == llm.RoleTool {
+					if msg.Role == llmapi.RoleTool {
 						toolMsgCount++
 					}
 				}
@@ -187,7 +187,7 @@ func TestAgentRun(t *testing.T) {
 				require.Equal(t, 2, svc.getCallCount())
 				var foundToolMsg bool
 				for _, msg := range svc.requests[1].Messages {
-					if msg.Role == llm.RoleTool {
+					if msg.Role == llmapi.RoleTool {
 						foundToolMsg = true
 						assert.Contains(t, msg.Content, "unknown tool")
 					}
@@ -258,7 +258,7 @@ func TestAgentRun(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{"partial "},
-					finishReason: llm.FinishReasonStop,
+					finishReason: llmapi.FinishReasonStop,
 					streamErr:    errors.New("connection reset"),
 				},
 			},
@@ -277,7 +277,7 @@ func TestAgentRun(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
+					finishReason: llmapi.FinishReasonToolCall,
 					toolCalls:    nil, // no tool calls
 				},
 			},
@@ -294,8 +294,8 @@ func TestAgentRun(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls:    []llm.ToolCall{}, // empty
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls:    []llmapi.ToolCall{}, // empty
 				},
 			},
 			config: Config{SystemPrompt: "test"},
@@ -308,7 +308,7 @@ func TestAgentRun(t *testing.T) {
 		{
 			name: "finish reason length persists partial message",
 			responses: []mockResponse{
-				{chunks: []string{"truncated"}, finishReason: llm.FinishReasonLength},
+				{chunks: []string{"truncated"}, finishReason: llmapi.FinishReasonLength},
 			},
 			config: Config{SystemPrompt: "test"},
 			assertFn: func(t *testing.T, events []Event, store *mockStore, svc *mockService) {
@@ -319,12 +319,12 @@ func TestAgentRun(t *testing.T) {
 					"FinishReasonLength must not emit an error")
 				doneEvents := eventsByType(events, EventDone)
 				require.Len(t, doneEvents, 1)
-				assert.Equal(t, llm.FinishReasonLength, doneEvents[0].FinishReason)
+				assert.Equal(t, llmapi.FinishReasonLength, doneEvents[0].FinishReason)
 				d, err := store.Get(context.Background(), "d")
 				require.NoError(t, err)
 				var found bool
 				for _, m := range d.Messages {
-					if m.Role == llm.RoleAssistant && m.Content == "truncated" {
+					if m.Role == llmapi.RoleAssistant && m.Content == "truncated" {
 						found = true
 					}
 				}
@@ -334,7 +334,7 @@ func TestAgentRun(t *testing.T) {
 		{
 			name: "unexpected finish reason (content_filter) emits error",
 			responses: []mockResponse{
-				{chunks: []string{""}, finishReason: llm.FinishReasonContentFilter},
+				{chunks: []string{""}, finishReason: llmapi.FinishReasonContentFilter},
 			},
 			config: Config{SystemPrompt: "test"},
 			assertFn: func(t *testing.T, events []Event, store *mockStore, svc *mockService) {
@@ -351,10 +351,10 @@ func TestAgentRun(t *testing.T) {
 				store.mu.Lock()
 				store.data["d"] = dialoguemanager.Dialogue{
 					ID: "d",
-					Messages: []llm.Message{
-						{Role: llm.RoleSystem, Content: "old system prompt"},
-						{Role: llm.RoleUser, Content: "previous question"},
-						{Role: llm.RoleAssistant, Content: "previous answer"},
+					Messages: []llmapi.Message{
+						{Role: llmapi.RoleSystem, Content: "old system prompt"},
+						{Role: llmapi.RoleUser, Content: "previous question"},
+						{Role: llmapi.RoleAssistant, Content: "previous answer"},
 					},
 					Version: 1,
 				}
@@ -367,9 +367,9 @@ func TestAgentRun(t *testing.T) {
 				// (skills system message is injected at index 1)
 				require.Equal(t, 1, svc.getCallCount())
 				msgs := svc.requests[0].Messages
-				assert.Equal(t, llm.RoleSystem, msgs[0].Role)
+				assert.Equal(t, llmapi.RoleSystem, msgs[0].Role)
 				assert.Equal(t, "old system prompt", msgs[0].Content)
-				assert.Equal(t, llm.RoleSystem, msgs[1].Role) // skills
+				assert.Equal(t, llmapi.RoleSystem, msgs[1].Role) // skills
 				assert.Equal(t, "previous question", msgs[2].Content)
 				assert.Equal(t, "previous answer", msgs[3].Content)
 				assert.Equal(t, "test message", msgs[len(msgs)-1].Content)
@@ -388,17 +388,17 @@ func TestAgentRun(t *testing.T) {
 				store.mu.Lock()
 				store.data["d"] = dialoguemanager.Dialogue{
 					ID: "d",
-					Messages: []llm.Message{
-						{Role: llm.RoleSystem, Content: "sys"},
-						{Role: llm.RoleUser, Content: "do things"},
+					Messages: []llmapi.Message{
+						{Role: llmapi.RoleSystem, Content: "sys"},
+						{Role: llmapi.RoleUser, Content: "do things"},
 						// Assistant message with a tool call but no
 						// matching tool result — simulates a truncated
 						// turn that was persisted before tools ran.
 						{
-							Role:    llm.RoleAssistant,
+							Role:    llmapi.RoleAssistant,
 							Content: "Let me help",
-							ToolCalls: []llm.ToolCall{
-								{ID: "call_orphan", Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`}},
+							ToolCalls: []llmapi.ToolCall{
+								{ID: "call_orphan", Function: llmapi.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`}},
 							},
 						},
 					},
@@ -410,7 +410,7 @@ func TestAgentRun(t *testing.T) {
 				assert.True(t, hasEventType(events, EventDone))
 				require.Equal(t, 1, svc.getCallCount())
 				for _, msg := range svc.requests[0].Messages {
-					if msg.Role == llm.RoleAssistant {
+					if msg.Role == llmapi.RoleAssistant {
 						assert.Empty(t, msg.ToolCalls,
 							"orphaned tool calls must be stripped before sending to LLM")
 						assert.Equal(t, "Let me help", msg.Content,
@@ -427,11 +427,11 @@ func TestAgentRun(t *testing.T) {
 				store.mu.Lock()
 				store.data["d"] = dialoguemanager.Dialogue{
 					ID: "d",
-					Messages: []llm.Message{
-						{Role: llm.RoleSystem, Content: "sys"},
-						{Role: llm.RoleUser, Content: "do things"},
+					Messages: []llmapi.Message{
+						{Role: llmapi.RoleSystem, Content: "sys"},
+						{Role: llmapi.RoleUser, Content: "do things"},
 						// Tool result with no matching assistant tool call.
-						{Role: llm.RoleTool, Content: "file contents", ToolCallID: "call_ghost"},
+						{Role: llmapi.RoleTool, Content: "file contents", ToolCallID: "call_ghost"},
 					},
 					Version: 1,
 				}
@@ -441,7 +441,7 @@ func TestAgentRun(t *testing.T) {
 				assert.True(t, hasEventType(events, EventDone))
 				require.Equal(t, 1, svc.getCallCount())
 				for _, msg := range svc.requests[0].Messages {
-					assert.NotEqual(t, llm.RoleTool, msg.Role,
+					assert.NotEqual(t, llmapi.RoleTool, msg.Role,
 						"orphaned tool result must be removed before sending to LLM")
 				}
 			},
@@ -461,7 +461,7 @@ func TestAgentRun(t *testing.T) {
 				msgs := svc.requests[0].Messages
 				var foundResource bool
 				for _, msg := range msgs {
-					if msg.Role == llm.RoleSystem && assert.Condition(t, func() bool {
+					if msg.Role == llmapi.RoleSystem && assert.Condition(t, func() bool {
 						return len(msg.Content) > 0
 					}) {
 						if contains(msg.Content, "package main") {
@@ -565,16 +565,16 @@ func TestAgentRun(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "my_tool", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "my_tool", Arguments: "{}"}},
 					},
-					usage: llm.Usage{TokensSent: 100, TokensReceived: 20, TokensReasoned: 5, TokensCached: 10},
+					usage: llmapi.Usage{TokensSent: 100, TokensReceived: 20, TokensReasoned: 5, TokensCached: 10},
 				},
 				{
 					chunks:       []string{"Done!"},
-					finishReason: llm.FinishReasonStop,
-					usage:        llm.Usage{TokensSent: 150, TokensReceived: 30, TokensReasoned: 8, TokensCached: 15},
+					finishReason: llmapi.FinishReasonStop,
+					usage:        llmapi.Usage{TokensSent: 150, TokensReceived: 30, TokensReasoned: 8, TokensCached: 15},
 				},
 			},
 			tools:  []Tool{&mockTool{name: "my_tool", result: ToolResult{Content: "ok"}}},
@@ -599,8 +599,8 @@ func TestAgentRun(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{"Hello!"},
-					finishReason: llm.FinishReasonStop,
-					rateLimitWarnings: []*llm.RateLimitInfo{
+					finishReason: llmapi.FinishReasonStop,
+					rateLimitWarnings: []*llmapi.RateLimitInfo{
 						{Message: "Rate limited. Waiting 2s before retrying (attempt 1/3)."},
 					},
 				},
@@ -654,11 +654,11 @@ func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	d := dialoguemanager.Dialogue{
 		ID:           "d",
 		ApprovedPlan: plan,
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys prompt"},
-			{Role: llm.RoleAssistant, Content: "Working on step 1..."},
-			{Role: llm.RoleUser, Content: "continue"},
-			{Role: llm.RoleAssistant, Content: "Done with step 1"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys prompt"},
+			{Role: llmapi.RoleAssistant, Content: "Working on step 1..."},
+			{Role: llmapi.RoleUser, Content: "continue"},
+			{Role: llmapi.RoleAssistant, Content: "Done with step 1"},
 		},
 		Version: 1,
 	}
@@ -666,12 +666,12 @@ func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	store.data["d"] = d
 	store.mu.Unlock()
 
-	compactedMsgs, archivedID, err := CompactDialogue(context.Background(), svc, store, d)
+	compactedMsgs, archivedID, err := CompactDialogue(context.Background(), svc, llmapi.ModelEntry{}, store, d)
 	require.NoError(t, err)
 	assert.NotEmpty(t, archivedID)
 
 	require.Len(t, compactedMsgs, 3)
-	assert.Equal(t, llm.RoleUser, compactedMsgs[1].Role,
+	assert.Equal(t, llmapi.RoleUser, compactedMsgs[1].Role,
 		"approved plan must be persisted as a user-anchor message so subsequent assistant tool_use turns are valid")
 	assert.Contains(t, compactedMsgs[1].Content, "/tmp/plan.md")
 	assert.Contains(t, compactedMsgs[1].Content, "Do X")
@@ -690,10 +690,10 @@ func TestCompactDialogueWithApprovedPlanUsesResumeProgressMessage(t *testing.T) 
 	d := dialoguemanager.Dialogue{
 		ID:           "d",
 		ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent},
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys prompt"},
-			{Role: llm.RoleAssistant, Content: "Finished step 1 and preparing step 2."},
-			{Role: llm.RoleUser, Content: "continue implementing"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys prompt"},
+			{Role: llmapi.RoleAssistant, Content: "Finished step 1 and preparing step 2."},
+			{Role: llmapi.RoleUser, Content: "continue implementing"},
 		},
 		Version: 1,
 	}
@@ -701,16 +701,16 @@ func TestCompactDialogueWithApprovedPlanUsesResumeProgressMessage(t *testing.T) 
 	store.data["d"] = d
 	store.mu.Unlock()
 
-	compactedMsgs, archivedID, err := CompactDialogue(context.Background(), svc, store, d)
+	compactedMsgs, archivedID, err := CompactDialogue(context.Background(), svc, llmapi.ModelEntry{}, store, d)
 	require.NoError(t, err)
 	assert.NotEmpty(t, archivedID)
 
 	require.Len(t, compactedMsgs, 3)
-	assert.Equal(t, llm.RoleSystem, compactedMsgs[0].Role)
-	assert.Equal(t, llm.RoleUser, compactedMsgs[1].Role,
+	assert.Equal(t, llmapi.RoleSystem, compactedMsgs[0].Role)
+	assert.Equal(t, llmapi.RoleUser, compactedMsgs[1].Role,
 		"approved plan must be persisted as a user-anchor message so subsequent assistant tool_use turns are valid")
 	assert.Contains(t, compactedMsgs[1].Content, "/tmp/plan.md")
-	assert.Equal(t, llm.RoleUser, compactedMsgs[2].Role)
+	assert.Equal(t, llmapi.RoleUser, compactedMsgs[2].Role)
 	assert.Contains(t, compactedMsgs[2].Content, "Continue executing the approved plan immediately")
 	assert.Contains(t, compactedMsgs[2].Content, "Do NOT create a new plan")
 	assert.Contains(t, compactedMsgs[2].Content, "Current progress: Step 1 is complete. Step 2 is next.")
@@ -731,11 +731,11 @@ func TestCompactDialoguePreservesSkillContent(t *testing.T) {
 
 	d := dialoguemanager.Dialogue{
 		ID: "d",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "review this"},
-			{Role: llm.RoleTool, Content: skillContent, ToolCallID: "c1"},
-			{Role: llm.RoleAssistant, Content: "reviewing..."},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "review this"},
+			{Role: llmapi.RoleTool, Content: skillContent, ToolCallID: "c1"},
+			{Role: llmapi.RoleAssistant, Content: "reviewing..."},
 		},
 		Version: 1,
 	}
@@ -743,12 +743,12 @@ func TestCompactDialoguePreservesSkillContent(t *testing.T) {
 	store.data["d"] = d
 	store.mu.Unlock()
 
-	compactedMsgs, _, err := CompactDialogue(context.Background(), svc, store, d)
+	compactedMsgs, _, err := CompactDialogue(context.Background(), svc, llmapi.ModelEntry{}, store, d)
 	require.NoError(t, err)
 
 	var foundSkill bool
 	for _, msg := range compactedMsgs {
-		if msg.Role == llm.RoleSystem && strings.Contains(msg.Content, `<skill_content name="review">`) {
+		if msg.Role == llmapi.RoleSystem && strings.Contains(msg.Content, `<skill_content name="review">`) {
 			foundSkill = true
 		}
 	}
@@ -946,11 +946,11 @@ func TestAgentConcurrency(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "t", Arguments: "{}"}},
-						{ID: "c2", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "t", Arguments: "{}"}},
-						{ID: "c3", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "t", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "t", Arguments: "{}"}},
+						{ID: "c2", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "t", Arguments: "{}"}},
+						{ID: "c3", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "t", Arguments: "{}"}},
 					},
 				},
 				stopResponse("done"),
@@ -993,10 +993,10 @@ func TestParallelToolExecution(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "slow", Arguments: "{}"}},
-						{ID: "c2", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "fast", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "slow", Arguments: "{}"}},
+						{ID: "c2", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "fast", Arguments: "{}"}},
 					},
 				},
 				stopResponse("done"),
@@ -1026,7 +1026,7 @@ func TestParallelToolExecution(t *testing.T) {
 		secondReq := svc.requests[1]
 		var toolIDs []string
 		for _, msg := range secondReq.Messages {
-			if msg.Role == llm.RoleTool {
+			if msg.Role == llmapi.RoleTool {
 				toolIDs = append(toolIDs, msg.ToolCallID)
 			}
 		}
@@ -1040,10 +1040,10 @@ func TestParallelToolExecution(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "t", Arguments: "{}"}},
-						{ID: "c2", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "t", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "t", Arguments: "{}"}},
+						{ID: "c2", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "t", Arguments: "{}"}},
 					},
 				},
 				stopResponse("done"),
@@ -1087,9 +1087,9 @@ func TestParallelToolExecution(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "call-abc", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "t", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "call-abc", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "t", Arguments: "{}"}},
 					},
 				},
 				stopResponse("done"),
@@ -1162,7 +1162,7 @@ func TestAutoDiagnostics(t *testing.T) {
 		secondReq := svc.requests[1]
 		var toolIDs []string
 		for _, msg := range secondReq.Messages {
-			if msg.Role == llm.RoleTool {
+			if msg.Role == llmapi.RoleTool {
 				toolIDs = append(toolIDs, msg.ToolCallID)
 			}
 		}
@@ -1171,7 +1171,7 @@ func TestAutoDiagnostics(t *testing.T) {
 		// The assistant message should have both tool calls
 		var assistantToolCalls int
 		for _, msg := range secondReq.Messages {
-			if msg.Role == llm.RoleAssistant {
+			if msg.Role == llmapi.RoleAssistant {
 				assistantToolCalls = len(msg.ToolCalls)
 			}
 		}
@@ -1286,10 +1286,10 @@ func TestAutoDiagnostics(t *testing.T) {
 			responses: []mockResponse{
 				{
 					chunks:       []string{""},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{
-						{ID: "c1", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "apply_patch", Arguments: `{"patch":"p"}`}},
-						{ID: "c2", Type: llm.ToolTypeFunction, Function: llm.FunctionCall{Name: "other", Arguments: "{}"}},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{
+						{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "apply_patch", Arguments: `{"patch":"p"}`}},
+						{ID: "c2", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "other", Arguments: "{}"}},
 					},
 				},
 				stopResponse("done"),
@@ -1322,7 +1322,7 @@ func TestAutoDiagnostics(t *testing.T) {
 		secondReq := svc.requests[1]
 		var toolIDs []string
 		for _, msg := range secondReq.Messages {
-			if msg.Role == llm.RoleTool {
+			if msg.Role == llmapi.RoleTool {
 				toolIDs = append(toolIDs, msg.ToolCallID)
 			}
 		}
@@ -1349,12 +1349,12 @@ func TestAutoDiagnostics(t *testing.T) {
 				responses: []mockResponse{
 					{
 						chunks:       []string{""},
-						finishReason: llm.FinishReasonToolCall,
-						toolCalls: []llm.ToolCall{
+						finishReason: llmapi.FinishReasonToolCall,
+						toolCalls: []llmapi.ToolCall{
 							{
 								ID:   origCallID,
-								Type: llm.ToolTypeFunction,
-								Function: llm.FunctionCall{
+								Type: llmapi.ToolTypeFunction,
+								Function: llmapi.FunctionCall{
 									Name:      "apply_patch",
 									Arguments: `{"patch":"p"}`,
 								},
@@ -1388,9 +1388,9 @@ func TestAutoDiagnostics(t *testing.T) {
 			// function_call ProviderItem appended after the original items.
 			require.Equal(t, 2, svc.getCallCount())
 			secondReq := svc.requests[1]
-			var assistantMsg llm.Message
+			var assistantMsg llmapi.Message
 			for _, m := range secondReq.Messages {
-				if m.Role == llm.RoleAssistant {
+				if m.Role == llmapi.RoleAssistant {
 					assistantMsg = m
 				}
 			}
@@ -1509,11 +1509,11 @@ func TestAgentCompact(t *testing.T) {
 		// tool_calls is not followed by matching tool result messages.
 		summarizeMsgs := svc.requests[1].Messages
 		for i, msg := range summarizeMsgs {
-			if msg.Role == llm.RoleAssistant && len(msg.ToolCalls) > 0 {
+			if msg.Role == llmapi.RoleAssistant && len(msg.ToolCalls) > 0 {
 				for _, tc := range msg.ToolCalls {
 					found := false
 					for j := i + 1; j < len(summarizeMsgs); j++ {
-						if summarizeMsgs[j].Role == llm.RoleTool && summarizeMsgs[j].ToolCallID == tc.ID {
+						if summarizeMsgs[j].Role == llmapi.RoleTool && summarizeMsgs[j].ToolCallID == tc.ID {
 							found = true
 							break
 						}
@@ -1528,10 +1528,10 @@ func TestAgentCompact(t *testing.T) {
 		// (skills system message is injected at index 1)
 		postMsgs := svc.requests[2].Messages
 		require.Len(t, postMsgs, 3)
-		assert.Equal(t, llm.RoleSystem, postMsgs[0].Role)
+		assert.Equal(t, llmapi.RoleSystem, postMsgs[0].Role)
 		assert.Equal(t, "test system prompt", postMsgs[0].Content)
-		assert.Equal(t, llm.RoleSystem, postMsgs[1].Role) // skills
-		assert.Equal(t, llm.RoleUser, postMsgs[2].Role)
+		assert.Equal(t, llmapi.RoleSystem, postMsgs[1].Role) // skills
+		assert.Equal(t, llmapi.RoleUser, postMsgs[2].Role)
 		assert.Equal(t, CompactSummaryPrefix+"Summary of work so far", postMsgs[2].Content)
 
 		// Archived dialogue exists with old messages
@@ -1544,10 +1544,10 @@ func TestAgentCompact(t *testing.T) {
 		d, ok := store.getDialogue("d")
 		assert.True(t, ok)
 		require.GreaterOrEqual(t, len(d.Messages), 3)
-		assert.Equal(t, llm.RoleSystem, d.Messages[0].Role)
-		assert.Equal(t, llm.RoleUser, d.Messages[1].Role)
+		assert.Equal(t, llmapi.RoleSystem, d.Messages[0].Role)
+		assert.Equal(t, llmapi.RoleUser, d.Messages[1].Role)
 		assert.True(t, strings.HasPrefix(d.Messages[1].Content, CompactSummaryPrefix))
-		assert.Equal(t, llm.RoleAssistant, d.Messages[2].Role)
+		assert.Equal(t, llmapi.RoleAssistant, d.Messages[2].Role)
 
 		// Events include compacting/compacted/done in correct order
 		assert.True(t, hasEventType(events, EventCompacting))
@@ -1582,7 +1582,7 @@ func TestAgentCompact(t *testing.T) {
 		thirdMsgs := svc.requests[2].Messages
 		var foundErrorTool bool
 		for _, msg := range thirdMsgs {
-			if msg.Role == llm.RoleTool && contains(msg.Content, "Compaction failed") {
+			if msg.Role == llmapi.RoleTool && contains(msg.Content, "Compaction failed") {
 				foundErrorTool = true
 			}
 		}
@@ -1603,7 +1603,7 @@ func TestAgentCompact(t *testing.T) {
 			responses: []mockResponse{
 				toolCallResponse("compact", "{}", "c1"),
 				// summarize() stream error
-				{chunks: []string{"partial"}, finishReason: llm.FinishReasonStop, streamErr: errors.New("connection reset")},
+				{chunks: []string{"partial"}, finishReason: llmapi.FinishReasonStop, streamErr: errors.New("connection reset")},
 				stopResponse("I see"),
 			},
 		}
@@ -1670,10 +1670,10 @@ func TestAgentCompact(t *testing.T) {
 		}
 		store := newMockStore()
 		// Pre-populate with history
-		oldMessages := []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "old question"},
-			{Role: llm.RoleAssistant, Content: "old answer"},
+		oldMessages := []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "old question"},
+			{Role: llmapi.RoleAssistant, Content: "old answer"},
 		}
 		store.mu.Lock()
 		store.data["d"] = dialoguemanager.Dialogue{
@@ -1716,18 +1716,18 @@ func TestAgentCompact(t *testing.T) {
 		store.mu.Lock()
 		store.data["d"] = dialoguemanager.Dialogue{
 			ID: "d",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleUser, Content: "prev summary"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
+				{Role: llmapi.RoleUser, Content: "prev summary"},
 			},
 			Version: 1,
 		}
 		// Pre-existing archive from a first compaction.
 		store.data["d-archived"] = dialoguemanager.Dialogue{
 			ID: "d-archived",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleUser, Content: "original messages"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
+				{Role: llmapi.RoleUser, Content: "original messages"},
 			},
 			Version: 1,
 		}
@@ -1811,10 +1811,10 @@ func TestAgentCompact(t *testing.T) {
 				// 1. LLM generates text, then calls compact
 				{
 					chunks:       []string{"Let me compact"},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{{
-						ID: "c1", Type: llm.ToolTypeFunction,
-						Function: llm.FunctionCall{Name: "compact", Arguments: "{}"},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{{
+						ID: "c1", Type: llmapi.ToolTypeFunction,
+						Function: llmapi.FunctionCall{Name: "compact", Arguments: "{}"},
 					}},
 				},
 				// 2. summarize() call
@@ -1822,10 +1822,10 @@ func TestAgentCompact(t *testing.T) {
 				// 3. post-compaction: LLM generates short text + tool call
 				{
 					chunks:       []string{"com"},
-					finishReason: llm.FinishReasonToolCall,
-					toolCalls: []llm.ToolCall{{
-						ID: "c2", Type: llm.ToolTypeFunction,
-						Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`},
+					finishReason: llmapi.FinishReasonToolCall,
+					toolCalls: []llmapi.ToolCall{{
+						ID: "c2", Type: llmapi.ToolTypeFunction,
+						Function: llmapi.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`},
 					}},
 				},
 				// 4. after read_file result, LLM finishes
@@ -1916,14 +1916,14 @@ func TestAgentCompact(t *testing.T) {
 		require.True(t, ok)
 		require.GreaterOrEqual(t, len(d.Messages), 3,
 			"should have system + skill + summary")
-		assert.Equal(t, llm.RoleSystem, d.Messages[1].Role)
+		assert.Equal(t, llmapi.RoleSystem, d.Messages[1].Role)
 		assert.Contains(t, d.Messages[1].Content, `<skill_content name="review">`)
 
 		// Post-compaction LLM request should include the preserved skill.
 		postReq := svc.requests[len(svc.requests)-1]
 		var foundSkill bool
 		for _, msg := range postReq.Messages {
-			if msg.Role == llm.RoleSystem &&
+			if msg.Role == llmapi.RoleSystem &&
 				contains(msg.Content, `<skill_content name="review">`) {
 				foundSkill = true
 			}
@@ -1933,11 +1933,11 @@ func TestAgentCompact(t *testing.T) {
 	})
 
 	t.Run("compact deduplicates multiple activations of same skill", func(t *testing.T) {
-		msgs := []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleTool, Content: `<skill_content name="x">` + "\nbody\n</skill_content>", ToolCallID: "c1"},
-			{Role: llm.RoleTool, Content: `<skill_content name="x">` + "\nbody\n</skill_content>", ToolCallID: "c2"},
-			{Role: llm.RoleTool, Content: `<skill_content name="y">` + "\nother\n</skill_content>", ToolCallID: "c3"},
+		msgs := []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleTool, Content: `<skill_content name="x">` + "\nbody\n</skill_content>", ToolCallID: "c1"},
+			{Role: llmapi.RoleTool, Content: `<skill_content name="x">` + "\nbody\n</skill_content>", ToolCallID: "c2"},
+			{Role: llmapi.RoleTool, Content: `<skill_content name="y">` + "\nother\n</skill_content>", ToolCallID: "c3"},
 		}
 		preserved := extractSkillContent(msgs)
 		assert.Len(t, preserved, 2, "should deduplicate identical skill content")
@@ -1970,7 +1970,7 @@ func TestAgentCompact(t *testing.T) {
 		postMsgs := svc.requests[2].Messages
 		var foundResource bool
 		for _, msg := range postMsgs {
-			if msg.Role == llm.RoleSystem && contains(msg.Content, "package main") {
+			if msg.Role == llmapi.RoleSystem && contains(msg.Content, "package main") {
 				foundResource = true
 			}
 		}
@@ -2053,8 +2053,8 @@ func TestClearContext(t *testing.T) {
 		require.True(t, ok)
 		require.GreaterOrEqual(t, len(stored.Messages), 2,
 			"cleared dialogue must have at least system+user anchoring the plan")
-		assert.Equal(t, llm.RoleSystem, stored.Messages[0].Role)
-		assert.Equal(t, llm.RoleUser, stored.Messages[1].Role,
+		assert.Equal(t, llmapi.RoleSystem, stored.Messages[0].Role)
+		assert.Equal(t, llmapi.RoleUser, stored.Messages[1].Role,
 			"second message must be a user turn so subsequent assistant tool_use turns are valid")
 		assert.Contains(t, stored.Messages[1].Content, "Plan approved. Saved to /tmp/plan.md")
 		assert.Contains(t, stored.Messages[1].Content, planContent)
@@ -2063,11 +2063,11 @@ func TestClearContext(t *testing.T) {
 		// before it.
 		var sawUser bool
 		for _, msg := range stored.Messages {
-			if msg.Role == llm.RoleUser {
+			if msg.Role == llmapi.RoleUser {
 				sawUser = true
 				continue
 			}
-			if msg.Role == llm.RoleAssistant && len(msg.ToolCalls) > 0 {
+			if msg.Role == llmapi.RoleAssistant && len(msg.ToolCalls) > 0 {
 				assert.True(t, sawUser,
 					"assistant tool_use message appeared before any user message: %+v", msg)
 			}
@@ -2114,24 +2114,24 @@ func TestClearContext(t *testing.T) {
 
 		// Strip system messages to mirror what providers like Anthropic do
 		// when extracting the system block out of the messages array.
-		var nonSystem []llm.Message
+		var nonSystem []llmapi.Message
 		for _, msg := range followUpReq.Messages {
-			if msg.Role == llm.RoleSystem {
+			if msg.Role == llmapi.RoleSystem {
 				continue
 			}
 			nonSystem = append(nonSystem, msg)
 		}
 		require.NotEmpty(t, nonSystem, "follow-up request must contain at least one non-system message")
-		assert.Equal(t, llm.RoleUser, nonSystem[0].Role,
+		assert.Equal(t, llmapi.RoleUser, nonSystem[0].Role,
 			"first non-system message must be a user turn (Anthropic rejects assistant-first)")
 		for i, msg := range nonSystem {
-			if msg.Role != llm.RoleAssistant || len(msg.ToolCalls) == 0 {
+			if msg.Role != llmapi.RoleAssistant || len(msg.ToolCalls) == 0 {
 				continue
 			}
 			require.Less(t, i+1, len(nonSystem),
 				"assistant tool_use at end of request has no following tool_result")
 			next := nonSystem[i+1]
-			assert.Equal(t, llm.RoleTool, next.Role,
+			assert.Equal(t, llmapi.RoleTool, next.Role,
 				"assistant tool_use must be immediately followed by a tool_result (got %s at index %d)",
 				next.Role, i+1)
 		}
@@ -2150,7 +2150,7 @@ func TestClearContext(t *testing.T) {
 				stopResponse("Continuing after compaction"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				countCalls++
 				if countCalls <= 1 {
 					return 900, nil // triggers auto-compact
@@ -2165,16 +2165,16 @@ func TestClearContext(t *testing.T) {
 		store.data["d"] = dialoguemanager.Dialogue{
 			ID:           "d",
 			ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: planPath, Body: planContent},
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleAssistant, Content: "I'll start working on step 1..."},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
+				{Role: llmapi.RoleAssistant, Content: "I'll start working on step 1..."},
 			},
 			Version: 1,
 		}
 		store.mu.Unlock()
 
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-			Config{SystemPrompt: "sys"})
+			Config{SystemPrompt: "sys", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 		it := ag.Run(context.Background(), "d", "continue working")
 		events := collectEvents(t, it)
@@ -2205,7 +2205,7 @@ func TestClearContext(t *testing.T) {
 				stopResponse("Done"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				countCalls++
 				if countCalls <= 2 {
 					return 900, nil // triggers auto-compact twice
@@ -2220,17 +2220,17 @@ func TestClearContext(t *testing.T) {
 		store.data["d"] = dialoguemanager.Dialogue{
 			ID:           "d",
 			ApprovedPlan: &dialoguemanager.ApprovedPlan{Body: planContent},
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleUser, Content: CompactSummaryPrefix + "Prior summary"},
-				{Role: llm.RoleAssistant, Content: "Working on it..."},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
+				{Role: llmapi.RoleUser, Content: CompactSummaryPrefix + "Prior summary"},
+				{Role: llmapi.RoleAssistant, Content: "Working on it..."},
 			},
 			Version: 1,
 		}
 		store.mu.Unlock()
 
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-			Config{SystemPrompt: "sys"})
+			Config{SystemPrompt: "sys", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 		it := ag.Run(context.Background(), "d", "keep going")
 		events := collectEvents(t, it)
@@ -2257,7 +2257,7 @@ func TestClearContext(t *testing.T) {
 				stopResponse("Done"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				countCalls++
 				if countCalls <= 2 {
 					return 900, nil
@@ -2271,16 +2271,16 @@ func TestClearContext(t *testing.T) {
 		store.data["d"] = dialoguemanager.Dialogue{
 			ID:           "d",
 			ApprovedPlan: &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: planContent},
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleAssistant, Content: "Working on it..."},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
+				{Role: llmapi.RoleAssistant, Content: "Working on it..."},
 			},
 			Version: 1,
 		}
 		store.mu.Unlock()
 
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-			Config{SystemPrompt: "sys"})
+			Config{SystemPrompt: "sys", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 		it := ag.Run(context.Background(), "d", "keep going")
 		events := collectEvents(t, it)
@@ -2291,7 +2291,7 @@ func TestClearContext(t *testing.T) {
 		require.GreaterOrEqual(t, len(stored.Messages), 3)
 		require.NotNil(t, stored.ApprovedPlan)
 		assert.Equal(t, planContent, stored.ApprovedPlan.Body)
-		assert.Equal(t, llm.RoleUser, stored.Messages[2].Role)
+		assert.Equal(t, llmapi.RoleUser, stored.Messages[2].Role)
 		assert.Contains(t, stored.Messages[2].Content, "Continue executing the approved plan immediately")
 		assert.Contains(t, stored.Messages[2].Content, "Do NOT create a new plan")
 	})
@@ -2299,10 +2299,10 @@ func TestClearContext(t *testing.T) {
 
 // assertToolCallPresent verifies that a tool result message with the given
 // ToolCallID exists and has the expected content.
-func assertToolCallPresent(t *testing.T, msgs []llm.Message, toolCallID, wantContent string) {
+func assertToolCallPresent(t *testing.T, msgs []llmapi.Message, toolCallID, wantContent string) {
 	t.Helper()
 	for _, msg := range msgs {
-		if msg.Role == llm.RoleTool && msg.ToolCallID == toolCallID {
+		if msg.Role == llmapi.RoleTool && msg.ToolCallID == toolCallID {
 			assert.Equal(t, wantContent, msg.Content)
 			return
 		}
@@ -2507,27 +2507,30 @@ func TestNoTransientContextHint(t *testing.T) {
 	svc := &mockService{
 		responses: []mockResponse{stopResponse("noted")},
 		// Simulate 80% context usage.
-		countTokensFn:  func([]llm.Message) (int, error) { return 8000, nil },
+		countTokensFn:  func(llmapi.ModelEntry, []llmapi.Message) (int, error) { return 8000, nil },
 		contextWindowN: 10000,
 	}
 	store := newMockStore()
 	store.mu.Lock()
 	store.data["d"] = dialoguemanager.Dialogue{
-		ID: "d", Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "q"},
-			{Role: llm.RoleAssistant, Content: "a"},
+		ID: "d", Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "q"},
+			{Role: llmapi.RoleAssistant, Content: "a"},
 		}, Version: 1,
 	}
 	store.mu.Unlock()
 
-	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{SystemPrompt: "sys"})
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{
+		SystemPrompt: "sys",
+		Model:        llmapi.ModelEntry{ContextWindow: 10000},
+	})
 	it := ag.Run(context.Background(), "d", "new")
 	_ = collectEvents(t, it)
 
 	require.Equal(t, 1, svc.getCallCount())
 	for _, msg := range svc.requests[0].Messages {
-		if msg.Role == llm.RoleSystem {
+		if msg.Role == llmapi.RoleSystem {
 			assert.NotContains(t, msg.Content, "tokens)",
 				"no transient context hint should be injected — compaction guidance is in the static system prompt")
 		}
@@ -2611,7 +2614,7 @@ Greet the user warmly.
 	require.Equal(t, 1, svc.getCallCount())
 	req := svc.requests[0]
 	require.True(t, len(req.Messages) >= 3, "expected at least 3 messages (system + skills + user)")
-	assert.Equal(t, llm.RoleSystem, req.Messages[1].Role)
+	assert.Equal(t, llmapi.RoleSystem, req.Messages[1].Role)
 	assert.Contains(t, req.Messages[1].Content, "greet")
 	assert.Contains(t, req.Messages[1].Content, "skill tool")
 
@@ -2619,7 +2622,7 @@ Greet the user warmly.
 	d, ok := store.getDialogue("d")
 	require.True(t, ok)
 	for _, msg := range d.Messages {
-		if msg.Role == llm.RoleSystem && msg.Content != "test" {
+		if msg.Role == llmapi.RoleSystem && msg.Content != "test" {
 			t.Errorf("persisted messages should not contain transient skills message, found: %s", msg.Content)
 		}
 	}
@@ -2639,9 +2642,9 @@ func TestSkillsNotInjectedWhenEmpty(t *testing.T) {
 	req := svc.requests[0]
 	// system + skills (builtins) + user messages.
 	assert.Equal(t, 3, len(req.Messages))
-	assert.Equal(t, llm.RoleSystem, req.Messages[0].Role)
-	assert.Equal(t, llm.RoleSystem, req.Messages[1].Role) // builtin skills
-	assert.Equal(t, llm.RoleUser, req.Messages[2].Role)
+	assert.Equal(t, llmapi.RoleSystem, req.Messages[0].Role)
+	assert.Equal(t, llmapi.RoleSystem, req.Messages[1].Role) // builtin skills
+	assert.Equal(t, llmapi.RoleUser, req.Messages[2].Role)
 	assert.Contains(t, req.Messages[1].Content, "explore")
 	assert.Contains(t, req.Messages[1].Content, "plan")
 }
@@ -2680,8 +2683,8 @@ func TestPersistMessages_AppendFallback(t *testing.T) {
 
 	// Pre-populate store so Create returns ErrAlreadyExists
 	store.mu.Lock()
-	store.data["d"] = dialoguemanager.Dialogue{ID: "d", Messages: []llm.Message{
-		{Role: llm.RoleUser, Content: "old"},
+	store.data["d"] = dialoguemanager.Dialogue{ID: "d", Messages: []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "old"},
 	}}
 	store.mu.Unlock()
 
@@ -2703,8 +2706,8 @@ func TestPersistMessages_AppendError(t *testing.T) {
 
 	// Pre-populate so Create → ErrAlreadyExists → AppendMessages → error
 	store.mu.Lock()
-	store.data["d"] = dialoguemanager.Dialogue{ID: "d", Messages: []llm.Message{
-		{Role: llm.RoleUser, Content: "old"},
+	store.data["d"] = dialoguemanager.Dialogue{ID: "d", Messages: []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "old"},
 	}}
 	store.mu.Unlock()
 
@@ -2752,10 +2755,10 @@ func TestPersistMessages_SaveOnCancelledContext(t *testing.T) {
 		store.mu.Lock()
 		store.data["d"] = dialoguemanager.Dialogue{
 			ID: "d",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "test"},
-				{Role: llm.RoleUser, Content: "old message"},
-				{Role: llm.RoleAssistant, Content: "old response"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "test"},
+				{Role: llmapi.RoleUser, Content: "old message"},
+				{Role: llmapi.RoleAssistant, Content: "old response"},
 			},
 		}
 		store.mu.Unlock()
@@ -2824,12 +2827,12 @@ func TestAgentRun_CheckpointsAfterToolIteration(t *testing.T) {
 	d, ok := store.getDialogue("d")
 	require.True(t, ok, "dialogue should be checkpointed before the next completion starts")
 	require.Len(t, d.Messages, 4)
-	assert.Equal(t, llm.RoleSystem, d.Messages[0].Role)
-	assert.Equal(t, llm.RoleUser, d.Messages[1].Role)
-	assert.Equal(t, llm.RoleAssistant, d.Messages[2].Role)
+	assert.Equal(t, llmapi.RoleSystem, d.Messages[0].Role)
+	assert.Equal(t, llmapi.RoleUser, d.Messages[1].Role)
+	assert.Equal(t, llmapi.RoleAssistant, d.Messages[2].Role)
 	require.Len(t, d.Messages[2].ToolCalls, 1)
 	assert.Equal(t, "c1", d.Messages[2].ToolCalls[0].ID)
-	assert.Equal(t, llm.RoleTool, d.Messages[3].Role)
+	assert.Equal(t, llmapi.RoleTool, d.Messages[3].Role)
 	assert.Equal(t, "c1", d.Messages[3].ToolCallID)
 	assert.Equal(t, "tool output", d.Messages[3].Content)
 
@@ -2877,11 +2880,17 @@ type mockService struct {
 	callCount int
 	responses []mockResponse
 	// captured requests for assertion
-	requests []llm.Request
+	requests []llmapi.Request
+	// captured model entry passed to each CreateCompletion call
+	models []llmapi.ModelEntry
 
 	// Optional overrides for token counting / context window.
-	countTokensFn  func([]llm.Message) (int, error)
+	countTokensFn  func(llmapi.ModelEntry, []llmapi.Message) (int, error)
 	contextWindowN int
+
+	// modelCatalog backs Models() / GetModel(). Tests that care about
+	// catalog behaviour seed this; defaults to a single synthetic entry.
+	modelCatalog []llmapi.ModelEntry
 
 	// beforeCompletion is called just before processing the mock
 	// response, allowing tests to cancel contexts etc.
@@ -2891,12 +2900,12 @@ type mockService struct {
 type mockResponse struct {
 	chunks            []string
 	reasoningChunks   []string
-	finishReason      llm.FinishReason
-	toolCalls         []llm.ToolCall
-	usage             llm.Usage
+	finishReason      llmapi.FinishReason
+	toolCalls         []llmapi.ToolCall
+	usage             llmapi.Usage
 	err               error
 	streamErr         error                // error to return from iterator.Err() after consuming
-	rateLimitWarnings []*llm.RateLimitInfo // warnings to emit before text deltas
+	rateLimitWarnings []*llmapi.RateLimitInfo // warnings to emit before text deltas
 	// providerItems are forwarded into DoneData.Message.ProviderItems so
 	// tests can simulate a Responses API stream that emits opaque items
 	// (reasoning blobs, function_call entries) which must be replayed
@@ -2905,8 +2914,8 @@ type mockResponse struct {
 }
 
 func (m *mockService) CreateCompletion(
-	ctx context.Context, req llm.Request,
-) (iterator.Iterator[llm.Event], error) {
+	ctx context.Context, model llmapi.ModelEntry, req llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -2924,6 +2933,7 @@ func (m *mockService) CreateCompletion(
 	idx := m.callCount
 	m.callCount++
 	m.requests = append(m.requests, req)
+	m.models = append(m.models, model)
 	m.mu.Unlock()
 
 	if idx >= len(m.responses) {
@@ -2935,12 +2945,12 @@ func (m *mockService) CreateCompletion(
 		return nil, resp.err
 	}
 
-	var items []llm.Event
+	var items []llmapi.Event
 
 	// Emit rate limit warnings (before text/reasoning).
 	for _, rl := range resp.rateLimitWarnings {
-		items = append(items, llm.Event{
-			Type:      llm.EventRateLimitWarning,
+		items = append(items, llmapi.Event{
+			Type:      llmapi.EventRateLimitWarning,
 			RateLimit: rl,
 		})
 	}
@@ -2951,39 +2961,39 @@ func (m *mockService) CreateCompletion(
 			// Paired with a text chunk — will be emitted below.
 			continue
 		}
-		items = append(items, llm.Event{Type: llm.EventReasoningDelta, Reasoning: chunk})
+		items = append(items, llmapi.Event{Type: llmapi.EventReasoningDelta, Reasoning: chunk})
 	}
 
 	// Emit text deltas, interleaving any paired reasoning deltas.
 	for i, chunk := range resp.chunks {
 		if i < len(resp.reasoningChunks) {
-			items = append(items, llm.Event{Type: llm.EventReasoningDelta, Reasoning: resp.reasoningChunks[i]})
+			items = append(items, llmapi.Event{Type: llmapi.EventReasoningDelta, Reasoning: resp.reasoningChunks[i]})
 		}
 		if chunk != "" {
-			items = append(items, llm.Event{Type: llm.EventTextDelta, Text: chunk})
+			items = append(items, llmapi.Event{Type: llmapi.EventTextDelta, Text: chunk})
 		}
 	}
 
 	// Emit individual tool call done events.
 	for i := range resp.toolCalls {
 		tc := resp.toolCalls[i]
-		items = append(items, llm.Event{Type: llm.EventToolCallDone, ToolCall: &tc})
+		items = append(items, llmapi.Event{Type: llmapi.EventToolCallDone, ToolCall: &tc})
 	}
 
 	// Build the final assistant message for DoneData.
 	content := strings.Join(resp.chunks, "")
 	reasoning := strings.Join(resp.reasoningChunks, "")
-	msg := llm.Message{
-		Role:             llm.RoleAssistant,
+	msg := llmapi.Message{
+		Role:             llmapi.RoleAssistant,
 		Content:          content,
 		ReasoningContent: reasoning,
 		ToolCalls:        resp.toolCalls,
 		ProviderItems:    resp.providerItems,
 	}
 
-	items = append(items, llm.Event{
-		Type: llm.EventStreamDone,
-		DoneData: &llm.DoneData{
+	items = append(items, llmapi.Event{
+		Type: llmapi.EventStreamDone,
+		DoneData: &llmapi.DoneData{
 			Message:      msg,
 			FinishReason: resp.finishReason,
 			Usage:        resp.usage,
@@ -3000,18 +3010,52 @@ func (m *mockService) CreateCompletion(
 	return iterator.FromSlice(items), nil
 }
 
-func (m *mockService) CountTokens(msgs []llm.Message) (int, error) {
+func (m *mockService) CountTokens(model llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 	if m.countTokensFn != nil {
-		return m.countTokensFn(msgs)
+		return m.countTokensFn(model, msgs)
 	}
 	return 0, nil
 }
 
-func (m *mockService) ContextWindow() int {
-	if m.contextWindowN > 0 {
-		return m.contextWindowN
+func (m *mockService) Models() iterator.Iterator[llmapi.ModelEntry] {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.modelCatalog) == 0 {
+		return iterator.FromSlice([]llmapi.ModelEntry{m.defaultEntry()})
 	}
-	return math.MaxInt
+	entries := make([]llmapi.ModelEntry, len(m.modelCatalog))
+	copy(entries, m.modelCatalog)
+	return iterator.FromSlice(entries)
+}
+
+func (m *mockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.modelCatalog {
+		if e.Name == model.Name {
+			return e, true
+		}
+	}
+	if len(m.modelCatalog) == 0 {
+		entry := m.defaultEntry()
+		if model.Name != "" {
+			entry.Name = model.Name
+		}
+		return entry, true
+	}
+	return llmapi.ModelEntry{}, false
+}
+
+// defaultEntry constructs the synthetic ModelEntry that callers see when
+// the test has not populated modelCatalog. It mirrors the old
+// ContextWindow() default (math.MaxInt) so existing test expectations
+// remain valid without explicit catalog setup.
+func (m *mockService) defaultEntry() llmapi.ModelEntry {
+	cw := m.contextWindowN
+	if cw <= 0 {
+		cw = math.MaxInt
+	}
+	return llmapi.ModelEntry{Name: "mock-model", Provider: "mock", ContextWindow: cw}
 }
 
 func (m *mockService) getCallCount() int {
@@ -3022,11 +3066,11 @@ func (m *mockService) getCallCount() int {
 
 // errorAfterIterator wraps an iterator and returns an error after exhaustion.
 type errorAfterIterator struct {
-	inner iterator.Iterator[llm.Event]
+	inner iterator.Iterator[llmapi.Event]
 	err   error
 }
 
-func (e *errorAfterIterator) Next(ctx context.Context) (llm.Event, bool) {
+func (e *errorAfterIterator) Next(ctx context.Context) (llmapi.Event, bool) {
 	return e.inner.Next(ctx)
 }
 
@@ -3095,7 +3139,7 @@ func (s *mockStore) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *mockStore) AppendMessages(ctx context.Context, d dialoguemanager.Dialogue, msgs []llm.Message, usage llm.DialogueUsage) error {
+func (s *mockStore) AppendMessages(ctx context.Context, d dialoguemanager.Dialogue, msgs []llmapi.Message, usage llmapi.DialogueUsage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.appendErr != nil {
@@ -3153,10 +3197,10 @@ type mockTool struct {
 	executeFn func(ctx context.Context, arguments string) ToolResult
 }
 
-func (t *mockTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *mockTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        t.name,
 			Description: "mock tool",
 			Parameters:  map[string]any{"type": "object"},
@@ -3222,12 +3266,12 @@ func hasEventType(events []Event, typ EventType) bool {
 func toolCallResponse(toolName, args, callID string) mockResponse {
 	return mockResponse{
 		chunks:       []string{""},
-		finishReason: llm.FinishReasonToolCall,
-		toolCalls: []llm.ToolCall{
+		finishReason: llmapi.FinishReasonToolCall,
+		toolCalls: []llmapi.ToolCall{
 			{
 				ID:       callID,
-				Type:     llm.ToolTypeFunction,
-				Function: llm.FunctionCall{Name: toolName, Arguments: args},
+				Type:     llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{Name: toolName, Arguments: args},
 			},
 		},
 	}
@@ -3237,18 +3281,18 @@ func TestStreamReset(t *testing.T) {
 	t.Run("agent resets builders and emits EventDone on EventStreamReset", func(t *testing.T) {
 		// Simulate a stream that delivers partial text, then resets (mid-stream
 		// retry), then delivers the complete response.
-		streamEvents := []llm.Event{
-			{Type: llm.EventTextDelta, Text: "partial "},
-			{Type: llm.EventReasoningDelta, Reasoning: "thinking..."},
-			{Type: llm.EventStreamReset},
-			{Type: llm.EventRateLimitWarning, RateLimit: &llm.RateLimitInfo{
+		streamEvents := []llmapi.Event{
+			{Type: llmapi.EventTextDelta, Text: "partial "},
+			{Type: llmapi.EventReasoningDelta, Reasoning: "thinking..."},
+			{Type: llmapi.EventStreamReset},
+			{Type: llmapi.EventRateLimitWarning, RateLimit: &llmapi.RateLimitInfo{
 				WaitDuration: time.Second,
 				Message:      "Connection lost (connection reset by peer), retrying in 1s (attempt 1/3).",
 			}},
-			{Type: llm.EventTextDelta, Text: "complete answer"},
-			{Type: llm.EventStreamDone, DoneData: &llm.DoneData{
-				Message:      llm.Message{Role: llm.RoleAssistant, Content: "complete answer"},
-				FinishReason: llm.FinishReasonStop,
+			{Type: llmapi.EventTextDelta, Text: "complete answer"},
+			{Type: llmapi.EventStreamDone, DoneData: &llmapi.DoneData{
+				Message:      llmapi.Message{Role: llmapi.RoleAssistant, Content: "complete answer"},
+				FinishReason: llmapi.FinishReasonStop,
 			}},
 		}
 
@@ -3292,7 +3336,7 @@ func TestStreamReset(t *testing.T) {
 		require.True(t, ok)
 		// Last message should be the assistant message with "complete answer".
 		lastMsg := d.Messages[len(d.Messages)-1]
-		assert.Equal(t, llm.RoleAssistant, lastMsg.Role)
+		assert.Equal(t, llmapi.RoleAssistant, lastMsg.Role)
 		assert.Equal(t, "complete answer", lastMsg.Content)
 	})
 }
@@ -3300,27 +3344,35 @@ func TestStreamReset(t *testing.T) {
 // streamResetMockService returns a pre-built event sequence that includes
 // EventStreamReset for testing mid-stream retry handling in the agent.
 type streamResetMockService struct {
-	events []llm.Event
+	events []llmapi.Event
 }
 
 func (m *streamResetMockService) CreateCompletion(
-	_ context.Context, _ llm.Request,
-) (iterator.Iterator[llm.Event], error) {
+	_ context.Context, _ llmapi.ModelEntry, _ llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
 	return iterator.FromSlice(m.events), nil
 }
 
-func (m *streamResetMockService) CountTokens(_ []llm.Message) (int, error) {
+func (m *streamResetMockService) CountTokens(_ llmapi.ModelEntry, _ []llmapi.Message) (int, error) {
 	return 0, nil
 }
 
-func (m *streamResetMockService) ContextWindow() int {
-	return 1_000_000
+func (m *streamResetMockService) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return iterator.FromSlice([]llmapi.ModelEntry{{Name: "stream-reset", ContextWindow: 1_000_000}})
+}
+
+func (m *streamResetMockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	entry := llmapi.ModelEntry{Name: "stream-reset", ContextWindow: 1_000_000}
+	if model.Name != "" {
+		entry.Name = model.Name
+	}
+	return entry, true
 }
 
 func stopResponse(chunks ...string) mockResponse {
 	return mockResponse{
 		chunks:       chunks,
-		finishReason: llm.FinishReasonStop,
+		finishReason: llmapi.FinishReasonStop,
 	}
 }
 
@@ -3328,14 +3380,14 @@ func stopResponseWithReasoning(reasoning []string, chunks ...string) mockRespons
 	return mockResponse{
 		chunks:          chunks,
 		reasoningChunks: reasoning,
-		finishReason:    llm.FinishReasonStop,
+		finishReason:    llmapi.FinishReasonStop,
 	}
 }
 
 func TestAgentRun_MultiContentInjectsSyntheticUserMessage(t *testing.T) {
-	imageParts := []llm.ContentPart{
-		{Type: llm.ContentPartTypeText, Text: "Read image file: photo.png"},
-		{Type: llm.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+	imageParts := []llmapi.ContentPart{
+		{Type: llmapi.ContentPartTypeText, Text: "Read image file: photo.png"},
+		{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
 	}
 	svc := &mockService{
 		responses: []mockResponse{
@@ -3361,7 +3413,7 @@ func TestAgentRun_MultiContentInjectsSyntheticUserMessage(t *testing.T) {
 	secondReq := svc.requests[1]
 	var foundImageMsg bool
 	for _, msg := range secondReq.Messages {
-		if msg.Role == llm.RoleUser && len(msg.MultiContent) > 0 {
+		if msg.Role == llmapi.RoleUser && len(msg.MultiContent) > 0 {
 			foundImageMsg = true
 			assert.Equal(t, imageParts, msg.MultiContent)
 		}
@@ -3373,7 +3425,7 @@ func TestAgentRun_MultiContentInjectsSyntheticUserMessage(t *testing.T) {
 	require.True(t, ok)
 	var persistedImageMsg bool
 	for _, msg := range d.Messages {
-		if msg.Role == llm.RoleUser && len(msg.MultiContent) > 0 {
+		if msg.Role == llmapi.RoleUser && len(msg.MultiContent) > 0 {
 			persistedImageMsg = true
 		}
 	}
@@ -3387,7 +3439,7 @@ func TestSwapService(t *testing.T) {
 		store := newMockStore()
 		ag := NewAgent(svc1, NewRegistry(), noSkills(), store, NoMemory(), Config{
 			SystemPrompt: "test",
-			Model:        "model-a",
+			Model:        llmapi.ModelEntry{Name: "model-a", Provider: "openai"},
 		})
 
 		// First run uses svc1.
@@ -3401,7 +3453,7 @@ func TestSwapService(t *testing.T) {
 		assert.Equal(t, "model-a", d1.Model)
 
 		// Swap to svc2 / model-b.
-		ag.SwapService(svc2, "model-b", "anthropic")
+		ag.SwapService(svc2, llmapi.ModelEntry{Name: "model-b", Provider: "anthropic"})
 		assert.Equal(t, "model-b", ag.Model())
 
 		// Second run uses svc2.
@@ -3427,7 +3479,7 @@ func TestAutoCompact(t *testing.T) {
 				stopResponse("Continuing after compaction"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				countCalls++
 				if countCalls <= 1 {
 					// First count: 90% usage triggers auto-compact.
@@ -3443,14 +3495,14 @@ func TestAutoCompact(t *testing.T) {
 		// nothing to summarize) does not short-circuit.
 		require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
 			ID: "d",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "test system prompt"},
-				{Role: llm.RoleUser, Content: "prior"},
-				{Role: llm.RoleAssistant, Content: "prior answer"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "test system prompt"},
+				{Role: llmapi.RoleUser, Content: "prior"},
+				{Role: llmapi.RoleAssistant, Content: "prior answer"},
 			},
 		}))
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-			Config{SystemPrompt: "test system prompt"})
+			Config{SystemPrompt: "test system prompt", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 		it := ag.Run(context.Background(), "d", "do stuff")
 		events := collectEvents(t, it)
@@ -3474,14 +3526,14 @@ func TestAutoCompact(t *testing.T) {
 				stopResponse("Done"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				// 80% usage: above old hint threshold but below auto-compact
 				return 800, nil
 			},
 		}
 		store := newMockStore()
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-			Config{SystemPrompt: "test"})
+			Config{SystemPrompt: "test", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 		it := ag.Run(context.Background(), "d", "test message")
 		events := collectEvents(t, it)
@@ -3493,7 +3545,7 @@ func TestAutoCompact(t *testing.T) {
 		// in the system prompt to avoid busting the prompt cache.
 		require.Equal(t, 1, svc.getCallCount())
 		for _, msg := range svc.requests[0].Messages {
-			if msg.Role == llm.RoleSystem {
+			if msg.Role == llmapi.RoleSystem {
 				assert.NotContains(t, msg.Content, "tokens)",
 					"no transient context hint should be injected")
 			}
@@ -3505,13 +3557,13 @@ func TestAutoCompact(t *testing.T) {
 		svc := &mockService{
 			responses: []mockResponse{
 				// 1st call: summarize fails (returned as stream error)
-				{chunks: []string{""}, finishReason: llm.FinishReasonStop,
+				{chunks: []string{""}, finishReason: llmapi.FinishReasonStop,
 					streamErr: errors.New("summarize failed")},
 				// 2nd call: normal response (after fallthrough)
 				stopResponse("Kept going despite compact failure"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				callCount++
 				if callCount <= 1 {
 					// First count: above threshold → triggers auto-compact
@@ -3527,14 +3579,14 @@ func TestAutoCompact(t *testing.T) {
 		// does not short-circuit the failure-path branch under test.
 		require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
 			ID: "d",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "test"},
-				{Role: llm.RoleUser, Content: "prior"},
-				{Role: llm.RoleAssistant, Content: "prior answer"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "test"},
+				{Role: llmapi.RoleUser, Content: "prior"},
+				{Role: llmapi.RoleAssistant, Content: "prior answer"},
 			},
 		}))
 		ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-			Config{SystemPrompt: "test"})
+			Config{SystemPrompt: "test", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 		it := ag.Run(context.Background(), "d", "test message")
 		events := collectEvents(t, it)
@@ -3564,7 +3616,7 @@ func TestAutoCompact(t *testing.T) {
 				stopResponse("Continuing after compaction"),
 			},
 			contextWindowN: 1000,
-			countTokensFn: func(msgs []llm.Message) (int, error) {
+			countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 				countCalls++
 				if countCalls <= 1 {
 					// First count: 90% usage triggers auto-compact.
@@ -3578,12 +3630,12 @@ func TestAutoCompact(t *testing.T) {
 		// Pre-seed the dialogue with conversation history so userMsgIdx > 1.
 		err := store.Create(context.Background(), dialoguemanager.Dialogue{
 			ID: "d",
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "test system prompt"},
-				{Role: llm.RoleUser, Content: "first question"},
-				{Role: llm.RoleAssistant, Content: "first answer"},
-				{Role: llm.RoleUser, Content: "second question"},
-				{Role: llm.RoleAssistant, Content: "second answer"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "test system prompt"},
+				{Role: llmapi.RoleUser, Content: "first question"},
+				{Role: llmapi.RoleAssistant, Content: "first answer"},
+				{Role: llmapi.RoleUser, Content: "second question"},
+				{Role: llmapi.RoleAssistant, Content: "second answer"},
 			},
 		})
 		require.NoError(t, err)
@@ -3591,6 +3643,7 @@ func TestAutoCompact(t *testing.T) {
 			Config{
 				SystemPrompt:        "test system prompt",
 				ProjectInstructions: "You are working on project X.",
+				Model:               llmapi.ModelEntry{ContextWindow: 1000},
 			})
 
 		it := ag.Run(context.Background(), "d", "do stuff")
@@ -3607,7 +3660,7 @@ func TestAutoCompact(t *testing.T) {
 		postCompactMsgs := svc.requests[1].Messages
 		var foundProjectInstructions bool
 		for _, msg := range postCompactMsgs {
-			if msg.Role == llm.RoleUser && contains(msg.Content, "project-instructions") {
+			if msg.Role == llmapi.RoleUser && contains(msg.Content, "project-instructions") {
 				foundProjectInstructions = true
 			}
 		}
@@ -3636,13 +3689,13 @@ func TestAutoCompact_SkipsWhenNothingToCompact(t *testing.T) {
 		// post-compact call will fail due to lack of mock responses.
 		responses:      []mockResponse{stopResponse("hi")},
 		contextWindowN: 1000,
-		countTokensFn: func(msgs []llm.Message) (int, error) {
+		countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 			return 900, nil // 90% → would trigger auto-compact
 		},
 	}
 	store := newMockStore()
 	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-		Config{SystemPrompt: "big system prompt"})
+		Config{SystemPrompt: "big system prompt", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 	it := ag.Run(context.Background(), "d", "hello")
 	events := collectEvents(t, it)
@@ -3678,7 +3731,7 @@ func TestAutoCompact_DoesNotLoopWhenCompactionCannotReduceUsage(t *testing.T) {
 			stopResponse("continuing"),
 		},
 		contextWindowN: 1000,
-		countTokensFn: func(msgs []llm.Message) (int, error) {
+		countTokensFn: func(_ llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
 			// Usage stays above threshold even after compaction (this
 			// is the realistic small-ctx case: tools + system prompt
 			// alone exceed the budget).
@@ -3688,14 +3741,14 @@ func TestAutoCompact_DoesNotLoopWhenCompactionCannotReduceUsage(t *testing.T) {
 	store := newMockStore()
 	require.NoError(t, store.Create(context.Background(), dialoguemanager.Dialogue{
 		ID: "d",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "prior"},
-			{Role: llm.RoleAssistant, Content: "prior answer"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "prior"},
+			{Role: llmapi.RoleAssistant, Content: "prior answer"},
 		},
 	}))
 	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
-		Config{SystemPrompt: "sys"})
+		Config{SystemPrompt: "sys", Model: llmapi.ModelEntry{ContextWindow: 1000}})
 
 	it := ag.Run(context.Background(), "d", "do stuff")
 	events := collectEvents(t, it)
@@ -3727,12 +3780,12 @@ func TestSummarizeEmptySummaryReturnsError(t *testing.T) {
 			svc := &mockService{
 				responses: []mockResponse{stopResponse(tt.chunks...)},
 			}
-			msgs := []llm.Message{
-				{Role: llm.RoleSystem, Content: "sys"},
-				{Role: llm.RoleUser, Content: "hello"},
-				{Role: llm.RoleAssistant, Content: "hi there"},
+			msgs := []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "sys"},
+				{Role: llmapi.RoleUser, Content: "hello"},
+				{Role: llmapi.RoleAssistant, Content: "hi there"},
 			}
-			_, err := Summarize(context.Background(), svc, msgs)
+			_, err := Summarize(context.Background(), svc, llmapi.ModelEntry{}, msgs)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "empty summary")
 		})
@@ -3748,33 +3801,33 @@ func TestCompactDialogueNormalizesMessagesBeforeSummarizing(t *testing.T) {
 	store := newMockStore()
 	d := dialoguemanager.Dialogue{
 		ID: "d",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, Content: "", ToolCalls: []llm.ToolCall{{
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, Content: "", ToolCalls: []llmapi.ToolCall{{
 				ID:       "orphaned_1",
-				Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`},
+				Function: llmapi.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`},
 			}}},
-			{Role: llm.RoleUser, Content: "try again"},
+			{Role: llmapi.RoleUser, Content: "try again"},
 		},
 	}
 
-	compacted, archivedID, err := CompactDialogue(context.Background(), svc, store, d)
+	compacted, archivedID, err := CompactDialogue(context.Background(), svc, llmapi.ModelEntry{}, store, d)
 	require.NoError(t, err)
 	assert.Equal(t, ArchivedID("d"), archivedID)
 
 	require.Equal(t, 1, svc.getCallCount())
 	req := svc.requests[0]
-	assert.Equal(t, []llm.Message{
-		{Role: llm.RoleSystem, Content: "sys"},
-		{Role: llm.RoleUser, Content: "hello"},
-		{Role: llm.RoleUser, Content: "try again"},
-		{Role: llm.RoleUser, Content: SummarizePrompt},
+	assert.Equal(t, []llmapi.Message{
+		{Role: llmapi.RoleSystem, Content: "sys"},
+		{Role: llmapi.RoleUser, Content: "hello"},
+		{Role: llmapi.RoleUser, Content: "try again"},
+		{Role: llmapi.RoleUser, Content: SummarizePrompt},
 	}, req.Messages)
 
-	assert.Equal(t, []llm.Message{
-		{Role: llm.RoleSystem, Content: "sys"},
-		{Role: llm.RoleUser, Content: CompactSummaryPrefix + "Summary of work so far"},
+	assert.Equal(t, []llmapi.Message{
+		{Role: llmapi.RoleSystem, Content: "sys"},
+		{Role: llmapi.RoleUser, Content: CompactSummaryPrefix + "Summary of work so far"},
 	}, compacted)
 
 	archived, ok := store.getDialogue(archivedID)
@@ -3882,11 +3935,11 @@ func TestPromptCacheKey(t *testing.T) {
 		var hasUser, hasAssistant, hasTool bool
 		for _, msg := range req2.Messages {
 			switch msg.Role {
-			case llm.RoleUser:
+			case llmapi.RoleUser:
 				hasUser = true
-			case llm.RoleAssistant:
+			case llmapi.RoleAssistant:
 				hasAssistant = true
-			case llm.RoleTool:
+			case llmapi.RoleTool:
 				hasTool = true
 			}
 		}
@@ -3910,24 +3963,24 @@ func TestContextSnapshotShowsCurrentNotCumulative(t *testing.T) {
 		responses: []mockResponse{
 			{
 				chunks:       []string{""},
-				finishReason: llm.FinishReasonToolCall,
-				toolCalls: []llm.ToolCall{{
+				finishReason: llmapi.FinishReasonToolCall,
+				toolCalls: []llmapi.ToolCall{{
 					ID:       "call_1",
-					Type:     llm.ToolTypeFunction,
-					Function: llm.FunctionCall{Name: "my_tool", Arguments: `{}`},
+					Type:     llmapi.ToolTypeFunction,
+					Function: llmapi.FunctionCall{Name: "my_tool", Arguments: `{}`},
 				}},
-				usage: llm.Usage{TokensSent: 50_000, TokensReceived: 500},
+				usage: llmapi.Usage{TokensSent: 50_000, TokensReceived: 500},
 			},
 			{
 				chunks:       []string{"done"},
-				finishReason: llm.FinishReasonStop,
-				usage:        llm.Usage{TokensSent: 55_000, TokensReceived: 600},
+				finishReason: llmapi.FinishReasonStop,
+				usage:        llmapi.Usage{TokensSent: 55_000, TokensReceived: 600},
 			},
 		},
 	}
 
 	ag := NewAgent(svc, NewRegistry(tool), noSkills(), store, NoMemory(),
-		Config{SystemPrompt: "test"})
+		Config{SystemPrompt: "test", Model: llmapi.ModelEntry{ContextWindow: 200_000}})
 
 	events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
 
@@ -4054,11 +4107,11 @@ func TestCachePrefixStability(t *testing.T) {
 }
 
 func TestNormalizeMessages(t *testing.T) {
-	toolCall := func(id string) llm.ToolCall {
-		return llm.ToolCall{
+	toolCall := func(id string) llmapi.ToolCall {
+		return llmapi.ToolCall{
 			ID:   id,
-			Type: llm.ToolTypeFunction,
-			Function: llm.FunctionCall{
+			Type: llmapi.ToolTypeFunction,
+			Function: llmapi.FunctionCall{
 				Name:      "read_file",
 				Arguments: `{"path":"x"}`,
 			},
@@ -4071,84 +4124,84 @@ func TestNormalizeMessages(t *testing.T) {
 		// (no matching tool results), stripping them leaves a completely empty
 		// assistant message that would cause Anthropic's API to reject with
 		// "text content blocks must be non-empty".
-		msgs := normalizeMessages([]llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, Content: "", ToolCalls: []llm.ToolCall{
-				{ID: "orphaned_1", Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`}},
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, Content: "", ToolCalls: []llmapi.ToolCall{
+				{ID: "orphaned_1", Function: llmapi.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`}},
 			}},
-			{Role: llm.RoleUser, Content: "try again"},
+			{Role: llmapi.RoleUser, Content: "try again"},
 		})
 		// The assistant message should be dropped entirely.
 		require.Len(t, msgs, 2)
-		assert.Equal(t, llm.RoleUser, msgs[0].Role)
+		assert.Equal(t, llmapi.RoleUser, msgs[0].Role)
 		assert.Equal(t, "hello", msgs[0].Content)
-		assert.Equal(t, llm.RoleUser, msgs[1].Role)
+		assert.Equal(t, llmapi.RoleUser, msgs[1].Role)
 		assert.Equal(t, "try again", msgs[1].Content)
 	})
 
 	t.Run("keeps assistant messages with content after stripping tool calls", func(t *testing.T) {
-		msgs := normalizeMessages([]llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, Content: "Sure, let me check.", ToolCalls: []llm.ToolCall{
-				{ID: "orphaned_1", Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`}},
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, Content: "Sure, let me check.", ToolCalls: []llmapi.ToolCall{
+				{ID: "orphaned_1", Function: llmapi.FunctionCall{Name: "read_file", Arguments: `{"path":"x"}`}},
 			}},
-			{Role: llm.RoleUser, Content: "thanks"},
+			{Role: llmapi.RoleUser, Content: "thanks"},
 		})
 		require.Len(t, msgs, 3)
-		assert.Equal(t, llm.RoleAssistant, msgs[1].Role)
+		assert.Equal(t, llmapi.RoleAssistant, msgs[1].Role)
 		assert.Equal(t, "Sure, let me check.", msgs[1].Content)
 		assert.Empty(t, msgs[1].ToolCalls)
 	})
 
 	t.Run("drops matched tool calls and results that are not adjacent", func(t *testing.T) {
-		msgs := normalizeMessages([]llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, Content: "I'll check.", ToolCalls: []llm.ToolCall{toolCall("late_1")}},
-			{Role: llm.RoleUser, Content: "actually, continue"},
-			{Role: llm.RoleTool, ToolCallID: "late_1", Content: "result"},
-			{Role: llm.RoleAssistant, Content: "done"},
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, Content: "I'll check.", ToolCalls: []llmapi.ToolCall{toolCall("late_1")}},
+			{Role: llmapi.RoleUser, Content: "actually, continue"},
+			{Role: llmapi.RoleTool, ToolCallID: "late_1", Content: "result"},
+			{Role: llmapi.RoleAssistant, Content: "done"},
 		})
 
 		require.Len(t, msgs, 4)
-		assert.Equal(t, llm.RoleUser, msgs[0].Role)
-		assert.Equal(t, llm.RoleAssistant, msgs[1].Role)
+		assert.Equal(t, llmapi.RoleUser, msgs[0].Role)
+		assert.Equal(t, llmapi.RoleAssistant, msgs[1].Role)
 		assert.Equal(t, "I'll check.", msgs[1].Content)
 		assert.Empty(t, msgs[1].ToolCalls)
-		assert.Equal(t, llm.RoleUser, msgs[2].Role)
-		assert.Equal(t, llm.RoleAssistant, msgs[3].Role)
+		assert.Equal(t, llmapi.RoleUser, msgs[2].Role)
+		assert.Equal(t, llmapi.RoleAssistant, msgs[3].Role)
 	})
 
 	t.Run("keeps only immediate tool calls with results from partial group", func(t *testing.T) {
-		msgs := normalizeMessages([]llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{toolCall("immediate_1"), toolCall("missing_1")}},
-			{Role: llm.RoleTool, ToolCallID: "immediate_1", Content: "result"},
-			{Role: llm.RoleUser, Content: "next"},
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, ToolCalls: []llmapi.ToolCall{toolCall("immediate_1"), toolCall("missing_1")}},
+			{Role: llmapi.RoleTool, ToolCallID: "immediate_1", Content: "result"},
+			{Role: llmapi.RoleUser, Content: "next"},
 		})
 
 		require.Len(t, msgs, 4)
-		assert.Equal(t, llm.RoleAssistant, msgs[1].Role)
+		assert.Equal(t, llmapi.RoleAssistant, msgs[1].Role)
 		require.Len(t, msgs[1].ToolCalls, 1)
 		assert.Equal(t, "immediate_1", msgs[1].ToolCalls[0].ID)
-		assert.Equal(t, llm.RoleTool, msgs[2].Role)
+		assert.Equal(t, llmapi.RoleTool, msgs[2].Role)
 		assert.Equal(t, "immediate_1", msgs[2].ToolCallID)
 	})
 
 	t.Run("drops late tool result even when earlier assistant call has immediate result", func(t *testing.T) {
-		msgs := normalizeMessages([]llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
-			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{toolCall("call_1")}},
-			{Role: llm.RoleTool, ToolCallID: "call_1", Content: "first result"},
-			{Role: llm.RoleAssistant, Content: "got it"},
-			{Role: llm.RoleTool, ToolCallID: "call_1", Content: "duplicate late result"},
-			{Role: llm.RoleUser, Content: "next"},
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, ToolCalls: []llmapi.ToolCall{toolCall("call_1")}},
+			{Role: llmapi.RoleTool, ToolCallID: "call_1", Content: "first result"},
+			{Role: llmapi.RoleAssistant, Content: "got it"},
+			{Role: llmapi.RoleTool, ToolCallID: "call_1", Content: "duplicate late result"},
+			{Role: llmapi.RoleUser, Content: "next"},
 		})
 
 		require.Len(t, msgs, 5)
-		assert.Equal(t, llm.RoleTool, msgs[2].Role)
+		assert.Equal(t, llmapi.RoleTool, msgs[2].Role)
 		assert.Equal(t, "first result", msgs[2].Content)
 		for _, msg := range msgs[3:] {
-			assert.NotEqual(t, llm.RoleTool, msg.Role)
+			assert.NotEqual(t, llmapi.RoleTool, msg.Role)
 		}
 	})
 }
@@ -4157,22 +4210,22 @@ func TestAgentRun_NormalizesNonAdjacentToolResultsBeforeReplay(t *testing.T) {
 	t.Parallel()
 
 	store := newMockStore()
-	replayCall := llm.ToolCall{
+	replayCall := llmapi.ToolCall{
 		ID:   "late_1",
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionCall{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionCall{
 			Name:      "read_file",
 			Arguments: `{"path":"x"}`,
 		},
 	}
 	store.data["d"] = dialoguemanager.Dialogue{
 		ID: "d",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "sys"},
-			{Role: llm.RoleUser, Content: "inspect"},
-			{Role: llm.RoleAssistant, Content: "I'll inspect.", ToolCalls: []llm.ToolCall{replayCall}},
-			{Role: llm.RoleUser, Content: "continue instead"},
-			{Role: llm.RoleTool, ToolCallID: "late_1", Content: "late result"},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleUser, Content: "inspect"},
+			{Role: llmapi.RoleAssistant, Content: "I'll inspect.", ToolCalls: []llmapi.ToolCall{replayCall}},
+			{Role: llmapi.RoleUser, Content: "continue instead"},
+			{Role: llmapi.RoleTool, ToolCallID: "late_1", Content: "late result"},
 		},
 	}
 
@@ -4185,7 +4238,7 @@ func TestAgentRun_NormalizesNonAdjacentToolResultsBeforeReplay(t *testing.T) {
 	require.Len(t, svc.requests, 1)
 
 	for _, msg := range svc.requests[0].Messages {
-		assert.NotEqual(t, llm.RoleTool, msg.Role,
+		assert.NotEqual(t, llmapi.RoleTool, msg.Role,
 			"late non-adjacent tool results must not be replayed to providers")
 		for _, tc := range msg.ToolCalls {
 			assert.NotEqual(t, "late_1", tc.ID,
@@ -4202,7 +4255,7 @@ func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testin
 		responses: []mockResponse{
 			{
 				reasoningChunks: []string{partialReasoning},
-				finishReason:    llm.FinishReasonLength,
+				finishReason:    llmapi.FinishReasonLength,
 			},
 			stopResponse("...doing X and Y."),
 		},
@@ -4218,7 +4271,7 @@ func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testin
 	secondReq := svc.requests[1]
 	var foundPartialAssistant bool
 	for _, msg := range secondReq.Messages {
-		if msg.Role == llm.RoleAssistant && msg.Content == partialReasoning {
+		if msg.Role == llmapi.RoleAssistant && msg.Content == partialReasoning {
 			foundPartialAssistant = true
 			break
 		}

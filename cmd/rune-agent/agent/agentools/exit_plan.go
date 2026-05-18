@@ -35,7 +35,7 @@ import (
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // ExitPlanTool implements the exit_plan_mode tool that persists the
@@ -67,10 +67,10 @@ func NewExitPlan(plansDir string, prompter agent.Prompter) *ExitPlanTool {
 }
 
 // Definition returns the LLM tool definition for exit_plan_mode.
-func (t *ExitPlanTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *ExitPlanTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "exit_plan_mode",
 			Description: `Use this tool when you have finished writing your plan and are ready
 for user approval. This tool saves the plan to disk and presents it

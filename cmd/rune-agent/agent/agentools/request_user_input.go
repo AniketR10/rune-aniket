@@ -30,7 +30,7 @@ import (
 	"strings"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type requestUserInputTool struct {
@@ -60,10 +60,10 @@ func NewRequestUserInput(prompter agent.Prompter) agent.Tool {
 	return &requestUserInputTool{prompter: prompter}
 }
 
-func (t *requestUserInputTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *requestUserInputTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "request_user_input",
 			Description: "Request user input for one to three short questions and wait for the response. When options is empty, the user types a free-form text answer. If the user needs a custom answer, the client automatically adds an Other option and collects free-form text before returning.",
 			Parameters: map[string]any{

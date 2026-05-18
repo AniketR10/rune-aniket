@@ -31,7 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 var _ dialoguemanager.Store = (*ephemeralStore)(nil)
@@ -89,7 +89,7 @@ func (s *ephemeralStore) Delete(_ context.Context, id string) error {
 
 func (s *ephemeralStore) AppendMessages(
 	_ context.Context, d dialoguemanager.Dialogue,
-	msgs []llm.Message, _ llm.DialogueUsage,
+	msgs []llmapi.Message, _ llmapi.DialogueUsage,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

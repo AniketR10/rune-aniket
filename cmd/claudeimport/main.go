@@ -44,17 +44,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"golang.org/x/oauth2"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	"unstable.build/go-tui/cmd/rune-agent/memory/claudememory"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 )
@@ -167,7 +163,7 @@ Examples:
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "./memories", "Output directory for compiled memories")
-	cmd.Flags().StringVarP(&model, "model", "m", anthropic.ClaudeOpus4Dot6, "LLM model to use")
+	cmd.Flags().StringVarP(&model, "model", "m", "claude-opus-4-6", "LLM model to use")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key (default: $OPENAI_API_KEY or $ANTHROPIC_API_KEY)")
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "Custom API base URL")
 	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
@@ -223,10 +219,13 @@ func (a *app) runCompile(
 		return fmt.Errorf("resolve output path: %w", err)
 	}
 
-	svc, err := newLLMService(model, apiKey, baseURL)
-	if err != nil {
-		return err
+	svc := w.LLM(ctx)
+	entry, ok := svc.GetModel(ctx, llmapi.ModelEntry{Name: model})
+	if !ok {
+		return fmt.Errorf("unknown model %q", model)
 	}
+	_ = apiKey
+	_ = baseURL
 
 	deps := dream.Deps{
 		LLM:           svc,
@@ -238,8 +237,7 @@ func (a *app) runCompile(
 		Parser:        w.Parser(ctx),
 		Notifications: w.Notifications(ctx),
 		DataPath:      output,
-		Model:         model,
-		Provider:      inferProvider(model),
+		Model:         entry,
 	}
 
 	it, err := claudememory.Import(ctx, source, deps)
@@ -355,54 +353,6 @@ func drainPlain(ctx context.Context, it iterator.Iterator[dream.Progress]) error
 		return fmt.Errorf("dream: %w", err)
 	}
 	return nil
-}
-
-// newLLMService creates an llm.Service for the given model, resolving
-// the provider and API key from the model name and environment.
-func newLLMService(model, apiKey, baseURL string) (llm.Service, error) {
-	provider := inferProvider(model)
-
-	if apiKey == "" {
-		switch provider {
-		case "anthropic":
-			apiKey = os.Getenv("ANTHROPIC_API_KEY")
-		default:
-			apiKey = os.Getenv("OPENAI_API_KEY")
-		}
-	}
-	if apiKey == "" {
-		return nil, fmt.Errorf("no API key: set --api-key or $OPENAI_API_KEY / $ANTHROPIC_API_KEY")
-	}
-
-	reg := llmregistry.NewStatic()
-	openai.RegisterModels(reg)
-	anthropic.RegisterModels(reg)
-
-	entry, ok := reg.Get(context.Background(), model)
-	if !ok {
-		return nil, fmt.Errorf("unknown model: %s", model)
-	}
-	contextWindows := map[string]int{model: entry.ContextWindow}
-
-	switch provider {
-	case "anthropic":
-		return anthropic.NewClient(apiKey, anthropic.Config{
-			Model:          model,
-			EnableThinking: true,
-		}, contextWindows), nil
-	default:
-		return openai.NewClient(apiKey, openai.Config{
-			Model:   model,
-			BaseURL: baseURL,
-		}, contextWindows), nil
-	}
-}
-
-func inferProvider(model string) string {
-	if strings.HasPrefix(model, "claude-") {
-		return "anthropic"
-	}
-	return "openai"
 }
 
 func defaultClaudeHome() string {

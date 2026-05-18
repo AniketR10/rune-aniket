@@ -10,18 +10,13 @@
 // is obtained from COMPANY. Access to the source code contained herein is hereby
 // forbidden to anyone except current COMPANY employees, managers or contractors who
 // have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
-//
-// The copyright notice above does not evidence any actual or intended publication or
-// disclosure of this source code, which includes information that is confidential and/or
-// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
-// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
-// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
-// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
-// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
-// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
-// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package llm
+// Package audit wraps an llmapi.Service with persistent completion
+// auditing. It was relocated from cmd/rune-agent/llm when rune-agent
+// stopped owning its own provider clients; the on-disk key prefix
+// ("audit:") and JSON layout are preserved so previously persisted
+// entries continue to deserialize.
+package audit
 
 import (
 	"context"
@@ -29,6 +24,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
@@ -48,63 +44,65 @@ func auditDialogueIDFrom(ctx context.Context) string {
 	return v
 }
 
-// AuditEntry records a single LLM completion request and its outcome.
-type AuditEntry struct {
-	StartedAt       time.Time     `json:"StartedAt"`
-	Duration        time.Duration `json:"Duration"`
-	Model           string        `json:"Model,omitempty"`
-	Provider        string        `json:"Provider,omitempty"`
-	Messages        []Message     `json:"Messages"`
-	Tools           int           `json:"Tools"`
-	ToolNames       []string      `json:"ToolNames,omitempty"`
-	ReasoningEffort string        `json:"ReasoningEffort,omitempty"`
-	MaxOutputTokens int           `json:"MaxOutputTokens,omitempty"`
-	EstimatedTokens int           `json:"EstimatedTokens"`
-	ContextWindow   int           `json:"ContextWindow"`
-	Response        *Message      `json:"Response,omitempty"`
-	Usage           Usage         `json:"Usage"`
-	FinishReason    FinishReason  `json:"FinishReason,omitempty"`
-	Err             string        `json:"Err,omitempty"`
+// Entry records a single LLM completion request and its outcome.
+// The JSON tags match the previous llm.AuditEntry layout so old entries
+// continue to deserialize.
+type Entry struct {
+	StartedAt       time.Time          `json:"StartedAt"`
+	Duration        time.Duration      `json:"Duration"`
+	Model           string             `json:"Model,omitempty"`
+	Provider        string             `json:"Provider,omitempty"`
+	Messages        []llmapi.Message   `json:"Messages"`
+	Tools           int                `json:"Tools"`
+	ToolNames       []string           `json:"ToolNames,omitempty"`
+	ReasoningEffort string             `json:"ReasoningEffort,omitempty"`
+	MaxOutputTokens int                `json:"MaxOutputTokens,omitempty"`
+	EstimatedTokens int                `json:"EstimatedTokens"`
+	ContextWindow   int                `json:"ContextWindow"`
+	Response        *llmapi.Message    `json:"Response,omitempty"`
+	Usage           llmapi.Usage       `json:"Usage"`
+	FinishReason    llmapi.FinishReason `json:"FinishReason,omitempty"`
+	Err             string             `json:"Err,omitempty"`
 }
 
 // auditDocument is the persisted document for a dialogue's audit log.
 type auditDocument struct {
-	Entries []AuditEntry `json:"Entries"`
+	Entries []Entry `json:"Entries"`
 }
 
 const auditKeyPrefix = "audit:"
 
-// AuditStore persists audit entries per dialogue using storageapi.
-type AuditStore struct {
+// Store persists audit entries per dialogue using storageapi.
+type Store struct {
 	backend storageapi.Service
 }
 
-// NewAuditStore returns a store backed by the given storage service.
-func NewAuditStore(backend storageapi.Service) *AuditStore {
-	return &AuditStore{backend: backend}
+// NewStore returns a store backed by the given storage service.
+func NewStore(backend storageapi.Service) *Store {
+	return &Store{backend: backend}
 }
 
 // Append adds an entry to the audit log for the given dialogue.
 // It is safe to call on a nil receiver or with an empty dialogue ID.
-func (s *AuditStore) Append(ctx context.Context, dialogueID string, entry AuditEntry) {
+func (s *Store) Append(ctx context.Context, dialogueID string, entry Entry) {
 	if s == nil || dialogueID == "" {
 		return
 	}
 	key := auditKeyPrefix + dialogueID
 	var doc auditDocument
 	if err := s.backend.Get(ctx, key, &doc); err != nil && !errors.Is(err, storageapi.ErrNotFound) {
-		slog.Warn("llm.audit: load audit log", "dialogue", dialogueID, "error", err)
+		slog.Warn("audit: load audit log", "dialogue", dialogueID, "error", err)
 		return
 	}
 	doc.Entries = append(doc.Entries, entry)
 	if err := s.backend.Set(ctx, key, &doc); err != nil {
-		slog.Warn("llm.audit: save audit log", "dialogue", dialogueID, "error", err)
+		slog.Warn("audit: save audit log", "dialogue", dialogueID, "error", err)
 	}
 }
 
 // Get returns all audit entries for the given dialogue.
 // Returns nil, nil when there are no entries or the receiver is nil.
-func (s *AuditStore) Get(ctx context.Context, dialogueID string) ([]AuditEntry, error) {
+func (s *Store) Get(ctx context.Context, dialogueID string) ([]Entry, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -119,42 +117,52 @@ func (s *AuditStore) Get(ctx context.Context, dialogueID string) ([]AuditEntry, 
 	return doc.Entries, nil
 }
 
-// auditService wraps a Service, logging and recording token usage
-// for every completion request.
+// auditService wraps an llmapi.Service, logging and recording token
+// usage for every completion request. The Model/Provider fields written
+// into each Entry come from the ModelEntry threaded through
+// CreateCompletion at call time; the constructor captures only the
+// initial entry as a fallback for tests that do not exercise per-call
+// routing.
 type auditService struct {
-	inner    Service
-	store    *AuditStore
-	model    string
-	provider string
+	inner llmapi.Service
+	store *Store
+	model llmapi.ModelEntry
 }
 
-// NewAuditService wraps inner in an audit decorator that logs every
-// completion request via slog and records entries in store.
-// The model and provider strings are recorded in each audit entry.
-func NewAuditService(inner Service, store *AuditStore, model, provider string) Service {
-	return &auditService{inner: inner, store: store, model: model, provider: provider}
+// NewService wraps inner in an audit decorator that logs every
+// completion request via slog and records entries in store. The model
+// is the ModelEntry the decorator was bound to; the per-call
+// CreateCompletion ModelEntry takes precedence when set.
+func NewService(inner llmapi.Service, store *Store, model llmapi.ModelEntry) llmapi.Service {
+	return &auditService{inner: inner, store: store, model: model}
 }
 
 // CountTokens delegates to the inner service.
-func (s *auditService) CountTokens(msgs []Message) (int, error) {
-	return s.inner.CountTokens(msgs)
+func (s *auditService) CountTokens(model llmapi.ModelEntry, msgs []llmapi.Message) (int, error) {
+	return s.inner.CountTokens(s.resolveModel(model), msgs)
 }
 
-// ContextWindow delegates to the inner service.
-func (s *auditService) ContextWindow() int {
-	return s.inner.ContextWindow()
+// Models delegates to the inner service.
+func (s *auditService) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return s.inner.Models()
+}
+
+// GetModel delegates to the inner service.
+func (s *auditService) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	return s.inner.GetModel(ctx, model)
 }
 
 // CreateCompletion delegates to the inner service and wraps the returned
 // iterator to intercept completion events for audit logging.
 func (s *auditService) CreateCompletion(
-	ctx context.Context, req Request,
-) (iterator.Iterator[Event], error) {
+	ctx context.Context, model llmapi.ModelEntry, req llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
+	resolved := s.resolveModel(model)
 	dialogueID := auditDialogueIDFrom(ctx)
-	estimated, _ := s.inner.CountTokens(req.Messages)
-	ctxWindow := s.inner.ContextWindow()
+	estimated, _ := s.inner.CountTokens(resolved, req.Messages)
+	ctxWindow := resolved.ContextWindow
 
-	slog.Info("llm.audit: completion started",
+	slog.Info("audit: completion started",
 		"dialogue", dialogueID,
 		"estimated_tokens_sent", estimated,
 		"messages", len(req.Messages),
@@ -163,18 +171,17 @@ func (s *auditService) CreateCompletion(
 	)
 
 	start := time.Now()
-
 	toolNames := extractToolNames(req.Tools)
 
-	it, err := s.inner.CreateCompletion(ctx, req)
+	it, err := s.inner.CreateCompletion(ctx, resolved, req)
 	if err != nil {
 		elapsed := time.Since(start)
-		slog.Warn("llm.audit: completion error", "error", err, "duration", elapsed)
-		s.store.Append(context.WithoutCancel(ctx), dialogueID, AuditEntry{
+		slog.Warn("audit: completion error", "error", err, "duration", elapsed)
+		s.store.Append(context.WithoutCancel(ctx), dialogueID, Entry{
 			StartedAt:       start,
 			Duration:        elapsed,
-			Model:           s.model,
-			Provider:        s.provider,
+			Model:           resolved.Name,
+			Provider:        resolved.Provider,
 			Messages:        copyMessages(req.Messages),
 			Tools:           len(req.Tools),
 			ToolNames:       toolNames,
@@ -187,10 +194,10 @@ func (s *auditService) CreateCompletion(
 		return nil, err
 	}
 
-	entry := &AuditEntry{
+	entry := &Entry{
 		StartedAt:       start,
-		Model:           s.model,
-		Provider:        s.provider,
+		Model:           resolved.Name,
+		Provider:        resolved.Provider,
 		Messages:        copyMessages(req.Messages),
 		Tools:           len(req.Tools),
 		ToolNames:       toolNames,
@@ -206,7 +213,7 @@ func (s *auditService) CreateCompletion(
 
 	var recorded bool
 	return iterator.FromFunc(
-		func(ctx context.Context) (Event, bool, error) {
+		func(ctx context.Context) (llmapi.Event, bool, error) {
 			ev, ok := it.Next(ctx)
 			if !ok {
 				if !recorded {
@@ -214,22 +221,22 @@ func (s *auditService) CreateCompletion(
 					entry.Duration = time.Since(start)
 					if itErr := it.Err(); itErr != nil {
 						entry.Err = itErr.Error()
-						slog.Warn("llm.audit: completion error",
+						slog.Warn("audit: completion error",
 							"error", itErr, "duration", entry.Duration)
 					}
 					s.store.Append(storeCtx, dialogueID, *entry)
 				}
-				return Event{}, false, it.Err()
+				return llmapi.Event{}, false, it.Err()
 			}
 			switch ev.Type {
-			case EventStreamDone:
+			case llmapi.EventStreamDone:
 				if ev.DoneData != nil && !recorded {
 					recorded = true
 					entry.Response = &ev.DoneData.Message
 					entry.Usage = ev.DoneData.Usage
 					entry.FinishReason = ev.DoneData.FinishReason
 					entry.Duration = time.Since(start)
-					slog.Info("llm.audit: completion done",
+					slog.Info("audit: completion done",
 						"dialogue", dialogueID,
 						"tokens_sent", ev.DoneData.Usage.TokensSent,
 						"tokens_received", ev.DoneData.Usage.TokensReceived,
@@ -241,12 +248,12 @@ func (s *auditService) CreateCompletion(
 					)
 					s.store.Append(storeCtx, dialogueID, *entry)
 				}
-			case EventStreamError:
+			case llmapi.EventStreamError:
 				if ev.Error != nil && !recorded {
 					recorded = true
 					entry.Duration = time.Since(start)
 					entry.Err = ev.Error.Error()
-					slog.Warn("llm.audit: completion error",
+					slog.Warn("audit: completion error",
 						"error", ev.Error, "duration", entry.Duration)
 					s.store.Append(storeCtx, dialogueID, *entry)
 				}
@@ -257,13 +264,27 @@ func (s *auditService) CreateCompletion(
 	), nil
 }
 
-func copyMessages(msgs []Message) []Message {
-	out := make([]Message, len(msgs))
+// resolveModel returns the per-call ModelEntry when it carries metadata
+// (Provider or ContextWindow), and falls back to the constructor-bound
+// entry otherwise. This lets callers pass either a fully-resolved entry
+// or a name-only lookup.
+func (s *auditService) resolveModel(call llmapi.ModelEntry) llmapi.ModelEntry {
+	if call.Provider != "" || call.ContextWindow != 0 || call.BaseURL != "" {
+		return call
+	}
+	if call.Name != "" && call.Name != s.model.Name {
+		return call
+	}
+	return s.model
+}
+
+func copyMessages(msgs []llmapi.Message) []llmapi.Message {
+	out := make([]llmapi.Message, len(msgs))
 	copy(out, msgs)
 	return out
 }
 
-func extractToolNames(tools []Tool) []string {
+func extractToolNames(tools []llmapi.Tool) []string {
 	if len(tools) == 0 {
 		return nil
 	}

@@ -35,7 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type osFileSystem struct{}
@@ -124,7 +124,7 @@ Relative paths in this skill are relative to the skill directory.
 		tool := NewSkillTool(registry, nil, nil)
 		def := tool.Definition()
 
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		assert.Equal(t, "skill", def.Function.Name)
 		assert.NotEmpty(t, def.Function.Description)
 		assert.NotNil(t, def.Function.Parameters)

@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -66,10 +66,10 @@ func NewGrepFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *Fi
 	return &grepFilesTool{fs: wfs, cwd: cwd, tracker: tracker}
 }
 
-func (t *grepFilesTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *grepFilesTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "grep_files",
 			Description: "Finds files whose contents match the pattern and lists them by modification time.",
 			Parameters: map[string]any{

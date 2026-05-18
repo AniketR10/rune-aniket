@@ -26,8 +26,8 @@ package agent
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 )
 
 // Spawner abstracts the ability to run sub-agents.
@@ -50,7 +50,7 @@ type RunRequest struct {
 	// current Message is appended. This is used to seed a sub-agent with
 	// a snapshot of the parent dialogue so it can act on existing
 	// conversation context (see skills.Skill.ContextSharing).
-	InitialMessages []llm.Message
+	InitialMessages []llmapi.Message
 }
 
 // RunHandle is the result of a Run call.

@@ -44,12 +44,14 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
+	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -70,12 +72,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
-	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llamacpp"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
+
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/cmd/rune-agent/memory"
 	"unstable.build/go-tui/component/markdown"
@@ -219,304 +216,9 @@ func defaultMarkdownConfig() *markdown.Config {
 	return &cfg
 }
 
-// clientConstructor builds an llm.Service from a token, config, and
-// context-window map. Defaults to openai.NewClient in production;
-// tests may substitute a stub.
-type clientConstructor func(token string, cfg openai.Config, models map[string]int) llm.Service
-
-type llmServiceOptions struct {
-	ctx     context.Context
-	storage storageapi.Service
-}
-
-type llmServiceOption func(*llmServiceOptions)
-
-func withLLMServiceStorage(ctx context.Context, storage storageapi.Service) llmServiceOption {
-	return func(o *llmServiceOptions) {
-		o.ctx = ctx
-		o.storage = storage
-	}
-}
-
-// newLLMService creates an LLM service for the given model by reading
-// provider API keys and LLM parameters from the current config. This is
-// called each time a service is needed so that config changes (e.g. via
-// the agentshell config command) take effect immediately.
-// If newClient is nil, openai.NewClient is used for non-Anthropic providers.
-// If newAnthropicClient is nil, anthropic.NewClient is used for Anthropic.
-func newLLMService(
-	ctx context.Context,
-	cfg configedit.Getter,
-	reg llmregistry.Registry,
-	model string,
-	newClient clientConstructor,
-	newAnthropicClient anthropic.ClientConstructor,
-	opts ...llmServiceOption,
-) (llm.Service, error) {
-	svcOpts := llmServiceOptions{ctx: context.Background()}
-	for _, opt := range opts {
-		opt(&svcOpts)
-	}
-	if svcOpts.ctx == nil {
-		svcOpts.ctx = context.Background()
-	}
-
-	entry, ok := reg.Get(svcOpts.ctx, model)
-	if !ok {
-		return nil, fmt.Errorf("model %q not found in registry", model)
-	}
-
-	// Local llama.cpp models: the entry's BaseURL points at an on-disk
-	// GGUF file placed there by the OCI cache registry. No API key or
-	// remote client is required.
-	if entry.Provider == llamacpp.LLMProvider {
-		return newLlamaCppService(entry, nil)
-	}
-
-	// Read provider API key.
-	var apiKey string
-	var codexCred codex.Credential
-	if entry.Provider == codex.LLMProvider {
-		var err error
-		codexCred, err = codex.CredentialForClient(svcOpts.ctx, svcOpts.storage)
-		if err != nil {
-			if errors.Is(err, codex.ErrCredentialNotFound) {
-				return nil, errors.New("no Codex credential found; open the Rune's shell and run `agent providers codex login`")
-			}
-			return nil, fmt.Errorf("load Codex credential: %w", err)
-		}
-		apiKey = codexCred.AccessToken
-	} else if entry.Provider != "ollama" {
-		if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
-			if key, err := pcfg.GetString("api_key").Resolve(ctx); err == nil {
-				apiKey = key
-			} else if !errors.Is(err, configedit.ErrNotFound) {
-				return nil, fmt.Errorf("get %q api_key from config: %w", entry.Provider, err)
-			}
-		} else if !errors.Is(err, configedit.ErrNotFound) {
-			return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
-		}
-		if apiKey == "" {
-			return nil, fmt.Errorf("no api_key configured for provider %q; "+
-				"set it in the %q config section", entry.Provider, entry.Provider)
-		}
-	}
-
-	// Read shared LLM parameters.
-	var temperature, topP float64
-	var maxTokens int
-	var debugHTTP bool
-
-	if v, err := cfg.GetFloat("temperature").Resolve(ctx); err == nil {
-		temperature = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'temperature' from config: %w", err)
-	}
-	if v, err := cfg.GetFloat("top_p").Resolve(ctx); err == nil {
-		topP = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'top_p' from config: %w", err)
-	}
-	if v, err := cfg.GetInt("max_tokens").Resolve(ctx); err == nil {
-		maxTokens = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'max_tokens' from config: %w", err)
-	}
-	if v, err := cfg.GetBool("debug_http").Resolve(ctx); err == nil {
-		debugHTTP = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'debug_http' from config: %w", err)
-	}
-
-	// <provider>.base_url overrides per entry base url and default in config.
-	if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
-		if key, err := pcfg.GetString("base_url").Resolve(ctx); err == nil {
-			entry.BaseURL = key
-		} else if !errors.Is(err, configedit.ErrNotFound) {
-			return nil, fmt.Errorf("get %q base_url from config: %w", entry.Provider, err)
-		}
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
-	}
-
-	contextMap := map[string]int{model: entry.ContextWindow}
-
-	// Dispatch to native Anthropic client for Anthropic models.
-	if entry.Provider == anthropic.LLMProvider {
-		acfg := anthropic.Config{
-			Model:       model,
-			MaxTokens:   maxTokens,
-			Temperature: temperature,
-			TopP:        topP,
-			DebugHTTP:   debugHTTP,
-		}
-		acfg.BaseURL = entry.BaseURL
-		if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
-			if v, err := pcfg.GetString("cache_control").Resolve(ctx); err == nil && v != "" {
-				acfg.CacheControl = v
-			} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
-				return nil, fmt.Errorf("get %q cache_control from config: %w", entry.Provider, err)
-			}
-			if v, err := pcfg.GetString("reasoning_effort").Resolve(ctx); err == nil && v != "" {
-				switch llm.ReasoningEffort(v) {
-				case llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
-					llm.ReasoningEffortHigh, llm.ReasoningEffortMax:
-					acfg.ReasoningEffort = v
-				default:
-					return nil, fmt.Errorf("invalid %q reasoning_effort value %q: "+
-						"must be low, medium, high, or max", entry.Provider, v)
-				}
-			} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
-				return nil, fmt.Errorf("get %q reasoning_effort from config: %w", entry.Provider, err)
-			}
-		}
-		// Enable adaptive thinking for models that support it (4.6+).
-		acfg.EnableThinking = anthropic.SupportsAdaptiveThinking(model)
-		if newAnthropicClient == nil {
-			newAnthropicClient = anthropic.NewClient
-		}
-		return newAnthropicClient(apiKey, acfg, contextMap), nil
-	}
-
-	// All other providers go through the OpenAI-compatible client.
-	var c openai.Config
-	c.Model = model
-	c.Temperature = temperature
-	c.TopP = topP
-	c.MaxTokens = maxTokens
-	c.DebugHTTP = debugHTTP
-	c.BaseURL = entry.BaseURL
-	if entry.Provider == codex.LLMProvider {
-		c.Model = codex.UpstreamModelName(model)
-		c.ForceResponsesAPI = true
-		// The ChatGPT Codex backend rejects parallel tool calls and only
-		// supports stateless requests; it carries the installation ID via
-		// client_metadata. The Responses API path threads reasoning items
-		// back universally, so no Codex-specific input shaping is needed.
-		c.Store = new(false)
-		c.DisableParallelToolCalls = true
-		c.ClientMetadata = map[string]string{
-			"x-codex-installation-id": codexCred.InstallationID,
-		}
-		c.Headers = codexCred.ClientHeaders()
-		contextMap = codex.UpstreamAvailableModels()
-	}
-
-	// Read per-provider OpenAI settings.
-	if pcfg, err := cfg.GetConfig(entry.Provider).Resolve(ctx); err == nil {
-		if v, err := pcfg.GetBool("force_responses_api").Resolve(ctx); err == nil {
-			c.ForceResponsesAPI = v
-		} else if !errors.Is(err, configedit.ErrNotFound) {
-			return nil, fmt.Errorf("get %q force_responses_api from config: %w", entry.Provider, err)
-		}
-		if v, err := pcfg.GetString("reasoning_effort").Resolve(ctx); err == nil && v != "" {
-			switch llm.ReasoningEffort(v) {
-			case llm.ReasoningEffortNone, llm.ReasoningEffortMinimal,
-				llm.ReasoningEffortLow, llm.ReasoningEffortMedium,
-				llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh:
-				c.ReasoningEffort = v
-			default:
-				return nil, fmt.Errorf("invalid %q reasoning_effort value %q: "+
-					"must be none, minimal, low, medium, high or xhigh", entry.Provider, v)
-			}
-		} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
-			return nil, fmt.Errorf("get %q reasoning_effort from config: %w", entry.Provider, err)
-		}
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get %q config section: %w", entry.Provider, err)
-	}
-	if entry.Provider == codex.LLMProvider {
-		c.ForceResponsesAPI = true
-	}
-
-	if v, err := cfg.GetFloat("frequency_penalty").Resolve(ctx); err == nil {
-		c.FrequencyPenalty = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'frequency_penalty' from config: %w", err)
-	}
-	if v, err := cfg.GetFloat("presence_penalty").Resolve(ctx); err == nil {
-		c.PresencePenalty = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'presence_penalty' from config: %w", err)
-	}
-	if v, err := cfg.GetString("reasoning_summary").Resolve(ctx); err == nil && v != "" {
-		switch llm.ReasoningSummary(v) {
-		case llm.ReasoningSummaryAuto, llm.ReasoningSummaryConcise,
-			llm.ReasoningSummaryDetailed, llm.ReasoningSummaryDisabled:
-			c.ReasoningSummary = v
-		default:
-			return nil, fmt.Errorf("invalid 'reasoning_summary' value %q: "+
-				"must be auto, concise, detailed, or disabled", v)
-		}
-	} else if err != nil && !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'reasoning_summary' from config: %w", err)
-	}
-	if v, err := cfg.GetInt("max_completion_tokens").Resolve(ctx); err == nil {
-		c.MaxCompletionTokens = v
-	} else if !errors.Is(err, configedit.ErrNotFound) {
-		return nil, fmt.Errorf("get 'max_completion_tokens' from config: %w", err)
-	}
-
-	if newClient == nil {
-		newClient = openai.NewClient
-	}
-	return newClient(apiKey, c, contextMap), nil
-}
-
-// newLlamaCppService constructs a local llama.cpp-backed llm.Service for a
-// ModelEntry whose BaseURL points at an on-disk GGUF file. An optional
-// progress callback receives model-load progress (typically 0..100 mapped
-// from llama.cpp's native progress callback) so callers can surface a
-// loading indicator while the GGUF is opened.
-func newLlamaCppService(
-	entry llmregistry.ModelEntry,
-	progress func(int64, int64, string),
-) (llm.Service, error) {
-	if entry.BaseURL == "" {
-		return nil, fmt.Errorf(
-			"llamacpp model %q has no local path (BaseURL) in the registry",
-			entry.Name)
-	}
-	svc, err := llamacpp.NewService(llamacpp.Config{
-		Model:         entry.Name,
-		ModelPath:     entry.BaseURL,
-		ProjectorPath: entry.ProjectorPath,
-		ContextWindow: uint32(entry.ContextWindow),
-		NGPULayers:    -1,
-		LoadProgress:  progress,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("llamacpp: load %q: %w", entry.Name, err)
-	}
-	return svc, nil
-}
-
-func composeModelRegistry(
-	base llmregistry.Registry,
-	local llmregistry.Registry,
-	customURL string,
-	customModels map[string]int,
-) llmregistry.Registry {
-	registry := llmregistry.NewComposite(local, base)
-	if len(customModels) == 0 {
-		return registry
-	}
-	customStatic := llmregistry.NewStatic()
-	for name, ctxWindow := range customModels {
-		customStatic.Register(llmregistry.ModelEntry{
-			Name:          name,
-			Provider:      "custom_provider",
-			ContextWindow: ctxWindow,
-			BaseURL:       customURL,
-		})
-	}
-	return llmregistry.NewComposite(customStatic, registry)
-}
-
 func newCommandEventHandler(
 	ctx context.Context, ed textapi.Editor, w *extensionapi.Workspace,
 	pconfig config.Config,
-	defaultRegistry llmregistry.Registry,
 	defaultModel string,
 ) (ret *aiEditorHandler, err error) {
 	fs := w.FileSystem(ctx)
@@ -585,7 +287,7 @@ func newCommandEventHandler(
 	tools = append(tools, agentools.ConversationTools(dialogueStore, fs, sessionsDir)...)
 
 	ret = new(aiEditorHandler)
-	ret.defaultEffort = llm.ReasoningEffortHigh
+	ret.defaultEffort = llmapi.ReasoningEffortHigh
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.ed = ed
 	ret.config = cfg
@@ -594,21 +296,21 @@ func newCommandEventHandler(
 	ret.toolRegistry = agent.NewRegistry(tools...)
 	ret.executor = executor
 	ret.sessionMgr = agentools.NewSessionManager(ret.ctx, executor, terminal)
-	ret.toolRegistry.RegisterOverrides(openai.LLMProvider,
+	ret.toolRegistry.RegisterOverrides("openai",
 		agentools.NewGrepFiles(fs, cwd, tracker),
 		agentools.NewListDir(fs, cwd),
 		agentools.NewExecCommand(ret.sessionMgr, cwd, cfg),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
-	ret.toolRegistry.RegisterOverrides(codex.LLMProvider,
+	ret.toolRegistry.RegisterOverrides("codex",
 		agentools.NewGrepFiles(fs, cwd, tracker),
 		agentools.NewListDir(fs, cwd),
 		agentools.NewExecCommand(ret.sessionMgr, cwd, cfg),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
-	ret.toolRegistry.RegisterExclusions(openai.LLMProvider,
+	ret.toolRegistry.RegisterExclusions("openai",
 		"search_content", "compact", "bash")
-	ret.toolRegistry.RegisterExclusions(codex.LLMProvider,
+	ret.toolRegistry.RegisterExclusions("codex",
 		"search_content", "compact", "bash")
 	ret.systemPrompt = agent.DefaultSystemPrompt(cwd)
 
@@ -637,18 +339,6 @@ func newCommandEventHandler(
 	ret.lsp = lsp
 	ret.parser = parser
 	ret.memoryDataPath = filepath.Join(w.DataDir(ctx), "memory")
-	ret.modelsCachePath = filepath.Join(w.DataDir(ctx), "models")
-	localStorage, err := db.Partition("llamacpp-registry")
-	if err != nil {
-		return nil, fmt.Errorf("partition llamacpp-registry storage: %w", err)
-	}
-	ret.localRegistry, err = llamacpp.NewRegistry(
-		ret.modelsCachePath,
-		llamacpp.WithStorage(localStorage),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("open local llamacpp registry: %w", err)
-	}
 	ret.defaultModel, err = pconfig.GetString("default_model")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -666,29 +356,16 @@ func newCommandEventHandler(
 	} else if err != nil && !errors.Is(err, config.ErrNotFound) {
 		slog.Warn("get 'auto_compact_ratio' from config", "error", err)
 	}
-	// Check for custom_provider config to add user-defined
-	// OpenAI-compatible models to the registry.
-	noti := w.Notifications(ctx)
-	var customURL string
-	var customModels map[string]int
-	if cpCfg, err := pconfig.GetConfig("custom_provider"); err == nil {
-		customURL, _ = cpCfg.GetString("url")
-		models, modelsErr := config.GetMapInt(cpCfg, "available_models")
-		if modelsErr != nil && !errors.Is(modelsErr, config.ErrNotFound) {
-			_, _ = noti.Notify(browserapi.LevelWarn,
-				"custom_provider: failed to parse available_models: %v", modelsErr)
-		}
-		customModels = models
-	} else if !errors.Is(err, config.ErrNotFound) {
-		_, _ = noti.Notify(browserapi.LevelWarn,
-			"custom_provider: invalid config: %v", err)
-	}
-	ret.modelRegistry = composeModelRegistry(defaultRegistry, ret.localRegistry, customURL, customModels)
+	// The host-provided llmapi.Service (w.LLM(ctx)) owns provider auth,
+	// llama.cpp, codex login, and custom_provider routing; rune-agent
+	// no longer constructs its own registry.
+	ret.llmSvc = w.LLM(ctx)
 
 	// Hooks: parse extensions.rune-agent.config.hooks. Errors are
 	// non-fatal: the extension still starts with an empty (no-op)
 	// hook config. The single Runner constructed here is shared
 	// across chat and query agents and propagated via agent.Config.
+	noti := w.Notifications(ctx)
 	var hooksCfg hooks.Config
 	if hooksMap, hookErr := pconfig.GetMap("hooks"); hookErr == nil {
 		parsed, parseErr := hooks.Parse(hooksMap)
@@ -704,11 +381,13 @@ func newCommandEventHandler(
 	}
 	ret.hookRunner = hooks.NewRunner(hooksCfg, executor, noti, cwd.Path())
 
-	if _, ok := ret.modelRegistry.Get(ctx, ret.defaultModel); !ok {
+	if _, ok := ret.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: ret.defaultModel}); !ok {
 		slog.Warn("default model not found in registry, falling back",
-			"requested", ret.defaultModel,
-			"fallback", openai.GPT5Dot5)
-		ret.defaultModel = openai.GPT5Dot5
+			"requested", ret.defaultModel)
+		fallback := firstModel(ret.llmSvc)
+		if fallback != "" {
+			ret.defaultModel = fallback
+		}
 	}
 
 	ret.cfg = defaultComponentCfg
@@ -834,9 +513,9 @@ func newCommandEventHandler(
 		}
 		ret.queryDefaultModel = defaultModel
 	}
-	if _, ok := ret.modelRegistry.Get(ctx, ret.queryDefaultModel); !ok {
-		first, hasFirst := firstModel(ret.modelRegistry)
-		if !hasFirst {
+	if _, ok := ret.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: ret.queryDefaultModel}); !ok {
+		first := firstModel(ret.llmSvc)
+		if first == "" {
 			return nil, fmt.Errorf("query default model %q not found and registry is empty",
 				ret.queryDefaultModel)
 		}
@@ -854,7 +533,7 @@ func newCommandEventHandler(
 		// empty string means "use the chat model" — no separate service needed.
 	}
 	if ret.compactModel != "" {
-		if _, ok := ret.modelRegistry.Get(ctx, ret.compactModel); !ok {
+		if _, ok := ret.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: ret.compactModel}); !ok {
 			_, _ = noti.Notify(browserapi.LevelWarn,
 				"compact model %q not found in registry, compaction will use the chat model",
 				ret.compactModel)
@@ -870,7 +549,7 @@ func newCommandEventHandler(
 
 	ret.db = db
 	if auditEnabled, _ := pconfig.GetBool("audit_enabled"); auditEnabled {
-		ret.auditStore = llm.NewAuditStore(ret.db)
+		ret.auditStore = audit.NewStore(ret.db)
 	}
 	ret.p = w.Interrupter(ctx)
 	ret.o = w.ResourceOpener(ctx)
@@ -885,7 +564,9 @@ func newCommandEventHandler(
 	ret.dialogueStore = dialogueStore
 
 	if ret.compactModel != "" {
-		ret.compactSvc, err = ret.newService(ret.compactModel)
+		compactSvc, _, cerr := ret.modelService(ctx, ret.compactModel)
+		err = cerr
+		ret.compactSvc = compactSvc
 		if err != nil {
 			_, _ = noti.Notify(browserapi.LevelWarn,
 				"failed to create backend for compact model %q (%v), compaction will use the chat model",
@@ -895,22 +576,21 @@ func newCommandEventHandler(
 		}
 	}
 
-	queryService, err := ret.newService(ret.queryDefaultModel)
+	queryService, queryEntry, err := ret.modelService(ctx, ret.queryDefaultModel)
 	if err != nil {
-		first, hasFirst := firstModel(ret.modelRegistry)
-		if !hasFirst || first == ret.queryDefaultModel {
+		first := firstModel(ret.llmSvc)
+		if first == "" || first == ret.queryDefaultModel {
 			return nil, fmt.Errorf("new backend for query dialogues: %v", err)
 		}
 		_, _ = noti.Notify(browserapi.LevelWarn,
 			"failed to create backend for model %q (%v), falling back to %q",
 			ret.queryDefaultModel, err, first)
 		ret.queryDefaultModel = first
-		queryService, err = ret.newService(first)
+		queryService, queryEntry, err = ret.modelService(ctx, first)
 		if err != nil {
 			return nil, fmt.Errorf("new backend for query dialogues (fallback %q): %v", first, err)
 		}
 	}
-	queryEntry, _ := ret.modelRegistry.Get(ctx, ret.queryDefaultModel)
 	ret.queryAgent = agent.NewAgent(
 		queryService, ret.toolRegistry, ret.skillRegistry,
 		ret.dialogueStore, agent.NoMemory(), agent.Config{
@@ -921,8 +601,7 @@ func newCommandEventHandler(
 			ProjectInstructions: ret.projectInstructions,
 			SessionKey:          "query",
 			AgentID:             "query",
-			Model:               ret.queryDefaultModel,
-			Provider:            queryEntry.Provider,
+			Model:               queryEntry,
 			Workspace:           ret.cwd,
 			Hooks:               ret.hookRunner,
 		},
@@ -952,7 +631,7 @@ type contextHintConfig struct {
 
 type aiEditorHandler struct {
 	exit                atomic.Uint32
-	modelRegistry       llmregistry.Registry
+	llmSvc              llmapi.Service
 	defaultModel        string
 	cfg                 dialoguetui.ComponentConfig
 	backgroundAttr      term.Attributes
@@ -961,7 +640,7 @@ type aiEditorHandler struct {
 	queryAgent          *agent.Agent
 	queryDefaultModel   string
 	compactModel        string // empty means use the chat model
-	compactSvc          llm.Service
+	compactSvc          llmapi.Service
 	toolRegistry        *agent.Registry
 	systemPrompt        string
 	projectInstructions string
@@ -973,32 +652,28 @@ type aiEditorHandler struct {
 	maxToolOutputBytes int
 	autoCompactRatio   float64
 
-	resources map[string]string
-	clip      clipboard.Register
-	// newClient, if non-nil, replaces openai.NewClient in
-	// newLLMService. Intended for testing only.
-	newClient          clientConstructor
-	newAnthropicClient anthropic.ClientConstructor
-	ed                 textapi.Editor
-	wm                 browserapi.WindowManager
-	n                  browserapi.Notifications
-	o                  browserapi.ResourceOpener
-	p                  term.Interrupter
-	db                 storageapi.Service
-	config             configedit.Config
-	skillRegistry      *skills.SkillRegistry
-	plansDir           string
-	memoryDataPath     string
-	exec               workspaceapi.Executor
-	lsp                semanticapi.LSP
-	parser             syntaxapi.Parser
-	memoryPath         string
-	cwd                workspaceapi.URI
-	fs                 workspaceapi.FileSystem
-	executor           workspaceapi.Executor
-	gitID              gitIdentity
+	resources      map[string]string
+	clip           clipboard.Register
+	ed             textapi.Editor
+	wm             browserapi.WindowManager
+	n              browserapi.Notifications
+	o              browserapi.ResourceOpener
+	p              term.Interrupter
+	db             storageapi.Service
+	config         configedit.Config
+	skillRegistry  *skills.SkillRegistry
+	plansDir       string
+	memoryDataPath string
+	exec           workspaceapi.Executor
+	lsp            semanticapi.LSP
+	parser         syntaxapi.Parser
+	memoryPath     string
+	cwd            workspaceapi.URI
+	fs             workspaceapi.FileSystem
+	executor       workspaceapi.Executor
+	gitID          gitIdentity
 
-	auditStore *llm.AuditStore
+	auditStore *audit.Store
 
 	// generateDialogueID overrides the spawner's dialogue ID
 	// generator. Testing only.
@@ -1006,8 +681,8 @@ type aiEditorHandler struct {
 	// generatePlanPath overrides the plan path generator. Testing only.
 	generatePlanPath func(title string) string
 	defaultsMu       sync.Mutex
-	defaultEffort    llm.ReasoningEffort // global default applied to new chats/queries
-	defaultMaxTokens int                 // global default applied to new chats/queries
+	defaultEffort    llmapi.ReasoningEffort // global default applied to new chats/queries
+	defaultMaxTokens int                    // global default applied to new chats/queries
 
 	openChats      sync.Map
 	openChatAgents sync.Map
@@ -1017,116 +692,34 @@ type aiEditorHandler struct {
 	// hookRunner dispatches Claude-Code-style hooks. nil when no
 	// hooks are configured.
 	hookRunner *hooks.Runner
-
-	// Local GGUF registry. Constructed eagerly in newCommandEventHandler.
-	// Owns the OCI client/cache, the in-process + persistent context
-	// metadata, and the download/delete/list surface area used by the
-	// agentshell.
-	modelsCachePath string
-	localRegistry   *llamacpp.Registry
 }
 
-func (h *aiEditorHandler) newService(model string) (llm.Service, error) {
-	return h.newServiceWithProgress(model, nil)
-}
-
-// newServiceWithProgress is like newService but forwards an optional
-// progress callback to local llama.cpp service creation. Remote/openai
-// providers ignore the callback because they do not perform heavyweight
-// model loads on the client side.
-func (h *aiEditorHandler) newServiceWithProgress(
-	model string,
-	progress func(int64, int64, string),
-) (llm.Service, error) {
-	entry, ok := h.modelRegistry.Get(h.ctx, model)
+// modelService resolves a model entry from the host-provided LLM
+// service, optionally wrapping it in an audit decorator. Replaces the
+// rune-agent-owned newLLMService/newLlamaCppService dispatch logic;
+// provider auth, registries, and local-model lifecycle now live in the
+// IDE host behind w.LLM(ctx).
+func (h *aiEditorHandler) modelService(ctx context.Context, model string) (
+	llmapi.Service, llmapi.ModelEntry, error,
+) {
+	entry, ok := h.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: model})
 	if !ok {
-		return nil, fmt.Errorf("model %q not found in registry", model)
+		return nil, llmapi.ModelEntry{}, fmt.Errorf("model %q not found", model)
 	}
-
-	var svc llm.Service
-	var err error
-	if entry.Provider == llamacpp.LLMProvider {
-		svc, err = newLlamaCppService(entry, progress)
-	} else {
-		svc, err = newLLMService(h.ctx, h.config, h.modelRegistry, model,
-			h.newClient, h.newAnthropicClient, withLLMServiceStorage(h.ctx, h.db))
-	}
-	if err != nil {
-		return nil, err
-	}
+	svc := h.llmSvc
 	if h.auditStore != nil {
-		provider := entry.Provider
-		svc = llm.NewAuditService(svc, h.auditStore, model, provider)
+		svc = audit.NewService(svc, h.auditStore, entry)
 	}
-	return svc, nil
+	return svc, entry, nil
 }
 
-// newChatService wraps newServiceWithProgress with a notification-based
-// loading indicator for heavyweight local model loads. The chat window/tab
-// itself is only created after the backend service exists, so without this
-// the user sees a dead period while a local GGUF is mmap'd/loaded.
-func (h *aiEditorHandler) newChatService(model string) (llm.Service, error) {
-	entry, ok := h.modelRegistry.Get(h.ctx, model)
-	if !ok {
-		return nil, fmt.Errorf("model %q not found in registry", model)
-	}
-	if entry.Provider != llamacpp.LLMProvider || h.n == nil {
-		return h.newService(model)
-	}
-
-	msg := fmt.Sprintf("Loading local model %s...", model)
-	notifID, err := h.n.Notify(browserapi.LevelInfo, msg)
-	if err != nil {
-		return h.newServiceWithProgress(model, nil)
-	}
-	// Freeze the notification in place immediately; this gives us a stable
-	// row to update while the model loads.
-	_ = h.n.UpdateNotificationProgress(notifID, msg, 0, 100)
-
-	lastProgress := int64(0)
-	progressFn := func(progress, total int64, _ string) {
-		p, t := progress, total
-		if t <= 0 {
-			t = 100
-		}
-		if p < 0 {
-			p = 0
-		}
-		if p > t {
-			p = t
-		}
-		scaled := p
-		scaledTotal := t
-		if t != 100 {
-			scaled = (p * 100) / t
-			scaledTotal = 100
-		}
-		if scaled < lastProgress {
-			scaled = lastProgress
-		}
-		lastProgress = scaled
-		_ = h.n.UpdateNotificationProgress(notifID,
-			fmt.Sprintf("Loading local model %s...", model), scaled, scaledTotal)
-	}
-
-	svc, err := h.newServiceWithProgress(model, progressFn)
-	if err != nil {
-		_ = h.n.UpdateNotificationProgress(notifID,
-			fmt.Sprintf("Loading local model %s failed: %v", model, err), 100, 100)
-		return nil, err
-	}
-	_ = h.n.UpdateNotificationProgress(notifID,
-		fmt.Sprintf("Loaded local model %s", model), 100, 100)
-	return svc, nil
-}
-
-func (h *aiEditorHandler) getDefaultEffort() llm.ReasoningEffort {
+func (h *aiEditorHandler) getDefaultEffort() llmapi.ReasoningEffort {
 	h.defaultsMu.Lock()
 	defer h.defaultsMu.Unlock()
 	return h.defaultEffort
 }
 
-func (h *aiEditorHandler) setDefaultEffort(e llm.ReasoningEffort) {
+func (h *aiEditorHandler) setDefaultEffort(e llmapi.ReasoningEffort) {
 	h.defaultsMu.Lock()
 	h.defaultEffort = e
 	h.defaultsMu.Unlock()
@@ -1255,21 +848,18 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 		agentshell.WithHistorySystemPrompt(true),
 		agentshell.WithEffort(h.getDefaultEffort, h.setDefaultEffort),
 		agentshell.WithMaxTokens(h.getDefaultMaxTokens, h.setDefaultMaxTokens),
-		agentshell.WithServiceFactory(h.newService),
 	}
 	if h.auditStore != nil {
 		opts = append(opts, agentshell.WithAuditStore(h.auditStore))
 	}
 	return agentshell.New(
 		h.wm,
-		nil,
-		h.modelRegistry, h.defaultModel,
+		h.llmSvc,
+		h.defaultModel,
 		h.dialogueStore, h.toolRegistry, h.agentsConfig,
 		h.config,
 		h.skillRegistry, h.cwd, h.fs,
 		h.db, h.exec, h.lsp, h.parser, h.n,
-		h.memoryDataPath,
-		h.localRegistry,
 		opts...,
 	)
 }
@@ -1277,7 +867,7 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	cmd.Args = filterAllFlag(cmd.Args)
 	if len(cmd.Args) > 0 {
-		if _, ok := h.modelRegistry.Get(h.ctx, cmd.Args[0]); ok {
+		if _, ok := h.llmSvc.GetModel(h.ctx, llmapi.ModelEntry{Name: cmd.Args[0]}); ok {
 			return errors.New("model must be passed as a second argument to a dialogue ID, " +
 				"check command manual for more details")
 		}
@@ -1285,13 +875,13 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	model := h.defaultModel
 	if len(cmd.Args) > 1 {
 		model = cmd.Args[1]
-		if _, ok := h.modelRegistry.Get(h.ctx, model); !ok {
+		if _, ok := h.llmSvc.GetModel(h.ctx, llmapi.ModelEntry{Name: model}); !ok {
 			return fmt.Errorf("model '%s' is not supported. Available models: %s",
-				model, availableModelsString(h.modelRegistry))
+				model, availableModelsString(h.llmSvc))
 		}
 	}
 
-	backendService, err := h.newChatService(model)
+	backendService, chatEntry, err := h.modelService(h.ctx, model)
 	if err != nil {
 		return fmt.Errorf("new backend: %v", err)
 	}
@@ -1310,36 +900,25 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	agentID := "default"
 	serviceFactory := func(
 		model string,
-	) (llm.Service, string, error) {
-		entry, ok := h.modelRegistry.Get(h.ctx, model)
-		if !ok {
-			return nil, "", fmt.Errorf("model %q not found", model)
-		}
-		svc, err := h.newService(model)
-		if err != nil {
-			return nil, "", err
-		}
-		return svc, entry.Provider, nil
+	) (llmapi.Service, llmapi.ModelEntry, error) {
+		return h.modelService(h.ctx, model)
 	}
 	// Build a separate agentshell for the command adapter. It only needs
 	// the base tools for display (e.g. /tools); it carries no mutable state.
 	cmdRegistry := agent.NewRegistry(h.baseTools...)
 	cmdShellOpts := []agentshell.Option{
 		agentshell.WithMCPInfo(h.mcpManager),
-		agentshell.WithServiceFactory(h.newService),
 	}
 	if h.auditStore != nil {
 		cmdShellOpts = append(cmdShellOpts, agentshell.WithAuditStore(h.auditStore))
 	}
 	cmdShell := agentshell.New(
 		h.wm, backendService,
-		h.modelRegistry, model,
+		model,
 		h.dialogueStore, cmdRegistry, h.agentsConfig,
 		h.config,
 		h.skillRegistry, h.cwd, h.fs,
 		h.db, h.exec, h.lsp, h.parser, h.n,
-		h.memoryDataPath,
-		h.localRegistry,
 		cmdShellOpts...,
 	)
 
@@ -1347,28 +926,26 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	var comp *dialoguetui.Component
 	hs := &hintSlot{} // shared with syncComponent for hint preservation during compaction
 	adapter := &commandAdapter{
-		handler:            cmdShell,
-		dialogueID:         d.ID,
-		wm:                 h.wm,
-		store:              h.dialogueStore,
-		modelRegistry:      h.modelRegistry,
-		config:             h.config,
-		ctx:                h.ctx,
-		storage:            h.db,
-		newClient:          h.newClient,
-		newAnthropicClient: h.newAnthropicClient,
-		currentModel:       model,
-		skillRegistry:      h.skillRegistry,
-		auditStore:         h.auditStore,
+		handler:       cmdShell,
+		dialogueID:    d.ID,
+		wm:            h.wm,
+		store:         h.dialogueStore,
+		llmSvc:        h.llmSvc,
+		config:        h.config,
+		ctx:           h.ctx,
+		storage:       h.db,
+		currentModel:  model,
+		skillRegistry: h.skillRegistry,
+		auditStore:    h.auditStore,
 		resetFn: func() {
 			mu.Lock()
 			comp.Reset()
 			mu.Unlock()
 		},
-		compactFn: func(msgs []llm.Message) {
+		compactFn: func(msgs []llmapi.Message) {
 			mu.Lock()
 			comp.Reset()
-			pending := make(map[string]llm.ToolCall)
+			pending := make(map[string]llmapi.ToolCall)
 			for _, msg := range msgs {
 				addMessage(comp, msg, pending)
 			}
@@ -1391,7 +968,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	comp = dialoguetui.NewComponent(cfg)
 
 	// Replay dialogue history.
-	pendingTools := make(map[string]llm.ToolCall)
+	pendingTools := make(map[string]llmapi.ToolCall)
 	for _, msg := range d.Messages {
 		addMessage(comp, msg, pendingTools)
 	}
@@ -1438,18 +1015,18 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	allTools = append(allTools, taskTools...)
 	chatRegistry := agent.NewRegistry(allTools...)
 	chatRegistry.CopyOverridesFrom(h.toolRegistry)
-	chatRegistry.RegisterOverrides(openai.LLMProvider,
+	chatRegistry.RegisterOverrides("openai",
 		agentools.NewUpdatePlan(progressUpdater),
 		agentools.NewRequestUserInput(prompter),
 	)
-	chatRegistry.RegisterOverrides(codex.LLMProvider,
+	chatRegistry.RegisterOverrides("codex",
 		agentools.NewUpdatePlan(progressUpdater),
 		agentools.NewRequestUserInput(prompter),
 	)
-	chatRegistry.RegisterExclusions(openai.LLMProvider,
+	chatRegistry.RegisterExclusions("openai",
 		"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "ask_user_question",
 	)
-	chatRegistry.RegisterExclusions(codex.LLMProvider,
+	chatRegistry.RegisterExclusions("codex",
 		"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "ask_user_question",
 	)
 	spawner.SetRegistry(chatRegistry)
@@ -1458,7 +1035,6 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	syncComp := syncComponent{mu: mu, comp: comp, h: h, hintSlot: hs}
 	h.openChats.Store(d.ID, syncComp)
 
-	chatEntry, _ := h.modelRegistry.Get(h.ctx, model)
 	chatAgent := agent.NewAgent(
 		backendService, chatRegistry, h.skillRegistry,
 		h.dialogueStore, memRecaller, agent.Config{
@@ -1469,8 +1045,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 			ProjectInstructions: h.projectInstructions,
 			SessionKey:          sessionKey,
 			AgentID:             agentID,
-			Model:               model,
-			Provider:            chatEntry.Provider,
+			Model:               chatEntry,
 			Workspace:           h.cwd,
 			Hooks:               h.hookRunner,
 			Prompter:            prompter,
@@ -1541,7 +1116,7 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 	if query == "" {
 		query = " " // avoid library omiting Content field when zero-valued
 	}
-	msg := llm.Message{Content: query, Role: llm.RoleUser}
+	msg := llmapi.Message{Content: query, Role: llmapi.RoleUser}
 	addMessage(comp, msg, nil)
 
 	syncComp := syncComponent{mu: mu, comp: comp, h: h, hintSlot: &hintSlot{}}
@@ -1577,16 +1152,8 @@ func (h *aiEditorHandler) handleQuery(cmd textapi.Command) error {
 
 		})
 
-	serviceFactory := func(model string) (llm.Service, string, error) {
-		entry, ok := h.modelRegistry.Get(h.ctx, model)
-		if !ok {
-			return nil, "", fmt.Errorf("model %q not found", model)
-		}
-		svc, err := h.newService(model)
-		if err != nil {
-			return nil, "", err
-		}
-		return svc, entry.Provider, nil
+	serviceFactory := func(model string) (llmapi.Service, llmapi.ModelEntry, error) {
+		return h.modelService(h.ctx, model)
 	}
 	prompter := &tuiPrompter{tx: tx, noti: h.n}
 	spawner := agent.NewGoroutineSpawner(
@@ -1726,7 +1293,7 @@ func (h *aiEditorHandler) completeWithDialoguesIterator(ctx context.Context, sho
 func (h *aiEditorHandler) completeWithModelsIterator(ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
-	return iterator.Map(h.modelRegistry.Models(), func(e llmregistry.ModelEntry) string {
+	return iterator.Map(h.llmSvc.Models(), func(e llmapi.ModelEntry) string {
 		return e.Name
 	}), nil
 }
@@ -1822,7 +1389,7 @@ func baseDialogueID(archivedID string) string {
 	return archivedID
 }
 
-func replayMessages(d dialoguemanager.Dialogue) []llm.Message {
+func replayMessages(d dialoguemanager.Dialogue) []llmapi.Message {
 	// New dialogues persist the approved plan as a RoleUser anchor message
 	// directly inside d.Messages (see clearContext / CompactDialogue), so we
 	// must NOT re-inject when it is already present — that would duplicate
@@ -1835,16 +1402,16 @@ func replayMessages(d dialoguemanager.Dialogue) []llm.Message {
 	if d.ApprovedPlan == nil {
 		return d.Messages
 	}
-	planMsg := llm.Message{
-		Role:    llm.RoleUser,
+	planMsg := llmapi.Message{
+		Role:    llmapi.RoleUser,
 		Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", d.ApprovedPlan.Path, d.ApprovedPlan.Body),
 	}
 	if len(d.Messages) >= 2 &&
-		d.Messages[1].Role == llm.RoleUser &&
+		d.Messages[1].Role == llmapi.RoleUser &&
 		d.Messages[1].Content == planMsg.Content {
 		return d.Messages
 	}
-	msgs := make([]llm.Message, 0, len(d.Messages)+1)
+	msgs := make([]llmapi.Message, 0, len(d.Messages)+1)
 	if len(d.Messages) > 0 {
 		msgs = append(msgs, d.Messages[0])
 	}
@@ -1855,9 +1422,9 @@ func replayMessages(d dialoguemanager.Dialogue) []llm.Message {
 	return msgs
 }
 
-func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[string]llm.ToolCall) {
+func addMessage(c *dialoguetui.Component, msg llmapi.Message, pendingTools map[string]llmapi.ToolCall) {
 	switch msg.Role {
-	case llm.RoleAssistant:
+	case llmapi.RoleAssistant:
 		if msg.ReasoningContent != "" {
 			c.AddReasoningChunk(msg.ReasoningContent)
 		}
@@ -1870,7 +1437,7 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 				pendingTools[call.ID] = call
 			}
 		}
-	case llm.RoleUser:
+	case llmapi.RoleUser:
 		if replayed, ok := parseStoredCommandMessage(msg.Content); ok {
 			c.AddSendMessage(replayed)
 		} else if strings.HasPrefix(msg.Content, agent.CompactSummaryPrefix) ||
@@ -1879,8 +1446,8 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 		} else {
 			c.AddSendMessage(msg.Content)
 		}
-	case llm.RoleSystem:
-	case llm.RoleTool:
+	case llmapi.RoleSystem:
+	case llmapi.RoleTool:
 		id := msg.ToolCallID
 		name := "tool"
 		args := ""
@@ -1920,18 +1487,18 @@ func addMessage(c *dialoguetui.Component, msg llm.Message, pendingTools map[stri
 	}
 }
 
-func firstModel(reg llmregistry.Registry) (string, bool) {
-	it := reg.Models()
+func firstModel(svc llmapi.Service) string {
+	it := svc.Models()
 	defer func() { _ = it.Close() }()
 	e, ok := it.Next(context.Background())
 	if !ok {
-		return "", false
+		return ""
 	}
-	return e.Name, true
+	return e.Name
 }
 
-func availableModelsString(reg llmregistry.Registry) string {
-	it := reg.Models()
+func availableModelsString(svc llmapi.Service) string {
+	it := svc.Models()
 	defer func() { _ = it.Close() }()
 	var names []string
 	for {
@@ -1990,17 +1557,17 @@ func notifyTurnOutcome(noti browserapi.Notifications, outcome turnOutcome, reaso
 	}
 }
 
-func outcomeAndReasonForFinishReason(reason llm.FinishReason) (turnOutcome, string) {
+func outcomeAndReasonForFinishReason(reason llmapi.FinishReason) (turnOutcome, string) {
 	switch reason {
-	case llm.FinishReasonStop:
+	case llmapi.FinishReasonStop:
 		return turnOutcomeCompleted, ""
-	case llm.FinishReasonLength:
+	case llmapi.FinishReasonLength:
 		return turnOutcomeTruncated, ""
-	case llm.FinishReasonToolCall:
+	case llmapi.FinishReasonToolCall:
 		return turnOutcomeError, "the model stopped while requesting tool calls"
-	case llm.FinishReasonContentFilter:
+	case llmapi.FinishReasonContentFilter:
 		return turnOutcomeError, "the response was blocked by a content filter"
-	case llm.FinishReasonNull:
+	case llmapi.FinishReasonNull:
 		return turnOutcomeError, "the response ended unexpectedly"
 	default:
 		return turnOutcomeError, fmt.Sprintf("unexpected finish reason: %s", reason)
@@ -2011,7 +1578,7 @@ func outcomeAndReasonForFinishReason(reason llm.FinishReason) (turnOutcome, stri
 // from the store and replays it in the TUI via compactFn. It is used by
 // createAgentCompletions to handle EventCompacted from both the main
 // agent loop and child (sub-agent) events.
-func makeOnCompacted(store dialoguemanager.Store, compactFn func([]llm.Message)) func(string) {
+func makeOnCompacted(store dialoguemanager.Store, compactFn func([]llmapi.Message)) func(string) {
 	return func(dialogueID string) {
 		compacted, err := store.Get(context.Background(), dialogueID)
 		if err != nil {
@@ -2033,14 +1600,14 @@ func makeOnCompacted(store dialoguemanager.Store, compactFn func([]llm.Message))
 //     tool calls would produce dangling references),
 //   - excludes an exact match of currentMessage appearing at the tail
 //     (so the slash-command envelope message is not duplicated), and
-//   - returns freshly copied llm.Message values.
+//   - returns freshly copied llmapi.Message values.
 //
 // store MUST NOT be nil; passing a nil store is a developer error.
 // Returns nil when the dialogue has not been persisted yet or on error.
 func parentDialogueContextMessages(
 	ctx context.Context, store dialoguemanager.Store,
 	dialogueID, currentMessage string,
-) []llm.Message {
+) []llmapi.Message {
 	if store == nil {
 		panic("parentDialogueContextMessages: store must not be nil")
 	}
@@ -2058,19 +1625,19 @@ func parentDialogueContextMessages(
 	// message if it has already been appended to the parent dialogue.
 	if n := len(msgs); n > 0 {
 		tail := msgs[n-1]
-		if tail.Role == llm.RoleUser && tail.Content == currentMessage {
+		if tail.Role == llmapi.RoleUser && tail.Content == currentMessage {
 			msgs = msgs[:n-1]
 		}
 	}
-	out := make([]llm.Message, 0, len(msgs))
+	out := make([]llmapi.Message, 0, len(msgs))
 	for _, m := range msgs {
-		if m.Role == llm.RoleSystem || m.Role == llm.RoleTool {
+		if m.Role == llmapi.RoleSystem || m.Role == llmapi.RoleTool {
 			continue
 		}
 		// Drop assistant messages that exist solely to carry tool
 		// calls; tool calls from the parent reference tools that may
 		// not exist in the child sub-agent.
-		if m.Role == llm.RoleAssistant && len(m.ToolCalls) > 0 && m.Content == "" && m.ReasoningContent == "" {
+		if m.Role == llmapi.RoleAssistant && len(m.ToolCalls) > 0 && m.Content == "" && m.ReasoningContent == "" {
 			continue
 		}
 		// For assistant messages that mix text and tool calls, strip
@@ -2203,7 +1770,7 @@ func createAgentCompletions(
 				if skill.AllowedTools != "" {
 					allowedTools = strings.Fields(skill.AllowedTools)
 				}
-				var initialMessages []llm.Message
+				var initialMessages []llmapi.Message
 				if skill.ParentContext {
 					initialMessages = parentDialogueContextMessages(
 						req.ctx, parentStore, id, req.msg,
@@ -2299,7 +1866,7 @@ func createAgentCompletions(
 					switch {
 					case errors.Is(ctx.Err(), context.Canceled), errors.Is(req.ctx.Err(), context.Canceled):
 						outcome = turnOutcomeCanceled
-						outcomeReason = string(llm.FinishReasonNull)
+						outcomeReason = string(llmapi.FinishReasonNull)
 					}
 				}
 				notifyTurnOutcome(noti, outcome, outcomeReason)
@@ -2421,7 +1988,7 @@ func createAgentCompletions(
 					}
 				case agent.EventDone:
 					outcome, outcomeReason = outcomeAndReasonForFinishReason(ev.FinishReason)
-					if ev.FinishReason == llm.FinishReasonLength {
+					if ev.FinishReason == llmapi.FinishReasonLength {
 						select {
 						case tx <- dialoguetui.MessageEvent{
 							Type: dialoguetui.MessageEventWarning,
@@ -2468,7 +2035,7 @@ func createAgentCompletions(
 					}
 				} else if outcome == turnOutcomeNone {
 					outcome = turnOutcomeCanceled
-					outcomeReason = string(llm.FinishReasonNull)
+					outcomeReason = string(llmapi.FinishReasonNull)
 				}
 			}
 			if outcome == turnOutcomeNone {
@@ -2605,39 +2172,33 @@ type commandAdapter struct {
 	wm         browserapi.WindowManager
 	store      dialoguemanager.Store
 	// compactFn replaces messages in the component after a successful compact.
-	compactFn func(msgs []llm.Message)
+	compactFn func(msgs []llmapi.Message)
 
 	// Model switching support. When agent is non-nil, the /model command
 	// can switch the backing LLM service mid-conversation.
-	agent              *agent.Agent
-	modelRegistry      llmregistry.Registry
-	config             configedit.Config
-	ctx                context.Context
-	storage            storageapi.Service
-	newClient          clientConstructor
-	newAnthropicClient anthropic.ClientConstructor
-	currentModel       string
-	auditStore         *llm.AuditStore
+	agent        *agent.Agent
+	llmSvc       llmapi.Service
+	config       configedit.Config
+	ctx          context.Context
+	storage      storageapi.Service
+	currentModel string
+	auditStore   *audit.Store
 
 	// Skill resolution. When a /name command matches a skill, the
 	// formatted skill content is returned as UserMessage.
 	skillRegistry *skills.SkillRegistry
 }
 
-func (a *commandAdapter) newService(model string) (llm.Service, error) {
-	svc, err := newLLMService(a.ctx, a.config, a.modelRegistry, model,
-		a.newClient, a.newAnthropicClient, withLLMServiceStorage(a.ctx, a.storage))
-	if err != nil {
-		return nil, err
+func (a *commandAdapter) newService(model string) (llmapi.Service, llmapi.ModelEntry, error) {
+	entry, ok := a.llmSvc.GetModel(a.ctx, llmapi.ModelEntry{Name: model})
+	if !ok {
+		return nil, llmapi.ModelEntry{}, fmt.Errorf("model %q not found", model)
 	}
+	svc := a.llmSvc
 	if a.auditStore != nil {
-		var provider string
-		if entry, ok := a.modelRegistry.Get(context.Background(), model); ok {
-			provider = entry.Provider
-		}
-		svc = llm.NewAuditService(svc, a.auditStore, model, provider)
+		svc = audit.NewService(svc, a.auditStore, entry)
 	}
-	return svc, nil
+	return svc, entry, nil
 }
 
 func (a *commandAdapter) HandleCommand(
@@ -2839,16 +2400,15 @@ func (a *commandAdapter) handleModel(
 		}, nil
 	}
 	model := args[0]
-	entry, ok := a.modelRegistry.Get(ctx, model)
-	if !ok {
+	if _, ok := a.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: model}); !ok {
 		return dialoguetui.CommandResult{}, fmt.Errorf("model %q is not available. Available models: %s",
-			model, availableModelsString(a.modelRegistry))
+			model, availableModelsString(a.llmSvc))
 	}
-	svc, err := a.newService(model)
+	svc, entry, err := a.newService(model)
 	if err != nil {
 		return dialoguetui.CommandResult{}, fmt.Errorf("create service for model %q: %w", model, err)
 	}
-	a.agent.SwapService(svc, model, entry.Provider)
+	a.agent.SwapService(svc, entry)
 	a.currentModel = model
 	md, err := markdown.New(fmt.Sprintf("Switched to model **%s**", model))
 	if err != nil {
@@ -2860,14 +2420,14 @@ func (a *commandAdapter) handleModel(
 }
 
 // validEffortLevels lists the allowed reasoning effort values.
-var validEffortLevels = []llm.ReasoningEffort{
-	llm.ReasoningEffortNone,
-	llm.ReasoningEffortMinimal,
-	llm.ReasoningEffortLow,
-	llm.ReasoningEffortMedium,
-	llm.ReasoningEffortHigh,
-	llm.ReasoningEffortXHigh,
-	llm.ReasoningEffortMax,
+var validEffortLevels = []llmapi.ReasoningEffort{
+	llmapi.ReasoningEffortNone,
+	llmapi.ReasoningEffortMinimal,
+	llmapi.ReasoningEffortLow,
+	llmapi.ReasoningEffortMedium,
+	llmapi.ReasoningEffortHigh,
+	llmapi.ReasoningEffortXHigh,
+	llmapi.ReasoningEffortMax,
 }
 
 // handleEffort shows the current effort level or sets a new one.
@@ -2883,7 +2443,7 @@ func (a *commandAdapter) handleEffort(args []string) (dialoguetui.CommandResult,
 		}, nil
 	}
 
-	level := llm.ReasoningEffort(args[0])
+	level := llmapi.ReasoningEffort(args[0])
 	valid := false
 	for _, v := range validEffortLevels {
 		if level == v {
@@ -2996,7 +2556,7 @@ type compactIterator struct {
 	args       []string
 	store      dialoguemanager.Store
 	dialogueID string
-	compactFn  func(msgs []llm.Message)
+	compactFn  func(msgs []llmapi.Message)
 
 	called bool
 	closed bool
@@ -3115,8 +2675,8 @@ func (a *commandAdapter) openMarkdownFloating(md *markdown.Component) {
 func (a *commandAdapter) Complete(
 	ctx context.Context, name string, args []string,
 ) (iterator.Iterator[string], error) {
-	if name == "model" && a.modelRegistry != nil {
-		return iterator.Map(a.modelRegistry.Models(), func(e llmregistry.ModelEntry) string {
+	if name == "model" && a.llmSvc != nil {
+		return iterator.Map(a.llmSvc.Models(), func(e llmapi.ModelEntry) string {
 			return e.Name
 		}), nil
 	}
@@ -3260,15 +2820,6 @@ func (p statusPhase) String() string {
 		return "rate limited"
 	default:
 		return ""
-	}
-}
-
-func (p statusPhase) arrow() rune {
-	switch p {
-	case phaseSending, phaseToolCalling:
-		return '↑'
-	default:
-		return '↓'
 	}
 }
 

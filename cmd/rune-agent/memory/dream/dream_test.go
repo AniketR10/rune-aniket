@@ -43,7 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/ide/vctrl/testgit"
 )
 
@@ -70,9 +70,9 @@ func TestDream(t *testing.T) {
 				{
 					ID:      "d1",
 					Version: 1,
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "How do I write tests?"},
-						{Role: llm.RoleAssistant, Content: "Use table-driven tests."},
+					Messages: []llmapi.Message{
+						{Role: llmapi.RoleUser, Content: "How do I write tests?"},
+						{Role: llmapi.RoleAssistant, Content: "Use table-driven tests."},
 					},
 				},
 			},
@@ -108,8 +108,8 @@ func TestDream(t *testing.T) {
 		deps := validDeps(t, dir)
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "hi"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "hi"},
 				}},
 			},
 		}
@@ -138,8 +138,8 @@ func TestDream(t *testing.T) {
 		deps := validDeps(t, dir)
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 3, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "updated content"},
+				{ID: "d1", Version: 3, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "updated content"},
 				}},
 			},
 		}
@@ -172,11 +172,11 @@ func TestDream(t *testing.T) {
 		deps := validDeps(t, dir)
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "first"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "first"},
 				}},
-				{ID: "d2", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "second"},
+				{ID: "d2", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "second"},
 				}},
 			},
 		}
@@ -214,8 +214,8 @@ func TestDream(t *testing.T) {
 		deps := validDeps(t, dir)
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "hi"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "hi"},
 				}},
 			},
 		}
@@ -241,9 +241,9 @@ func TestDream(t *testing.T) {
 		d1 := dialoguemanager.Dialogue{
 			ID:      "d1",
 			Version: 1,
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "old convo"},
-				{Role: llm.RoleAssistant, Content: "old response"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "old convo"},
+				{Role: llmapi.RoleAssistant, Content: "old response"},
 			},
 		}
 		deps.Store = &mockDialogueStore{
@@ -328,8 +328,8 @@ func TestDream(t *testing.T) {
 		d1 := dialoguemanager.Dialogue{
 			ID:      "d1",
 			Version: 1,
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "old convo"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "old convo"},
 			},
 		}
 		deps.Store = &mockDialogueStore{
@@ -394,9 +394,9 @@ func TestDream(t *testing.T) {
 		d1 := dialoguemanager.Dialogue{
 			ID:      "d1",
 			Version: 1,
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "How should I write tests?"},
-				{Role: llm.RoleAssistant, Content: "Use table-driven tests."},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "How should I write tests?"},
+				{Role: llmapi.RoleAssistant, Content: "Use table-driven tests."},
 			},
 		}
 		store := &mockDialogueStore{
@@ -488,9 +488,9 @@ func TestValidateDeps(t *testing.T) {
 func TestFormatTranscript(t *testing.T) {
 	t.Run("formats user and assistant messages", func(t *testing.T) {
 		d := dialoguemanager.Dialogue{
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "hello"},
-				{Role: llm.RoleAssistant, Content: "world"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "hello"},
+				{Role: llmapi.RoleAssistant, Content: "world"},
 			},
 		}
 		result := formatTranscript(d)
@@ -502,9 +502,9 @@ func TestFormatTranscript(t *testing.T) {
 
 	t.Run("skips system messages", func(t *testing.T) {
 		d := dialoguemanager.Dialogue{
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: "secret"},
-				{Role: llm.RoleUser, Content: "hello"},
+			Messages: []llmapi.Message{
+				{Role: llmapi.RoleSystem, Content: "secret"},
+				{Role: llmapi.RoleUser, Content: "hello"},
 			},
 		}
 		result := formatTranscript(d)
@@ -559,8 +559,8 @@ func TestRunPhases(t *testing.T) {
 		deps := validDeps(t, dir)
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "hello"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "hello"},
 				}},
 			},
 		}
@@ -675,8 +675,8 @@ func TestRunPhases(t *testing.T) {
 		deps := validDeps(t, dir)
 		deps.Store = &mockDialogueStore{
 			dialogues: []dialoguemanager.Dialogue{
-				{ID: "d1", Version: 1, Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "hi"},
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "hi"},
 				}},
 			},
 		}
@@ -736,9 +736,9 @@ func TestDreamPipelineGitIntegration(t *testing.T) {
 	d1 := dialoguemanager.Dialogue{
 		ID:      "d1",
 		Version: 1,
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "How should I write tests?"},
-			{Role: llm.RoleAssistant, Content: "Use table-driven tests."},
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "How should I write tests?"},
+			{Role: llmapi.RoleAssistant, Content: "Use table-driven tests."},
 		},
 	}
 
@@ -1029,23 +1029,23 @@ func hasProgressType(progress []Progress, typ ProgressType) bool {
 
 // --- Mocks ---
 
-// mockLLMService implements llm.Service for testing.
+// mockLLMService implements llmapi.Service for testing.
 type mockLLMService struct {
 	mu        sync.Mutex
 	callCount int
 	responses []mockLLMResponse
-	requests  []llm.Request
+	requests  []llmapi.Request
 }
 
 type mockLLMResponse struct {
 	text         string
-	finishReason llm.FinishReason
+	finishReason llmapi.FinishReason
 	err          error
 }
 
 func (m *mockLLMService) CreateCompletion(
-	ctx context.Context, req llm.Request,
-) (iterator.Iterator[llm.Event], error) {
+	ctx context.Context, _ llmapi.ModelEntry, req llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -1065,11 +1065,11 @@ func (m *mockLLMService) CreateCompletion(
 		return nil, resp.err
 	}
 
-	events := []llm.Event{
-		{Type: llm.EventTextDelta, Text: resp.text},
-		{Type: llm.EventStreamDone, DoneData: &llm.DoneData{
-			Message: llm.Message{
-				Role:    llm.RoleAssistant,
+	events := []llmapi.Event{
+		{Type: llmapi.EventTextDelta, Text: resp.text},
+		{Type: llmapi.EventStreamDone, DoneData: &llmapi.DoneData{
+			Message: llmapi.Message{
+				Role:    llmapi.RoleAssistant,
 				Content: resp.text,
 			},
 			FinishReason: resp.finishReason,
@@ -1078,12 +1078,22 @@ func (m *mockLLMService) CreateCompletion(
 	return iterator.FromSlice(events), nil
 }
 
-func (m *mockLLMService) CountTokens(_ []llm.Message) (int, error) {
+func (m *mockLLMService) CountTokens(_ llmapi.ModelEntry, _ []llmapi.Message) (int, error) {
 	return 0, nil
 }
 
-func (m *mockLLMService) ContextWindow() int {
-	return 100000
+func (m *mockLLMService) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return iterator.FromSlice([]llmapi.ModelEntry{{Name: "test", ContextWindow: 100000}})
+}
+
+func (m *mockLLMService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	if model.Name == "" {
+		model.Name = "test"
+	}
+	if model.ContextWindow == 0 {
+		model.ContextWindow = 100000
+	}
+	return model, true
 }
 
 func (m *mockLLMService) getCallCount() int {
@@ -1095,7 +1105,7 @@ func (m *mockLLMService) getCallCount() int {
 func stopLLMResponse(text string) mockLLMResponse {
 	return mockLLMResponse{
 		text:         text,
-		finishReason: llm.FinishReasonStop,
+		finishReason: llmapi.FinishReasonStop,
 	}
 }
 
@@ -1154,7 +1164,7 @@ func (s *mockDialogueStore) Delete(
 
 func (s *mockDialogueStore) AppendMessages(
 	_ context.Context, d dialoguemanager.Dialogue,
-	msgs []llm.Message, _ llm.DialogueUsage,
+	msgs []llmapi.Message, _ llmapi.DialogueUsage,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

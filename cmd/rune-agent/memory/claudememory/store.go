@@ -39,7 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 var errReadOnly = errors.New("claudememory: read-only store")
@@ -170,7 +170,7 @@ func (s *Store) Delete(_ context.Context, _ string) error {
 // AppendMessages is not supported on a read-only store.
 func (s *Store) AppendMessages(
 	_ context.Context, _ dialoguemanager.Dialogue,
-	_ []llm.Message, _ llm.DialogueUsage,
+	_ []llmapi.Message, _ llmapi.DialogueUsage,
 ) error {
 	return errReadOnly
 }
@@ -343,7 +343,7 @@ type contentBlock struct {
 // parseConversation reads a Claude Code JSONL stream and extracts
 // user/assistant messages, skipping sidechains, thinking, tool_use,
 // and non-conversational entry types.
-func parseConversation(r io.Reader) ([]llm.Message, error) {
+func parseConversation(r io.Reader) ([]llmapi.Message, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // 10MB max line
 
@@ -352,13 +352,13 @@ func parseConversation(r io.Reader) ([]llm.Message, error) {
 		texts []string
 	}
 
-	var msgs []llm.Message
+	var msgs []llmapi.Message
 	var pending *pendingAssistant
 
 	flushPending := func() {
 		if pending != nil && len(pending.texts) > 0 {
-			msgs = append(msgs, llm.Message{
-				Role:    llm.RoleAssistant,
+			msgs = append(msgs, llmapi.Message{
+				Role:    llmapi.RoleAssistant,
 				Content: strings.Join(pending.texts, ""),
 			})
 		}
@@ -395,8 +395,8 @@ func parseConversation(r io.Reader) ([]llm.Message, error) {
 			if text == "" {
 				continue
 			}
-			msgs = append(msgs, llm.Message{
-				Role:    llm.RoleUser,
+			msgs = append(msgs, llmapi.Message{
+				Role:    llmapi.RoleUser,
 				Content: text,
 			})
 

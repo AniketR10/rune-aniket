@@ -32,12 +32,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/cmd/rune-agent/extension"
-	"unstable.build/go-tui/cmd/rune-agent/llm/anthropic"
-	"unstable.build/go-tui/cmd/rune-agent/llm/codex"
-	"unstable.build/go-tui/cmd/rune-agent/llm/gemini"
-	"unstable.build/go-tui/cmd/rune-agent/llm/llmregistry"
-	"unstable.build/go-tui/cmd/rune-agent/llm/ollama"
-	"unstable.build/go-tui/cmd/rune-agent/llm/openai"
 	"unstable.build/go-tui/debug"
 )
 
@@ -64,19 +58,7 @@ func main() {
 
 	})
 
-	// Build the composite model registry from all providers.
-	static := llmregistry.NewStatic()
-	openai.RegisterModels(static)
-	codex.RegisterModels(static)
-	anthropic.RegisterModels(static)
-	gemini.RegisterModels(static)
-
-	ollamaRegistry := ollama.NewRegistry("")
-	registry := llmregistry.NewComposite(static, ollamaRegistry)
-
-	defaultModel := openai.GPT5Dot5
-
-	ext, metadata := extension.NewExtension(registry, defaultModel)
+	ext, metadata := extension.NewExtension()
 	err := extensionapi.ServeWorkspaceExtension(ext, metadata)
 	if err != nil {
 		slog.Error("serve extension", "error", err)

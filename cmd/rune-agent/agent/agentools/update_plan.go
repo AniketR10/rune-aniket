@@ -31,7 +31,7 @@ import (
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // updatePlanTool is a Codex-style checklist/progress tool. It updates the
@@ -63,10 +63,10 @@ func NewUpdatePlan(updater agent.ProgressUpdater) agent.Tool {
 	}
 }
 
-func (t *updatePlanTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *updatePlanTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "update_plan",
 			Description: `Updates the task plan.
 Provide an optional explanation and a list of plan items, each with a step and status.

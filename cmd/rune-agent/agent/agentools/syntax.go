@@ -33,7 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // SyntaxTools returns all syntax (tree-sitter) backed agent tools.
@@ -153,10 +153,10 @@ type nodeTypesArgs struct {
 	NodeTypes string `json:"node_types"`
 }
 
-func (t *listSymbolsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *listSymbolsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "list_symbols",
 			Description: `Find all functions, methods, types, or variables across the workspace by
 category using tree-sitter. Returns matches formatted as
@@ -221,10 +221,10 @@ type fileNodeTypesArgs struct {
 	NodeTypes string `json:"node_types"`
 }
 
-func (t *listFileSymbolsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *listFileSymbolsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "list_file_symbols",
 			Description: `Find functions, methods, types, or variables in a single file by
 category using tree-sitter. Same as list_symbols but scoped to one file.
@@ -304,10 +304,10 @@ type queryASTArgs struct {
 	Captures []string `json:"captures"`
 }
 
-func (t *queryASTTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *queryASTTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "query_ast",
 			Description: `Search for structural code patterns across the workspace using a
 tree-sitter S-expression query. Returns matches formatted as
@@ -382,10 +382,10 @@ type queryFileASTArgs struct {
 	Captures []string `json:"captures"`
 }
 
-func (t *queryFileASTTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *queryFileASTTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "query_file_ast",
 			Description: `Search for structural code patterns in a single file using a tree-sitter
 S-expression query. Same as query_ast but scoped to one file.

@@ -50,7 +50,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/debug"
 )
 
@@ -100,7 +100,7 @@ type Progress struct {
 
 // Deps holds all dependencies for the Dream function.
 type Deps struct {
-	LLM            llm.Service
+	LLM            llmapi.Service
 	Store          dialoguemanager.Store // conversation source
 	Storage        storageapi.Service    // dream state persistence
 	FS             workspaceapi.FileSystem
@@ -109,8 +109,7 @@ type Deps struct {
 	Parser         syntaxapi.Parser         // for structural queries
 	Notifications  browserapi.Notifications // for skill registry warnings
 	DataPath       string                   // memory workspace root
-	Model          string                   // LLM model name (passed to agent config)
-	Provider       string                   // LLM provider (e.g. "openai", "anthropic")
+	Model          llmapi.ModelEntry        // resolved LLM model entry (passed to agent config)
 	MaxFixAttempts int                      // 0 uses defaultMaxFixAttempts
 
 	// SourceDialoguePrompt, if set, replaces the default "Source Dialogue
@@ -190,7 +189,6 @@ func NewAgentPhase(name, description, systemPrompt string,
 				MaxIterations: dreamMaxIterations,
 				SystemPrompt:  systemPrompt,
 				Model:         deps.Model,
-				Provider:      deps.Provider,
 			})
 
 			dialogueID := uuid.New().String()
@@ -557,7 +555,6 @@ func dreamDialogue(
 		MaxIterations: dreamMaxIterations,
 		SystemPrompt:  prompt,
 		Model:         deps.Model,
-		Provider:      deps.Provider,
 	})
 
 	dialogueID := uuid.New().String()
@@ -838,7 +835,6 @@ func fixUpgradeCompat(ctx context.Context, ch chan<- Progress, deps Deps, fromVe
 			MaxIterations: dreamMaxIterations,
 			SystemPrompt:  m.FixPrompt,
 			Model:         deps.Model,
-			Provider:      deps.Provider,
 		})
 
 		dialogueID := uuid.New().String()
@@ -958,7 +954,7 @@ func preReadWorkspaceFiles(fs workspaceapi.FileSystem, dataPath string) []agent.
 func formatTranscript(d dialoguemanager.Dialogue) string {
 	var b strings.Builder
 	for _, msg := range d.Messages {
-		if msg.Role == llm.RoleSystem {
+		if msg.Role == llmapi.RoleSystem {
 			continue
 		}
 		fmt.Fprintf(&b, "### %s\n\n%s\n\n", msg.Role, msg.Content)

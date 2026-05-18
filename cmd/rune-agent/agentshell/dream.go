@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
@@ -51,14 +52,13 @@ func (s *shell) handleDream(
 		}
 	}
 
-	entry, ok := s.modelRegistry.Get(ctx, model)
-	if !ok {
-		return nil, fmt.Errorf("model %q not found in registry", model)
-	}
-
 	svc, err := s.serviceForModel(model)
 	if err != nil {
 		return nil, fmt.Errorf("create llm service: %w", err)
+	}
+	entry, ok := svc.GetModel(ctx, llmapi.ModelEntry{Name: model})
+	if !ok {
+		return nil, fmt.Errorf("model %q not found", model)
 	}
 
 	deps := dream.Deps{
@@ -70,9 +70,7 @@ func (s *shell) handleDream(
 		LSP:           s.lsp,
 		Parser:        s.parser,
 		Notifications: s.notifications,
-		DataPath:      s.dataPath,
-		Model:         model,
-		Provider:      entry.Provider,
+		Model:         entry,
 	}
 
 	it, err := dream.Dream(ctx, deps)

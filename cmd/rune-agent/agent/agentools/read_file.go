@@ -33,7 +33,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // maxImageBytes is the maximum file size for image reads (20 MB).
@@ -59,10 +59,10 @@ func newReadFile(fs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *File
 	return &readFileTool{fs: fs, cwd: cwd, tracker: tracker, maxLineBytes: maxLineBytes}
 }
 
-func (t *readFileTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *readFileTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "read_file",
 			Description: `Read the contents of a file. Returns each line prefixed with its 1-based
 line number (e.g. "L1: hello world").
@@ -224,9 +224,9 @@ func (t *readFileTool) executeImage(ctx context.Context, path string, data []byt
 
 	return agent.ToolResult{
 		Content: summary,
-		MultiContent: []llm.ContentPart{
-			{Type: llm.ContentPartTypeText, Text: summary},
-			{Type: llm.ContentPartTypeImageURL, ImageURL: dataURI},
+		MultiContent: []llmapi.ContentPart{
+			{Type: llmapi.ContentPartTypeText, Text: summary},
+			{Type: llmapi.ContentPartTypeImageURL, ImageURL: dataURI},
 		},
 		DropToolResultIDs: staleIDs,
 	}

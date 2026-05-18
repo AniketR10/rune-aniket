@@ -30,7 +30,7 @@ import (
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // NewTaskTools returns the four task tracking tools: TaskCreate, TaskUpdate,
@@ -58,10 +58,10 @@ type taskCreateArgs struct {
 	Metadata    map[string]any `json:"metadata"`
 }
 
-func (t *taskCreateTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *taskCreateTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "TaskCreate",
 			Description: "Create a new task to track progress on a piece of work.",
 			Parameters: map[string]any{
@@ -135,10 +135,10 @@ type taskUpdateArgs struct {
 	Metadata     map[string]any `json:"metadata"`
 }
 
-func (t *taskUpdateTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *taskUpdateTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "TaskUpdate",
 			Description: "Update an existing task's status, subject, or other fields.",
 			Parameters: map[string]any{
@@ -238,10 +238,10 @@ type taskGetArgs struct {
 	TaskID string `json:"taskId"`
 }
 
-func (t *taskGetTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *taskGetTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "TaskGet",
 			Description: "Get the full details of a task by ID.",
 			Parameters: map[string]any{
@@ -288,10 +288,10 @@ type taskListTool struct {
 	store *taskstore.Store
 }
 
-func (t *taskListTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *taskListTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        "TaskList",
 			Description: "List all tasks and their statuses.",
 			Parameters: map[string]any{

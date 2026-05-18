@@ -2,25 +2,10 @@ extensions:
   rune-agent:
     path: '$RUNE_DATADIR/bin/rune-agent'
     config:
-      # Per-provider API keys.
-      # openai:
-      #   api_key: 'sk-...'
-      #   reasoning_effort: 'xhigh'
-      # anthropic:
-      #   api_key: 'sk-ant-...'
-      #   reasoning_effort: 'max'
-      # gemini:
-      #   api_key: 'AIza...'
-      #
-      # Custom OpenAI-compatible provider. Use this to connect to any
-      # provider that exposes an OpenAI-compatible API (e.g. vLLM,
-      # LiteLLM, Together, Groq, a local proxy, etc.).
-      # custom_provider:
-      #   url: 'https://my-provider.example.com/v1/'
-      #   api_key: 'sk-...'
-      #   available_models:
-      #     my-model-name: 128000      # model id → context window (tokens)
-      #     another-model: 32000
+      # Provider API keys, custom OpenAI-compatible endpoints, codex login
+      # state, and local model registries now live host-side under the
+      # top-level `models.*` block in the rune config (managed via the
+      # `models providers` and `models local` rune shell commands).
       # Name of the project instructions file to discover. The agent
       # walks up from the workspace root looking for files with this
       # name and injects their contents into the system prompt.

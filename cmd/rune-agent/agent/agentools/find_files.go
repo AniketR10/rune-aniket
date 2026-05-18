@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -55,10 +55,10 @@ func newFindFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *Fi
 	return &findFilesTool{fs: wfs, cwd: cwd, tracker: tracker}
 }
 
-func (t *findFilesTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *findFilesTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "find_files",
 			Description: `Find files by name or path using a regex pattern. Recursively walks
 the directory tree starting from path (defaults to workspace root),

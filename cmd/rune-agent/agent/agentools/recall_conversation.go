@@ -30,7 +30,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/memory"
 )
 
@@ -49,10 +49,10 @@ func NewRecallConversation(exec workspaceapi.Executor, memoryPath string) agent.
 	return &recallConversationTool{exec: exec, memoryPath: memoryPath}
 }
 
-func (t *recallConversationTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *recallConversationTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "recall_conversation",
 			Description: `Fetch the original conversation transcript that produced a memory.
 

@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestParseConversation(t *testing.T) {
@@ -46,9 +46,9 @@ func TestParseConversation(t *testing.T) {
 		msgs, err := parseConversation(strings.NewReader(jsonl))
 		require.NoError(t, err)
 		require.Len(t, msgs, 2)
-		assert.Equal(t, llm.RoleUser, msgs[0].Role)
+		assert.Equal(t, llmapi.RoleUser, msgs[0].Role)
 		assert.Equal(t, "Hello", msgs[0].Content)
-		assert.Equal(t, llm.RoleAssistant, msgs[1].Role)
+		assert.Equal(t, llmapi.RoleAssistant, msgs[1].Role)
 		assert.Equal(t, "Hi there!", msgs[1].Content)
 	})
 
@@ -218,7 +218,7 @@ func TestStoreReadOnly(t *testing.T) {
 
 	assert.ErrorIs(t, store.Create(ctx, dialoguemanager.Dialogue{ID: "x"}), errReadOnly)
 	assert.ErrorIs(t, store.Delete(ctx, "x"), errReadOnly)
-	assert.ErrorIs(t, store.AppendMessages(ctx, dialoguemanager.Dialogue{}, nil, llm.DialogueUsage{}), errReadOnly)
+	assert.ErrorIs(t, store.AppendMessages(ctx, dialoguemanager.Dialogue{}, nil, llmapi.DialogueUsage{}), errReadOnly)
 }
 
 func TestStoreHealth(t *testing.T) {

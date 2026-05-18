@@ -33,7 +33,7 @@ import (
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // ToolStats tracks execution metrics for a single MCP tool.
@@ -83,10 +83,10 @@ type toolAdapter struct {
 	stats      *ToolStats
 }
 
-func (t *toolAdapter) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *toolAdapter) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name:        t.serverName + "_" + t.mcpTool.Name,
 			Description: t.mcpTool.Description,
 			Parameters:  sanitizeMCPInputSchema(t.serverName, t.mcpTool.Name, t.mcpTool.InputSchema),

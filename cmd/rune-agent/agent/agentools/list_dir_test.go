@@ -32,13 +32,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestListDir_definition(t *testing.T) {
 	tool := NewListDir(localFS{}, dirURI("/workspace"))
 	def := tool.Definition()
-	assert.Equal(t, llm.ToolTypeFunction, def.Type)
+	assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 	assert.Equal(t, "list_dir", def.Function.Name)
 	assert.NotEmpty(t, def.Function.Description)
 	assert.NotNil(t, def.Function.Parameters)

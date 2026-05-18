@@ -36,12 +36,12 @@ import (
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // conversationAuditPrefix is the key prefix used for audit entries in
-// the dialogue store. Duplicated here because llm.auditKeyPrefix is
+// the dialogue store. Duplicated here because llmapi.auditKeyPrefix is
 // unexported.
 const conversationAuditPrefix = "audit:"
 
@@ -50,10 +50,10 @@ type listConversationsTool struct {
 	sessionsDir string
 }
 
-func (t *listConversationsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *listConversationsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "list_conversations",
 			Description: `List past user to agent conversation sessions.
 
@@ -126,10 +126,10 @@ type searchConversationsArgs struct {
 	Pattern string `json:"pattern"`
 }
 
-func (t *searchConversationsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *searchConversationsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "search_conversations",
 			Description: `Search across all past conversation sessions for a regex pattern.
 

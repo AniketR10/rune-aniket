@@ -33,7 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // LSPTools returns all LSP-backed agent tools. The tracker should be
@@ -246,10 +246,10 @@ type symbolArgs struct {
 	Symbol string `json:"symbol"`
 }
 
-func (t *findDefinitionTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *findDefinitionTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "find_definition",
 			Description: `Find where a symbol is defined. Returns the file path and line number
 of the definition (e.g. "src/main.go:42").
@@ -311,10 +311,10 @@ type findImplementationsTool struct {
 	tracker *FileTracker
 }
 
-func (t *findImplementationsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *findImplementationsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "find_implementations",
 			Description: `Find concrete types that implement an interface. Returns file paths and
 line numbers for each implementation (e.g. "handler.go:15").
@@ -375,10 +375,10 @@ type findReferencesTool struct {
 	tracker *FileTracker
 }
 
-func (t *findReferencesTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *findReferencesTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "find_references",
 			Description: `Find all references to a symbol across the workspace. Returns file
 paths, line numbers, and source text for each reference, formatted as
@@ -516,10 +516,10 @@ func (a filePathArgs) filePath() (string, error) {
 	return "", fmt.Errorf("missing required parameter: path")
 }
 
-func (t *outlineFileTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *outlineFileTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "outline_file",
 			Description: `Get a flat outline of a file showing all symbols (functions,
 types, methods, variables) with their kinds, line numbers, and names.
@@ -625,10 +625,10 @@ type searchSymbolsArgs struct {
 	Query string `json:"query"`
 }
 
-func (t *searchSymbolsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *searchSymbolsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "search_symbols",
 			Description: `Search for symbols by name across the entire workspace. Returns matching
 symbol names with their kind and location (e.g. "handler.go:42:function:HandleRequest"),
@@ -714,10 +714,10 @@ type describeSymbolTool struct {
 	cwd workspaceapi.URI
 }
 
-func (t *describeSymbolTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *describeSymbolTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "describe_symbol",
 			Description: `Get type information and documentation for a symbol. Returns the
 symbol's type signature and any doc comments from hover information.
@@ -797,10 +797,10 @@ type checkFileErrorsTool struct {
 	tracker *FileTracker
 }
 
-func (t *checkFileErrorsTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *checkFileErrorsTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "check_file_errors",
 			Description: `Get compilation errors, warnings, and linter diagnostics for a file.
 Returns issues sorted by severity (errors first), each formatted as
@@ -891,10 +891,10 @@ type formatFileTool struct {
 	tracker *FileTracker
 }
 
-func (t *formatFileTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *formatFileTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "format_file",
 			Description: `Format a file using the language server's formatter (e.g. gofmt for Go).
 Reads the file, applies formatting edits, and writes the result back.

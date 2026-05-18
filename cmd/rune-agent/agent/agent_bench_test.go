@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // benchFixtures returns the shared test data used by both benchmarks:
@@ -97,7 +97,7 @@ func benchFixtures() (responses []mockResponse, tools []Tool) {
 		"passed to `make` when building `reqMessages`. Because `resourceMsgs` can be non-empty, the capacity ",
 		"calculation must account for it. The corrected expression is:\n\n",
 		"```go\n",
-		"messages := make([]llm.Message, 0,\n",
+		"messages := make([]llmapi.Message, 0,\n",
 		"    len(dialogue.Messages)+len(resourceMsgs)+1)\n",
 		"```\n\n",
 		"This avoids a reallocation on the first append when context resources are present, which is the ",
@@ -170,27 +170,27 @@ agent/tool.go:42: type Tool interface {`
 	// CountTokens + estimateToolDefTokens. Setting it here matches
 	// production behavior — without it, every turn falls into the
 	// expensive fallback path, which doesn't reflect real usage.
-	reportedUsage := llm.Usage{TokensSent: 2000, TokensReceived: 150}
+	reportedUsage := llmapi.Usage{TokensSent: 2000, TokensReceived: 150}
 
 	responses = []mockResponse{
 		// Step 1: read two files in parallel.
 		{
 			chunks:       []string{""},
-			finishReason: llm.FinishReasonToolCall,
+			finishReason: llmapi.FinishReasonToolCall,
 			usage:        reportedUsage,
-			toolCalls: []llm.ToolCall{
+			toolCalls: []llmapi.ToolCall{
 				{
 					ID:   "c1",
-					Type: llm.ToolTypeFunction,
-					Function: llm.FunctionCall{
+					Type: llmapi.ToolTypeFunction,
+					Function: llmapi.FunctionCall{
 						Name:      "read_file",
 						Arguments: `{"path":"agent/agent.go"}`,
 					},
 				},
 				{
 					ID:   "c2",
-					Type: llm.ToolTypeFunction,
-					Function: llm.FunctionCall{
+					Type: llmapi.ToolTypeFunction,
+					Function: llmapi.FunctionCall{
 						Name:      "read_file",
 						Arguments: `{"path":"agent/tool.go"}`,
 					},
@@ -200,13 +200,13 @@ agent/tool.go:42: type Tool interface {`
 		// Step 2: search for a symbol.
 		{
 			chunks:       []string{""},
-			finishReason: llm.FinishReasonToolCall,
+			finishReason: llmapi.FinishReasonToolCall,
 			usage:        reportedUsage,
-			toolCalls: []llm.ToolCall{
+			toolCalls: []llmapi.ToolCall{
 				{
 					ID:   "c3",
-					Type: llm.ToolTypeFunction,
-					Function: llm.FunctionCall{
+					Type: llmapi.ToolTypeFunction,
+					Function: llmapi.FunctionCall{
 						Name:      "search_content",
 						Arguments: `{"query":"Agent.run","path":"agent"}`,
 					},
@@ -216,21 +216,21 @@ agent/tool.go:42: type Tool interface {`
 		// Step 3: edit a file and read another in parallel.
 		{
 			chunks:       []string{mediumOutput},
-			finishReason: llm.FinishReasonToolCall,
+			finishReason: llmapi.FinishReasonToolCall,
 			usage:        reportedUsage,
-			toolCalls: []llm.ToolCall{
+			toolCalls: []llmapi.ToolCall{
 				{
 					ID:   "c4",
-					Type: llm.ToolTypeFunction,
-					Function: llm.FunctionCall{
+					Type: llmapi.ToolTypeFunction,
+					Function: llmapi.FunctionCall{
 						Name:      "apply_patch",
 						Arguments: `{"path":"agent/agent.go","patch":"--- a/agent/agent.go\n+++ b/agent/agent.go\n@@ -1 +1 @@\n-old line\n+new line"}`,
 					},
 				},
 				{
 					ID:   "c5",
-					Type: llm.ToolTypeFunction,
-					Function: llm.FunctionCall{
+					Type: llmapi.ToolTypeFunction,
+					Function: llmapi.FunctionCall{
 						Name:      "read_file",
 						Arguments: `{"path":"llm/service.go"}`,
 					},
@@ -242,7 +242,7 @@ agent/tool.go:42: type Tool interface {`
 		// a large assistant message for persistence.
 		{
 			chunks:       longOutputChunks,
-			finishReason: llm.FinishReasonStop,
+			finishReason: llmapi.FinishReasonStop,
 			usage:        reportedUsage,
 		},
 	}

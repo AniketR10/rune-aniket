@@ -29,7 +29,7 @@ import (
 	"fmt"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type requestSkillTool struct {
@@ -49,10 +49,10 @@ func NewRequestSkill(prompter agent.Prompter) agent.Tool {
 	return &requestSkillTool{prompter: prompter}
 }
 
-func (t *requestSkillTool) Definition() llm.Tool {
-	return llm.Tool{
-		Type: llm.ToolTypeFunction,
-		Function: llm.FunctionDefinition{
+func (t *requestSkillTool) Definition() llmapi.Tool {
+	return llmapi.Tool{
+		Type: llmapi.ToolTypeFunction,
+		Function: llmapi.FunctionDefinition{
 			Name: "request_skill",
 			Description: `Request a skill or capability that is not currently available.
 Use this when you need a tool that is not in your tool list (e.g.

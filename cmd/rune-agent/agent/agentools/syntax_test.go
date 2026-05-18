@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // --- mock Parser ---
@@ -110,7 +110,7 @@ func TestSyntaxTools(t *testing.T) {
 	}
 	for _, tool := range tools {
 		def := tool.Definition()
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		name := def.Function.Name
 		_, ok := expectedNames[name]
 		assert.True(t, ok, "unexpected tool name: %s", name)

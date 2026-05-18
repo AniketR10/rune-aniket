@@ -38,7 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // stubConversationStore is a minimal in-memory Store for testing the
@@ -125,7 +125,7 @@ func TestListConversations_ListError(t *testing.T) {
 
 // writeSessionFile writes a JSON session file in the sessions dir with the
 // given dialogue ID. The file name is base64url(id) + ".json".
-func writeSessionFile(t *testing.T, sessionsDir, id string, msgs []llm.Message) {
+func writeSessionFile(t *testing.T, sessionsDir, id string, msgs []llmapi.Message) {
 	t.Helper()
 	encoded := base64.RawURLEncoding.EncodeToString([]byte(id))
 	path := filepath.Join(sessionsDir, encoded+".json")
@@ -137,11 +137,11 @@ func writeSessionFile(t *testing.T, sessionsDir, id string, msgs []llm.Message) 
 func TestSearchConversations_MatchesAcrossConversations(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeSessionFile(t, dir, "conv-1", []llm.Message{
-		{Role: llm.RoleUser, Content: "Fix the bug in handler.go"},
+	writeSessionFile(t, dir, "conv-1", []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "Fix the bug in handler.go"},
 	})
-	writeSessionFile(t, dir, "conv-2", []llm.Message{
-		{Role: llm.RoleUser, Content: "No bugs here"},
+	writeSessionFile(t, dir, "conv-2", []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "No bugs here"},
 	})
 
 	tool := &searchConversationsTool{fs: localFS{root: dir}, sessionsDir: dir}
@@ -158,8 +158,8 @@ func TestSearchConversations_MatchesAcrossConversations(t *testing.T) {
 func TestSearchConversations_NoMatches(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeSessionFile(t, dir, "conv-1", []llm.Message{
-		{Role: llm.RoleUser, Content: "hello world"},
+	writeSessionFile(t, dir, "conv-1", []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hello world"},
 	})
 
 	tool := &searchConversationsTool{fs: localFS{root: dir}, sessionsDir: dir}
@@ -189,11 +189,11 @@ func TestSearchConversations_MissingPattern(t *testing.T) {
 func TestSearchConversations_FiltersAudit(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeSessionFile(t, dir, "conv-1", []llm.Message{
-		{Role: llm.RoleUser, Content: "hello"},
+	writeSessionFile(t, dir, "conv-1", []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hello"},
 	})
-	writeSessionFile(t, dir, "audit:xyz", []llm.Message{
-		{Role: llm.RoleUser, Content: "hello"},
+	writeSessionFile(t, dir, "audit:xyz", []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hello"},
 	})
 
 	tool := &searchConversationsTool{fs: localFS{root: dir}, sessionsDir: dir}

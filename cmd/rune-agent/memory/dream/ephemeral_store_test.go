@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestEphemeralStore(t *testing.T) {
@@ -44,8 +44,8 @@ func TestEphemeralStore(t *testing.T) {
 
 	t.Run("Create and Get", func(t *testing.T) {
 		s := newEphemeralStore()
-		msgs := []llm.Message{
-			{Role: llm.RoleUser, Content: "hello"},
+		msgs := []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
 		}
 		require.NoError(t, s.Create(ctx, dialoguemanager.Dialogue{
 			ID: "d1", Messages: msgs,
@@ -85,17 +85,17 @@ func TestEphemeralStore(t *testing.T) {
 	t.Run("AppendMessages appends and increments version", func(t *testing.T) {
 		s := newEphemeralStore()
 		require.NoError(t, s.Create(ctx, dialoguemanager.Dialogue{
-			ID: "d1", Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "first"},
+			ID: "d1", Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "first"},
 			},
 		}))
 
 		d, err := s.Get(ctx, "d1")
 		require.NoError(t, err)
 
-		err = s.AppendMessages(ctx, d, []llm.Message{
-			{Role: llm.RoleAssistant, Content: "second"},
-		}, llm.DialogueUsage{})
+		err = s.AppendMessages(ctx, d, []llmapi.Message{
+			{Role: llmapi.RoleAssistant, Content: "second"},
+		}, llmapi.DialogueUsage{})
 		require.NoError(t, err)
 
 		d, err = s.Get(ctx, "d1")
@@ -107,7 +107,7 @@ func TestEphemeralStore(t *testing.T) {
 
 	t.Run("AppendMessages returns ErrNotFound for missing dialogue", func(t *testing.T) {
 		s := newEphemeralStore()
-		err := s.AppendMessages(ctx, dialoguemanager.Dialogue{ID: "nope"}, nil, llm.DialogueUsage{})
+		err := s.AppendMessages(ctx, dialoguemanager.Dialogue{ID: "nope"}, nil, llmapi.DialogueUsage{})
 		assert.ErrorIs(t, err, storageapi.ErrNotFound)
 	})
 

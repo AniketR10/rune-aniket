@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestExitPlanTool(t *testing.T) {
@@ -183,7 +183,7 @@ func TestExitPlanTool(t *testing.T) {
 		tool := NewExitPlan(t.TempDir(), mp)
 		def := tool.Definition()
 
-		assert.Equal(t, llm.ToolTypeFunction, def.Type)
+		assert.Equal(t, llmapi.ToolTypeFunction, def.Type)
 		assert.Equal(t, "exit_plan_mode", def.Function.Name)
 		assert.NotEmpty(t, def.Function.Description)
 	})

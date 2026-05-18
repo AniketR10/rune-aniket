@@ -37,13 +37,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
-	"unstable.build/go-tui/cmd/rune-agent/llm"
 	"unstable.build/go-tui/debug"
 )
 
@@ -55,15 +56,18 @@ type Config struct {
 	SystemPrompt       string
 	SessionKey         string
 	AgentID            string
-	Model              string
-	Provider           string // e.g. "openai", "anthropic", "gemini", "ollama"
+	// Model carries the fully-resolved entry the agent loop targets.
+	// Name, Provider, and ContextWindow are all consulted by the loop;
+	// callers obtain a populated ModelEntry by routing through
+	// llmapi.Service.GetModel before constructing the Config.
+	Model              llmapi.ModelEntry
 	Workspace          workspaceapi.URI
 	SubAgent           bool // true for sub-agent dialogues spawned by agent tool calls.
 
 	// CompactSvc, when non-nil, is used for summarization during
 	// compaction instead of the agent's own LLM service. This allows
 	// using a cheaper/faster model for conversation summaries.
-	CompactSvc llm.Service
+	CompactSvc llmapi.Service
 
 	// ProjectInstructions holds the content loaded from project
 	// instruction files (e.g. AGENTS.md). When non-empty it is
@@ -109,36 +113,49 @@ func (noMemory) Recall(_ context.Context, _ []string, _ string, _ string) ([]Mem
 // Agent orchestrates the agentic loop: LLM → tool call → result → repeat.
 type Agent struct {
 	mu              sync.Mutex // protects svc, config.Model, effort, and maxOutputTokens
-	svc             llm.Service
+	svc             llmapi.Service
 	registry        *Registry
 	skillRegistry   *skills.SkillRegistry
 	store           dialoguemanager.Store
 	resources       sync.Map
 	config          Config
-	effort          llm.ReasoningEffort // session-level effort override
+	effort          llmapi.ReasoningEffort // session-level effort override
 	maxOutputTokens int                 // session-level max-output-token override
 	memory          MemoryRecaller
 }
 
-// SwapService replaces the LLM service, model, and provider used by the agent.
+// SwapService replaces the LLM service and model used by the agent.
 // It must be called between Run invocations, not during one.
-func (a *Agent) SwapService(svc llm.Service, model, provider string) {
+func (a *Agent) SwapService(svc llmapi.Service, model llmapi.ModelEntry) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.svc = svc
 	a.config.Model = model
-	a.config.Provider = provider
 }
 
 // provider returns the current provider name under the mutex.
 func (a *Agent) provider() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.config.Provider
+	return a.config.Model.Provider
 }
 
 // Model returns the current model name.
 func (a *Agent) Model() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.config.Model.Name
+}
+
+// Provider returns the current provider name.
+func (a *Agent) Provider() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.config.Model.Provider
+}
+
+// ModelEntry returns the full ModelEntry the agent is currently bound to.
+func (a *Agent) ModelEntry() llmapi.ModelEntry {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.config.Model
@@ -160,14 +177,14 @@ func (a *Agent) Workspace() workspaceapi.URI {
 
 // SetEffort sets the session-level reasoning effort. An empty string
 // means use the provider/config default.
-func (a *Agent) SetEffort(effort llm.ReasoningEffort) {
+func (a *Agent) SetEffort(effort llmapi.ReasoningEffort) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.effort = effort
 }
 
 // Effort returns the current session-level reasoning effort.
-func (a *Agent) Effort() llm.ReasoningEffort {
+func (a *Agent) Effort() llmapi.ReasoningEffort {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.effort
@@ -190,7 +207,7 @@ func (a *Agent) MaxOutputTokens() int {
 
 // NewAgent creates a new Agent. Panics if skillRegistry is nil.
 func NewAgent(
-	svc llm.Service,
+	svc llmapi.Service,
 	registry *Registry,
 	skillRegistry *skills.SkillRegistry,
 	store dialoguemanager.Store,
@@ -271,7 +288,7 @@ type ToolCallResult struct {
 }
 
 type toolCallInfo struct {
-	call    llm.ToolCall
+	call    llmapi.ToolCall
 	tool    Tool
 	found   bool
 	summary string
@@ -339,7 +356,7 @@ func (a *Agent) run(
 		}
 	}
 
-	ctx = llm.WithAuditDialogueID(ctx, dialogueID)
+	ctx = audit.WithAuditDialogueID(ctx, dialogueID)
 	log := slog.With("struct", "agent.Agent", "dialogueID", dialogueID)
 
 	maxOutput := a.config.MaxToolOutputBytes
@@ -359,8 +376,8 @@ func (a *Agent) run(
 		// New dialogue: seed with system prompt
 		dialogue.ID = dialogueID
 		dialogue.WorkspaceURI = a.config.Workspace.String()
-		dialogue.Messages = []llm.Message{
-			{Role: llm.RoleSystem, Content: a.config.SystemPrompt},
+		dialogue.Messages = []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: a.config.SystemPrompt},
 		}
 		log.Debug("new dialogue: added system prompt", "prompt", a.config.SystemPrompt)
 	} else {
@@ -378,7 +395,7 @@ func (a *Agent) run(
 		Cwd:           a.config.Workspace,
 		HookEventName: hooks.EventSessionStart,
 		Source:        sessionStartSource(isNew),
-		Model:         a.config.Model,
+		Model:         a.config.Model.Name,
 	})
 	if startRes.AdditionalContext != "" {
 		userMessage = startRes.AdditionalContext + "\n\n" + userMessage
@@ -403,10 +420,10 @@ func (a *Agent) run(
 	sort.Slice(resources, func(i, j int) bool {
 		return resources[i].uri < resources[j].uri
 	})
-	resourceMsgs := make([]llm.Message, 0, len(resources))
+	resourceMsgs := make([]llmapi.Message, 0, len(resources))
 	for _, r := range resources {
-		resourceMsgs = append(resourceMsgs, llm.Message{
-			Role: llm.RoleSystem,
+		resourceMsgs = append(resourceMsgs, llmapi.Message{
+			Role: llmapi.RoleSystem,
 			Content: fmt.Sprintf("The file with URI %s is "+
 				"in the user's context:\n```\n%s\n```", r.uri, r.content),
 		})
@@ -414,10 +431,10 @@ func (a *Agent) run(
 	}
 
 	// Append user message
-	userMsg := llm.Message{Role: llm.RoleUser, Content: userMessage}
+	userMsg := llmapi.Message{Role: llmapi.RoleUser, Content: userMessage}
 
 	// Build full message list
-	messages := make([]llm.Message, 0,
+	messages := make([]llmapi.Message, 0,
 		len(dialogue.Messages)+len(resourceMsgs)+1)
 	messages = append(messages, dialogue.Messages...)
 	messages = normalizeMessages(messages)
@@ -426,7 +443,7 @@ func (a *Agent) run(
 
 	// Track new messages for persistence.
 	// For new dialogues, include the seeded system prompt so it is persisted.
-	newMessages := make([]llm.Message, 0, len(dialogue.Messages)+1)
+	newMessages := make([]llmapi.Message, 0, len(dialogue.Messages)+1)
 	if isNew {
 		newMessages = append(newMessages, dialogue.Messages...)
 	}
@@ -451,12 +468,12 @@ func (a *Agent) run(
 
 	// Track usage across the entire Run invocation, plus the portion not yet
 	// checkpointed to durable storage.
-	var usage llm.DialogueUsage
-	var pendingUsage llm.DialogueUsage
+	var usage llmapi.DialogueUsage
+	var pendingUsage llmapi.DialogueUsage
 	runStart := time.Now()
 	checkpointStart := runStart
 
-	contextWindow := a.svc.ContextWindow()
+	contextWindow := a.config.Model.ContextWindow
 
 	// lastAPITokensSent caches the sent token count reported by the
 	// provider in its most recent response. When available it is more
@@ -505,10 +522,10 @@ func (a *Agent) run(
 	// non-deterministic ordering that busts the tools cache.
 	tools := a.registry.Tools(a.provider())
 
-	var transient []llm.Message
+	var transient []llmapi.Message
 	var infos []toolCallInfo
-	var toolMsgs []llm.Message
-	var imageContentParts []llm.ContentPart
+	var toolMsgs []llmapi.Message
+	var imageContentParts []llmapi.ContentPart
 	// stopHookActive is set to true once the Stop hook has blocked
 	// once and we appended a continuation message. The second
 	// invocation passes this flag in the payload and ignores blocks.
@@ -534,11 +551,11 @@ func (a *Agent) run(
 		if hasPersistedDialogue {
 			dialogue.Messages = append(dialogue.Messages, newMessages...)
 		} else {
-			dialogue.Messages = append([]llm.Message(nil), newMessages...)
+			dialogue.Messages = append([]llmapi.Message(nil), newMessages...)
 			hasPersistedDialogue = true
 		}
 		newMessages = nil
-		pendingUsage = llm.DialogueUsage{}
+		pendingUsage = llmapi.DialogueUsage{}
 		checkpointStart = time.Now()
 		return true
 	}
@@ -558,13 +575,13 @@ func (a *Agent) run(
 
 		transient = transient[:0]
 		if section := skillsPromptSection(a.skillRegistry.List()); section != "" {
-			transient = append(transient, llm.Message{Role: llm.RoleSystem, Content: section})
+			transient = append(transient, llmapi.Message{Role: llmapi.RoleSystem, Content: section})
 		}
 		if preloadedSkillMsg != "" {
-			transient = append(transient, llm.Message{Role: llm.RoleSystem, Content: preloadedSkillMsg})
+			transient = append(transient, llmapi.Message{Role: llmapi.RoleSystem, Content: preloadedSkillMsg})
 		}
 		if len(transient) > 0 {
-			req := make([]llm.Message, 0, len(reqMessages)+len(transient))
+			req := make([]llmapi.Message, 0, len(reqMessages)+len(transient))
 			req = append(req, reqMessages[0])
 			req = append(req, transient...)
 			req = append(req, reqMessages[1:]...)
@@ -592,8 +609,8 @@ func (a *Agent) run(
 				content = "<project-instructions>\n" + a.config.ProjectInstructions +
 					"\n</project-instructions>\n\n" + content
 			}
-			reqMessages[idx] = llm.Message{
-				Role:    llm.RoleUser,
+			reqMessages[idx] = llmapi.Message{
+				Role:    llmapi.RoleUser,
 				Content: content,
 			}
 		}
@@ -605,7 +622,7 @@ func (a *Agent) run(
 		// the provider did not report usage.
 		tokenCount := lastAPITokensSent
 		if tokenCount == 0 {
-			tokenCount, _ = a.svc.CountTokens(reqMessages)
+			tokenCount, _ = a.svc.CountTokens(a.config.Model, reqMessages)
 			tokenCount += estimateToolDefTokens(tools)
 		}
 		contextUsage := float64(tokenCount) / float64(contextWindow)
@@ -638,7 +655,7 @@ func (a *Agent) run(
 		//     respond or report a context-window-exceeded error.
 		hasPriorAssistant := false
 		for _, m := range messages {
-			if m.Role == llm.RoleAssistant {
+			if m.Role == llmapi.RoleAssistant {
 				hasPriorAssistant = true
 				break
 			}
@@ -685,7 +702,7 @@ func (a *Agent) run(
 			}
 		}
 
-		req := llm.Request{
+		req := llmapi.Request{
 			Messages:        reqMessages,
 			PromptCacheKey:  dialogueID,
 			Tools:           tools,
@@ -697,7 +714,7 @@ func (a *Agent) run(
 		emit(ctx, ch, Event{Type: EventInferenceStart})
 		inferenceStart := time.Now()
 		log.Debug("creating completion", "messages", len(reqMessages), "tools", len(tools))
-		it, err := a.svc.CreateCompletion(ctx, req)
+		it, err := a.svc.CreateCompletion(ctx, a.config.Model, req)
 		log.Debug("created completion", "error", err, "duration", time.Since(inferenceStart))
 		if err != nil {
 			emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("create completion: %w", err)})
@@ -709,7 +726,7 @@ func (a *Agent) run(
 
 		response.Reset()
 		reasoningResponse.Reset()
-		var doneData *llm.DoneData
+		var doneData *llmapi.DoneData
 		firstContent := false
 
 		// Consume stream
@@ -719,34 +736,34 @@ func (a *Agent) run(
 				break
 			}
 			switch ev.Type {
-			case llm.EventTextDelta:
+			case llmapi.EventTextDelta:
 				if !firstContent {
 					firstContent = true
 					emit(ctx, ch, Event{Type: EventFirstContent})
 				}
 				emit(ctx, ch, Event{Type: EventText, Text: ev.Text})
 				response.WriteString(ev.Text)
-			case llm.EventReasoningDelta:
+			case llmapi.EventReasoningDelta:
 				if !firstContent {
 					firstContent = true
 					emit(ctx, ch, Event{Type: EventFirstContent})
 				}
 				emit(ctx, ch, Event{Type: EventReasoning, Reasoning: ev.Reasoning})
 				reasoningResponse.WriteString(ev.Reasoning)
-			case llm.EventToolCallDone:
+			case llmapi.EventToolCallDone:
 				// Streaming hint — full tool calls come via doneData.
-			case llm.EventStreamDone:
+			case llmapi.EventStreamDone:
 				doneData = ev.DoneData
-			case llm.EventRateLimitWarning:
+			case llmapi.EventRateLimitWarning:
 				emit(ctx, ch, Event{Type: EventRateLimitWarning, RateLimit: ev.RateLimit})
-			case llm.EventStreamReset:
+			case llmapi.EventStreamReset:
 				response.Reset()
 				reasoningResponse.Reset()
 				doneData = nil
 				firstContent = false
 				emit(ctx, ch, Event{Type: EventDone})
 				emit(ctx, ch, Event{Type: EventInferenceStart})
-			case llm.EventStreamError:
+			case llmapi.EventStreamError:
 				log.Debug("stream error during inference",
 					"error", ev.Error,
 					"messages_sent", len(reqMessages),
@@ -774,16 +791,16 @@ func (a *Agent) run(
 		_ = it.Close()
 
 		// Build assistant message from doneData (source of truth).
-		var assistantMsg llm.Message
-		var finishReason llm.FinishReason
-		var completionUsage llm.Usage
+		var assistantMsg llmapi.Message
+		var finishReason llmapi.FinishReason
+		var completionUsage llmapi.Usage
 		if doneData != nil {
 			assistantMsg = doneData.Message
 			finishReason = doneData.FinishReason
 			completionUsage = doneData.Usage
 		} else {
-			assistantMsg = llm.Message{
-				Role:             llm.RoleAssistant,
+			assistantMsg = llmapi.Message{
+				Role:             llmapi.RoleAssistant,
 				Content:          response.String(),
 				ReasoningContent: reasoningResponse.String(),
 			}
@@ -815,7 +832,7 @@ func (a *Agent) run(
 		}
 
 		switch finishReason {
-		case llm.FinishReasonLength:
+		case llmapi.FinishReasonLength:
 			// Output truncated by token limit. Persist the partial
 			// assistant message (including any reasoning-only content)
 			// so the user can continue the conversation.
@@ -836,7 +853,7 @@ func (a *Agent) run(
 			log.Debug("agent loop done: output truncated", "reason", finishReason)
 			return
 
-		case llm.FinishReasonStop:
+		case llmapi.FinishReasonStop:
 			// Stop hook may block — i.e. instruct the agent to keep
 			// going. We allow exactly one continuation per Run to
 			// prevent infinite loops; the second invocation passes
@@ -853,7 +870,7 @@ func (a *Agent) run(
 				if reason == "" {
 					reason = "Continue"
 				}
-				contMsg := llm.Message{Role: llm.RoleUser, Content: reason}
+				contMsg := llmapi.Message{Role: llmapi.RoleUser, Content: reason}
 				messages = append(messages, contMsg)
 				newMessages = append(newMessages, contMsg)
 				usage.Add(completionUsage, 0, inferenceDuration, 0)
@@ -878,7 +895,7 @@ func (a *Agent) run(
 			log.Debug("agent loop done", "reason", finishReason)
 			return
 
-		case llm.FinishReasonToolCall:
+		case llmapi.FinishReasonToolCall:
 			if len(assistantMsg.ToolCalls) == 0 {
 				emit(ctx, ch, Event{Type: EventError,
 					Error: errors.New("tool_calls finish reason but no tool calls in message")})
@@ -1078,8 +1095,8 @@ func (a *Agent) run(
 					result.Content = hres.Reason
 					result.IsError = true
 				}
-				toolMsgs[tr.index] = llm.Message{
-					Role:       llm.RoleTool,
+				toolMsgs[tr.index] = llmapi.Message{
+					Role:       llmapi.RoleTool,
 					Content:    result.Content,
 					ToolCallID: tr.info.call.ID,
 				}
@@ -1111,8 +1128,8 @@ func (a *Agent) run(
 			// Neither OpenAI nor Anthropic supports images in tool-role
 			// messages, so we carry the image data in a user message.
 			if len(imageContentParts) > 0 {
-				imgMsg := llm.Message{
-					Role:         llm.RoleUser,
+				imgMsg := llmapi.Message{
+					Role:         llmapi.RoleUser,
 					MultiContent: imageContentParts,
 				}
 				messages = append(messages, imgMsg)
@@ -1161,14 +1178,14 @@ func (a *Agent) run(
 //     Orphaned or non-adjacent tool calls are stripped from the assistant
 //     message and orphaned or non-adjacent tool results are removed
 //     entirely.
-func normalizeMessages(messages []llm.Message) []llm.Message {
+func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 	// Mark only structurally valid tool-call pairs. A tool result is valid
 	// only when it appears in the consecutive RoleTool message group that
 	// immediately follows the assistant message containing its tool call.
 	validToolCallIDs := make(map[int]map[string]struct{})
 	validToolResultIndexes := make(map[int]struct{})
 	for i := range messages {
-		if messages[i].Role != llm.RoleAssistant || len(messages[i].ToolCalls) == 0 {
+		if messages[i].Role != llmapi.RoleAssistant || len(messages[i].ToolCalls) == 0 {
 			continue
 		}
 
@@ -1178,7 +1195,7 @@ func normalizeMessages(messages []llm.Message) []llm.Message {
 		}
 
 		seenResults := make(map[string]struct{}, len(messages[i].ToolCalls))
-		for j := i + 1; j < len(messages) && messages[j].Role == llm.RoleTool; j++ {
+		for j := i + 1; j < len(messages) && messages[j].Role == llmapi.RoleTool; j++ {
 			id := messages[j].ToolCallID
 			if id == "" {
 				continue
@@ -1215,14 +1232,14 @@ func normalizeMessages(messages []llm.Message) []llm.Message {
 		}
 
 		// Drop orphaned or non-adjacent tool results.
-		if msg.Role == llm.RoleTool {
+		if msg.Role == llmapi.RoleTool {
 			if _, ok := validToolResultIndexes[i]; !ok {
 				continue
 			}
 		}
 
 		// Fix reasoning-only assistant messages.
-		if msg.Role == llm.RoleAssistant &&
+		if msg.Role == llmapi.RoleAssistant &&
 			msg.Content == "" &&
 			msg.ReasoningContent != "" &&
 			len(msg.ToolCalls) == 0 {
@@ -1236,7 +1253,7 @@ func normalizeMessages(messages []llm.Message) []llm.Message {
 		// only tool calls which became orphaned. Sending an empty
 		// assistant message causes Anthropic to reject with
 		// "text content blocks must be non-empty".
-		if msg.Role == llm.RoleAssistant &&
+		if msg.Role == llmapi.RoleAssistant &&
 			msg.Content == "" &&
 			msg.ReasoningContent == "" &&
 			len(msg.ToolCalls) == 0 {
@@ -1252,14 +1269,14 @@ func normalizeMessages(messages []llm.Message) []llm.Message {
 func (a *Agent) injectAutoDiagnostics(
 	ctx context.Context,
 	ch chan<- Event,
-	messages []llm.Message,
-	newMessages []llm.Message,
-	assistantMsg llm.Message,
-	toolMsgs []llm.Message,
+	messages []llmapi.Message,
+	newMessages []llmapi.Message,
+	assistantMsg llmapi.Message,
+	toolMsgs []llmapi.Message,
 	diagCandidates []executedToolCall,
 	maxOutput int,
 	log *slog.Logger,
-) ([]llm.Message, llm.Message) {
+) ([]llmapi.Message, llmapi.Message) {
 	if len(diagCandidates) == 0 {
 		return toolMsgs, assistantMsg
 	}
@@ -1276,10 +1293,10 @@ func (a *Agent) injectAutoDiagnostics(
 		diagArgs := fmt.Sprintf(`{"path":%q}`, filePath)
 		diagSummary := diagTool.Summary(diagArgs)
 
-		syntheticCall := llm.ToolCall{
+		syntheticCall := llmapi.ToolCall{
 			ID:   syntheticID,
-			Type: llm.ToolTypeFunction,
-			Function: llm.FunctionCall{
+			Type: llmapi.ToolTypeFunction,
+			Function: llmapi.FunctionCall{
 				Name:      "check_file_errors",
 				Arguments: diagArgs,
 			},
@@ -1347,8 +1364,8 @@ func (a *Agent) injectAutoDiagnostics(
 			ToolDuration: diagDur,
 		})
 
-		toolMsgs = append(toolMsgs, llm.Message{
-			Role:       llm.RoleTool,
+		toolMsgs = append(toolMsgs, llmapi.Message{
+			Role:       llmapi.RoleTool,
 			Content:    diagResult.Content,
 			ToolCallID: syntheticID,
 		})
@@ -1361,8 +1378,8 @@ func (a *Agent) injectAutoDiagnostics(
 
 func (a *Agent) persistMessages(
 	ctx context.Context, dialogueID string,
-	dialogue dialoguemanager.Dialogue, newMessages []llm.Message,
-	usage llm.DialogueUsage,
+	dialogue dialoguemanager.Dialogue, newMessages []llmapi.Message,
+	usage llmapi.DialogueUsage,
 ) bool {
 	if len(newMessages) == 0 {
 		return false
@@ -1380,7 +1397,7 @@ func (a *Agent) persistMessages(
 	err := a.store.Create(ctx, dialoguemanager.Dialogue{
 		ID:           dialogueID,
 		AgentID:      a.config.AgentID,
-		Model:        a.config.Model,
+		Model:        a.config.Model.Name,
 		WorkspaceURI: a.config.Workspace.String(),
 		SubAgent:     a.config.SubAgent,
 		Messages:     newMessages,
@@ -1408,7 +1425,7 @@ func (a *Agent) compact(
 		summarizeSvc = a.config.CompactSvc
 	}
 
-	compactedMsgs, archivedID, err := CompactDialogue(ctx, summarizeSvc, a.store, d)
+	compactedMsgs, archivedID, err := CompactDialogue(ctx, summarizeSvc, a.config.Model, a.store, d)
 	if err != nil {
 		emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("compact: %v", err)})
 		return dialoguemanager.Dialogue{}, err
@@ -1422,30 +1439,30 @@ func (a *Agent) compact(
 
 // extractSkillContent finds tool results containing activated skill content
 // and converts them to system messages for re-injection after compaction.
-func extractSkillContent(messages []llm.Message) []llm.Message {
-	var result []llm.Message
+func extractSkillContent(messages []llmapi.Message) []llmapi.Message {
+	var result []llmapi.Message
 	seen := make(map[string]bool)
 	for _, m := range messages {
-		if m.Role != llm.RoleTool || !strings.Contains(m.Content, "<skill_content ") {
+		if m.Role != llmapi.RoleTool || !strings.Contains(m.Content, "<skill_content ") {
 			continue
 		}
 		if seen[m.Content] {
 			continue
 		}
 		seen[m.Content] = true
-		result = append(result, llm.Message{
-			Role:    llm.RoleSystem,
+		result = append(result, llmapi.Message{
+			Role:    llmapi.RoleSystem,
 			Content: m.Content,
 		})
 	}
 	return result
 }
 
-func approvedPlanMessages(plan *dialoguemanager.ApprovedPlan) []llm.Message {
+func approvedPlanMessages(plan *dialoguemanager.ApprovedPlan) []llmapi.Message {
 	if plan == nil {
 		return nil
 	}
-	return []llm.Message{{
+	return []llmapi.Message{{
 		// Anchor the conversation with a user turn so subsequent
 		// assistant tool_use turns are valid for providers that require
 		// strict user/assistant alternation (e.g. Anthropic). System
@@ -1458,7 +1475,7 @@ func approvedPlanMessages(plan *dialoguemanager.ApprovedPlan) []llm.Message {
 		//
 		// when the conversation resumes from compaction or after a
 		// cleared exit_plan_mode turn.
-		Role:    llm.RoleUser,
+		Role:    llmapi.RoleUser,
 		Content: fmt.Sprintf("Plan approved. Saved to %s\n\n%s", plan.Path, plan.Body),
 	}}
 }
@@ -1472,7 +1489,7 @@ func (a *Agent) clearContext(
 	ctx context.Context, ch chan<- Event,
 	approvedPlan *dialoguemanager.ApprovedPlan,
 	d dialoguemanager.Dialogue,
-) ([]llm.Message, error) {
+) ([]llmapi.Message, error) {
 	archivedID, err := NextArchivedID(ctx, a.store, d.ID)
 	if err != nil {
 		emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf("clear context: archive: %v", err)})
@@ -1480,7 +1497,7 @@ func (a *Agent) clearContext(
 	}
 
 	clearedMsgs := append(
-		[]llm.Message{{Role: llm.RoleSystem, Content: a.config.SystemPrompt}},
+		[]llmapi.Message{{Role: llmapi.RoleSystem, Content: a.config.SystemPrompt}},
 		approvedPlanMessages(approvedPlan)...,
 	)
 
@@ -1610,18 +1627,18 @@ func cleanSummary(raw string) string {
 
 // Summarize sends the given messages to the LLM and asks it to produce
 // a structured summary. It returns the cleaned summary text.
-func Summarize(ctx context.Context, svc llm.Service, messages []llm.Message) (string, error) {
+func Summarize(ctx context.Context, svc llmapi.Service, model llmapi.ModelEntry, messages []llmapi.Message) (string, error) {
 	messages = normalizeMessages(slices.Clone(messages))
 
-	prompt := llm.Message{
-		Role:    llm.RoleUser,
+	prompt := llmapi.Message{
+		Role:    llmapi.RoleUser,
 		Content: SummarizePrompt,
 	}
-	summaryReq := llm.Request{
+	summaryReq := llmapi.Request{
 		Messages: append(messages, prompt),
 	}
 
-	it, err := svc.CreateCompletion(ctx, summaryReq)
+	it, err := svc.CreateCompletion(ctx, model, summaryReq)
 	if err != nil {
 		return "", err
 	}
@@ -1633,10 +1650,10 @@ func Summarize(ctx context.Context, svc llm.Service, messages []llm.Message) (st
 		if !ok {
 			break
 		}
-		if ev.Type == llm.EventTextDelta {
+		if ev.Type == llmapi.EventTextDelta {
 			sb.WriteString(ev.Text)
 		}
-		if ev.Type == llm.EventStreamError {
+		if ev.Type == llmapi.EventStreamError {
 			return "", ev.Error
 		}
 	}
@@ -1660,11 +1677,12 @@ func Summarize(ctx context.Context, svc llm.Service, messages []llm.Message) (st
 // A blocked hook is returned as a regular error.
 func CompactDialogue(
 	ctx context.Context,
-	svc llm.Service,
+	svc llmapi.Service,
+	model llmapi.ModelEntry,
 	store dialoguemanager.Store,
 	d dialoguemanager.Dialogue,
 	opts ...CompactOption,
-) (compactedMsgs []llm.Message, archivedDialogueID string, err error) {
+) (compactedMsgs []llmapi.Message, archivedDialogueID string, err error) {
 	var copts compactOptions
 	for _, o := range opts {
 		o(&copts)
@@ -1685,7 +1703,7 @@ func CompactDialogue(
 		return nil, "", errors.New(reason)
 	}
 
-	summaryText, err := Summarize(ctx, svc, d.Messages)
+	summaryText, err := Summarize(ctx, svc, model, d.Messages)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1697,14 +1715,14 @@ func CompactDialogue(
 
 	// Re-inject the system prompt from the original messages.
 	var systemPrompt string
-	if len(d.Messages) > 0 && d.Messages[0].Role == llm.RoleSystem {
+	if len(d.Messages) > 0 && d.Messages[0].Role == llmapi.RoleSystem {
 		systemPrompt = d.Messages[0].Content
 	}
 
-	compactedMsgs = []llm.Message{{Role: llm.RoleSystem, Content: systemPrompt}}
+	compactedMsgs = []llmapi.Message{{Role: llmapi.RoleSystem, Content: systemPrompt}}
 
 	// Preserve approved-plan metadata and activated skills from the old dialogue.
-	var preserved []llm.Message
+	var preserved []llmapi.Message
 	preserved = append(preserved, approvedPlanMessages(d.ApprovedPlan)...)
 	preserved = append(preserved, extractSkillContent(d.Messages)...)
 	if len(preserved) > 0 {
@@ -1712,13 +1730,13 @@ func CompactDialogue(
 	}
 
 	if d.ApprovedPlan != nil {
-		compactedMsgs = append(compactedMsgs, llm.Message{
-			Role:    llm.RoleUser,
+		compactedMsgs = append(compactedMsgs, llmapi.Message{
+			Role:    llmapi.RoleUser,
 			Content: CompactResumePrefix + summaryText + CompactResumeSuffix,
 		})
 	} else {
-		compactedMsgs = append(compactedMsgs, llm.Message{
-			Role:    llm.RoleUser,
+		compactedMsgs = append(compactedMsgs, llmapi.Message{
+			Role:    llmapi.RoleUser,
 			Content: CompactSummaryPrefix + summaryText,
 		})
 	}
@@ -1844,27 +1862,27 @@ func (c *channelIterator) Close() error {
 // assistant + tool message pairs that would have been produced by
 // actual tool executions. The assistant message contains all tool
 // calls; each result follows as a separate tool-role message.
-func buildToolCallMessages(results []ToolCallResult) []llm.Message {
-	calls := make([]llm.ToolCall, len(results))
+func buildToolCallMessages(results []ToolCallResult) []llmapi.Message {
+	calls := make([]llmapi.ToolCall, len(results))
 	for i, r := range results {
-		calls[i] = llm.ToolCall{
+		calls[i] = llmapi.ToolCall{
 			ID:   fmt.Sprintf("precall-%d", i),
-			Type: llm.ToolTypeFunction,
-			Function: llm.FunctionCall{
+			Type: llmapi.ToolTypeFunction,
+			Function: llmapi.FunctionCall{
 				Name:      r.ToolName,
 				Arguments: r.Arguments,
 			},
 		}
 	}
 
-	msgs := make([]llm.Message, 0, 1+len(results))
-	msgs = append(msgs, llm.Message{
-		Role:      llm.RoleAssistant,
+	msgs := make([]llmapi.Message, 0, 1+len(results))
+	msgs = append(msgs, llmapi.Message{
+		Role:      llmapi.RoleAssistant,
 		ToolCalls: calls,
 	})
 	for i, r := range results {
-		msgs = append(msgs, llm.Message{
-			Role:       llm.RoleTool,
+		msgs = append(msgs, llmapi.Message{
+			Role:       llmapi.RoleTool,
 			Content:    r.Content,
 			ToolCallID: calls[i].ID,
 		})
@@ -1877,7 +1895,7 @@ func buildToolCallMessages(results []ToolCallResult) []llm.Message {
 // description, and parameter schema to estimate the JSON byte length,
 // then divides by 4 (a conservative chars-per-token ratio for
 // structured text). Zero allocations.
-func estimateToolDefTokens(tools []llm.Tool) int {
+func estimateToolDefTokens(tools []llmapi.Tool) int {
 	var n int
 	for i := range tools {
 		f := &tools[i].Function
