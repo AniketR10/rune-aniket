@@ -67,10 +67,7 @@ type responsiveCtx struct {
 	ctx    context.Context
 	cancel func()
 	ch     chan responsiveValue
-	// pw, when non-nil, receives Progress updates forwarded from
-	// extension-side HandleProgress messages. Only meaningful for
-	// handle requests; Help never reports progress.
-	pw repl.ProgressWriter
+	pw     repl.ProgressWriter
 }
 
 type responsiveValue struct {
@@ -321,11 +318,6 @@ func (c *replCommandClientStream) activeHandle() *responsiveCtx {
 	return c.handle
 }
 
-// forwardProgress delivers a HandleProgress message from the extension
-// to the ProgressWriter associated with the currently-active handle
-// request, if any. Progress is advisory: if no request is active, or the
-// request didn't supply a ProgressWriter, the update is silently
-// dropped.
 func (c *replCommandClientStream) forwardProgress(
 	p *textrpc.HandleREPLCommandProgress,
 ) {
@@ -425,5 +417,35 @@ func responsiveFromProtoRows(rows []*termrpc.CellRow) component.Responsive {
 			cells[y][x] = c.ToModel()
 		}
 	}
-	return component.NewResponsiveStringFromCells(cells, component.StringResponsiveConfig{})
+	return &protoRowsResponsive{cells: cells}
+}
+
+type protoRowsResponsive struct {
+	cells [][]term.Cell
+	width int
+}
+
+var _ component.Responsive = (*protoRowsResponsive)(nil)
+
+func (r *protoRowsResponsive) Height(int) int { return len(r.cells) }
+
+func (r *protoRowsResponsive) Resize(width, _ int) { r.width = width }
+
+func (r *protoRowsResponsive) Draw(w term.Writer) {
+	for y, row := range r.cells {
+		var offset int
+		for x, c := range row {
+			xi := x + offset
+			if c.Width > 1 {
+				offset += int(c.Width) - 1
+			}
+			if xi >= r.width {
+				break
+			}
+			if c.Ch == 0 {
+				continue
+			}
+			w.SetCell(term.Coordinates{X: xi, Y: y}, c)
+		}
+	}
 }

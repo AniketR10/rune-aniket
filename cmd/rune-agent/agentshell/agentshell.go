@@ -228,7 +228,7 @@ var commandManual = textapi.CommandManual{
 			},
 		},
 		{Name: "config", Summary: "Show current LLM config parameters."},
-		{Name: "dream", Summary: "Run memory consolidation on unprocessed dialogues.", Synopsis: "[--model MODEL]"},
+		{Name: "dream", Summary: "Run memory consolidation on unprocessed dialogues.", Synopsis: "[--model MODEL] [--debug]"},
 		{Name: "effort", Summary: "Show or set default reasoning effort.", Synopsis: "[none|minimal|low|medium|high|xhigh|max]"},
 		{Name: "exit", Summary: "Exit the shell."},
 		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[command ...]"},
@@ -429,7 +429,7 @@ func (s *shell) handleCommand(
 	case "config":
 		return s.showConfig(), nil
 	case "dream":
-		return s.handleDream(ctx, cmd.Args)
+		return s.handleDream(ctx, cmd.Args, pw)
 	case "effort":
 		return s.handleEffort(cmd.Args)
 	case "exit":

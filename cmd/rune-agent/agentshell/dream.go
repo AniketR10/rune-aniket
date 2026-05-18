@@ -26,18 +26,21 @@ package agentshell
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
+	"unstable.build/go-tui/cmd/rune-agent/memory/dream/dreamcomponent"
 )
 
 func (s *shell) handleDream(
-	ctx context.Context, args []string,
+	ctx context.Context, args []string, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	model := s.defaultModel
+	debug := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--model":
@@ -46,9 +49,11 @@ func (s *shell) handleDream(
 			}
 			i++
 			model = args[i]
+		case "--debug":
+			debug = true
 		default:
 			return nil, fmt.Errorf(
-				"unknown argument: %s\nusage: dream [--model MODEL]", args[i])
+				"unknown argument: %s\nusage: dream [--model MODEL] [--debug]", args[i])
 		}
 	}
 
@@ -78,50 +83,23 @@ func (s *shell) handleDream(
 		return nil, err
 	}
 
-	notifID, err := s.notifications.Notify(
-		browserapi.LevelInfo, "Dream: starting...")
-	if err != nil {
-		_ = it.Close()
-		return nil, fmt.Errorf("notify: %v", err)
-	}
-	var lastProgress, lastTotal int64 = 0, 1
-	_ = s.notifications.UpdateNotificationProgress(notifID, "Dream: starting...", lastProgress, lastTotal)
-
 	return iterator.FromFunc(
 		func(ctx context.Context) (component.Responsive, bool, error) {
 			for {
 				p, ok := it.Next(ctx)
 				if !ok {
-					if err := it.Err(); err != nil {
-						return nil, false, err
-					}
-					return nil, false, nil
+					return nil, false, it.Err()
 				}
-
-				if p.Total > 0 {
-					lastTotal = int64(p.Total)
-					lastProgress = int64(p.Progress)
+				if p.Total > 0 && pw != nil {
+					pw.Progress(int64(p.Progress)+1, int64(p.Total), p.Units)
 				}
-
-				switch p.Type {
-				case dream.ProgressError:
-					if p.Message != "" {
-						_ = s.notifications.UpdateNotificationProgress(
-							notifID, p.Message, min(lastProgress, lastTotal-1), lastTotal)
-					}
-					return responsiveString(fmt.Sprintf("Error [%s]: %s", p.DialogueID, p.Message)), true, nil
-
-				case dream.ProgressDone:
-					_ = s.notifications.UpdateNotificationProgress(
-						notifID, p.Message, lastTotal, lastTotal)
-					return responsiveString(fmt.Sprintf("Done: %s", p.Message)), true, nil
-
-				default:
-					if p.Message != "" {
-						_ = s.notifications.UpdateNotificationProgress(
-							notifID, p.Message, min(lastProgress, lastTotal-1), lastTotal)
-					}
+				if debug {
+					return responsiveString(formatDebugProgress(p)), true, nil
 				}
+				if p.Type == dream.ProgressToolCall {
+					continue
+				}
+				return dreamcomponent.New(p), true, nil
 			}
 		},
 		func() error { return it.Close() },
@@ -130,4 +108,61 @@ func (s *shell) handleDream(
 
 func responsiveString(s string) component.Responsive {
 	return component.NewResponsiveString(s, component.StringResponsiveConfig{})
+}
+
+func formatDebugProgress(p dream.Progress) string {
+	ts := time.Now().Format("15:04:05.000")
+	out := fmt.Sprintf("[%s] %s", ts, progressTypeName(p.Type))
+	if p.DialogueID != "" {
+		out += " dlg=" + p.DialogueID
+	}
+	if p.ToolName != "" {
+		out += " tool=" + p.ToolName
+	}
+	if p.Total > 0 {
+		if p.Units != "" {
+			out += fmt.Sprintf(" %d/%d %s", p.Progress+1, p.Total, p.Units)
+		} else {
+			out += fmt.Sprintf(" %d/%d", p.Progress+1, p.Total)
+		}
+	}
+	if p.IsError {
+		out += " error=true"
+	}
+	if p.Message != "" {
+		out += " | " + p.Message
+	}
+	return out
+}
+
+func progressTypeName(t dream.ProgressType) string {
+	switch t {
+	case dream.ProgressBootstrap:
+		return "bootstrap"
+	case dream.ProgressAnalyzing:
+		return "analyzing"
+	case dream.ProgressWriting:
+		return "writing"
+	case dream.ProgressVerifying:
+		return "verifying"
+	case dream.ProgressFixing:
+		return "fixing"
+	case dream.ProgressMigrating:
+		return "migrating"
+	case dream.ProgressReprocessing:
+		return "reprocessing"
+	case dream.ProgressToolCall:
+		return "tool-call"
+	case dream.ProgressToolResult:
+		return "tool-result"
+	case dream.ProgressError:
+		return "error"
+	case dream.ProgressPhaseStart:
+		return "phase-start"
+	case dream.ProgressPhaseFinish:
+		return "phase-finish"
+	case dream.ProgressDone:
+		return "done"
+	}
+	return fmt.Sprintf("type(%d)", int(t))
 }

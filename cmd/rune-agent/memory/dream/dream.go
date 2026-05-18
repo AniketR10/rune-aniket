@@ -96,6 +96,10 @@ type Progress struct {
 	Units      string // e.g., "dialogues"
 	ToolName   string // for ProgressToolCall/ProgressToolResult
 	IsError    bool   // for ProgressToolResult: was it a tool error?
+	// Duration is set on ProgressToolResult and reports how long the
+	// tool took to execute. Zero when the tool did not report a
+	// duration.
+	Duration time.Duration
 }
 
 // Deps holds all dependencies for the Dream function.
@@ -457,69 +461,53 @@ func runExtractPhase(ctx context.Context, ch chan<- Progress, deps Deps,
 		}
 	}
 
-	// Stream new/updated dialogues without buffering.
-	dialogueIt, err := deps.Store.List(ctx)
+	// Pre-collect new/updated dialogue headers so callers (and the
+	// REPL ProgressWriter) know the total work up front. Without this
+	// total, percentage-style progress bars cannot render meaningful
+	// numbers for the new-dialogue branch.
+	newHeaders, err := collectNewHeaders(ctx, deps.Store, state, reprocessSet)
 	if err != nil {
 		return fmt.Errorf("list dialogues: %w", err)
 	}
-	newHeaderIt := iterator.Filter(dialogueIt, func(h dialoguemanager.DialogueHeader) bool {
-		if reprocessSet[h.ID] {
-			return false
-		}
-		dreamedVersion, ok := state.Dreamed[h.ID]
-		return !ok || h.Version > dreamedVersion
-	})
+	newTotal := len(newHeaders)
 
-	var processedNew int
-	for {
+	for idx, h := range newHeaders {
 		if ctx.Err() != nil {
-			_ = newHeaderIt.Close()
 			return ctx.Err()
-		}
-		h, ok := newHeaderIt.Next(ctx)
-		if !ok {
-			if err := newHeaderIt.Err(); err != nil {
-				_ = newHeaderIt.Close()
-				return fmt.Errorf("list dialogues: %w", err)
-			}
-			break
 		}
 		d, err := deps.Store.Get(ctx, h.ID)
 		if err != nil {
 			log.Warn("get dialogue failed, skipping",
 				"dialogueID", h.ID, "error", err)
-			processedNew++
 			continue
 		}
 		emit(ctx, ch, Progress{
 			Type:       ProgressAnalyzing,
 			DialogueID: d.ID,
-			Message:    fmt.Sprintf("Processing conversation %q", d.ID),
-			Progress:   processedNew,
+			Message:    fmt.Sprintf("conversation %q", d.ID),
+			Progress:   idx,
+			Total:      newTotal,
 			Units:      "conversations",
 		})
-		if err := dreamDialogue(ctx, ch, deps, d, existingCategories, processedNew, 0); err != nil {
+		if err := dreamDialogue(ctx, ch, deps, d, existingCategories, idx, newTotal); err != nil {
 			log.Warn("dream dialogue failed, skipping",
 				"dialogueID", d.ID, "error", err)
 			emit(ctx, ch, Progress{
 				Type:       ProgressError,
 				DialogueID: d.ID,
-				Message:    fmt.Sprintf("Failed to process conversation %q: %s", d.ID, err),
-				Progress:   processedNew,
+				Message:    fmt.Sprintf("failed: %s", err),
+				Progress:   idx,
+				Total:      newTotal,
 				Units:      "conversations",
 			})
-			processedNew++
 			continue
 		}
 		state.Dreamed[d.ID] = h.Version
 		if err := stateStore.save(ctx, *state); err != nil {
-			_ = newHeaderIt.Close()
 			return fmt.Errorf("save state: %w", err)
 		}
-		processedNew++
 		extracted++
 	}
-	_ = newHeaderIt.Close()
 
 	// Increment LastExtract only when extraction actually produced new memories.
 	// Failed attempts are not counted so downstream phases are not triggered
@@ -532,6 +520,31 @@ func runExtractPhase(ctx context.Context, ch chan<- Progress, deps Deps,
 	}
 
 	return nil
+}
+
+// collectNewHeaders enumerates dialogue headers via deps.Store.List and
+// returns those that need (re-)dreaming because they have not been
+// processed for their current version. Reprocessing IDs are filtered
+// out so they are not processed twice. The full slice is buffered in
+// memory so callers know the total up front; the dialogue store is
+// expected to contain at most thousands of headers.
+func collectNewHeaders(
+	ctx context.Context, store dialoguemanager.Store,
+	state *DreamState, reprocessSet map[string]bool,
+) ([]dialoguemanager.DialogueHeader, error) {
+	it, err := store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = it.Close() }()
+	filtered := iterator.Filter(it, func(h dialoguemanager.DialogueHeader) bool {
+		if reprocessSet[h.ID] {
+			return false
+		}
+		dreamedVersion, ok := state.Dreamed[h.ID]
+		return !ok || h.Version > dreamedVersion
+	})
+	return iterator.ToSlice(ctx, filtered)
 }
 
 func dreamDialogue(
@@ -562,7 +575,7 @@ func dreamDialogue(
 	emit(ctx, ch, Progress{
 		Type:       ProgressWriting,
 		DialogueID: d.ID,
-		Message:    fmt.Sprintf("Processing conversation %q: extracting memories", d.ID),
+		Message:    "extracting memories",
 		Progress:   index,
 		Total:      total,
 		Units:      "conversations",
@@ -587,7 +600,7 @@ func dreamDialogue(
 		emit(ctx, ch, Progress{
 			Type:       ProgressVerifying,
 			DialogueID: d.ID,
-			Message:    fmt.Sprintf("Processing conversation %q: verifying memories", d.ID),
+			Message:    "verifying memories",
 			Progress:   index,
 			Total:      total,
 			Units:      "conversations",
@@ -606,7 +619,7 @@ func dreamDialogue(
 		emit(ctx, ch, Progress{
 			Type:       ProgressFixing,
 			DialogueID: d.ID,
-			Message:    fmt.Sprintf("Processing conversation %q: fixing tests (attempt %d/%d)", d.ID, attempt+1, maxFix),
+			Message:    fmt.Sprintf("fixing tests (attempt %d/%d)", attempt+1, maxFix),
 			Progress:   index,
 			Total:      total,
 			Units:      "conversations",
@@ -624,7 +637,7 @@ func dreamDialogue(
 	emit(ctx, ch, Progress{
 		Type:       ProgressVerifying,
 		DialogueID: d.ID,
-		Message:    fmt.Sprintf("Processing conversation %q: final verification", d.ID),
+		Message:    "final verification",
 		Progress:   index,
 		Total:      total,
 		Units:      "conversations",
@@ -656,15 +669,16 @@ func runAgent(
 				Type:       ProgressToolCall,
 				DialogueID: sourceDialogueID,
 				ToolName:   ev.ToolName,
-				Message:    toolProgressMessage(sourceDialogueID, ev.ToolName, ev.ToolSummary),
+				Message:    ev.ToolSummary,
 			})
 		case agent.EventToolResult:
 			emit(ctx, ch, Progress{
 				Type:       ProgressToolResult,
 				DialogueID: sourceDialogueID,
 				ToolName:   ev.ToolName,
-				Message:    toolProgressMessage(sourceDialogueID, ev.ToolName, ev.ToolSummary),
+				Message:    ev.ToolSummary,
 				IsError:    ev.IsError,
+				Duration:   ev.ToolDuration,
 			})
 		case agent.EventError:
 			agentErr = ev.Error
@@ -960,13 +974,6 @@ func formatTranscript(d dialoguemanager.Dialogue) string {
 		fmt.Fprintf(&b, "### %s\n\n%s\n\n", msg.Role, msg.Content)
 	}
 	return b.String()
-}
-
-func toolProgressMessage(dialogueID, toolName, summary string) string {
-	if dialogueID == "" {
-		return fmt.Sprintf("%s: %s", toolName, summary)
-	}
-	return fmt.Sprintf("Processing conversation %q: %s: %s", dialogueID, toolName, summary)
 }
 
 func emit(ctx context.Context, ch chan<- Progress, p Progress) {
