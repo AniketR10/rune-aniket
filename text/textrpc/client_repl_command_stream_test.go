@@ -18,7 +18,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tcell "github.com/unstablebuild/tcell/v3"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
@@ -27,10 +26,10 @@ import (
 func TestResponsiveFromProtoRows_PreservesPerCellAttributes(t *testing.T) {
 	width := 4
 	attrs := []term.Attributes{
-		{Fg: tcell.ColorFuchsia, Attrs: tcell.AttrBold},
-		{Fg: tcell.ColorGreen},
-		{Fg: tcell.ColorGray},
-		{Fg: tcell.ColorRed, Bg: tcell.ColorBlack},
+		{Fg: term.ColorFuchsia, Attrs: term.AttrBold},
+		{Fg: term.ColorGreen},
+		{Fg: term.ColorGray},
+		{Fg: term.ColorRed, Bg: term.ColorBlack},
 	}
 	runes := []rune{'a', 'b', 'c', 'd'}
 

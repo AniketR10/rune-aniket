@@ -167,8 +167,8 @@ func TestSearchConversations_MatchesInLargeSingleLineSession(t *testing.T) {
 	// Build a single user message whose Content exceeds 64 KiB so that the
 	// resulting JSON is one line well past bufio.MaxScanTokenSize.
 	padding := strings.Repeat("padding ", (bufio.MaxScanTokenSize/8)+1)
-	writeSessionFile(t, dir, "big-conv", []llm.Message{
-		{Role: llm.RoleUser, Content: padding + " needle-token " + padding},
+	writeSessionFile(t, dir, "big-conv", []llmapi.Message{
+		{Role: llmapi.RoleUser, Content: padding + " needle-token " + padding},
 	})
 
 	tool := &searchConversationsTool{fs: localFS{root: dir}, sessionsDir: dir}
