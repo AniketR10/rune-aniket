@@ -11,8 +11,17 @@ RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TAR
 RUNE_LINUX_RELEASE_TAR ?= rune-release-$(RUNE_LINUX_TARGET_OS)-$(RUNE_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
 DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64" CGO_CFLAGS="-arch x86_64" CGO_CXXFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64"
 
-COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
-GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
+# RUNE_DEBUG_BUILD mirrors the root Makefile flag. Set to "true" to
+# bake debug-only ex commands (:panic, :crash) into the binary. The
+# root `debug` target propagates this; release builds leave it empty.
+RUNE_DEBUG_BUILD ?=
+DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/go-tui/debug.DebugBuild=true)
+# RACE_FLAG mirrors RUNE_DEBUG_BUILD so direct cmd/rune builds (which
+# do not run through the root Makefile's GOFLAGS) still get -race when
+# the caller opts into a debug build.
+RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
+COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(DEBUG_LDFLAGS)
+GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
 
 # RUNE_ENV selects the API endpoints baked into the binary.
@@ -26,7 +35,7 @@ PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpoint
 # in a recipe — this lets target-specific overrides such as
 # `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive
 # prerequisites without affecting the default `make rune` build.
-RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune $(if $(filter prod,$(RUNE_ENV)),$(PROD_LDFLAGS))"
 
 # Public download buckets that dist.sh uploads release tarballs / DMGs to.
 # `prod-dist-*` targets push to PROD_DOWNLOADS_BUCKET (user-facing) while

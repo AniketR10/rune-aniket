@@ -2,9 +2,21 @@ GO=go
 CI ?= false
 GOTESTFLAGS ?= -race -timeout 240s
 GOTESTFLAGSNORACE = -timeout 240s
-COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
-GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
-RUNE_GOFLAGS=-tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
+# RUNE_DEBUG_BUILD, when set to "true", flips an in-binary feature
+# flag that exposes debug-only ex commands such as :panic and :crash.
+# Defaults to off; the `debug` target sets it via a target-specific
+# variable. Recursive (=) so target-specific overrides propagate to
+# prerequisites that re-expand COMMON_LDFLAGS.
+RUNE_DEBUG_BUILD ?=
+DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/go-tui/debug.DebugBuild=true)
+# RACE_FLAG mirrors RUNE_DEBUG_BUILD so the race detector is enabled
+# for every binary the `debug` target produces, including the rune
+# binary (which builds with RUNE_GOFLAGS rather than GOFLAGS). This is
+# what makes :datarace actually crash the debug build.
+RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
+COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(DEBUG_LDFLAGS)
+GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
+RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
 OXAPI_GOFLAGS=
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
@@ -79,7 +91,7 @@ default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 default: .git/hooks/pre-commit deps $(EXECS) $(CLAUDEIMPORT)
 
-debug: GOFLAGS=-race
+debug: RUNE_DEBUG_BUILD := true
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 debug: deps $(EXECS) $(CLAUDEIMPORT)

@@ -356,12 +356,6 @@ var (
 			},
 			handler: (*ex).resumeNotifications,
 		},
-		"panic": {
-			man: textapi.CommandManual{
-				Summary: "Cause the editor to panic. This is for internal debugging purposes only.",
-			},
-			handler: (*ex).panic,
-		},
 		"terminalnewtab": {
 			man: textapi.CommandManual{
 				Summary: "Open a new terminal emulator in a new tab and attach it to the current " +
@@ -659,6 +653,41 @@ var (
 				Synopsis: "<program> [args]",
 			},
 			handler: (*ex).locationpicker,
+		},
+	}
+
+	// exDebugCommands are commands that intentionally crash or
+	// destabilize the process and must only be registered when the
+	// IDE is built or configured for debugging. The workspace
+	// handler only subscribes them when ide.WithDebugCommands(true)
+	// is supplied.
+	exDebugCommands = map[string]commandAll{
+		"panic": {
+			man: textapi.CommandManual{
+				Summary: "Cause the editor to panic. This is for internal " +
+					"debugging purposes only and is registered only in debug builds.",
+			},
+			handler: (*ex).panic,
+		},
+		"crash": {
+			man: textapi.CommandManual{
+				Summary: "Trigger an unrecoverable Go runtime fatal error " +
+					"(stack overflow). Unlike panic, this cannot be caught " +
+					"by recover and exercises the launch-log crash report path. " +
+					"Registered only in debug builds.",
+			},
+			handler: (*ex).crash,
+		},
+		"datarace": {
+			man: textapi.CommandManual{
+				Summary: "Deliberately provoke a Go data race on a shared " +
+					"variable. When the binary is built with -race (e.g. " +
+					"via `make debug`) the race detector should abort the " +
+					"process and the resulting report should flow through " +
+					"the launch-log crash report path. Registered only in " +
+					"debug builds.",
+			},
+			handler: (*ex).datarace,
 		},
 	}
 

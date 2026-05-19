@@ -1480,7 +1480,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return true
 			}, runner, mu, nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
-			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil)
+			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil, false)
 		require.NoError(t, err)
 		defer m.Close()
 		m.drainPendingWorkspaces()
@@ -4619,7 +4619,7 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 			return true
 		}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil)
+		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil, false)
 
 	require.NoError(t, err)
 	if uri != nil {

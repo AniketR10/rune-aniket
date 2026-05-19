@@ -55,6 +55,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/cmd/rune/crashreport"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
@@ -307,8 +308,15 @@ func main() {
 			})
 			os.Args = append(os.Args[:1], append(defaults, os.Args[1:]...)...)
 
-			// best effort redirect stdout/err to /tmp/rune_launch.log
-			logPath := filepath.Join(os.TempDir(), "rune_launch.log")
+			// best effort redirect stdout/err to <datadir>/launch.log
+			// so runtime fatal stderr dumps can later be ingested as
+			// crash reports. The data directory may not exist yet on
+			// first launch, so create it before opening the log.
+			if err := os.MkdirAll(*flagDataPath, 0777); err != nil {
+				fmt.Fprintf(os.Stderr, "mkdir datadir %q: %s",
+					*flagDataPath, err)
+			}
+			logPath := crashreport.DefaultLaunchLogPath(*flagDataPath)
 			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err == nil {
 				// syscall.Dup2 isn't defined on linux/arm64 (the
@@ -478,6 +486,9 @@ func runTUI(
 		ide.WithZdotDir(*flagZdotDir),
 		ide.WithScheme(docsScheme, newDocsSchemeFunc()),
 	}
+	if debug.DebugBuild == "true" {
+		opts = append(opts, ide.WithDebugCommands(true))
+	}
 
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,
 		*flagDataPath, opts...)
@@ -630,6 +641,9 @@ func runGUI(
 					}
 				}, true
 			}),
+	}
+	if debug.DebugBuild == "true" {
+		opts = append(opts, ide.WithDebugCommands(true))
 	}
 
 	var err error

@@ -142,6 +142,10 @@ type workspaceManagerHandler struct {
 	externalEvents          []externalEvents
 	initialVTECapacity      int
 	dispatchOnPreview       map[string]PreviewFunc
+	// debugCommands gates registration of debug-only ex commands
+	// (`panic`, `crash`). Set from the top-level ide.WithDebugCommands
+	// option; production builds leave this false.
+	debugCommands bool
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -461,6 +465,7 @@ func (h *workspaceManagerHandler) init(
 	shaderRunner *shaderRunner,
 	initialVTECapacity int,
 	dispatchOnPreview map[string]PreviewFunc,
+	debugCommands bool,
 ) (err error) {
 	ctx := context.Background()
 
@@ -524,6 +529,7 @@ func (h *workspaceManagerHandler) init(
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
 	h.tabBarHeight = tabBarHeight
+	h.debugCommands = debugCommands
 	h.pending = make(map[string]*pendingWorkspace)
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
@@ -555,6 +561,7 @@ func (h *workspaceManagerHandler) init(
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
+	h.empty.debugCommands = h.debugCommands
 	h.empty.commandEditor = h.newCommandPromptEditor(cfg)
 	tm.tm = h.empty.Browser()
 	if err = h.subscribeAllCommands(h.empty); err != nil {
@@ -1306,6 +1313,11 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		return nil, fmt.Errorf("new ex: %w", err)
 	}
 	ex.commandEditor = h.newCommandPromptEditor(cfg)
+	// Propagate the IDE-level debug-commands gate before the
+	// workspace's ex is subscribed in Phase C so debug-only
+	// commands like `panic` and `crash` are available in
+	// every workspace, not just the home/empty one.
+	ex.debugCommands = h.debugCommands
 	apibrowser := newBrowserAdapter(ex.Browser())
 	cursorHistoryCloser, err := idecursor.WithHistory(
 		ex.Editor(), h.ideStorage, apibrowser, apibrowser, ex.workspace,

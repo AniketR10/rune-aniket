@@ -34,4 +34,9 @@ var (
 	// If left empty, debug helpers will use the return
 	// of os.TempDir.
 	ReportsDir = ""
+	// DebugBuild is a compile-time variable set to "true" by
+	// the Makefile's debug target. When set, the IDE wires up
+	// debug-only ex commands (`panic`, `crash`) that would be
+	// unsafe to ship in release builds.
+	DebugBuild = ""
 )

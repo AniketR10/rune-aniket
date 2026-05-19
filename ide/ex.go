@@ -192,6 +192,10 @@ type ex struct {
 	// completion notifications through e.sched so all map mutations
 	// happen on the UI goroutine. Created in init().
 	flusher *flusher
+
+	// debugCommands gates registration of `panic` and `crash`.
+	// Set by the workspace handler before subscribeCommands runs.
+	debugCommands bool
 }
 
 // PreviewFunc is a function used to preview commands.
@@ -313,8 +317,7 @@ func (e *ex) init(
 
 func (e *ex) subscribeCommands() error {
 	var ret error
-	for name, man := range exCommands {
-		// Name is only defined as a key to exCommands
+	subscribe := func(name string, man commandAll) {
 		man.man.Name = name
 		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {
@@ -329,6 +332,14 @@ func (e *ex) subscribeCommands() error {
 			}))
 		if err != nil {
 			ret = multierror.Append(ret, fmt.Errorf("subscribe command: %w", err))
+		}
+	}
+	for name, man := range exCommands {
+		subscribe(name, man)
+	}
+	if e.debugCommands {
+		for name, man := range exDebugCommands {
+			subscribe(name, man)
 		}
 	}
 	return ret
@@ -1964,6 +1975,43 @@ func (e *ex) terminalneworsplit(_ context.Context, args ...string) error {
 
 func (e *ex) panic(_ context.Context, args ...string) error {
 	panic("this could be a panic")
+}
+
+// crash triggers a Go runtime fatal error (stack overflow) that cannot
+// be intercepted by recover(). It exists to exercise the launch-log
+// crash report path and is only registered in debug builds via
+// ide.WithDebugCommands.
+func (e *ex) crash(_ context.Context, args ...string) error {
+	var recurse func(int) int
+	recurse = func(n int) int { return recurse(n+1) + 1 }
+	_ = recurse(0)
+	return nil
+}
+
+// datarace deliberately provokes a Go data race on a shared int by
+// spawning two goroutines that read and write it concurrently without
+// synchronization. It exists so debug builds (which are compiled with
+// `-race`) can validate that the race detector is wired up and that
+// the resulting report reaches the launch-log crash report path. Only
+// registered when ide.WithDebugCommands(true) is supplied.
+func (e *ex) datarace(_ context.Context, _ ...string) error {
+	var shared int
+	done := make(chan struct{}, 2)
+	go func() {
+		for i := range 1_000_000 {
+			shared = i
+		}
+		done <- struct{}{}
+	}()
+	go func() {
+		for range 1_000_000 {
+			_ = shared
+		}
+		done <- struct{}{}
+	}()
+	<-done
+	<-done
+	return nil
 }
 
 func (e *ex) windownew(_ context.Context, args ...string) error {

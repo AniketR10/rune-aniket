@@ -344,6 +344,16 @@ func WithTabsClickCallback(fn func(int) bool) Option {
 	}
 }
 
+// WithDebugCommands toggles registration of debug-only ex commands.
+// When enabled, the IDE registers commands that intentionally crash
+// the process (`panic`, `crash`) for use during development. The
+// default is false; production builds must leave this off.
+func WithDebugCommands(enabled bool) Option {
+	return func(opts *options) {
+		opts.debugCommands = enabled
+	}
+}
+
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
@@ -364,6 +374,12 @@ type options struct {
 	defaultConfig       string
 	bell                func()
 	scheduleFn          func(func()) bool
+
+	// debugCommands, when true, makes the IDE register debug-only
+	// ex commands such as `panic` and `crash`. These commands are
+	// unsafe in production (they intentionally crash the process)
+	// and must only be enabled in debug builds.
+	debugCommands bool
 
 	defaultConfigModeModal bool
 	defaultConfigTUI       bool

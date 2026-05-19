@@ -67,6 +67,17 @@ func checkCrashReports(
 	)
 
 	ctx := context.Background()
+
+	// Materialize crash reports for fatal errors (stack overflow,
+	// runtime.throw, unrecovered panics) that the runtime printed to
+	// stderr in a prior session. recover() can not catch those, so
+	// without this pass they would otherwise be lost.
+	if _, err := mgr.IngestLaunchLog(
+		ctx, crashreport.DefaultLaunchLogPath(dataDir), debug.Package, debug.Tag,
+	); err != nil {
+		log.Warnf("ingest launch log: %v", err)
+	}
+
 	pending, err := mgr.PendingReports(ctx)
 	if err != nil {
 		log.Warnf("check crash reports: %v", err)
