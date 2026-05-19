@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
@@ -43,6 +44,11 @@ type flusherTarget interface {
 	ForceFlushTab(ctx context.Context, h browserapi.Handler) (<-chan error, error)
 	OverwriteTab(ctx context.Context, h browserapi.Handler) (<-chan error, error)
 	ReloadTab(ctx context.Context, h browserapi.Handler) (<-chan error, error)
+	// Resource returns the tab handler open for uri, or false if no
+	// tab with that URI is open. byoe's Reloader implementation
+	// uses this to translate the FS-watcher URI into the handler
+	// the flusher's reloadAsync expects.
+	Resource(uri workspaceapi.URI) (browserapi.Handler, bool)
 }
 
 // flusher coordinates async save / reload operations for an ex.
@@ -147,6 +153,30 @@ func (f *flusher) reloadAsync(
 	uri workspaceapi.URI, h browserapi.Handler, onSuccess func(),
 ) error {
 	return f.startAsync(uri, opReload, f.startWith(f.comp.ReloadTab, h), onSuccess)
+}
+
+// Reload satisfies byoe.Reloader. The byoe handler's FS watcher
+// calls this from the host UI goroutine (scheduled via
+// scheduleNextTick) on every Write/Rename/Create/Remove event for
+// the open file. We resolve uri to the open tab handler through the
+// embedded text.Component, then hand off to the same reloadAsync
+// pipeline :reloadfile uses — disk read, buffer reset, lastFlush
+// advance, and dirty-tab clear all happen on the IDE's awaiter
+// goroutine + UI scheduler.
+//
+// Returns nil when the reload was started successfully (the buffered
+// completion channel is owned by reloadAsync's awaiter and surfaces
+// errors as notifications). Returns workspace.ErrFlushInProgress
+// when a previous reload is still in flight; callers can treat that
+// as benign because the in-flight op will catch up the mirror.
+// Returns workspaceapi.ErrInvalidReload when uri has no open tab —
+// for example a Remove event arriving after the tab was closed.
+func (f *flusher) Reload(uri workspaceapi.URI) error {
+	h, ok := f.comp.Resource(uri)
+	if !ok {
+		return textapi.ErrInvalidReload
+	}
+	return f.reloadAsync(uri, h, nil)
 }
 
 // inFlightCount reports how many awaiter goroutines are still

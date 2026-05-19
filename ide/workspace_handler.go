@@ -250,18 +250,17 @@ func (m visibleWorkspaceManager) UnregisterScheme(scheme string) error {
 }
 
 func (h *workspaceManagerHandler) newEditor(
+	reloader byoe.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace, tm browser.TabManager,
 	cfg ideConfig, svc vctrl.Service,
-) (
-	text.Editor, error,
-) {
+) (text.Editor, error) {
 	switch cfg.editorMode() {
 	case editorModeModal:
 		return h.newBuiltinModalEditor(cwd, cfg, svc), nil
 	case editorModeModeless:
 		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
 	case editorModeBYOE:
-		return h.newBYOEFallbackEditor(cwd, ws, tm, cfg, svc), nil
+		return h.newBYOEFallbackEditor(reloader, cwd, ws, tm, cfg, svc), nil
 	default:
 		panic("invalid editor mode")
 	}
@@ -339,6 +338,7 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 // editor.byoe.command / .goto must already be validated by
 // validateConfig — invalid values here are a programmer error.
 func (h *workspaceManagerHandler) newBYOEFallbackEditor(
+	reloader byoe.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace,
 	tm browser.TabManager, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
@@ -364,6 +364,7 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 		ws, // executor
 		tm,
 		cfg.terminalConfig(),
+		reloader,
 		fallback,
 	)
 }
@@ -547,13 +548,15 @@ func (h *workspaceManagerHandler) init(
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	// do not pass a real version control for home workspace.
-	// newEditor runs after tm is allocated so editors that embed a
-	// vte (e.g. byoe) receive the workspace's tab manager up front.
-	ed, err := h.newEditor(homeDirUri, h.homeWorkspace, tm, cfg, vctrl.NopService())
-	if err != nil {
-		return fmt.Errorf("new editor: %v", err)
-	}
-	h.empty, err = newEx(ed, homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
+	// The editor is constructed inside newEx so that flusher /
+	// byoe.Reloader exist before byoe.New, which demands a non-nil
+	// Reloader. tm is captured by the factory closure.
+	h.empty, err = newEx(
+		func(reloader byoe.Reloader) (text.Editor, error) {
+			return h.newEditor(reloader, homeDirUri, h.homeWorkspace,
+				tm, cfg, vctrl.NopService())
+		},
+		homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.publishEvent, 0 /* vte capacity */, h.clip, h.macro,
 		h.dispatchOnPreview, tm, homeParser, globalOpts...)
@@ -1296,15 +1299,15 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	multicwd := workspace.Multi(context.Background(), visibleManager, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	// newEditor runs after multicwd + tm are allocated so editors
-	// that embed a vte (e.g. byoe) receive the workspace tab
-	// manager and the workspace handle up front, with no late
-	// binding required.
-	ed, err := h.newEditor(uri, multicwd, tm, cfg, vctrlService)
-	if err != nil {
-		return nil, fmt.Errorf("new editor: %w", err)
-	}
-	ex, err := newEx(ed, multicwd, h.ideStorage, h.notifications, uri,
+	// The editor is constructed inside newEx so that flusher /
+	// byoe.Reloader exist before byoe.New, which demands a non-nil
+	// Reloader. multicwd, tm, cfg, vctrlService are captured by
+	// the factory closure.
+	ex, err := newEx(
+		func(reloader byoe.Reloader) (text.Editor, error) {
+			return h.newEditor(reloader, uri, multicwd, tm, cfg, vctrlService)
+		},
+		multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent,
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
 		tm, parser, textOpts...)

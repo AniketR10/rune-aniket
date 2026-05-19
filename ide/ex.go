@@ -65,6 +65,7 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -169,32 +170,12 @@ type ex struct {
 	companionShell       *ideshell.Handler
 	companionShellURI    workspaceapi.URI
 
-	fileExplorerWin    browser.Window
-	fileExplorerTarget browser.Window
-
-	// fileExplorerHandler is created lazily on the first :fexplorer
-	// invocation and reused across toggles. Recreating it would call
-	// e.ed.Edit a second time on the same memory URI, which would
-	// re-subscribe the vi editor's per-file fold/location/git
-	// commands and fail with "command already registered".
+	fileExplorerWin     browser.Window
+	fileExplorerTarget  browser.Window
 	fileExplorerHandler *fileExplorerHandler
-
-	// sched serializes UI-thread work (callbacks from async flush
-	// goroutines, etc.). Set by the workspace handler after newEx.
-	// When nil, async completion callbacks run inline on the
-	// goroutine that delivered the result, which is unsafe for
-	// production UI but acceptable in tests that don't drive a
-	// real event loop.
-	sched func(func()) bool
-	// flusher owns the per-URI cancel/awaiter state for async
-	// Flush/ForceFlush/Reload/Overwrite operations. It serialises
-	// completion notifications through e.sched so all map mutations
-	// happen on the UI goroutine. Created in init().
-	flusher *flusher
-
-	// debugCommands gates registration of `panic` and `crash`.
-	// Set by the workspace handler before subscribeCommands runs.
-	debugCommands bool
+	sched               func(func()) bool
+	flusher             *flusher
+	debugCommands       bool
 }
 
 // PreviewFunc is a function used to preview commands.
@@ -203,7 +184,8 @@ type ex struct {
 type PreviewFunc = func(string, ...string) (component.Responsive, func(), bool)
 
 func newEx(
-	ed text.Editor, m workspace.Workspace,
+	edFactory func(byoe.Reloader) (text.Editor, error),
+	m workspace.Workspace,
 	storage storageapi.Service,
 	notifications *notisManager,
 	uri workspaceapi.URI,
@@ -219,7 +201,7 @@ func newEx(
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, storage, notifications, uri,
+	err = e.init(edFactory, m, storage, notifications, uri,
 		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip, macro,
 		dispatchOnPreview, tm, parser, opts...)
 	if err != nil {
@@ -232,7 +214,8 @@ func newEx(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	ed text.Editor, m workspace.Workspace,
+	edFactory func(byoe.Reloader) (text.Editor, error),
+	m workspace.Workspace,
 	storage storageapi.Service,
 	notifications *notisManager,
 	uri workspaceapi.URI,
@@ -247,12 +230,22 @@ func (e *ex) init(
 	parser syntaxapi.Parser,
 	opts ...text.Option,
 ) (err error) {
-	err = e.doInit(ed, m, storage, notifications, uri,
+	err = e.doInit(m, storage, notifications, uri,
 		emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
 		return
 	}
 	e.parser = parser
+	if emulatorConfig.ScheduleNextTick == nil {
+		panic("ide.ex: emulatorConfig.ScheduleNextTick must not be nil")
+	}
+	e.sched = emulatorConfig.ScheduleNextTick
+	e.flusher = newFlusher(&e.comp, e.notifications, e.sched)
+	ed, err := edFactory(e.flusher)
+	if err != nil {
+		return err
+	}
+	e.ed = ed
 	err = e.comp.Init(ed, m, e.config)
 	if err != nil {
 		return
@@ -299,14 +292,6 @@ func (e *ex) init(
 	e.dispatchOnPreview = dispatchOnPreview
 	e.macro = macro
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
-	// sched is the event-loop scheduler; callers (production wires
-	// emulatorConfig.ScheduleNextTick; tests must install a
-	// serializing scheduler) must supply a non-nil value.
-	if emulatorConfig.ScheduleNextTick == nil {
-		panic("ide.ex: emulatorConfig.ScheduleNextTick must not be nil")
-	}
-	e.sched = emulatorConfig.ScheduleNextTick
-	e.flusher = newFlusher(&e.comp, e.notifications, e.sched)
 	e.tasks = idetask.NewManager(&e.comp, tm, m,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
 	e.tasks.SetFrameAttr(e.config.FrameAttr)
@@ -384,7 +369,7 @@ func (e *ex) Interrupt(ctx context.Context) error {
 }
 
 func (e *ex) doInit(
-	ed text.Editor, m workspace.Workspace,
+	m workspace.Workspace,
 	storage storageapi.Service,
 	n *notisManager,
 	uri workspaceapi.URI,
@@ -410,9 +395,6 @@ func (e *ex) doInit(
 	for _, o := range opts {
 		o(&e.config)
 	}
-	// Wire the event-loop scheduler into text.Config so async flush
-	// completion can run dispatchFlush / resetTabProperties on the
-	// UI goroutine instead of racing with Draw.
 	if e.config.ScheduleNextTick == nil {
 		e.config.ScheduleNextTick = emulatorConfig.ScheduleNextTick
 	}
@@ -424,7 +406,6 @@ func (e *ex) doInit(
 	}
 	e.sequencer.Init(seqInterests, e.config.SequencerTimeout)
 
-	e.ed = ed
 	e.cleanPartialReissueState()
 	e.cmdV.C = browser.NewComponent(e.config.Config)
 	return

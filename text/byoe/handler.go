@@ -57,16 +57,11 @@ type editorHandler struct {
 	cwd              workspace.Workspace
 	notifications    browserapi.Notifications
 	scheduleNextTick func(func()) bool
-
-	// probe maps the embedded editor's screen-relative cursor back to
-	// a file (line, col) by structurally aligning the rendered cell
-	// grid against the file content. It carries no editor-specific
-	// knowledge; see term/vte/vteprobe.
-	probe *vteprobe.Cursor
-
-	watchID     int
-	watchActive bool
-	cancelCtx   context.CancelFunc
+	probe            *vteprobe.Cursor
+	watchID          int
+	watchActive      bool
+	cancelCtx        context.CancelFunc
+	reloader         Reloader
 }
 
 // newHandler builds a wrapper around vteH, hooks the file watcher, and
@@ -77,6 +72,7 @@ func newHandler(
 	gotoTpl gotoTemplate, cwd workspace.Workspace,
 	notifications browserapi.Notifications,
 	scheduleNextTick func(func()) bool,
+	reloader Reloader,
 ) *editorHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
@@ -88,21 +84,8 @@ func newHandler(
 		notifications:    notifications,
 		scheduleNextTick: scheduleNextTick,
 		cancelCtx:        cancel,
-		probe: vteprobe.New(
-			cwd,
-			// Common editor tabstops, ordered by frequency. First
-			// value wins ties so vim/nvim defaults to 8.
-			[]int{8, 4, 2},
-			// Confidence floor: anything below this means the
-			// rendered screen does not align with the file (cursor
-			// on a chrome row, mid-load, alt-screen menu, …) and
-			// CursorAtScroll falls back to (0, 0).
-			0.6,
-			// Upper bound on the file size we are willing to slurp
-			// for inference. 8 MiB easily covers source files; on
-			// anything larger Infer returns ErrUnknown.
-			8<<20,
-		),
+		reloader:         reloader,
+		probe:            vteprobe.New(cwd, []int{8, 4, 2}, 0.6, 8<<20),
 	}
 	h.startWatcher(ctx)
 	return h
@@ -114,7 +97,8 @@ func newHandler(
 func (h *editorHandler) startWatcher(ctx context.Context) {
 	ch := make(chan schemeapi.EventInfo, 8)
 	id, err := h.cwd.Watch(h.resource.Path(), ch,
-		schemeapi.Write, schemeapi.Rename)
+		schemeapi.Write, schemeapi.Rename,
+		schemeapi.Create, schemeapi.Remove)
 	if err != nil {
 		_, _ = h.notifications.Notify(
 			browserapi.LevelWarn,
@@ -138,45 +122,34 @@ func (h *editorHandler) startWatcher(ctx context.Context) {
 	})
 }
 
-// scheduleReload runs on the watcher goroutine. It reads the file
-// contents (off the UI goroutine), then schedules a single buffer
-// replace on the UI goroutine.
+// scheduleReload runs on the watcher goroutine. The reloader touches
+// the open-tab map and the FlusherCloser swap-worker state, both of
+// which cooperate with cell.Buffer subscribers that mutate UI-owned
+// state — so the call must happen on the host UI goroutine.
+// scheduleNextTick is the only hand-off into that loop.
+//
+// The reload itself is async: Reloader.Reload starts the IDE's
+// canonical reload pipeline (the same path :reloadfile uses) and
+// returns either nil or a start-failure error. The actual disk I/O,
+// buffer reset, and dirty-tab clear happen on the IDE's own awaiter
+// goroutine + UI scheduler.
 func (h *editorHandler) scheduleReload(uri workspaceapi.URI) {
-	data, err := readAll(h.cwd, uri.Path())
-	if err != nil {
+	h.scheduleNextTick(func() {
+		err := h.reloader.Reload(uri)
+		if err == nil || errors.Is(err, workspace.ErrFlushInProgress) {
+			return
+		}
 		// External editors typically save via "write to tmp, then
 		// rename" so the watcher routinely sees a transient
-		// not-exist window between the rename and the next watcher
-		// event. Don't spam the user with a warn for what is
-		// expected protocol noise; just wait for the next event.
+		// not-exist window between the rename and the next event.
+		// Don't spam the user for what is expected protocol noise.
 		if errors.Is(err, os.ErrNotExist) {
 			return
 		}
 		_, _ = h.notifications.Notify(
 			browserapi.LevelWarn,
 			"byoe: reload %s: %v", uri.Path(), err)
-		return
-	}
-	h.scheduleNextTick(func() {
-		h.replaceBuffer(data)
 	})
-}
-
-// replaceBuffer atomically replaces the cell.Buffer contents in a
-// single Edit so subscribers see one version bump.
-func (h *editorHandler) replaceBuffer(data string) {
-	view := h.buf.View()
-	rows := view.Rows()
-	endY := 0
-	endX := 0
-	if rows > 0 {
-		endY = rows - 1
-		endX = view.Columns(endY)
-	}
-	h.buf.Edit(context.Background(),
-		term.Coordinates{Y: 0, X: 0},
-		term.Coordinates{Y: endY, X: endX},
-		data)
 }
 
 // Resource satisfies text.Handler.
@@ -194,12 +167,6 @@ func (h *editorHandler) CursorAtScroll() term.Coordinates {
 	if comp == nil {
 		return term.Coordinates{}
 	}
-	// Reach straight into the live grid of whichever screen the
-	// embedded program is drawing into. Scroll.Buffer().RawCells()
-	// returns the underlying [][]term.Cell without copying; the call
-	// to Infer must complete before the next VTE write mutates that
-	// grid, which it does because CursorAtScroll runs on the host
-	// event loop alongside vte writes.
 	var scroll *component.Scroll
 	if comp.IsAltBuffer() {
 		scroll = comp.AlternateScroll()

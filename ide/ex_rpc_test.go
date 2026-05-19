@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/text/texttest"
 )
 
@@ -157,7 +158,7 @@ func newTestRPCBrowser(t *testing.T,
 			[][]string{{"tabprevious"}}))
 		opts = append(opts, otherOpts...)
 		ex.syncCommandPrompt = true
-		err = ex.init(ed, &testLoader{}, svc, notifications, uri,
+		err = ex.init(func(byoe.Reloader) (text.Editor, error) { return ed, nil }, &testLoader{}, svc, notifications, uri,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(),
 			nopPublishEvent, 0, clip, nil, nil, nil, nil, opts...)
 		if err != nil {

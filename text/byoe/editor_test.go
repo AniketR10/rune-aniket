@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -80,6 +81,7 @@ func newTestEditor() *Editor {
 		stubExecutor{},
 		stubTabManager{},
 		vte.DefaultConfig(),
+		stubReloader{},
 	)
 }
 
@@ -127,6 +129,12 @@ func (stubTabManager) SetTabName(workspaceapi.URI, string, term.Attributes) erro
 	return nil
 }
 
+// stubReloader satisfies byoe.Reloader for tests that only need a
+// non-nil value to satisfy byoe.New's invariants.
+type stubReloader struct{}
+
+func (stubReloader) Reload(workspaceapi.URI) error { return nil }
+
 var _ browser.EventPublisher = stubPublisher{}
 var _ browserapi.Notifications = stubNotifications{}
 var _ schemeapi.Terminal = stubTerminal{}
@@ -156,6 +164,7 @@ func TestNewPanicsOnMissingArgument(t *testing.T) {
 		{"no terminal", func(a *newArgs) { a.terminal = nil }},
 		{"no executor", func(a *newArgs) { a.executor = nil }},
 		{"no tab manager", func(a *newArgs) { a.tabManager = nil }},
+		{"no reloader", func(a *newArgs) { a.reloader = nil }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -191,6 +200,7 @@ type newArgs struct {
 	executor      schemeapi.Executor
 	tabManager    browser.TabManager
 	vteCfg        vte.Config
+	reloader      Reloader
 }
 
 func goodArgs() newArgs {
@@ -206,6 +216,7 @@ func goodArgs() newArgs {
 		executor:      stubExecutor{},
 		tabManager:    stubTabManager{},
 		vteCfg:        vte.DefaultConfig(),
+		reloader:      stubReloader{},
 	}
 }
 
@@ -213,7 +224,7 @@ func (a newArgs) call() *Editor {
 	return New(
 		a.command, a.gotoTemplate, a.schedule,
 		a.cwd, a.uri, a.notifications, a.publisher,
-		a.terminal, a.executor, a.tabManager, a.vteCfg)
+		a.terminal, a.executor, a.tabManager, a.vteCfg, a.reloader)
 }
 
 // TestPublisherFuncSurfaceClosedError verifies the PublisherFunc
@@ -235,16 +246,52 @@ func TestSubstituteCommand(t *testing.T) {
 	assert.Equal(t, "vim +call cursor(10, 4) /tmp/x.go", got)
 }
 
-// TestHandlerReplaceBuffer verifies the buffer-replace helper drives
-// the cell.Buffer in a single Edit covering the full prior content.
-func TestHandlerReplaceBuffer(t *testing.T) {
-	buf := cell.NewBuffer()
-	buf.WriteString("hello\nworld\n")
-	v0 := buf.Version()
-	h := &editorHandler{buf: buf}
-	h.replaceBuffer("goodbye\n")
-	assert.Greater(t, buf.Version(), v0,
-		"buffer version must advance after replaceBuffer")
-	assert.Equal(t, "goodbye\n", buf.String(),
-		"replaceBuffer must overwrite full prior content")
+// recordingReloader captures every URI it is asked to reload so
+// scheduleReload tests can assert exactly what got routed into the
+// IDE pipeline.
+type recordingReloader struct {
+	calls []workspaceapi.URI
+	err   error
+}
+
+func (r *recordingReloader) Reload(uri workspaceapi.URI) error {
+	r.calls = append(r.calls, uri)
+	return r.err
+}
+
+// TestScheduleReloadRoutesThroughReloaderOnUIGoroutine verifies that
+// the FS-watcher-driven reload is handed off to the Reloader, and that
+// the hand-off goes through scheduleNextTick — the watcher goroutine
+// must not call Reloader directly because Reload touches UI-owned tab
+// state (open-tab map, FlusherCloser swap state, cell.Buffer
+// subscribers).
+func TestScheduleReloadRoutesThroughReloaderOnUIGoroutine(t *testing.T) {
+	rel := &recordingReloader{}
+	var scheduled []func()
+	sched := func(fn func()) bool {
+		scheduled = append(scheduled, fn)
+		return true
+	}
+	uri, err := workspaceapi.ParseURI("file:///x")
+	require.NoError(t, err)
+	h := &editorHandler{
+		resource:         uri,
+		notifications:    stubNotifications{},
+		scheduleNextTick: sched,
+		reloader:         rel,
+	}
+
+	h.scheduleReload(uri)
+
+	// Reloader must NOT have been called inline: the watcher
+	// goroutine handed the work to the UI scheduler instead.
+	require.Empty(t, rel.calls,
+		"scheduleReload must defer to scheduleNextTick, not call Reload inline")
+	require.Len(t, scheduled, 1)
+
+	// Drain the scheduled callback to simulate the UI goroutine
+	// picking it up.
+	scheduled[0]()
+	assert.Equal(t, []workspaceapi.URI{uri}, rel.calls,
+		"scheduled callback must invoke Reloader with the watched URI")
 }

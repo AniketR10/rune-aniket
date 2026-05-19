@@ -68,13 +68,14 @@ func New(
 	executor schemeapi.Executor,
 	tabManager browser.TabManager,
 	vteCfg vte.Config,
+	reloader byoe.Reloader,
 	fallback text.Editor,
 ) *Editor {
 	return newWithEditors(
 		byoe.New(
 			command, gotoTemplate, scheduleNextTick,
 			cwd, workspaceURI, notifications, publisher,
-			terminal, executor, tabManager, vteCfg,
+			terminal, executor, tabManager, vteCfg, reloader,
 		),
 		fallback,
 	)

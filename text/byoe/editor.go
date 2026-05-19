@@ -33,8 +33,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -61,6 +59,7 @@ func New(
 	executor schemeapi.Executor,
 	tabManager browser.TabManager,
 	vteCfg vte.Config,
+	reloader Reloader,
 ) *Editor {
 	switch {
 	case command == "":
@@ -79,6 +78,8 @@ func New(
 		panic("byoe.New: executor is required")
 	case tabManager == nil:
 		panic("byoe.New: tabManager is required")
+	case reloader == nil:
+		panic("byoe.New: reloader is required")
 	}
 	tpl, err := parseGotoTemplate(gotoTemplate)
 	if err != nil {
@@ -96,6 +97,7 @@ func New(
 		executor:         executor,
 		tabManager:       tabManager,
 		vteCfg:           vteCfg,
+		reloader:         reloader,
 	}
 	ret.pub.Init()
 	return ret
@@ -115,6 +117,7 @@ type Editor struct {
 	executor         schemeapi.Executor
 	tabManager       browser.TabManager
 	vteCfg           vte.Config
+	reloader         Reloader
 
 	pub text.Publisher
 }
@@ -155,7 +158,7 @@ func (e *Editor) Edit(
 	}
 
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
-		e.cwd, e.notifications, e.scheduleNextTick)
+		e.cwd, e.notifications, e.scheduleNextTick, e.reloader)
 	return e.pub.PublishExternalEdit(file, buf, h), nil
 }
 
@@ -207,18 +210,4 @@ func substituteCommand(tpl, file string, line, col int) string {
 		"{col}", strconv.Itoa(col),
 	)
 	return repl.Replace(tpl)
-}
-
-// readAll reads the full contents of path from cwd's filesystem.
-func readAll(cwd workspace.Workspace, path string) (string, error) {
-	f, err := cwd.OpenFile(path, os.O_RDONLY, 0)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }
