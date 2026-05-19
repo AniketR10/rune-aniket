@@ -43,7 +43,7 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
 	rune-docker-build rune-docker-run \
-	ox-api-docker-build-gcp ox-api-docker-push-gcp \
+	ox-api-docker-build-gcp ox-api-docker-push-gcp-staging \
 	ox-api-docker-build-gcp-prod ox-api-docker-push-gcp-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
@@ -262,7 +262,7 @@ rune-docker-run:
 ox-api-docker-build-gcp:
 	@$(MAKE) -C cmd/ox-api docker-build-gcp
 
-ox-api-docker-push-gcp:
+ox-api-docker-push-gcp-staging:
 	@$(MAKE) -C cmd/ox-api docker-push-gcp
 
 ox-api-docker-build-gcp-prod:
