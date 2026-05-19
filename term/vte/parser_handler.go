@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/term/vte/vtescreen"
@@ -747,40 +746,40 @@ func (t *parserHandler) TerminalAttribute(pattr vteparser.Attr) {
 		attr.Bg = 0
 		attr.Attrs = 0
 	case vteparser.BoldAttr:
-		attr.Attrs |= tcell.AttrBold
+		attr.Attrs |= term.AttrBold
 	case vteparser.DimAttr:
-		attr.Attrs |= tcell.AttrDim
+		attr.Attrs |= term.AttrDim
 	case vteparser.ItalicAttr:
-		attr.Attrs |= tcell.AttrItalic
+		attr.Attrs |= term.AttrItalic
 	case vteparser.UnderlineAttr:
-		attr.Attrs |= tcell.AttrUnderline
+		attr.Attrs |= term.AttrUnderline
 	case vteparser.BlinkSlowAttr, vteparser.BlinkFastAttr:
-		attr.Attrs |= tcell.AttrBlink
+		attr.Attrs |= term.AttrBlink
 	case vteparser.ReverseAttr:
-		attr.Attrs |= tcell.AttrReverse
+		attr.Attrs |= term.AttrReverse
 	case vteparser.HiddenAttr:
 		t.sync.buf.SetHiddenCursor(true)
 		return
 	case vteparser.StrikeAttr:
-		attr.Attrs |= tcell.AttrStrikeThrough
+		attr.Attrs |= term.AttrStrikeThrough
 	case vteparser.CancelBoldAttr:
-		attr.Attrs &^= tcell.AttrBold
+		attr.Attrs &^= term.AttrBold
 	case vteparser.CancelBoldDimAttr:
-		attr.Attrs &^= tcell.AttrBold
-		attr.Attrs &^= tcell.AttrDim
+		attr.Attrs &^= term.AttrBold
+		attr.Attrs &^= term.AttrDim
 	case vteparser.CancelItalicAttr:
-		attr.Attrs &^= tcell.AttrItalic
+		attr.Attrs &^= term.AttrItalic
 	case vteparser.CancelUnderlineAttr:
-		attr.Attrs &^= tcell.AttrUnderline
+		attr.Attrs &^= term.AttrUnderline
 	case vteparser.CancelBlinkAttr:
-		attr.Attrs &^= tcell.AttrBlink
+		attr.Attrs &^= term.AttrBlink
 	case vteparser.CancelReverseAttr:
-		attr.Attrs &^= tcell.AttrReverse
+		attr.Attrs &^= term.AttrReverse
 	case vteparser.CancelHiddenAttr:
 		t.sync.buf.SetHiddenCursor(false)
 		return
 	case vteparser.CancelStrikeAttr:
-		attr.Attrs &^= tcell.AttrStrikeThrough
+		attr.Attrs &^= term.AttrStrikeThrough
 	case vteparser.ForegroundAttr:
 		attr.Fg = pattr.Color
 	case vteparser.BackgroundAttr:

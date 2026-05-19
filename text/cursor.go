@@ -39,7 +39,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
@@ -2698,7 +2697,7 @@ func (c *Cursor) setSelection() (ok bool) {
 		locs = append(locs, textapi.Location{
 			From: sel.From,
 			To:   sel.To,
-			Attr: term.Attributes{Attrs: tcell.AttrReverse},
+			Attr: term.Attributes{Attrs: term.AttrReverse},
 		})
 	}
 

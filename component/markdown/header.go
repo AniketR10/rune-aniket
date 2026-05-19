@@ -26,7 +26,6 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 type headerBlock struct {
@@ -68,7 +67,7 @@ func (hb *headerBlock) Draw(w term.Writer) {
 	lines := wrapTextRun(hb.content, effectiveWidth)
 	startY := 1
 
-	if attr.Bg != tcell.ColorDefault {
+	if attr.Bg != term.ColorDefault {
 		maxContentWidth := 0
 		for i, line := range lines {
 			lineWidth := line.Len()
@@ -93,7 +92,7 @@ func (hb *headerBlock) Draw(w term.Writer) {
 	}
 
 	contentOffset := 0
-	if attr.Bg != tcell.ColorDefault {
+	if attr.Bg != term.ColorDefault {
 		contentOffset = 1
 	}
 

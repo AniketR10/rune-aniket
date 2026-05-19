@@ -70,7 +70,7 @@ func TestConvertByteOffset(t *testing.T) {
 			0, term.Coordinates{Y: 0, X: 0}, true,
 		},
 		{
-			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+			[][]term.Cell{{{Ch: '👨', Combining: &[]rune{
 				rune(8205),
 				rune(128103),
 				rune(8205),
@@ -79,7 +79,7 @@ func TestConvertByteOffset(t *testing.T) {
 			18, term.Coordinates{Y: 0, X: 1}, true,
 		},
 		{
-			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+			[][]term.Cell{{{Ch: '👨', Combining: &[]rune{
 				rune(8205),
 				rune(128103),
 				rune(8205),
@@ -158,7 +158,7 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 			0, 0, term.Coordinates{Y: 0, X: 0}, true,
 		},
 		{
-			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+			[][]term.Cell{{{Ch: '👨', Combining: &[]rune{
 				rune(8205),
 				rune(128103),
 				rune(8205),
@@ -167,7 +167,7 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 			0, 18, term.Coordinates{Y: 0, X: 1}, true,
 		},
 		{
-			[][]term.Cell{{{Ch: '👨', Combining: []rune{
+			[][]term.Cell{{{Ch: '👨', Combining: &[]rune{
 				rune(8205),
 				rune(128103),
 				rune(8205),

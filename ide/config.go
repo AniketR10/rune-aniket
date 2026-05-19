@@ -48,7 +48,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/llm"
 	yaml "gopkg.in/yaml.v3"
 	tconfig "unstable.build/go-tui/api/config"
@@ -1285,14 +1284,14 @@ func setNotificationsColor(ret *notifications.Config) {
 	ret.ColorSuccess.Bg = ret.BackgroundAttributes.Bg
 	ret.ColorError.Bg = ret.BackgroundAttributes.Bg
 	ret.ColorWarning.Bg = ret.BackgroundAttributes.Bg
-	ret.ColorInfo.Fg = tcell.ColorSilver
-	ret.ColorSuccess.Fg = tcell.ColorGreen
-	ret.ColorError.Fg = tcell.ColorRed
-	ret.ColorWarning.Fg = tcell.ColorYellow
-	ret.ColorInfo.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
-	ret.ColorSuccess.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
-	ret.ColorError.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
-	ret.ColorWarning.Attrs = ret.BackgroundAttributes.Attrs | tcell.AttrBold
+	ret.ColorInfo.Fg = term.ColorSilver
+	ret.ColorSuccess.Fg = term.ColorGreen
+	ret.ColorError.Fg = term.ColorRed
+	ret.ColorWarning.Fg = term.ColorYellow
+	ret.ColorInfo.Attrs = ret.BackgroundAttributes.Attrs | term.AttrBold
+	ret.ColorSuccess.Attrs = ret.BackgroundAttributes.Attrs | term.AttrBold
+	ret.ColorError.Attrs = ret.BackgroundAttributes.Attrs | term.AttrBold
+	ret.ColorWarning.Attrs = ret.BackgroundAttributes.Attrs | term.AttrBold
 }
 
 func (c ideConfig) focusTabAttr() term.Attributes {
@@ -1813,7 +1812,7 @@ func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
 }
 
 func (c ideConfig) virtualEditorSelectionAttr() (ret term.Attributes) {
-	ret = term.Attributes{Attrs: tcell.AttrReverse}
+	ret = term.Attributes{Attrs: term.AttrReverse}
 	cfg, ok := c.virtual()
 	if !ok {
 		return
@@ -1872,7 +1871,7 @@ func (c ideConfig) virtualEditorEditor() (ret string) {
 }
 
 func (c ideConfig) modalResultAttr() (attr term.Attributes) {
-	attr = term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack}
+	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
 	cfg, ok := c.modal()
 	if !ok {
 		return
@@ -1967,7 +1966,7 @@ func (c ideConfig) fileExplorer() (config.Config, bool) {
 // file explorer. Defaults to a gray foreground so the guides recede
 // visually behind file names.
 func (c ideConfig) fileExplorerIndentAttr() term.Attributes {
-	def := term.Attributes{Fg: tcell.ColorGray}
+	def := term.Attributes{Fg: term.ColorGray}
 	cfg, ok := c.fileExplorer()
 	if !ok {
 		return def
@@ -1987,7 +1986,7 @@ func (c ideConfig) fileExplorerIndentAttr() term.Attributes {
 // override) in the file explorer. Defaults to a gray foreground so
 // the icons recede visually behind file names.
 func (c ideConfig) fileExplorerIconAttr() term.Attributes {
-	def := term.Attributes{Fg: tcell.ColorGray}
+	def := term.Attributes{Fg: term.ColorGray}
 	cfg, ok := c.fileExplorer()
 	if !ok {
 		return def
@@ -2247,7 +2246,7 @@ func (c ideConfig) clipboard() clipboard.Register {
 }
 
 func (c ideConfig) modelessResultAttr() (attr term.Attributes) {
-	attr = term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack}
+	attr = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
 	cfg, ok := c.modeless()
 	if !ok {
 		return
@@ -2736,12 +2735,12 @@ func (c ideConfig) terminalDefaultAttr() term.Attributes {
 
 func (c ideConfig) terminalSelectionAttr() term.Attributes {
 	return c.getConfigAttr("terminal", "selection_attr",
-		term.Attributes{Attrs: tcell.AttrReverse})
+		term.Attributes{Attrs: term.AttrReverse})
 }
 
 func (c ideConfig) terminalNeedsAttentionAttr() term.Attributes {
 	return c.getConfigAttr("terminal", "needs_attention_attr",
-		term.Attributes{Attrs: tcell.AttrBlink})
+		term.Attributes{Attrs: term.AttrBlink})
 }
 
 func (c ideConfig) terminalDynamicTabName() bool {
@@ -2876,15 +2875,15 @@ func (c ideConfig) terminalConfig() vte.Config {
 	return ret
 }
 
-func (c ideConfig) pluginBarBackgroundColor(def tcell.Color) (bg tcell.Color) {
+func (c ideConfig) pluginBarBackgroundColor(def term.Color) (bg term.Color) {
 	return c.pluginAttr(term.Attributes{Bg: def}, "bar_background_attr").Bg
 }
 
-func (c ideConfig) pluginStatusSuccessColor(def tcell.Color) (fg tcell.Color) {
+func (c ideConfig) pluginStatusSuccessColor(def term.Color) (fg term.Color) {
 	return c.pluginAttr(term.Attributes{Fg: def}, "status_success_attr").Fg
 }
 
-func (c ideConfig) pluginStatusErrorColor(def tcell.Color) (fg tcell.Color) {
+func (c ideConfig) pluginStatusErrorColor(def term.Color) (fg term.Color) {
 	return c.pluginAttr(term.Attributes{Fg: def}, "status_error_attr").Fg
 }
 

@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
 )
@@ -93,12 +92,12 @@ func loadingShader(defaultAttr term.Attributes) shader.Shader {
 // without slowing the user down.
 func openShader(defaultAttr term.Attributes) shader.Shader {
 	params := shader.DefaultBurnParams()
-	params.BurnGradient = []tcell.Color{
-		tcell.ColorWhite,
-		tcell.ColorSilver,
-		tcell.ColorYellow,
-		tcell.ColorRed,
-		tcell.ColorMaroon,
+	params.BurnGradient = []term.Color{
+		term.ColorWhite,
+		term.ColorSilver,
+		term.ColorYellow,
+		term.ColorRed,
+		term.ColorMaroon,
 	}
 	params.BurnSymbols = []rune{
 		'░', '▒', '▓', '█', '█', '▓', '▒', '░',
@@ -169,9 +168,9 @@ func (s *openShaderShader) SetInitialDesaturation(amount float64) {
 
 func shutdownShader(defaultAttr term.Attributes) shader.Shader {
 	params := glslshader.DefaultFlamesParams()
-	params.ColorGradient = []tcell.Color{
-		tcell.ColorRed,
-		tcell.ColorMaroon,
+	params.ColorGradient = []term.Color{
+		term.ColorRed,
+		term.ColorMaroon,
 	}
 
 	// randomize some of the parameters

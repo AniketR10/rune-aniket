@@ -184,7 +184,7 @@ func cellsToRowString(row []term.Cell) string {
 	var b strings.Builder
 	for _, c := range row {
 		b.WriteRune(c.Ch)
-		for _, comb := range c.Combining {
+		for _, comb := range c.CombiningRunes() {
 			b.WriteRune(comb)
 		}
 	}

@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // detectChrome finds the inclusive content band [top, bot] inside rows
@@ -175,17 +174,19 @@ func isAttrChromeRow(r extractedRow) bool {
 
 // isChromeAttr returns true when the attribute mask of a cell signals
 // chrome (reverse video, bold-on-color, or non-default background).
+const colorReset = term.ColorSpecial
+
 func isChromeAttr(a term.Attributes) bool {
-	s := tcell.Style(a)
-	if s.Attrs&tcell.AttrReverse != 0 {
+	s := a.Style()
+	if s.Attrs&term.AttrReverse != 0 {
 		return true
 	}
-	if s.Attrs&tcell.AttrBold != 0 {
-		if s.Fg != tcell.ColorDefault && s.Bg != tcell.ColorDefault {
+	if s.Attrs&term.AttrBold != 0 {
+		if s.Fg != term.ColorDefault && s.Bg != term.ColorDefault {
 			return true
 		}
 	}
-	if s.Bg != tcell.ColorDefault && s.Bg != tcell.ColorReset {
+	if s.Bg != term.ColorDefault && s.Bg != colorReset {
 		return true
 	}
 	return false

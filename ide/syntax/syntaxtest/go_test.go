@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"go.uber.org/goleak"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"
@@ -2026,7 +2025,7 @@ func newTestCase(
 	// give the focus tab icon attr an explicit fg so the
 	// term.StringWriter's ForegroundCh substitution renders the
 	// tab icon in the layouts under test.
-	tcfg.FocusTabIconAttr = term.Attributes{Fg: tcell.ColorWhite}
+	tcfg.FocusTabIconAttr = term.Attributes{Fg: term.ColorWhite}
 	comp, err := text.NewComponent(ed, w, tcfg)
 	require.NoError(t, err)
 

@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/timeshader"
 )
@@ -154,15 +153,14 @@ func testFedIntoMultipleTimeShaders(t *testing.T, sh shader.Shader) {
 }
 
 func testCellMatrix(t *testing.T, sh shader.Shader) {
-	wht := tcell.ColorWhite
-	blk := tcell.ColorBlack
+	wht := term.ColorWhite
+	blk := term.ColorBlack
 
 	// regular cell (char, fg and bg are set)
 	cell := func(ch rune) term.Cell {
 		return term.Cell{
 			Ch:         ch,
-			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: tcell.AttrNone},
-			Combining:  []rune{},
+			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrNone},
 			Width:      1,
 		}
 	}
@@ -192,8 +190,7 @@ func testCellMatrix(t *testing.T, sh shader.Shader) {
 	itaCell := func() term.Cell {
 		return term.Cell{
 			Ch:         'C',
-			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: tcell.AttrItalic},
-			Combining:  []rune{},
+			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrItalic},
 			Width:      1,
 		}
 	}
@@ -202,8 +199,7 @@ func testCellMatrix(t *testing.T, sh shader.Shader) {
 	cellGap := func() term.Cell {
 		return term.Cell{
 			Ch:         0,
-			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: tcell.AttrNone},
-			Combining:  []rune{},
+			Attributes: term.Attributes{Fg: wht, Bg: blk, Attrs: term.AttrNone},
 			Width:      0,
 		}
 	}

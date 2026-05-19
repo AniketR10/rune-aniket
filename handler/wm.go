@@ -30,7 +30,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component"
 	tterm "unstable.build/go-tui/term"
 )
@@ -489,8 +488,8 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
 		FocusFrameCharSet:   compapi.FrameCharSetDefault(),
 		FocusFrameAttr: term.Attributes{
-			Fg: tcell.ColorRed,
-			Bg: tcell.ColorDefault,
+			Fg: term.ColorRed,
+			Bg: term.ColorDefault,
 		},
 	}
 }

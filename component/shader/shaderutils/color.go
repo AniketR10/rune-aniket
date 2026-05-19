@@ -26,13 +26,13 @@ package shaderutils
 import (
 	"math"
 
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // InterpolateColor calculates a color that is a linear blend between the
 // provided color and target color.
 //
-// In case color is the tcell.ColorDefault then it is resolved with
+// In case color is the term.ColorDefault then it is resolved with
 // resolveColorDefault.
 //
 // If after resolution either endpoint is still unresolvable (e.g. a default
@@ -40,8 +40,8 @@ import (
 // function returns color unchanged so callers preserve the terminal's
 // default rendering rather than emitting garbage RGB.
 func InterpolateColor(
-	factor float64, color, target, resolveColorDefault tcell.Color,
-) tcell.Color {
+	factor float64, color, target, resolveColorDefault term.Color,
+) term.Color {
 	// Identity short-circuit: when color and target are the same value,
 	// return color unchanged so named/palette colors (and ColorDefault) are
 	// preserved instead of being converted to literal TrueColor RGB. This
@@ -51,7 +51,7 @@ func InterpolateColor(
 		return color
 	}
 	resolved := color
-	if resolved == tcell.ColorDefault {
+	if resolved == term.ColorDefault {
 		resolved = resolveColorDefault
 	}
 	// If either endpoint can't be expressed as RGB after resolution, the
@@ -64,7 +64,7 @@ func InterpolateColor(
 	}
 	r, g, b := resolved.RGB()
 	tr, tg, tb := target.RGB()
-	return tcell.NewRGBColor(
+	return term.NewRGBColor(
 		int32(float64(r)+((float64(tr)-float64(r))*factor)),
 		int32(float64(g)+((float64(tg)-float64(g))*factor)),
 		int32(float64(b)+((float64(tb)-float64(b))*factor)),
@@ -73,10 +73,10 @@ func InterpolateColor(
 
 // ColorBrightness returns a normalized value 0..1 indicating the intensity of the color.
 //
-// In case color is the tcell.ColorDefault then it is resolved with
+// In case color is the term.ColorDefault then it is resolved with
 // resolveColorDefault.
-func ColorBrightness(color, resolveColorDefault tcell.Color) float64 {
-	if color == tcell.ColorDefault {
+func ColorBrightness(color, resolveColorDefault term.Color) float64 {
+	if color == term.ColorDefault {
 		color = resolveColorDefault
 	}
 	r, g, b := color.RGB()
@@ -85,7 +85,7 @@ func ColorBrightness(color, resolveColorDefault tcell.Color) float64 {
 
 // SampleGradient interpolates a color from a gradient at a given position
 // where factor=0 is the first color and factor=1 the last.
-func SampleGradient(factor float64, gradient []tcell.Color) tcell.Color {
+func SampleGradient(factor float64, gradient []term.Color) term.Color {
 	t := math.Min(1, math.Max(0, factor))
 	stops := float64(len(gradient) - 1)
 	tt := t * stops
@@ -114,12 +114,12 @@ func SampleGradient(factor float64, gradient []tcell.Color) tcell.Color {
 // cell's relative brightness so the result reads as the same color with
 // its hue removed rather than every cell collapsing to one shade.
 //
-// If color is [tcell.ColorDefault] it is resolved with resolveDefault.
+// If color is [term.ColorDefault] it is resolved with resolveDefault.
 // If after resolution color cannot be expressed as RGB, color is
 // returned unchanged so the terminal keeps rendering it natively.
 func DesaturateColor(
-	color tcell.Color, amount float64, resolveDefault tcell.Color,
-) tcell.Color {
+	color term.Color, amount float64, resolveDefault term.Color,
+) term.Color {
 	if amount <= 0 {
 		return color
 	}
@@ -127,7 +127,7 @@ func DesaturateColor(
 		amount = 1
 	}
 	resolved := color
-	if resolved == tcell.ColorDefault {
+	if resolved == term.ColorDefault {
 		resolved = resolveDefault
 	}
 	if resolved.Hex() < 0 {
@@ -137,9 +137,9 @@ func DesaturateColor(
 	lum := 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
 	if amount >= 1 {
 		l := int32(math.Round(lum))
-		return tcell.NewRGBColor(l, l, l)
+		return term.NewRGBColor(l, l, l)
 	}
-	return tcell.NewRGBColor(
+	return term.NewRGBColor(
 		int32(math.Round(float64(r)+(lum-float64(r))*amount)),
 		int32(math.Round(float64(g)+(lum-float64(g))*amount)),
 		int32(math.Round(float64(b)+(lum-float64(b))*amount)),

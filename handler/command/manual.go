@@ -32,7 +32,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 )
 
@@ -124,8 +123,8 @@ func (p *Prompt) makeManualComponent(
 	cfg.HeaderPrefix = false
 	cfg.ParagraphSpacing = 0
 	cfg.InlineCode = term.Attributes{
-		Fg: tcell.ColorSilver,
-		Bg: tcell.ColorGray,
+		Fg: term.ColorSilver,
+		Bg: term.ColorGray,
 	}
 	markdown, err := markdown.NewWithConfig(str, cfg)
 	if err != nil || p.config.NoMarkdown {

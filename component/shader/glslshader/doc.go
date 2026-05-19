@@ -50,8 +50,8 @@ by shadeGLSL() and you only responsible for your runCell().
 		frame, total int, fps float, time float,
 		fragCoordX, fragCoordY int,
 		resolutionX, resolutionY int,
-		inChar rune, inFg, inBg tcell.Color,
-	) (char rune, fg, bg tcell.Color) {
+		inChar rune, inFg, inBg term.Color,
+	) (char rune, fg, bg term.Color) {
 		// generate your art based on those parameters or pass through by
 	    // piping the input values to the out return values.
 		char = inChar

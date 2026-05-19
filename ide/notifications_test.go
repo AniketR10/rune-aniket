@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/notifications"
 )
 
@@ -46,7 +45,7 @@ func newTestNotifications(uri workspaceapi.URI, t *testing.T) (*testNotifier, *n
 		parent:  &workspaceManagerMock{workspace: new(ex), wantFocusURI: uri},
 		uri:     uri,
 		cfg: notifications.Config{
-			ColorError: term.Attributes{Fg: tcell.ColorRed},
+			ColorError: term.Attributes{Fg: term.ColorRed},
 		},
 	}
 	return mock, b
@@ -66,7 +65,7 @@ func TestNotifyAcrossWorkspaces(t *testing.T) {
 
 		assert.Equal(t, 1, mock.messages["abc_paused"])
 		expectedAttrs := map[workspaceapi.URI]term.Attributes{
-			workspace: {Fg: tcell.ColorRed},
+			workspace: {Fg: term.ColorRed},
 		}
 		assert.Equal(t, expectedAttrs, workspaceMock.attrs)
 	})

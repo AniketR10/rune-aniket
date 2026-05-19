@@ -29,7 +29,6 @@ import (
 	"github.com/rivo/uniseg"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term/vte/vteparser"
 
 	"github.com/stretchr/testify/assert"
@@ -521,9 +520,9 @@ func TestWriteInsert(t *testing.T) {
 		b.SetCursorAtScreen(term.Coordinates{}, false)
 
 		attrs := term.Attributes{
-			Fg:    tcell.ColorYellow,
-			Bg:    tcell.ColorBlue,
-			Attrs: tcell.AttrItalic,
+			Fg:    term.ColorYellow,
+			Bg:    term.ColorBlue,
+			Attrs: term.AttrItalic,
 		}
 		b.SetCursorAttributes(attrs)
 		b.Write('X', 1, 0)

@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/debug"
 )
 
@@ -147,7 +146,7 @@ func (h *Handler) drawPreview(w term.Writer) {
 				cell.Attributes = term.AttributesUnion(cell.Attributes, h.cfg.PreviewAttr)
 				if h.targetStartX < h.targetEndX &&
 					x >= h.targetStartX && x < h.targetEndX {
-					cell.Attrs |= tcell.AttrReverse
+					cell.Attrs |= term.AttrReverse
 				}
 			}
 			w.SetCell(term.Coordinates{X: leftPad + x, Y: row}, cell)
@@ -160,7 +159,7 @@ func (h *Handler) drawSeparator(w term.Writer) {
 		return
 	}
 	ch := component.FrameCharSetDefault().HorizontalTop
-	attr := term.Attributes{Fg: tcell.ColorGray}
+	attr := term.Attributes{Fg: term.ColorGray}
 	leftPad := spanHorizontalPad / 2
 	rightPad := spanHorizontalPad - leftPad
 	contentW := max(0, h.innerW-leftPad-rightPad)

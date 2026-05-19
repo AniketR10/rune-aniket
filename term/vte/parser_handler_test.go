@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -719,7 +718,7 @@ func TestIntegrationParserHandler(t *testing.T) {
 				assert.True(t, tm.belled)
 				assert.Equal(t, testURI, tm.toUri)
 				assert.Equal(t, "radical", tm.setName)
-				assert.Equal(t, term.Attributes{Attrs: tcell.AttrBlink}, tm.setAttr)
+				assert.Equal(t, term.Attributes{Attrs: term.AttrBlink}, tm.setAttr)
 			},
 		},
 		{

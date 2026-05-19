@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestSetWidthHeight(t *testing.T) {
@@ -1953,7 +1952,7 @@ func TestSetFrameAttr(t *testing.T) {
 	wm, w1 := NewWindowManager(h1, cfg)
 	wm.Resize(20, 8)
 
-	newAttr := term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorBlue}
+	newAttr := term.Attributes{Fg: term.ColorGreen, Bg: term.ColorBlue}
 	prev, ok := w1.SetFrameAttr(newAttr)
 	assert.True(t, ok)
 	assert.Equal(t, cfg.FrameAttr, prev)

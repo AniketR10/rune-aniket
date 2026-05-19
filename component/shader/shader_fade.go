@@ -25,7 +25,6 @@ package shader
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shaderutils"
 )
 
@@ -46,7 +45,7 @@ func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
 	if epoch == 0 {
 		for y, row := range cells {
 			for x, cell := range row {
-				if cell.Bg == tcell.ColorDefault {
+				if cell.Bg == term.ColorDefault {
 					cell.Bg = s.defaultAttr.Bg
 				}
 				cells[y][x].Fg = cell.Bg
@@ -57,10 +56,10 @@ func (s fade) Shade(epoch, total int, cells [][]term.Cell) {
 	opacity := float64(epoch) / float64(total)
 	for y, row := range cells {
 		for x, cell := range row {
-			if cell.Bg == tcell.ColorDefault {
+			if cell.Bg == term.ColorDefault {
 				cell.Bg = s.defaultAttr.Bg
 			}
-			if cell.Fg == tcell.ColorDefault {
+			if cell.Fg == term.ColorDefault {
 				cell.Fg = s.defaultAttr.Fg
 			}
 			cells[y][x].Fg = shaderutils.InterpolateColor(

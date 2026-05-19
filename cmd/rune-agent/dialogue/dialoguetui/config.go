@@ -29,7 +29,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 )
 
@@ -180,7 +179,7 @@ type ComponentConfig struct {
 
 	// BackgroundColor, when set to a valid color, fills every cell with
 	// this background color before drawing content.
-	BackgroundColor tcell.Color
+	BackgroundColor term.Color
 
 	InputBox InputBoxConfig
 }

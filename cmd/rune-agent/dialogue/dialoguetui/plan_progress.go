@@ -24,7 +24,6 @@
 package dialoguetui
 
 import (
-	tcell "github.com/unstablebuild/tcell/v3"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -53,9 +52,9 @@ type PlanProgress struct {
 var _ component.Responsive = (*PlanProgress)(nil)
 
 var (
-	defaultInProgressAttr = term.Attributes{Fg: tcell.ColorTeal}
-	defaultPendingAttr    = term.Attributes{Fg: tcell.ColorYellow}
-	defaultDescAttr       = term.Attributes{Fg: tcell.ColorGray}
+	defaultInProgressAttr = term.Attributes{Fg: term.ColorTeal}
+	defaultPendingAttr    = term.Attributes{Fg: term.ColorYellow}
+	defaultDescAttr       = term.Attributes{Fg: term.ColorGray}
 )
 
 // NewPlanProgress creates a new PlanProgress component.
@@ -125,7 +124,7 @@ func (p *PlanProgress) Draw(w term.Writer) {
 			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{})
 		case "in_progress":
 			x = writeRuneLineAttr(w, 0, y, "󰐌 ", p.width, inProgressAttr)
-			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{Attrs: tcell.AttrBold})
+			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{Attrs: term.AttrBold})
 		default: // pending
 			x = writeRuneLineAttr(w, 0, y, "󰏥 ", p.width, pendingAttr)
 			writeRuneLineAttr(w, x, y, task.Subject, p.width, term.Attributes{})

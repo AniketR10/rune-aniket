@@ -31,7 +31,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 type testEvent struct {
@@ -122,7 +121,7 @@ func newTestDomWriter(widthInPixels, heightInPixels int) (
 
 func TestDomWriterSetAttr(t *testing.T) {
 	w, _, _, _ := newTestDomWriter(1, 1)
-	attr := Attributes{Bg: tcell.ColorBlack, Fg: tcell.ColorWhite, Attrs: tcell.AttrBold}
+	attr := Attributes{Bg: term.ColorBlack, Fg: term.ColorWhite, Attrs: term.AttrBold}
 	w.SetAttr(attr)
 	assert.Equal(t, attr, w.Attr())
 }

@@ -27,7 +27,6 @@ package glslshader
 import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shaderutils"
@@ -55,7 +54,7 @@ type ShineFrameParams struct {
 	FrameCharSet component.FrameCharSet
 	// Color is the color blended into the foreground of matching cells when
 	// the shine band passes over them.
-	Color tcell.Color
+	Color term.Color
 	// BandWidth controls how wide the shine band is, expressed as a fraction
 	// of the (aspect-ratio corrected) diagonal length.
 	//
@@ -72,7 +71,7 @@ func DefaultShineFrameParams(fc component.FrameCharSet) ShineFrameParams {
 	return ShineFrameParams{
 		Direction:    DirectionBottomLeftToTopRight,
 		FrameCharSet: fc,
-		Color:        tcell.NewRGBColor(255, 255, 255),
+		Color:        term.NewRGBColor(255, 255, 255),
 		BandWidth:    0.25,
 		Cycles:       1,
 	}

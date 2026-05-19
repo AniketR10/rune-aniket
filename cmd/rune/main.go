@@ -634,9 +634,9 @@ func runGUI(
 				return nil, func() {
 					theme, err := g.SetTheme(theme)
 					if err == nil {
-						i.SetDefaultAttributes(term.Attributes{
-							Fg: theme.Foreground,
-							Bg: theme.Background,
+					i.SetDefaultAttributes(term.Attributes{
+							Fg: term.FromTcellColor(theme.Foreground),
+							Bg: term.FromTcellColor(theme.Background),
 						})
 					}
 				}, true
@@ -715,8 +715,8 @@ func runGUI(
 	// update IDE's default attributes with the theme's attributes
 	// so init shader fades in/out correctly.
 	i.SetDefaultAttributes(term.Attributes{
-		Fg: initialTheme.Foreground,
-		Bg: initialTheme.Background,
+		Fg: term.FromTcellColor(initialTheme.Foreground),
+		Bg: term.FromTcellColor(initialTheme.Background),
 	})
 
 	g, err = gui.New(i.Ready(), options...)

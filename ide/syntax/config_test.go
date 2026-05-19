@@ -28,29 +28,28 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestCaptureNameAttributesSupportsMarkupAndTextCaptures(t *testing.T) {
 	attrs := DefaultConfig().CaptureNamesAttributes
 
-	assert.Equal(t, tcell.ColorYellow, captureNameAttributes(attrs, "markup.heading").Fg)
-	assert.Equal(t, tcell.ColorYellow, captureNameAttributes(attrs, "markup.heading.1").Fg)
-	assert.Equal(t, tcell.ColorFuchsia, captureNameAttributes(attrs, "markup.raw.block").Fg)
-	assert.Equal(t, tcell.ColorFuchsia, captureNameAttributes(attrs, "markup.link.url").Fg)
-	assert.Equal(t, tcell.ColorYellow, captureNameAttributes(attrs, "markup.list.checked").Fg)
-	assert.Equal(t, tcell.ColorBlue, captureNameAttributes(attrs, "markup.quote").Fg)
-	assert.Equal(t, tcell.ColorYellow, captureNameAttributes(attrs, "text.title").Fg)
-	assert.Equal(t, tcell.ColorFuchsia, captureNameAttributes(attrs, "text.uri").Fg)
+	assert.Equal(t, term.ColorYellow, captureNameAttributes(attrs, "markup.heading").Fg)
+	assert.Equal(t, term.ColorYellow, captureNameAttributes(attrs, "markup.heading.1").Fg)
+	assert.Equal(t, term.ColorFuchsia, captureNameAttributes(attrs, "markup.raw.block").Fg)
+	assert.Equal(t, term.ColorFuchsia, captureNameAttributes(attrs, "markup.link.url").Fg)
+	assert.Equal(t, term.ColorYellow, captureNameAttributes(attrs, "markup.list.checked").Fg)
+	assert.Equal(t, term.ColorBlue, captureNameAttributes(attrs, "markup.quote").Fg)
+	assert.Equal(t, term.ColorYellow, captureNameAttributes(attrs, "text.title").Fg)
+	assert.Equal(t, term.ColorFuchsia, captureNameAttributes(attrs, "text.uri").Fg)
 }
 
 func TestCaptureNameAttributesUserConfigOverridesFallback(t *testing.T) {
 	attrs := DefaultConfig().CaptureNamesAttributes
-	attrs["markup.heading"] = term.Attributes{Fg: tcell.ColorGreen}
-	attrs["markup.heading.2"] = term.Attributes{Fg: tcell.ColorRed}
+	attrs["markup.heading"] = term.Attributes{Fg: term.ColorGreen}
+	attrs["markup.heading.2"] = term.Attributes{Fg: term.ColorRed}
 
-	assert.Equal(t, tcell.ColorRed, captureNameAttributes(attrs, "markup.heading.2").Fg)
-	assert.Equal(t, tcell.ColorGreen, captureNameAttributes(attrs, "markup.heading.3").Fg)
+	assert.Equal(t, term.ColorRed, captureNameAttributes(attrs, "markup.heading.2").Fg)
+	assert.Equal(t, term.ColorGreen, captureNameAttributes(attrs, "markup.heading.3").Fg)
 }
 
 func TestCaptureNameAttributesUnknownCaptureReturnsZeroAttributes(t *testing.T) {

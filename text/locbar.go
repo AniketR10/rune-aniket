@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
@@ -79,16 +78,16 @@ func WithIconsBar(
 	ret.gitEnabled = gitEnabled
 
 	if cfg.DelAttr == (term.Attributes{}) {
-		cfg.DelAttr = term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorRed}
+		cfg.DelAttr = term.Attributes{Fg: term.ColorWhite, Bg: term.ColorRed}
 	}
 	if cfg.AddAttr == (term.Attributes{}) {
-		cfg.AddAttr = term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorGreen}
+		cfg.AddAttr = term.Attributes{Fg: term.ColorWhite, Bg: term.ColorGreen}
 	}
 	if cfg.DelOverlayAttr == (term.Attributes{}) {
-		cfg.DelOverlayAttr = term.Attributes{Bg: tcell.ColorMaroon}
+		cfg.DelOverlayAttr = term.Attributes{Bg: term.ColorMaroon}
 	}
 	if cfg.AddOverlayAttr == (term.Attributes{}) {
-		cfg.AddOverlayAttr = term.Attributes{Bg: tcell.ColorGreen}
+		cfg.AddOverlayAttr = term.Attributes{Bg: term.ColorGreen}
 	}
 	ret.delAttr = cfg.DelAttr
 	ret.addAttr = cfg.AddAttr
@@ -460,7 +459,7 @@ func (b *iconsBar) iconAttr(id string, loc textapi.Location) term.Attributes {
 		}
 	}
 	fg := attr.Fg
-	if attr.Bg != tcell.ColorDefault {
+	if attr.Bg != term.ColorDefault {
 		fg = attr.Bg
 	}
 	return term.Attributes{Fg: fg, Attrs: attr.Attrs}

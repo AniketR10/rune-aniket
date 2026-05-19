@@ -30,7 +30,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 )
 
@@ -85,7 +84,7 @@ func (d *mouseDelegate) Height() int {
 func New(comp *markdown.Component, opts ...Option) *Handler {
 	h := &Handler{
 		comp:           comp,
-		selectionAttrs: term.Attributes{Attrs: tcell.AttrReverse},
+		selectionAttrs: term.Attributes{Attrs: term.AttrReverse},
 	}
 	for _, opt := range opts {
 		opt(h)

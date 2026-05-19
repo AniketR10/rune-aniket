@@ -35,7 +35,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
-	"github.com/unstablebuild/tcell/v3"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/cell"
@@ -118,14 +117,14 @@ func TestSetLocationListRequest(t *testing.T) {
 				{
 					From: &termrpc.Coordinates{},
 					To:   &termrpc.Coordinates{X: 1, Y: 3},
-					Attr: &termrpc.Attributes{Attrs: int64(tcell.AttrBold)},
+					Attr: &termrpc.Attributes{Attrs: uint32(term.AttrBold)},
 				},
 				{
 					To:   &termrpc.Coordinates{},
 					From: &termrpc.Coordinates{X: 1, Y: 3},
 					Attr: &termrpc.Attributes{
-						Foreground: uint64(tcell.ColorBlack),
-						Background: uint64(tcell.ColorGreen),
+						Foreground: uint32(term.ColorBlack),
+						Background: uint32(term.ColorGreen),
 					},
 					Msg: "wsb: hold BBBY",
 				},
@@ -144,7 +143,7 @@ func TestSetLocationListRequest(t *testing.T) {
 		l := text.LocationSlice([]textapi.Location{
 			{
 				To:      term.Coordinates{X: 1, Y: 3},
-				Attr:    term.Attributes{Attrs: tcell.AttrBold},
+				Attr:    term.Attributes{Attrs: term.AttrBold},
 				Message: myMsg,
 			},
 		})
@@ -156,7 +155,7 @@ func TestSetLocationListRequest(t *testing.T) {
 				{
 					From: &termrpc.Coordinates{},
 					To:   &termrpc.Coordinates{X: 1, Y: 3},
-					Attr: &termrpc.Attributes{Attrs: int64(tcell.AttrBold)},
+					Attr: &termrpc.Attributes{Attrs: uint32(term.AttrBold)},
 					Msg:  myMsg,
 				},
 			},
@@ -172,7 +171,7 @@ func benchmarkSetLocationListRequest(b *testing.B, n int) {
 		l[i] = textapi.Location{
 			From: term.Coordinates{X: i, Y: n},
 			To:   term.Coordinates{X: n, Y: n},
-			Attr: term.Attributes{Attrs: tcell.AttrBold},
+			Attr: term.Attributes{Attrs: term.AttrBold},
 		}
 	}
 
@@ -202,11 +201,11 @@ func BenchmarkSetLocationListRequest10000(b *testing.B) {
 var (
 	loc1 = textapi.Location{
 		To:   term.Coordinates{X: 1, Y: 3},
-		Attr: term.Attributes{Attrs: tcell.AttrBold},
+		Attr: term.Attributes{Attrs: term.AttrBold},
 	}
 	loc2 = textapi.Location{
 		From:    term.Coordinates{X: 1, Y: 3},
-		Attr:    term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorGreen},
+		Attr:    term.Attributes{Fg: term.ColorBlack, Bg: term.ColorGreen},
 		Message: "wsb: hold BBBY",
 	}
 	loc3 = textapi.Location{}

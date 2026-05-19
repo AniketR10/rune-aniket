@@ -32,7 +32,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 )
@@ -198,6 +197,6 @@ func DiffComponent(diffs []diffmatchpatch.Diff) tui.Component {
 }
 
 var (
-	addAttr = term.Attributes{Bg: tcell.ColorGreen}
-	delAttr = term.Attributes{Bg: tcell.ColorRed}
+	addAttr = term.Attributes{Bg: term.ColorGreen}
+	delAttr = term.Attributes{Bg: term.ColorRed}
 )

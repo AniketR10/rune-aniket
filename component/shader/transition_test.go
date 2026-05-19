@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // testTransitionFrames runs the given transition shader's Shade() method on
@@ -142,13 +141,13 @@ func (s *mockShader) reset() {
 
 // newConstantShader gives you a shader that renders always the same char, fg
 // and bg regardless of frame and total.
-func newConstantShader(ch rune, fg, bg tcell.Color) *constantShader {
+func newConstantShader(ch rune, fg, bg term.Color) *constantShader {
 	return &constantShader{ch, fg, bg}
 }
 
 type constantShader struct {
 	ch     rune
-	fg, bg tcell.Color
+	fg, bg term.Color
 }
 
 func (s *constantShader) Shade(frame, total int, in [][]term.Cell) {

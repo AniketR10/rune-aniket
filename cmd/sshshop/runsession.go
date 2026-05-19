@@ -85,7 +85,8 @@ func runSession(ctx context.Context, sess ssh.Session, log *slog.Logger) error {
 	// events that this screen's event loop will actually observe.
 	// term.DefaultWriter / tui.PublishEvent both target the process
 	// global writer and would be silently dropped in RunScreen mode.
-	writer := term.NewScreenWriter(screen)
+	termScreen := term.NewTcellScreen(screen)
+	writer := term.NewScreenWriter(termScreen)
 	sessionInterrupter := writerInterrupter{w: writer}
 
 	root := shop.NewRoot(sess, log,

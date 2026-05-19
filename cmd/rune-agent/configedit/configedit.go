@@ -42,7 +42,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // ErrNotFound is returned by Resolve when the requested key is not
@@ -198,11 +198,11 @@ func (r Rune) Resolve(ctx context.Context) (rune, error) {
 
 // Color defers reading a terminal color configuration value.
 type Color struct {
-	resolve func(context.Context) (tcell.Color, error)
+	resolve func(context.Context) (term.Color, error)
 }
 
 // Resolve returns the current value or an error.
-func (c Color) Resolve(ctx context.Context) (tcell.Color, error) {
+func (c Color) Resolve(ctx context.Context) (term.Color, error) {
 	if c.resolve == nil {
 		return 0, ErrNotFound
 	}
@@ -211,11 +211,11 @@ func (c Color) Resolve(ctx context.Context) (tcell.Color, error) {
 
 // Attribute defers reading a terminal-attribute configuration value.
 type Attribute struct {
-	resolve func(context.Context) (tcell.AttrMask, error)
+	resolve func(context.Context) (term.AttrMask, error)
 }
 
 // Resolve returns the current value or an error.
-func (a Attribute) Resolve(ctx context.Context) (tcell.AttrMask, error) {
+func (a Attribute) Resolve(ctx context.Context) (term.AttrMask, error) {
 	if a.resolve == nil {
 		return 0, ErrNotFound
 	}
@@ -263,10 +263,10 @@ func NewSlice(fn func(context.Context) ([]any, error)) Slice { return Slice{reso
 func NewRune(fn func(context.Context) (rune, error)) Rune { return Rune{resolve: fn} }
 
 // NewColor returns a Color whose Resolve invokes fn.
-func NewColor(fn func(context.Context) (tcell.Color, error)) Color { return Color{resolve: fn} }
+func NewColor(fn func(context.Context) (term.Color, error)) Color { return Color{resolve: fn} }
 
 // NewAttribute returns an Attribute whose Resolve invokes fn.
-func NewAttribute(fn func(context.Context) (tcell.AttrMask, error)) Attribute {
+func NewAttribute(fn func(context.Context) (term.AttrMask, error)) Attribute {
 	return Attribute{resolve: fn}
 }
 

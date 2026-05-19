@@ -26,7 +26,6 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 type tableAlignment int
@@ -165,7 +164,7 @@ func (t *tableBlock) Draw(w term.Writer) {
 	}
 
 	contentHeight := t.cachedHeight()
-	if t.cfg.Paragraph.Bg != tcell.ColorDefault && contentHeight > 1 {
+	if t.cfg.Paragraph.Bg != term.ColorDefault && contentHeight > 1 {
 		bgAttr := term.Attributes{Bg: t.cfg.Paragraph.Bg}
 		for y := range contentHeight - 1 {
 			for x := range t.w {

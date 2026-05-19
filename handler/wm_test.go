@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/handlertest"
@@ -373,8 +372,8 @@ func TestWindowManagerInit(t *testing.T) {
 
 func TestWindowManagerSetAttr(t *testing.T) {
 	wm := NewWindowManager(handler.NewTestHandler(), DefaultWindowManagerConfig())
-	cyan := tcell.ColorNavy
-	red := tcell.ColorRed
+	cyan := term.ColorNavy
+	red := term.ColorRed
 
 	wm.SplitHorizontal(wm.Focus(), handler.NewTestHandler())
 	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})

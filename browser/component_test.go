@@ -35,7 +35,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	thandler "unstable.build/go-tui/handler"
 )
 
@@ -290,7 +289,7 @@ func TestWindowFocusTabIconCueFollowsFocus(t *testing.T) {
 	cfg.Frame = false
 	cfg.FrameUnion = false
 	cfg.Dim = false
-	windowFocusIconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+	windowFocusIconAttr := term.Attributes{Bg: term.ColorGreen, Attrs: term.AttrBold}
 	cfg.FocusTabIconAttr = windowFocusIconAttr
 
 	b := NewComponent(cfg)
@@ -565,8 +564,8 @@ func TestNonFocusTabAttrRespectedWithFrameFg(t *testing.T) {
 	cfg.Dim = false
 	// simulate user-configured frame_attr with a non-default foreground
 	// (the production rune.star sets this to gray).
-	cfg.WindowManagerConfig.FrameAttr = term.Attributes{Fg: tcell.ColorGray}
-	cfg.FocusTabAttr = term.Attributes{Fg: tcell.ColorBlue}
+	cfg.WindowManagerConfig.FrameAttr = term.Attributes{Fg: term.ColorGray}
+	cfg.FocusTabAttr = term.Attributes{Fg: term.ColorBlue}
 	cfg.NonFocusTabAttr = term.Attributes{} // i.e. fg=default,bg=default
 
 	b := NewComponent(cfg)
@@ -937,7 +936,7 @@ func TestTabAttrs(t *testing.T) {
 		{"a"}, {"b"},
 	}
 
-	expectedAttr := term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorGreen}
+	expectedAttr := term.Attributes{Fg: term.ColorYellow, Bg: term.ColorGreen}
 	uris := make([]workspaceapi.URI, 0)
 	for i, tabDef := range tabDefs {
 		uri, err := workspaceapi.ParseURI("file:///" + tabDef.name)

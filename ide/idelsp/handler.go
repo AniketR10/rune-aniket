@@ -47,7 +47,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/html"
 )
@@ -523,12 +522,12 @@ func (h *CallbackHandler) ShowMessageRequest(
 	ch := make(chan *semanticapi.MessageActionItem, 1)
 	prompt := handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorRed,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorRed,
 		},
 		OptionAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorGray,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorGray,
 		},
 		PromptConfig: component.PromptConfig{
 			Message: params.Message,
@@ -902,21 +901,21 @@ func diagnosticSeverityToAttr(
 	key := diagnosticSeverityIconKey(s)
 	switch s {
 	case semanticapi.DiagnosticSeverityError:
-		return term.Attributes(tcell.Style{
-			Bg: tcell.ColorRed,
-		}), icons[key]
+		return term.Attributes{
+			Bg: term.ColorRed,
+		}, icons[key]
 	case semanticapi.DiagnosticSeverityWarning:
-		return term.Attributes(tcell.Style{
-			Bg: tcell.ColorYellow,
-		}), icons[key]
+		return term.Attributes{
+			Bg: term.ColorYellow,
+		}, icons[key]
 	case semanticapi.DiagnosticSeverityInformation:
-		return term.Attributes(tcell.Style{
-			Bg: tcell.ColorBlue,
-		}), icons[key]
+		return term.Attributes{
+			Bg: term.ColorBlue,
+		}, icons[key]
 	default:
-		return term.Attributes(tcell.Style{
-			Bg: tcell.ColorGray,
-		}), icons[key]
+		return term.Attributes{
+			Bg: term.ColorGray,
+		}, icons[key]
 	}
 }
 
@@ -944,28 +943,28 @@ func classifyCompilerDiagnostic(
 ) (icon, enhanced string, attr term.Attributes) {
 	switch {
 	case strings.Contains(msg, "inline") || strings.Contains(msg, "inlining"):
-		return icons[IconCompilerInline], "Inline: " + msg, term.Attributes(tcell.Style{
-			Bg: tcell.ColorIndigo,
-		})
+		return icons[IconCompilerInline], "Inline: " + msg, term.Attributes{
+			Bg: term.GetColor("indigo"),
+		}
 	case strings.Contains(msg, "escape") ||
 		strings.Contains(msg, "heap") ||
 		strings.Contains(msg, "leaking"):
-		return icons[IconCompilerEscape], "Escape: " + msg, term.Attributes(tcell.Style{
-			Bg: tcell.ColorDarkMagenta,
-		})
+		return icons[IconCompilerEscape], "Escape: " + msg, term.Attributes{
+			Bg: term.GetColor("darkmagenta"),
+		}
 	case strings.Contains(msg, "Bounds"):
-		return icons[IconCompilerBounds], "Bounds: " + msg, term.Attributes(tcell.Style{
-			Bg: tcell.ColorRebeccaPurple,
-		})
+		return icons[IconCompilerBounds], "Bounds: " + msg, term.Attributes{
+			Bg: term.GetColor("rebeccapurple"),
+		}
 	case strings.Contains(msg, "nilcheck") ||
 		strings.Contains(msg, "nil check"):
-		return icons[IconCompilerNilcheck], "Nilcheck: " + msg, term.Attributes(tcell.Style{
-			Bg: tcell.ColorBlueViolet,
-		})
+		return icons[IconCompilerNilcheck], "Nilcheck: " + msg, term.Attributes{
+			Bg: term.GetColor("blueviolet"),
+		}
 	default:
-		return icons[IconCompilerDefault], msg, term.Attributes(tcell.Style{
-			Bg: tcell.ColorDarkSlateBlue,
-		})
+		return icons[IconCompilerDefault], msg, term.Attributes{
+			Bg: term.GetColor("darkslateblue"),
+		}
 	}
 }
 

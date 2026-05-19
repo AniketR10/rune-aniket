@@ -28,7 +28,6 @@ import (
 	"math/rand"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shaderutils"
 )
@@ -60,7 +59,7 @@ type FlamesParams struct {
 	// Characters to use for painting the flames (first coolest; last hottest).
 	Chars []rune
 	// Colors to use for painting the flames (first coolest; last hottest).
-	ColorGradient []tcell.Color
+	ColorGradient []term.Color
 	// Describe how the background opacity of the flame characters evolves
 	// throughout the course of the animation.
 	BgContour FlamesBgOpacityContour
@@ -166,15 +165,15 @@ func FlamesPresetBlobby() FlamesParams {
 // flames with.
 //
 // Aimed to be passed to FlamesParams.ColorGradient.
-func FlamesColorGradientRed() []tcell.Color {
-	return []tcell.Color{
-		tcell.NewRGBColor(255, 255, 255),
-		tcell.NewRGBColor(255, 247, 143),
-		tcell.NewRGBColor(255, 247, 93),
-		tcell.NewRGBColor(254, 101, 13),
-		tcell.NewRGBColor(138, 0, 60),
-		tcell.NewRGBColor(81, 1, 0),
-		tcell.NewRGBColor(255, 20, 0),
+func FlamesColorGradientRed() []term.Color {
+	return []term.Color{
+		term.NewRGBColor(255, 255, 255),
+		term.NewRGBColor(255, 247, 143),
+		term.NewRGBColor(255, 247, 93),
+		term.NewRGBColor(254, 101, 13),
+		term.NewRGBColor(138, 0, 60),
+		term.NewRGBColor(81, 1, 0),
+		term.NewRGBColor(255, 20, 0),
 	}
 }
 
@@ -313,7 +312,7 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 	flamesFrame := offsetFrame
 
 	var char rune
-	var fg, bg tcell.Color
+	var fg, bg term.Color
 
 	// Perform some adjustement to the speed of the flame, to speed up its
 	// animation on shorter shader runs or slow it down on longer ones.
@@ -430,7 +429,7 @@ func (s *flames) processCell(x, y int, frame, total int, cells [][]term.Cell) {
 // sampleFlamesGradient returns the blended color at point t (0...1)
 // interpolating any color steps, 0 being the start of the gradient and 1 the
 // end.
-func (s *flames) sampleFlamesGradient(t float) tcell.Color {
+func (s *flames) sampleFlamesGradient(t float) term.Color {
 	t = math.Min(1, math.Max(0, t))
 	stops := float(len(s.ColorGradient) - 1)
 	tt := t * stops

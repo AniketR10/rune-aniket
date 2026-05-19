@@ -44,7 +44,7 @@ func TestBufferEditRequest(t *testing.T) {
 			out: textrpc.EditRequest{
 				ResourceName: &textrpc.URI{Uri: ""},
 				Buffer: []*termrpc.CellRow{
-					{Cells: []*termrpc.Cell{{Character: 'a'}}},
+					{Cells: []*termrpc.Cell{{Character: 'a', Width: 1, Bytes: 1}}},
 				},
 			},
 		},
@@ -53,9 +53,9 @@ func TestBufferEditRequest(t *testing.T) {
 			out: textrpc.EditRequest{
 				ResourceName: &textrpc.URI{Uri: ""},
 				Buffer: []*termrpc.CellRow{
-					{Cells: []*termrpc.Cell{{Character: 'a'}}},
-					{Cells: []*termrpc.Cell{{Character: 'b'}, {Character: 'b'}}},
-					{Cells: []*termrpc.Cell{{Character: 'c'}, {Character: 'c'}, {Character: 'c'}}},
+					{Cells: []*termrpc.Cell{{Character: 'a', Width: 1, Bytes: 1}}},
+					{Cells: []*termrpc.Cell{{Character: 'b', Width: 1, Bytes: 1}, {Character: 'b', Width: 1, Bytes: 1}}},
+					{Cells: []*termrpc.Cell{{Character: 'c', Width: 1, Bytes: 1}, {Character: 'c', Width: 1, Bytes: 1}, {Character: 'c', Width: 1, Bytes: 1}}},
 				},
 			},
 		},

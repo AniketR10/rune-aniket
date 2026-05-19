@@ -30,7 +30,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
-	"github.com/unstablebuild/tcell/v3"
 	imagefont "golang.org/x/image/font"
 	"unstable.build/go-tui/term/gui/drawrect"
 	"unstable.build/go-tui/term/gui/drawtext"
@@ -230,7 +229,7 @@ func (r *renderer) renderRow(
 		}
 
 		// reverse attr if AttrReverse
-		if cell.Attrs&tcell.AttrReverse != 0 {
+		if cell.Attrs&term.AttrReverse != 0 {
 			temp = fg
 			fg = bg
 			bg = temp
@@ -250,8 +249,8 @@ func (r *renderer) renderRow(
 			continue
 		}
 
-		isBold := cell.Attrs&tcell.AttrBold != 0
-		isItalic := cell.Attrs&tcell.AttrItalic != 0
+		isBold := cell.Attrs&term.AttrBold != 0
+		isItalic := cell.Attrs&term.AttrItalic != 0
 
 		drawTextOptions := defaultDrawTextOptions
 		if isBackground {
@@ -278,11 +277,11 @@ func (r *renderer) renderRow(
 		)
 
 		// dim fg text if AttrDim
-		if cell.Attrs&tcell.AttrDim != 0 {
+		if cell.Attrs&term.AttrDim != 0 {
 			drawTextOptions.ColorScale.ScaleAlpha(dimAlphaPerc)
 		}
 
-		if cell.Attrs&tcell.AttrUnderline != 0 {
+		if cell.Attrs&term.AttrUnderline != 0 {
 			underlinePixelY := pixelY + r.font.CellSize.Y - 1
 			r.bufVertices, r.bufIndices = drawrect.DrawStroke(&r.bufPath, r.bufVertices, r.bufIndices,
 				screen, float32(pixelX), float32(underlinePixelY),
@@ -310,7 +309,7 @@ func (r *renderer) renderRow(
 		}
 
 		// draw text
-		r.drawer.DrawWithOptions(screen, cell.Ch, cell.Combining, useFace, &drawTextOptions)
+		r.drawer.DrawWithOptions(screen, cell.Ch, cell.CombiningRunes(), useFace, &drawTextOptions)
 		if cell.Width > 1 {
 			skipRunes += int(cell.Width) - 1
 		}
@@ -332,8 +331,8 @@ func (r *renderer) renderCursor(
 	width := math.Max(1, float64(cell.Width))
 
 	useFace := r.font.Regular
-	isBold := cell.Attributes.Attrs&tcell.AttrBold != 0
-	isItalic := cell.Attributes.Attrs&tcell.AttrItalic != 0
+	isBold := cell.Attributes.Attrs&term.AttrBold != 0
+	isItalic := cell.Attributes.Attrs&term.AttrItalic != 0
 	if isBold && isItalic {
 		useFace = r.font.BoldItalic
 	} else if isBold {
@@ -387,7 +386,7 @@ func (r *renderer) renderCursor(
 				float32(cb)/0xffff,
 				float32(ca)/0xffff,
 			)
-			r.drawer.DrawWithOptions(screen, cell.Ch, cell.Combining, useFace, &opts)
+			r.drawer.DrawWithOptions(screen, cell.Ch, cell.CombiningRunes(), useFace, &opts)
 		}
 	}
 }
@@ -399,8 +398,8 @@ func (r *renderer) getCell(cells [][]term.Cell, pos term.Coordinates) (ret term.
 	return cells[pos.Y][pos.X]
 }
 
-func tcellToColor(tcolor tcell.Color, def color.RGBA, opacity float64) color.RGBA {
-	if !tcolor.Valid() || tcolor == tcell.ColorDefault {
+func tcellToColor(tcolor term.Color, def color.RGBA, opacity float64) color.RGBA {
+	if !tcolor.Valid() || tcolor == term.ColorDefault {
 		return def
 	}
 	r, g, b := tcolor.TrueColor().RGB()

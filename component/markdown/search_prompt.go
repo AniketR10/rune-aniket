@@ -26,7 +26,6 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 type searchResult int
@@ -90,7 +89,7 @@ func (p *searchPrompt) draw(w term.Writer, y, width int) {
 
 	w.SetCell(term.Coordinates{X: 0, Y: y}, term.Cell{
 		Ch: '/', Width: 1,
-		Attributes: term.Attributes{Attrs: tcell.AttrBold},
+		Attributes: term.Attributes{Attrs: term.AttrBold},
 	})
 
 	for i, r := range p.buf {

@@ -24,7 +24,7 @@
 package vteparser
 
 import (
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Handler abstracts a terminal TUI implementation.
@@ -369,7 +369,7 @@ const (
 // Attr is a terminal cell attributes.
 type Attr struct {
 	Type  AttrType
-	Color tcell.Color
+	Color term.Color
 }
 
 // AttrType encodes the type of attribute in an Attr.

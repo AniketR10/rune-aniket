@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const listIndent = 2
@@ -76,7 +75,7 @@ func (l *listBlock) Resize(width, _ int) {
 
 func (l *listBlock) Draw(w term.Writer) {
 	contentHeight := l.heightAtIndent(l.w, 0)
-	if l.cfg.Paragraph.Bg != tcell.ColorDefault && contentHeight > 1 {
+	if l.cfg.Paragraph.Bg != term.ColorDefault && contentHeight > 1 {
 		bgAttr := term.Attributes{Bg: l.cfg.Paragraph.Bg}
 		for y := range contentHeight - 1 {
 			for x := range l.w {

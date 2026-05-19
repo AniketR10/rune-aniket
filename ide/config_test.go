@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
@@ -386,7 +385,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, browser.DefaultConfig().NonFocusTabAttr, cfg.nonFocusTabAttr())
 	assert.Equal(t, term.Attributes{}, cfg.workspaceWallpaperAttr())
 	assert.Equal(t, term.Attributes{}, cfg.workspaceWallpaperBackgroundAttr())
-	selectAttr := term.Attributes{Attrs: tcell.AttrReverse}
+	selectAttr := term.Attributes{Attrs: term.AttrReverse}
 
 	reservoir := cfg.initialTerminalCapacity()
 	assert.Equal(t, 1, reservoir)
@@ -403,7 +402,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, vte.Config{
 		Clipboard:                cfg.clipboard(),
 		SelectionAttributes:      selectAttr,
-		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
+		NeedsAttentionAttributes: term.Attributes{Attrs: term.AttrBlink},
 		Modal:                    false,
 		ClipboardRegister:        clipboard.DefaultRegisterID,
 		MaxLines:                 10_000,
@@ -413,7 +412,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
 	assert.Zero(t, cfg.defaultAttr())
 
-	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow},
+	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow},
 		cfg.modelessResultAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modelessAttr())
 	assert.Equal(t, term.Attributes{}, cfg.modalAttr())
@@ -436,7 +435,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Equal(t, "", cfg.virtualEditorEditor())
 	assert.Equal(t, "fish", cfg.virtualEditorShell())
 	assert.Equal(t, term.Attributes{}, cfg.virtualEditorAttr())
-	assert.Equal(t, term.Attributes{Attrs: tcell.AttrReverse},
+	assert.Equal(t, term.Attributes{Attrs: term.AttrReverse},
 		cfg.virtualEditorSelectionAttr())
 }
 
@@ -552,9 +551,9 @@ func TestConfigSetting(t *testing.T) {
 	expectedConfig := handler.WindowManagerConfig{
 		WindowManagerConfig: tcomponent.WindowManagerConfig{
 			Frame:         true,
-			FrameAttr:     term.Attributes{Fg: tcell.ColorRed},
+			FrameAttr:     term.Attributes{Fg: term.ColorRed},
 			FrameCharSet:  component.FrameCharSetHighlight(),
-			ScrollBarAttr: term.Attributes{Fg: tcell.GetColor("#f0f0f0")},
+			ScrollBarAttr: term.Attributes{Fg: term.GetColor("#f0f0f0")},
 			ScrollBarChar: '|',
 			NoMaxSize:     true,
 		},
@@ -688,7 +687,7 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, expectedCommandAliases, actualCommandAliases)
 	assert.Equal(t, 2*time.Second, cfg.commandOverlayShowManualAfter())
-	assert.Equal(t, term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorYellow, Attrs: tcell.AttrBold},
+	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow, Attrs: term.AttrBold},
 		cfg.commandOverlayManualAttr())
 
 	expectedFUCs := component.DefaultFrameUnionCharSet()
@@ -713,15 +712,15 @@ func TestConfigSetting(t *testing.T) {
 	assert.NotNil(t, statusBarCfg.ScheduleNextTick)
 	statusBarCfg.ScheduleNextTick = nil
 	assert.Equal(t, text.StatusBarConfig{
-		BackgroundColor: tcell.ColorMaroon,
+		BackgroundColor: term.ColorMaroon,
 		Layout: []text.StatusBarComponent{
 			{
 				Template: "█%s█▓▒░",
 				Type:     text.StatusBarStatus,
 				Attributes: term.Attributes{
-					Bg:    tcell.ColorRed,
-					Fg:    tcell.ColorBlack,
-					Attrs: tcell.AttrBold,
+					Bg:    term.ColorRed,
+					Fg:    term.ColorBlack,
+					Attrs: term.AttrBold,
 				},
 			},
 			{Template: "  %s", Type: text.StatusBarFilePath},
@@ -729,12 +728,12 @@ func TestConfigSetting(t *testing.T) {
 			{
 				Template:   "   %d",
 				Type:       text.StatusBarGitDiffAdded,
-				Attributes: term.Attributes{Fg: tcell.ColorGreen},
+				Attributes: term.Attributes{Fg: term.ColorGreen},
 			},
 			{
 				Template:   "   %d ",
 				Type:       text.StatusBarGitDiffDeleted,
-				Attributes: term.Attributes{Fg: tcell.ColorRed},
+				Attributes: term.Attributes{Fg: term.ColorRed},
 			},
 			{Type: text.StatusBarVoid},
 			{Template: "%d:", Type: text.StatusBarCoordinatesCursorX},
@@ -743,7 +742,7 @@ func TestConfigSetting(t *testing.T) {
 			{
 				Template:   "%s  ",
 				Type:       text.StatusBarLanguage,
-				Attributes: term.Attributes{Attrs: tcell.AttrBold},
+				Attributes: term.Attributes{Attrs: term.AttrBold},
 			},
 		},
 		GitService: nil,
@@ -783,15 +782,15 @@ func TestConfigSetting(t *testing.T) {
 	assert.False(t, noti.ProgressBar)
 	assert.Equal(t, 1*time.Second, noti.AutoClose)
 	assert.Equal(t, component.FrameCharSetHighlight(), noti.FrameCharSet)
-	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
+	assert.Equal(t, term.Attributes{Fg: term.GetColor("#f0f0f0"), Bg: term.ColorRed},
 		noti.Attributes)
-	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
+	assert.Equal(t, term.Attributes{Fg: term.GetColor("#f0f0f0"), Bg: term.ColorRed},
 		noti.BackgroundAttributes)
 
-	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0")}, cfg.focusTabAttr())
-	assert.Equal(t, term.Attributes{Fg: tcell.ColorWhite}, cfg.nonFocusTabAttr())
-	assert.Equal(t, term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorWhite}, cfg.workspaceWallpaperAttr())
-	assert.Equal(t, term.Attributes{Bg: tcell.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
+	assert.Equal(t, term.Attributes{Fg: term.GetColor("#f0f0f0")}, cfg.focusTabAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorWhite}, cfg.nonFocusTabAttr())
+	assert.Equal(t, term.Attributes{Fg: term.ColorYellow, Bg: term.ColorWhite}, cfg.workspaceWallpaperAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
 
 	reservoir := cfg.initialTerminalCapacity()
 	assert.Equal(t, 0, reservoir)
@@ -800,18 +799,18 @@ func TestConfigSetting(t *testing.T) {
 	expectedBarConfig := plugin.BarConfig{
 		StatusErrorIcon:       "X",
 		StatusSuccessIcon:     "$",
-		StatusErrorColor:      tcell.ColorYellow,
-		StatusSuccessColor:    tcell.ColorBlue,
+		StatusErrorColor:      term.ColorYellow,
+		StatusSuccessColor:    term.ColorBlue,
 		StatusAnimationFrames: []string{"A", "B", "C"},
-		BackgroundColor:       tcell.ColorGray,
+		BackgroundColor:       term.ColorGray,
 		AlignBottom:           true,
 		Layout: []plugin.BarComponent{
 			{
 				Type:     plugin.BarStatusIcon,
 				Template: " %s █▓▒░",
 				Attributes: term.Attributes{
-					Fg: tcell.ColorWhite,
-					Bg: tcell.ColorGray,
+					Fg: term.ColorWhite,
+					Bg: term.ColorGray,
 				},
 			},
 			{
@@ -821,8 +820,8 @@ func TestConfigSetting(t *testing.T) {
 				Type:     plugin.BarCommand,
 				Template: "%s",
 				Attributes: term.Attributes{
-					Fg:    tcell.ColorWhite,
-					Attrs: tcell.AttrBold,
+					Fg:    term.ColorWhite,
+					Attrs: term.AttrBold,
 				},
 			},
 			{
@@ -833,8 +832,8 @@ func TestConfigSetting(t *testing.T) {
 				Type:     plugin.BarElapsed,
 				Template: "░▒▓█ %s ",
 				Attributes: term.Attributes{
-					Fg: tcell.ColorWhite,
-					Bg: tcell.ColorGray,
+					Fg: term.ColorWhite,
+					Bg: term.ColorGray,
 				},
 			},
 		},
@@ -848,11 +847,11 @@ func TestConfigSetting(t *testing.T) {
 	vteConfig.RingBell = nil
 	expectedEmulatorConfig := vte.Config{
 		CommandAndArgs:           []string{"sh"},
-		Attributes:               term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
+		Attributes:               term.Attributes{Fg: term.ColorWhite, Bg: term.ColorYellow},
 		Clipboard:                cfg.clipboard(),
 		ClipboardRegister:        clipboard.DefaultRegisterID,
-		SelectionAttributes:      term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
-		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink, Fg: tcell.ColorRed},
+		SelectionAttributes:      term.Attributes{Fg: term.ColorGreen, Bg: term.ColorTeal},
+		NeedsAttentionAttributes: term.Attributes{Attrs: term.AttrBlink, Fg: term.ColorRed},
 		Modal:                    true,
 		DynamicTabName:           true,
 		MaxLines:                 999,
@@ -862,42 +861,42 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 
 	expectedPrompt := browser.PromptConfig{
-		TextAttr:      term.Attributes{Fg: tcell.ColorTeal},
-		HighlightAttr: term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
+		TextAttr:      term.Attributes{Fg: term.ColorTeal},
+		HighlightAttr: term.Attributes{Fg: term.GetColor("#f0f0f0"), Bg: term.ColorRed},
 		MinWidth:      browser.DefaultConfig().MinWidth,
 	}
 	assert.Equal(t, expectedPrompt, cfg.promptConfig())
 
-	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
-		Fg: tcell.GetColor("#f0f0f0")}, cfg.modalResultAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
+		Fg: term.GetColor("#f0f0f0")}, cfg.modalResultAttr())
 
-	assert.Equal(t, term.Attributes{Bg: tcell.ColorRed,
-		Fg: tcell.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorRed,
+		Fg: term.GetColor("#f1f1f1")}, cfg.modelessResultAttr())
 
 	expectedSyntaxConfig := syntax.DefaultConfig()
 	expectedSyntaxConfig.Autoindent = false
 	expectedSyntaxConfig.CaptureNamesAttributes["function"] = term.Attributes{
-		Fg: tcell.ColorGreen, Bg: tcell.ColorYellow}
+		Fg: term.ColorGreen, Bg: term.ColorYellow}
 	syntaxConfig := cfg.syntaxConfig()
 	assert.NotNil(t, syntaxConfig.ScheduleNextTick)
 	syntaxConfig.ScheduleNextTick = nil
 	expectedSyntaxConfig.ScheduleNextTick = nil
 	assert.Equal(t, expectedSyntaxConfig, syntaxConfig)
 
-	assert.Equal(t, term.Attributes{Bg: tcell.ColorGreen,
-		Fg: tcell.GetColor("#f9f9f9")}, cfg.modelessAttr())
-	assert.Equal(t, term.Attributes{Bg: tcell.ColorYellow,
-		Fg: tcell.GetColor("#f2f2f2")}, cfg.modalAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorGreen,
+		Fg: term.GetColor("#f9f9f9")}, cfg.modelessAttr())
+	assert.Equal(t, term.Attributes{Bg: term.ColorYellow,
+		Fg: term.GetColor("#f2f2f2")}, cfg.modalAttr())
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "")
 	assert.Equal(t, "vim", cfg.virtualEditorEditor())
 	assert.Equal(t, "bash", cfg.virtualEditorShell())
-	assert.Equal(t, term.Attributes{Fg: tcell.GetColor("#f0f0f0"), Bg: tcell.ColorRed},
+	assert.Equal(t, term.Attributes{Fg: term.GetColor("#f0f0f0"), Bg: term.ColorRed},
 		cfg.virtualEditorAttr())
 	virtualEditorSelectionAttr := cfg.virtualEditorSelectionAttr()
-	assert.Equal(t, tcell.GetColor("#f3f3f3"), virtualEditorSelectionAttr.Fg)
-	assert.Equal(t, tcell.ColorGreen, virtualEditorSelectionAttr.Bg)
+	assert.Equal(t, term.GetColor("#f3f3f3"), virtualEditorSelectionAttr.Fg)
+	assert.Equal(t, term.ColorGreen, virtualEditorSelectionAttr.Bg)
 
 	wantMappings := map[handler.Sequence][][]string{
 		{First: term.KeyComb{Ch: 'f'}}:                    {{"searchfile"}},

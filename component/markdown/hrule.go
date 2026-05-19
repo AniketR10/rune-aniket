@@ -26,7 +26,6 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 type horizontalRuleBlock struct {
@@ -59,7 +58,7 @@ func (hr *horizontalRuleBlock) Draw(w term.Writer) {
 	ch := hr.cfg.HorizontalRule
 	attr := hr.cfg.HorizontalRuleAttr
 
-	if attr.Bg != tcell.ColorDefault {
+	if attr.Bg != term.ColorDefault {
 		bgAttr := term.Attributes{Bg: attr.Bg}
 		for x := range hr.w {
 			w.UnionAttributes(term.Coordinates{X: x, Y: 0}, bgAttr)

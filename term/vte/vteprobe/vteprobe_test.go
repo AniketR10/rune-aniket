@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -323,7 +322,7 @@ func TestInferRelativeLineNumbers(t *testing.T) {
 func TestInferCursorOnChromeRowIsUnknown(t *testing.T) {
 	t.Parallel()
 
-	reverse := term.Attributes(tcell.Style{Attrs: tcell.AttrReverse})
+	reverse := term.Attributes{Attrs: term.AttrReverse}
 
 	const path = "/code.go"
 	content := []byte("foo\nbar\nbaz\n")

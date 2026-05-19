@@ -30,6 +30,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/term/gui"
@@ -166,7 +167,7 @@ func getGUIColorThemes(browser browser.Browser, cfg config.Config) (
 							"'gui.themes.%s' config: %v", name, err)
 					continue
 				}
-				theme.Cursor = value
+				theme.Cursor = value.Tcell()
 			case "foreground":
 				value, err := colorsCfg.GetColor(colorName)
 				if err != nil {
@@ -175,7 +176,7 @@ func getGUIColorThemes(browser browser.Browser, cfg config.Config) (
 							"'gui.themes.%s' config: %v", name, err)
 					continue
 				}
-				theme.Foreground = value
+				theme.Foreground = value.Tcell()
 			case "background":
 				value, err := colorsCfg.GetColor(colorName)
 				if err != nil {
@@ -184,9 +185,9 @@ func getGUIColorThemes(browser browser.Browser, cfg config.Config) (
 							"'gui.themes.%s' config: %v", name, err)
 					continue
 				}
-				theme.Background = value
+				theme.Background = value.Tcell()
 			default:
-				color, ok := tcell.ColorNames[colorName]
+				color, ok := term.GetColorNames()[colorName]
 				if !ok {
 					_, _ = browser.Notify(browserapi.LevelWarn,
 						"Unknown color '%s' in 'gui.themes.%s' config. "+
@@ -201,7 +202,7 @@ func getGUIColorThemes(browser browser.Browser, cfg config.Config) (
 							"'gui.themes.%s' config: %v", colorName, name, err)
 					continue
 				}
-				theme.Colors[color] = value
+				theme.Colors[color.Tcell()] = value.Tcell()
 			}
 		}
 		ret[name] = theme

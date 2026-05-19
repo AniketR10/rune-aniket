@@ -27,7 +27,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // DefaultConfig returns a sane default Config.
@@ -37,8 +36,8 @@ func DefaultConfig() Config {
 		ClipboardRegister:        clipboard.DefaultRegisterID,
 		ScheduleNextTick:         func(cb func()) bool { cb(); return true },
 		RingBell:                 func() {},
-		SelectionAttributes:      term.Attributes{Attrs: tcell.AttrReverse},
-		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
+		SelectionAttributes:      term.Attributes{Attrs: term.AttrReverse},
+		NeedsAttentionAttributes: term.Attributes{Attrs: term.AttrBlink},
 		DynamicTabName:           false,
 		MaxLines:                 10_000,
 		MinWidth:                 0,

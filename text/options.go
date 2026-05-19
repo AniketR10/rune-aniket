@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/markdown"
@@ -104,12 +103,12 @@ type Config struct {
 	ScheduleNextTick func(func()) bool
 	// FileExplorerIndentAttr selects the attributes applied to the
 	// indent guide rune drawn at the start of every depth level in
-	// the file explorer. Defaults to tcell.ColorGray when zero.
+	// the file explorer. Defaults to term.ColorGray when zero.
 	FileExplorerIndentAttr term.Attributes
 	// FileExplorerIconAttr selects the attributes applied to the
 	// per-row icon glyph (directory, default file, or per-extension
 	// override) drawn after the indent guides in the file explorer.
-	// Defaults to tcell.ColorGray when zero.
+	// Defaults to term.ColorGray when zero.
 	FileExplorerIconAttr term.Attributes
 
 	EventPublisher func(term.Event) bool
@@ -303,8 +302,8 @@ type CommandAlias struct {
 // DefaultCommandOverlayConfig returns the default Config's CommandOverlayConfig.
 func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	// NOTE: cannot use handler/command config: dependency cycle
-	cfg.MatchedTextAttr = term.Attributes{Fg: tcell.ColorRed}
-	cfg.FocusElementAttr = term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold | tcell.AttrUnderline}
+	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
+	cfg.FocusElementAttr = term.Attributes{Fg: term.ColorRed, Attrs: term.AttrBold | term.AttrUnderline}
 	cfg.ElementAttr = term.Attributes{}
 	cfg.ManualAttr = term.Attributes{}
 	cfg.ShowManualAfter = 1 * time.Second
@@ -321,7 +320,7 @@ func DefaultConfig() Config {
 		ShellMaxHistory:         2000,
 		CommandHistoryKey:       term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
 		Config:                  browser.DefaultConfig(),
-		DirtyTabAttr:            term.Attributes{Attrs: tcell.AttrBold},
+		DirtyTabAttr:            term.Attributes{Attrs: term.AttrBold},
 		CommandKeyBindings:      make(map[term.KeyComb][][]string),
 		CommandSequenceBindings: make(map[handler.Sequence][][]string),
 		CommandAliases:          make(map[string]CommandAlias),
@@ -334,8 +333,8 @@ func DefaultConfig() Config {
 		Clipboard:               clipboard.NewInMemory(),
 		OpenRouter:              nopOpenRouter{},
 		Comments:                CommentConfig{},
-		FileExplorerIndentAttr:  term.Attributes{Fg: tcell.ColorGray},
-		FileExplorerIconAttr:    term.Attributes{Fg: tcell.ColorGray},
+		FileExplorerIndentAttr:  term.Attributes{Fg: term.ColorGray},
+		FileExplorerIconAttr:    term.Attributes{Fg: term.ColorGray},
 		Icons: IconSet{
 			Extensions:    map[string]rune{},
 			Directory:     '',

@@ -32,7 +32,6 @@ import (
 
 	"github.com/disintegration/imaging"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -146,7 +145,7 @@ func Encode(
 			character := density[idx]
 			var attr term.Attributes
 			if config.Color {
-				fg := tcell.NewColor(int32(r), int32(g), int32(b))
+				fg := term.NewColor(int32(r), int32(g), int32(b))
 				attr = term.Attributes{Fg: fg}
 			}
 			output.InsertWithAttr(term.Coordinates{X: x + padX, Y: y + padY}, character, attr)

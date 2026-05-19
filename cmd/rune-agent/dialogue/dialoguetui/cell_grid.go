@@ -29,7 +29,6 @@ import (
 	"unicode"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // selRange represents a selection coordinate pair.
@@ -115,7 +114,7 @@ func (g *cellGrid) ClearReverse(x0, y0, w, h int) {
 	for y := y0; y < y0+h && y < g.height; y++ {
 		for x := x0; x < x0+w && x < g.width; x++ {
 			idx := y*g.width + x
-			g.cells[idx].Attrs &^= tcell.AttrReverse
+			g.cells[idx].Attrs &^= term.AttrReverse
 		}
 	}
 }
@@ -123,7 +122,7 @@ func (g *cellGrid) ClearReverse(x0, y0, w, h int) {
 // Dump copies all cells to w. If sel is non-nil and active, cells within the
 // selection range have AttrReverse applied via UnionAttributes.
 func (g *cellGrid) Dump(w term.Writer, sel *selRange) {
-	reverseAttr := term.Attributes{Attrs: tcell.AttrReverse}
+	reverseAttr := term.Attributes{Attrs: term.AttrReverse}
 	for y := range g.height {
 		for x := range g.width {
 			pos := term.Coordinates{X: x, Y: y}
@@ -169,7 +168,7 @@ func (g *cellGrid) TextBetween(start, end term.Coordinates) string {
 				continue
 			}
 			line.WriteRune(cell.Ch)
-			for _, r := range cell.Combining {
+			for _, r := range cell.CombiningRunes() {
 				line.WriteRune(r)
 			}
 		}

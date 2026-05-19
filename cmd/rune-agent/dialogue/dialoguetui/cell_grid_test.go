@@ -28,7 +28,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func setGridText(g *cellGrid, y int, text string) {
@@ -124,7 +123,7 @@ func TestCellGridTextBetween(t *testing.T) {
 		g.Resize(20, 5)
 		g.SetCell(term.Coordinates{X: 0, Y: 0}, term.Cell{
 			Ch:        'e',
-			Combining: []rune{0x0301}, // combining acute accent
+			Combining: &[]rune{0x0301}, // combining acute accent
 		})
 		g.SetCell(term.Coordinates{X: 1, Y: 0}, term.Cell{Ch: 'x'})
 
@@ -268,13 +267,13 @@ func TestCellGridDumpSelection(t *testing.T) {
 
 	// Cells B, C, D (x=1,2,3 on y=0) should have AttrReverse.
 	cells := w.Cells()
-	assert.Equal(t, tcell.AttrReverse, cells[1].Attrs, "x=1 should have reverse")
-	assert.Equal(t, tcell.AttrReverse, cells[2].Attrs, "x=2 should have reverse")
-	assert.Equal(t, tcell.AttrReverse, cells[3].Attrs, "x=3 should have reverse")
+	assert.Equal(t, term.AttrReverse, cells[1].Attrs, "x=1 should have reverse")
+	assert.Equal(t, term.AttrReverse, cells[2].Attrs, "x=2 should have reverse")
+	assert.Equal(t, term.AttrReverse, cells[3].Attrs, "x=3 should have reverse")
 	// x=0 should not have reverse
-	assert.Equal(t, tcell.AttrMask(0), cells[0].Attrs, "x=0 should not have reverse")
+	assert.Equal(t, term.AttrMask(0), cells[0].Attrs, "x=0 should not have reverse")
 	// x=4 should not have reverse
-	assert.Equal(t, tcell.AttrMask(0), cells[4].Attrs, "x=4 should not have reverse")
+	assert.Equal(t, term.AttrMask(0), cells[4].Attrs, "x=4 should not have reverse")
 }
 
 func TestCellGridSelRangeContains(t *testing.T) {

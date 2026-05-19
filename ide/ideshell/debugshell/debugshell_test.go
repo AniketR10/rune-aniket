@@ -44,7 +44,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/text/texttest"
@@ -1098,8 +1097,8 @@ func TestHandler_StoppedBreakpointHighlightsLine(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 0, Y: 9}, loc.From)
 	assert.Equal(t, 9, loc.To.Y)
 	assert.Contains(t, loc.Message, "main.main")
-	assert.Equal(t, tcell.ColorYellow, loc.Attr.Bg)
-	assert.Equal(t, tcell.ColorBlack, loc.Attr.Fg)
+	assert.Equal(t, term.ColorYellow, loc.Attr.Bg)
+	assert.Equal(t, term.ColorBlack, loc.Attr.Fg)
 	assert.Equal(t, textapi.LocationPriorityWarning,
 		ed.setLocationByID[stoppedLocationID])
 }

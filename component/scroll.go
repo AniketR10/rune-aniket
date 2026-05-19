@@ -31,7 +31,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -111,7 +110,7 @@ func (s *Scroll) Init(buf *cell.Buffer) {
 	s.hiddenmeta = make(map[int]string)
 	if s.HideAttr == (term.Attributes{}) {
 		s.HideAttr = s.Attributes
-		s.HideAttr.Fg = tcell.ColorGray
+		s.HideAttr.Fg = term.ColorGray
 	}
 }
 
@@ -126,7 +125,7 @@ func (s *Scroll) Init(buf *cell.Buffer) {
 // MarkHidden is disabled.
 func (s *Scroll) InitPerformance(buf *cell.Buffer) {
 	if s.ResultsAttr == (term.Attributes{}) {
-		s.ResultsAttr.Attrs = tcell.AttrReverse
+		s.ResultsAttr.Attrs = term.AttrReverse
 	}
 	s.initBuffer(buf)
 }

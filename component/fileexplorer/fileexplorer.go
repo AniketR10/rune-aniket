@@ -32,7 +32,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/text"
@@ -72,12 +71,12 @@ type Config struct {
 	IndentWidth int
 	// IndentAttr is applied to the leading IndentRune of every depth
 	// level. The default (zero value) renders the indent guides in
-	// tcell.ColorGray so they recede visually behind file names.
+	// term.ColorGray so they recede visually behind file names.
 	IndentAttr term.Attributes
 	// IconAttr is applied to the per-row icon glyph (directory,
 	// default file, or per-extension override) drawn after the indent
 	// guides. The default (zero value) renders the icons in
-	// tcell.ColorGray so they recede visually behind file names,
+	// term.ColorGray so they recede visually behind file names,
 	// matching the indent guides.
 	IconAttr term.Attributes
 	// Ignore filters out entries whose URI matches the matcher.
@@ -215,10 +214,10 @@ func normalizeConfig(cfg Config) Config {
 		cfg.IndentWidth = 4
 	}
 	if cfg.IndentAttr == (term.Attributes{}) {
-		cfg.IndentAttr = term.Attributes{Fg: tcell.ColorGray}
+		cfg.IndentAttr = term.Attributes{Fg: term.ColorGray}
 	}
 	if cfg.IconAttr == (term.Attributes{}) {
-		cfg.IconAttr = term.Attributes{Fg: tcell.ColorGray}
+		cfg.IconAttr = term.Attributes{Fg: term.ColorGray}
 	}
 	if cfg.Ignore == nil {
 		cfg.Ignore = vctrl.NopMatcher(false)

@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/handler/handlertest"
 )
 
@@ -545,7 +544,7 @@ func testLessHandle(t *testing.T, cases []handlertest.SingleTestCase) {
 
 func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWriter) {
 	cfg := DefaultLessConfig()
-	cfg.BarAttr = term.Attributes{Bg: tcell.ColorBlack}
+	cfg.BarAttr = term.Attributes{Bg: term.ColorBlack}
 	if less == nil {
 		less = NewLess(cfg)
 	} else {

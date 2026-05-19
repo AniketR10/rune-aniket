@@ -32,7 +32,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const (
@@ -540,7 +540,7 @@ var (
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
 				var colorNames []string
-				for name := range tcell.GetColorNames() {
+				for name := range term.GetColorNames() {
 					colorNames = append(colorNames, name)
 				}
 				return iterator.FromSlice(colorNames), "", nil

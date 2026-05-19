@@ -64,7 +64,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/agentshell"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
@@ -96,7 +95,7 @@ var (
 				NoSplitWords: true,
 				StringConfig: component.StringConfig{
 					Alignment:            component.AlignmentLeft,
-					Attributes:           term.Attributes{Fg: tcell.ColorGray},
+					Attributes:           term.Attributes{Fg: term.ColorGray},
 					BackgroundAttributes: term.Attributes{},
 				},
 			},
@@ -105,7 +104,7 @@ var (
 		},
 		ReceiveMessageStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorSilver},
+			Attributes:           term.Attributes{Fg: term.ColorSilver},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ReceiveMessageSpanConfig: component.SpanConfig{
@@ -113,7 +112,7 @@ var (
 		},
 		ReasoningStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorGray},
+			Attributes:           term.Attributes{Fg: term.ColorGray},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ReasoningSpanConfig: component.SpanConfig{
@@ -130,7 +129,7 @@ var (
 		SendMessageBottomPad: 1,
 		ToolCallStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorPurple},
+			Attributes:           term.Attributes{Fg: term.ColorPurple},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ToolCallSpanConfig: component.SpanConfig{
@@ -138,12 +137,12 @@ var (
 		},
 		ToolCallArgsStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorGray},
+			Attributes:           term.Attributes{Fg: term.ColorGray},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ToolResultStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorGray},
+			Attributes:           term.Attributes{Fg: term.ColorGray},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ToolResultSpanConfig: component.SpanConfig{
@@ -151,7 +150,7 @@ var (
 		},
 		ErrorStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorRed},
+			Attributes:           term.Attributes{Fg: term.ColorRed},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ErrorSpanConfig: component.SpanConfig{
@@ -160,7 +159,7 @@ var (
 		},
 		WarningStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorYellow},
+			Attributes:           term.Attributes{Fg: term.ColorYellow},
 			BackgroundAttributes: term.Attributes{},
 		},
 		WarningSpanConfig: component.SpanConfig{
@@ -174,34 +173,34 @@ var (
 		StartCollapsed:     true,
 		ReasoningAnnotationStringConfig: component.StringConfig{
 			Alignment:  component.AlignmentLeft,
-			Attributes: term.Attributes{Attrs: tcell.AttrDim},
+			Attributes: term.Attributes{Attrs: term.AttrDim},
 		},
 		MarkdownConfig: defaultMarkdownConfig(),
 		PromptToolCallStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: tcell.ColorAqua},
+			Attributes:           term.Attributes{Fg: term.ColorAqua},
 			BackgroundAttributes: term.Attributes{},
 		},
 		SelectionConfig: dialoguetui.SelectionConfig{
 			TitleStringConfig: component.StringConfig{
 				Alignment:  component.AlignmentLeft,
-				Attributes: term.Attributes{Fg: tcell.ColorSilver},
+				Attributes: term.Attributes{Fg: term.ColorSilver},
 			},
 			OptionStringConfig: component.StringConfig{
 				Alignment:  component.AlignmentLeft,
-				Attributes: term.Attributes{Fg: tcell.ColorSilver},
+				Attributes: term.Attributes{Fg: term.ColorSilver},
 			},
 			CursorStringConfig: component.StringConfig{
 				Alignment:  component.AlignmentLeft,
-				Attributes: term.Attributes{Attrs: tcell.AttrReverse},
+				Attributes: term.Attributes{Attrs: term.AttrReverse},
 			},
 			HeaderStringConfig: component.StringConfig{
 				Alignment:  component.AlignmentLeft,
-				Attributes: term.Attributes{Fg: tcell.ColorYellow},
+				Attributes: term.Attributes{Fg: term.ColorYellow},
 			},
 			DescStringConfig: component.StringConfig{
 				Alignment:  component.AlignmentLeft,
-				Attributes: term.Attributes{Fg: tcell.ColorDimGray},
+				Attributes: term.Attributes{Fg: term.GetColor("dimgray")},
 			},
 		},
 	}
@@ -409,7 +408,7 @@ func newCommandEventHandler(
 		if err != config.ErrNotFound {
 			slog.Warn("get 'user_msg_background_attr' from extension config", "error", err)
 		}
-		sendMsgBackgroundAttr = term.Attributes{Bg: tcell.ColorGray}
+		sendMsgBackgroundAttr = term.Attributes{Bg: term.ColorGray}
 	}
 	ret.cfg.SendMessageStringConfig.BackgroundAttributes = sendMsgBackgroundAttr
 	ret.cfg.SendMessageStringConfig.Bg = sendMsgBackgroundAttr.Bg
@@ -487,8 +486,8 @@ func newCommandEventHandler(
 	}
 
 	ret.contextHintCfg = contextHintConfig{
-		labelAttr: term.Attributes{Bg: backgroundAttr.Bg, Attrs: tcell.AttrDim},
-		valueAttr: term.Attributes{Bg: backgroundAttr.Bg, Fg: tcell.ColorRed},
+		labelAttr: term.Attributes{Bg: backgroundAttr.Bg, Attrs: term.AttrDim},
+		valueAttr: term.Attributes{Bg: backgroundAttr.Bg, Fg: term.ColorRed},
 	}
 	contextHintAttr, err := config.GetAttributes(pconfig, "context_hint_attr")
 	if err != nil {
@@ -500,7 +499,7 @@ func newCommandEventHandler(
 		ret.contextHintCfg.valueAttr.Bg = backgroundAttr.Bg
 		ret.contextHintCfg.labelAttr = contextHintAttr
 		ret.contextHintCfg.labelAttr.Bg = backgroundAttr.Bg
-		ret.contextHintCfg.labelAttr.Attrs |= tcell.AttrDim
+		ret.contextHintCfg.labelAttr.Attrs |= term.AttrDim
 	}
 
 	ret.queryDefaultModel, err = pconfig.GetString("query_default_model")

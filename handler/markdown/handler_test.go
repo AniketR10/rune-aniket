@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/handler/handlertest"
 )
@@ -58,11 +57,11 @@ func TestNewWithOptions(t *testing.T) {
 			clicked = u
 			return true
 		}),
-		WithSelectionAttrs(term.Attributes{Attrs: tcell.AttrBold}),
+		WithSelectionAttrs(term.Attributes{Attrs: term.AttrBold}),
 	)
 
 	require.NotNil(t, h)
-	assert.Equal(t, tcell.AttrBold, h.selectionAttrs.Attrs)
+	assert.Equal(t, term.AttrBold, h.selectionAttrs.Attrs)
 	assert.NotNil(t, h.onLinkClick)
 
 	testURL, _ := url.Parse("http://example.com")

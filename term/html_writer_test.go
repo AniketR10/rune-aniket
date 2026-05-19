@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const defaultBackgroundCursorAtRoot = `<pre style="background:#000000;color:#FFFFFF;"><span style="background: red;">%s</span>%s</pre>`
@@ -90,20 +89,20 @@ func TestHTMLWriter(t *testing.T) {
 			expectedCSS string
 		}{
 			{term.Attributes{}, "X"}, /* no style */
-			{term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorWhite}, "<span style=\"background:#FFFFFF;\">X</span>"}, /*white is default foreground */
-			{term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorBlack}, "<span style=\"color:#000000;\">X</span>"},      /* black is default background */
-			{term.Attributes{Fg: tcell.ColorBlue, Bg: tcell.ColorBlue}, "<span style=\"background:#0000FF;color:#0000FF;\">X</span>"},
-			{term.Attributes{Fg: tcell.ColorAqua, Bg: tcell.ColorAqua}, "<span style=\"background:#00FFFF;color:#00FFFF;\">X</span>"},
-			{term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorGreen}, "<span style=\"background:#00FF00;color:#00FF00;\">X</span>"},
-			{term.Attributes{Fg: tcell.ColorFuchsia, Bg: tcell.ColorFuchsia}, "<span style=\"background:#FF00FF;color:#FF00FF;\">X</span>"},
-			{term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorRed}, "<span style=\"background:#FF0000;color:#FF0000;\">X</span>"},
-			{term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorYellow}, "<span style=\"background:#FFFF00;color:#FFFF00;\">X</span>"},
-			{term.Attributes{Attrs: tcell.AttrBold}, "<span style=\"font-weight:bold;\">X</span>"},
-			{term.Attributes{Attrs: tcell.AttrUnderline}, "<span style=\"text-decoration:underline;\">X</span>"},
-			{term.Attributes{Attrs: tcell.AttrReverse}, "<span style=\"background:#FFFFFF;color:#000000;\">X</span>"},
-			{term.Attributes{Attrs: tcell.AttrBold | tcell.AttrReverse | tcell.AttrUnderline},
+			{term.Attributes{Fg: term.ColorWhite, Bg: term.ColorWhite}, "<span style=\"background:#FFFFFF;\">X</span>"}, /*white is default foreground */
+			{term.Attributes{Fg: term.ColorBlack, Bg: term.ColorBlack}, "<span style=\"color:#000000;\">X</span>"},      /* black is default background */
+			{term.Attributes{Fg: term.ColorBlue, Bg: term.ColorBlue}, "<span style=\"background:#0000FF;color:#0000FF;\">X</span>"},
+			{term.Attributes{Fg: term.ColorAqua, Bg: term.ColorAqua}, "<span style=\"background:#00FFFF;color:#00FFFF;\">X</span>"},
+			{term.Attributes{Fg: term.ColorGreen, Bg: term.ColorGreen}, "<span style=\"background:#00FF00;color:#00FF00;\">X</span>"},
+			{term.Attributes{Fg: term.ColorFuchsia, Bg: term.ColorFuchsia}, "<span style=\"background:#FF00FF;color:#FF00FF;\">X</span>"},
+			{term.Attributes{Fg: term.ColorRed, Bg: term.ColorRed}, "<span style=\"background:#FF0000;color:#FF0000;\">X</span>"},
+			{term.Attributes{Fg: term.ColorYellow, Bg: term.ColorYellow}, "<span style=\"background:#FFFF00;color:#FFFF00;\">X</span>"},
+			{term.Attributes{Attrs: term.AttrBold}, "<span style=\"font-weight:bold;\">X</span>"},
+			{term.Attributes{Attrs: term.AttrUnderline}, "<span style=\"text-decoration:underline;\">X</span>"},
+			{term.Attributes{Attrs: term.AttrReverse}, "<span style=\"background:#FFFFFF;color:#000000;\">X</span>"},
+			{term.Attributes{Attrs: term.AttrBold | term.AttrReverse | term.AttrUnderline},
 				"<span style=\"font-weight:bold;text-decoration:underline;background:#FFFFFF;color:#000000;\">X</span>"},
-			{term.Attributes{Fg: tcell.ColorAqua, Bg: tcell.ColorAqua, Attrs: tcell.AttrBold},
+			{term.Attributes{Fg: term.ColorAqua, Bg: term.ColorAqua, Attrs: term.AttrBold},
 				"<span style=\"font-weight:bold;background:#00FFFF;color:#00FFFF;\">X</span>"},
 		}
 
@@ -120,7 +119,7 @@ func TestHTMLWriter(t *testing.T) {
 
 func TestHTMLWriterClear(t *testing.T) {
 	writer := newWriterNoCursor()
-	writer.Clear(term.Attributes{Bg: tcell.ColorAqua, Fg: tcell.ColorFuchsia})
+	writer.Clear(term.Attributes{Bg: term.ColorAqua, Fg: term.ColorFuchsia})
 	expectedHTML := `<pre style="background:#00FFFF;color:#FF00FF;"> </pre>`
 	expectInnerHTMLWithCursor(t, writer, expectedHTML)
 }

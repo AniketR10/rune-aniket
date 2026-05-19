@@ -29,7 +29,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
 )
@@ -91,7 +90,7 @@ func defaultConfig() modelessConfig {
 		indentRune: text.IndentRuneTab,
 		ruler:      90,
 		resAttr: term.Attributes{
-			Attrs: tcell.AttrReverse,
+			Attrs: term.AttrReverse,
 		},
 		commandBar: true,
 		clipboard:  clipboard.NewInMemory(),

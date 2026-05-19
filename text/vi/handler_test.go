@@ -39,7 +39,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	thandler "unstable.build/go-tui/handler"
@@ -823,7 +822,7 @@ func TestMatchingRuneHighlight(t *testing.T) {
 		require.True(t, ok)
 		loc, ok := list.Current()
 		require.True(t, ok)
-		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.AttrReverse, loc.Attr.Attrs)
 		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
 		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
 	})
@@ -844,7 +843,7 @@ func TestMatchingRuneHighlight(t *testing.T) {
 		require.True(t, ok)
 		loc, ok := list.Current()
 		require.True(t, ok)
-		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.AttrReverse, loc.Attr.Attrs)
 		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
 		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
 	})
@@ -867,7 +866,7 @@ func TestMatchingRuneHighlight(t *testing.T) {
 		require.True(t, ok)
 		loc, ok := list.Current()
 		require.True(t, ok)
-		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.AttrReverse, loc.Attr.Attrs)
 		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
 		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
 	})
@@ -890,7 +889,7 @@ func TestMatchingRuneHighlight(t *testing.T) {
 		require.True(t, ok)
 		loc, ok := list.Current()
 		require.True(t, ok)
-		assert.Equal(t, tcell.AttrReverse, loc.Attr.Attrs)
+		assert.Equal(t, term.AttrReverse, loc.Attr.Attrs)
 		assert.Equal(t, term.Coordinates{Y: 31}, loc.From)
 		assert.Equal(t, term.Coordinates{Y: 31, X: 1}, loc.To)
 	})

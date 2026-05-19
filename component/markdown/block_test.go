@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestHeaderBlockHeight(t *testing.T) {
@@ -989,7 +988,7 @@ func TestHeaderBackgroundPadding(t *testing.T) {
 	// - X=1-7: content "# Title" (with bg)
 	// - X=8: padding (bg only, no content)
 	cfg := DefaultConfig()
-	cfg.H1 = term.Attributes{Bg: tcell.ColorRed}
+	cfg.H1 = term.Attributes{Bg: term.ColorRed}
 
 	block := newHeaderBlock(1, textRun{{text: "Title"}}, &cfg)
 	w := term.NewStringWriter(20, 4)

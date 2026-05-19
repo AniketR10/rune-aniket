@@ -32,7 +32,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	htmlcomp "unstable.build/go-tui/component/html"
 	"unstable.build/go-tui/component/markdown"
 )
@@ -111,7 +110,7 @@ func New(interrupter term.Interrupter, u *url.URL, opts ...Option) *Handler {
 		cache:          make(map[string]*htmlcomp.Component),
 		httpClient:     http.DefaultClient,
 		mdCfg:          markdown.DefaultConfig(),
-		selectionAttrs: term.Attributes{Attrs: tcell.AttrReverse},
+		selectionAttrs: term.Attributes{Attrs: term.AttrReverse},
 	}
 	for _, opt := range opts {
 		opt(h)

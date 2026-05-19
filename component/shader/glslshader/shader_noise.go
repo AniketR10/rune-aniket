@@ -25,7 +25,6 @@ package glslshader
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 )
 
@@ -75,8 +74,8 @@ func (s *noise) runCell(
 	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
-	inChar rune, inFg, inBg tcell.Color,
-) (char rune, fg, bg tcell.Color) {
+	inChar rune, inFg, inBg term.Color,
+) (char rune, fg, bg term.Color) {
 	spedTime := s.Speed * time
 
 	ar := float(resolutionX) / float(resolutionY)
@@ -116,7 +115,7 @@ func (s *noise) runCell(
 		char = 'x'
 	}
 
-	fg = tcell.NewRGBColor(fgBase, fgBase, fgBase)
-	bg = tcell.NewRGBColor(bgBase, bgBase, bgBase)
+	fg = term.NewRGBColor(fgBase, fgBase, fgBase)
+	bg = term.NewRGBColor(bgBase, bgBase, bgBase)
 	return
 }

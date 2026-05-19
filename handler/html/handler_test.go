@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	htmlcomp "unstable.build/go-tui/component/html"
 )
 
@@ -430,13 +429,13 @@ func TestWithOptions(t *testing.T) {
 	interrupter := term.NopInterrupter()
 	h := New(interrupter, mustParseURL(t, srv.URL),
 		WithHTTPClient(client),
-		WithSelectionAttrs(term.Attributes{Attrs: tcell.AttrBold}),
+		WithSelectionAttrs(term.Attributes{Attrs: term.AttrBold}),
 	)
 	defer func() { _ = h.Close() }()
 
 	require.NotNil(t, h)
 	assert.Equal(t, client, h.httpClient)
-	assert.Equal(t, term.Attributes{Attrs: tcell.AttrBold}, h.selectionAttrs)
+	assert.Equal(t, term.Attributes{Attrs: term.AttrBold}, h.selectionAttrs)
 }
 
 func TestCacheReuse(t *testing.T) {

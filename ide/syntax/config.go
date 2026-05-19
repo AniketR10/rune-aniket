@@ -30,7 +30,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // Config configures a tree parser.
@@ -86,44 +85,44 @@ func DefaultConfig() Config {
 
 var defaultCaptureNamesAttributes = map[string]term.Attributes{
 	"function":         {},
-	"function.builtin": {Fg: tcell.ColorYellow},
+	"function.builtin": {Fg: term.ColorYellow},
 	"function.method":  {},
 	"type":             {},
 	"property":         {},
 	"variable":         {},
 	"operator":         {},
-	"keyword":          {Fg: tcell.ColorYellow},
-	"string":           {Fg: tcell.ColorFuchsia},
+	"keyword":          {Fg: term.ColorYellow},
+	"string":           {Fg: term.ColorFuchsia},
 	"escape":           {},
-	"number":           {Fg: tcell.ColorRed},
+	"number":           {Fg: term.ColorRed},
 	"constant.builtin": {},
-	"comment":          {Fg: tcell.ColorBlue},
+	"comment":          {Fg: term.ColorBlue},
 
 	// Markup captures are emitted by common tree-sitter queries for markdown,
 	// markdown_inline, djot, rst, latex, typst, vimdoc, gitcommit, pod, and
 	// other prose/markup-like languages.
-	"markup.heading":       {Fg: tcell.ColorYellow},
-	"markup.raw":           {Fg: tcell.ColorFuchsia},
-	"markup.raw.delimiter": {Fg: tcell.ColorYellow},
-	"markup.link":          {Fg: tcell.ColorYellow},
-	"markup.link.url":      {Fg: tcell.ColorFuchsia},
-	"markup.link.label":    {Fg: tcell.ColorYellow},
-	"markup.link.text":     {Fg: tcell.ColorYellow},
-	"markup.list":          {Fg: tcell.ColorYellow},
-	"markup.quote":         {Fg: tcell.ColorBlue},
-	"markup.strong":        {Fg: tcell.ColorYellow},
-	"markup.italic":        {Fg: tcell.ColorYellow},
-	"markup.strikethrough": {Fg: tcell.ColorBlue},
-	"markup.underline":     {Fg: tcell.ColorYellow},
-	"markup.math":          {Fg: tcell.ColorFuchsia},
+	"markup.heading":       {Fg: term.ColorYellow},
+	"markup.raw":           {Fg: term.ColorFuchsia},
+	"markup.raw.delimiter": {Fg: term.ColorYellow},
+	"markup.link":          {Fg: term.ColorYellow},
+	"markup.link.url":      {Fg: term.ColorFuchsia},
+	"markup.link.label":    {Fg: term.ColorYellow},
+	"markup.link.text":     {Fg: term.ColorYellow},
+	"markup.list":          {Fg: term.ColorYellow},
+	"markup.quote":         {Fg: term.ColorBlue},
+	"markup.strong":        {Fg: term.ColorYellow},
+	"markup.italic":        {Fg: term.ColorYellow},
+	"markup.strikethrough": {Fg: term.ColorBlue},
+	"markup.underline":     {Fg: term.ColorYellow},
+	"markup.math":          {Fg: term.ColorFuchsia},
 
 	// Legacy markdown captures used by older upstream queries.
-	"text.title":     {Fg: tcell.ColorYellow},
-	"text.literal":   {Fg: tcell.ColorFuchsia},
-	"text.uri":       {Fg: tcell.ColorFuchsia},
-	"text.reference": {Fg: tcell.ColorYellow},
-	"text.emphasis":  {Fg: tcell.ColorYellow},
-	"text.strong":    {Fg: tcell.ColorYellow},
+	"text.title":     {Fg: term.ColorYellow},
+	"text.literal":   {Fg: term.ColorFuchsia},
+	"text.uri":       {Fg: term.ColorFuchsia},
+	"text.reference": {Fg: term.ColorYellow},
+	"text.emphasis":  {Fg: term.ColorYellow},
+	"text.strong":    {Fg: term.ColorYellow},
 }
 
 func captureNameAttributes(

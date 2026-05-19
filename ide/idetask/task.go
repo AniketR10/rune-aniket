@@ -42,7 +42,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
@@ -50,10 +49,10 @@ import (
 )
 
 const (
-	colorSuccess    = tcell.ColorGreen
-	colorRunning    = tcell.ColorGray
-	colorError      = tcell.ColorRed
-	colorPaused     = tcell.ColorYellow
+	colorSuccess    = term.ColorGreen
+	colorRunning    = term.ColorGray
+	colorError      = term.ColorRed
+	colorPaused     = term.ColorYellow
 	minimizePadding = 0
 )
 
@@ -96,7 +95,7 @@ type Task struct {
 	scheduleNextTick func(fn func()) bool
 
 	bar              tui.Component
-	barColor         tcell.Color
+	barColor         term.Color
 	defaultFrameAttr term.Attributes
 	width            int
 	maxWidth         int
@@ -482,7 +481,7 @@ func (t *Task) setPause() {
 
 // setBarColor paints the minimized task frame background with the given status
 // color while preserving the configured non-focus frame Fg/Attrs.
-func (t *Task) setBarColor(color tcell.Color) {
+func (t *Task) setBarColor(color term.Color) {
 	t.scheduleNextTick(func() {
 		if _, is := t.win.IsMinimized(); is && !t.win.Closed() {
 			attr := t.defaultFrameAttr
@@ -493,7 +492,7 @@ func (t *Task) setBarColor(color tcell.Color) {
 	})
 }
 
-func (t *Task) setTabColor(color tcell.Color) {
+func (t *Task) setTabColor(color term.Color) {
 	if t.tab != nil {
 		t.tab.SetAttrs(t.Name, term.Attributes{Fg: color})
 	}
@@ -556,7 +555,7 @@ func (t *Task) unminimize() {
 	}
 	t.win.Unminimize()
 	t.win.SetFrameAttr(t.defaultFrameAttr)
-	t.scheduleNextTick(func() { t.setTabColor(tcell.ColorDefault) })
+	t.scheduleNextTick(func() { t.setTabColor(term.ColorDefault) })
 }
 
 func (t *Task) minimize() {

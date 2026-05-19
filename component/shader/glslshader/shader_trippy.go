@@ -25,7 +25,6 @@ package glslshader
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 )
 
@@ -69,8 +68,8 @@ func (s *trippy) runCell(
 	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
-	inChar rune, inFg, inBg tcell.Color,
-) (char rune, fg, bg tcell.Color) {
+	inChar rune, inFg, inBg term.Color,
+) (char rune, fg, bg term.Color) {
 	fragCoord := vec2(float(fragCoordX), float(fragCoordY))
 
 	iTime := time // time in seconds
@@ -99,7 +98,7 @@ func (s *trippy) runCell(
 	)
 
 	col = col.multSc(255.0)
-	bg = tcell.NewRGBColor(int32(col.x), int32(col.y), int32(col.z))
+	bg = term.NewRGBColor(int32(col.x), int32(col.y), int32(col.z))
 	return
 }
 

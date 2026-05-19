@@ -36,7 +36,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -236,7 +236,7 @@ func (e *editor) GetRune(key string) Rune {
 }
 
 func (e *editor) GetColor(key string) Color {
-	return Color{resolve: func(context.Context) (tcell.Color, error) {
+	return Color{resolve: func(context.Context) (term.Color, error) {
 		// Overlay does not currently carry colors. Defer to snapshot.
 		if e.snapshot == nil {
 			return 0, ErrNotFound
@@ -247,7 +247,7 @@ func (e *editor) GetColor(key string) Color {
 }
 
 func (e *editor) GetAttribute(key string) Attribute {
-	return Attribute{resolve: func(context.Context) (tcell.AttrMask, error) {
+	return Attribute{resolve: func(context.Context) (term.AttrMask, error) {
 		if e.snapshot == nil {
 			return 0, ErrNotFound
 		}
@@ -486,14 +486,14 @@ func (s *snapshotGetter) GetRune(key string) Rune {
 }
 
 func (s *snapshotGetter) GetColor(key string) Color {
-	return Color{resolve: func(context.Context) (tcell.Color, error) {
+	return Color{resolve: func(context.Context) (term.Color, error) {
 		v, err := s.snapshot.GetColor(key)
 		return v, translateErr(err)
 	}}
 }
 
 func (s *snapshotGetter) GetAttribute(key string) Attribute {
-	return Attribute{resolve: func(context.Context) (tcell.AttrMask, error) {
+	return Attribute{resolve: func(context.Context) (term.AttrMask, error) {
 		v, err := s.snapshot.GetAttribute(key)
 		return v, translateErr(err)
 	}}

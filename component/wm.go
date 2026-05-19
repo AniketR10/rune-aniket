@@ -27,7 +27,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // WindowManagerConfig represents the configuration for a WindowManager
@@ -468,7 +467,7 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		FrameAttr:     term.Attributes{},
 		FrameCharSet:  charset,
 		NoMaxSize:     true,
-		ScrollBarAttr: term.Attributes{Attrs: tcell.AttrBold},
+		ScrollBarAttr: term.Attributes{Attrs: term.AttrBold},
 	}
 }
 

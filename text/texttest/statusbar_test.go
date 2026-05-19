@@ -35,7 +35,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/ide/syntax"
@@ -57,7 +56,7 @@ func TestStatusBarStatus(t *testing.T) {
 		Layout: []text.StatusBarComponent{
 			{
 				Type:       text.StatusBarStatus,
-				Attributes: term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorRed},
+				Attributes: term.Attributes{Fg: term.ColorYellow, Bg: term.ColorRed},
 				Template:   "█%s█▓▒░",
 			},
 		},
@@ -93,14 +92,14 @@ func main() {
 	cells := w.Cells()
 	require.Len(t, cells, 10*20)
 	require.Equal(t, '█', cells[180].Ch)
-	assert.Equal(t, tcell.ColorRed, cells[180].Fg)
-	assert.Equal(t, tcell.ColorRed, cells[181].Fg)
+	assert.Equal(t, term.ColorRed, cells[180].Fg)
+	assert.Equal(t, term.ColorRed, cells[181].Fg)
 	for i := 182; i < 185; i++ {
-		assert.Equal(t, tcell.ColorRed, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Fg)
 	}
 
 	bar.SetStatus("INTERESTING",
-		term.Attributes{Bg: tcell.ColorOlive, Fg: tcell.ColorMaroon})
+		term.Attributes{Bg: term.ColorOlive, Fg: term.ColorMaroon})
 	tests = []comptest.TestCase{
 		{Expected: `
 package main        
@@ -119,13 +118,13 @@ func main() {
 
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
-	assert.Equal(t, tcell.ColorOlive, cells[180].Fg)
+	assert.Equal(t, term.ColorOlive, cells[180].Fg)
 	for i := 181; i < 181+len("INTERESTING"); i++ {
-		assert.Equal(t, tcell.ColorMaroon, cells[i].Fg)
-		assert.Equal(t, tcell.ColorOlive, cells[i].Bg)
+		assert.Equal(t, term.ColorMaroon, cells[i].Fg)
+		assert.Equal(t, term.ColorOlive, cells[i].Bg)
 	}
 	for i := 193; i < 196; i++ {
-		assert.Equal(t, tcell.ColorOlive, cells[i].Fg)
+		assert.Equal(t, term.ColorOlive, cells[i].Fg)
 	}
 }
 
@@ -146,7 +145,7 @@ func TestStatusBarFilepath(t *testing.T) {
 		Layout: []text.StatusBarComponent{
 			{
 				Type:       text.StatusBarFilePath,
-				Attributes: term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorRed},
+				Attributes: term.Attributes{Fg: term.ColorYellow, Bg: term.ColorRed},
 				Template:   "  %s",
 			},
 			{
@@ -188,8 +187,8 @@ func main() {
 	cells := w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorYellow, cells[i].Fg)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
+		assert.Equal(t, term.ColorYellow, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Bg)
 	}
 
 	buf.InsertString(term.Coordinates{}, "package")
@@ -212,8 +211,8 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorOlive, cells[i].Fg)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
+		assert.Equal(t, term.ColorOlive, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Bg)
 	}
 
 	ok, _ := buf.Undo()
@@ -237,8 +236,8 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorYellow, cells[i].Fg)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
+		assert.Equal(t, term.ColorYellow, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Bg)
 	}
 
 	ok, _ = buf.Redo()
@@ -262,8 +261,8 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorOlive, cells[i].Fg)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
+		assert.Equal(t, term.ColorOlive, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Bg)
 	}
 
 	require.Len(t, ed.subs[textapi.EventTypeFlush], 1)
@@ -289,8 +288,8 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 180; i < 180+len("relpath.go"); i++ {
-		assert.Equal(t, tcell.ColorYellow, cells[i].Fg)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
+		assert.Equal(t, term.ColorYellow, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Bg)
 	}
 
 }
@@ -404,7 +403,7 @@ func TestStatusBarCursor(t *testing.T) {
 			{
 				Template:   "%s  ",
 				Type:       text.StatusBarLanguage,
-				Attributes: term.Attributes{Attrs: tcell.AttrBold},
+				Attributes: term.Attributes{Attrs: term.AttrBold},
 			},
 		},
 	}
@@ -476,13 +475,13 @@ func TestStatusBarSyntax(t *testing.T) {
 		Workspace:        testURI,
 		Publisher:        &ed,
 		GitService:       mockGit,
-		ErrorColor:       tcell.ColorMaroon,
+		ErrorColor:       term.ColorMaroon,
 		Layout: []text.StatusBarComponent{
 			{Type: text.StatusBarVoid},
 			{
 				Template:   "%s  ",
 				Type:       text.StatusBarLanguage,
-				Attributes: term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorRed},
+				Attributes: term.Attributes{Fg: term.ColorYellow, Bg: term.ColorRed},
 			},
 		},
 	}
@@ -555,8 +554,8 @@ func main() {
 	cells := w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 196; i < 196+len("GO"); i++ {
-		assert.Equal(t, tcell.ColorYellow, cells[i].Fg)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg)
+		assert.Equal(t, term.ColorYellow, cells[i].Fg)
+		assert.Equal(t, term.ColorRed, cells[i].Bg)
 	}
 
 	wg.Add(1)
@@ -585,8 +584,8 @@ func main() {
 	cells = w.Cells()
 	require.Len(t, cells, 10*20)
 	for i := 196; i < 196+len("GO"); i++ {
-		assert.Equal(t, tcell.ColorMaroon, cells[i].Fg, i)
-		assert.Equal(t, tcell.ColorRed, cells[i].Bg, i)
+		assert.Equal(t, term.ColorMaroon, cells[i].Fg, i)
+		assert.Equal(t, term.ColorRed, cells[i].Bg, i)
 	}
 
 	require.NoError(t, bar.Close())

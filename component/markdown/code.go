@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/languages"
 )
@@ -131,13 +130,13 @@ func applyHighlights(cells [][]term.Cell, hls []textapi.Location, codeBlock term
 			for x := startX; x < endX && x < len(cells[y]); x++ {
 				cells[y][x].Attributes = hl.Attr
 				// Preserve the code block background color.
-				if codeBlock.Bg != tcell.ColorDefault {
-					cells[y][x].Attributes = term.Attributes(tcell.Style{
-						Fg:    hl.Attr.Fg,
-						Bg:    codeBlock.Bg,
-						Attrs: hl.Attr.Attrs,
-					})
+				if codeBlock.Bg != term.ColorDefault {
+					cells[y][x].Attributes = term.Attributes{
+					Fg:    hl.Attr.Fg,
+					Bg:    codeBlock.Bg,
+					Attrs: hl.Attr.Attrs,
 				}
+			}
 			}
 		}
 	}
@@ -163,7 +162,7 @@ func (c *codeBlock) Draw(w term.Writer) {
 		return
 	}
 
-	if c.cfg.CodeBlock.Bg != tcell.ColorDefault {
+	if c.cfg.CodeBlock.Bg != term.ColorDefault {
 		bgAttr := term.Attributes{Bg: c.cfg.CodeBlock.Bg}
 		for y := range c.Height(c.w) - 1 {
 			for x := range c.w {

@@ -29,7 +29,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
 )
@@ -97,7 +96,7 @@ func defaultviHandlerImplConfig() viConfig {
 		indentRune: text.IndentRuneTab,
 		ruler:      90,
 		resAttr: term.Attributes{
-			Attrs: tcell.AttrReverse,
+			Attrs: term.AttrReverse,
 		},
 		clipboard: clipboard.NewInMemory(),
 		scheduleNextTick: func(fn func()) bool {

@@ -167,8 +167,8 @@ func TestRawCellsStringReadFrom(t *testing.T) {
 		{"c\n", [][]term.Cell{{{Ch: 'c', Combining: nil, Bytes: 1, Width: 1}}, {}}},
 		{"\n\n\n", [][]term.Cell{{}, {}, {}, {}}},
 		{"\n\n\na", [][]term.Cell{{}, {}, {}, {{Ch: 'a', Combining: nil, Bytes: 1, Width: 1}}}},
-		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2, Combining: []rune{}, Bytes: 4}}}},
-		{"👨‍👧‍👦", [][]term.Cell{{{Ch: '👨', Combining: []rune{
+		{"💥", [][]term.Cell{{{Ch: '💥', Width: 2, Combining: nil, Bytes: 4}}}},
+		{"👨‍👧‍👦", [][]term.Cell{{{Ch: '👨', Combining: &[]rune{
 			rune(8205),
 			rune(128103),
 			rune(8205),
@@ -384,7 +384,7 @@ func TestRawCellsInsertGraphemeCluster(t *testing.T) {
 	_, next = c.insert(next, "👦")
 
 	assert.Equal(t, [][]term.Cell{
-		{{Ch: '👨', Combining: []rune{
+		{{Ch: '👨', Combining: &[]rune{
 			rune(8205),
 			rune(128103),
 			rune(8205),
@@ -764,7 +764,7 @@ func TestRawCellsCell(t *testing.T) {
 
 	cell, ok = c.Cell(term.Coordinates{Y: 3, X: 25})
 	assert.True(t, ok)
-	assert.Equal(t, term.Cell{Ch: '中', Combining: []rune{}, Bytes: 3, Width: 2}, cell)
+	assert.Equal(t, term.Cell{Ch: '中', Combining: nil, Bytes: 3, Width: 2}, cell)
 
 	cell, ok = c.Cell(term.Coordinates{Y: 666})
 	assert.False(t, ok)

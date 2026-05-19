@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -347,43 +346,43 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 			{
 				From: term.Coordinates{Y: 1},
 				To:   term.Coordinates{Y: 1, X: 1},
-				Attr: term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen},
+				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
 			},
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen},
+				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
 			},
 			{
 				From: term.Coordinates{Y: 3},
 				To:   term.Coordinates{Y: 3, X: 1},
-				Attr: term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorGreen},
+				Attr: term.Attributes{Fg: term.ColorRed, Bg: term.ColorGreen},
 			},
 		}
 		criticalLocations := []textapi.Location{
 			{
 				From: term.Coordinates{Y: 1},
 				To:   term.Coordinates{Y: 1, X: 1},
-				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
+				Attr: term.Attributes{Attrs: term.AttrUnderline, Bg: term.ColorBlack},
 			},
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
+				Attr: term.Attributes{Attrs: term.AttrUnderline, Bg: term.ColorBlack},
 			},
 			{
 				From: term.Coordinates{Y: 3},
 				To:   term.Coordinates{Y: 3, X: 1},
-				Attr: term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack},
+				Attr: term.Attributes{Attrs: term.AttrUnderline, Bg: term.ColorBlack},
 			},
 		}
 		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
 
 		expected := [][]term.Cell{
 			{{}},
-			{{Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}}},
-			{{Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}}},
-			{{Attributes: term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}}},
+			{{Attributes: term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack}}},
+			{{Attributes: term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack}}},
+			{{Attributes: term.Attributes{Fg: term.ColorRed, Attrs: term.AttrUnderline, Bg: term.ColorBlack}}},
 			{{}},
 		}
 
@@ -494,24 +493,24 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 			{
 				From:    term.Coordinates{Y: 1},
 				To:      term.Coordinates{Y: 1, X: 1},
-				Attr:    term.Attributes{Bg: tcell.ColorRed},
+				Attr:    term.Attributes{Bg: term.ColorRed},
 				Message: "blabla",
 			},
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorOrange},
+				Attr: term.Attributes{Bg: term.GetColor("orange")},
 			},
 			{
 				From: term.Coordinates{Y: 3},
 				To:   term.Coordinates{Y: 3, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorYellow},
+				Attr: term.Attributes{Bg: term.ColorYellow},
 			},
 		}
 
 		expected := [][]term.Cell{
 			{{}, {}},
-			{{Attributes: term.Attributes{Bg: tcell.ColorRed}},
+			{{Attributes: term.Attributes{Bg: term.ColorRed}},
 				{Attributes: term.Attributes{Bg: 0}}},
 			{{}, {}},
 			{{}, {}},
@@ -535,7 +534,7 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 			{
 				From:    term.Coordinates{Y: 2},
 				To:      term.Coordinates{Y: 2, X: 1},
-				Attr:    term.Attributes{Bg: tcell.ColorGreen},
+				Attr:    term.Attributes{Bg: term.ColorGreen},
 				Message: "B HAS A MESSAGE FOR YOU",
 			},
 		}
@@ -546,7 +545,7 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 
 		expected := [][]term.Cell{
 			{{}, {}},
-			{{Attributes: term.Attributes{Bg: tcell.ColorGreen}},
+			{{Attributes: term.Attributes{Bg: term.ColorGreen}},
 				{Attributes: term.Attributes{Bg: 0}}},
 			{{}, {}},
 			{{}, {}},
@@ -567,17 +566,17 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 			{
 				From: term.Coordinates{Y: 1},
 				To:   term.Coordinates{Y: 1, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorRed},
+				Attr: term.Attributes{Bg: term.ColorRed},
 			},
 			{
 				From: term.Coordinates{Y: 2},
 				To:   term.Coordinates{Y: 2, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorOrange},
+				Attr: term.Attributes{Bg: term.GetColor("orange")},
 			},
 			{
 				From: term.Coordinates{Y: 3},
 				To:   term.Coordinates{Y: 3, X: 1},
-				Attr: term.Attributes{Bg: tcell.ColorYellow},
+				Attr: term.Attributes{Bg: term.ColorYellow},
 			},
 		}
 

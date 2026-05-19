@@ -34,7 +34,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const longStr = `Love in your heart wasn't put there to stay.
@@ -970,7 +969,7 @@ func TestBufferSubscribe(t *testing.T) {
 
 func TestBufferInsertWithAttr(t *testing.T) {
 	buf := NewBuffer()
-	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow, Attrs: tcell.AttrBold}
+	attr := term.Attributes{Fg: term.ColorRed, Bg: term.ColorYellow, Attrs: term.AttrBold}
 
 	buf.InsertWithAttr(term.Coordinates{}, 'A', attr)
 	cell := buf.RawCells()[0][0]
@@ -984,7 +983,7 @@ func TestBufferInsertWithAttr(t *testing.T) {
 }
 
 func TestBufferInsertStringWithAttr(t *testing.T) {
-	attr := term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorYellow, Attrs: tcell.AttrItalic}
+	attr := term.Attributes{Fg: term.ColorRed, Bg: term.ColorYellow, Attrs: term.AttrItalic}
 	t.Run("insert single line string", func(t *testing.T) {
 		buf := NewBuffer()
 		buf.InsertStringWithAttr(term.Coordinates{}, "Atza", attr)

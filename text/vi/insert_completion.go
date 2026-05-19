@@ -28,7 +28,6 @@ import (
 
 	sdkcomp "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const (
@@ -52,9 +51,9 @@ func newInsertCompletionFloating(
 	apply func(string),
 ) *insertCompletionFloating {
 	list := sdkcomp.NewFocusList()
-	list.SetFocusAttr(term.Attributes{Fg: tcell.ColorWhite})
+	list.SetFocusAttr(term.Attributes{Fg: term.ColorWhite})
 	strCfg := sdkcomp.StringConfig{
-		Attributes: term.Attributes{Fg: tcell.ColorGray},
+		Attributes: term.Attributes{Fg: term.ColorGray},
 	}
 	for _, label := range candidates {
 		list.PushBack(sdkcomp.NewStringWithConfig(label, strCfg))

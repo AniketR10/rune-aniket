@@ -28,7 +28,6 @@ import (
 
 	fzf "github.com/junegunn/fzf/src/algo"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const (
@@ -86,16 +85,16 @@ type ListConfig struct {
 
 func (c ListConfig) toInternal() listConfig {
 	matchCountAttr := term.Attributes{
-		Fg:    tcell.ColorRed,
-		Attrs: tcell.AttrBold,
+		Fg:    term.ColorRed,
+		Attrs: term.AttrBold,
 	}
 	matchedTextAttr := term.Attributes{
-		Fg: tcell.ColorRed,
+		Fg: term.ColorRed,
 	}
 	searchBaseAttr := term.Attributes{}
 	focusAttr := term.Attributes{
-		Fg:    tcell.ColorRed,
-		Attrs: tcell.AttrBold,
+		Fg:    term.ColorRed,
+		Attrs: term.AttrBold,
 	}
 	textAttr := term.Attributes{}
 	if c.MatchedTextAttr != nil {

@@ -29,7 +29,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -121,8 +120,8 @@ func DefaultConfig() Config {
 		HistoryCycleKey:  term.KeyComb{Ch: ':'},
 		HistoryToggleKey: term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
 		EditModeKey:      term.KeyComb{Mod: term.ModShift, Key: term.KeyEsc},
-		MatchedTextAttr:  term.Attributes{Fg: tcell.ColorRed},
-		FocusElementAttr: term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline, Fg: tcell.ColorRed},
+		MatchedTextAttr:  term.Attributes{Fg: term.ColorRed},
+		FocusElementAttr: term.Attributes{Attrs: term.AttrBold | term.AttrUnderline, Fg: term.ColorRed},
 		ElementAttr:      term.Attributes{},
 		DocumentID:       "command-history",
 		ShowManualAfter:  1 * time.Second,

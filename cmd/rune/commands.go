@@ -379,8 +379,8 @@ func subscribeGUICommands(
 				theme, err := g.SetTheme(cmd.Args[0])
 				if err == nil {
 					i.SetDefaultAttributes(term.Attributes{
-						Fg: theme.Foreground,
-						Bg: theme.Background,
+						Fg: term.FromTcellColor(theme.Foreground),
+						Bg: term.FromTcellColor(theme.Background),
 					})
 				}
 				return

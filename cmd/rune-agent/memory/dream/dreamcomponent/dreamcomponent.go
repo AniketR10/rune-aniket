@@ -37,7 +37,6 @@ import (
 	"strings"
 	"time"
 
-	tcell "github.com/unstablebuild/tcell/v3"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 
@@ -89,16 +88,16 @@ const (
 )
 
 var (
-	successAttr   = term.Attributes{Fg: tcell.ColorGreen}
-	errorAttr     = term.Attributes{Fg: tcell.ColorRed}
-	phaseAttr     = term.Attributes{Fg: tcell.ColorFuchsia, Attrs: tcell.AttrBold}
-	migrateAttr   = term.Attributes{Fg: tcell.ColorOlive}
-	bootstrapAttr = term.Attributes{Fg: tcell.ColorAqua}
-	doneAttr      = term.Attributes{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}
-	toolAttr      = term.Attributes{Fg: tcell.ColorGray}
-	toolNameAttr  = term.Attributes{Fg: tcell.ColorFuchsia, Attrs: tcell.AttrBold}
-	counterAttr   = term.Attributes{Fg: tcell.ColorGray}
-	subStepAttr   = term.Attributes{Fg: tcell.ColorGray}
+	successAttr   = term.Attributes{Fg: term.ColorGreen}
+	errorAttr     = term.Attributes{Fg: term.ColorRed}
+	phaseAttr     = term.Attributes{Fg: term.ColorFuchsia, Attrs: term.AttrBold}
+	migrateAttr   = term.Attributes{Fg: term.ColorOlive}
+	bootstrapAttr = term.Attributes{Fg: term.ColorAqua}
+	doneAttr      = term.Attributes{Fg: term.ColorGreen, Attrs: term.AttrBold}
+	toolAttr      = term.Attributes{Fg: term.ColorGray}
+	toolNameAttr  = term.Attributes{Fg: term.ColorFuchsia, Attrs: term.AttrBold}
+	counterAttr   = term.Attributes{Fg: term.ColorGray}
+	subStepAttr   = term.Attributes{Fg: term.ColorGray}
 	labelAttr     = term.Attributes{}
 	workingAttr   = term.Attributes{}
 )

@@ -29,7 +29,6 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const (
@@ -49,7 +48,7 @@ type HTMLWriter struct {
 // NewHTMLWriter allocates storage for a new HTMLWriter and initializes it.
 func NewHTMLWriter(width, height int) (t *HTMLWriter) {
 	t = new(HTMLWriter)
-	t.defaultAttr = term.Attributes{Bg: tcell.ColorBlack, Fg: tcell.ColorWhite}
+	t.defaultAttr = term.Attributes{Bg: term.ColorBlack, Fg: term.ColorWhite}
 	t.Resize(width, height)
 	t.cursorStyle = defaultCursorStyle
 	return
@@ -89,26 +88,26 @@ func (w *HTMLWriter) convertToCSS(attr term.Attributes, ignoreDefault bool) (
 ) {
 	var builder strings.Builder
 
-	if attr.Attrs&tcell.AttrBold != 0 {
-		attr.Attrs &^= tcell.AttrBold
+	if attr.Attrs&term.AttrBold != 0 {
+		attr.Attrs &^= term.AttrBold
 		needsFg = true
 		builder.WriteString("font-weight:bold;")
 	}
 
-	if attr.Attrs&tcell.AttrUnderline != 0 {
-		attr.Attrs &^= tcell.AttrUnderline
+	if attr.Attrs&term.AttrUnderline != 0 {
+		attr.Attrs &^= term.AttrUnderline
 		needsFg = true
 		builder.WriteString("text-decoration:underline;")
 	}
 
-	fgReverse := attr.Attrs&tcell.AttrReverse != 0
-	bgReverse := attr.Attrs&tcell.AttrReverse != 0
+	fgReverse := attr.Attrs&term.AttrReverse != 0
+	bgReverse := attr.Attrs&term.AttrReverse != 0
 	if fgReverse || bgReverse {
 		if fgReverse {
-			attr.Attrs &^= tcell.AttrReverse
+			attr.Attrs &^= term.AttrReverse
 		}
 		if bgReverse {
-			attr.Attrs &^= tcell.AttrReverse
+			attr.Attrs &^= term.AttrReverse
 		}
 
 		// at this point all attributes should be removed
@@ -124,7 +123,7 @@ func (w *HTMLWriter) convertToCSS(attr term.Attributes, ignoreDefault bool) (
 	}
 
 	bgHex := attr.Bg.CSS()
-	needsBg = attr.Bg != tcell.ColorDefault
+	needsBg = attr.Bg != term.ColorDefault
 	if !ignoreDefault || needsBg {
 		builder.WriteString("background:")
 		builder.WriteString(bgHex)
@@ -132,7 +131,7 @@ func (w *HTMLWriter) convertToCSS(attr term.Attributes, ignoreDefault bool) (
 	}
 
 	fgHex := attr.Fg.CSS()
-	needsColorFg := attr.Fg != tcell.ColorDefault
+	needsColorFg := attr.Fg != term.ColorDefault
 	if !ignoreDefault || needsColorFg {
 		builder.WriteString("color:")
 		builder.WriteString(fgHex)

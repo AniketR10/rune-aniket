@@ -39,7 +39,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/workspace"
 )
@@ -67,14 +66,14 @@ func TestParserHighlights(t *testing.T) {
 			From: term.Coordinates{X: 0, Y: 0},
 			To:   term.Coordinates{X: 7, Y: 0},
 			Attr: term.Attributes{
-				Fg: tcell.ColorYellow,
+				Fg: term.ColorYellow,
 			},
 		},
 		{
 			From: term.Coordinates{X: 0, Y: 1},
 			To:   term.Coordinates{X: 4, Y: 1},
 			Attr: term.Attributes{
-				Fg: tcell.ColorYellow,
+				Fg: term.ColorYellow,
 			},
 		},
 		{

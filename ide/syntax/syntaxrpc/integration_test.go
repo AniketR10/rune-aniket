@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -289,7 +288,7 @@ func TestHighlight(t *testing.T) {
 				{
 					From:    term.Coordinates{X: 0, Y: 0},
 					To:      term.Coordinates{X: 7, Y: 0},
-					Attr:    term.Attributes(tcell.Style{Fg: tcell.ColorBlue}),
+					Attr:    term.Attributes{Fg: term.ColorBlue},
 					Message: "keyword",
 				},
 			},
@@ -302,13 +301,13 @@ func TestHighlight(t *testing.T) {
 				{
 					From:    term.Coordinates{X: 0, Y: 0},
 					To:      term.Coordinates{X: 2, Y: 0},
-					Attr:    term.Attributes(tcell.Style{Fg: tcell.ColorRed}),
+					Attr:    term.Attributes{Fg: term.ColorRed},
 					Message: "keyword",
 				},
 				{
 					From:    term.Coordinates{X: 3, Y: 0},
 					To:      term.Coordinates{X: 7, Y: 0},
-					Attr:    term.Attributes(tcell.Style{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}),
+					Attr:    term.Attributes{Fg: term.ColorGreen, Attrs: term.AttrBold},
 					Message: "function",
 				},
 			},

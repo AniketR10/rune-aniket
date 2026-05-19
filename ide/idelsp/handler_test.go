@@ -42,7 +42,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestCallbackHandler_ShowMessage(t *testing.T) {
@@ -212,9 +211,9 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					From:    term.Coordinates{X: 0, Y: 5},
 					To:      term.Coordinates{X: 10, Y: 5},
 					Message: "undefined variable",
-					Attr: term.Attributes(tcell.Style{
-						Bg: tcell.ColorRed,
-					}),
+					Attr: term.Attributes{
+						Bg: term.ColorRed,
+					},
 					Icon: "✖",
 				},
 			},
@@ -253,18 +252,18 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					From:    term.Coordinates{X: 0, Y: 1},
 					To:      term.Coordinates{X: 5, Y: 1},
 					Message: "unused var",
-					Attr: term.Attributes(tcell.Style{
-						Bg: tcell.ColorYellow,
-					}),
+					Attr: term.Attributes{
+						Bg: term.ColorYellow,
+					},
 					Icon: "▲",
 				},
 				{
 					From:    term.Coordinates{X: 0, Y: 3},
 					To:      term.Coordinates{X: 8, Y: 3},
 					Message: "syntax error",
-					Attr: term.Attributes(tcell.Style{
-						Bg: tcell.ColorRed,
-					}),
+					Attr: term.Attributes{
+						Bg: term.ColorRed,
+					},
 					Icon: "✖",
 				},
 			},
@@ -293,9 +292,9 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					To:      term.Coordinates{X: 3, Y: 10},
 					Message: "Inline: can inline Add",
 					Icon:    "󰁔",
-					Attr: term.Attributes(tcell.Style{
-						Bg: tcell.ColorIndigo,
-					}),
+					Attr: term.Attributes{
+						Bg: term.GetColor("indigo"),
+					},
 				},
 			},
 			expectedPriority: textapi.LocationPriorityInfo,
@@ -323,9 +322,9 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					To:      term.Coordinates{X: 8, Y: 5},
 					Message: "Escape: a escapes to heap",
 					Icon:    "󰁝",
-					Attr: term.Attributes(tcell.Style{
-						Bg: tcell.ColorDarkMagenta,
-					}),
+					Attr: term.Attributes{
+						Bg: term.GetColor("darkmagenta"),
+					},
 				},
 			},
 			expectedPriority: textapi.LocationPriorityInfo,
@@ -352,9 +351,9 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 					From:    term.Coordinates{X: 0, Y: 1},
 					To:      term.Coordinates{X: 5, Y: 1},
 					Message: "cannot inline: too complex",
-					Attr: term.Attributes(tcell.Style{
-						Bg: tcell.ColorRed,
-					}),
+					Attr: term.Attributes{
+						Bg: term.ColorRed,
+					},
 					Icon: "✖",
 				},
 			},
@@ -775,52 +774,52 @@ func TestClassifyCompilerDiagnostic(t *testing.T) {
 		{
 			msg: "can inline Add", wantIcon: "󰁔",
 			wantMsg:  "Inline: can inline Add",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorIndigo}),
+			wantAttr: term.Attributes{Bg: term.GetColor("indigo")},
 		},
 		{
 			msg: "inlining call to Add", wantIcon: "󰁔",
 			wantMsg:  "Inline: inlining call to Add",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorIndigo}),
+			wantAttr: term.Attributes{Bg: term.GetColor("indigo")},
 		},
 		{
 			msg: "a escapes to heap", wantIcon: "󰁝",
 			wantMsg:  "Escape: a escapes to heap",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
+			wantAttr: term.Attributes{Bg: term.GetColor("darkmagenta")},
 		},
 		{
 			msg: "moved to heap: x", wantIcon: "󰁝",
 			wantMsg:  "Escape: moved to heap: x",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
+			wantAttr: term.Attributes{Bg: term.GetColor("darkmagenta")},
 		},
 		{
 			msg: "leaking param: x", wantIcon: "󰁝",
 			wantMsg:  "Escape: leaking param: x",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
+			wantAttr: term.Attributes{Bg: term.GetColor("darkmagenta")},
 		},
 		{
 			msg: "a does not escape", wantIcon: "󰁝",
 			wantMsg:  "Escape: a does not escape",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkMagenta}),
+			wantAttr: term.Attributes{Bg: term.GetColor("darkmagenta")},
 		},
 		{
 			msg: "Found IsInBounds", wantIcon: "󰅪",
 			wantMsg:  "Bounds: Found IsInBounds",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorRebeccaPurple}),
+			wantAttr: term.Attributes{Bg: term.GetColor("rebeccapurple")},
 		},
 		{
 			msg: "isInBounds", wantIcon: "󰅪",
 			wantMsg:  "Bounds: isInBounds",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorRebeccaPurple}),
+			wantAttr: term.Attributes{Bg: term.GetColor("rebeccapurple")},
 		},
 		{
 			msg: "nilcheck", wantIcon: "∅",
 			wantMsg:  "Nilcheck: nilcheck",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorBlueViolet}),
+			wantAttr: term.Attributes{Bg: term.GetColor("blueviolet")},
 		},
 		{
 			msg: "unknown compiler message", wantIcon: "⚙",
 			wantMsg:  "unknown compiler message",
-			wantAttr: term.Attributes(tcell.Style{Bg: tcell.ColorDarkSlateBlue}),
+			wantAttr: term.Attributes{Bg: term.GetColor("darkslateblue")},
 		},
 	}
 	for _, tt := range tests {
@@ -1842,31 +1841,31 @@ func TestDiagnosticSeverityToAttr(t *testing.T) {
 	tests := []struct {
 		name     string
 		severity semanticapi.DiagnosticSeverity
-		wantBg   tcell.Color
+		wantBg   term.Color
 		wantIcon string
 	}{
 		{
 			name:     "error is red",
 			severity: semanticapi.DiagnosticSeverityError,
-			wantBg:   tcell.ColorRed,
+			wantBg:   term.ColorRed,
 			wantIcon: "✖",
 		},
 		{
 			name:     "warning is yellow",
 			severity: semanticapi.DiagnosticSeverityWarning,
-			wantBg:   tcell.ColorYellow,
+			wantBg:   term.ColorYellow,
 			wantIcon: "▲",
 		},
 		{
 			name:     "info is blue",
 			severity: semanticapi.DiagnosticSeverityInformation,
-			wantBg:   tcell.ColorBlue,
+			wantBg:   term.ColorBlue,
 			wantIcon: "◉",
 		},
 		{
 			name:     "hint is gray",
 			severity: semanticapi.DiagnosticSeverityHint,
-			wantBg:   tcell.ColorGray,
+			wantBg:   term.ColorGray,
 			wantIcon: "󰌵",
 		},
 	}
@@ -1874,7 +1873,7 @@ func TestDiagnosticSeverityToAttr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			attr, icon := diagnosticSeverityToAttr(tt.severity, DefaultIconSet())
-			style := tcell.Style(attr)
+			style := term.Style(attr)
 			assert.Equal(t, tt.wantBg, style.Bg)
 			assert.Equal(t, tt.wantIcon, icon)
 		})

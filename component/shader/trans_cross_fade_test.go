@@ -29,14 +29,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shaderutils"
 )
 
 func TestTransitionCrossFade(t *testing.T) {
 	t.Run("noise is applied only within cross fade area", func(t *testing.T) {
-		shRedAAAs := newConstantShader('A', tcell.ColorDarkRed, tcell.ColorRed)
-		shGreenBBBs := newConstantShader('B', tcell.ColorDarkGreen, tcell.ColorGreen)
+		shRedAAAs := newConstantShader('A', term.GetColor("darkred"), term.ColorRed)
+		shGreenBBBs := newConstantShader('B', term.GetColor("darkgreen"), term.ColorGreen)
 
 		type frRange struct {
 			start, end int
@@ -96,8 +95,8 @@ func TestTransitionCrossFade(t *testing.T) {
 	})
 
 	t.Run("colors are interpolated only within cross fade area", func(t *testing.T) {
-		shRedAAAs := newConstantShader('A', tcell.ColorDarkRed, tcell.ColorRed)
-		shGreenBBBs := newConstantShader('B', tcell.ColorDarkGreen, tcell.ColorGreen)
+		shRedAAAs := newConstantShader('A', term.GetColor("darkred"), term.ColorRed)
+		shGreenBBBs := newConstantShader('B', term.GetColor("darkgreen"), term.ColorGreen)
 		transition := TransitionCrossFade(
 			TransitionCrossFadeParams{ChangeAtPerc: 0.5, OverlapPerc: 0.4},
 			term.Attributes{},
@@ -107,40 +106,40 @@ func TestTransitionCrossFade(t *testing.T) {
 
 		frames := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
-		lerpFg := func(factor float64) tcell.Color {
+		lerpFg := func(factor float64) term.Color {
 			return shaderutils.InterpolateColor(
-				factor, tcell.ColorDarkRed, tcell.ColorDarkGreen, 0,
+				factor, term.GetColor("darkred"), term.GetColor("darkgreen"), 0,
 			)
 		}
-		expectFgs := []tcell.Color{
-			tcell.ColorDarkRed,
-			tcell.ColorDarkRed,
-			tcell.ColorDarkRed,
-			tcell.ColorDarkRed,
+		expectFgs := []term.Color{
+			term.GetColor("darkred"),
+			term.GetColor("darkred"),
+			term.GetColor("darkred"),
+			term.GetColor("darkred"),
 			lerpFg(0.25),
 			lerpFg(0.5),
 			lerpFg(0.75),
-			tcell.ColorDarkGreen,
-			tcell.ColorDarkGreen,
-			tcell.ColorDarkGreen,
+			term.GetColor("darkgreen"),
+			term.GetColor("darkgreen"),
+			term.GetColor("darkgreen"),
 		}
 
-		lerpBg := func(factor float64) tcell.Color {
+		lerpBg := func(factor float64) term.Color {
 			return shaderutils.InterpolateColor(
-				factor, tcell.ColorRed, tcell.ColorGreen, 0,
+				factor, term.ColorRed, term.ColorGreen, 0,
 			)
 		}
-		expectBgs := []tcell.Color{
-			tcell.ColorRed,
-			tcell.ColorRed,
-			tcell.ColorRed,
-			tcell.ColorRed,
+		expectBgs := []term.Color{
+			term.ColorRed,
+			term.ColorRed,
+			term.ColorRed,
+			term.ColorRed,
 			lerpBg(0.25),
 			lerpBg(0.5),
 			lerpBg(0.75),
-			tcell.ColorGreen,
-			tcell.ColorGreen,
-			tcell.ColorGreen,
+			term.ColorGreen,
+			term.ColorGreen,
+			term.ColorGreen,
 		}
 
 		require.True(t, len(frames) == len(expectBgs), // && len(expectBgs) == len(expectFgs),

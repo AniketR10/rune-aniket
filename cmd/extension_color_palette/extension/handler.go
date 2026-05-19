@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // NewExtension returns the color palette extension and its metadata.
@@ -133,11 +132,11 @@ func makeColorGrid(dim bool) tui.Component {
 	for y := range 16 {
 		ret[y] = make([]tui.Component, 16)
 		for x := range 16 {
-			var attrs tcell.AttrMask
-			color := tcell.PaletteColor(nameNum)
+			var attrs term.AttrMask
+			color := term.PaletteColor(nameNum)
 			name := color.Name(true)
 			if dim {
-				attrs = tcell.AttrDim
+				attrs = term.AttrDim
 				name = fmt.Sprintf("D%s", name)
 			}
 			ret[y][x] = component.NewStringWithConfig(name,
@@ -153,16 +152,16 @@ func makeColorGrid(dim bool) tui.Component {
 	nextGrid := make([][]tui.Component, 0, nextGridOf)
 	var i, x int
 	y := -1
-	for name := range tcell.GetColorNames() {
+	for name := range term.GetColorNames() {
 		if i%nextGridOf == 0 {
 			y++
 			x = 0
 			nextGrid = append(nextGrid, make([]tui.Component, nextGridOf))
 		}
-		var attrs tcell.AttrMask
-		color := tcell.GetColor(name)
+		var attrs term.AttrMask
+		color := term.GetColor(name)
 		if dim {
-			attrs = tcell.AttrDim
+			attrs = term.AttrDim
 			name = fmt.Sprintf("D%s", name)
 		}
 		nextGrid[y][x] = component.NewStringWithConfig(name,

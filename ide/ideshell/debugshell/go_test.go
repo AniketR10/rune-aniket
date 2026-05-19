@@ -48,8 +48,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
-
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/ideshell"
@@ -144,8 +142,8 @@ func TestE2E_Launch(t *testing.T) {
 	stopLoc := h.findLocation(t, stoppedLocationID)
 	require.True(t, stopLoc.To.X > 1,
 		"expected stopped location to span the line, got To.X=%d", stopLoc.To.X)
-	assert.Equal(t, tcell.ColorBlack, stopLoc.Attr.Fg)
-	assert.Equal(t, tcell.ColorYellow, stopLoc.Attr.Bg)
+	assert.Equal(t, term.ColorBlack, stopLoc.Attr.Fg)
+	assert.Equal(t, term.ColorYellow, stopLoc.Attr.Bg)
 	assert.Contains(t, stopLoc.Message, "main.Sum",
 		"expected stack-trace message, got %q", stopLoc.Message)
 
@@ -155,7 +153,7 @@ func TestE2E_Launch(t *testing.T) {
 	// and a range covering the variable name (To.X > From.X).
 	h.waitLocation(t, variablesLocationID, 5*time.Second)
 	varLoc := h.findLocation(t, variablesLocationID)
-	assert.Equal(t, tcell.ColorGray, varLoc.Attr.Bg)
+	assert.Equal(t, term.ColorGray, varLoc.Attr.Bg)
 	assert.True(t, varLoc.To.X > varLoc.From.X,
 		"expected variable name range, got %v..%v", varLoc.From, varLoc.To)
 	assert.NotEmpty(t, varLoc.Message,
@@ -422,14 +420,14 @@ func TestE2E_Attach(t *testing.T) {
 	require.True(t, stopLoc.To.X > 1,
 		"expected stopped location to span the line, got To.X=%d",
 		stopLoc.To.X)
-	assert.Equal(t, tcell.ColorBlack, stopLoc.Attr.Fg)
-	assert.Equal(t, tcell.ColorYellow, stopLoc.Attr.Bg)
+	assert.Equal(t, term.ColorBlack, stopLoc.Attr.Fg)
+	assert.Equal(t, term.ColorYellow, stopLoc.Attr.Bg)
 	assert.Contains(t, stopLoc.Message, "main.Sum",
 		"expected stack-trace message, got %q", stopLoc.Message)
 
 	h.waitLocation(t, variablesLocationID, 5*time.Second)
 	varLoc := h.findLocation(t, variablesLocationID)
-	assert.Equal(t, tcell.ColorGray, varLoc.Attr.Bg)
+	assert.Equal(t, term.ColorGray, varLoc.Attr.Bg)
 	assert.True(t, varLoc.To.X > varLoc.From.X)
 	assert.NotEmpty(t, varLoc.Message)
 	assert.Equal(t, textapi.LocationPriorityCritical,

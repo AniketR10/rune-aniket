@@ -31,7 +31,6 @@ import (
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/benchdraw"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/term/gui/drawtext"
 	"unstable.build/go-tui/term/gui/font"
 )
@@ -90,8 +89,8 @@ func benchmarkRendererContent(
 		cells[i] = make([]term.Cell, width)
 		for j := 0; j < height; j++ {
 			cells[i][j].Ch = []rune(strconv.Itoa(i))[0]
-			cells[i][j].Fg = tcell.NewColor(255, 0, 255)
-			cells[i][j].Bg = tcell.NewColor(0, 0, 255)
+			cells[i][j].Fg = term.NewColor(255, 0, 255)
+			cells[i][j].Bg = term.NewColor(0, 0, 255)
 		}
 	}
 	var (

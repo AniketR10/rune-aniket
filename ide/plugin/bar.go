@@ -32,7 +32,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/template"
 )
 
@@ -67,12 +66,12 @@ const (
 // by WithBar.
 type BarConfig struct {
 	Layout                []BarComponent
-	BackgroundColor       tcell.Color
+	BackgroundColor       term.Color
 	StatusAnimationFrames []string
 	StatusErrorIcon       string
-	StatusErrorColor      tcell.Color
+	StatusErrorColor      term.Color
 	StatusSuccessIcon     string
-	StatusSuccessColor    tcell.Color
+	StatusSuccessColor    term.Color
 	AlignBottom           bool
 }
 
@@ -99,9 +98,9 @@ func DefaultBarConfig() BarConfig {
 			},
 		},
 		StatusErrorIcon:       "▀",
-		StatusErrorColor:      tcell.ColorRed,
+		StatusErrorColor:      term.ColorRed,
 		StatusSuccessIcon:     "▀",
-		StatusSuccessColor:    tcell.ColorGreen,
+		StatusSuccessColor:    term.ColorGreen,
 		StatusAnimationFrames: defaultAnimationFrames,
 	}
 }
@@ -258,7 +257,7 @@ func (e *pluginHandlerBar) rebuildStatus() {
 	doneErr := e.doneErr
 	if done {
 		var icon string
-		var color tcell.Color
+		var color term.Color
 		if doneErr != nil {
 			icon = e.StatusErrorIcon
 			color = e.StatusErrorColor
@@ -402,7 +401,7 @@ func (b *pluginHandlerBar) resize() {
 }
 
 func (e *pluginHandlerBar) Draw(w term.Writer) {
-	if e.BackgroundColor != tcell.ColorDefault && e.barCenter.Height() != 0 {
+	if e.BackgroundColor != term.ColorDefault && e.barCenter.Height() != 0 {
 		attrs := term.Attributes{Bg: e.BackgroundColor}
 		for x := range e.width {
 			w.UnionAttributes(term.Coordinates{Y: e.height - 1, X: x}, attrs)

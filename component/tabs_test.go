@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestTabsDraw(t *testing.T) {
@@ -333,7 +332,7 @@ func TestTabsDrawFocusHighlightCharAttr(t *testing.T) {
 	l.SetBorder(false)
 	l.Resize(20, 2)
 
-	focusFrameAttr := term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold}
+	focusFrameAttr := term.Attributes{Fg: term.ColorRed, Attrs: term.AttrBold}
 	l.SetAttr(term.Attributes{}, term.Attributes{},
 		term.Attributes{}, term.Attributes{},
 		focusFrameAttr, term.Attributes{}, term.Attributes{})
@@ -377,7 +376,7 @@ func TestTabsDrawHighlightDisabled(t *testing.T) {
 	l.Resize(20, 2)
 	l.SetAttr(term.Attributes{}, term.Attributes{},
 		term.Attributes{}, term.Attributes{},
-		term.Attributes{Fg: tcell.ColorRed}, term.Attributes{}, term.Attributes{})
+		term.Attributes{Fg: term.ColorRed}, term.Attributes{}, term.Attributes{})
 	l.SetFocusFrameChar(0)
 	l.Add('A', "alpha")
 	l.Add('B', "beta")
@@ -405,7 +404,7 @@ func TestTabsDrawBottomHighlight(t *testing.T) {
 	l.SetBottomHighlight(true)
 	l.Resize(20, 2)
 
-	focusFrameAttr := term.Attributes{Fg: tcell.ColorRed}
+	focusFrameAttr := term.Attributes{Fg: term.ColorRed}
 	l.SetAttr(term.Attributes{}, term.Attributes{},
 		term.Attributes{}, term.Attributes{},
 		focusFrameAttr, term.Attributes{}, term.Attributes{})
@@ -445,9 +444,9 @@ func TestTabsDrawIconAttr(t *testing.T) {
 	l.SetBorder(false)
 	l.Resize(30, 1)
 
-	focusAttr := term.Attributes{Fg: tcell.ColorWhite}
-	nonFocusAttr := term.Attributes{Fg: tcell.ColorBlue}
-	iconAttr := term.Attributes{Bg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+	focusAttr := term.Attributes{Fg: term.ColorWhite}
+	nonFocusAttr := term.Attributes{Fg: term.ColorBlue}
+	iconAttr := term.Attributes{Bg: term.ColorGreen, Attrs: term.AttrBold}
 	l.SetAttr(focusAttr, nonFocusAttr, term.Attributes{}, term.Attributes{},
 		term.Attributes{}, term.Attributes{}, term.Attributes{})
 
@@ -481,10 +480,10 @@ func TestTabsSetAttrIconAttrs(t *testing.T) {
 	l.SetBorder(false)
 	l.Resize(30, 1)
 
-	focusAttr := term.Attributes{Fg: tcell.ColorWhite}
-	nonFocusAttr := term.Attributes{Fg: tcell.ColorBlue}
-	focusIconAttr := term.Attributes{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}
-	nonFocusIconAttr := term.Attributes{Fg: tcell.ColorRed}
+	focusAttr := term.Attributes{Fg: term.ColorWhite}
+	nonFocusAttr := term.Attributes{Fg: term.ColorBlue}
+	focusIconAttr := term.Attributes{Fg: term.ColorGreen, Attrs: term.AttrBold}
+	nonFocusIconAttr := term.Attributes{Fg: term.ColorRed}
 	l.SetAttr(focusAttr, nonFocusAttr, focusIconAttr, nonFocusIconAttr,
 		term.Attributes{}, term.Attributes{}, term.Attributes{})
 

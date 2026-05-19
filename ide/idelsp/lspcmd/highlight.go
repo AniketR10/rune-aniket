@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const highlightLocationID = "lsp-highlight"
@@ -61,8 +60,8 @@ type HighlightConfig struct {
 func DefaultHighlightConfig() HighlightConfig {
 	return HighlightConfig{
 		Delay:     250 * time.Millisecond,
-		ReadAttr:  term.Attributes{Attrs: tcell.AttrUnderline},
-		WriteAttr: term.Attributes{Bg: tcell.ColorDarkOliveGreen},
+		ReadAttr:  term.Attributes{Attrs: term.AttrUnderline},
+		WriteAttr: term.Attributes{Bg: term.GetColor("darkolivegreen")},
 	}
 }
 

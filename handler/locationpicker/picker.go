@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/debug"
 )
 
@@ -57,7 +56,7 @@ type Config struct {
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		ListFocusAttr: term.Attributes{Fg: tcell.ColorPurple, Attrs: tcell.AttrBold},
+		ListFocusAttr: term.Attributes{Fg: term.ColorPurple, Attrs: term.AttrBold},
 	}
 }
 
@@ -268,7 +267,7 @@ func (l *Picker) drawPreview(w term.Writer) {
 			if isTarget {
 				cell.Attributes = term.AttributesUnion(cell.Attributes, l.previewAttr)
 				if x >= startChar && x < endChar {
-					cell.Attrs |= tcell.AttrReverse
+					cell.Attrs |= term.AttrReverse
 				}
 			}
 			w.SetCell(term.Coordinates{X: x, Y: row}, cell)
@@ -278,7 +277,7 @@ func (l *Picker) drawPreview(w term.Writer) {
 
 func (l *Picker) drawSeparator(w term.Writer) {
 	ch := component.FrameCharSetDefault().HorizontalTop
-	attr := term.Attributes{Fg: tcell.ColorGray}
+	attr := term.Attributes{Fg: term.ColorGray}
 	y := l.previewH
 	for x := range l.innerW {
 		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch, Width: 1, Attributes: attr})

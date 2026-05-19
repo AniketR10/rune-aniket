@@ -38,7 +38,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func testSignatureHelp(sigs []semanticapi.SignatureInformation, activeSig, activeParam uint32) *semanticapi.SignatureHelp {
@@ -172,16 +171,16 @@ func TestSignatureHelpFloatingDraw(t *testing.T) {
 	cells := sw.Cells()
 	for x := 11; x < 19; x++ {
 		cell := cells[x]
-		assert.NotZero(t, cell.Attrs&tcell.AttrBold, "cell %d should be bold", x)
-		assert.NotZero(t, cell.Attrs&tcell.AttrUnderline, "cell %d should be underline", x)
+		assert.NotZero(t, cell.Attrs&term.AttrBold, "cell %d should be bold", x)
+		assert.NotZero(t, cell.Attrs&term.AttrUnderline, "cell %d should be underline", x)
 	}
 	// Characters outside the active param range should NOT have bold.
-	assert.Zero(t, cells[0].Attrs&tcell.AttrBold, "cell 0 should not be bold")
+	assert.Zero(t, cells[0].Attrs&term.AttrBold, "cell 0 should not be bold")
 
 	// Second line should have the param documentation in gray.
 	require.True(t, h >= 2, "should have 2 lines for param doc")
 	docCell := cells[w] // first cell of second row
-	assert.Equal(t, tcell.ColorGray, docCell.Fg, "param doc should be gray")
+	assert.Equal(t, term.ColorGray, docCell.Fg, "param doc should be gray")
 }
 
 func TestSignatureHelpFloatingOverloadCycling(t *testing.T) {

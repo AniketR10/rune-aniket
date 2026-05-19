@@ -26,7 +26,6 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const blockquoteIndent = 2
@@ -63,7 +62,7 @@ func (b *blockquoteBlock) Resize(width, _ int) {
 
 func (b *blockquoteBlock) Draw(w term.Writer) {
 	contentHeight := b.heightAtIndent(b.w, 0)
-	if b.cfg.Blockquote.Bg != tcell.ColorDefault && contentHeight > 1 {
+	if b.cfg.Blockquote.Bg != term.ColorDefault && contentHeight > 1 {
 		bgAttr := term.Attributes{Bg: b.cfg.Blockquote.Bg}
 		for y := range contentHeight - 1 {
 			for x := range b.w {

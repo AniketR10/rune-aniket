@@ -53,7 +53,7 @@ func WithMarkdownConfig(cfg markdown.Config) Option {
 }
 
 // WithSelectionAttrs sets the attributes used to highlight selected
-// text. Defaults to [tcell.AttrReverse].
+// text. Defaults to [term.AttrReverse].
 func WithSelectionAttrs(attrs term.Attributes) Option {
 	return func(h *Handler) {
 		h.selectionAttrs = attrs

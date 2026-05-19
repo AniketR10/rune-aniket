@@ -41,7 +41,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestPickerRender(t *testing.T) {
@@ -139,8 +138,8 @@ func TestPickerDraw(t *testing.T) {
 	rendered := sw.Cells()
 	leftPad := spanHPad / 2
 	cell := rendered[1*w+leftPad]
-	assert.Equal(t, tcell.ColorYellow, cell.Bg, "target line should have preview bg")
-	assert.NotEqual(t, tcell.ColorYellow, rendered[leftPad].Bg, "non-target line should not have preview bg")
+	assert.Equal(t, term.ColorYellow, cell.Bg, "target line should have preview bg")
+	assert.NotEqual(t, term.ColorYellow, rendered[leftPad].Bg, "non-target line should not have preview bg")
 }
 
 func TestPickerDrawPreviewReverseRange(t *testing.T) {
@@ -161,10 +160,10 @@ func TestPickerDrawPreviewReverseRange(t *testing.T) {
 
 	rendered := sw.Cells()
 	leftPad := spanHPad / 2
-	assert.Zero(t, rendered[leftPad+1].Attrs&tcell.AttrReverse, "char before range should not have AttrReverse")
-	assert.NotZero(t, rendered[leftPad+2].Attrs&tcell.AttrReverse, "char in range should have AttrReverse")
-	assert.NotZero(t, rendered[leftPad+4].Attrs&tcell.AttrReverse, "char in range should have AttrReverse")
-	assert.Zero(t, rendered[leftPad+5].Attrs&tcell.AttrReverse, "char after range should not have AttrReverse")
+	assert.Zero(t, rendered[leftPad+1].Attrs&term.AttrReverse, "char before range should not have AttrReverse")
+	assert.NotZero(t, rendered[leftPad+2].Attrs&term.AttrReverse, "char in range should have AttrReverse")
+	assert.NotZero(t, rendered[leftPad+4].Attrs&term.AttrReverse, "char in range should have AttrReverse")
+	assert.Zero(t, rendered[leftPad+5].Attrs&term.AttrReverse, "char after range should not have AttrReverse")
 }
 
 func TestPickerDrawPreviewClampsTargetLine(t *testing.T) {
@@ -180,7 +179,7 @@ func TestPickerDrawPreviewClampsTargetLine(t *testing.T) {
 	rendered := sw.Cells()
 	leftPad := spanHPad / 2
 	cell := rendered[1*w+leftPad]
-	assert.Equal(t, tcell.ColorYellow, cell.Bg, "clamped target line should have preview bg")
+	assert.Equal(t, term.ColorYellow, cell.Bg, "clamped target line should have preview bg")
 }
 
 func TestPickerDimensions(t *testing.T) {
@@ -252,7 +251,7 @@ func TestPickerHighlightApplied(t *testing.T) {
 	p := testPicker(entries, fc)
 
 	for x := 0; x < 4 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: tcell.ColorGreen}
+		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorGreen}
 	}
 
 	w, ht := p.Dimensions()
@@ -260,8 +259,8 @@ func TestPickerHighlightApplied(t *testing.T) {
 
 	rendered := sw.Cells()
 	leftPad := spanHPad / 2
-	assert.Equal(t, tcell.ColorGreen, rendered[leftPad+0].Fg, "highlighted char should have green fg")
-	assert.NotEqual(t, tcell.ColorGreen, rendered[leftPad+5].Fg, "non-highlighted char should not have green fg")
+	assert.Equal(t, term.ColorGreen, rendered[leftPad+0].Fg, "highlighted char should have green fg")
+	assert.NotEqual(t, term.ColorGreen, rendered[leftPad+5].Fg, "non-highlighted char should not have green fg")
 }
 
 func TestPickerHighlightUnionWithTargetLine(t *testing.T) {
@@ -279,7 +278,7 @@ func TestPickerHighlightUnionWithTargetLine(t *testing.T) {
 	p := testPicker(entries, fc)
 
 	for x := 0; x < 4 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: tcell.ColorRed}
+		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorRed}
 	}
 
 	w, ht := p.Dimensions()
@@ -288,14 +287,14 @@ func TestPickerHighlightUnionWithTargetLine(t *testing.T) {
 	rendered := sw.Cells()
 	leftPad := spanHPad / 2
 	cell0 := rendered[leftPad+0]
-	assert.Equal(t, tcell.ColorYellow, cell0.Bg, "target line cell should have preview bg")
-	assert.Equal(t, tcell.ColorRed, cell0.Fg, "target line cell should keep syntax fg")
-	assert.Zero(t, cell0.Attrs&tcell.AttrReverse, "cell outside reference range should not have reverse")
+	assert.Equal(t, term.ColorYellow, cell0.Bg, "target line cell should have preview bg")
+	assert.Equal(t, term.ColorRed, cell0.Fg, "target line cell should keep syntax fg")
+	assert.Zero(t, cell0.Attrs&term.AttrReverse, "cell outside reference range should not have reverse")
 
 	cell2 := rendered[leftPad+2]
-	assert.Equal(t, tcell.ColorYellow, cell2.Bg, "ref range cell should have preview bg")
-	assert.Equal(t, tcell.ColorRed, cell2.Fg, "ref range cell should keep syntax fg")
-	assert.NotZero(t, cell2.Attrs&tcell.AttrReverse, "ref range cell should have reverse")
+	assert.Equal(t, term.ColorYellow, cell2.Bg, "ref range cell should have preview bg")
+	assert.Equal(t, term.ColorRed, cell2.Fg, "ref range cell should keep syntax fg")
+	assert.NotZero(t, cell2.Attrs&term.AttrReverse, "ref range cell should have reverse")
 }
 
 func TestPickerHighlightMultipleRangesPerLine(t *testing.T) {
@@ -307,10 +306,10 @@ func TestPickerHighlightMultipleRangesPerLine(t *testing.T) {
 	p := testPicker(entries, fc)
 
 	for x := 0; x < 4 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: tcell.ColorBlue}
+		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorBlue}
 	}
 	for x := 5; x < 9 && x < len(p.previewCells[0]); x++ {
-		p.previewCells[0][x].Attributes = term.Attributes{Fg: tcell.ColorRed}
+		p.previewCells[0][x].Attributes = term.Attributes{Fg: term.ColorRed}
 	}
 
 	w, ht := p.Dimensions()
@@ -318,8 +317,8 @@ func TestPickerHighlightMultipleRangesPerLine(t *testing.T) {
 
 	rendered := sw.Cells()
 	leftPad := spanHPad / 2
-	assert.Equal(t, tcell.ColorBlue, rendered[leftPad+0].Fg, "first range should be blue")
-	assert.Equal(t, tcell.ColorRed, rendered[leftPad+5].Fg, "second range should be red")
+	assert.Equal(t, term.ColorBlue, rendered[leftPad+0].Fg, "first range should be blue")
+	assert.Equal(t, term.ColorRed, rendered[leftPad+5].Fg, "second range should be red")
 }
 
 func TestPickerNilParserNoHighlights(t *testing.T) {
@@ -351,12 +350,12 @@ func TestPickerLoadHighlights(t *testing.T) {
 				{
 					From: term.Coordinates{X: 0, Y: 0},
 					To:   term.Coordinates{X: 5, Y: 0},
-					Attr: term.Attributes{Fg: tcell.ColorGreen},
+					Attr: term.Attributes{Fg: term.ColorGreen},
 				},
 				{
 					From: term.Coordinates{X: 0, Y: 1},
 					To:   term.Coordinates{X: 5, Y: 1},
-					Attr: term.Attributes{Fg: tcell.ColorBlue},
+					Attr: term.Attributes{Fg: term.ColorBlue},
 				},
 			}), nil
 		},
@@ -369,13 +368,13 @@ func TestPickerLoadHighlights(t *testing.T) {
 	require.NotNil(t, p.previewCells)
 	require.Len(t, p.previewCells, 3)
 	for x := 0; x < 5; x++ {
-		assert.Equal(t, tcell.ColorGreen, p.previewCells[0][x].Fg, "line 0 char %d", x)
+		assert.Equal(t, term.ColorGreen, p.previewCells[0][x].Fg, "line 0 char %d", x)
 	}
 	for x := 0; x < 5; x++ {
-		assert.Equal(t, tcell.ColorBlue, p.previewCells[1][x].Fg, "line 1 char %d", x)
+		assert.Equal(t, term.ColorBlue, p.previewCells[1][x].Fg, "line 1 char %d", x)
 	}
 	for _, c := range p.previewCells[2] {
-		assert.Equal(t, tcell.ColorDefault, c.Fg, "line 2 should have default fg")
+		assert.Equal(t, term.ColorDefault, c.Fg, "line 2 should have default fg")
 	}
 }
 
@@ -417,7 +416,7 @@ func TestPickerLoadHighlightsOutOfBoundsIgnored(t *testing.T) {
 				{
 					From: term.Coordinates{X: 0, Y: 99},
 					To:   term.Coordinates{X: 5, Y: 99},
-					Attr: term.Attributes{Fg: tcell.ColorGreen},
+					Attr: term.Attributes{Fg: term.ColorGreen},
 				},
 			}), nil
 		},
@@ -532,7 +531,7 @@ func parseURI(t *testing.T, raw string) workspaceapi.URI {
 }
 
 func testPicker(entries []Entry, fc fileContent) *Picker {
-	cfg := Config{PreviewAttr: term.Attributes{Bg: tcell.ColorYellow}}
+	cfg := Config{PreviewAttr: term.Attributes{Bg: term.ColorYellow}}
 	return New(entries, stubWindowManager{}, testFS(fc), syncTick, nil, cfg, nil)
 }
 

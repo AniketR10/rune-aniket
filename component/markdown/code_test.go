@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // mockParser implements syntaxapi.Parser for testing. Only Highlight is used.
@@ -86,11 +85,11 @@ func captureSchedule(cfg *Config) func() {
 }
 
 func TestCodeBlockHighlights(t *testing.T) {
-	green := term.Attributes{Fg: tcell.ColorGreen}
-	blue := term.Attributes{Fg: tcell.ColorBlue}
+	green := term.Attributes{Fg: term.ColorGreen}
+	blue := term.Attributes{Fg: term.ColorBlue}
 
 	cfg := DefaultConfig()
-	cfg.CodeBlock = term.Attributes{Fg: tcell.ColorSilver}
+	cfg.CodeBlock = term.Attributes{Fg: term.ColorSilver}
 	cfg.Parser = &mockParser{
 		highlights: []textapi.Location{
 			{
@@ -122,11 +121,11 @@ func TestCodeBlockHighlights(t *testing.T) {
 }
 
 func TestCodeBlockHighlightsPreserveBg(t *testing.T) {
-	green := term.Attributes{Fg: tcell.ColorGreen}
-	bgColor := tcell.ColorGray
+	green := term.Attributes{Fg: term.ColorGreen}
+	bgColor := term.ColorGray
 
 	cfg := DefaultConfig()
-	cfg.CodeBlock = term.Attributes{Fg: tcell.ColorSilver, Bg: bgColor}
+	cfg.CodeBlock = term.Attributes{Fg: term.ColorSilver, Bg: bgColor}
 	cfg.Parser = &mockParser{
 		highlights: []textapi.Location{
 			{
@@ -142,19 +141,19 @@ func TestCodeBlockHighlightsPreserveBg(t *testing.T) {
 	drain()
 
 	require.Len(t, cb.cells, 1)
-	assert.Equal(t, tcell.ColorGreen, cb.cells[0][0].Fg)
+	assert.Equal(t, term.ColorGreen, cb.cells[0][0].Fg)
 	assert.Equal(t, bgColor, cb.cells[0][0].Bg)
 }
 
 func TestCodeBlockDrawWithHighlights(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.CodeBlock = term.Attributes{Fg: tcell.ColorSilver}
+	cfg.CodeBlock = term.Attributes{Fg: term.ColorSilver}
 	cfg.Parser = &mockParser{
 		highlights: []textapi.Location{
 			{
 				From: term.Coordinates{X: 0, Y: 0},
 				To:   term.Coordinates{X: 5, Y: 0},
-				Attr: term.Attributes{Fg: tcell.ColorRed},
+				Attr: term.Attributes{Fg: term.ColorRed},
 			},
 		},
 	}
@@ -563,10 +562,10 @@ func TestCodeBlockDimensionsTableDriven(t *testing.T) {
 }
 
 func TestCodeBlockHighlightsAsync(t *testing.T) {
-	green := term.Attributes{Fg: tcell.ColorGreen}
+	green := term.Attributes{Fg: term.ColorGreen}
 
 	cfg := DefaultConfig()
-	cfg.CodeBlock = term.Attributes{Fg: tcell.ColorSilver}
+	cfg.CodeBlock = term.Attributes{Fg: term.ColorSilver}
 	cfg.Parser = &mockParser{
 		highlights: []textapi.Location{
 			{
@@ -651,14 +650,14 @@ func TestCodeBlockCloseCancelsIterator(t *testing.T) {
 		first: textapi.Location{
 			From: term.Coordinates{X: 0, Y: 0},
 			To:   term.Coordinates{X: 2, Y: 0},
-			Attr: term.Attributes{Fg: tcell.ColorGreen},
+			Attr: term.Attributes{Fg: term.ColorGreen},
 		},
 		done:     make(chan struct{}),
 		closedCh: make(chan struct{}),
 	}
 
 	cfg := DefaultConfig()
-	cfg.CodeBlock = term.Attributes{Fg: tcell.ColorSilver}
+	cfg.CodeBlock = term.Attributes{Fg: term.ColorSilver}
 	cfg.Parser = &blockingParser{iter: it}
 
 	// Use a ScheduleNextTick that never runs the callback,

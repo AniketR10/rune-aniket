@@ -33,8 +33,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
+
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type osFS struct{}
@@ -293,7 +294,7 @@ func TestEditor_GetColor_reads_snapshot(t *testing.T) {
 
 	c, err := cfg.GetColor("fg").Resolve(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, tcell.ColorRed, c)
+	assert.Equal(t, term.ColorRed, c)
 
 	_, err = cfg.GetColor("missing").Resolve(ctx)
 	assert.ErrorIs(t, err, configedit.ErrNotFound)
@@ -309,7 +310,7 @@ func TestEditor_GetAttribute_reads_snapshot(t *testing.T) {
 
 	a, err := cfg.GetAttribute("flag").Resolve(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, tcell.AttrBold, a)
+	assert.Equal(t, term.AttrBold, a)
 
 	_, err = cfg.GetAttribute("missing").Resolve(ctx)
 	assert.ErrorIs(t, err, configedit.ErrNotFound)

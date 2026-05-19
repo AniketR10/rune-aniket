@@ -29,7 +29,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
 )
@@ -42,30 +41,30 @@ func initShader(defaultAttr term.Attributes, fc component.FrameCharSet) shader.S
 	params := glslshader.BurningPresetGentle(logo, false, fc)
 	params.Intensity = []float64{0.2, 0.9, 1.1, 1.1, 0.9, 0.0}
 	params.Colors = glslshader.BurningColors{
-		HeatColorGradientOverride: []tcell.Color{
-			tcell.ColorMaroon,
-			tcell.ColorRed,
-			tcell.ColorYellow,
+		HeatColorGradientOverride: []term.Color{
+			term.ColorMaroon,
+			term.ColorRed,
+			term.ColorYellow,
 		},
-		RipplesGradientStart: []tcell.Color{
-			tcell.ColorMaroon,
-			tcell.ColorRed,
-			tcell.ColorOlive,
-			tcell.ColorYellow,
-			tcell.ColorYellow,
-			tcell.ColorOlive,
-			tcell.ColorRed,
-			tcell.ColorMaroon,
+		RipplesGradientStart: []term.Color{
+			term.ColorMaroon,
+			term.ColorRed,
+			term.ColorOlive,
+			term.ColorYellow,
+			term.ColorYellow,
+			term.ColorOlive,
+			term.ColorRed,
+			term.ColorMaroon,
 		},
-		RipplesGradientEnd: []tcell.Color{
-			tcell.ColorMaroon,
-			tcell.ColorRed,
-			tcell.ColorOlive,
-			tcell.ColorYellow,
-			tcell.ColorYellow,
-			tcell.ColorOlive,
-			tcell.ColorRed,
-			tcell.ColorMaroon,
+		RipplesGradientEnd: []term.Color{
+			term.ColorMaroon,
+			term.ColorRed,
+			term.ColorOlive,
+			term.ColorYellow,
+			term.ColorYellow,
+			term.ColorOlive,
+			term.ColorRed,
+			term.ColorMaroon,
 		},
 	}
 	return glslshader.Burning(params, defaultAttr, initShaderDuration, initShaderFPS)

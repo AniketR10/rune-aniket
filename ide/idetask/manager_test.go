@@ -47,7 +47,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/plugin"
 )
@@ -145,12 +144,12 @@ func TestManager(t *testing.T) {
 			// newly created floating window may transiently have focus attrs;
 			// task minimized frames must still use this configured baseline.
 			configured := term.Attributes{
-				Fg:    tcell.ColorSilver,
-				Bg:    tcell.ColorNavy,
-				Attrs: tcell.AttrBold,
+				Fg:    term.ColorSilver,
+				Bg:    term.ColorNavy,
+				Attrs: term.AttrBold,
 			}
 			m.SetFrameAttr(configured)
-			wm.nextFrameAttr = term.Attributes{Fg: tcell.ColorRed}
+			wm.nextFrameAttr = term.Attributes{Fg: term.ColorRed}
 
 			require.NoError(t, m.RunTask(Task{Name: "build", Cmd: "echo"}))
 			ws := wm.Created()
@@ -159,7 +158,7 @@ func TestManager(t *testing.T) {
 			got := ws[0].FrameAttr()
 			assert.Equal(t, configured.Fg, got.Fg,
 				"configured frame Fg must be preserved")
-			assert.Equal(t, tcell.ColorGray, got.Bg,
+			assert.Equal(t, term.ColorGray, got.Bg,
 				"running status should paint frame Bg")
 			assert.Equal(t, configured.Attrs, got.Attrs,
 				"configured frame Attrs must be preserved")

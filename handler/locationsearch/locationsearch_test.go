@@ -48,7 +48,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/ide/vctrl/testgit"
@@ -371,7 +370,7 @@ func TestHandlerHighlightApplied(t *testing.T) {
 				{
 					From: term.Coordinates{X: 0, Y: 0},
 					To:   term.Coordinates{X: 4, Y: 0},
-					Attr: term.Attributes{Fg: tcell.ColorGreen},
+					Attr: term.Attributes{Fg: term.ColorGreen},
 				},
 			}), nil
 		},
@@ -394,7 +393,7 @@ func TestHandlerHighlightApplied(t *testing.T) {
 	h.loadHighlights(uri, "alpha\nbeta", baseCells)
 
 	for x := range 4 {
-		assert.Equal(t, tcell.ColorGreen, h.previewCells[0][x].Fg, "char %d should be green", x)
+		assert.Equal(t, term.ColorGreen, h.previewCells[0][x].Fg, "char %d should be green", x)
 	}
 }
 

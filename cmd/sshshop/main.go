@@ -22,12 +22,6 @@
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 
-// Command sshshop is a prototype SSH-accessible TUI storefront.
-//
-// It terminates raw TCP/22 (or a configured port) directly, gives each
-// SSH session its own tcell.Screen wrapped around the session byte
-// stream, and drives a rune-go-sdk tui.Handler against that screen.
-// No real OS users, no forked shell, no PTY attached to a real process.
 package main
 
 import (

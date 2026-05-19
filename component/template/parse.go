@@ -30,7 +30,6 @@ import (
 	"text/template/parse"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // AllowedFuncs returns a list of allowed functions to pass to parse.Parse
@@ -114,19 +113,19 @@ func ParseAction(n *parse.ActionNode) (string, term.Attributes, error) {
 				return "", term.Attributes{}, errors.New("fg requires a color argument")
 			}
 		case "bold":
-			attrs.Attrs |= tcell.AttrBold
+			attrs.Attrs |= term.AttrBold
 		case "underline":
-			attrs.Attrs |= tcell.AttrUnderline
+			attrs.Attrs |= term.AttrUnderline
 		case "reverse":
-			attrs.Attrs |= tcell.AttrReverse
+			attrs.Attrs |= term.AttrReverse
 		case "blink":
-			attrs.Attrs |= tcell.AttrBlink
+			attrs.Attrs |= term.AttrBlink
 		case "dim":
-			attrs.Attrs |= tcell.AttrDim
+			attrs.Attrs |= term.AttrDim
 		case "italic":
-			attrs.Attrs |= tcell.AttrItalic
+			attrs.Attrs |= term.AttrItalic
 		case "strikethrough":
-			attrs.Attrs |= tcell.AttrStrikeThrough
+			attrs.Attrs |= term.AttrStrikeThrough
 		default:
 			return "", term.Attributes{}, fmt.Errorf("unsupported pipeline command %q", ident.Ident)
 		}
@@ -134,11 +133,11 @@ func ParseAction(n *parse.ActionNode) (string, term.Attributes, error) {
 	return fieldName, attrs, nil
 }
 
-func getColor(name string) (tcell.Color, error) {
+func getColor(name string) (term.Color, error) {
 	if name == "default" {
-		return tcell.ColorDefault, nil
+		return term.ColorDefault, nil
 	}
-	if c := tcell.GetColor(name); c != tcell.ColorDefault {
+	if c := term.GetColor(name); c != term.ColorDefault {
 		return c, nil
 	}
 	if len(name) == 7 && name[0] == '#' {
@@ -146,7 +145,7 @@ func getColor(name string) (tcell.Color, error) {
 		if e != nil {
 			return 0, errInvalidColor
 		}
-		return tcell.NewHexColor(int32(v)), nil
+		return term.NewHexColor(int32(v)), nil
 	}
 	return 0, errInvalidColor
 }

@@ -25,7 +25,6 @@ package shader_test
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func makeCharCells(cols, rows int) [][]term.Cell {
@@ -36,7 +35,7 @@ func makeCharCells(cols, rows int) [][]term.Cell {
 			out[y][x] = term.Cell{
 				Ch:         'A',
 				Width:      1,
-				Attributes: term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack},
+				Attributes: term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack},
 			}
 		}
 	}
@@ -51,7 +50,7 @@ func makeBlankCells(cols, rows int) [][]term.Cell {
 			out[y][x] = term.Cell{
 				Ch:         ' ',
 				Width:      1,
-				Attributes: term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack},
+				Attributes: term.Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack},
 			}
 		}
 	}

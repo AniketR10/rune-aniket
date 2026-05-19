@@ -28,7 +28,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // Config defines the styling options for markdown rendering.
@@ -108,27 +107,27 @@ func DefaultTableCharSet() TableCharSet {
 
 // DefaultConfig returns a Config with sensible defaults for terminal rendering.
 func DefaultConfig() Config {
-	magenta := term.Attributes{Fg: tcell.ColorFuchsia}
-	magentaBold := term.Attributes{Fg: tcell.ColorFuchsia, Attrs: tcell.AttrBold}
-	cyan := term.Attributes{Fg: tcell.ColorTeal}
-	cyanUnderline := term.Attributes{Fg: tcell.ColorTeal, Attrs: tcell.AttrUnderline}
-	codeblock := term.Attributes{Bg: tcell.ColorGray}
-	gray := term.Attributes{Fg: tcell.ColorGray}
-	def := term.Attributes{Fg: tcell.ColorDefault}
-	defBold := term.Attributes{Fg: tcell.ColorDefault, Attrs: tcell.AttrBold}
-	defItalic := term.Attributes{Fg: tcell.ColorDefault, Attrs: tcell.AttrItalic}
-	dimWhite := term.Attributes{Fg: tcell.ColorDimGray}
+	magenta := term.Attributes{Fg: term.ColorFuchsia}
+	magentaBold := term.Attributes{Fg: term.ColorFuchsia, Attrs: term.AttrBold}
+	cyan := term.Attributes{Fg: term.ColorTeal}
+	cyanUnderline := term.Attributes{Fg: term.ColorTeal, Attrs: term.AttrUnderline}
+	codeblock := term.Attributes{Bg: term.ColorGray}
+	gray := term.Attributes{Fg: term.ColorGray}
+	def := term.Attributes{Fg: term.ColorDefault}
+	defBold := term.Attributes{Fg: term.ColorDefault, Attrs: term.AttrBold}
+	defItalic := term.Attributes{Fg: term.ColorDefault, Attrs: term.AttrItalic}
+	dimWhite := term.Attributes{Fg: term.GetColor("dimgray")}
 	dimWhiteStrike := term.Attributes{
-		Fg: tcell.ColorDefault, Attrs: tcell.AttrStrikeThrough | tcell.AttrDim,
+		Fg: term.ColorDefault, Attrs: term.AttrStrikeThrough | term.AttrDim,
 	}
-	purpleBold := term.Attributes{Fg: tcell.ColorPurple, Attrs: tcell.AttrBold}
-	purple := term.Attributes{Fg: tcell.ColorPurple}
-	purpleDim := term.Attributes{Fg: tcell.ColorPurple, Attrs: tcell.AttrDim}
+	purpleBold := term.Attributes{Fg: term.ColorPurple, Attrs: term.AttrBold}
+	purple := term.Attributes{Fg: term.ColorPurple}
+	purpleDim := term.Attributes{Fg: term.ColorPurple, Attrs: term.AttrDim}
 
 	title := term.Attributes{
-		Fg:    tcell.ColorWhite,
-		Bg:    tcell.ColorPurple,
-		Attrs: tcell.AttrBold,
+		Fg:    term.ColorWhite,
+		Bg:    term.ColorPurple,
+		Attrs: term.AttrBold,
 	}
 	return Config{
 		H1:           title,
@@ -166,7 +165,7 @@ func DefaultConfig() Config {
 
 		ParagraphSpacing: 1,
 
-		SearchMatch:   term.Attributes{Attrs: tcell.AttrReverse},
-		SearchCurrent: term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack},
+		SearchMatch:   term.Attributes{Attrs: term.AttrReverse},
+		SearchCurrent: term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack},
 	}
 }

@@ -30,7 +30,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // C0 set of 7-bit control characters (from ANSI X3.4-1977).
@@ -640,21 +640,21 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 		case 29:
 			attrs = append(attrs, Attr{Type: CancelStrikeAttr})
 		case 30:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorBlack})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorBlack})
 		case 31:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorMaroon})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorMaroon})
 		case 32:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorGreen})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorGreen})
 		case 33:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorOlive})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorOlive})
 		case 34:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorNavy})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorNavy})
 		case 35:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorPurple})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorPurple})
 		case 36:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorTeal})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorTeal})
 		case 37:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorSilver})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorSilver})
 		case 38, 48, 58:
 			var attr AttrType
 			switch param[0] {
@@ -682,59 +682,59 @@ func (p *driver) attrsFromSgrParameters(params [][]uint16) []Attr {
 			}
 			p.logUnhandledAttribute(params)
 		case 39:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorDefault})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorDefault})
 		case 40:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorBlack})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorBlack})
 		case 41:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorMaroon})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorMaroon})
 		case 42:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorGreen})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorGreen})
 		case 43:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorOlive})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorOlive})
 		case 44:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorNavy})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorNavy})
 		case 45:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorPurple})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorPurple})
 		case 46:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorTeal})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorTeal})
 		case 47:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorSilver})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorSilver})
 		case 49:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorDefault})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorDefault})
 		case 59:
-			attrs = append(attrs, Attr{Type: UnderlineColorAttr, Color: tcell.ColorBlack})
+			attrs = append(attrs, Attr{Type: UnderlineColorAttr, Color: term.ColorBlack})
 		case 90:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorGray})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorGray})
 		case 91:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorRed})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorRed})
 		case 92:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorLime})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorLime})
 		case 93:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorYellow})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorYellow})
 		case 94:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorBlue})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorBlue})
 		case 95:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorFuchsia})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorFuchsia})
 		case 96:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorAqua})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorAqua})
 		case 97:
-			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: tcell.ColorWhite})
+			attrs = append(attrs, Attr{Type: ForegroundAttr, Color: term.ColorWhite})
 		case 100:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorGray})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorGray})
 		case 101:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorRed})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorRed})
 		case 102:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorLime})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorLime})
 		case 103:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorYellow})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorYellow})
 		case 104:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorBlue})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorBlue})
 		case 105:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorFuchsia})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorFuchsia})
 		case 106:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorAqua})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorAqua})
 		case 107:
-			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: tcell.ColorWhite})
+			attrs = append(attrs, Attr{Type: BackgroundAttr, Color: term.ColorWhite})
 		default:
 			p.logUnhandledAttribute(params)
 		}
@@ -788,7 +788,7 @@ func (p *driver) logUnhandledAttribute(params [][]uint16) {
 }
 
 // handleColonRGB handles colon separated RGB color escape sequence.
-func handleColonRGB(params []uint16) (int, tcell.Color, bool) {
+func handleColonRGB(params []uint16) (int, term.Color, bool) {
 	var rgbStart int
 	if len(params) > 4 {
 		rgbStart = 2
@@ -807,7 +807,7 @@ func handleColonRGB(params []uint16) (int, tcell.Color, bool) {
 }
 
 // parse a color
-func parseSGRColor(params []uint16) (int, tcell.Color, bool) {
+func parseSGRColor(params []uint16) (int, term.Color, bool) {
 	if len(params) == 0 {
 		return 0, 0, false
 	}
@@ -825,13 +825,13 @@ func parseSGRColor(params []uint16) (int, tcell.Color, bool) {
 				b = int32(params[i])
 			}
 		}
-		return 4, tcell.NewRGBColor(r, g, b), true
+		return 4, term.NewRGBColor(r, g, b), true
 	case 5:
 		// indexed color
 		if len(params) > 1 {
-			return 2, tcell.PaletteColor(int(params[1])), true
+			return 2, term.PaletteColor(int(params[1])), true
 		}
-		return 1, tcell.ColorBlack, true
+		return 1, term.ColorBlack, true
 	default:
 		return 0, 0, false
 	}

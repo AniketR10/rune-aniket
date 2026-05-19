@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/text"
 )
@@ -425,13 +424,13 @@ func extensionsStatusLabel(state extensionRunStateSnapshot) string {
 func extensionsStatusAttr(status string) term.Attributes {
 	switch status {
 	case "Running":
-		return term.Attributes{Fg: tcell.ColorGreen, Attrs: tcell.AttrBold}
+		return term.Attributes{Fg: term.ColorGreen, Attrs: term.AttrBold}
 	case "Stopped":
-		return term.Attributes{Fg: tcell.ColorYellow, Attrs: tcell.AttrBold}
+		return term.Attributes{Fg: term.ColorYellow, Attrs: term.AttrBold}
 	case "Errored":
-		return term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold}
+		return term.Attributes{Fg: term.ColorRed, Attrs: term.AttrBold}
 	default:
-		return term.Attributes{Fg: tcell.ColorDefault, Attrs: tcell.AttrBold}
+		return term.Attributes{Fg: term.ColorDefault, Attrs: term.AttrBold}
 	}
 }
 

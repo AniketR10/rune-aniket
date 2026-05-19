@@ -48,6 +48,6 @@
 // Use NewWithConfig to customize colors and styling:
 //
 //	cfg := markdown.DefaultConfig()
-//	cfg.H1 = term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold}
+//	cfg.H1 = term.Attributes{Fg: term.ColorRed, Attrs: term.AttrBold}
 //	md := markdown.NewWithConfig(content, cfg)
 package markdown

@@ -27,59 +27,60 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unstablebuild/tcell/v3"
+
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestInterpolateColor(t *testing.T) {
 	tsuite := []struct {
 		name                string
-		colA                tcell.Color
-		colB                tcell.Color
-		resolveColorDefault tcell.Color
+		colA                term.Color
+		colB                term.Color
+		resolveColorDefault term.Color
 		factor              float64
 		expectRGB           []int32
 	}{
 		{
 			name:      "begins with colA",
-			colA:      tcell.NewRGBColor(0, 10, 100),
-			colB:      tcell.NewRGBColor(10, 0, 200),
+			colA:      term.NewRGBColor(0, 10, 100),
+			colB:      term.NewRGBColor(10, 0, 200),
 			factor:    0.0,
 			expectRGB: []int32{0, 10, 100},
 		},
 		{
 			name:      "ends with colA",
-			colA:      tcell.NewRGBColor(0, 10, 100),
-			colB:      tcell.NewRGBColor(10, 0, 200),
+			colA:      term.NewRGBColor(0, 10, 100),
+			colB:      term.NewRGBColor(10, 0, 200),
 			factor:    1.0,
 			expectRGB: []int32{10, 0, 200},
 		},
 		{
 			name:      "linearly interpolates each channel",
-			colA:      tcell.NewRGBColor(0, 10, 100),
-			colB:      tcell.NewRGBColor(10, 0, 200),
+			colA:      term.NewRGBColor(0, 10, 100),
+			colB:      term.NewRGBColor(10, 0, 200),
 			factor:    0.2,
 			expectRGB: []int32{2, 8, 120},
 		},
 		{
 			name:      "negative factor",
-			colA:      tcell.NewRGBColor(0, 10, 100),
-			colB:      tcell.NewRGBColor(10, 0, 200),
+			colA:      term.NewRGBColor(0, 10, 100),
+			colB:      term.NewRGBColor(10, 0, 200),
 			factor:    -0.5,
 			expectRGB: []int32{251, 15, 50},
 		},
 		{
 			name:      "factor over 1",
-			colA:      tcell.NewRGBColor(0, 10, 100),
-			colB:      tcell.NewRGBColor(10, 0, 200),
+			colA:      term.NewRGBColor(0, 10, 100),
+			colB:      term.NewRGBColor(10, 0, 200),
 			factor:    1.5,
 			expectRGB: []int32{15, 251, 250},
 		},
 		{
 			name:                "interpolating default color",
-			colA:                tcell.ColorDefault,
-			colB:                tcell.NewRGBColor(0, 0, 0),
+			colA:                term.ColorDefault,
+			colB:                term.NewRGBColor(0, 0, 0),
 			factor:              0.5,
-			resolveColorDefault: tcell.NewRGBColor(200, 0, 0),
+			resolveColorDefault: term.NewRGBColor(200, 0, 0),
 			expectRGB:           []int32{100, 0, 0},
 		},
 	}
@@ -103,20 +104,20 @@ func TestInterpolateColor(t *testing.T) {
 func TestInterpolateColorPreservesIdentityWhenColorAndTargetMatch(t *testing.T) {
 	tsuite := []struct {
 		name   string
-		color  tcell.Color
+		color  term.Color
 		factor float64
 	}{
-		{name: "named color blue", color: tcell.ColorBlue, factor: 0.5},
-		{name: "named color red at factor 0", color: tcell.ColorRed, factor: 0.0},
-		{name: "named color green at factor 1", color: tcell.ColorGreen, factor: 1.0},
-		{name: "default color preserved", color: tcell.ColorDefault, factor: 0.5},
-		{name: "rgb color round-trips", color: tcell.NewRGBColor(12, 34, 56), factor: 0.7},
+		{name: "named color blue", color: term.ColorBlue, factor: 0.5},
+		{name: "named color red at factor 0", color: term.ColorRed, factor: 0.0},
+		{name: "named color green at factor 1", color: term.ColorGreen, factor: 1.0},
+		{name: "default color preserved", color: term.ColorDefault, factor: 0.5},
+		{name: "rgb color round-trips", color: term.NewRGBColor(12, 34, 56), factor: 0.7},
 	}
 
 	for _, tcase := range tsuite {
 		t.Run(tcase.name, func(t *testing.T) {
 			res := InterpolateColor(
-				tcase.factor, tcase.color, tcase.color, tcell.ColorDefault,
+				tcase.factor, tcase.color, tcase.color, term.ColorDefault,
 			)
 			assert.Equal(t, tcase.color, res)
 		})
@@ -146,11 +147,11 @@ func TestInterpolateColorWithUnresolvableDefault(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			res := InterpolateColor(
 				tcase.factor,
-				tcell.ColorDefault,
-				tcell.NewRGBColor(255, 255, 255),
-				tcell.ColorDefault, // also unresolvable
+				term.ColorDefault,
+				term.NewRGBColor(255, 255, 255),
+				term.ColorDefault, // also unresolvable
 			)
-			assert.Equal(t, tcell.ColorDefault, res)
+			assert.Equal(t, term.ColorDefault, res)
 		})
 	}
 }
@@ -158,44 +159,44 @@ func TestInterpolateColorWithUnresolvableDefault(t *testing.T) {
 func TestColorBrightness(t *testing.T) {
 	tsuite := []struct {
 		name                string
-		col                 tcell.Color
-		resolveColorDefault tcell.Color
+		col                 term.Color
+		resolveColorDefault term.Color
 		expect              float64
 	}{
 		{
 			name:   "black",
-			col:    tcell.NewRGBColor(0, 0, 0),
+			col:    term.NewRGBColor(0, 0, 0),
 			expect: 0.0,
 		},
 		{
 			name:   "white",
-			col:    tcell.NewRGBColor(255, 255, 255),
+			col:    term.NewRGBColor(255, 255, 255),
 			expect: 1.0,
 		},
 		{
 			name:   "high red",
-			col:    tcell.NewRGBColor(255, 10, 10),
+			col:    term.NewRGBColor(255, 10, 10),
 			expect: 0.35947712418300654,
 		},
 		{
 			name:   "high green",
-			col:    tcell.NewRGBColor(10, 255, 10),
+			col:    term.NewRGBColor(10, 255, 10),
 			expect: 0.35947712418300654,
 		},
 		{
 			name:   "high blue",
-			col:    tcell.NewRGBColor(10, 10, 255),
+			col:    term.NewRGBColor(10, 10, 255),
 			expect: 0.35947712418300654,
 		},
 		{
 			name:   "negative values should not panic",
-			col:    tcell.NewRGBColor(-10, -10, -255),
+			col:    term.NewRGBColor(-10, -10, -255),
 			expect: 0.6444444444444445, // strange result but can stimulate creativity
 		},
 		{
 			name:                "default color",
-			col:                 tcell.ColorDefault,
-			resolveColorDefault: tcell.NewRGBColor(255, 255, 255),
+			col:                 term.ColorDefault,
+			resolveColorDefault: term.NewRGBColor(255, 255, 255),
 			expect:              1.0,
 		},
 	}
@@ -212,78 +213,78 @@ func TestSampleGradient(t *testing.T) {
 	tsuite := []struct {
 		name     string
 		factor   float64
-		gradient []tcell.Color
-		expect   tcell.Color
+		gradient []term.Color
+		expect   term.Color
 	}{
 		{
 			name:   "start",
 			factor: 0.0,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(255, 0, 0),
+			expect: term.NewRGBColor(255, 0, 0),
 		},
 		{
 			name:   "inbetween, first half",
 			factor: 0.22,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(142, 112, 0),
+			expect: term.NewRGBColor(142, 112, 0),
 		},
 		{
 			name:   "inbetween, middle",
 			factor: 0.5,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(0, 255, 0),
+			expect: term.NewRGBColor(0, 255, 0),
 		},
 		{
 			name:   "inbetween second half",
 			factor: 0.864,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(0, 69, 185),
+			expect: term.NewRGBColor(0, 69, 185),
 		},
 		{
 			name:   "end",
 			factor: 0.0,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(255, 0, 0),
+			expect: term.NewRGBColor(255, 0, 0),
 		},
 		{
 			name:   "beyond start",
 			factor: -0.5,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(255, 0, 0),
+			expect: term.NewRGBColor(255, 0, 0),
 		},
 		{
 			name:   "beyond end",
 			factor: 1.5,
-			gradient: []tcell.Color{
-				tcell.NewRGBColor(255, 0, 0),
-				tcell.NewRGBColor(0, 255, 0),
-				tcell.NewRGBColor(0, 0, 255),
+			gradient: []term.Color{
+				term.NewRGBColor(255, 0, 0),
+				term.NewRGBColor(0, 255, 0),
+				term.NewRGBColor(0, 0, 255),
 			},
-			expect: tcell.NewRGBColor(0, 0, 255),
+			expect: term.NewRGBColor(0, 0, 255),
 		},
 	}
 
@@ -297,13 +298,13 @@ func TestSampleGradient(t *testing.T) {
 
 func TestDesaturateColor(t *testing.T) {
 	// amount=0: passthrough.
-	c := tcell.NewRGBColor(200, 50, 10)
-	assert.Equal(t, c, DesaturateColor(c, 0, tcell.ColorDefault))
+	c := term.NewRGBColor(200, 50, 10)
+	assert.Equal(t, c, DesaturateColor(c, 0, term.ColorDefault))
 
 	// amount=1: each cell collapses to its own luminance gray, not a
 	// fixed shared gray. Cells with different RGB stay distinct.
-	red := DesaturateColor(tcell.NewRGBColor(255, 0, 0), 1, tcell.ColorDefault)
-	green := DesaturateColor(tcell.NewRGBColor(0, 255, 0), 1, tcell.ColorDefault)
+	red := DesaturateColor(term.NewRGBColor(255, 0, 0), 1, term.ColorDefault)
+	green := DesaturateColor(term.NewRGBColor(0, 255, 0), 1, term.ColorDefault)
 	rr, rg, rb := red.RGB()
 	gr, gg, gb := green.RGB()
 	assert.Equal(t, rr, rg)
@@ -313,11 +314,11 @@ func TestDesaturateColor(t *testing.T) {
 	assert.NotEqual(t, rr, gr, "different sources should not collapse to the same gray")
 
 	// Amount clamped above 1 behaves like amount=1.
-	clamped := DesaturateColor(tcell.NewRGBColor(255, 0, 0), 2, tcell.ColorDefault)
+	clamped := DesaturateColor(term.NewRGBColor(255, 0, 0), 2, term.ColorDefault)
 	assert.Equal(t, red, clamped)
 
 	// ColorDefault is resolved before computing luminance.
-	resolved := DesaturateColor(tcell.ColorDefault, 1, tcell.NewRGBColor(255, 255, 255))
+	resolved := DesaturateColor(term.ColorDefault, 1, term.NewRGBColor(255, 255, 255))
 	r, g, b := resolved.RGB()
 	assert.Equal(t, int32(255), r)
 	assert.Equal(t, int32(255), g)
@@ -326,7 +327,7 @@ func TestDesaturateColor(t *testing.T) {
 	// Unresolvable defaults are returned unchanged so the terminal keeps
 	// rendering them natively.
 	assert.Equal(t,
-		tcell.ColorDefault,
-		DesaturateColor(tcell.ColorDefault, 1, tcell.ColorDefault),
+		term.ColorDefault,
+		DesaturateColor(term.ColorDefault, 1, term.ColorDefault),
 	)
 }

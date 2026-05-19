@@ -26,7 +26,6 @@ package markdown
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 type paragraphBlock struct {
@@ -60,7 +59,7 @@ func (p *paragraphBlock) Draw(w term.Writer) {
 
 	lines := wrapTextRun(p.content, p.w)
 
-	if p.cfg.Paragraph.Bg != tcell.ColorDefault {
+	if p.cfg.Paragraph.Bg != term.ColorDefault {
 		bgAttr := term.Attributes{Bg: p.cfg.Paragraph.Bg}
 		for y := range len(lines) {
 			for x := range p.w {

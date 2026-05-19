@@ -28,7 +28,6 @@ import (
 	"math/rand"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shaderutils"
 )
 
@@ -136,7 +135,7 @@ type BurnParams struct {
 	BurnSymbols []rune
 	// BurnGradient is the fire color gradient sampled to colorize the
 	// burning glyphs over the cell's local burn time.
-	BurnGradient []tcell.Color
+	BurnGradient []term.Color
 	// BurnDuration is the fraction of the total animation each cell
 	// spends actively on fire. Smaller values yield a narrower wave
 	// front. (range 0..1, clamped)
@@ -181,12 +180,12 @@ func DefaultBurnParams() BurnParams {
 			'▖', '▙', '█', '▜', '▀', '▝',
 		},
 		// Matches TTE's default burn_colors.
-		BurnGradient: []tcell.Color{
-			tcell.NewRGBColor(255, 255, 255),
-			tcell.NewRGBColor(255, 247, 93),
-			tcell.NewRGBColor(254, 101, 13),
-			tcell.NewRGBColor(138, 0, 60),
-			tcell.NewRGBColor(81, 1, 0),
+		BurnGradient: []term.Color{
+			term.NewRGBColor(255, 255, 255),
+			term.NewRGBColor(255, 247, 93),
+			term.NewRGBColor(254, 101, 13),
+			term.NewRGBColor(138, 0, 60),
+			term.NewRGBColor(81, 1, 0),
 		},
 		BurnDuration: 0.15,
 		SmokeSymbols: []rune{'.', ',', '\'', '`', '#', '*'},
@@ -384,7 +383,7 @@ func (s *burn) Shade(frame, total int, cells [][]term.Cell) {
 			cells[targetY][targetX].Fg = shaderutils.InterpolateColor(
 				frac,
 				sourceCell.Fg,
-				tcell.NewRGBColor(80, 79, 79),
+				term.NewRGBColor(80, 79, 79),
 				s.defaultAttr.Fg,
 			)
 			// Rising-particle cells overwrite the target cell;

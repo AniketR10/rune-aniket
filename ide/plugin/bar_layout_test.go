@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestBarLayout(t *testing.T) {
@@ -103,7 +102,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarStatusIcon,
 					Template:   "%s",
-					Attributes: term.Attributes{Fg: tcell.ColorRed},
+					Attributes: term.Attributes{Fg: term.ColorRed},
 				},
 			},
 		},
@@ -114,7 +113,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarStatusIcon,
 					Template:   "%s",
-					Attributes: term.Attributes{Bg: tcell.ColorBlue},
+					Attributes: term.Attributes{Bg: term.ColorBlue},
 				},
 			},
 		},
@@ -125,7 +124,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarStatusIcon,
 					Template:   "%s",
-					Attributes: term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorRed},
+					Attributes: term.Attributes{Fg: term.ColorBlack, Bg: term.ColorRed},
 				},
 			},
 		},
@@ -136,7 +135,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarCommand,
 					Template:   "%s",
-					Attributes: term.Attributes{Attrs: tcell.AttrBold},
+					Attributes: term.Attributes{Attrs: term.AttrBold},
 				},
 			},
 		},
@@ -147,7 +146,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarExitStatus,
 					Template:   "%s",
-					Attributes: term.Attributes{Attrs: tcell.AttrItalic},
+					Attributes: term.Attributes{Attrs: term.AttrItalic},
 				},
 			},
 		},
@@ -158,7 +157,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarElapsed,
 					Template:   "%s",
-					Attributes: term.Attributes{Attrs: tcell.AttrBold | tcell.AttrUnderline},
+					Attributes: term.Attributes{Attrs: term.AttrBold | term.AttrUnderline},
 				},
 			},
 		},
@@ -170,9 +169,9 @@ func TestBarLayout(t *testing.T) {
 					Type:     BarElapsed,
 					Template: "%s",
 					Attributes: term.Attributes{
-						Bg:    tcell.ColorRed,
-						Fg:    tcell.ColorBlack,
-						Attrs: tcell.AttrBold,
+						Bg:    term.ColorRed,
+						Fg:    term.ColorBlack,
+						Attrs: term.AttrBold,
 					},
 				},
 			},
@@ -184,7 +183,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarElapsed,
 					Template:   "%s",
-					Attributes: term.Attributes{Fg: tcell.NewRGBColor(0xff, 0x55, 0x00)},
+					Attributes: term.Attributes{Fg: term.NewRGBColor(0xff, 0x55, 0x00)},
 				},
 			},
 		},
@@ -201,12 +200,12 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarElapsed,
 					Template:   "%s",
-					Attributes: term.Attributes{Fg: tcell.ColorGreen},
+					Attributes: term.Attributes{Fg: term.ColorGreen},
 				},
 				{
 					Type:       BarCommand,
 					Template:   "  %s",
-					Attributes: term.Attributes{Fg: tcell.ColorRed},
+					Attributes: term.Attributes{Fg: term.ColorRed},
 				},
 			},
 		},
@@ -218,8 +217,8 @@ func TestBarLayout(t *testing.T) {
 					Type:     BarStatusIcon,
 					Template: "█%s█▓▒░",
 					Attributes: term.Attributes{
-						Bg:    tcell.ColorRed,
-						Attrs: tcell.AttrBold,
+						Bg:    term.ColorRed,
+						Attrs: term.AttrBold,
 					},
 				},
 				{
@@ -242,7 +241,7 @@ func TestBarLayout(t *testing.T) {
 					Type:     BarCommand,
 					Template: "  %s lines",
 					Attributes: term.Attributes{
-						Bg: tcell.ColorRed,
+						Bg: term.ColorRed,
 					},
 				},
 				{
@@ -265,8 +264,8 @@ func TestBarLayout(t *testing.T) {
 					Type:     BarStatusIcon,
 					Template: "%s",
 					Attributes: term.Attributes{
-						Attrs: tcell.AttrBold | tcell.AttrItalic | tcell.AttrUnderline |
-							tcell.AttrDim | tcell.AttrReverse | tcell.AttrStrikeThrough | tcell.AttrBlink,
+						Attrs: term.AttrBold | term.AttrItalic | term.AttrUnderline |
+							term.AttrDim | term.AttrReverse | term.AttrStrikeThrough | term.AttrBlink,
 					},
 				},
 			},
@@ -292,7 +291,7 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarStatusIcon,
 					Template:   "%s",
-					Attributes: term.Attributes{Fg: tcell.ColorDefault},
+					Attributes: term.Attributes{Fg: term.ColorDefault},
 				},
 			},
 		},
@@ -348,17 +347,17 @@ func TestBarLayout(t *testing.T) {
 				{
 					Type:       BarExitStatus,
 					Template:   "%s  ",
-					Attributes: term.Attributes{Fg: tcell.ColorDefault},
+					Attributes: term.Attributes{Fg: term.ColorDefault},
 				},
 				{
 					Type:       BarCommand,
 					Template:   "%s lines  ",
-					Attributes: term.Attributes{Fg: tcell.ColorDefault},
+					Attributes: term.Attributes{Fg: term.ColorDefault},
 				},
 				{
 					Type:       BarElapsed,
 					Template:   " %s ",
-					Attributes: term.Attributes{Bg: tcell.ColorNavy, Attrs: tcell.AttrBold},
+					Attributes: term.Attributes{Bg: term.ColorNavy, Attrs: term.AttrBold},
 				},
 			},
 		},

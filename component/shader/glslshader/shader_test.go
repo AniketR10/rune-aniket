@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shadertest"
 )
@@ -202,8 +201,8 @@ func (s *fakeCellRunner) runCell(
 	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
-	inChar rune, inFg, inBg tcell.Color,
-) (char rune, fg, bg tcell.Color) {
+	inChar rune, inFg, inBg term.Color,
+) (char rune, fg, bg term.Color) {
 	s.frame = frame
 	s.total = total
 	s.fps = fps

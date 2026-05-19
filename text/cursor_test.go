@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/workspace"
@@ -3837,7 +3836,7 @@ func testCursorSelect(t *testing.T, width, height int) {
 			e.MoveLastLine()
 			e.MoveEndLine()
 			insert(e)
-			assertBufferAttributes(t, e.buffer(), term.Attributes{Attrs: tcell.AttrReverse})
+			assertBufferAttributes(t, e.buffer(), term.Attributes{Attrs: term.AttrReverse})
 			assert.True(t, e.Unselect())
 			assertBufferAttributes(t, e.buffer(), term.Attributes{})
 		}
@@ -5143,7 +5142,7 @@ func TestCursorAutoPair(t *testing.T) {
 }
 
 var (
-	abcAttr      = term.Attributes{Attrs: tcell.AttrUnderline, Bg: tcell.ColorBlack}
+	abcAttr      = term.Attributes{Attrs: term.AttrUnderline, Bg: term.ColorBlack}
 	abcLocations = []textapi.Location{
 		{
 			From:    term.Coordinates{Y: 1},

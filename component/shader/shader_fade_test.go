@@ -28,7 +28,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestFade(t *testing.T) {
@@ -45,54 +44,54 @@ func TestFade(t *testing.T) {
 			frame: 0,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: tcell.ColorBlack}},
+				{Attributes: term.Attributes{Fg: 0, Bg: term.ColorBlack}},
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorBlack}},
+				{Attributes: term.Attributes{Fg: term.ColorBlack, Bg: term.ColorBlack}},
 			}},
 		},
 		{
 			frame: 10,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: tcell.ColorBlack}},
+				{Attributes: term.Attributes{Fg: 0, Bg: term.ColorBlack}},
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: 0, Bg: tcell.ColorBlack}},
+				{Attributes: term.Attributes{Fg: 0, Bg: term.ColorBlack}},
 			}},
 		},
 		{
 			frame: 4,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(10, 10, 10), Bg: tcell.ColorBlack}},
+				{Attributes: term.Attributes{Fg: term.NewRGBColor(10, 10, 10), Bg: term.ColorBlack}},
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(4, 4, 4), Bg: tcell.ColorBlack}},
+				{Attributes: term.Attributes{Fg: term.NewRGBColor(4, 4, 4), Bg: term.ColorBlack}},
 			}},
 		},
 		{
 			frame: 4,
 			total: 9,
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(10, 10, 10), Bg: 0}},
+				{Attributes: term.Attributes{Fg: term.NewRGBColor(10, 10, 10), Bg: 0}},
 			}},
 			// Bg is ColorDefault and defaultAttrs.Bg is also unset, so the
 			// blend has no resolvable starting point and Fg ends up
 			// resolving to ColorDefault.
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.ColorDefault, Bg: 0}},
+				{Attributes: term.Attributes{Fg: term.ColorDefault, Bg: 0}},
 			}},
 		},
 		{
 			frame:        4,
 			total:        9,
-			defaultAttrs: term.Attributes{Fg: tcell.NewRGBColor(10, 0, 0), Bg: tcell.NewRGBColor(0, 0, 10)},
+			defaultAttrs: term.Attributes{Fg: term.NewRGBColor(10, 0, 0), Bg: term.NewRGBColor(0, 0, 10)},
 			in: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.ColorDefault, Bg: tcell.ColorDefault}},
+				{Attributes: term.Attributes{Fg: term.ColorDefault, Bg: term.ColorDefault}},
 			}},
 			wantOut: [][]term.Cell{{
-				{Attributes: term.Attributes{Fg: tcell.NewRGBColor(4, 0, 5), Bg: tcell.ColorDefault}},
+				{Attributes: term.Attributes{Fg: term.NewRGBColor(4, 0, 5), Bg: term.ColorDefault}},
 			}},
 		},
 	}

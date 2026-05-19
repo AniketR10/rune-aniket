@@ -282,7 +282,8 @@ func (c *rawCells) doInsertAt(pos term.Coordinates, r []rune, width, byteCount u
 	if len(r) > 1 {
 		combining = r[1:]
 	}
-	cell := term.Cell{Ch: r[0], Combining: combining, Width: width, Bytes: byteCount}
+	cell := term.Cell{Ch: r[0], Width: width, Bytes: byteCount}
+	cell.SetCombining(combining)
 	c.cells[pos.Y][pos.X] = cell
 }
 
@@ -496,7 +497,7 @@ func copyRowToBuilder(builder *strings.Builder, cells []term.Cell) {
 	builder.Grow(len(cells)) // almost every time this is exact
 	for _, c := range cells {
 		builder.WriteRune(c.Ch)
-		for _, comb := range c.Combining {
+		for _, comb := range c.CombiningRunes() {
 			builder.WriteRune(comb)
 		}
 	}
@@ -515,7 +516,7 @@ func copyRowToBuffer(builder *bytes.Buffer, cells []term.Cell) {
 	builder.Grow(len(cells)) // almost every time this is exact
 	for _, c := range cells {
 		builder.WriteRune(c.Ch)
-		for _, comb := range c.Combining {
+		for _, comb := range c.CombiningRunes() {
 			builder.WriteRune(comb)
 		}
 	}
@@ -776,10 +777,12 @@ func (c *rawCells) readFromWithView(r io.Reader, view View) (int64, error) {
 					rowY++
 				default:
 					cell := term.Cell{
-						Ch:        r[0],
-						Width:     width,
-						Combining: r[1:],
-						Bytes:     byteCount,
+						Ch:    r[0],
+						Width: width,
+						Bytes: byteCount,
+					}
+					if len(r) > 1 {
+						cell.SetCombining(r[1:])
 					}
 					c.cells[rowY] = append(c.cells[rowY], cell)
 				}

@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 )
@@ -401,12 +400,12 @@ func (uc *UpdateChecker) showUpdatePrompt(ctx context.Context, updates []Update)
 
 	prompt := handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorRed,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorRed,
 		},
 		OptionAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorGray,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorGray,
 		},
 		OptionBindings: []term.KeyComb{{Ch: 'u'}, {Ch: 'r'}, {Ch: 's'}},
 		PromptConfig: component.PromptConfig{

@@ -30,14 +30,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestTransitionCut(t *testing.T) {
 	t.Run("cells content from shader 1 before change point, shader 2 thereafter",
 		func(t *testing.T) {
-			shRedAAAs := newConstantShader('A', tcell.ColorDarkRed, tcell.ColorRed)
-			shGreenBBBs := newConstantShader('B', tcell.ColorDarkGreen, tcell.ColorGreen)
+			shRedAAAs := newConstantShader('A', term.GetColor("darkred"), term.ColorRed)
+			shGreenBBBs := newConstantShader('B', term.GetColor("darkgreen"), term.ColorGreen)
 			transition := TransitionCut(TransitionCutParams{ChangeAtPerc: 0.5},
 				shRedAAAs,
 				shGreenBBBs,
@@ -45,13 +44,13 @@ func TestTransitionCut(t *testing.T) {
 
 			frames := []int{0, 1, 2, 3, 4, 5, 6, 7}
 			expectChars := []rune{'A', 'A', 'A', 'A', 'B', 'B', 'B', 'B'}
-			expectFgs := []tcell.Color{
-				tcell.ColorDarkRed, tcell.ColorDarkRed, tcell.ColorDarkRed, tcell.ColorDarkRed,
-				tcell.ColorDarkGreen, tcell.ColorDarkGreen, tcell.ColorDarkGreen, tcell.ColorDarkGreen,
+			expectFgs := []term.Color{
+				term.GetColor("darkred"), term.GetColor("darkred"), term.GetColor("darkred"), term.GetColor("darkred"),
+				term.GetColor("darkgreen"), term.GetColor("darkgreen"), term.GetColor("darkgreen"), term.GetColor("darkgreen"),
 			}
-			expectBgs := []tcell.Color{
-				tcell.ColorRed, tcell.ColorRed, tcell.ColorRed, tcell.ColorRed,
-				tcell.ColorGreen, tcell.ColorGreen, tcell.ColorGreen, tcell.ColorGreen,
+			expectBgs := []term.Color{
+				term.ColorRed, term.ColorRed, term.ColorRed, term.ColorRed,
+				term.ColorGreen, term.ColorGreen, term.ColorGreen, term.ColorGreen,
 			}
 
 			require.True(t, len(frames) == len(expectChars) &&

@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 var _ browserapi.Floating = (*completionHandler)(nil)
@@ -318,23 +317,23 @@ func TestCompletionHandlerDraw(t *testing.T) {
 		name            string
 		giveLabels      []string
 		giveFocusOffset int
-		wantFg          []tcell.Color
+		wantFg          []term.Color
 	}{
 		{
 			name:       "first focused",
 			giveLabels: []string{"a", "b"},
-			wantFg:     []tcell.Color{tcell.ColorWhite, tcell.ColorGray},
+			wantFg:     []term.Color{term.ColorWhite, term.ColorGray},
 		},
 		{
 			name:            "second focused",
 			giveLabels:      []string{"a", "b"},
 			giveFocusOffset: 1,
-			wantFg:          []tcell.Color{tcell.ColorGray, tcell.ColorWhite},
+			wantFg:          []term.Color{term.ColorGray, term.ColorWhite},
 		},
 		{
 			name:       "single entry focused",
 			giveLabels: []string{"only"},
-			wantFg:     []tcell.Color{tcell.ColorWhite},
+			wantFg:     []term.Color{term.ColorWhite},
 		},
 	}
 	for _, test := range tests {

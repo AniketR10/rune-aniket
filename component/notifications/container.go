@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/debug"
 )
 
@@ -85,13 +84,13 @@ type Config struct {
 	// By default, the default color along with a bold foreground is used.
 	ColorInfo term.Attributes
 	// ColorSuccess determines the style of the progress bar for success notifications.
-	// By default, tcell.ColorGreen is used.
+	// By default, term.ColorGreen is used.
 	ColorSuccess term.Attributes
 	// ColorWarning determines the style of the progress bar for warning notifications.
-	// By default, tcell.ColorYellow is used.
+	// By default, term.ColorYellow is used.
 	ColorWarning term.Attributes
 	// ColorError determines the style of the progress bar for error notifications.
-	// By default, tcell.ColorRed is used.
+	// By default, term.ColorRed is used.
 	ColorError term.Attributes
 }
 
@@ -140,22 +139,22 @@ func (n *Container) Init(inner tui.Component, cfg Config) {
 	}
 	if cfg.ColorInfo == (term.Attributes{}) {
 		cfg.ColorInfo.Attrs = cfg.BackgroundAttributes.Attrs
-		cfg.ColorInfo.Attrs |= tcell.AttrBold
+		cfg.ColorInfo.Attrs |= term.AttrBold
 	}
 	if cfg.ColorSuccess == (term.Attributes{}) {
 		cfg.ColorSuccess.Attrs = cfg.BackgroundAttributes.Attrs
-		cfg.ColorSuccess.Attrs |= tcell.AttrBold
-		cfg.ColorSuccess.Fg = tcell.ColorGreen
+		cfg.ColorSuccess.Attrs |= term.AttrBold
+		cfg.ColorSuccess.Fg = term.ColorGreen
 	}
 	if cfg.ColorWarning == (term.Attributes{}) {
 		cfg.ColorWarning.Attrs = cfg.BackgroundAttributes.Attrs
-		cfg.ColorWarning.Attrs |= tcell.AttrBold
-		cfg.ColorWarning.Fg = tcell.ColorYellow
+		cfg.ColorWarning.Attrs |= term.AttrBold
+		cfg.ColorWarning.Fg = term.ColorYellow
 	}
 	if cfg.ColorError == (term.Attributes{}) {
 		cfg.ColorError.Attrs = cfg.BackgroundAttributes.Attrs
-		cfg.ColorError.Attrs |= tcell.AttrBold
-		cfg.ColorError.Fg = tcell.ColorRed
+		cfg.ColorError.Attrs |= term.AttrBold
+		cfg.ColorError.Fg = term.ColorRed
 	}
 	if cfg.ProgressRunes == (ProgressRunes{}) {
 		cfg.ProgressRunes.Start = cfg.FrameCharSet.BottomLeft

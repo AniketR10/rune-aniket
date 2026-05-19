@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/notifications"
 )
 
@@ -228,7 +227,7 @@ func (c *notis) inFocus() bool {
 
 func (c *notis) setTabAttr(level browserapi.NotificationLevel) {
 	attentionAttr := term.Attributes{
-		Fg: tcell.ColorWhite,
+		Fg: term.ColorWhite,
 		Bg: c.cfg.BackgroundAttributes.Bg,
 	}
 	switch level {

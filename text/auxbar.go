@@ -38,7 +38,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
@@ -102,29 +101,29 @@ func WithAuxBar(
 	ret.setLinesWidth()
 	ret.svc = vctrl.NewCache(config.Service)
 	if config.DelAttr == (term.Attributes{}) {
-		config.DelAttr = term.Attributes{Fg: tcell.ColorMaroon}
+		config.DelAttr = term.Attributes{Fg: term.ColorMaroon}
 	}
 	if config.AddAttr == (term.Attributes{}) {
-		config.AddAttr = term.Attributes{Fg: tcell.ColorGreen}
+		config.AddAttr = term.Attributes{Fg: term.ColorGreen}
 	}
 	ret.delAttr = config.DelAttr
 	ret.addAttr = config.AddAttr
 	if config.DelOverlayAttr == (term.Attributes{}) {
-		config.DelOverlayAttr = term.Attributes{Bg: tcell.ColorMaroon}
+		config.DelOverlayAttr = term.Attributes{Bg: term.ColorMaroon}
 	}
 	if config.AddOverlayAttr == (term.Attributes{}) {
-		config.AddOverlayAttr = term.Attributes{Bg: tcell.ColorGreen}
+		config.AddOverlayAttr = term.Attributes{Bg: term.ColorGreen}
 	}
 	if config.HighlightCursorAttr == (term.Attributes{}) {
 		config.HighlightCursorAttr = term.Attributes{
-			Fg:    tcell.ColorWhite,
-			Bg:    tcell.ColorGray,
-			Attrs: tcell.AttrBold,
+			Fg:    term.ColorWhite,
+			Bg:    term.ColorGray,
+			Attrs: term.AttrBold,
 		}
 	}
 	ret.cursorAttr = config.HighlightCursorAttr
 	if config.LineNumberAttr == (term.Attributes{}) {
-		config.LineNumberAttr = term.Attributes{Fg: tcell.ColorGray}
+		config.LineNumberAttr = term.Attributes{Fg: term.ColorGray}
 	}
 	ret.barLineAttr = config.LineNumberAttr
 	ret.config = config

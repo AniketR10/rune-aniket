@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // SubscribeLocationCommands returns a slice of location list related commands
@@ -336,7 +335,7 @@ func (u locationCommandHandler) handleHighlightLocations(cmd textapi.Command) (e
 		clear(u.highlightedLocationLists)
 		locations := make([]textapi.Location, len(locationList.Locations))
 		for i, loc := range locationList.Locations {
-			loc.Attr = term.Attributes{Attrs: tcell.AttrReverse}
+			loc.Attr = term.Attributes{Attrs: term.AttrReverse}
 			locations[i] = loc
 		}
 		u.Handler.SetLocationList(
@@ -426,7 +425,7 @@ func (u locationCommandHandler) handleCreateLocation(cmd textapi.Command) (err e
 		From: from,
 		To:   to,
 		Attr: term.Attributes{
-			Bg: tcell.ColorGray,
+			Bg: term.ColorGray,
 		},
 	})
 	u.Handler.SetLocationList(textapi.LocationPriorityInfo, list, LocationSlice(curr))

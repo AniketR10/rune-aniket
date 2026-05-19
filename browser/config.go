@@ -30,7 +30,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/handler"
 )
 
@@ -38,18 +37,18 @@ import (
 func DefaultConfig() Config {
 	return Config{
 		Wallpaper:           NopWallpaper(),
-		FocusTabAttr:        term.Attributes{Fg: tcell.ColorWhite},
-		NonFocusTabAttr:     term.Attributes{Fg: tcell.ColorRed},
+		FocusTabAttr:        term.Attributes{Fg: term.ColorWhite},
+		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
 		FocusTabIconAttr:    term.Attributes{},
 		NonFocusTabIconAttr: term.Attributes{},
-		FocusTabHighlightAttr: term.Attributes{Fg: tcell.ColorYellow},
+		FocusTabHighlightAttr: term.Attributes{Fg: term.ColorYellow},
 		FocusTabHighlightChar: '━',
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
 		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		FrameUnion:          handler.DefaultWindowManagerConfig().Frame,
 		PromptConfig: PromptConfig{
 			TextAttr:       term.Attributes{},
-			HighlightAttr:  term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorWhite},
+			HighlightAttr:  term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
 			BackgroundAttr: term.Attributes{},
 			MinWidth:       60,
 		},

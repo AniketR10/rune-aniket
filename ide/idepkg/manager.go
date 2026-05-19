@@ -52,7 +52,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/starlarkconfig"
@@ -810,12 +809,12 @@ func (m *Manager) promptConfigChange(
 
 	prompt := handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorRed,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorRed,
 		},
 		OptionAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorGray,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorGray,
 		},
 		OptionBindings: []term.KeyComb{{Ch: 'a'}, {Ch: 'd'}},
 		PromptConfig: component.PromptConfig{

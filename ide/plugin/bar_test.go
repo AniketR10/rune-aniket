@@ -32,7 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestBarDraw(t *testing.T) {
@@ -136,7 +135,7 @@ func TestBarDraw(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			var err error
 			config := DefaultBarConfig()
-			config.BackgroundColor = tcell.ColorRed // exercise bg setting for panics
+			config.BackgroundColor = term.ColorRed // exercise bg setting for panics
 			config.StatusAnimationFrames, _ = component.ProgressAnimationFrames()
 			config.Layout, err = ParseBarLayout(test.layout)
 			require.NoError(t, err)

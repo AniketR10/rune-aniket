@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shadertest"
 )
 
@@ -51,7 +50,7 @@ func guiFrameCharset() component.FrameCharSet {
 func TestShineFrame(t *testing.T) {
 	shadertest.TestShader(t, ShineFrame(
 		DefaultShineFrameParams(guiFrameCharset()),
-		term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+		term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 	))
 }
 
@@ -197,11 +196,11 @@ func TestShineFrameOnlyAffectsFrameChars(t *testing.T) {
 	sh := ShineFrame(
 		ShineFrameParams{
 			FrameCharSet: fc,
-			Color:        tcell.NewRGBColor(255, 255, 255),
+			Color:        term.NewRGBColor(255, 255, 255),
 			BandWidth:    0.3,
 			Cycles:       1,
 		},
-		term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+		term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 	)
 
 	for _, tcase := range tsuite {
@@ -224,7 +223,7 @@ func TestShineFrameOnlyAffectsFrameChars(t *testing.T) {
 
 func TestShineFrameNoMatchingChars(t *testing.T) {
 	fc := guiFrameCharset()
-	origFg := tcell.NewRGBColor(10, 20, 30)
+	origFg := term.NewRGBColor(10, 20, 30)
 	mk := func(ch rune) term.Cell {
 		return term.Cell{
 			Ch:         ch,
@@ -240,7 +239,7 @@ func TestShineFrameNoMatchingChars(t *testing.T) {
 
 	sh := ShineFrame(
 		DefaultShineFrameParams(fc),
-		term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+		term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 	)
 	for f := range 10 {
 		sh.Shade(f, 10, cells)
@@ -376,11 +375,11 @@ func TestShineFrameDirections(t *testing.T) {
 				ShineFrameParams{
 					Direction:    tcase.direction,
 					FrameCharSet: fc,
-					Color:        tcell.NewRGBColor(255, 255, 255),
+					Color:        term.NewRGBColor(255, 255, 255),
 					BandWidth:    0.3,
 					Cycles:       1,
 				},
-				term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+				term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 			)
 
 			cells := makeCells()

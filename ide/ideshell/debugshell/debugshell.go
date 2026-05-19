@@ -44,7 +44,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/idedebug"
 )
@@ -607,8 +606,8 @@ func (h *Handler) openFrame(
 		Message: stopMsg,
 		Icon:    h.cfg.Icons.Stopped,
 		Attr: term.Attributes{
-			Fg: tcell.ColorBlack,
-			Bg: tcell.ColorYellow,
+			Fg: term.ColorBlack,
+			Bg: term.ColorYellow,
 		},
 	}
 	if err := h.editor.SetLocationList(
@@ -808,7 +807,7 @@ func (h *Handler) installVariablesLocations(
 			From:    ident.From,
 			To:      ident.To,
 			Message: msg,
-			Attr:    term.Attributes{Bg: tcell.ColorGray},
+			Attr:    term.Attributes{Bg: term.ColorGray},
 		})
 	}
 	if len(locs) == 0 {

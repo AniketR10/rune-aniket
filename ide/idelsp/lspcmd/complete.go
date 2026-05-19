@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // CompleteConfig configures the "complete" subcommand.
@@ -149,7 +148,7 @@ func (h *completeHandler) HandleCommand(ctx context.Context, cmd textapi.Command
 	drainDone, drainDoneCancel := context.WithCancel(context.Background())
 
 	list := component.NewFocusList()
-	list.SetFocusAttr(term.Attributes{Fg: tcell.ColorWhite})
+	list.SetFocusAttr(term.Attributes{Fg: term.ColorWhite})
 
 	floating := &completionHandler{
 		list:        list,
@@ -243,9 +242,9 @@ type completionHandler struct {
 // Used in tests that need a synchronously filled handler.
 func newCompletionHandler(labels []string) *completionHandler {
 	list := component.NewFocusList()
-	list.SetFocusAttr(term.Attributes{Fg: tcell.ColorWhite})
+	list.SetFocusAttr(term.Attributes{Fg: term.ColorWhite})
 	strCfg := component.StringConfig{
-		Attributes: term.Attributes{Fg: tcell.ColorGray},
+		Attributes: term.Attributes{Fg: term.ColorGray},
 	}
 	for _, label := range labels {
 		list.PushBack(component.NewStringWithConfig(label, strCfg))
@@ -261,7 +260,7 @@ func newCompletionHandler(labels []string) *completionHandler {
 
 func (c *completionHandler) drainLoop(ch <-chan string) {
 	strCfg := component.StringConfig{
-		Attributes: term.Attributes{Fg: tcell.ColorGray},
+		Attributes: term.Attributes{Fg: term.ColorGray},
 	}
 	for label := range ch {
 		c.mu.Lock()

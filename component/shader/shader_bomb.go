@@ -27,7 +27,6 @@ import (
 	"math"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shaderutils"
 )
@@ -46,7 +45,7 @@ func Bomb(params BombParams, defaultAttrs term.Attributes) Shader {
 
 // BombParams defines the parameters used by the Bomb shader.
 type BombParams struct {
-	RingCol         tcell.Color
+	RingCol         term.Color
 	RingStart       float64
 	RingEnd         float64
 	CharBandwidth   float64
@@ -56,7 +55,7 @@ type BombParams struct {
 // DefaultBombParams return a set of sane BombParams.
 func DefaultBombParams() BombParams {
 	return BombParams{
-		RingCol:         tcell.NewRGBColor(255, 0, 0),
+		RingCol:         term.NewRGBColor(255, 0, 0),
 		RingStart:       0.5,
 		RingEnd:         0.8,
 		CharBandwidth:   0.3,

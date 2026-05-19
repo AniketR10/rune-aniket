@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 )
@@ -65,12 +64,12 @@ func (m *Manager) showPrompt(ctx context.Context, manifest Manifest) {
 
 	prompt := handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorBlue,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorBlue,
 		},
 		OptionAttr: term.Attributes{
-			Attrs: tcell.AttrBold,
-			Bg:    tcell.ColorGray,
+			Attrs: term.AttrBold,
+			Bg:    term.ColorGray,
 		},
 		OptionBindings: []term.KeyComb{{Ch: 'y'}, {Ch: 'l'}, {Ch: 's'}},
 		PromptConfig: component.PromptConfig{

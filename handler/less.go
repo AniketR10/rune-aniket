@@ -28,7 +28,6 @@ import (
 
 	compapi "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 )
@@ -54,7 +53,7 @@ func DefaultLessConfig() LessConfig {
 	return LessConfig{
 		Wrap: false,
 		ResAttr: term.Attributes{
-			Attrs: tcell.AttrReverse,
+			Attrs: term.AttrReverse,
 		},
 		NoBar: false,
 	}

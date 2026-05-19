@@ -36,8 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
-
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	fileexplorercomp "unstable.build/go-tui/component/fileexplorer"
@@ -117,7 +115,7 @@ func (h *pageExplorerHandler) Draw(w term.Writer) {
 	y := min(h.selected, h.height-1)
 	for x := 0; x < h.width; x++ {
 		w.UnionAttributes(term.Coordinates{X: x, Y: y},
-			term.Attributes{Attrs: tcell.AttrReverse})
+			term.Attributes{Attrs: term.AttrReverse})
 	}
 }
 

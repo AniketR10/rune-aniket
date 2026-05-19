@@ -35,7 +35,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
@@ -246,7 +245,7 @@ type BurningColors struct {
 	// painting natural-looking red values (or blue tones, depending on
 	// SwapRedBlue value), when flames touch the logo will be painted with
 	// colors of this gradient. The end part of the gradient is the hottest.
-	HeatColorGradientOverride []tcell.Color
+	HeatColorGradientOverride []term.Color
 	// SwapRedBlue, when no HeatColorGradientOverride is passed, changes the
 	// red and blue channels producing blue flames.
 	SwapRedBlue bool
@@ -254,7 +253,7 @@ type BurningColors struct {
 	// onwards respecting the gradient values of the logo. Through time it will
 	// move from interpolate the gradient values from RipplesGradientStart
 	// towards RipplesGradientEnd so the whole gradient to sample evolves.
-	RipplesGradientStart, RipplesGradientEnd []tcell.Color
+	RipplesGradientStart, RipplesGradientEnd []term.Color
 }
 
 type burning struct {
@@ -326,25 +325,25 @@ func BurningPresetGentle(
 		Intensity:       []float{0.2, 0.8, 1.0, 1.0, 0.8, 0.0},
 		StartFadeOut:    0.7,
 		Colors: BurningColors{
-			RipplesGradientStart: []tcell.Color{
+			RipplesGradientStart: []term.Color{
 				// Natural fire colors (warm).
-				tcell.NewRGBColor(216, 44, 12),
-				tcell.NewRGBColor(235, 61, 14),
-				tcell.NewRGBColor(255, 156, 73),
-				tcell.NewRGBColor(255, 203, 104), // midpoint
-				tcell.NewRGBColor(255, 156, 73),
-				tcell.NewRGBColor(235, 61, 14),
-				tcell.NewRGBColor(216, 44, 12),
+				term.NewRGBColor(216, 44, 12),
+				term.NewRGBColor(235, 61, 14),
+				term.NewRGBColor(255, 156, 73),
+				term.NewRGBColor(255, 203, 104), // midpoint
+				term.NewRGBColor(255, 156, 73),
+				term.NewRGBColor(235, 61, 14),
+				term.NewRGBColor(216, 44, 12),
 			},
-			RipplesGradientEnd: []tcell.Color{
+			RipplesGradientEnd: []term.Color{
 				// Natural fire colors (warm).
-				tcell.NewRGBColor(255, 67, 9),
-				tcell.NewRGBColor(255, 187, 19),
-				tcell.NewRGBColor(255, 255, 169),
-				tcell.NewRGBColor(255, 255, 255), // midpoint
-				tcell.NewRGBColor(255, 255, 169),
-				tcell.NewRGBColor(255, 187, 19),
-				tcell.NewRGBColor(255, 67, 9),
+				term.NewRGBColor(255, 67, 9),
+				term.NewRGBColor(255, 187, 19),
+				term.NewRGBColor(255, 255, 169),
+				term.NewRGBColor(255, 255, 255), // midpoint
+				term.NewRGBColor(255, 255, 169),
+				term.NewRGBColor(255, 187, 19),
+				term.NewRGBColor(255, 67, 9),
 			},
 		},
 		// DebugWallpaperBounds: true,
@@ -493,8 +492,8 @@ func (s *burning) runCell(
 	cellCoords term.Coordinates,
 	fragCoordX, fragCoordY int,
 	resolutionX, resolutionY int,
-	inChar rune, inFg, inBg tcell.Color,
-) (outChar rune, outFg, outBg tcell.Color) {
+	inChar rune, inFg, inBg term.Color,
+) (outChar rune, outFg, outBg term.Color) {
 	outFg = inFg
 	outBg = inBg
 	outChar = inChar
@@ -549,13 +548,13 @@ func (s *burning) runCell(
 }
 
 func (s *burning) drawFlames(
-	inBg tcell.Color,
+	inBg term.Color,
 	termCoords term.Coordinates,
 	progress float,
 	frame int,
 	time float,
 	uv vec2D,
-) (outBg tcell.Color) {
+) (outBg term.Color) {
 	outBg = inBg
 
 	if s.DebugWallpaperBounds {
@@ -669,11 +668,11 @@ func (s *burning) drawFlames(
 }
 
 func (s *burning) drawDebugWallpaperBounds(
-	inBg tcell.Color, inChar rune,
+	inBg term.Color, inChar rune,
 	termCoords term.Coordinates,
 	progress float,
 	rows, cols int,
-) (outBg tcell.Color, outChar rune) {
+) (outBg term.Color, outChar rune) {
 	outBg = inBg
 	outChar = inChar
 	x := termCoords.X
@@ -681,20 +680,20 @@ func (s *burning) drawDebugWallpaperBounds(
 	bounds := s.wallpaperBounds
 	if x == 0 && y == 0 {
 		// Yellow screen top left corner.
-		outBg = tcell.NewColor(255, 255, 0)
+		outBg = term.NewColor(255, 255, 0)
 	} else if x == cols-1 && y == rows-1 {
 		// Cyan screen bottom right corner.
-		outBg = tcell.NewColor(0, 255, 255)
+		outBg = term.NewColor(0, 255, 255)
 	} else if x == bounds.topLeftX && y == bounds.topLeftY {
 		// Red wallpaper top left corner.
-		outBg = tcell.NewColor(255, 0, 0)
+		outBg = term.NewColor(255, 0, 0)
 	} else if x == bounds.bottomRightX && y == bounds.bottomRightY {
 		// Green wallpaper bottom right corner.
-		outBg = tcell.NewColor(0, 255, 0)
+		outBg = term.NewColor(0, 255, 0)
 	} else if s.isWithinWallpaperBounds(x, y) {
 		// Paint chars within the area of wallpaper and change bg.
 		outBg = shaderutils.InterpolateColor(
-			progress, tcell.NewColor(255, 255, 255), inBg, s.defaultAttr.Bg,
+			progress, term.NewColor(255, 255, 255), inBg, s.defaultAttr.Bg,
 		)
 		outChar = 'M'
 	}
@@ -702,11 +701,11 @@ func (s *burning) drawDebugWallpaperBounds(
 }
 
 func (s *burning) drawLogoEffects(
-	inChar rune, inFg, inBg tcell.Color,
+	inChar rune, inFg, inBg term.Color,
 	termCoords term.Coordinates,
 	frame int,
 	progress float,
-) (outChar rune, outFg, outBg tcell.Color) {
+) (outChar rune, outFg, outBg term.Color) {
 	outFg = inFg
 	outBg = inBg
 

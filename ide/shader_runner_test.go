@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
 )
@@ -42,7 +41,7 @@ import (
 func fakeLoadingShader() func(term.Attributes) shader.Shader {
 	return func(defaultAttr term.Attributes) shader.Shader {
 		params := glslshader.DefaultShineParams()
-		params.Color = tcell.NewRGBColor(255, 255, 255)
+		params.Color = term.NewRGBColor(255, 255, 255)
 		return glslshader.Shine(params, defaultAttr)
 	}
 }

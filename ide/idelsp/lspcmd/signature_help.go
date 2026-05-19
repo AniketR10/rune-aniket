@@ -39,7 +39,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/debug"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // SignatureHelpConfig configures the "signature-help" subcommand.
@@ -63,7 +62,7 @@ type SignatureHelpConfig struct {
 func DefaultSignatureHelpConfig() SignatureHelpConfig {
 	return SignatureHelpConfig{
 		ActiveParamAttr: term.Attributes{
-			Attrs: tcell.AttrBold | tcell.AttrUnderline,
+			Attrs: term.AttrBold | term.AttrUnderline,
 		},
 		AutoTrigger: true,
 	}
@@ -414,7 +413,7 @@ func (f *signatureHelpFloating) Draw(w term.Writer) {
 	}
 
 	if counter != "" {
-		grayAttr := term.Attributes{Fg: tcell.ColorGray}
+		grayAttr := term.Attributes{Fg: term.ColorGray}
 		for _, r := range counter {
 			w.SetCell(term.Coordinates{X: x, Y: 0}, term.Cell{
 				Ch: r, Width: 1, Attributes: grayAttr,
@@ -425,7 +424,7 @@ func (f *signatureHelpFloating) Draw(w term.Writer) {
 
 	paramDoc := activeParamDoc(sig, paramIdx)
 	if paramDoc != "" {
-		grayAttr := term.Attributes{Fg: tcell.ColorGray}
+		grayAttr := term.Attributes{Fg: term.ColorGray}
 		dx := 0
 		for _, r := range paramDoc {
 			w.SetCell(term.Coordinates{X: dx, Y: 1}, term.Cell{

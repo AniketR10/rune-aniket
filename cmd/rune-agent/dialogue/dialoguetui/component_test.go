@@ -33,7 +33,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/markdown"
 )
 
@@ -4347,7 +4346,7 @@ func TestSendMessageBackgroundDoesNotLeakIntoPadding(t *testing.T) {
 	const (
 		width  = 20
 		height = 10
-		bg     = tcell.ColorGray
+		bg     = term.ColorGray
 	)
 	comp := NewComponent(ComponentConfig{
 		SendMessageStringConfig: component.StringConfig{

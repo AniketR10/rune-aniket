@@ -42,7 +42,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	sdkhandler "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/handler/search"
@@ -89,7 +88,7 @@ type Config struct {
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		PreviewAttr:         term.Attributes{Attrs: tcell.AttrReverse},
+		PreviewAttr:         term.Attributes{Attrs: term.AttrReverse},
 		PreviewContextLines: defaultPreviewContextLines,
 		MinPreviewWidth:     defaultMinPreviewWidth,
 		SeparatorHeight:     defaultSeparatorHeight,

@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/text"
 )
 
@@ -190,7 +189,7 @@ func (h *Handler) setBreakpointAt(ctx context.Context, cmd textapi.Command) erro
 			To:      term.Coordinates{X: 0, Y: y},
 			Message: "breakpoint",
 			Icon:    h.cfg.Icons.Breakpoint,
-			Attr:    term.Attributes{Bg: tcell.ColorRed},
+			Attr:    term.Attributes{Bg: term.ColorRed},
 		})
 	}
 	editorHandler.SetLocationList(

@@ -38,7 +38,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
 )
@@ -272,7 +271,7 @@ func TestIndentAttrDefaultsToGray(t *testing.T) {
 	// The second row renders as "│ <icon> app.go"; cell 0 is the
 	// indent rune and must be gray.
 	require.Equal(t, '│', rows[1][0].Ch)
-	require.Equal(t, tcell.ColorGray, rows[1][0].Fg)
+	require.Equal(t, term.ColorGray, rows[1][0].Fg)
 }
 
 // TestIndentAttrHonorsConfig verifies that an explicit IndentAttr
@@ -281,12 +280,12 @@ func TestIndentAttrHonorsConfig(t *testing.T) {
 	c, buf, _ := newComp(t, map[string][]mockEntry{
 		"/project":     {{name: "src", isDir: true}},
 		"/project/src": {{name: "app.go"}},
-	}, Config{IndentAttr: term.Attributes{Fg: tcell.ColorRed}})
+	}, Config{IndentAttr: term.Attributes{Fg: term.ColorRed}})
 	c.ExpandNodeAt(term.Coordinates{Y: 0})
 	rows := buf.View().RawCells()
 	require.Len(t, rows, 2)
 	require.Equal(t, '│', rows[1][0].Ch)
-	require.Equal(t, tcell.ColorRed, rows[1][0].Fg)
+	require.Equal(t, term.ColorRed, rows[1][0].Fg)
 }
 
 // TestIconAttrDefaultsToGray renders a nested tree and asserts that
@@ -303,12 +302,12 @@ func TestIconAttrDefaultsToGray(t *testing.T) {
 	require.Len(t, rows, 2)
 	// Row 0 is the root directory at depth 0; the icon sits at
 	// column 0.
-	require.Equal(t, tcell.ColorGray, rows[0][0].Fg)
+	require.Equal(t, term.ColorGray, rows[0][0].Fg)
 	// Row 1 is the file at depth 1; the icon sits at column
 	// 1 * IndentWidth.
 	// IndentWidth defaults to 4 (matching the editor's default
 	// tabspaces); see normalizeConfig.
-	require.Equal(t, tcell.ColorGray, rows[1][4].Fg)
+	require.Equal(t, term.ColorGray, rows[1][4].Fg)
 }
 
 // TestIconAttrHonorsConfig verifies that an explicit IconAttr
@@ -317,12 +316,12 @@ func TestIconAttrHonorsConfig(t *testing.T) {
 	c, buf, _ := newComp(t, map[string][]mockEntry{
 		"/project":     {{name: "src", isDir: true}},
 		"/project/src": {{name: "app.go"}},
-	}, Config{IconAttr: term.Attributes{Fg: tcell.ColorRed}})
+	}, Config{IconAttr: term.Attributes{Fg: term.ColorRed}})
 	c.ExpandNodeAt(term.Coordinates{Y: 0})
 	rows := buf.View().RawCells()
 	require.Len(t, rows, 2)
-	require.Equal(t, tcell.ColorRed, rows[0][0].Fg)
-	require.Equal(t, tcell.ColorRed, rows[1][4].Fg)
+	require.Equal(t, term.ColorRed, rows[0][0].Fg)
+	require.Equal(t, term.ColorRed, rows[1][4].Fg)
 }
 
 // TestOpenDirectoryIcon verifies that expanded directories render with

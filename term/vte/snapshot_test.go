@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestTerminalSnapshotStorageRoundTripTermCells(t *testing.T) {
@@ -49,17 +48,17 @@ func TestTerminalSnapshotStorageRoundTripTermCells(t *testing.T) {
 			Cells: [][]term.Cell{
 				{
 					{
-						Attributes: term.Attributes(tcell.Style{
-							Fg:    tcell.ColorRed,
-							Bg:    tcell.ColorBlue,
-							Attrs: tcell.AttrBold | tcell.AttrUnderline,
-						}),
+						Attributes: term.Attributes{
+							Fg:    term.ColorRed,
+							Bg:    term.ColorBlue,
+							Attrs: term.AttrBold | term.AttrUnderline,
+						},
 						Ch:        'e',
-						Combining: []rune{'\u0301'},
+						Combining: &[]rune{'\u0301'},
 						Width:     1,
 						Bytes:     3,
 					},
-					{Ch: '界', Combining: []rune{}, Width: 2, Bytes: 3},
+					{Ch: '界', Combining: nil, Width: 2, Bytes: 3},
 				},
 			},
 		},

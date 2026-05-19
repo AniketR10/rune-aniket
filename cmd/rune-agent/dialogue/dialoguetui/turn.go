@@ -29,7 +29,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	tcell "github.com/unstablebuild/tcell/v3"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -548,16 +547,16 @@ func (t *Turn) Draw(w term.Writer) {
 }
 
 var (
-	defaultTreeAttr      = term.Attributes{Fg: tcell.ColorGray}
-	defaultSuccessAttr   = term.Attributes{Fg: tcell.ColorGreen}
-	defaultErrorAttr     = term.Attributes{Fg: tcell.ColorRed}
-	defaultToolNameAttr  = term.Attributes{Attrs: tcell.AttrBold, Fg: tcell.ColorFuchsia}
-	defaultToolArgsAttr  = term.Attributes{Fg: tcell.ColorGray}
-	defaultPromptAttr    = term.Attributes{Fg: tcell.ColorAqua}
-	defaultDroppedAttr   = term.Attributes{Fg: tcell.ColorGray}
-	defaultMemoryAttr    = term.Attributes{Fg: tcell.ColorPurple}
-	defaultResultAttr    = term.Attributes{Fg: tcell.ColorGreen}
-	defaultResultErrAttr = term.Attributes{Fg: tcell.ColorRed}
+	defaultTreeAttr      = term.Attributes{Fg: term.ColorGray}
+	defaultSuccessAttr   = term.Attributes{Fg: term.ColorGreen}
+	defaultErrorAttr     = term.Attributes{Fg: term.ColorRed}
+	defaultToolNameAttr  = term.Attributes{Attrs: term.AttrBold, Fg: term.ColorFuchsia}
+	defaultToolArgsAttr  = term.Attributes{Fg: term.ColorGray}
+	defaultPromptAttr    = term.Attributes{Fg: term.ColorAqua}
+	defaultDroppedAttr   = term.Attributes{Fg: term.ColorGray}
+	defaultMemoryAttr    = term.Attributes{Fg: term.ColorPurple}
+	defaultResultAttr    = term.Attributes{Fg: term.ColorGreen}
+	defaultResultErrAttr = term.Attributes{Fg: term.ColorRed}
 )
 
 func (t *Turn) treeAttr() term.Attributes {

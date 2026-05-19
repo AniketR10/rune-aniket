@@ -30,8 +30,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const (
@@ -83,7 +81,7 @@ func newDomWriter(
 ) *domWriter {
 	w := new(domWriter)
 	w.ch = make(chan Event)
-	w.attr = Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorBlack}
+	w.attr = Attributes{Fg: term.ColorWhite, Bg: term.ColorBlack}
 	w.emitter = emitter
 	w.body = body
 	w.term = term

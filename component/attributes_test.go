@@ -31,7 +31,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -62,7 +61,7 @@ func TestAttrSetter(t *testing.T) {
 	t.Run("attr oob is ignored", func(t *testing.T) {
 		w := term.NewStringWriter(2, 2)
 		s := WithAttrSetter(&component.TestComponent{Ch: 'x'})
-		s.SetAttrAt(term.Coordinates{X: 2, Y: 2}, term.Attributes{Fg: tcell.ColorRed})
+		s.SetAttrAt(term.Coordinates{X: 2, Y: 2}, term.Attributes{Fg: term.ColorRed})
 
 		s.Resize(2, 2)
 
@@ -73,12 +72,12 @@ func TestAttrSetter(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		w := cell.NewBufferWriter(context.Background(), 4, 4)
 		s := WithAttrSetter(&component.TestComponent{Ch: 'a'})
-		s.SetAttr(term.Attributes{Fg: tcell.ColorBlue, Bg: tcell.ColorNavy})
+		s.SetAttr(term.Attributes{Fg: term.ColorBlue, Bg: term.ColorNavy})
 		s.SetAttrAt(term.Coordinates{X: 3, Y: 3},
 			term.Attributes{
-				Fg:    tcell.ColorRed,
-				Bg:    tcell.ColorGreen,
-				Attrs: tcell.AttrBold | tcell.AttrUnderline,
+				Fg:    term.ColorRed,
+				Bg:    term.ColorGreen,
+				Attrs: term.AttrBold | term.AttrUnderline,
 			})
 
 		s.Resize(4, 4)
@@ -87,13 +86,13 @@ func TestAttrSetter(t *testing.T) {
 		for y, row := range w.RawCells() {
 			for x, cell := range row {
 				if y == 3 && x == 3 {
-					assert.Equal(t, tcell.ColorGreen, cell.Bg)
-					assert.Equal(t, tcell.ColorRed, cell.Fg)
-					assert.True(t, cell.Attrs&tcell.AttrUnderline != 0)
-					assert.True(t, cell.Attrs&tcell.AttrBold != 0)
+					assert.Equal(t, term.ColorGreen, cell.Bg)
+					assert.Equal(t, term.ColorRed, cell.Fg)
+					assert.True(t, cell.Attrs&term.AttrUnderline != 0)
+					assert.True(t, cell.Attrs&term.AttrBold != 0)
 				} else {
-					assert.Equal(t, tcell.ColorNavy, cell.Bg)
-					assert.Equal(t, tcell.ColorBlue, cell.Fg)
+					assert.Equal(t, term.ColorNavy, cell.Bg)
+					assert.Equal(t, term.ColorBlue, cell.Fg)
 				}
 			}
 		}

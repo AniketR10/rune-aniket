@@ -30,14 +30,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shadertest"
 )
 
 func TestShine(t *testing.T) {
 	shadertest.TestShader(t, Shine(
 		DefaultShineParams(),
-		term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+		term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 	))
 }
 
@@ -159,13 +158,13 @@ xxxxxxxxxxx`,
 
 	sh := Shine(
 		ShineParams{
-			Color:     tcell.NewRGBColor(255, 255, 255),
+			Color:     term.NewRGBColor(255, 255, 255),
 			BandWidth: 0.3,
 			Cycles:    1,
 		},
 		// A non-default Fg fallback so the shine has something to blend
 		// from on cells whose Fg is ColorDefault.
-		term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+		term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 	)
 
 	for _, tcase := range tsuite {
@@ -288,11 +287,11 @@ xxxxxxxxxxx
 			sh := Shine(
 				ShineParams{
 					Direction: tcase.direction,
-					Color:     tcell.NewRGBColor(255, 255, 255),
+					Color:     term.NewRGBColor(255, 255, 255),
 					BandWidth: 0.3,
 					Cycles:    1,
 				},
-				term.Attributes{Fg: tcell.NewRGBColor(80, 80, 80)},
+				term.Attributes{Fg: term.NewRGBColor(80, 80, 80)},
 			)
 
 			cells := makeCells()

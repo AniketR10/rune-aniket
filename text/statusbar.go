@@ -37,7 +37,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/template"
@@ -97,8 +96,8 @@ type StatusBarConfig struct {
 	Publisher        EventPublisher
 
 	Layout          []StatusBarComponent
-	BackgroundColor tcell.Color
-	ErrorColor      tcell.Color
+	BackgroundColor term.Color
+	ErrorColor      term.Color
 	GitService      vctrl.Service
 }
 
@@ -298,7 +297,7 @@ func (b *StatusBar) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 // Draw satisfies tui.Component.
 func (b *StatusBar) Draw(w term.Writer) {
 	b.vhandler.Draw(w)
-	if b.config.BackgroundColor != tcell.ColorDefault && b.barRight.Height() != 0 {
+	if b.config.BackgroundColor != term.ColorDefault && b.barRight.Height() != 0 {
 		attrs := term.Attributes{Bg: b.config.BackgroundColor}
 		for x := range b.width {
 			w.UnionAttributes(term.Coordinates{Y: b.height - 1, X: x}, attrs)
@@ -407,9 +406,9 @@ func (b *StatusBar) rebuildBarSyntax(state syntax.State) {
 	if state.ParserError != "" {
 		attrs.Fg = b.config.ErrorColor
 		if b.syntaxTemplate.Attributes.Bg == b.config.ErrorColor {
-			attrs.Fg = tcell.ColorRed
-			if b.syntaxTemplate.Attributes.Bg == tcell.ColorRed {
-				attrs.Fg = tcell.ColorYellow
+			attrs.Fg = term.ColorRed
+			if b.syntaxTemplate.Attributes.Bg == term.ColorRed {
+				attrs.Fg = term.ColorYellow
 			}
 		}
 	}
@@ -491,7 +490,7 @@ func (b *StatusBar) buildGit(shortRef string, added, deleted int) {
 
 func (b *StatusBar) buildGitError() {
 	components := template.Build(b.gitShortRefTemplate.Template, "untracked",
-		term.Attributes{Fg: tcell.ColorYellow},
+		term.Attributes{Fg: term.ColorYellow},
 		b.gitShortRefTemplate.Attributes, b.config.BackgroundColor)
 	b.gitShortRefBuilt = component.Inline(components, component.AlignmentLeft)
 	b.gitShortRef.Init(b.gitShortRefBuilt)
@@ -514,15 +513,15 @@ func (b *StatusBar) rebuildFilename(filename string) {
 		path = fmt.Sprintf("%s 󰌾", filename)
 	case !flushed && !b.readOnly:
 		path = fmt.Sprintf("%s ", filename)
-		attrs.Fg = tcell.ColorOlive
-		if attrs.Bg == tcell.ColorOlive {
-			attrs.Fg = tcell.ColorYellow
+		attrs.Fg = term.ColorOlive
+		if attrs.Bg == term.ColorOlive {
+			attrs.Fg = term.ColorYellow
 		}
 	case !flushed && b.readOnly:
 		path = fmt.Sprintf("%s 󰗻", filename)
-		attrs.Fg = tcell.ColorRed
-		if attrs.Bg == tcell.ColorRed {
-			attrs.Fg = tcell.ColorOlive
+		attrs.Fg = term.ColorRed
+		if attrs.Bg == term.ColorRed {
+			attrs.Fg = term.ColorOlive
 		}
 	}
 	components := template.Build(b.relpathTemplate.Template,

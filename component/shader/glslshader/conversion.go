@@ -25,11 +25,11 @@
 package glslshader
 
 import (
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-func colToVec(col, resolveColorDefault tcell.Color) vec3D {
-	if col == tcell.ColorDefault {
+func colToVec(col, resolveColorDefault term.Color) vec3D {
+	if col == term.ColorDefault {
 		col = resolveColorDefault
 	}
 	r, g, b := col.RGB()
@@ -37,6 +37,6 @@ func colToVec(col, resolveColorDefault tcell.Color) vec3D {
 
 }
 
-func vecToCol(v vec3D) tcell.Color {
-	return tcell.NewRGBColor(int32(v.x), int32(v.y), int32(v.z))
+func vecToCol(v vec3D) term.Color {
+	return term.NewRGBColor(int32(v.x), int32(v.y), int32(v.z))
 }

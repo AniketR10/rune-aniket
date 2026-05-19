@@ -26,7 +26,6 @@ package glslshader
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shaderutils"
@@ -77,7 +76,7 @@ type ShineParams struct {
 	Direction Direction
 	// Color is the color blended into the foreground of each cell when the
 	// shine band passes over it.
-	Color tcell.Color
+	Color term.Color
 	// BandWidth controls how wide the shine band is, expressed as a fraction
 	// of the (aspect-ratio corrected) diagonal length.
 	//
@@ -92,7 +91,7 @@ type ShineParams struct {
 func DefaultShineParams() ShineParams {
 	return ShineParams{
 		Direction: DirectionBottomLeftToTopRight,
-		Color:     tcell.NewRGBColor(255, 255, 255),
+		Color:     term.NewRGBColor(255, 255, 255),
 		BandWidth: 0.25,
 		Cycles:    1,
 	}

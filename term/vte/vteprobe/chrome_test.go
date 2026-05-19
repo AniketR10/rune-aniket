@@ -28,7 +28,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 // makeStyledRow builds an extractedRow whose every non-space rune carries
@@ -52,7 +51,7 @@ func makeStyledRow(s string, a term.Attributes) extractedRow {
 func TestDetectChrome(t *testing.T) {
 	t.Parallel()
 
-	reverse := term.Attributes(tcell.Style{Attrs: tcell.AttrReverse})
+	reverse := term.Attributes{Attrs: term.AttrReverse}
 
 	t.Run("status row at bottom is peeled", func(t *testing.T) {
 		t.Parallel()

@@ -128,7 +128,7 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 		fgOpacity:        1,
 		fontManager:      fontManager,
 		enableLigatures:  true,
-		cursorAttributes: term.Attributes{Bg: tcell.ColorRed},
+		cursorAttributes: term.Attributes{Bg: term.FromTcellColor(tcell.ColorRed)},
 		startPositionX:   0,
 		startPositionY:   0,
 		defaultWidth:     defaultWidth,
@@ -139,8 +139,8 @@ func New(handler tui.Handler, options ...Option) (*GUI, error) {
 	ret.ctx = context.Background()
 	ret.ctx, ret.cancelCtx = context.WithCancel(ret.ctx)
 
-	ret.defaultAttr.Fg = tcell.ColorWhite
-	ret.defaultAttr.Bg = tcell.ColorBlack
+	ret.defaultAttr.Fg = term.FromTcellColor(tcell.ColorWhite)
+	ret.defaultAttr.Bg = term.FromTcellColor(tcell.ColorBlack)
 	for _, option := range options {
 		if err := option(ret); err != nil {
 			return nil, fmt.Errorf("option: %w", err)
@@ -537,9 +537,9 @@ func (g *GUI) log(level log.Level, msg string, args ...any) {
 func (g *GUI) resetTheme() {
 	tcell.SetColorValues(g.originalColorValues)
 
-	g.defaultAttr.Fg = tcell.ColorWhite
-	g.defaultAttr.Bg = tcell.ColorBlack
-	g.cursorAttributes = term.Attributes{Bg: tcell.ColorRed}
+	g.defaultAttr.Fg = term.FromTcellColor(tcell.ColorWhite)
+	g.defaultAttr.Bg = term.FromTcellColor(tcell.ColorBlack)
+	g.cursorAttributes = term.Attributes{Bg: term.FromTcellColor(tcell.ColorRed)}
 }
 
 func (g *GUI) setTheme(name string, theme Theme) {
@@ -550,7 +550,7 @@ func (g *GUI) setTheme(name string, theme Theme) {
 	tcell.MergeColorValues(m)
 
 	g.theme = name
-	g.defaultAttr.Fg = theme.Foreground
-	g.defaultAttr.Bg = theme.Background
-	g.cursorAttributes = term.Attributes{Bg: theme.Cursor}
+	g.defaultAttr.Fg = term.FromTcellColor(theme.Foreground)
+	g.defaultAttr.Bg = term.FromTcellColor(theme.Background)
+	g.cursorAttributes = term.Attributes{Bg: term.FromTcellColor(theme.Cursor)}
 }

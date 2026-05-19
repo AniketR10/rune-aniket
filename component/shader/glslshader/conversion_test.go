@@ -27,30 +27,30 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unstablebuild/tcell/v3"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestConversion(t *testing.T) {
 	t.Run("convert color to vector", func(t *testing.T) {
-		col := tcell.NewRGBColor(255, 245, 235)
+		col := term.NewRGBColor(255, 245, 235)
 		vec := colToVec(col, 0)
 		assert.Equal(t, vec, vec3(255, 245, 235))
 	})
 
 	t.Run("convert color to vector out of range wraps", func(t *testing.T) {
-		col := tcell.NewRGBColor(300, 301, 302)
+		col := term.NewRGBColor(300, 301, 302)
 		vec := colToVec(col, 0)
 		assert.Equal(t, vec, vec3(300%256, 301%256, 302%256))
 	})
 
 	t.Run("convert default color to vector", func(t *testing.T) {
-		col := tcell.ColorDefault
-		vec := colToVec(col, tcell.NewRGBColor(255, 0, 0))
+		col := term.ColorDefault
+		vec := colToVec(col, term.NewRGBColor(255, 0, 0))
 		assert.Equal(t, vec, vec3(255, 0, 0))
 	})
 
 	t.Run("convert default color to vector no default attribute", func(t *testing.T) {
-		col := tcell.ColorDefault
+		col := term.ColorDefault
 
 		// term.Attribute{} makes field Bg be the zero-value (0) which is
 		// itself ColorDefault, so it will leave the color unresolved.

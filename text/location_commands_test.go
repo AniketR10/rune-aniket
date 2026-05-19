@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
@@ -82,12 +81,12 @@ func TestLocationHighlightCommandHighlightsAllLocations(t *testing.T) {
 		{
 			From: term.Coordinates{Y: 0},
 			To:   term.Coordinates{Y: 0, X: 1},
-			Attr: term.Attributes{Attrs: tcell.AttrReverse},
+			Attr: term.Attributes{Attrs: term.AttrReverse},
 		},
 		{
 			From: term.Coordinates{Y: 2},
 			To:   term.Coordinates{Y: 2, X: 1},
-			Attr: term.Attributes{Attrs: tcell.AttrReverse},
+			Attr: term.Attributes{Attrs: term.AttrReverse},
 		},
 	}, h.lastLocations)
 

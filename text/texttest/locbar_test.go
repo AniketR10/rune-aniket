@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/ide/vctrl"
@@ -111,7 +110,7 @@ func TestIconsBarUsesIconWidthAndForegroundAttr(t *testing.T) {
 		From: term.Coordinates{Y: 1},
 		To:   term.Coordinates{Y: 2},
 		Icon: "",
-		Attr: term.Attributes{Bg: tcell.ColorRed},
+		Attr: term.Attributes{Bg: term.ColorRed},
 	}}))
 
 	w := term.NewStringWriter(7, 2)
@@ -126,8 +125,8 @@ func TestIconsBarUsesIconWidthAndForegroundAttr(t *testing.T) {
 	require.NoError(t, w.Flush())
 	assert.Equal(t, "   a   \nF  b   ", w.String())
 	iconCell := w.Cells()[7]
-	assert.Equal(t, tcell.ColorRed, iconCell.Fg)
-	assert.Equal(t, tcell.ColorDefault, iconCell.Bg)
+	assert.Equal(t, term.ColorRed, iconCell.Fg)
+	assert.Equal(t, term.ColorDefault, iconCell.Bg)
 }
 
 func TestIconsBarDrawsAllIconsWhenWrappedHandlerConsumesList(t *testing.T) {

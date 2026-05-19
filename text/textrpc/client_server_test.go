@@ -48,7 +48,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	tbrowserrpc "unstable.build/go-tui/browser/browserrpc"
@@ -371,9 +370,9 @@ func TestClientServerIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		expectedAttrs := term.Attributes{
-			Attrs: tcell.AttrUnderline | tcell.AttrBold,
-			Fg:    tcell.ColorWhite,
-			Bg:    tcell.ColorNavy,
+			Attrs: term.AttrUnderline | term.AttrBold,
+			Fg:    term.ColorWhite,
+			Bg:    term.ColorNavy,
 		}
 
 		mock := expectEditor(t, ctrl, ed, uri)

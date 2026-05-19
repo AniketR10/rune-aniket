@@ -49,7 +49,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	fileexplorercomp "unstable.build/go-tui/component/fileexplorer"
@@ -546,9 +545,9 @@ func (e *ex) tabrename(_ context.Context, args ...string) error {
 	}
 	var attrs term.Attributes
 	if len(args) > 1 {
-		attrs.Fg = tcell.GetColor(args[1])
+		attrs.Fg = term.GetColor(args[1])
 		if len(args) > 2 {
-			attrs.Bg = tcell.GetColor(args[2])
+			attrs.Bg = term.GetColor(args[2])
 		}
 	}
 	return e.Browser().SetTabName(t.URI(), args[0], attrs)
@@ -1324,10 +1323,10 @@ func (e *ex) defaultcolors(_ context.Context, args ...string) error {
 	}
 
 	var attrs term.Attributes
-	attrs.Bg = tcell.GetColor(args[0])
+	attrs.Bg = term.GetColor(args[0])
 
 	if len(args) == 2 {
-		attrs.Fg = tcell.GetColor(args[1])
+		attrs.Fg = term.GetColor(args[1])
 	}
 
 	content, _ := e.invokeWindow().Content()

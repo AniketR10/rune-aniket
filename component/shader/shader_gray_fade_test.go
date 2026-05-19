@@ -28,14 +28,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader"
 )
 
 func TestGrayFade_FirstFrameLeavesCellsIntact(t *testing.T) {
 	sh := shader.GrayFade(shader.DefaultGrayFadeParams(), term.Attributes{})
 	in := makeCharCells(4, 2)
-	in[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
+	in[0][0].Fg = term.NewRGBColor(255, 0, 0)
 	want := cloneCells(in)
 
 	sh.Shade(0, 10, in)
@@ -59,7 +58,7 @@ func TestGrayFade_HoldsAtFullDesaturationAfterFadeFrames(t *testing.T) {
 
 	// At the end of the fade window: full desaturation.
 	in := makeCharCells(2, 1)
-	in[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
+	in[0][0].Fg = term.NewRGBColor(255, 0, 0)
 	sh.Shade(params.FadeFrames-1, total, in)
 	assert.Equal(t, 1.0, sh.Progress())
 	r1, g1, b1 := in[0][0].Fg.RGB()
@@ -68,7 +67,7 @@ func TestGrayFade_HoldsAtFullDesaturationAfterFadeFrames(t *testing.T) {
 
 	// Many frames later: still fully desaturated, no recolor.
 	in = makeCharCells(2, 1)
-	in[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
+	in[0][0].Fg = term.NewRGBColor(255, 0, 0)
 	sh.Shade(500, total, in)
 	assert.Equal(t, 1.0, sh.Progress(),
 		"Progress must stay at 1.0 past FadeFrames")
@@ -85,8 +84,8 @@ func TestGrayFade_LastFrameFullyDesaturatesFg(t *testing.T) {
 	params.FadeFrames = 10
 	sh := shader.GrayFade(params, term.Attributes{})
 	in := makeCharCells(2, 1)
-	in[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
-	in[0][0].Bg = tcell.NewRGBColor(10, 20, 30)
+	in[0][0].Fg = term.NewRGBColor(255, 0, 0)
+	in[0][0].Bg = term.NewRGBColor(10, 20, 30)
 
 	sh.Shade(params.FadeFrames-1, 10_000, in)
 
@@ -94,7 +93,7 @@ func TestGrayFade_LastFrameFullyDesaturatesFg(t *testing.T) {
 	r, g, b := in[0][0].Fg.RGB()
 	assert.Equal(t, r, g, "fully-desaturated Fg should have r==g==b")
 	assert.Equal(t, r, b, "fully-desaturated Fg should have r==g==b")
-	assert.Equal(t, tcell.NewRGBColor(10, 20, 30), in[0][0].Bg,
+	assert.Equal(t, term.NewRGBColor(10, 20, 30), in[0][0].Bg,
 		"GrayFade must not alter the background")
 }
 
@@ -106,8 +105,8 @@ func TestGrayFade_DesaturationPreservesPerCellBrightness(t *testing.T) {
 	params.FadeFrames = 10
 	sh := shader.GrayFade(params, term.Attributes{})
 	in := makeCharCells(2, 1)
-	in[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
-	in[0][1].Fg = tcell.NewRGBColor(255, 255, 255)
+	in[0][0].Fg = term.NewRGBColor(255, 0, 0)
+	in[0][1].Fg = term.NewRGBColor(255, 255, 255)
 
 	sh.Shade(params.FadeFrames-1, 10_000, in)
 
@@ -127,7 +126,7 @@ func TestGrayFade_DefaultParamsRampOverTotal(t *testing.T) {
 
 	const total = 10
 	in := makeCharCells(2, 1)
-	in[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
+	in[0][0].Fg = term.NewRGBColor(255, 0, 0)
 	sh.Shade(total-1, total, in)
 	assert.Equal(t, 1.0, sh.Progress(),
 		"default params should reach full progress at frame==total-1")
@@ -138,7 +137,7 @@ func TestGrayFade_DefaultParamsRampOverTotal(t *testing.T) {
 	// Mid-way through total, progress should be partial.
 	sh = shader.GrayFade(shader.GrayFadeParams{}, term.Attributes{})
 	mid := makeCharCells(2, 1)
-	mid[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
+	mid[0][0].Fg = term.NewRGBColor(255, 0, 0)
 	sh.Shade(total/2, total, mid)
 	assert.InDelta(t, float64(total/2)/float64(total-1), sh.Progress(), 1e-9)
 }
@@ -196,8 +195,8 @@ func TestBurn_SetInitialDesaturationAppliesToSnapshot(t *testing.T) {
 		SetInitialDesaturation(amount float64)
 	}
 	snapshot := makeCharCells(2, 1)
-	snapshot[0][0].Fg = tcell.NewRGBColor(255, 0, 0)
-	snapshot[0][1].Fg = tcell.NewRGBColor(0, 255, 0)
+	snapshot[0][0].Fg = term.NewRGBColor(255, 0, 0)
+	snapshot[0][1].Fg = term.NewRGBColor(0, 255, 0)
 	sh.(setter).SetInitialCells(snapshot)
 	sh.(setter).SetInitialDesaturation(1)
 

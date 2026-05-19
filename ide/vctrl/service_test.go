@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 func TestDiffToLocationList(t *testing.T) {
@@ -45,7 +44,7 @@ func TestDiffToLocationList(t *testing.T) {
 			{
 				From: term.Coordinates{},
 				To:   term.Coordinates{Y: 1},
-				Attr: term.Attributes{Fg: tcell.ColorGreen},
+				Attr: term.Attributes{Fg: term.ColorGreen},
 				Icon: "+",
 			},
 		}},
@@ -55,7 +54,7 @@ func TestDiffToLocationList(t *testing.T) {
 			{
 				From: term.Coordinates{},
 				To:   term.Coordinates{Y: 0, X: 1},
-				Attr: term.Attributes{Fg: tcell.ColorRed},
+				Attr: term.Attributes{Fg: term.ColorRed},
 				Icon: "-",
 			},
 		}},
@@ -65,7 +64,7 @@ func TestDiffToLocationList(t *testing.T) {
 			{
 				From: term.Coordinates{},
 				To:   term.Coordinates{Y: 1},
-				Attr: term.Attributes{Fg: tcell.ColorGreen},
+				Attr: term.Attributes{Fg: term.ColorGreen},
 				Icon: "+",
 			},
 		}},
@@ -74,7 +73,7 @@ func TestDiffToLocationList(t *testing.T) {
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
 			actual := test.diff.LocationList(
-				term.Attributes{Fg: tcell.ColorRed}, term.Attributes{Fg: tcell.ColorGreen})
+				term.Attributes{Fg: term.ColorRed}, term.Attributes{Fg: term.ColorGreen})
 			locs := make([]textapi.Location, 0)
 			for loc, ok := actual.Current(); ok; loc, ok = actual.Next() {
 				locs = append(locs, loc)

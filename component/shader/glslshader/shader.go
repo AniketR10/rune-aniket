@@ -29,7 +29,6 @@ import (
 	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/debug"
 )
@@ -47,8 +46,8 @@ type cellRunner interface {
 		cellCoords term.Coordinates,
 		fragCoordX, fragCoordY int,
 		resolutionX, resolutionY int,
-		inChar rune, inFg, inBg tcell.Color,
-	) (char rune, fg, bg tcell.Color)
+		inChar rune, inFg, inBg term.Color,
+	) (char rune, fg, bg term.Color)
 }
 
 // glslHelper is a helper structure which parallelizes computation

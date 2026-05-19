@@ -36,7 +36,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
@@ -173,7 +172,7 @@ func (h *editorHandler) newMarkLocation(pos term.Coordinates) textapi.Location {
 	return textapi.Location{
 		From: pos,
 		To:   term.Coordinates{Y: pos.Y, X: pos.X + 1},
-		Attr: term.Attributes{Bg: tcell.ColorGray},
+		Attr: term.Attributes{Bg: term.ColorGray},
 	}
 }
 

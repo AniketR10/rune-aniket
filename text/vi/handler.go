@@ -40,7 +40,6 @@ import (
 	sdkcomp "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
@@ -269,37 +268,37 @@ func (vi *viHandlerImpl) setMode(mode viMode) {
 		text = " NORMAL"
 	case insertMode:
 		text = " INSERT"
-		attrs = term.Attributes{Bg: tcell.ColorGreen, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorGreen, Fg: term.ColorBlack}
 	case deleteMode:
 		text = " DELETE"
-		attrs = term.Attributes{Bg: tcell.ColorRed, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorRed, Fg: term.ColorBlack}
 	case yankMode:
 		text = "  YANK "
-		attrs = term.Attributes{Bg: tcell.ColorFuchsia, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorFuchsia, Fg: term.ColorBlack}
 	case caseChangeMode:
 		text = "  CASE "
-		attrs = term.Attributes{Bg: tcell.ColorFuchsia, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorFuchsia, Fg: term.ColorBlack}
 	case shiftMode:
 		text = " SHIFT "
-		attrs = term.Attributes{Bg: tcell.ColorOrange, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.GetColor("orange"), Fg: term.ColorBlack}
 	case commentMode:
 		text = "COMMENT"
-		attrs = term.Attributes{Bg: tcell.ColorLime, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorLime, Fg: term.ColorBlack}
 	case visualMode:
 		text = " VISUAL"
-		attrs = term.Attributes{Bg: tcell.ColorBlue, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorBlue, Fg: term.ColorBlack}
 	case visualLineMode:
 		text = " V-LINE"
-		attrs = term.Attributes{Bg: tcell.ColorTeal, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorTeal, Fg: term.ColorBlack}
 	case visualBlockMode:
 		text = "V-BLOCK"
-		attrs = term.Attributes{Bg: tcell.ColorAqua, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorAqua, Fg: term.ColorBlack}
 	case replaceMode:
 		text = "REPLACE"
-		attrs = term.Attributes{Bg: tcell.ColorYellow, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorYellow, Fg: term.ColorBlack}
 	case searchMode:
 		text = " SEARCH"
-		attrs = term.Attributes{Bg: tcell.ColorSilver, Fg: tcell.ColorBlack}
+		attrs = term.Attributes{Bg: term.ColorSilver, Fg: term.ColorBlack}
 	default:
 		panic(fmt.Sprintf("unknown mode: %v", mode))
 	}
@@ -416,7 +415,7 @@ func (vi *viHandlerImpl) highlightZRange() {
 		vi.clearZRangeHighlight()
 		return
 	}
-	foldHighlightAttr := term.Attributes{Bg: tcell.ColorGray}
+	foldHighlightAttr := term.Attributes{Bg: term.ColorGray}
 	vi.cursor.SetLocationList(
 		textapi.LocationPriorityInfo, foldHighlightLocationListID,
 		text.LocationSlice([]textapi.Location{
@@ -780,7 +779,7 @@ func (vi *viHandlerImpl) markMatchingBraceViaCursor(target, match rune, end bool
 	vi.cursor.SetLocationList(textapi.LocationPriorityInfo,
 		matchingLocID, textapi.LocationSlice([]textapi.Location{
 			{From: pos, To: selectEnd, Attr: term.Attributes{
-				Attrs: tcell.AttrReverse,
+				Attrs: term.AttrReverse,
 			}},
 		}))
 }

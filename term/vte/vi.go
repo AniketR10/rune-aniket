@@ -35,7 +35,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term/vte/vtescreen"
@@ -783,7 +782,7 @@ func (v *viHandler) drawPromptLine(w term.Writer) {
 				posAtScreen.X < 0 || posAtScreen.X >= v.width {
 				continue
 			}
-			w.UnionAttributes(posAtScreen, term.Attributes{Attrs: tcell.AttrUnderline})
+			w.UnionAttributes(posAtScreen, term.Attributes{Attrs: term.AttrUnderline})
 		}
 	}
 }

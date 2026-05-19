@@ -28,7 +28,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/unstablebuild/tcell/v3"
+
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestParserIntegration(t *testing.T) {
@@ -86,7 +87,7 @@ func TestParserIntegration(t *testing.T) {
 				'2', '5', '5', 'm',
 			},
 			func(t *testing.T, handler mockHandler) {
-				expected := tcell.NewRGBColor(128, 66, 255)
+				expected := term.NewRGBColor(128, 66, 255)
 				assert.Equal(t, &Attr{Type: ForegroundAttr, Color: expected}, handler.attr)
 			},
 		},
@@ -94,7 +95,7 @@ func TestParserIntegration(t *testing.T) {
 			"parsing ForegroundAttr must not parse blue component also as separate attr",
 			[]byte{0x1b, '[', '3', '8', ';', '2', ';', '0', ';', '2', '5', '5', ';', '0', 'm'},
 			func(t *testing.T, handler mockHandler) {
-				expected := tcell.NewRGBColor(0, 255, 0)
+				expected := term.NewRGBColor(0, 255, 0)
 				// The blue component was being parsed as iota's 0 value (ResetAttr) wiping the RGB attr.
 				assert.NotEqual(t, &Attr{Type: ResetAttr}, handler.attr)
 				assert.Equal(t, &Attr{Type: ForegroundAttr, Color: expected}, handler.attr)
@@ -105,7 +106,7 @@ func TestParserIntegration(t *testing.T) {
 			"parsing BackgroundAttr must not parse blue component also as separate attr",
 			[]byte{0x1b, '[', '4', '8', ';', '2', ';', '0', ';', '2', '5', '5', ';', '0', 'm'},
 			func(t *testing.T, handler mockHandler) {
-				expected := tcell.NewRGBColor(0, 255, 0)
+				expected := term.NewRGBColor(0, 255, 0)
 				// The blue component was being parsed as iota's 0 value (ResetAttr) wiping the RGB attr.
 				assert.NotEqual(t, &Attr{Type: ResetAttr}, handler.attr)
 				assert.Equal(t, &Attr{Type: BackgroundAttr, Color: expected}, handler.attr)

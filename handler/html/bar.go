@@ -29,7 +29,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 )
 
 const (
@@ -65,13 +64,13 @@ func (b *barButtons) Draw(w term.Writer) {
 	}
 	backCell := term.Cell{Ch: backButton, Width: 2}
 	if b.backDim {
-		backCell.Attributes = term.Attributes{Attrs: tcell.AttrDim}
+		backCell.Attributes = term.Attributes{Attrs: term.AttrDim}
 	}
 	w.SetCell(term.Coordinates{X: 1, Y: 1}, backCell)
 
 	fwdCell := term.Cell{Ch: forwardButton, Width: 2}
 	if b.fwdDim {
-		fwdCell.Attributes = term.Attributes{Attrs: tcell.AttrDim}
+		fwdCell.Attributes = term.Attributes{Attrs: term.AttrDim}
 	}
 	w.SetCell(term.Coordinates{X: 4, Y: 1}, fwdCell)
 }

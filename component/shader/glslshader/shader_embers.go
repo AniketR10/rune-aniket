@@ -28,7 +28,6 @@ import (
 	"math/rand"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
 )
@@ -125,13 +124,13 @@ func DefaultEmbersParams() EmbersParams {
 // Aimed to be passed to EmbersParams.Colors.
 func EmbersColorsRed() EmbersColors {
 	return EmbersColors{
-		Fg1:     tcell.NewRGBColor(255, 22, 0),
-		Fg2:     tcell.NewRGBColor(255, 198, 28),
-		Bg1:     tcell.NewRGBColor(255, 22, 0),
-		Bg2:     tcell.NewRGBColor(255, 255, 0),
-		Sparks1: tcell.NewRGBColor(241, 24, 0),
-		Sparks2: tcell.NewRGBColor(243, 255, 24),
-		Ashes:   tcell.NewRGBColor(47, 30, 32),
+		Fg1:     term.NewRGBColor(255, 22, 0),
+		Fg2:     term.NewRGBColor(255, 198, 28),
+		Bg1:     term.NewRGBColor(255, 22, 0),
+		Bg2:     term.NewRGBColor(255, 255, 0),
+		Sparks1: term.NewRGBColor(241, 24, 0),
+		Sparks2: term.NewRGBColor(243, 255, 24),
+		Ashes:   term.NewRGBColor(47, 30, 32),
 	}
 }
 
@@ -139,15 +138,15 @@ func EmbersColorsRed() EmbersColors {
 type EmbersColors struct {
 	// Colors to taint the foreground with: Fg1 on cooler ember regions
 	// presence Fg2 otherwise.
-	Fg1, Fg2 tcell.Color
+	Fg1, Fg2 term.Color
 	// Colors to taint the background with: Fg1 on cooler ember regions
 	// presence Fg2 otherwise.
-	Bg1, Bg2 tcell.Color
+	Bg1, Bg2 term.Color
 	// Colors to taint the foreground with: Fg1 on cooler ember parts Fg2
 	// otherwise.
-	Sparks1, Sparks2 tcell.Color
+	Sparks1, Sparks2 term.Color
 	// Base color for the ashes embers blend into.
-	Ashes tcell.Color
+	Ashes term.Color
 }
 
 type embers struct {

@@ -30,15 +30,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
 )
 
 var (
-	defaultFocusAttr    = term.Attributes{Fg: tcell.ColorRed}
-	defaultNonFocusAttr = term.Attributes{Fg: tcell.ColorDefault}
-	defaultScrollAttr   = term.Attributes{Fg: tcell.ColorWhite}
-	defaultFrameAttr    = term.Attributes{Fg: tcell.ColorRed}
+	defaultFocusAttr    = term.Attributes{Fg: term.ColorRed}
+	defaultNonFocusAttr = term.Attributes{Fg: term.ColorDefault}
+	defaultScrollAttr   = term.Attributes{Fg: term.ColorWhite}
+	defaultFrameAttr    = term.Attributes{Fg: term.ColorRed}
 	defaultSeparator    = "  "
 )
 

@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	htmlcomp "unstable.build/go-tui/component/html"
 )
 
@@ -348,8 +347,8 @@ Hello
 		// At start of history, both buttons rendered dim.
 		assert.Equal(t, 0, h.historyIdx)
 		w := barDraw(t, h)
-		assert.Equal(t, tcell.AttrDim, cellAt(w, 1, 1).Attrs, "back dim at start")
-		assert.Equal(t, tcell.AttrDim, cellAt(w, 4, 1).Attrs, "forward dim at start")
+		assert.Equal(t, term.AttrDim, cellAt(w, 1, 1).Attrs, "back dim at start")
+		assert.Equal(t, term.AttrDim, cellAt(w, 4, 1).Attrs, "forward dim at start")
 
 		// Click ◀: does nothing at start.
 		h.Handle(term.Event{
@@ -362,8 +361,8 @@ Hello
 		h.navigateTo(mustParseURL(t, srv.URL+"/p2"))
 		assert.Equal(t, 1, h.historyIdx)
 		w = barDraw(t, h)
-		assert.Equal(t, tcell.AttrNone, cellAt(w, 1, 1).Attrs, "back not dim after nav")
-		assert.Equal(t, tcell.AttrDim, cellAt(w, 4, 1).Attrs, "forward dim at end")
+		assert.Equal(t, term.AttrNone, cellAt(w, 1, 1).Attrs, "back not dim after nav")
+		assert.Equal(t, term.AttrDim, cellAt(w, 4, 1).Attrs, "forward dim at end")
 
 		// At end of history, ▶ does nothing.
 		h.Handle(term.Event{
@@ -375,8 +374,8 @@ Hello
 		// Go back: back dim, forward enabled.
 		h.goBack()
 		w = barDraw(t, h)
-		assert.Equal(t, tcell.AttrDim, cellAt(w, 1, 1).Attrs, "back dim at start again")
-		assert.Equal(t, tcell.AttrNone, cellAt(w, 4, 1).Attrs, "forward not dim with forward history")
+		assert.Equal(t, term.AttrDim, cellAt(w, 1, 1).Attrs, "back dim at start again")
+		assert.Equal(t, term.AttrNone, cellAt(w, 4, 1).Attrs, "forward not dim with forward history")
 	})
 
 	t.Run("double click selects URL word", func(t *testing.T) {

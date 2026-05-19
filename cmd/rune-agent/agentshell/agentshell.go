@@ -45,7 +45,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
@@ -1539,8 +1538,8 @@ func newForkPickerHandler(
 ) *forkPickerHandler {
 	list := &component.FocusList{}
 	list.InitWithAttr(
-		term.Attributes{Fg: tcell.ColorDefault},
-		term.Attributes{Fg: tcell.ColorRed, Attrs: tcell.AttrBold},
+		term.Attributes{Fg: term.ColorDefault},
+		term.Attributes{Fg: term.ColorRed, Attrs: term.AttrBold},
 	)
 	maxEntryW := 0
 	for _, c := range candidates {
@@ -1658,7 +1657,7 @@ func (h *forkPickerHandler) updatePreview() {
 
 func (h *forkPickerHandler) drawSeparator(w term.Writer) {
 	ch := component.FrameCharSetDefault().HorizontalTop
-	attr := term.Attributes{Fg: tcell.ColorGray}
+	attr := term.Attributes{Fg: term.ColorGray}
 	y := h.previewH
 	for x := range h.innerW {
 		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch, Width: 1, Attributes: attr})
