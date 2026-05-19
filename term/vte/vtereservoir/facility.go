@@ -183,6 +183,26 @@ func (f *Facility) WaitForInitialFill() {
 	}
 }
 
+// WaitForPendingInit blocks until every initCap warm-up goroutine has
+// observed the current state and decremented pendingInit. Unlike
+// WaitForInitialFill, this does not exit early on Close — the warm-up
+// is still racing the underlying factory at that point, and the
+// goroutine has side effects on the executor/workspace (opening pty
+// pairs, launching shells) that the workspace teardown needs to be
+// sequenced after to avoid concurrent fd destroy / startProcess access.
+//
+// Use this from owners that need to fence their own resource teardown
+// against an in-flight warm-up; Close itself remains non-blocking so
+// stuck factories cannot wedge shutdown of unrelated callers (see the
+// "initCap does not resurrect a closed pool" facility test).
+func (f *Facility) WaitForPendingInit() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for f.pendingInit > 0 {
+		f.cond.Wait()
+	}
+}
+
 // Get selects an arbitrary vte from the [Facility], removes it from the
 // Facility, and returns it to the caller.
 func (f *Facility) Get() (VTE, error) {

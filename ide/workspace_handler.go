@@ -1146,30 +1146,65 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.pendingWG.Add(1)
 	go debug.CapturePanicReport(func() {
 		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
+		// If the workspace was canceled while Phase B was running
+		// (e.g. workspaceManagerHandler.Close marked pending and
+		// returned without an event loop to drain the install
+		// callback), dispose the partial build inline rather than
+		// trying to schedule installPendingWorkspace. Otherwise the
+		// just-built ex (and its in-flight vtereservoir warmup) is
+		// orphaned and keeps using fileScheme-owned *os.File handles
+		// that the imminent workspaceManager shutdown is about to
+		// close, surfacing as a data race in os.startProcess vs
+		// os.(*File).Close.
+		if pending.canceled.Load() {
+			h.abortPendingBuild(pending, uri, built, buildErr, cancel)
+			return
+		}
 		// scheduleNextTick may legitimately return false if the
 		// host event loop is not running (e.g. tests that exercise
 		// the IDE without tui.Run, or the loop has already exited).
 		// In that case the install closure never runs, so we still
 		// need to release pendingWG and tear down the reservation —
 		// otherwise drainPendingWorkspaces would hang forever and a
-		// reserved-but-empty slot would leak in h.pending.
+		// reserved-but-empty slot would leak in h.pending. The
+		// build artifacts also have to be disposed inline, same as
+		// the canceled branch above, for the same fileScheme race
+		// reason.
 		scheduled := h.scheduleNextTick(func() {
 			defer h.pendingWG.Done()
 			h.installPendingWorkspace(pending, uri, ctx, cancel,
 				cwd, built, buildErr, shouldRestore, promptRecommended)
 		})
 		if !scheduled {
-			h.mu.Lock()
-			delete(h.pending, uri.String())
-			if h.lastReservedPending == pending {
-				h.lastReservedPending = nil
-			}
-			h.mu.Unlock()
-			cancel()
-			h.pendingWG.Done()
+			h.abortPendingBuild(pending, uri, built, buildErr, cancel)
 		}
 	})
 	return nil
+}
+
+// abortPendingBuild tears down the bookkeeping and artifacts for a
+// pending workspace whose Phase C install will not run — either because
+// closeWorkspace canceled the pending entry mid-build or because the
+// host event loop is no longer draining scheduleNextTick callbacks.
+// It mirrors the install-skipping path of installPendingWorkspace:
+// remove the reservation, dispose the partial build (so the embedded
+// vtereservoir warmup stops touching fileScheme-owned fds), call the
+// build context's cancel, and release the pendingWG slot.
+func (h *workspaceManagerHandler) abortPendingBuild(
+	pending *pendingWorkspace, uri workspaceapi.URI,
+	built *builtWorkspace, buildErr error, cancel context.CancelFunc,
+) {
+	h.mu.Lock()
+	delete(h.pending, uri.String())
+	if h.lastReservedPending == pending {
+		h.lastReservedPending = nil
+	}
+	h.mu.Unlock()
+	if buildErr == nil {
+		h.discardBuiltWorkspace(built)
+	}
+	cancel()
+	h.pendingWG.Done()
 }
 
 // findInstalledSlot returns the index of an already-installed workspace
@@ -2111,6 +2146,15 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 		p.cancelCtx()
 		delete(h.pending, k)
 	}
+	// Wait for in-flight Phase B build goroutines to observe the
+	// cancellation and dispose themselves. Without this, the build
+	// goroutine can still be inside vtereservoir.New's warmup when
+	// the workspaceManager.Close call below tears down the fileScheme
+	// out from under it, racing on the pty/tty *os.File descriptors
+	// the warmup is feeding to os.StartProcess.
+	h.mu.Unlock()
+	h.pendingWG.Wait()
+	h.mu.Lock()
 	for _, hm := range h.workspaces {
 		if hm == nil {
 			continue

@@ -2491,6 +2491,15 @@ func (e *ex) Close() (ret error) {
 		if err := e.reservoir.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
+		// Block until every in-flight initCap warm-up goroutine has
+		// returned from vte.NewHandler. Those goroutines open pty
+		// pairs against the workspace's fileScheme and call
+		// os.StartProcess, both of which touch *os.File descriptors
+		// the workspace.Manager teardown is about to free. Letting
+		// ex.Close return while a warm-up syscall is still in flight
+		// leaks the just-opened fds and races the FD destroy in
+		// os.(*File).Close (caught by -race during shutdown).
+		e.reservoir.WaitForPendingInit()
 	}
 	if e.cancelPartialReissue != nil {
 		e.cancelPartialReissue()
