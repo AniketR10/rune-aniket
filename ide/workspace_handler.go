@@ -2657,6 +2657,13 @@ func (h *workspaceManagerHandler) waitInflight() {
 		}
 		exes = append(exes, w.ex)
 	}
+	// h.empty is the home/empty workspace's ex; flushes there (e.g.
+	// :write against a buffer opened from the empty workspace) are
+	// tracked by the same flusher contract but are not in
+	// h.workspaces, so drain them too.
+	if h.empty != nil {
+		exes = append(exes, h.empty)
+	}
 	h.mu.Unlock()
 	for _, e := range exes {
 		e.waitInflight()
