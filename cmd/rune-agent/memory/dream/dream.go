@@ -40,6 +40,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -50,7 +51,6 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/debug"
 )
 
@@ -244,12 +244,18 @@ func Dream(ctx context.Context, deps Deps) (iterator.Iterator[Progress], error) 
 	}
 
 	ch := make(chan Progress, 1)
-	it := &progressIterator{ch: ch}
+	runCtx, cancel := context.WithCancel(ctx)
+	it := &progressIterator{
+		ch:     ch,
+		cancel: cancel,
+		done:   make(chan struct{}),
+	}
 
 	go debug.CapturePanicReport(func() {
 
+		defer close(it.done)
 		defer close(ch)
-		it.runErr = runDream(ctx, ch, deps)
+		it.runErr = runDream(runCtx, ch, deps)
 
 	})
 
@@ -334,6 +340,9 @@ func runDream(ctx context.Context, ch chan<- Progress, deps Deps) error {
 
 	// Run pipeline phases.
 	for _, phase := range phases {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// Skip non-extract phases that have already processed the current
 		// extraction epoch, or when no extraction has produced memories yet.
 		if phase.Name != "extract" {
@@ -597,6 +606,9 @@ func dreamDialogue(
 	}
 
 	for attempt := range maxFix {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		emit(ctx, ch, Progress{
 			Type:       ProgressVerifying,
 			DialogueID: d.ID,
@@ -720,7 +732,7 @@ func goModTidy(ctx context.Context, exec workspaceapi.Executor, dataPath string)
 			return fmt.Errorf("go mod tidy failed:\n%s\n%w", buf.String(), procErr)
 		}
 	case <-ctx.Done():
-		return fmt.Errorf("go mod tidy timed out:\n%s", buf.String())
+		return ctx.Err()
 	}
 
 	return nil
@@ -806,7 +818,7 @@ func runGitCmd(ctx context.Context, exec workspaceapi.Executor,
 			return fmt.Errorf("git %s failed:\n%s\n%w", args[0], buf.String(), procErr)
 		}
 	case <-ctx.Done():
-		return fmt.Errorf("git %s timed out:\n%s", args[0], buf.String())
+		return ctx.Err()
 	}
 
 	return nil
@@ -899,7 +911,7 @@ func verify(ctx context.Context, exec workspaceapi.Executor, dataPath string) er
 			return fmt.Errorf("go test failed:\n%s\n%w", buf.String(), procErr)
 		}
 	case <-ctx.Done():
-		return fmt.Errorf("go test timed out:\n%s", buf.String())
+		return ctx.Err()
 	}
 
 	return nil
@@ -990,6 +1002,12 @@ type progressIterator struct {
 	runErr error // set by goroutine before close(ch)
 	mu     sync.Mutex
 	err    error
+	// cancel cancels the producer's derived context. Calling Close
+	// invokes it; subsequent calls are no-ops thanks to sync.Once.
+	cancel     context.CancelFunc
+	cancelOnce sync.Once
+	// done is closed by the producer goroutine when it exits.
+	done chan struct{}
 }
 
 func (p *progressIterator) Next(ctx context.Context) (Progress, bool) {
@@ -1019,5 +1037,26 @@ func (p *progressIterator) Err() error {
 }
 
 func (p *progressIterator) Close() error {
+	if p.cancel != nil {
+		p.cancelOnce.Do(p.cancel)
+	}
+	if p.done != nil {
+		// Wait for the producer goroutine to fully exit so callers can
+		// rely on Close meaning "producer stopped". Use a generous
+		// safety deadline to avoid hanging the REPL if the producer is
+		// stuck in a system call that ignores ctx cancellation.
+		select {
+		case <-p.done:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	// Surface the producer's terminal error (typically ctx.Canceled
+	// after Close) so callers querying Err() after Close see it even if
+	// they never drained the channel to completion via Next.
+	p.mu.Lock()
+	if p.err == nil && p.runErr != nil {
+		p.err = p.runErr
+	}
+	p.mu.Unlock()
 	return nil
 }

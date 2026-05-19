@@ -38,12 +38,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/ide/vctrl/testgit"
 )
 
@@ -232,6 +232,61 @@ func TestDream(t *testing.T) {
 
 		_ = collectProgress(t, it)
 		assert.Error(t, it.Err())
+	})
+
+	t.Run("cancellation stops in-flight producer", func(t *testing.T) {
+		dir := t.TempDir()
+		// Pre-create .git so ensureGitRepo short-circuits and the
+		// producer reaches the LLM call quickly.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+		deps := validDeps(t, dir)
+		deps.Store = &mockDialogueStore{
+			dialogues: []dialoguemanager.Dialogue{
+				{ID: "d1", Version: 1, Messages: []llmapi.Message{
+					{Role: llmapi.RoleUser, Content: "hi"},
+				}},
+			},
+		}
+		// LLM blocks until either ctx is cancelled or the test releases it.
+		release := make(chan struct{})
+		defer close(release)
+		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
+			{block: release},
+		}}
+
+		it, err := Dream(t.Context(), deps)
+		require.NoError(t, err)
+
+		// Drain a couple of bootstrap/phase events so the producer is
+		// past startup and waiting on the LLM call.
+		drainCtx, drainCancel := context.WithTimeout(t.Context(), 2*time.Second)
+		got := 0
+		for got < 2 {
+			_, ok := it.Next(drainCtx)
+			if !ok {
+				break
+			}
+			got++
+		}
+		drainCancel()
+		require.Greater(t, got, 0, "no progress events received before cancel")
+
+		// Cancelling Close must stop the producer goroutine within the
+		// deadline. Before the fix, Close is a no-op so the goroutine
+		// keeps running until the (blocking) LLM call returns.
+		closeDone := make(chan error, 1)
+		go func() { closeDone <- it.Close() }()
+
+		select {
+		case <-closeDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("it.Close() did not return within 2s after cancel; " +
+				"producer goroutine is still running")
+		}
+
+		// After Close returns, the iterator must report an error
+		// terminating in context.Canceled.
+		assert.ErrorIs(t, it.Err(), context.Canceled)
 	})
 
 	t.Run("schema upgrade triggers re-processing", func(t *testing.T) {
@@ -1041,6 +1096,10 @@ type mockLLMResponse struct {
 	text         string
 	finishReason llmapi.FinishReason
 	err          error
+	// block, if non-nil, causes CreateCompletion to block until the channel
+	// is closed or ctx is done. Used by cancellation tests to keep the
+	// producer goroutine in-flight.
+	block <-chan struct{}
 }
 
 func (m *mockLLMService) CreateCompletion(
@@ -1061,6 +1120,13 @@ func (m *mockLLMService) CreateCompletion(
 	}
 
 	resp := m.responses[idx]
+	if resp.block != nil {
+		select {
+		case <-resp.block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	if resp.err != nil {
 		return nil, resp.err
 	}
