@@ -238,6 +238,7 @@ release-all: dmg-notarize
 #   make rune-app-delve
 #   open $(RUNE_RELEASE_DIR)/Rune.app
 #   dlv attach $$(pgrep -n rune)
+app-delve: RUNE_DEBUG_BUILD := true
 app-delve:
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)

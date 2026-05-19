@@ -38,7 +38,7 @@ EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean test coverage generate sixdev rune rune-agent ox-api claudeimport \
+.PHONY: debug clean test coverage generate rune rune-agent ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
@@ -95,10 +95,6 @@ debug: RUNE_DEBUG_BUILD := true
 debug: CGO_ENABLED=CGO_ENABLED=1
 debug: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 debug: deps $(EXECS) $(CLAUDEIMPORT)
-
-sixdev: GOFLAGS=-race
-sixdev: CGO_ENABLED=CGO_ENABLED=1
-sixdev: bin/six
 
 rune: CGO_ENABLED=CGO_ENABLED=1
 rune: GOPRIVATE=github.com/unstablebuild,unstable.build/*
