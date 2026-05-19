@@ -615,7 +615,7 @@ config = {
         "aliases":      {
             "e":              {"command": "edit", "completer": "files"},
             "w":              "write",
-            "sed":            "!! gsed -i $1 %",
+            "sed":            "!! gsed -i $1 $FILE",
             "gitnextchange":  "jumptolocation next gitchange",
             "gitprevchange":  "jumptolocation previous gitchange",
             "lspnextdiagnostic": "jumptolocation next lsp-diagnostics",
@@ -641,7 +641,7 @@ config = {
             # re-shell-quotes it so the whole script reaches awk
             # as one argv element.
             "gitchanges":     "locationpicker awk 'BEGIN { cmd = \"git diff HEAD --no-color -U0\"; while ((cmd | getline line) > 0) { if (substr(line, 1, 6) == \"+++ b/\") f = substr(line, 7); else if (substr(line, 1, 2) == \"@@\") { match(line, /[+][0-9]+/); print f \":\" substr(line, RSTART+1, RLENGTH-1) \":1:\" line } } }'",
-            "gitblame":       "! git blame %",
+            "gitblame":       "! git blame $FILE",
             "gitdiff":        "! git diff",
             "shadercancel":   "shaderrun nop 500ms",
             "tabnew":         "echo {prompt}edit<space>",
@@ -651,13 +651,13 @@ config = {
             "searchvar":      "echo {prompt}searchast<space>locals.scm<space>local.definition.var<enter>",
             "searchtype":     "echo {prompt}searchast<space>locals.scm<space>local.definition.type<enter>",
             "worktreenew": [
-                '!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1',
-                'workspacenew $RUNE_DATADIR/worktrees/$1',
+                '!! git worktree add "$RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1" -b $1',
+                'workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1',
                 'workspaceready workspacerename $1',
             ],
             "worktreeopen": {
                 "command": [
-                    "workspacenew $RUNE_DATADIR/worktrees/$1",
+                    "workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
                     "workspaceready workspacerename $1",
                     "workspaceready shaderrun shine 600ms",
                 ],
@@ -665,7 +665,7 @@ config = {
             },
             "worktreeremove": {
                 "command": [
-                    "!! git worktree remove $1",
+                    "!! git worktree remove $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
                     "shaderrun embers 600ms",
                 ],
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",

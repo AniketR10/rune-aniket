@@ -69,6 +69,7 @@ import (
 	"unstable.build/go-tui/text/registerhistory"
 	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/text/cmdenv"
 )
 
 const (
@@ -3370,7 +3371,8 @@ func parseAliasCompleter(
 func commandCompleter(cmdstr string) func(c *text.Component) command.Completer {
 	return func(c *text.Component) command.Completer {
 		cmdAndArgs := strings.Split(cmdstr, " ")
-		return command.OutputLinesCompleter(c.Workspace(), cmdAndArgs)
+		return command.OutputLinesCompleter(
+			c.Workspace(), cmdAndArgs, cmdenv.Lookup(c.EnvSource()))
 	}
 }
 

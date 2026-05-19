@@ -82,6 +82,7 @@ func newTestEditor() *Editor {
 		stubTabManager{},
 		vte.DefaultConfig(),
 		stubReloader{},
+		nil,
 	)
 }
 
@@ -224,7 +225,8 @@ func (a newArgs) call() *Editor {
 	return New(
 		a.command, a.gotoTemplate, a.schedule,
 		a.cwd, a.uri, a.notifications, a.publisher,
-		a.terminal, a.executor, a.tabManager, a.vteCfg, a.reloader)
+		a.terminal, a.executor, a.tabManager, a.vteCfg,
+		a.reloader, nil)
 }
 
 // TestPublisherFuncSurfaceClosedError verifies the PublisherFunc

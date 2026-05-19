@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/byoe"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
@@ -70,12 +71,13 @@ func New(
 	vteCfg vte.Config,
 	reloader byoe.Reloader,
 	fallback text.Editor,
+	env cmdenv.Source,
 ) *Editor {
 	return newWithEditors(
 		byoe.New(
 			command, gotoTemplate, scheduleNextTick,
 			cwd, workspaceURI, notifications, publisher,
-			terminal, executor, tabManager, vteCfg, reloader,
+			terminal, executor, tabManager, vteCfg, reloader, env,
 		),
 		fallback,
 	)

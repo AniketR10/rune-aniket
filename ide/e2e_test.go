@@ -186,7 +186,7 @@ editor:
 command:
   key: ":"
   aliases:
-    sed: "!! %s -i $1 %%"
+    sed: "!! %s -i $1 $FILE"
 `, sedStub))
 		require.NoError(t, err)
 

@@ -42,6 +42,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -60,6 +61,7 @@ func New(
 	tabManager browser.TabManager,
 	vteCfg vte.Config,
 	reloader Reloader,
+	env cmdenv.Source,
 ) *Editor {
 	switch {
 	case command == "":
@@ -98,6 +100,7 @@ func New(
 		tabManager:       tabManager,
 		vteCfg:           vteCfg,
 		reloader:         reloader,
+		env:              env,
 	}
 	ret.pub.Init()
 	return ret
@@ -118,6 +121,7 @@ type Editor struct {
 	tabManager       browser.TabManager
 	vteCfg           vte.Config
 	reloader         Reloader
+	env              cmdenv.Source
 
 	pub text.Publisher
 }
@@ -144,6 +148,16 @@ func (e *Editor) Edit(
 	// re-tokenise as syntax errors). Pre-substituted-string in,
 	// shell.Fields out, no double-tokenisation.
 	cmdStr := substituteCommand(e.command, file.Path(), 1, 1)
+	// Apply Rune-side shell-style expansion so $WORKSPACE,
+	// $WORKSPACE_HASH, $FILE, $RUNE_DATADIR, … resolve before the
+	// vte's own shell.Fields pass runs. Expansion failures (e.g.
+	// command substitution rejected) propagate as a clear error
+	// rather than silently producing a malformed argv.
+	if expanded, expErr := cmdenv.Expand(cmdStr, e.env); expErr == nil {
+		cmdStr = expanded
+	} else {
+		return nil, fmt.Errorf("byoe: expand command %q: %w", cmdStr, expErr)
+	}
 
 	cfg := e.vteCfg
 	cfg.CommandAndArgs = []string{cmdStr}

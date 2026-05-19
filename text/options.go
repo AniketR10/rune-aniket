@@ -44,6 +44,7 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/text/cmdenv"
 )
 
 // CommandOverlayConfig holds configuration for the
@@ -110,6 +111,31 @@ type Config struct {
 	// override) drawn after the indent guides in the file explorer.
 	// Defaults to term.ColorGray when zero.
 	FileExplorerIconAttr term.Attributes
+	// EnvSource resolves command-time variables referenced by alias
+	// bodies and by dispatched argv. The text component additionally
+	// overlays a fixed set of editor-state variables on top of this
+	// source before falling through to it and finally to os.Getenv:
+	//   $1..$9          alias positional args
+	//   $FILE           focused tab's local path
+	//   $FILE_URI       focused tab's URI string
+	//   $FILE_DIR       directory portion of $FILE
+	//   $FILE_BASENAME  basename of $FILE
+	//   $FILE_STEM      $FILE_BASENAME without extension
+	//   $FILE_EXT       extension of $FILE (no leading dot)
+	//   $FILE_REL       $FILE relative to $WORKSPACE_URI
+	//   $LINE / $COLUMN 1-based cursor position
+	//   $SELECTION      current selection
+	//   $WORD           identifier at the cursor
+	//   $LANG           language ID for $FILE
+	// EnvSource itself is expected to supply at least $WORKSPACE,
+	// $WORKSPACE_HASH, $WORKSPACE_URI and $WORKSPACE_PATH for every
+	// workspace scheme — commands dispatched through an alias run
+	// inside the workspace's own filesystem, so these names must
+	// resolve whether the workspace is local, remote, or in-memory
+	// (see ide/workspace_handler.go). A nil source behaves like one
+	// that returns ok=false for every name, so non-editor $VAR
+	// references fall back to the process environment.
+	EnvSource cmdenv.Source
 
 	EventPublisher func(term.Event) bool
 
@@ -645,6 +671,16 @@ func WithEventPublisher(f func(term.Event) bool) Option {
 func WithOpenRouter(r OpenRouter) Option {
 	return func(cfg *Config) {
 		cfg.OpenRouter = r
+	}
+}
+
+// WithEnvSource installs an EnvSource consulted during command
+// dispatch when expanding $VAR / ${VAR} references in alias bodies
+// and dispatched argv. Unknown names fall back to os.Getenv. Passing
+// a nil source disables Rune-side overrides entirely.
+func WithEnvSource(env cmdenv.Source) Option {
+	return func(cfg *Config) {
+		cfg.EnvSource = env
 	}
 }
 

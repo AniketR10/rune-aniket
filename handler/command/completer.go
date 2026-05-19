@@ -184,8 +184,14 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 	})
 }
 
-// OutputLinesCompleter returns a files path completer with the given directory reader.
-func OutputLinesCompleter(w schemeapi.Executor, cmdAndArgs []string) Completer {
+// OutputLinesCompleter returns a files path completer with the given
+// directory reader. lookup resolves any $VAR references inside
+// cmdAndArgs; pass nil to use os.Getenv alone. Callers that want to
+// expand Rune-managed variables on top of os.Getenv should pass the
+// function returned by text/cmdenv.Lookup(src).
+func OutputLinesCompleter(
+	w schemeapi.Executor, cmdAndArgs []string, lookup func(string) string,
+) Completer {
 	return FuncCompleter(func(
 		ctx context.Context, args []string,
 	) (iterator.Iterator[string], string, error) {
@@ -195,9 +201,10 @@ func OutputLinesCompleter(w schemeapi.Executor, cmdAndArgs []string) Completer {
 		}
 		ch := make(chan error)
 		cmdAndArgsStr := strings.Join(cmdAndArgs, " ")
-		// NOTE: this uses os.Getenv, but it should use the workspace's
-		// Getenv mechanism, which should be implemented at some point.
-		cmdAndArgs, err := shell.Fields(cmdAndArgsStr, os.Getenv)
+		if lookup == nil {
+			lookup = os.Getenv
+		}
+		cmdAndArgs, err := shell.Fields(cmdAndArgsStr, lookup)
 		if err != nil {
 			return nil, "", fmt.Errorf("expand shell arguments: %w", err)
 		}

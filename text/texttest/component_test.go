@@ -1476,6 +1476,11 @@ func TestDispatchCommand(t *testing.T) {
 
 		var newWindowCalled, editCalled int
 
+		// $name is not in the recognised set (positional digits,
+		// $FILE, $WORKSPACE, $WORKSPACE_HASH); shell.Expand falls
+		// back to os.Getenv("name"). Pin it to the empty string so
+		// the expected argv is deterministic regardless of host env.
+		t.Setenv("name", "")
 		// make sure that substitution doesn't replace original alias
 		// so we can replace it dynamically every time
 		const n = 100
@@ -1484,7 +1489,7 @@ func TestDispatchCommand(t *testing.T) {
 				text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 					newWindowCalled++
 					assert.Equal(t, "newWindow", cmd.Name)
-					assert.Equal(t, []string{"wasup", "arg2", "$name", "$1"}, cmd.Args)
+					assert.Equal(t, []string{"wasup", "arg2", "", "$1"}, cmd.Args)
 					return nil
 				}, nil))
 
@@ -1522,6 +1527,7 @@ func TestDispatchCommand(t *testing.T) {
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		win, _ := c.Focus()
+		t.Setenv("name", "")
 
 		var newWindowCalled, editCalled int
 
@@ -1529,7 +1535,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				newWindowCalled++
 				assert.Equal(t, "newWindow", cmd.Name)
-				assert.Equal(t, []string{"wasup", "arg2", "$name", "arg1"}, cmd.Args)
+				assert.Equal(t, []string{"wasup", "arg2", "", "arg1"}, cmd.Args)
 				return nil
 			}, nil))
 
@@ -1566,6 +1572,7 @@ func TestDispatchCommand(t *testing.T) {
 		}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		win, _ := c.Focus()
+		t.Setenv("name", "")
 
 		var newWindowCalled, editCalled int
 
@@ -1573,7 +1580,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				newWindowCalled++
 				assert.Equal(t, "newWindow", cmd.Name)
-				assert.Equal(t, []string{"wasup", "arg2", "$name", "$1"}, cmd.Args)
+				assert.Equal(t, []string{"wasup", "arg2", "", "$1"}, cmd.Args)
 				return nil
 			}, nil))
 
@@ -1600,7 +1607,7 @@ func TestDispatchCommand(t *testing.T) {
 		assert.Equal(t, 0, editCalled)
 	})
 
-	t.Run("replaces commands % arg with current file", func(t *testing.T) {
+	t.Run("replaces commands $FILE arg with current file", func(t *testing.T) {
 		config := text.DefaultConfig()
 		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
@@ -1612,7 +1619,7 @@ func TestDispatchCommand(t *testing.T) {
 			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
 				editCalled++
 				assert.Equal(t, "edit", cmd.Name)
-				assert.Equal(t, []string{"'/a'", "--all"}, cmd.Args)
+				assert.Equal(t, []string{"/a", "--all"}, cmd.Args)
 				return nil
 			}, nil))
 
@@ -1628,12 +1635,123 @@ func TestDispatchCommand(t *testing.T) {
 			Resource: NewTestHandler(),
 			URI:      uri,
 			Name:     "edit",
-			Args:     []string{"'%'", "--all"},
+			Args:     []string{"$FILE", "--all"},
 			Window:   win,
 		}
 		ok, err := c.DispatchCommand(context.Background(), cmd)
 		assert.True(t, ok)
 		require.NoError(t, err)
+	})
+
+	t.Run("expands file/cursor/workspace variables in alias body", func(t *testing.T) {
+		// Wire a WORKSPACE_URI EnvSource so $FILE_REL can resolve;
+		// covers the same delegation chain the workspace handler
+		// uses in production (ide/workspace_handler.go envSource).
+		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+		config.EnvSource = func(name string) (string, bool) {
+			switch name {
+			case "WORKSPACE_URI":
+				return "file:///root", true
+			case "WORKSPACE_PATH":
+				return "/root", true
+			}
+			return "", false
+		}
+		config.CommandAliases = map[string]text.CommandAlias{
+			"check": {Commands: []string{
+				"sink $FILE $FILE_URI $FILE_DIR $FILE_BASENAME " +
+					"$FILE_STEM $FILE_EXT $FILE_REL $LANG $LINE " +
+					"$COLUMN $WORKSPACE_URI $WORKSPACE_PATH",
+			}},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var sinkCalled int
+		c.SubscribeCommand(testCommand("sink", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				sinkCalled++
+				assert.Equal(t, []string{
+					"/root/src/main.go",
+					"file:///root/src/main.go",
+					"/root/src",
+					"main.go",
+					"main",
+					"go",
+					"src/main.go",
+					"go",
+					// LINE/COLUMN are 1-based; on a freshly opened
+					// tab they read as (1,1) — the cursor starts
+					// at row 0, column 0 in the buffer.
+					"1",
+					"1",
+					"file:///root",
+					"/root",
+				}, cmd.Args)
+				return nil
+			}, nil))
+
+		resource, err := workspaceapi.ParseURI("file:///root/src/main.go")
+		require.NoError(t, err)
+		h, err := c.Open(resource)
+		require.NoError(t, err)
+		c.Browser().Focus().SetContent(h)
+
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "check",
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(context.Background(), cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
+		assert.Equal(t, 1, sinkCalled)
+	})
+
+	t.Run("expands new variables in dispatched argv too", func(t *testing.T) {
+		// The dispatched-arg expansion path is symmetric with the
+		// alias-target path; both must see the same context and the
+		// same names. Cover that explicitly so a future regression
+		// can't silently shrink the dispatched-arg overlay.
+		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+		config.EnvSource = func(name string) (string, bool) {
+			if name == "WORKSPACE_URI" {
+				return "file:///w", true
+			}
+			return "", false
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+		win, _ := c.Focus()
+
+		var gotArgs []string
+		c.SubscribeCommand(testCommand("sink", "", ""),
+			text.FuncCommandHandler(func(ctx context.Context, cmd textapi.Command) error {
+				gotArgs = cmd.Args
+				return nil
+			}, nil))
+
+		resource, err := workspaceapi.ParseURI("file:///w/pkg/foo.go")
+		require.NoError(t, err)
+		h, err := c.Open(resource)
+		require.NoError(t, err)
+		c.Browser().Focus().SetContent(h)
+
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "sink",
+			Args: []string{
+				"$FILE_REL", "$FILE_STEM", "$LANG",
+			},
+			Window: win,
+		}
+		ok, err := c.DispatchCommand(context.Background(), cmd)
+		assert.True(t, ok)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"pkg/foo.go", "foo", "go"}, gotArgs)
 	})
 
 	t.Run("bubbles up HandleCommand errors", func(t *testing.T) {

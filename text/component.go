@@ -31,8 +31,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -52,6 +54,7 @@ import (
 	"unstable.build/go-tui/component/markdown"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/text/cmdenv"
 	hmarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/syntax"
@@ -600,50 +603,399 @@ func (c *Component) CompleteCommand(ctx context.Context, cmd textapi.Command) (
 	return man.handler.Complete(ctx, cmd)
 }
 
-// handle escaped dollar signs by susbstituting for an extremely
-// rare string that couldn't possible be included in a command
-const impossibleMark = ""
+// EnvSource returns the EnvSource configured for this Component.
+// Returns nil when none was wired (callers chain to os.Getenv).
+func (c *Component) EnvSource() cmdenv.Source {
+	return c.config.EnvSource
+}
 
-func (c *Component) replacePositionalArgs(
-	alias CommandAlias, dispatched textapi.Command,
-) (CommandAlias, textapi.Command, error) {
-	// clone so we don't mess with originals
-	cmds := alias.Commands
-	alias.Commands = make([]string, len(cmds))
-	copy(alias.Commands, cmds)
-	argsReplaced := make(map[int]struct{})
-	for j, cmd := range alias.Commands {
-		cmd = strings.ReplaceAll(cmd, "$$", impossibleMark)
-		for i, arg := range []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9"} {
-			replace := i
-			if replace >= len(dispatched.Args) {
-				if strings.Contains(cmd, arg) {
-					return alias, dispatched, fmt.Errorf("alias expects an argument "+
-						"at position %[1]d ($%[1]d)", replace+1)
-				}
-				break
-			}
-			old := cmd
-			// Shell-quote the substituted value so the recursive
-			// dispatch (which re-tokenises the alias target) preserves
-			// it as a single argument even when it contains whitespace
-			// or shell metacharacters.
-			cmd = strings.ReplaceAll(cmd, arg, command.ShellQuote(dispatched.Args[replace]))
-			if old != cmd {
-				argsReplaced[replace] = struct{}{}
-			}
-		}
-		cmd = strings.ReplaceAll(cmd, impossibleMark, "$")
-		alias.Commands[j] = cmd
+// expansionContext is the per-dispatch snapshot of editor state used
+// to resolve $VAR references in alias bodies and dispatched argv. A
+// single context is captured at the top of DispatchCommand and shared
+// across every alias target so that two targets in the same alias
+// chain see identical FILE/LINE/SELECTION values, even if a target's
+// own side effects would have changed them.
+type expansionContext struct {
+	// file is the focused tab's URI when the focused content is an
+	// editor tab; the zero URI otherwise.
+	file workspaceapi.URI
+	// line and column are 1-based and 0 when no editor handler is
+	// focused (i.e. focused tab content is not a text.Handler).
+	line, column int
+	// selection is the focused handler's currently selected text;
+	// empty when nothing is selected.
+	selection string
+	// word is the identifier under the cursor (letters / digits /
+	// underscore); empty when the cursor is not on one.
+	word string
+	// lang is the language id of the focused file (empty when
+	// undetectable from the path extension).
+	lang string
+}
+
+// captureExpansionContext snapshots focused tab + handler state into
+// an expansionContext. Returns a zero context when no editor tab is
+// focused.
+func (c *Component) captureExpansionContext() expansionContext {
+	content, _ := c.comp.Focus().Content()
+	tab, ok := content.(*browser.Tab)
+	if !ok {
+		return expansionContext{}
 	}
-	reworked := make([]string, 0, len(dispatched.Args))
-	for i, arg := range dispatched.Args {
-		if _, ok := argsReplaced[i]; !ok {
-			reworked = append(reworked, arg)
+	ctx := expansionContext{file: tab.URI()}
+	if lang, err := languages.LanguageForFile(filepath.Base(ctx.file.Path())); err == nil {
+		ctx.lang = lang
+	}
+	if sel, ok := tab.Selection(); ok {
+		ctx.selection = sel
+	}
+	h, ok := tab.Handler().(Handler)
+	if !ok {
+		return ctx
+	}
+	pos := h.CursorAtScroll()
+	ctx.line = pos.Y + 1
+	ctx.column = pos.X + 1
+	ctx.word = wordAtCursor(h.CellView(), pos)
+	return ctx
+}
+
+// resolveBuiltin returns the value for one of the Rune-provided
+// expansion names, or ok=false when name is not one of them. file-
+// derived names (FILE_*, LANG, LINE, COLUMN, WORD, SELECTION) come
+// from ctx; FILE_REL needs $WORKSPACE_URI from the user EnvSource so
+// it is computed lazily inside the lookup.
+func (c *Component) resolveBuiltin(
+	ctx expansionContext, name string,
+) (string, bool) {
+	switch name {
+	case "FILE":
+		return ctx.file.Path(), true
+	case "FILE_URI":
+		if ctx.file == (workspaceapi.URI{}) {
+			return "", true
+		}
+		return ctx.file.String(), true
+	case "FILE_DIR":
+		if ctx.file.Path() == "" {
+			return "", true
+		}
+		return filepath.Dir(ctx.file.Path()), true
+	case "FILE_BASENAME":
+		if ctx.file.Path() == "" {
+			return "", true
+		}
+		return filepath.Base(ctx.file.Path()), true
+	case "FILE_STEM":
+		if ctx.file.Path() == "" {
+			return "", true
+		}
+		base := filepath.Base(ctx.file.Path())
+		return strings.TrimSuffix(base, filepath.Ext(base)), true
+	case "FILE_EXT":
+		if ctx.file.Path() == "" {
+			return "", true
+		}
+		return strings.TrimPrefix(filepath.Ext(ctx.file.Path()), "."), true
+	case "FILE_REL":
+		return c.fileRel(ctx), true
+	case "LINE":
+		if ctx.line == 0 {
+			return "", true
+		}
+		return strconv.Itoa(ctx.line), true
+	case "COLUMN":
+		if ctx.column == 0 {
+			return "", true
+		}
+		return strconv.Itoa(ctx.column), true
+	case "SELECTION":
+		return ctx.selection, true
+	case "WORD":
+		return ctx.word, true
+	case "LANG":
+		return ctx.lang, true
+	}
+	return "", false
+}
+
+// fileRel computes the focused file's path relative to the focused
+// workspace, consulting the user EnvSource for $WORKSPACE_URI. When
+// either value is missing, returns the empty string.
+func (c *Component) fileRel(ctx expansionContext) string {
+	if ctx.file == (workspaceapi.URI{}) {
+		return ""
+	}
+	user := c.config.EnvSource
+	if user == nil {
+		return ""
+	}
+	wsRaw, ok := user("WORKSPACE_URI")
+	if !ok || wsRaw == "" {
+		return ""
+	}
+	wsURI, err := workspaceapi.ParseURI(wsRaw)
+	if err != nil {
+		return ""
+	}
+	return workspaceapi.RelPath(wsURI, ctx.file)
+}
+
+// aliasEnvSource overlays the positional alias arguments ($1..$9)
+// and the focused-editor variables on top of the Component's
+// EnvSource. Names outside the overlayed set are delegated to the
+// underlying source.
+func (c *Component) aliasEnvSource(
+	args []string, ctx expansionContext,
+) cmdenv.Source {
+	user := c.config.EnvSource
+	return func(name string) (string, bool) {
+		if len(name) == 1 && name[0] >= '1' && name[0] <= '9' {
+			idx := int(name[0] - '1')
+			if idx < len(args) {
+				return args[idx], true
+			}
+			return "", false
+		}
+		if v, ok := c.resolveBuiltin(ctx, name); ok {
+			return v, true
+		}
+		if user != nil {
+			return user(name)
+		}
+		return "", false
+	}
+}
+
+// dispatchedEnvSource is the EnvSource used to expand the dispatched
+// argv (i.e. the args the user typed after the command name). Like
+// aliasEnvSource but without the $1..$9 overlay.
+func (c *Component) dispatchedEnvSource(ctx expansionContext) cmdenv.Source {
+	user := c.config.EnvSource
+	return func(name string) (string, bool) {
+		if v, ok := c.resolveBuiltin(ctx, name); ok {
+			return v, true
+		}
+		if user != nil {
+			return user(name)
+		}
+		return "", false
+	}
+}
+
+// expandAliasTarget tokenises the alias target string and expands
+// each token through env. Tokens that reference positional args $N
+// for N greater than the available arg count surface as a clear
+// error. Unknown $VAR names fall back to os.Getenv via the EnvSource
+// chain.
+//
+// referenced is the set of positional indexes (0-based) consumed by
+// the target so callers can strip them from the dispatched args.
+func (c *Component) expandAliasTarget(
+	target string, args []string, ctx expansionContext,
+) (argv []string, referenced map[int]struct{}, err error) {
+	tokens := command.SplitCommandLine(target)
+	argv = make([]string, 0, len(tokens))
+	referenced = make(map[int]struct{})
+	env := c.aliasEnvSource(args, ctx)
+	for _, tok := range tokens {
+		raw := command.UnquoteToken(tok)
+		if err := checkAliasReferences(raw, len(args)); err != nil {
+			return nil, nil, err
+		}
+		expanded, expErr := cmdenv.Expand(escapeDoubleDollar(raw), env)
+		if expErr != nil {
+			return nil, nil, fmt.Errorf(
+				"expand alias target token %q: %v", raw, expErr)
+		}
+		recordPositionalReferences(raw, len(args), referenced)
+		argv = append(argv, expanded)
+	}
+	return argv, referenced, nil
+}
+
+// expandDispatchedArgs expands each dispatched arg through env using
+// cmdenv.Expand. Unlike the alias-target path it does NOT
+// re-tokenise — the arg already arrived as a single field.
+func (c *Component) expandDispatchedArgs(
+	args []string, ctx expansionContext,
+) ([]string, error) {
+	env := c.dispatchedEnvSource(ctx)
+	out := make([]string, len(args))
+	for i, a := range args {
+		v, err := cmdenv.Expand(escapeDoubleDollar(a), env)
+		if err != nil {
+			return nil, fmt.Errorf("expand dispatched arg %q: %v", a, err)
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+// wordAtCursor returns the identifier (letters / digits / underscore)
+// surrounding pos on the buffer row pos.Y. Returns an empty string
+// when the cell at pos is not part of an identifier or pos is out of
+// bounds. Uses the same matcher as the editor's word-object
+// selection so $WORD agrees with the user's visual selection
+// expectations.
+func wordAtCursor(view cell.View, pos term.Coordinates) string {
+	if view == nil {
+		return ""
+	}
+	rows := view.RawCells()
+	if pos.Y < 0 || pos.Y >= len(rows) {
+		return ""
+	}
+	row := rows[pos.Y]
+	if pos.X < 0 || pos.X >= len(row) {
+		return ""
+	}
+	if !isWordRune(row[pos.X].Ch) {
+		return ""
+	}
+	start := pos.X
+	for start > 0 && isWordRune(row[start-1].Ch) {
+		start--
+	}
+	end := pos.X
+	for end < len(row) && isWordRune(row[end].Ch) {
+		end++
+	}
+	var b strings.Builder
+	b.Grow(end - start)
+	for i := start; i < end; i++ {
+		b.WriteRune(row[i].Ch)
+	}
+	return b.String()
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+}
+
+// checkAliasReferences validates that every $N (N=1..9) referenced by
+// token has a corresponding dispatched arg. Returns nil when no
+// problematic reference is found.
+func checkAliasReferences(token string, argCount int) error {
+	for _, name := range scanDollarRefs(token) {
+		if len(name) != 1 || name[0] < '1' || name[0] > '9' {
+			continue
+		}
+		pos := int(name[0]-'0') - 1
+		if pos >= argCount {
+			return fmt.Errorf(
+				"alias expects an argument at position %d ($%s)",
+				pos+1, name)
 		}
 	}
-	dispatched.Args = reworked
-	return alias, dispatched, nil
+	return nil
+}
+
+func recordPositionalReferences(
+	token string, argCount int, out map[int]struct{},
+) {
+	for _, name := range scanDollarRefs(token) {
+		if len(name) != 1 || name[0] < '1' || name[0] > '9' {
+			continue
+		}
+		pos := int(name[0]-'0') - 1
+		if pos < argCount {
+			out[pos] = struct{}{}
+		}
+	}
+}
+
+// escapeDoubleDollar replaces every Layer 0 "$$" escape with "\$"
+// so that mvdan.cc/sh/v3/shell.Expand emits a literal '$' instead of
+// the parent process PID. The transformation is the inverse of the
+// historical impossibleMark trick used by replacePositionalArgs.
+func escapeDoubleDollar(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	i := 0
+	n := len(s)
+	for i < n {
+		if i+1 < n && s[i] == '$' && s[i+1] == '$' {
+			b.WriteString("\\$")
+			i += 2
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
+// scanDollarRefs returns the variable names referenced by $NAME and
+// ${NAME} forms inside s. An escaped \$ is ignored. The result may
+// contain duplicates; callers that need uniqueness should
+// deduplicate.
+func scanDollarRefs(s string) []string {
+	var names []string
+	i := 0
+	n := len(s)
+	for i < n {
+		c := s[i]
+		if c == '\\' && i+1 < n {
+			i += 2
+			continue
+		}
+		if c != '$' {
+			i++
+			continue
+		}
+		// $$ → literal $, skip both chars (Layer 0 escape).
+		if i+1 < n && s[i+1] == '$' {
+			i += 2
+			continue
+		}
+		i++
+		if i >= n {
+			break
+		}
+		if s[i] == '{' {
+			i++
+			start := i
+			for i < n && s[i] != '}' {
+				i++
+			}
+			if i > start {
+				names = append(names, s[start:i])
+			}
+			if i < n {
+				i++ // skip '}'
+			}
+			continue
+		}
+		start := i
+		if !isDollarHead(s[i]) {
+			continue
+		}
+		i++
+		if s[start] >= '0' && s[start] <= '9' {
+			names = append(names, s[start:i])
+			continue
+		}
+		for i < n && isDollarTail(s[i]) {
+			i++
+		}
+		names = append(names, s[start:i])
+	}
+	return names
+}
+
+func isDollarHead(b byte) bool {
+	return (b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		b == '_' ||
+		(b >= '0' && b <= '9')
+}
+
+func isDollarTail(b byte) bool {
+	return (b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9') ||
+		b == '_'
 }
 
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
@@ -655,32 +1007,53 @@ func (c *Component) DispatchCommand(
 		panic("invalid command: missing Window from which command was invoked")
 	}
 
-	// replace % with current open file, before shell expansion
-	content, _ := c.comp.Focus().Content()
-	th, ok := content.(*browser.Tab)
-	if ok {
-		for i, arg := range cmd.Args {
-			arg = strings.ReplaceAll(arg, "%%", impossibleMark)
-			arg = strings.ReplaceAll(arg, "%", th.URI().Path())
-			cmd.Args[i] = strings.ReplaceAll(arg, impossibleMark, "%")
+	// Expand $FILE / $WORKSPACE / $WORKSPACE_HASH / $RUNE_DATADIR / …
+	// in dispatched args before alias rewriting or subscriber
+	// dispatch. Each Arg already arrived as a single field from the
+	// command prompt — expansion stays per-token so values containing
+	// whitespace remain one argv element. Skip dispatched-arg
+	// expansion when this dispatch is a recursive call from an alias
+	// expander: those args were already expanded one pass above and
+	// re-expanding would corrupt values like "$1" produced by
+	// alias-level "$$1" escapes.
+	expCtx := c.captureExpansionContext()
+	if _, inAlias := IsAliasContext(ctx); !inAlias {
+		cmd.Args, err = c.expandDispatchedArgs(cmd.Args, expCtx)
+		if err != nil {
+			return
 		}
 	}
 	targets, ok := c.config.CommandAliases[cmd.Name]
 	if ok {
 		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
-		targets, cmd, err = c.replacePositionalArgs(targets, cmd)
-		if err != nil {
-			return
-		}
-		c.log(log.TraceLevel, "replaced positional args: %#v, cmd: %#v", targets, cmd)
+		referencedAll := make(map[int]struct{})
+		expandedTargets := make([][]string, 0, len(targets.Commands))
 		for _, target := range targets.Commands {
-			argv := regroupAndUnquote(target)
+			argv, referenced, expErr := c.expandAliasTarget(target, cmd.Args, expCtx)
+			if expErr != nil {
+				return handled, expErr
+			}
+			expandedTargets = append(expandedTargets, argv)
+			for k := range referenced {
+				referencedAll[k] = struct{}{}
+			}
+		}
+		remainingArgs := make([]string, 0, len(cmd.Args))
+		for i, arg := range cmd.Args {
+			if _, ok := referencedAll[i]; !ok {
+				remainingArgs = append(remainingArgs, arg)
+			}
+		}
+		c.log(log.TraceLevel,
+			"expanded alias: %#v, remaining args: %#v",
+			expandedTargets, remainingArgs)
+		for i, argv := range expandedTargets {
 			if len(argv) == 0 {
-				argv = strings.Split(target, " ")
+				continue
 			}
 			targetCmd := textapi.Command{
 				Name:     argv[0],
-				Args:     append(argv[1:], cmd.Args...),
+				Args:     append(argv[1:], remainingArgs...),
 				URI:      cmd.URI,
 				Resource: cmd.Resource,
 				Window:   cmd.Window,
@@ -689,7 +1062,8 @@ func (c *Component) DispatchCommand(
 			targetHandled, targetErr := c.DispatchCommand(
 				contextWithAlias(ctx, cmd.Name), targetCmd)
 			if targetErr != nil {
-				return targetHandled, fmt.Errorf("%s: %s", target, targetErr)
+				return targetHandled, fmt.Errorf(
+					"%s: %s", targets.Commands[i], targetErr)
 			}
 			handled = handled || targetHandled
 		}
@@ -1318,19 +1692,6 @@ func (c *Component) loadMarkdown(uri workspaceapi.URI) (browserapi.Handler, erro
 		return true
 	}))
 	return handler, nil
-}
-
-// regroupAndUnquote parses s with the Layer 1 argv tokenizer and
-// returns each word with its outer quoting/escaping stripped. Use this
-// when handing tokens that survived an alias-target round trip to a
-// recursive dispatcher whose subscribers expect clean argument values.
-func regroupAndUnquote(s string) []string {
-	tokens := command.SplitCommandLine(s)
-	out := make([]string, len(tokens))
-	for i, t := range tokens {
-		out[i] = command.UnquoteToken(t)
-	}
-	return out
 }
 
 var _ workspace.FlusherCloser = (*editorFlusherCloser)(nil)

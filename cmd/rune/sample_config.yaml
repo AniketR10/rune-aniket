@@ -43,7 +43,7 @@
 #      completer:
 #        - {history}
 #        - {file}
-#    gitblame: "! git blame %"
+#    gitblame: "! git blame $FILE"
 #  # Key bindings merge with the built-ins; set a value to "" to unbind.
 #  key_bindings:
 #    <m-q>: quit

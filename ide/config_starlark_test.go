@@ -235,8 +235,8 @@ func TestStarlarkSampleEndToEnd(t *testing.T) {
 
 	aliases := cmd["aliases"].(map[string]any)
 	assert.Equal(t, []any{
-		`!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1`,
-		"workspacenew $RUNE_DATADIR/worktrees/$1",
+		`!! git worktree add "$RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1" -b $1`,
+		"workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
 		"workspaceready workspacerename $1",
 	}, aliases["worktreenew"])
 }

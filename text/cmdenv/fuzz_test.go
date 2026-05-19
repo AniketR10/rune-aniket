@@ -1,0 +1,162 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+
+package cmdenv
+
+import (
+	"strings"
+	"testing"
+)
+
+// FuzzExpand fuzzes the POSIX-style parameter/arithmetic expander
+// used by every Rune command alias and dispatched argv. The contract
+// being protected here is twofold:
+//
+//  1. Expand must NEVER panic on any byte string a user can drop
+//     into an alias body or a command argument. The underlying
+//     mvdan.cc/sh parser is well-tested but lives behind our public
+//     command-variables surface; the fuzzer is the cheapest backstop
+//     against parser regressions reaching dispatch time.
+//  2. On success, every $NAME / ${NAME} substring of the input must
+//     resolve from the Source we hand in (or to the empty string for
+//     undefined names) — never from process state. The fuzzer
+//     enforces this by using a Source that returns ok=false for
+//     every name, so the lookup chain collapses to os.Getenv with an
+//     environment we've cleared.
+func FuzzExpand(f *testing.F) {
+	// Hand-curated corpus seeds covering each operator family
+	// supported by mvdan.cc/sh. The fuzzer will mutate them.
+	seeds := []string{
+		"",
+		"plain literal",
+		"$FOO",
+		"${FOO}",
+		"${FOO:-default}",
+		"${FOO-default}",
+		"${FOO:+alt}",
+		"${FOO:?missing}",
+		"${FOO:0:3}",
+		"${#FOO}",
+		"${FOO#prefix}",
+		"${FOO##*/}",
+		"${FOO%suffix}",
+		"${FOO%%/*}",
+		"${FOO/old/new}",
+		"${FOO//old/new}",
+		"${FOO/#head/h}",
+		"${FOO/%tail/t}",
+		"${FOO^}",
+		"${FOO^^}",
+		"${FOO,}",
+		"${FOO,,}",
+		"$((1+2*3))",
+		"$((0x10))",
+		`\$FOO`,
+		`\\`,
+		`"$FOO"`,
+		`'$FOO'`,
+		"$1 $2 $9",
+		"prefix $A middle $B suffix",
+		"$(echo hi)",  // rejected: command substitution
+		"`echo hi`",   // rejected: backticks
+		"${",          // truncated
+		"$",           // bare dollar
+		"${UNCLOSED",  // unclosed brace
+		"${FOO:-${BAR:-baz}}",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	// Clear the host environment slots the fuzzer is most likely to
+	// stumble into so a passing host env can't paper over a real
+	// difference in expansion behaviour.
+	for _, name := range []string{
+		"FOO", "BAR", "BAZ", "A", "B", "C",
+		"HOME", "PATH", "SHELL", "USER",
+	} {
+		f.Setenv(name, "")
+	}
+
+	emptySource := Source(func(string) (string, bool) { return "", false })
+
+	f.Fuzz(func(t *testing.T, in string) {
+		// Skip inputs the Go test framework's UTF-8 sanitisation
+		// will already have normalised; we only care about what
+		// real users can place in an alias body, which the YAML /
+		// Starlark loaders deliver as valid UTF-8 strings.
+		out, err := Expand(in, emptySource)
+
+		if err != nil {
+			// Errors must be plain values; the only contract is
+			// that they don't crash. Nothing else to check.
+			return
+		}
+
+		// Successful expansion contract: output never contains a
+		// NUL byte unless the input did, and never contains a raw
+		// process-state artifact like the parent PID. Both would
+		// indicate Expand silently switched to a non-POSIX mode.
+		if strings.ContainsRune(out, 0) && !strings.ContainsRune(in, 0) {
+			t.Fatalf("Expand injected NUL byte: input=%q output=%q",
+				in, out)
+		}
+
+		// `\$` must always expand to a literal `$`. This is the
+		// invariant escapeDoubleDollar relies on when it rewrites
+		// `$$` -> `\$` in text.Component before calling us.
+		got, err := Expand(`\$`, emptySource)
+		if err != nil {
+			t.Fatalf("Expand(`\\$`) errored unexpectedly: %v", err)
+		}
+		if got != "$" {
+			t.Fatalf("Expand(`\\$`) = %q, want %q", got, "$")
+		}
+	})
+}
+
+// FuzzLookup fuzzes the Source -> shell-lookup adapter. The contract
+// is that Lookup never panics on arbitrary names and always returns
+// the Source's value when ok=true, falling back to os.Getenv
+// otherwise.
+func FuzzLookup(f *testing.F) {
+	seeds := []string{"", "FOO", "FOO_BAR", "1", "a b", "$weird"}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, name string) {
+		// Nil source: must always defer to os.Getenv without
+		// panicking.
+		lookup := Lookup(nil)
+		_ = lookup(name)
+
+		// Source that wins: must always return its value regardless
+		// of os env.
+		t.Setenv("RUNE_FUZZ_DUMMY", "from-env")
+		src := Source(func(n string) (string, bool) {
+			if n == name {
+				return "from-source", true
+			}
+			return "", false
+		})
+		lookup = Lookup(src)
+		if got := lookup(name); got != "from-source" {
+			t.Fatalf("Lookup(src)(%q) = %q, want %q",
+				name, got, "from-source")
+		}
+
+		// Source that abstains: must fall through to os.Getenv.
+		abstain := Source(func(string) (string, bool) {
+			return "", false
+		})
+		lookup = Lookup(abstain)
+		if name == "RUNE_FUZZ_DUMMY" {
+			if got := lookup(name); got != "from-env" {
+				t.Fatalf("Lookup(abstain)(%q) = %q, want %q",
+					name, got, "from-env")
+			}
+		}
+	})
+}

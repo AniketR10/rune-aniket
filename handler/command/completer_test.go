@@ -65,7 +65,7 @@ func TestCommandOutputLinesCompleterCloseSignals(t *testing.T) {
 		},
 	}
 
-	c := OutputLinesCompleter(exec, []string{"long-running"})
+	c := OutputLinesCompleter(exec, []string{"long-running"}, nil)
 	iter, _, err := c.Complete(context.Background(), nil)
 	require.NoError(t, err)
 
@@ -85,7 +85,7 @@ func TestCommandOutputLinesCompleterContextCancellation(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c := OutputLinesCompleter(exec, []string{"hanging-cmd"})
+	c := OutputLinesCompleter(exec, []string{"hanging-cmd"}, nil)
 	iter, _, err := c.Complete(ctx, nil)
 	require.NoError(t, err)
 
@@ -172,7 +172,7 @@ func TestCommandOutputLinesCompleter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := OutputLinesCompleter(tt.executor, tt.cmdArgs)
+			c := OutputLinesCompleter(tt.executor, tt.cmdArgs, nil)
 			iter, prefix, err := c.Complete(context.Background(), nil)
 
 			if tt.wantErr != "" {

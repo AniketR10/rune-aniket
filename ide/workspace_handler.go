@@ -366,6 +366,7 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 		cfg.terminalConfig(),
 		reloader,
 		fallback,
+		h.envSource,
 	)
 }
 
@@ -672,6 +673,32 @@ func (h *workspaceManagerHandler) focusURI() workspaceapi.URI {
 		return handler.uri
 	}
 	return h.homeURI
+}
+
+// envSource resolves Rune-managed variables ($WORKSPACE,
+// $WORKSPACE_HASH, $WORKSPACE_URI, $WORKSPACE_PATH) by looking up
+// the focused workspace at dispatch time. Every variable resolves
+// for every scheme: commands run via the workspace's executor in its
+// native filesystem, so the focused workspace URI is a meaningful
+// identifier regardless of whether the workspace is local, remote,
+// or in-memory. Returning ok=false signals the caller (text.Component)
+// that no workspace is focused at all.
+func (h *workspaceManagerHandler) envSource(name string) (string, bool) {
+	uri := h.focusURI()
+	if uri == (workspaceapi.URI{}) {
+		return "", false
+	}
+	switch name {
+	case "WORKSPACE":
+		return workspaceBasename(uri), true
+	case "WORKSPACE_HASH":
+		return workspaceHash(uri), true
+	case "WORKSPACE_URI":
+		return uri.String(), true
+	case "WORKSPACE_PATH":
+		return uri.Path(), true
+	}
+	return "", false
 }
 
 func (h *workspaceManagerHandler) setWorkspaceRequiresAttention(
@@ -1030,6 +1057,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithOpenRouter(h),
 		text.WithFileExplorerIndentAttr(cfg.fileExplorerIndentAttr()),
 		text.WithFileExplorerIconAttr(cfg.fileExplorerIconAttr()),
+		text.WithEnvSource(h.envSource),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
