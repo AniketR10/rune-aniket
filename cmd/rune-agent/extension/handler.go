@@ -1056,16 +1056,31 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if err != nil {
 		return err
 	}
-	const icon = '󱫆'
-	tab, err := h.wm.Tab(uri, icon, uri.String(), bhandler)
+	tab, err := openChatTab(h.wm, uri, d.ID, bhandler)
 	if err != nil {
-		return fmt.Errorf("create tab: %v", err)
+		return err
 	}
 
 	if err := h.wm.SetWindowContent(cmd.Window, tab); err != nil {
 		return fmt.Errorf("window set content: %v", err)
 	}
 	return nil
+}
+
+// openChatTab creates the rune-agent chat tab. The visible tab label is the
+// dialogue's petname ID (e.g. "rolling-fox"), not the internal
+// "rune-agent://<model>/<id>" URI, which would not be useful to users. The
+// URI argument remains the tab's unique identity.
+func openChatTab(
+	wm browserapi.WindowManager, uri workspaceapi.URI, dialogueID string,
+	h browserapi.Handler,
+) (browserapi.Handler, error) {
+	const icon = '󱫆'
+	tab, err := wm.Tab(uri, icon, dialogueID, h)
+	if err != nil {
+		return nil, fmt.Errorf("create tab: %v", err)
+	}
+	return tab, nil
 }
 
 func getModelUri(id, model string) (workspaceapi.URI, error) {
