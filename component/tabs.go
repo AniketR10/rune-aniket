@@ -67,6 +67,7 @@ type tab struct {
 	name     string
 	defName  string
 	icon     rune
+	defIcon  rune
 	iconAttr *term.Attributes
 	focus    bool
 	defAttr  term.Attributes
@@ -389,6 +390,22 @@ func (t *Tabs) SetTabIcon(idx int, icon rune) {
 	t.dirty = true
 }
 
+// SetTabDefaultIcon sets the default icon of the tab at idx. Calls to
+// ResetTabIcon will reset the tab icon to the given icon. If the tab
+// at idx does not exist, this method will panic.
+func (t *Tabs) SetTabDefaultIcon(idx int, icon rune) {
+	t.tabs[idx].defIcon = icon
+	t.dirty = true
+}
+
+// ResetTabIcon resets the icon of the tab at idx to either the initial
+// icon given to this tab or the last icon set via SetTabDefaultIcon.
+// If the tab at idx does not exist, this method will panic.
+func (t *Tabs) ResetTabIcon(idx int) {
+	t.tabs[idx].icon = t.tabs[idx].defIcon
+	t.dirty = true
+}
+
 // SetTabDefaultName sets the default name of the tab at idx. Calls to ResetTabName
 // will reset the tab name to the given name. If the tab at idx does not exist,
 // this method will panic.
@@ -425,6 +442,7 @@ func (t *Tabs) Add(icon rune, name string) int {
 		attr:    term.Attributes{},
 		defName: name,
 		icon:    icon,
+		defIcon: icon,
 		name:    name,
 	}
 	if t.tabs == nil {

@@ -958,6 +958,63 @@ func TestTabAttrs(t *testing.T) {
 	assert.Equal(t, term.Attributes{}, actualAttr)
 }
 
+// TestSetTabIcon verifies SetTabIcon overrides the tab icon for a
+// known URI and returns false for an unknown URI, and that
+// ResetTabIcon restores the icon the tab was created with.
+func TestSetTabIcon(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	uriA, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	uriB, err := workspaceapi.ParseURI("file:///b")
+	require.NoError(t, err)
+
+	hA := newTestHandler()
+	hB := newTestHandler()
+	_ = b.NewTab(uriA, 'A', "a", hA, hA)
+	_ = b.NewTab(uriB, 'B', "b", hB, hB)
+
+	// override the icon for tab A
+	require.True(t, b.SetTabIcon(uriA, '★'))
+	assert.Equal(t, '★', b.tabs.TabIcon(0))
+	// tab B is unaffected
+	assert.Equal(t, 'B', b.tabs.TabIcon(1))
+
+	// unknown URI returns false and is a no-op
+	missing, err := workspaceapi.ParseURI("file:///missing")
+	require.NoError(t, err)
+	assert.False(t, b.SetTabIcon(missing, '?'))
+	assert.Equal(t, '★', b.tabs.TabIcon(0))
+	assert.Equal(t, 'B', b.tabs.TabIcon(1))
+
+	// ResetTabIcon restores the original icon
+	require.True(t, b.ResetTabIcon(uriA))
+	assert.Equal(t, 'A', b.tabs.TabIcon(0))
+	assert.False(t, b.ResetTabIcon(missing))
+}
+
+// TestSetTabIconHonorsTabOverrideIcon verifies that when
+// Config.TabOverrideIcon is set, ResetTabIcon restores to the
+// overridden glyph (not the icon argument originally passed to
+// NewTab).
+func TestSetTabIconHonorsTabOverrideIcon(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.TabOverrideIcon = '●'
+	b := NewComponent(cfg)
+
+	uri, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	h := newTestHandler()
+	_ = b.NewTab(uri, 'A', "a", h, h)
+	assert.Equal(t, '●', b.tabs.TabIcon(0))
+
+	require.True(t, b.SetTabIcon(uri, '★'))
+	assert.Equal(t, '★', b.tabs.TabIcon(0))
+
+	require.True(t, b.ResetTabIcon(uri))
+	assert.Equal(t, '●', b.tabs.TabIcon(0))
+}
+
 func TestMoveTabs(t *testing.T) {
 	b := NewComponent(DefaultConfig())
 

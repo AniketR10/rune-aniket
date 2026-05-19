@@ -283,6 +283,31 @@ $  X  X Things  #  #
 	comptest.TestComponent(t, l, w, tests)
 }
 
+// TestTabsResetTabIcon verifies that SetTabIcon updates the icon and
+// ResetTabIcon restores it to either the icon supplied to Add or the
+// last default set via SetTabDefaultIcon.
+func TestTabsResetTabIcon(t *testing.T) {
+	l := NewTabs()
+	l.Add('A', "alpha")
+	l.Add('B', "beta")
+
+	assert.Equal(t, 'A', l.TabIcon(0))
+	assert.Equal(t, 'B', l.TabIcon(1))
+
+	l.SetTabIcon(0, '★')
+	assert.Equal(t, '★', l.TabIcon(0))
+	assert.Equal(t, 'B', l.TabIcon(1))
+
+	l.ResetTabIcon(0)
+	assert.Equal(t, 'A', l.TabIcon(0))
+
+	// SetTabDefaultIcon changes what ResetTabIcon restores to.
+	l.SetTabDefaultIcon(1, '☆')
+	l.SetTabIcon(1, '?')
+	l.ResetTabIcon(1)
+	assert.Equal(t, '☆', l.TabIcon(1))
+}
+
 // TestTabsDrawFocusHighlightBorderless verifies that in borderless mode at
 // h>=2 (the production tab-bar config: TabBarHeight=2, frame=false), tab
 // labels render on y=1 and the focused-tab columns on y=0 get the focus

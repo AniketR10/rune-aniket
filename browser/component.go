@@ -295,6 +295,33 @@ func (c *Component) SetTabAttrs(
 	return false
 }
 
+// SetTabIcon overrides the icon of the tab with the given uri.
+// It returns false if there's no tab with the given uri. The tab icon
+// can be restored to its default via ResetTabIcon.
+func (c *Component) SetTabIcon(uri workspaceapi.URI, icon rune) bool {
+	for i, t := range c.buffers {
+		if t.uri.String() == uri.String() {
+			c.tabs.SetTabIcon(i, icon)
+			return true
+		}
+	}
+	return false
+}
+
+// ResetTabIcon resets the icon of the tab with the given uri to the
+// last icon set via SetTabDefaultIcon or, if none, the icon the tab
+// was created with (after any Config.TabOverrideIcon override).
+// It returns false if there's no tab with the given uri.
+func (c *Component) ResetTabIcon(uri workspaceapi.URI) bool {
+	for i, t := range c.buffers {
+		if t.uri.String() == uri.String() {
+			c.tabs.ResetTabIcon(i)
+			return true
+		}
+	}
+	return false
+}
+
 // ResetTabNameAndAttrs resets the name and attributes of the tab with the given uri.
 // Moving forward, the name and attributes and name set via
 // SetTabDefaultNameAndAttrs will be used. It returns false if there's no tab with id.
