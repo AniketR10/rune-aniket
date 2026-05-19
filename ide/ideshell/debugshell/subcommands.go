@@ -614,7 +614,11 @@ func (h *Handler) cmdRestart(
 }
 
 // threadID parses an optional thread-id argument or falls back to
-// the first thread returned by the debugger.
+// the thread of the most recent StoppedEvent. Only when no stop
+// is active does it ask the debugger for the thread list and
+// pick threads[0]. This matters under the race detector where
+// many runtime/GC goroutines outrank the user's goroutine in
+// the `Threads` response.
 func (h *Handler) threadID(ctx context.Context, args []string) (int, error) {
 	sid, err := h.sessionIDOrError()
 	if err != nil {
@@ -626,6 +630,12 @@ func (h *Handler) threadID(ctx context.Context, args []string) (int, error) {
 			return 0, fmt.Errorf("invalid thread-id %q: %w", args[0], err)
 		}
 		return id, nil
+	}
+	h.mu.Lock()
+	stoppedID := h.stoppedThreadID
+	h.mu.Unlock()
+	if stoppedID != 0 {
+		return stoppedID, nil
 	}
 	threads, err := h.dbg.Threads(ctx, sid)
 	if err != nil {
@@ -1015,7 +1025,10 @@ func (h *Handler) cmdDisassemble(
 
 // topFrameID returns the frame ID to use for scope/expression
 // queries. If args contains a frame id, it is parsed and
-// returned. Otherwise the top frame of the first thread is used.
+// returned. Otherwise the frame currently selected by
+// `debugger jump` on the most recent stop is used, falling
+// back to the top frame of the current thread when no stop is
+// active.
 func (h *Handler) topFrameID(ctx context.Context, args []string) (int, error) {
 	sid, err := h.sessionIDOrError()
 	if err != nil {
@@ -1028,6 +1041,14 @@ func (h *Handler) topFrameID(ctx context.Context, args []string) (int, error) {
 		}
 		return id, nil
 	}
+	h.mu.Lock()
+	if len(h.stoppedFrames) > 0 &&
+		h.stoppedFrame >= 0 && h.stoppedFrame < len(h.stoppedFrames) {
+		id := h.stoppedFrames[h.stoppedFrame].Id
+		h.mu.Unlock()
+		return id, nil
+	}
+	h.mu.Unlock()
 	id, err := h.threadID(ctx, nil)
 	if err != nil {
 		return 0, err

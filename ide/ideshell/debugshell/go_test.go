@@ -179,7 +179,17 @@ func TestE2E_Launch(t *testing.T) {
 			loc.From.Y+1, loc.Message, otherStart+1, otherEnd+1)
 	}
 
-	// 7c. The prompt 'debugger jump backward' subcommand must
+	// 7c. evaluate an arbitrary expression in the current
+	// (deepest, Sum) frame and verify the response surfaces a
+	// value. Must run *before* `debugger jump backward` because
+	// post-jump evaluate correctly targets the caller frame
+	// where `n` is out of scope (see RUNE-173).
+	evIt, err := h.run(ctx, subEvaluate, "n+1")
+	require.NoError(t, err)
+	require.NotNil(t, evIt)
+	defer evIt.Close()
+
+	// 7d. The prompt 'debugger jump backward' subcommand must
 	// move the cursor up into the calling frame (one level
 	// shallower) without invoking step-in/out.
 	require.GreaterOrEqual(t, len(stack), 2,
@@ -190,13 +200,6 @@ func TestE2E_Launch(t *testing.T) {
 	afterJump := h.cursor(t)
 	assert.NotEqual(t, beforeJump, afterJump,
 		"expected cursor to move on jump backward")
-
-	// 7d. evaluate an arbitrary expression in the current
-	// frame and verify the response surfaces a value.
-	evIt, err := h.run(ctx, subEvaluate, "n+1")
-	require.NoError(t, err)
-	require.NotNil(t, evIt)
-	defer evIt.Close()
 
 	// 8. continue and let the program run to completion. The
 	// breakpoint may hit again across remaining loop iterations

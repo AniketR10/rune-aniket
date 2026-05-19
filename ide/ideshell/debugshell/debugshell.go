@@ -125,6 +125,15 @@ type Handler struct {
 	// prompt `jump` subcommand).
 	stoppedFrames []dap.StackFrame
 	stoppedFrame  int
+	// stoppedThreadID mirrors the ThreadId from the most
+	// recent DAP StoppedEvent while a stop is active. It is
+	// used by threadID/topFrameID so that variables, evaluate
+	// and friends target the goroutine that actually hit the
+	// breakpoint instead of an arbitrary entry from the DAP
+	// `Threads` response (which under the race detector is
+	// almost never the user's goroutine). Cleared together
+	// with stoppedFrames when the session ends.
+	stoppedThreadID int
 	// installedLocations tracks every (file URI string,
 	// location list ID) pair we have ever installed during the
 	// session, so we can clear them all on terminate. Cleared
@@ -546,6 +555,7 @@ func (h *Handler) handleStoppedBreakpoint(
 	h.mu.Lock()
 	h.stoppedFrames = append([]dap.StackFrame(nil), resp.StackFrames...)
 	h.stoppedFrame = 0
+	h.stoppedThreadID = ev.Body.ThreadId
 	h.mu.Unlock()
 
 	frames := resp.StackFrames
@@ -940,6 +950,7 @@ func (h *Handler) OnClose(reason string) {
 	h.breakpoints = make(map[string][]int)
 	h.stoppedFrames = nil
 	h.stoppedFrame = 0
+	h.stoppedThreadID = 0
 	h.mu.Unlock()
 	if ch == nil {
 		return
@@ -971,6 +982,7 @@ func (h *Handler) resetSession() {
 	h.breakpoints = make(map[string][]int)
 	h.stoppedFrames = nil
 	h.stoppedFrame = 0
+	h.stoppedThreadID = 0
 	h.mu.Unlock()
 	if ch != nil {
 		close(ch)

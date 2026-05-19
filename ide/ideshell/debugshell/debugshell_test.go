@@ -80,6 +80,8 @@ type fakeDebugger struct {
 	setBpCalls      []*dap.SetBreakpointsArguments
 	setVarResp      *dap.SetVariableResponseBody
 	evaluateCalls   []*dap.EvaluateArguments
+	threadsCalls    int
+	stackTraceArgs  []*dap.StackTraceArguments
 }
 
 func newFakeDebugger() *fakeDebugger {
@@ -224,14 +226,16 @@ func (f *fakeDebugger) Pause(_ context.Context, _ string, _ *dap.PauseArguments)
 func (f *fakeDebugger) Threads(_ context.Context, _ string) ([]dap.Thread, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.threadsCalls++
 	return f.threadsResponse, nil
 }
 
 func (f *fakeDebugger) StackTrace(
-	_ context.Context, _ string, _ *dap.StackTraceArguments,
+	_ context.Context, _ string, a *dap.StackTraceArguments,
 ) (*dap.StackTraceResponseBody, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.stackTraceArgs = append(f.stackTraceArgs, a)
 	return f.stackResponse, nil
 }
 
@@ -1320,6 +1324,123 @@ func TestHandler_Evaluate_RequiresArgs(t *testing.T) {
 	}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "usage")
+}
+
+// TestHandler_VariablesEvaluateUseStoppedFrame is the
+// regression test for RUNE-173. With many runtime/GC goroutines
+// in the DAP `Threads` response, picking `threads[0]` for
+// `variables`/`evaluate` returns runtime locals instead of the
+// user's locals. The handler must instead target the goroutine
+// from the most recent StoppedEvent and the frame index
+// currently selected by `debugger jump`.
+func TestHandler_VariablesEvaluateUseStoppedFrame(t *testing.T) {
+	dbg := newFakeDebugger()
+	br := newFakeBrowser()
+	tile := &fakeWindow{id: 1, content: &texttest.TestEditorHandler{}}
+	br.windows = []*fakeWindow{tile}
+	ed := newFakeTextapiEditor()
+	h := New(dbg, br, ed, Config{ScheduleNextTick: syncScheduleNextTick})
+
+	// Threads ranks a runtime goroutine ahead of the user's
+	// goroutine — the old code would target Id=1 (runtime) and
+	// surface runtime/internal locals.
+	dbg.threadsResponse = []dap.Thread{
+		{Id: 1, Name: "runtime"},
+		{Id: 1130, Name: "main"},
+	}
+	// Two frames: deepest (index 0) is the user's frame, and
+	// the caller is what `debugger jump backward` should pick.
+	dbg.stackResponse = &dap.StackTraceResponseBody{
+		StackFrames: []dap.StackFrame{
+			{
+				Id: 1000, Name: "user.frame", Line: 10,
+				Source: &dap.Source{Path: "/tmp/user.go"},
+			},
+			{
+				Id: 1001, Name: "user.caller", Line: 20,
+				Source: &dap.Source{Path: "/tmp/user.go"},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	it, err := h.cmdInitialize(ctx, []string{"go"}, nil)
+	require.NoError(t, err)
+	defer it.Close()
+	_, _ = it.Next(ctx) // consume announcement
+	_, err = h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subLaunch, "/bin/prog"},
+	}, nil)
+	require.NoError(t, err)
+	_, err = h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subConfigured},
+	}, nil)
+	require.NoError(t, err)
+
+	// Drive a StoppedEvent on the user's goroutine.
+	require.NotNil(t, dbg.subscriber)
+	dbg.subscriber.OnEvent(&dap.StoppedEvent{
+		Event: dap.Event{Event: "stopped"},
+		Body:  dap.StoppedEventBody{Reason: "breakpoint", ThreadId: 1130},
+	})
+	// handleStoppedBreakpoint runs in its own goroutine — wait
+	// for the stop state to be installed.
+	require.Eventually(t, func() bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return h.stoppedThreadID == 1130 && len(h.stoppedFrames) == 2
+	}, time.Second, 10*time.Millisecond)
+
+	// `debugger evaluate c` must target the deepest user
+	// frame (id 1000), NOT the top frame of threads[0].
+	evIt, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subEvaluate, "c"},
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, evIt)
+	evIt.Close()
+	require.Len(t, dbg.evaluateCalls, 1)
+	assert.Equal(t, 1000, dbg.evaluateCalls[0].FrameId,
+		"evaluate must use the stopped frame, not threads[0]")
+
+	// `debugger variables` (no args) must request scopes for
+	// the same stopped frame, not the runtime goroutine.
+	varsIt, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subVariables},
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, varsIt)
+	varsIt.Close()
+	// No StackTrace request should have been issued by the
+	// `variables`/`evaluate` path itself — handleStoppedBreakpoint
+	// already populated h.stoppedFrames, so topFrameID must read
+	// straight from that cache instead of calling StackTrace again.
+	// The one StackTrace call we expect is the one issued by
+	// handleStoppedBreakpoint when the StoppedEvent arrived.
+	require.Len(t, dbg.stackTraceArgs, 1,
+		"only handleStoppedBreakpoint should call StackTrace")
+	assert.Equal(t, 1130, dbg.stackTraceArgs[0].ThreadId)
+
+	// `debugger jump backward` selects the caller frame.
+	// jump is a prompt subcommand, not a repl subcommand.
+	ph := NewPromptHandler(h)
+	require.NoError(t, ph.HandleCommand(ctx, textapi.Command{
+		Name: CommandName,
+		Args: []string{subJump, jumpBackward},
+		URI:  mustParseURI(t, "file:///tmp/user.go"),
+	}))
+
+	// After jump, `debugger evaluate` must target the newly
+	// selected frame's id (1001).
+	evIt2, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subEvaluate, "c"},
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, evIt2)
+	evIt2.Close()
+	require.Len(t, dbg.evaluateCalls, 2)
+	assert.Equal(t, 1001, dbg.evaluateCalls[1].FrameId,
+		"evaluate must follow `debugger jump` to the new frame")
 }
 
 // TestHandler_ClearLocationsOnTerminate verifies that every
