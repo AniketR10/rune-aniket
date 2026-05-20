@@ -1344,3 +1344,80 @@ func searchStr(s, sub string) bool {
 	}
 	return false
 }
+
+// TestHandlerPromptCtrlCDismissesSelection verifies that Ctrl-C while a
+// selection prompt is active dismisses the prompt (sends nil on the
+// result channel) instead of being absorbed as a regular key.
+func TestHandlerPromptCtrlCDismissesSelection(t *testing.T) {
+	h, tx, interrupt := newPromptHandler(t)
+	resultCh := make(chan []string, 1)
+
+	tx <- MessageEvent{
+		Type:          MessageEventPrompt,
+		PromptTitle:   "Choose",
+		PromptOptions: []PromptEventOption{{Label: "A"}, {Label: "B"}},
+		PromptResult:  resultCh,
+	}
+	<-interrupt
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+	assert.True(t, handled)
+
+	vals := <-resultCh
+	assert.Nil(t, vals, "Ctrl-C should dismiss the prompt and send nil")
+}
+
+// TestHandlerPromptCtrlCDismissesRequiresInput verifies that Ctrl-C
+// dismisses the prompt while it is in the RequiresInput text-input mode,
+// rather than only being routed to the inputbox.
+func TestHandlerPromptCtrlCDismissesRequiresInput(t *testing.T) {
+	h, tx, interrupt := newPromptHandler(t)
+	resultCh := make(chan []string, 1)
+
+	tx <- MessageEvent{
+		Type:        MessageEventPrompt,
+		PromptTitle: "Choose",
+		PromptOptions: []PromptEventOption{
+			{Label: "Other", RequiresInput: true},
+		},
+		PromptResult: resultCh,
+	}
+	<-interrupt
+
+	// Enter the requires-input text mode.
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+
+	// Ctrl-C while typing should dismiss the entire prompt.
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+	assert.True(t, handled)
+
+	vals := <-resultCh
+	assert.Nil(t, vals, "Ctrl-C in input mode should dismiss the prompt")
+}
+
+// TestHandlerPromptCtrlCDismissesFreeForm verifies that Ctrl-C dismisses
+// a free-form (zero-option) prompt without submitting the typed text.
+func TestHandlerPromptCtrlCDismissesFreeForm(t *testing.T) {
+	h, tx, interrupt := newPromptHandler(t)
+	resultCh := make(chan []string, 1)
+
+	tx <- MessageEvent{
+		Type:          MessageEventPrompt,
+		PromptTitle:   "What is your name?",
+		PromptOptions: nil,
+		PromptResult:  resultCh,
+	}
+	<-interrupt
+
+	// Type some text so we can assert Ctrl-C does not submit it.
+	for _, ch := range "Ali" {
+		h.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+	assert.True(t, handled)
+
+	vals := <-resultCh
+	assert.Nil(t, vals, "Ctrl-C in free-form prompt should dismiss, not submit")
+}

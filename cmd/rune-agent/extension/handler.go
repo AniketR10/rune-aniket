@@ -1328,6 +1328,10 @@ func (h *aiEditorHandler) wrapDialogueHandler(
 	// wrap it for ctrl-c cancelation of context
 	return handler.Wrap(dhandler, func(ev term.Event) (exit bool, handled bool) {
 		if ev.Ch == 'c' && ev.Mod == term.ModCtrl {
+			// Let the dialogue handler dismiss any active prompt first.
+			// Otherwise the prompt UI would stay visible while only the
+			// underlying completion context is cancelled.
+			exit, _ = dhandler.Handle(ev)
 			mu.Lock()
 			cancelFn := cancel
 			cancel = nil

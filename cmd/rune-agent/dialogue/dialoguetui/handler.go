@@ -230,6 +230,16 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyEsc:
 			s.comp.CancelPromptInput()
 		default:
+			if ev.Mod == term.ModCtrl && ev.Ch == 'c' {
+				// Ctrl-C dismisses the entire prompt while in text input mode.
+				ch := s.comp.PreparePromptDismiss()
+				s.mu.Unlock()
+				if ch != nil {
+					ch <- nil
+				}
+				s.mu.Lock()
+				return
+			}
 			if ib := s.comp.PromptInput(); ib != nil {
 				ib.Handle(ev)
 			}
@@ -262,6 +272,16 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			}
 			s.mu.Lock()
 		default:
+			if ev.Mod == term.ModCtrl && ev.Ch == 'c' {
+				// Ctrl-C dismisses the active selection prompt.
+				ch := s.comp.PreparePromptDismiss()
+				s.mu.Unlock()
+				if ch != nil {
+					ch <- nil
+				}
+				s.mu.Lock()
+				return
+			}
 			if ev.Ch == ' ' {
 				s.comp.PromptToggle()
 			}
@@ -290,6 +310,18 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 			}
 			s.mu.Lock()
 		default:
+			if ev.Mod == term.ModCtrl && ev.Ch == 'c' {
+				// Ctrl-C dismisses the active free-form prompt without
+				// submitting any typed text.
+				handled = true
+				ch := s.comp.PreparePromptDismiss()
+				s.mu.Unlock()
+				if ch != nil {
+					ch <- nil
+				}
+				s.mu.Lock()
+				return
+			}
 			// Route all other keys to the main inputbox.
 			_, handled = s.comp.Input().Handle(ev)
 		}
