@@ -1705,7 +1705,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	// command-prompt handler. debugshell.Handler owns the active
 	// debug session lifecycle (initialize, launch, attach,
 	// terminate) and forwards DAP events back to the REPL.
-	dbgHandler := debugshell.New(dap, &ex.comp, apieditor, debugshell.Config{
+	dbgHandler := debugshell.New(dap, &ex.comp, apieditor, parser, ex.workspace, debugshell.Config{
 		WorkspaceURI: uri,
 		Icons: debugshell.Icons{
 			Breakpoint: "",
@@ -1715,7 +1715,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		ScheduleNextTick: cfg.scheduleNextTick,
 	}).WithNotify(func(level browserapi.NotificationLevel, msg string, args ...any) {
 		_, _ = notifications.Notify(level, msg, args...)
-	}).WithParser(parser)
+	})
 	dbgMan := debugshell.Manual()
 	if err := ex.comp.RegisterREPLCommand(dbgMan, dbgHandler); err != nil {
 		log.Errorf("register debugger repl command: %v", err)

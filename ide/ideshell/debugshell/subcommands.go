@@ -27,6 +27,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -188,16 +190,11 @@ func (h *Handler) replayBreakpoints(
 // function in the file. The caller must surface this so the
 // user sees the failure rather than a silent no-op.
 func (h *Handler) normalizeBreakpointLine(path string, line int) (int, error) {
-	if h.parser == nil {
-		// No parser wired (test handlers, unsupported
-		// languages): trust the requested line.
-		return line, nil
-	}
 	uri, err := workspaceapi.ParseURI("file://" + path)
 	if err != nil {
 		return 0, fmt.Errorf("parse uri: %w", err)
 	}
-	target, err := nextStatementLine(h.parser, uri, line)
+	target, err := nextStatementLine(h.parser, h.fs, uri, path, line)
 	if err != nil {
 		return 0, err
 	}
@@ -222,33 +219,78 @@ const codeAnchorTypes = syntaxapi.NodeCaptureReference |
 	syntaxapi.NodeCaptureDefinitionType |
 	syntaxapi.NodeCaptureDefinitionNamespace
 
+// commentQuery matches every `(comment)` node in the file.
+// `(comment)` is a convention shared by virtually every
+// tree-sitter grammar (Go, Python, JS, YAML, Rust, ...), so
+// the query is language-agnostic. nextStatementLine uses the
+// comment ranges to skip comment-only lines without having
+// to enumerate per-language statement node types.
+const commentQuery = `(comment) @c`
+
 // nextStatementLine returns the 1-based line of the next
-// breakpoint-able location at or after line in uri. The
-// implementation is language-agnostic: it relies only on the
-// cross-language captures the IDE provides for every grammar
-// (`local.scope` and `local.reference`/`local.definition.*`).
+// breakpoint-able location at or after line in uri.
+//
+// The implementation is language-agnostic. It uses two
+// pieces of grammar information that every tree-sitter
+// grammar exposes via the IDE's queries:
+//
+//   - `local.scope` from locals.scm — to bound the search to
+//     the user's smallest enclosing function/block.
+//   - `(comment)` nodes — by tree-sitter convention every
+//     grammar names its comment node `comment`, so we can
+//     skip comment-only lines without enumerating
+//     per-language statement node types.
+//
+// Combined with a text-level blank-line check, this lets us
+// accept any line that contains source code as a breakpoint
+// target — including literal-only statements like
+// `return false`, bare `break`, `fallthrough`, ... that
+// the previous `local.reference`/`local.definition.*` based
+// algorithm could not see because their operands do not
+// produce identifier captures.
 //
 // The algorithm:
 //
 //  1. Find the smallest local.scope that contains line.
-//  2. Within that scope, find the minimum start line of any
-//     code anchor (reference or definition) that is >= line.
-//  3. When line sits outside any scope (e.g. between two
-//     top-level definitions in shell), fall back to any
-//     anchor in the whole file.
+//  2. Walk forward from line (inclusive), stopping at the
+//     scope's last row (or end of file when no scope
+//     encloses line), and return the first row that is
+//     non-blank and not fully covered by a comment node.
+//  3. As a final safety net, if no such row is found but a
+//     code anchor exists at or after line within the scope,
+//     return that anchor's row. This preserves the previous
+//     behaviour for files we failed to read.
 //
 // Returns an error when no anchor exists at or after line —
 // e.g. the cursor is on the closing brace of the last
 // function in the file. Callers must surface this so the
 // user retries on a different line.
 func nextStatementLine(
-	parser syntaxapi.Parser, uri workspaceapi.URI, line int,
+	parser syntaxapi.Parser, fs workspaceapi.FileSystem,
+	uri workspaceapi.URI, path string, line int,
 ) (int, error) {
 	scopes, err := queryNodeAll(parser, uri, syntaxapi.NodeCaptureScope)
 	if err != nil {
 		return 0, fmt.Errorf("query scopes: %w", err)
 	}
 	enclosing, hasEnclosing := smallestEnclosingScope(scopes, line)
+
+	// Determine the row range to search within. Without an
+	// enclosing scope (e.g. between top-level definitions),
+	// the search is unbounded — match the previous
+	// fall-back-to-anchors behaviour at the very end.
+	endRow := -1 // -1 means "no upper bound"
+	if hasEnclosing {
+		endRow = enclosing.To.Y
+	}
+
+	// Best-effort line scan over the actual source bytes.
+	// When no workspace FS is wired (test handlers) or the
+	// file cannot be read for any other reason, fall back
+	// to the anchor-only path so we never regress behaviour.
+	if row, ok := firstCodeLine(parser, fs, uri, path, line, endRow); ok {
+		return row, nil
+	}
 
 	anchors, err := queryNodeAll(parser, uri, codeAnchorTypes)
 	if err != nil {
@@ -273,12 +315,158 @@ func nextStatementLine(
 	return best, nil
 }
 
+// firstCodeLine returns the 1-based line >= startLine (and
+// <= endRow+1 when endRow >= 0) in the file identified by uri
+// that contains source code: a non-blank line that is not
+// fully covered by a `(comment)` node.
+//
+// ok is false when the file cannot be read or the grammar
+// has no comment query results AND the file is empty —
+// callers must then fall back to the anchor-based path.
+func firstCodeLine(
+	parser syntaxapi.Parser, fs workspaceapi.FileSystem,
+	uri workspaceapi.URI, path string,
+	startLine, endRow int,
+) (int, bool) {
+	f, err := fs.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return 0, false
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return 0, false
+	}
+	// Errors from the comment query are tolerated:
+	// grammars without a `(comment)` node simply yield no
+	// matches, which is harmless — the blank-line check
+	// below still skips whitespace-only lines.
+	comments, _ := queryStringAll(parser, uri, commentQuery, "c")
+
+	lines := strings.Split(string(data), "\n")
+
+	// A row is "comment-only" when every non-whitespace
+	// character on that row falls inside a comment node.
+	// This works for both line comments (// ..., # ...)
+	// and inner rows of block comments (/* ... */),
+	// regardless of leading indentation.
+	commentRow := func(row int) bool {
+		if row < 0 || row >= len(lines) {
+			return false
+		}
+		line := lines[row]
+		// Find first and last non-whitespace columns.
+		firstCol, lastCol := -1, -1
+		for i, r := range line {
+			if r == ' ' || r == '\t' {
+				continue
+			}
+			if firstCol < 0 {
+				firstCol = i
+			}
+			lastCol = i
+		}
+		if firstCol < 0 {
+			return false // blank line; handled separately
+		}
+		for _, c := range comments {
+			if row < c.From.Y || row > c.To.Y {
+				continue
+			}
+			startCol := 0
+			if row == c.From.Y {
+				startCol = c.From.X
+			}
+			endCol := len(line)
+			if row == c.To.Y {
+				endCol = c.To.X
+			}
+			if firstCol >= startCol && lastCol < endCol {
+				return true
+			}
+		}
+		return false
+	}
+
+	maxLine := len(lines)
+	endLine := maxLine
+	if endRow >= 0 && endRow+1 < endLine {
+		endLine = endRow + 1
+	}
+	for ln := startLine; ln <= endLine; ln++ {
+		if ln < 1 || ln > maxLine {
+			continue
+		}
+		if strings.TrimSpace(lines[ln-1]) == "" {
+			continue
+		}
+		if commentRow(ln - 1) {
+			continue
+		}
+		// Skip lines whose only non-whitespace token is a
+		// closing delimiter. Delve never binds breakpoints
+		// to bare `}`, `)`, `]` lines, and accepting them
+		// here would regress TestE2E_BreakpointOnClosingBrace.
+		if isDelimiterOnly(lines[ln-1]) {
+			continue
+		}
+		return ln, true
+	}
+	return 0, false
+}
+
+// isDelimiterOnly reports whether line, after trimming
+// whitespace, contains only closing delimiters. Used to
+// preserve the "no statement at or after line N" behaviour
+// when the cursor sits on a closing brace.
+func isDelimiterOnly(line string) bool {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return false
+	}
+	for _, r := range t {
+		switch r {
+		case '}', ')', ']', ',', ';':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func queryNodeAll(
 	parser syntaxapi.Parser,
 	uri workspaceapi.URI,
 	kinds syntaxapi.NodeCaptureName,
 ) ([]syntaxapi.Result, error) {
 	it, err := parser.QueryNode(uri, kinds)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = it.Close() }()
+	var out []syntaxapi.Result
+	for {
+		v, ok := it.Next(context.Background())
+		if !ok {
+			break
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// queryStringAll runs a raw tree-sitter query against uri and
+// returns every match for the given capture name. It is the
+// arbitrary-query sibling of queryNodeAll. Errors are
+// returned to the caller; nextStatementLine treats them as a
+// signal that the grammar does not understand the query and
+// falls back to the anchor-only path.
+func queryStringAll(
+	parser syntaxapi.Parser,
+	uri workspaceapi.URI,
+	query, captureName string,
+) ([]syntaxapi.Result, error) {
+	it, err := parser.Query(uri, query, []string{captureName})
 	if err != nil {
 		return nil, err
 	}

@@ -348,6 +348,63 @@ func lastClosingBraceLine(t *testing.T, path string) int {
 	return 0
 }
 
+// TestE2E_BreakpointOnLiteralOnlyReturn regression-tests
+// RUNE-177: a `return false`-style line inside a function
+// body must be a valid breakpoint target even though
+// tree-sitter emits no identifier captures for it. Before
+// the fix, the prompt-side setBreakpointAt path failed with
+// "no statement at or after line N" on these lines.
+func TestE2E_BreakpointOnLiteralOnlyReturn(t *testing.T) {
+	t.Parallel()
+	dlvBin := findDlv(t)
+	tmpDir := setupBuggy(t)
+	mainPath := filepath.Join(tmpDir, "main.go")
+
+	h := newE2EHarness(t, dlvBin, tmpDir)
+	defer h.close()
+
+	ctx := h.ctx
+
+	it, err := h.run(ctx, subInitialize, "go")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	// Locate the `return false` line inside AlwaysFalse.
+	// Using a content match instead of a hard-coded number
+	// keeps the test resilient to edits to the fixture's
+	// license header or surrounding helpers.
+	line := lineContaining(t, mainPath, "return false")
+	cursor := term.Coordinates{Y: line - 1}
+	hndl, err := h.runPromptOnHandler(ctx, mainPath, cursor, subSetBreakpoint)
+	require.NoError(t, err,
+		"set-breakpoint on a literal-only return must succeed")
+	require.NotNil(t, hndl.LocationList)
+	loc, ok := hndl.LocationList.Current()
+	require.True(t, ok, "no breakpoint location installed")
+	// The breakpoint must bind on the literal-only line
+	// itself, not the next/previous line.
+	assert.Equal(t, line-1, loc.From.Y,
+		"breakpoint should sit on the literal-only return line")
+}
+
+// lineContaining returns the 1-based line number of the first
+// line in path whose trimmed content equals literal. Fails
+// the test if none match.
+func lineContaining(t *testing.T, path, literal string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	lines := strings.Split(string(data), "\n")
+	for i, l := range lines {
+		if strings.TrimSpace(l) == literal {
+			return i + 1
+		}
+	}
+	require.Failf(t, "literal not found",
+		"path=%s literal=%q", path, literal)
+	return 0
+}
+
 func TestE2E_Attach(t *testing.T) {
 	t.Parallel()
 	dlvBin := findDlv(t)
@@ -517,14 +574,14 @@ func newE2EHarness(t *testing.T, dlvBin, dir string) *e2eHarness {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = fs.Close() })
 	parser := syntax.NewParser(fs, pkg, uri)
-	h := New(mgr, br, ed, Config{
+	h := New(mgr, br, ed, parser, fs, Config{
 		WorkspaceURI: uri,
 		Debugger:     dapCfg,
 		ScheduleNextTick: func(fn func()) bool {
 			fn()
 			return true
 		},
-	}).WithParser(parser)
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 
@@ -1221,7 +1278,7 @@ func newIDEHarness(t *testing.T, dlvBin, dir string) *ideHarness {
 
 	hh.h = nil
 	apiEd := newCompEditorAdapter(comp)
-	h := New(mgr, comp, apiEd, Config{
+	h := New(mgr, comp, apiEd, passThroughParser{}, passThroughFS{}, Config{
 		WorkspaceURI: uri,
 		Debugger:     dapCfg,
 		ScheduleNextTick: func(fn func()) bool {

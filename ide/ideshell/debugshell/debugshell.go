@@ -106,6 +106,7 @@ type Handler struct {
 	browser browser.Browser
 	editor  textapi.Editor
 	parser  syntaxapi.Parser
+	fs      workspaceapi.FileSystem
 	notify  func(level browserapi.NotificationLevel, msg string, args ...any)
 	// scheduleNextTick is the GUI event-loop scheduler used to
 	// hop IDE-resource calls back onto the main goroutine. Set
@@ -199,10 +200,17 @@ var _ debugapi.EventSubscriber = (*Handler)(nil)
 // Panics if dbg is nil — passing a nil debugger is a programmer
 // error.
 func New(
-	dbg debugapi.Debugger, b browser.Browser, ed textapi.Editor, cfg Config,
+	dbg debugapi.Debugger, b browser.Browser, ed textapi.Editor,
+	parser syntaxapi.Parser, fs workspaceapi.FileSystem, cfg Config,
 ) *Handler {
 	if dbg == nil {
 		panic("debugshell: debugger is required")
+	}
+	if parser == nil {
+		panic("debugshell: parser is required")
+	}
+	if fs == nil {
+		panic("debugshell: file system is required")
 	}
 	if cfg.ScheduleNextTick == nil {
 		panic("debugshell: Config.ScheduleNextTick is required")
@@ -212,6 +220,8 @@ func New(
 		cfg:                cfg,
 		browser:            b,
 		editor:             ed,
+		parser:             parser,
+		fs:                 fs,
 		scheduleNextTick:   cfg.ScheduleNextTick,
 		breakpoints:        make(map[string][]int),
 		installedLocations: make(map[string]map[string]bool),
@@ -222,15 +232,6 @@ func New(
 // non-fatal debugger UI errors.
 func (h *Handler) WithNotify(fn func(level browserapi.NotificationLevel, msg string, args ...any)) *Handler {
 	h.notify = fn
-	return h
-}
-
-// WithParser installs a syntaxapi.Parser used to locate
-// in-scope variable identifiers when the debuggee stops at a
-// breakpoint. When unset, the variables location list is not
-// installed.
-func (h *Handler) WithParser(p syntaxapi.Parser) *Handler {
-	h.parser = p
 	return h
 }
 
@@ -725,10 +726,6 @@ func (h *Handler) installVariablesLocations(
 			variablesLocationID,
 			textapi.LocationSlice(nil),
 		)
-	}
-	if h.parser == nil {
-		clear()
-		return
 	}
 	scopes, err := h.dbg.Scopes(ctx, sid, &dap.ScopesArguments{
 		FrameId: frame.Id,

@@ -634,7 +634,8 @@ func newTestHandler(t *testing.T) (*Handler, *fakeDebugger, *texttest.TestEditor
 	t.Helper()
 	ed := texttest.NopEditor()
 	dbg := newFakeDebugger()
-	h := New(dbg, nil, nil, Config{ScheduleNextTick: syncScheduleNextTick})
+	h := New(dbg, nil, nil, passThroughParser{}, passThroughFS{},
+		Config{ScheduleNextTick: syncScheduleNextTick})
 	return h, dbg, ed
 }
 
@@ -1037,7 +1038,7 @@ func TestHandler_StoppedBreakpointHighlightsLine(t *testing.T) {
 	tile := &fakeWindow{id: 1, content: &texttest.TestEditorHandler{}}
 	br.windows = []*fakeWindow{tile}
 	ed := newFakeTextapiEditor()
-	h := New(dbg, br, ed, Config{
+	h := New(dbg, br, ed, passThroughParser{}, passThroughFS{}, Config{
 		Icons:            Icons{Stopped: "0a8b"},
 		ScheduleNextTick: syncScheduleNextTick,
 	})
@@ -1246,7 +1247,7 @@ func TestHandler_HandleCommand_UnknownSub(t *testing.T) {
 // `debugger initialize <prefix>` is completed against the
 // adapter language IDs configured on the debugshell.
 func TestHandler_CompleteInitializeAdapters(t *testing.T) {
-	h := New(newFakeDebugger(), nil, nil, Config{
+	h := New(newFakeDebugger(), nil, nil, passThroughParser{}, passThroughFS{}, Config{
 		Debugger: idedebug.Config{
 			Adapters: map[string]idedebug.AdapterConfig{
 				"go":     {},
@@ -1339,7 +1340,7 @@ func TestHandler_VariablesEvaluateUseStoppedFrame(t *testing.T) {
 	tile := &fakeWindow{id: 1, content: &texttest.TestEditorHandler{}}
 	br.windows = []*fakeWindow{tile}
 	ed := newFakeTextapiEditor()
-	h := New(dbg, br, ed, Config{ScheduleNextTick: syncScheduleNextTick})
+	h := New(dbg, br, ed, passThroughParser{}, passThroughFS{}, Config{ScheduleNextTick: syncScheduleNextTick})
 
 	// Threads ranks a runtime goroutine ahead of the user's
 	// goroutine — the old code would target Id=1 (runtime) and
@@ -1455,7 +1456,7 @@ func TestHandler_ClearLocationsOnTerminate(t *testing.T) {
 	tile := &fakeWindow{id: 1, content: &texttest.TestEditorHandler{}}
 	br.windows = []*fakeWindow{tile}
 	ed := newFakeTextapiEditor()
-	h := New(dbg, br, ed, Config{ScheduleNextTick: syncScheduleNextTick})
+	h := New(dbg, br, ed, passThroughParser{}, passThroughFS{}, Config{ScheduleNextTick: syncScheduleNextTick})
 
 	ctx := context.Background()
 	it, err := h.cmdInitialize(ctx, []string{"go"}, nil)
@@ -1775,12 +1776,12 @@ func TestPromptHandler_CompleteOnlyPromptSubcommands(t *testing.T) {
 }
 
 func TestHandler_New_NilDebugger(t *testing.T) {
-	require.Panics(t, func() { New(nil, nil, nil, Config{}) })
+	require.Panics(t, func() { New(nil, nil, nil, passThroughParser{}, passThroughFS{}, Config{}) })
 }
 
 func TestHandler_New_NilScheduleNextTick(t *testing.T) {
 	require.Panics(t, func() {
-		New(newFakeDebugger(), nil, nil, Config{})
+		New(newFakeDebugger(), nil, nil, passThroughParser{}, passThroughFS{}, Config{})
 	})
 }
 
@@ -1934,7 +1935,7 @@ func TestHandler_StoppedEventEmitsStackTrace(t *testing.T) {
 	tile := &fakeWindow{id: 1, content: &texttest.TestEditorHandler{}}
 	br.windows = []*fakeWindow{tile}
 	ed := newFakeTextapiEditor()
-	h := New(dbg, br, ed, Config{ScheduleNextTick: syncScheduleNextTick})
+	h := New(dbg, br, ed, passThroughParser{}, passThroughFS{}, Config{ScheduleNextTick: syncScheduleNextTick})
 
 	ctx := context.Background()
 	it, err := h.cmdInitialize(ctx, []string{"go"}, nil)

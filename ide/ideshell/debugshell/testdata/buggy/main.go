@@ -60,11 +60,21 @@ func Other(n int) int {
 	return total
 }
 
+// AlwaysFalse exists only as a breakpoint target whose body
+// contains a single literal-only statement (`return false`).
+// Tree-sitter emits no identifier captures for this line, so
+// the regression test for RUNE-177 can pin down that the
+// breakpoint still binds.
+func AlwaysFalse() bool {
+	return false
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "wait" {
 		for {
 			_ = Sum(5)
 			_ = Other(3)
+			_ = AlwaysFalse()
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
