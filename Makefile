@@ -116,14 +116,14 @@ claudeimport: $(CLAUDEIMPORT)
 	@ pre-commit install
 
 test: CI=$(CI)
-test: $(RUNE_LLAMACPP_STAMP)
+test: docs-init $(RUNE_LLAMACPP_STAMP)
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
 test: CI=$(CI)
-test-no-race: $(RUNE_LLAMACPP_STAMP)
+test-no-race: docs-init $(RUNE_LLAMACPP_STAMP)
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
-coverage: $(BIN)
+coverage: docs-init $(BIN)
 	@ go test ./.../... -coverprofile $(BIN)/coverage
 	@ go tool cover -html=$(BIN)/coverage
 
@@ -139,7 +139,7 @@ FUZZTIME ?= 10s
 FUZZ_PKG ?= ./...
 FUZZ_TEST_FLAGS ?= -race -parallel=1 -count=1
 
-fuzz: $(RUNE_LLAMACPP_STAMP)
+fuzz: docs-init $(RUNE_LLAMACPP_STAMP)
 	@ set -e; \
 	pkgs=$$(go list -f '{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}' $(FUZZ_PKG)); \
 	for pkg in $$pkgs; do \
@@ -164,7 +164,7 @@ fuzz-list:
 	done
 
 generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
-generate:
+generate: docs-init
 	@ rm -rf **/*rpc*/*.pb.go
 	@ go generate ./...
 
@@ -180,7 +180,7 @@ format:
 cross-compile:
 	@ . ./test_crosscompile.sh
 
-lint:
+lint: docs-init
 	@ golangci-lint run --timeout=600s
 
 clean:
