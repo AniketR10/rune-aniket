@@ -644,13 +644,6 @@ func (m *Manager) download(
 		}
 	}
 
-	err = m.processConfig(pkgID, version, configFile)
-	if err != nil {
-		_ = os.RemoveAll(pkgVersionDirname)
-		m.abortDownload(err, pkgID, version, notificationID)
-		return
-	}
-
 	err = m.linkLibCopyBin(pkgID, version, executables, pkgVersionDirname)
 	if err != nil {
 		_ = os.RemoveAll(pkgVersionDirname)
@@ -668,6 +661,16 @@ func (m *Manager) download(
 		_ = removeExecutables(executables, m.binDir)
 		m.abortDownload(err, pkgID, version, notificationID)
 		return
+	}
+
+	if err := m.processConfig(pkgID, version, configFile); err != nil {
+		m.log(log.WarnLevel, "process config for package %s version %s: %v",
+			pkgID, version, err)
+		if _, notifyErr := m.n.Notify(browserapi.LevelError,
+			"process configuration for %s version %s: %s",
+			pkgID, version, err); notifyErr != nil {
+			m.log(log.WarnLevel, "notify: %v", notifyErr)
+		}
 	}
 
 	if !writer.completeProgress {

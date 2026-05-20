@@ -30,6 +30,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 
@@ -2293,4 +2294,161 @@ func makePAXXattrTarball(t *testing.T) []byte {
 	require.NoError(t, tw.Close())
 	require.NoError(t, gzw.Close())
 	return buf.Bytes()
+}
+
+// failingUpdateStorage wraps a storageapi.Service and returns failErr from
+// Update calls whose ID matches failKey. All other operations delegate
+// to the inner service unchanged.
+type failingUpdateStorage struct {
+	storageapi.Service
+	failKey string
+	failErr error
+}
+
+func (s *failingUpdateStorage) Update(
+	ctx context.Context, id string,
+	updates []storageapi.Update, precond ...storageapi.Precondition,
+) error {
+	if id == s.failKey {
+		return s.failErr
+	}
+	return s.Service.Update(ctx, id, updates, precond...)
+}
+
+func TestInstallNoConfigPromptOnFailure(t *testing.T) {
+	t.Parallel()
+	t.Run("no config prompt scheduled when storage update fails", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "configpkg", Version: "1"},
+		})
+
+		temp, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(temp) })
+
+		configPath := filepath.Join(temp, "config.yaml")
+		// Create user config so processConfig would otherwise schedule a prompt.
+		require.NoError(t, os.WriteFile(configPath, []byte("{}\n"), 0644))
+
+		n := idepkgtest.NewNotifications(t)
+		n.ExpectErrorNotification = true
+		rel := idepkgtest.NewReleaseManager(pkgs, versions)
+		fileScheme := newLocalScheme(temp)
+		var promptCalled atomic.Bool
+		wm := &mockWindowManager{
+			floatingFn: func(_ browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				// Recorded and asserted on the test goroutine after
+				// Wait — install runs on a different goroutine where
+				// t.Fatal would not reliably abort the install path.
+				promptCalled.Store(true)
+				return &mockWindow{}, nil
+			},
+		}
+		storage := &failingUpdateStorage{
+			Service: storagestub.NewInMemoryService(),
+			failKey: "configpkg:1",
+			failErr: errors.New("simulated storage update failure"),
+		}
+		m := NewManager(n, rel, storage, fileScheme, temp, configPath, wm,
+			syncTick, term.NopInterrupter())
+
+		n.SetWg(1) // the install-failure error notification
+		err = m.InstallPackageVersion(context.Background(), "configpkg", "1")
+		require.NoError(t, err)
+		n.Wait()
+		n.RequireErrorNotification()
+		assert.False(t, promptCalled.Load(),
+			"config prompt must not be scheduled when install fails")
+
+		// The installed package dir should have been rolled back.
+		pkgDir := makePackageVersionDirname(temp, "configpkg", "1")
+		_, statErr := os.Stat(pkgDir)
+		assert.True(t, os.IsNotExist(statErr),
+			"package version dir should be removed after rollback")
+
+		// User config should be untouched.
+		data, err := os.ReadFile(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, "{}\n", string(data),
+			"user config should not be modified when install fails")
+	})
+}
+
+func TestInstallConfigPromptScheduledAfterSuccess(t *testing.T) {
+	t.Parallel()
+	t.Run("prompt only scheduled after install success notification", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "configpkg", Version: "1"},
+		})
+
+		temp, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(temp) })
+
+		configPath := filepath.Join(temp, "config.yaml")
+		require.NoError(t, os.WriteFile(configPath, []byte("{}\n"), 0644))
+
+		n := idepkgtest.NewNotifications(t)
+		rel := idepkgtest.NewReleaseManager(pkgs, versions)
+		fileScheme := newLocalScheme(temp)
+
+		// Record the order of success notification vs. prompt scheduling.
+		// Floating is invoked from inside processConfig's scheduled fn,
+		// which runs synchronously under syncTick. So if processConfig
+		// runs after storage.Update (the fix), Floating must be observed
+		// only after storage has marked the entry complete.
+		var (
+			promptCalled    bool
+			storageComplete bool
+		)
+		wm := &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				assert.True(t, storageComplete,
+					"prompt must not be scheduled before storage marks the install complete")
+				promptCalled = true
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+		storage := &orderingStorage{
+			Service:    storagestub.NewInMemoryService(),
+			completeAt: "configpkg:1",
+			completed:  &storageComplete,
+		}
+		m := NewManager(n, rel, storage, fileScheme, temp, configPath, wm,
+			syncTick, term.NopInterrupter())
+
+		n.SetWg(2) // apply success + download success
+		err = m.InstallPackageVersion(context.Background(), "configpkg", "1")
+		require.NoError(t, err)
+		n.Wait()
+		n.RequireNoErrorNotification()
+
+		assert.True(t, promptCalled, "config prompt should be scheduled on success path")
+	})
+}
+
+// orderingStorage flips *completed to true after a successful Update for completeAt.
+// Used to observe whether the config prompt is scheduled before the
+// install is durably committed.
+type orderingStorage struct {
+	storageapi.Service
+	completeAt string
+	completed  *bool
+}
+
+func (s *orderingStorage) Update(
+	ctx context.Context, id string,
+	updates []storageapi.Update, precond ...storageapi.Precondition,
+) error {
+	err := s.Service.Update(ctx, id, updates, precond...)
+	if err == nil && id == s.completeAt {
+		*s.completed = true
+	}
+	return err
 }
