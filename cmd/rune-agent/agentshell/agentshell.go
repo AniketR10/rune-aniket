@@ -36,6 +36,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -50,7 +51,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/component/markdown"
 	mdhandler "unstable.build/go-tui/handler/markdown"
@@ -1061,9 +1062,9 @@ func (s *shell) compactConversation(
 		return nil, fmt.Errorf("create llm service: %w", err)
 	}
 
-	model, ok := svc.GetModel(ctx, llmapi.ModelEntry{Name: s.defaultModel})
-	if !ok {
-		return nil, fmt.Errorf("model %q not found", s.defaultModel)
+	model, err := llmarg.Resolve(ctx, svc, s.defaultModel)
+	if err != nil {
+		return nil, err
 	}
 	_, _, err = agent.CompactDialogue(ctx, svc, model, s.store, d)
 	if err != nil {

@@ -48,9 +48,9 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"golang.org/x/oauth2"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/cmd/rune-agent/memory/claudememory"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 	"unstable.build/go-tui/debug"
@@ -222,9 +222,9 @@ func (a *app) runCompile(
 	}
 
 	svc := w.LLM(ctx)
-	entry, ok := svc.GetModel(ctx, llmapi.ModelEntry{Name: model})
-	if !ok {
-		return fmt.Errorf("unknown model %q", model)
+	entry, err := llmarg.Resolve(ctx, svc, model)
+	if err != nil {
+		return err
 	}
 	_ = apiKey
 	_ = baseURL

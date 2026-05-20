@@ -69,6 +69,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 
 	runemcp "unstable.build/go-tui/cmd/rune-agent/mcp"
 	"unstable.build/go-tui/cmd/rune-agent/memory"
@@ -377,13 +378,16 @@ func newCommandEventHandler(
 	}
 	ret.hookRunner = hooks.NewRunner(hooksCfg, executor, noti, cwd.Path())
 
-	if _, ok := ret.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: ret.defaultModel}); !ok {
+	if entry, err := llmarg.Resolve(ctx, ret.llmSvc, ret.defaultModel); err != nil {
 		slog.Warn("default model not found in registry, falling back",
-			"requested", ret.defaultModel)
+			"requested", ret.defaultModel, "error", err)
 		fallback := firstModel(ret.llmSvc)
 		if fallback != "" {
 			ret.defaultModel = fallback
 		}
+	} else {
+		// Persist the qualified form so the strict router can find it.
+		ret.defaultModel = entry.Provider + "/" + entry.Name
 	}
 
 	ret.cfg = defaultComponentCfg
@@ -509,16 +513,18 @@ func newCommandEventHandler(
 		}
 		ret.queryDefaultModel = defaultModel
 	}
-	if _, ok := ret.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: ret.queryDefaultModel}); !ok {
+	if entry, err := llmarg.Resolve(ctx, ret.llmSvc, ret.queryDefaultModel); err != nil {
 		first := firstModel(ret.llmSvc)
 		if first == "" {
-			return nil, fmt.Errorf("query default model %q not found and registry is empty",
-				ret.queryDefaultModel)
+			return nil, fmt.Errorf("query default model %q not found and registry is empty: %w",
+				ret.queryDefaultModel, err)
 		}
 		_, _ = noti.Notify(browserapi.LevelWarn,
 			"query default model %q not found in registry, falling back to %q",
 			ret.queryDefaultModel, first)
 		ret.queryDefaultModel = first
+	} else {
+		ret.queryDefaultModel = entry.Provider + "/" + entry.Name
 	}
 
 	ret.compactModel, err = pconfig.GetString("compact_model")
@@ -529,11 +535,13 @@ func newCommandEventHandler(
 		// empty string means "use the chat model" — no separate service needed.
 	}
 	if ret.compactModel != "" {
-		if _, ok := ret.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: ret.compactModel}); !ok {
+		if entry, err := llmarg.Resolve(ctx, ret.llmSvc, ret.compactModel); err != nil {
 			_, _ = noti.Notify(browserapi.LevelWarn,
-				"compact model %q not found in registry, compaction will use the chat model",
-				ret.compactModel)
+				"compact model %q not found in registry, compaction will use the chat model (%v)",
+				ret.compactModel, err)
 			ret.compactModel = ""
+		} else {
+			ret.compactModel = entry.Provider + "/" + entry.Name
 		}
 	}
 
@@ -692,9 +700,9 @@ type aiEditorHandler struct {
 func (h *aiEditorHandler) modelService(ctx context.Context, model string) (
 	llmapi.Service, llmapi.ModelEntry, error,
 ) {
-	entry, ok := h.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: model})
-	if !ok {
-		return nil, llmapi.ModelEntry{}, fmt.Errorf("model %q not found", model)
+	entry, err := llmarg.Resolve(ctx, h.llmSvc, model)
+	if err != nil {
+		return nil, llmapi.ModelEntry{}, err
 	}
 	svc := h.llmSvc
 	if h.auditStore != nil {
@@ -857,7 +865,7 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	cmd.Args = filterAllFlag(cmd.Args)
 	if len(cmd.Args) > 0 {
-		if _, ok := h.llmSvc.GetModel(h.ctx, llmapi.ModelEntry{Name: cmd.Args[0]}); ok {
+		if _, err := llmarg.Resolve(h.ctx, h.llmSvc, cmd.Args[0]); err == nil {
 			return errors.New("model must be passed as a second argument to a dialogue ID, " +
 				"check command manual for more details")
 		}
@@ -865,9 +873,8 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	model := h.defaultModel
 	if len(cmd.Args) > 1 {
 		model = cmd.Args[1]
-		if _, ok := h.llmSvc.GetModel(h.ctx, llmapi.ModelEntry{Name: model}); !ok {
-			return fmt.Errorf("model '%s' is not supported. Available models: %s",
-				model, availableModelsString(h.llmSvc))
+		if _, err := llmarg.Resolve(h.ctx, h.llmSvc, model); err != nil {
+			return err
 		}
 	}
 
@@ -1280,7 +1287,7 @@ func (h *aiEditorHandler) completeWithModelsIterator(ctx context.Context) (
 	iterator.Iterator[string], error,
 ) {
 	return iterator.Map(h.llmSvc.Models(), func(e llmapi.ModelEntry) string {
-		return e.Name
+		return e.Provider + "/" + e.Name
 	}), nil
 }
 
@@ -1481,21 +1488,6 @@ func firstModel(svc llmapi.Service) string {
 		return ""
 	}
 	return e.Name
-}
-
-func availableModelsString(svc llmapi.Service) string {
-	it := svc.Models()
-	defer func() { _ = it.Close() }()
-	var names []string
-	for {
-		e, ok := it.Next(context.Background())
-		if !ok {
-			break
-		}
-		names = append(names, e.Name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
 }
 
 type completionRequest struct {

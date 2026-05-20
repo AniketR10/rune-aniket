@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/component/markdown"
 	mdhandler "unstable.build/go-tui/handler/markdown"
 )
@@ -142,18 +143,6 @@ func newCommandAdapter(deps commandAdapterDeps) *commandAdapter {
 			_ = deps.interrupter.Interrupt(context.Background())
 		},
 	}
-}
-
-func (a *commandAdapter) newService(model string) (llmapi.Service, llmapi.ModelEntry, error) {
-	entry, ok := a.llmSvc.GetModel(a.ctx, llmapi.ModelEntry{Name: model})
-	if !ok {
-		return nil, llmapi.ModelEntry{}, fmt.Errorf("model %q not found", model)
-	}
-	svc := a.llmSvc
-	if a.auditStore != nil {
-		svc = audit.NewService(svc, a.auditStore, entry)
-	}
-	return svc, entry, nil
 }
 
 func (a *commandAdapter) HandleCommand(
@@ -354,18 +343,19 @@ func (a *commandAdapter) handleModel(
 			Display: iterator.FromSlice([]component.Responsive{md}),
 		}, nil
 	}
-	model := args[0]
-	if _, ok := a.llmSvc.GetModel(ctx, llmapi.ModelEntry{Name: model}); !ok {
-		return dialoguetui.CommandResult{}, fmt.Errorf("model %q is not available. Available models: %s",
-			model, availableModelsString(a.llmSvc))
-	}
-	svc, entry, err := a.newService(model)
+	arg := args[0]
+	entry, err := llmarg.Resolve(ctx, a.llmSvc, arg)
 	if err != nil {
-		return dialoguetui.CommandResult{}, fmt.Errorf("create service for model %q: %w", model, err)
+		return dialoguetui.CommandResult{}, err
+	}
+	svc := a.llmSvc
+	if a.auditStore != nil {
+		svc = audit.NewService(svc, a.auditStore, entry)
 	}
 	a.agent.SwapService(svc, entry)
-	a.currentModel = model
-	md, err := markdown.New(fmt.Sprintf("Switched to model **%s**", model))
+	qualified := entry.Provider + "/" + entry.Name
+	a.currentModel = qualified
+	md, err := markdown.New(fmt.Sprintf("Switched to model **%s**", qualified))
 	if err != nil {
 		return dialoguetui.CommandResult{}, err
 	}
@@ -570,8 +560,10 @@ func (a *commandAdapter) Complete(
 	ctx context.Context, name string, args []string,
 ) (iterator.Iterator[string], error) {
 	if name == "model" && a.llmSvc != nil {
+		// Qualified to disambiguate name collisions across providers
+		// (e.g. openai/gpt-5.5 vs codex/gpt-5.5).
 		return iterator.Map(a.llmSvc.Models(), func(e llmapi.ModelEntry) string {
-			return e.Name
+			return e.Provider + "/" + e.Name
 		}), nil
 	}
 	if name == "effort" {

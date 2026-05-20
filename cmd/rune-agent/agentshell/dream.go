@@ -28,10 +28,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream/dreamcomponent"
 )
@@ -61,9 +61,9 @@ func (s *shell) handleDream(
 	if err != nil {
 		return nil, fmt.Errorf("create llm service: %w", err)
 	}
-	entry, ok := svc.GetModel(ctx, llmapi.ModelEntry{Name: model})
-	if !ok {
-		return nil, fmt.Errorf("model %q not found", model)
+	entry, err := llmarg.Resolve(ctx, svc, model)
+	if err != nil {
+		return nil, err
 	}
 
 	deps := dream.Deps{

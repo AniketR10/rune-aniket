@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package llmrouter provides a Router that implements llmapi.Service by
 // dispatching CreateCompletion / CountTokens calls to one of the
 // known provider clients. The router owns every client it dispatches
@@ -187,10 +186,13 @@ func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.Aggregate(its...)
 }
 
-// GetModel implements llmapi.Service. It scans the aggregate catalog
-// for an entry whose Name matches and returns it. If model.Provider is
-// set, only entries for that provider are considered.
+// GetModel implements llmapi.Service. Bare-name lookups (empty
+// Provider) return (zero, false) so name collisions across providers
+// cannot silently dispatch to the wrong backend.
 func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	if model.Provider == "" {
+		return llmapi.ModelEntry{}, false
+	}
 	it := r.Models()
 	defer func() { _ = it.Close() }()
 	for {
@@ -201,7 +203,7 @@ func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.
 		if entry.Name != model.Name {
 			continue
 		}
-		if model.Provider != "" && entry.Provider != model.Provider {
+		if entry.Provider != model.Provider {
 			continue
 		}
 		return entry, true
@@ -210,11 +212,12 @@ func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.
 
 // resolve picks the llmapi.Service that serves model.Provider. The
 // codex and local providers build a fresh service per request — codex
-// because the access token (and installation ID) come from storage
-// and rotate, local because each llama.cpp Service owns a single
-// loaded model.
+// because the access token rotates, local because each llama.cpp
+// Service owns a single loaded model.
 func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.Service, error) {
 	switch model.Provider {
+	case "":
+		return nil, errors.New("llmrouter: ModelEntry.Provider must be set")
 	case ProviderOpenAI:
 		return r.openai, nil
 	case ProviderAnthropic:

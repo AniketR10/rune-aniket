@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package llmrouter
 
 import (
@@ -87,7 +86,8 @@ func TestRouter_CustomCatalogSurfacesEntries(t *testing.T) {
 	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService())
 	require.NoError(t, err)
 
-	got, ok := r.GetModel(context.Background(), llmapi.ModelEntry{Name: "my-model"})
+	got, ok := r.GetModel(context.Background(),
+		llmapi.ModelEntry{Provider: ProviderCustom, Name: "my-model"})
 	require.True(t, ok)
 	assert.Equal(t, 8192, got.ContextWindow)
 	assert.Equal(t, ProviderCustom, got.Provider)
@@ -120,4 +120,43 @@ func TestRouter_StaticCatalog(t *testing.T) {
 	assert.True(t, hasProvider(ProviderAnthropic), "no anthropic models")
 	assert.True(t, hasProvider(ProviderCodex), "no codex models")
 	assert.True(t, hasProvider(ProviderGemini), "no gemini models")
+}
+
+func TestRouter_GetModel_RequiresProvider(t *testing.T) {
+	r := newTestRouter(t)
+	// gpt-5.5 collides across openai and codex catalogs.
+	_, ok := r.GetModel(context.Background(), llmapi.ModelEntry{Name: "gpt-5.5"})
+	assert.False(t, ok, "GetModel must reject empty Provider")
+}
+
+func TestRouter_GetModel_QualifiedDisambiguates(t *testing.T) {
+	r := newTestRouter(t)
+	ctx := context.Background()
+
+	got, ok := r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderCodex, Name: "gpt-5.5"})
+	require.True(t, ok)
+	assert.Equal(t, ProviderCodex, got.Provider)
+
+	got, ok = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderOpenAI, Name: "gpt-5.5"})
+	require.True(t, ok)
+	assert.Equal(t, ProviderOpenAI, got.Provider)
+}
+
+func TestRouter_Resolve_RejectsEmptyProvider(t *testing.T) {
+	r := newTestRouter(t)
+	_, err := r.resolve(context.Background(), llmapi.ModelEntry{Name: "gpt-5.5"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ModelEntry.Provider must be set")
+}
+
+func TestRouter_CreateCompletion_RejectsEmptyProvider(t *testing.T) {
+	r := newTestRouter(t)
+	_, err := r.CreateCompletion(context.Background(),
+		llmapi.ModelEntry{Name: "gpt-5.5"}, llmapi.Request{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ModelEntry.Provider must be set")
+
+	_, err = r.CountTokens(llmapi.ModelEntry{Name: "gpt-5.5"}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ModelEntry.Provider must be set")
 }
