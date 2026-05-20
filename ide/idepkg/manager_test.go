@@ -33,6 +33,9 @@ import (
 	"syscall"
 	"testing"
 
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
@@ -40,6 +43,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -52,7 +56,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
-	"github.com/unstablebuild/ox-api/bluestore"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -2186,4 +2190,107 @@ func TestProcessConfigSkipsPromptWhenAlreadyMerged(t *testing.T) {
 		err = m.ProcessInstalledSettings(context.Background())
 		require.NoError(t, err)
 	})
+}
+
+// TestInstallPackageVersionNonUTF8PAXXattr is a regression test for
+// RUNE-174: previously, tar.Header values returned by untar were persisted
+// verbatim into the TOML-backed package store, so a tarball carrying a PAX
+// xattr with non-UTF-8 bytes (such as macOS's "com.apple.provenance"
+// containing 0xad) made storage.Update fail with
+// "invalid UTF-8 byte: 0xad", aborting the install.
+func TestInstallPackageVersionNonUTF8PAXXattr(t *testing.T) {
+	t.Parallel()
+	pkgID := "paxpkg"
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles([]release.Bundle{
+		{Package: pkgID, Version: "1"},
+	})
+
+	tarball := makePAXXattrTarball(t)
+
+	m, n, r, datadir, storage := newTestManagerWithLocalStorage(t, pkgs, versions)
+	r.SetTarball(pkgID, tarball)
+
+	n.SetWg(1)
+	err := m.InstallPackageVersion(context.Background(), pkgID, "1")
+	require.NoError(t, err)
+	n.Wait()
+	n.RequireNoErrorNotification()
+
+	// The binary must end up in the package's bin directory.
+	binPath := filepath.Join(datadir, "bin", "tool")
+	info, err := os.Stat(binPath)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0111 != 0, "installed file must be executable")
+
+	// Round-trip the persisted record through the TOML store. Before the
+	// fix, the file written during install contained raw 0xad bytes inside
+	// a TOML string and the next read failed with "invalid UTF-8 byte:
+	// 0xad". After the fix, the stored value carries only Name/Mode and
+	// reads succeed.
+	var got pkgVersionValue
+	key := m.makeDownloadKey(pkgID, "1")
+	require.NoError(t, storage.Get(context.Background(), key, &got))
+	assert.Equal(t, pkgID, got.Package)
+	require.Len(t, got.Executables, 1)
+	assert.Equal(t, "tool", got.Executables[0].Name)
+}
+
+// newTestManagerWithLocalStorage is like newTestManager but uses the
+// production-style TOML-backed local storage so that any non-UTF-8 bytes in
+// persisted values surface as marshaling errors.
+func newTestManagerWithLocalStorage(
+	t *testing.T,
+	packages map[string]release.Package,
+	versions map[string][]release.Bundle,
+) (*Manager, *idepkgtest.Notifications, *idepkgtest.ReleaseManager, string, storageapi.Service) {
+	temp, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(temp)
+	})
+	configPath := filepath.Join(temp, "config.yaml")
+	n := idepkgtest.NewNotifications(t)
+	r := idepkgtest.NewReleaseManager(packages, versions)
+	fileScheme := newLocalScheme(temp)
+	wm := &mockWindowManager{
+		floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+			h.Resize(70, 20)
+			h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			return &mockWindow{}, nil
+		},
+	}
+	storage := localstorage.New(context.Background(), temp, doctoml.Marshaler())
+	manager := NewManager(n, r, storage,
+		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
+	return manager, n, r, temp, storage
+}
+
+// makePAXXattrTarball builds a gzipped tar with a single executable whose
+// PAX records include the macOS "com.apple.provenance" xattr containing a
+// non-UTF-8 byte (0xad). This mirrors what Go binaries on macOS carry and
+// is the payload that triggered the original install failure.
+func makePAXXattrTarball(t *testing.T) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+
+	const content = "#!/bin/sh\necho hi\n"
+	hdr := &tar.Header{
+		Name:   "tool",
+		Mode:   0o755,
+		Size:   int64(len(content)),
+		Format: tar.FormatPAX,
+		PAXRecords: map[string]string{
+			"SCHILY.xattr.com.apple.provenance": "\xad",
+		},
+	}
+	require.NoError(t, tw.WriteHeader(hdr))
+	_, err := tw.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gzw.Close())
+	return buf.Bytes()
 }

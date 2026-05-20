@@ -46,6 +46,7 @@ type ReleaseManager struct {
 	progressUnits        string
 	missProgressComplete bool
 	hook                 func()
+	tarballs             map[string][]byte
 }
 
 // NewReleaseManager returns a new instance of ReleaseManager.
@@ -66,6 +67,17 @@ func (t *ReleaseManager) ExpectReturnErr(err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.err = err
+}
+
+// SetTarball registers a custom gzipped-tar payload to return when Get is
+// called for the given pkgID. Overrides the embedded fixtures.
+func (t *ReleaseManager) SetTarball(pkgID string, data []byte) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.tarballs == nil {
+		t.tarballs = make(map[string][]byte)
+	}
+	t.tarballs[pkgID] = data
 }
 
 // SetHook sets a hook to be called before any of the methods return
@@ -178,6 +190,10 @@ func (t *ReleaseManager) Get(
 		defer wg.Done()
 		t.mu.Lock()
 		defer t.mu.Unlock()
+		if buf, ok := t.tarballs[pkgID]; ok {
+			_, err = writer.Write(buf)
+			return
+		}
 		switch pkgID {
 		case "go":
 			_, err = writer.Write(goTar)

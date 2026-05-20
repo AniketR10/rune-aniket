@@ -755,7 +755,7 @@ func (m *Manager) linkLibVersion(pkgID string, version release.Version) error {
 
 func (m *Manager) linkLibCopyBin(
 	pkgID string, version release.Version,
-	executables []*tar.Header, pkgVersionDirname string,
+	executables []executableEntry, pkgVersionDirname string,
 ) error {
 	m.log(log.TraceLevel, "linking package %s version %s library", pkgID, version)
 	err := m.linkLibVersion(pkgID, version)
@@ -941,7 +941,7 @@ func (m *Manager) processConfig(
 	return nil
 }
 
-func (m *Manager) untar(tarfile *os.File, dirname string) (string, []*tar.Header, error) {
+func (m *Manager) untar(tarfile *os.File, dirname string) (string, []executableEntry, error) {
 	if err := os.MkdirAll(dirname, 0777); err != nil {
 		err = fmt.Errorf("mkdir: %w", err)
 		return "", nil, err
@@ -1169,10 +1169,10 @@ func isExecutable(info fs.FileInfo) bool {
 	return info.Mode()&os.ModeType == 0 && info.Mode()&0111 != 0
 }
 
-func untar(dst string, r io.Reader) ([]*tar.Header, error) {
+func untar(dst string, r io.Reader) ([]executableEntry, error) {
 	tr := tar.NewReader(r)
 
-	var executables []*tar.Header
+	var executables []executableEntry
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -1184,7 +1184,10 @@ func untar(dst string, r io.Reader) ([]*tar.Header, error) {
 
 		target := filepath.Join(dst, filepath.Clean(hdr.Name))
 		if isExecutable(hdr.FileInfo()) && !isHidden(hdr.Name) {
-			executables = append(executables, hdr)
+			executables = append(executables, executableEntry{
+				Name: hdr.Name,
+				Mode: hdr.Mode,
+			})
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
@@ -1220,7 +1223,7 @@ func untar(dst string, r io.Reader) ([]*tar.Header, error) {
 	return executables, nil
 }
 
-func copyExecutables(files []*tar.Header, dirname, targetdirname string) error {
+func copyExecutables(files []executableEntry, dirname, targetdirname string) error {
 	var ret error
 	for _, executable := range files {
 		name := filepath.Clean(executable.Name)
@@ -1233,7 +1236,7 @@ func copyExecutables(files []*tar.Header, dirname, targetdirname string) error {
 		defer func() { _ = origfile.Close() }()
 		target := filepath.Join(targetdirname, filepath.Base(name))
 		targetfile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR,
-			executable.FileInfo().Mode())
+			os.FileMode(executable.Mode))
 		if err != nil {
 			ret = multierror.Append(ret, fmt.Errorf("create executable %s: %w", target, err))
 			continue
@@ -1251,7 +1254,7 @@ func isHidden(file string) bool {
 	return strings.HasPrefix(filepath.Base(file), ".")
 }
 
-func removeExecutables(files []*tar.Header, targetdirname string) error {
+func removeExecutables(files []executableEntry, targetdirname string) error {
 	var ret error
 	for _, executable := range files {
 		name := filepath.Clean(executable.Name)
@@ -1305,8 +1308,18 @@ func makeStagingDirname(dataDir, pkgID string, version release.Version) string {
 type pkgVersionValue struct {
 	Package     string
 	Version     release.Version
-	Executables []*tar.Header
+	Executables []executableEntry
 	Complete    bool
+}
+
+// executableEntry is the UTF-8-safe representation of an executable file
+// extracted from a package tarball. The raw [tar.Header] cannot be persisted
+// directly because PAX records (for example macOS's
+// "com.apple.provenance" xattr) may contain non-UTF-8 bytes, which the TOML
+// marshaler used by the local package store rejects.
+type executableEntry struct {
+	Name string
+	Mode int64
 }
 
 func escapeString(val string) string {
