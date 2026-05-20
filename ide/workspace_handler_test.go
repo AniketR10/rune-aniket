@@ -4614,10 +4614,12 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
+	publish := newTestPublishOverride
+	if publish == nil {
+		publish = func(term.Event) bool { return true }
+	}
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager,
-		notiConfig, cfg, storage, dir, func(term.Event) bool {
-			return true
-		}, runner, mu, extensions,
+		notiConfig, cfg, storage, dir, publish, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil, false)
 

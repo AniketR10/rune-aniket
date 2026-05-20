@@ -161,7 +161,7 @@ func (h *openConfirmExitPromptHandler) OnSelect(
 	switch option {
 	case yesOpt:
 		h.wm.confirmedForceExit = true
-		h.wm.publishEvent(term.Event{Type: term.EventNone})
+		h.wm.events.globalPublisher()(term.Event{Type: term.EventNone})
 	case noOpt:
 		h.wm.shaderRunner.cancel()
 		h.wm.confirmedForceExit = false

@@ -119,7 +119,7 @@ type workspaceManagerHandler struct {
 	clip               clipboard.Register
 	macro              *idemacro.Recorder
 	macroPlayer        *idemacro.Player
-	publishEvent       func(term.Event) bool
+	events             *eventRouter
 	tabsClickCallback  func(int) bool
 	extensionRunner    ExtensionsRunner
 	sixDir             string
@@ -359,7 +359,7 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 		ws,
 		cwd,
 		h.notifications.current(),
-		byoe.PublisherFunc(h.publishEvent),
+		byoe.PublisherFunc(h.events.newPublisher(cwd)),
 		ws, // terminal
 		ws, // executor
 		tm,
@@ -486,15 +486,9 @@ func (h *workspaceManagerHandler) init(
 	// history under the "ide" partition; the {history} completer must
 	// read from the same partition or it will see an empty document.
 	cfg.storage = h.ideStorage
-	interrupter := term.FuncInterrupter(func(ctx context.Context) error {
-		payload, _ := term.PayloadFromContext(ctx)
-		if !h.publishEvent(term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}) {
-			return errEventStreamNotReady
-		}
-		return nil
-	})
+	h.events = newEventRouter(publishEvent)
 	h.frameCharSet = cfg.windowFrameCharset()
-	notiConfig.Interrupter = interrupter
+	notiConfig.Interrupter = h.events.globalInterrupter()
 	h.notifications = newWorkspaceNotifications(h.ideStorage, notiConfig, h)
 	h.shaderRunner = shaderRunner
 	h.mu = locker
@@ -513,11 +507,10 @@ func (h *workspaceManagerHandler) init(
 	h.reloadConfig = reloadConfig
 	h.workspaceConfigFilename = workspaceConfigFilename
 	h.tabsClickCallback = tabsClickCallback
-	h.publishEvent = publishEvent
 	h.workspace = manager
 	h.clip = cfg.clipboard()
 	h.macro = idemacro.New(h.clip, h.notifications.current(), cfg.commandKey())
-	h.macroPlayer = idemacro.NewPlayer(h.clip, h.macro, h.publishEvent)
+	h.macroPlayer = idemacro.NewPlayer(h.clip, h.macro, h.events.globalPublisher())
 	h.sixDir = sixDir
 	h.extensionRunner = extensionRunner
 	h.builtinExtensions = builtinExtensions
@@ -541,11 +534,14 @@ func (h *workspaceManagerHandler) init(
 	h.homeURI = homeDirUri
 	h.homeWorkspace = homeWorkspace
 	h.setReleaseManager(releaseManager)
+	// Seed the focus mirror before textOpts/newEx build home-bound
+	// publishers; their first publish runs before switchToWorkspace.
+	h.events.setFocus(h.homeURI)
 
 	// don't install a fs watcher for the home workspace,
 	// to prevent unecessary resource consumption
 	homeParser := syntax.NewParser(h.homeWorkspace, h.pkgmanager, h.homeURI)
-	globalOpts := h.textOpts(cfg, homeParser)
+	globalOpts := h.textOpts(cfg, homeParser, h.homeURI)
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	// do not pass a real version control for home workspace.
@@ -559,7 +555,7 @@ func (h *workspaceManagerHandler) init(
 		},
 		homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
-		h.publishEvent, 0 /* vte capacity */, h.clip, h.macro,
+		h.events.newPublisher(h.homeURI), 0 /* vte capacity */, h.clip, h.macro,
 		h.dispatchOnPreview, tm, homeParser, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -920,6 +916,7 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 		}
 	}
 	h.focus = i
+	h.events.setFocus(h.focusURI())
 	h.focusProxy.Target = h.focusHandler()
 	// resize for bottom workspace bar to disappear
 	h.Resize(h.width, h.height)
@@ -1019,7 +1016,7 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 }
 
 func (h *workspaceManagerHandler) textOpts(
-	cfg ideConfig, parser syntaxapi.Parser,
+	cfg ideConfig, parser syntaxapi.Parser, uri workspaceapi.URI,
 ) []text.Option {
 	markdownConfig := markdown.DefaultConfig()
 	markdownConfig.Parser = parser
@@ -1046,7 +1043,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithCommandAliases(cfg.commandAliases()),
 		text.WithPromptConfig(cfg.promptConfig()),
-		text.WithEventPublisher(h.publishEvent),
+		text.WithEventPublisher(h.events.newPublisher(uri)),
 		text.WithTabBarOffset(h.tabBarOffset),
 		text.WithTabBarHeight(h.tabBarHeight),
 		text.WithTabNameSeparator(cfg.tabNameSeparator()),
@@ -1334,7 +1331,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	}
 
 	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
-	textOpts := h.textOpts(cfg, parser)
+	textOpts := h.textOpts(cfg, parser, uri)
 	// Always attempt to construct a real vctrl.Service so file-level
 	// git commands (e.g. :gitlink) work even when the user has not
 	// enabled aux-bar git decorations. gogit.NewService falls back to
@@ -1371,7 +1368,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 			return h.newEditor(reloader, uri, multicwd, tm, cfg, vctrlService)
 		},
 		multicwd, h.ideStorage, h.notifications, uri,
-		cfg.terminalConfig(), cfg.pluginBarConfig(), h.publishEvent,
+		cfg.terminalConfig(), cfg.pluginBarConfig(), h.events.newPublisher(uri),
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
 		tm, parser, textOpts...)
 	if err != nil {
@@ -1658,9 +1655,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err != nil {
 		return nil, fmt.Errorf("new command authorizer: %w", err)
 	}
-	res := extension.BrowserResources(ex.Browser(), h.publishEvent)
+	res := extension.BrowserResources(ex.Browser(), h.events.newPublisher(uri))
 	res = extension.MergeResourceMap(res,
-		extension.EditorResources(ex.Browser(), ed, h.publishEvent))
+		extension.EditorResources(ex.Browser(), ed, h.events.newPublisher(uri)))
 	res = extension.MergeResourceMap(res,
 		extension.WorkspaceResources(cwd, cmdAuthorizer))
 	res = extension.MergeResourceMap(res,
@@ -1725,7 +1722,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 			WithOpenShell(ex.shellnewtab)); err != nil {
 		log.Errorf("subscribe debugger command prompt: %v", err)
 	}
-	cmdcfg := lspCommandsConfig(uri, cfg, notifications, h, parser, callbacks)
+	cmdcfg := lspCommandsConfig(uri, cfg, notifications,
+		h.events.newInterrupter(uri), parser, callbacks)
 	apiHandler, err := lspcmd.AllHandler(
 		lsp, apieditor, apibrowser, apibrowser, apibrowser,
 		ex.workspace, parser, cmdcfg)
@@ -2132,6 +2130,7 @@ func (h *workspaceManagerHandler) moveWorkspace(args ...string) error {
 	h.workspaces[curr] = h.workspaces[next]
 	h.workspaces[next] = temp
 	h.focus = next
+	h.events.setFocus(h.focusURI())
 	h.Resize(h.width, h.height)
 	return err
 }
@@ -2637,12 +2636,7 @@ func (h *workspaceManagerHandler) persistWorkspaceStateOnClose(hm *workspaceHand
 }
 
 func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
-	payload, _ := term.PayloadFromContext(ctx)
-	ev := term.Event{Type: term.EventInterrupt, Raw: payload, Context: ctx}
-	if !h.publishEvent(ev) {
-		return errEventStreamNotReady
-	}
-	return nil
+	return h.events.globalInterrupter().Interrupt(ctx)
 }
 
 // waitInflight blocks until every workspace's in-flight async save /
