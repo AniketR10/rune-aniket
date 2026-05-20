@@ -16,6 +16,8 @@ package main
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,11 +27,20 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
+// newTestConfigPath returns a fresh temp-dir-backed config path. The
+// host directory must exist because workspace.NewFileScheme stats its
+// workspace root at construction time.
+func newTestConfigPath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "config.yaml")
+}
+
 func TestDocsSchemePrefill(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
 	uri, err := workspaceapi.ParseURI("docs:///")
 	require.NoError(t, err)
 
-	s, err := newDocsSchemeFunc()(context.Background(), config.NopConfig(), uri)
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -49,10 +60,11 @@ func TestDocsSchemePrefill(t *testing.T) {
 // embedded directory layout (e.g. /develop/sdk.md), so opening by relative
 // path must round-trip the embed contents.
 func TestDocsSchemeAllFilesNonEmpty(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
 	uri, err := workspaceapi.ParseURI("docs:///")
 	require.NoError(t, err)
 
-	s, err := newDocsSchemeFunc()(context.Background(), config.NopConfig(), uri)
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -80,10 +92,11 @@ func TestDocsSchemeAllFilesNonEmpty(t *testing.T) {
 // "develop/sdk.md") surfaced at the root by basename, but the basename did
 // not resolve to a real URI and the editor opened an empty buffer.
 func TestDocsSchemeReadDirOpenRoundTrip(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
 	uri, err := workspaceapi.ParseURI("docs:///")
 	require.NoError(t, err)
 
-	s, err := newDocsSchemeFunc()(context.Background(), config.NopConfig(), uri)
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -91,8 +104,10 @@ func TestDocsSchemeReadDirOpenRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, entries)
 
+	rootNames := map[string]bool{}
 	for _, e := range entries {
 		name := e.Name()
+		rootNames[name] = true
 		if e.IsDir() {
 			continue
 		}
@@ -106,6 +121,10 @@ func TestDocsSchemeReadDirOpenRoundTrip(t *testing.T) {
 		require.NoError(t, err, "read %s", name)
 		assert.NotEmpty(t, data, "%s should not be empty when opened by ReadDir-returned name", name)
 	}
+	// AGENTS.md must be discoverable at the workspace root so the
+	// agent's DiscoverAgentsFiles traversal picks it up as project
+	// instructions.
+	assert.Truef(t, rootNames["AGENTS.md"], "ReadDir(/) must list AGENTS.md, got %v", rootNames)
 }
 
 // TestDocsSchemeNestedDirsAreBrowsable asserts that the docs scheme exposes
@@ -113,10 +132,11 @@ func TestDocsSchemeReadDirOpenRoundTrip(t *testing.T) {
 // descending into those directories yields the markdown files stored under
 // them.
 func TestDocsSchemeNestedDirsAreBrowsable(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
 	uri, err := workspaceapi.ParseURI("docs:///")
 	require.NoError(t, err)
 
-	s, err := newDocsSchemeFunc()(context.Background(), config.NopConfig(), uri)
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -148,6 +168,102 @@ func TestDocsSchemeNestedDirsAreBrowsable(t *testing.T) {
 	_ = f.Close()
 	require.NoError(t, err)
 	assert.NotEmpty(t, data)
+}
+
+func TestDocsSchemeAgentsMDPresent(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
+	uri, err := workspaceapi.ParseURI("docs:///")
+	require.NoError(t, err)
+
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	f, err := s.Open(docsAgentsPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+
+	data, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.NotEmpty(t, data, "AGENTS.md must not be empty")
+	want, err := renderDocsAgentsMD(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(want), string(data))
+	assert.Contains(t, string(data), cfgPath,
+		"AGENTS.md must embed the user's resolved config path")
+}
+
+func TestDocsSchemeRoutesConfigPathToFileScheme(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.yaml")
+	const initial = "agent:\n  provider: openai\n"
+	require.NoError(t, os.WriteFile(cfg, []byte(initial), 0o644))
+
+	uri, err := workspaceapi.ParseURI("docs:///")
+	require.NoError(t, err)
+
+	s, err := newDocsSchemeFunc(cfg)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	f, err := s.Open(cfg)
+	require.NoError(t, err)
+	got, err := io.ReadAll(f)
+	_ = f.Close()
+	require.NoError(t, err)
+	assert.Equal(t, initial, string(got))
+
+	info, err := s.Stat(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(initial)), info.Size())
+
+	const updated = "agent:\n  provider: anthropic\n"
+	w, err := s.Create(cfg)
+	require.NoError(t, err)
+	_, err = w.Write([]byte(updated))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	onDisk, err := os.ReadFile(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, updated, string(onDisk))
+
+	// A sibling host path must not be routed: only the exact
+	// configPath crosses into the file scheme.
+	sibling := filepath.Join(dir, "other.yaml")
+	require.NoError(t, os.WriteFile(sibling, []byte("x"), 0o644))
+	_, err = s.Open(sibling)
+	assert.Error(t, err, "non-config host paths must not be routed to the file scheme")
+}
+
+// TestDocsSchemeNewFileRoutesConfigPath guards against an RPC
+// regression: the workspace server reconstitutes file handles on every
+// Read/Write/Close via NewFile(fd, name), so the outer Scheme must
+// route by filename or fds opened against the file scheme surface as
+// "invalid file descriptor".
+func TestDocsSchemeNewFileRoutesConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.yaml")
+	const initial = "agent:\n  provider: openai\n"
+	require.NoError(t, os.WriteFile(cfg, []byte(initial), 0o644))
+
+	uri, err := workspaceapi.ParseURI("docs:///")
+	require.NoError(t, err)
+
+	s, err := newDocsSchemeFunc(cfg)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	f, err := s.Open(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+
+	g := s.NewFile(f.Fd(), cfg)
+	require.NotNil(t, g, "NewFile must return the host file descriptor for the config path")
+
+	got, err := io.ReadAll(g)
+	require.NoError(t, err)
+	assert.Equal(t, initial, string(got))
 }
 
 func fsWalkMD(t *testing.T, out *map[string][]byte) error {

@@ -1,0 +1,95 @@
+# AGENTS.md
+
+You are operating inside the **Rune documentation workspace**
+(`docs:///`). This workspace is an in-memory, read-only snapshot of
+the public Rune documentation. There is no shell, no process
+executor, and no network attached to it.
+
+## Hard constraints
+
+- **Do not call `bash` or `exec_command`.** This workspace has no
+  executor; every such call fails with
+  `cannot execute commands on in-memory scheme` and wastes a turn.
+- **Do not invent answers.** Only answer from the contents of this
+  workspace. If the docs do not cover a question, say so explicitly
+  instead of guessing.
+- Treat the workspace as read-only. Do not propose edits to these
+  documents; they are sourced from the upstream `docs-rune` repo.
+
+## How to answer questions
+
+Use the read-only navigation tools against this workspace:
+
+- `read_file` to read a known path (e.g. `/intro.md`).
+- `find_files` to locate documents by path pattern.
+- `search_content` to find a phrase or keyword across the docs.
+
+Good starting points at the workspace root:
+
+- `/intro.md` — overview of Rune.
+- `/config.md` — configuration reference, including editor, agent,
+  and TUI settings.
+- `/providers.md` — supported LLM providers and how to configure
+  them.
+- `/troubleshoot.md` — common issues and fixes.
+- `/develop/` — developer-facing material (SDK, extensions).
+- `/learn/` — task-oriented guides and tutorials.
+
+When a user asks about a feature, prefer this flow:
+
+1. `search_content` for the feature name or its likely config key.
+2. Open the most relevant file with `read_file` and read the full
+   section.
+3. Quote or paraphrase the documentation, and cite the file path
+   (e.g. `config.md`) so the user can verify.
+
+If nothing in the workspace matches, reply with something like
+"The embedded Rune docs do not cover this" rather than speculating
+about behavior, config keys, or product names.
+
+## Editing the user's Rune configuration
+
+The active Rune configuration file for this user is:
+
+    {{.ConfigPath}}
+
+Rune supports configuration in either YAML (`config.yaml`) or
+Starlark (`config.star`); the path above is the file currently in
+use. When a question asks how to change a setting, do the
+following:
+
+1. Locate the relevant key in `/config.md` (and any provider-
+   specific page under `/providers.md` or `/develop/`).
+2. Show the user the snippet they need to add or change, in the
+   same format as their existing config (YAML vs Starlark — infer
+   from the extension of the path above).
+3. Tell them exactly which file to edit, using the path above. Do
+   not invent alternative locations such as `~/.config/rune/` or
+   `/etc/rune/` — the path above is the one Rune is actually
+   reading.
+4. If the embedded docs do not document the requested key, say so
+   rather than guessing a key name or value.
+
+You **can** edit this file yourself from inside the docs
+workspace. The docs scheme transparently routes filesystem
+operations targeting the path above to the user's real host
+filesystem. Concretely:
+
+- `read_file` on the path above returns the current config bytes.
+- `apply_patch` against the path above edits the config in place;
+  use the same Update/Add/Delete File directives you would use on
+  a normal repository file.
+- Routing only kicks in when the path argument is **exactly**
+  the path above. Do not invent alternative paths.
+
+Before applying a patch, always:
+
+1. `read_file` the current config so you patch against real
+   content.
+2. Confirm with the user what change they want, including any
+   replacement values.
+3. Apply the smallest patch that achieves the change; do not
+   reformat or reorder unrelated keys.
+
+Other host paths are not routed and remain unreachable from this
+workspace.

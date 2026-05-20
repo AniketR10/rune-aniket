@@ -486,7 +486,7 @@ func runTUI(
 			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
 		}),
 		ide.WithZdotDir(*flagZdotDir),
-		ide.WithScheme(docsScheme, newDocsSchemeFunc()),
+		ide.WithScheme(docsScheme, newDocsSchemeFunc(*flagConfigPath)),
 	}
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))
@@ -605,7 +605,7 @@ func runGUI(
 			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
 		}),
 		ide.WithZdotDir(*flagZdotDir),
-		ide.WithScheme(docsScheme, newDocsSchemeFunc()),
+		ide.WithScheme(docsScheme, newDocsSchemeFunc(*flagConfigPath)),
 		// maximize window on double click
 		ide.WithTabsClickCallback(func(i int) bool {
 			if clickCount == 0 || time.Since(lastTabsClick) < doubleClickTimeout {
