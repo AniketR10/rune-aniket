@@ -51,6 +51,9 @@ func validateConfig(cfg map[string]any) (err error) {
 	if err = llm.ValidateConfig(c.llmConfig()); err != nil {
 		return
 	}
+	if err = validateNotice(cfg); err != nil {
+		return
+	}
 	return
 }
 
@@ -195,6 +198,48 @@ func parseGotoTemplate(tpl string) error {
 type gotoSegment struct {
 	literal     string
 	placeholder string // "line" or "col"
+}
+
+// validateNotice rewrites an invalid workspace.notice.show back to
+// "once" so the IDE still boots when the user supplies an
+// unrecognised value.
+func validateNotice(cfg map[string]any) error {
+	ws, ok := cfg["workspace"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := ws["notice"]
+	if !ok {
+		return nil
+	}
+	notice, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("workspace.notice must be a mapping, got %T", raw)
+	}
+	for k := range notice {
+		switch k {
+		case "path", "literal", "show":
+		default:
+			return fmt.Errorf("workspace.notice has unknown key %q "+
+				"(expected path, literal, show)", k)
+		}
+	}
+	if v, present := notice["show"]; present {
+		s, ok := v.(string)
+		if !ok {
+			notice["show"] = "once"
+			return fmt.Errorf("workspace.notice.show must be a string, "+
+				"got %T; falling back to %q", v, "once")
+		}
+		switch s {
+		case "", "once", "always":
+		default:
+			notice["show"] = "once"
+			return fmt.Errorf("workspace.notice.show must be %q or %q; "+
+				"got %q, falling back to %q", "once", "always", s, "once")
+		}
+	}
+	return nil
 }
 
 // splitGotoTemplate splits tpl into literal/placeholder segments.

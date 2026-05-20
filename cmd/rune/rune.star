@@ -864,6 +864,17 @@ config = {
         # Character drawn on the bottom row of the workspace tab bar to
         # highlight the workspace currently in focus.
         "focus_tab_highlight_char":  "",
+        # Per-workspace notice shown in a floating window when the
+        # workspace opens. Either `path` (resolved against the
+        # workspace filesystem) or `literal` provides the content;
+        # when both are set, `literal` wins. A `.md` path renders as
+        # markdown; other paths render as plain text. `show` is
+        # "once" (deduplicated by content fingerprint) or "always".
+        "notice": {
+            "path":    "",
+            "literal": "",
+            "show":    "once",
+        },
     },
     # Notification pop-up configuration.
     "notifications": {

@@ -72,6 +72,7 @@ import (
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 	"unstable.build/go-tui/ide/idemacro"
+	"unstable.build/go-tui/ide/idenotice"
 	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/llmshell"
@@ -1302,6 +1303,7 @@ type builtWorkspace struct {
 	ex                  *ex
 	runner              extension.Runner
 	cursorHistoryCloser io.Closer
+	notice              *idenotice.Crier
 }
 
 // buildWorkspaceAsync runs the blocking IO and heavy construction in a
@@ -1435,6 +1437,9 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		runner:              runner,
 		cursorHistoryCloser: cursorHistoryCloser,
 	}
+	if noticeCfg, ok := newNoticeConfig(cfg, h.ideStorage, uri); ok {
+		built.notice = idenotice.New(cwd, apibrowser, noticeCfg)
+	}
 	return built, nil
 }
 
@@ -1560,6 +1565,15 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	h.workspaces[pending.slot] = wh
 	h.workspaceCount++
 	h.switchToWorkspace(pending.slot)
+
+	if built.notice != nil {
+		notice := built.notice
+		h.scheduleNextTick(func() {
+			if err := notice.Show(ctx); err != nil {
+				ex.log(log.WarnLevel, "show workspace notice: %v", err)
+			}
+		})
+	}
 
 	// Drain any commands enqueued via `workspaceready` while this
 	// pending build was in flight. They run against the freshly

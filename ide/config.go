@@ -48,7 +48,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/go-tui/llm"
 	yaml "gopkg.in/yaml.v3"
 	tconfig "unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/browser"
@@ -64,12 +63,13 @@ import (
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/llm"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/text/registerhistory"
 	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/text/cmdenv"
 )
 
 const (
@@ -2706,6 +2706,32 @@ func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
 func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_background_attr",
 		term.Attributes{})
+}
+
+func (c ideConfig) workspaceNotice() (path, literal, show string) {
+	ws := c.workspace()
+	notice, err := ws.GetConfig("notice")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.notice"] = err
+		}
+		return "", "", ""
+	}
+	path = workspaceNoticeString(c, notice, "path")
+	literal = workspaceNoticeString(c, notice, "literal")
+	show = workspaceNoticeString(c, notice, "show")
+	return
+}
+
+func workspaceNoticeString(c ideConfig, cfg config.Config, key string) string {
+	v, err := cfg.GetString(key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.notice."+key] = err
+		}
+		return ""
+	}
+	return v
 }
 
 func (c ideConfig) workspaceHighlightTabChar() rune {
