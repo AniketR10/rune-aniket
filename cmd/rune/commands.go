@@ -27,8 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"runtime"
@@ -37,7 +35,6 @@ import (
 	"strings"
 
 	"github.com/ernestrc/go-multierror"
-	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -135,36 +132,6 @@ func subscribeOtherCommands(
 				return i.Open(uri)
 			},
 		},
-	}
-	if os.Getenv("RUNE_DEBUG") == "true" {
-		commands = append(commands, struct {
-			cmd           textapi.CommandManual
-			handleCommand func(context.Context, textapi.Command) (err error)
-			completer     func(context.Context, textapi.Command) (
-				iterator.Iterator[string], string, error,
-			)
-		}{
-			cmd: textapi.CommandManual{
-				Name: "pprof",
-				Summary: "Starts a pprof server for debugging. " +
-					"If no addr is passed, :6662 is used",
-				Synopsis: "[addr]",
-			},
-			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
-				addr := ":6662"
-				if len(cmd.Args) == 1 {
-					addr = cmd.Args[0]
-				}
-				runtime.SetBlockProfileRate(1)
-				runtime.SetMutexProfileFraction(1)
-				go debug.CapturePanicReport(func() {
-					if err := http.ListenAndServe(addr, nil); err != http.ErrServerClosed {
-						log.Errorf("listen and serve pprof: %v", err)
-					}
-				})
-				return nil
-			},
-		})
 	}
 	for _, man := range commands {
 		handler := text.FuncCommandHandler(man.handleCommand, man.completer)

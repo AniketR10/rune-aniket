@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package main
 
 import (
@@ -33,10 +32,12 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/debug"
 	htmlhandler "unstable.build/go-tui/handler/html"
 )
 
 func main() {
+	debug.StartPProfOnSignal()
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "usage: runefox <url>")
 		os.Exit(1)

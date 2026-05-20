@@ -6,8 +6,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	_ "net/http/pprof"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -29,9 +27,7 @@ func init() {
 }
 
 func main() {
-	go debug.CapturePanicReport(func() {
-		log.Println(http.ListenAndServe("localhost:6061", nil))
-	})
+	debug.StartPProfOnSignal()
 
 	ext, meta := extension.NewExtension()
 	meta.ExtensionVersion = Version

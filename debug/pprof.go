@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,38 +21,41 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package debug
 
 import (
-	"fmt"
-	"log/slog"
+	"net"
+	"net/http"
+	// pprof handlers register themselves on http.DefaultServeMux on import.
+	_ "net/http/pprof"
 	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
 
-	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
-	"unstable.build/go-tui/cmd/rune-agent/extension"
-	"unstable.build/go-tui/debug"
+	log "github.com/sirupsen/logrus"
 )
 
-var (
-	// Tag is a compile-time variable
-	Tag = "development"
-	// Commit is a compile-time variable
-	Commit = "HEAD"
-	// Version is injected at compile time.
-	Version string
-)
-
-func init() {
-	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
-}
-
-func main() {
-	debug.StartPProfOnSignal()
-
-	ext, metadata := extension.NewExtension()
-	err := extensionapi.ServeWorkspaceExtension(ext, metadata)
-	if err != nil {
-		slog.Error("serve extension", "error", err)
-		os.Exit(1)
-	}
+// StartPProfOnSignal installs a SIGUSR1 handler that, on the first
+// signal, starts a pprof HTTP server bound to a random localhost port
+// and logs the listening address at info level so the caller can find
+// it. Subsequent SIGUSR1 signals are ignored.
+func StartPProfOnSignal() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGUSR1)
+	go CapturePanicReport(func() {
+		<-ch
+		signal.Stop(ch)
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			log.Errorf("pprof listen: %v", err)
+			return
+		}
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
+		log.Infof("pprof server listening on http://%s/debug/pprof/", ln.Addr())
+		if err := http.Serve(ln, nil); err != http.ErrServerClosed {
+			log.Errorf("pprof serve: %v", err)
+		}
+	})
 }

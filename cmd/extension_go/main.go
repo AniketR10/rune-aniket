@@ -28,9 +28,11 @@ import (
 	"os"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"unstable.build/go-tui/debug"
 )
 
 func main() {
+	debug.StartPProfOnSignal()
 	extension, metadata := NewExtension()
 	if err := extensionapi.ServeWorkspaceExtension(extension, metadata); err != nil {
 		slog.Error("serve extension", "error", err)

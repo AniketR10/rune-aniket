@@ -53,6 +53,7 @@ import (
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/cmd/rune-agent/memory/claudememory"
 	"unstable.build/go-tui/cmd/rune-agent/memory/dream"
+	"unstable.build/go-tui/debug"
 )
 
 var errNotInRune = errors.New(
@@ -60,6 +61,7 @@ var errNotInRune = errors.New(
 )
 
 func main() {
+	debug.StartPProfOnSignal()
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

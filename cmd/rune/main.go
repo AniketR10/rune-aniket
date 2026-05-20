@@ -422,6 +422,8 @@ func run() int {
 
 	rpc.DisableGRPCLogging()
 
+	debug.StartPProfOnSignal()
+
 	if *flagWorkspaceServer != "" {
 		code := startWorkspaceServer()
 		return code
@@ -634,7 +636,7 @@ func runGUI(
 				return nil, func() {
 					theme, err := g.SetTheme(theme)
 					if err == nil {
-					i.SetDefaultAttributes(term.Attributes{
+						i.SetDefaultAttributes(term.Attributes{
 							Fg: term.FromTcellColor(theme.Foreground),
 							Bg: term.FromTcellColor(theme.Background),
 						})

@@ -25,11 +25,11 @@ package main
 
 import (
 	"fmt"
-	_ "net/http/pprof"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/cmd/extension_chaos/extension"
+	"unstable.build/go-tui/debug"
 )
 
 var (
@@ -46,6 +46,7 @@ func init() {
 }
 
 func main() {
+	debug.StartPProfOnSignal()
 	ext, meta := extension.NewExtension()
 	meta.ExtensionVersion = Version
 	if err := extensionapi.ServeWorkspaceExtension(ext, meta); err != nil {

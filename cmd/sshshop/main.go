@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package main
 
 import (
@@ -36,9 +35,11 @@ import (
 	"time"
 
 	"github.com/gliderlabs/ssh"
+	"unstable.build/go-tui/debug"
 )
 
 func main() {
+	debug.StartPProfOnSignal()
 	hostKey := filepath.Join(os.TempDir(), "host_ed25519")
 	var cfg serverConfig
 	flag.StringVar(&cfg.addr, "addr", ":2222",
