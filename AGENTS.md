@@ -46,6 +46,16 @@ Run a single test:
 go test -race -run TestName ./path/to/package/
 ```
 
+## License headers
+
+`make license` only adds headers to files missing one. When you add new
+files, force-apply the canonical header so a file that already carries
+a license-looking but non-canonical comment is rewritten:
+
+```bash
+bluectl license -f LICENSE <new files>
+```
+
 ## Repository Architecture
 
 ### Main Rune application
