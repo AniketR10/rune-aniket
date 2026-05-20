@@ -61,18 +61,3 @@ func TestStoreMarkShownRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, shown)
 }
-
-func TestStoreNilSafe(t *testing.T) {
-	ctx := context.Background()
-	var s *store
-	shown, err := s.Shown(ctx, "u", "f")
-	require.NoError(t, err)
-	assert.False(t, shown)
-	require.NoError(t, s.MarkShown(ctx, "u", "f"))
-
-	s = &store{}
-	shown, err = s.Shown(ctx, "u", "f")
-	require.NoError(t, err)
-	assert.False(t, shown)
-	require.NoError(t, s.MarkShown(ctx, "u", "f"))
-}

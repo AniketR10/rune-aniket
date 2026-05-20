@@ -1438,7 +1438,9 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		cursorHistoryCloser: cursorHistoryCloser,
 	}
 	if noticeCfg, ok := newNoticeConfig(cfg, h.ideStorage, uri); ok {
-		built.notice = idenotice.New(cwd, apibrowser, noticeCfg)
+		built.notice = idenotice.New(
+			cwd, apibrowser, parser, h.scheduleNextTick,
+			noticeLinkCopier(h.clip, apibrowser), noticeCfg)
 	}
 	return built, nil
 }

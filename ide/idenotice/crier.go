@@ -27,13 +27,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
-	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -50,20 +50,35 @@ type fileSystem interface {
 // Crier resolves the configured workspace notice and opens it in a
 // floating window.
 type Crier struct {
-	fs    fileSystem
-	wm    browserapi.WindowManager
-	cfg   Config
-	store *store
+	fs               fileSystem
+	wm               browserapi.WindowManager
+	parser           syntaxapi.Parser
+	scheduleNextTick func(func()) bool
+	onLinkClick      func(*url.URL) bool
+	cfg              Config
+	store            *store
 }
 
 // New returns a Crier that loads the notice via fs and displays it
-// through wm.
-func New(fs fileSystem, wm browserapi.WindowManager, cfg Config) *Crier {
+// through wm. parser and scheduleNextTick are forwarded to the
+// markdown component so fenced code blocks get asynchronous syntax
+// highlighting. onLinkClick is invoked when the user clicks a link
+// in the rendered notice; returning true suppresses the markdown
+// handler's default same-page anchor behavior.
+func New(
+	fs fileSystem, wm browserapi.WindowManager,
+	parser syntaxapi.Parser, scheduleNextTick func(func()) bool,
+	onLinkClick func(*url.URL) bool,
+	cfg Config,
+) *Crier {
 	return &Crier{
-		fs:    fs,
-		wm:    wm,
-		cfg:   cfg,
-		store: newStore(cfg.Storage),
+		fs:               fs,
+		wm:               wm,
+		parser:           parser,
+		scheduleNextTick: scheduleNextTick,
+		onLinkClick:      onLinkClick,
+		cfg:              cfg,
+		store:            newStore(cfg.Storage),
 	}
 }
 
@@ -71,16 +86,17 @@ func New(fs fileSystem, wm browserapi.WindowManager, cfg Config) *Crier {
 // It is a no-op when no notice is configured, and under ShowOnce
 // it is also a no-op when the same fingerprint was already shown.
 func (c *Crier) Show(ctx context.Context) error {
-	content, isMarkdown, err := c.resolveContent()
+	content, err := c.resolveContent()
 	if err != nil {
 		return err
 	}
 	if content == "" {
 		return nil
 	}
-	fp := fingerprint(content, isMarkdown)
+	fp := fingerprint(content)
+	uri := c.cfg.WorkspaceURI.String()
 	if c.cfg.effectiveShow() == ShowOnce {
-		shown, err := c.store.Shown(ctx, c.cfg.WorkspaceURI, fp)
+		shown, err := c.store.Shown(ctx, uri, fp)
 		if err != nil {
 			return err
 		}
@@ -88,83 +104,54 @@ func (c *Crier) Show(ctx context.Context) error {
 			return nil
 		}
 	}
-	if err := c.openFloating(content, isMarkdown); err != nil {
+	if err := c.openFloating(content); err != nil {
 		return err
 	}
 	if c.cfg.effectiveShow() == ShowOnce {
-		if err := c.store.MarkShown(ctx, c.cfg.WorkspaceURI, fp); err != nil {
+		if err := c.store.MarkShown(ctx, uri, fp); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Crier) resolveContent() (string, bool, error) {
+func (c *Crier) resolveContent() (string, error) {
 	if c.cfg.Literal != "" {
-		return c.cfg.Literal, true, nil
+		return c.cfg.Literal, nil
 	}
 	if c.cfg.Path == "" {
-		return "", false, nil
-	}
-	if c.fs == nil {
-		return "", false, errors.New("idenotice: nil filesystem")
+		return "", nil
 	}
 	f, err := c.fs.OpenFile(c.cfg.Path, os.O_RDONLY, 0)
 	if err != nil {
-		return "", false, fmt.Errorf("idenotice: open %q: %w", c.cfg.Path, err)
+		return "", fmt.Errorf("idenotice: open %q: %w", c.cfg.Path, err)
 	}
 	defer f.Close() //nolint:errcheck
 	b, err := io.ReadAll(f)
 	if err != nil {
-		return "", false, fmt.Errorf("idenotice: read %q: %w", c.cfg.Path, err)
+		return "", fmt.Errorf("idenotice: read %q: %w", c.cfg.Path, err)
 	}
-	isMarkdown := strings.HasSuffix(strings.ToLower(c.cfg.Path), ".md")
-	return string(b), isMarkdown, nil
+	return string(b), nil
 }
 
-// fingerprint mixes the isMarkdown bit into the hash so a path
-// renamed from .md to .txt (or vice versa) reshows under ShowOnce.
-func fingerprint(content string, isMarkdown bool) string {
+func fingerprint(content string) string {
 	h := sha256.New()
 	h.Write([]byte(content))
-	if isMarkdown {
-		h.Write([]byte{1})
-	} else {
-		h.Write([]byte{0})
-	}
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-func (c *Crier) openFloating(content string, isMarkdown bool) error {
-	if c.wm == nil {
-		return errors.New("idenotice: nil window manager")
+func (c *Crier) openFloating(content string) error {
+	inner, err := buildNoticeHandler(content,
+		c.parser, c.scheduleNextTick, c.onLinkClick)
+	if err != nil {
+		return err
 	}
-	if isMarkdown {
-		md, err := markdown.New(content)
-		if err != nil {
-			return fmt.Errorf("idenotice: parse markdown: %w", err)
-		}
-		mdh := mdhandler.New(md)
-		var win browserapi.Window
-		bh := browserapi.FuncHandler(mdh, func() error {
-			return c.wm.CloseWindow(win)
-		})
-		floating := browserapi.FuncFloating(bh, mdh.Dimensions)
-		win, err = c.wm.Floating(floating, browserapi.FloatingConfig{
-			Alignment: component.AlignmentCentered,
-		})
-		if err != nil {
-			return fmt.Errorf("idenotice: open floating: %w", err)
-		}
-		return nil
-	}
-	str := plaincomponent(content)
 	var win browserapi.Window
-	bh := browserapi.FuncHandler(handler.NopFromComponent(str), func() error {
+	bh := browserapi.FuncHandler(inner, func() error {
 		return c.wm.CloseWindow(win)
 	})
-	floating := browserapi.FuncFloating(bh, str.Dimensions)
-	win, err := c.wm.Floating(floating, browserapi.FloatingConfig{
+	floating := browserapi.FuncFloating(bh, inner.Dimensions)
+	win, err = c.wm.Floating(floating, browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,
 	})
 	if err != nil {
@@ -173,8 +160,22 @@ func (c *Crier) openFloating(content string, isMarkdown bool) error {
 	return nil
 }
 
-func plaincomponent(text string) *component.ResponsiveString {
-	return component.NewResponsiveString(text, component.StringResponsiveConfig{
-		NoSplitWords: true,
-	})
+func buildNoticeHandler(
+	content string,
+	parser syntaxapi.Parser, scheduleNextTick func(func()) bool,
+	onLinkClick func(*url.URL) bool,
+) (*handler.Span, error) {
+	mcfg := markdown.DefaultConfig()
+	mcfg.HeaderPrefix = false
+	mcfg.Parser = parser
+	mcfg.ScheduleNextTick = scheduleNextTick
+	md, err := markdown.NewWithConfig(content, mcfg)
+	if err != nil {
+		return nil, fmt.Errorf("idenotice: parse markdown: %w", err)
+	}
+	mdh := mdhandler.New(md, mdhandler.WithOnLinkClick(onLinkClick))
+	return handler.NewSpan(mdh, component.SpanConfig{
+		PadHorizontal:    2,
+		ContentAlignment: component.AlignmentCentered,
+	}), nil
 }

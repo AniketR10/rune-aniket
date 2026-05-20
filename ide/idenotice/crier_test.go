@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -35,6 +36,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 )
@@ -63,6 +67,38 @@ func (stubWM) CloseWindow(browserapi.Window) error                          { re
 type stubWindow uint64
 
 func (s stubWindow) WindowID() uint64 { return uint64(s) }
+
+// nopParser satisfies syntaxapi.Parser; the notice doesn't rely on
+// highlighting being applied during construction (it's scheduled via
+// the tick callback).
+type nopParser struct{}
+
+func (nopParser) Search(string, []string, ...string) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (nopParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (nopParser) Query(workspaceapi.URI, string, []string) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (nopParser) QueryNode(workspaceapi.URI, syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (nopParser) Highlight(workspaceapi.URI, string) (iterator.Iterator[textapi.Location], error) {
+	return iterator.Empty[textapi.Location](), nil
+}
+
+func syncTick(fn func()) bool { fn(); return true }
+
+func nopLinkClick(*url.URL) bool { return false }
+
+func mustURI(t *testing.T, s string) workspaceapi.URI {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI(s)
+	require.NoError(t, err)
+	return uri
+}
 
 type mapFS struct {
 	files map[string]string
@@ -95,24 +131,25 @@ func (f *stubFile) Sync() error                             { return nil }
 func (f *stubFile) Truncate(int64) error                    { return nil }
 func (f *stubFile) Write([]byte) (int, error)               { return 0, io.ErrUnexpectedEOF }
 
-const testURI = "file:///workspace"
-
 func TestCrierShowEmptyConfigIsNoOp(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
-	c := New(mapFS{}, wm, Config{
+	c := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Storage:      storagestub.NewInMemoryService(),
-		WorkspaceURI: testURI,
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, c.Show(context.Background()))
 	assert.Equal(t, 0, wm.calls)
 }
 
 func TestCrierShowLiteralOpensFloating(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
-	c := New(mapFS{}, wm, Config{
+	c := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Literal:      "# Hello",
 		Show:         ShowAlways,
-		WorkspaceURI: testURI,
+		Storage:      storagestub.NewInMemoryService(),
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, c.Show(context.Background()))
 	assert.Equal(t, 1, wm.calls)
@@ -120,19 +157,22 @@ func TestCrierShowLiteralOpensFloating(t *testing.T) {
 }
 
 func TestCrierShowLiteralWinsOverPath(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
 	fs := mapFS{files: map[string]string{"notice.md": "FROM-FILE"}}
-	c := New(fs, wm, Config{
+	c := New(fs, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Path:         "notice.md",
 		Literal:      "FROM-LITERAL",
 		Show:         ShowAlways,
-		WorkspaceURI: testURI,
+		Storage:      storagestub.NewInMemoryService(),
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, c.Show(context.Background()))
 	assert.Equal(t, 1, wm.calls)
 }
 
 func TestCrierShowPathMarkdownVsPlain(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	cases := []struct {
 		name      string
 		path      string
@@ -146,10 +186,11 @@ func TestCrierShowPathMarkdownVsPlain(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			wm := &stubWM{}
 			fs := mapFS{files: map[string]string{tc.path: tc.content}}
-			c := New(fs, wm, Config{
+			c := New(fs, wm, nopParser{}, syncTick, nopLinkClick, Config{
 				Path:         tc.path,
 				Show:         ShowAlways,
-				WorkspaceURI: testURI,
+				Storage:      storagestub.NewInMemoryService(),
+				WorkspaceURI: uri,
 			})
 			require.NoError(t, c.Show(context.Background()))
 			if tc.wantShown {
@@ -162,12 +203,13 @@ func TestCrierShowPathMarkdownVsPlain(t *testing.T) {
 }
 
 func TestCrierShowOnceSkipsSecondCall(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
-	c := New(mapFS{}, wm, Config{
+	c := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Literal:      "# Once",
 		Show:         ShowOnce,
 		Storage:      storagestub.NewInMemoryService(),
-		WorkspaceURI: testURI,
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, c.Show(context.Background()))
 	require.NoError(t, c.Show(context.Background()))
@@ -175,12 +217,13 @@ func TestCrierShowOnceSkipsSecondCall(t *testing.T) {
 }
 
 func TestCrierShowAlwaysRepeats(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
-	c := New(mapFS{}, wm, Config{
+	c := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Literal:      "# Always",
 		Show:         ShowAlways,
 		Storage:      storagestub.NewInMemoryService(),
-		WorkspaceURI: testURI,
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, c.Show(context.Background()))
 	require.NoError(t, c.Show(context.Background()))
@@ -188,22 +231,23 @@ func TestCrierShowAlwaysRepeats(t *testing.T) {
 }
 
 func TestCrierShowOnceFingerprintChangeRetriggers(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
 	storage := storagestub.NewInMemoryService()
-	first := New(mapFS{}, wm, Config{
+	first := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Literal:      "# v1",
 		Show:         ShowOnce,
 		Storage:      storage,
-		WorkspaceURI: testURI,
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, first.Show(context.Background()))
 	assert.Equal(t, 1, wm.calls)
 
-	second := New(mapFS{}, wm, Config{
+	second := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Literal:      "# v2 changed",
 		Show:         ShowOnce,
 		Storage:      storage,
-		WorkspaceURI: testURI,
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, second.Show(context.Background()))
 	assert.Equal(t, 2, wm.calls)
@@ -213,11 +257,12 @@ func TestCrierShowOnceFingerprintChangeRetriggers(t *testing.T) {
 }
 
 func TestCrierShowOnceDefaultsForEmptyShow(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
-	c := New(mapFS{}, wm, Config{
+	c := New(mapFS{}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Literal:      "# default",
 		Storage:      storagestub.NewInMemoryService(),
-		WorkspaceURI: testURI,
+		WorkspaceURI: uri,
 	})
 	require.NoError(t, c.Show(context.Background()))
 	require.NoError(t, c.Show(context.Background()))
@@ -225,11 +270,13 @@ func TestCrierShowOnceDefaultsForEmptyShow(t *testing.T) {
 }
 
 func TestCrierShowPathReadErrorPropagates(t *testing.T) {
+	uri := mustURI(t, "file:///workspace")
 	wm := &stubWM{}
-	c := New(mapFS{err: errors.New("boom")}, wm, Config{
+	c := New(mapFS{err: errors.New("boom")}, wm, nopParser{}, syncTick, nopLinkClick, Config{
 		Path:         "notice.md",
 		Show:         ShowAlways,
-		WorkspaceURI: testURI,
+		Storage:      storagestub.NewInMemoryService(),
+		WorkspaceURI: uri,
 	})
 	err := c.Show(context.Background())
 	require.Error(t, err)

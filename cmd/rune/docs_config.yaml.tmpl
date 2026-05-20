@@ -1,0 +1,21 @@
+# Baked-in workspace overlay for the built-in docs:/// scheme.
+# Shown by ide/idenotice whenever the docs workspace opens. The
+# docs workspace is a short, intentional visit, so we use
+# show: always rather than once.
+workspace:
+  notice:
+    show: always
+    literal: |
+      # Welcome to the Rune docs
+
+      Everything you'd find on [docs.rune.build](https://docs.rune.build)
+      lives here too, ready to read offline.
+
+      A few things you can do from this workspace:
+
+      - Browse the docs in the file tree, starting with `intro.md`.
+      - Run the `agent` command and ask questions about anything in the docs.
+      - **Even better:** ask the agent to help you configure Rune —
+        edits land in your real config file automatically.
+
+      Happy hacking!

@@ -56,9 +56,6 @@ func noticeDocumentID(uri string) string {
 }
 
 func (s *store) Shown(ctx context.Context, uri, fingerprint string) (bool, error) {
-	if s == nil || s.storage == nil {
-		return false, nil
-	}
 	var doc noticeDocument
 	err := s.storage.Get(ctx, noticeDocumentID(uri), &doc)
 	if errors.Is(err, storageapi.ErrNotFound) {
@@ -71,9 +68,6 @@ func (s *store) Shown(ctx context.Context, uri, fingerprint string) (bool, error
 }
 
 func (s *store) MarkShown(ctx context.Context, uri, fingerprint string) error {
-	if s == nil || s.storage == nil {
-		return nil
-	}
 	doc := noticeDocument{
 		Kind:         noticeDocumentKind,
 		WorkspaceURI: uri,

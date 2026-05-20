@@ -193,6 +193,54 @@ func TestDocsSchemeAgentsMDPresent(t *testing.T) {
 		"AGENTS.md must embed the user's resolved config path")
 }
 
+func TestDocsSchemeConfigYAML(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
+	uri, err := workspaceapi.ParseURI("docs:///")
+	require.NoError(t, err)
+
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	f, err := s.Open(docsConfigPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+
+	data, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.NotEmpty(t, data)
+	got := string(data)
+	for _, want := range []string{
+		"workspace:",
+		"notice:",
+		"show: always",
+		"# Welcome to the Rune docs",
+	} {
+		assert.Containsf(t, got, want, "docs config must contain %q", want)
+	}
+}
+
+// TestDocsSchemeConfigYAMLNotRouted guards against configRoutedScheme
+// forwarding the docs workspace config to the host file scheme. The
+// docs /.rune/config.yaml is purely virtual and must never be confused
+// with the user's real host config.
+func TestDocsSchemeConfigYAMLNotRouted(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
+	uri, err := workspaceapi.ParseURI("docs:///")
+	require.NoError(t, err)
+
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	f, err := s.Open(docsConfigPath)
+	require.NoError(t, err)
+	data, err := io.ReadAll(f)
+	_ = f.Close()
+	require.NoError(t, err)
+	assert.Equal(t, string(docsConfigYAML), string(data),
+		"docs:///.rune/config.yaml must return the in-memory baked bytes")
+}
 func TestDocsSchemeRoutesConfigPathToFileScheme(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.yaml")

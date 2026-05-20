@@ -60,6 +60,20 @@ var docsAgentsMDTmpl string
 // agent.DiscoverAgentsFiles only consults AGENTS.md from there.
 const docsAgentsPath = "/AGENTS.md"
 
+// docsConfigYAML is the baked workspace overlay shipped with the
+// docs:/// scheme. It sets workspace.notice so opening the docs
+// always greets the user. It is not parameterised: the
+// configRoutedScheme keeps this file in-memory and routes only the
+// user's real host configPath.
+//
+//go:embed docs_config.yaml.tmpl
+var docsConfigYAML []byte
+
+// docsConfigPath must match cmd/rune/main.go:workspaceConfigFilename
+// (".rune/config.yaml") so loadWorkspaceConfig overlays this file
+// onto the IDE config when docs:/// opens.
+const docsConfigPath = "/.rune/config.yaml"
+
 func renderDocsAgentsMD(configPath string) ([]byte, error) {
 	t, err := template.New("docs_agents.md").Parse(docsAgentsMDTmpl)
 	if err != nil {
@@ -90,7 +104,7 @@ func newDocsSchemeFunc(configPath string) schemeapi.SchemeFunc {
 		if err != nil {
 			return nil, err
 		}
-		if err := prefillDocsScheme(mem, agentsMD); err != nil {
+		if err := prefillDocsScheme(mem, agentsMD, docsConfigYAML); err != nil {
 			_ = mem.Close()
 			return nil, fmt.Errorf("prefill docs scheme: %w", err)
 		}
@@ -116,9 +130,10 @@ func newDocsSchemeFunc(configPath string) schemeapi.SchemeFunc {
 }
 
 // prefillDocsScheme walks docsFS (which always uses forward slashes,
-// even on Windows) and writes agentsMD after the walk so a stray
-// AGENTS.md in the docs submodule cannot win.
-func prefillDocsScheme(s schemeapi.Scheme, agentsMD []byte) error {
+// even on Windows) and writes agentsMD and configYAML after the walk
+// so a stray AGENTS.md or .rune/config.yaml in the docs submodule
+// cannot win.
+func prefillDocsScheme(s schemeapi.Scheme, agentsMD, configYAML []byte) error {
 	if err := fs.WalkDir(docsFS, docsSchemeRoot, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -139,7 +154,10 @@ func prefillDocsScheme(s schemeapi.Scheme, agentsMD []byte) error {
 	}); err != nil {
 		return err
 	}
-	return writeDocsFile(s, docsAgentsPath, agentsMD)
+	if err := writeDocsFile(s, docsAgentsPath, agentsMD); err != nil {
+		return err
+	}
+	return writeDocsFile(s, docsConfigPath, configYAML)
 }
 
 func writeDocsFile(s schemeapi.Scheme, dst string, data []byte) error {

@@ -28,7 +28,10 @@
 // or always.
 package idenotice
 
-import "github.com/unstablebuild/rune-go-sdk/api/storageapi"
+import (
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
 
 // Valid values for Config.Show.
 const (
@@ -50,7 +53,7 @@ type Config struct {
 	Show string
 	// Required when Show == ShowOnce.
 	Storage      storageapi.Service
-	WorkspaceURI string
+	WorkspaceURI workspaceapi.URI
 }
 
 func (c Config) effectiveShow() string {
