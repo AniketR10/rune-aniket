@@ -513,6 +513,57 @@ func TestStartCommand(t *testing.T) {
 			"non-zsh shells must not receive the configured ZDOTDIR; "+
 				"got %q", stdout.String())
 	})
+
+	// Reproduces the bug from RUNE-184: a Cmd.Path beginning with ~
+	// was forwarded verbatim to fork/exec because StartCommand
+	// didn't expand it, even though every other path-taking
+	// fileScheme method (OpenFile, Stat, ReadDir, ...) does. The
+	// expansion must live in fileScheme because that's the only
+	// layer that knows the executor host's getUser; for remote
+	// schemes the same code runs on the remote rune so ~ resolves
+	// to the *remote* user's home.
+	t.Run("Cmd.Path expands ~ via the executor's user", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		// Use tmpDir as the fake user home so we can place a real
+		// script at "~/script.sh".
+		fakeHome := tmpDir
+		script := filepath.Join(fakeHome, "script.sh")
+		require.NoError(t, os.WriteFile(script,
+			[]byte("#!/bin/sh\necho ok\n"), 0o755))
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s := new(fileScheme)
+		s.osStat = os.Stat
+		s.getUser = func() (*user.User, error) {
+			return &user.User{Username: "git", HomeDir: fakeHome}, nil
+		}
+		s.lookupUser = func(name string) (*user.User, error) {
+			return &user.User{Username: name, HomeDir: fakeHome}, nil
+		}
+		require.NoError(t, s.init(config.NopConfig(), uri))
+
+		var stdout bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Path:    "~/script.sh",
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err,
+			"~-prefixed Cmd.Path must be expanded by fileScheme "+
+				"before fork/exec; otherwise the kernel sees a "+
+				"literal '~/script.sh' and reports 'no such file "+
+				"or directory'")
+		require.NoError(t, <-ch)
+		assert.Equal(t, "ok\n", stdout.String())
+	})
 }
 
 func TestResolveLoginShell(t *testing.T) {

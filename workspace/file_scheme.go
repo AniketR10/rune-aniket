@@ -359,23 +359,21 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 ) {
 	var err error
 	// Empty Path is the protocol contract for "run the user's login
-	// shell on the executor's host". The fileScheme on the host that
-	// will actually run the process owns this resolution: for SSH
-	// workspaces this travels through workspacerpc to the remote
-	// fileScheme so $SHELL and ZDOTDIR come from the *remote* host's
-	// config, never the IDE host's.
+	// shell on the executor's host".
 	if cmd.Path == "" {
 		cmd.Path = resolveLoginShell()
 		if len(cmd.Args) == 0 {
 			cmd.Args = []string{"--login", "-i"}
 		}
-		// Apply shell-specific env tweaks. We only know how to
-		// inject a custom rc dir for zsh today; bash ignores
-		// BASH_ENV / --rcfile under --login, and sh has no
-		// equivalent.
 		if filepath.Base(cmd.Path) == "zsh" && p.zdotDir != "" {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("ZDOTDIR=%s", p.zdotDir))
 		}
+	}
+	cmd.Path, err = workspaceapi.ExpandPath(
+		cmd.Path, p.getUserOrLookup,
+		func() (string, error) { return "", nil })
+	if err != nil {
+		return 0, fmt.Errorf("expand cmd.Path: %w", err)
 	}
 	path := cmd.Path
 	if filepath.Base(cmd.Path) == cmd.Path {
@@ -402,14 +400,6 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	stdcmd.Env = append(stdcmd.Env, cmd.Env...)
 	stdcmd.SysProcAttr = cmd.SysProcAttr
 
-	// unwrap os.File if Stdout is a fileSchemeFile
-	// In principle, closing of files should be done by callers
-	// so it's fine to lose delete from map on close, as the stdcmd
-	// routine should not close them. This is necessary
-	// to allow the standard library to run its ioctl checks
-	// correctly, for example when running a process over a pty/tty.
-	// Also, for tty mode (setsid/setctty) the kernel requires real
-	// descriptors for controlling terminal setup
 	stdcmd.Stdout = p.tryUnwrapFileWriter(cmd.Stdout)
 	stdcmd.Stderr = p.tryUnwrapFileWriter(cmd.Stderr)
 	stdcmd.Stdin = p.tryUnwrapFileReader(cmd.Stdin)
@@ -432,13 +422,6 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 		p.log(log.DebugLevel, "exec.Command: Wait returned: cmd=%v pid=%d, err=%v",
 			stdcmd.Args, stdcmd.Process.Pid, err)
 
-		// Deliver the exit status to the watcher with a generous
-		// timeout. Use context.Background here rather than a context
-		// derived from p.ctx so callers continue to get the exit
-		// notification even if the file scheme has already begun
-		// shutting down — buggy watchers (or watchers waiting on
-		// the producer in turn, like wrapWatcher in workspacessh)
-		// would otherwise leak when both sides cancel concurrently.
 		ctx, cancel := context.WithTimeout(
 			context.Background(), watcherWaitTimeout)
 		defer cancel()
@@ -644,9 +627,6 @@ func (f *fileSchemeFile) Close() error {
 	return f.closeErr
 }
 
-// ownedSchemeFile wraps a workspaceapi.File returned by the package-level
-// OpenFile helper. Closing it closes both the file and the scheme that was
-// created to open it.
 type ownedSchemeFile struct {
 	workspaceapi.File
 	scheme    io.Closer
@@ -730,10 +710,6 @@ func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI) eventInfo {
 	}
 }
 
-// resolveLoginShell returns the user's login shell on the host where
-// the file scheme runs. The protocol contract is that an empty
-// workspaceapi.Cmd.Path means "use the user's login shell"; this
-// helper turns that contract into a concrete binary.
 func resolveLoginShell() string {
 	const fallback = "/bin/sh"
 	candidates := []string{
@@ -747,9 +723,6 @@ func resolveLoginShell() string {
 		if isExecutableFile(sh) {
 			return sh
 		}
-		// $SHELL was set but unusable from this process. Log so an
-		// operator can see why we're falling back, then try the
-		// well-known list.
 		log.WithField(logging.KeyClass, "fileScheme").Warnf(
 			"resolveLoginShell: $SHELL=%q is not an executable file on this "+
 				"host; falling back to a well-known shell", sh)
