@@ -1801,11 +1801,6 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 ) (err error) {
 	invokeWindow := ex.invokeWindow()
 	for _, f := range files {
-		// Skip the file explorer singleton: it is re-opened via
-		// :fexplorer and must not be restored as a regular tab,
-		// otherwise ex.initFileExplorer would call Edit a second
-		// time on the same URI and fail with
-		// "command already registered".
 		if f.URI.String() == fileExplorerURI {
 			continue
 		}
@@ -1821,7 +1816,10 @@ func (h *workspaceManagerHandler) openPrevSessionFiles(
 			err = multierror.Append(err, ferr)
 			continue
 		}
-		ed := t.Handler().(text.Handler)
+		ed, ok := t.Handler().(text.Handler)
+		if !ok {
+			continue
+		}
 		ed.SetCursorAtScroll(f.Cursor)
 	}
 	return err

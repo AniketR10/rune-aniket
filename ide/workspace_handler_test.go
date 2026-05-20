@@ -65,7 +65,9 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/handlertest"
+	handlermarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/idehistory"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/vctrl/testgit"
 	"unstable.build/go-tui/localstorage"
@@ -1059,6 +1061,66 @@ func TestEditFileURIRedirectsToWorkspaceWithOpenFile(t *testing.T) {
 	assert.Len(t, m.workspaces[1].ex.comp.Tabs(), 1)
 	_, ok = redirectedTab.Window()
 	assert.True(t, ok)
+}
+
+// TestOpenPrevSessionFilesSkipsNonTextHandler is a regression test for
+// the crash where restoring a previous session containing a markdown
+// tab (whose handler is *handlermarkdown.Handler, not a text.Handler)
+// panicked in openPrevSessionFiles via an unchecked type assertion.
+func TestOpenPrevSessionFilesSkipsNonTextHandler(t *testing.T) {
+	tmp := t.TempDir()
+	mdPath := filepath.Join(tmp, "README.md")
+	require.NoError(t, os.WriteFile(mdPath, []byte("# hi\n"), 0o666))
+
+	cfg := defaultConfigWithWrap(false)
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, "", nopShutdownShaderConfig())
+	defer func() {
+		require.NoError(t, m.Close())
+	}()
+
+	uri, err := workspaceapi.ParseURI("file://" + tmp)
+	require.NoError(t, err)
+	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.drainPendingWorkspaces()
+
+	ex := m.workspaces[0].ex
+	mdURI, err := workspaceapi.ParseURI("file://" + mdPath)
+	require.NoError(t, err)
+
+	// Open the markdown file read-only to install a tab whose handler
+	// is *handlermarkdown.Handler (this is what :view README.md does).
+	mdTab, err := ex.editFileURI(mdURI, ex.invokeWindow(), true)
+	require.NoError(t, err)
+	ex.Wait()
+	_, ok := mdTab.Handler().(*handlermarkdown.Handler)
+	require.True(t, ok, "markdown view tab must use *handlermarkdown.Handler")
+
+	state := idehistory.State{
+		Files: []idehistory.File{{
+			URI:    mdURI,
+			Cursor: term.Coordinates{X: 1, Y: 2},
+		}},
+	}
+
+	// On main this panics:
+	//   interface conversion: *markdown.Handler is not text.Handler:
+	//       missing method CellEditor
+	require.NotPanics(t, func() {
+		err = m.openPrevSessionFiles(ex, state.Files, nil)
+	})
+	require.NoError(t, err)
+
+	tabs := ex.comp.Tabs()
+	var foundMD bool
+	for _, tab := range tabs {
+		if !tab.URI().Equal(mdURI) {
+			continue
+		}
+		_, ok := tab.Handler().(*handlermarkdown.Handler)
+		assert.True(t, ok, "markdown tab handler should remain *handlermarkdown.Handler")
+		foundMD = true
+	}
+	assert.True(t, foundMD, "expected to find markdown tab after session restore")
 }
 
 func TestReadfileCrossWorkspaceIntegration(t *testing.T) {
