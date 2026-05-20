@@ -36,7 +36,7 @@ import (
 // deterministic regardless of the underlying scheme.
 //
 // Wrapping the local scheme in a workspaceshell.Executor lets the
-// "extensions-process" REPL command list extension PIDs even
+// "extensions process" REPL command list extension PIDs even
 // though they bypass the workspace's own process executor.
 type extensionsExecutor struct {
 	shell *workspaceshell.Executor

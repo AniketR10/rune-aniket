@@ -113,9 +113,10 @@ type ex struct {
 	parser     syntaxapi.Parser
 	wsExecutor *workspaceshell.Executor
 	// extensionsExecutor tracks extension binaries launched by the
-	// IDE's extension runner. It backs the "extensions-process" REPL
-	// command so users can list, signal, or stop extension PIDs the
-	// same way they would workspace processes.
+	// IDE's extension runner. It backs the "extensions process" REPL
+	// command (a nested subcommand of "extensions") so users can
+	// list, signal, or stop extension PIDs the same way they would
+	// workspace processes.
 	extensionsExecutor *workspaceshell.Executor
 	storage            storageapi.Service
 	workspaceURI       workspaceapi.URI
@@ -1856,13 +1857,24 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 		if e.wsExecutor != nil {
 			e.wsExecutor.RegisterProcessCommand(registry)
 		}
-		if e.extensionsExecutor != nil {
-			e.extensionsExecutor.RegisterExtensionsProcessCommand(registry)
-		}
 
 		router := text.NewREPLHandler(&e.comp)
 		for _, cmd := range e.comp.REPLCommands() {
-			if err := registry.RegisterREPLCommand(cmd, router); err != nil {
+			handler := textapi.REPLHandler(router)
+			if cmd.Name == extensionsREPLCommandName && e.extensionsExecutor != nil {
+				// Fold the old top-level "extensions-process" REPL
+				// command under the "extensions" namespace so
+				// process management for extensions lives next to
+				// the rest of the extensions UI. The wrapper still
+				// routes through the same workspaceshell.Executor;
+				// only the surface name changes.
+				cmd.Commands = append(cmd.Commands, extensionsProcessManual())
+				handler = extensionsREPLWithProcess{
+					underlying: router,
+					proc:       e.extensionsExecutor,
+				}
+			}
+			if err := registry.RegisterREPLCommand(cmd, handler); err != nil {
 				_ = h.Close()
 				return fmt.Errorf("register repl command %q: %w", cmd.Name, err)
 			}

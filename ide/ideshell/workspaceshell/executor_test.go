@@ -528,39 +528,6 @@ func TestRegisterProcessCommand(t *testing.T) {
 	}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	defer func() { _ = iter.Close() }()
-
-	// "extensions-process" must NOT resolve in this registry
-	// because the caller chose to expose the command under
-	// "process" only.
-	_, err = r.HandleCommand(ctx, repl.Command{
-		Name: "extensions-process",
-		Args: []string{"status"},
-	}, repl.NopProgressWriter())
-	assert.ErrorIs(t, err, repl.ErrNotFound)
-}
-
-// TestRegisterExtensionsProcessCommand asserts that
-// RegisterExtensionsProcessCommand wires the executor as the
-// handler for the "extensions-process" REPL command in the
-// registry, leaving "process" unbound.
-func TestRegisterExtensionsProcessCommand(t *testing.T) {
-	exec := NewExecutor(newMockExecutor())
-	r := ideshell.NewRegistry()
-	exec.RegisterExtensionsProcessCommand(r)
-
-	ctx := context.Background()
-	iter, err := r.HandleCommand(ctx, repl.Command{
-		Name: "extensions-process",
-		Args: []string{"status"},
-	}, repl.NopProgressWriter())
-	require.NoError(t, err)
-	defer func() { _ = iter.Close() }()
-
-	_, err = r.HandleCommand(ctx, repl.Command{
-		Name: "process",
-		Args: []string{"status"},
-	}, repl.NopProgressWriter())
-	assert.ErrorIs(t, err, repl.ErrNotFound)
 }
 
 func TestHandleCommandUnknownSubcommand(t *testing.T) {

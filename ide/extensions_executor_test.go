@@ -135,7 +135,7 @@ func TestExtensionsExecutorCloseClosesUnderlying(t *testing.T) {
 // TestExtensionsExecutorTracksLaunchedPid verifies that PIDs of
 // extension binaries launched through extensionsExecutor are
 // recorded in the embedded tracking shell, so that the
-// "extensions-process status" REPL command can list them.
+// "extensions process status" REPL command can list them.
 //
 // Before this behavior was centralized the extension PID was never
 // recorded anywhere: workspaceRunner.Run forwarded straight to the
@@ -154,7 +154,7 @@ func TestExtensionsExecutorTracksLaunchedPid(t *testing.T) {
 	require.NoError(t, err)
 
 	iter, err := exe.shell.HandleCommand(context.Background(), repl.Command{
-		Name: "extensions-process",
+		Name: "process",
 		Args: []string{"status"},
 	}, repl.NopProgressWriter())
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestExtensionsExecutorTracksLaunchedPid(t *testing.T) {
 	out := renderResponsives(t, iter)
 	assert.Contains(t, out, strconv.Itoa(int(pid)),
 		"extension PIDs launched via extensionsExecutor must be "+
-			"tracked by the embedded shell so 'extensions-process "+
+			"tracked by the embedded shell so 'extensions process "+
 			"status' can list them")
 }
 

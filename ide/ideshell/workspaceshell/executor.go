@@ -219,21 +219,14 @@ func (e *Executor) RegisterProcessCommand(r *ideshell.CommandRegistry) {
 	r.Register("process", "Process management", e)
 }
 
-// RegisterExtensionsProcessCommand registers the
-// "extensions-process" REPL command in the given registry. Use
-// this for the executor that tracks extension binaries launched
-// by the extension runner. Subcommands (status/audit/tree/info/
-// signal/stop) are the same as for the "process" command but
-// operate on the extension PIDs only.
-func (e *Executor) RegisterExtensionsProcessCommand(r *ideshell.CommandRegistry) {
-	r.Register("extensions-process", "Extensions process management", e)
-}
-
-// processCommandNames are the REPL command names HandleCommand and
-// Complete recognize. The same Executor type backs both names so
-// callers can choose at registration time which one to expose.
+// isProcessCommandName reports whether name is the REPL command
+// dispatched to this Executor. Both the workspace-scope "process"
+// command and the extensions tracker reuse the same Executor type;
+// the latter is now folded under the "extensions" REPL command so
+// the Executor is only invoked with cmd.Name == "process" in either
+// case.
 func isProcessCommandName(name string) bool {
-	return name == "process" || name == "extensions-process"
+	return name == "process"
 }
 
 // HandleCommand dispatches process subcommands.
