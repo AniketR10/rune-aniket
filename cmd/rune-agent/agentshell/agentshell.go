@@ -109,7 +109,8 @@ func WithMaxTokens(get func() int, set func(int)) Option {
 const CommandName = "agent"
 
 // New returns a REPL handler backed by the agent shell.
-// It panics if wm, llmSvc, skillRegistry, or fs is nil.
+// It panics if wm, llmSvc, skillRegistry, or fs is nil, or if
+// memoryDataPath is empty.
 func New(
 	wm browserapi.WindowManager,
 	llmSvc llmapi.Service,
@@ -126,6 +127,7 @@ func New(
 	lsp semanticapi.LSP,
 	parser syntaxapi.Parser,
 	notifications browserapi.Notifications,
+	memoryDataPath string,
 	opts ...Option,
 ) textapi.REPLHandler {
 	if wm == nil {
@@ -140,22 +142,26 @@ func New(
 	if fs == nil {
 		panic("agentshell: FileSystem must not be nil")
 	}
+	if memoryDataPath == "" {
+		panic("agentshell: memoryDataPath must not be empty")
+	}
 	s := &shell{
-		wm:            wm,
-		llmSvc:        llmSvc,
-		defaultModel:  defaultModel,
-		store:         store,
-		registry:      registry,
-		agentsConfig:  agentsConfig,
-		cfg:           cfg,
-		skillRegistry: skillRegistry,
-		cwd:           cwd,
-		fs:            fs,
-		storage:       storage,
-		exec:          exec,
-		lsp:           lsp,
-		parser:        parser,
-		notifications: notifications,
+		wm:             wm,
+		llmSvc:         llmSvc,
+		defaultModel:   defaultModel,
+		store:          store,
+		registry:       registry,
+		agentsConfig:   agentsConfig,
+		cfg:            cfg,
+		skillRegistry:  skillRegistry,
+		cwd:            cwd,
+		fs:             fs,
+		storage:        storage,
+		exec:           exec,
+		lsp:            lsp,
+		parser:         parser,
+		notifications:  notifications,
+		memoryDataPath: memoryDataPath,
 	}
 	for _, o := range opts {
 		o(s)
@@ -184,6 +190,7 @@ type shell struct {
 	lsp                 semanticapi.LSP
 	parser              syntaxapi.Parser
 	notifications       browserapi.Notifications
+	memoryDataPath      string
 	getEffort           func() llmapi.ReasoningEffort
 	setEffort           func(llmapi.ReasoningEffort)
 	getMaxTokens        func() int

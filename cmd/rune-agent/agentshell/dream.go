@@ -75,6 +75,7 @@ func (s *shell) handleDream(
 		LSP:           s.lsp,
 		Parser:        s.parser,
 		Notifications: s.notifications,
+		DataPath:      s.memoryDataPath,
 		Model:         entry,
 	}
 

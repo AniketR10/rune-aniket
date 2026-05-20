@@ -858,6 +858,7 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 		h.config,
 		h.skillRegistry, h.cwd, h.fs,
 		h.db, h.exec, h.lsp, h.parser, h.n,
+		h.memoryDataPath,
 		opts...,
 	)
 }
@@ -916,6 +917,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		h.config,
 		h.skillRegistry, h.cwd, h.fs,
 		h.db, h.exec, h.lsp, h.parser, h.n,
+		h.memoryDataPath,
 		cmdShellOpts...,
 	)
 
