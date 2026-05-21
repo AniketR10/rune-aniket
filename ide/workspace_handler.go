@@ -157,22 +157,28 @@ type workspaceManagerHandler struct {
 	// to the workspace slot index in h.workspaces. When middle slots are
 	// empty (nil), the bar skips them, so the bar tab index does not
 	// equal the slot index.
-	barIdxToSlot    []int
-	focusProxy      handler.Proxy
-	width, height   int
-	workspaces      [workspaceSlots]*workspaceHandler
-	workspaceCount  int
-	focus           int
-	homeURI         workspaceapi.URI
-	homeWorkspace   workspace.Workspace
-	empty           *ex
-	homeRunner      extension.Runner
-	homeLSPManager  *idelsp.Manager
-	homeDAPManager  *idedebug.Manager
-	openPrevFiles   []idehistory.File
-	openPrevFilesEx *ex
-	openPrevWindows map[uint64]browser.Window
-	shaderRunner    *shaderRunner
+	barIdxToSlot   []int
+	focusProxy     handler.Proxy
+	width, height  int
+	workspaces     [workspaceSlots]*workspaceHandler
+	workspaceCount int
+	focus          int
+	homeURI        workspaceapi.URI
+	homeWorkspace  workspace.Workspace
+	empty          *ex
+	homeRunner     extension.Runner
+	homeLSPManager *idelsp.Manager
+	homeDAPManager *idedebug.Manager
+	// homePromptStorage is the storageapi.Service partition allocated
+	// for the home workspace's extension permissions. Each Partition
+	// on a firstmover-backed storage spawns its own follower
+	// goroutine + gRPC subscription, so it must be closed on IDE
+	// shutdown.
+	homePromptStorage storageapi.Service
+	openPrevFiles     []idehistory.File
+	openPrevFilesEx   *ex
+	openPrevWindows   map[uint64]browser.Window
+	shaderRunner      *shaderRunner
 	// pending tracks workspaces whose Phase B (async build) is in
 	// flight. Entries are added in Phase A (under h.mu) and removed
 	// in Phase C (also under h.mu). The pending slot index reserves
@@ -583,7 +589,7 @@ func (h *workspaceManagerHandler) init(
 		log.Errorf("build home workspace extensions executor: %v", err)
 		return nil
 	}
-	runner, lspManager, dapManager, err := h.buildExtensions(
+	runner, lspManager, dapManager, promptStorage, err := h.buildExtensions(
 		cfg, homeDirUri, trackedCwd, h.empty, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
@@ -597,6 +603,7 @@ func (h *workspaceManagerHandler) init(
 		h.homeRunner = runner
 		h.homeLSPManager = lspManager
 		h.homeDAPManager = dapManager
+		h.homePromptStorage = promptStorage
 		// speed up initialization by initializing extensions asynchronously
 		go debug.CapturePanicReport(func() { h.initExtensions(runner, cfg) })
 	}
@@ -1305,6 +1312,7 @@ type builtWorkspace struct {
 	notice              *idenotice.Crier
 	lspManager          *idelsp.Manager
 	dapManager          *idedebug.Manager
+	promptStorage       storageapi.Service
 }
 
 // buildWorkspaceAsync runs the blocking IO and heavy construction in a
@@ -1416,7 +1424,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 			uri.String(), err)
 		return nil, fmt.Errorf("new extensions executor: %w", err)
 	}
-	runner, lspManager, dapManager, err := h.buildExtensions(
+	runner, lspManager, dapManager, promptStorage, err := h.buildExtensions(
 		cfg, uri, trackedCwd, ex, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
@@ -1431,6 +1439,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		wh.Extensions.Store(runner)
 		wh.lspManager = lspManager
 		wh.dapManager = dapManager
+		wh.promptStorage = promptStorage
 	}
 
 	built := &builtWorkspace{
@@ -1442,6 +1451,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		cursorHistoryCloser: cursorHistoryCloser,
 		lspManager:          lspManager,
 		dapManager:          dapManager,
+		promptStorage:       promptStorage,
 	}
 	if noticeCfg, ok := newNoticeConfig(cfg, h.ideStorage, uri); ok {
 		built.notice = idenotice.New(
@@ -1649,6 +1659,9 @@ func (h *workspaceManagerHandler) discardBuiltWorkspace(built *builtWorkspace) {
 	if built.dapManager != nil {
 		_ = built.dapManager.Close()
 	}
+	if built.promptStorage != nil {
+		_ = built.promptStorage.Close()
+	}
 	if built.ex != nil {
 		_ = built.ex.Close()
 	}
@@ -1673,15 +1686,24 @@ func lspConfig(cfg ideConfig) config.Config {
 func (h *workspaceManagerHandler) buildExtensions(
 	cfg ideConfig, uri workspaceapi.URI,
 	cwd workspace.Workspace, ex *ex, extExecutor *extensionsExecutor,
-) (_ extension.Runner, _ *idelsp.Manager, _ *idedebug.Manager, retErr error) {
+) (
+	extension.Runner, *idelsp.Manager, *idedebug.Manager,
+	storageapi.Service, error,
+) {
 	notifications := h.notifications.new(uri, ex.container)
 	ed := ex.Editor()
 	promptOpener := &ex.comp
 	promptStorage := storageapi.WithPartition(h.storage, "extension-permissions")
+	var retErr error
+	defer func() {
+		if retErr != nil {
+			_ = promptStorage.Close()
+		}
+	}()
 	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)
 	}
 	res := extension.BrowserResources(ex.Browser(), h.events.newPublisher(uri))
 	res = extension.MergeResourceMap(res,
@@ -1770,7 +1792,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		lsp, apieditor, apibrowser, apibrowser, apibrowser,
 		ex.workspace, parser, cmdcfg)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("new lsp command handler: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("new lsp command handler: %v", err)
 	}
 	handler := text.FuncCommandHandler(apiHandler.HandleCommand,
 		func(ctx context.Context, cmd textapi.Command) (iterator.Iterator[string], string, error) {
@@ -1798,7 +1820,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
-		return nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
+		return nil, nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
 	browser := ex.Browser()
 	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
@@ -1806,9 +1828,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 		dataDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("new workspace extensions runner: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}
-	return runner, lsp, dap, nil
+	return runner, lsp, dap, promptStorage, nil
 }
 
 func (h *workspaceManagerHandler) addOrCreateWorkspace(
@@ -2204,6 +2226,11 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
+	if h.homePromptStorage != nil {
+		if err := h.homePromptStorage.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
 	if h.pkgmanager != nil {
 		if err := h.pkgmanager.Close(); err != nil {
 			ret = multierror.Append(ret, err)
@@ -2240,8 +2267,13 @@ type workspaceHandler struct {
 	closeOnce     sync.Once
 	closeErr      error
 	historyCloser io.Closer
-	lspManager *idelsp.Manager
-	dapManager *idedebug.Manager
+	lspManager    *idelsp.Manager
+	dapManager    *idedebug.Manager
+	// promptStorage is the per-workspace extension-permissions
+	// Partition allocated in buildExtensions. Closing it tears down
+	// the firstmover follower goroutine + gRPC subscription that
+	// Partition spawned (RUNE-189).
+	promptStorage storageapi.Service
 }
 
 func (hm *workspaceHandler) Close() error {
@@ -2275,6 +2307,11 @@ func (hm *workspaceHandler) Close() error {
 		}
 		if hm.dapManager != nil {
 			if err := hm.dapManager.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		if hm.promptStorage != nil {
+			if err := hm.promptStorage.Close(); err != nil {
 				ret = multierror.Append(ret, err)
 			}
 		}

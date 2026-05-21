@@ -4689,7 +4689,11 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 
 	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
-	storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
+	var storage storageapi.Service = localstorage.New(
+		context.Background(), dir, doctoml.Marshaler())
+	if newTestStorageWrap != nil {
+		storage = newTestStorageWrap(storage)
+	}
 	publish := newTestPublishOverride
 	if publish == nil {
 		publish = func(term.Event) bool { return true }
@@ -5214,6 +5218,110 @@ func TestReloadWorkspaceClosesAndReopensScheme(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("new scheme did not run a trivial command after reload")
 	}
+}
+
+// newTestStorageWrap lets a test install a wrapper around the
+// storageapi.Service that newTestWorkspaceManagerHandlerWithManagerMu
+// constructs internally. Tests must reset it to nil in t.Cleanup so
+// other tests fall back to an unwrapped storage.
+var newTestStorageWrap func(storageapi.Service) storageapi.Service
+
+// partitionTrackingService counts opens and closes of partitions whose
+// (root-level) name matches a target string. Used by the RUNE-189
+// regression test to assert that the per-workspace
+// `extension-permissions` Partition created inside buildExtensions is
+// closed when the workspace closes.
+type partitionTrackingService struct {
+	storageapi.Service
+	target string
+	opens  atomic.Int32
+	closes atomic.Int32
+}
+
+func (s *partitionTrackingService) Partition(name string) (storageapi.Service, error) {
+	p, err := s.Service.Partition(name)
+	if err != nil {
+		return nil, err
+	}
+	if name != s.target {
+		return p, nil
+	}
+	s.opens.Add(1)
+	return &trackedPartition{Service: p, parent: s}, nil
+}
+
+type trackedPartition struct {
+	storageapi.Service
+	parent *partitionTrackingService
+	once   sync.Once
+}
+
+func (p *trackedPartition) Close() error {
+	// firstmover's underlying delayedLoadingService.Close is not
+	// idempotent; double-counting Close would mask a real leak so
+	// guard with sync.Once.
+	p.once.Do(func() { p.parent.closes.Add(1) })
+	return p.Service.Close()
+}
+
+// TestCloseWorkspaceClosesExtensionPermissionsPartition guards the
+// RUNE-189 invariant that every storageapi.Service Partition opened
+// while a workspace is installing (e.g. the "extension-permissions"
+// partition allocated inside buildExtensions) is closed when the
+// workspace is closed. Each unclosed Partition on a firstmover-backed
+// storage leaks a follower goroutine, a leadOrFollow goroutine, a
+// monitorLeader goroutine, and a gRPC client subscription.
+func TestCloseWorkspaceClosesExtensionPermissionsPartition(t *testing.T) {
+	dir := t.TempDir()
+
+	var tracker *partitionTrackingService
+	newTestStorageWrap = func(s storageapi.Service) storageapi.Service {
+		tracker = &partitionTrackingService{
+			Service: s, target: "extension-permissions",
+		}
+		return tracker
+	}
+	t.Cleanup(func() { newTestStorageWrap = nil })
+
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NotNil(t, tracker, "newTestStorageWrap must have been invoked")
+	require.GreaterOrEqual(t, tracker.opens.Load(), int32(1),
+		"buildExtensions must open at least one Partition during install")
+
+	openedDuringInstall := tracker.opens.Load()
+	closedDuringInstall := tracker.closes.Load()
+
+	require.NoError(t, m.commandCloseWorkspace())
+
+	openedDuringClose := tracker.opens.Load() - openedDuringInstall
+	closedDuringClose := tracker.closes.Load() - closedDuringInstall
+
+	// The home install path always opens one "extension-permissions"
+	// partition that stays alive until the manager (not the
+	// workspace) closes. Anything beyond that one belongs to
+	// per-workspace installs and MUST be closed when the workspace
+	// closes. netLeak counts unclosed per-workspace partitions:
+	// homeAccountedFor = 1; openedClose may include re-installs.
+	netLeak := openedDuringInstall - 1 - closedDuringClose - openedDuringClose
+	require.LessOrEqual(t, netLeak, int32(0),
+		"closing a workspace must close every Partition opened during "+
+			"its install (opened=%d closed=%d net=%d): "+
+			"unclosed Partitions leak a firstmover follower goroutine "+
+			"plus a gRPC client per workspace cycle (RUNE-189)",
+		openedDuringInstall, closedDuringClose, netLeak)
 }
 
 // TestWorkspaceReadyCommand exercises the `workspaceready` event-loop
