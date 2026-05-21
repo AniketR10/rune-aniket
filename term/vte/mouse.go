@@ -119,8 +119,16 @@ func (e *mouseDriver) SetSelectionStart(pos term.Coordinates) {
 }
 
 func (e *mouseDriver) SetSelectionEnd(pos term.Coordinates) {
-	e.t.Select(e.selectionStart)
-	e.t.SelectEnd(pos)
+	// Select/SelectEnd assume reading order: from is the top-left and
+	// to is one past the bottom-right. A leftward drag would otherwise
+	// produce from > to, and the buffer's internal sort then drops the
+	// press cell and the drag-end cell from the selection.
+	start, end := e.selectionStart, pos
+	if end.Y < start.Y || (end.Y == start.Y && end.X < start.X) {
+		start, end = end, start
+	}
+	e.t.Select(start)
+	e.t.SelectEnd(end)
 	e.copySelectionToClipboard()
 }
 

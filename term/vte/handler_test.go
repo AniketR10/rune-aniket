@@ -181,6 +181,85 @@ exit
 	assert.False(t, show)
 }
 
+// TestHandlerMouseSelection drives press/drag/release sequences over
+// the vte handler and asserts the resulting Selection() contents. The
+// leftward and same-cell cases pin the user-reported bug where the
+// first (leftmost) cell of a leftward drag was excluded from the
+// selection.
+func TestHandlerMouseSelection(t *testing.T) {
+	t.Parallel()
+
+	// All cases echo "hello" so it lands on row 1. The buffer reports
+	// Columns(1)=5, which clamps any to.X past column 5.
+	const helloRow = 1
+	type mev struct {
+		key  term.Key
+		x, y int
+	}
+	left := func(x, y int) mev { return mev{term.MouseLeft, x, y} }
+	rel := func(x, y int) mev { return mev{term.MouseRelease, x, y} }
+
+	cases := []struct {
+		desc   string
+		events []mev
+		want   string
+	}{
+		{
+			desc:   "rightward drag from col 0 to col 4",
+			events: []mev{left(0, helloRow), left(4, helloRow), rel(4, helloRow)},
+			want:   "hello",
+		},
+		{
+			desc:   "leftward drag from col 5 to col 0 includes first cell",
+			events: []mev{left(5, helloRow), left(0, helloRow), rel(0, helloRow)},
+			want:   "hello",
+		},
+		{
+			desc:   "press and drag on same cell selects that cell",
+			events: []mev{left(0, helloRow), left(0, helloRow), rel(0, helloRow)},
+			want:   "h",
+		},
+		{
+			desc:   "press right, drag one cell left",
+			events: []mev{left(4, helloRow), left(3, helloRow), rel(3, helloRow)},
+			want:   "lo",
+		},
+		{
+			desc:   "drag past row's last column clamps to Columns(y)",
+			events: []mev{left(4, helloRow), left(5, helloRow), rel(5, helloRow)},
+			want:   "o",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+			cfg := DefaultConfig()
+			handler, _ := testSequence(t, cfg, defaultWaitForIdleVte,
+				[]vtetest.Case{{"echo hello>",
+					`$ echo hello        
+hello               
+$ ▐                 
+                    
+                    
+                    
+                    
+                    
+                    
+                    `}})
+			for _, ev := range tc.events {
+				handler.Handle(term.Event{
+					Type: term.EventMouse, Key: ev.key,
+					MouseX: ev.x, MouseY: ev.y,
+				})
+			}
+			sel, ok := handler.Selection()
+			require.True(t, ok)
+			assert.Equal(t, tc.want, sel)
+		})
+	}
+}
+
 func TestResetPrimaryBuffer(t *testing.T) {
 	t.Parallel()
 	t.Run("non modal", func(t *testing.T) {
