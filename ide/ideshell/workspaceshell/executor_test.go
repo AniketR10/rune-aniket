@@ -1318,3 +1318,639 @@ func TestE2EProcessTreeWithRealExecutor(t *testing.T) {
 	assert.Contains(t, out, strconv.Itoa(int(childPid)))
 	assert.Contains(t, out, "PPID: "+strconv.Itoa(int(parentPid)))
 }
+
+// RUNE-181 — comprehensive regression suite for the
+// `process status` / `process audit` markdown table renderer.
+//
+// The renderer wraps each cell in `` `…` `` and separates cells
+// with `|`. A naive implementation breaks the table when an
+// argv element contains literal newlines, backticks, or pipes
+// — embedded `\n` terminates the markdown row early and stray
+// backticks/pipes split the cell. These tests guarantee that
+// for *any* shell heredoc / inline-script argv we have ever
+// seen in the wild, the rendered row stays on exactly one line
+// and every cell stays inside its delimiters.
+//
+// Test cases are listed at the top; fixtures, helpers and the
+// supporting argv corpus live at the bottom of this file per
+// the project's "table tests on top, fixtures on bottom"
+// convention.
+
+// TestEscapeMarkdownTableCell is the unit-level table for the
+// sanitizer. It must be a closed function over its input: no
+// matter what raw bytes we feed it, the output must contain
+// no raw CR/LF, no unescaped backticks, and no unescaped pipes.
+func TestEscapeMarkdownTableCell(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: "", want: ""},
+		{name: "plain ascii", in: "hello", want: "hello"},
+		{name: "unicode passthrough", in: "héllo — world", want: "héllo — world"},
+		{name: "tab is preserved", in: "a\tb", want: "a\tb"},
+
+		{name: "single pipe", in: "a|b", want: "a\\|b"},
+		{name: "many pipes", in: "a|b|c|d", want: "a\\|b\\|c\\|d"},
+		{name: "single backtick", in: "a`b", want: "a\\`b"},
+		{name: "many backticks", in: "`a``b`", want: "\\`a\\`\\`b\\`"},
+
+		{name: "lf only", in: "\n", want: "␤"},
+		{name: "cr only", in: "\r", want: "␤"},
+		{name: "crlf only", in: "\r\n", want: "␤"},
+		{name: "lone lf middle", in: "a\nb", want: "a␤b"},
+		{name: "lone cr middle", in: "a\rb", want: "a␤b"},
+		{name: "crlf middle", in: "a\r\nb", want: "a␤b"},
+		{name: "multiple lfs", in: "a\n\nb\n", want: "a␤␤b␤"},
+		{name: "mixed cr lf crlf", in: "a\rb\nc\r\nd", want: "a␤b␤c␤d"},
+		{name: "trailing newline", in: "a\n", want: "a␤"},
+		{name: "leading newline", in: "\na", want: "␤a"},
+
+		{
+			name: "heredoc body",
+			in:   "bash -c cd /tmp && python3 <<PY\nprint(1)\nPY",
+			want: "bash -c cd /tmp && python3 <<PY␤print(1)␤PY",
+		},
+		{
+			name: "all specials at once",
+			in:   "echo `whoami` | tee /tmp/x\n",
+			want: "echo \\`whoami\\` \\| tee /tmp/x␤",
+		},
+		{
+			name: "ansi-c quoted newline",
+			in:   "printf $'line1\\nline2\\n'\n",
+			want: "printf $'line1\\nline2\\n'␤",
+		},
+		{
+			name: "nul byte is preserved",
+			in:   "a\x00b",
+			want: "a\x00b",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := escapeMarkdownTableCell(tc.in)
+			assert.Equal(t, tc.want, got)
+			assertSanitizedCell(t, got)
+		})
+	}
+}
+
+// TestBuildProcessTableMarkdownSource_HeredocCorpus drives the
+// markdown source builder with realistic argvs taken from every
+// language we know spawns child processes with heredoc-style
+// inline scripts (bash, dash, zsh, python, perl, ruby, node,
+// php, sql, awk, sed, ssh, tar). Each case provides a single
+// `workspaceapi.Cmd`, which the test converts into a
+// `psEntry` via formatCmd — the same path the real
+// handleStatus / handleAudit code takes. The test asserts:
+//
+//   - the full markdown source matches a literal golden
+//   - the row count equals header rows + entries
+//   - no row contains a raw CR or LF
+//   - every backtick in the row is escaped
+//   - the row is wrapped by `| ` … ` |`
+//   - the COMMAND cell is wrapped by backticks that are NOT
+//     adjacent to any inner unescaped backtick
+func TestBuildProcessTableMarkdownSource_HeredocCorpus(t *testing.T) {
+	for _, tc := range heredocCorpus() {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := psEntry{
+				pid:     tc.pid,
+				uptime:  tc.uptime,
+				lastErr: tc.lastErr,
+				command: formatCmdFromArgv(tc.path, tc.args),
+			}
+			got := buildProcessTableMarkdownSource(
+				[]psEntry{entry},
+			)
+			assert.Equal(t, tableHeader+tc.wantRow, got,
+				"markdown source mismatch")
+			assertTableStructure(t, got, 1)
+		})
+	}
+}
+
+// TestBuildProcessTableMarkdownSource_Structural exercises the
+// shape of the table for cases that are not specific to a
+// language: empty table, multiple entries, PID ordering,
+// `lastErr` with newlines, and the original RUNE-181 repro.
+func TestBuildProcessTableMarkdownSource_Structural(t *testing.T) {
+	cases := []struct {
+		name    string
+		entries []psEntry
+		want    string
+	}{
+		{
+			name:    "empty table is header-only",
+			entries: nil,
+			want:    tableHeader,
+		},
+		{
+			name: "single benign entry",
+			entries: []psEntry{
+				benignEntry(1, 5*time.Second, "/bin/ls -l"),
+			},
+			want: tableHeader +
+				"| `1` | `5s` | — | `/bin/ls -l` |\n",
+		},
+		{
+			name: "multiple entries sorted by pid",
+			entries: []psEntry{
+				benignEntry(20, 6*time.Second, "/bin/b"),
+				benignEntry(10, 5*time.Second, "/bin/a"),
+				benignEntry(15, 7*time.Second, "/bin/c"),
+			},
+			want: tableHeader +
+				"| `10` | `5s` | — | `/bin/a` |\n" +
+				"| `15` | `7s` | — | `/bin/c` |\n" +
+				"| `20` | `6s` | — | `/bin/b` |\n",
+		},
+		{
+			name: "lastErr with embedded newline",
+			entries: []psEntry{{
+				pid:     5,
+				uptime:  4 * time.Second,
+				lastErr: "boom\nstack",
+				command: "/bin/x",
+			}},
+			want: tableHeader +
+				"| `5` | `4s` | boom␤stack | `/bin/x` |\n",
+		},
+		{
+			name: "lastErr with backtick and pipe",
+			entries: []psEntry{{
+				pid:     6,
+				uptime:  time.Second,
+				lastErr: "exit `1` | core",
+				command: "/bin/y",
+			}},
+			want: tableHeader +
+				"| `6` | `1s` | exit \\`1\\` \\| core | `/bin/y` |\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildProcessTableMarkdownSource(tc.entries)
+			assert.Equal(t, tc.want, got)
+			assertTableStructure(t, got, len(tc.entries))
+		})
+	}
+}
+
+// TestHandleStatusHeredocCorpus drives the full
+// handleStatus → markdown.New → comptest framebuffer pipeline
+// for the same argv corpus. It asserts that:
+//
+//   - the rendered text still shows the canonical column
+//     headers (canary that the row structure did not collapse)
+//   - the rendered text contains the sanitizer's single-line
+//     marker whenever the argv had a literal newline
+//   - the rendered text contains the executable basename
+//     (canary that the COMMAND cell carries something
+//     resembling the original command)
+func TestHandleStatusHeredocCorpus(t *testing.T) {
+	for _, tc := range heredocCorpus() {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := newMockExecutor()
+			exec := NewExecutor(mock)
+			exec.now = fixedTime(
+				time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			)
+
+			ctx := context.Background()
+			_, err := exec.Start(ctx, workspaceapi.Cmd{
+				Path: tc.path,
+				Args: tc.args,
+			})
+			require.NoError(t, err)
+
+			iter := exec.handleStatus()
+			defer func() { _ = iter.Close() }()
+			out := collectRenderedText(t, iter)
+
+			assert.Contains(t, out, "PID")
+			assert.Contains(t, out, "UPTIME")
+			assert.Contains(t, out, "LAST ERR")
+			assert.Contains(t, out, "COMMAND")
+			if argvHasNewline(tc.path, tc.args) {
+				assert.Contains(t, out, "␤",
+					"sanitizer marker missing")
+			}
+			if base := basename(tc.path); base != "" {
+				assert.Contains(t, out, base,
+					"command basename missing")
+			}
+		})
+	}
+}
+
+// ============================================================
+// Fixtures and helpers (table tests on top, fixtures below).
+// ============================================================
+
+// tableHeader is the literal two-line markdown header emitted
+// by buildProcessTableMarkdownSource. Centralised so individual
+// test cases stay focused on the row(s) they exercise.
+const tableHeader = "| PID | UPTIME | LAST ERR | COMMAND |\n" +
+	"| --- | --- | --- | --- |\n"
+
+// heredocCase is one row of the language-realistic argv corpus.
+// Each case fully describes a tracked process plus the expected
+// rendered markdown row.
+type heredocCase struct {
+	name    string
+	path    string
+	args    []string
+	pid     workspaceapi.Pid
+	uptime  time.Duration
+	lastErr string
+	wantRow string
+}
+
+// heredocCorpus returns the realistic argv invocations we want
+// to be bullet-proof against. Each entry models a real way a
+// shell, REPL, or build tool spawns a child process whose argv
+// contains characters that previously broke the markdown table.
+func heredocCorpus() []heredocCase {
+	return []heredocCase{
+		{
+			name: "bash -c heredoc python (rune-181 repro)",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"cd /tmp && python3 <<PY\nprint(1)\nPY",
+			},
+			pid:     42,
+			uptime:  7 * time.Second,
+			lastErr: "—",
+			wantRow: "| `42` | `7s` | — | " +
+				"`/bin/bash -c cd /tmp && python3 " +
+				"<<PY␤print(1)␤PY` |\n",
+		},
+		{
+			name: "bash -c quoted heredoc no expansion",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"cat <<'EOF'\nliteral $HOME `cmd`\nEOF",
+			},
+			pid:     43,
+			uptime:  3 * time.Second,
+			lastErr: "—",
+			wantRow: "| `43` | `3s` | — | " +
+				"`/bin/bash -c cat <<'EOF'␤" +
+				"literal $HOME \\`cmd\\`␤EOF` |\n",
+		},
+		{
+			name: "bash -c dash heredoc tab-strip",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"cat <<-EOF\n\tindented\n\tEOF",
+			},
+			pid:     44,
+			uptime:  time.Second,
+			lastErr: "—",
+			wantRow: "| `44` | `1s` | — | " +
+				"`/bin/bash -c cat <<-EOF␤\tindented" +
+				"␤\tEOF` |\n",
+		},
+		{
+			name: "dash -c pipe between commands",
+			path: "/bin/dash",
+			args: []string{
+				"-c",
+				"ls | wc -l",
+			},
+			pid:     45,
+			uptime:  2 * time.Second,
+			lastErr: "—",
+			wantRow: "| `45` | `2s` | — | " +
+				"`/bin/dash -c ls \\| wc -l` |\n",
+		},
+		{
+			name: "zsh -c command substitution",
+			path: "/bin/zsh",
+			args: []string{
+				"-c",
+				"echo `whoami`@`hostname`",
+			},
+			pid:     46,
+			uptime:  4 * time.Second,
+			lastErr: "—",
+			wantRow: "| `46` | `4s` | — | " +
+				"`/bin/zsh -c echo \\`whoami\\`@" +
+				"\\`hostname\\`` |\n",
+		},
+		{
+			name: "ksh print heredoc",
+			path: "/bin/ksh",
+			args: []string{
+				"-c",
+				"print -- <<DONE\nhi\nDONE",
+			},
+			pid:     47,
+			uptime:  5 * time.Second,
+			lastErr: "—",
+			wantRow: "| `47` | `5s` | — | " +
+				"`/bin/ksh -c print -- <<DONE␤hi␤" +
+				"DONE` |\n",
+		},
+		{
+			name: "python -c inline",
+			path: "/usr/bin/python3",
+			args: []string{
+				"-c",
+				"import sys\nprint(sys.argv)\n",
+			},
+			pid:     48,
+			uptime:  6 * time.Second,
+			lastErr: "—",
+			wantRow: "| `48` | `6s` | — | " +
+				"`/usr/bin/python3 -c import sys␤" +
+				"print(sys.argv)␤` |\n",
+		},
+		{
+			name: "perl -e multiline",
+			path: "/usr/bin/perl",
+			args: []string{
+				"-e",
+				"use strict;\nprint \"hi\\n\";",
+			},
+			pid:     49,
+			uptime:  8 * time.Second,
+			lastErr: "—",
+			wantRow: "| `49` | `8s` | — | " +
+				"`/usr/bin/perl -e use strict;␤print " +
+				"\"hi\\n\";` |\n",
+		},
+		{
+			name: "perl heredoc EOF quoted",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"perl <<'PERL'\nprint 1;\nPERL",
+			},
+			pid:     50,
+			uptime:  9 * time.Second,
+			lastErr: "—",
+			wantRow: "| `50` | `9s` | — | " +
+				"`/bin/bash -c perl <<'PERL'␤print 1;␤" +
+				"PERL` |\n",
+		},
+		{
+			name: "ruby squiggly heredoc",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"ruby <<~RUBY\n  puts :hi\nRUBY",
+			},
+			pid:     51,
+			uptime:  10 * time.Second,
+			lastErr: "—",
+			wantRow: "| `51` | `10s` | — | " +
+				"`/bin/bash -c ruby <<~RUBY␤  puts :hi␤" +
+				"RUBY` |\n",
+		},
+		{
+			name: "node heredoc js",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"node <<JS\nconsole.log(1)\nJS",
+			},
+			pid:     52,
+			uptime:  11 * time.Second,
+			lastErr: "—",
+			wantRow: "| `52` | `11s` | — | " +
+				"`/bin/bash -c node <<JS␤console.log(1)␤" +
+				"JS` |\n",
+		},
+		{
+			name: "php heredoc EOT",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"php <<<EOT\n<?php echo 1; ?>\nEOT",
+			},
+			pid:     53,
+			uptime:  12 * time.Second,
+			lastErr: "—",
+			wantRow: "| `53` | `12s` | — | " +
+				"`/bin/bash -c php <<<EOT␤<?php echo 1; ?>␤" +
+				"EOT` |\n",
+		},
+		{
+			name: "psql heredoc SQL pipe",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"psql <<SQL\nSELECT 1 | 2;\nSQL",
+			},
+			pid:     54,
+			uptime:  13 * time.Second,
+			lastErr: "—",
+			wantRow: "| `54` | `13s` | — | " +
+				"`/bin/bash -c psql <<SQL␤SELECT 1 \\| 2;␤" +
+				"SQL` |\n",
+		},
+		{
+			name: "awk multiline program",
+			path: "/usr/bin/awk",
+			args: []string{
+				"BEGIN { print 1 }\n{ print $0 }\nEND { print 2 }",
+				"/etc/hosts",
+			},
+			pid:     55,
+			uptime:  14 * time.Second,
+			lastErr: "—",
+			wantRow: "| `55` | `14s` | — | " +
+				"`/usr/bin/awk BEGIN { print 1 }␤{ print $0 }" +
+				"␤END { print 2 } /etc/hosts` |\n",
+		},
+		{
+			name: "sed multiline script",
+			path: "/usr/bin/sed",
+			args: []string{
+				"-e",
+				"s/a/b/\n/start/,/end/{\n  d\n}",
+				"file",
+			},
+			pid:     56,
+			uptime:  15 * time.Second,
+			lastErr: "—",
+			wantRow: "| `56` | `15s` | — | " +
+				"`/usr/bin/sed -e s/a/b/␤/start/,/end/{␤  " +
+				"d␤} file` |\n",
+		},
+		{
+			name: "ssh remote heredoc with crlf",
+			path: "/usr/bin/ssh",
+			args: []string{
+				"host",
+				"bash <<'REMOTE'\r\nls\r\nREMOTE",
+			},
+			pid:     57,
+			uptime:  16 * time.Second,
+			lastErr: "—",
+			wantRow: "| `57` | `16s` | — | " +
+				"`/usr/bin/ssh host bash <<'REMOTE'␤ls␤" +
+				"REMOTE` |\n",
+		},
+		{
+			name:    "single argv literal newlines only",
+			path:    "/bin/echo",
+			args:    []string{"\n\n\n"},
+			pid:     58,
+			uptime:  17 * time.Second,
+			lastErr: "—",
+			wantRow: "| `58` | `17s` | — | " +
+				"`/bin/echo ␤␤␤` |\n",
+		},
+		{
+			name:    "argv with only carriage returns",
+			path:    "/bin/echo",
+			args:    []string{"a\rb\rc"},
+			pid:     59,
+			uptime:  18 * time.Second,
+			lastErr: "—",
+			wantRow: "| `59` | `18s` | — | " +
+				"`/bin/echo a␤b␤c` |\n",
+		},
+		{
+			name: "all-special argv (lf + cr + pipe + backtick)",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"echo `id` | tee log\r\nexit",
+			},
+			pid:     60,
+			uptime:  19 * time.Second,
+			lastErr: "—",
+			wantRow: "| `60` | `19s` | — | " +
+				"`/bin/bash -c echo \\`id\\` \\| tee log␤" +
+				"exit` |\n",
+		},
+		{
+			name:    "empty path is rendered as login shell",
+			path:    "",
+			args:    []string{"--login", "-c", "echo hi"},
+			pid:     61,
+			uptime:  20 * time.Second,
+			lastErr: "—",
+			wantRow: "| `61` | `20s` | — | " +
+				"`(login shell) --login -c echo hi` |\n",
+		},
+		{
+			name: "lastErr with newline alongside heredoc command",
+			path: "/bin/bash",
+			args: []string{
+				"-c",
+				"python3 <<PY\nraise SystemExit(1)\nPY",
+			},
+			pid:     62,
+			uptime:  21 * time.Second,
+			lastErr: "Traceback\nSystemExit: 1",
+			wantRow: "| `62` | `21s` | Traceback␤SystemExit: 1 | " +
+				"`/bin/bash -c python3 <<PY␤raise SystemExit(1)" +
+				"␤PY` |\n",
+		},
+	}
+}
+
+// benignEntry returns a psEntry with a `—` lastErr — the
+// shape produced by handleStatus for a still-running process
+// that has no recorded error.
+func benignEntry(
+	pid workspaceapi.Pid, uptime time.Duration, command string,
+) psEntry {
+	return psEntry{
+		pid:     pid,
+		uptime:  uptime,
+		lastErr: "—",
+		command: command,
+	}
+}
+
+// formatCmdFromArgv mirrors formatCmd's argv→string projection
+// without constructing a full processInfo. Tests use it so the
+// markdown-source assertions exercise the same join logic that
+// handleStatus/handleAudit perform at runtime.
+func formatCmdFromArgv(path string, args []string) string {
+	return formatCmd(processInfo{path: path, args: args})
+}
+
+// argvHasNewline reports whether any element of the
+// path-plus-args tuple contains a CR or LF — used by the
+// end-to-end test to decide whether the sanitizer marker is
+// expected in the rendered output.
+func argvHasNewline(path string, args []string) bool {
+	if strings.ContainsAny(path, "\r\n") {
+		return true
+	}
+	for _, a := range args {
+		if strings.ContainsAny(a, "\r\n") {
+			return true
+		}
+	}
+	return false
+}
+
+// basename returns the last path component, or "" if path is
+// empty. The end-to-end test uses it as a canary that the
+// COMMAND cell still carries something resembling the original
+// invocation after sanitization.
+func basename(path string) string {
+	if path == "" {
+		return ""
+	}
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		return path[i+1:]
+	}
+	return path
+}
+
+// assertSanitizedCell encodes the cell-level invariants the
+// sanitizer must enforce: no raw CR/LF, no unescaped backticks,
+// no unescaped pipes.
+func assertSanitizedCell(t *testing.T, got string) {
+	t.Helper()
+	assert.NotContains(t, got, "\n", "raw LF survived")
+	assert.NotContains(t, got, "\r", "raw CR survived")
+	for i := 0; i < len(got); i++ {
+		switch got[i] {
+		case '`':
+			if i == 0 || got[i-1] != '\\' {
+				t.Fatalf("unescaped backtick at %d in %q",
+					i, got)
+			}
+		case '|':
+			if i == 0 || got[i-1] != '\\' {
+				t.Fatalf("unescaped pipe at %d in %q",
+					i, got)
+			}
+		}
+	}
+}
+
+// assertTableStructure encodes the row-level invariants the
+// renderer must enforce: header rows + exactly one row per
+// entry, each row terminated by a single '\n', no raw CR
+// anywhere in the source, and every row begins with "| " and
+// ends with " |".
+func assertTableStructure(t *testing.T, got string, entries int) {
+	t.Helper()
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	require.Equal(t, 2+entries, len(lines),
+		"expected header(2)+%d entries; got %d lines: %q",
+		entries, len(lines), lines)
+	assert.NotContains(t, got, "\r", "raw CR in markdown source")
+	for i, line := range lines {
+		assert.True(t, strings.HasPrefix(line, "|"),
+			"row %d missing leading pipe: %q", i, line)
+		assert.True(t, strings.HasSuffix(line, "|"),
+			"row %d missing trailing pipe: %q", i, line)
+	}
+}

@@ -660,6 +660,14 @@ func toLines(ss ...string) iterator.Iterator[component.Responsive] {
 }
 
 func renderProcessTableMarkdown(entries []psEntry) iterator.Iterator[component.Responsive] {
+	return markdownResponsive(buildProcessTableMarkdownSource(entries))
+}
+
+// buildProcessTableMarkdownSource produces the markdown source
+// for the process status/audit table. Each row is sanitized so
+// that newlines or backticks inside a command or lastErr cannot
+// break out of their cell. Entries are sorted by PID.
+func buildProcessTableMarkdownSource(entries []psEntry) string {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].pid < entries[j].pid
 	})
@@ -676,7 +684,7 @@ func renderProcessTableMarkdown(entries []psEntry) iterator.Iterator[component.R
 			escapeMarkdownTableCell(ent.command),
 		)
 	}
-	return markdownResponsive(b.String())
+	return b.String()
 }
 
 func toResponsive(s string) component.Responsive {
@@ -693,8 +701,21 @@ func markdownResponsive(content string) iterator.Iterator[component.Responsive] 
 	return iterator.FromSlice([]component.Responsive{md})
 }
 
+// escapeMarkdownTableCell sanitizes a string so it can safely be
+// embedded inside a single markdown table cell wrapped in
+// backticks. It collapses line breaks to a visible single-line
+// marker, escapes backticks so they cannot terminate the
+// surrounding `…`, and escapes pipes so they cannot terminate
+// the cell.
 func escapeMarkdownTableCell(s string) string {
-	return strings.ReplaceAll(s, "|", "\\|")
+	// Order matters: collapse CRLF to a single marker before
+	// touching lone CR or LF.
+	s = strings.ReplaceAll(s, "\r\n", "␤")
+	s = strings.ReplaceAll(s, "\n", "␤")
+	s = strings.ReplaceAll(s, "\r", "␤")
+	s = strings.ReplaceAll(s, "`", "\\`")
+	s = strings.ReplaceAll(s, "|", "\\|")
+	return s
 }
 
 // ContextWithParentPid returns a context carrying the given
