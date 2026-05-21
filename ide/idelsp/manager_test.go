@@ -264,3 +264,63 @@ func TestWatchServerRestartsOnConnLoss(t *testing.T) {
 	_ = newSrv.call(pingCtx, "workspace/symbol",
 		semanticapi.WorkspaceSymbolParams{Query: ""}, &raw)
 }
+
+// TestManagerCloseTerminatesGopls locks in the RUNE-180 contract that
+// Manager.Close propagates cancellation down to spawned language-server
+// processes (m.ctx → langServer.ctx → exec.CommandContext-bound child).
+func TestManagerCloseTerminatesGopls(t *testing.T) {
+	t.Parallel()
+	goplsBin := findGopls(t)
+	tmpDir := setupTestWorkspace(t, "testdata")
+
+	uri := makeURI(t, "file://"+tmpDir)
+	scheme := newTestScheme()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var ready sync.Once
+	var wg sync.WaitGroup
+	callback := &testCallback{
+		onProgress: readyOnProgress(&ready, &wg),
+	}
+
+	mgr := New(
+		uri, scheme, scheme,
+		&stubPkgManager{bin: goplsBin},
+		nil, nil,
+		Config{Callback: callback, MaxRetries: 3, NoInitializeServer: true},
+	)
+
+	params := autoInitParams(uri.String())
+	initOpts, err := json.Marshal(map[string]any{
+		"langID":  "go",
+		"command": "gopls serve",
+	})
+	require.NoError(t, err)
+	params.InitializeOptions = initOpts
+
+	wg.Add(1)
+	_, err = mgr.Initialize(ctx, params)
+	require.NoError(t, err)
+	wg.Wait()
+
+	mgr.mu.Lock()
+	srv := mgr.servers["go"]
+	mgr.mu.Unlock()
+	require.NotNil(t, srv)
+	require.NotNil(t, srv.watcher,
+		"langServer must have a process watcher so close can be observed")
+
+	require.NoError(t, mgr.Close())
+
+	require.Error(t, mgr.ctx.Err(),
+		"Manager.Close must cancel m.ctx so handleEvs / watchServer exit")
+
+	select {
+	case <-srv.watcher:
+	case <-time.After(10 * time.Second):
+		t.Fatal("gopls child did not exit within 10s of Manager.Close: " +
+			"manager teardown is not propagating cancellation to the child")
+	}
+}

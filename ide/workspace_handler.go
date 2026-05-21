@@ -167,6 +167,8 @@ type workspaceManagerHandler struct {
 	homeWorkspace   workspace.Workspace
 	empty           *ex
 	homeRunner      extension.Runner
+	homeLSPManager  *idelsp.Manager
+	homeDAPManager  *idedebug.Manager
 	openPrevFiles   []idehistory.File
 	openPrevFilesEx *ex
 	openPrevWindows map[uint64]browser.Window
@@ -180,7 +182,7 @@ type workspaceManagerHandler struct {
 	// lastReservedPending tracks the most recently reserved
 	// pendingWorkspace whose Phase B is still in flight. It is set
 	// in reservePendingSlot and cleared in installPendingWorkspace
-	// or doCloseWorkspace when the pending entry it points at is
+	// or closeWorkspace when the pending entry it points at is
 	// torn down. The `workspaceready` command consults this to
 	// decide whether to enqueue against the most recent pending
 	// build or dispatch inline.
@@ -581,7 +583,8 @@ func (h *workspaceManagerHandler) init(
 		log.Errorf("build home workspace extensions executor: %v", err)
 		return nil
 	}
-	runner, err := h.buildExtensions(cfg, homeDirUri, trackedCwd, h.empty, extExec)
+	runner, lspManager, dapManager, err := h.buildExtensions(
+		cfg, homeDirUri, trackedCwd, h.empty, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -592,6 +595,8 @@ func (h *workspaceManagerHandler) init(
 			h.empty.setExecutor(exec, wsExec, extExec.shell)
 		}
 		h.homeRunner = runner
+		h.homeLSPManager = lspManager
+		h.homeDAPManager = dapManager
 		// speed up initialization by initializing extensions asynchronously
 		go debug.CapturePanicReport(func() { h.initExtensions(runner, cfg) })
 	}
@@ -1231,16 +1236,10 @@ func (h *workspaceManagerHandler) isPending(uri workspaceapi.URI) bool {
 // lifetime context that the Phase B goroutine and the FS watcher
 // share — distinct from the *scheme's* parent context.
 //
-// The scheme is always built with context.Background() as its parent.
-// Schemes manage their own internal lifecycle via Close() (e.g.
-// remoteScheme.Close cancels its own ctx, closes the ssh session and
-// stops the maintainConnection goroutine), and workspace.Manager
-// caches schemes by URI: closeWorkspaceKeepScheme on :workspacereload
-// deliberately reuses the cached entry, so cancelling the per-handler
-// ctx must NOT propagate into the scheme. Otherwise the next dial /
-// stat / pty call short-circuits with context.Canceled before it
-// reaches the wire (the bug TestIntegrationIDEWorkspaceReloadOverSSH
-// reproduces).
+// The scheme is built with context.Background() as its parent because
+// schemes manage their own lifecycle via Close (e.g. remoteScheme.Close
+// cancels its ctx and tears down the ssh session); binding the scheme
+// to the per-handler ctx would cancel in-flight RPCs before Close runs.
 //
 // workspace.Manager.AddWorkspace itself does not block on remote IO —
 // for SSH it returns a remoteScheme whose first connection attempt
@@ -1304,6 +1303,8 @@ type builtWorkspace struct {
 	runner              extension.Runner
 	cursorHistoryCloser io.Closer
 	notice              *idenotice.Crier
+	lspManager          *idelsp.Manager
+	dapManager          *idedebug.Manager
 }
 
 // buildWorkspaceAsync runs the blocking IO and heavy construction in a
@@ -1415,7 +1416,8 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 			uri.String(), err)
 		return nil, fmt.Errorf("new extensions executor: %w", err)
 	}
-	runner, err := h.buildExtensions(cfg, uri, trackedCwd, ex, extExec)
+	runner, lspManager, dapManager, err := h.buildExtensions(
+		cfg, uri, trackedCwd, ex, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -1427,6 +1429,8 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 			ex.setExecutor(exec, wsExec, extExec.shell)
 		}
 		wh.Extensions.Store(runner)
+		wh.lspManager = lspManager
+		wh.dapManager = dapManager
 	}
 
 	built := &builtWorkspace{
@@ -1436,6 +1440,8 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		ex:                  ex,
 		runner:              runner,
 		cursorHistoryCloser: cursorHistoryCloser,
+		lspManager:          lspManager,
+		dapManager:          dapManager,
 	}
 	if noticeCfg, ok := newNoticeConfig(cfg, h.ideStorage, uri); ok {
 		built.notice = idenotice.New(
@@ -1637,6 +1643,12 @@ func (h *workspaceManagerHandler) discardBuiltWorkspace(built *builtWorkspace) {
 			_ = c.Close()
 		}
 	}
+	if built.lspManager != nil {
+		_ = built.lspManager.Close()
+	}
+	if built.dapManager != nil {
+		_ = built.dapManager.Close()
+	}
 	if built.ex != nil {
 		_ = built.ex.Close()
 	}
@@ -1661,7 +1673,7 @@ func lspConfig(cfg ideConfig) config.Config {
 func (h *workspaceManagerHandler) buildExtensions(
 	cfg ideConfig, uri workspaceapi.URI,
 	cwd workspace.Workspace, ex *ex, extExecutor *extensionsExecutor,
-) (extension.Runner, error) {
+) (_ extension.Runner, _ *idelsp.Manager, _ *idedebug.Manager, retErr error) {
 	notifications := h.notifications.new(uri, ex.container)
 	ed := ex.Editor()
 	promptOpener := &ex.comp
@@ -1669,7 +1681,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications)
 	if err != nil {
-		return nil, fmt.Errorf("new command authorizer: %w", err)
+		return nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)
 	}
 	res := extension.BrowserResources(ex.Browser(), h.events.newPublisher(uri))
 	res = extension.MergeResourceMap(res,
@@ -1710,6 +1722,20 @@ func (h *workspaceManagerHandler) buildExtensions(
 		Adapters:   cfg.debuggerConfigs(),
 	}
 	dap := idedebug.New(uri, cwd, h.pkgmanager, dapCfg)
+	// Close the Managers on any error past this point: subsequent
+	// build steps don't return them, so the caller has no handle to
+	// clean up the manager-owned goroutines / subprocesses on failure.
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		if err := lsp.Close(); err != nil {
+			log.Warnf("close lsp manager after build error: %v", err)
+		}
+		if err := dap.Close(); err != nil {
+			log.Warnf("close dap manager after build error: %v", err)
+		}
+	}()
 	err = ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)
@@ -1744,7 +1770,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		lsp, apieditor, apibrowser, apibrowser, apibrowser,
 		ex.workspace, parser, cmdcfg)
 	if err != nil {
-		return nil, fmt.Errorf("new lsp command handler: %v", err)
+		return nil, nil, nil, fmt.Errorf("new lsp command handler: %v", err)
 	}
 	handler := text.FuncCommandHandler(apiHandler.HandleCommand,
 		func(ctx context.Context, cmd textapi.Command) (iterator.Iterator[string], string, error) {
@@ -1772,7 +1798,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
+		return nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
 	browser := ex.Browser()
 	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
@@ -1780,9 +1806,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 		dataDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
-		return nil, fmt.Errorf("new workspace extensions runner: %v", err)
+		return nil, nil, nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}
-	return runner, nil
+	return runner, lsp, dap, nil
 }
 
 func (h *workspaceManagerHandler) addOrCreateWorkspace(
@@ -1932,7 +1958,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 
 func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
 	i := h.focus
-	workspaceURI, _, err := h.closeWorkspaceKeepScheme()
+	workspaceURI, _, err := h.closeWorkspace()
 	if err != nil {
 		return err
 	}
@@ -2000,23 +2026,12 @@ func (h *workspaceManagerHandler) commandWorkspaceReady(args ...string) error {
 	return ex.dispatchCommand(args[0], args[1:]...)
 }
 
-func (h *workspaceManagerHandler) closeWorkspace() (workspaceapi.URI, []workspaceapi.URI, error) {
-	return h.doCloseWorkspace(true)
-}
-
-// closeWorkspaceKeepScheme is like closeWorkspace but does NOT remove the
-// backing workspace from workspace.Manager. This is used by
-// commandReloadWorkspace, where the workspace is immediately re-added under
-// the same URI; keeping the Manager entry means AddWorkspace returns the
-// same managerWorkspace and the existing scheme (e.g. an in-memory scheme
-// holding live buffer content) survives the reload.
-func (h *workspaceManagerHandler) closeWorkspaceKeepScheme() (
-	workspaceapi.URI, []workspaceapi.URI, error,
-) {
-	return h.doCloseWorkspace(false)
-}
-
-func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
+// closeWorkspace tears the focused workspace down and removes its
+// scheme from workspace.Manager. :workspaceclose and :workspacereload
+// both route through here so reload is a true close+open cycle — the
+// scheme is not reused, which is what guarantees scheme.Close hooks
+// (e.g. killing LSP/DAP child processes bound to scheme ctx) fire.
+func (h *workspaceManagerHandler) closeWorkspace() (
 	workspaceapi.URI, []workspaceapi.URI, error,
 ) {
 	// If the focused slot is currently a pending build (Phase B in
@@ -2056,13 +2071,7 @@ func (h *workspaceManagerHandler) doCloseWorkspace(removeFromManager bool) (
 	}
 
 	h.persistWorkspaceStateOnClose(hm)
-	var err error
-	if removeFromManager {
-		err = hm.closeAndRemove()
-	} else {
-		err = hm.Close()
-	}
-	if err != nil {
+	if err := hm.closeAndRemove(); err != nil {
 		log.Error(err)
 	} else {
 		log.Debugf("Closed all workspace resources successfully")
@@ -2185,6 +2194,16 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
+	if h.homeLSPManager != nil {
+		if err := h.homeLSPManager.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	if h.homeDAPManager != nil {
+		if err := h.homeDAPManager.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
 	if h.pkgmanager != nil {
 		if err := h.pkgmanager.Close(); err != nil {
 			ret = multierror.Append(ret, err)
@@ -2221,6 +2240,8 @@ type workspaceHandler struct {
 	closeOnce     sync.Once
 	closeErr      error
 	historyCloser io.Closer
+	lspManager *idelsp.Manager
+	dapManager *idedebug.Manager
 }
 
 func (hm *workspaceHandler) Close() error {
@@ -2241,6 +2262,19 @@ func (hm *workspaceHandler) Close() error {
 		}
 		if hm.cursorHistoryCloser != nil {
 			if err := hm.cursorHistoryCloser.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		// Close Managers after the extension runner (which may still
+		// hold gRPC calls into them) but before cancelCtx, so their
+		// teardown can use the workspace ctx.
+		if hm.lspManager != nil {
+			if err := hm.lspManager.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		if hm.dapManager != nil {
+			if err := hm.dapManager.Close(); err != nil {
 				ret = multierror.Append(ret, err)
 			}
 		}

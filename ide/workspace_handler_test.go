@@ -1792,12 +1792,15 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":edit /tmp/12345aZZ>ihello<yyp:w>:workspacerelo>", // saved
+		// RUNE-180: reload is now a true close+open, so a memory://
+		// scheme's buffer disappears with the scheme. The tab is
+		// restored from session state but the buffer is empty.
+		{":edit /tmp/12345aZZ>ihello<yyp:w>:workspacerelo>", // saved (mem://)
 			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
-│hell▐             │
-│hello             │
+│▐                 │
+│                  │
 │                  │
 │                  │
 │                  │
@@ -1807,8 +1810,8 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
-│hell▐             │
-│hello             │
+│▐                 │
+│                  │
 │                  │
 │                  │
 │                  │
@@ -2504,12 +2507,23 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			})
 
 			t.Run("position is restored on workspacereload", func(t *testing.T) {
-				dir, err := os.MkdirTemp("", "")
+				// Use a file:// workspace so :write persists to disk
+				// across the reload. RUNE-180 made reload close+open
+				// the scheme, so a mem:// buffer would disappear with
+				// the scheme even after :write.
+				dir := t.TempDir()
+				manager := workspace.NewManager(
+					config.NopConfig(), inlineSchedule)
+				require.NoError(t, manager.RegisterScheme(
+					workspace.MemoryScheme, workspace.NewMemoryScheme))
+				require.NoError(t, manager.RegisterScheme(
+					workspace.FileScheme, workspace.NewFileScheme))
+				uri, err := workspaceapi.ParseURI("file://" + dir)
 				require.NoError(t, err)
-				t.Cleanup(func() {
-					_ = os.RemoveAll(dir)
-				})
-				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), dir, nopShutdownShaderConfig())
+				runner := FuncExtensionsRunner(testRunnerFn)
+				m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(
+					t, manager, &uri, defaultConfigWithWrap(wrap),
+					runner, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
 					{":edit A>ih3ll0\nw1rld <:write>:edit B>ihello\nworld <:write>:notificationcloseall>",
@@ -5085,6 +5099,123 @@ func TestCloseWorkspaceRemovesClosedWorkspaceFromManager(t *testing.T) {
 		"closing a workspace must remove it from workspace.Manager so its scheme can be GC'd")
 }
 
+// TestCloseWorkspaceClosesScheme guards the RUNE-180 invariant that
+// :workspaceclose closes the underlying scheme, killing subprocesses
+// whose lifetime is bound to the scheme ctx (via bluectx.First in
+// fileScheme.StartCommand).
+func TestCloseWorkspaceClosesScheme(t *testing.T) {
+	dir := t.TempDir()
+
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.True(t, manager.HasWorkspace(uri))
+
+	cwd := m.workspaces[m.focus].cwd
+	require.NotNil(t, cwd, "workspace handler must have cwd installed")
+	ch := make(chan error, 1)
+	_, err = cwd.StartCommand(context.Background(), workspaceapi.Cmd{
+		Path:    "/bin/sh",
+		Args:    []string{"-c", "sleep 30"},
+		Watcher: workspaceapi.ChanProcessWatcher(ch),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, m.commandCloseWorkspace())
+	require.Equal(t, 0, m.workspaceCount)
+	require.False(t, manager.HasWorkspace(uri),
+		"closing a workspace must remove it from workspace.Manager")
+
+	select {
+	case <-ch:
+	case <-time.After(10 * time.Second):
+		t.Fatal("subprocess survived :workspaceclose: the scheme " +
+			"ctx was not canceled, so spawned commands leak")
+	}
+}
+
+// TestReloadWorkspaceClosesAndReopensScheme guards the RUNE-180
+// invariant that :workspacereload is a real close+open: the old scheme
+// (and any subprocesses it owns) is torn down, and a fresh scheme is
+// installed under the same URI. The pre-fix path kept the scheme alive
+// across reload, leaking LSP/DAP children.
+func TestReloadWorkspaceClosesAndReopensScheme(t *testing.T) {
+	dir := t.TempDir()
+
+	manager := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	runner := FuncExtensionsRunner(testRunnerFn)
+	m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
+		&uri, defaultCfg(), runner, nil, dir, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	origCwd := m.workspaces[m.focus].cwd
+	require.NotNil(t, origCwd)
+
+	ch := make(chan error, 1)
+	_, err = origCwd.StartCommand(context.Background(), workspaceapi.Cmd{
+		Path:    "/bin/sh",
+		Args:    []string{"-c", "sleep 30"},
+		Watcher: workspaceapi.ChanProcessWatcher(ch),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, m.commandReloadWorkspace())
+	m.drainPendingWorkspaces()
+
+	select {
+	case <-ch:
+	case <-time.After(10 * time.Second):
+		t.Fatal("subprocess survived :workspacereload: the old " +
+			"scheme was reused instead of closed+reopened, so LSP/DAP " +
+			"children spawned by it leak across reload")
+	}
+
+	require.True(t, manager.HasWorkspace(uri),
+		":workspacereload must re-register the workspace")
+	newCwd := m.workspaces[m.focus].cwd
+	require.NotNil(t, newCwd)
+	// Compare interface values via %p: require.NotSame rejects
+	// interface arguments, and we need concrete pointer identity to
+	// distinguish scheme reuse from a fresh install.
+	require.NotEqual(t,
+		fmt.Sprintf("%p", origCwd), fmt.Sprintf("%p", newCwd),
+		":workspacereload must install a fresh workspace.Workspace, "+
+			"not reuse the cached one")
+
+	ch2 := make(chan error, 1)
+	_, err = newCwd.StartCommand(context.Background(), workspaceapi.Cmd{
+		Path:    "/bin/sh",
+		Args:    []string{"-c", "true"},
+		Watcher: workspaceapi.ChanProcessWatcher(ch2),
+	})
+	require.NoError(t, err,
+		"new scheme must be usable after :workspacereload")
+	select {
+	case <-ch2:
+	case <-time.After(5 * time.Second):
+		t.Fatal("new scheme did not run a trivial command after reload")
+	}
+}
+
 // TestWorkspaceReadyCommand exercises the `workspaceready` event-loop
 // primitive that defers a command until the most-recently-issued
 // pending workspace finishes installing. This is what makes the
@@ -5176,10 +5307,10 @@ func TestWorkspaceReadyCommand(t *testing.T) {
 			m.commandWorkspaceReady(cmdRenameWorkspace, "dropped"))
 		require.Len(t, pending.onReady, 1)
 
-		// Focus the pending slot so doCloseWorkspace cancels the
+		// Focus the pending slot so closeWorkspace cancels the
 		// pending entry (its branch keys off pendingForFocus).
 		m.focus = pending.slot
-		_, _, err = m.doCloseWorkspace(true)
+		_, _, err = m.closeWorkspace()
 		require.NoError(t, err)
 		require.Nil(t, m.lastReservedPending,
 			"canceling the pending entry must clear "+

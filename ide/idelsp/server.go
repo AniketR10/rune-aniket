@@ -200,6 +200,12 @@ func (s *langServer) start(ctx context.Context) error {
 }
 
 func (s *langServer) Close() error {
+	// Cancel s.ctx so exec.CommandContext kills the child gopls process;
+	// without this, a Close before watchServer takes over (e.g. failed
+	// initialize) leaves an orphan subprocess.
+	if s.cancel != nil {
+		s.cancel()
+	}
 	// NOTE: if we don't close this first, there's a risk that
 	// conn.Close blocks before because it's calling conn.Wait.
 	_ = s.stdin.Close()

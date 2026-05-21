@@ -17,7 +17,9 @@ package idedebug
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/google/go-dap"
 	"github.com/stretchr/testify/assert"
@@ -70,4 +72,60 @@ func TestCreateSessionNoAdapter(t *testing.T) {
 		debugapi.ClientCapabilities{}, fakeSubscriber{})
 	assert.True(t, errors.Is(err, debugapi.ErrNoAdapterConfigured),
 		"expected ErrNoAdapterConfigured, got %v", err)
+}
+
+// TestManagerCloseTerminatesAdapterAndGoroutines locks in the RUNE-180
+// contract that Manager.Close cancels the manager ctx, cancels each
+// session ctx (so exec.CommandContext kills the adapter subprocess),
+// and waits for watchSession goroutines to exit.
+func TestManagerCloseTerminatesAdapterAndGoroutines(t *testing.T) {
+	t.Parallel()
+	m := newTestManager(t)
+
+	// Inject a session mirroring startSession's invariants instead of
+	// launching a real DAP adapter (which would need a fake binary):
+	// a *debugServer parented on m.ctx with an open conn, a watcher
+	// channel, and a watchSession goroutine tracked by m.wg.
+	a, b := net.Pipe()
+	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
+
+	watcher := make(chan error, 1)
+	srv := newDebugServer(m.ctx, debugConfig{langID: "test", command: "test"},
+		"/bin/test", nil, m.rootURI,
+		debugapi.ClientCapabilities{}, fakeSubscriber{})
+	srv.conn = a
+	srv.watcher = watcher
+	srv.alive = true
+
+	const sessionID = "test-session"
+	m.mu.Lock()
+	m.sessions[sessionID] = srv
+	m.mu.Unlock()
+
+	m.wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer m.wg.Done()
+		defer close(done)
+		m.watchSession(sessionID, &srv.cfg, srv)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("watchSession exited before Close")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	require.NoError(t, m.Close())
+
+	require.Error(t, m.ctx.Err(),
+		"Manager.Close must cancel m.ctx")
+	require.Error(t, srv.ctx.Err(),
+		"Manager.Close must cancel each debugServer ctx so the "+
+			"adapter subprocess is killed")
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watchSession goroutine did not exit after Manager.Close")
+	}
 }
