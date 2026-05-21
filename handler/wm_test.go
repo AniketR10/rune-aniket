@@ -363,6 +363,301 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	handlertest.TestHandler(t, wm, cases, writer)
 }
 
+// TestWindowManagerMouseDrag exercises WindowManager.Handle mouse
+// routing across drag-capture, focus-switch, and non-drag paths.
+func TestWindowManagerMouseDrag(t *testing.T) {
+	cases := []dragCase{
+		{
+			desc:   "single window: press then drag stays in window",
+			layout: singleLayout("A"),
+			frame:  true,
+			width:  24, height: 8,
+			events: []mouseEvent{
+				press(5, 3),
+				drag(7, 4),
+				release(7, 4),
+			},
+			expect: []dispatch{
+				to("A", term.MouseLeft, 4, 2),
+				to("A", term.MouseLeft, 6, 3),
+				to("A", term.MouseRelease, 6, 3),
+			},
+		},
+		{
+			desc:   "single window no frame: coords pass through unchanged",
+			layout: singleLayout("A"),
+			frame:  false,
+			width:  24, height: 8,
+			events: []mouseEvent{
+				press(0, 0),
+				drag(23, 7),
+				release(23, 7),
+			},
+			expect: []dispatch{
+				to("A", term.MouseLeft, 0, 0),
+				to("A", term.MouseLeft, 23, 7),
+				to("A", term.MouseRelease, 23, 7),
+			},
+		},
+
+		{
+			desc:   "press in focused left pane stays local",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(2, 2),
+				release(2, 2),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 1, 1),
+				to("L", term.MouseRelease, 1, 1),
+			},
+		},
+		{
+			desc:   "press at first content cell of focused left pane reaches (0,0)",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(1, 1),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 0, 0),
+			},
+		},
+		{
+			desc:   "drag from right pane into left pane stays captured by right",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "R",
+			events: []mouseEvent{
+				press(15, 2),
+				drag(3, 2), // into left pane
+				drag(0, 0),
+				release(0, 0),
+			},
+			expect: []dispatch{
+				to("R", term.MouseLeft, 2, 1),
+				to("R", term.MouseLeft, 0, 1), // clamped to R's left edge
+				to("R", term.MouseLeft, 0, 0),
+				to("R", term.MouseRelease, 0, 0),
+			},
+		},
+		{
+			desc:   "drag from left pane into right pane stays captured by left",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(2, 2),
+				drag(20, 5), // into right pane
+				release(20, 5),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 1, 1),
+				to("L", term.MouseLeft, 9, 4), // clamped to L's bottom-right
+				to("L", term.MouseRelease, 9, 4),
+			},
+		},
+		{
+			desc:   "drag past screen edges clamps to content bounds",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(2, 2),
+				drag(0, 0),
+				drag(11, 7),
+				release(11, 7),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 1, 1),
+				to("L", term.MouseLeft, 0, 0),
+				to("L", term.MouseLeft, 9, 5),
+				to("L", term.MouseRelease, 9, 5),
+			},
+		},
+		{
+			desc:   "release that ends drag reaches press window even when over sibling",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(2, 2),
+				drag(15, 2),
+				release(15, 2),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 1, 1),
+				to("L", term.MouseLeft, 9, 1),
+				to("L", term.MouseRelease, 9, 1),
+			},
+		},
+
+		{
+			desc:   "press on unfocused window switches focus AND dispatches the press",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(15, 2),
+				release(15, 2),
+			},
+			expect: []dispatch{
+				to("R", term.MouseLeft, 2, 1),
+				to("R", term.MouseRelease, 2, 1),
+			},
+		},
+		{
+			desc:   "press at first content cell of unfocused right pane reaches (0,0)",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(13, 1),
+			},
+			expect: []dispatch{
+				to("R", term.MouseLeft, 0, 0),
+			},
+		},
+
+		{
+			desc:   "hover over unfocused window is dropped (no focus switch)",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				hover(15, 2),
+			},
+			expect: []dispatch{
+				dropped(),
+			},
+			expectFocus: "L",
+		},
+		{
+			desc:   "wheel event in focused window dispatches locally",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				{key: term.MouseWheelUp, x: 5, y: 3},
+			},
+			expect: []dispatch{
+				to("L", term.MouseWheelUp, 4, 2),
+			},
+		},
+		{
+			desc:   "wheel event in unfocused window is dropped (no focus switch)",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				{key: term.MouseWheelDown, x: 15, y: 3},
+			},
+			expect: []dispatch{
+				dropped(),
+			},
+			expectFocus: "L",
+		},
+
+		{
+			desc:   "press, release in place, then press in sibling: each press is its own gesture",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(2, 2),
+				release(2, 2),
+				press(15, 2),
+				release(15, 2),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 1, 1),
+				to("L", term.MouseRelease, 1, 1),
+				to("R", term.MouseLeft, 2, 1),
+				to("R", term.MouseRelease, 2, 1),
+			},
+		},
+		{
+			desc:   "second press without release in between starts a fresh drag in the new window",
+			layout: vsplitLayout("L", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "L",
+			events: []mouseEvent{
+				press(2, 2),
+				drag(15, 2),
+				release(15, 2),
+				press(20, 4),
+			},
+			expect: []dispatch{
+				to("L", term.MouseLeft, 1, 1),
+				to("L", term.MouseLeft, 9, 1),
+				to("L", term.MouseRelease, 9, 1),
+				to("R", term.MouseLeft, 7, 3),
+			},
+		},
+
+		{
+			desc:   "three vsplits: drag from rightmost across both siblings stays captured",
+			layout: threeVsplitLayout("L", "M", "R"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "R",
+			events: []mouseEvent{
+				press(20, 2),
+				drag(14, 2),
+				drag(2, 2),
+				release(2, 2),
+			},
+			expect: []dispatch{
+				// localX reflects R's empirical position after two vsplits.
+				to("R", term.MouseLeft, 3, 1),
+				to("R", term.MouseLeft, 0, 1),
+				to("R", term.MouseLeft, 0, 1),
+				to("R", term.MouseRelease, 0, 1),
+			},
+		},
+
+		{
+			desc:   "hsplit: drag from top into bottom stays captured by top",
+			layout: hsplitLayout("T", "B"),
+			frame:  true,
+			width:  24, height: 8,
+			initial: "T",
+			events: []mouseEvent{
+				press(5, 1),
+				drag(5, 6),
+				release(5, 6),
+			},
+			expect: []dispatch{
+				to("T", term.MouseLeft, 4, 0),
+				to("T", term.MouseLeft, 4, 1), // clamped to T's bottom
+				to("T", term.MouseRelease, 4, 1),
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			runDragCase(t, tc)
+		})
+	}
+}
+
 func TestWindowManagerInit(t *testing.T) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = false
@@ -1126,6 +1421,206 @@ C────────DCCCCCCCCC│
 
 type scrollableHandler struct {
 	compapi.Scrollable
+}
+
+// --- TestWindowManagerMouseDrag harness ---
+
+type layout func(t *testing.T, width, height int, frame bool) (
+	wm *WindowManager,
+	handlers map[string]*handler.TestHandler,
+	windows map[string]Window,
+)
+
+// mouseEvent's (x, y) are absolute screen-cell coordinates.
+type mouseEvent struct {
+	key  term.Key
+	x, y int
+}
+
+func press(x, y int) mouseEvent {
+	return mouseEvent{key: term.MouseLeft, x: x, y: y}
+}
+
+func drag(x, y int) mouseEvent {
+	// A drag is another MouseLeft with no intervening MouseRelease,
+	// matching what term/gui/mouse.go emits while the button is held.
+	return mouseEvent{key: term.MouseLeft, x: x, y: y}
+}
+
+func release(x, y int) mouseEvent {
+	return mouseEvent{key: term.MouseRelease, x: x, y: y}
+}
+
+func hover(x, y int) mouseEvent {
+	// Key=0 is what term/gui/mouse.go emits on a pure cursor move.
+	return mouseEvent{key: 0, x: x, y: y}
+}
+
+// dispatch is the expected delivery of one mouseEvent: owner is the
+// receiving handler name (empty => dropped) and localX/localY are the
+// coordinates the handler should observe after WM translation/clamp.
+type dispatch struct {
+	owner          string
+	key            term.Key
+	localX, localY int
+}
+
+func to(owner string, key term.Key, x, y int) dispatch {
+	return dispatch{owner: owner, key: key, localX: x, localY: y}
+}
+
+func dropped() dispatch {
+	return dispatch{owner: ""}
+}
+
+type dragCase struct {
+	desc          string
+	layout        layout
+	frame         bool
+	width, height int
+	initial       string // window to focus before the sequence; "" keeps default
+	events        []mouseEvent
+	expect        []dispatch
+	expectFocus   string // optional post-sequence focus assertion
+}
+
+func singleLayout(name string) layout {
+	return func(t *testing.T, width, height int, frame bool) (
+		*WindowManager, map[string]*handler.TestHandler, map[string]Window,
+	) {
+		h := handler.NewTestHandler()
+		_, wm := prepareTest(width, height, frame, h)
+		handlers := map[string]*handler.TestHandler{name: h}
+		windows := map[string]Window{name: wm.Focus()}
+		return wm, handlers, windows
+	}
+}
+
+func vsplitLayout(left, right string) layout {
+	return func(t *testing.T, width, height int, frame bool) (
+		*WindowManager, map[string]*handler.TestHandler, map[string]Window,
+	) {
+		lh := handler.NewTestHandler()
+		rh := handler.NewTestHandler()
+		_, wm := prepareTest(width, height, frame, lh)
+		lw := wm.Focus()
+		rw, ok := wm.SplitVertical(lw, rh)
+		require.True(t, ok)
+		handlers := map[string]*handler.TestHandler{left: lh, right: rh}
+		windows := map[string]Window{left: lw, right: rw}
+		return wm, handlers, windows
+	}
+}
+
+func threeVsplitLayout(a, b, c string) layout {
+	return func(t *testing.T, width, height int, frame bool) (
+		*WindowManager, map[string]*handler.TestHandler, map[string]Window,
+	) {
+		ah := handler.NewTestHandler()
+		bh := handler.NewTestHandler()
+		ch := handler.NewTestHandler()
+		_, wm := prepareTest(width, height, frame, ah)
+		aw := wm.Focus()
+		bw, ok := wm.SplitVertical(aw, bh)
+		require.True(t, ok)
+		cw, ok := wm.SplitVertical(bw, ch)
+		require.True(t, ok)
+		handlers := map[string]*handler.TestHandler{a: ah, b: bh, c: ch}
+		windows := map[string]Window{a: aw, b: bw, c: cw}
+		return wm, handlers, windows
+	}
+}
+
+func hsplitLayout(top, bottom string) layout {
+	return func(t *testing.T, width, height int, frame bool) (
+		*WindowManager, map[string]*handler.TestHandler, map[string]Window,
+	) {
+		th := handler.NewTestHandler()
+		bh := handler.NewTestHandler()
+		_, wm := prepareTest(width, height, frame, th)
+		tw := wm.Focus()
+		bw, ok := wm.SplitHorizontal(tw, bh)
+		require.True(t, ok)
+		handlers := map[string]*handler.TestHandler{top: th, bottom: bh}
+		windows := map[string]Window{top: tw, bottom: bw}
+		return wm, handlers, windows
+	}
+}
+
+func runDragCase(t *testing.T, tc dragCase) {
+	t.Helper()
+	wm, handlers, windows := tc.layout(t, tc.width, tc.height, tc.frame)
+
+	if tc.initial != "" {
+		win, ok := windows[tc.initial]
+		require.Truef(t, ok, "unknown initial window %q", tc.initial)
+		wm.SetFocus(win)
+	}
+
+	type record struct {
+		owner string
+		ev    term.Event
+	}
+	var seen []record
+	for name, h := range handlers {
+		h.HandleOverride = func(ev term.Event) (bool, bool) {
+			if ev.Type == term.EventMouse {
+				seen = append(seen, record{owner: name, ev: ev})
+			}
+			return false, false
+		}
+	}
+
+	for _, ev := range tc.events {
+		wm.Handle(term.Event{
+			Type:   term.EventMouse,
+			Key:    ev.key,
+			MouseX: ev.x,
+			MouseY: ev.y,
+		})
+	}
+
+	actual := make([]dispatch, 0, len(tc.events))
+	si := 0
+	for _, ev := range tc.events {
+		if si < len(seen) && eventMatchesIntent(ev, seen[si].ev) {
+			s := seen[si]
+			actual = append(actual, dispatch{
+				owner:  s.owner,
+				key:    s.ev.Key,
+				localX: s.ev.MouseX,
+				localY: s.ev.MouseY,
+			})
+			si++
+		} else {
+			actual = append(actual, dropped())
+		}
+	}
+	// Surface surplus records so the failure diff names them.
+	for ; si < len(seen); si++ {
+		s := seen[si]
+		actual = append(actual, dispatch{
+			owner:  s.owner + "(unexpected)",
+			key:    s.ev.Key,
+			localX: s.ev.MouseX,
+			localY: s.ev.MouseY,
+		})
+	}
+
+	assert.Equal(t, tc.expect, actual,
+		"dispatch sequence mismatch for case %q", tc.desc)
+
+	if tc.expectFocus != "" {
+		want, ok := windows[tc.expectFocus]
+		require.Truef(t, ok, "unknown expectFocus window %q", tc.expectFocus)
+		assert.Equal(t, want.Window, wm.Focus().Window,
+			"focus mismatch for case %q", tc.desc)
+	}
+}
+
+// Match by key only; absolute → local coords are not directly predictable.
+func eventMatchesIntent(intent mouseEvent, seen term.Event) bool {
+	return seen.Key == intent.key
 }
 
 func (t scrollableHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {

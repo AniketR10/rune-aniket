@@ -56,6 +56,7 @@ type WindowManager struct {
 	prevMouseScrollBarDrag   bool
 	prevMouseLeftChild       component.Window
 	prevMouseScrollBarOffset int
+	prevMouseLeftDrag        bool
 }
 
 // WindowSubscriber wraps the OnFocus callback used
@@ -127,12 +128,26 @@ func (wm *WindowManager) SetAttr(def, focus term.Attributes) {
 
 // Handle satisfies tui.Handler.
 func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
+	// Cleared after dispatch so MouseRelease ending a drag still
+	// reaches the press window instead of being re-routed by position.
+	var endDragAfter bool
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
 		childAtMouse, ok := wm.comp.WindowAt(mousePos)
 		if wm.prevMouseScrollBarDrag {
 			childAtMouse = wm.prevMouseLeftChild
 			ok = true
+		}
+		// Pin MouseLeft/Release to the press window for the duration
+		// of a drag so the inner mouse.Mouse sees a matched
+		// press/release pair instead of a fresh press in a sibling.
+		if wm.prevMouseLeftDrag &&
+			(ev.Key == term.MouseLeft || ev.Key == term.MouseRelease) {
+			childAtMouse = wm.prevMouseLeftChild
+			ok = true
+			if ev.Key == term.MouseRelease {
+				endDragAfter = true
+			}
 		}
 		if !ok {
 			return
@@ -171,20 +186,35 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			ev.MouseX--
 		}
 
-		// mouse on frame
+		// Upper-bound clamp is required for drag capture: events
+		// re-routed to the press window must land inside its content.
+		maxX, maxY := contentBounds(childAtMouse, wm.config.Frame)
 		if ev.MouseX < 0 {
 			ev.MouseX = 0
+		} else if ev.MouseX > maxX {
+			ev.MouseX = maxX
 		}
-
 		if ev.MouseY < 0 {
 			ev.MouseY = 0
+		} else if ev.MouseY > maxY {
+			ev.MouseY = maxY
 		}
 
 		if wm.Focus().Window != childAtMouse {
 			if ev.Key == term.MouseLeft {
 				wm.SetFocus(wm.newNode(childAtMouse))
+				// Fall through: the inner mouse.Mouse must see the
+				// press to anchor a selection at the pressed cell.
+			} else if ev.Key == term.MouseRelease && endDragAfter {
+				// Captured-drag release: dispatch without changing focus.
+			} else {
+				return
 			}
-			return
+		}
+
+		if ev.Key == term.MouseLeft {
+			wm.prevMouseLeftDrag = true
+			wm.prevMouseLeftChild = childAtMouse
 		}
 	}
 
@@ -192,6 +222,9 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	focus := wm.focus
 	size := wm.comp.SizeTiles()
 	hexit, handled = focus.Content().Handle(ev)
+	if endDragAfter {
+		wm.prevMouseLeftDrag = false
+	}
 
 	// if handler in focus wants to exit, close the window,
 	// or signal exit to upstream handler if it was last window
@@ -573,6 +606,23 @@ func (wm *WindowManager) UnsubscribeAll() {
 
 func (wm *WindowManager) resetScrollBarMouse() {
 	wm.prevMouseScrollBarDrag = false
+}
+
+// contentBounds returns the maximum local (X, Y) inside win's content
+// area, accounting for the one-cell frame on each side when frame is true.
+func contentBounds(win component.Window, frame bool) (maxX, maxY int) {
+	w, h := win.Width(), win.Height()
+	if frame {
+		w -= 2
+		h -= 2
+	}
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return w - 1, h - 1
 }
 
 func (wm *WindowManager) handleScrollBarMouse(
