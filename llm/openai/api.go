@@ -21,11 +21,12 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package openai
 
 import (
+	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/packages/param"
@@ -127,12 +128,7 @@ func openAIToolsFromModel(tools []llmapi.Tool) []openai.ChatCompletionToolUnionP
 			Name:        tool.Function.Name,
 			Description: param.NewOpt(tool.Function.Description),
 		}
-		switch p := tool.Function.Parameters.(type) {
-		case shared.FunctionParameters:
-			def.Parameters = p
-		case map[string]any:
-			def.Parameters = shared.FunctionParameters(p)
-		}
+		def.Parameters = openAIToolParameters(tool.Function.Name, tool.Function.Parameters)
 		ret[i] = openai.ChatCompletionFunctionTool(def)
 	}
 	return ret
@@ -282,13 +278,62 @@ func responsesToolsFromModel(tools []llmapi.Tool) []responses.ToolUnionParam {
 		if tool.Function.Description != "" {
 			ft.Description = param.NewOpt(tool.Function.Description)
 		}
-		switch p := tool.Function.Parameters.(type) {
-		case shared.FunctionParameters:
-			ft.Parameters = map[string]any(p)
-		case map[string]any:
-			ft.Parameters = p
-		}
+		ft.Parameters = map[string]any(openAIToolParameters(tool.Function.Name, tool.Function.Parameters))
 		ret[i] = responses.ToolUnionParam{OfFunction: ft}
 	}
 	return ret
+}
+
+// openAIToolParameters converts the generic llmapi.FunctionDefinition.Parameters
+// value into a shared.FunctionParameters map that both the Chat Completions
+// and the Responses APIs can consume. The input may already be a
+// shared.FunctionParameters / map[string]any, raw JSON bytes
+// (json.RawMessage or []byte) when the tool definition crossed the
+// llmapi gRPC boundary, or any other value that JSON-marshals to an
+// object schema. Returns nil when conversion fails so the caller emits a
+// tool with no schema rather than an invalid one.
+//
+// This mirrors the anthropic client's toolInputSchema in llm/anthropic/api.go
+// and exists to fix RUNE-186: after the host-side llmapi.Service cutover,
+// rune-agent tool schemas arrive as json.RawMessage on the wire, and the
+// prior type switch silently dropped them.
+func openAIToolParameters(name string, params any) shared.FunctionParameters {
+	switch p := params.(type) {
+	case nil:
+		return nil
+	case shared.FunctionParameters:
+		return p
+	case map[string]any:
+		return shared.FunctionParameters(p)
+	case json.RawMessage:
+		var m map[string]any
+		if err := json.Unmarshal(p, &m); err != nil {
+			slog.Warn("openai: failed to unmarshal tool parameters",
+				"tool", name, "error", err)
+			return nil
+		}
+		return shared.FunctionParameters(m)
+	case []byte:
+		var m map[string]any
+		if err := json.Unmarshal(p, &m); err != nil {
+			slog.Warn("openai: failed to unmarshal tool parameters",
+				"tool", name, "error", err)
+			return nil
+		}
+		return shared.FunctionParameters(m)
+	default:
+		b, err := json.Marshal(p)
+		if err != nil {
+			slog.Warn("openai: failed to marshal tool parameters",
+				"tool", name, "error", err)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			slog.Warn("openai: failed to unmarshal tool parameters",
+				"tool", name, "error", err)
+			return nil
+		}
+		return shared.FunctionParameters(m)
+	}
 }

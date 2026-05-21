@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/openai/openai-go/v2/shared"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
@@ -126,4 +127,138 @@ func TestResponsesToolsFromModel(t *testing.T) {
 	data, err := json.Marshal(ft)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"additionalProperties":false`)
+}
+
+// schemaJSON is a tiny strict-compliant tool schema used by the parameter
+// helper tests below. It is intentionally simple so the tests can assert
+// the conversion preserves both the structural fields ("type",
+// "properties", "required") and any leaf annotations.
+const schemaJSON = `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`
+
+type typedSchema struct {
+	Type                 string         `json:"type"`
+	Properties           map[string]any `json:"properties"`
+	Required             []string       `json:"required"`
+	AdditionalProperties bool           `json:"additionalProperties"`
+}
+
+func newTypedSchema() typedSchema {
+	return typedSchema{
+		Type: "object",
+		Properties: map[string]any{
+			"path": map[string]any{"type": "string"},
+		},
+		Required:             []string{"path"},
+		AdditionalProperties: false,
+	}
+}
+
+// TestOpenAIToolsFromModel_ParameterShapes exercises the chat-completions
+// tool conversion path. It is the regression test for RUNE-186: when
+// rune-agent obtains llmapi.Service over gRPC, tool parameter schemas
+// arrive as json.RawMessage (or []byte), and the prior switch silently
+// dropped them, leaving the model with no schema and producing empty
+// tool-call arguments.
+func TestOpenAIToolsFromModel_ParameterShapes(t *testing.T) {
+	mapParams := map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{"path": map[string]any{"type": "string"}},
+		"required":             []any{"path"},
+		"additionalProperties": false,
+	}
+
+	cases := []struct {
+		name       string
+		parameters any
+		wantNil    bool
+	}{
+		{"map[string]any", mapParams, false},
+		{"shared.FunctionParameters", shared.FunctionParameters(mapParams), false},
+		{"json.RawMessage", json.RawMessage([]byte(schemaJSON)), false},
+		{"[]byte", []byte(schemaJSON), false},
+		{"typed struct", newTypedSchema(), false},
+		{"invalid json.RawMessage", json.RawMessage([]byte("not json")), true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := []llmapi.Tool{{
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionDefinition{
+					Name:        "read_file",
+					Description: "Read a file",
+					Parameters:  tc.parameters,
+				},
+			}}
+
+			got := openAIToolsFromModel(tools)
+			require.Len(t, got, 1)
+			def := got[0].OfFunction
+			require.NotNil(t, def)
+
+			if tc.wantNil {
+				assert.Nil(t, def.Function.Parameters)
+				return
+			}
+
+			require.NotNil(t, def.Function.Parameters, "schema must survive conversion")
+			assert.Equal(t, "object", def.Function.Parameters["type"])
+			props, ok := def.Function.Parameters["properties"].(map[string]any)
+			require.True(t, ok, "properties must be a map")
+			assert.Contains(t, props, "path")
+		})
+	}
+}
+
+// TestResponsesToolsFromModel_ParameterShapes mirrors the chat path test
+// for the Responses API (codex / gpt-5*) conversion.
+func TestResponsesToolsFromModel_ParameterShapes(t *testing.T) {
+	mapParams := map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{"path": map[string]any{"type": "string"}},
+		"required":             []any{"path"},
+		"additionalProperties": false,
+	}
+
+	cases := []struct {
+		name       string
+		parameters any
+		wantNil    bool
+	}{
+		{"map[string]any", mapParams, false},
+		{"shared.FunctionParameters", shared.FunctionParameters(mapParams), false},
+		{"json.RawMessage", json.RawMessage([]byte(schemaJSON)), false},
+		{"[]byte", []byte(schemaJSON), false},
+		{"typed struct", newTypedSchema(), false},
+		{"invalid json.RawMessage", json.RawMessage([]byte("not json")), true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := []llmapi.Tool{{
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionDefinition{
+					Name:        "read_file",
+					Description: "Read a file",
+					Parameters:  tc.parameters,
+				},
+			}}
+
+			got := responsesToolsFromModel(tools)
+			require.Len(t, got, 1)
+			ft := got[0].OfFunction
+			require.NotNil(t, ft)
+
+			if tc.wantNil {
+				assert.Nil(t, ft.Parameters)
+				return
+			}
+
+			require.NotNil(t, ft.Parameters, "schema must survive conversion")
+			assert.Equal(t, "object", ft.Parameters["type"])
+			props, ok := ft.Parameters["properties"].(map[string]any)
+			require.True(t, ok, "properties must be a map")
+			assert.Contains(t, props, "path")
+		})
+	}
 }

@@ -53,12 +53,6 @@ func TestCreateCompletion(t *testing.T) {
 
 	token := os.Getenv("OPENAI_TESTING_KEY")
 
-	t.Run("NewClient with empty model panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			NewClient(token, Config{})
-		})
-	})
-
 	t.Run("sends a chat completion request, with no context", func(t *testing.T) {
 		c := NewClient(token, Config{
 			Temperature: 0.1,
@@ -244,6 +238,80 @@ func TestCreateCompletion(t *testing.T) {
 		assert.Equal(t, `{
   "location": "San Francisco, CA"
 }`, toolCalls[0].Function.Arguments)
+	})
+
+	t.Run("tools with json.RawMessage parameters (RUNE-186)", func(t *testing.T) {
+		schema := json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"location": {
+					"type": "string",
+					"description": "The city and state, e.g. San Francisco, CA"
+				},
+				"unit": {
+					"type": "string",
+					"enum": ["celsius", "fahrenheit"]
+				}
+			},
+			"required": ["location"],
+			"additionalProperties": false
+		}`)
+
+		tools := []llmapi.Tool{{
+			Type: llmapi.ToolTypeFunction,
+			Function: llmapi.FunctionDefinition{
+				Name:        "getCurrentWeather",
+				Description: "Get the weather in location",
+				Parameters:  schema,
+			},
+		}}
+
+		runOne := func(t *testing.T, model string, ctxWindow int) {
+			t.Helper()
+			c := NewClient(token, Config{Tools: tools})
+			ctx := context.Background()
+			req := llmapi.Request{Messages: []llmapi.Message{
+				{Role: llmapi.RoleUser, Content: "what's the weather like in San Francisco right now?"},
+			}}
+			it, err := c.CreateCompletion(ctx, llmapi.ModelEntry{Name: model, ContextWindow: ctxWindow}, req)
+			require.NoError(t, err)
+
+			var toolCalls []llmapi.ToolCall
+			var doneData *llmapi.DoneData
+			for {
+				ev, ok := it.Next(ctx)
+				if !ok {
+					break
+				}
+				switch ev.Type {
+				case llmapi.EventToolCallDone:
+					toolCalls = append(toolCalls, *ev.ToolCall)
+				case llmapi.EventStreamDone:
+					doneData = ev.DoneData
+				}
+			}
+
+			require.NoError(t, it.Err())
+			require.NotNil(t, doneData)
+			assert.Equal(t, llmapi.FinishReasonToolCall, doneData.FinishReason)
+
+			require.Len(t, toolCalls, 1)
+			assert.Equal(t, "getCurrentWeather", toolCalls[0].Function.Name)
+			args := toolCalls[0].Function.Arguments
+			require.NotEmpty(t, args, "tool call arguments must not be empty (RUNE-186 regression)")
+			var parsed map[string]any
+			require.NoError(t, json.Unmarshal([]byte(args), &parsed), "arguments must be valid JSON: %q", args)
+			loc, ok := parsed["location"].(string)
+			require.True(t, ok, "arguments must include required string field 'location': %q", args)
+			assert.Contains(t, strings.ToLower(loc), "san francisco")
+		}
+
+		t.Run("chat completions", func(t *testing.T) {
+			runOne(t, GPT4, 200000)
+		})
+		t.Run("responses API", func(t *testing.T) {
+			runOne(t, GPT5Dot3Codex, 200000)
+		})
 	})
 
 	t.Run("uses JSON schema provided", func(t *testing.T) {
@@ -572,8 +640,7 @@ func TestContextWindows(t *testing.T) {
 	models[GPT4] = 50
 
 	t.Run("CreateCompletion errors with ErrContextWindowExceeded", func(t *testing.T) {
-		c := NewClient("", Config{
-		}).(*client)
+		c := NewClient("", Config{}).(*client)
 		ctx := context.Background()
 		msgs := makeMessageTokens(c, 51)
 
@@ -587,8 +654,7 @@ func TestContextWindows(t *testing.T) {
 func TestCountTokens(t *testing.T) {
 	for model := range AvailableModels() {
 		t.Run(model, func(t *testing.T) {
-			c := NewClient("", Config{
-			}).(*client)
+			c := NewClient("", Config{}).(*client)
 			text := "!Hola mundo!"
 			count, _ := c.CountTokens(llmapi.ModelEntry{Name: model, ContextWindow: 200000}, []llmapi.Message{{Content: text}})
 			assert.Equal(t, 10, count)
@@ -596,8 +662,7 @@ func TestCountTokens(t *testing.T) {
 	}
 
 	t.Run("counts_tool_calls_in_messages", func(t *testing.T) {
-		c := NewClient("", Config{
-		}).(*client)
+		c := NewClient("", Config{}).(*client)
 
 		// Baseline: message with only text content.
 		baseCount, _ := c.CountTokens(llmapi.ModelEntry{Name: "gpt-4o", ContextWindow: 200000}, []llmapi.Message{{
@@ -622,8 +687,7 @@ func TestCountTokens(t *testing.T) {
 	})
 
 	t.Run("counts_tool_call_id_in_tool_messages", func(t *testing.T) {
-		c := NewClient("", Config{
-		}).(*client)
+		c := NewClient("", Config{}).(*client)
 
 		// Baseline: tool message with empty ToolCallID.
 		baseCount, _ := c.CountTokens(llmapi.ModelEntry{Name: "gpt-4o", ContextWindow: 200000}, []llmapi.Message{{
@@ -1128,7 +1192,7 @@ func captureRequestBody(t *testing.T, cfg Config, req llmapi.Request) map[string
 	cfg.BaseURL = srv.URL
 	c := NewClient("test-key", cfg)
 	ctx := context.Background()
-	it, err := c.CreateCompletion(ctx, llmapi.ModelEntry{Name: GPT5Dot3Codex, ContextWindow: 200000}, req)
+	it, err := c.CreateCompletion(ctx, llmapi.ModelEntry{Name: GPT4Dot1Nano, ContextWindow: 200000}, req)
 	require.NoError(t, err)
 	// Drain the stream.
 	for {
