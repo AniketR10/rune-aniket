@@ -359,7 +359,9 @@ func (t *Task) init(
 	})
 
 	t.tryRunning(b, scheme, "")
+	t.mu.Lock()
 	t.minimize()
+	t.mu.Unlock()
 	_, err = b.SetFocus(prev)
 	if err != nil {
 		cancel()
