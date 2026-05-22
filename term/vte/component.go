@@ -65,6 +65,9 @@ type Component struct {
 	remote    remote
 	writech   chan []byte
 	writeErr  atomic.Value
+	// closed is set under mu by Close so the async expandAndStart
+	// goroutine can bail before handing the pty FDs to os/exec.
+	closed bool
 
 	width, height     int
 	parserHandler     *parserHandler
@@ -732,7 +735,8 @@ func (t *Component) ClearPrimaryBuffer() (ok bool) {
 
 // Close assumes lock has been acquired by caller
 func (t *Component) Close() (ret error) {
-	defer t.cancelCtx()
+	t.closed = true
+	t.cancelCtx()
 
 	if err := t.pty.Slave.Close(); err != nil {
 		ret = multierr.Append(ret, err)
@@ -843,7 +847,14 @@ func (t *Component) startCommand(cmdAndArgsStr string) error {
 	cmd.Stderr = t.pty.Slave
 	cmd.Stdin = t.pty.Slave
 
-	if _, err := t.executor.StartCommand(t.ctx, cmd); err != nil {
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return nil
+	}
+	_, err = t.executor.StartCommand(t.ctx, cmd)
+	t.mu.Unlock()
+	if err != nil {
 		return fmt.Errorf("start command: %w", err)
 	}
 	return nil
