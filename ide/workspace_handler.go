@@ -108,29 +108,28 @@ var (
 var _ text.EventPublisher = (*workspaceManagerHandler)(nil)
 
 type workspaceManagerHandler struct {
-	mu                 sync.Locker
-	pkgmanager         *pkgManager
-	exitPromptOpen     bool
-	scheduleNextTick   func(func()) bool
-	confirmedForceExit bool
-	notifications      *notisManager
-	storage            storageapi.Service
-	ideStorage         storageapi.Service
-	workspace          workspace.WorkspaceManager
-	clip               clipboard.Register
-	macro              *idemacro.Recorder
-	macroPlayer        *idemacro.Player
-	events             *eventRouter
-	tabsClickCallback  func(int) bool
-	extensionRunner    ExtensionsRunner
-	sixDir             string
-	configPath         string
-	llmRouter          *llmrouter.Router
-	frameCharSet       component.FrameCharSet
-	tabBarOffset       int
-	tabBarHeight       int
-	builtinExtensions  map[string]Extension
-	// this is the name of of the file to be expected in workspace folders
+	mu                      sync.Locker
+	pkgmanager              *pkgManager
+	exitPromptOpen          bool
+	scheduleNextTick        func(func()) bool
+	confirmedForceExit      bool
+	notifications           *notisManager
+	storage                 storageapi.Service
+	ideStorage              storageapi.Service
+	workspace               workspace.WorkspaceManager
+	clip                    clipboard.Register
+	macro                   *idemacro.Recorder
+	macroPlayer             *idemacro.Player
+	events                  *eventRouter
+	tabsClickCallback       func(int) bool
+	extensionRunner         ExtensionsRunner
+	sixDir                  string
+	configPath              string
+	llmRouter               *llmrouter.Router
+	frameCharSet            component.FrameCharSet
+	tabBarOffset            int
+	tabBarHeight            int
+	builtinExtensions       map[string]Extension
 	workspaceConfigFilename string
 	tabAttentionNameSuffix  string
 	workspaceBarKind        workspaceBarKind
@@ -142,56 +141,31 @@ type workspaceManagerHandler struct {
 	externalEvents          []externalEvents
 	initialVTECapacity      int
 	dispatchOnPreview       map[string]PreviewFunc
-	// debugCommands gates registration of debug-only ex commands
-	// (`panic`, `crash`). Set from the top-level ide.WithDebugCommands
-	// option; production builds leave this false.
-	debugCommands bool
-	// NOTE: if user changes frame config, then mouse calculations
-	// for resize might be off.
-	frame        bool
-	reloadConfig func() (ideConfig, error)
+	debugCommands           bool
+	frame                   bool
+	reloadConfig            func() (ideConfig, error)
 
-	union handler.FrameUnion
-	bar   handler.Tabs
-	// barIdxToSlot maps a bar tab index (as returned by handler.Tabs.TabAt)
-	// to the workspace slot index in h.workspaces. When middle slots are
-	// empty (nil), the bar skips them, so the bar tab index does not
-	// equal the slot index.
-	barIdxToSlot   []int
-	focusProxy     handler.Proxy
-	width, height  int
-	workspaces     [workspaceSlots]*workspaceHandler
-	workspaceCount int
-	focus          int
-	homeURI        workspaceapi.URI
-	homeWorkspace  workspace.Workspace
-	empty          *ex
-	homeRunner     extension.Runner
-	homeLSPManager *idelsp.Manager
-	homeDAPManager *idedebug.Manager
-	openPrevFiles   []idehistory.File
-	openPrevFilesEx *ex
-	openPrevWindows map[uint64]browser.Window
-	shaderRunner      *shaderRunner
-	// pending tracks workspaces whose Phase B (async build) is in
-	// flight. Entries are added in Phase A (under h.mu) and removed
-	// in Phase C (also under h.mu). The pending slot index reserves
-	// position in h.workspaces so concurrent addWorkspace calls do
-	// not collide.
-	pending map[string]*pendingWorkspace
-	// lastReservedPending tracks the most recently reserved
-	// pendingWorkspace whose Phase B is still in flight. It is set
-	// in reservePendingSlot and cleared in installPendingWorkspace
-	// or closeWorkspace when the pending entry it points at is
-	// torn down. The `workspaceready` command consults this to
-	// decide whether to enqueue against the most recent pending
-	// build or dispatch inline.
+	union               handler.FrameUnion
+	bar                 handler.Tabs
+	barIdxToSlot        []int
+	focusProxy          handler.Proxy
+	width, height       int
+	workspaces          [workspaceSlots]*workspaceHandler
+	workspaceCount      int
+	focus               int
+	homeURI             workspaceapi.URI
+	homeWorkspace       workspace.Workspace
+	empty               *ex
+	homeRunner          extension.Runner
+	homeLSPManager      *idelsp.Manager
+	homeDAPManager      *idedebug.Manager
+	openPrevFiles       []idehistory.File
+	openPrevFilesEx     *ex
+	openPrevWindows     map[uint64]browser.Window
+	shaderRunner        *shaderRunner
+	pending             map[string]*pendingWorkspace
 	lastReservedPending *pendingWorkspace
-	// pendingWG counts in-flight Phase B builds (and the scheduled
-	// Phase C closure they enqueue). Tests use it via
-	// waitForWorkspaces to block until all installs land. Production
-	// code never inspects it.
-	pendingWG sync.WaitGroup
+	pendingWG           sync.WaitGroup
 }
 
 type openFileTarget struct {
@@ -200,25 +174,12 @@ type openFileTarget struct {
 	tab          *browser.Tab
 }
 
-// pendingWorkspace describes an addWorkspace request whose Phase B build
-// is running in a goroutine. It reserves a slot in h.workspaces so other
-// addWorkspace calls (and slot-finding helpers) can see it while the
-// async build is in progress, and exposes a cancel hook so that the slot
-// can be torn down (e.g. via :workspaceclose) before install finishes.
 type pendingWorkspace struct {
 	uri       workspaceapi.URI
 	slot      int
 	cancelCtx func()
-	// canceled is set by Phase C / closeWorkspace when the install
-	// must be aborted; the goroutine and the install closure both
-	// check it before installing the handler.
-	canceled atomic.Bool
-	// onReady holds commands enqueued by `workspaceready` while this
-	// pending build is in flight. They are dispatched against the
-	// freshly-installed workspace's ex in installPendingWorkspace,
-	// in the same event-loop turn as switchToWorkspace, so callers
-	// observe them as if issued by the new workspace itself.
-	onReady [][]string
+	canceled  atomic.Bool
+	onReady   [][]string
 }
 
 type visibleWorkspaceManager struct {
@@ -295,10 +256,6 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 		vi.WithWorkspaceCommandRegistry(cwd, h),
 		vi.WithAutoCenter(true),
 		vi.WithWindowManager(currentWorkspaceWindowManager{root: h}),
-		// Route per-file command handlers (e.g. :gitlink → notify
-		// "copied <url>") through the focused workspace's
-		// notifications container so the message renders on screen
-		// instead of being dropped into nopNotifications{}.
 		vi.WithNotifications(h.notifications.current()),
 	)
 	return vi.Editor(viOpts...)
@@ -335,11 +292,6 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	)
 }
 
-// newBYOEFallbackEditor returns a byoefallback router that hosts the
-// user-configured external TUI editor (file://, ssh://) and a
-// Rune-native fallback editor (memory:// and any other scheme).
-// editor.byoe.command / .goto must already be validated by
-// validateConfig — invalid values here are a programmer error.
 func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 	reloader byoe.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace,
@@ -350,9 +302,6 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 	case editorFallbackModeless:
 		fallback = h.newBuiltinModelessEditor(cwd, cfg, svc)
 	default:
-		// editorFallbackModal and any unexpected value
-		// (validateBYOE rewrites unknown to "modal" before this
-		// point).
 		fallback = h.newBuiltinModalEditor(cwd, cfg, svc)
 	}
 	return byoefallback.New(
@@ -373,13 +322,6 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 	)
 }
 
-// newCommandPromptEditor returns the command.Editor adapter used by
-// the command Prompt's modal edit mode. It bypasses text.Editor.Edit
-// (which layers status / icons / location / aux bars on top of the
-// bare buffer view, displacing the cursor coordinates the prompt
-// reads back) and instantiates either a vi.Vi or a modeless editor
-// handler directly, mirroring the editor mode the user has selected
-// for the rest of the IDE.
 func (h *workspaceManagerHandler) newCommandPromptEditor(
 	cfg ideConfig,
 ) command.Editor {
@@ -393,10 +335,6 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 			autoPair:         cfg.editorAutoPair(),
 		}
 	case editorModeModal, editorModeBYOE:
-		// The command prompt is always Rune-native — there is no way
-		// to host it inside the external editor's vte. byoe uses the
-		// vi-based prompt because its default command key (':') and
-		// keymap match the modal flavor.
 		return viCommandPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),
@@ -409,9 +347,6 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 	}
 }
 
-// modelessCommandPromptEditor and viCommandPromptEditor are bare
-// command.Editor adapters: each Edit invocation spins up a fresh
-// editor handler bound to the supplied buffer, with no bar chrome.
 type modelessCommandPromptEditor struct {
 	tabspaces        int
 	indents          text.IndentConfig
@@ -475,19 +410,11 @@ func (h *workspaceManagerHandler) init(
 
 	h.storage = storage
 	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
-	// Construct the LLM router from the typed models.* config block.
-	// The router owns every provider client plus the llama.cpp local
-	// registry; the rest of the IDE treats it as an llmapi.Service.
 	router, err := llmrouter.New(cfg.llmConfig(), sixDir, h.storage)
 	if err != nil {
 		return fmt.Errorf("init llm router: %w", err)
 	}
 	h.llmRouter = router
-	// Ensure ideConfig — used to assemble alias completer chains during
-	// textOpts — can resolve `{history}` against the same partitioned
-	// storage the command Prompt writes to. The Prompt persists command
-	// history under the "ide" partition; the {history} completer must
-	// read from the same partition or it will see an empty document.
 	cfg.storage = h.ideStorage
 	h.events = newEventRouter(publishEvent)
 	h.frameCharSet = cfg.windowFrameCharset()
@@ -497,14 +424,6 @@ func (h *workspaceManagerHandler) init(
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
 	h.frame = cfg.frame()
-	// The host event loop (term/gui/gui.go's (*GUI).Update,
-	// rune-go-sdk's tui.Run) is contracted to hold the shared IDE
-	// locker around every UserFunc it dispatches. Callbacks
-	// scheduled via cfg.scheduleNextTick therefore already run
-	// serialized with the rest of the IDE state machine — no
-	// extra wrapping required, and any extra h.mu.Lock() here
-	// would self-deadlock the event loop because *sync.Mutex is
-	// not reentrant.
 	h.scheduleNextTick = cfg.scheduleNextTick
 	h.configPath = cfg.configPath
 	h.reloadConfig = reloadConfig
@@ -537,8 +456,6 @@ func (h *workspaceManagerHandler) init(
 	h.homeURI = homeDirUri
 	h.homeWorkspace = homeWorkspace
 	h.setReleaseManager(releaseManager)
-	// Seed the focus mirror before textOpts/newEx build home-bound
-	// publishers; their first publish runs before switchToWorkspace.
 	h.events.setFocus(h.homeURI)
 
 	// don't install a fs watcher for the home workspace,
@@ -547,10 +464,6 @@ func (h *workspaceManagerHandler) init(
 	globalOpts := h.textOpts(cfg, homeParser, h.homeURI)
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	// do not pass a real version control for home workspace.
-	// The editor is constructed inside newEx so that flusher /
-	// byoe.Reloader exist before byoe.New, which demands a non-nil
-	// Reloader. tm is captured by the factory closure.
 	h.empty, err = newEx(
 		func(reloader byoe.Reloader) (text.Editor, error) {
 			return h.newEditor(reloader, homeDirUri, h.homeWorkspace,
@@ -597,11 +510,6 @@ func (h *workspaceManagerHandler) init(
 		h.homeRunner = runner
 		h.homeLSPManager = lspManager
 		h.homeDAPManager = dapManager
-		// The home workspace's extension-permissions partition is a
-		// child of h.storage (the firstmover root). h.storage.Close
-		// on IDE shutdown closes every Partition it spawned, so we
-		// intentionally drop the handle here (RUNE-189).
-		// speed up initialization by initializing extensions asynchronously
 		go debug.CapturePanicReport(func() { h.initExtensions(runner, cfg) })
 	}
 
@@ -681,14 +589,6 @@ func (h *workspaceManagerHandler) focusURI() workspaceapi.URI {
 	return h.homeURI
 }
 
-// envSource resolves Rune-managed variables ($WORKSPACE,
-// $WORKSPACE_HASH, $WORKSPACE_URI, $WORKSPACE_PATH) by looking up
-// the focused workspace at dispatch time. Every variable resolves
-// for every scheme: commands run via the workspace's executor in its
-// native filesystem, so the focused workspace URI is a meaningful
-// identifier regardless of whether the workspace is local, remote,
-// or in-memory. Returning ok=false signals the caller (text.Component)
-// that no workspace is focused at all.
 func (h *workspaceManagerHandler) envSource(name string) (string, bool) {
 	uri := h.focusURI()
 	if uri == (workspaceapi.URI{}) {
@@ -933,10 +833,6 @@ func (h *workspaceManagerHandler) switchToWorkspace(i int) bool {
 	return true
 }
 
-// onBarTabClick translates a bar tab index (sequential among visible
-// tabs) to the workspace slot index before switching. The bar may skip
-// empty middle slots, so a direct slot lookup would otherwise focus the
-// wrong workspace.
 func (h *workspaceManagerHandler) onBarTabClick(barIdx int) bool {
 	if barIdx < 0 || barIdx >= len(h.barIdxToSlot) {
 		return false
@@ -1088,9 +984,6 @@ func (h *workspaceManagerHandler) textOpts(
 	return ret
 }
 
-// we have no conrol over what extensions are defining in configuration;
-// it could be secret keys or anything worth stealing for a malicious extension
-// that gets granted extensionapi.PermissionConfig.
 func cleanedExtensionConfig(cfg map[string]any) map[string]any {
 	m := make(map[string]any, len(cfg))
 	for k, v := range cfg {
@@ -1101,33 +994,6 @@ func cleanedExtensionConfig(cfg map[string]any) map[string]any {
 	return m
 }
 
-// addWorkspace begins loading a workspace for the given URI. It is split
-// into three phases:
-//
-//  1. Phase A (synchronous, on the event loop, holding h.mu when called
-//     by init): validate the request, deduplicate by URI, reserve a
-//     pending slot, and create the underlying workspace.Workspace via
-//     the manager. None of these steps may block on remote IO.
-//
-//  2. Phase B (goroutine): perform the blocking work — load the
-//     workspace overlay config (cwd.OpenFile), construct the git
-//     vctrl.Service (cwd.Stat), build the editor / ex / cursor history
-//     / extensions runner. This is where SSH workspaces typically wait
-//     for the first connection attempt and any associated UI prompts.
-//
-//  3. Phase C (scheduled back onto the event loop via scheduleNextTick):
-//     install the constructed workspaceHandler into h.workspaces,
-//     subscribe commands/events, switch focus, spawn the FS watcher
-//     goroutine and run session restore.
-//
-// addWorkspace returns synchronously after Phase A so the event loop is
-// not blocked while Phase B is in progress; if Phase A fails the caller
-// receives an error immediately. Phase B/C errors are surfaced via the
-// notifications system since the caller has already returned.
-//
-// The slot index argument follows the original semantics: -1 picks the
-// next available slot; otherwise the given slot is reserved (used by
-// commandReloadWorkspace which needs to land back in the same slot).
 func (h *workspaceManagerHandler) addWorkspace(
 	uri workspaceapi.URI, shouldRestore, promptRecommended bool, slot int,
 ) error {
@@ -1153,30 +1019,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 	h.pendingWG.Add(1)
 	go debug.CapturePanicReport(func() {
 		built, buildErr := h.buildWorkspaceAsync(uri, cwd, pending)
-		// If the workspace was canceled while Phase B was running
-		// (e.g. workspaceManagerHandler.Close marked pending and
-		// returned without an event loop to drain the install
-		// callback), dispose the partial build inline rather than
-		// trying to schedule installPendingWorkspace. Otherwise the
-		// just-built ex (and its in-flight vtereservoir warmup) is
-		// orphaned and keeps using fileScheme-owned *os.File handles
-		// that the imminent workspaceManager shutdown is about to
-		// close, surfacing as a data race in os.startProcess vs
-		// os.(*File).Close.
 		if pending.canceled.Load() {
 			h.abortPendingBuild(pending, uri, built, buildErr, cancel)
 			return
 		}
-		// scheduleNextTick may legitimately return false if the
-		// host event loop is not running (e.g. tests that exercise
-		// the IDE without tui.Run, or the loop has already exited).
-		// In that case the install closure never runs, so we still
-		// need to release pendingWG and tear down the reservation —
-		// otherwise drainPendingWorkspaces would hang forever and a
-		// reserved-but-empty slot would leak in h.pending. The
-		// build artifacts also have to be disposed inline, same as
-		// the canceled branch above, for the same fileScheme race
-		// reason.
 		scheduled := h.scheduleNextTick(func() {
 			defer h.pendingWG.Done()
 			h.installPendingWorkspace(pending, uri, ctx, cancel,
@@ -1189,14 +1035,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	return nil
 }
 
-// abortPendingBuild tears down the bookkeeping and artifacts for a
-// pending workspace whose Phase C install will not run — either because
-// closeWorkspace canceled the pending entry mid-build or because the
-// host event loop is no longer draining scheduleNextTick callbacks.
-// It mirrors the install-skipping path of installPendingWorkspace:
-// remove the reservation, dispose the partial build (so the embedded
-// vtereservoir warmup stops touching fileScheme-owned fds), call the
-// build context's cancel, and release the pendingWG slot.
 func (h *workspaceManagerHandler) abortPendingBuild(
 	pending *pendingWorkspace, uri workspaceapi.URI,
 	built *builtWorkspace, buildErr error, cancel context.CancelFunc,
@@ -1214,8 +1052,6 @@ func (h *workspaceManagerHandler) abortPendingBuild(
 	h.pendingWG.Done()
 }
 
-// findInstalledSlot returns the index of an already-installed workspace
-// whose URI matches uri.
 func (h *workspaceManagerHandler) findInstalledSlot(uri workspaceapi.URI) (int, bool) {
 	for i, w := range h.workspaces {
 		if w == nil {
@@ -1228,27 +1064,11 @@ func (h *workspaceManagerHandler) findInstalledSlot(uri workspaceapi.URI) (int, 
 	return -1, false
 }
 
-// isPending reports whether a Phase B build is currently running for
-// the given URI.
 func (h *workspaceManagerHandler) isPending(uri workspaceapi.URI) bool {
 	_, ok := h.pending[uri.String()]
 	return ok
 }
 
-// createWorkspaceScheme is Phase A's only call into workspace.Manager.
-// It constructs the underlying workspace.Workspace plus a per-handler
-// lifetime context that the Phase B goroutine and the FS watcher
-// share — distinct from the *scheme's* parent context.
-//
-// The scheme is built with context.Background() as its parent because
-// schemes manage their own lifecycle via Close (e.g. remoteScheme.Close
-// cancels its ctx and tears down the ssh session); binding the scheme
-// to the per-handler ctx would cancel in-flight RPCs before Close runs.
-//
-// workspace.Manager.AddWorkspace itself does not block on remote IO —
-// for SSH it returns a remoteScheme whose first connection attempt
-// happens in a background goroutine — so this is safe to call from
-// the event loop.
 func (h *workspaceManagerHandler) createWorkspaceScheme(uri workspaceapi.URI) (
 	workspace.Workspace, context.Context, context.CancelFunc, error,
 ) {
@@ -1260,12 +1080,6 @@ func (h *workspaceManagerHandler) createWorkspaceScheme(uri workspaceapi.URI) (
 	return cwd, ctx, cancel, nil
 }
 
-// reservePendingSlot picks (or validates) the slot the workspace will
-// occupy and records a pendingWorkspace entry so concurrent
-// addWorkspace calls and nextAvailableWorkspace see the slot as taken.
-// It must be called with whatever locking discipline the caller already
-// uses (init holds h.mu; commandAddWorkspace runs single-threaded on
-// the event loop).
 func (h *workspaceManagerHandler) reservePendingSlot(
 	uri workspaceapi.URI, slot int, cancel context.CancelFunc,
 ) (*pendingWorkspace, error) {
@@ -1288,17 +1102,10 @@ func (h *workspaceManagerHandler) reservePendingSlot(
 		cancelCtx: cancel,
 	}
 	h.pending[uri.String()] = pending
-	// Track the most recently reserved pending workspace so a
-	// follow-up `workspaceready` issued in the same alias (before
-	// focus has switched) attaches to this build rather than the
-	// previously focused workspace's ex.
 	h.lastReservedPending = pending
 	return pending, nil
 }
 
-// builtWorkspace bundles the heavyweight artifacts produced by Phase B
-// so installPendingWorkspace can install them atomically on the event
-// loop.
 type builtWorkspace struct {
 	cfg                 ideConfig
 	configErr           error
@@ -1312,24 +1119,12 @@ type builtWorkspace struct {
 	promptStorage       storageapi.Service
 }
 
-// buildWorkspaceAsync runs the blocking IO and heavy construction in a
-// goroutine. It MUST NOT touch h.workspaces, h.pending or any other
-// event-loop-owned state directly: results are handed back via the
-// returned builtWorkspace and consumed under the event-loop lock by
-// installPendingWorkspace.
 func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	uri workspaceapi.URI, cwd workspace.Workspace,
 	pending *pendingWorkspace,
 ) (*builtWorkspace, error) {
 	cfg, configErr := h.reloadConfig()
-	// Ensure ideConfig used for textOpts can resolve `{history}` placeholders
-	// in command alias completer chains. Use the same partitioned storage
-	// the command Prompt uses so the doc IDs line up.
 	cfg.storage = h.ideStorage
-	// reloadConfig returns a fresh ideConfig that didn't go through
-	// ide.New / ide.WithScheduleNextTick wiring, so propagate the
-	// host scheduler captured in init. Downstream consumers
-	// (debugshell, lsp, etc.) require it to be non-nil.
 	cfg.scheduleNextTick = h.scheduleNextTick
 	if _, wConfigErr := loadWorkspaceConfig(
 		h.workspaceConfigFilename, cwd, uri, &cfg,
@@ -1340,11 +1135,6 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 
 	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
 	textOpts := h.textOpts(cfg, parser, uri)
-	// Always attempt to construct a real vctrl.Service so file-level
-	// git commands (e.g. :gitlink) work even when the user has not
-	// enabled aux-bar git decorations. gogit.NewService falls back to
-	// a lazy lookup when no .git is found at the workspace root, so
-	// it is safe to call unconditionally on non-git workspaces.
 	vctrlService, err := gogit.NewService(uri, cwd)
 	if err != nil {
 		h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",
@@ -1354,23 +1144,10 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		vctrlService = vctrl.SyncService(vctrlService, new(sync.Mutex))
 	}
 
-	// workspace capable of opening URIs other than the workspaceapi.URI
-	// while only routing to other currently visible IDE workspaces.
 	visibleManager := visibleWorkspaceManager{parent: h, manager: h.workspace}
-	// Multi may construct *new* schemes for URIs outside the
-	// workspace (loadExtraneous / recoverExtraneous below). Those
-	// schemes are cached by workspace.Manager and outlive any
-	// individual workspaceHandler — ditto the rationale in
-	// createWorkspaceScheme: the scheme parent must be Background
-	// so :workspacereload tearing down ctx never leaves a cached
-	// extraneous scheme with a canceled context.
 	multicwd := workspace.Multi(context.Background(), visibleManager, cwd, uri)
 	tm := new(workspaceTabManager)
 	tm.parent = h
-	// The editor is constructed inside newEx so that flusher /
-	// byoe.Reloader exist before byoe.New, which demands a non-nil
-	// Reloader. multicwd, tm, cfg, vctrlService are captured by
-	// the factory closure.
 	ex, err := newEx(
 		func(reloader byoe.Reloader) (text.Editor, error) {
 			return h.newEditor(reloader, uri, multicwd, tm, cfg, vctrlService)
@@ -1383,10 +1160,6 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		return nil, fmt.Errorf("new ex: %w", err)
 	}
 	ex.commandEditor = h.newCommandPromptEditor(cfg)
-	// Propagate the IDE-level debug-commands gate before the
-	// workspace's ex is subscribed in Phase C so debug-only
-	// commands like `panic` and `crash` are available in
-	// every workspace, not just the home/empty one.
 	ex.debugCommands = h.debugCommands
 	apibrowser := newBrowserAdapter(ex.Browser())
 	cursorHistoryCloser, err := idecursor.WithHistory(
@@ -1458,11 +1231,6 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	return built, nil
 }
 
-// installPendingWorkspace runs on the event loop after Phase B
-// completes. It either tears down the partial state on error, or
-// installs the constructed workspaceHandler into h.workspaces, runs
-// command/event subscription, switches focus, spawns the FS watcher
-// goroutine and runs session restore.
 func (h *workspaceManagerHandler) installPendingWorkspace(
 	pending *pendingWorkspace,
 	uri workspaceapi.URI,
@@ -1473,31 +1241,13 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	buildErr error,
 	shouldRestore, promptRecommended bool,
 ) {
-	// Phase C is invoked from the host event loop's UserFunc
-	// dispatch (gui.Update / tui.Run), which already holds h.mu —
-	// so we run with the IDE lock held without re-locking here.
 	delete(h.pending, uri.String())
 	if h.lastReservedPending == pending {
 		h.lastReservedPending = nil
 	}
 
-	// Stop the loading shader at the very end of this Phase C, *in the
-	// same event-loop turn*. We previously deferred stopLoading through
-	// scheduleNextTick so the new workspace would Draw once before the
-	// open shader took over, but that drew the freshly-installed
-	// workspace in full color for a frame between the gray-fade loading
-	// shader and the burn open shader, breaking the chained transition.
-	// captureOpenShaderCells already snapshots the pre-switch screen
-	// before switchToWorkspace, so the burn has everything it needs to
-	// start immediately and there is no reason to give the new workspace
-	// a frame to render first. If no loading/open shader is configured,
-	// this is a no-op.
 	defer h.shaderRunner.stopLoading()
 
-	// closeWorkspace can flag the pending entry as canceled while
-	// Phase B is in progress; in that case the cancelCtx has already
-	// been called. Drop the partially built artifacts so we don't
-	// install a workspace the user closed.
 	if pending.canceled.Load() {
 		if built != nil {
 			h.discardBuiltWorkspace(built)
@@ -1514,9 +1264,6 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 		return
 	}
 
-	// subscribeAllCommands / subscribeAllEvents touch event-loop-owned
-	// state (per-ex command registries, the publisher), so they live in
-	// Phase C even though they are CPU-only.
 	if err := h.subscribeAllCommands(built.ex); err != nil {
 		_ = built.cursorHistoryCloser.Close()
 		cancel()
@@ -1532,9 +1279,6 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 		return
 	}
 
-	// FS watcher goroutine — we keep this naked goroutine tied to ctx
-	// rather than to pending so that closeWorkspace's cancel() shuts
-	// it down naturally.
 	ex := built.ex
 	wh := built.wh
 	go debug.CapturePanicReport(func() {
@@ -1733,17 +1477,11 @@ func (h *workspaceManagerHandler) buildExtensions(
 	lsp := idelsp.New(uri, cwd,
 		cwd, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
-	// Debug adapter manager. Session creation is owned by the
-	// consumer (typically agentshell); the Manager itself holds
-	// no "current" session and routes every call by sessionID.
 	dapCfg := idedebug.Config{
 		MaxRetries: 5,
 		Adapters:   cfg.debuggerConfigs(),
 	}
 	dap := idedebug.New(uri, cwd, h.pkgmanager, dapCfg)
-	// Close the Managers on any error past this point: subsequent
-	// build steps don't return them, so the caller has no handle to
-	// clean up the manager-owned goroutines / subprocesses on failure.
 	defer func() {
 		if retErr == nil {
 			return
@@ -2025,13 +1763,6 @@ func (h *workspaceManagerHandler) commandRenameWorkspace(args ...string) error {
 	return nil
 }
 
-// commandWorkspaceReady defers another command until the most-recently
-// reserved pending workspace has finished installing. If no pending
-// workspace exists, the command is dispatched inline against the
-// currently focused ex. It is intended for aliases like `worktreenew`
-// that fire `workspacenew` and then want a follow-up step (e.g.
-// `workspacerename $1`) to run on the *new* workspace rather than the
-// previously focused one.
 func (h *workspaceManagerHandler) commandWorkspaceReady(args ...string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("expected at least one argument with the command to run")
@@ -2045,18 +1776,9 @@ func (h *workspaceManagerHandler) commandWorkspaceReady(args ...string) error {
 	return ex.dispatchCommand(args[0], args[1:]...)
 }
 
-// closeWorkspace tears the focused workspace down and removes its
-// scheme from workspace.Manager. :workspaceclose and :workspacereload
-// both route through here so reload is a true close+open cycle — the
-// scheme is not reused, which is what guarantees scheme.Close hooks
-// (e.g. killing LSP/DAP child processes bound to scheme ctx) fire.
 func (h *workspaceManagerHandler) closeWorkspace() (
 	workspaceapi.URI, []workspaceapi.URI, error,
 ) {
-	// If the focused slot is currently a pending build (Phase B in
-	// progress), tear it down: cancel the context so any blocking IO
-	// returns and mark the pending entry so installPendingWorkspace
-	// drops the partial build instead of installing it.
 	if pending, ok := h.pendingForFocus(); ok {
 		uri := pending.uri
 		pending.canceled.Store(true)
@@ -2178,21 +1900,11 @@ func (h *workspaceManagerHandler) moveWorkspace(args ...string) error {
 }
 
 func (h *workspaceManagerHandler) Close() (ret error) {
-	// Cancel any in-flight pending builds so their goroutines can
-	// exit and their finalize closures (when they eventually run) see
-	// canceled and discard the partially built artifacts instead of
-	// installing them after Close.
 	for k, p := range h.pending {
 		p.canceled.Store(true)
 		p.cancelCtx()
 		delete(h.pending, k)
 	}
-	// Wait for in-flight Phase B build goroutines to observe the
-	// cancellation and dispose themselves. Without this, the build
-	// goroutine can still be inside vtereservoir.New's warmup when
-	// the workspaceManager.Close call below tears down the fileScheme
-	// out from under it, racing on the pty/tty *os.File descriptors
-	// the warmup is feeding to os.StartProcess.
 	h.mu.Unlock()
 	h.pendingWG.Wait()
 	h.mu.Lock()
@@ -2249,23 +1961,13 @@ type workspaceHandler struct {
 	cancelCtx           func()
 	uri                 workspaceapi.URI
 	Extensions          atomic.Value
-	// cwd is the managerWorkspace returned by workspace.Manager.AddWorkspace.
-	// It is closed in closeAndRemove (the single-workspace close path) so
-	// its underlying scheme can be dropped from workspace.Manager and
-	// garbage-collected. It is NOT closed in Close(), which is also invoked
-	// on full-IDE shutdown where the workspace.Manager is owned by the
-	// caller.
-	cwd           workspace.Workspace
-	closeOnce     sync.Once
-	closeErr      error
-	historyCloser io.Closer
-	lspManager    *idelsp.Manager
-	dapManager    *idedebug.Manager
-	// promptStorage is the per-workspace extension-permissions
-	// Partition allocated in buildExtensions. Closing it tears down
-	// the firstmover follower goroutine + gRPC subscription that
-	// Partition spawned (RUNE-189).
-	promptStorage storageapi.Service
+	cwd                 workspace.Workspace
+	closeOnce           sync.Once
+	closeErr            error
+	historyCloser       io.Closer
+	lspManager          *idelsp.Manager
+	dapManager          *idedebug.Manager
+	promptStorage       storageapi.Service
 }
 
 func (hm *workspaceHandler) Close() error {
@@ -2289,9 +1991,6 @@ func (hm *workspaceHandler) Close() error {
 				ret = multierror.Append(ret, err)
 			}
 		}
-		// Close Managers after the extension runner (which may still
-		// hold gRPC calls into them) but before cancelCtx, so their
-		// teardown can use the workspace ctx.
 		if hm.lspManager != nil {
 			if err := hm.lspManager.Close(); err != nil {
 				ret = multierror.Append(ret, err)
@@ -2316,12 +2015,6 @@ func (hm *workspaceHandler) Close() error {
 	return hm.closeErr
 }
 
-// closeAndRemove closes this handler and also removes the backing workspace
-// from the owning workspace.Manager so the scheme it owns can be
-// garbage-collected. This is the right teardown when a single workspace is
-// closed while the rest of the IDE stays alive (e.g. via :close). It must
-// NOT be used on full-IDE shutdown, because the Manager is owned by the
-// caller and survives the handler.
 func (hm *workspaceHandler) closeAndRemove() (ret error) {
 	if err := hm.Close(); err != nil {
 		ret = multierror.Append(ret, err)
@@ -2620,12 +2313,6 @@ func (h *workspaceManagerHandler) subscribeAllEvents(
 		return err
 	}
 	if cfg.editorAutoSave() && !ex.ed.IsExternal() {
-		// In externally-managed editor modes (e.g. byoe) the
-		// external editor process owns saving. Rune's mirror buffer
-		// is rewritten by a workspace watcher on every external
-		// save, which would trigger autoSaver edits that race the
-		// external editor's writes and surface ErrStaleData
-		// warnings on every keystroke. Skip the subscription.
 		saver := autoSaverFactory(&ex.comp, ex.notifications,
 			cfg.scheduleNextTick, defaultAutoSaveDelay)
 		if err := ex.comp.SubscribeEvents(autoSaveEvents, saver); err != nil {
