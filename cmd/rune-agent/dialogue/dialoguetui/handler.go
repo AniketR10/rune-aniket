@@ -531,11 +531,11 @@ func parseCommand(text string) (string, []string) {
 
 func (s *dialogueHandler) executeCommand(name string, args []string) {
 	result, err := s.commands.HandleCommand(s.ctx, name, args)
+	defer s.publishInterrupt(s.ctx)
 	if err != nil {
 		s.mu.Lock()
 		s.comp.AddErrorMessage(err.Error())
 		s.mu.Unlock()
-		s.publishInterrupt(s.ctx)
 		return
 	}
 	if result.Exit {
@@ -552,7 +552,6 @@ func (s *dialogueHandler) executeCommand(name string, args []string) {
 			false,
 		)
 		s.mu.Unlock()
-		s.publishInterrupt(s.ctx)
 		return
 	}
 	if result.Display != nil {

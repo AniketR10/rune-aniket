@@ -1017,6 +1017,50 @@ func TestHandlerCommandUserMessageNoArgs(t *testing.T) {
 	assert.True(t, handled)
 }
 
+// TestHandlerCommandSideEffectInterrupts verifies that a /command which
+// returns a zero-value CommandResult{} (e.g. /fork, /history — commands
+// that open a floating window via wm.Floating and have no Display,
+// UserMessage, or Exit) still wakes the event loop via the interrupter.
+// Without this, the screen does not repaint until the next key event.
+func TestHandlerCommandSideEffectInterrupts(t *testing.T) {
+	interrupt := make(chan struct{}, 20)
+	called := make(chan struct{}, 1)
+	mock := &mockCommandHandler{
+		handleFunc: func(context.Context, string, []string) (CommandResult, error) {
+			// Simulate a command that mutates external state (e.g.
+			// wm.Floating) and returns no display/user-message/exit.
+			called <- struct{}{}
+			return CommandResult{}, nil
+		},
+	}
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex),
+		NewComponent(ComponentConfig{}), term.FuncInterrupter(func(context.Context) error {
+			interrupt <- struct{}{}
+			return nil
+		}),
+		WithCommands(mock),
+	)
+	defer close(tx)
+	h.Resize(30, 9)
+
+	for _, ch := range "/fork" {
+		h.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+
+	select {
+	case <-called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for HandleCommand to be called")
+	}
+	select {
+	case <-interrupt:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected interrupter to be invoked after side-effect-only command")
+	}
+}
+
 // TestHandlerPromptHintRestoredAfterSelect verifies that when a prompt
 // event arrives through the handler's tx channel, the receive-message hint
 // is hidden while the prompt is active, and restored after the user selects.
