@@ -36,14 +36,6 @@ import (
 	"unstable.build/go-tui/term/gui"
 )
 
-// defaultSampleConfig is a boiled-down YAML template written to the user's
-// config path the first time they run `:config` and the file doesn't exist.
-// It only documents the knobs most people actually change; the full default
-// tree lives in the embedded rune.star Starlark file.
-//
-//go:embed sample_config.yaml
-var defaultSampleConfig string
-
 //go:embed rune.star
 var defaultStarlarkConfig string
 

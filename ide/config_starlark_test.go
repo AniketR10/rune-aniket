@@ -296,11 +296,14 @@ func TestRuneStarFixture(t *testing.T) {
 		checks func(*testing.T, map[string]any)
 	}{
 		{
-			name:   "gui modal",
+			name:   "gui",
 			params: map[string]any{"mode": "modal", "tui": false},
 			checks: func(t *testing.T, cfg map[string]any) {
 				editor := cfg["editor"].(map[string]any)
-				assert.Equal(t, "modal", editor["mode"])
+				// rune.star no longer sets editor.mode; the bootstrap
+				// override layered on top is what picks the mode.
+				_, hasMode := editor["mode"]
+				assert.False(t, hasMode, "editor.mode should not be set in rune.star")
 				assert.Equal(t, false, editor["auto_pair"])
 				// GUI-specific window manager frame charset should use the
 				// braille-ish corners.
@@ -311,37 +314,16 @@ func TestRuneStarFixture(t *testing.T) {
 			},
 		},
 		{
-			name:   "gui modeless",
-			params: map[string]any{"mode": "modeless", "tui": false},
-			checks: func(t *testing.T, cfg map[string]any) {
-				editor := cfg["editor"].(map[string]any)
-				assert.Equal(t, "modeless", editor["mode"])
-				assert.Equal(t, true, editor["auto_pair"])
-				cmd := cfg["command"].(map[string]any)
-				assert.Equal(t, "<s-m-p>", cmd["key"])
-				bindings := cmd["key_bindings"].(map[string]any)
-				assert.Equal(t, "cursorhistory prev", bindings["<ctrl-->"])
-				assert.Equal(t, "cursorhistory next", bindings["<ctrl-shift-->"])
-				assert.Equal(t, "locationtoggle bookmark", bindings["<m-f2>"])
-				assert.Equal(t, "jumptolocation next bookmark", bindings["<f2>"])
-				assert.Equal(t, "jumptolocation previous bookmark", bindings["<s-f2>"])
-				assert.Equal(t, "locationhighlight bookmark", bindings["<a-f2>"])
-				assert.Equal(t, "locationdeleteall bookmark", bindings["<s-m-f2>"])
-				term := cfg["terminal"].(map[string]any)
-				assert.Equal(t, false, term["modal"])
-			},
-		},
-		{
-			name:   "tui modal",
+			name:   "tui",
 			params: map[string]any{"mode": "modal", "tui": true},
 			checks: func(t *testing.T, cfg map[string]any) {
 				assert.Contains(t, cfg, "default_attr")
 				wm := cfg["browser"].(map[string]any)["window_manager"].(map[string]any)
 				cs := wm["frame_charset"].(map[string]any)
 				assert.Equal(t, "┌", cs["topleft"])
-				// modal is still in effect.
 				editor := cfg["editor"].(map[string]any)
-				assert.Equal(t, "modal", editor["mode"])
+				_, hasMode := editor["mode"]
+				assert.False(t, hasMode, "editor.mode should not be set in rune.star")
 				assert.Equal(t, false, editor["auto_pair"])
 			},
 		},

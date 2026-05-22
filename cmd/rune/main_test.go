@@ -122,15 +122,6 @@ func TestResolveDefaultConfigPathPrefersYAMLThenStar(t *testing.T) {
 	}
 }
 
-func TestResolveSampleConfigPath(t *testing.T) {
-	dataDir := filepath.Join("home", ".rune")
-	got := resolveSampleConfigPath(dataDir)
-	want := filepath.Join(dataDir, "config.yaml")
-	if got != want {
-		t.Fatalf("resolveSampleConfigPath() = %q, want %q", got, want)
-	}
-}
-
 func TestResolveDefaultConfigPathUsesDatadirDefaultLocation(t *testing.T) {
 	dataDir := filepath.Join("home", ".rune")
 	got := resolveDefaultConfigPath(dataDir)

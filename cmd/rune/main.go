@@ -49,7 +49,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"golang.org/x/oauth2"
@@ -142,10 +141,6 @@ func resolveDefaultConfigPath(dataDir string) string {
 		return starPath
 	}
 	return yamlPath
-}
-
-func resolveSampleConfigPath(dataDir string) string {
-	return path.Join(dataDir, configFilename)
 }
 
 func cwdURI() workspaceapi.URI {
@@ -579,89 +574,22 @@ func runGUI(
 		}
 	}
 
-	var lastTabsClick time.Time
-	var clickCount int
-	var g *gui.GUI
-	var i *ide.IDE
-	opts := []ide.Option{
-		ide.WithExtensionsRunner(runner),
-		ide.WithInitShader(initShader, initShaderFPS, initShaderDuration),
-		ide.WithShutdownShader(shutdownShader, 30, shutdownShaderDuration),
-		ide.WithLoadingShader(loadingShader, loadingShaderFPS, loadingShaderDuration),
-		ide.WithOpenShader(openShader, openShaderFPS, openShaderDuration),
-		ide.WithLocker(mu),
-		ide.WithConfigFilename(workspaceConfigFilename),
-		ide.WithDefaultWallpaper(makeWallpaper()),
-		ide.WithTabBarOffset(13),
-		ide.WithTabBarHeight(2),
-		ide.WithWorkspacesBarHeight(2),
-		ide.WithWorkspacesBarOffset(1),
-		ide.WithWorkspacesIcon('1'),
-		ide.WithWorkspacesBarFrame(false),
-		ide.WithDefaultConfigStarlark(defaultStarlarkConfig, true, false),
-		ide.WithBell(func() {}),
-		ide.WithPublishEvent(publishEvent),
-		ide.WithScheduleNextTick(func(fn func()) bool {
-			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
-		}),
-		ide.WithZdotDir(*flagZdotDir),
-		ide.WithScheme(docsScheme, newDocsSchemeFunc(*flagConfigPath)),
-		// maximize window on double click
-		ide.WithTabsClickCallback(func(i int) bool {
-			if clickCount == 0 || time.Since(lastTabsClick) < doubleClickTimeout {
-				clickCount++
-			} else {
-				clickCount = 1
-			}
-			lastTabsClick = time.Now()
-			if clickCount == 2 {
-				g.MaximizeWindow()
-				return true
-			}
-			return false
-		}),
-		ide.WithDispatchOnPreview(cmdSetTheme,
-			func(cmd string, args ...string) (component.Responsive, func(), bool) {
-				if cmd != cmdSetTheme {
-					return nil, nil, false
-				}
-				if len(args) == 0 {
-					return nil, nil, false
-				}
-				theme := g.Theme()
-				_, err := g.SetTheme(args[0])
-				if err != nil {
-					return nil, nil, false
-				}
-				return nil, func() {
-					theme, err := g.SetTheme(theme)
-					if err == nil {
-						i.SetDefaultAttributes(term.Attributes{
-							Fg: term.FromTcellColor(theme.Foreground),
-							Bg: term.FromTcellColor(theme.Background),
-						})
-					}
-				}, true
-			}),
-	}
-	if debug.DebugBuild == "true" {
-		opts = append(opts, ide.WithDebugCommands(true))
-	}
-
-	var err error
-	i, err = ide.New(*flagWorkspace, *flagConfigPath,
-		*flagDataPath, opts...)
+	root, err := newRoot(
+		*flagDataPath, *flagConfigPath,
+		*flagWorkspace, *flagZdotDir, filenames,
+		launchCmd, runner, mu, publishEvent,
+	)
 	if err != nil {
 		fmt.Printf("ide: %s", err)
 		log.Errorf("ide: %v", err)
 		return 1
 	}
 
-	browser := i.Browser()
+	browser := root.browser()
 	if chdirerr != nil {
 		_, _ = browser.Notify(browserapi.LevelError, "%v", chdirerr)
 	}
-	cfg, ok, err := getGUIConfig(i.Config())
+	cfg, ok, err := getGUIConfig(root.config())
 	if err != nil {
 		_, _ = browser.Notify(browserapi.LevelError, "%v", err)
 	}
@@ -674,13 +602,9 @@ func runGUI(
 		os.Setenv(k, evalVar(value))
 	})
 
-	transparentWindow := getGUITransparentWindow(browser, cfg)
-	fg, bg := getGUIWindowOpacity(browser, cfg)
-
 	defaultColorTheme := getGUIDefaultColorTheme(browser, cfg)
 	themes := getGUIColorThemes(browser, cfg)
-	initialTheme := themes[defaultColorTheme]
-
+	transparentWindow := getGUITransparentWindow(browser, cfg)
 	options := []gui.Option{
 		gui.WithColorThemes(defaultColorTheme, themes),
 		gui.WithFontDPI(getGUIFontDPI(browser, cfg)),
@@ -697,7 +621,7 @@ func runGUI(
 		gui.WithPrintFPS(*flagFPS),
 	}
 
-	storage := i.Storage()
+	storage := root.storage()
 	width, height, ok := getLastSize(storage)
 	if ok {
 		options = append(options, gui.WithSize(width, height))
@@ -707,56 +631,26 @@ func runGUI(
 		options = append(options, gui.WithPosition(x, y))
 	}
 
-	client, cerr := setupReleaseManager(i, storage)
-	if cerr != nil {
-		log.Warnf("could not setup release manager: %v", cerr)
-		// continue with nil client
-	}
-	defer client.Close()
-
-	// update IDE's default attributes with the theme's attributes
-	// so init shader fades in/out correctly.
-	i.SetDefaultAttributes(term.Attributes{
-		Fg: term.FromTcellColor(initialTheme.Foreground),
-		Bg: term.FromTcellColor(initialTheme.Background),
-	})
-
-	g, err = gui.New(i.Ready(), options...)
+	g, err := gui.New(root, options...)
 	if err != nil {
 		fmt.Printf("gui: %s", err)
 		log.Errorf("gui: %v", err)
 		return 1
 	}
+	defer func() { _ = root.Close() }()
+	root.attachGUI(g, transparentWindow)
 
-	if transparentWindow && (fg != 1 || bg != 1) {
+	initialTheme := themes[defaultColorTheme]
+	root.setInitialThemeAttr(term.Attributes{
+		Fg: term.FromTcellColor(initialTheme.Foreground),
+		Bg: term.FromTcellColor(initialTheme.Background),
+	})
+	if fg, bg := getGUIWindowOpacity(browser, cfg); transparentWindow && (fg != 1 || bg != 1) {
 		g.SetOpacity(bg, fg)
 	}
-
-	err = subscribeCommands(g, client, cerr, i, transparentWindow, *flagConfigPath, launchCmd)
-	if err != nil {
-		log.Errorf("subscribe to GUI commands: %v", err)
+	if root.alreadyBootstrapped() {
+		root.setupConfiguredIDE(root.realIDE)
 	}
-
-	openFiles(i, filenames)
-
-	scheduleCrashReportCheck(i, client, *flagDataPath,
-		func(fn func()) bool {
-			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
-		})
-
-	upgradeCtx, upgradeCancel := context.WithCancel(context.Background())
-	defer upgradeCancel()
-	upgradeMgr := scheduleUpgradeCheck(upgradeCtx, i, apiclient.DefaultDownloadsHost,
-		func(fn func()) bool {
-			return publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
-		})
-	if err := subscribeUpgradeCommands(i, upgradeMgr); err != nil {
-		log.Errorf("subscribe upgrade commands: %v", err)
-	}
-	defer func() {
-		_ = upgradeMgr.Close()
-	}()
-
 	err = g.Run("Rune")
 	if err != nil && !errors.Is(err, gui.ErrHandlerExited) {
 		fmt.Printf("%s", err)
@@ -768,7 +662,6 @@ func runGUI(
 
 	saveLastSize(storage, g)
 	saveLastPosition(storage, g)
-	_ = i.Close()
 	return 0
 }
 
@@ -794,6 +687,37 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
 	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
 	i.SetReleaseManager(releaseManager)
+	return client, nil
+}
+
+// newBootstrapAPIClient builds a slim apiclient.Client suitable for
+// driving the pre-swap login prompt. Telemetry is disabled and the
+// client is NOT subscribed to IDE events or used as a release manager
+// source — those wirings live in setupReleaseManager and belong to the
+// configured IDE only. Tokens acquired by this client are written to
+// the shared on-disk auth partition keyed by dataDir, so the real
+// client constructed after the swap reads them back transparently.
+//
+// The caller passes a notifications service that survives the swap so
+// the OAuth goroutine's success / failure message lands on whichever
+// IDE is active when login completes — preIDE if the user is still in
+// the browser when performSwap runs would orphan the message
+// otherwise.
+func newBootstrapAPIClient(
+	notifications browserapi.Notifications,
+	storage storageapi.Service,
+) (*apiclient.Client, error) {
+	apicfg := apiclient.DefaultConfig()
+	apicfg.HTTPEndpointAddress = *flagHTTPAddress
+	apicfg.GRPCEndpointAddress = *flagGRPCAddress
+	apicfg.InsecureTransport = *flagGRPCInsecure
+	apicfg.TelemetryPeriod = *flagTelemetryPeriod
+	apicfg.ReleaseCollection = *flagReleaseCollection
+	apicfg.EnableTelemetry = false
+	client, err := apiclient.New(notifications, storage, apicfg, *flagDataPath)
+	if err != nil {
+		return nil, fmt.Errorf("new bootstrap api client: %v", err)
+	}
 	return client, nil
 }
 

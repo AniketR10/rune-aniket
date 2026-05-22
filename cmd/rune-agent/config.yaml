@@ -11,9 +11,9 @@ extensions:
       # name and injects their contents into the system prompt.
       agents_file: AGENTS.md
       # Model used for chat sessions (agent command).
-      default_model: gpt-5.4
+      default_model: codex/gpt-5.5
       # Model used for quick queries (? command).
-      query_default_model: gpt-5.4
+      query_default_model: codex/gpt-5.5
       # Model used for conversation compaction/summarization.
       # When empty, the chat model is used.
       # compact_model: ''

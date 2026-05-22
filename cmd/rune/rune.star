@@ -5,8 +5,10 @@
 #
 # Use normal Starlark `if` / `for` / dict-merge idioms to customise.
 
-# The Rune loader passes `mode` ("modal" | "modeless") and `tui` (bool) as
-# predeclared globals; the script branches on them below.
+# The Rune loader passes `tui` (bool) as a predeclared global; the script
+# branches on it below. The `mode` global is also exposed for backwards
+# compatibility but is no longer consulted here; editor mode is selected by
+# an override file written by the bootstrap flow.
 
 # Box-drawing frame characters used by the terminal-specific overrides below.
 TUI_FRAME_CHARSET = {
@@ -237,8 +239,6 @@ config = {
     # `openai`/`anthropic` blocks live in rune-agent's own settings tree
     # and are NOT consulted here.
     "models": {
-        # Default model selected when callers do not specify one.
-        "default": "gpt-5.4",
         # Global sampling and budgeting parameters.
         "temperature":           0,
         "top_p":                 0,
@@ -394,12 +394,10 @@ config = {
         "themes":               GUI_THEMES,
     },
     "editor": {
-        # 'modal' simulates vi/vim, 'modeless' works like conventional text
-        # editors, and 'byoe' (bring-your-own-editor) hands editing off to an
-        # external TUI editor process running inside a Rune-managed vte. Rune
-        # keeps owning the tab, the on-disk file, and IDE-wide commands; the
-        # external editor owns the buffer contents and the cursor.
-        "mode":       "modal",
+        # Editor mode and BYOE settings are not configured here. The
+        # bootstrap flow writes an override file with the user's choice
+        # ("modal", "modeless", or "byoe" with a preset). Without an
+        # override, Rune defaults to modal as configured below.
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
         # Auto-pair quotes, brackets, and braces while editing. Explicitly off
@@ -560,49 +558,7 @@ config = {
             "icon_attr":   attr(fg = "gray"),
         },
     },
-    # Built-in extension configuration. Keys are identifiers only.
-    "extensions": {
-        # Adds the `colorPalette` command, which shows the colors available
-        # for use throughout this configuration.
-        "color_palette": {},
-        # Adds fuzzy file and line search to the editor.
-        "fuzzy_search": {
-            "path": "extension_fuzzy_search",
-            "config": {
-                "file": {
-                    # Whether search is case sensitive.
-                    "case_sensitive": True,
-                    # Search algorithm: fuzzy | contains | equal.
-                    "algo":           "fuzzy",
-                    # Key binding used to cycle through history.
-                    "history_key":    "<m-p>",
-                    # Maximum history stored.
-                    "history":        50000,
-                    "element_attr":        attr(fg = "default", bg = "default", flags = ["dim"]),
-                    "matched_text_attr":   attr(fg = "blue", bg = "default", flags = ["bold"]),
-                    "count_attr":          attr(fg = "default", bg = "default"),
-                    "focus_element_attr":  attr(fg = "purple", bg = "default"),
-                },
-                "line": {
-                    # Whether search is case sensitive.
-                    "case_sensitive": True,
-                    # Search algorithm: fuzzy | contains | equal.
-                    "algo":           "fuzzy",
-                    "history_key":    "<m-\\\\>",
-                    # Maximum history stored.
-                    "history":        2000,
-                    "element_attr":        attr(fg = "default", bg = "default", flags = ["dim"]),
-                    "matched_text_attr":   attr(fg = "blue", bg = "default", flags = ["bold"]),
-                    "count_attr":          attr(fg = "default", bg = "default"),
-                    "focus_element_attr":  attr(fg = "purple", bg = "default"),
-                },
-                "syntax": {
-                    "case_sensitive": True,
-                    "algo":           "fuzzy",
-                },
-            },
-        },
-    },
+    "extensions": {},
     # Configuration for the command prompt.
     "command": {
         # Key that opens the command prompt.
@@ -922,113 +878,6 @@ config = {
     },
 }
 
-if mode == "modeless":
-    config = merge(config, {
-        "editor": {
-            "mode":      "modeless",
-            "auto_pair": True,
-            "modeless": {
-                "attr":        attr(fg = "default", bg = "default"),
-                "bar_attr":    attr(fg = "default", bg = "default"),
-                "search_attr": attr(fg = "grey", bg = "yellow"),
-            },
-            "status_bar": {
-                "layout": '██▓▒░  {{ .Filepath }}  {{ .GitShortRef }}   {{ .GitDiffAdd | fg "green" }}   {{ .GitDiffDel | fg "red" }} {{ .ShiftRight }} {{ .CursorColumn }}:{{ .CursorLine }}  {{ .TotalLines }} lines  {{ .Language | bold }}  ░▒▓██',
-            },
-        },
-        "command": {
-            "key":          "<s-m-p>",
-            "key_bindings": {
-                # These blank commands intentionally shadow the modal defaults to
-                # preserve the legacy runerc.modeless key map exactly.
-                "<m-j>":       "",
-                "<m-k>":       "",
-                "<m-l>":       "",
-                "<m-h>":       "",
-                "<m-s>":       "write",
-                "<a-m-s>":     "writeall",
-                "<m-q>":       "quit",
-                "<m-s-n>":     "windownew",
-                "<m-s-w>":     "windowclose",
-                "<a-g>":       "searchtext",
-                "<m-r>":       "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>",
-                "<s-m-r>":     "searchtype",
-                "<m-;>":       "searchtext",
-                "<c-m-p>":     "echo <s-m-p>workspacefocus{wait}<space>",
-                "<m-f2>":      "locationtoggle bookmark",
-                "<f2>":        "jumptolocation next bookmark",
-                "<s-f2>":      "jumptolocation previous bookmark",
-                "<a-f2>":      "locationhighlight bookmark",
-                "<s-m-f2>":    "locationdeleteall bookmark",
-                "<a-m-right>": "tabnext",
-                "<a-m-left>":  "tabprevious",
-                "<m-f>":       "searchtext",
-                "<m-g>":       "jumptolocation next search",
-                "<s-m-g>":     "jumptolocation prev search",
-                "<ctrl-->":    "cursorhistory prev",
-                "<ctrl-shift-->": "cursorhistory next",
-                "<m-u>":       "cursorhistory prev",
-                "<s-m-u>":     "cursorhistory next",
-                "<m-,>":       "config",
-                "<s-m-]>":     "tabnext",
-                "<s-m-[>":     "tabprevious",
-                "<c-g>":       "echo <esc>:",
-                "<ctrl-meta-p>":       "echo <esc>:workspacefocus<space>",
-                "<alt-meta-down>":     "lspgotodef",
-                "<f12>":               "lspgotodef",
-                "<alt-shift-meta-down>":"lspref",
-                "<m-=>":       "guifontsize increase",
-                "<m-->":       "guifontsize decrease",
-                "<m-t>":       "tabnew",
-                "<m-w>":       "tabclose",
-                "<a-m-l>":     "tabmove right",
-                "<a-m-h>":     "tabmove left",
-                "<m-n>":       "windownew",
-                "<m-c>":       "clipboardcopy",
-                "<m-v>":       "clipboardpaste",
-                "<m-y>":       "echolastcmd",
-                "<s-m-h>":     "windowfocus left",
-                "<s-m-l>":     "windowfocus right",
-                "<s-m-j>":     "windowfocus down",
-                "<s-m-k>":     "windowfocus up",
-                "<a-s-m-h>":   "windowmove left",
-                "<a-s-m-l>":   "windowmove right",
-                "<a-s-m-j>":   "windowmove down",
-                "<a-s-m-k>":   "windowmove up",
-                "<s-m-backspace>":"windowresize reset",
-                "<s-m-+>":     ["windowresize max width", "windowresize max height"],
-                "<s-m-->":     ["windowresize min width", "windowresize min height"],
-                "<s-m-up>":    "windowresize increase height",
-                "<s-m-down>":  "windowresize decrease height",
-                "<s-m-left>":  "windowresize decrease width",
-                "<s-m-right>": "windowresize increase width",
-                "<s-m-w>":     "windowclose",
-                "<c-m-h>":     "windowdefaultsplit h",
-                "<c-m-v>":     "windowdefaultsplit v",
-                "<s-m-f>":     "windowtogglemaximize",
-                "<m-o>":       "lsphover",
-                "<m-b>":       "lspformat",
-                "<m-m>":       "lspformatimports",
-                "<a-j>":       "gitnextchange",
-                "<a-k>":       "gitprevchange",
-                "<m-p>":       "searchfile",
-                "<m-\\\\>":   "searchtext",
-                "<m-enter>":   "terminalneworsplit",
-                "<s-m-enter>": "!",
-                "gf":          "editfileoncursor",
-                "<m-1>":       "workspacefocus 1",
-                "<m-2>":       "workspacefocus 2",
-                "<m-3>":       "workspacefocus 3",
-                "<m-4>":       "workspacefocus 4",
-                "<m-5>":       "workspacefocus 5",
-                "<m-6>":       "workspacefocus 6",
-                "<m-7>":       "workspacefocus 7",
-                "<m-8>":       "workspacefocus 8",
-                "<m-9>":       "workspacefocus 9",
-            },
-        },
-        "terminal": {"modal": False},
-    })
 
 if tui:
     tui_cmd_bindings = {

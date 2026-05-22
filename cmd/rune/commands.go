@@ -106,9 +106,8 @@ func subscribeOtherCommands(
 		},
 		{
 			cmd: textapi.CommandManual{
-				Name: "config",
-				Summary: "Edits the current configuration. If there's no configuration on disk, " +
-					"the sample configuration is opened and the user has a chance to persist updates to disk.",
+				Name:    "config",
+				Summary: "Opens the current configuration file for editing.",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) error {
 				uri, err := workspaceapi.CurrentUserHostURI(configPath)
@@ -116,19 +115,6 @@ func subscribeOtherCommands(
 					err = fmt.Errorf("parse config uri: %w", err)
 					return err
 				}
-				_, err = os.Stat(configPath)
-				if err == nil {
-					return i.Open(uri)
-				}
-				if err != nil && !errors.Is(err, os.ErrNotExist) {
-					return fmt.Errorf("stat config file %q: %w", configPath, err)
-				}
-
-				err = os.WriteFile(configPath, []byte(defaultSampleConfig), 0666)
-				if err != nil {
-					return fmt.Errorf("write sample config to config file %q: %w", configPath, err)
-				}
-
 				return i.Open(uri)
 			},
 		},
