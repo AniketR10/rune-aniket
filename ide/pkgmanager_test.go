@@ -26,6 +26,8 @@ package ide
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
@@ -36,6 +38,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
@@ -45,6 +48,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
@@ -491,6 +495,76 @@ func TestPkgManager_HandlePkgInstall_NotAuthenticated(t *testing.T) {
 		Args: []string{"go"},
 	})
 	require.NoError(t, err, "expected ErrNotAuthenticated to be suppressed into a notification")
+}
+
+// TestPkgManager_HandlePkgInstall_Forbidden verifies that the
+// interactive :pkginstall command translates a 403 from the
+// cdnrelease endpoint into the friendly errForbidden sentinel
+// instead of bubbling up the raw cdnrelease error.
+func TestPkgManager_HandlePkgInstall_Forbidden(t *testing.T) {
+	t.Parallel()
+	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.ExpectReturnErr(&cdnrelease.StatusError{
+		URL:    "https://example/api/releases/darwin-arm64/packages",
+		Status: http.StatusForbidden,
+	})
+
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+	defer m.Close()
+
+	err := m.pkgmanager.HandleCommand(context.Background(), textapi.Command{
+		Name: cmdPkgInstall,
+		Args: []string{"go"},
+	})
+	require.ErrorIs(t, err, idepkg.ErrForbidden)
+}
+
+// TestPkgManager_CompletePkgInstall_Forbidden verifies that tab
+// completion against the releases endpoint surfaces the friendly
+// errForbidden sentinel to the completer framework when the server
+// returns 403.
+func TestPkgManager_CompletePkgInstall_Forbidden(t *testing.T) {
+	t.Parallel()
+	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.ExpectReturnErr(&cdnrelease.StatusError{
+		URL:    "https://example/api/releases/darwin-arm64/packages",
+		Status: http.StatusForbidden,
+	})
+
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+	defer m.Close()
+
+	_, _, err := m.pkgmanager.Complete(context.Background(), textapi.Command{
+		Name: cmdPkgInstall,
+		Args: []string{""},
+	})
+	require.ErrorIs(t, err, idepkg.ErrForbidden)
+}
+
+// TestPkgManager_HandlePkgInstall_Forbidden_Integration spins up a
+// real cdnrelease.Manager against an httptest.Server returning 403
+// so the end-to-end error type/status contract between blue and rune
+// is exercised, not just the in-process mock.
+func TestPkgManager_HandlePkgInstall_Forbidden_Integration(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	}))
+	defer srv.Close()
+	rm := cdnrelease.NewManager(srv.Client(), srv.URL)
+
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+	defer m.Close()
+
+	err := m.pkgmanager.HandleCommand(context.Background(), textapi.Command{
+		Name: cmdPkgInstall,
+		Args: []string{"go"},
+	})
+	require.ErrorIs(t, err, idepkg.ErrForbidden)
 }
 
 func TestPackageManagerPreviewIntegration(t *testing.T) {

@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -44,6 +45,7 @@ import (
 	bluedebug "github.com/unstablebuild/blue/debug"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -57,6 +59,84 @@ import (
 	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/workspace/walkdir"
 )
+
+// Sentinel errors returned by release-manager wrappers below so callers
+// can branch on the kind of failure with errors.Is without parsing
+// messages. The underlying cdnrelease error is preserved in the wrap
+// chain for diagnostics.
+var (
+	// ErrPackageNotFound is returned when the server reports that a
+	// requested package does not exist.
+	ErrPackageNotFound = errors.New("package not found")
+	// ErrVersionNotFound is returned when the server reports that a
+	// requested version of a known package does not exist.
+	ErrVersionNotFound = errors.New("package version not found")
+	// ErrServerUnavailable is returned for transient (5xx) failures
+	// from the package server or the signed-URL download backend.
+	ErrServerUnavailable = errors.New("package server unavailable")
+	// ErrForbidden is returned when the package server rejects the
+	// caller with a 403 (no valid token or insufficient subscription).
+	// The wrapped message is rendered directly to the user.
+	ErrForbidden = errors.New("login first via `login` command and " +
+		"ensure you have a valid subscription to download packages")
+)
+
+// translatePackageErr maps a *cdnrelease.StatusError on a
+// package-scoped call into a user-facing wrapped sentinel. Errors
+// without a recognisable status (network errors, non-StatusError
+// wraps) are returned unchanged.
+func translatePackageErr(err error, pkgID string) error {
+	var se *cdnrelease.StatusError
+	if !errors.As(err, &se) {
+		return err
+	}
+	switch {
+	case se.Status == http.StatusForbidden:
+		return ErrForbidden
+	case se.Status == http.StatusNotFound:
+		return fmt.Errorf("package %q does not exist: %w", pkgID, ErrPackageNotFound)
+	case se.Status >= 500:
+		return fmt.Errorf("%w (status %d)", ErrServerUnavailable, se.Status)
+	}
+	return err
+}
+
+func translateVersionErr(err error, pkgID, version string) error {
+	var se *cdnrelease.StatusError
+	if !errors.As(err, &se) {
+		return err
+	}
+	switch {
+	case se.URL == "":
+		// Signed-URL download from GCS failed
+		return fmt.Errorf("download of %q version %q failed: %w (status %d)",
+			pkgID, version, ErrServerUnavailable, se.Status)
+	case se.Status == http.StatusForbidden:
+		return ErrForbidden
+	case se.Status == http.StatusNotFound:
+		return fmt.Errorf("version %q of package %q does not exist: %w",
+			version, pkgID, ErrVersionNotFound)
+	case se.Status >= 500:
+		return fmt.Errorf("%w (status %d)", ErrServerUnavailable, se.Status)
+	}
+	return err
+}
+
+func translateListErr(err error, pkgID string) error {
+	var se *cdnrelease.StatusError
+	if !errors.As(err, &se) {
+		return err
+	}
+	switch {
+	case se.Status == http.StatusForbidden:
+		return ErrForbidden
+	case se.Status == http.StatusNotFound && pkgID != "":
+		return fmt.Errorf("package %q does not exist: %w", pkgID, ErrPackageNotFound)
+	case se.Status >= 500:
+		return fmt.Errorf("%w (status %d)", ErrServerUnavailable, se.Status)
+	}
+	return err
+}
 
 // NewManager allocates storage for a new Manager and initializes it.
 // The dataDir argument will be used to store downloaded bundles
@@ -156,7 +236,11 @@ func (m *Manager) DescribePackage(ctx context.Context, pkgID string) (release.Pa
 	if pkgID == "" {
 		return release.Package{}, errors.New("package id must not be empty")
 	}
-	return m.m.GetPackage(ctx, pkgID)
+	pkg, err := m.m.GetPackage(ctx, pkgID)
+	if err != nil {
+		return release.Package{}, translatePackageErr(err, pkgID)
+	}
+	return pkg, nil
 }
 
 // DescribeRelease fetches a release bundle manifest.
@@ -170,15 +254,23 @@ func (m *Manager) DescribeRelease(ctx context.Context, pkgID string, version str
 	if version == "" {
 		return release.Bundle{}, errors.New("release version must not be empty")
 	}
-	return m.m.Get(ctx, pkgID, release.Version(version),
+	b, err := m.m.Get(ctx, pkgID, release.Version(version),
 		release.NopProgressWriter(io.Discard))
+	if err != nil {
+		return release.Bundle{}, translateVersionErr(err, pkgID, version)
+	}
+	return b, nil
 }
 
 // ListPackages lists all packages.
 func (m *Manager) ListPackages(ctx context.Context, filters map[string]string) (
 	iterator.Iterator[release.Package], error,
 ) {
-	return m.m.ListPackages(ctx, filters)
+	it, err := m.m.ListPackages(ctx, filters)
+	if err != nil {
+		return nil, translateListErr(err, "")
+	}
+	return it, nil
 }
 
 // ListPackageVersions lists all bundles of a package.
@@ -186,7 +278,11 @@ func (m *Manager) ListPackageVersions(ctx context.Context, pkgID string, filters
 	iterator.Iterator[release.Bundle], error,
 ) {
 	pkgID = escapeString(pkgID)
-	return m.m.List(ctx, pkgID, filters)
+	it, err := m.m.List(ctx, pkgID, filters)
+	if err != nil {
+		return nil, translateListErr(err, pkgID)
+	}
+	return it, nil
 }
 
 // InstallPackageVersion downloads a Package bundle by package name and version, reports
@@ -503,7 +599,7 @@ func (m *Manager) PackageVersionInUse(
 	pkgID = escapeString(pkgID)
 	it, err := m.m.List(ctx, pkgID, nil)
 	if err != nil {
-		return "", fmt.Errorf("list bundles: %w", err)
+		return "", translateListErr(err, pkgID)
 	}
 
 	var versions []release.Version
@@ -611,7 +707,7 @@ func (m *Manager) download(
 	m.log(log.TraceLevel, "fetching package %s version %s", pkgID, version)
 	_, err := m.m.Get(ctx, pkgID, version, writer)
 	if err != nil {
-		err = fmt.Errorf("download: %w", err)
+		err = translateVersionErr(err, pkgID, string(version))
 		m.abortDownload(err, pkgID, version, notificationID)
 		return
 	}
@@ -891,11 +987,6 @@ func (m *Manager) processConfig(
 		return ""
 	}
 
-	// Decode the package's contribution against an empty base. For YAML
-	// packages this yields the package map as-is; for Starlark packages
-	// it runs the script with predeclared `config = {}` so the script can
-	// mutate it freely without seeing the user's config. The result is
-	// the set of changes the package wants to apply.
 	pkgOverlayCfg, err := loadIdePkgConfigOverlay(
 		pkgConfigFile, data, map[string]any{},
 		pkgID, pkgVersion, m.dataDir,
@@ -906,11 +997,6 @@ func (m *Manager) processConfig(
 	if len(pkgOverlayCfg) == 0 {
 		return nil
 	}
-	// YAML packages carry unexpanded `$RUNE_*` placeholders in their
-	// values; expand them before comparing to the user's already-expanded
-	// config so "already merged" is detected correctly. Starlark scripts
-	// resolve these variables at evaluation time, so expansion is a no-op
-	// for them.
 	expandMapValues(pkgOverlayCfg, runeVarMapping)
 
 	if idePkgVerifyMergeMap(userCfg, pkgOverlayCfg) == nil {
@@ -986,9 +1072,6 @@ func loadIdePkgConfigFile(path string) (map[string]any, error) {
 	return loadIdePkgConfigFromBytes(path, data, "", "", "")
 }
 
-// idePkgStarlarkParams builds the predeclared globals exposed to package
-// and user config.star scripts. Empty values are omitted so scripts can
-// detect absence via `"RUNE_PKG_ID" not in dir()`-style checks.
 func idePkgStarlarkParams(pkgID string, pkgVersion release.Version, dataDir string) map[string]any {
 	params := map[string]any{}
 	if dataDir != "" {
@@ -1318,8 +1401,7 @@ type pkgVersionValue struct {
 // executableEntry is the UTF-8-safe representation of an executable file
 // extracted from a package tarball. The raw [tar.Header] cannot be persisted
 // directly because PAX records (for example macOS's
-// "com.apple.provenance" xattr) may contain non-UTF-8 bytes, which the TOML
-// marshaler used by the local package store rejects.
+// "com.apple.provenance" xattr) may contain non-UTF-8 bytes
 type executableEntry struct {
 	Name string
 	Mode int64

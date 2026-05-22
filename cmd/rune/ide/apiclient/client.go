@@ -316,7 +316,7 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		}
 
 		return nil
-	}, doneCopy, tryPorts)
+	}, tryPorts, blueauth.WithSuccessHTML(doneCopy))
 	if err != nil {
 		return nil, fmt.Errorf("new oauth2 client: %w", err)
 	}

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -44,6 +45,7 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -405,6 +407,97 @@ func TestListPackageVersions(t *testing.T) {
 
 		r.ExpectReturnErr(errors.New("boom"))
 		_, err := m.ListPackageVersions(context.Background(), "go", nil)
+		assert.EqualError(t, err, "boom")
+	})
+}
+
+// TestTranslateReleaseErrors verifies that the wrapper methods
+// translate *cdnrelease.StatusError responses into friendly
+// sentinel-wrapped errors that callers can match with errors.Is.
+// Other (non-StatusError) errors must pass through unchanged.
+func TestTranslateReleaseErrors(t *testing.T) {
+	t.Parallel()
+
+	notFound := &cdnrelease.StatusError{
+		URL:    "https://example/api/releases/darwin-arm64/packages/go",
+		Status: http.StatusNotFound,
+	}
+	serverErr := &cdnrelease.StatusError{
+		URL:    "https://example/api/releases/darwin-arm64/packages",
+		Status: http.StatusBadGateway,
+	}
+	downloadErr := &cdnrelease.StatusError{
+		// Empty URL marks the signed-URL data download branch.
+		Status: http.StatusForbidden,
+	}
+
+	t.Run("DescribePackage 404 -> ErrPackageNotFound", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(release.Package{Name: "go"}),
+			idepkgtest.MakeBundles())
+		r.ExpectReturnErr(notFound)
+
+		_, err := m.DescribePackage(context.Background(), "go")
+		require.ErrorIs(t, err, ErrPackageNotFound)
+		assert.Contains(t, err.Error(), `package "go" does not exist`)
+	})
+
+	t.Run("ListPackages 5xx -> ErrServerUnavailable", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(), idepkgtest.MakeBundles())
+		r.ExpectReturnErr(serverErr)
+
+		_, err := m.ListPackages(context.Background(), nil)
+		require.ErrorIs(t, err, ErrServerUnavailable)
+		assert.Contains(t, err.Error(), "status 502")
+	})
+
+	t.Run("ListPackageVersions 404 -> ErrPackageNotFound", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(release.Package{Name: "go"}),
+			idepkgtest.MakeBundles())
+		r.ExpectReturnErr(notFound)
+
+		_, err := m.ListPackageVersions(context.Background(), "go", nil)
+		require.ErrorIs(t, err, ErrPackageNotFound)
+		assert.Contains(t, err.Error(), `package "go" does not exist`)
+	})
+
+	t.Run("DescribeRelease 404 -> ErrVersionNotFound", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(release.Package{Name: "go"}),
+			idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}}))
+		r.ExpectReturnErr(notFound)
+
+		_, err := m.DescribeRelease(context.Background(), "go", "1")
+		require.ErrorIs(t, err, ErrVersionNotFound)
+		assert.Contains(t, err.Error(), `version "1" of package "go" does not exist`)
+	})
+
+	t.Run("DescribeRelease signed-URL failure -> ErrServerUnavailable", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(release.Package{Name: "go"}),
+			idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}}))
+		r.ExpectReturnErr(downloadErr)
+
+		_, err := m.DescribeRelease(context.Background(), "go", "1")
+		require.ErrorIs(t, err, ErrServerUnavailable)
+		assert.Contains(t, err.Error(), `download of "go" version "1" failed`)
+	})
+
+	t.Run("non-StatusError passes through", func(t *testing.T) {
+		t.Parallel()
+		m, _, r, _ := newTestManager(t,
+			idepkgtest.MakePackages(release.Package{Name: "go"}),
+			idepkgtest.MakeBundles())
+		r.ExpectReturnErr(errors.New("boom"))
+
+		_, err := m.DescribePackage(context.Background(), "go")
 		assert.EqualError(t, err, "boom")
 	})
 }
