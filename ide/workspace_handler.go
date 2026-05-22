@@ -169,15 +169,9 @@ type workspaceManagerHandler struct {
 	homeRunner     extension.Runner
 	homeLSPManager *idelsp.Manager
 	homeDAPManager *idedebug.Manager
-	// homePromptStorage is the storageapi.Service partition allocated
-	// for the home workspace's extension permissions. Each Partition
-	// on a firstmover-backed storage spawns its own follower
-	// goroutine + gRPC subscription, so it must be closed on IDE
-	// shutdown.
-	homePromptStorage storageapi.Service
-	openPrevFiles     []idehistory.File
-	openPrevFilesEx   *ex
-	openPrevWindows   map[uint64]browser.Window
+	openPrevFiles   []idehistory.File
+	openPrevFilesEx *ex
+	openPrevWindows map[uint64]browser.Window
 	shaderRunner      *shaderRunner
 	// pending tracks workspaces whose Phase B (async build) is in
 	// flight. Entries are added in Phase A (under h.mu) and removed
@@ -589,7 +583,7 @@ func (h *workspaceManagerHandler) init(
 		log.Errorf("build home workspace extensions executor: %v", err)
 		return nil
 	}
-	runner, lspManager, dapManager, promptStorage, err := h.buildExtensions(
+	runner, lspManager, dapManager, _, err := h.buildExtensions(
 		cfg, homeDirUri, trackedCwd, h.empty, extExec)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
@@ -603,7 +597,10 @@ func (h *workspaceManagerHandler) init(
 		h.homeRunner = runner
 		h.homeLSPManager = lspManager
 		h.homeDAPManager = dapManager
-		h.homePromptStorage = promptStorage
+		// The home workspace's extension-permissions partition is a
+		// child of h.storage (the firstmover root). h.storage.Close
+		// on IDE shutdown closes every Partition it spawned, so we
+		// intentionally drop the handle here (RUNE-189).
 		// speed up initialization by initializing extensions asynchronously
 		go debug.CapturePanicReport(func() { h.initExtensions(runner, cfg) })
 	}
@@ -2223,11 +2220,6 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	}
 	if h.homeDAPManager != nil {
 		if err := h.homeDAPManager.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
-	if h.homePromptStorage != nil {
-		if err := h.homePromptStorage.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}

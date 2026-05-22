@@ -355,6 +355,46 @@ func TestSetSucceedsWhenBackendIsSlowerThanMethodRetryCadence(t *testing.T) {
 	assert.Equal(t, "ok", out.A)
 }
 
+// TestPartitionChildrenClosedByParent guards the RUNE-189 invariant
+// that closing a firstmover.Service closes every Partition-derived
+// peer it spawned. Each Partition call starts a fresh follower
+// (leadOrFollow goroutine + gRPC client subscription); without
+// recursive close the caller would need to hold every partition
+// handle and Close them individually.
+func TestPartitionChildrenClosedByParent(t *testing.T) {
+	lockFile := makeTempLockFile(t)
+	cfg := testConfig()
+	leader := New(storagestub.NewInMemoryService(), lockFile, cfg)
+
+	a, err := leader.Partition("a")
+	require.NoError(t, err)
+	b, err := leader.Partition("b")
+	require.NoError(t, err)
+	// Nested partitions must also be closed by the root.
+	bChild, err := b.Partition("child")
+	require.NoError(t, err)
+
+	require.NoError(t, leader.Close())
+
+	// Each child's Close is idempotent (s.closed guard), so a direct
+	// Close after the parent's recursive close must be a no-op and
+	// the child must already be marked closed.
+	for i, child := range []storageapi.Service{a, b, bChild} {
+		fm, ok := child.(*Service)
+		require.Truef(t, ok, "child %d not a *Service: %T", i, child)
+		fm.mu.Lock()
+		closed := fm.closed
+		fm.mu.Unlock()
+		assert.Truef(t, closed,
+			"child %d (%T) must be closed when parent Close returns", i, child)
+	}
+
+	// Partition on a closed parent must fail rather than silently
+	// leak a follower that no one will ever close.
+	_, err = leader.Partition("after-close")
+	assert.Error(t, err)
+}
+
 // slowSetService delegates Set to an in-memory backend after a
 // configurable delay. All other methods are passthroughs.
 type slowSetService struct {

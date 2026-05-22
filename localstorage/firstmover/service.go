@@ -108,6 +108,13 @@ type Service struct {
 	followFailures int
 	subscriptions  map[string][][]byte
 	active         storageapi.Service
+	// children tracks Partition()-derived peers so that closing the
+	// root also closes every follower (goroutine + gRPC client
+	// subscription) it spawned. Every Partition call on a
+	// firstmover-backed Service starts a fresh leadOrFollow loop, so
+	// callers that forget to Close a partition leak ~5 goroutines
+	// per workspace open/close cycle (RUNE-189).
+	children []*Service
 }
 
 const unixSocketPathMax = 103
@@ -281,6 +288,18 @@ func (s *Service) Partition(name string) (storageapi.Service, error) {
 	}
 	ret := new(Service)
 	ret.Init(partitioned, s.lockFileListen+"."+url.PathEscape(name), s.cfg)
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		// Parent already closed: don't retain a child the parent
+		// will never tear down. Close it now and surface the error
+		// via the returned Service being unusable (caller checks
+		// for nil).
+		_ = ret.Close()
+		return nil, errors.New("firstmover: Partition on closed Service")
+	}
+	s.children = append(s.children, ret)
+	s.mu.Unlock()
 	return ret, nil
 }
 
@@ -366,6 +385,8 @@ func (s *Service) Close() (ret error) {
 	}
 	s.log(log.TraceLevel, "Close called on peer...")
 	s.closed = true
+	children := s.children
+	s.children = nil
 	if s.active != s.svc && s.active != nil {
 		close(s.quitCh)
 		// it's possible that Close on a follower was called after
@@ -393,6 +414,16 @@ func (s *Service) Close() (ret error) {
 	s.mu.Unlock()
 
 	<-s.closeWaitCh
+	// Close children after the parent's lock is dropped and after
+	// closeWaitCh has signaled, so child Close calls (which take
+	// their own locks and may block on their own closeWaitCh) cannot
+	// deadlock with the parent's leadOrFollow loop. A child whose
+	// caller already closed it is a no-op thanks to s.closed.
+	for _, child := range children {
+		if err := child.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
 	return
 }
 
