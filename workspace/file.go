@@ -876,11 +876,11 @@ func (f *file) flush(force bool) error {
 
 // Close should be called once when this structure is not to be used anymore.
 func (f *file) Close() (ret error) {
+	f.asyncWG.Wait()
+
 	if f.fileName == "" {
 		return errors.New("trying to Close an uninitialized file")
 	}
-
-	f.asyncWG.Wait()
 
 	f.fileName = ""
 
