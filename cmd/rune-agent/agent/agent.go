@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/debug"
@@ -60,9 +61,9 @@ type Config struct {
 	// Name, Provider, and ContextWindow are all consulted by the loop;
 	// callers obtain a populated ModelEntry by routing through
 	// llmapi.Service.GetModel before constructing the Config.
-	Model              llmapi.ModelEntry
-	Workspace          workspaceapi.URI
-	SubAgent           bool // true for sub-agent dialogues spawned by agent tool calls.
+	Model     llmapi.ModelEntry
+	Workspace workspaceapi.URI
+	SubAgent  bool // true for sub-agent dialogues spawned by agent tool calls.
 
 	// CompactSvc, when non-nil, is used for summarization during
 	// compaction instead of the agent's own LLM service. This allows
@@ -120,7 +121,7 @@ type Agent struct {
 	resources       sync.Map
 	config          Config
 	effort          llmapi.ReasoningEffort // session-level effort override
-	maxOutputTokens int                 // session-level max-output-token override
+	maxOutputTokens int                    // session-level max-output-token override
 	memory          MemoryRecaller
 }
 
@@ -714,6 +715,10 @@ func (a *Agent) run(
 		emit(ctx, ch, Event{Type: EventInferenceStart})
 		inferenceStart := time.Now()
 		log.Debug("creating completion", "messages", len(reqMessages), "tools", len(tools))
+		// Layer 1 wire safety net: scrub every outgoing string of
+		// invalid UTF-8 bytes so the proto-go marshaller cannot
+		// reject the request.
+		sanitizeRequest(&req)
 		it, err := a.svc.CreateCompletion(ctx, a.config.Model, req)
 		log.Debug("created completion", "error", err, "duration", time.Since(inferenceStart))
 		if err != nil {
@@ -969,6 +974,12 @@ func (a *Agent) run(
 						if !result.IsError {
 							result.Content = truncateMiddle(result.Content, maxOutput)
 						}
+						// Layer 1: belt-and-suspenders sanitisation so
+						// a stray invalid UTF-8 byte in any tool
+						// output (or in an error message that embeds
+						// raw bytes) can never wedge the proto-go
+						// marshaller downstream.
+						result.Content = utf8validate.Sanitize(result.Content)
 						results <- executedToolCall{index: i, info: info, result: result, duration: dur}
 					}(i, info)
 				})
@@ -1638,6 +1649,7 @@ func Summarize(ctx context.Context, svc llmapi.Service, model llmapi.ModelEntry,
 		Messages: append(messages, prompt),
 	}
 
+	sanitizeRequest(&summaryReq)
 	it, err := svc.CreateCompletion(ctx, model, summaryReq)
 	if err != nil {
 		return "", err
@@ -1858,6 +1870,41 @@ func (c *channelIterator) Close() error {
 	}
 }
 
+// sanitizeRequest scrubs every string field in req of invalid UTF-8
+// bytes, replacing each with U+FFFD. Call this immediately before
+// passing the request to llmapi.Service.CreateCompletion so the
+// proto-go marshaller cannot reject the request for any single byte
+// that slipped past upstream sanitisation.
+func sanitizeRequest(req *llmapi.Request) {
+	if req == nil {
+		return
+	}
+	for i := range req.Messages {
+		m := &req.Messages[i]
+		m.Content = utf8validate.Sanitize(m.Content)
+		m.ReasoningContent = utf8validate.Sanitize(m.ReasoningContent)
+		m.ToolCallID = utf8validate.Sanitize(m.ToolCallID)
+		m.Name = utf8validate.Sanitize(m.Name)
+		for j := range m.MultiContent {
+			cp := &m.MultiContent[j]
+			cp.Text = utf8validate.Sanitize(cp.Text)
+			cp.ImageURL = utf8validate.Sanitize(cp.ImageURL)
+		}
+		for j := range m.ToolCalls {
+			tc := &m.ToolCalls[j]
+			tc.ID = utf8validate.Sanitize(tc.ID)
+			tc.Function.Name = utf8validate.Sanitize(tc.Function.Name)
+			tc.Function.Arguments = utf8validate.Sanitize(tc.Function.Arguments)
+		}
+	}
+	req.PromptCacheKey = utf8validate.Sanitize(req.PromptCacheKey)
+	for i := range req.Tools {
+		t := &req.Tools[i]
+		t.Function.Name = utf8validate.Sanitize(t.Function.Name)
+		t.Function.Description = utf8validate.Sanitize(t.Function.Description)
+	}
+}
+
 // buildToolCallMessages converts pre-computed ToolCallResults into the
 // assistant + tool message pairs that would have been produced by
 // actual tool executions. The assistant message contains all tool
@@ -1870,7 +1917,7 @@ func buildToolCallMessages(results []ToolCallResult) []llmapi.Message {
 			Type: llmapi.ToolTypeFunction,
 			Function: llmapi.FunctionCall{
 				Name:      r.ToolName,
-				Arguments: r.Arguments,
+				Arguments: utf8validate.Sanitize(r.Arguments),
 			},
 		}
 	}
@@ -1883,7 +1930,7 @@ func buildToolCallMessages(results []ToolCallResult) []llmapi.Message {
 	for i, r := range results {
 		msgs = append(msgs, llmapi.Message{
 			Role:       llmapi.RoleTool,
-			Content:    r.Content,
+			Content:    utf8validate.Sanitize(r.Content),
 			ToolCallID: calls[i].ID,
 		})
 	}

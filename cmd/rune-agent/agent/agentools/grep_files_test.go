@@ -235,3 +235,23 @@ func TestGrepFiles_summary(t *testing.T) {
 		})
 	}
 }
+
+// TestGrepFiles_skipsBinaryFiles verifies that binary files are not
+// reported even when their bytes happen to contain the search pattern.
+// Regression for RUNE-179.
+func TestGrepFiles_skipsBinaryFiles(t *testing.T) {
+	dir := t.TempDir()
+	// Binary blob: has a NUL in the first 8 KiB and includes the
+	// literal token "needle" embedded between the binary bytes.
+	binBlob := []byte("\x7fELF\x02\x01\x01\x00\x00\x00needle\x00\x00\x00data\x01\x02")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin.dat"), binBlob, 0o644))
+	// Plain text file with the same token.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "text.txt"), []byte("a needle in a haystack\n"), 0o644))
+
+	tool := NewGrepFiles(localFS{}, dirURI(dir), NewFileTracker())
+	result := tool.Execute(t.Context(), `{"pattern":"needle"}`)
+
+	require.False(t, result.IsError)
+	assert.Contains(t, result.Content, "text.txt")
+	assert.NotContains(t, result.Content, "bin.dat")
+}

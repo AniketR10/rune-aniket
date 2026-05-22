@@ -28,11 +28,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 const (
@@ -62,8 +64,8 @@ func newBash(
 	cfg configedit.Config,
 ) agent.Tool {
 	return &bashTool{
-		exec: exec,
-		cwd:  cwd,
+		exec:  exec,
+		cwd:   cwd,
 		guard: newGrepGuard(cfg),
 	}
 }
@@ -183,20 +185,25 @@ func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResu
 
 	output := buf.Bytes()
 
-	// Truncate if too large
+	// Truncate if too large. Snap the cut to a UTF-8 rune boundary
+	// so we don't slice through a multi-byte character and produce
+	// invalid UTF-8.
 	if len(output) > maxCommandOutput {
-		output = append(output[:maxCommandOutput],
-			[]byte(fmt.Sprintf("\n\n(output truncated at %d bytes)", maxCommandOutput))...)
+		cut := maxCommandOutput
+		for cut > 0 && !utf8.RuneStart(output[cut]) {
+			cut--
+		}
+		output = fmt.Appendf(output[:cut], "\n\n(output truncated at %d bytes)", maxCommandOutput)
 	}
 
 	if procErr != nil {
 		return agent.ToolResult{
-			Content: fmt.Sprintf("%s\nerror: %v", string(output), procErr),
+			Content: utf8validate.Sanitize(fmt.Sprintf("%s\nerror: %v", string(output), procErr)),
 			IsError: true,
 		}
 	}
 
-	content := string(output)
+	content := utf8validate.Sanitize(string(output))
 	if hint := bashToolHint(args.Command); hint != "" {
 		content += "\n\nTIP: " + hint
 	}

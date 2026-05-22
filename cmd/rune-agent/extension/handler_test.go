@@ -8,10 +8,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +30,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
@@ -451,6 +455,306 @@ func TestE2ECtrlCDismissesSelectionPrompt(t *testing.T) {
 			),
 		},
 	})
+}
+
+// -----------------------------------------------------------------------------
+// E2E fixture for RUNE-179 (UTF-8 / binary safety across the agent loop)
+// -----------------------------------------------------------------------------
+
+// utf8E2EHandler wires the real chat tab handler to a scripted
+// llmapi.Service that emits a sequence of read_file / grep_files tool
+// calls covering each Layer of the RUNE-179 fix. It returns the
+// wrapped tui.Handler plus the scripted service so the test can
+// inspect the captured request log after the sequence completes.
+func utf8E2EHandler(t *testing.T, svc *llmtest.Service, workspaceDir string) tui.Handler {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	interruptCh := make(chan struct{}, 64)
+	interrupter := term.FuncInterrupter(func(context.Context) error {
+		select {
+		case interruptCh <- struct{}{}:
+		default:
+		}
+		return nil
+	})
+
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	mu := new(sync.Mutex)
+	dhandler, _, rx := dialoguetui.Handler(ctx, mu, comp, interrupter)
+
+	cwd, err := workspaceapi.ParseURI("file://" + workspaceDir)
+	require.NoError(t, err)
+
+	fs := testLocalFS{root: workspaceDir}
+	tools, _ := agentools.DefaultTools(
+		fs, testLocalExec{}, cwd, nil, agentools.Config{}, configedit.NopConfig(),
+	)
+	// DefaultTools does not include grep_files (the host-side ripgrep
+	// integration covers that path in production). RUNE-179 fixed the
+	// in-process grep_files implementation, so register it explicitly
+	// for this e2e fixture.
+	tools = append(tools, agentools.NewGrepFiles(fs, cwd, agentools.NewFileTracker()))
+	registry := agent.NewRegistry(tools...)
+	skillReg := skills.NewRegistry(fs, cwd, nil, nil)
+	store := newMemDialogueStore()
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{
+		SystemPrompt: "test",
+		Model:        llmapi.ModelEntry{Provider: "test", Name: "test-model", ContextWindow: 128_000},
+		Workspace:    cwd,
+	})
+
+	owner := &aiEditorHandler{n: stubNotifications{}}
+	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case req, ok := <-msgRx:
+				if !ok {
+					return
+				}
+				it := ag.Run(req.ctx, "test-dialogue", req.msg)
+				for {
+					if _, more := it.Next(req.ctx); !more {
+						break
+					}
+				}
+				_ = it.Close()
+			}
+		}
+	})
+
+	t.Cleanup(func() {
+		cancel()
+		wg.Wait()
+	})
+
+	return &promptFlusher{
+		t:           t,
+		inner:       wrapped,
+		interruptCh: interruptCh,
+		// Tool execution takes longer than ask_user prompts; bump the
+		// quiescence window so the multi-tool scripted sequence
+		// finishes before the test asserts on captured requests.
+		settle: 150 * time.Millisecond,
+	}
+}
+
+// findToolResult scans messages for the tool-role message that carries
+// the result of the given tool-call ID. Returns ("", false) if absent.
+func findToolResult(msgs []llmapi.Message, toolCallID string) (string, bool) {
+	for _, m := range msgs {
+		if m.Role == llmapi.RoleTool && m.ToolCallID == toolCallID {
+			return m.Content, true
+		}
+	}
+	return "", false
+}
+
+// TestE2EUTF8SafetyAcrossAgentLoop is the RUNE-179 end-to-end
+// regression. The scripted LLM walks a workspace that contains:
+//
+//   - utf8.txt: valid UTF-8 text
+//   - latin1.log: text with a stray 0xff byte
+//   - bin.dat: binary blob with a NUL in the first 8 KiB
+//
+// It issues a read_file call against each path and a final grep_files
+// over the workspace before replying with "done". The test then
+// inspects the captured llmapi.Request log to verify:
+//
+//  1. Layer 1 — every outgoing string field is valid UTF-8.
+//  2. Layer 3 — read_file on the binary file returns a BinaryStub that
+//     steers the model toward bash inspection.
+//  3. Layer 3 — read_file on the latin-1 file ends with the U+FFFD
+//     marker and the bad byte is replaced.
+//  4. Layer 3 — read_file on the UTF-8 file is passed through with no
+//     marker.
+//  5. Layer 4 — grep_files for "needle" returns the UTF-8 file but
+//     not the binary blob, even though both contain the literal bytes.
+func TestE2EUTF8SafetyAcrossAgentLoop(t *testing.T) {
+	dir := t.TempDir()
+
+	// utf8.txt: valid multi-byte text containing the literal "needle"
+	// so grep_files has at least one positive hit.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "utf8.txt"),
+		[]byte("héllo · 世界\nfind the needle in the haystack\n"), 0o644))
+	// latin1.log: ASCII with one stray 0xff byte sliced into a line.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "latin1.log"),
+		[]byte("normal line\nbad byte here: \xff oops\nmore text\n"), 0o644))
+	// bin.dat: looks binary by both heuristics (NUL in first 8 KiB)
+	// and embeds the same "needle" token between binary bytes so the
+	// grep filter is the only thing keeping it out of results.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin.dat"),
+		[]byte("\x7fELF\x02\x01\x01\x00\x00\x00needle\x00data\x01\x02"), 0o644))
+
+	// Scripted LLM: four tool-calls then stop. The arguments include a
+	// stray invalid UTF-8 byte in a path field on purpose so the
+	// wire-level sanitiser in agent.go (Layer 1) has to scrub it
+	// before CreateCompletion is invoked on the next turn.
+	svc := llmtest.New(
+		[]llmapi.ModelEntry{{Provider: "test", Name: "test-model", ContextWindow: 128_000}},
+		llmtest.Response{
+			ToolCalls: []llmapi.ToolCall{{
+				ID:   "call-read-utf8",
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{
+					Name:      "read_file",
+					Arguments: `{"path":"utf8.txt","offset":0,"limit":0}`,
+				},
+			}},
+			FinishReason: llmapi.FinishReasonToolCall,
+		},
+		llmtest.Response{
+			ToolCalls: []llmapi.ToolCall{{
+				ID:   "call-read-latin1",
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{
+					Name: "read_file",
+					// Embed a stray 0xff byte to exercise Layer 1's
+					// tool-call Arguments sanitisation.
+					Arguments: "{\"path\":\"latin1.log\",\"offset\":0,\"limit\":0,\"_pad\":\"\xff\"}",
+				},
+			}},
+			FinishReason: llmapi.FinishReasonToolCall,
+		},
+		llmtest.Response{
+			ToolCalls: []llmapi.ToolCall{{
+				ID:   "call-read-bin",
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{
+					Name:      "read_file",
+					Arguments: `{"path":"bin.dat","offset":0,"limit":0}`,
+				},
+			}},
+			FinishReason: llmapi.FinishReasonToolCall,
+		},
+		llmtest.Response{
+			ToolCalls: []llmapi.ToolCall{{
+				ID:   "call-grep",
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{
+					Name:      "grep_files",
+					Arguments: `{"pattern":"needle"}`,
+				},
+			}},
+			FinishReason: llmapi.FinishReasonToolCall,
+		},
+		llmtest.Response{
+			Chunks:       []string{"done"},
+			FinishReason: llmapi.FinishReasonStop,
+		},
+	)
+
+	h := utf8E2EHandler(t, svc, dir)
+
+	// Drive the handler through its public interface. The user types
+	// "hi" and presses Enter; the scripted agent loop runs all four
+	// tool calls and the final stop. We only assert on the final
+	// frame (assistant text "done" appears) — the per-tool assertions
+	// run after the sequence against the captured request log.
+	// The chat area shows the user's message at the top; the
+	// assistant's "done" reply and tool-spinner lines are written
+	// into the dialogue component asynchronously by the agent loop
+	// and may not be flushed by the time this frame is captured.
+	// The RUNE-179 assertions below run after polling for the full
+	// scripted sequence to complete.
+	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+		InputSequence: "hi<enter>",
+		Expected: frame(
+			"hi",
+			blanks(), blanks(), blanks(), blanks(), blanks(), blanks(),
+			"   ┌───────────────────────────────┐    ",
+			"   │▐                              │    ",
+			"   └───────────────────────────────┘    ",
+		),
+	}})
+
+	// Give the agent loop a final moment to flush the post-tool
+	// CreateCompletion calls into the recorder. The promptFlusher
+	// settle window covers most of this, but the stop reply itself
+	// arrives after the last interrupt so we wait once more.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if svc.CallCount() >= 5 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	require.GreaterOrEqualf(t, svc.CallCount(), 5,
+		"expected scripted agent loop to issue all 5 CreateCompletion calls, got %d", svc.CallCount())
+
+	requests := svc.Requests()
+
+	// (1) Layer 1: every outgoing string field is valid UTF-8.
+	for k, r := range requests {
+		for i, m := range r.Request.Messages {
+			assert.Truef(t, utf8.ValidString(m.Content),
+				"request %d message %d Content has invalid UTF-8: %q", k, i, m.Content)
+			assert.Truef(t, utf8.ValidString(m.ReasoningContent),
+				"request %d message %d ReasoningContent has invalid UTF-8", k, i)
+			for j, tc := range m.ToolCalls {
+				assert.Truef(t, utf8.ValidString(tc.Function.Arguments),
+					"request %d message %d toolcall %d Arguments has invalid UTF-8: %q",
+					k, i, j, tc.Function.Arguments)
+				assert.Truef(t, utf8.ValidString(tc.Function.Name),
+					"request %d message %d toolcall %d Name has invalid UTF-8", k, i, j)
+			}
+		}
+	}
+
+	// The Nth scripted response is processed during the Nth call; the
+	// next call (N+1) is the first one whose Messages slice carries
+	// the tool-role result from that response. So the message log on
+	// request[i+1] is where we can inspect tool result i.
+	require.GreaterOrEqual(t, len(requests), 5)
+	utf8Msgs := requests[1].Request.Messages
+	latin1Msgs := requests[2].Request.Messages
+	binMsgs := requests[3].Request.Messages
+	grepMsgs := requests[4].Request.Messages
+
+	// (2) Layer 3: binary file → BinaryStub with bash hint.
+	binResult, ok := findToolResult(binMsgs, "call-read-bin")
+	require.True(t, ok, "expected tool result for call-read-bin in request 3")
+	header := regexp.MustCompile(`^<binary file: bin\.dat, \d+ bytes, sha256=[0-9a-f]{64}`)
+	assert.Regexp(t, header, binResult, "binary file result must start with the stub header")
+	assert.Contains(t, binResult, "use bash",
+		"binary stub must instruct the model to fall back to bash")
+	assert.Contains(t, binResult, "xxd",
+		"binary stub must mention xxd / hexdump / strings as inspection options")
+
+	// (3) Layer 3: latin-1 file → U+FFFD marker, bad byte replaced.
+	latin1Result, ok := findToolResult(latin1Msgs, "call-read-latin1")
+	require.True(t, ok, "expected tool result for call-read-latin1 in request 2")
+	assert.Truef(t, utf8.ValidString(latin1Result),
+		"latin-1 tool result must be valid UTF-8: %q", latin1Result)
+	assert.Contains(t, latin1Result, "\ufffd",
+		"latin-1 tool result must replace bad bytes with U+FFFD")
+	assert.Contains(t, latin1Result, "(1 invalid UTF-8 byte replaced with U+FFFD)",
+		"latin-1 tool result must carry the byte-count marker")
+
+	// (4) Layer 3: valid UTF-8 file → verbatim, no marker, no stub.
+	utf8Result, ok := findToolResult(utf8Msgs, "call-read-utf8")
+	require.True(t, ok, "expected tool result for call-read-utf8 in request 1")
+	assert.Contains(t, utf8Result, "héllo · 世界",
+		"utf-8 tool result must round-trip multi-byte characters")
+	assert.NotContains(t, utf8Result, "invalid UTF-8",
+		"valid utf-8 file must not be tagged with a sanitisation marker")
+	assert.NotContains(t, utf8Result, "<binary file:",
+		"valid utf-8 file must not be tagged as binary")
+
+	// (5) Layer 4: grep_files matches the utf-8 text file but skips
+	// the binary blob even though both contain the literal "needle".
+	grepResult, ok := findToolResult(grepMsgs, "call-grep")
+	require.True(t, ok, "expected tool result for call-grep in request 4")
+	assert.Contains(t, grepResult, "utf8.txt", "grep must find the text file")
+	assert.NotContains(t, grepResult, "bin.dat",
+		"grep must skip binary files even when their bytes contain the pattern")
 }
 
 // TestE2ECtrlCDismissesFreeFormPrompt drives the same handler with an

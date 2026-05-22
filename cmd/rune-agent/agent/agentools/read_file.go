@@ -25,15 +25,17 @@ package agentools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 )
 
 // maxImageBytes is the maximum file size for image reads (20 MB).
@@ -140,6 +142,21 @@ func (t *readFileTool) Execute(ctx context.Context, arguments string) agent.Tool
 
 	t.tracker.Record(path, data)
 
+	variant := readFileVariant(args.Offset, args.Limit)
+
+	// Binary files: skip in-band content and return a metadata stub
+	// so the model doesn't try to reason about raw bytes (and so the
+	// proto-go marshaller doesn't reject the request). Still track
+	// the read so re-reads detect mutation as usual.
+	if utf8validate.IsBinary(data) {
+		staleIDs := t.tracker.TrackRead(ctx, "read_file", path, variant)
+		staleIDs = append(staleIDs, t.tracker.ConsumeDiscoveries(path)...)
+		return agent.ToolResult{
+			Content:           utf8validate.BinaryStub(filepath.Base(path), len(data), sha256.Sum256(data)),
+			DropToolResultIDs: staleIDs,
+		}
+	}
+
 	lines := strings.Split(string(data), "\n")
 
 	// Apply offset (1-based)
@@ -161,11 +178,15 @@ func (t *readFileTool) Execute(ctx context.Context, arguments string) agent.Tool
 		fmt.Fprintf(&sb, "L%d: %s\n", i+1, agent.TruncateLine(lines[i], t.maxLineBytes))
 	}
 
-	variant := readFileVariant(args.Offset, args.Limit)
+	content := sb.String()
+	if n := utf8validate.CountInvalidBytes(content); n > 0 {
+		content = utf8validate.Sanitize(content) + "\n" + utf8validate.InvalidBytesMarker(n) + "\n"
+	}
+
 	staleIDs := t.tracker.TrackRead(ctx, "read_file", path, variant)
 	staleIDs = append(staleIDs, t.tracker.ConsumeDiscoveries(path)...)
 	return agent.ToolResult{
-		Content:           sb.String(),
+		Content:           content,
 		DropToolResultIDs: staleIDs,
 	}
 }

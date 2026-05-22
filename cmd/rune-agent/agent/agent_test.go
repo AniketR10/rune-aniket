@@ -36,16 +36,17 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestAgentRun(t *testing.T) {
@@ -2904,7 +2905,7 @@ type mockResponse struct {
 	toolCalls         []llmapi.ToolCall
 	usage             llmapi.Usage
 	err               error
-	streamErr         error                // error to return from iterator.Err() after consuming
+	streamErr         error                   // error to return from iterator.Err() after consuming
 	rateLimitWarnings []*llmapi.RateLimitInfo // warnings to emit before text deltas
 	// providerItems are forwarded into DoneData.Message.ProviderItems so
 	// tests can simulate a Responses API stream that emits opaque items
@@ -4278,4 +4279,55 @@ func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testin
 	}
 	assert.True(t, foundPartialAssistant,
 		"second LLM request must contain the partial assistant message with reasoning as content")
+}
+
+// TestToolOutputSanitizedForWire is the RUNE-179 regression. Tools may
+// return content with invalid UTF-8 bytes; those bytes must never
+// reach llmapi.Request.Messages, otherwise the proto-go marshaller
+// rejects the request and wedges the conversation.
+func TestToolOutputSanitizedForWire(t *testing.T) {
+	svc := &mockService{
+		responses: []mockResponse{
+			toolCallResponse("read", "{\"path\":\"a\xfftxt\"}", "call_r1"),
+			stopResponse("done"),
+		},
+	}
+	store := newMockStore()
+	readTool := &mockTool{
+		name: "read",
+		executeFn: func(_ context.Context, _ string) ToolResult {
+			return ToolResult{Content: "ok\xffbad"}
+		},
+	}
+	ag := NewAgent(svc, NewRegistry(readTool), noSkills(), store, NoMemory(),
+		Config{SystemPrompt: "system\xffprompt"})
+
+	it := ag.Run(context.Background(), "d", "go\xffuser")
+	events := collectEvents(t, it)
+	require.True(t, hasEventType(events, EventDone))
+
+	require.GreaterOrEqual(t, svc.getCallCount(), 2)
+	for k, req := range svc.requests {
+		for i, msg := range req.Messages {
+			assert.Truef(t, utf8.ValidString(msg.Content),
+				"request %d message %d content has invalid UTF-8: %q", k, i, msg.Content)
+			for j, tc := range msg.ToolCalls {
+				assert.Truef(t, utf8.ValidString(tc.Function.Arguments),
+					"request %d message %d toolcall %d arguments has invalid UTF-8: %q",
+					k, i, j, tc.Function.Arguments)
+			}
+		}
+	}
+
+	// The tool result content should be the sanitized version, with
+	// U+FFFD in place of the stray 0xff byte.
+	lastReq := svc.requests[svc.getCallCount()-1]
+	var found bool
+	for _, msg := range lastReq.Messages {
+		if msg.Role == llmapi.RoleTool && msg.ToolCallID == "call_r1" {
+			assert.Equal(t, "ok\ufffdbad", msg.Content)
+			found = true
+		}
+	}
+	assert.True(t, found, "expected sanitized tool result message in last request")
 }

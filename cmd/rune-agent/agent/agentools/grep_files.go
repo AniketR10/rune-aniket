@@ -27,6 +27,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -34,9 +36,10 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -160,9 +163,15 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		}
 		if args.Include != "" {
 			matched, _ := filepath.Match(args.Include, filepath.Base(path))
-			return matched
+			if !matched {
+				return false
+			}
 		}
-		return true
+		// Skip binary files (e.g. compiled objects, fonts, images
+		// without recognised extensions). Reading lines from them
+		// would emit invalid UTF-8 and bloats the line iterator
+		// channel; this matches ripgrep's default behaviour.
+		return !pathIsBinary(t.fs, filepath.Join(root, path))
 	})
 
 	lines, err := walkdir.ReadLines(walkCtx, t.fs, filtered)
@@ -186,7 +195,7 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		if _, dup := seen[relPath]; dup {
 			continue
 		}
-		content := contentAfterLineNum(line)
+		content := utf8validate.Sanitize(contentAfterLineNum(line))
 		if re.MatchString(content) {
 			seen[relPath] = struct{}{}
 			absPath := filepath.Join(root, relPath)
@@ -230,4 +239,22 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		output += fmt.Sprintf("\n\n(results truncated at %d files)", limit)
 	}
 	return agent.ToolResult{Content: output}
+}
+
+// pathIsBinary opens path and inspects up to the first 8 KiB to decide
+// whether it should be treated as binary content. Files that fail to
+// open are conservatively treated as non-binary so the existing
+// per-file error path can surface the failure to the caller.
+func pathIsBinary(fs workspaceapi.FileSystem, path string) bool {
+	f, err := fs.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, 8*1024)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return false
+	}
+	return utf8validate.IsBinary(buf[:n])
 }

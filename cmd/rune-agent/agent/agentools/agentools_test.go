@@ -26,23 +26,26 @@ package agentools
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // localFS implements workspaceapi.FileSystem using local OS calls for testing.
@@ -644,6 +647,64 @@ func TestReadFile_lineTruncation(t *testing.T) {
 	})
 }
 
+// TestReadFile_binaryFileReturnsStub verifies that read_file refuses to
+// inline binary content and returns a metadata stub instead. Regression
+// for RUNE-179.
+func TestReadFile_binaryFileReturnsStub(t *testing.T) {
+	dir := t.TempDir()
+	// ELF-ish blob with a NUL in the first 8 KiB.
+	data := []byte("\x7fELF\x02\x01\x01\x00binary\x00\x00payload")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.out"), data, 0o644))
+
+	tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+	result := tool.Execute(context.Background(), `{"path":"a.out"}`)
+
+	require.False(t, result.IsError)
+	// Header carries identity (name, size, sha256).
+	header := regexp.MustCompile(`^<binary file: a\.out, \d+ bytes, sha256=[0-9a-f]{64}`)
+	assert.Regexp(t, header, result.Content)
+	// Body steers the model toward bash-based inspection rather than
+	// looping on the same read_file path.
+	assert.Contains(t, result.Content, "use bash")
+	assert.Contains(t, result.Content, "xxd")
+}
+
+// TestReadFile_textWithStrayBytesSanitised verifies that text files
+// with a stray invalid UTF-8 byte (e.g. a latin-1 log line) are passed
+// through with U+FFFD replacement and a trailing marker.
+func TestReadFile_textWithStrayBytesSanitised(t *testing.T) {
+	dir := t.TempDir()
+	// One latin-1 byte (0xff) inside an otherwise ASCII log line.
+	data := []byte("normal line\nbad byte here: \xff oops\nmore text\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "latin1.log"), data, 0o644))
+
+	tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+	result := tool.Execute(context.Background(), `{"path":"latin1.log"}`)
+
+	require.False(t, result.IsError)
+	assert.True(t, utf8.ValidString(result.Content),
+		"sanitised content must be valid UTF-8")
+	assert.Contains(t, result.Content, "\ufffd",
+		"invalid byte must be replaced with U+FFFD")
+	assert.Contains(t, result.Content, "(1 invalid UTF-8 byte replaced with U+FFFD)")
+}
+
+// TestReadFile_validUTF8PassesThroughVerbatim verifies that a normal
+// UTF-8 source file is returned without a sanitisation marker.
+func TestReadFile_validUTF8PassesThroughVerbatim(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte("héllo · 世界\nL2 ascii\n")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "utf8.txt"), data, 0o644))
+
+	tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+	result := tool.Execute(context.Background(), `{"path":"utf8.txt"}`)
+
+	require.False(t, result.IsError)
+	assert.Contains(t, result.Content, "héllo · 世界")
+	assert.NotContains(t, result.Content, "invalid UTF-8")
+	assert.NotContains(t, result.Content, "\ufffd")
+}
+
 func TestSearch(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -974,6 +1035,33 @@ func TestBash_definition_does_not_expose_timeout_parameter(t *testing.T) {
 	props, ok := params["properties"].(map[string]any)
 	require.True(t, ok)
 	assert.NotContains(t, props, "timeout")
+}
+
+// TestBash_truncation_snaps_to_rune_boundary verifies that the 100 KiB
+// cap in bash.go does not slice through a multi-byte UTF-8 rune and
+// emit invalid UTF-8 to the model. Regression for RUNE-179.
+func TestBash_truncation_snaps_to_rune_boundary(t *testing.T) {
+	dir := setupWorkspace(t)
+	// Build a payload that places a multi-byte rune across the
+	// 100 KiB truncation boundary, then trails a sentinel that must be
+	// cut. printf 'a%.0s' is portable across bash/macOS.
+	const cap = 100 * 1024
+	script := fmt.Sprintf(
+		`printf 'a%%.0s' {1..%d}; printf '\xe2\x86\x92'; printf 'TAILSENTINEL'`,
+		cap-1,
+	)
+	tool := newBash(localExec{}, dirURI(dir), configedit.NopConfig())
+	args := fmt.Sprintf(`{"command": %q, "description": "boundary"}`, script)
+
+	result := tool.Execute(context.Background(), args)
+
+	require.False(t, result.IsError, "expected success, got: %s", result.Content)
+	require.True(t, utf8.ValidString(result.Content),
+		"bash output must be valid UTF-8 after truncation; bytes=%d", len(result.Content))
+	assert.Contains(t, result.Content, "(output truncated at",
+		"expected truncation notice")
+	// The trailing sentinel lives past the cap and must be dropped.
+	assert.NotContains(t, result.Content, "TAILSENTINEL")
 }
 
 func TestApplyPatch(t *testing.T) {
