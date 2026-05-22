@@ -49,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"mvdan.cc/sh/v3/syntax"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	fileexplorercomp "unstable.build/go-tui/component/fileexplorer"
@@ -56,6 +57,7 @@ import (
 	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idecmd"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/idetask"
@@ -66,6 +68,7 @@ import (
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/byoe"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -73,11 +76,7 @@ const (
 	commandHistoryDocumentID = "command-history:ex-command-history"
 	shellHistoryDocumentID   = "shell-history:ex-shell-history"
 	reissuePadding           = 10 * time.Millisecond
-	// fileExplorerURI is the pseudo-URI used to identify the file
-	// explorer's in-memory buffer. Exposed so that infrastructure
-	// that snapshots open files (session restore, history tracking)
-	// can skip it instead of trying to re-open it as a regular tab.
-	fileExplorerURI = "memory:///fexplorer"
+	fileExplorerURI          = "memory:///fexplorer"
 )
 
 var (
@@ -105,55 +104,43 @@ type macroRecorder interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config     text.Config
-	comp       text.Component
-	clip       clipboard.Register
-	executor   schemeapi.Executor
-	ed         text.Editor
-	parser     syntaxapi.Parser
-	wsExecutor *workspaceshell.Executor
-	// extensionsExecutor tracks extension binaries launched by the
-	// IDE's extension runner. It backs the "extensions process" REPL
-	// command (a nested subcommand of "extensions") so users can
-	// list, signal, or stop extension PIDs the same way they would
-	// workspace processes.
-	extensionsExecutor *workspaceshell.Executor
-	storage            storageapi.Service
-	workspaceURI       workspaceapi.URI
-	closed             bool
-	reservoir          *vtereservoir.Facility
-	// initialReservoirCapacity preserves the configured pool size so
-	// that setExecutor can re-create the reservoir without racing
-	// against the asynchronous initCap (Capacity() returns the
-	// momentary length of the pool, which is usually 0 right after
-	// extension load).
+	config        text.Config
+	comp          text.Component
+	clip          clipboard.Register
+	ed            text.Editor
+	parser        syntaxapi.Parser
+	wsExecutor    *workspaceshell.Executor
+	aliasExpander *idecmd.Expander
+	// executor is a forwarding proxy: long-lived consumers (the
+	// CommandSubstResolver, plugin.New, the VTE) capture this value
+	// once and continue to route through whatever underlying
+	// schemeapi.Executor setExecutor last installed.
+	executor                 *currentExecutor
+	extensionsExecutor       *workspaceshell.Executor
+	storage                  storageapi.Service
+	workspaceURI             workspaceapi.URI
+	closed                   bool
+	reservoir                *vtereservoir.Facility
 	initialReservoirCapacity int
-	// do not use directly, use notifications below instead
-	// which is able to dispatch cross-workspace cues.
-	container            *notifications.Container
-	notifications        browserapi.Notifications
-	emulatorConfig       vte.Config
-	newEmulatorHandler   func([]string) (vtereservoir.VTE, error)
-	tm                   browser.TabManager
-	newPluginHandler     func(...string) (pluginHandler, error)
-	workspace            workspace.Workspace
-	tasks                *idetask.Manager
-	dispatchOnPreview    map[string]PreviewFunc
-	filepathCompleter    command.Completer
-	sequencer            thandler.Sequencer
-	publishEvent         func(term.Event) bool
-	cancelPartialReissue func()
-	ctxPartialReissue    context.Context
-	reissueEvent         term.Event
-	cmd                  *command.Prompt
-	syncCommandPrompt    bool
-	// commandEditor, when non-nil, drives the command Prompt's modal
-	// edit mode. It is set by the workspace handler to a bare vi or
-	// modeless handler (no aux/status/icons bars) chosen from the
-	// active editor mode configuration. Tests that construct ex
-	// directly leave it nil and fall back to wrapping e.ed.Edit.
-	commandEditor     command.Editor
-	pluginWaitTimeout time.Duration
+	container                *notifications.Container
+	notifications            browserapi.Notifications
+	emulatorConfig           vte.Config
+	newEmulatorHandler       func([]string) (vtereservoir.VTE, error)
+	tm                       browser.TabManager
+	newPluginHandler         func(...string) (pluginHandler, error)
+	workspace                workspace.Workspace
+	tasks                    *idetask.Manager
+	dispatchOnPreview        map[string]previewFunc
+	filepathCompleter        command.Completer
+	sequencer                thandler.Sequencer
+	publishEvent             func(term.Event) bool
+	cancelPartialReissue     func()
+	ctxPartialReissue        context.Context
+	reissueEvent             term.Event
+	cmd                      *command.Prompt
+	syncCommandPrompt        bool
+	commandEditor            command.Editor
+	pluginWaitTimeout        time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
 	cmdV             handler.Virtual[*browser.Component]
@@ -179,10 +166,10 @@ type ex struct {
 	debugCommands       bool
 }
 
-// PreviewFunc is a function used to preview commands.
+// previewFunc is a function used to preview commands.
 // The first argument returns a component to render alongside the command
 // prompt and the function is used to cancel any mutable effects.
-type PreviewFunc = func(string, ...string) (component.Responsive, func(), bool)
+type previewFunc = func(string, ...string) (component.Responsive, func(), bool)
 
 func newEx(
 	edFactory func(byoe.Reloader) (text.Editor, error),
@@ -196,7 +183,7 @@ func newEx(
 	initialVTECapacity int,
 	clip clipboard.Register,
 	macro macroRecorder,
-	dispatchOnPreview map[string]PreviewFunc,
+	dispatchOnPreview map[string]previewFunc,
 	tm browser.TabManager,
 	parser syntaxapi.Parser,
 	opts ...text.Option,
@@ -226,7 +213,7 @@ func (e *ex) init(
 	initialVTECapacity int,
 	clip clipboard.Register,
 	macro macroRecorder,
-	dispatchOnPreview map[string]PreviewFunc,
+	dispatchOnPreview map[string]previewFunc,
 	tm browser.TabManager,
 	parser syntaxapi.Parser,
 	opts ...text.Option,
@@ -285,6 +272,8 @@ func (e *ex) init(
 		plugin.WithFrameCharSet(e.config.FocusFrameCharSet),
 		plugin.WithFrameAttr(e.config.FocusFrameAttr),
 		plugin.WithBarConfig(pluginBarConfig),
+		plugin.WithCommandExpander(cmdenv.NewCommandSubstResolver(
+			e.executor, e.config.EnvSource)),
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.executor, e.workspace,
@@ -335,7 +324,7 @@ func (e *ex) setExecutor(
 	wsExec *workspaceshell.Executor,
 	extExec *workspaceshell.Executor,
 ) {
-	e.executor = exe
+	e.executor.set(exe)
 	e.wsExecutor = wsExec
 	e.extensionsExecutor = extExec
 	if e.reservoir != nil {
@@ -379,8 +368,9 @@ func (e *ex) doInit(
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
-	e.executor = m
-	e.pluginWaitTimeout = 3 * time.Second
+	e.executor = &currentExecutor{}
+	e.executor.set(m)
+	e.pluginWaitTimeout = 60 * time.Second
 	e.clip = clip
 	e.workspace = m
 	e.container = notifications.New(&e.comp, n.cfg)
@@ -409,6 +399,9 @@ func (e *ex) doInit(
 
 	e.cleanPartialReissueState()
 	e.cmdV.C = browser.NewComponent(e.config.Config)
+	e.aliasExpander = idecmd.NewExpander(
+		e.config.CommandAliases, e.comp.DispatchEnv(),
+	)
 	return
 }
 
@@ -437,11 +430,41 @@ func (e *ex) Complete(ctx context.Context, args []string) (
 		scmd.Cursor.Content = h.CursorAtScroll()
 		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
-	it, newArg, err := e.comp.CompleteCommand(ctx, scmd)
+	it, newArg, err := e.completeCommand(ctx, scmd)
 	if err != nil {
 		e.setError(fmt.Errorf("complete command: %v", err))
 	}
 	return it, newArg, err
+}
+
+// completeCommand resolves alias completers before falling through to
+// the text component's command-subscriber completion. Aliases used to
+// live inside text.Component; now they're owned by ide.
+func (e *ex) completeCommand(
+	ctx context.Context, cmd textapi.Command,
+) (iterator.Iterator[string], string, error) {
+	if alias, ok := e.aliasExpander.ResolveAlias(cmd.Name); ok {
+		if len(alias.Completers) == 0 {
+			return iterator.FromSlice[string](nil), "", nil
+		}
+		argv := append([]string{cmd.Name}, cmd.Args...)
+		if len(alias.Completers) == 1 {
+			factory := alias.Completers[0]
+			if factory == nil {
+				return iterator.FromSlice[string](nil), "", nil
+			}
+			return factory(&e.comp).Complete(ctx, argv)
+		}
+		completers := make([]command.Completer, 0, len(alias.Completers))
+		for _, factory := range alias.Completers {
+			if factory == nil {
+				continue
+			}
+			completers = append(completers, factory(&e.comp))
+		}
+		return command.MultiCompleter(completers...).Complete(ctx, argv)
+	}
+	return e.comp.CompleteCommand(ctx, cmd)
 }
 
 // Dispatch satisfies command.Dispatcher for command.Handler.
@@ -792,12 +815,6 @@ func (e *ex) quit(_ context.Context, args ...string) error {
 	return nil
 }
 
-// waitInflight blocks until all in-flight async Flush/ForceFlush/
-// Reload awaiter goroutines have completed and their completion
-// callbacks have been dispatched through sched. This is intended
-// for tests and for IDE shutdown — production UI code should
-// never need to wait on this directly because the UI keeps
-// responding while saves are in flight.
 func (e *ex) waitInflight() {
 	e.flusher.wait()
 }
@@ -815,25 +832,58 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		scmd.Cursor.Content = h.CursorAtScroll()
 		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
-	var handled bool
-	handled, err = e.comp.DispatchCommand(context.Background(), scmd)
+	ctx := context.Background()
+	target, isAlias := e.aliasExpander.ResolveAlias(cmd)
+	if cmd == "!" || cmd == "!!" {
+		ctx = cmdenv.WithCommandSubstitution(ctx)
+	}
+	if isAlias && idecmd.ChainFromContext(ctx) == nil {
+		ctx = idecmd.WithChain(ctx, cmd, idecmd.NewChain())
+	}
+	it, err := e.aliasExpander.Expand(ctx, scmd)
 	if err != nil {
-		return
+		return err
 	}
-	if !handled {
-		target, ok := e.config.CommandAliases[cmd]
-		if !ok && e.workspace == nil {
-			err = fmt.Errorf("unknown command or alias %q or cannot run on an empty workspace", cmd)
-		} else if !ok {
-			err = fmt.Errorf("unknown command or command alias %q", cmd)
-		} else if e.workspace == nil {
-			err = fmt.Errorf("cannot run %q (alias of %v) on an empty workspace",
-				cmd, target)
-		} else {
-			err = fmt.Errorf("%s is aliased to an unknown command %v", cmd, target)
+	defer func() { _ = it.Close() }()
+	var handled bool
+	for {
+		next, ok := it.Next(ctx)
+		if !ok {
+			break
 		}
+		h, derr := e.comp.DispatchCommand(ctx, next)
+		if derr != nil {
+			if isAlias {
+				return fmt.Errorf("%s: %s", formatStep(next), derr)
+			}
+			return derr
+		}
+		handled = handled || h
 	}
-	return
+	if iterErr := it.Err(); iterErr != nil {
+		return iterErr
+	}
+	if handled {
+		return nil
+	}
+	switch {
+	case !ok && e.workspace == nil:
+		return fmt.Errorf("unknown command or alias %q or cannot run on an empty workspace", cmd)
+	case !ok:
+		return fmt.Errorf("unknown command or command alias %q", cmd)
+	case e.workspace == nil:
+		return fmt.Errorf("cannot run %q (alias of %v) on an empty workspace",
+			cmd, target.Commands)
+	default:
+		return fmt.Errorf("%s is aliased to an unknown command %v", cmd, target.Commands)
+	}
+}
+
+func formatStep(cmd textapi.Command) string {
+	if len(cmd.Args) == 0 {
+		return cmd.Name
+	}
+	return cmd.Name + " " + strings.Join(cmd.Args, " ")
 }
 
 func (e *ex) editFileURI(uri workspaceapi.URI, win browser.Window, readOnly bool) (
@@ -1365,12 +1415,8 @@ func (e *ex) executePlugin(_ context.Context, args ...string) error {
 	if len(args) == 0 {
 		return e.toggleCompanionTerminal()
 	}
-	// Args reach this handler already unquoted by the command prompt.
-	// The plugin handler stitches them back together into a command line
-	// that the VTE will re-tokenise via mvdan.cc/sh — so individual args
-	// containing whitespace or shell metacharacters must be re-quoted to
-	// survive that round trip as a single argument.
-	h, err := e.newPluginHandler(reshellQuoteArgs(args)...)
+	pluginArgs := cmdenv.BuildPluginArgv(args)
+	h, err := e.newPluginHandler(pluginArgs...)
 	if err != nil {
 		return err
 	}
@@ -1397,132 +1443,87 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("expected at least one argument")
 	}
-	ch := make(chan error)
-	watcher := workspaceapi.ChanProcessWatcher(ch)
 	start := time.Now()
 	e.log(log.DebugLevel, "starting command %v", args)
-	cfg := e.emulatorConfig
-	cfg.Watcher = watcher
-	// See executePlugin: re-quote so the VTE's shell.Fields call
-	// preserves argument boundaries that contain whitespace.
-	cfg.CommandAndArgs = reshellQuoteArgs(args)
-	// use set executor so we can inject plugin vars
-	v, err := vte.NewHandler(e.Browser(), e.Browser(),
-		e.workspace, e.executor, e.tm, cfg)
+
+	var line string
+	if len(args) == 1 {
+		line = args[0]
+	} else {
+		line = strings.Join(args, " ")
+	}
+	parsed, err := syntax.NewParser().Parse(strings.NewReader(line), "")
 	if err != nil {
-		return err
+		return fmt.Errorf("parse shell line %q: %w", line, err)
 	}
-	h := vteAdapter{v}
 
-	handleError := func(err error) error {
-		if err == nil {
-			_, _ = e.notifications.Notify(browserapi.LevelSuccess,
-				fmt.Sprintf("%s: done in %s", args[0], time.Since(start).
-					Truncate(time.Millisecond)))
-			return err
+	notifyName := firstWord(line)
+	_, isAliasCtx := idecmd.IsContext(ctx)
+	run := func(ctx context.Context) error {
+		runCtx, cancel := context.WithTimeout(ctx, e.pluginWaitTimeout)
+		defer cancel()
+		var stderrBuf strings.Builder
+		runner := cmdenv.Runner{
+			Executor:  e.executor,
+			EnvSource: e.config.EnvSource,
+			Stderr:    &stderrBuf,
 		}
-
-		// collect stdout/stderr from plugin handler
-		const width, height = 50, 6
-		var w term.StringWriter
-		w.Init(width, height)
-		h.Resize(width, height)
-		h.Draw(&w)
-		_ = w.Flush()
-		err = fmt.Errorf("%v: %s", err, w.String())
-		return err
+		captured, runErr := runner.Run(runCtx, line, parsed)
+		if runErr != nil {
+			return runErr
+		}
+		idecmd.UpdateChainVars(ctx, captured)
+		return nil
 	}
 
-	// if command is part of an alias chain, then we want to wait for it
-	// to finish so we can use the return value of this command to short-circuit
-	// if there's an error.
-	_, isAliasCtx := text.IsAliasContext(ctx)
+	notifID, nerr := e.notifications.Notify(browserapi.LevelInfo,
+		"%s: running...", notifyName)
+	if nerr == nil {
+		_ = e.notifications.UpdateNotificationProgress(notifID, "", 0, 1)
+	}
+	closeProgress := func() {
+		if nerr != nil {
+			return
+		}
+		_ = e.notifications.UpdateNotificationProgress(notifID, "", 1, 1)
+	}
+
 	if isAliasCtx {
-		defer h.Close() //nolint:errcheck
-		select {
-		case err = <-ch:
-			err = handleError(err)
-			return err
-		case <-time.After(e.pluginWaitTimeout):
-			return errors.New("command was taking too long and so it was canceled")
+		runErr := run(ctx)
+		closeProgress()
+		if runErr != nil {
+			return runErr
 		}
+		_, _ = e.notifications.Notify(browserapi.LevelSuccess,
+			fmt.Sprintf("%s: done in %s", notifyName,
+				time.Since(start).Truncate(time.Millisecond)))
+		return nil
 	}
 
-	go debug.CapturePanicReport(func
-	//nolint:errcheck
-	() {
-
-		defer h.Close()
-		err := <-ch
-		err = handleError(err)
-		if err != nil {
+	go debug.CapturePanicReport(func() {
+		runErr := run(ctx)
+		closeProgress()
+		if runErr != nil {
 			_, _ = e.notifications.Notify(browserapi.LevelError,
-				fmt.Sprintf("%s: %s", args[0], err))
+				fmt.Sprintf("%s: %s", notifyName, runErr))
+			return
 		}
-
+		_, _ = e.notifications.Notify(browserapi.LevelSuccess,
+			fmt.Sprintf("%s: done in %s", notifyName,
+				time.Since(start).Truncate(time.Millisecond)))
 	})
 	return nil
 }
 
-// reshellQuoteArgs re-applies POSIX-style shell quoting to args so that a
-// downstream consumer that re-joins them with spaces and re-runs a shell
-// tokenizer (mvdan.cc/sh's Fields) recovers the original argument
-// boundaries even when individual values contain whitespace or shell
-// metacharacters. Used by the plugin executor whose VTE pipeline does
-// exactly that round-trip.
-//
-// Quoting uses double quotes (or no quotes when unnecessary) rather than
-// single quotes so that variable expansion of values like
-// "$RUNE_DATADIR/worktrees/foo" — which alias bodies routinely embed —
-// is still performed by shell.Fields downstream. Single-quoting would
-// suppress that expansion, leaving a literal "$RUNE_DATADIR" in argv
-// (RUNE-AGENT/worktreenew regression).
-func reshellQuoteArgs(args []string) []string {
-	out := make([]string, len(args))
-	for i, a := range args {
-		out[i] = shellFieldsQuote(a)
+// firstWord returns the leading whitespace-delimited word of line,
+// used only for surfacing a readable command name in success /
+// failure notifications.
+func firstWord(line string) string {
+	line = strings.TrimLeft(line, " \t")
+	if idx := strings.IndexAny(line, " \t"); idx >= 0 {
+		return line[:idx]
 	}
-	return out
-}
-
-// shellFieldsQuote wraps s so that shell.Fields(s, os.Getenv) returns it
-// as a single argument while preserving POSIX-style $VAR / ${VAR}
-// expansion. Strings that do not contain Layer 1 / shell metacharacters
-// are returned verbatim. Values that need quoting are wrapped in double
-// quotes, escaping the few characters that are still special inside
-// double-quoted regions: `\`, `"`, and backtick.
-func shellFieldsQuote(s string) string {
-	if s == "" {
-		return `""`
-	}
-	if !needsShellFieldsQuote(s) {
-		return s
-	}
-	var b strings.Builder
-	b.Grow(len(s) + 2)
-	b.WriteByte('"')
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\\' || c == '"' || c == '`' {
-			b.WriteByte('\\')
-		}
-		b.WriteByte(c)
-	}
-	b.WriteByte('"')
-	return b.String()
-}
-
-func needsShellFieldsQuote(s string) bool {
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case ' ', '\t', '\n', '\r',
-			'\\', '"', '\'', '`',
-			'|', '&', ';', '(', ')', '<', '>',
-			'*', '?', '[', ']', '#', '~', '=':
-			return true
-		}
-	}
-	return false
+	return line
 }
 
 func (e *ex) keydump(_ context.Context, _ ...string) error {
@@ -2283,6 +2284,7 @@ func (e *ex) resetCommandList(cmd *command.Prompt) {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
 	commands := e.comp.Commands()
+	commands = append(commands, e.aliasExpander.Aliases()...)
 	sort.Slice(commands, func(i, j int) bool {
 		return commands[i].Name < commands[j].Name
 	})

@@ -657,7 +657,8 @@ config = {
             ],
             "worktreeopen": {
                 "command": [
-                    "workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
+                    "!! WORKTREE=$(git worktree list --porcelain | awk -v name=\"$1\" '$$1==\"worktree\" && $$2 ~ \"/\" name \"$$\" {print $$2; exit}')",
+                    "workspacenew $WORKTREE",
                     "workspaceready workspacerename $1",
                     "workspaceready shaderrun shine 600ms",
                 ],
@@ -665,13 +666,11 @@ config = {
             },
             "worktreeremove": {
                 "command": [
-                    "!! git worktree remove $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
+                    "!! git worktree remove $1",
                     "shaderrun embers 600ms",
                 ],
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
-            # Open a workspace and play the shine shader as a visual
-            # confirmation that the new workspace was opened.
             "wopen": {
                 "command": "workspacenew $1",
                 "completer": [
@@ -679,8 +678,6 @@ config = {
                     "{dirs}",
                 ],
             },
-            # Open the embedded Rune documentation as an in-memory
-            # workspace served by the "docs" scheme.
             "docs":           "workspacenew docs:///",
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.

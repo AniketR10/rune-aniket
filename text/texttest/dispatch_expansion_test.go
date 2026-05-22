@@ -432,7 +432,7 @@ func TestDispatchCommandExpansion(t *testing.T) {
 				Args:     args,
 				Window:   win,
 			}
-			ok, derr := c.DispatchCommand(context.Background(), cmd)
+			ok, derr := dispatchWithAliases(context.Background(), c, cmd)
 
 			if tc.wantErrContains != "" {
 				require.Error(t, derr)

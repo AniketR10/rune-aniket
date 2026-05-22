@@ -25,9 +25,11 @@ package vte
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -561,6 +563,107 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 // component drives the pty winsize via the schemeapi.Terminal contract.
 type ptySize struct {
 	width, height int
+}
+
+// expanderFunc adapts a plain function into the CommandExpander
+// interface for tests.
+type expanderFunc func(ctx context.Context, line string) (string, error)
+
+func (f expanderFunc) ExpandCommand(ctx context.Context, line string) (string, error) {
+	return f(ctx, line)
+}
+
+// TestComponentInitAsyncExpander pins the contract that, when a
+// CommandExpander is configured, NewComponent returns immediately
+// (without blocking the caller / event-loop goroutine) and the
+// expander runs in a background goroutine before the foreign
+// command is started. This is what lets `! echo $(sleep 10)` open
+// the floating window instantly while the $(...) resolution
+// continues in the background.
+func TestComponentInitAsyncExpander(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	expanderEntered := make(chan struct{})
+	cfg := DefaultConfig()
+	cfg.CommandAndArgs = []string{"echo", "$(slow)"}
+	cfg.CommandExpander = expanderFunc(func(ctx context.Context, line string) (string, error) {
+		close(expanderEntered)
+		<-release
+		return "echo expanded", nil
+	})
+
+	exec := &recordingExecutor{}
+	comp, err := NewComponent(exec, exec, &mockTabManager{}, cfg)
+	require.NoError(t, err,
+		"NewComponent must return immediately when CommandExpander "+
+			"is set, before the expander completes")
+
+	// The expander must have been entered in the background goroutine
+	// (so the caller did not block on it).
+	select {
+	case <-expanderEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expander was never invoked")
+	}
+
+	// The executor must not have received StartCommand yet, because
+	// the expander has not returned.
+	got := exec.snapshotCmd()
+	assert.Empty(t, got.Path,
+		"StartCommand must not run before the expander returns; "+
+			"got Path=%q", got.Path)
+
+	// Release the expander; the resolved command must reach the
+	// executor.
+	close(release)
+	require.Eventually(t, func() bool {
+		return exec.snapshotCmd().Path != ""
+	}, 2*time.Second, 5*time.Millisecond,
+		"StartCommand must run with the resolved line after the "+
+			"expander returns")
+
+	got = exec.snapshotCmd()
+	assert.Equal(t, "echo", got.Path,
+		"expanded line must be field-split into Path/Args; got %q", got.Path)
+	assert.Equal(t, []string{"expanded"}, got.Args,
+		"expanded line must be field-split into Path/Args; got %v", got.Args)
+
+	_ = comp
+}
+
+// TestComponentInitAsyncExpanderErrorReachesWatcher pins that when
+// the expander returns an error, no foreign command is started and
+// the configured watcher fires with that error so plugin.Handler
+// can surface the failure in the floating window.
+func TestComponentInitAsyncExpanderErrorReachesWatcher(t *testing.T) {
+	t.Parallel()
+
+	expectedErr := errors.New("expander boom")
+	watchCh := make(chan error, 1)
+	cfg := DefaultConfig()
+	cfg.CommandAndArgs = []string{"echo", "$(broken)"}
+	cfg.CommandExpander = expanderFunc(func(ctx context.Context, line string) (string, error) {
+		return "", expectedErr
+	})
+	cfg.Watcher = workspaceapi.ChanProcessWatcher(watchCh)
+
+	exec := &recordingExecutor{}
+	_, err := NewComponent(exec, exec, &mockTabManager{}, cfg)
+	require.NoError(t, err)
+
+	select {
+	case got := <-watchCh:
+		require.Error(t, got)
+		assert.ErrorIs(t, got, expectedErr,
+			"the expander error must reach the watcher so "+
+				"plugin.Handler can transition into the done state")
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher never received the expander error")
+	}
+
+	assert.Empty(t, exec.snapshotCmd().Path,
+		"StartCommand must not run when the expander errors")
 }
 
 func (e *recordingExecutor) SetPtySize(p workspaceapi.Pty, width, height int) error {

@@ -51,21 +51,20 @@ import (
 
 // Component implements a vte terminal emulator tui.Component.
 type Component struct {
-	mu         sync.Mutex
-	terminal   schemeapi.Terminal
-	executor   schemeapi.Executor
-	clipboard  clipboard.Register
-	cfg        Config
-	pty        workspaceapi.Pty
-	cmdAndArgs []string
-	watcher    workspaceapi.ProcessWatcher
-	scroll     component.Scroll
-	ctx        context.Context
-	cancelCtx  func()
-	uri        workspaceapi.URI
-	remote     remote
-	writech    chan []byte
-	writeErr   atomic.Value
+	mu        sync.Mutex
+	terminal  schemeapi.Terminal
+	executor  schemeapi.Executor
+	clipboard clipboard.Register
+	cfg       Config
+	pty       workspaceapi.Pty
+	watcher   workspaceapi.ProcessWatcher
+	scroll    component.Scroll
+	ctx       context.Context
+	cancelCtx func()
+	uri       workspaceapi.URI
+	remote    remote
+	writech   chan []byte
+	writeErr  atomic.Value
 
 	width, height     int
 	parserHandler     *parserHandler
@@ -95,7 +94,6 @@ func (t *Component) Init(
 	tm browser.TabManager, cfg Config,
 ) error {
 	t.clipboard = cfg.Clipboard
-	t.cmdAndArgs = cfg.CommandAndArgs
 	t.watcher = cfg.Watcher
 	t.defAttr = cfg.Attributes
 	t.selectionAttr = cfg.SelectionAttributes
@@ -105,7 +103,7 @@ func (t *Component) Init(
 	t.cfg = cfg
 
 	t.ctx, t.cancelCtx = context.WithCancel(context.Background())
-	err := t.createPty()
+	err := t.createPty(cfg.CommandAndArgs)
 	if err != nil {
 		return err
 	}
@@ -665,18 +663,6 @@ func (t *Component) Snapshot() (Snapshot, error) {
 // into this live terminal emulator's primary buffer. It restores rendered
 // buffer contents, cursor position, title and scroll offset while leaving the
 // currently running pty process intact.
-//
-// The snapshot's Width/Height are used as the authoritative layout
-// dimensions for the restored cells, since those cells were laid out at
-// that geometry. After loading the cells, this method routes through the
-// regular Resize path so the pty winsize, parser-handler buffers and
-// scroll component all converge on the snapshot dimensions through a
-// single, well-tested code path. Without this, a follow-up Resize with
-// dimensions that happen to match the component's stale live width/height
-// would short-circuit at Resize's "same size" early return, leaving the
-// pty winsize at its kernel default; the shell would then write narrow
-// output into primBuf (the user-visible "main\n?\n)\nblue" cascade) until
-// the user manually resized the tile.
 func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordinates, err error) {
 	width, height := snapshot.Width, snapshot.Height
 	if width <= 0 {
@@ -686,11 +672,6 @@ func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordina
 		height = 1
 	}
 
-	// Replace primBuf contents and reset live dimensions under t.mu.
-	// Live dimensions are cleared so the follow-up Resize below cannot
-	// short-circuit at its "same size" early-return; this is the
-	// invariant that previously broke when t.width was preset by the
-	// reservoir / Facility.Resize path and matched the tile size.
 	t.mu.Lock()
 	t.parserHandler.sync.primBuf.Restore(
 		snapshot.Primary.Cells, snapshot.Primary.Cursor, width, height)
@@ -762,7 +743,6 @@ func (t *Component) Close() (ret error) {
 	return ret
 }
 
-//nolint:unused
 func (t *Component) log(level log.Level, line string, params ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
@@ -771,7 +751,7 @@ func (t *Component) log(level log.Level, line string, params ...any) {
 		Logf(level, line, params...)
 }
 
-func (t *Component) createPty() error {
+func (t *Component) createPty(cmdAndArgs []string) error {
 	pty, err := t.terminal.NewPty(t.ctx)
 	if err != nil {
 		return fmt.Errorf("new pty: %v", err)
@@ -782,11 +762,61 @@ func (t *Component) createPty() error {
 		return fmt.Errorf("pty URI: %v", err)
 	}
 
-	cmdAndArgs := t.cmdAndArgs
+	t.pty = pty
+	if t.cfg.CommandExpander != nil {
+		go debug.CapturePanicReport(func() {
+			t.expandAndStart(cmdAndArgs)
+		})
+		return nil
+	}
 	cmdAndArgsStr := strings.Join(cmdAndArgs, " ")
+	if err := t.startCommand(cmdAndArgsStr); err != nil {
+		if closeErr := pty.Master.Close(); closeErr != nil {
+			closeErr = fmt.Errorf("close pty: %w", closeErr)
+			err = multierr.Append(err, closeErr)
+		}
+		return err
+	}
+	return nil
+}
+
+// expandAndStart runs the configured CommandExpander and then
+// starts the resolved command. Failures are written to the pty
+// slave (so the user sees them in the floating window) and reported
+// to the watcher.
+func (t *Component) expandAndStart(cmdAndArgs []string) {
+	line := strings.Join(cmdAndArgs, " ")
+	resolved, err := t.cfg.CommandExpander.ExpandCommand(t.ctx, line)
+	if err != nil {
+		t.reportSpawnError(err)
+		return
+	}
+	if err := t.startCommand(resolved); err != nil {
+		t.reportSpawnError(err)
+	}
+}
+
+// reportSpawnError writes err to the pty slave (so the floating
+// window surfaces it) and notifies the configured watcher.
+func (t *Component) reportSpawnError(err error) {
+	_, _ = t.pty.Slave.Write([]byte(err.Error()))
+	if t.watcher != nil {
+		go func() {
+			select {
+			case t.watcher.WatchProcess() <- err:
+			case <-t.ctx.Done():
+			}
+		}()
+	}
+}
+
+// startCommand performs the shell field-splitting on t.cmdAndArgs
+// and dispatches the resolved command via the executor. It assumes
+// t.pty has already been populated by createPty.
+func (t *Component) startCommand(cmdAndArgsStr string) error {
 	// NOTE: this uses os.Getenv, but it should use the workspace's
 	// Getenv mechanism, which should be implemented at some point.
-	cmdAndArgs, err = shell.Fields(cmdAndArgsStr, os.Getenv)
+	cmdAndArgs, err := shell.Fields(cmdAndArgsStr, os.Getenv)
 	if err != nil {
 		return fmt.Errorf("expand shell arguments: %w", err)
 	}
@@ -809,22 +839,13 @@ func (t *Component) createPty() error {
 		}
 	}
 
-	cmd.Stdout = pty.Slave
-	cmd.Stderr = pty.Slave
-	cmd.Stdin = pty.Slave
+	cmd.Stdout = t.pty.Slave
+	cmd.Stderr = t.pty.Slave
+	cmd.Stdin = t.pty.Slave
 
-	_, retErr := t.executor.StartCommand(t.ctx, cmd)
-	if retErr != nil {
-		retErr = fmt.Errorf("start command: %w", retErr)
-		if err := pty.Master.Close(); err != nil {
-			err = fmt.Errorf("close pty: %w", err)
-			retErr = multierr.Append(retErr, err)
-		}
+	if _, err := t.executor.StartCommand(t.ctx, cmd); err != nil {
+		return fmt.Errorf("start command: %w", err)
 	}
-	if retErr != nil {
-		return retErr
-	}
-	t.pty = pty
 	return nil
 }
 

@@ -153,7 +153,7 @@ func (e *Editor) Edit(
 	// vte's own shell.Fields pass runs. Expansion failures (e.g.
 	// command substitution rejected) propagate as a clear error
 	// rather than silently producing a malformed argv.
-	if expanded, expErr := cmdenv.Expand(cmdStr, e.env); expErr == nil {
+	if expanded, expErr := cmdenv.Expand(ctx, cmdStr, e.env); expErr == nil {
 		cmdStr = expanded
 	} else {
 		return nil, fmt.Errorf("byoe: expand command %q: %w", cmdStr, expErr)

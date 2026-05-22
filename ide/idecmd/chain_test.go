@@ -21,25 +21,65 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package idecmd
 
 import (
 	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-type ctxKey int
-
-var barsKey ctxKey
-
-func withAuxiliaryBars(ctx context.Context) context.Context {
-	return context.WithValue(ctx, barsKey, true)
+func TestChainSetGet(t *testing.T) {
+	t.Parallel()
+	c := NewChain()
+	c.Set("VAR", "value")
+	v, ok := c.Get("VAR")
+	assert.True(t, ok)
+	assert.Equal(t, "value", v)
+	_, ok = c.Get("MISSING")
+	assert.False(t, ok)
 }
 
-// BarsFromContext reports whether the context was prepared by
-// withAuxiliaryBars. text.Editor implementations call it to decide
-// whether to wrap the returned text.Handler with status / icons /
-// aux bars.
-func BarsFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(barsKey).(bool)
-	return v
+func TestChainNilSafe(t *testing.T) {
+	t.Parallel()
+	var c *Chain
+	c.Set("ignored", "x") // no panic
+	_, ok := c.Get("anything")
+	assert.False(t, ok)
+	assert.Nil(t, c.Source())
+}
+
+func TestContextRoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, ok := IsContext(ctx)
+	assert.False(t, ok)
+	assert.Nil(t, ChainFromContext(ctx))
+
+	chain := NewChain()
+	ctx2 := WithChain(ctx, "my-alias", chain)
+	name, ok := IsContext(ctx2)
+	assert.True(t, ok)
+	assert.Equal(t, "my-alias", name)
+	assert.Same(t, chain, ChainFromContext(ctx2))
+}
+
+func TestUpdateChainVars(t *testing.T) {
+	t.Parallel()
+	chain := NewChain()
+	ctx := WithChain(context.Background(), "a", chain)
+	UpdateChainVars(ctx, map[string]string{"X": "1", "Y": "2"})
+	v, ok := chain.Get("X")
+	assert.True(t, ok)
+	assert.Equal(t, "1", v)
+	v, ok = chain.Get("Y")
+	assert.True(t, ok)
+	assert.Equal(t, "2", v)
+}
+
+func TestUpdateChainVarsNoChainContext(t *testing.T) {
+	t.Parallel()
+	// Should be a no-op (no panic).
+	UpdateChainVars(context.Background(), map[string]string{"X": "1"})
 }

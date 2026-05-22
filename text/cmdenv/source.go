@@ -27,8 +27,6 @@ package cmdenv
 
 import (
 	"os"
-
-	"mvdan.cc/sh/v3/shell"
 )
 
 // Source resolves variable names to values for command-time expansion.
@@ -50,17 +48,4 @@ func Lookup(src Source) func(string) string {
 		}
 		return os.Getenv(name)
 	}
-}
-
-// Expand performs POSIX-style parameter and arithmetic expansion on a
-// single token as if it were inside double quotes. The result is
-// always a single field — there is no word splitting, no globbing,
-// and no command substitution; callers that need word splitting must
-// tokenise their input before calling Expand.
-//
-// Variable lookups consult src first and fall back to os.Getenv. The
-// underlying parser rejects $( … ) and backtick command substitutions
-// at parse time, which surfaces here as an error.
-func Expand(s string, src Source) (string, error) {
-	return shell.Expand(s, Lookup(src))
 }

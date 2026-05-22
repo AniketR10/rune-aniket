@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"unstable.build/go-tui/handler/finder"
 	"unstable.build/go-tui/handler/locationsearch"
+	"unstable.build/go-tui/text/cmdenv"
 )
 
 // locationpicker runs the given program via $SHELL -c and presents
@@ -55,7 +56,7 @@ func (e *ex) locationpicker(ctx context.Context, args ...string) error {
 	// invoked as `:gitgrep 'foo bar'` would reach the shell as
 	// `git grep -n --column foo bar`, splitting the user's
 	// single-token query into two grep arguments.
-	cmdStr := strings.Join(reshellQuoteArgs(args), " ")
+	cmdStr := strings.Join(cmdenv.QuoteArgsForShellFields(args), " ")
 
 	prevWin := e.invokeWindow()
 	apibrowser := newBrowserAdapter(e.Browser())

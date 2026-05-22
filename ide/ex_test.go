@@ -32,6 +32,7 @@ import (
 	"os/user"
 
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1469,7 +1470,7 @@ func TestPreviewCommands(t *testing.T) {
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		var called, reverted bool
-		previews := map[string]PreviewFunc{
+		previews := map[string]previewFunc{
 			"setTheme": func(string, ...string) (component.Responsive, func(), bool) {
 				called = true
 				return nil, func() {
@@ -1500,7 +1501,7 @@ func TestPreviewCommands(t *testing.T) {
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		var called, reverted bool
-		previews := map[string]PreviewFunc{
+		previews := map[string]previewFunc{
 			"setTheme": func(string, ...string) (component.Responsive, func(), bool) {
 				called = true
 				return nil, func() {
@@ -2242,7 +2243,7 @@ func newExForTestingCommandsPreview(
 	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
 	clip clipboard.Register,
-	previews map[string]PreviewFunc,
+	previews map[string]previewFunc,
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
@@ -2714,9 +2715,161 @@ func TestCommandPluginWait(t *testing.T) {
 		}
 		b := newExForTesting(t, texttest.NopEditor(), opts...)
 		defer b.Close()
+		// Override the production default so the test exercises the
+		// timeout-cancelled branch within the test harness budget.
+		b.ex.pluginWaitTimeout = 1 * time.Second
 
 		handlertest.RunHandlerSequence(t, b, 20, 10, cases)
 	})
+}
+
+// TestCommandPluginWaitDirectIsAsync pins the contract that a top-level
+// (non-alias) `!!` command does NOT block the caller. executePluginWait
+// only runs synchronously when the dispatch ctx is inside an alias chain
+// (so a capturing step's vars land before the next step expands); a
+// direct `:!! sleep 10` must hand off to a background goroutine and
+// return immediately.
+//
+// Regression: withAliasChain previously wrapped every dispatch ctx with
+// an alias chain, which made idealias.IsContext(ctx) report true for
+// non-alias commands too and forced executePluginWait into the
+// blocking branch.
+func TestCommandPluginWaitDirectIsAsync(t *testing.T) {
+	opts := []text.Option{
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+	// pluginWaitTimeout bounds the background run; pick a value much
+	// larger than the time dispatchCommand itself is allowed to take.
+	b.ex.pluginWaitTimeout = 5 * time.Second
+
+	start := time.Now()
+	err := b.ex.dispatchCommand("!!", "sleep", "10")
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	require.Less(t, elapsed, 500*time.Millisecond,
+		"direct !! must dispatch to a goroutine and return immediately")
+}
+
+// TestCommandPluginWaitInflightNotification pins the UX contract that a
+// `!!` command surfaces a progress-anchored Info notification while it
+// runs, closes it (progress == total) on completion, and then posts a
+// terminal success or error notification.
+//
+// The notification stays open for the duration of the run because the
+// runtime keeps progress notifications visible until progress == total
+// is observed. Without this anchor, slow commands give the user no
+// feedback that anything is happening.
+func TestCommandPluginWaitInflightNotification(t *testing.T) {
+	opts := []text.Option{
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+	rec := &pluginWaitNotifications{inner: b.ex.notifications}
+	b.ex.notifications = rec
+	b.ex.pluginWaitTimeout = 5 * time.Second
+
+	require.NoError(t, b.ex.dispatchCommand("!!", "echo", "hi"))
+
+	// The async branch posts the running notification + initial 0/1
+	// progress synchronously before spawning the goroutine, so by the
+	// time dispatchCommand returns those must already be visible.
+	rec.assertInflightSeen(t)
+
+	// Wait for the goroutine to post the closing 1/1 progress and the
+	// terminal success notification.
+	require.Eventually(t, rec.terminalReached, 2*time.Second, 10*time.Millisecond,
+		"expected closing 1/1 progress and a terminal LevelSuccess notification")
+}
+
+// pluginWaitNotifications captures the Notify / progress sequence the
+// ex executePluginWait path produces so tests can assert UX without
+// rendering the floating notifications UI.
+type pluginWaitNotifications struct {
+	inner    browserapi.Notifications
+	mu       sync.Mutex
+	notifies []pluginWaitNote
+	progress []pluginWaitProgress
+}
+
+type pluginWaitNote struct {
+	id    string
+	level browserapi.NotificationLevel
+	msg   string
+}
+
+type pluginWaitProgress struct {
+	id              string
+	progress, total int64
+}
+
+func (r *pluginWaitNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	id, err := r.inner.Notify(level, msg, args...)
+	r.mu.Lock()
+	r.notifies = append(r.notifies, pluginWaitNote{
+		id: id, level: level, msg: fmt.Sprintf(msg, args...),
+	})
+	r.mu.Unlock()
+	return id, err
+}
+
+func (r *pluginWaitNotifications) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return r.Notify(level, msg, args...)
+}
+
+func (r *pluginWaitNotifications) UpdateNotificationProgress(
+	id, message string, progress, total int64,
+) error {
+	err := r.inner.UpdateNotificationProgress(id, message, progress, total)
+	r.mu.Lock()
+	r.progress = append(r.progress, pluginWaitProgress{
+		id: id, progress: progress, total: total,
+	})
+	r.mu.Unlock()
+	return err
+}
+
+func (r *pluginWaitNotifications) assertInflightSeen(t *testing.T) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	require.NotEmpty(t, r.notifies,
+		"expected an inflight Notify call before dispatchCommand returned")
+	require.Equal(t, browserapi.LevelInfo, r.notifies[0].level)
+	require.NotEmpty(t, r.progress,
+		"expected an initial progress update anchoring the notification")
+	require.Equal(t, int64(0), r.progress[0].progress)
+	require.Equal(t, int64(1), r.progress[0].total)
+	require.Equal(t, r.notifies[0].id, r.progress[0].id,
+		"the initial progress must target the inflight notification id")
+}
+
+func (r *pluginWaitNotifications) terminalReached() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.progress) < 2 {
+		return false
+	}
+	last := r.progress[len(r.progress)-1]
+	if last.progress != 1 || last.total != 1 {
+		return false
+	}
+	for _, nf := range r.notifies[1:] {
+		if nf.level == browserapi.LevelSuccess ||
+			nf.level == browserapi.LevelError {
+			return true
+		}
+	}
+	return false
 }
 
 func TestIntegrationEphemeralTerminal(t *testing.T) {
@@ -3133,7 +3286,7 @@ func TestSetExecutorPreservesReservoirCapacity(t *testing.T) {
 	// Trigger setExecutor with the original executor; the new
 	// reservoir must come up with the originally configured capacity,
 	// regardless of what the (just-closed) old reservoir reports.
-	b.ex.setExecutor(b.ex.executor, b.ex.wsExecutor, b.ex.extensionsExecutor)
+	b.ex.setExecutor(b.ex.executor.get(), b.ex.wsExecutor, b.ex.extensionsExecutor)
 
 	require.NotNil(t, b.ex.reservoir)
 	assert.NotSame(t, first, b.ex.reservoir)
@@ -4002,9 +4155,12 @@ func TestTerminalOnFocus(t *testing.T) {
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
 		ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
-			require.Len(t, args, 2)
-			assert.Equal(t, "echo", args[0])
-			assert.Equal(t, "bla", args[1])
+			// `echo bla` has no shell metacharacters or
+			// operators, so cmdenv.BuildPluginArgv passes it
+			// through as plain argv. Multi-arg invocations
+			// with operators take the `sh -c` path — see
+			// TestExecutePluginShellInterpretsOperators.
+			require.Equal(t, []string{"echo", "bla"}, args)
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })
@@ -4042,6 +4198,97 @@ func TestTerminalOnFocus(t *testing.T) {
 		require.Len(t, tvte.onFocusChange, 7)
 		assert.False(t, tvte.onFocusChange[6])
 	})
+}
+
+// TestExecutePluginShellInterpretsOperators is a regression test for
+// the bug where `! echo "$(...)" | tee /tmp/out` passed the `|` as a
+// literal argv element instead of having the downstream shell pipe
+// the output. The fix routes any `!` invocation whose args contain
+// shell operators (or that has 2+ args, where re-tokenisation cannot
+// be made lossless without a shell) through `sh -c <quoted-line>` so
+// the surrounding pipes/redirects/&&/||/$() are interpreted by the
+// shell rather than concatenated as argv.
+//
+// The third element passed to newPluginHandler is the line wrapped by
+// cmdenv.Quote because vte.Component.startCommand re-tokenises the
+// joined argv via shell.Fields; without bash-quoting the line would
+// fragment back into argv pieces and the shell would never see the
+// pipe as an operator. After shell.Fields runs over the joined
+// `sh -c <quoted-line>`, the third arg arrives at sh -c intact.
+func TestExecutePluginShellInterpretsOperators(t *testing.T) {
+	bgctx := context.Background()
+	cases := []struct {
+		name     string
+		args     []string
+		wantArgv []string
+	}{
+		{
+			name:     "single arg without operators stays direct",
+			args:     []string{"htop"},
+			wantArgv: []string{"htop"},
+		},
+		{
+			name:     "two simple args stay direct",
+			args:     []string{"echo", "hi"},
+			wantArgv: []string{"echo", "hi"},
+		},
+		{
+			name:     "pipe routes through sh -c",
+			args:     []string{"echo", "hi", "|", "tee", "/tmp/yikes"},
+			wantArgv: []string{"sh", "-c", "'echo hi | tee /tmp/yikes'"},
+		},
+		{
+			name:     "redirect routes through sh -c",
+			args:     []string{"echo", "hi", ">", "/tmp/yikes"},
+			wantArgv: []string{"sh", "-c", "'echo hi > /tmp/yikes'"},
+		},
+		{
+			name:     "and-and routes through sh -c",
+			args:     []string{"true", "&&", "echo", "ok"},
+			wantArgv: []string{"sh", "-c", "'true && echo ok'"},
+		},
+		{
+			name:     "semicolon routes through sh -c",
+			args:     []string{"echo", "a;", "echo", "b"},
+			wantArgv: []string{"sh", "-c", "'echo a; echo b'"},
+		},
+		{
+			name: "cmdsubst with pipe routes through sh -c",
+			args: []string{"echo",
+				"$(runectl llm message openai/gpt-5.5 hello)",
+				"|", "tee", "/tmp/yikes"},
+			wantArgv: []string{"sh", "-c",
+				"'echo $(runectl llm message openai/gpt-5.5 hello) | tee /tmp/yikes'"},
+		},
+		{
+			name:     "single arg containing pipe routes through sh -c",
+			args:     []string{"echo hi | tee /tmp/yikes"},
+			wantArgv: []string{"sh", "-c", "'echo hi | tee /tmp/yikes'"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI("memory:///")
+			require.NoError(t, err)
+			scheme, _ := workspace.NewMemoryScheme(
+				context.Background(), config.NopConfig(), uri)
+			ex := newExForTestingWithWorkspace(t,
+				workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
+				texttest.NopEditor(), vte.DefaultConfig(),
+				nopPublishEvent, clipboard.NewInMemory())
+			tvte := newTestVte()
+			var got []string
+			ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+				got = append([]string(nil), args...)
+				return tvte, nil
+			}
+			t.Cleanup(func() { _ = ex.Close() })
+			ex.Resize(100, 100)
+
+			require.NoError(t, ex.executePlugin(bgctx, tc.args...))
+			assert.Equal(t, tc.wantArgv, got)
+		})
+	}
 }
 
 func TestSwitchToTab(t *testing.T) {
@@ -4870,7 +5117,7 @@ func TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion(t *testing.T) {
 			"$RUNE_DATADIR/worktrees/" + worktreeName,
 			"-b", worktreeName,
 		}
-		quoted := reshellQuoteArgs(args)
+		quoted := cmdenv.QuoteArgsForShellFields(args)
 		fields, err := shell.Fields(strings.Join(quoted, " "), os.Getenv)
 		require.NoError(t, err)
 		assert.Equal(t, []string{
@@ -5007,9 +5254,224 @@ func envSourceForURI(uri workspaceapi.URI) cmdenv.Source {
 			return workspaceBasename(uri), true
 		case "WORKSPACE_HASH":
 			return workspaceHash(uri), true
+		case "WORKSPACE_URI":
+			return uri.String(), true
+		case "WORKSPACE_PATH":
+			return uri.Path(), true
 		}
 		return "", false
 	}
+}
+
+// TestPluginWaitAssignmentCapturesIntoAliasChain verifies the
+// alias-variable-capture feature introduced for RUNE-178: a `!!`
+// step whose body assigns variables (e.g. `VAR=value`) publishes
+// those values into the surrounding alias chain so subsequent steps
+// in the same alias dispatch can reference them via $VAR.
+//
+// The capture is performed by mvdan.cc/sh/v3/interp inside
+// runShellLineViaInterp; the chain env scope is plumbed through
+// text.Component.DispatchCommand. Together they let aliases like
+// worktreeopen feed `git worktree list`'s output into a subsequent
+// `workspacenew $WORKTREE` step.
+func TestPluginWaitAssignmentCapturesIntoAliasChain(t *testing.T) {
+	t.Run("literal assignment is visible to next step", func(t *testing.T) {
+		captured := newExForCapturingCommand(t, []string{
+			"!! WORKTREE=/tmp/foo",
+			"workspacenew $WORKTREE",
+		})
+		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, []string{"/tmp/foo"}, captured.Args,
+			"the literal assignment from the !! step must be "+
+				"visible to the next alias step via $VAR expansion")
+	})
+
+	t.Run("cmdsubst assignment is visible to next step", func(t *testing.T) {
+		captured := newExForCapturingCommand(t, []string{
+			// echo prints "hello"; the alias chain must see the
+			// captured value rather than a literal "$(echo …)".
+			// WORKTREE is the variable name used by the
+			// production worktreeopen alias; intentionally picked
+			// over $WORD which is a Rune-builtin name.
+			"!! WORKTREE=$(/bin/echo /tmp/foo)",
+			"workspacenew $WORKTREE",
+		})
+		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, []string{"/tmp/foo"}, captured.Args,
+			"command substitution inside a !! step must execute "+
+				"and the result must be published to the chain env")
+	})
+
+	// Regression for RUNE-178 / worktreeopen: awk-internal field
+	// references in a `!!` body are written as $$1/$$2 so Rune's
+	// positional-arg validator does not consume them and the shell
+	// sees a literal `$1` / `$2`. The alias has only one Rune
+	// positional but its awk script references $$1 / $$2.
+	t.Run("double-dollar escape defers $N to the shell", func(t *testing.T) {
+		captured := newExForCapturingCommand(t, []string{
+			`!! WORKTREE=$(/bin/echo a b | awk '$$2=="b" {print $$1}')`,
+			"workspacenew $WORKTREE",
+		})
+		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, []string{"a"}, captured.Args,
+			"$$N must be passed to the shell as a literal $N "+
+				"so awk (and other shell-internal $N consumers) "+
+				"can use them without Rune intervening")
+	})
+}
+
+// newExForCapturingCommand runs aliasCommands as the body of an alias
+// named "chaintest" and returns the textapi.Command dispatched by
+// the *non-!!* second step. The first !! step is wired to interp via
+// the production runShellLineViaInterp path; its commands (`echo`
+// etc.) execute via the default ExecHandler since the workspace
+// executor used by newExForTesting only records to captureLoader.
+// Only the second step's dispatched command is captured here — the
+// purpose is to assert what argv the alias chain produced for it.
+func newExForCapturingCommand(t *testing.T, aliasCommands []string) textapi.Command {
+	t.Helper()
+	var got textapi.Command
+	var subscribed bool
+	opts := []text.Option{
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandAliases(map[string]text.CommandAlias{
+			"chaintest": {Commands: aliasCommands},
+		}),
+	}
+	b := newExForTestingWithWorkspace(t, &realExecLoader{testLoader: testLoader{}},
+		texttest.NopEditor(), vte.DefaultConfig(),
+		nopPublishEvent, clipboard.NewInMemory(), opts...)
+	defer b.Close()
+
+	// Subscribe a sink command "workspacenew" so we can observe the
+	// fully-expanded argv that the chain produced for the
+	// post-capture step.
+	err := b.comp.SubscribeCommand(textapi.CommandManual{
+		Name: "workspacenew",
+	}, text.FuncCommandHandler(
+		func(_ context.Context, cmd textapi.Command) error {
+			got = cmd
+			subscribed = true
+			return nil
+		}, nil,
+	))
+	require.NoError(t, err)
+
+	require.NoError(t, b.ex.dispatchCommand("chaintest"))
+	require.True(t, subscribed,
+		"the post-capture alias step must have been dispatched")
+	return got
+}
+
+// realExecLoader is a testLoader that actually runs simple commands
+// via os/exec in the host filesystem so plugin tests that exercise
+// mvdan/sh interp's $(…) capture path can observe real stdout. It is
+// safe to use only for tests that intentionally invoke whitelisted
+// host binaries (e.g. /bin/echo); it is not appropriate for tests
+// that depend on workspace-scoped behaviour.
+type realExecLoader struct {
+	testLoader
+}
+
+func (w *realExecLoader) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
+	c.Stdin = cmd.Stdin
+	c.Stdout = cmd.Stdout
+	c.Stderr = cmd.Stderr
+	// Run synchronously: interp expects stdout writes to be flushed
+	// before the ExecHandler returns. Doing Start + async Wait
+	// races with interp's bytes.Buffer reads when capturing $(…).
+	runErr := c.Run()
+	if cmd.Watcher != nil {
+		cmd.Watcher.WatchProcess() <- runErr
+	}
+	if runErr != nil {
+		return 0, runErr
+	}
+	if c.Process != nil {
+		return workspaceapi.Pid(c.Process.Pid), nil
+	}
+	return 0, nil
+}
+
+// TestWorktreeRemoveAliasResolvesFromInsideWorktree is the RUNE-178
+// regression: invoking worktreeremove from inside a worktree used to
+// resolve $WORKSPACE-$WORKSPACE_HASH to the worktree's own slug, so
+// the rebuilt path never matched git's worktree registry. Handing
+// git the bare basename works from parent and from any sibling
+// worktree.
+func TestWorktreeRemoveAliasResolvesFromInsideWorktree(t *testing.T) {
+	const (
+		fixedAliasBody  = `!! git worktree remove $1`
+		brokenAliasBody = `!! git worktree remove $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1`
+		worktreeName    = "tabs-refresh-gpt"
+	)
+	dataDir := t.TempDir()
+	t.Setenv("RUNE_DATADIR", dataDir)
+
+	// Simulate the bug's focused-workspace context: the user is sitting
+	// inside the worktree workspace that worktreenew created earlier,
+	// not the parent repo.
+	parentURI, err := workspaceapi.ParseURI("file:///tmp/a/blue")
+	require.NoError(t, err)
+	worktreePath := filepath.Join(dataDir, "worktrees",
+		workspaceBasename(parentURI)+"-"+workspaceHash(parentURI),
+		worktreeName)
+	worktreeURI, err := workspaceapi.ParseURI("file://" + worktreePath)
+	require.NoError(t, err)
+
+	run := func(t *testing.T, aliasBody string) []string {
+		t.Helper()
+		captured := &captureLoader{
+			testLoader: testLoader{},
+			startErr:   errors.New("captured-start-command"),
+		}
+		envSource := envSourceForURI(worktreeURI)
+		publishEvent := func(ev term.Event) bool { return true }
+		e := newExForTestingWithWorkspace(t, captured,
+			texttest.NopEditor(), vte.DefaultConfig(),
+			publishEvent, clipboard.NewInMemory(),
+			text.WithCommandKey(testCommandKey),
+			text.WithEnvSource(envSource),
+			text.WithCommandAliases(map[string]text.CommandAlias{
+				"worktreeremove": {Commands: []string{aliasBody}},
+			}),
+		)
+		defer e.Close()
+		_ = e.dispatchCommand("worktreeremove", worktreeName)
+		require.NotEmpty(t, captured.cmds,
+			"!! must have reached the executor's StartCommand")
+		got := captured.cmds[0]
+		return append([]string{got.Path}, got.Args...)
+	}
+
+	t.Run("bug repro: old body rebuilds the wrong worktree path", func(t *testing.T) {
+		argv := run(t, brokenAliasBody)
+		// The old body uses $WORKSPACE-$WORKSPACE_HASH, which inside a
+		// worktree resolves to the worktree's own slug rather than the
+		// parent repo's. The resulting path nests the worktree slug
+		// under $RUNE_DATADIR/worktrees and never exists on disk.
+		wrongSlug := workspaceBasename(worktreeURI) + "-" + workspaceHash(worktreeURI)
+		wrongPath := filepath.Join(dataDir, "worktrees", wrongSlug, worktreeName)
+		assert.Equal(t, []string{
+			"git", "worktree", "remove", wrongPath,
+		}, argv,
+			"sanity: the broken alias body must reproduce the bug "+
+				"by handing git a worktree-slugged path that does not exist")
+	})
+
+	t.Run("fix: alias hands git the bare basename", func(t *testing.T) {
+		argv := run(t, fixedAliasBody)
+		assert.Equal(t, []string{
+			"git", "worktree", "remove", worktreeName,
+		}, argv,
+			"worktreeremove must hand git only the basename so that "+
+				"git-worktree(1) resolves the target from .git/worktrees "+
+				"regardless of which workspace is focused")
+	})
 }
 
 func TestMoveTabs(t *testing.T) {

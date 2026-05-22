@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,25 +21,23 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+
+package cmdenv
 
 import (
 	"context"
+	"testing"
 )
 
-type ctxKey int
-
-var barsKey ctxKey
-
-func withAuxiliaryBars(ctx context.Context) context.Context {
-	return context.WithValue(ctx, barsKey, true)
-}
-
-// BarsFromContext reports whether the context was prepared by
-// withAuxiliaryBars. text.Editor implementations call it to decide
-// whether to wrap the returned text.Handler with status / icons /
-// aux bars.
-func BarsFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(barsKey).(bool)
-	return v
+func TestWithCommandSubstitutionRoundTrip(t *testing.T) {
+	if AllowsCommandSubstitution(context.Background()) {
+		t.Fatal("plain context must not allow command substitution")
+	}
+	ctx := WithCommandSubstitution(context.Background())
+	if !AllowsCommandSubstitution(ctx) {
+		t.Fatal("WithCommandSubstitution(ctx) must opt ctx in")
+	}
+	if AllowsCommandSubstitution(context.TODO()) {
+		t.Fatal("TODO context must not allow command substitution")
+	}
 }

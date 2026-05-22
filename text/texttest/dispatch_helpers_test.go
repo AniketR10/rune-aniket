@@ -21,25 +21,46 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package texttest
 
 import (
 	"context"
+
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+
+	"unstable.build/go-tui/ide/idecmd"
+	"unstable.build/go-tui/text"
 )
 
-type ctxKey int
-
-var barsKey ctxKey
-
-func withAuxiliaryBars(ctx context.Context) context.Context {
-	return context.WithValue(ctx, barsKey, true)
-}
-
-// BarsFromContext reports whether the context was prepared by
-// withAuxiliaryBars. text.Editor implementations call it to decide
-// whether to wrap the returned text.Handler with status / icons /
-// aux bars.
-func BarsFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(barsKey).(bool)
-	return v
+// dispatchWithAliases is a texttest-local helper that mirrors what
+// ide/ex does in production: it wires a text.Component to an
+// idecmd.Expander built from the alias map installed on the
+// Component's config, then iterates the expanded command stream and
+// dispatches each yielded command.
+//
+// Tests use it in place of comp.DispatchCommand so they continue to
+// exercise alias resolution after the loop moved out of text/.
+func dispatchWithAliases(
+	ctx context.Context, c *text.Component, cmd textapi.Command,
+) (bool, error) {
+	exp := idecmd.NewExpander(c.CommandAliases(), c.DispatchEnv())
+	ctx = idecmd.WithChain(ctx, cmd.Name, idecmd.NewChain())
+	it, err := exp.Expand(ctx, cmd)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = it.Close() }()
+	var handled bool
+	for {
+		next, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		h, derr := c.DispatchCommand(ctx, next)
+		if derr != nil {
+			return h, derr
+		}
+		handled = handled || h
+	}
+	return handled, it.Err()
 }

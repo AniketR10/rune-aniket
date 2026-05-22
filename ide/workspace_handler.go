@@ -140,7 +140,7 @@ type workspaceManagerHandler struct {
 	externalCommands        map[string]externalCommand
 	externalEvents          []externalEvents
 	initialVTECapacity      int
-	dispatchOnPreview       map[string]PreviewFunc
+	dispatchOnPreview       map[string]previewFunc
 	debugCommands           bool
 	frame                   bool
 	reloadConfig            func() (ideConfig, error)
@@ -403,7 +403,7 @@ func (h *workspaceManagerHandler) init(
 	releaseManager release.Manager,
 	shaderRunner *shaderRunner,
 	initialVTECapacity int,
-	dispatchOnPreview map[string]PreviewFunc,
+	dispatchOnPreview map[string]previewFunc,
 	debugCommands bool,
 ) (err error) {
 	ctx := context.Background()
@@ -439,7 +439,7 @@ func (h *workspaceManagerHandler) init(
 	h.initialVTECapacity = initialVTECapacity
 	h.dispatchOnPreview = dispatchOnPreview
 	if h.dispatchOnPreview == nil {
-		h.dispatchOnPreview = make(map[string]PreviewFunc)
+		h.dispatchOnPreview = make(map[string]previewFunc)
 	}
 
 	h.workspacesIcon = workspacesIcon
@@ -2403,9 +2403,6 @@ func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 	return h.events.globalInterrupter().Interrupt(ctx)
 }
 
-// waitInflight blocks until every workspace's in-flight async save /
-// reload completion goroutines have delivered their callbacks via
-// sched. Intended for tests and graceful shutdown.
 func (h *workspaceManagerHandler) waitInflight() {
 	h.mu.Lock()
 	exes := make([]*ex, 0, len(h.workspaces))
@@ -2415,10 +2412,6 @@ func (h *workspaceManagerHandler) waitInflight() {
 		}
 		exes = append(exes, w.ex)
 	}
-	// h.empty is the home/empty workspace's ex; flushes there (e.g.
-	// :write against a buffer opened from the empty workspace) are
-	// tracked by the same flusher contract but are not in
-	// h.workspaces, so drain them too.
 	if h.empty != nil {
 		exes = append(exes, h.empty)
 	}
@@ -2432,9 +2425,6 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	notifications := h.notifications.current()
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
-		// do this once only when initializing pgmanager for the first time
-		// these don't require release.Manager so it's ok to do it
-		// with the initial release.Manager.
 		defer func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()

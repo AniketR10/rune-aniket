@@ -5,6 +5,7 @@
 package cmdenv
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,7 +55,7 @@ func TestExpand(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := Expand(tc.in, src)
+			got, err := Expand(context.Background(), tc.in, src)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -67,7 +68,7 @@ func TestExpand(t *testing.T) {
 
 func TestExpandNilSourceUsesOSEnv(t *testing.T) {
 	t.Setenv("RUNE_TEST_NIL_ENV", "yes")
-	got, err := Expand("$RUNE_TEST_NIL_ENV", nil)
+	got, err := Expand(context.Background(), "$RUNE_TEST_NIL_ENV", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "yes", got)
 }

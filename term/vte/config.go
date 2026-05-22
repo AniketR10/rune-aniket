@@ -24,6 +24,8 @@
 package vte
 
 import (
+	"context"
+
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -87,6 +89,27 @@ type Config struct {
 	HeightHint int
 
 	Debug bool
+
+	// CommandExpander, if non-nil, is invoked in a background
+	// goroutine after the pty is created but before the foreign
+	// command is started. ExpandCommand receives the joined
+	// command line (CommandAndArgs joined with " ") and returns
+	// the resolved line to actually execute. The pty exists while
+	// the expander runs, so the host UI is interactive (resize,
+	// draw) but no foreign process is attached yet.
+	//
+	// Returning an error aborts the spawn; the error is written to
+	// the pty slave so it surfaces in the floating window like any
+	// other failure, and the Watcher fires with that error.
+	CommandExpander CommandExpander
+}
+
+// CommandExpander resolves a vte command line before the foreign
+// command is started. Implementations may run arbitrary I/O (e.g.
+// resolve $(...) via the workspace executor); they are invoked off
+// the event-loop goroutine so they may block.
+type CommandExpander interface {
+	ExpandCommand(ctx context.Context, line string) (string, error)
 }
 
 func (c Config) scheduleBell() {

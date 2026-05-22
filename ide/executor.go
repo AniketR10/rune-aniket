@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,25 +21,55 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package text
+package ide
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
+	"syscall"
+
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
-type ctxKey int
-
-var barsKey ctxKey
-
-func withAuxiliaryBars(ctx context.Context) context.Context {
-	return context.WithValue(ctx, barsKey, true)
+type currentExecutor struct {
+	inner atomic.Pointer[schemeapi.Executor]
 }
 
-// BarsFromContext reports whether the context was prepared by
-// withAuxiliaryBars. text.Editor implementations call it to decide
-// whether to wrap the returned text.Handler with status / icons /
-// aux bars.
-func BarsFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(barsKey).(bool)
-	return v
+func (d *currentExecutor) set(exe schemeapi.Executor) {
+	d.inner.Store(&exe)
 }
+
+func (d *currentExecutor) get() schemeapi.Executor {
+	p := d.inner.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// StartCommand satisfies schemeapi.Executor.
+func (d *currentExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	exe := d.get()
+	if exe == nil {
+		return 0, errors.New("currentExecutor: no underlying executor installed")
+	}
+	return exe.StartCommand(ctx, cmd)
+}
+
+// Signal satisfies schemeapi.Executor.
+func (d *currentExecutor) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
+	exe := d.get()
+	if exe == nil {
+		return errors.New("currentExecutor: no underlying executor installed")
+	}
+	return exe.Signal(pid, sig)
+}
+
+// Close satisfies io.Closer. Close is a no-op on the proxy itself;
+// ownership of the underlying executor lifecycle stays with the
+// component that produced it (workspace_handler, doInit).
+func (d *currentExecutor) Close() error { return nil }

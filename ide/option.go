@@ -78,10 +78,10 @@ func WithLocker(locker sync.Locker) Option {
 
 // WithDispatchOnPreview determines a list of commands
 // that should be dispatched as user is scrolling down the list of completions.
-func WithDispatchOnPreview(cmd string, fn PreviewFunc) Option {
+func WithDispatchOnPreview(cmd string, fn previewFunc) Option {
 	return func(opts *options) {
 		if opts.dispatchOnPreview == nil {
-			opts.dispatchOnPreview = make(map[string]PreviewFunc)
+			opts.dispatchOnPreview = make(map[string]previewFunc)
 		}
 		opts.dispatchOnPreview[cmd] = fn
 	}
@@ -366,7 +366,7 @@ type options struct {
 	workspacesIcon      rune
 	workspacesBarOffset int
 	locker              sync.Locker
-	dispatchOnPreview   map[string]PreviewFunc
+	dispatchOnPreview   map[string]previewFunc
 	extensions          map[string]Extension
 	schemes             map[string]schemeapi.SchemeFunc
 	workspaceConfig     string

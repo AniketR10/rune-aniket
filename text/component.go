@@ -54,10 +54,10 @@ import (
 	"unstable.build/go-tui/component/markdown"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
-	"unstable.build/go-tui/text/cmdenv"
 	hmarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -741,35 +741,8 @@ func (c *Component) fileRel(ctx expansionContext) string {
 	return workspaceapi.RelPath(wsURI, ctx.file)
 }
 
-// aliasEnvSource overlays the positional alias arguments ($1..$9)
-// and the focused-editor variables on top of the Component's
-// EnvSource. Names outside the overlayed set are delegated to the
-// underlying source.
-func (c *Component) aliasEnvSource(
-	args []string, ctx expansionContext,
-) cmdenv.Source {
-	user := c.config.EnvSource
-	return func(name string) (string, bool) {
-		if len(name) == 1 && name[0] >= '1' && name[0] <= '9' {
-			idx := int(name[0] - '1')
-			if idx < len(args) {
-				return args[idx], true
-			}
-			return "", false
-		}
-		if v, ok := c.resolveBuiltin(ctx, name); ok {
-			return v, true
-		}
-		if user != nil {
-			return user(name)
-		}
-		return "", false
-	}
-}
-
-// dispatchedEnvSource is the EnvSource used to expand the dispatched
-// argv (i.e. the args the user typed after the command name). Like
-// aliasEnvSource but without the $1..$9 overlay.
+// dispatchedEnvSource resolves $FILE/$WORD/builtins, then delegates
+// to the user-configured EnvSource.
 func (c *Component) dispatchedEnvSource(ctx expansionContext) cmdenv.Source {
 	user := c.config.EnvSource
 	return func(name string) (string, bool) {
@@ -783,53 +756,23 @@ func (c *Component) dispatchedEnvSource(ctx expansionContext) cmdenv.Source {
 	}
 }
 
-// expandAliasTarget tokenises the alias target string and expands
-// each token through env. Tokens that reference positional args $N
-// for N greater than the available arg count surface as a clear
-// error. Unknown $VAR names fall back to os.Getenv via the EnvSource
-// chain.
-//
-// referenced is the set of positional indexes (0-based) consumed by
-// the target so callers can strip them from the dispatched args.
-func (c *Component) expandAliasTarget(
-	target string, args []string, ctx expansionContext,
-) (argv []string, referenced map[int]struct{}, err error) {
-	tokens := command.SplitCommandLine(target)
-	argv = make([]string, 0, len(tokens))
-	referenced = make(map[int]struct{})
-	env := c.aliasEnvSource(args, ctx)
-	for _, tok := range tokens {
-		raw := command.UnquoteToken(tok)
-		if err := checkAliasReferences(raw, len(args)); err != nil {
-			return nil, nil, err
-		}
-		expanded, expErr := cmdenv.Expand(escapeDoubleDollar(raw), env)
-		if expErr != nil {
-			return nil, nil, fmt.Errorf(
-				"expand alias target token %q: %v", raw, expErr)
-		}
-		recordPositionalReferences(raw, len(args), referenced)
-		argv = append(argv, expanded)
+// DispatchEnv returns the cmdenv.Source that DispatchCommand uses to
+// expand args. Includes $FILE/$WORD/$WORKSPACE_* derived from the
+// currently focused window plus the user-configured EnvSource.
+// External alias dispatchers consume it to perform per-step
+// expansion outside the component.
+func (c *Component) DispatchEnv() cmdenv.Source {
+	return func(key string) (value string, ok bool) {
+		return c.dispatchedEnvSource(c.captureExpansionContext())(key)
 	}
-	return argv, referenced, nil
 }
 
-// expandDispatchedArgs expands each dispatched arg through env using
-// cmdenv.Expand. Unlike the alias-target path it does NOT
-// re-tokenise — the arg already arrived as a single field.
-func (c *Component) expandDispatchedArgs(
-	args []string, ctx expansionContext,
-) ([]string, error) {
-	env := c.dispatchedEnvSource(ctx)
-	out := make([]string, len(args))
-	for i, a := range args {
-		v, err := cmdenv.Expand(escapeDoubleDollar(a), env)
-		if err != nil {
-			return nil, fmt.Errorf("expand dispatched arg %q: %v", a, err)
-		}
-		out[i] = v
-	}
-	return out, nil
+// CommandAliases returns the alias table configured on this
+// Component. The Component itself does not act on aliases (resolution
+// is performed by ide-level dispatchers); the accessor exists so
+// those dispatchers and test harnesses can read what was configured.
+func (c *Component) CommandAliases() map[string]CommandAlias {
+	return c.config.CommandAliases
 }
 
 // wordAtCursor returns the identifier (letters / digits / underscore)
@@ -873,131 +816,6 @@ func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
-// checkAliasReferences validates that every $N (N=1..9) referenced by
-// token has a corresponding dispatched arg. Returns nil when no
-// problematic reference is found.
-func checkAliasReferences(token string, argCount int) error {
-	for _, name := range scanDollarRefs(token) {
-		if len(name) != 1 || name[0] < '1' || name[0] > '9' {
-			continue
-		}
-		pos := int(name[0]-'0') - 1
-		if pos >= argCount {
-			return fmt.Errorf(
-				"alias expects an argument at position %d ($%s)",
-				pos+1, name)
-		}
-	}
-	return nil
-}
-
-func recordPositionalReferences(
-	token string, argCount int, out map[int]struct{},
-) {
-	for _, name := range scanDollarRefs(token) {
-		if len(name) != 1 || name[0] < '1' || name[0] > '9' {
-			continue
-		}
-		pos := int(name[0]-'0') - 1
-		if pos < argCount {
-			out[pos] = struct{}{}
-		}
-	}
-}
-
-// escapeDoubleDollar replaces every Layer 0 "$$" escape with "\$"
-// so that mvdan.cc/sh/v3/shell.Expand emits a literal '$' instead of
-// the parent process PID. The transformation is the inverse of the
-// historical impossibleMark trick used by replacePositionalArgs.
-func escapeDoubleDollar(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	i := 0
-	n := len(s)
-	for i < n {
-		if i+1 < n && s[i] == '$' && s[i+1] == '$' {
-			b.WriteString("\\$")
-			i += 2
-			continue
-		}
-		b.WriteByte(s[i])
-		i++
-	}
-	return b.String()
-}
-
-// scanDollarRefs returns the variable names referenced by $NAME and
-// ${NAME} forms inside s. An escaped \$ is ignored. The result may
-// contain duplicates; callers that need uniqueness should
-// deduplicate.
-func scanDollarRefs(s string) []string {
-	var names []string
-	i := 0
-	n := len(s)
-	for i < n {
-		c := s[i]
-		if c == '\\' && i+1 < n {
-			i += 2
-			continue
-		}
-		if c != '$' {
-			i++
-			continue
-		}
-		// $$ → literal $, skip both chars (Layer 0 escape).
-		if i+1 < n && s[i+1] == '$' {
-			i += 2
-			continue
-		}
-		i++
-		if i >= n {
-			break
-		}
-		if s[i] == '{' {
-			i++
-			start := i
-			for i < n && s[i] != '}' {
-				i++
-			}
-			if i > start {
-				names = append(names, s[start:i])
-			}
-			if i < n {
-				i++ // skip '}'
-			}
-			continue
-		}
-		start := i
-		if !isDollarHead(s[i]) {
-			continue
-		}
-		i++
-		if s[start] >= '0' && s[start] <= '9' {
-			names = append(names, s[start:i])
-			continue
-		}
-		for i < n && isDollarTail(s[i]) {
-			i++
-		}
-		names = append(names, s[start:i])
-	}
-	return names
-}
-
-func isDollarHead(b byte) bool {
-	return (b >= 'a' && b <= 'z') ||
-		(b >= 'A' && b <= 'Z') ||
-		b == '_' ||
-		(b >= '0' && b <= '9')
-}
-
-func isDollarTail(b byte) bool {
-	return (b >= 'a' && b <= 'z') ||
-		(b >= 'A' && b <= 'Z') ||
-		(b >= '0' && b <= '9') ||
-		b == '_'
-}
-
 // DispatchCommand dispatches a EventTypeCommand with cmd to subscribers
 // subscribed via SubscribeEvents.
 func (c *Component) DispatchCommand(
@@ -1007,68 +825,6 @@ func (c *Component) DispatchCommand(
 		panic("invalid command: missing Window from which command was invoked")
 	}
 
-	// Expand $FILE / $WORKSPACE / $WORKSPACE_HASH / $RUNE_DATADIR / …
-	// in dispatched args before alias rewriting or subscriber
-	// dispatch. Each Arg already arrived as a single field from the
-	// command prompt — expansion stays per-token so values containing
-	// whitespace remain one argv element. Skip dispatched-arg
-	// expansion when this dispatch is a recursive call from an alias
-	// expander: those args were already expanded one pass above and
-	// re-expanding would corrupt values like "$1" produced by
-	// alias-level "$$1" escapes.
-	expCtx := c.captureExpansionContext()
-	if _, inAlias := IsAliasContext(ctx); !inAlias {
-		cmd.Args, err = c.expandDispatchedArgs(cmd.Args, expCtx)
-		if err != nil {
-			return
-		}
-	}
-	targets, ok := c.config.CommandAliases[cmd.Name]
-	if ok {
-		c.log(log.DebugLevel, "Dispatching alias %s: %#v", cmd.Name, targets)
-		referencedAll := make(map[int]struct{})
-		expandedTargets := make([][]string, 0, len(targets.Commands))
-		for _, target := range targets.Commands {
-			argv, referenced, expErr := c.expandAliasTarget(target, cmd.Args, expCtx)
-			if expErr != nil {
-				return handled, expErr
-			}
-			expandedTargets = append(expandedTargets, argv)
-			for k := range referenced {
-				referencedAll[k] = struct{}{}
-			}
-		}
-		remainingArgs := make([]string, 0, len(cmd.Args))
-		for i, arg := range cmd.Args {
-			if _, ok := referencedAll[i]; !ok {
-				remainingArgs = append(remainingArgs, arg)
-			}
-		}
-		c.log(log.TraceLevel,
-			"expanded alias: %#v, remaining args: %#v",
-			expandedTargets, remainingArgs)
-		for i, argv := range expandedTargets {
-			if len(argv) == 0 {
-				continue
-			}
-			targetCmd := textapi.Command{
-				Name:     argv[0],
-				Args:     append(argv[1:], remainingArgs...),
-				URI:      cmd.URI,
-				Resource: cmd.Resource,
-				Window:   cmd.Window,
-				Cursor:   cmd.Cursor,
-			}
-			targetHandled, targetErr := c.DispatchCommand(
-				contextWithAlias(ctx, cmd.Name), targetCmd)
-			if targetErr != nil {
-				return targetHandled, fmt.Errorf(
-					"%s: %s", targets.Commands[i], targetErr)
-			}
-			handled = handled || targetHandled
-		}
-		return handled, nil
-	}
 	man, ok := c.cmdSubscribers[cmd.Name]
 	if !ok {
 		c.log(log.DebugLevel, "Dispatching command %q: no subscribers", cmd.Name)
@@ -1420,20 +1176,13 @@ func (c *Component) UnsubscribeEvents(sub EventHandler) (ret bool, err error) {
 // IsExternal delegates to the underlying Editor.
 func (c *Component) IsExternal() bool { return c.ed.IsExternal() }
 
-// Commands returns a list of commands registered via SubscribeCommand
-// or via Config.CommandAliases.
+// Commands returns a list of commands registered via SubscribeCommand.
 func (c *Component) Commands() (ret []command.Manual) {
 	ret = make([]command.Manual, len(c.cmdSubscribers))
 	var i int
 	for _, cmd := range c.cmdSubscribers {
 		ret[i] = cmd.man
 		i++
-	}
-	for alias, aliasOf := range c.config.CommandAliases {
-		ret = append(ret, command.Manual{
-			Name:    alias,
-			AliasOf: aliasOf.Commands,
-		})
 	}
 	return ret
 }

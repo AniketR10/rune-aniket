@@ -128,7 +128,7 @@ func FuzzDispatchCommandAlias(f *testing.F) {
 		}
 		// Contract: must not panic. Returned ok/err are allowed
 		// to take any value.
-		_, _ = c.DispatchCommand(context.Background(), cmd)
+		_, _ = dispatchWithAliases(context.Background(), c, cmd)
 	})
 }
 
@@ -191,6 +191,6 @@ func FuzzDispatchCommandDirectArgs(f *testing.F) {
 			Args:     args,
 			Window:   win,
 		}
-		_, _ = c.DispatchCommand(context.Background(), cmd)
+		_, _ = dispatchWithAliases(context.Background(), c, cmd)
 	})
 }

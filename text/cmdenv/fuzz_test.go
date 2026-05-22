@@ -5,6 +5,7 @@
 package cmdenv
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -86,7 +87,7 @@ func FuzzExpand(f *testing.F) {
 		// will already have normalised; we only care about what
 		// real users can place in an alias body, which the YAML /
 		// Starlark loaders deliver as valid UTF-8 strings.
-		out, err := Expand(in, emptySource)
+		out, err := Expand(context.Background(), in, emptySource)
 
 		if err != nil {
 			// Errors must be plain values; the only contract is
@@ -106,7 +107,7 @@ func FuzzExpand(f *testing.F) {
 		// `\$` must always expand to a literal `$`. This is the
 		// invariant escapeDoubleDollar relies on when it rewrites
 		// `$$` -> `\$` in text.Component before calling us.
-		got, err := Expand(`\$`, emptySource)
+		got, err := Expand(context.Background(), `\$`, emptySource)
 		if err != nil {
 			t.Fatalf("Expand(`\\$`) errored unexpectedly: %v", err)
 		}

@@ -107,6 +107,18 @@ func WithBarConfig(barConfig BarConfig) Option {
 	}
 }
 
+// WithCommandExpander returns an option that installs a
+// vte.CommandExpander into the underlying vte.Config. The expander
+// runs in a background goroutine after the pty is created but
+// before the plugin's command is started; it can therefore perform
+// slow I/O (e.g. resolving $(...) via the workspace executor)
+// without blocking the event loop or the floating window's UI.
+func WithCommandExpander(expander vte.CommandExpander) Option {
+	return func(cfg *handlerConfig) {
+		cfg.cfg.CommandExpander = expander
+	}
+}
+
 type handlerConfig struct {
 	bar          BarConfig
 	cfg          vte.Config
