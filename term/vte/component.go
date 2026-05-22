@@ -231,7 +231,10 @@ func (t *Component) Resize(width, height int) error {
 		return fmt.Errorf("terminal is not running")
 	}
 
-	if t.width == width && t.height == height {
+	t.mu.Lock()
+	sameSize := t.width == width && t.height == height
+	t.mu.Unlock()
+	if sameSize {
 		// some programs will not re-print if width and height
 		// are the same, but resizing buffers does clear all the content
 		// so we would be left with an empty screen buffer.
@@ -243,11 +246,12 @@ func (t *Component) Resize(width, height int) error {
 		return err
 	}
 
+	t.mu.Lock()
 	t.width = width
 	t.height = height
-
-	t.parserHandler.Resize(width, height)
+	t.parserHandler.resizeLocked(width, height)
 	t.scroll.Resize(width, height)
+	t.mu.Unlock()
 
 	return nil
 }
@@ -703,10 +707,9 @@ func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordina
 	t.mu.Unlock()
 
 	// Drive the snapshot dimensions through the regular Resize path so
-	// SetPtySize, parserHandler.Resize and scroll.Resize all run via the
-	// same code as a normal window-manager Resize. Resize takes t.mu
-	// (transitively via parserHandler.Resize), so it must run with the
-	// lock released.
+	// SetPtySize, parserHandler resize and scroll.Resize all run via
+	// the same code as a normal window-manager Resize. Resize takes
+	// t.mu, so it must run with the lock released.
 	if err = t.Resize(width, height); err != nil {
 		return cursor, err
 	}

@@ -636,3 +636,48 @@ func TestComponentRestoreFromSnapshotDrivesSetPtySize(t *testing.T) {
 	assert.Empty(t, exe.setPtySize,
 		"follow-up Resize at the same size is a legitimate no-op")
 }
+
+// TestComponentResizeIsSerialized pins that Component.Resize takes
+// Component.mu when mutating t.width/t.height. Other Component
+// accessors (CursorVisible, ScrollDown, drawSelection via Selection,
+// Snapshot) read t.width/t.height under t.mu, so writing them off-lock
+// from Resize races the IDE event-loop reads. The race detector trips
+// when Resize touches shared state without locking.
+func TestComponentResizeIsSerialized(t *testing.T) {
+	t.Parallel()
+
+	comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+		&mockTabManager{}, DefaultConfig())
+	require.NoError(t, err)
+	require.NoError(t, comp.Resize(20, 10))
+
+	const iterations = 500
+	stop := make(chan struct{})
+	done := make(chan struct{})
+
+	// Reader: takes Component.mu and reads t.height (CursorVisible at
+	// component.go:305 references t.height under t.mu).
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_ = comp.CursorVisible()
+		}
+	}()
+
+	// Writer: Component.Resize writes t.width/t.height. Must take
+	// t.mu to serialize with the reader.
+	for i := range iterations {
+		w, h := 20, 10
+		if i%2 == 0 {
+			w, h = 30, 12
+		}
+		require.NoError(t, comp.Resize(w, h))
+	}
+	close(stop)
+	<-done
+}

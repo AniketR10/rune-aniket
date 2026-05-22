@@ -177,7 +177,15 @@ func (t *parserHandler) Resize(width, height int) {
 
 	t.sync.mu.Lock()
 	defer t.sync.mu.Unlock()
+	t.resizeLocked(width, height)
+}
 
+// resizeLocked performs the parser-side resize work. Callers must
+// hold t.sync.mu.
+func (t *parserHandler) resizeLocked(width, height int) {
+	if width < 0 || height < 0 {
+		return
+	}
 	t.sync.primBuf.Resize(width, height)
 	t.sync.altBuf.Resize(width, height)
 	t.width = width
