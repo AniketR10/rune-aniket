@@ -34,7 +34,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vteprobe"
@@ -167,17 +166,8 @@ func (h *editorHandler) CursorAtScroll() term.Coordinates {
 	if comp == nil {
 		return term.Coordinates{}
 	}
-	var scroll *component.Scroll
-	if comp.IsAltBuffer() {
-		scroll = comp.AlternateScroll()
-	} else {
-		scroll = comp.PrimaryScroll()
-	}
-	if scroll == nil {
-		return term.Coordinates{}
-	}
 	res, err := h.probe.Infer(context.Background(), h.resource,
-		scroll.Buffer().RawCells(), comp.CursorAtScreen())
+		comp.RawCells(), comp.CursorAtScreen())
 	if err != nil {
 		return term.Coordinates{}
 	}

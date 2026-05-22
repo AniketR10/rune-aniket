@@ -1404,16 +1404,12 @@ func newTestParentComponent(content string, cursorAtScroll term.Coordinates) *te
 	}
 }
 
-func (c *testParentComponent) PrimaryScroll() *component.Scroll {
-	return c.scroll
+func (c *testParentComponent) PrimaryScroll() (*component.Scroll, sync.Locker) {
+	return c.scroll, nopLocker{}
 }
 
 func (c *testParentComponent) URI() workspaceapi.URI {
 	return c.uri
-}
-
-func (c *testParentComponent) Locker() sync.Locker {
-	return nopLocker{}
 }
 
 func (c *testParentComponent) cursorAtScroll() term.Coordinates {

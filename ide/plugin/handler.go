@@ -339,8 +339,7 @@ func (e *Handler) initializeDoneHandler() {
 		e.doneHandler = e.liveHandler
 		return
 	}
-	orig := e.emulator.Component().PrimaryScroll().Buffer()
-	buf := cell.CellsToBuffer(term.CloneCells(orig.RawCells()))
+	buf := cell.CellsToBuffer(e.emulator.Component().RawCells())
 
 	uri := e.emulator.Component().URI()
 

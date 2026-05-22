@@ -599,27 +599,42 @@ func (t *Component) OnFocusChange(inFocus bool) error {
 	return nil
 }
 
-// PrimaryScroll returns the primary buffer's underlying component.Scroll.
-func (t *Component) PrimaryScroll() *component.Scroll {
+// PrimaryScroll returns the primary buffer's underlying
+// component.Scroll along with the sync.Locker that guards mutations to
+// it. Callers must hold the returned Locker for the entire duration
+// they read from or otherwise depend on the Scroll's underlying
+// cell.Buffer; the VTE parser goroutine mutates that buffer under the
+// same Locker. For one-shot reads of the rendered grid, prefer
+// Component.RawCells which locks and clones for you.
+func (t *Component) PrimaryScroll() (*component.Scroll, sync.Locker) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.parserHandler.sync.primBuf.Scroll()
+	return t.parserHandler.sync.primBuf.Scroll(), &t.mu
 }
 
-// AlternateScroll returns the alternate buffer's underlying
-// component.Scroll. Callers can reach the rendered cells via
-// Scroll.Buffer().RawCells() and the cursor via the buffer's own
-// CursorAtScreen, without copying. Combined with PrimaryScroll and
-// IsAltBuffer, this lets analyses (e.g. vteprobe) work directly
-// against the live grid of whichever screen the embedded program is
-// drawing into.
-//
-// As with PrimaryScroll, callers are responsible for not holding the
-// returned reference across mutations of the underlying VTE state.
-func (t *Component) AlternateScroll() *component.Scroll {
+// AlternateScroll mirrors PrimaryScroll for the alternate buffer. The
+// same locking contract applies: hold the returned Locker for as long
+// as the Scroll (or its underlying cell.Buffer) is in use. For
+// one-shot reads of the rendered grid, prefer Component.RawCells which
+// locks and clones for you.
+func (t *Component) AlternateScroll() (*component.Scroll, sync.Locker) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.parserHandler.sync.altBuf.Scroll()
+	return t.parserHandler.sync.altBuf.Scroll(), &t.mu
+}
+
+// RawCells returns a cloned snapshot of the rendered cell grid of the
+// currently active buffer (alternate when IsAltBuffer is true,
+// otherwise primary). The clone is detached from the live VTE state,
+// so callers can iterate it freely without holding any lock and
+// without racing the parser goroutine.
+func (t *Component) RawCells() [][]term.Cell {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return term.CloneCells(t.parserHandler.sync.altBuf.Cells.RawCells())
+	}
+	return term.CloneCells(t.parserHandler.sync.primBuf.Cells.RawCells())
 }
 
 // Snapshot returns a durable snapshot of the terminal's primary rendered
@@ -705,12 +720,6 @@ func (t *Component) RestoreFromSnapshot(snapshot Snapshot) (cursor term.Coordina
 	t.scroll.SetOffset(offset)
 	cursor = t.parserHandler.sync.primBuf.CursorAtScroll()
 	return cursor, nil
-}
-
-// Locker returns the underlying sync.Locker used by this Component
-// to synchronize access to the internal state.
-func (t *Component) Locker() sync.Locker {
-	return &t.mu
 }
 
 // UsedAlternateBuffer returns whether the alternate buffer was used

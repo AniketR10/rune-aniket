@@ -509,8 +509,9 @@ func TestComponentAlternateScroll(t *testing.T) {
 
 		assert.False(t, comp.IsAltBuffer(),
 			"primary must be the active buffer by default")
-		scroll := comp.PrimaryScroll()
+		scroll, mu := comp.PrimaryScroll()
 		require.NotNil(t, scroll)
+		require.NotNil(t, mu)
 		assert.Equal(t, term.Coordinates{X: 2, Y: 1},
 			comp.CursorAtScreen(),
 			"primary cursor must match what was set")
@@ -536,8 +537,9 @@ func TestComponentAlternateScroll(t *testing.T) {
 		resetBuffer(t, ph, "ALT  \nBUF  \n     ")
 		ph.setCursorAtScreen(term.Coordinates{X: 3, Y: 0}, false)
 
-		scroll := comp.AlternateScroll()
+		scroll, mu := comp.AlternateScroll()
 		require.NotNil(t, scroll)
+		require.NotNil(t, mu)
 		assert.Equal(t, term.Coordinates{X: 3, Y: 0},
 			comp.CursorAtScreen(),
 			"alt cursor must match what was set")

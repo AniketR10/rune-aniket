@@ -77,9 +77,8 @@ type viHandler struct {
 
 // for dependency injection purposes
 type parentComponent interface {
-	PrimaryScroll() *component.Scroll
+	PrimaryScroll() (*component.Scroll, sync.Locker)
 	URI() workspaceapi.URI
-	Locker() sync.Locker
 	cursorAtScroll() term.Coordinates
 	scheduleBellCallback(callback func()) bool
 	pendingCallbacks() int
@@ -116,13 +115,12 @@ func (v *viHandler) doInit(comp parentComponent, config Config) {
 	// of the vte parser, which gets complicated quickly to maintain and keep sync
 	// but share buffer, so updates are synced.
 	v.sync.scroll = new(component.Scroll)
-	v.sync.vteScroll = comp.PrimaryScroll()
+	v.sync.vteScroll, v.sync.mu = comp.PrimaryScroll()
 	v.sync.scroll.InitPerformance(v.sync.vteScroll.Buffer())
 	v.sync.scroll.InvertOffset = true
 	vi.InitWithScroll(v.sync.scroll, comp.URI(), text.IndentRuneTab, 0, opts...)
 	v.sync.vi = vi
 	v.sync.selector = v.sync.scroll.Buffer()
-	v.sync.mu = comp.Locker()
 	v.sync.editor = v.sync.scroll.Buffer().WithEditor(v)
 
 	v.comp = comp
