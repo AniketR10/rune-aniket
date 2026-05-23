@@ -81,6 +81,25 @@ bluectl license -f LICENSE <new files>
 - Configuration is exposed through the extension config system
 - The agent relies heavily on semantic code navigation tools and structural search
 
+## Goroutines
+
+All spawned goroutines must run their body under
+`debug.CapturePanicReport` (from this repository's `debug` package) so
+that any panic is captured into a crash report and logged instead of
+silently taking down the process. This applies to every goroutine
+spawn site, including short-lived helpers, background workers, and
+goroutines started from production code paths.
+
+```go
+go debug.CapturePanicReport(func() {
+    // goroutine body
+})
+```
+
+Do not wrap goroutine bodies in ad-hoc `recover()` blocks in place of
+`debug.CapturePanicReport`; the helper is the single source of truth
+for panic capture and crash-report generation.
+
 ## How to implement a `tui.Component` or `tui.Handler`
 
 The UI elements in this repository are built on `github.com/unstablebuild/rune-go-sdk`.
@@ -145,6 +164,25 @@ Invalid forms include:
 - raw `>`
 - raw `<` without a matching `>`
 - raw `\` or `\` followed by anything other than `\`, `<`, `>`
+
+## Code comments
+
+Comments should explain *why*, not *what* or *how* — the code already
+shows what it does. Do not pepper code with narrative comments.
+
+- Do not add comments that restate the adjacent code in prose.
+- Do not add comments describing what you just changed (e.g.
+  `// now also handles X`, `// removed Y`). Use the commit message
+  for that.
+- Do not add docstrings, header banners, or type annotations to code
+  you did not change.
+- Only add a comment when the intent, trade-off, invariant, or
+  non-obvious constraint cannot be inferred from the code and names.
+- Prefer clearer naming and smaller functions over explanatory
+  comments.
+- Exported API doc comments (`// FuncName ...`) are fine where Go
+  convention or lint requires them; keep them about the contract,
+  not the implementation.
 
 ## Bug-fix policy
 
