@@ -482,6 +482,7 @@ func runTUI(
 		}),
 		ide.WithZdotDir(*flagZdotDir),
 		ide.WithScheme(docsScheme, newDocsSchemeFunc(*flagConfigPath)),
+		ide.WithStreamingOpen(true),
 	}
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))

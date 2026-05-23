@@ -816,6 +816,7 @@ func (e *ex) quit(_ context.Context, args ...string) error {
 }
 
 func (e *ex) waitInflight() {
+	e.comp.WaitStreamingLoads()
 	e.flusher.wait()
 }
 

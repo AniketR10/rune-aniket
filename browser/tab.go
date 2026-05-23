@@ -24,6 +24,7 @@
 package browser
 
 import (
+	"errors"
 	"io"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -121,6 +122,28 @@ func (b *Tab) Handler() browserapi.Handler {
 // which is used when tab is closed via
 func (b *Tab) Closer() io.Closer {
 	return b.closer
+}
+
+// SetHandler atomically replaces this tab's handler and closer.
+// Both the previous handler and the previous closer (if non-nil)
+// have Close called on them so the caller cannot leak the resources
+// they owned. The tab's URI, window association, name and
+// attributes are preserved.
+func (b *Tab) SetHandler(newHandler browserapi.Handler, newCloser io.Closer) error {
+	oldHandler := b.handler
+	oldCloser := b.closer
+	b.handler = newHandler
+	b.closer = newCloser
+	var ret error
+	if oldHandler != nil {
+		ret = oldHandler.Close()
+	}
+	if oldCloser != nil {
+		if err := oldCloser.Close(); err != nil {
+			ret = errors.Join(ret, err)
+		}
+	}
+	return ret
 }
 
 // TabSubscriber is a subscriber of tab focus or free operations.

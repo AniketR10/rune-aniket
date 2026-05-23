@@ -33,10 +33,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
-	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
@@ -52,12 +52,14 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	hmarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/text/cmdenv"
+	"unstable.build/go-tui/text/streamload"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -89,6 +91,7 @@ type Component struct {
 	replSubscribers map[string]replCommandAll
 	editors         map[string]Handler
 	fileRegistry    FileCommandRegistry
+	streamingLoads  sync.WaitGroup
 }
 
 // NewComponent allocates storage for a new Component and initializes it.
@@ -150,6 +153,21 @@ func (c *Component) newFileBuffer(
 		return nil, nil, err
 	}
 
+	return c.buildEditorHandler(file, buf, fc, readOnly, recover)
+}
+
+// buildEditorHandler wires a freshly-loaded buffer into the syntax
+// tree, calls Editor.Edit to obtain a Handler, registers
+// syntax-derived commands, and returns the resulting Handler and
+// editorFlusherCloser. Split out of newFileBuffer so the streaming
+// open path can construct the editor handler after the goroutine
+// load completes — the load and the editor construction must run on
+// different goroutines (the former cannot block the UI, the latter
+// must run on the UI goroutine).
+func (c *Component) buildEditorHandler(
+	file workspaceapi.URI, buf *cell.Buffer, fc workspace.FlusherCloser,
+	readOnly, recover bool,
+) (handler Handler, ret *editorFlusherCloser, err error) {
 	interrupter := browser.EventPublisherInterrupter(c)
 	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) {
 		handler.SetLocationList(textapi.LocationPriorityInfo, "syntax", ll)
@@ -443,30 +461,163 @@ func (c *Component) openFileTab(
 		readOnly = true
 	}
 
-	buf := cell.NewBuffer()
-	var handler browserapi.Handler
-	var fc workspace.FlusherCloser
-	var err error
 	if readOnly {
-		handler, ok, err = c.loadView(file)
-		if !ok {
-			handler, fc, err = c.newFileBuffer(file, recoveryFilename,
-				buf, readOnly, forceRecover)
+		viewHandler, viewOK, viewErr := c.loadView(file)
+		if viewErr != nil {
+			return nil, viewErr
 		}
-	} else {
-		handler, fc, err = c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
+		if viewOK {
+			return c.newViewTab(file, viewHandler), nil
+		}
 	}
+	if c.config.StreamingOpen {
+		return c.openFileTabStreaming(file, recoveryFilename, readOnly, forceRecover)
+	}
+	return c.openFileTabSync(file, recoveryFilename, readOnly, forceRecover)
+}
+
+// openFileTabSync is the legacy synchronous file-open path. It is
+// kept for the recovery / force-edit prompt flows, which require the
+// load error (e.g. ErrStaleData, ErrFileAlreadyOpen) to surface
+// synchronously so the prompt handler can chain to the next prompt.
+func (c *Component) openFileTabSync(
+	file workspaceapi.URI, recoveryFilename workspaceapi.URI,
+	readOnly, forceRecover bool,
+) (browserapi.Handler, error) {
+	buf := cell.NewBuffer()
+	handler, fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
 	if err != nil {
 		return nil, err
 	}
-
-	ext := filepath.Ext(file.Name())
-	icon, ok := c.config.Icons.Extensions[ext]
-	if !ok {
-		icon = c.config.Icons.Default
-	}
-	t = c.newTab(file, icon, file.Name(), handler, fc)
+	t := c.newTab(file, c.iconFor(file), file.Name(), handler, fc)
 	return t, nil
+}
+
+// newViewTab wraps a non-editor view handler (e.g. markdown) in a
+// browser.Tab. Extracted so the streaming/non-streaming dispatch in
+// openFileTab stays readable.
+func (c *Component) newViewTab(
+	file workspaceapi.URI, h browserapi.Handler,
+) *browser.Tab {
+	return c.newTab(file, c.iconFor(file), file.Name(), h, nil)
+}
+
+// iconFor returns the configured icon for the given file path.
+func (c *Component) iconFor(file workspaceapi.URI) rune {
+	ext := filepath.Ext(file.Name())
+	if icon, ok := c.config.Icons.Extensions[ext]; ok {
+		return icon
+	}
+	return c.config.Icons.Default
+}
+
+// WaitStreamingLoads waits for in-flight asynchronous files being loaded.
+// It should be used for testing only.
+func (c *Component) WaitStreamingLoads() {
+	c.streamingLoads.Wait()
+}
+
+func (c *Component) openFileTabStreaming(
+	file, recoveryFilename workspaceapi.URI, readOnly, forceRecover bool,
+) (browserapi.Handler, error) {
+	sh, err := streamload.New(c.workspace, file, streamload.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("stream load file: %w", err)
+	}
+	icon := c.iconFor(file)
+	streamingTab := c.newTab(file, icon, file.Name(), sh, nil)
+	recovering := recoveryFilename != (workspaceapi.URI{})
+	c.streamingLoads.Add(2)
+	go debug.CapturePanicReport(func() {
+		defer c.streamingLoads.Done()
+		c.animateTabLoading(file, sh.Loading())
+	})
+	go debug.CapturePanicReport(func() {
+		defer c.streamingLoads.Done()
+		defer sh.Close() //nolint:errcheck
+
+		buf := cell.NewBuffer()
+		realHandler, efc, loadErr := c.newFileBuffer(
+			file, recoveryFilename, buf, readOnly, forceRecover)
+
+		c.config.ScheduleNextTick(func() {
+			c.streamingBufferLoaded(
+				streamingTab, sh, file, readOnly, recovering,
+				realHandler, efc, loadErr)
+		})
+	})
+
+	return streamingTab, nil
+}
+
+func (c *Component) streamingBufferLoaded(
+	streamingTab *browser.Tab, sh *streamload.Handler,
+	file workspaceapi.URI, readOnly, recovering bool,
+	realHandler Handler, efc *editorFlusherCloser, loadErr error,
+) {
+	switch {
+	case c.streamingTabAbandoned(streamingTab, file):
+	case loadErr != nil:
+		_ = c.comp.RemoveTab(streamingTab)
+		switch {
+		case isAlreadyOpenErr(loadErr):
+			_, handled, routeErr := c.config.OpenRouter.RouteOpen(file, readOnly)
+			switch {
+			case handled && routeErr != nil:
+				_, _ = c.Notify(browserapi.LevelError, "%v", routeErr)
+			case !handled:
+				c.openRecoveryPrompt(file)
+			}
+		case recovering && loadErr == workspaceapi.ErrStaleData:
+			c.openAreYouSurePrompt(file)
+		default:
+			_, _ = c.Notify(browserapi.LevelError, "open %s: %v", file, loadErr)
+		}
+	default:
+		c.streamingTabSwapHandler(streamingTab, sh, file, realHandler, efc)
+		return
+	}
+	if efc != nil {
+		_ = efc.Close()
+	}
+	if realHandler != nil {
+		_ = realHandler.Close()
+	}
+}
+
+func (c *Component) streamingTabSwapHandler(
+	streamingTab *browser.Tab, sh *streamload.Handler,
+	file workspaceapi.URI,
+	realHandler Handler, efc *editorFlusherCloser,
+) {
+	offset := sh.SeekOffset()
+	width, height := sh.Dimensions()
+	if err := streamingTab.SetHandler(realHandler, efc); err != nil {
+		_, _ = c.Notify(browserapi.LevelError,
+			"swap streaming handler for %s: %v", file, err)
+	}
+	if width > 0 && height > 0 {
+		realHandler.Resize(width, height)
+	}
+	applyOffset(realHandler, offset)
+}
+
+// streamingTabAbandoned reports whether the user has closed the
+// streaming tab between OpenFileTab returning and the swap callback
+// running on the event loop.
+func (c *Component) streamingTabAbandoned(
+	streamingTab *browser.Tab, file workspaceapi.URI,
+) bool {
+	current, ok := c.comp.Tab(file)
+	return !ok || current != streamingTab
+}
+
+// isAlreadyOpenErr identifies the family of errors that should
+// trigger the recovery prompt: another process holds the swap file
+// or the file is owned by a different workspace.
+func isAlreadyOpenErr(err error) bool {
+	return err == workspaceapi.ErrFileAlreadyOpen ||
+		errors.Is(err, workspace.ErrOpenInOtherWorkspace)
 }
 
 // Open opens the given file in a new browser tab. If file is already
@@ -1443,113 +1594,54 @@ func (c *Component) loadMarkdown(uri workspaceapi.URI) (browserapi.Handler, erro
 	return handler, nil
 }
 
-var _ workspace.FlusherCloser = (*editorFlusherCloser)(nil)
+var loadingSpinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
-// used to intercept calls to Close and Flush to dispatch
-// corresponding events to subscribers.
-type editorFlusherCloser struct {
-	parent    *Component
-	fc        workspace.FlusherCloser
-	h         Handler
-	uri       workspaceapi.URI
-	buf       *cell.Buffer
-	commands  []textapi.CommandManual
-	lastFlush int
-}
+const loadingSpinnerFPS = 10
 
-func (c editorFlusherCloser) OnWillEdit(
-	ctx context.Context, start, end term.Coordinates, str string,
-) {
-}
+func (c *Component) animateTabLoading(uri workspaceapi.URI, done <-chan struct{}) {
+	ticker := time.NewTicker(time.Second / loadingSpinnerFPS)
+	defer ticker.Stop()
 
-func (c editorFlusherCloser) OnDidEdit(
-	ctx context.Context, from, to term.Coordinates, old string,
-) {
-	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)
-}
-
-func (e *editorFlusherCloser) ForceFlush(ctx context.Context) (<-chan error, error) {
-	inner, err := e.fc.ForceFlush(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.wrapAndDispatch(inner, false), nil
-}
-
-func (e *editorFlusherCloser) LastFlush() time.Time {
-	return e.fc.LastFlush()
-}
-
-func (e *editorFlusherCloser) Flush(ctx context.Context) (<-chan error, error) {
-	inner, err := e.fc.Flush(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.wrapAndDispatch(inner, false), nil
-}
-
-func (e *editorFlusherCloser) Reload(ctx context.Context) (<-chan error, error) {
-	inner, err := e.fc.Reload(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.wrapAndDispatch(inner, true), nil
-}
-
-// wrapAndDispatch awaits the inner channel result and emits the
-// EventTypeFlush event before forwarding the result on the returned
-// channel. When skipOnErr is true (Reload), dispatchFlush is only
-// invoked on success — preserving the original sync Reload behaviour.
-func (e *editorFlusherCloser) wrapAndDispatch(
-	inner <-chan error, skipOnErr bool,
-) <-chan error {
-	out := make(chan error, 1)
-	go func() {
-		err := <-inner
-		doDispatch := err == nil || !skipOnErr
-		if !doDispatch {
-			out <- err
-			close(out)
+	frame := 0
+	c.scheduleSpinnerFrame(uri, frame)
+	for {
+		select {
+		case <-done:
+			c.scheduleResetTabIcon(uri)
 			return
-		}
-		// dispatchFlush mutates UI-owned state (tab attrs, event
-		// publisher). Schedule it via the configured next-tick
-		// scheduler so it runs on the UI goroutine, then forward
-		// the result immediately — we do NOT block on the
-		// scheduled callback because the caller might be the one
-		// driving the scheduler, which would deadlock if we waited.
-		//
-		// text.Config.ScheduleNextTick must be wired by the embedder
-		// (ide.ex.init forwards emulatorConfig.ScheduleNextTick). A
-		// nil scheduler here is a programming error — fail loudly.
-		e.parent.config.ScheduleNextTick(func() { _ = e.dispatchFlush() })
-		out <- err
-		close(out)
-	}()
-	return out
-}
-
-func (e *editorFlusherCloser) dispatchFlush() error {
-	e.lastFlush = e.buf.Version()
-	e.parent.log(log.TraceLevel, "flushed, new snapshot is at %d", e.lastFlush)
-	return e.parent.dispatchFlush(e.uri, e.h)
-}
-
-func (e *editorFlusherCloser) Close() error {
-	ev := textapi.Event{
-		Type:     textapi.EventTypeClose,
-		URI:      e.uri,
-		Resource: e.h,
-	}
-	e.parent.DispatchEvent(ev)
-	ret := e.fc.Close()
-	for _, cmd := range e.commands {
-		err := e.parent.fileRegistry.UnsubscribeCommandForFile(e.uri, cmd.Name)
-		if err != nil {
-			ret = multierror.Append(ret, err)
+		case <-c.ctx.Done():
+			c.scheduleResetTabIcon(uri)
+			return
+		case <-ticker.C:
+			frame++
+			c.scheduleSpinnerFrame(uri, frame)
 		}
 	}
-	return ret
+}
+
+func (c *Component) scheduleSpinnerFrame(uri workspaceapi.URI, frame int) {
+	ch := loadingSpinnerFrames[frame%len(loadingSpinnerFrames)]
+	c.config.ScheduleNextTick(func() {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+		c.comp.SetTabIcon(uri, ch)
+		_ = c.PublishEvent(term.Event{Type: term.EventNone})
+	})
+}
+
+func (c *Component) scheduleResetTabIcon(uri workspaceapi.URI) {
+	c.config.ScheduleNextTick(func() {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+		c.comp.ResetTabIcon(uri)
+		_ = c.PublishEvent(term.Event{Type: term.EventNone})
+	})
 }
 
 type commandAll struct {
@@ -1560,26 +1652,6 @@ type commandAll struct {
 type replCommandAll struct {
 	handler textapi.REPLHandler
 	man     textapi.CommandManual
-}
-
-// wraps Editor returned in calls to Edit
-// to auto-delete in calls to Close or Handle(exit=true)
-type wrapEditor struct {
-	parent *Component
-	Handler
-}
-
-func (w wrapEditor) Close() error {
-	delete(w.parent.editors, w.Resource().String())
-	return w.Handler.Close()
-}
-
-func (w wrapEditor) Handle(ev term.Event) (exit, handled bool) {
-	exit, handled = w.Handler.Handle(ev)
-	if exit {
-		delete(w.parent.editors, w.Resource().String())
-	}
-	return
 }
 
 type handlerWindowSubscriber = Component
@@ -1605,5 +1677,16 @@ func apiManualToManual(cmd textapi.CommandManual) command.Manual {
 		Summary:  cmd.Summary,
 		Synopsis: cmd.Synopsis,
 		Commands: subcmds,
+	}
+}
+
+func applyOffset(scr component.Scrollable, offset int) {
+	if offset <= 0 || scr == nil {
+		return
+	}
+	for scr.SeekOffset() < offset {
+		if !scr.SeekDown() {
+			return
+		}
 	}
 }

@@ -143,6 +143,7 @@ type workspaceManagerHandler struct {
 	dispatchOnPreview       map[string]previewFunc
 	debugCommands           bool
 	frame                   bool
+	streamingOpen           bool
 	reloadConfig            func() (ideConfig, error)
 
 	union               handler.FrameUnion
@@ -405,6 +406,7 @@ func (h *workspaceManagerHandler) init(
 	initialVTECapacity int,
 	dispatchOnPreview map[string]previewFunc,
 	debugCommands bool,
+	streamingOpen bool,
 ) (err error) {
 	ctx := context.Background()
 
@@ -446,6 +448,7 @@ func (h *workspaceManagerHandler) init(
 	h.tabBarOffset = tabBarOffset
 	h.tabBarHeight = tabBarHeight
 	h.debugCommands = debugCommands
+	h.streamingOpen = streamingOpen
 	h.pending = make(map[string]*pendingWorkspace)
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
@@ -961,6 +964,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithFileExplorerIndentAttr(cfg.fileExplorerIndentAttr()),
 		text.WithFileExplorerIconAttr(cfg.fileExplorerIconAttr()),
 		text.WithEnvSource(h.envSource),
+		text.WithStreamingOpen(h.streamingOpen),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {

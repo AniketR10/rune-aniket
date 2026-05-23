@@ -1270,7 +1270,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 		}, runner, mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
-		shRunner, 0, nil, false)
+		shRunner, 0, nil, false, false)
 	require.NoError(t, err)
 	m.subscribeCommand(textapi.CommandManual{Name: "pkgwait"}, text.FuncCommandHandler(
 		func(ctx context.Context, cmd textapi.Command) error {
@@ -1368,7 +1368,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 		}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
-		shRunner, 0, nil, false)
+		shRunner, 0, nil, false, false)
 	require.NoError(t, err)
 	for i, file := range files {
 		require.NoError(t, m.openFile(file, i == 0))

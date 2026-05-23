@@ -354,6 +354,13 @@ func WithDebugCommands(enabled bool) Option {
 	}
 }
 
+// WithStreamingOpen enables opening files asynchronously.
+func WithStreamingOpen(enabled bool) Option {
+	return func(opts *options) {
+		opts.streamingOpen = enabled
+	}
+}
+
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
@@ -374,12 +381,8 @@ type options struct {
 	defaultConfig       string
 	bell                func()
 	scheduleFn          func(func()) bool
-
-	// debugCommands, when true, makes the IDE register debug-only
-	// ex commands such as `panic` and `crash`. These commands are
-	// unsafe in production (they intentionally crash the process)
-	// and must only be enabled in debug builds.
-	debugCommands bool
+	debugCommands       bool
+	streamingOpen       bool
 
 	defaultConfigModeModal bool
 	defaultConfigTUI       bool

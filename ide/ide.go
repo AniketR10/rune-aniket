@@ -390,7 +390,7 @@ func (i *IDE) init(
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,
 		op.releaseManager, &i.root, i.ideConfig.initialTerminalCapacity(),
-		op.dispatchOnPreview, op.debugCommands)
+		op.dispatchOnPreview, op.debugCommands, op.streamingOpen)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)
 	}

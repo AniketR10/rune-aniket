@@ -188,7 +188,12 @@ func (w *testLoader) Stat(name string) (os.FileInfo, error) {
 func (w *testLoader) OpenFile(
 	path string, flag int, perm os.FileMode,
 ) (workspaceapi.File, error) {
-	panic("unimplemented")
+	// Returning an error here causes text.Component's streaming
+	// open path to fall back to the synchronous workspace.Load
+	// flow, which testLoader.Load services. Without this, every
+	// ide test that opens a file in a non-real workspace would
+	// panic on the streamload pre-read.
+	return nil, errors.New("ide/ex_test: testLoader.OpenFile not implemented")
 }
 func (w *testLoader) NewPty(context.Context) (workspaceapi.Pty, error) {
 	return workspaceapi.Pty{

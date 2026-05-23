@@ -92,6 +92,14 @@ type Config struct {
 	Clipboard               clipboard.Register
 	OpenRouter              OpenRouter
 	Comments                CommentConfig
+	// StreamingOpen enables the async streaming file-open path.
+	// When true, OpenFileTab returns a lightweight read-only
+	// streaming handler immediately and runs workspace.Load on a
+	// background goroutine, swapping in the real editor handler
+	// when the load completes. When false (the default), opens use
+	// the synchronous workspace.Load path. See
+	// text/streamload for the streaming handler implementation.
+	StreamingOpen bool
 	// ScheduleNextTick is used by async flush completion to run
 	// UI-mutating callbacks (notably the EventTypeFlush dispatch and
 	// the dirty-attribute reset) on the event-loop goroutine instead
@@ -681,6 +689,18 @@ func WithOpenRouter(r OpenRouter) Option {
 func WithEnvSource(env cmdenv.Source) Option {
 	return func(cfg *Config) {
 		cfg.EnvSource = env
+	}
+}
+
+// WithStreamingOpen enables the async streaming file-open path. When
+// set, OpenFileTab returns a lightweight read-only streaming handler
+// immediately and runs the workspace.Load on a background goroutine,
+// swapping in the real editor handler when the load completes. The
+// default is false (synchronous open) so existing test fixtures and
+// integrations continue to behave as before.
+func WithStreamingOpen(on bool) Option {
+	return func(cfg *Config) {
+		cfg.StreamingOpen = on
 	}
 }
 
