@@ -91,3 +91,49 @@ func TestFilenameForLanguage(t *testing.T) {
 		})
 	}
 }
+
+// TestLanguageForFile covers the file→language id mapping with an
+// emphasis on the regression that triggered the syntax-tree freeze:
+// arbitrary .log files were being claimed as Salesforce sflog source
+// just because of the extension. That mapping is gone — .log now
+// falls through to the bare-extension fallback (which a separate
+// follow-up will further tighten to an error).
+func TestLanguageForFile(t *testing.T) {
+	tests := []struct {
+		filename string
+		wantID   string
+		wantErr  bool
+	}{
+		// Recognized exact filenames (mapped via filenameToLanguageID).
+		{"Makefile", "make", false},
+		// Recognized extensions.
+		{"main.go", "go", false},
+		{"app.py", "python", false},
+		{"index.js", "javascript", false},
+		{"snippet.rs", "rust", false},
+
+		// Regression: .log files must NOT be parsed as Salesforce
+		// sflog. The mapping has been removed; .log falls through to
+		// the bare-extension fallback ("log") which has no installed
+		// parser package on a normal system.
+		{"debug.log", "log", false},
+		{"server.log", "log", false},
+
+		// Unknown extensions still fall back to ext[1:] for now.
+		{"weird.totallymadeup", "totallymadeup", false},
+
+		// No extension and not a recognized filename → error.
+		{"README", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			id, err := LanguageForFile(tt.filename)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantID, id)
+		})
+	}
+}

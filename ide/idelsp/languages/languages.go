@@ -511,9 +511,6 @@ var extensionToLanguageID = map[string]string{
 	// Scheme
 	".ss": "scheme",
 
-	// Sflog (Salesforce)
-	".log": "sflog",
-
 	// Snakemake
 	".smk": "snakemake",
 
@@ -789,7 +786,6 @@ var languageIDToExtension = map[string]string{
 	"rust":               ".rs",
 	"scala":              ".scala",
 	"scheme":             ".ss",
-	"sflog":              ".log",
 	"snakemake":          ".smk",
 	"solidity":           ".sol",
 	"sourcepawn":         ".sp",
