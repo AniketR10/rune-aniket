@@ -145,6 +145,10 @@ func (m *mockManager) Workspace(file workspaceapi.URI) (workspace.Workspace, boo
 	return m.workspace, true, nil
 }
 
+func (m *mockManager) IncrementReference(workspaceapi.URI) {}
+
+func (m *mockManager) DecrementReference(workspaceapi.URI) error { return nil }
+
 // TestMultiForwardsRemoteScheme guards against the regression
 // where workspace.Multi only exposes the embedded Workspace's
 // promoted method set, hiding OnDisconnect on schemes that
@@ -178,6 +182,114 @@ func TestMultiForwardsRemoteScheme(t *testing.T) {
 			"workspace's disconnect channel")
 }
 
+// TestMultiExtraneousReleasesWorkspaceOnFileClose pins the
+// RUNE-196 regression: workspaces created on demand by
+// multi.loadExtraneous must be released from the Manager when the
+// per-file FlusherCloser closes, otherwise long sessions
+// accumulate one ad-hoc workspace (and its scheme, watchers,
+// executor, vte reservoir, ...) per out-of-workspace open.
+func TestMultiExtraneousReleasesWorkspaceOnFileClose(t *testing.T) {
+	ctx := context.Background()
+
+	defURI := parseURI(t, "memory:///")
+	extraneousDir := parseURI(t, "test:///tmp/")
+	extraneousFile := parseURI(t, "test:///tmp/file.txt")
+
+	t.Run("single file release", func(t *testing.T) {
+		m := newRefcountManager(t)
+		def := defaultWorkspaceFor(t, ctx, m, defURI)
+		multi := workspace.Multi(ctx, hideExtraneous(m), def, defURI)
+
+		require.False(t, m.HasWorkspace(extraneousDir))
+
+		fc, err := multi.Load(extraneousFile, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+		require.True(t, m.HasWorkspace(extraneousDir),
+			"loadExtraneous must install the ad-hoc workspace")
+
+		require.NoError(t, fc.Close())
+		assert.False(t, m.HasWorkspace(extraneousDir),
+			"closing the per-file FlusherCloser must release the "+
+				"ad-hoc workspace; otherwise long sessions leak "+
+				"one workspace per out-of-workspace open")
+	})
+
+	t.Run("refcount keeps workspace alive until last file closes", func(t *testing.T) {
+		m := newRefcountManager(t)
+		def := defaultWorkspaceFor(t, ctx, m, defURI)
+		multi := workspace.Multi(ctx, hideExtraneous(m), def, defURI)
+
+		file1 := parseURI(t, "test:///tmp/a.txt")
+		file2 := parseURI(t, "test:///tmp/b.txt")
+
+		fc1, err := multi.Load(file1, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+		fc2, err := multi.Load(file2, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+
+		require.True(t, m.HasWorkspace(extraneousDir))
+
+		require.NoError(t, fc1.Close())
+		assert.True(t, m.HasWorkspace(extraneousDir),
+			"workspace must survive close of first file while a "+
+				"second file in the same dir is still open")
+
+		require.NoError(t, fc2.Close())
+		assert.False(t, m.HasWorkspace(extraneousDir),
+			"workspace must be released after the last file closes")
+	})
+
+	t.Run("double close does not under-release", func(t *testing.T) {
+		m := newRefcountManager(t)
+		def := defaultWorkspaceFor(t, ctx, m, defURI)
+		multi := workspace.Multi(ctx, hideExtraneous(m), def, defURI)
+
+		file1 := parseURI(t, "test:///tmp/a.txt")
+		file2 := parseURI(t, "test:///tmp/b.txt")
+
+		fc1, err := multi.Load(file1, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+		holdFC, err := multi.Load(file2, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+
+		require.NoError(t, fc1.Close())
+		_ = fc1.Close()
+		assert.True(t, m.HasWorkspace(extraneousDir),
+			"double Close on a single per-file FlusherCloser must "+
+				"only decrement the refcount once; the second "+
+				"open in the same dir must still keep the "+
+				"workspace alive")
+
+		require.NoError(t, holdFC.Close())
+		assert.False(t, m.HasWorkspace(extraneousDir))
+
+		fc2, err := multi.Load(file2, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+		require.True(t, m.HasWorkspace(extraneousDir),
+			"a fresh extraneous open after a previous release "+
+				"must re-create the workspace")
+		require.NoError(t, fc2.Close())
+		assert.False(t, m.HasWorkspace(extraneousDir))
+	})
+
+	t.Run("default workspace is never released by refcount", func(t *testing.T) {
+		m := newRefcountManager(t)
+		def := defaultWorkspaceFor(t, ctx, m, defURI)
+		multi := workspace.Multi(ctx, hideExtraneous(m), def, defURI)
+
+		require.True(t, m.HasWorkspace(defURI))
+
+		fc, err := multi.Load(extraneousFile, cell.NewBuffer(), extraneousDir, false)
+		require.NoError(t, err)
+		require.NoError(t, fc.Close())
+
+		assert.True(t, m.HasWorkspace(defURI),
+			"the IDE-owned default workspace must not be subject "+
+				"to the refcount; only workspaces explicitly "+
+				"incremented should be released on decrement")
+	})
+}
+
 // remoteWorkspace is a workspace.Workspace that also satisfies
 // workspace.RemoteScheme by surfacing a caller-controlled
 // disconnect channel. Used by TestMultiForwardsRemoteScheme.
@@ -188,4 +300,64 @@ type remoteWorkspace struct {
 
 func (r remoteWorkspace) OnDisconnect() <-chan struct{} {
 	return r.disconnectCh
+}
+
+func newRefcountManager(t *testing.T) *workspace.Manager {
+	t.Helper()
+	m := workspace.NewManager(config.NopConfig(), inlineSchedule)
+	require.NoError(t, m.RegisterScheme("memory", workspace.NewMemoryScheme))
+	require.NoError(t, m.RegisterScheme("test", NewNopScheme("test")))
+	t.Cleanup(func() { _ = m.Close() })
+	return m
+}
+
+func defaultWorkspaceFor(
+	t *testing.T, ctx context.Context,
+	m *workspace.Manager, uri workspaceapi.URI,
+) workspace.Workspace {
+	t.Helper()
+	w, err := m.AddWorkspace(ctx, uri)
+	require.NoError(t, err)
+	return w
+}
+
+// hideExtraneous wraps the real Manager but always reports "no
+// workspace yet" from Workspace(file). This mirrors the production
+// visibleWorkspaceManager (ide/workspace_handler.go), which only
+// surfaces workspaces that own a visible tab slot; workspaces
+// created on demand never appear there, so multi.loadExtraneous
+// can find the existing manager entry via AddWorkspace without
+// bailing out with ErrOpenInOtherWorkspace.
+func hideExtraneous(m *workspace.Manager) workspace.WorkspaceManager {
+	return hidingManager{m: m}
+}
+
+type hidingManager struct {
+	m *workspace.Manager
+}
+
+func (h hidingManager) RegisterScheme(s string, fn schemeapi.SchemeFunc) error {
+	return h.m.RegisterScheme(s, fn)
+}
+
+func (h hidingManager) UnregisterScheme(s string) error {
+	return h.m.UnregisterScheme(s)
+}
+
+func (h hidingManager) AddWorkspace(ctx context.Context, uri workspaceapi.URI) (
+	workspace.Workspace, error,
+) {
+	return h.m.AddWorkspace(ctx, uri)
+}
+
+func (h hidingManager) Workspace(workspaceapi.URI) (workspace.Workspace, bool, error) {
+	return nil, false, nil
+}
+
+func (h hidingManager) IncrementReference(uri workspaceapi.URI) {
+	h.m.IncrementReference(uri)
+}
+
+func (h hidingManager) DecrementReference(uri workspaceapi.URI) error {
+	return h.m.DecrementReference(uri)
 }

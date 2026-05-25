@@ -40,15 +40,13 @@ var _ SchemeManager = (*Manager)(nil)
 // Manager manages resources for a collection of workspaces.
 // It allows clients to register new Schemes and add new workspaces.
 type Manager struct {
-	cfg           config.Config
-	workspaceFunc func(workspaceapi.URI, schemeapi.Scheme, func(func()) bool) Workspace
-	// scheduleNextTick is forwarded to workspaceFunc so each
-	// workspace's loaded files can dispatch buffer mutations back
-	// onto the host event loop.
+	cfg              config.Config
+	workspaceFunc    func(workspaceapi.URI, schemeapi.Scheme, func(func()) bool) Workspace
 	scheduleNextTick func(func()) bool
 
 	schemes    map[string]schemeapi.SchemeFunc
 	workspaces map[string]managerWorkspace
+	refs       map[string]int
 }
 
 // NewManager allocates storage for a new Manager and initializes it
@@ -82,6 +80,7 @@ func (m *Manager) Init(
 	m.cfg = cfg
 	m.schemes = make(map[string]schemeapi.SchemeFunc)
 	m.workspaces = make(map[string]managerWorkspace)
+	m.refs = make(map[string]int)
 	m.workspaceFunc = workspaceFunc
 	m.scheduleNextTick = scheduleNextTick
 }
@@ -115,6 +114,7 @@ func (m *Manager) UnregisterScheme(scheme string) error {
 
 func (m *Manager) removeWorkspace(uri workspaceapi.URI) {
 	delete(m.workspaces, uri.String())
+	delete(m.refs, uri.String())
 }
 
 // Scheme returns a SchemeFunc for the given URI.
@@ -189,6 +189,40 @@ func (m *Manager) Workspace(file workspaceapi.URI) (Workspace, bool, error) {
 func (m *Manager) HasWorkspace(uri workspaceapi.URI) bool {
 	_, ok := m.workspaces[uri.String()]
 	return ok
+}
+
+// IncrementReference bumps the refcount for the workspace
+// registered under uri. See [WorkspaceManager.IncrementReference].
+// Calling IncrementReference for a uri that was never added via
+// AddWorkspace is a no-op so a stray increment cannot resurrect a
+// torn-down entry.
+func (m *Manager) IncrementReference(uri workspaceapi.URI) {
+	if _, ok := m.workspaces[uri.String()]; !ok {
+		return
+	}
+	m.refs[uri.String()]++
+}
+
+// DecrementReference decrements the refcount for the workspace at
+// uri and closes it once the count reaches zero. See
+// [WorkspaceManager.DecrementReference].
+func (m *Manager) DecrementReference(uri workspaceapi.URI) error {
+	key := uri.String()
+	count, referenced := m.refs[key]
+	if !referenced {
+		return nil
+	}
+	count--
+	if count > 0 {
+		m.refs[key] = count
+		return nil
+	}
+	w, ok := m.workspaces[key]
+	if !ok {
+		delete(m.refs, key)
+		return nil
+	}
+	return w.Close()
 }
 
 // Close closes all resources associated with this Manager.

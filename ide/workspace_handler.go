@@ -214,6 +214,14 @@ func (m visibleWorkspaceManager) UnregisterScheme(scheme string) error {
 	return m.manager.UnregisterScheme(scheme)
 }
 
+func (m visibleWorkspaceManager) IncrementReference(uri workspaceapi.URI) {
+	m.manager.IncrementReference(uri)
+}
+
+func (m visibleWorkspaceManager) DecrementReference(uri workspaceapi.URI) error {
+	return m.manager.DecrementReference(uri)
+}
+
 func (h *workspaceManagerHandler) newEditor(
 	reloader byoe.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace, tm browser.TabManager,

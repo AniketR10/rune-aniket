@@ -524,6 +524,10 @@ func (m testWorkspaceManager) Workspace(uri workspaceapi.URI) (workspace.Workspa
 	return m.workspace, workspaceapi.HasPrefix(uri, m.workspaceURI), nil
 }
 
+func (testWorkspaceManager) IncrementReference(workspaceapi.URI) {}
+
+func (testWorkspaceManager) DecrementReference(workspaceapi.URI) error { return nil }
+
 type testParser struct{}
 
 func (testParser) Search(

@@ -53,7 +53,11 @@ func (stubWorkspaceManager) Workspace(workspaceapi.URI) (workspace.Workspace, bo
 func (stubWorkspaceManager) RegisterScheme(string, schemeapi.SchemeFunc) error {
 	return nil
 }
-func (stubWorkspaceManager) UnregisterScheme(string) error { return nil }
+func (stubWorkspaceManager) UnregisterScheme(string) error        { return nil }
+func (stubWorkspaceManager) IncrementReference(workspaceapi.URI) {}
+func (stubWorkspaceManager) DecrementReference(workspaceapi.URI) error {
+	return nil
+}
 
 type stubOpener struct{ opened []workspaceapi.URI }
 

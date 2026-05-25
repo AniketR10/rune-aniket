@@ -638,6 +638,32 @@ func (mr *MockWorkspaceManagerMockRecorder) Workspace(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Workspace", reflect.TypeOf((*MockWorkspaceManager)(nil).Workspace), arg0)
 }
 
+// IncrementReference mocks base method.
+func (m *MockWorkspaceManager) IncrementReference(arg0 workspaceapi.URI) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncrementReference", arg0)
+}
+
+// IncrementReference indicates an expected call of IncrementReference.
+func (mr *MockWorkspaceManagerMockRecorder) IncrementReference(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementReference", reflect.TypeOf((*MockWorkspaceManager)(nil).IncrementReference), arg0)
+}
+
+// DecrementReference mocks base method.
+func (m *MockWorkspaceManager) DecrementReference(arg0 workspaceapi.URI) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecrementReference", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DecrementReference indicates an expected call of DecrementReference.
+func (mr *MockWorkspaceManagerMockRecorder) DecrementReference(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecrementReference", reflect.TypeOf((*MockWorkspaceManager)(nil).DecrementReference), arg0)
+}
+
 // MockFlusherCloser is a mock of FlusherCloser interface.
 type MockFlusherCloser struct {
 	ctrl     *gomock.Controller

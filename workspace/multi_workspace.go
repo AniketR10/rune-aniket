@@ -26,6 +26,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cell"
@@ -91,21 +92,62 @@ func (m multi) loadExtraneous(
 	if ok {
 		return nil, ErrOpenInOtherWorkspace
 	}
-	w, err := m.manager.AddWorkspace(m.parentCtx, workspaceapi.Dir(file))
+	dir := workspaceapi.Dir(file)
+	w, err := m.manager.AddWorkspace(m.parentCtx, dir)
 	if err != nil {
 		return nil, err
 	}
-	return w.Load(file, buf, swapDir, readOnly)
+	fc, err := w.Load(file, buf, swapDir, readOnly)
+	if err != nil {
+		return nil, err
+	}
+	return m.wrapExtraneous(dir, fc), nil
 }
 
 func (m multi) recoverExtraneous(
 	file, swapFilePath workspaceapi.URI, buf *cell.Buffer, force bool,
 ) (FlusherCloser, error) {
-	workspace, err := m.manager.AddWorkspace(m.parentCtx, workspaceapi.Dir(file))
+	dir := workspaceapi.Dir(file)
+	workspace, err := m.manager.AddWorkspace(m.parentCtx, dir)
 	if err != nil {
 		return nil, err
 	}
-	return workspace.Recover(file, swapFilePath, buf, force)
+	fc, err := workspace.Recover(file, swapFilePath, buf, force)
+	if err != nil {
+		return nil, err
+	}
+	return m.wrapExtraneous(dir, fc), nil
+}
+
+// wrapExtraneous increments the workspace refcount for dir and
+// returns a FlusherCloser whose Close decrements it exactly once.
+func (m multi) wrapExtraneous(dir workspaceapi.URI, fc FlusherCloser) FlusherCloser {
+	m.manager.IncrementReference(dir)
+	return &extraneousCloser{FlusherCloser: fc, manager: m.manager, dir: dir}
+}
+
+// extraneousCloser wraps a per-file FlusherCloser so its Close
+// also decrements the workspace refcount the file represents.
+// Close is idempotent: a repeated call returns the cached error
+// without decrementing twice, so a tab that runs Close from both
+// its normal teardown and a shutdown path cannot under-count the
+// workspace.
+type extraneousCloser struct {
+	FlusherCloser
+	manager  WorkspaceManager
+	dir      workspaceapi.URI
+	closeOne sync.Once
+	closeErr error
+}
+
+func (e *extraneousCloser) Close() error {
+	e.closeOne.Do(func() {
+		e.closeErr = e.FlusherCloser.Close()
+		if relErr := e.manager.DecrementReference(e.dir); relErr != nil && e.closeErr == nil {
+			e.closeErr = relErr
+		}
+	})
+	return e.closeErr
 }
 
 // OnDisconnect forwards to the wrapped workspace's RemoteScheme
