@@ -173,23 +173,35 @@ func (c *Component) buildEditorHandler(
 		handler.SetLocationList(textapi.LocationPriorityInfo, "syntax", ll)
 	})
 
-	// install tree in Buffer first so editor can use
-	// its capabilities while initializing
-
-	tree := syntax.WithTree(c.ctx, c.config, interrupter,
-		c.config.PkgManager, locs, file, buf, fc, c.workspace, c.config.Syntax)
-	fc = tree
+	// Skip syntax-tree installation entirely for buffers larger
+	// than MaxSyntaxParseSize: parsing a multi-MB file on the host
+	// event loop inside tree_sitter.Parser.ParseWithOptions
+	// previously froze the UI for seconds. The buffer is still
+	// editable; only highlighting / folds / :jumptoast become
+	// unavailable for the tab.
+	var tree *syntax.Tree
+	if c.config.MaxSyntaxParseSize == 0 || buf.Size() <= c.config.MaxSyntaxParseSize {
+		// install tree in Buffer first so editor can use its
+		// capabilities while initializing
+		tree = syntax.WithTree(c.ctx, c.config, interrupter,
+			c.config.PkgManager, locs, file, buf, fc, c.workspace, c.config.Syntax)
+		fc = tree
+	}
 
 	handler, err = c.ed.Edit(withAuxiliaryBars(c.ctx), file, buf, readOnly, recover)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	commands, cmdHandler := syntax.Commands(handler, tree)
-	for _, cmd := range commands {
-		err := c.fileRegistry.SubscribeCommandForFile(file, cmd, cmdHandler)
-		if err != nil {
-			return nil, nil, err
+	var commands []textapi.CommandManual
+	if tree != nil {
+		var cmdHandler syntax.CommandHandler
+		commands, cmdHandler = syntax.Commands(handler, tree)
+		for _, cmd := range commands {
+			err := c.fileRegistry.SubscribeCommandForFile(file, cmd, cmdHandler)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 

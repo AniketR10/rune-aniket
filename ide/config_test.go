@@ -1017,6 +1017,25 @@ editor:
 	assert.Equal(t, 2, cfg.editorTabspaces())
 }
 
+func TestEditorMaxSizeForSyntax(t *testing.T) {
+	f, err := os.CreateTemp("", "")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`
+editor:
+  max_size_for_syntax: 2048
+`)
+	require.NoError(t, err)
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.Equal(t, 2048, cfg.editorMaxSizeForSyntax())
+}
+
 func TestEditorIndentType(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)

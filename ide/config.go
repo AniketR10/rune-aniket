@@ -2436,6 +2436,23 @@ func (c ideConfig) editorTabspaces() (tabs int) {
 	return
 }
 
+func (c ideConfig) editorMaxSizeForSyntax() (size int) {
+	size = text.DefaultConfig().MaxSyntaxParseSize
+	cfg, ok := c.editor()
+	if !ok {
+		return
+	}
+	cfgSize, err := cfg.GetInt("max_size_for_syntax")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.max_size_for_syntax"] = err
+		}
+		return
+	}
+	size = cfgSize
+	return
+}
+
 func (c ideConfig) wallpaper() (ret browser.Wallpaper) {
 	backgroundAttr := c.workspaceWallpaperBackgroundAttr()
 

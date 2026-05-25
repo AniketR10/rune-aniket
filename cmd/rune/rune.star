@@ -407,6 +407,12 @@ config = {
         # set to True to flush file tabs ~2s after the last edit.
         "auto_save":  False,
         "tabspaces": 4,
+        # Maximum buffer size (in bytes) for which Rune installs a syntax
+        # tree on tab open. Files larger than this skip syntax parsing to
+        # avoid freezing the editor inside the tree-sitter parser on
+        # large log files and other big blobs. Set to 0 to disable the
+        # guard and always parse.
+        "max_size_for_syntax": 1048576,
         "modal": {
             # Default text attributes.
             "attr":        attr(fg = "default", bg = "default"),

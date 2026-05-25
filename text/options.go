@@ -87,11 +87,15 @@ type Config struct {
 	DirtyTabAttr            term.Attributes
 	Icons                   IconSet
 	Syntax                  syntax.Config
-	PkgManager              syntax.PkgManager
-	Markdown                markdown.Config
-	Clipboard               clipboard.Register
-	OpenRouter              OpenRouter
-	Comments                CommentConfig
+	// MaxSyntaxParseSize caps the buffer size (in cells, as
+	// reported by cell.Buffer.Size) above which a file's tab
+	// installs no syntax tree.
+	MaxSyntaxParseSize int
+	PkgManager         syntax.PkgManager
+	Markdown           markdown.Config
+	Clipboard          clipboard.Register
+	OpenRouter         OpenRouter
+	Comments           CommentConfig
 	// StreamingOpen enables the async streaming file-open path.
 	// When true, OpenFileTab returns a lightweight read-only
 	// streaming handler immediately and runs workspace.Load on a
@@ -362,6 +366,14 @@ func DefaultConfig() Config {
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		EventPublisher:          func(term.Event) bool { return false },
 		Syntax:                  syntax.DefaultConfig(),
+		// 1 MiB caps the parse pipeline at a value generous
+		// enough for typical source files but small enough to
+		// keep log files and other large blobs from freezing
+		// the editor inside tree_sitter.Parser.ParseWithOptions.
+		// rune.star ships the same value via
+		// editor.max_size_for_syntax; user configs and tests can
+		// override the field through text.WithMaxSyntaxParseSize.
+		MaxSyntaxParseSize:      1 * 1024 * 1024,
 		PkgManager:              nopPkgManager{},
 		Markdown:                markdown.DefaultConfig(),
 		Clipboard:               clipboard.NewInMemory(),
@@ -395,6 +407,16 @@ func WithTabspaces(tabspaces int) Option {
 func WithSyntaxConfig(syntax syntax.Config) Option {
 	return func(cfg *Config) {
 		cfg.Syntax = syntax
+	}
+}
+
+// WithMaxSyntaxParseSize returns an Option that caps the buffer size
+// above which a freshly loaded tab will skip syntax-tree
+// installation entirely. See Config.MaxSyntaxParseSize. Zero
+// disables the guard.
+func WithMaxSyntaxParseSize(size int) Option {
+	return func(cfg *Config) {
+		cfg.MaxSyntaxParseSize = size
 	}
 }
 

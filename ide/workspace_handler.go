@@ -958,6 +958,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithTabNameSeparator(cfg.tabNameSeparator()),
 		text.WithPackageManager(h.pkgmanager),
 		text.WithSyntaxConfig(cfg.syntaxConfig()),
+		text.WithMaxSyntaxParseSize(cfg.editorMaxSizeForSyntax()),
 		text.WithMarkdownConfig(markdownConfig),
 		text.WithClipboard(h.clip),
 		text.WithOpenRouter(h),
