@@ -38,8 +38,13 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 )
 
-// maxImageBytes is the maximum file size for image reads (20 MB).
-const maxImageBytes = 20 * 1024 * 1024
+// maxImageBytes is the maximum raw file size for image reads. The image
+// is base64-encoded into the LLM request, which inflates payload size
+// by ~33%, and the extension host's gRPC server enforces the default
+// 4 MiB inbound message cap. Capping raw bytes at 3 MiB keeps the
+// encoded request comfortably under that ceiling once the rest of the
+// message envelope is accounted for.
+const maxImageBytes = 3 * 1024 * 1024
 
 type readFileTool struct {
 	fs           workspaceapi.FileSystem
@@ -229,8 +234,12 @@ func imageMediaType(path string) (string, bool) {
 func (t *readFileTool) executeImage(ctx context.Context, path string, data []byte, mime string) agent.ToolResult {
 	if len(data) > maxImageBytes {
 		return agent.ToolResult{
-			Content: fmt.Sprintf("error: image file %s is too large (%d bytes, max %d)",
-				filepath.Base(path), len(data), maxImageBytes),
+			Content: fmt.Sprintf(
+				"error: image file %s is too large to send to the model "+
+					"(%d bytes, max %d bytes / %d MiB). Reduce the image "+
+					"size (resize or recompress) and try again.",
+				filepath.Base(path), len(data), maxImageBytes,
+				maxImageBytes/(1024*1024)),
 			IsError: true,
 		}
 	}
