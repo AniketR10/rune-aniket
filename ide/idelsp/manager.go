@@ -271,17 +271,26 @@ func (m *Manager) handle(ev textapi.Event) error {
 			if m.cfg.NoInitializeServer {
 				m.mu.Lock()
 				delete(m.pendingOpens, uri)
+				delete(m.files, uri)
 				m.mu.Unlock()
 				return nil
 			}
 			return err
 		}
-		return srv.notify(ctx, "textDocument/didClose",
+		notifyErr := srv.notify(ctx, "textDocument/didClose",
 			semanticapi.DidCloseTextDocumentParams{
 				TextDocument: semanticapi.TextDocumentIdentifier{
 					URI: uri,
 				},
 			})
+		// Drop the cached entry regardless of notify outcome: once
+		// we send didClose (or fail trying), the server side is no
+		// longer guaranteed to track this URI and our cached copy
+		// would only leak memory until process exit.
+		m.mu.Lock()
+		delete(m.files, uri)
+		m.mu.Unlock()
+		return notifyErr
 
 	case textapi.EventTypeEdit:
 		srv, err := m.serverForURI(uri)

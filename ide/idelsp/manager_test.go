@@ -33,7 +33,40 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 )
+
+// TestEventTypeClose_evictsFilesCache locks in the fix for RUNE-195:
+// Manager.files retained the full text of every URI ever opened in a
+// language-supported buffer because EventTypeClose only emitted
+// textDocument/didClose without touching m.files. The handler must
+// drop the cached entry so long-running sessions do not accumulate
+// one full file copy per URI.
+func TestEventTypeClose_evictsFilesCache(t *testing.T) {
+	t.Parallel()
+	workspaceURI := makeURI(t, "file:///workspace")
+	m := New(workspaceURI, nil, nil, nil, nil, nil,
+		Config{NoInitializeServer: true})
+	t.Cleanup(func() { _ = m.Close() })
+
+	openURI := makeURI(t, "file:///workspace/open.go")
+	m.mu.Lock()
+	m.files[openURI.String()] = newFile(openURI, "package open\n", "go")
+	m.mu.Unlock()
+
+	require.Len(t, m.files, 1)
+
+	err := m.handle(textapi.Event{
+		Type: textapi.EventTypeClose,
+		URI:  openURI,
+	})
+	require.NoError(t, err)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	assert.Empty(t, m.files,
+		"EventTypeClose must evict the cached file entry")
+}
 
 // TestManagerMaxRetriesPropagatesFromConfig locks in the fix for Bug B
 // in RUNE-132: Config.MaxRetries was read for default-filling but
