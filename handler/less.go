@@ -308,7 +308,35 @@ func (l *Less) updateSearchBarAttr() {
 }
 
 func (l *Less) normalHandleEvent(ev term.Event) (exit, handled bool) {
-	if ev.Type != term.EventKey || ev.Mod != 0 {
+	if ev.Type != term.EventKey {
+		return
+	}
+	// Named-key navigation: arrow and page keys work regardless of
+	// the Ch field, plus Ctrl-f / Ctrl-b emacs/less-style page
+	// scrolling. We special-case these before the rune switch so
+	// they remain available even when the user holds Ctrl.
+	if ev.Mod == 0 {
+		switch ev.Key {
+		case term.KeyArrowUp:
+			return false, l.scroll.SeekUp()
+		case term.KeyArrowDown:
+			return false, l.scroll.SeekDown()
+		case term.KeyPgup:
+			return false, l.scroll.SeekUpPage()
+		case term.KeyPgdn:
+			return false, l.scroll.SeekDownPage()
+		}
+	}
+	if ev.Mod == term.ModCtrl {
+		switch ev.Ch {
+		case 'b':
+			return false, l.scroll.SeekUpPage()
+		case 'f':
+			return false, l.scroll.SeekDownPage()
+		}
+		return
+	}
+	if ev.Mod != 0 {
 		return
 	}
 

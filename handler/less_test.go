@@ -558,3 +558,84 @@ func setup(t *testing.T, less *Less, width, height int) (*Less, *term.StringWrit
 
 	return less, term.NewStringWriter(width, height)
 }
+
+// TestLessNavigationKeys exercises the arrow and ctrl-b/ctrl-f and
+// pgup/pgdn navigation bindings end-to-end against the rendered
+// framebuffer. The fixture is a 12-line file of 2-character line
+// labels (00..11) so each rendered row is unambiguous and the
+// viewport (4x4 with the command bar disabled) shows exactly four
+// content rows.
+func TestLessNavigationKeys(t *testing.T) {
+	const (
+		width  = 4
+		height = 4
+	)
+	const numbered = "00\n01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n11"
+
+	cfg := DefaultLessConfig()
+	cfg.NoBar = true
+	less := NewLess(cfg)
+	_, err := less.Buffer().ReadFrom(strings.NewReader(numbered))
+	require.NoError(t, err)
+
+	cases := []handlertest.SequenceTestCase{
+		{
+			InputSequence: "",
+			Expected: "" +
+				"00  \n" +
+				"01  \n" +
+				"02  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<down>",
+			Expected: "" +
+				"01  \n" +
+				"02  \n" +
+				"03  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<up>",
+			Expected: "" +
+				"00  \n" +
+				"01  \n" +
+				"02  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<c-f>",
+			Expected: "" +
+				"04  \n" +
+				"05  \n" +
+				"06  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<c-b>",
+			Expected: "" +
+				"00  \n" +
+				"01  \n" +
+				"02  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<pgdn>",
+			Expected: "" +
+				"04  \n" +
+				"05  \n" +
+				"06  \n" +
+				"0▐  ",
+		},
+		{
+			InputSequence: "<pgup>",
+			Expected: "" +
+				"00  \n" +
+				"01  \n" +
+				"02  \n" +
+				"0▐  ",
+		},
+	}
+
+	handlertest.RunHandlerSequence(t, less, width, height, cases)
+}
