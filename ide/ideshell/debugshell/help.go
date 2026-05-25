@@ -180,7 +180,9 @@ func helpLines() iterator.Iterator[component.Responsive] {
 	b.WriteString("- `debugger configured`\n")
 	b.WriteString("## Session lifecycle\n")
 	b.WriteString("- **`initialize`** `<langID>` — Create a debug session for the language\n")
-	b.WriteString("- **`launch`** `<program>` `[args...]` — Send Launch\n")
+	b.WriteString("- **`launch`** `[-e KEY=VAL]... [--] <program> [args...]` — Send Launch. " +
+		"Repeat `-e` to set debuggee env vars; use `--` to allow a program path " +
+		"or args that start with `-`.\n")
 	b.WriteString("- **`attach`** `<pid|program>` — Send Attach\n")
 	b.WriteString("- **`configured`** — Send all in-memory breakpoints, then ConfigurationDone\n")
 	b.WriteString("- **`terminate`** — End the current debug session\n")

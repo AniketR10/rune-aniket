@@ -604,8 +604,13 @@ func (h *Handler) cmdInitialize(
 func (h *Handler) cmdLaunch(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
+	const usage = "usage: debugger launch [-e KEY=VAL]... [--] <program> [args...]"
 	if len(args) == 0 {
-		return nil, errors.New("usage: debugger launch <program> [args...]")
+		return nil, errors.New(usage)
+	}
+	program, progArgs, env, err := parseLaunchArgs(args)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", usage, err)
 	}
 	sid, err := h.requireInitializedOnly()
 	if err != nil {
@@ -633,8 +638,9 @@ func (h *Handler) cmdLaunch(
 		return nil, fmt.Errorf("launch: %w", err)
 	}
 	lArgs := debugapi.LaunchRequestArguments{
-		Program: args[0],
-		Args:    append([]string{}, args[1:]...),
+		Program: program,
+		Args:    progArgs,
+		Env:     env,
 	}
 	// Arm the InitializedEvent channel before dispatching
 	// Launch so the iterator we return is guaranteed to see
@@ -652,7 +658,7 @@ func (h *Handler) cmdLaunch(
 	h.phase = phaseStarted
 	h.mu.Unlock()
 	out := []string{
-		fmt.Sprintf("Launch sent for `%s`.", args[0]),
+		fmt.Sprintf("Launch sent for `%s`.", program),
 	}
 	if outputPath != "" {
 		out = append(out, fmt.Sprintf(
@@ -662,6 +668,59 @@ func (h *Handler) cmdLaunch(
 	out = append(out,
 		"Run `debugger configured` when configuration is complete.")
 	return newLaunchIterator(out, initCh), nil
+}
+
+// parseLaunchArgs parses the argv of `debugger launch` into a program
+// path, program args, and an env map. Flags accepted before the program
+// (or before an optional `--` separator):
+//
+//	-e KEY=VAL    Set an environment variable for the debuggee.
+//	              Repeatable. VAL may contain '=' characters.
+//
+// `--` terminates flag parsing; the next token is the program and all
+// remaining tokens are program args (so program args may start with
+// `-`). Without `--`, the first non-flag token is the program and no
+// further flag parsing occurs.
+func parseLaunchArgs(
+	args []string,
+) (program string, progArgs []string, env map[string]string, err error) {
+	i := 0
+	for ; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			i++
+			break
+		}
+		if a == "-e" {
+			if i+1 >= len(args) {
+				return "", nil, nil, errors.New("-e requires a KEY=VALUE argument")
+			}
+			kv := args[i+1]
+			eq := strings.IndexByte(kv, '=')
+			if eq <= 0 {
+				return "", nil, nil, fmt.Errorf(
+					"-e value %q must be KEY=VALUE with a non-empty KEY", kv)
+			}
+			if env == nil {
+				env = make(map[string]string)
+			}
+			env[kv[:eq]] = kv[eq+1:]
+			i++
+			continue
+		}
+		if strings.HasPrefix(a, "-") && a != "-" {
+			return "", nil, nil, fmt.Errorf("unknown flag %q", a)
+		}
+		break
+	}
+	if i >= len(args) {
+		return "", nil, nil, errors.New("missing <program>")
+	}
+	program = args[i]
+	if i+1 < len(args) {
+		progArgs = append([]string{}, args[i+1:]...)
+	}
+	return program, progArgs, env, nil
 }
 
 func (h *Handler) cmdAttach(

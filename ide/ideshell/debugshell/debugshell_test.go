@@ -760,6 +760,120 @@ func TestHandler_Launch(t *testing.T) {
 	assert.Equal(t, []string{"--flag", "arg"}, dbg.launchCalls[0].Args)
 }
 
+func TestHandler_LaunchWithEnvFlags(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		program  string
+		progArgs []string
+		env      map[string]string
+	}{
+		{
+			name:     "env before program no separator",
+			args:     []string{subLaunch, "-e", "FOO=bar", "/bin/prog", "arg1"},
+			program:  "/bin/prog",
+			progArgs: []string{"arg1"},
+			env:      map[string]string{"FOO": "bar"},
+		},
+		{
+			name:     "env before program with separator",
+			args:     []string{subLaunch, "-e", "FOO=bar", "--", "/bin/prog", "arg1"},
+			program:  "/bin/prog",
+			progArgs: []string{"arg1"},
+			env:      map[string]string{"FOO": "bar"},
+		},
+		{
+			name:    "multiple env vars",
+			args:    []string{subLaunch, "-e", "FOO=bar", "-e", "BAZ=qux", "--", "/bin/prog"},
+			program: "/bin/prog",
+			env:     map[string]string{"FOO": "bar", "BAZ": "qux"},
+		},
+		{
+			name:    "env value contains equals",
+			args:    []string{subLaunch, "-e", "KEY=a=b=c", "--", "/bin/prog"},
+			program: "/bin/prog",
+			env:     map[string]string{"KEY": "a=b=c"},
+		},
+		{
+			name:     "separator preserves program args starting with dash",
+			args:     []string{subLaunch, "--", "/bin/prog", "-e", "not-a-flag"},
+			program:  "/bin/prog",
+			progArgs: []string{"-e", "not-a-flag"},
+		},
+		{
+			name:     "no flags still works",
+			args:     []string{subLaunch, "/bin/prog", "--flag", "arg"},
+			program:  "/bin/prog",
+			progArgs: []string{"--flag", "arg"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, dbg, _ := newTestHandler(t)
+			ctx := context.Background()
+			initSession(t, h, dbg, "go")
+
+			_, err := h.HandleCommand(ctx, repl.Command{
+				Name: CommandName,
+				Args: tc.args,
+			}, nil)
+			require.NoError(t, err)
+			require.Len(t, dbg.launchCalls, 1)
+			assert.Equal(t, tc.program, dbg.launchCalls[0].Program)
+			if tc.progArgs == nil {
+				assert.Empty(t, dbg.launchCalls[0].Args)
+			} else {
+				assert.Equal(t, tc.progArgs, dbg.launchCalls[0].Args)
+			}
+			assert.Equal(t, tc.env, dbg.launchCalls[0].Env)
+		})
+	}
+}
+
+func TestHandler_LaunchFlagErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "missing -e value",
+			args: []string{subLaunch, "-e"},
+		},
+		{
+			name: "malformed -e value no equals",
+			args: []string{subLaunch, "-e", "FOO", "/bin/prog"},
+		},
+		{
+			name: "malformed -e value empty key",
+			args: []string{subLaunch, "-e", "=bar", "/bin/prog"},
+		},
+		{
+			name: "unknown flag",
+			args: []string{subLaunch, "-x", "FOO=bar", "/bin/prog"},
+		},
+		{
+			name: "only flags no program",
+			args: []string{subLaunch, "-e", "FOO=bar"},
+		},
+		{
+			name: "separator with no program",
+			args: []string{subLaunch, "-e", "FOO=bar", "--"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, dbg, _ := newTestHandler(t)
+			ctx := context.Background()
+			initSession(t, h, dbg, "go")
+
+			_, err := h.HandleCommand(ctx, repl.Command{
+				Name: CommandName,
+				Args: tc.args,
+			}, nil)
+			require.Error(t, err)
+			assert.Empty(t, dbg.launchCalls)
+		})
+	}
+}
+
 func TestHandler_LaunchThenConfigured(t *testing.T) {
 	h, dbg, _ := newTestHandler(t)
 	ctx := context.Background()
