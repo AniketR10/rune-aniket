@@ -24,6 +24,7 @@
 package debug
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	// pprof handlers register themselves on http.DefaultServeMux on import.
@@ -36,6 +37,31 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// StartPProfHTTP binds a pprof HTTP server to addr (e.g.
+// "127.0.0.1:0" for a random port) and serves it in a background
+// goroutine. It enables block and mutex profiling as a side-effect so
+// the corresponding pprof endpoints have non-empty output. It returns
+// the listening address as "host:port".
+//
+// addr follows the same syntax as net.Listen("tcp", ...). Callers that
+// want a random port should pass "127.0.0.1:0".
+func StartPProfHTTP(addr string) (string, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return "", fmt.Errorf("pprof listen %q: %w", addr, err)
+	}
+	runtime.SetBlockProfileRate(1)
+	runtime.SetMutexProfileFraction(1)
+	bound := ln.Addr().String()
+	log.Infof("pprof server listening on http://%s/debug/pprof/", bound)
+	go CapturePanicReport(func() {
+		if err := http.Serve(ln, nil); err != http.ErrServerClosed {
+			log.Errorf("pprof serve: %v", err)
+		}
+	})
+	return bound, nil
+}
+
 // StartPProfOnSignal installs a SIGUSR1 handler that, on the first
 // signal, starts a pprof HTTP server bound to a random localhost port
 // and logs the listening address at info level so the caller can find
@@ -46,16 +72,8 @@ func StartPProfOnSignal() {
 	go CapturePanicReport(func() {
 		<-ch
 		signal.Stop(ch)
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			log.Errorf("pprof listen: %v", err)
-			return
-		}
-		runtime.SetBlockProfileRate(1)
-		runtime.SetMutexProfileFraction(1)
-		log.Infof("pprof server listening on http://%s/debug/pprof/", ln.Addr())
-		if err := http.Serve(ln, nil); err != http.ErrServerClosed {
-			log.Errorf("pprof serve: %v", err)
+		if _, err := StartPProfHTTP("127.0.0.1:0"); err != nil {
+			log.Errorf("StartPProfOnSignal: %v", err)
 		}
 	})
 }

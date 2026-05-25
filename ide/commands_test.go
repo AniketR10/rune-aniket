@@ -25,6 +25,8 @@ package ide
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -64,7 +66,7 @@ func TestDebugCommandsSubscriptionGating(t *testing.T) {
 		win, _ := b.ex.Browser().Focus()
 		// newExForTesting calls subscribeCommands() with the
 		// default ex.debugCommands == false.
-		for _, name := range []string{"panic", "crash", "datarace"} {
+		for _, name := range []string{"panic", "crash", "datarace", "heapdump", "pprof"} {
 			handled, err := b.ex.comp.DispatchCommand(context.Background(),
 				textapi.Command{
 					Name:   name,
@@ -110,4 +112,49 @@ func countSubscribeErrors(t *testing.T, err error) int {
 		return 0
 	}
 	return strings.Count(err.Error(), "command already registered")
+}
+
+// TestHeapdumpWritesFileAtRequestedPath verifies that the :heapdump
+// debug command writes a non-empty heap dump to the path passed as
+// its first argument. Covers the explicit-path branch of
+// (*ex).heapdump.
+func TestHeapdumpWritesFileAtRequestedPath(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	out := filepath.Join(t.TempDir(), "heap.dump")
+
+	err := b.ex.heapdump(context.Background(), out)
+	require.NoError(t, err)
+
+	info, err := os.Stat(out)
+	require.NoError(t, err)
+	assert.Greater(t, info.Size(), int64(0),
+		"heap dump file should be non-empty")
+}
+
+// TestHeapdumpDefaultsToTempFile verifies that with no path argument
+// the command picks a unique temp file via os.CreateTemp and that
+// the file ends up on disk with content.
+func TestHeapdumpDefaultsToTempFile(t *testing.T) {
+	// Direct the default temp dir to a per-test location so we can
+	// scan for the new file without interfering with concurrent
+	// tests. os.CreateTemp("", ...) honors TMPDIR on macOS/Linux.
+	t.Setenv("TMPDIR", t.TempDir())
+
+	b := newExForTesting(t, texttest.NopEditor())
+	err := b.ex.heapdump(context.Background())
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(os.TempDir())
+	require.NoError(t, err)
+	var matches []os.DirEntry
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "rune-heap-") &&
+			strings.HasSuffix(e.Name(), ".dump") {
+			matches = append(matches, e)
+		}
+	}
+	require.Len(t, matches, 1, "expected exactly one rune-heap-*.dump file")
+	info, err := matches[0].Info()
+	require.NoError(t, err)
+	assert.Greater(t, info.Size(), int64(0))
 }

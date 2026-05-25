@@ -27,6 +27,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	rtdebug "runtime/debug"
 	"slices"
 	"sort"
 	"strconv"
@@ -2005,6 +2007,61 @@ func (e *ex) datarace(_ context.Context, _ ...string) error {
 	}()
 	<-done
 	<-done
+	return nil
+}
+
+// heapdump writes a Go runtime heap dump (the format documented at
+// https://golang.org/s/go15heapdump) to a file and notifies the user
+// with the resulting path. The dump differs from the sampled pprof
+// heap profile in that it captures the full object graph with
+// per-object outgoing pointers and GC roots, which is required to
+// walk reverse reachability for live objects.
+//
+// If args[0] is set, it is used as the output path; otherwise a fresh
+// file is created via os.CreateTemp. Registered only in debug builds
+// via ide.WithDebugCommands. Note that runtime/debug.WriteHeapDump
+// suspends every goroutine for the duration of the dump, so this
+// command will freeze the IDE briefly on a large heap.
+func (e *ex) heapdump(_ context.Context, args ...string) error {
+	var (
+		f   *os.File
+		err error
+	)
+	if len(args) > 0 && args[0] != "" {
+		f, err = os.Create(args[0])
+	} else {
+		f, err = os.CreateTemp("", "rune-heap-*.dump")
+	}
+	if err != nil {
+		return fmt.Errorf("heapdump: create file: %w", err)
+	}
+	rtdebug.WriteHeapDump(f.Fd())
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("heapdump: close %q: %w", f.Name(), err)
+	}
+	_, _ = e.notifications.Notify(browserapi.LevelInfo,
+		"heap dump written to %s", f.Name())
+	return nil
+}
+
+// pprof starts a net/http/pprof server on the given TCP address (or
+// 127.0.0.1:0 for a random localhost port if no address is supplied)
+// and notifies the user with the listening address. It is the
+// in-IDE equivalent of sending SIGUSR1 to the process and exists for
+// convenience in debug builds where typing :pprof is faster than
+// switching to a shell to send a signal. Registered only in debug
+// builds via ide.WithDebugCommands.
+func (e *ex) pprof(_ context.Context, args ...string) error {
+	addr := "127.0.0.1:0"
+	if len(args) > 0 && args[0] != "" {
+		addr = args[0]
+	}
+	bound, err := debug.StartPProfHTTP(addr)
+	if err != nil {
+		return fmt.Errorf("pprof: %w", err)
+	}
+	_, _ = e.notifications.Notify(browserapi.LevelInfo,
+		"pprof server listening on http://%s/debug/pprof/", bound)
 	return nil
 }
 

@@ -689,6 +689,31 @@ var (
 			},
 			handler: (*ex).datarace,
 		},
+		"heapdump": {
+			man: textapi.CommandManual{
+				Summary: "Write a Go runtime heap dump to a temp file " +
+					"using runtime/debug.WriteHeapDump. Unlike the " +
+					"pprof heap profile, the dump contains the full " +
+					"object graph with per-object outgoing pointers " +
+					"and is the only way to walk reverse reachability " +
+					"for live objects. The dump path is reported via " +
+					"a notification. Registered only in debug builds.",
+				Synopsis: "[path]",
+			},
+			handler: (*ex).heapdump,
+		},
+		"pprof": {
+			man: textapi.CommandManual{
+				Summary: "Start a net/http/pprof server bound to the " +
+					"given TCP address (defaults to 127.0.0.1:0 for a " +
+					"random localhost port). Convenience equivalent of " +
+					"sending SIGUSR1 to the process. Block and mutex " +
+					"profiling are enabled as a side-effect. " +
+					"Registered only in debug builds.",
+				Synopsis: "[host:port]",
+			},
+			handler: (*ex).pprof,
+		},
 	}
 
 	manSplitWindow = commandAll{
