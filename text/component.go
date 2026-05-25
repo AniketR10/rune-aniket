@@ -156,29 +156,18 @@ func (c *Component) newFileBuffer(
 	return c.buildEditorHandler(file, buf, fc, readOnly, recover)
 }
 
-// buildEditorHandler wires a freshly-loaded buffer into the syntax
-// tree, calls Editor.Edit to obtain a Handler, registers
-// syntax-derived commands, and returns the resulting Handler and
-// editorFlusherCloser. Split out of newFileBuffer so the streaming
-// open path can construct the editor handler after the goroutine
-// load completes — the load and the editor construction must run on
-// different goroutines (the former cannot block the UI, the latter
-// must run on the UI goroutine).
 func (c *Component) buildEditorHandler(
 	file workspaceapi.URI, buf *cell.Buffer, fc workspace.FlusherCloser,
 	readOnly, recover bool,
 ) (handler Handler, ret *editorFlusherCloser, err error) {
 	interrupter := browser.EventPublisherInterrupter(c)
 	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) {
+		if handler == nil {
+			return
+		}
 		handler.SetLocationList(textapi.LocationPriorityInfo, "syntax", ll)
 	})
 
-	// Skip syntax-tree installation entirely for buffers larger
-	// than MaxSyntaxParseSize: parsing a multi-MB file on the host
-	// event loop inside tree_sitter.Parser.ParseWithOptions
-	// previously froze the UI for seconds. The buffer is still
-	// editable; only highlighting / folds / :jumptoast become
-	// unavailable for the tab.
 	var tree *syntax.Tree
 	if c.config.MaxSyntaxParseSize == 0 || buf.Size() <= c.config.MaxSyntaxParseSize {
 		// install tree in Buffer first so editor can use its
@@ -1597,8 +1586,7 @@ func (c *Component) animateTabLoading(uri workspaceapi.URI, done <-chan struct{}
 		}
 	}
 }
-		
-	
+
 func (c *Component) scheduleSpinnerFrame(uri workspaceapi.URI, frame int) {
 	ch := loadingSpinnerFrames[frame%len(loadingSpinnerFrames)]
 	c.config.ScheduleNextTick(func() {
