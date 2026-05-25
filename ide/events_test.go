@@ -563,6 +563,74 @@ func TestEventDispatching(t *testing.T) {
 	})
 }
 
+// TestHandleFSChange_NoPromptForSecondWriteDuringReload guards
+// against a spurious "Discard your changes" prompt that fired when
+// an external tool (e.g. `git rebase`) wrote to a clean, open file
+// multiple times in quick succession.
+//
+// The first Write kicks off an async reload. The reload's
+// buffer-mutation tick (workspace/file.go scheduleNextTick) raises
+// OnDidEdit on text.editorFlusherCloser, which used to call
+// setDirtyFileAttr unconditionally — flipping the tab to "dirty"
+// even though the buffer was being rewritten from disk, not edited
+// by the user. A second Write arriving before
+// editorFlusherCloser.dispatchFlush ran (it's queued via the host
+// scheduler) saw IsDirty=true in handleFSChange and routed to
+// openFileChangedPrompt instead of just triggering another reload.
+//
+// With the fix, OnDidEdit short-circuits while the reload is in
+// flight, so the second Write observes IsDirty=false and no prompt
+// is opened.
+func TestHandleFSChange_NoPromptForSecondWriteDuringReload(t *testing.T) {
+	var mu sync.Mutex
+	ignores := vctrl.NopMatcher(false)
+
+	x := newExForEventTesting(t)
+	testURI, err := x.workspace.URI("a")
+	require.NoError(t, err)
+
+	// Open a clean file. createOpenWriteFile writes empty content,
+	// opens the buffer, then writes "abc" on disk — leaving the
+	// buffer empty and disk modified, which mirrors the
+	// "external tool just touched a clean file" precondition.
+	createOpenWriteFile(t, x, testURI, "abc")
+
+	dirty, ok := x.comp.IsDirty(testURI)
+	require.True(t, ok)
+	require.False(t, dirty, "precondition: buffer must be clean before first reload")
+
+	// First Write kicks off the reload. The async worker reloads
+	// the file from disk and schedules the buffer mutation onto
+	// the workspace scheduler (inline in tests). OnDidEdit fires
+	// for each cell-edit and previously raised the dirty
+	// attribute mid-reload.
+	fsev := testEventInfo{e: schemeapi.Write, u: testURI}
+	dispatchFilesystemEvent(x, &mu, ignores, fsev)
+
+	// Drain the async worker so the buffer mutation has run.
+	// dispatchFlush (which clears efc.lastFlush) is still queued
+	// on the host scheduler and intentionally not drained — this
+	// is the precise window the production race opens.
+	x.waitInflight()
+
+	// Second Write arrives while the first reload's dispatchFlush
+	// is still pending. handleFSChange must observe IsDirty=false
+	// and route to startReloadAndNotify, not openFileChangedPrompt.
+	require.NoError(t, os.WriteFile(testURI.Path(), []byte("xyz"), 0o666))
+	fsev2 := testEventInfo{e: schemeapi.Write, u: testURI}
+	dispatchFilesystemEvent(x, &mu, ignores, fsev2)
+
+	// If openFileChangedPrompt opened, the next keypress would be
+	// handled by the prompt (returning handled=true). assertNoPrompt
+	// verifies it wasn't.
+	assertNoPrompt(t, x)
+
+	// Final sanity: drain everything and confirm the buffer
+	// reflects the latest disk content.
+	x.waitInflight()
+	assertBufferContent(t, x, testURI, "xyz")
+}
+
 func assertFileContent(t *testing.T, x *ex, file workspaceapi.URI, content string) {
 	t.Helper()
 	// Reloads, flushes and overwrites are asynchronous; wait for

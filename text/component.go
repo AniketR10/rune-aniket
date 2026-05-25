@@ -779,26 +779,13 @@ func (c *Component) EnvSource() cmdenv.Source {
 // chain see identical FILE/LINE/SELECTION values, even if a target's
 // own side effects would have changed them.
 type expansionContext struct {
-	// file is the focused tab's URI when the focused content is an
-	// editor tab; the zero URI otherwise.
-	file workspaceapi.URI
-	// line and column are 1-based and 0 when no editor handler is
-	// focused (i.e. focused tab content is not a text.Handler).
+	file         workspaceapi.URI
 	line, column int
-	// selection is the focused handler's currently selected text;
-	// empty when nothing is selected.
-	selection string
-	// word is the identifier under the cursor (letters / digits /
-	// underscore); empty when the cursor is not on one.
-	word string
-	// lang is the language id of the focused file (empty when
-	// undetectable from the path extension).
-	lang string
+	selection    string
+	word         string
+	lang         string
 }
 
-// captureExpansionContext snapshots focused tab + handler state into
-// an expansionContext. Returns a zero context when no editor tab is
-// focused.
 func (c *Component) captureExpansionContext() expansionContext {
 	content, _ := c.comp.Focus().Content()
 	tab, ok := content.(*browser.Tab)
@@ -823,11 +810,6 @@ func (c *Component) captureExpansionContext() expansionContext {
 	return ctx
 }
 
-// resolveBuiltin returns the value for one of the Rune-provided
-// expansion names, or ok=false when name is not one of them. file-
-// derived names (FILE_*, LANG, LINE, COLUMN, WORD, SELECTION) come
-// from ctx; FILE_REL needs $WORKSPACE_URI from the user EnvSource so
-// it is computed lazily inside the lookup.
 func (c *Component) resolveBuiltin(
 	ctx expansionContext, name string,
 ) (string, bool) {
@@ -882,9 +864,6 @@ func (c *Component) resolveBuiltin(
 	return "", false
 }
 
-// fileRel computes the focused file's path relative to the focused
-// workspace, consulting the user EnvSource for $WORKSPACE_URI. When
-// either value is missing, returns the empty string.
 func (c *Component) fileRel(ctx expansionContext) string {
 	if ctx.file == (workspaceapi.URI{}) {
 		return ""
@@ -904,8 +883,6 @@ func (c *Component) fileRel(ctx expansionContext) string {
 	return workspaceapi.RelPath(wsURI, ctx.file)
 }
 
-// dispatchedEnvSource resolves $FILE/$WORD/builtins, then delegates
-// to the user-configured EnvSource.
 func (c *Component) dispatchedEnvSource(ctx expansionContext) cmdenv.Source {
 	user := c.config.EnvSource
 	return func(name string) (string, bool) {
@@ -938,12 +915,6 @@ func (c *Component) CommandAliases() map[string]CommandAlias {
 	return c.config.CommandAliases
 }
 
-// wordAtCursor returns the identifier (letters / digits / underscore)
-// surrounding pos on the buffer row pos.Y. Returns an empty string
-// when the cell at pos is not part of an identifier or pos is out of
-// bounds. Uses the same matcher as the editor's word-object
-// selection so $WORD agrees with the user's visual selection
-// expectations.
 func wordAtCursor(view cell.View, pos term.Coordinates) string {
 	if view == nil {
 		return ""
@@ -1462,10 +1433,6 @@ func (c *Component) Tab(
 ) (browserapi.Handler, error) {
 	if _, ok := h.(Handler); ok {
 		panic("handler must not be a text.Handler. " +
-			// Otherwise events might be inconsistently
-			// delivered: i.e. EventTypeFocus/Unfocus events
-			// will be delievered for text.Handler
-			// that have not had EventTypeOpen delivered.
 			"Use OpenFileTab if attempting to create a tab with the return value of Edit")
 	}
 
@@ -1630,7 +1597,8 @@ func (c *Component) animateTabLoading(uri workspaceapi.URI, done <-chan struct{}
 		}
 	}
 }
-
+		
+	
 func (c *Component) scheduleSpinnerFrame(uri workspaceapi.URI, frame int) {
 	ch := loadingSpinnerFrames[frame%len(loadingSpinnerFrames)]
 	c.config.ScheduleNextTick(func() {

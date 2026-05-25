@@ -49,16 +49,20 @@ type editorFlusherCloser struct {
 	buf       *cell.Buffer
 	commands  []textapi.CommandManual
 	lastFlush int
+	reloading bool
 }
 
-func (c editorFlusherCloser) OnWillEdit(
+func (c *editorFlusherCloser) OnWillEdit(
 	ctx context.Context, start, end term.Coordinates, str string,
 ) {
 }
 
-func (c editorFlusherCloser) OnDidEdit(
+func (c *editorFlusherCloser) OnDidEdit(
 	ctx context.Context, from, to term.Coordinates, old string,
 ) {
+	if c.reloading {
+		return
+	}
 	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)
 }
 
@@ -67,7 +71,7 @@ func (e *editorFlusherCloser) ForceFlush(ctx context.Context) (<-chan error, err
 	if err != nil {
 		return nil, err
 	}
-	return e.wrapAndDispatch(inner, false), nil
+	return e.wrapAndDispatch(inner, false, false), nil
 }
 
 func (e *editorFlusherCloser) LastFlush() time.Time {
@@ -79,30 +83,42 @@ func (e *editorFlusherCloser) Flush(ctx context.Context) (<-chan error, error) {
 	if err != nil {
 		return nil, err
 	}
-	return e.wrapAndDispatch(inner, false), nil
+	return e.wrapAndDispatch(inner, false, false), nil
 }
 
 func (e *editorFlusherCloser) Reload(ctx context.Context) (<-chan error, error) {
+	e.reloading = true
 	inner, err := e.fc.Reload(ctx)
 	if err != nil {
+		e.reloading = false
 		return nil, err
 	}
-	return e.wrapAndDispatch(inner, true), nil
+	return e.wrapAndDispatch(inner, true, true), nil
 }
 
 func (e *editorFlusherCloser) wrapAndDispatch(
-	inner <-chan error, skipOnErr bool,
+	inner <-chan error, skipOnErr, isReload bool,
 ) <-chan error {
 	out := make(chan error, 1)
 	go debug.CapturePanicReport(func() {
 		err := <-inner
 		doDispatch := err == nil || !skipOnErr
 		if !doDispatch {
+			if isReload {
+				e.parent.config.ScheduleNextTick(func() {
+					e.reloading = false
+				})
+			}
 			out <- err
 			close(out)
 			return
 		}
-		e.parent.config.ScheduleNextTick(func() { _ = e.dispatchFlush() })
+		e.parent.config.ScheduleNextTick(func() {
+			_ = e.dispatchFlush()
+			if isReload {
+				e.reloading = false
+			}
+		})
 		out <- err
 		close(out)
 	})

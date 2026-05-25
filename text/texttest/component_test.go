@@ -2512,6 +2512,60 @@ func TestReload(t *testing.T) {
 		require.True(t, ok)
 		assert.False(t, isDirty)
 	})
+
+	t.Run("clean buffer stays clean during reload-driven OnDidEdit", func(t *testing.T) {
+		// Guards the editorFlusherCloser.reloading short-circuit.
+		// Before the fix, every cell edit fired by a reload raised
+		// the dirty tab attribute via OnDidEdit because efc.lastFlush
+		// only advances on the host-scheduled dispatchFlush tick.
+		// A clean reload (e.g. an external `git rebase` rewriting an
+		// already-saved file) must never flip the tab to dirty —
+		// either during reload-driven edits or after the scheduled
+		// dispatchFlush has run.
+		cfg := text.DefaultConfig()
+		var pending []func()
+		cfg.ScheduleNextTick = func(fn func()) bool {
+			pending = append(pending, fn)
+			return true
+		}
+		c, testLoader := newTestComponentConfig(t, NopEditor(), cfg)
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		const content = "abc\ndef\n"
+		testLoader.content = content
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, err)
+		require.NoError(t, win.SetContent(h))
+
+		dirty, ok := c.IsDirty(resource1)
+		require.True(t, ok)
+		require.False(t, dirty, "buffer must start clean")
+
+		require.NoError(t, awaitErr(c.Reload(context.Background(), win)))
+
+		// Mid-reload: dispatchFlush is queued but not yet drained.
+		// OnDidEdit fired for each cell edit produced by Replace,
+		// but the reloading flag must have suppressed
+		// setDirtyFileAttr — so the tab is still clean.
+		dirty, ok = c.IsDirty(resource1)
+		require.True(t, ok)
+		assert.False(t, dirty,
+			"reload-driven OnDidEdit must not flip the tab to dirty")
+
+		// Drain the scheduler: dispatchFlush advances efc.lastFlush
+		// to the post-reload buffer version, and the reloading flag
+		// is cleared. The tab remains clean.
+		for _, fn := range pending {
+			fn()
+		}
+		pending = nil
+
+		dirty, ok = c.IsDirty(resource1)
+		require.True(t, ok)
+		assert.False(t, dirty)
+	})
 }
 
 func TestOverwrite(t *testing.T) {
