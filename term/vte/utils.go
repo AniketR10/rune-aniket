@@ -32,16 +32,34 @@ import (
 // lastPromptLine this attempts to find the last "shell" prompt line,
 // or falls back to returning the last block of content.
 //
+// cursorY is the row where the shell PTY cursor currently lives.
+// When non-negative, lastPromptLine walks UPWARD from cursorY across
+// wrapped continuation rows to find the prompt anchor (the topmost
+// row whose predecessor is not a full-width wrap), then walks DOWN
+// from there including each subsequent row only when its predecessor
+// is full-width. This:
+//   - excludes shell-drawn artifacts rendered below the real prompt
+//     (e.g. orphan rows left over from completion-menu cleanup),
+//   - correctly includes wrapped command lines, and
+//   - works whether modal mode is entered on the prompt row or on
+//     a wrapped continuation row.
+//
+// When cursorY is negative, lastPromptLine falls back to the legacy
+// bottom-up search.
+//
 //	┌─────────┐
 //	│$ OOOOO  │
 //	│$ OOOOOOO│
 //	│OOOOOOOO │
 //	│$ XXXXXX │
 //	└─────────┘
-func lastPromptLine(view cell.View, width int, excludeTailSpaces bool) (from term.Coordinates, to term.Coordinates) {
+func lastPromptLine(view cell.View, width, cursorY int, excludeTailSpaces bool) (from term.Coordinates, to term.Coordinates) {
 	cells := view.RawCells()
 	if len(cells) == 0 {
 		return
+	}
+	if cursorY >= 0 && cursorY < len(cells) {
+		return lastPromptLineFromAnchor(cells, width, cursorY, excludeTailSpaces)
 	}
 	to.Y = len(cells) - 1
 	to.X = len(cells[to.Y])
@@ -92,5 +110,67 @@ func lastPromptLine(view cell.View, width int, excludeTailSpaces bool) (from ter
 	}
 
 	from = last
+	return
+}
+
+// lastPromptLineFromAnchor finds the prompt block by first walking
+// UP from cursorY across wrapped continuation rows (rows whose
+// predecessor is full-width), then walking DOWN from the anchor
+// including each subsequent row only if its predecessor is
+// full-width. This ignores rows below the block that are separated
+// by a partial-width row (shell artifacts such as completion-menu
+// cleanup orphans) while still picking up the real prompt row when
+// the cursor sits on a wrapped continuation line.
+func lastPromptLineFromAnchor(
+	cells [][]term.Cell, width, cursorY int, excludeTailSpaces bool,
+) (from, to term.Coordinates) {
+	// last meaningful column on a row, taking excludeTailSpaces
+	// into account (matches viHandler.lastValidLineColumn).
+	lastContentX := func(y int) int {
+		if y < 0 || y >= len(cells) {
+			return -1
+		}
+		row := cells[y]
+		for x := len(row) - 1; x >= 0; x-- {
+			ch := row[x].Ch
+			if ch == vtescreen.DefaultChar {
+				continue
+			}
+			if excludeTailSpaces && ch == ' ' {
+				continue
+			}
+			return x
+		}
+		return -1
+	}
+
+	// Walk UP from cursorY across wrap-continuation rows to find
+	// the prompt anchor: the topmost row whose predecessor is not
+	// full-width.
+	anchorY := cursorY
+	for anchorY > 0 && lastContentX(anchorY-1) >= width-1 {
+		anchorY--
+	}
+
+	from = term.Coordinates{Y: anchorY, X: 0}
+	to = term.Coordinates{Y: anchorY, X: 0}
+
+	prevFullWidth := true // unused for the anchor row itself
+	for y := anchorY; y < len(cells); y++ {
+		if y > anchorY && !prevFullWidth {
+			break
+		}
+		lx := lastContentX(y)
+		if lx < 0 {
+			if y == anchorY {
+				// no content on the prompt row; return
+				// an empty block at the anchor.
+				return
+			}
+			break
+		}
+		to = term.Coordinates{Y: y, X: lx + 1}
+		prevFullWidth = lx >= width-1
+	}
 	return
 }

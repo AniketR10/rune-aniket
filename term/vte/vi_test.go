@@ -633,6 +633,14 @@ bindkey '^a' beginning-of-line
 bindkey '^g' beep
 setopt COMBINING_CHARS
 PS1='$ '
+autoload -U compinit && compinit -u
+zstyle ':completion:*' menu select
+# Deterministic completion target for RUNE-193: xfoo has a fixed
+# completion list so the rendered menu does not depend on which
+# command binaries the host has installed.
+xfoo() { :; }
+_xfoo() { compadd -- alpha bravo charlie delta }
+compdef _xfoo xfoo
 `))
 	require.NoError(t, err)
 
@@ -644,6 +652,69 @@ PS1='$ '
 				`$ echo blaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaa▐   
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequenceShell(t, cfg, defaultWaitForIdleVte, zshPath, cases)
+	})
+
+	// RUNE-193: tab-completion below the prompt confused lastPromptLine
+	// so that subsequent vi edits on the real prompt row rang the bell
+	// instead of mutating the buffer. With menu-select enabled, zsh
+	// renders the completion list on rows below the prompt; after <esc>
+	// dismisses the menu, leftover prompt-like rows can still sit below
+	// the cursor row and trick the heuristic.
+	t.Run("tab completion then vi delete-to-end", func(t *testing.T) {
+		cases := []vtetest.Case{
+			// type `xfoo `, press <tab> to render the (fixed)
+			// zsh completion menu below the prompt, then
+			// <esc>0C to delete the command and re-enter
+			// insert mode. The prompt row must show an empty
+			// `$ ` with the cursor right after it — proving
+			// the `C` was not bell-rejected by lastPromptLine
+			// misclassifying the real prompt row. zsh leaves
+			// the completion menu drawn below the prompt; the
+			// visual cleanup of those rows is the shell's
+			// responsibility, so the test only asserts the
+			// prompt row, leaving menu rows un-checked.
+			{"xfoo ✌<0C",
+				`$ ▐                 
+alpha    charlie    
+bravo    delta      
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		cfg := DefaultConfig()
+		cfg.Modal = true
+		testSequenceShell(t, cfg, defaultWaitForIdleVte, zshPath, cases)
+	})
+
+	// RUNE-193 regression guard: when the user enters modal mode
+	// while the shell cursor sits on a wrapped continuation row,
+	// lastPromptLine must still include the original prompt row
+	// in the block so vi motions/edits that land on the upper row
+	// succeed instead of being bell-rejected. Type `echo` plus
+	// enough `a`s to wrap onto row 1, then <esc>k (vi up onto the
+	// prompt row) and insert `X`. The `X` must land on row 0,
+	// proving the prompt row is part of the editable block.
+	t.Run("modal entered on wrapped continuation row", func(t *testing.T) {
+		cases := []vtetest.Case{
+			{"echo aaaaaaaaaaaaaaaaaa<kiX",
+				`$ ecX▐o aaaaaaaaaaaa
+aaaaaa              
+                    
                     
                     
                     

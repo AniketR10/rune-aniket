@@ -24,6 +24,7 @@
 package vte
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,9 +35,14 @@ import (
 func TestLastPromptLine(t *testing.T) {
 	t.Parallel()
 	suite := []struct {
-		description    string
-		content        string
-		width          int
+		description string
+		content     string
+		width       int
+		// cursorY=0 (zero value) defaults to -1 (legacy
+		// bottom-up search). Set setCursorY explicitly to
+		// anchor the prompt block at a specific row.
+		cursorY        int
+		setCursorY     bool
 		considerSpaces bool
 		expectedStart  term.Coordinates
 		expectedEnd    term.Coordinates
@@ -135,6 +141,27 @@ $ aaaaaaaa`,
 			expectedEnd:   term.Coordinates{Y: 2, X: 9},
 		},
 		{
+			// RUNE-193: zsh menu-select tab completion below the
+			// prompt leaves an orphan `$ ` row below the real
+			// prompt row after <esc>. Without a prompt anchor,
+			// lastPromptLine picked the orphan as the prompt and
+			// excluded the real prompt row — vi edits on the real
+			// prompt row would then be rejected with a bell.
+			// Anchoring at the PTY cursor row (the shell prompt
+			// start) makes lastPromptLine return the real prompt
+			// row instead.
+			description: "RUNE-193 orphan prompt row below the real prompt",
+			// row 0: `$ ls` + 16 NULs (real prompt, cursor here)
+			// row 1: `$ ` + 18 NULs (orphan from menu cleanup)
+			content: "$ ls" + strings.Repeat("\x00", 16) + "\n" +
+				"$ " + strings.Repeat("\x00", 18),
+			width:         20,
+			cursorY:       0,
+			setCursorY:    true,
+			expectedStart: term.Coordinates{Y: 0, X: 0},
+			expectedEnd:   term.Coordinates{Y: 0, X: 4},
+		},
+		{
 			description: "considering spaces, multiline simple",
 			content: `
 blablabla
@@ -203,7 +230,11 @@ $ aaaaaaaa`,
 			}
 
 			// sut
-			actualStart, actualEnd := lastPromptLine(buf, test.width, test.considerSpaces)
+			cursorY := -1
+			if test.setCursorY {
+				cursorY = test.cursorY
+			}
+			actualStart, actualEnd := lastPromptLine(buf, test.width, cursorY, test.considerSpaces)
 			assert.Equal(t, test.expectedStart, actualStart, "start")
 			assert.Equal(t, test.expectedEnd, actualEnd, "end")
 		})

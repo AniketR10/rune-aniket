@@ -714,7 +714,7 @@ func (v *viHandler) moveViToLastLineCharacter() {
 	// consider spaces = true because shell fills deleted columns
 	// with a space, so last content column should not consider tail spaces
 	// as content.
-	_, pos := lastPromptLine(v.sync.vi.CellView(), v.width, true)
+	_, pos := lastPromptLine(v.sync.vi.CellView(), v.width, promptStart.Y, true)
 	// end coordinates are right exclusive
 	if pos.X > 0 {
 		pos.X--
@@ -726,7 +726,7 @@ func (v *viHandler) moveViToLastLineCharacter() {
 }
 
 func (v *viHandler) lastPromptLine() (term.Coordinates, term.Coordinates) {
-	return lastPromptLine(v.sync.vi.CellView(), v.width,
+	return lastPromptLine(v.sync.vi.CellView(), v.width, v.comp.cursorAtScroll().Y,
 		false /* include at most one space with prompt line */)
 }
 
