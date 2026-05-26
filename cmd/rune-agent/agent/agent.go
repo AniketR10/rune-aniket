@@ -574,6 +574,10 @@ func (a *Agent) run(
 		// unless a skill is actually installed or removed.
 		a.skillRegistry.Reload()
 
+		// Clear element slots before truncating: llmapi.Message holds Content
+		// strings (potentially large) plus ToolCalls slice, and a bare [:0]
+		// reslice would keep them reachable until overwritten.
+		clear(transient)
 		transient = transient[:0]
 		if section := skillsPromptSection(a.skillRegistry.List()); section != "" {
 			transient = append(transient, llmapi.Message{Role: llmapi.RoleSystem, Content: section})
@@ -916,6 +920,9 @@ func (a *Agent) run(
 			emit(ctx, ch, Event{Type: EventToolsStart})
 
 			// 1. Emit all EventToolCall events and resolve summaries upfront.
+			// Clear element slots: toolCallInfo holds a tool.Interface and
+			// argument strings that would otherwise stay reachable past [:0].
+			clear(infos)
 			infos = infos[:0]
 			for _, call := range assistantMsg.ToolCalls {
 				log.Debug("tool call",
@@ -993,6 +1000,8 @@ func (a *Agent) run(
 			toolMsgs = slices.Grow(toolMsgs[:0], len(infos))[:len(infos)]
 			clear(toolMsgs)
 			compacted := false
+			// Image parts may carry large data URLs; clear before truncating.
+			clear(imageContentParts)
 			imageContentParts = imageContentParts[:0]
 			var diagCandidates []executedToolCall
 			for tr := range results {
@@ -1239,6 +1248,9 @@ func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 					kept = append(kept, tc)
 				}
 			}
+			// Zero any slots beyond the new length so dropped ToolCall ID and
+			// Arguments strings can be GC'd before the slice header is reused.
+			clear(msg.ToolCalls[len(kept):])
 			msg.ToolCalls = kept
 		}
 

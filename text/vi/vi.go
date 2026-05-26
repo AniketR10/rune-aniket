@@ -239,6 +239,10 @@ func (l *changeList) newer() (term.Coordinates, bool) {
 }
 
 func (vi *Vi) resetEdits() {
+	// Zero the slots before truncating: term.Event contains heap pointers
+	// (Err, Raw, UserFunc, Context) and a bare [:0] reslice would keep them
+	// reachable until overwritten.
+	clear(vi.currEdits)
 	vi.currEdits = vi.currEdits[:0]
 	vi.currEdited = false
 }
@@ -251,6 +255,7 @@ func (vi *Vi) copyRepeat() {
 	if !vi.currEdited {
 		return
 	}
+	clear(vi.repeatEdits)
 	vi.repeatEdits = vi.repeatEdits[:0]
 	vi.repeatEdits = append(vi.repeatEdits, vi.currEdits...)
 }

@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/google/go-dap"
@@ -155,7 +156,7 @@ func (h *Handler) setBreakpointAt(ctx context.Context, cmd textapi.Command) erro
 		}
 	}
 	if idx >= 0 {
-		lines = append(lines[:idx], lines[idx+1:]...)
+		lines = slices.Delete(lines, idx, idx+1)
 	} else {
 		lines = append(lines, line)
 	}

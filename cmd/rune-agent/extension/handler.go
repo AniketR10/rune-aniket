@@ -34,6 +34,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -804,7 +805,7 @@ func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []stri
 	for i, a := range filtered {
 		if a == "--all" {
 			showAll = true
-			filtered = append(filtered[:i], filtered[i+1:]...)
+			filtered = slices.Delete(filtered, i, i+1)
 			break
 		}
 	}

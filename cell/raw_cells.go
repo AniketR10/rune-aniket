@@ -427,7 +427,11 @@ func (c *rawCells) trimRowsFromEnd(count int) (removed int) {
 	}
 	removed = count
 	removed = min(removed, n-1)
-	c.cells = c.cells[:n-removed]
+	newLen := n - removed
+	// Drop the trailing row pointers so the underlying []term.Cell allocations
+	// are not pinned by the unused tail of the backing array.
+	clear(c.cells[newLen:])
+	c.cells = c.cells[:newLen]
 	return removed
 }
 
@@ -531,7 +535,11 @@ func (c *rawCells) conflate(row int) {
 
 	// copy all rows into row we just moved up and trim last row
 	copy(c.cells[row+1:], c.cells[row+2:])
-	c.cells = c.cells[:len(c.cells)-1]
+	// Drop the conflated row pointer from the tail so its []term.Cell
+	// allocation can be GC'd before the slot is overwritten.
+	last := len(c.cells) - 1
+	c.cells[last] = nil
+	c.cells = c.cells[:last]
 }
 
 // mergeMarkedRows walks rows [0..end] and, whenever a row's last cell
@@ -622,6 +630,9 @@ func (c *rawCells) mergeMarkedRows(
 		read = groupEnd + 1
 		merged += merge
 	}
+	// Drop the trailing row pointers so the merged-away row allocations are
+	// not pinned by the unused tail of the backing array.
+	clear(c.cells[write:])
 	c.cells = c.cells[:write]
 	return merged
 }
@@ -663,7 +674,12 @@ func (c *rawCells) delete(from, to term.Coordinates) (
 	if diff := end.Y - start.Y; diff > 1 {
 		copyToBuilder(&builder, c.cells[start.Y+1:end.Y])
 		copy(c.cells[start.Y+1:], c.cells[end.Y:])
-		c.cells = c.cells[:len(c.cells)-diff+1]
+		// Zero the dropped tail before truncating: each [][]term.Cell slot is
+		// a slice header whose data ptr pins a potentially-large row of cells
+		// until overwritten.
+		newLen := len(c.cells) - diff + 1
+		clear(c.cells[newLen:])
+		c.cells = c.cells[:newLen]
 
 		lastRow = start.Y + 1
 		if lastRow < len(c.cells) {

@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -1264,7 +1265,9 @@ func (c *Component) seedInserts(insCount, delStart int) []rune {
 		for j, o := range c.orphans {
 			if o.content == line {
 				ids[i] = o.id
-				c.orphans = append(c.orphans[:j], c.orphans[j+1:]...)
+				// slices.Delete clears the tail so the removed orphanRow's
+				// content string is not retained in the backing array.
+				c.orphans = slices.Delete(c.orphans, j, j+1)
 				break
 			}
 		}

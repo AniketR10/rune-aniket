@@ -152,6 +152,9 @@ func (u *undoer) pushRedo(cmd edits) {
 }
 
 func (u *undoer) resetRedoTimeline() {
+	// Clear element slots: edits carries edit strings that would otherwise
+	// stay reachable past [:0] until subsequent appends overwrite them.
+	clear(u.redoTimeline)
 	u.redoTimeline = u.redoTimeline[:0]
 }
 

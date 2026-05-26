@@ -1060,6 +1060,9 @@ func (c *Component) Close() (ret error) {
 			ret = err
 		}
 	}
+	// Drop *Tab references so closed tabs can be GC'd immediately rather
+	// than waiting for subsequent appends to overwrite the slots.
+	clear(c.buffers)
 	c.buffers = c.buffers[:0]
 	c.wm.UnsubscribeAll()
 
@@ -1110,7 +1113,10 @@ func (c *Component) removeTab(t *Tab) {
 }
 
 func (c *Component) doRemoveTab(idx int) {
-	c.buffers = append(c.buffers[:idx], c.buffers[idx+1:]...)
+	// Use slices.Delete so the now-unused tail slot is cleared. A bare
+	// append(s[:idx], s[idx+1:]...) leaves the dropped *Tab pointer (which
+	// transitively roots the file's cell.Buffer) in the backing array.
+	c.buffers = slices.Delete(c.buffers, idx, idx+1)
 }
 
 func (c *Component) doInsertTab(idx int, t *Tab) {

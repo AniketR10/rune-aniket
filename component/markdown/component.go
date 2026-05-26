@@ -542,6 +542,8 @@ func (c *Component) seekToSearchResult(loc textapi.Location) bool {
 }
 
 func (c *Component) runSearch() {
+	// Clear element slots: textapi.Location holds Message/Icon strings.
+	clear(c.searchResults)
 	c.searchResults = c.searchResults[:0]
 	c.searchList = nil
 

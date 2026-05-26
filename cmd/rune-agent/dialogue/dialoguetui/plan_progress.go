@@ -24,6 +24,7 @@
 package dialoguetui
 
 import (
+	"slices"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -71,7 +72,9 @@ func NewPlanProgress(cfg *ComponentConfig, _ term.Interrupter) *PlanProgress {
 func (p *PlanProgress) UpdateTask(entry ProgressTaskEntry) {
 	if idx, ok := p.taskIndex[entry.ID]; ok {
 		if entry.Status == "deleted" {
-			p.tasks = append(p.tasks[:idx], p.tasks[idx+1:]...)
+			// slices.Delete clears the tail so the removed entry's strings
+			// are not retained in the backing array past len.
+			p.tasks = slices.Delete(p.tasks, idx, idx+1)
 			delete(p.taskIndex, entry.ID)
 			for i := idx; i < len(p.tasks); i++ {
 				p.taskIndex[p.tasks[i].ID] = i

@@ -26,6 +26,8 @@ package cell
 import (
 	"context"
 
+	"slices"
+
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
@@ -70,5 +72,8 @@ func (p *syncPublisher) Unsubscribe(s Subscriber) {
 	if unsubs < 0 {
 		panic("Subscriber is not subscribed")
 	}
-	p.subscribers = append(p.subscribers[:unsubs], p.subscribers[unsubs+1:]...)
+	// slices.Delete clears the tail slot so the removed Subscriber (often an
+	// editorFlusherCloser holding *cell.Buffer) is not pinned via the
+	// backing array past len.
+	p.subscribers = slices.Delete(p.subscribers, unsubs, unsubs+1)
 }

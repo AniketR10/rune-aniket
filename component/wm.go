@@ -24,6 +24,8 @@
 package component
 
 import (
+	"slices"
+
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -483,7 +485,10 @@ func (wm *WindowManager) withFrame(handler tui.Component) *component.Frame {
 func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
 	for i, f := range wm.float {
 		if f == w {
-			wm.float = append(wm.float[:i], wm.float[i+1:]...)
+			// slices.Delete clears the tail so the removed *floatingNode
+			// (which transitively holds the floating window content) is not
+			// retained in the backing array.
+			wm.float = slices.Delete(wm.float, i, i+1)
 			break
 		}
 	}

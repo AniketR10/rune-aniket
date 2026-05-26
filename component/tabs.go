@@ -25,6 +25,7 @@ package component
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -519,6 +520,9 @@ func (t *Tabs) MoveTo(curridx, idx int) bool {
 // RemoveAll removes all tabs.
 func (t *Tabs) RemoveAll() bool {
 	ret := t.Size() != 0
+	// Clear pointers before truncating so removed *tab values can be GC'd
+	// without waiting for subsequent appends.
+	clear(t.tabs)
 	t.tabs = t.tabs[:0]
 	t.focusIdx = 0
 	t.dirty = true
@@ -913,7 +917,9 @@ func runesThatFit(runes []rune, budget int) (int, int) {
 
 func (t *Tabs) doRemoveTab(idx int) *tab {
 	ret := t.tabs[idx]
-	t.tabs = append(t.tabs[:idx], t.tabs[idx+1:]...)
+	// slices.Delete clears the tail slot so the removed *tab is not
+	// retained in the backing array past len.
+	t.tabs = slices.Delete(t.tabs, idx, idx+1)
 	return ret
 }
 

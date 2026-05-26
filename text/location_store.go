@@ -69,8 +69,12 @@ func (c *LocationStore) LocationList(ID string) (LocationList, bool) {
 // location lists have the same priority level, then the location list ID is used
 // to disambiguate order.
 func (c *LocationStore) SortedLocations() []textapi.Location {
-	// re-use previous allocation
+	// re-use previous allocation; clear element slots first so the strings
+	// inside textapi.Location (Message, Icon) and *LocationSet pointers do
+	// not stay reachable past [:0] until subsequent appends overwrite them.
+	clear(c.locsSlice)
 	c.locsSlice = c.locsSlice[:0]
+	clear(c.locsSliceTemp)
 	c.locsSliceTemp = c.locsSliceTemp[:0]
 	for _, list := range c.drawLocations {
 		c.locsSliceTemp = append(c.locsSliceTemp, list)
@@ -115,6 +119,8 @@ func (c *LocationStore) SetLocationList(
 	prev, ok := c.locs[ID]
 	if ok {
 		c.clearMessages(ID)
+		// Clear before truncating: Location holds Message and Icon strings.
+		clear(c.drawLocations[ID].Locations)
 		c.drawLocations[ID].Locations = c.drawLocations[ID].Locations[:0]
 		c.drawLocations[ID].Priority = pri
 	} else {
@@ -144,6 +150,7 @@ func (c *LocationStore) LocationsAtCoordinates(pos term.Coordinates) (
 	if len(msgs) == 0 {
 		return nil, false
 	}
+	clear(c.locsAtCoordsTemp)
 	c.locsAtCoordsTemp = c.locsAtCoordsTemp[:0]
 	for _, msg := range msgs {
 		c.locsAtCoordsTemp = append(c.locsAtCoordsTemp, msg.location)

@@ -281,6 +281,10 @@ loop:
 		g.drawHandler(ctx)
 	}
 
+	// Zero the slots before truncating: term.Event contains heap pointers
+	// (Err, Raw, UserFunc, Context) and a bare [:0] reslice would otherwise
+	// keep payloads from previously-buffered events reachable until overwritten.
+	clear(g.pendingEvents)
 	g.pendingEvents = g.pendingEvents[:0]
 	g.iteration++
 	return nil

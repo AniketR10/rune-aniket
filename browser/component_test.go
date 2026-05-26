@@ -927,6 +927,36 @@ func TestRemoveTab(t *testing.T) {
 	assertTabNames(t, b, []string{"c"})
 }
 
+// TestRemoveTabDoesNotRetainPointersInTail asserts that after RemoveTab the
+// dropped *Tab pointers are not retained past len(c.buffers) in the slice's
+// backing array. A naive append(s[:i], s[i+1:]...) leaves the previous tail
+// duplicate behind, which transitively pins the file's *cell.Buffer and
+// produces multi-GB workspace-close leaks on large files.
+func TestRemoveTabDoesNotRetainPointersInTail(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	names := []string{"a", "b", "c", "d"}
+	tabs := make([]*Tab, 0, len(names))
+	for _, name := range names {
+		uri, err := workspaceapi.ParseURI("file:///" + name)
+		require.NoError(t, err)
+		h := newTestHandler()
+		tabs = append(tabs, b.NewTab(uri, 'o', name, h, h))
+	}
+
+	// Remove every tab in order. After each removal the slot at index
+	// len(c.buffers) inside the backing array must be nil; otherwise the
+	// removed tab (and its transitive cell.Buffer) stays GC-reachable.
+	for range names {
+		require.True(t, b.RemoveTab(tabs[0]))
+		tabs = tabs[1:]
+		tail := b.buffers[len(b.buffers) : len(b.buffers)+1]
+		assert.Nilf(t, tail[0],
+			"buffers[%d] not cleared after RemoveTab; tail still pins *Tab",
+			len(b.buffers))
+	}
+}
+
 func TestTabAttrs(t *testing.T) {
 	b := NewComponent(DefaultConfig())
 

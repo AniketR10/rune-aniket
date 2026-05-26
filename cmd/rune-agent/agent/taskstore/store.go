@@ -25,6 +25,7 @@ package taskstore
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"sync"
 )
@@ -112,7 +113,9 @@ func (s *Store) Update(id string, opts UpdateOpts) (Task, error) {
 			delete(s.byID, id)
 			for i, task := range s.tasks {
 				if task.ID == id {
-					s.tasks = append(s.tasks[:i], s.tasks[i+1:]...)
+					// slices.Delete clears the tail so the removed *Task is
+					// not retained in the backing array past len.
+					s.tasks = slices.Delete(s.tasks, i, i+1)
 					break
 				}
 			}
