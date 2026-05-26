@@ -26,6 +26,7 @@ package apiclient
 import (
 	"context"
 	"crypto/x509"
+	_ "embed"
 	"fmt"
 	"net/url"
 	"sync/atomic"
@@ -49,13 +50,8 @@ import (
 	"unstable.build/go-tui/debug"
 )
 
-const (
-	doneCopy = `
-<script type="text/javascript">
-</script>
-Success! Please close this tab.
-`
-)
+//go:embed callback_page.html
+var callbackPageHTML string
 
 // Client implements a client to an instance of ox-api.
 // This client should be subscribed to events as a text.EventHandler,
@@ -316,7 +312,7 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		}
 
 		return nil
-	}, tryPorts, blueauth.WithSuccessHTML(doneCopy))
+	}, tryPorts, blueauth.WithSuccessHTML(callbackPageHTML))
 	if err != nil {
 		return nil, fmt.Errorf("new oauth2 client: %w", err)
 	}
