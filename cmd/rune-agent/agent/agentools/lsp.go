@@ -30,11 +30,17 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 )
+
+// maxSymbolMatches bounds fan-out of follow-up LSP requests when a
+// fuzzy WorkspaceSymbol fallback returns many candidates.
+const maxSymbolMatches = 8
 
 // LSPTools returns all LSP-backed agent tools. The tracker should be
 // the same instance returned by DefaultTools so that stale reads are
@@ -42,35 +48,86 @@ import (
 func LSPTools(
 	lsp semanticapi.LSP,
 	fs workspaceapi.FileSystem,
+	parser syntaxapi.Parser,
 	cwd workspaceapi.URI,
 	tracker *FileTracker,
 ) []agent.Tool {
 	return []agent.Tool{
-		&findDefinitionTool{lsp: lsp, fs: fs, cwd: cwd, tracker: tracker},
-		&findImplementationsTool{lsp: lsp, fs: fs, cwd: cwd, tracker: tracker},
-		&findReferencesTool{lsp: lsp, fs: fs, cwd: cwd, tracker: tracker},
+		&findDefinitionTool{lsp: lsp, fs: fs, parser: parser, cwd: cwd, tracker: tracker},
+		&findImplementationsTool{lsp: lsp, fs: fs, parser: parser, cwd: cwd, tracker: tracker},
+		&findReferencesTool{lsp: lsp, fs: fs, parser: parser, cwd: cwd, tracker: tracker},
 		&outlineFileTool{lsp: lsp, fs: fs, cwd: cwd, tracker: tracker},
 		&searchSymbolsTool{lsp: lsp, cwd: cwd, tracker: tracker},
-		&describeSymbolTool{lsp: lsp, cwd: cwd},
+		&describeSymbolTool{lsp: lsp, parser: parser, cwd: cwd},
 		&checkFileErrorsTool{lsp: lsp, fs: fs, cwd: cwd, tracker: tracker},
 		&formatFileTool{lsp: lsp, fs: fs, cwd: cwd, tracker: tracker},
 	}
 }
 
-// resolveSymbol finds the first workspace symbol matching name and returns its location.
 func resolveSymbol(
-	ctx context.Context, lsp semanticapi.LSP, symbol string,
-) (semanticapi.Location, error) {
+	ctx context.Context, lsp semanticapi.LSP, parser syntaxapi.Parser, symbol string,
+) ([]semanticapi.Location, bool, error) {
+	if strings.Contains(symbol, ".") {
+		matches, err := symbolresolve.Resolve(ctx, parser, symbol, nil)
+		if err == nil {
+			locs := make([]semanticapi.Location, 0, len(matches))
+			for _, m := range matches {
+				locs = append(locs, semanticapi.Location{
+					URI:   m.URI,
+					Range: semanticapi.Range{Start: m.Pos, End: m.Pos},
+				})
+			}
+			return capLocations(locs)
+		}
+	}
 	syms, err := lsp.WorkspaceSymbol(ctx, semanticapi.WorkspaceSymbolParams{
 		Query: symbol,
 	})
 	if err != nil {
-		return semanticapi.Location{}, fmt.Errorf("workspace symbol lookup: %w", err)
+		return nil, false, fmt.Errorf("workspace symbol lookup: %w", err)
 	}
 	if len(syms) == 0 {
-		return semanticapi.Location{}, fmt.Errorf("symbol %q not found", symbol)
+		return nil, false, fmt.Errorf("symbol %q not found", symbol)
 	}
-	return syms[0].Location, nil
+	locs := make([]semanticapi.Location, 0, len(syms))
+	for _, s := range syms {
+		locs = append(locs, s.Location)
+	}
+	return capLocations(locs)
+}
+
+func capLocations(locs []semanticapi.Location) ([]semanticapi.Location, bool, error) {
+	if len(locs) > maxSymbolMatches {
+		return locs[:maxSymbolMatches], true, nil
+	}
+	return locs, false, nil
+}
+
+func renderMultiLocation(
+	cwd workspaceapi.URI, locs []semanticapi.Location, blocks []string,
+	truncated bool, totalBefore int,
+) string {
+	if len(blocks) == 1 {
+		out := blocks[0]
+		if truncated {
+			out += fmt.Sprintf("\n\n(matches truncated to %d of %d)", len(blocks), totalBefore)
+		}
+		return out
+	}
+	var sb strings.Builder
+	for i, b := range blocks {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString("# ")
+		sb.WriteString(formatLocation(locs[i], cwd))
+		sb.WriteByte('\n')
+		sb.WriteString(b)
+	}
+	if truncated {
+		fmt.Fprintf(&sb, "\n\n(matches truncated to %d of %d)", len(blocks), totalBefore)
+	}
+	return sb.String()
 }
 
 // fileURI resolves a file path to a workspace URI.
@@ -238,6 +295,7 @@ func severityName(s semanticapi.DiagnosticSeverity) string {
 type findDefinitionTool struct {
 	lsp     semanticapi.LSP
 	fs      workspaceapi.FileSystem
+	parser  syntaxapi.Parser
 	cwd     workspaceapi.URI
 	tracker *FileTracker
 }
@@ -287,19 +345,31 @@ func (t *findDefinitionTool) Execute(ctx context.Context, arguments string) agen
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
 	}
-	loc, err := resolveSymbol(ctx, t.lsp, args.Symbol)
+	locs, truncated, err := resolveSymbol(ctx, t.lsp, t.parser, args.Symbol)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
-	result, err := t.lsp.Definition(ctx, semanticapi.DefinitionParams{
-		TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
-		Position:     loc.Range.Start,
-	})
-	if err != nil {
-		return agent.ToolResult{Content: fmt.Sprintf("error: definition: %v", err), IsError: true}
+	totalBefore := len(locs)
+	if truncated {
+		totalBefore = -1
 	}
-	t.tracker.TrackDiscovery(ctx, pathsFromLocationResult(result))
-	return agent.ToolResult{Content: formatLocations(result, t.cwd)}
+	blocks := make([]string, 0, len(locs))
+	var discovered []string
+	for _, loc := range locs {
+		result, err := t.lsp.Definition(ctx, semanticapi.DefinitionParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
+			Position:     loc.Range.Start,
+		})
+		if err != nil {
+			return agent.ToolResult{Content: fmt.Sprintf("error: definition: %v", err), IsError: true}
+		}
+		discovered = append(discovered, pathsFromLocationResult(result)...)
+		blocks = append(blocks, formatLocations(result, t.cwd))
+	}
+	t.tracker.TrackDiscovery(ctx, dedupPaths(discovered))
+	return agent.ToolResult{
+		Content: renderMultiLocation(t.cwd, locs, blocks, truncated, max(totalBefore, len(locs))),
+	}
 }
 
 // --- find_implementations ---
@@ -307,6 +377,7 @@ func (t *findDefinitionTool) Execute(ctx context.Context, arguments string) agen
 type findImplementationsTool struct {
 	lsp     semanticapi.LSP
 	fs      workspaceapi.FileSystem
+	parser  syntaxapi.Parser
 	cwd     workspaceapi.URI
 	tracker *FileTracker
 }
@@ -351,19 +422,27 @@ func (t *findImplementationsTool) Execute(ctx context.Context, arguments string)
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
 	}
-	loc, err := resolveSymbol(ctx, t.lsp, args.Symbol)
+	locs, truncated, err := resolveSymbol(ctx, t.lsp, t.parser, args.Symbol)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
-	result, err := t.lsp.Implementation(ctx, semanticapi.ImplementationParams{
-		TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
-		Position:     loc.Range.Start,
-	})
-	if err != nil {
-		return agent.ToolResult{Content: fmt.Sprintf("error: implementation: %v", err), IsError: true}
+	blocks := make([]string, 0, len(locs))
+	var discovered []string
+	for _, loc := range locs {
+		result, err := t.lsp.Implementation(ctx, semanticapi.ImplementationParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
+			Position:     loc.Range.Start,
+		})
+		if err != nil {
+			return agent.ToolResult{Content: fmt.Sprintf("error: implementation: %v", err), IsError: true}
+		}
+		discovered = append(discovered, pathsFromLocationResult(result)...)
+		blocks = append(blocks, formatLocations(result, t.cwd))
 	}
-	t.tracker.TrackDiscovery(ctx, pathsFromLocationResult(result))
-	return agent.ToolResult{Content: formatLocations(result, t.cwd)}
+	t.tracker.TrackDiscovery(ctx, dedupPaths(discovered))
+	return agent.ToolResult{
+		Content: renderMultiLocation(t.cwd, locs, blocks, truncated, len(locs)),
+	}
 }
 
 // --- find_references ---
@@ -371,6 +450,7 @@ func (t *findImplementationsTool) Execute(ctx context.Context, arguments string)
 type findReferencesTool struct {
 	lsp     semanticapi.LSP
 	fs      workspaceapi.FileSystem
+	parser  syntaxapi.Parser
 	cwd     workspaceapi.URI
 	tracker *FileTracker
 }
@@ -417,20 +497,42 @@ func (t *findReferencesTool) Execute(ctx context.Context, arguments string) agen
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
 	}
-	loc, err := resolveSymbol(ctx, t.lsp, args.Symbol)
+	locs, symTruncated, err := resolveSymbol(ctx, t.lsp, t.parser, args.Symbol)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
-	locations, err := t.lsp.References(ctx, semanticapi.ReferenceParams{
-		TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
-		Position:     loc.Range.Start,
-		Context:      semanticapi.ReferenceContext{IncludeDeclaration: true},
-	})
-	if err != nil {
-		return agent.ToolResult{Content: fmt.Sprintf("error: references: %v", err), IsError: true}
+	blocks := make([]string, 0, len(locs))
+	var discovered []string
+	fileCache := make(map[string][]string) // URI -> lines, shared across locations.
+	for _, loc := range locs {
+		locations, err := t.lsp.References(ctx, semanticapi.ReferenceParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
+			Position:     loc.Range.Start,
+			Context:      semanticapi.ReferenceContext{IncludeDeclaration: true},
+		})
+		if err != nil {
+			return agent.ToolResult{Content: fmt.Sprintf("error: references: %v", err), IsError: true}
+		}
+		blocks = append(blocks, formatReferences(t.fs, t.cwd, locations, fileCache))
+		limit := min(len(locations), maxSearchResults)
+		discovered = append(discovered, pathsFromLocations(locations[:limit])...)
 	}
+	t.tracker.TrackDiscovery(ctx, dedupPaths(discovered))
+	return agent.ToolResult{
+		Content: renderMultiLocation(t.cwd, locs, blocks, symTruncated, len(locs)),
+	}
+}
+
+// formatReferences renders one find_references block (matching the
+// pre-RUNE-190 output shape) for a single resolved location's
+// per-reference list. fileCache is shared across calls so reading the
+// same source file twice is avoided.
+func formatReferences(
+	fs workspaceapi.FileSystem, cwd workspaceapi.URI,
+	locations []semanticapi.Location, fileCache map[string][]string,
+) string {
 	if len(locations) == 0 {
-		return agent.ToolResult{Content: "no references found"}
+		return "no references found"
 	}
 	limit := len(locations)
 	truncated := false
@@ -439,20 +541,18 @@ func (t *findReferencesTool) Execute(ctx context.Context, arguments string) agen
 		truncated = true
 	}
 	var sb strings.Builder
-	fileCache := make(map[string][]string) // URI -> lines
 	for i := 0; i < limit; i++ {
 		l := locations[i]
 		if i > 0 {
 			sb.WriteByte('\n')
 		}
-		rel := uriToRelPath(l.URI, t.cwd)
+		rel := uriToRelPath(l.URI, cwd)
 		lineNum := l.Range.Start.Line + 1
-		// Read file and cache lines for source content.
 		lines, ok := fileCache[l.URI]
 		if !ok {
 			parsed, parseErr := workspaceapi.ParseURI(l.URI)
 			if parseErr == nil {
-				data, readErr := readFile(t.fs, parsed.Path())
+				data, readErr := readFile(fs, parsed.Path())
 				if readErr == nil {
 					lines = strings.Split(string(data), "\n")
 				}
@@ -468,8 +568,24 @@ func (t *findReferencesTool) Execute(ctx context.Context, arguments string) agen
 	if truncated {
 		fmt.Fprintf(&sb, "\n\n(results truncated at %d matches)", maxSearchResults)
 	}
-	t.tracker.TrackDiscovery(ctx, pathsFromLocations(locations[:limit]))
-	return agent.ToolResult{Content: sb.String()}
+	return sb.String()
+}
+
+// dedupPaths returns paths with duplicates removed, preserving order.
+func dedupPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(paths))
+	out := paths[:0]
+	for _, p := range paths {
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
 }
 
 // pathsFromLocations extracts unique absolute file paths from a Location slice.
@@ -710,8 +826,9 @@ func (t *searchSymbolsTool) Execute(ctx context.Context, arguments string) agent
 // --- describe_symbol ---
 
 type describeSymbolTool struct {
-	lsp semanticapi.LSP
-	cwd workspaceapi.URI
+	lsp    semanticapi.LSP
+	parser syntaxapi.Parser
+	cwd    workspaceapi.URI
 }
 
 func (t *describeSymbolTool) Definition() llmapi.Tool {
@@ -754,26 +871,37 @@ func (t *describeSymbolTool) Execute(ctx context.Context, arguments string) agen
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: invalid arguments: %v", err), IsError: true}
 	}
-	loc, err := resolveSymbol(ctx, t.lsp, args.Symbol)
+	locs, truncated, err := resolveSymbol(ctx, t.lsp, t.parser, args.Symbol)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
-	hover, err := t.lsp.Hover(ctx, semanticapi.HoverParams{
-		TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
-		Position:     loc.Range.Start,
-	})
-	if err != nil {
-		return agent.ToolResult{Content: fmt.Sprintf("error: hover: %v", err), IsError: true}
+	blocks := make([]string, 0, len(locs))
+	for _, loc := range locs {
+		hover, err := t.lsp.Hover(ctx, semanticapi.HoverParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
+			Position:     loc.Range.Start,
+		})
+		if err != nil {
+			return agent.ToolResult{Content: fmt.Sprintf("error: hover: %v", err), IsError: true}
+		}
+		blocks = append(blocks, hoverContent(hover))
 	}
+	return agent.ToolResult{
+		Content: renderMultiLocation(t.cwd, locs, blocks, truncated, len(locs)),
+	}
+}
+
+// hoverContent extracts the most useful content from a Hover result,
+// matching the precedence used by the original describe_symbol tool.
+func hoverContent(hover *semanticapi.Hover) string {
 	if hover == nil {
-		return agent.ToolResult{Content: "no information available"}
+		return "no information available"
 	}
-	// Extract the most useful content from the hover result.
 	switch {
 	case hover.Contents.Value != "":
-		return agent.ToolResult{Content: hover.Contents.Value}
+		return hover.Contents.Value
 	case hover.ContentsMarked != nil:
-		return agent.ToolResult{Content: hover.ContentsMarked.Value}
+		return hover.ContentsMarked.Value
 	case len(hover.ContentsMarkedA) > 0:
 		var sb strings.Builder
 		for i, m := range hover.ContentsMarkedA {
@@ -782,9 +910,9 @@ func (t *describeSymbolTool) Execute(ctx context.Context, arguments string) agen
 			}
 			sb.WriteString(m.Value)
 		}
-		return agent.ToolResult{Content: sb.String()}
+		return sb.String()
 	default:
-		return agent.ToolResult{Content: "no information available"}
+		return "no information available"
 	}
 }
 

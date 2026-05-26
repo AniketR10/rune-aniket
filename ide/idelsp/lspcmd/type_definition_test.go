@@ -76,7 +76,7 @@ func TestTypeDefinitionHandler(t *testing.T) {
 			wantFloat:   true,
 			wantEntries: 2,
 		},
-		{name: "no type definitions"},
+		{name: "no type definitions", wantErr: true},
 		{name: "nil resource", nilResource: true, wantErr: true},
 	}
 	for _, tt := range tests {

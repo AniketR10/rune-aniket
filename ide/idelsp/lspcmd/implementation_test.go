@@ -76,7 +76,7 @@ func TestImplementationHandler(t *testing.T) {
 			wantFloat:   true,
 			wantEntries: 2,
 		},
-		{name: "no implementations"},
+		{name: "no implementations", wantErr: true},
 		{name: "nil resource", nilResource: true, wantErr: true},
 	}
 	for _, tt := range tests {

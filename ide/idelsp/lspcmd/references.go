@@ -83,8 +83,9 @@ type referencesHandler struct {
 }
 
 func (h *referencesHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m symbolMatch) {
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m symbolMatch, done func()) {
 		h.scheduleNextTick(func() {
+			defer done()
 			wsURI, err := LspToURI(m.URI)
 			if err != nil {
 				_, _ = h.notify.Notify(browserapi.LevelError, "references: %s", err)

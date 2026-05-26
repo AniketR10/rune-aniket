@@ -81,8 +81,9 @@ type declarationHandler struct {
 }
 
 func (h *declarationHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m symbolMatch) {
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m symbolMatch, done func()) {
 		h.scheduleNextTick(func() {
+			defer done()
 			wsURI, err := LspToURI(m.URI)
 			if err != nil {
 				_, _ = h.notify.Notify(browserapi.LevelError, "declaration: %s", err)
@@ -112,7 +113,7 @@ func (h *declarationHandler) execute(
 	}
 	entries := locationsFromResult(result)
 	if len(entries) == 0 {
-		return nil
+		return errNoLocations
 	}
 	entries = enrichEntries(entries, h.cfg.RootURI)
 	if len(entries) == 1 {

@@ -242,7 +242,7 @@ func newCommandEventHandler(
 	tools = append(tools, agentools.NewWebFetch(fetcher))
 
 	parser := w.Parser(ctx)
-	tools = append(tools, agentools.LSPTools(lsp, fs, cwd, tracker)...)
+	tools = append(tools, agentools.LSPTools(lsp, fs, parser, cwd, tracker)...)
 	tools = append(tools, agentools.SyntaxTools(parser, fs, cwd, tracker)...)
 
 	mcpManager := runemcp.NewManager()

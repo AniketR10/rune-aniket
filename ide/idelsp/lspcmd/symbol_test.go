@@ -31,216 +31,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
-
-func TestResolveSymbol(t *testing.T) {
-	t.Parallel()
-
-	fileA, err := workspaceapi.ParseURI("file:///project/pkg/a.go")
-	require.NoError(t, err)
-	fileB, err := workspaceapi.ParseURI("file:///project/pkg/b.go")
-	require.NoError(t, err)
-	fileC, err := workspaceapi.ParseURI("file:///project/other/c.go")
-	require.NoError(t, err)
-
-	tests := []struct {
-		name        string
-		query       string
-		imports     []syntaxapi.Result
-		aliases     []syntaxapi.Result
-		types       []syntaxapi.Result
-		selectors   []syntaxapi.Result
-		wantMatches []symbolMatch
-		wantErr     bool
-	}{
-		{
-			name:  "qualified type found",
-			query: "context.Context",
-			types: []syntaxapi.Result{
-				{File: fileA, Text: "context", From: term.Coordinates{X: 5, Y: 10}, CaptureName: "pkg"},
-				{File: fileA, Text: "Context", From: term.Coordinates{X: 13, Y: 10}, CaptureName: "type"},
-			},
-			wantMatches: []symbolMatch{{
-				URI:     fileA.String(),
-				Pos:     semanticapi.Position{Line: 10, Character: 13},
-				Display: "context.Context",
-			}},
-		},
-		{
-			name:  "selector expression found",
-			query: "fmt.Println",
-			selectors: []syntaxapi.Result{
-				{File: fileA, Text: "fmt", From: term.Coordinates{X: 1, Y: 20}, CaptureName: "pkg"},
-				{File: fileA, Text: "Println", From: term.Coordinates{X: 5, Y: 20}, CaptureName: "symbol"},
-			},
-			wantMatches: []symbolMatch{{
-				URI:     fileA.String(),
-				Pos:     semanticapi.Position{Line: 20, Character: 5},
-				Display: "fmt.Println",
-			}},
-		},
-		{
-			name:    "no dot in name errors",
-			query:   "NoDot",
-			wantErr: true,
-		},
-		{
-			name:    "no results errors",
-			query:   "missing.Symbol",
-			wantErr: true,
-		},
-		{
-			name:  "same import path deduplicates to single match",
-			query: "fmt.Println",
-			imports: []syntaxapi.Result{
-				{File: fileA, Text: `"fmt"`, CaptureName: "path"},
-				{File: fileC, Text: `"fmt"`, CaptureName: "path"},
-			},
-			selectors: []syntaxapi.Result{
-				{File: fileA, Text: "fmt", From: term.Coordinates{X: 1, Y: 5}, CaptureName: "pkg"},
-				{File: fileA, Text: "Println", From: term.Coordinates{X: 5, Y: 5}, CaptureName: "symbol"},
-				{File: fileC, Text: "fmt", From: term.Coordinates{X: 1, Y: 10}, CaptureName: "pkg"},
-				{File: fileC, Text: "Println", From: term.Coordinates{X: 5, Y: 10}, CaptureName: "symbol"},
-			},
-			wantMatches: []symbolMatch{{
-				URI:        fileA.String(),
-				Pos:        semanticapi.Position{Line: 5, Character: 5},
-				Display:    "fmt.Println",
-				ImportPath: "fmt",
-			}},
-		},
-		{
-			name:  "different import paths show picker with display names",
-			query: "log.Info",
-			imports: []syntaxapi.Result{
-				{File: fileA, Text: `"github.com/pkg/log"`, CaptureName: "path"},
-				{File: fileC, Text: `"github.com/other/log"`, CaptureName: "path"},
-			},
-			selectors: []syntaxapi.Result{
-				{File: fileA, Text: "log", From: term.Coordinates{X: 1, Y: 5}, CaptureName: "pkg"},
-				{File: fileA, Text: "Info", From: term.Coordinates{X: 5, Y: 5}, CaptureName: "symbol"},
-				{File: fileC, Text: "log", From: term.Coordinates{X: 1, Y: 10}, CaptureName: "pkg"},
-				{File: fileC, Text: "Info", From: term.Coordinates{X: 5, Y: 10}, CaptureName: "symbol"},
-			},
-			wantMatches: []symbolMatch{
-				{URI: fileA.String(), Pos: semanticapi.Position{Line: 5, Character: 5}, Display: "github.com/pkg/log: log.Info", ImportPath: "github.com/pkg/log"},
-				{URI: fileC.String(), Pos: semanticapi.Position{Line: 10, Character: 5}, Display: "github.com/other/log: log.Info", ImportPath: "github.com/other/log"},
-			},
-		},
-		{
-			name:  "same base package with explicit alias deduplicates to two imports",
-			query: "iterator.Iterator",
-			imports: []syntaxapi.Result{
-				{File: fileA, Text: `"github.com/unstablebuild/blue/iterator"`, CaptureName: "path"},
-				{File: fileA, Text: `"github.com/unstablebuild/rune-go-sdk/iterator"`, CaptureName: "path"},
-				{File: fileB, Text: `"github.com/unstablebuild/blue/iterator"`, CaptureName: "path"},
-				{File: fileC, Text: `"github.com/unstablebuild/rune-go-sdk/iterator"`, CaptureName: "path"},
-			},
-			aliases: []syntaxapi.Result{
-				{File: fileA, Text: "sdkiterator", CaptureName: "alias"},
-				{File: fileA, Text: `"github.com/unstablebuild/rune-go-sdk/iterator"`, CaptureName: "path"},
-			},
-			types: []syntaxapi.Result{
-				{File: fileA, Text: "iterator", From: term.Coordinates{X: 1, Y: 5}, CaptureName: "pkg"},
-				{File: fileA, Text: "Iterator", From: term.Coordinates{X: 10, Y: 5}, CaptureName: "type"},
-				{File: fileB, Text: "iterator", From: term.Coordinates{X: 1, Y: 10}, CaptureName: "pkg"},
-				{File: fileB, Text: "Iterator", From: term.Coordinates{X: 10, Y: 10}, CaptureName: "type"},
-				{File: fileC, Text: "iterator", From: term.Coordinates{X: 1, Y: 15}, CaptureName: "pkg"},
-				{File: fileC, Text: "Iterator", From: term.Coordinates{X: 10, Y: 15}, CaptureName: "type"},
-			},
-			wantMatches: []symbolMatch{
-				{URI: fileA.String(), Pos: semanticapi.Position{Line: 5, Character: 10}, Display: "github.com/unstablebuild/blue/iterator: iterator.Iterator", ImportPath: "github.com/unstablebuild/blue/iterator"},
-				{URI: fileC.String(), Pos: semanticapi.Position{Line: 15, Character: 10}, Display: "github.com/unstablebuild/rune-go-sdk/iterator: iterator.Iterator", ImportPath: "github.com/unstablebuild/rune-go-sdk/iterator"},
-			},
-		},
-		{
-			name:  "duplicate URIs deduplicated",
-			query: "context.Context",
-			types: []syntaxapi.Result{
-				{File: fileA, Text: "context", From: term.Coordinates{X: 5, Y: 10}, CaptureName: "pkg"},
-				{File: fileA, Text: "Context", From: term.Coordinates{X: 13, Y: 10}, CaptureName: "type"},
-				{File: fileA, Text: "context", From: term.Coordinates{X: 5, Y: 20}, CaptureName: "pkg"},
-				{File: fileA, Text: "Context", From: term.Coordinates{X: 13, Y: 20}, CaptureName: "type"},
-			},
-			wantMatches: []symbolMatch{{
-				URI:     fileA.String(),
-				Pos:     semanticapi.Position{Line: 10, Character: 13},
-				Display: "context.Context",
-			}},
-		},
-		{
-			name:  "non-matching pairs skipped",
-			query: "fmt.Println",
-			selectors: []syntaxapi.Result{
-				{File: fileA, Text: "os", From: term.Coordinates{X: 1, Y: 5}, CaptureName: "pkg"},
-				{File: fileA, Text: "Exit", From: term.Coordinates{X: 4, Y: 5}, CaptureName: "symbol"},
-				{File: fileB, Text: "fmt", From: term.Coordinates{X: 1, Y: 8}, CaptureName: "pkg"},
-				{File: fileB, Text: "Println", From: term.Coordinates{X: 5, Y: 8}, CaptureName: "symbol"},
-			},
-			wantMatches: []symbolMatch{{
-				URI:     fileB.String(),
-				Pos:     semanticapi.Position{Line: 8, Character: 5},
-				Display: "fmt.Println",
-			}},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			parser := &mockParser{
-				searchFn: func(query string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-					switch {
-					case strings.Contains(query, "import_spec") && !strings.Contains(query, "name:"):
-						return iterator.FromSlice(tt.imports), nil
-					case strings.Contains(query, "import_spec") && strings.Contains(query, "name:"):
-						return iterator.FromSlice(tt.aliases), nil
-					case strings.Contains(query, "qualified_type"):
-						return iterator.FromSlice(tt.types), nil
-					case strings.Contains(query, "selector_expression"):
-						return iterator.FromSlice(tt.selectors), nil
-					}
-					return iterator.Empty[syntaxapi.Result](), nil
-				},
-			}
-			matches, err := resolveSymbol(context.Background(), parser, tt.query, nil)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantMatches, matches)
-		})
-	}
-}
-
-func TestPackagePathFromURI(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		uri  string
-		want string
-	}{
-		{
-			uri:  "file:///Users/foo/go/pkg/mod/github.com/org/repo@v1.2.3/cell/buffer.go",
-			want: "github.com/org/repo/cell",
-		},
-		{
-			uri:  "file:///project/internal/cell/buffer.go",
-			want: "/project/internal/cell",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.uri, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, packagePathFromURI(tt.uri))
-		})
-	}
-}
 
 func TestNormalizeMethodName(t *testing.T) {
 	t.Parallel()
@@ -396,10 +191,14 @@ func TestCompleteReferencedSymbol(t *testing.T) {
 		aliases   []syntaxapi.Result
 		types     []syntaxapi.Result
 		selectors []syntaxapi.Result
+		packages  []syntaxapi.Result
+		defs      []syntaxapi.Result
 	}
 	searchRouter := func(qr queryResults) func(string, []string) (iterator.Iterator[syntaxapi.Result], error) {
 		return func(query string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
 			switch {
+			case strings.Contains(query, "package_clause"):
+				return iterator.FromSlice(qr.packages), nil
 			case strings.Contains(query, "import_spec") && !strings.Contains(query, "name:"):
 				return iterator.FromSlice(qr.imports), nil
 			case strings.Contains(query, "import_spec") && strings.Contains(query, "name:"):
@@ -602,16 +401,37 @@ func TestCompleteReferencedSymbol(t *testing.T) {
 			},
 			want: []string{"context.Context", "fmt.Stringer"},
 		},
+		{
+			name: "workspace-defined symbols appear even when unreferenced",
+			results: queryResults{
+				packages: []syntaxapi.Result{
+					{File: fileA, Text: "iterator", CaptureName: "pkg"},
+				},
+				defs: []syntaxapi.Result{
+					{File: fileA, Text: "Reduce"},
+					{File: fileA, Text: "Map"},
+					// Unexported definitions should be filtered.
+					{File: fileA, Text: "private"},
+				},
+			},
+			want: []string{"iterator.Reduce", "iterator.Map"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			parser := &mockParser{searchFn: searchRouter(tt.results)}
+			defs := tt.results.defs
+			parser := &mockParser{
+				searchFn: searchRouter(tt.results),
+				searchNodeFn: func(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+					return iterator.FromSlice(defs), nil
+				},
+			}
 			iter, err := completeReferencedSymbol(context.Background(), parser)
 			require.NoError(t, err)
 			got := collectIter(t, iter)
-			assert.Equal(t, tt.want, got)
+			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
 }
@@ -703,8 +523,32 @@ func benchmarkData() (parser *mockParser, nUnique int) {
 		}
 	}
 
+	// ~150 packages: one package clause per file. Files in the same
+	// pkgN/ directory share a package name so workspace-defined symbols
+	// look like a real Go project.
+	var packages []syntaxapi.Result
+	for i, f := range files {
+		pkgName := fmt.Sprintf("pkg%d", i/10)
+		packages = append(packages, syntaxapi.Result{
+			File: f, Text: pkgName, CaptureName: "pkg",
+		})
+	}
+
+	// ~1500 definitions: ~10 funcs/types per file. Mix of exported
+	// and unexported names so the IsExported filter has work to do.
+	var defs []syntaxapi.Result
+	for _, f := range files {
+		for _, tn := range typeNames {
+			defs = append(defs, syntaxapi.Result{File: f, Text: tn})
+		}
+		// One unexported per file, dropped by the filter.
+		defs = append(defs, syntaxapi.Result{File: f, Text: "helper"})
+	}
+
 	router := func(query string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
 		switch {
+		case strings.Contains(query, "package_clause"):
+			return iterator.FromSlice(packages), nil
 		case strings.Contains(query, "import_spec") && !strings.Contains(query, "name:"):
 			return iterator.FromSlice(imports), nil
 		case strings.Contains(query, "import_spec") && strings.Contains(query, "name:"):
@@ -736,8 +580,26 @@ func benchmarkData() (parser *mockParser, nUnique int) {
 			}
 		}
 	}
+	// Workspace-defined symbols also contribute to the unique count.
+	pkgOf := make(map[workspaceapi.URI]string, len(packages))
+	for _, p := range packages {
+		pkgOf[p.File] = p.Text
+	}
+	for _, d := range defs {
+		if !isExported(d.Text) {
+			continue
+		}
+		if name := pkgOf[d.File]; name != "" {
+			seen[name+"."+d.Text] = true
+		}
+	}
 
-	return &mockParser{searchFn: router}, len(seen)
+	return &mockParser{
+		searchFn: router,
+		searchNodeFn: func(_ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+			return iterator.FromSlice(defs), nil
+		},
+	}, len(seen)
 }
 
 func BenchmarkCompleteReferencedSymbol(b *testing.B) {

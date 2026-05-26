@@ -41,6 +41,8 @@ type locationEntry struct {
 	display string
 }
 
+var errNoLocations = errors.New("no location returned")
+
 func navigateTo(
 	e locationEntry, opener browserapi.ResourceOpener,
 	wm browserapi.WindowManager,
@@ -50,6 +52,7 @@ func navigateTo(
 	scheduleNextTick(func() {
 		if err := doNavigate(e, opener, wm, editor); err != nil {
 			_, _ = notify.Notify(browserapi.LevelError, "navigate: %s", err)
+			return
 		}
 	})
 }

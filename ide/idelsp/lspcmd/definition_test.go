@@ -85,7 +85,7 @@ func TestDefinitionHandler(t *testing.T) {
 			wantFloat:   true,
 			wantEntries: 2,
 		},
-		{name: "no definitions"},
+		{name: "no definitions", wantErr: true},
 		{name: "nil resource", nilResource: true, wantErr: true},
 		{
 			name:        "definition via symbol name",

@@ -76,7 +76,7 @@ func TestDeclarationHandler(t *testing.T) {
 			wantFloat:   true,
 			wantEntries: 2,
 		},
-		{name: "no declarations"},
+		{name: "no declarations", wantErr: true},
 		{name: "nil resource", nilResource: true, wantErr: true},
 	}
 	for _, tt := range tests {

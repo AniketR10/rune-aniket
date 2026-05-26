@@ -96,6 +96,9 @@ var syncTick = func(fn func()) bool { fn(); return true }
 type mockParser struct {
 	highlightFn func(workspaceapi.URI, string) (iterator.Iterator[textapi.Location], error)
 	searchFn    func(string, []string) (iterator.Iterator[syntaxapi.Result], error)
+	// searchNodeFn lets tests stub responses for SearchNode (used by the
+	// definitions phase in symbolresolve.Resolve / SearchDefinitions).
+	searchNodeFn func(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
 }
 
 func (m *mockParser) Search(query string, captures []string, langs ...string) (iterator.Iterator[syntaxapi.Result], error) {
@@ -104,7 +107,10 @@ func (m *mockParser) Search(query string, captures []string, langs ...string) (i
 	}
 	return iterator.Empty[syntaxapi.Result](), nil
 }
-func (m *mockParser) SearchNode(_ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (m *mockParser) SearchNode(n syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	if m.searchNodeFn != nil {
+		return m.searchNodeFn(n)
+	}
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 func (m *mockParser) Query(_ workspaceapi.URI, _ string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {

@@ -29,13 +29,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
-	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 )
 
 // --- mock LSP ---
@@ -278,6 +284,44 @@ func (s *stubLSP) DidDeleteFiles(context.Context, semanticapi.DeleteFilesParams)
 
 var _ semanticapi.LSP = (*stubLSP)(nil)
 
+// --- mock parser ---
+
+// fakeParser implements syntaxapi.Parser for tests. nil fields fall
+// back to empty iterators so tests can opt into stubbing only the
+// surface they need.
+type fakeParser struct {
+	searchFn     func(string, []string) (iterator.Iterator[syntaxapi.Result], error)
+	searchNodeFn func(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
+	queryNodeFn  func(workspaceapi.URI, syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
+}
+
+func (p *fakeParser) Search(q string, c []string, _ ...string) (iterator.Iterator[syntaxapi.Result], error) {
+	if p.searchFn != nil {
+		return p.searchFn(q, c)
+	}
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (p *fakeParser) SearchNode(n syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	if p.searchNodeFn != nil {
+		return p.searchNodeFn(n)
+	}
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (p *fakeParser) Query(_ workspaceapi.URI, _ string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (p *fakeParser) QueryNode(u workspaceapi.URI, n syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+	if p.queryNodeFn != nil {
+		return p.queryNodeFn(u, n)
+	}
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (p *fakeParser) Highlight(_ workspaceapi.URI, _ string) (iterator.Iterator[textapi.Location], error) {
+	return iterator.Empty[textapi.Location](), nil
+}
+
+var _ syntaxapi.Parser = (*fakeParser)(nil)
+
 // --- helpers ---
 
 func loc(uri string, line, char uint32) semanticapi.Location {
@@ -299,7 +343,7 @@ func symInfo(name string, kind semanticapi.SymbolKind, uri string, line uint32) 
 
 func TestLSPTools(t *testing.T) {
 	lsp := &stubLSP{}
-	tools := LSPTools(lsp, localFS{}, dirURI("/workspace"), NewFileTracker())
+	tools := LSPTools(lsp, localFS{}, &fakeParser{}, dirURI("/workspace"), NewFileTracker())
 	require.Len(t, tools, 8)
 
 	expectedNames := map[string]bool{
@@ -1132,4 +1176,352 @@ func TestLSPToolSummaries(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.tool.Summary(tt.args))
 		})
 	}
+}
+
+// --- Symbol resolver integration (RUNE-190) ---
+
+// stringsContains is a tiny inline strings.Contains so the new test
+// helpers stay close to the data they consume.
+func stringsContains(s, sub string) bool { return strings.Contains(s, sub) }
+
+func TestResolveSymbolDottedSkipsWorkspaceSymbol(t *testing.T) {
+	// (a) describe_symbol iterator.Iterator → ambiguous → returns
+	//     Hover for both packages under "# path:line" headers; assert
+	//     WorkspaceSymbol was NOT called.
+	parsed := func(s string) workspaceapi.URI {
+		u, _ := workspaceapi.ParseURI(s)
+		return u
+	}
+	wsCalled := false
+	hovers := map[string]string{
+		"file:///workspace/blue/iterator/iterator.go": "type Iterator (blue)",
+		"file:///workspace/sdk/iterator/iterator.go":  "type Iterator (sdk)",
+	}
+	lsp := &stubLSP{
+		workspaceSymbolFn: func(p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+			wsCalled = true
+			return nil, nil
+		},
+		hoverFn: func(p semanticapi.HoverParams) (*semanticapi.Hover, error) {
+			v, ok := hovers[p.TextDocument.URI]
+			if !ok {
+				return nil, fmt.Errorf("unexpected URI: %s", p.TextDocument.URI)
+			}
+			return &semanticapi.Hover{
+				Contents: semanticapi.MarkupContent{Kind: semanticapi.MarkupKindMarkdown, Value: v},
+			}, nil
+		},
+	}
+	blueURI := parsed("file:///workspace/blue/iterator/iterator.go")
+	sdkURI := parsed("file:///workspace/sdk/iterator/iterator.go")
+	parser := &fakeParser{
+		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+			if stringsContains(q, "package_clause") {
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: blueURI, Text: "iterator"},
+					{File: sdkURI, Text: "iterator"},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+			switch u {
+			case blueURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: blueURI, Text: "Iterator", From: term.Coordinates{X: 5, Y: 9}},
+				}), nil
+			case sdkURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: sdkURI, Text: "Iterator", From: term.Coordinates{X: 5, Y: 14}},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+	}
+	tool := &describeSymbolTool{lsp: lsp, parser: parser, cwd: dirURI("/workspace")}
+	got := tool.Execute(context.Background(), `{"symbol":"iterator.Iterator"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.False(t, wsCalled, "WorkspaceSymbol must not be called for dotted names that resolve")
+	assert.Contains(t, got.Content, "# blue/iterator/iterator.go:10")
+	assert.Contains(t, got.Content, "# sdk/iterator/iterator.go:15")
+	assert.Contains(t, got.Content, "type Iterator (blue)")
+	assert.Contains(t, got.Content, "type Iterator (sdk)")
+	assert.NotContains(t, got.Content, "TestStreamIterator")
+}
+
+func TestResolveSymbolDefinitionOnly(t *testing.T) {
+	// (b) describe_symbol iterator.Reduce — definition-only resolves
+	//     via SearchNode phase.
+	parsed := func(s string) workspaceapi.URI {
+		u, _ := workspaceapi.ParseURI(s)
+		return u
+	}
+	uri := parsed("file:///workspace/iterator/reduce.go")
+	lsp := &stubLSP{
+		hoverFn: func(p semanticapi.HoverParams) (*semanticapi.Hover, error) {
+			return &semanticapi.Hover{
+				Contents: semanticapi.MarkupContent{Value: "func Reduce[T any](...)"},
+			}, nil
+		},
+	}
+	parser := &fakeParser{
+		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+			if stringsContains(q, "package_clause") {
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: uri, Text: "iterator"},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+			if u == uri {
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: uri, Text: "Reduce", From: term.Coordinates{X: 5, Y: 41}},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+	}
+	tool := &describeSymbolTool{lsp: lsp, parser: parser, cwd: dirURI("/workspace")}
+	got := tool.Execute(context.Background(), `{"symbol":"iterator.Reduce"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.Equal(t, "func Reduce[T any](...)", got.Content)
+}
+
+func TestResolveSymbolNoDotFallsBackToWorkspaceSymbol(t *testing.T) {
+	// (c) describe_symbol Foo (no dot) falls back to WorkspaceSymbol
+	//     and hovers all returned syms.
+	wsCalled := false
+	lsp := &stubLSP{
+		workspaceSymbolFn: func(p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+			wsCalled = true
+			return []semanticapi.SymbolInformation{
+				symInfo("Foo", semanticapi.SymbolKindFunction, "file:///workspace/a.go", 1),
+				symInfo("Foo", semanticapi.SymbolKindFunction, "file:///workspace/b.go", 2),
+			}, nil
+		},
+		hoverFn: func(p semanticapi.HoverParams) (*semanticapi.Hover, error) {
+			return &semanticapi.Hover{
+				Contents: semanticapi.MarkupContent{Value: "hover " + p.TextDocument.URI},
+			}, nil
+		},
+	}
+	tool := &describeSymbolTool{lsp: lsp, parser: &fakeParser{}, cwd: dirURI("/workspace")}
+	got := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.True(t, wsCalled)
+	assert.Contains(t, got.Content, "# a.go:2")
+	assert.Contains(t, got.Content, "# b.go:3")
+	assert.Contains(t, got.Content, "hover file:///workspace/a.go")
+	assert.Contains(t, got.Content, "hover file:///workspace/b.go")
+}
+
+func TestFindDefinitionTwoMatches(t *testing.T) {
+	// (d) two-match find_definition.
+	parsed := func(s string) workspaceapi.URI {
+		u, _ := workspaceapi.ParseURI(s)
+		return u
+	}
+	blueURI := parsed("file:///workspace/blue/iterator/iterator.go")
+	sdkURI := parsed("file:///workspace/sdk/iterator/iterator.go")
+	defResult := func(uri string, line uint32) semanticapi.LocationResult {
+		return semanticapi.LocationResult{
+			Location: &semanticapi.Location{
+				URI: uri, Range: semanticapi.Range{Start: semanticapi.Position{Line: line}},
+			},
+		}
+	}
+	lsp := &stubLSP{
+		definitionFn: func(p semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+			return defResult(p.TextDocument.URI, p.Position.Line), nil
+		},
+	}
+	parser := &fakeParser{
+		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+			if stringsContains(q, "package_clause") {
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: blueURI, Text: "iterator"},
+					{File: sdkURI, Text: "iterator"},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+			switch u {
+			case blueURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: blueURI, Text: "Iterator", From: term.Coordinates{X: 0, Y: 9}},
+				}), nil
+			case sdkURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: sdkURI, Text: "Iterator", From: term.Coordinates{X: 0, Y: 14}},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+	}
+	tool := &findDefinitionTool{
+		lsp: lsp, fs: localFS{}, parser: parser,
+		cwd: dirURI("/workspace"), tracker: NewFileTracker(),
+	}
+	got := tool.Execute(context.Background(), `{"symbol":"iterator.Iterator"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.Contains(t, got.Content, "# blue/iterator/iterator.go:10")
+	assert.Contains(t, got.Content, "# sdk/iterator/iterator.go:15")
+}
+
+func TestFindReferencesTwoMatches(t *testing.T) {
+	parsed := func(s string) workspaceapi.URI {
+		u, _ := workspaceapi.ParseURI(s)
+		return u
+	}
+	aURI := parsed("file:///workspace/a/x.go")
+	bURI := parsed("file:///workspace/b/x.go")
+	lsp := &stubLSP{
+		referencesFn: func(p semanticapi.ReferenceParams) ([]semanticapi.Location, error) {
+			return []semanticapi.Location{
+				{URI: p.TextDocument.URI, Range: semanticapi.Range{Start: semanticapi.Position{Line: 0}}},
+			}, nil
+		},
+	}
+	parser := &fakeParser{
+		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+			if stringsContains(q, "package_clause") {
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: aURI, Text: "x"},
+					{File: bURI, Text: "x"},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+			switch u {
+			case aURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: aURI, Text: "Foo", From: term.Coordinates{X: 0, Y: 1}},
+				}), nil
+			case bURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: bURI, Text: "Foo", From: term.Coordinates{X: 0, Y: 1}},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+	}
+	tool := &findReferencesTool{
+		lsp: lsp, fs: localFS{}, parser: parser,
+		cwd: dirURI("/workspace"), tracker: NewFileTracker(),
+	}
+	got := tool.Execute(context.Background(), `{"symbol":"x.Foo"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.Contains(t, got.Content, "# a/x.go:2")
+	assert.Contains(t, got.Content, "# b/x.go:2")
+}
+
+func TestFindImplementationsTwoMatches(t *testing.T) {
+	parsed := func(s string) workspaceapi.URI {
+		u, _ := workspaceapi.ParseURI(s)
+		return u
+	}
+	aURI := parsed("file:///workspace/a/x.go")
+	bURI := parsed("file:///workspace/b/x.go")
+	lsp := &stubLSP{
+		implementationFn: func(p semanticapi.ImplementationParams) (semanticapi.LocationResult, error) {
+			return semanticapi.LocationResult{
+				Location: &semanticapi.Location{
+					URI:   p.TextDocument.URI,
+					Range: semanticapi.Range{Start: semanticapi.Position{Line: 0}},
+				},
+			}, nil
+		},
+	}
+	parser := &fakeParser{
+		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
+			if stringsContains(q, "package_clause") {
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: aURI, Text: "x"},
+					{File: bURI, Text: "x"},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+			switch u {
+			case aURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: aURI, Text: "Reader", From: term.Coordinates{X: 0, Y: 1}},
+				}), nil
+			case bURI:
+				return iterator.FromSlice([]syntaxapi.Result{
+					{File: bURI, Text: "Reader", From: term.Coordinates{X: 0, Y: 1}},
+				}), nil
+			}
+			return iterator.Empty[syntaxapi.Result](), nil
+		},
+	}
+	tool := &findImplementationsTool{
+		lsp: lsp, fs: localFS{}, parser: parser,
+		cwd: dirURI("/workspace"), tracker: NewFileTracker(),
+	}
+	got := tool.Execute(context.Background(), `{"symbol":"x.Reader"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.Contains(t, got.Content, "# a/x.go:2")
+	assert.Contains(t, got.Content, "# b/x.go:2")
+}
+
+func TestResolveSymbolCapsWorkspaceSymbol(t *testing.T) {
+	// (e) maxSymbolMatches cap: WorkspaceSymbol returns 50 → at most
+	//     8 follow-ups + truncation marker.
+	wsCount := 0
+	hoverCount := 0
+	lsp := &stubLSP{
+		workspaceSymbolFn: func(p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+			wsCount++
+			out := make([]semanticapi.SymbolInformation, 50)
+			for i := range out {
+				out[i] = symInfo("Foo", semanticapi.SymbolKindFunction,
+					fmt.Sprintf("file:///workspace/f%d.go", i), uint32(i))
+			}
+			return out, nil
+		},
+		hoverFn: func(p semanticapi.HoverParams) (*semanticapi.Hover, error) {
+			hoverCount++
+			return &semanticapi.Hover{
+				Contents: semanticapi.MarkupContent{Value: "x"},
+			}, nil
+		},
+	}
+	tool := &describeSymbolTool{lsp: lsp, parser: &fakeParser{}, cwd: dirURI("/workspace")}
+	got := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
+	assert.False(t, got.IsError, got.Content)
+	assert.Equal(t, 1, wsCount)
+	assert.Equal(t, maxSymbolMatches, hoverCount)
+	assert.Contains(t, got.Content, "(matches truncated to 8 of")
+}
+
+func TestResolveSymbolSingleMatchByteIdentical(t *testing.T) {
+	// (f) single-match output is byte-identical to today (no header).
+	lsp := &stubLSP{
+		workspaceSymbolFn: func(p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
+			return []semanticapi.SymbolInformation{
+				symInfo("Foo", semanticapi.SymbolKindFunction, "file:///workspace/pkg/foo.go", 9),
+			}, nil
+		},
+		definitionFn: func(p semanticapi.DefinitionParams) (semanticapi.LocationResult, error) {
+			return semanticapi.LocationResult{
+				Location: &semanticapi.Location{
+					URI:   "file:///workspace/pkg/foo.go",
+					Range: semanticapi.Range{Start: semanticapi.Position{Line: 9}},
+				},
+			}, nil
+		},
+	}
+	tool := &findDefinitionTool{
+		lsp: lsp, fs: localFS{}, parser: &fakeParser{},
+		cwd: dirURI("/workspace"), tracker: NewFileTracker(),
+	}
+	got := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
+	assert.False(t, got.IsError, got.Content)
+	// No header for single match.
+	assert.Equal(t, "pkg/foo.go:10", got.Content)
 }
