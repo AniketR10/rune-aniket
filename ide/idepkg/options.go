@@ -26,6 +26,7 @@ package idepkg
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"unstable.build/go-tui/ide/ideplan"
 )
 
 // Option configures a Manager.
@@ -65,5 +66,15 @@ func WithSyntaxParser(parser syntaxapi.Parser) Option {
 func WithEditorMode(mode string) Option {
 	return func(m *Manager) {
 		m.editorMode = mode
+	}
+}
+
+// WithPlanSource installs an ideplan.Source that gates package
+// downloads.
+// When the source reports PlanDenied, InstallPackageVersion returns
+// ErrSubscriptionRequired before contacting the release server.
+func WithPlanSource(ps ideplan.Source) Option {
+	return func(m *Manager) {
+		m.planSource = ps
 	}
 }

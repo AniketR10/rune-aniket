@@ -1076,7 +1076,7 @@ func mustNewAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, nil)
 	require.NoError(t, err)
 	return a
 }
@@ -1090,7 +1090,7 @@ func mustNewAuthorizerWithNotifications(
 	noti browserapi.Notifications,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti, nil)
 	require.NoError(t, err)
 	return a
 }

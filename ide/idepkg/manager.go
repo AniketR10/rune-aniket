@@ -56,6 +56,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -81,6 +82,11 @@ var (
 		"ensure you have a valid subscription to download packages")
 )
 
+// ErrSubscriptionRequired re-exports ideplan.ErrSubscriptionRequired so
+// callers can branch on errors.Is(err, idepkg.ErrSubscriptionRequired)
+// without importing ideplan. Gated paths wrap this alongside ErrForbidden.
+var ErrSubscriptionRequired = ideplan.ErrSubscriptionRequired
+
 // translatePackageErr maps a *cdnrelease.StatusError on a
 // package-scoped call into a user-facing wrapped sentinel. Errors
 // without a recognisable status (network errors, non-StatusError
@@ -92,7 +98,7 @@ func translatePackageErr(err error, pkgID string) error {
 	}
 	switch {
 	case se.Status == http.StatusForbidden:
-		return ErrForbidden
+		return forbiddenErr(se)
 	case se.Status == http.StatusNotFound:
 		return fmt.Errorf("package %q does not exist: %w", pkgID, ErrPackageNotFound)
 	case se.Status >= 500:
@@ -112,7 +118,7 @@ func translateVersionErr(err error, pkgID, version string) error {
 		return fmt.Errorf("download of %q version %q failed: %w (status %d)",
 			pkgID, version, ErrServerUnavailable, se.Status)
 	case se.Status == http.StatusForbidden:
-		return ErrForbidden
+		return forbiddenErr(se)
 	case se.Status == http.StatusNotFound:
 		return fmt.Errorf("version %q of package %q does not exist: %w",
 			version, pkgID, ErrVersionNotFound)
@@ -129,13 +135,25 @@ func translateListErr(err error, pkgID string) error {
 	}
 	switch {
 	case se.Status == http.StatusForbidden:
-		return ErrForbidden
+		return forbiddenErr(se)
 	case se.Status == http.StatusNotFound && pkgID != "":
 		return fmt.Errorf("package %q does not exist: %w", pkgID, ErrPackageNotFound)
 	case se.Status >= 500:
 		return fmt.Errorf("%w (status %d)", ErrServerUnavailable, se.Status)
 	}
 	return err
+}
+
+// forbiddenErr maps a 403 StatusError to a user-facing error. When the
+// rejected request targeted a release path, it surfaces as
+// ErrSubscriptionRequired so callers can branch on
+// errors.Is(err, ErrSubscriptionRequired) for "subscribe to continue"
+// messaging. Other 403s map to plain ErrForbidden.
+func forbiddenErr(se *cdnrelease.StatusError) error {
+	if strings.Contains(se.URL, "/api/releases/") {
+		return fmt.Errorf("%w: %w", ErrSubscriptionRequired, ErrForbidden)
+	}
+	return ErrForbidden
 }
 
 // NewManager allocates storage for a new Manager and initializes it.
@@ -169,6 +187,7 @@ func NewManager(
 		n:                n,
 		m:                m,
 		storage:          storage,
+		planSource:       ideplan.AlwaysAllowed(),
 	}
 	ret.iterators.m = make(map[string]*sync.Mutex)
 	for _, opt := range opts {
@@ -201,6 +220,7 @@ type Manager struct {
 	crashReportVersion string
 
 	editorMode string
+	planSource ideplan.Source
 
 	iterators struct {
 		sync.Mutex
@@ -295,6 +315,10 @@ func (m *Manager) InstallPackageVersion(
 ) error {
 	if pkgID == "" || version == "" {
 		return errors.New("package and version must not be empty")
+	}
+
+	if m.planSource.PlanDecision(ctx).Kind == ideplan.Denied {
+		return fmt.Errorf("%w: %w", ErrSubscriptionRequired, ErrForbidden)
 	}
 
 	// ensure no one is being naughty

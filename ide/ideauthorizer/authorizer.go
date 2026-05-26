@@ -37,6 +37,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	blueauth "github.com/unstablebuild/blue/auth"
@@ -51,6 +52,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 )
 
@@ -110,20 +112,28 @@ type PromptOpener interface {
 // NewAuthorizer returns an Authorizer that satisfies both the workspace
 // CommandAuthorizer interface and the blue auth authorizer used by the
 // extension runner for gRPC middleware.
+//
+// planSource gates extension RPCs and command execution on the user's
+// paid-plan status. Pass nil (or ideplan.AlwaysAllowed()) to disable
+// the gate — production code wires a real ideplan.Source; tests
+// typically pass nil.
 func NewAuthorizer(
 	editor text.Editor,
 	promptOpener PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 	notifications browserapi.Notifications,
+	planSource ideplan.Source,
 ) (*Authorizer, error) {
 	if editor == nil {
 		return nil, errors.New("editor is required")
 	}
 	a := &Authorizer{
-		prompter: newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
-		storage:  storage,
-		once:     make(map[string]pluginPermissionOnceDecision),
-		pending:  make(map[string]*pendingPrompt),
+		prompter:      newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
+		storage:       storage,
+		once:          make(map[string]pluginPermissionOnceDecision),
+		pending:       make(map[string]*pendingPrompt),
+		planSource:    planSource,
+		notifications: notifications,
 	}
 	if err := registerAuthorizerREPLCommand(editor, a); err != nil {
 		return nil, fmt.Errorf("register authorizer repl command: %w", err)
@@ -150,6 +160,15 @@ type Authorizer struct {
 	// channel). See RUNE-97.
 	pendingMu sync.Mutex
 	pending   map[string]*pendingPrompt
+
+	// planSource gates the authorizer on the user's paid-plan status.
+	// Nil means no gating (legacy / test setups).
+	planSource    ideplan.Source
+	notifications browserapi.Notifications
+	// graceWarned ensures the "subscription about to lapse" warning is
+	// shown at most once per authorizer lifetime, so the user is not
+	// spammed for every extension RPC during the grace window.
+	graceWarned atomic.Bool
 }
 
 // GRPCAuthServerOptions returns the gRPC server options that install
@@ -182,6 +201,9 @@ func (a *Authorizer) Authorize(
 	if resource == workspacerpc.Executor_StartCommand_FullMethodName {
 		return nil
 	}
+	if err := a.checkPlan(ctx); err != nil {
+		return err
+	}
 	if claims.Extra.Plugin {
 		return a.authorizePlugin(ctx, claims.Extra, perm, resource)
 	}
@@ -208,6 +230,9 @@ func (a *Authorizer) AuthorizeCommand(
 	claims, ok := blueauth.ClaimsFromContext[Extension](ctx)
 	if !ok {
 		return nil
+	}
+	if err := a.checkPlan(ctx); err != nil {
+		return err
 	}
 	command := pluginPermissionCommandDetail{
 		Path: cmd.Path,
@@ -241,6 +266,36 @@ func (a *Authorizer) authorizeExtension(
 	key := extensionPermissionStorageKey(ext, perm)
 	onceKey := stablePermissionOnceKey(identity, perm, nil)
 	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource, nil)
+}
+
+// checkPlan returns ErrSubscriptionRequired (wrapping
+// blueauth.ErrForbidden) when the configured PlanSource reports
+// PlanDenied. PlanGracePeriod emits a one-shot warning notification but
+// allows the call through.
+func (a *Authorizer) checkPlan(ctx context.Context) error {
+	if a.planSource == nil {
+		return nil
+	}
+	d := a.planSource.PlanDecision(ctx)
+	switch d.Kind {
+	case ideplan.Allowed:
+		return nil
+	case ideplan.GracePeriod:
+		if a.notifications != nil && a.graceWarned.CompareAndSwap(false, true) {
+			msg := "Your subscription verification is overdue. Extensions will stop working soon."
+			if !d.GraceExpiresAt.IsZero() {
+				msg = fmt.Sprintf("Your subscription verification is overdue. "+
+					"Extensions will stop working at %s.",
+					d.GraceExpiresAt.Format(time.RFC1123))
+			}
+			_, _ = a.notifications.NotifyOnce(browserapi.LevelWarn, "%s", msg)
+		}
+		return nil
+	case ideplan.Denied:
+		return fmt.Errorf("%w: %w", ideplan.ErrSubscriptionRequired, blueauth.ErrForbidden)
+	default:
+		return fmt.Errorf("%w: %w", ideplan.ErrSubscriptionRequired, blueauth.ErrForbidden)
+	}
 }
 
 func (a *Authorizer) authorizePermission(

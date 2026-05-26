@@ -46,6 +46,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/ideplan"
 )
 
 const (
@@ -127,6 +128,7 @@ func (m *pkgManager) init(
 	scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser,
 	editorMode string,
+	planSource ideplan.Source,
 ) {
 	storage := storageapi.WithPartition(rootStorage, "idepkg")
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
@@ -136,6 +138,7 @@ func (m *pkgManager) init(
 		idepkg.WithFrameCharSet(fcs),
 		idepkg.WithSyntaxParser(parser),
 		idepkg.WithEditorMode(editorMode),
+		idepkg.WithPlanSource(planSource),
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick
@@ -194,6 +197,12 @@ func (m *pkgManager) HandleCommand(ctx context.Context, cmd textapi.Command) err
 	if errors.Is(err, auth.ErrNotAuthenticated) {
 		_, nerr := m.n.Notify(browserapi.LevelWarn,
 			"Run the `login` command to manage packages.")
+		return nerr
+	}
+	if errors.Is(err, idepkg.ErrSubscriptionRequired) {
+		_, nerr := m.n.Notify(browserapi.LevelWarn,
+			"This package requires an active subscription. "+
+				"Run the `login` command after subscribing.")
 		return nerr
 	}
 	return err

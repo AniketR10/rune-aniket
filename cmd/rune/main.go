@@ -687,7 +687,7 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
 	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
 	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
-	i.SetReleaseManager(releaseManager)
+	i.SetupPackageDistribution(releaseManager, client)
 	return client, nil
 }
 

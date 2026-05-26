@@ -37,6 +37,8 @@ import (
 	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"golang.org/x/oauth2"
+	"unstable.build/go-tui/ide/ideplan"
 )
 
 func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {
@@ -193,4 +195,51 @@ func TestClient_Login_AttemptsBrowserFlow(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("expected browser to be opened by :login flow")
 	}
+}
+
+func TestDecidePlan(t *testing.T) {
+	now := time.Now()
+	grace := 7 * 24 * time.Hour
+	withRole := func(role auth.Role, expiry time.Time) *oauth2.Token {
+		t := &oauth2.Token{AccessToken: "tok", Expiry: expiry}
+		return t.WithExtra(map[string]any{"extra": map[string]any{"Role": role}})
+	}
+
+	cases := []struct {
+		name string
+		tok  *oauth2.Token
+		want ideplan.Kind
+	}{
+		{"nil token denied", nil, ideplan.Denied},
+		{"empty access token denied", &oauth2.Token{}, ideplan.Denied},
+		{"basic role denied", withRole(auth.RoleBasic, now.Add(time.Hour)), ideplan.Denied},
+		{"paid role allowed", withRole(auth.RolePaid, now.Add(time.Hour)), ideplan.Allowed},
+		{"user role allowed", withRole(auth.RoleUser, now.Add(time.Hour)), ideplan.Allowed},
+		{"zero expiry treated as valid", withRole(auth.RolePaid, time.Time{}), ideplan.Allowed},
+		{"expired within grace", withRole(auth.RolePaid, now.Add(-24*time.Hour)), ideplan.GracePeriod},
+		{"expired exactly at grace boundary", withRole(auth.RolePaid, now.Add(-grace)), ideplan.GracePeriod},
+		{"expired past grace denied", withRole(auth.RolePaid, now.Add(-grace-time.Minute)), ideplan.Denied},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := decidePlan(tc.tok, now, grace)
+			assert.Equal(t, tc.want, got.Kind, "decision=%+v", got)
+			if tc.want == ideplan.GracePeriod {
+				assert.False(t, got.GraceExpiresAt.IsZero())
+			}
+		})
+	}
+}
+
+func TestRolePlanFromToken(t *testing.T) {
+	t.Run("missing extra returns basic", func(t *testing.T) {
+		assert.Equal(t, auth.RoleBasic, rolePlanFromToken(&oauth2.Token{}))
+	})
+	t.Run("present role returned", func(t *testing.T) {
+		tok := (&oauth2.Token{}).WithExtra(map[string]any{
+			"extra": map[string]any{"Role": auth.RolePaid},
+		})
+		assert.Equal(t, auth.RolePaid, rolePlanFromToken(tok))
+	})
 }

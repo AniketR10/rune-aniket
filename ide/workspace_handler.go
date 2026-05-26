@@ -73,6 +73,7 @@ import (
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 	"unstable.build/go-tui/ide/idemacro"
 	"unstable.build/go-tui/ide/idenotice"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/llmshell"
@@ -167,6 +168,8 @@ type workspaceManagerHandler struct {
 	pending             map[string]*pendingWorkspace
 	lastReservedPending *pendingWorkspace
 	pendingWG           sync.WaitGroup
+
+	planSource ideplan.Source
 }
 
 type openFileTarget struct {
@@ -414,6 +417,7 @@ func (h *workspaceManagerHandler) init(
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool,
 	releaseManager release.Manager,
+	planSource ideplan.Source,
 	shaderRunner *shaderRunner,
 	initialVTECapacity int,
 	dispatchOnPreview map[string]previewFunc,
@@ -470,7 +474,7 @@ func (h *workspaceManagerHandler) init(
 
 	h.homeURI = homeDirUri
 	h.homeWorkspace = homeWorkspace
-	h.setReleaseManager(releaseManager)
+	h.setupPackageDistribution(releaseManager, planSource)
 	h.events.setFocus(h.homeURI)
 
 	// don't install a fs watcher for the home workspace,
@@ -896,6 +900,13 @@ func (h *workspaceManagerHandler) Selection() (string, bool) {
 }
 
 func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg ideConfig) {
+	if h.planSource.PlanDecision(context.Background()).Kind == ideplan.Denied {
+		noti := h.notifications.current()
+		_, _ = noti.NotifyOnce(browserapi.LevelWarn,
+			"Extensions are disabled: subscription required. "+
+				"Run the `login` command after subscribing.")
+		return
+	}
 	var wg sync.WaitGroup
 	userExtensions := cfg.extensions()
 
@@ -1459,7 +1470,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		}
 	}()
 	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
-		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications)
+		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications, h.planSource)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)
 	}
@@ -2438,7 +2449,14 @@ func (h *workspaceManagerHandler) waitInflight() {
 	}
 }
 
-func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
+func (h *workspaceManagerHandler) setupPackageDistribution(
+	releaseManager release.Manager, planSource ideplan.Source,
+) {
+	if planSource == nil {
+		panic("setupPackageDistribution: planSource must not be nil; " +
+			"use ideplan.AlwaysAllowed() for unrestricted setups")
+	}
+	h.planSource = planSource
 	notifications := h.notifications.current()
 	if h.pkgmanager == nil {
 		h.pkgmanager = new(pkgManager)
@@ -2468,8 +2486,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	}
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
-		h, h, h.scheduleNextTick, parser,
-		editorMode)
+		h, h, h.scheduleNextTick, parser, editorMode, planSource)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }
 
