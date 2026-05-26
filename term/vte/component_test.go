@@ -551,6 +551,84 @@ func TestComponentAlternateScroll(t *testing.T) {
 	})
 }
 
+// TestComponentSnapshotIsConsistentUnderParserPressure regresses a
+// BYOE bug where the editorHandler refreshed its vteprobe from two
+// separate accessors (RawCells then CursorAtScreen). Each call locked
+// Component.mu independently, so the parser goroutine could advance
+// the grid between them and the resulting (cells, cursor) pair was
+// from two different parser-callback boundaries — vteprobe.Cursor.Infer
+// then confidently reported the wrong file line because its cursor
+// argument referred to a state the cells did not match. The race
+// detector did not see it: every read was properly synchronised, the
+// inconsistency was semantic, not concurrent unsynchronised access.
+//
+// The invariant exercised below holds at every parser-callback
+// boundary: immediately after Input, the row containing the cursor
+// has at least cursor.X populated cells (Input both writes a cell
+// and advances the cursor under one Lock). With a split snapshot
+// the cursor can be sampled after a later Input while the cells were
+// sampled before the row was rewritten, leaving cells[cursor.Y]
+// shorter than the cursor demands.
+func TestComponentSnapshotIsConsistentUnderParserPressure(t *testing.T) {
+	t.Parallel()
+
+	comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+		&mockTabManager{}, DefaultConfig())
+	require.NoError(t, err)
+	ph := comp.parserHandler
+	ph.sync.primBuf.SetDefaultChar(' ')
+	ph.sync.altBuf.SetDefaultChar(' ')
+	require.NoError(t, comp.Resize(40, 4))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var writerWG sync.WaitGroup
+	writerWG.Go(func() {
+		row := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			// Goto + Input together produce a state where row Y
+			// has at least cursor.X populated cells immediately
+			// after Input returns. Cycling rows keeps the cells
+			// "short" so a stale cells snapshot is observably
+			// shorter than the post-Input cursor demands.
+			ph.Goto(row, 0)
+			ph.ClearLine(vteparser.LineClearModeAll)
+			ph.Input('x')
+			row = (row + 1) % 4
+		}
+	})
+
+	const iterations = 5000
+	for range iterations {
+		snap, err := comp.Snapshot()
+		require.NoError(t, err)
+		active := snap.Active()
+		cells, cursor := active.Cells, active.Cursor
+		if cursor.X == 0 {
+			continue
+		}
+		require.Less(t, cursor.Y, len(cells),
+			"cursor.Y must be within the snapshotted cells")
+		row := cells[cursor.Y]
+		assert.GreaterOrEqual(t, len(row), cursor.X,
+			"the row holding the cursor must have at least cursor.X "+
+				"populated cells — Input writes a cell and advances "+
+				"the cursor under one lock, so a snapshot that "+
+				"observes a cursor at column N must observe a row "+
+				"with at least N cells. Seeing fewer means the "+
+				"cursor was sampled from a later parser callback "+
+				"than the cells.")
+	}
+	cancel()
+	writerWG.Wait()
+}
+
 func assertDraw(t *testing.T, comp *Component, expected string) {
 	t.Helper()
 	writer := term.NewStringWriter(comp.width, comp.height)
@@ -564,6 +642,8 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 type ptySize struct {
 	width, height int
 }
+
+
 
 // expanderFunc adapts a plain function into the CommandExpander
 // interface for tests.

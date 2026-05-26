@@ -328,6 +328,10 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 		reloader,
 		fallback,
 		h.envSource,
+		cfg.byoeOverrideHighlights(),
+		h,
+		svc,
+		h.clip,
 	)
 }
 

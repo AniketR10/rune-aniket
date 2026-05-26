@@ -472,6 +472,11 @@ config = {
             # the file explorer's tab). Valid values are "modal" or
             # "modeless".
             "fallback": "modal",
+            # When True, Rune overlays its own location-list attributes
+            # (syntax highlights, LSP diagnostics, debugger variables)
+            # on top of the external editor's output. Set to False to
+            # keep the external editor's native highlights untouched.
+            "override_highlights": False,
         },
         "indents": {
             "chatito": "spaces",

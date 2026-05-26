@@ -56,6 +56,18 @@ type VTE interface {
 	ClearPrimaryBuffer() bool
 }
 
+// Pin the subset of VTE that *vte.Handler must satisfy directly so
+// removing one of these methods from vte.Handler fails compilation
+// here, with a clear "missing method X" pointer, instead of producing
+// confusing interface-satisfaction errors at every vteAdapter call
+// site below.
+var _ interface {
+	OnFocusChange(bool)
+	SetDefaultAttributes(term.Attributes)
+	Snapshot() (vte.Snapshot, error)
+	RestoreFromSnapshot(vte.Snapshot) error
+} = (*vte.Handler)(nil)
+
 // Facility is a pool of vte instances.It only caches vte instances
 // that start with no initial commands,
 type Facility struct {

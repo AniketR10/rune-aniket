@@ -66,6 +66,24 @@ func (w wrapInfo) wrapOffsetAtRow(y int) int {
 	return w.wrapOffset[y]
 }
 
+// buildRowMappings projects a wrapInfo (indexed by full terminal row)
+// into the public RowMapping shape exported on Result.
+func buildRowMappings(totalRows int, w wrapInfo) []RowMapping {
+	out := make([]RowMapping, totalRows)
+	for y := 0; y < totalRows; y++ {
+		if y < len(w.rowFileLine) {
+			out[y].FileLine = w.rowFileLine[y]
+		}
+		if y < len(w.wrapOffset) {
+			out[y].WrapOffset = w.wrapOffset[y]
+		}
+		if y < len(w.folded) {
+			out[y].Folded = w.folded[y]
+		}
+	}
+	return out
+}
+
 // foldPlaceholderRE matches a fold placeholder anywhere in the body of
 // a row. Editors typically render placeholders like
 //

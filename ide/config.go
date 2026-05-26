@@ -1726,6 +1726,26 @@ func (c ideConfig) byoeFallback() string {
 	return editorFallbackModeless
 }
 
+// byoeOverrideHighlights reports whether Rune should overlay its
+// location-list attributes (syntax, diagnostics, debugger variables)
+// on top of the external editor's rendered output. Defaults to true
+// so users opt out rather than in; an unparseable value also yields
+// the default while recording the error.
+func (c ideConfig) byoeOverrideHighlights() bool {
+	cfg, ok := c.byoe()
+	if !ok {
+		return true
+	}
+	enabled, err := cfg.GetBool("override_highlights")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.byoe.override_highlights"] = err
+		}
+		return true
+	}
+	return enabled
+}
+
 func (c ideConfig) editorMode() (ret string) {
 	ret = "modal"
 	if c.cfg == nil {

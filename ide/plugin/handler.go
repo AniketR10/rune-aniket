@@ -362,7 +362,11 @@ func (e *Handler) initializeDoneHandler() {
 		e.doneHandler = e.liveHandler
 		return
 	}
-	buf := cell.CellsToBuffer(e.emulator.Component().RawCells())
+	snap, err := e.emulator.Component().Snapshot()
+	if err != nil {
+		return
+	}
+	buf := cell.CellsToBuffer(snap.Active().Cells)
 
 	uri := e.emulator.Component().URI()
 

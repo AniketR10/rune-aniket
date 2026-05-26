@@ -108,3 +108,40 @@ func visualToRawCol(line string, runeOffset int, tabstop int) int {
 	// past the last char (common in vim insert mode).
 	return rawCol + 1
 }
+
+// RawToVisualCol returns the 0-based visual rune-cell offset that the
+// 0-based raw rune column rawCol resolves to under tabstop. Tabs
+// expand to the next tabstop multiple; combining-only clusters
+// contribute zero visual cells but still consume one raw column. Out
+// of range rawCol values are clamped to the line's visual width.
+func RawToVisualCol(line string, rawCol, tabstop int) int {
+	if tabstop <= 0 {
+		tabstop = 1
+	}
+	if rawCol <= 0 {
+		return 0
+	}
+	visual := 0
+	raw := 0
+	state := -1
+	remainder := line
+	for len(remainder) > 0 && raw < rawCol {
+		var cluster string
+		var width uint8
+		cluster, remainder, width, state = graphemecluster.StepString(remainder, state)
+		if cluster == "" {
+			break
+		}
+		if cluster == "\t" {
+			pad := tabstop - (visual % tabstop)
+			if pad <= 0 {
+				pad = tabstop
+			}
+			visual += pad
+		} else {
+			visual += int(width)
+		}
+		raw++
+	}
+	return visual
+}

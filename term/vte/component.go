@@ -625,7 +625,7 @@ func (t *Component) OnFocusChange(inFocus bool) error {
 // they read from or otherwise depend on the Scroll's underlying
 // cell.Buffer; the VTE parser goroutine mutates that buffer under the
 // same Locker. For one-shot reads of the rendered grid, prefer
-// Component.RawCells which locks and clones for you.
+// Component.Snapshot which locks and clones for you.
 func (t *Component) PrimaryScroll() (*component.Scroll, sync.Locker) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -635,7 +635,7 @@ func (t *Component) PrimaryScroll() (*component.Scroll, sync.Locker) {
 // AlternateScroll mirrors PrimaryScroll for the alternate buffer. The
 // same locking contract applies: hold the returned Locker for as long
 // as the Scroll (or its underlying cell.Buffer) is in use. For
-// one-shot reads of the rendered grid, prefer Component.RawCells which
+// one-shot reads of the rendered grid, prefer Component.Snapshot which
 // locks and clones for you.
 func (t *Component) AlternateScroll() (*component.Scroll, sync.Locker) {
 	t.mu.Lock()
@@ -643,38 +643,47 @@ func (t *Component) AlternateScroll() (*component.Scroll, sync.Locker) {
 	return t.parserHandler.sync.altBuf.Scroll(), &t.mu
 }
 
-// RawCells returns a cloned snapshot of the rendered cell grid of the
-// currently active buffer (alternate when IsAltBuffer is true,
-// otherwise primary). The clone is detached from the live VTE state,
-// so callers can iterate it freely without holding any lock and
-// without racing the parser goroutine.
-func (t *Component) RawCells() [][]term.Cell {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.parserHandler.useAlt {
-		return term.CloneCells(t.parserHandler.sync.altBuf.Cells.RawCells())
-	}
-	return term.CloneCells(t.parserHandler.sync.primBuf.Cells.RawCells())
-}
-
-// Snapshot returns a durable snapshot of the terminal's primary rendered
-// buffer. It captures primary history plus visible screen, but it does not
-// attempt to persist the live pty process or alternate-screen program state.
+// Snapshot returns a durable snapshot of the terminal's currently
+// active rendered buffer together with the cursor position at the
+// same instant. The clone is detached from the live VTE state, so
+// callers can iterate it freely without holding any lock.
+//
+// Cells and cursor are read under one mutex acquire so the parser
+// goroutine cannot advance the grid between the two reads. The parser
+// applies pty bytes in many short critical sections, so a caller that
+// reads cells and cursor through separate accessors can observe a
+// cursor from a later parser state than the cells it just snapshotted
+// — feeding that mismatched pair to anything that interprets the grid
+// (e.g. vteprobe.Cursor.Infer) produces confidently-wrong results.
+// Use Snapshot whenever both the grid and the cursor are needed.
+//
+// Exactly one of Snapshot.Primary or Snapshot.Alternate is populated,
+// matching the buffer that was active at snapshot time. Snapshot does
+// not attempt to persist the live pty process or the inactive buffer.
 func (t *Component) Snapshot() (Snapshot, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	return Snapshot{
+	snap := Snapshot{
 		Version:      terminalSnapshotVersion,
 		Title:        t.parserHandler.title,
 		Width:        t.width,
 		Height:       t.height,
 		ScrollOffset: t.scroll.Offset(),
-		Primary: ScreenSnapshot{
+	}
+	cursor := t.parserHandler.sync.buf.CursorAtScreen()
+	if t.parserHandler.useAlt {
+		snap.Alternate = ScreenSnapshot{
+			Cells:  term.CloneCells(t.parserHandler.sync.altBuf.Cells.RawCells()),
+			Cursor: cursor,
+		}
+	} else {
+		snap.Primary = ScreenSnapshot{
 			Cells:  term.CloneCells(t.parserHandler.sync.primBuf.Cells.RawCells()),
-			Cursor: t.parserHandler.sync.primBuf.CursorAtScroll(),
-		},
-	}, nil
+			Cursor: cursor,
+		}
+	}
+	return snap, nil
 }
 
 // RestoreFromSnapshot restores a previously captured terminal snapshot

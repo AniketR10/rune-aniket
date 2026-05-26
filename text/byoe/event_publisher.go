@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,62 +21,25 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package vte
+package byoe
 
 import (
-	"context"
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/browser"
 )
 
-func TestTerminalSnapshotStorageRoundTripTermCells(t *testing.T) {
-	type doc struct {
-		Snapshot Snapshot
+type eventPublisher struct {
+	publisher browser.EventPublisher
+	refresh   func()
+}
+
+func newEventPublisher(publisher browser.EventPublisher) *eventPublisher {
+	return &eventPublisher{publisher: publisher}
+}
+
+func (p *eventPublisher) PublishEvent(ev term.Event) error {
+	if ev.Type == term.EventInterrupt && p.refresh != nil {
+		p.refresh()
 	}
-
-	stored := doc{Snapshot: Snapshot{
-		Version:      terminalSnapshotVersion,
-		Title:        "saved",
-		Width:        80,
-		Height:       24,
-		ScrollOffset: term.Coordinates{Y: 3, X: 1},
-		Primary: ScreenSnapshot{
-			Cursor: term.Coordinates{Y: 7, X: 4},
-			Cells: [][]term.Cell{
-				{
-					{
-						Attributes: term.Attributes{
-							Fg:    term.ColorRed,
-							Bg:    term.ColorBlue,
-							Attrs: term.AttrBold | term.AttrUnderline,
-						},
-						Ch:        'e',
-						Combining: &[]rune{'\u0301'},
-						Width:     1,
-						Bytes:     3,
-					},
-					{Ch: '界', Combining: nil, Width: 2, Bytes: 3},
-				},
-			},
-		},
-		Alternate: ScreenSnapshot{
-			Cursor: term.Coordinates{Y: 1, X: 2},
-			Cells: [][]term.Cell{
-				{
-					{Ch: 'a', Width: 1, Bytes: 1},
-					{Ch: 'b', Width: 1, Bytes: 1},
-				},
-			},
-		},
-	}}
-
-	svc := storagestub.NewInMemoryService()
-	require.NoError(t, svc.Set(context.Background(), "terminal", stored))
-
-	var actual doc
-	require.NoError(t, svc.Get(context.Background(), "terminal", &actual))
-	require.Equal(t, stored, actual)
+	return p.publisher.PublishEvent(ev)
 }

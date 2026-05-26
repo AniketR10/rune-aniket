@@ -30,8 +30,10 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/byoe"
@@ -72,12 +74,17 @@ func New(
 	reloader byoe.Reloader,
 	fallback text.Editor,
 	env cmdenv.Source,
+	overrideHighlights bool,
+	registry text.WorkspaceCommandRegistry,
+	vctrlSvc vctrl.Service,
+	clip clipboard.Register,
 ) *Editor {
 	return newWithEditors(
 		byoe.New(
 			command, gotoTemplate, scheduleNextTick,
 			cwd, workspaceURI, notifications, publisher,
 			terminal, executor, tabManager, vteCfg, reloader, env,
+			overrideHighlights, registry, vctrlSvc, clip,
 		),
 		fallback,
 	)

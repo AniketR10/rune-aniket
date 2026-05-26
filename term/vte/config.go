@@ -102,6 +102,20 @@ type Config struct {
 	// the pty slave so it surfaces in the floating window like any
 	// other failure, and the Watcher fires with that error.
 	CommandExpander CommandExpander
+
+	// DisablePerformanceInterrupt opts out of the EventInterrupt
+	// coalescing that vte.Handler normally applies to keep terminal
+	// sessions cheap to redraw. When false (default) the publisher
+	// goroutine is parked for the duration of Handle, and Handle
+	// itself consumes one post-write update directly off updateCh —
+	// so a single keypress that causes a multi-flush repaint results
+	// in at most one EventInterrupt reaching the publisher.
+	//
+	// Set this to true when a caller (e.g. BYOE) needs to observe
+	// every grid mutation as it happens, because something downstream
+	// of the publisher must keep state synchronized with the embedded
+	// program's actual repaint cadence (vteprobe.Cursor.Infer).
+	DisablePerformanceInterrupt bool
 }
 
 // CommandExpander resolves a vte command line before the foreign

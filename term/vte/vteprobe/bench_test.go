@@ -92,3 +92,84 @@ func BenchmarkCursorInfer(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkCursorInferMatrix runs Cursor.Infer against every
+// (sample, editor) fixture under testdata/samples so the inference
+// cost can be compared across editor chromes (vim, nvim, emacs, hx,
+// nano), across content shapes (go-basic, go-complex, go-cli with a
+// non-zero scroll offset, go-pem / go-pem-eof whose long PEM blocks
+// stress wrap detection), and across cursor positions captured in the
+// fixture. Each sub-benchmark prepares its buffer and warms the
+// file-content cache outside the timing loop so the steady-state
+// inference path is what we measure.
+func BenchmarkCursorInferMatrix(b *testing.B) {
+	samples, err := discoverSamples("testdata/samples")
+	if err != nil {
+		b.Fatalf("discover samples: %v", err)
+	}
+	if len(samples) == 0 {
+		b.Skip("no samples under testdata/samples")
+	}
+
+	const filePath = "/sample.txt"
+	uri, err := workspaceapi.ParseURI("file://" + filePath)
+	if err != nil {
+		b.Fatalf("parse uri: %v", err)
+	}
+
+	for _, s := range samples {
+		if len(s.editors) == 0 {
+			continue
+		}
+		sampleBytes, err := os.ReadFile(s.sampleFile)
+		if err != nil {
+			b.Fatalf("read sample %q: %v", s.name, err)
+		}
+		for _, ed := range s.editors {
+			b.Run(s.name+"/"+ed.name, func(b *testing.B) {
+				benchInferFixture(b, sampleBytes, uri, ed)
+			})
+		}
+	}
+}
+
+func benchInferFixture(
+	b *testing.B, sampleBytes []byte, uri workspaceapi.URI, ed editorCase,
+) {
+	b.Helper()
+
+	fx, err := loadEditorFixture(ed.dir)
+	if err != nil {
+		b.Fatalf("load fixture: %v", err)
+	}
+	screen, err := os.ReadFile(filepath.Join(ed.dir, "screen.ansi"))
+	if err != nil {
+		b.Fatalf("read screen: %v", err)
+	}
+	cur, err := readCursor(filepath.Join(ed.dir, "cursor.txt"))
+	if err != nil {
+		b.Fatalf("read cursor: %v", err)
+	}
+
+	data := captureToReplayBytes(screen, fx.Width, fx.Height, cur)
+	buf, _, err := vte.Replay(fx.Width, fx.Height, data)
+	if err != nil {
+		b.Fatalf("replay: %v", err)
+	}
+
+	fs := newFakeFS(map[string][]byte{"/sample.txt": sampleBytes})
+	c := New(fs, []int{4, 2, 8}, fx.MinConfidence, 8<<20)
+	cells := buf.RawCells()
+	if _, err := c.Infer(context.Background(), uri, cells, cur); err != nil {
+		b.Fatalf("warmup infer: %v", err)
+	}
+
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := c.Infer(ctx, uri, cells, cur); err != nil {
+			b.Fatalf("infer: %v", err)
+		}
+	}
+}

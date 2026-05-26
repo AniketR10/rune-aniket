@@ -261,3 +261,55 @@ func TestValidateBYOEFallbackInvalidValueRewrites(t *testing.T) {
 	// editor.mode remains "byoe" since command/goto are valid.
 	assert.Equal(t, "byoe", ic.editorMode())
 }
+
+// TestByoeOverrideHighlights table-tests the accessor: defaults to
+// true when unset, round-trips explicit true/false, and falls back to
+// true while recording an error when the value is the wrong type.
+func TestByoeOverrideHighlights(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		raw        any
+		setRaw     bool
+		wantValue  bool
+		wantErrKey bool
+	}{
+		{name: "unset defaults to true", wantValue: true},
+		{name: "explicit true", setRaw: true, raw: true, wantValue: true},
+		{name: "explicit false", setRaw: true, raw: false, wantValue: false},
+		{
+			name:       "non-bool falls back to true",
+			setRaw:     true,
+			raw:        "yes",
+			wantValue:  true,
+			wantErrKey: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			byoe := map[string]any{
+				"command": "vim {file}",
+				"goto":    "<esc>:{line}<enter>",
+			}
+			if tc.setRaw {
+				byoe["override_highlights"] = tc.raw
+			}
+			cfg := ideConfig{
+				cfg: map[string]any{
+					"editor": map[string]any{
+						"mode": "byoe",
+						"byoe": byoe,
+					},
+				},
+				errors: map[string]error{},
+			}
+			got := cfg.byoeOverrideHighlights()
+			assert.Equal(t, tc.wantValue, got)
+			_, hadErr := cfg.errors["editor.byoe.override_highlights"]
+			assert.Equal(t, tc.wantErrKey, hadErr,
+				"expected errors entry to %v", tc.wantErrKey)
+		})
+	}
+}

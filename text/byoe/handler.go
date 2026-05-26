@@ -26,8 +26,13 @@ package byoe
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"sync"
+	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -61,6 +66,13 @@ type editorHandler struct {
 	watchActive      bool
 	cancelCtx        context.CancelFunc
 	reloader         Reloader
+
+	overrideHighlights bool
+	locations          *text.LocationStore
+	lastProbe          atomic.Pointer[vteprobe.Result]
+
+	debugMu      sync.Mutex
+	debugLastMsg map[string]string
 }
 
 // newHandler builds a wrapper around vteH, hooks the file watcher, and
@@ -72,19 +84,22 @@ func newHandler(
 	notifications browserapi.Notifications,
 	scheduleNextTick func(func()) bool,
 	reloader Reloader,
+	overrideHighlights bool,
 ) *editorHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
-		Handler:          vteH,
-		buf:              buf,
-		resource:         uri,
-		gotoTemplate:     gotoTpl,
-		cwd:              cwd,
-		notifications:    notifications,
-		scheduleNextTick: scheduleNextTick,
-		cancelCtx:        cancel,
-		reloader:         reloader,
-		probe:            vteprobe.New(cwd, []int{8, 4, 2}, 0.6, 8<<20),
+		Handler:            vteH,
+		buf:                buf,
+		resource:           uri,
+		gotoTemplate:       gotoTpl,
+		cwd:                cwd,
+		notifications:      notifications,
+		scheduleNextTick:   scheduleNextTick,
+		cancelCtx:          cancel,
+		reloader:           reloader,
+		probe:              vteprobe.New(cwd, []int{8, 4, 2}, 0.6, 8<<20),
+		overrideHighlights: overrideHighlights,
+		locations:          text.NewLocationStore(),
 	}
 	h.startWatcher(ctx)
 	return h
@@ -154,24 +169,21 @@ func (h *editorHandler) scheduleReload(uri workspaceapi.URI) {
 // Resource satisfies text.Handler.
 func (h *editorHandler) Resource() workspaceapi.URI { return h.resource }
 
-// CursorAtScroll asks vteprobe to map the embedded editor's
-// screen-relative cursor back to a file position by aligning the
-// rendered cell grid against the on-disk file. The first revision is
-// intentionally naive: snapshot the active buffer on every call, run
-// a fresh inference, and return zero on any failure. There is no
-// caching beyond what vteprobe.Cursor already does internally for
-// file contents.
+// CursorAtScroll returns the file-content cursor inferred by the last
+// Draw. Probing happens in Draw rather than in Handle because Handle
+// only enqueues bytes into the pty master: the embedded editor's
+// response (the screen update we care about) is parsed asynchronously
+// by the vte run goroutine and applied to the cell.Buffer through
+// ScheduleNextTick. By the time Draw runs the host event loop has
+// already drained those scheduled callbacks, so RawCells() reflects
+// the post-Handle state. Returns the zero value before the first
+// Draw or whenever the most recent Infer failed.
 func (h *editorHandler) CursorAtScroll() term.Coordinates {
-	comp := h.Handler.Component()
-	if comp == nil {
+	probe := h.lastProbe.Load()
+	if probe == nil {
 		return term.Coordinates{}
 	}
-	res, err := h.probe.Infer(context.Background(), h.resource,
-		comp.RawCells(), comp.CursorAtScreen())
-	if err != nil {
-		return term.Coordinates{}
-	}
-	return res.CursorAtScroll
+	return probe.CursorAtScroll
 }
 
 // SetCursorAtScroll injects the configured goto sequence into the
@@ -193,20 +205,112 @@ func (h *editorHandler) SetWrap(wrap bool) {}
 // ShowCommandBar is a nop.
 func (h *editorHandler) ShowCommandBar(show bool) {}
 
-// SetLocationList is a nop.
+// SetLocationList records a location list so the next Draw can
+// overlay its attributes on top of the embedded editor's output.
+// MoveTo{Next,Prev}Location remain unimplemented because they need
+// editor-specific key sequences to drive the embedded cursor, but the
+// store is updated so observers querying LocationLists see the same
+// state non-BYOE editors expose.
 func (h *editorHandler) SetLocationList(
-	textapi.LocationPriority, string, text.LocationList,
+	pri textapi.LocationPriority, id string, l text.LocationList,
 ) {
+	h.locations.SetLocationList(pri, id, l)
 }
 
-// LocationLists returns nil.
-func (h *editorHandler) LocationLists() []text.LocationSet { return nil }
+// LocationLists returns the currently registered location lists.
+func (h *editorHandler) LocationLists() []text.LocationSet {
+	return h.locations.LocationLists()
+}
 
-// MoveToNextLocation is a nop.
-func (h *editorHandler) MoveToNextLocation(string) bool { return false }
+// MoveToNextLocation drives the embedded editor's cursor to the next
+// location on the list named ID, picking the first location strictly
+// past CursorAtScroll (or wrapping to the start of the list when the
+// cursor is past the last location). Returns false when the list is
+// unknown, empty, or no goto template is configured.
+func (h *editorHandler) MoveToNextLocation(id string) bool {
+	return h.moveToLocation(id, true)
+}
 
-// MoveToPrevLocation is a nop.
-func (h *editorHandler) MoveToPrevLocation(string) bool { return false }
+// MoveToPrevLocation drives the embedded editor's cursor to the
+// location immediately before CursorAtScroll on the list named ID, or
+// wraps to the end of the list when no earlier location exists.
+// Returns false under the same conditions as MoveToNextLocation.
+func (h *editorHandler) MoveToPrevLocation(id string) bool {
+	return h.moveToLocation(id, false)
+}
+
+// moveToLocation walks the named list to find the location to jump to
+// relative to CursorAtScroll, then dispatches the goto sequence via
+// SetCursorAtScroll. forward=true walks Next looking for the first
+// location strictly past the cursor; forward=false walks Prev looking
+// for the first location strictly before it. Both wrap around when no
+// candidate satisfies the predicate.
+func (h *editorHandler) moveToLocation(id string, forward bool) bool {
+	l, ok := h.locations.LocationList(id)
+	if !ok {
+		return false
+	}
+	cursor := h.CursorAtScroll()
+	target, ok := pickLocation(l, cursor, forward)
+	if !ok {
+		return false
+	}
+	return h.SetCursorAtScroll(target.From)
+}
+
+// pickLocation walks l from its first entry collecting every
+// location, then picks the next one strictly past cursor (when
+// forward is true) or the last one strictly before cursor (when
+// forward is false). With no candidate, it wraps — returning the
+// first location for forward and the last for backward, matching
+// text.Cursor.MoveTo{Next,Prev}Location semantics.
+func pickLocation(
+	l text.LocationList, cursor term.Coordinates, forward bool,
+) (textapi.Location, bool) {
+	rewindLocationList(l)
+	first, ok := l.Current()
+	if !ok {
+		return textapi.Location{}, false
+	}
+	locs := []textapi.Location{first}
+	for {
+		loc, ok := l.Next()
+		if !ok {
+			break
+		}
+		locs = append(locs, loc)
+	}
+	if forward {
+		for _, loc := range locs {
+			if isAfter(loc.From, cursor) {
+				return loc, true
+			}
+		}
+		return locs[0], true
+	}
+	for i := len(locs) - 1; i >= 0; i-- {
+		if isBefore(locs[i].From, cursor) {
+			return locs[i], true
+		}
+	}
+	return locs[len(locs)-1], true
+}
+
+func isAfter(pos, cursor term.Coordinates) bool {
+	return pos.Y > cursor.Y || (pos.Y == cursor.Y && pos.X > cursor.X)
+}
+
+func isBefore(pos, cursor term.Coordinates) bool {
+	return pos.Y < cursor.Y || (pos.Y == cursor.Y && pos.X < cursor.X)
+}
+
+func rewindLocationList(l text.LocationList) {
+	for {
+		if _, ok := l.Prev(); !ok {
+			return
+		}
+	}
+}
 
 // SetDefaultAttributes is a nop.
 func (h *editorHandler) SetDefaultAttributes(term.Attributes) {}
@@ -217,9 +321,78 @@ func (h *editorHandler) IsSearchMode() bool { return false }
 // CellView returns the watcher-synced buffer view.
 func (h *editorHandler) CellView() cell.View { return h.buf.View() }
 
+// Draw forwards to the embedded vte.Handler and, when override is
+// enabled, strips the embedded editor's attributes (so Rune fully
+// owns highlighting) then overlays the configured location lists on
+// top of the rendered grid. The cached probe is refreshed by the
+// interrupter wired in editor.Edit, not here: only EventInterrupt
+// signals that the embedded editor actually mutated its cell grid,
+// and most Draw calls (e.g. focus changes elsewhere in the IDE) do
+// not.
+func (h *editorHandler) Draw(w term.Writer) {
+	probe := h.lastProbe.Load()
+	if !h.overrideHighlights {
+		h.Handler.Draw(w)
+		return
+	}
+	h.Handler.Draw(ignoreAttrWriter{Writer: w})
+	if probe == nil {
+		h.debugByoe("draw", "probe=nil")
+		return
+	}
+	locs := h.locations.SortedLocations()
+	h.debugByoe("draw", fmt.Sprintf(
+		"bands={top=%d,bot=%d,gutter=%d,grid=%d} rows=%d locs=%d",
+		probe.Bands.Top, probe.Bands.Bottom, probe.Bands.GutterWidth,
+		probe.Bands.GridWidth, len(probe.Rows), len(locs)))
+	drawLocations(w, locs, probe)
+}
+
+// refreshProbe re-runs vteprobe against the current cell grid.
+// A failed Infer (cursor on chrome, transient redraw mid-clear,
+// confidence below threshold, …) keeps the previous result so the
+// overlay does not flicker off between successful probes.
+func (h *editorHandler) refreshProbe() {
+	comp := h.Handler.Component()
+	snap, err := comp.Snapshot()
+	if err != nil {
+		h.debugByoe("refresh", fmt.Sprintf("snapshot err: %v", err))
+		return
+	}
+	active := snap.Active()
+	res, err := h.probe.Infer(context.Background(), h.resource,
+		active.Cells, active.Cursor)
+	if err != nil {
+		h.debugByoe("refresh", fmt.Sprintf("infer err: %v", err))
+		return
+	}
+	h.debugByoe("refresh", fmt.Sprintf(
+		"cursor=%+v bands={top=%d,bot=%d,gutter=%d,grid=%d} rows=%d",
+		res.CursorAtScroll, res.Bands.Top, res.Bands.Bottom,
+		res.Bands.GutterWidth, res.Bands.GridWidth, len(res.Rows)))
+	h.lastProbe.Store(&res)
+}
+
 // CellEditor returns a no-op cell.Editor: the external editor is the
 // only writer to the file and Rune-level edits would fight with it.
 func (h *editorHandler) CellEditor() cell.Editor { return nopCellEditor{} }
+
+// debugByoe logs msg under the given site, deduping back-to-back
+// identical messages so the log stays readable when refreshProbe /
+// Draw run on every interrupt.
+func (h *editorHandler) debugByoe(site, msg string) {
+	h.debugMu.Lock()
+	if h.debugLastMsg == nil {
+		h.debugLastMsg = make(map[string]string)
+	}
+	if h.debugLastMsg[site] == msg {
+		h.debugMu.Unlock()
+		return
+	}
+	h.debugLastMsg[site] = msg
+	h.debugMu.Unlock()
+	log.WithField(logging.KeyClass, "byoe."+site).Info(msg)
+}
 
 // Dimensions reports the ideal size needed to render the buffer
 // without clipping.

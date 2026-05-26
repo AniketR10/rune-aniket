@@ -102,3 +102,15 @@ func extractRow(cells []term.Cell) extractedRow {
 	}
 	return extractedRow{runes: runes, attrs: attrs, runeColMap: runeCol}
 }
+
+// gridWidth reports the visual width of the rendered grid, taken from
+// the widest row. Returns 0 for an empty grid.
+func gridWidth(rows []extractedRow) int {
+	w := 0
+	for i := range rows {
+		if n := len(rows[i].runeColMap); n > w {
+			w = n
+		}
+	}
+	return w
+}

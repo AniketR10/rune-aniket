@@ -35,6 +35,12 @@ const terminalSnapshotVersion = 1
 // process attached to the pty. This mirrors tmux's distinction between an
 // in-memory pane grid/history and process respawn: saved snapshots can restore
 // output/history, but cannot continue the original process after Rune exits.
+//
+// Exactly one of Primary or Alternate is populated, matching the buffer
+// that was active at snapshot time. Reading both cells and cursor under
+// one mutex acquire — instead of through separate component accessors —
+// is what callers like vteprobe rely on to keep the two consistent
+// across parser callbacks.
 type Snapshot struct {
 	Version int
 	Title   string
@@ -43,11 +49,23 @@ type Snapshot struct {
 
 	ScrollOffset term.Coordinates
 	Primary      ScreenSnapshot
+	Alternate    ScreenSnapshot
 }
 
-// ActiveCells returns the cells that should be displayed for this snapshot.
+// ActiveCells returns the cells of the buffer that was active when the
+// snapshot was taken (Alternate when populated, Primary otherwise).
 func (s Snapshot) ActiveCells() [][]term.Cell {
-	return term.CloneCells(s.Primary.Cells)
+	return term.CloneCells(s.Active().Cells)
+}
+
+// Active returns the ScreenSnapshot of the buffer that was active when
+// the snapshot was taken: Alternate when its Cells are populated,
+// otherwise Primary.
+func (s Snapshot) Active() ScreenSnapshot {
+	if len(s.Alternate.Cells) != 0 {
+		return s.Alternate
+	}
+	return s.Primary
 }
 
 // ScreenSnapshot is the rendered state of one VTE screen buffer.

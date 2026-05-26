@@ -1,0 +1,24 @@
+        // this CLI is to be used. It should ONLY include
+        // the semantic information about how arguments are parsed.
+        //
+        // Example: [<options>] [<revision-range>] [[--] <path>...]
+        Synopsis string
+
+        // Commands is a list of accepted commands or nil
+        // if no commands are expected.
+        Commands []Manual
+
+        Options FlagSet
+}
+
+// CLI represents a command-line interface.
+type CLI interface {
+        // Parse takes args and interprets them.
+        Run(ctx context.Context, args []string) error
+
+        Man() Manual
+}
+
+// FlagSet is just a type alias used to foster NewFlagSet usage.
+[1;7msamples/go-cli/sample.txt                                     50,0-1         33%
+[0m

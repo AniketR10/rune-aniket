@@ -5,7 +5,7 @@
 # per-editor fixtures.
 #
 # Usage:
-#   ./capture.sh <sample> <editor> [line] [col]
+#   ./capture.sh <sample> <editor> [line] [col] [post-keys]
 #
 # <sample> is the directory name under testdata/samples/ (e.g.
 #   `go-basic`); the sample file is testdata/samples/<sample>/sample.txt.
@@ -15,6 +15,12 @@
 #   (line, col) before capturing — handy for capturing scrolled states
 #   that exercise alignment code paths (e.g. cursor near EOF in a file
 #   with many `}` lines). Defaults: line=1, col=1.
+# [post-keys] is an optional literal key sequence fed to the editor
+#   via `tmux send-keys` after the initial positioning and before
+#   the screen is captured. Use it to reproduce bugs that only
+#   manifest after a specific motion (e.g. `k` to move up from the
+#   line the initial positioning landed on). The string is passed
+#   verbatim, so use tmux's literal-key syntax (no Enter appended).
 #
 # Output lands in testdata/samples/<sample>/<editor>/:
 #   screen.ansi   — raw ANSI byte stream from `tmux capture-pane -p -e -S -`
@@ -25,8 +31,8 @@
 
 set -euo pipefail
 
-if [[ $# -lt 2 || $# -gt 4 ]]; then
-    echo "usage: $0 <sample> <editor> [line] [col]" >&2
+if [[ $# -lt 2 || $# -gt 5 ]]; then
+    echo "usage: $0 <sample> <editor> [line] [col] [post-keys]" >&2
     exit 2
 fi
 
@@ -34,6 +40,7 @@ sample="$1"
 editor="$2"
 line="${3:-1}"
 col="${4:-1}"
+postkeys="${5:-}"
 root="$(cd "$(dirname "$0")" && pwd)"
 sample_file="$root/samples/$sample/sample.txt"
 outdir="$root/samples/$sample/$editor"
@@ -90,6 +97,12 @@ esac
 tmux send-keys -t "$session" "$cmd" Enter
 # Allow time for the editor to paint its initial screen.
 sleep 1.5
+
+if [[ -n "$postkeys" ]]; then
+    tmux send-keys -t "$session" "$postkeys"
+    # Give the editor a beat to repaint after the motion.
+    sleep 0.3
+fi
 
 tmux capture-pane -t "$session" -p -e -S - >"$outdir/screen.ansi"
 tmux display-message -t "$session" -p '#{cursor_x},#{cursor_y}' \

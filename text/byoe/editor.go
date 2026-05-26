@@ -40,11 +40,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/text/cmdenv"
+	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/ide/vctrl/vctrlcmd"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -62,6 +65,10 @@ func New(
 	vteCfg vte.Config,
 	reloader Reloader,
 	env cmdenv.Source,
+	overrideHighlights bool,
+	registry text.WorkspaceCommandRegistry,
+	vctrlSvc vctrl.Service,
+	clip clipboard.Register,
 ) *Editor {
 	switch {
 	case command == "":
@@ -88,19 +95,25 @@ func New(
 		panic("byoe.New: invalid gotoTemplate: " + err.Error())
 	}
 	ret := &Editor{
-		command:          command,
-		gotoTemplate:     tpl,
-		scheduleNextTick: scheduleNextTick,
-		cwd:              cwd,
-		workspaceURI:     workspaceURI,
-		notifications:    notifications,
-		publisher:        publisher,
-		terminal:         terminal,
-		executor:         executor,
-		tabManager:       tabManager,
-		vteCfg:           vteCfg,
-		reloader:         reloader,
-		env:              env,
+		command:            command,
+		gotoTemplate:       tpl,
+		scheduleNextTick:   scheduleNextTick,
+		cwd:                cwd,
+		workspaceURI:       workspaceURI,
+		notifications:      notifications,
+		publisher:          publisher,
+		terminal:           terminal,
+		executor:           executor,
+		tabManager:         tabManager,
+		vteCfg:             vteCfg,
+		reloader:           reloader,
+		env:                env,
+		overrideHighlights: overrideHighlights,
+		vctrlSvc:           vctrlSvc,
+		clipboard:          clip,
+	}
+	if registry != nil {
+		ret.fileRegistry = text.NewFileCommandRegistry(workspaceURI, registry)
 	}
 	ret.pub.Init()
 	return ret
@@ -109,19 +122,23 @@ func New(
 // Editor implements text.Editor. Its zero value is not usable; use
 // the New constructor.
 type Editor struct {
-	command          string
-	gotoTemplate     gotoTemplate
-	scheduleNextTick func(func()) bool
-	cwd              workspace.Workspace
-	workspaceURI     workspaceapi.URI
-	notifications    browserapi.Notifications
-	publisher        browser.EventPublisher
-	terminal         schemeapi.Terminal
-	executor         schemeapi.Executor
-	tabManager       browser.TabManager
-	vteCfg           vte.Config
-	reloader         Reloader
-	env              cmdenv.Source
+	command            string
+	gotoTemplate       gotoTemplate
+	scheduleNextTick   func(func()) bool
+	cwd                workspace.Workspace
+	workspaceURI       workspaceapi.URI
+	notifications      browserapi.Notifications
+	publisher          browser.EventPublisher
+	terminal           schemeapi.Terminal
+	executor           schemeapi.Executor
+	tabManager         browser.TabManager
+	vteCfg             vte.Config
+	reloader           Reloader
+	env                cmdenv.Source
+	overrideHighlights bool
+	fileRegistry       text.FileCommandRegistry
+	vctrlSvc           vctrl.Service
+	clipboard          clipboard.Register
 
 	pub text.Publisher
 }
@@ -163,17 +180,37 @@ func (e *Editor) Edit(
 	cfg.CommandAndArgs = []string{cmdStr}
 	cfg.Modal = false
 	cfg.ScheduleNextTick = e.scheduleNextTick
+	// refreshProbe must see every grid mutation to keep vteprobe
+	// in sync with the embedded editor's repaint cadence; opt out
+	// of the publisher-side coalescing that terminal sessions use.
+	cfg.DisablePerformanceInterrupt = true
 
+	pub := newEventPublisher(e.publisher)
 	vteH, err := vte.NewHandler(
-		e.publisher, e.notifications,
+		pub, e.notifications,
 		e.terminal, e.executor, e.tabManager, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("byoe: new vte handler: %w", err)
 	}
 
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
-		e.cwd, e.notifications, e.scheduleNextTick, e.reloader)
-	return e.pub.PublishExternalEdit(file, buf, h), nil
+		e.cwd, e.notifications, e.scheduleNextTick, e.reloader,
+		e.overrideHighlights)
+	pub.refresh = h.refreshProbe
+	var ret text.Handler = h
+	if e.fileRegistry != nil {
+		var err error
+		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
+		if err != nil {
+			return nil, fmt.Errorf("byoe: subscribe location commands: %w", err)
+		}
+		ret, err = vctrlcmd.SubscribeGitCommands(file, e.fileRegistry,
+			ret, e.vctrlSvc, e.clipboard, e.notifications)
+		if err != nil {
+			return nil, fmt.Errorf("byoe: subscribe git commands: %w", err)
+		}
+	}
+	return e.pub.PublishExternalEdit(file, buf, ret), nil
 }
 
 // SubscribeCommand returns an error: byoe does not host Rune-side

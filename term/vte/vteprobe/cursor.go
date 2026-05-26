@@ -81,6 +81,64 @@ type Result struct {
 	// is correct. Callers that received a non-error Result may still
 	// want to threshold it depending on their tolerance for mistakes.
 	Confidence float64
+	// Bands describes the editor's chrome and gutter layout: the
+	// inclusive [Top, Bottom] terminal-row range that holds file
+	// content, and GutterWidth the number of visual columns consumed
+	// by the line-number gutter (0 when no gutter is present). Right
+	// chrome (e.g. a sign column on the right edge) is not detected;
+	// the right edge is the grid width.
+	Bands Bands
+	// Rows projects each terminal row of the rendered grid back to a
+	// position in the file. Len(Rows) equals the number of rows in
+	// the input cell grid. Rows outside the content band have
+	// FileLine == 0 and Folded == false. The leading content row
+	// reports WrapOffset == 0; soft-wrap continuation rows carry a
+	// positive WrapOffset (rune-cell offset into the file line).
+	Rows []RowMapping
+	// FileLines is the on-disk file content split into lines (no
+	// trailing newline). Callers that need to translate raw file
+	// columns into the visual columns used by Rows/Bands (e.g. to
+	// project a location's tab-relative coordinates onto the
+	// rendered grid) can read this slice instead of re-opening the
+	// file. Indices are 0-based; Len matches the number of source
+	// lines. The slice is shared with the probe's internal cache —
+	// callers must not mutate it.
+	FileLines []string
+}
+
+// Bands describes the chrome and gutter layout the probe inferred.
+type Bands struct {
+	// Top is the inclusive terminal-row index of the first content
+	// row (the first row after any top chrome).
+	Top int
+	// Bottom is the inclusive terminal-row index of the last content
+	// row (the last row before any bottom chrome).
+	Bottom int
+	// GutterWidth is the visual column width consumed by the
+	// line-number gutter at the left of the content band. Zero when
+	// no gutter is present.
+	GutterWidth int
+	// GridWidth is the total visual width of the terminal grid in
+	// cells. Right-edge chrome (e.g. a sign column) is not detected;
+	// the body width is GridWidth - GutterWidth.
+	GridWidth int
+}
+
+// RowMapping describes how a single terminal row projects back to a
+// position in the file.
+type RowMapping struct {
+	// FileLine is the 1-based file line displayed on this row, or 0
+	// when the row is not anchored to a file line (chrome row,
+	// out-of-band, or empty trailing row past EOF).
+	FileLine int
+	// WrapOffset is the rune-cell offset (after gutter strip and tab
+	// expansion) at which the row starts into its FileLine. Always 0
+	// for the leading segment of a non-wrapped line and for the first
+	// segment of a soft-wrapped line.
+	WrapOffset int
+	// Folded is true when the row is a fold placeholder. FileLine
+	// then points at the first folded line.
+	Folded bool
 }
 
 // ErrUnknown is returned by Cursor.Infer when the package cannot infer
@@ -276,6 +334,14 @@ func (i *Cursor) Infer(
 		Tabstop:    align.tabstop,
 		Folded:     folded,
 		Confidence: computeConfidence(align, wrap, rows, cur),
+		Bands: Bands{
+			Top:         top,
+			Bottom:      bot,
+			GutterWidth: gut.width,
+			GridWidth:   gridWidth(rows),
+		},
+		Rows:      buildRowMappings(len(rows), wrap),
+		FileLines: lines,
 	}
 	if log.IsLevelEnabled(log.DebugLevel) {
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").

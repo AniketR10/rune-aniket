@@ -74,7 +74,7 @@ type Handler struct {
 	exit          atomic.Bool // whether running shell/program has exited
 	width, height int
 	updateCh      chan struct{}
-	sema          chan struct{}
+	sema          chan struct{} // nil when DisablePerformanceInterrupt
 }
 
 // NewHandler allocates storage for a new Handler and initializes it.
@@ -133,7 +133,9 @@ func (e *Handler) Init(
 	e.ctx, e.cancelCtx = context.WithCancel(context.Background())
 
 	e.updateCh = make(chan struct{}, 1)
-	e.sema = make(chan struct{})
+	if !config.DisablePerformanceInterrupt {
+		e.sema = make(chan struct{})
+	}
 	go debug.CapturePanicReport(func() {
 		logErr := e.comp.Run(e.updateCh)
 		e.exit.Store(true)
@@ -150,12 +152,25 @@ func (e *Handler) Init(
 
 	go debug.CapturePanicReport(func() {
 		for {
-			select {
-			case <-e.sema:
-				e.sema <- struct{}{}
-			case <-e.ctx.Done():
-				return
-			case <-e.updateCh:
+			if e.sema != nil {
+				// Park the publisher while Handle is running so a
+				// keystroke that triggers a multi-flush repaint
+				// produces at most one EventInterrupt downstream.
+				// The handshake mirrors Handle's send/receive on
+				// the same channel.
+				select {
+				case <-e.sema:
+					e.sema <- struct{}{}
+				case <-e.ctx.Done():
+					return
+				case <-e.updateCh:
+				}
+			} else {
+				select {
+				case <-e.ctx.Done():
+					return
+				case <-e.updateCh:
+				}
 			}
 			err = e.publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
 			if err != nil {
@@ -322,13 +337,15 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	select {
-	case e.sema <- struct{}{}:
-	case <-e.ctx.Done():
-		exit = true
-		return
+	if e.sema != nil {
+		select {
+		case e.sema <- struct{}{}:
+		case <-e.ctx.Done():
+			exit = true
+			return
+		}
+		defer func() { <-e.sema }()
 	}
-	defer func() { <-e.sema }()
 
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
@@ -355,15 +372,21 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.comp.ScrollBottom()
 		e.log(log.TraceLevel, "written cltr-c to pty: %q", raw)
 	}
-	e.handleTimer.Reset(e.handleTimeout)
-	select {
-	case <-e.handleTimer.C:
-		e.handleTimer.Stop()
-	case <-e.ctx.Done():
-		exit = true
-	case <-e.updateCh:
-		if !e.handleTimer.Stop() {
-			<-e.handleTimer.C
+	if e.sema != nil {
+		// Debounce: give the embedded program up to handleTimeout
+		// to flush its post-keystroke repaint before returning.
+		// One update is consumed directly off updateCh so it does
+		// not redundantly wake the publisher we just parked.
+		e.handleTimer.Reset(e.handleTimeout)
+		select {
+		case <-e.handleTimer.C:
+			e.handleTimer.Stop()
+		case <-e.ctx.Done():
+			exit = true
+		case <-e.updateCh:
+			if !e.handleTimer.Stop() {
+				<-e.handleTimer.C
+			}
 		}
 	}
 	return

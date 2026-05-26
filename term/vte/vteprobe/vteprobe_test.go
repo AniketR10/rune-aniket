@@ -165,7 +165,7 @@ func (f *fakeFS) Stat(path string) (os.FileInfo, error) {
 	return fakeFileInfo{name: path, size: int64(len(fd.data)), modTime: fd.modTime}, nil
 }
 
-func (f *fakeFS) Remove(string) error             { panic("fakeFS.Remove: not implemented") }
+func (f *fakeFS) Remove(string) error { panic("fakeFS.Remove: not implemented") }
 func (f *fakeFS) ReadDir(string) ([]os.DirEntry, error) {
 	panic("fakeFS.ReadDir: not implemented")
 }
@@ -177,15 +177,15 @@ type fakeFile struct {
 	data *bytes.Reader
 }
 
-func (f *fakeFile) Name() string                  { return "" }
-func (f *fakeFile) Stat() (os.FileInfo, error)    { return nil, io.EOF }
-func (f *fakeFile) Sync() error                   { return nil }
-func (f *fakeFile) Truncate(int64) error          { return nil }
-func (f *fakeFile) Fd() uintptr                   { return 0 }
+func (f *fakeFile) Name() string               { return "" }
+func (f *fakeFile) Stat() (os.FileInfo, error) { return nil, io.EOF }
+func (f *fakeFile) Sync() error                { return nil }
+func (f *fakeFile) Truncate(int64) error       { return nil }
+func (f *fakeFile) Fd() uintptr                { return 0 }
 func (f *fakeFile) Seek(o int64, w int) (int64, error) {
 	return f.data.Seek(o, w)
 }
-func (f *fakeFile) Read(p []byte) (int, error)        { return f.data.Read(p) }
+func (f *fakeFile) Read(p []byte) (int, error) { return f.data.Read(p) }
 func (f *fakeFile) ReadAt(p []byte, off int64) (int, error) {
 	return f.data.ReadAt(p, off)
 }
@@ -509,4 +509,112 @@ func TestInferSoftWrap(t *testing.T) {
 	got2, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 2})
 	require.NoError(t, err)
 	assert.Equal(t, 1, got2.CursorAtScroll.Y)
+}
+
+// TestInferExposesBandsAndRows asserts the public Bands/Rows/Tabstop
+// fields agree with the rendered fixture so byoe consumers can project
+// file coordinates back to screen coordinates without reaching into
+// vteprobe internals.
+func TestInferExposesBandsAndRows(t *testing.T) {
+	t.Parallel()
+
+	const path = "/sample.go"
+	content := []byte("aaa\nbbb\nccc\n")
+
+	rows := []string{
+		" 1 aaa",
+		" 2 bbb",
+		" 3 ccc",
+	}
+	buf := makeBuffer(rows, 20)
+	fs := newFakeFS(map[string][]byte{path: content})
+	uri, err := workspaceapi.ParseURI("file://" + path)
+	require.NoError(t, err)
+
+	inf := newCursor(t, fs)
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
+		term.Coordinates{X: 3, Y: 1})
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, got.Bands.Top, "content band starts at row 0")
+	assert.Equal(t, 2, got.Bands.Bottom, "content band ends at last file row")
+	assert.Equal(t, 3, got.Bands.GutterWidth, "leading ` N ` gutter width")
+	require.Len(t, got.Rows, 3)
+	assert.Equal(t, 1, got.Rows[0].FileLine)
+	assert.Equal(t, 2, got.Rows[1].FileLine)
+	assert.Equal(t, 3, got.Rows[2].FileLine)
+	for _, r := range got.Rows {
+		assert.Equal(t, 0, r.WrapOffset)
+		assert.False(t, r.Folded)
+	}
+}
+
+// TestInferExposesWrappedRows asserts Rows reflects the wrap layout
+// detected for soft-wrapped long lines.
+func TestInferExposesWrappedRows(t *testing.T) {
+	t.Parallel()
+
+	const path = "/long.txt"
+	long := "aaaaaaaaaa" + "bbbbbbbbbb" + "cccccccccc"
+	content := []byte(long + "\nshort\n")
+
+	rows := []string{
+		long[:20],
+		long[20:],
+		"short",
+	}
+	buf := makeBuffer(rows, 20)
+	fs := newFakeFS(map[string][]byte{path: content})
+	uri, err := workspaceapi.ParseURI("file://" + path)
+	require.NoError(t, err)
+
+	inf := newCursor(t, fs)
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
+		term.Coordinates{X: 0, Y: 0})
+	require.NoError(t, err)
+
+	require.Len(t, got.Rows, 3)
+	assert.Equal(t, 1, got.Rows[0].FileLine)
+	assert.Equal(t, 0, got.Rows[0].WrapOffset)
+	assert.Equal(t, 1, got.Rows[1].FileLine, "continuation row keeps file line")
+	assert.Positive(t, got.Rows[1].WrapOffset,
+		"continuation row must report a positive wrap offset")
+	assert.Equal(t, 2, got.Rows[2].FileLine)
+	assert.Equal(t, 0, got.Rows[2].WrapOffset)
+}
+
+// TestInferTabstopDefaultsToVim8 documents the BYOE-with-vim scenario:
+// a Go file rendered by vim with the default tabstop=8, no gutter,
+// and no chrome. The probe must pick tabstop 8 even though smaller
+// tabstops also appear in the hint list — at ts=4 the rendered tab
+// indentation no longer matches expandTabs(file).
+func TestInferTabstopDefaultsToVim8(t *testing.T) {
+	t.Parallel()
+
+	const path = "/document_tracker.go"
+	content := []byte(
+		"type documentTracker struct {\n" +
+			"\tdb              document.Service\n" +
+			"\tlastIssueNumber map[string]int\n" +
+			"}\n")
+
+	rows := []string{
+		"type documentTracker struct {",
+		"        db              document.Service",
+		"        lastIssueNumber map[string]int",
+		"}",
+	}
+	buf := makeBuffer(rows, 80)
+	fs := newFakeFS(map[string][]byte{path: content})
+	uri, err := workspaceapi.ParseURI("file://" + path)
+	require.NoError(t, err)
+
+	inf := newCursor(t, fs)
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
+		term.Coordinates{X: 8, Y: 1})
+	require.NoError(t, err)
+	assert.Equal(t, 8, got.Tabstop, "vim default tabstop must be inferred")
+	// The 'd' of db sits at visual column 8 (one tab) and is the
+	// first character on file line 2 (Y=1).
+	assert.Equal(t, term.Coordinates{X: 1, Y: 1}, got.CursorAtScroll)
 }

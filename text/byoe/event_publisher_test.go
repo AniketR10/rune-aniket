@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,62 +21,49 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package vte
+package byoe
 
 import (
-	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-func TestTerminalSnapshotStorageRoundTripTermCells(t *testing.T) {
-	type doc struct {
-		Snapshot Snapshot
-	}
+type recordingPublisher struct {
+	events []term.Event
+}
 
-	stored := doc{Snapshot: Snapshot{
-		Version:      terminalSnapshotVersion,
-		Title:        "saved",
-		Width:        80,
-		Height:       24,
-		ScrollOffset: term.Coordinates{Y: 3, X: 1},
-		Primary: ScreenSnapshot{
-			Cursor: term.Coordinates{Y: 7, X: 4},
-			Cells: [][]term.Cell{
-				{
-					{
-						Attributes: term.Attributes{
-							Fg:    term.ColorRed,
-							Bg:    term.ColorBlue,
-							Attrs: term.AttrBold | term.AttrUnderline,
-						},
-						Ch:        'e',
-						Combining: &[]rune{'\u0301'},
-						Width:     1,
-						Bytes:     3,
-					},
-					{Ch: '界', Combining: nil, Width: 2, Bytes: 3},
-				},
-			},
-		},
-		Alternate: ScreenSnapshot{
-			Cursor: term.Coordinates{Y: 1, X: 2},
-			Cells: [][]term.Cell{
-				{
-					{Ch: 'a', Width: 1, Bytes: 1},
-					{Ch: 'b', Width: 1, Bytes: 1},
-				},
-			},
-		},
-	}}
+func (r *recordingPublisher) PublishEvent(ev term.Event) error {
+	r.events = append(r.events, ev)
+	return nil
+}
 
-	svc := storagestub.NewInMemoryService()
-	require.NoError(t, svc.Set(context.Background(), "terminal", stored))
+func TestEventPublisherRefreshesOnInterruptOnly(t *testing.T) {
+	t.Parallel()
+	pub := &recordingPublisher{}
+	wrapper := newEventPublisher(pub)
+	var refreshes int
+	wrapper.refresh = func() { refreshes++ }
 
-	var actual doc
-	require.NoError(t, svc.Get(context.Background(), "terminal", &actual))
-	require.Equal(t, stored, actual)
+	keyEv := term.Event{Type: term.EventKey, Ch: 'x'}
+	intrEv := term.Event{Type: term.EventInterrupt}
+
+	require := assert.New(t)
+	require.NoError(wrapper.PublishEvent(keyEv))
+	require.NoError(wrapper.PublishEvent(intrEv))
+	require.NoError(wrapper.PublishEvent(keyEv))
+
+	assert.Equal(t, []term.Event{keyEv, intrEv, keyEv}, pub.events,
+		"every event must be forwarded to the wrapped publisher")
+	assert.Equal(t, 1, refreshes,
+		"refresh must run exactly once per EventInterrupt")
+}
+
+func TestEventPublisherNilRefreshIsNop(t *testing.T) {
+	t.Parallel()
+	pub := &recordingPublisher{}
+	wrapper := newEventPublisher(pub)
+	assert.NoError(t, wrapper.PublishEvent(term.Event{Type: term.EventInterrupt}))
+	assert.Len(t, pub.events, 1)
 }
