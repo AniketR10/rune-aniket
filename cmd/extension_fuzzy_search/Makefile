@@ -19,7 +19,7 @@ clean:
 pkg: $(BIN)/extension_fuzzy_search
 	@mkdir -p $(PKG)/bin
 	@cp $(BIN)/extension_fuzzy_search $(PKG)/bin/
-	@cp config.yaml $(PKG)/
+	@cp config.star $(PKG)/
 $(TAR): pkg
 	cd $(PKG) && tar -czvf $(TAR) .
 

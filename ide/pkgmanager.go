@@ -126,6 +126,7 @@ func (m *pkgManager) init(
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser,
+	editorMode string,
 ) {
 	storage := storageapi.WithPartition(rootStorage, "idepkg")
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
@@ -134,6 +135,7 @@ func (m *pkgManager) init(
 		idepkg.WithCrashReportVersion(debug.Tag),
 		idepkg.WithFrameCharSet(fcs),
 		idepkg.WithSyntaxParser(parser),
+		idepkg.WithEditorMode(editorMode),
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick

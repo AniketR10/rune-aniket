@@ -1749,6 +1749,17 @@ func (c ideConfig) editorMode() (ret string) {
 	return
 }
 
+// pkgEditorMode returns the editor mode exposed to package config.star
+// scripts. BYOE substitutes the configured byoe.fallback so packages get a
+// concrete modal/modeless mode instead of the meta value "byoe".
+func (c ideConfig) pkgEditorMode() string {
+	mode := c.editorMode()
+	if mode == editorModeBYOE {
+		return c.byoeFallback()
+	}
+	return mode
+}
+
 func (c ideConfig) editorRuler() (ruler int) {
 	ruler = 90
 	cfg, ok := c.editor()

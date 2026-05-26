@@ -58,3 +58,12 @@ func WithSyntaxParser(parser syntaxapi.Parser) Option {
 		m.parser = parser
 	}
 }
+
+// WithEditorMode sets the resolved editor mode ("modal", "modeless", "byoe")
+// exposed to package config.star scripts as the RUNE_EDITOR_MODE predeclared
+// global. Empty values are not forwarded.
+func WithEditorMode(mode string) Option {
+	return func(m *Manager) {
+		m.editorMode = mode
+	}
+}

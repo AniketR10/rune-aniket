@@ -114,7 +114,6 @@ config = merge(config, {
             "<s-m-w>":     "windowclose",
             "<c-m-h>":     "windowdefaultsplit h",
             "<c-m-v>":     "windowdefaultsplit v",
-            "<s-m-f>":     "windowtogglemaximize",
             "<m-o>":       "lsphover",
             "<m-b>":       "lspformat",
             "<m-m>":       "lspformatimports",

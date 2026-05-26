@@ -1,0 +1,92 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+
+package extension
+
+import (
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/ide/starlarkconfig"
+)
+
+// TestBundledConfigStar locks in the mode/tui-aware fuzzy-search package
+// config shipped at cmd/extension_fuzzy_search/config.star. RUNE-137 moved
+// the search* aliases and bindings out of cmd/rune/rune.star and into this
+// file, so the host now relies on it for every search command.
+func TestBundledConfigStar(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("../config.star")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name string
+		mode string
+	}{
+		{"modal", "modal"},
+		{"modeless", "modeless"},
+		{"empty_mode_acts_as_non_modeless", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := starlarkconfig.Decode(starlarkconfig.Source{
+				Src:      data,
+				Filename: "config.star",
+				Params: map[string]any{
+					"RUNE_DATADIR":     "/data",
+					"RUNE_PKG_ID":      "fuzzy_search",
+					"RUNE_PKG_VERSION": "1",
+					"RUNE_EDITOR_MODE": tc.mode,
+				},
+			})
+			require.NoError(t, err)
+
+			cmd := cfg["command"].(map[string]any)
+			kb := cmd["key_bindings"].(map[string]any)
+
+			// Base bindings present in all modes.
+			assert.Equal(t, "searchfile", kb["<m-p>"])
+			assert.Equal(t, "searchtext", kb["<m-\\\\>"])
+			assert.Equal(t, "searchfunc", kb["<a-s-f>"])
+			assert.Equal(t, "searchvar", kb["<a-s-v>"])
+			assert.Equal(t, "searchtype", kb["<a-s-s>"])
+
+			// Aliases present in all modes.
+			aliases := cmd["aliases"].(map[string]any)
+			assert.Contains(t, aliases, "searchfunc")
+			assert.Contains(t, aliases, "searchvar")
+			assert.Contains(t, aliases, "searchtype")
+
+			assert.NotContains(t, aliases, "tabsearch")
+			assert.NotContains(t, aliases, "workspacesearch")
+
+			// <s-m-f>: searchtext is the only modeless-specific override
+			// (Sublime-style project search); modal must NOT bind it. The
+			// other modeless bindings (<m-f>, <m-;>, <a-g>, <s-m-r>) live
+			// in the user-editable cmd/rune/override_modeless.star file.
+			if tc.mode == "modeless" {
+				assert.Equal(t, "searchtext", kb["<s-m-f>"],
+					"modeless should bind <s-m-f> to searchtext")
+			} else {
+				_, ok := kb["<s-m-f>"]
+				assert.False(t, ok, "non-modeless must not bind <s-m-f>")
+			}
+
+			_, hasCxp := kb["<c-x><c-p>"]
+			assert.False(t, hasCxp, "fuzzy_search must not bind TUI <c-x><c-p>")
+
+			// Legacy YAML values for the finder config block survive.
+			ext := cfg["extensions"].(map[string]any)
+			fs := ext["fuzzy_search"].(map[string]any)
+			fsCfg := fs["config"].(map[string]any)
+			fileCfg := fsCfg["file"].(map[string]any)
+			assert.Equal(t, "fuzzy", fileCfg["algo"])
+			assert.Equal(t, "<m-p>", fileCfg["history_key"])
+			assert.Equal(t, true, fileCfg["case_sensitive"])
+		})
+	}
+}

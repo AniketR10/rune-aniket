@@ -200,6 +200,8 @@ type Manager struct {
 	crashReportPkg     string
 	crashReportVersion string
 
+	editorMode string
+
 	iterators struct {
 		sync.Mutex
 		m map[string]*sync.Mutex
@@ -516,7 +518,7 @@ func (m *Manager) ProcessInstalledSettings(ctx context.Context) (ret error) {
 			continue
 		}
 		dir := makePackageVersionDirname(m.dataDir, pkv.Package, pkv.Version)
-		configFile := filepath.Join(dir, "config.yaml")
+		configFile := pkgConfigFile(dir)
 		err = m.processConfig(pkv.Package, pkv.Version, configFile)
 		if err != nil {
 			ret = errors.Join(ret, fmt.Errorf("process %s: %w", configFile, err))
@@ -581,7 +583,7 @@ func (m *Manager) UsePackageVersion(
 	pkgID = escapeString(pkgID)
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
 
-	configFile := filepath.Join(pkgVersionDirname, "config.yaml")
+	configFile := pkgConfigFile(pkgVersionDirname)
 	err = m.processConfig(pkgID, version, configFile)
 	if err != nil {
 		return err
@@ -732,13 +734,7 @@ func (m *Manager) download(
 		return
 	}
 
-	configFile := filepath.Join(pkgVersionDirname, "config.yaml")
-	if _, statErr := os.Stat(configFile); os.IsNotExist(statErr) {
-		starFile := filepath.Join(pkgVersionDirname, "config.star")
-		if _, starErr := os.Stat(starFile); starErr == nil {
-			configFile = starFile
-		}
-	}
+	configFile := pkgConfigFile(pkgVersionDirname)
 
 	err = m.linkLibCopyBin(pkgID, version, executables, pkgVersionDirname)
 	if err != nil {
@@ -989,7 +985,7 @@ func (m *Manager) processConfig(
 
 	pkgOverlayCfg, err := loadIdePkgConfigOverlay(
 		pkgConfigFile, data, map[string]any{},
-		pkgID, pkgVersion, m.dataDir,
+		pkgID, pkgVersion, m.dataDir, m.editorMode,
 	)
 	if err != nil {
 		return fmt.Errorf("decode package config: %w", err)
@@ -1007,6 +1003,7 @@ func (m *Manager) processConfig(
 	// the merged result the prompt will show and apply.
 	pkgCfg, err := loadIdePkgConfigOverlay(
 		pkgConfigFile, data, userCfg, pkgID, pkgVersion, m.dataDir,
+		m.editorMode,
 	)
 	if err != nil {
 		return fmt.Errorf("decode merged package config: %w", err)
@@ -1054,13 +1051,7 @@ func (m *Manager) untar(tarfile *os.File, dirname string) (string, []executableE
 		return "", nil, err
 	}
 
-	configFile := filepath.Join(dirname, "config.yaml")
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		starFile := filepath.Join(dirname, "config.star")
-		if _, starErr := os.Stat(starFile); starErr == nil {
-			configFile = starFile
-		}
-	}
+	configFile := pkgConfigFile(dirname)
 	return configFile, executables, nil
 }
 
@@ -1069,10 +1060,29 @@ func loadIdePkgConfigFile(path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return loadIdePkgConfigFromBytes(path, data, "", "", "")
+	return loadIdePkgConfigFromBytes(path, data, "", "", "", "")
 }
 
-func idePkgStarlarkParams(pkgID string, pkgVersion release.Version, dataDir string) map[string]any {
+// pkgConfigFile returns the path to the package's settings file inside dir.
+// Packages may ship either config.yaml (legacy) or config.star (mode-aware);
+// when both exist, config.yaml wins. The returned path may not exist on disk —
+// callers must stat it themselves.
+func pkgConfigFile(dir string) string {
+	yamlPath := filepath.Join(dir, "config.yaml")
+	if _, err := os.Stat(yamlPath); err == nil {
+		return yamlPath
+	}
+	starPath := filepath.Join(dir, "config.star")
+	if _, err := os.Stat(starPath); err == nil {
+		return starPath
+	}
+	return yamlPath
+}
+
+func idePkgStarlarkParams(
+	pkgID string, pkgVersion release.Version, dataDir string,
+	editorMode string,
+) map[string]any {
 	params := map[string]any{}
 	if dataDir != "" {
 		params["RUNE_DATADIR"] = dataDir
@@ -1083,18 +1093,22 @@ func idePkgStarlarkParams(pkgID string, pkgVersion release.Version, dataDir stri
 	if pkgVersion != "" {
 		params["RUNE_PKG_VERSION"] = string(pkgVersion)
 	}
+	if editorMode != "" {
+		params["RUNE_EDITOR_MODE"] = editorMode
+	}
 	return params
 }
 
 func loadIdePkgConfigFromBytes(
 	filename string, data []byte,
 	pkgID string, pkgVersion release.Version, dataDir string,
+	editorMode string,
 ) (map[string]any, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".star") {
 		return starlarkconfig.Decode(starlarkconfig.Source{
 			Src:      data,
 			Filename: filename,
-			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir),
+			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir, editorMode),
 		})
 	}
 	if len(data) == 0 {
@@ -1110,16 +1124,18 @@ func loadIdePkgConfigFromBytes(
 func loadIdePkgConfigOverlay(
 	filename string, data []byte, base map[string]any,
 	pkgID string, pkgVersion release.Version, dataDir string,
+	editorMode string,
 ) (map[string]any, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".star") {
 		return starlarkconfig.Decode(starlarkconfig.Source{
 			Src:      data,
 			Filename: filename,
-			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir),
+			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir, editorMode),
 			Base:     base,
 		})
 	}
-	return loadIdePkgConfigFromBytes(filename, data, pkgID, pkgVersion, dataDir)
+	return loadIdePkgConfigFromBytes(filename, data, pkgID, pkgVersion, dataDir,
+		editorMode)
 }
 
 func normalizeIdePkgConfig(v any) any {

@@ -2545,3 +2545,55 @@ func (s *orderingStorage) Update(
 	}
 	return err
 }
+
+// TestEditorModeParamExposed verifies that RUNE_EDITOR_MODE reaches package
+// config.star scripts via idePkgStarlarkParams. RUNE-137 needs this to drive
+// the extension_fuzzy_search mode-aware key bindings.
+func TestEditorModeParamExposed(t *testing.T) {
+	t.Parallel()
+
+	const src = `
+config = {}
+if RUNE_EDITOR_MODE == "modeless":
+    config["picked_mode"] = "modeless"
+else:
+    config["picked_mode"] = "other"
+`
+	cases := []struct {
+		mode    string
+		wantMod string
+	}{
+		{"modal", "other"},
+		{"modeless", "modeless"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.mode, func(t *testing.T) {
+			got, err := loadIdePkgConfigFromBytes(
+				"config.star", []byte(src),
+				"pkg", release.Version("1"), "/data",
+				tc.mode,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantMod, got["picked_mode"])
+		})
+	}
+}
+
+// TestPkgConfigFilePrefersYAML and TestPkgConfigFileFallsBackToStar lock in
+// the shared discovery used by download/untar/UsePackageVersion/
+// ProcessInstalledSettings: config.yaml wins when both formats are present,
+// config.star is picked up when only it ships.
+func TestPkgConfigFilePrefersYAML(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.star"), []byte("config = {}\n"), 0o644))
+	assert.Equal(t, filepath.Join(dir, "config.yaml"), pkgConfigFile(dir))
+}
+
+func TestPkgConfigFileFallsBackToStar(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.star"), []byte("config = {}\n"), 0o644))
+	assert.Equal(t, filepath.Join(dir, "config.star"), pkgConfigFile(dir))
+}

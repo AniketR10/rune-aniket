@@ -2458,9 +2458,14 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	}
 	wm := currentWorkspaceWindowManager{root: h}
 	parser := &lazyParser{root: h}
+	editorMode := ""
+	if cfg, err := h.reloadConfig(); err == nil {
+		editorMode = cfg.pkgEditorMode()
+	}
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
-		h, h, h.scheduleNextTick, parser)
+		h, h, h.scheduleNextTick, parser,
+		editorMode)
 	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }
 

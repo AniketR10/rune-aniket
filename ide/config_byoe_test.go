@@ -73,6 +73,59 @@ func TestByoeModeAndAccessors(t *testing.T) {
 	assert.Equal(t, "<esc>:{line}<enter>", cfg.byoeGoto())
 }
 
+// TestPkgEditorModeSubstitutesByoeFallback verifies the value forwarded to
+// package config.star scripts: byoe mode is rewritten to the configured
+// byoe.fallback so packages always see a concrete modal or modeless mode.
+func TestPkgEditorModeSubstitutesByoeFallback(t *testing.T) {
+	cases := []struct {
+		name     string
+		fallback string
+		want     string
+	}{
+		{"default_fallback_is_modeless", "", "modeless"},
+		{"explicit_modal_fallback", "modal", "modal"},
+		{"explicit_modeless_fallback", "modeless", "modeless"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			byoe := map[string]any{
+				"command": "vim {file}",
+				"goto":    "<esc>:{line}<enter>",
+			}
+			if tc.fallback != "" {
+				byoe["fallback"] = tc.fallback
+			}
+			cfg := &ideConfig{
+				cfg: map[string]any{
+					"editor": map[string]any{
+						"mode": "byoe",
+						"byoe": byoe,
+					},
+				},
+				errors: map[string]error{},
+			}
+			assert.Equal(t, "byoe", cfg.editorMode())
+			assert.Equal(t, tc.want, cfg.pkgEditorMode())
+		})
+	}
+}
+
+// TestPkgEditorModePassesNonByoeThrough verifies modal/modeless are
+// forwarded verbatim to packages.
+func TestPkgEditorModePassesNonByoeThrough(t *testing.T) {
+	for _, mode := range []string{"modal", "modeless"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := &ideConfig{
+				cfg: map[string]any{
+					"editor": map[string]any{"mode": mode},
+				},
+				errors: map[string]error{},
+			}
+			assert.Equal(t, mode, cfg.pkgEditorMode())
+		})
+	}
+}
+
 // TestValidateBYOEFallsBackOnMissingFile verifies that a byoe mode
 // with an invalid (no {file}) command is rewritten back to "modal" so
 // the IDE still boots.

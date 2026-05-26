@@ -1,0 +1,80 @@
+# Fuzzy-search extension configuration.
+#
+# Rune's package manager runs this script after installing the
+# extension_fuzzy_search bundle. Predeclared globals exposed by the host:
+#
+#   RUNE_DATADIR      string  Rune's data directory.
+#   RUNE_PKG_ID       string  the installed package's ID.
+#   RUNE_PKG_VERSION  string  the installed package's version.
+#   RUNE_EDITOR_MODE  string  "modal" | "modeless" — the resolved host
+#                             editor mode (empty when not yet known). The
+#                             host substitutes byoe with its configured
+#                             editor.byoe.fallback value before invoking
+#                             this script, so "byoe" never reaches here.
+#
+# The script writes the merged settings into the user's rune config so that
+# fuzzy_search options and search* aliases/key bindings are only registered
+# when the extension is actually installed.
+
+mode = RUNE_EDITOR_MODE
+
+def attr(fg = None, bg = None, flags = None):
+    out = {}
+    if fg != None:
+        out["fg"] = fg
+    if bg != None:
+        out["bg"] = bg
+    if flags != None:
+        out["flags"] = flags
+    return out
+
+config = {
+    "extensions": {
+        "fuzzy_search": {
+            "path": "$RUNE_DATADIR/bin/extension_fuzzy_search",
+            "config": {
+                "file": {
+                    "case_sensitive":     True,
+                    "algo":               "fuzzy",
+                    "history_key":        "<m-p>",
+                    "history":            50000,
+                    "element_attr":       attr(fg = "default", bg = "default", flags = ["dim"]),
+                    "matched_text_attr":  attr(fg = "blue", bg = "default", flags = ["bold"]),
+                    "count_attr":         attr(fg = "default", bg = "default"),
+                    "focus_element_attr": attr(fg = "purple", bg = "default"),
+                },
+                "line": {
+                    "case_sensitive":     True,
+                    "algo":               "fuzzy",
+                    "history_key":        "<m-\\\\>",
+                    "history":            2000,
+                    "element_attr":       attr(fg = "default", bg = "default", flags = ["dim"]),
+                    "matched_text_attr":  attr(fg = "blue", bg = "default", flags = ["bold"]),
+                    "count_attr":         attr(fg = "default", bg = "default"),
+                    "focus_element_attr": attr(fg = "purple", bg = "default"),
+                },
+                "syntax": {
+                    "case_sensitive": True,
+                    "algo":           "fuzzy",
+                },
+            },
+        },
+    },
+    "command": {
+        "aliases": {
+            "searchfunc":      "echo {prompt}searchast<space>locals.scm<space>local.definition.method|local.definition.function<enter>",
+            "searchvar":       "echo {prompt}searchast<space>locals.scm<space>local.definition.var<enter>",
+            "searchtype":      "echo {prompt}searchast<space>locals.scm<space>local.definition.type<enter>",
+        },
+        "key_bindings": {
+            "<m-p>":    "searchfile",
+            "<m-\\\\>": "searchtext",
+            "<a-s-f>":  "searchfunc",
+            "<a-s-v>":  "searchvar",
+            "<a-s-s>":  "searchtype",
+        },
+    },
+}
+
+if mode == "modeless":
+    config["command"]["key_bindings"]["<s-m-f>"] = "searchtext"
