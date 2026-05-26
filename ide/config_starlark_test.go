@@ -380,7 +380,11 @@ func TestRuneStarModelsConfig(t *testing.T) {
 
 	models, ok := cfg["models"].(map[string]any)
 	require.True(t, ok, "models block missing")
-	assert.Equal(t, "gpt-5.4", models["default"])
+	// rune.star no longer ships a `models.default`; the loader keeps the
+	// built-in default when the key is absent and the bootstrap override
+	// is what sets a concrete model.
+	_, hasDefault := models["default"]
+	assert.False(t, hasDefault, "models.default should not be set in rune.star")
 	assert.Equal(t, "auto", models["reasoning_summary"])
 	assert.Equal(t, false, models["debug_http"])
 

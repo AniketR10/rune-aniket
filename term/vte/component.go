@@ -65,9 +65,24 @@ type Component struct {
 	remote    remote
 	writech   chan []byte
 	writeErr  atomic.Value
-	// closed is set under mu by Close so the async expandAndStart
-	// goroutine can bail before handing the pty FDs to os/exec.
-	closed bool
+	// closed is set by Close so the async expandAndStart goroutine
+	// can bail before handing the pty FDs to os/exec. It is atomic
+	// because Close runs on the host event loop while the
+	// expandAndStart goroutine reads it before acquiring mu and
+	// invoking executor.StartCommand.
+	closed atomic.Bool
+	// spawnWG tracks the async expandAndStart goroutine that
+	// createPty spawns when CommandExpander is set. Tests can call
+	// WaitSpawn to block until the spawn (and any
+	// reportSpawnError watcher hand-off) has completed.
+	spawnWG sync.WaitGroup
+	// spawnErrored reports whether the async expandAndStart goroutine
+	// reported a spawn failure via reportSpawnError. Tests use this
+	// to know whether to also wait for the watcher receiver to
+	// process the resulting error; long-running successful spawns
+	// would otherwise block waiting for a process exit that may be
+	// minutes or hours away.
+	spawnErrored atomic.Bool
 
 	width, height     int
 	parserHandler     *parserHandler
@@ -733,9 +748,12 @@ func (t *Component) ClearPrimaryBuffer() (ok bool) {
 	return true
 }
 
-// Close assumes lock has been acquired by caller
+// Close tears down the pty and cancels the Component's context.
+// Safe to call concurrently with the async expandAndStart goroutine:
+// startCommand re-checks t.closed (atomic) under mu before handing
+// the pty FDs to executor.StartCommand.
 func (t *Component) Close() (ret error) {
-	t.closed = true
+	t.closed.Store(true)
 	t.cancelCtx()
 
 	if err := t.pty.Slave.Close(); err != nil {
@@ -745,6 +763,24 @@ func (t *Component) Close() (ret error) {
 		ret = multierr.Append(ret, err)
 	}
 	return ret
+}
+
+// WaitSpawn blocks until the async expandAndStart goroutine
+// (created by createPty when Config.CommandExpander is set) has
+// finished, including any reportSpawnError watcher hand-off.
+// Tests use this to settle integration timing where the pty/process
+// outcome influences subsequent rendering.
+func (t *Component) WaitSpawn() {
+	t.spawnWG.Wait()
+}
+
+// SpawnErrored reports whether the async expandAndStart goroutine
+// produced a spawn failure that was already pushed through the
+// configured watcher. Tests use this in combination with WaitSpawn
+// to decide whether to also wait for downstream watcher receivers
+// to process the resulting error.
+func (t *Component) SpawnErrored() bool {
+	return t.spawnErrored.Load()
 }
 
 func (t *Component) log(level log.Level, line string, params ...any) {
@@ -768,7 +804,9 @@ func (t *Component) createPty(cmdAndArgs []string) error {
 
 	t.pty = pty
 	if t.cfg.CommandExpander != nil {
+		t.spawnWG.Add(1)
 		go debug.CapturePanicReport(func() {
+			defer t.spawnWG.Done()
 			t.expandAndStart(cmdAndArgs)
 		})
 		return nil
@@ -801,16 +839,19 @@ func (t *Component) expandAndStart(cmdAndArgs []string) {
 }
 
 // reportSpawnError writes err to the pty slave (so the floating
-// window surfaces it) and notifies the configured watcher.
+// window surfaces it) and notifies the configured watcher. The
+// watcher send is synchronous so callers (always the
+// expandAndStart goroutine) know the receiver has observed the
+// terminal error before they exit; tests that wait for the
+// goroutine via WaitGroup or context observe a fully-settled state.
 func (t *Component) reportSpawnError(err error) {
 	_, _ = t.pty.Slave.Write([]byte(err.Error()))
+	t.spawnErrored.Store(true)
 	if t.watcher != nil {
-		go func() {
-			select {
-			case t.watcher.WatchProcess() <- err:
-			case <-t.ctx.Done():
-			}
-		}()
+		select {
+		case t.watcher.WatchProcess() <- err:
+		case <-t.ctx.Done():
+		}
 	}
 }
 
@@ -848,7 +889,7 @@ func (t *Component) startCommand(cmdAndArgsStr string) error {
 	cmd.Stdin = t.pty.Slave
 
 	t.mu.Lock()
-	if t.closed {
+	if t.closed.Load() {
 		t.mu.Unlock()
 		return nil
 	}

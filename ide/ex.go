@@ -820,6 +820,9 @@ func (e *ex) quit(_ context.Context, args ...string) error {
 func (e *ex) waitInflight() {
 	e.comp.WaitStreamingLoads()
 	e.flusher.wait()
+	if e.tasks != nil {
+		e.tasks.WaitInflight()
+	}
 }
 
 func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {

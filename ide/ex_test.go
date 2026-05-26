@@ -4582,11 +4582,11 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 ││                           │
 ││                  ┌────────┐
-││                  │new     │
-││                  │vte:    │
 ││                  │start   │
 ││                  │command:│
 ││                  │ context│
+││                  │ cancele│
+││                  │d       │
 ││                  └────────┘
 ││                           │
 ││                           │
@@ -4630,11 +4630,11 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 ││                           │
 ││                  ┌────────┐
-││                  │new     │
-││                  │vte:    │
 ││                  │start   │
 ││                  │command:│
 ││                  │ context│
+││                  │ cancele│
+││                  │d       │
 ││                  └────────┘
 ││                           │
 ││                           │
@@ -4647,8 +4647,8 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 ││                           │
 ││                           │
-││ new vte: start command:   │
-││ context canceled          │
+││  start command: context   │
+││  canceled                 │
 ││                           │
 ││                           │
 ││                           │
@@ -4679,8 +4679,8 @@ func TestRunStopTasks(t *testing.T) {
 ││                           │
 ││                           │
 ││                           │
-││ new vte: start command:   │
-││ context canceled          │
+││  start command: context   │
+││  canceled                 │
 ││                           │
 ││                           │
 ││                           │
@@ -4695,8 +4695,8 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 │                            │
 │                            │
-│  new vte: start command:   │
-│  context canceled          │
+│  start command: context    │
+│  canceled                  │
 │                            │
 │                            │
 │                            │
@@ -4711,8 +4711,8 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 │                            │
 │                            │
-│  new vte: start command:   │
-│  context canceled          │
+│  start command: context    │
+│  canceled                  │
 │                            │
 │                            │
 │                            │
@@ -4726,11 +4726,11 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  new vte:   ││AAAAAAAAAAAAA│
 │  start      ││AAAAAAAAAAAAA│
 │  command:   ││AAAAAAAAAAAAA│
 │  context    ││AAAAAAAAAAAAA│
 │  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4742,11 +4742,11 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  new vte:   ││AAAAAAAAAAAAA│
 │  start      ││AAAAAAAAAAAAA│
 │  command:   ││AAAAAAAAAAAAA│
 │  context    ││AAAAAAAAAAAAA│
 │  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4774,11 +4774,11 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  new vte:   ││AAAAAAAAAAAAA│
 │  start      ││AAAAAAAAAAAAA│
 │  command:   ││AAAAAAAAAAAAA│
 │  context    ││AAAAAAAAAAAAA│
 │  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4790,11 +4790,11 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 │             ││             │
 │             ││             │
-│  new vte:   ││  new vte:   │
 │  start      ││  start      │
 │  command:   ││  command:   │
 │  context    ││  context    │
 │  canceled   ││  canceled   │
+│             ││             │
 │             ││             │
 │             ││             │
 │             ││             │
@@ -4822,11 +4822,11 @@ func TestRunStopTasks(t *testing.T) {
 │             ││             │
 │             ││             │
 │             ││             │
-│  new vte:   ││  new vte:   │
 │  start      ││  start      │
 │  command:   ││  command:   │
 │  context    ││  context    │
 │  canceled   ││  canceled   │
+│             ││             │
 │             ││             │
 │             ││             │
 │             ││             │
@@ -4838,11 +4838,11 @@ func TestRunStopTasks(t *testing.T) {
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  new vte:   ││AAAAAAAAAAAAA│
 │  start      ││AAAAAAAAAAAAA│
 │  command:   ││AAAAAAAAAAAAA│
 │  context    ││AAAAAAAAAAAAA│
 │  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -5732,7 +5732,23 @@ func TestViewForceWrite(t *testing.T) {
 }
 
 func TestViewForceWriteAll(t *testing.T) {
-	cases := []handlertest.SequenceTestCase{
+	// Open two read-only tabs, then run :writeall and assert the
+	// rendered output contains both save-failure notifications.
+	// The two flushes complete on independent goroutines, so the
+	// order in which their notification popups stack is not
+	// deterministic; this test therefore checks for the presence of
+	// each notification's text rather than a fixed golden frame.
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	e := newExForTestingWithWorkspace(t, &testLoader{},
+		texttest.NopEditor(), vte.DefaultConfig(),
+		nopPublishEvent, clipboard.NewInMemory(), opts...)
+	defer e.Close()
+
+	const width, height = 30, 15
+	writer := term.NewStringWriter(width, height)
+	setup := []handlertest.SequenceTestCase{
 		{":view caliu.go>:view boira.go>b",
 			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
@@ -5749,22 +5765,28 @@ func TestViewForceWriteAll(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
-		{":writeall>",
-			`┌────────────━━┌─────────────┐
-│o caliu.go  o │ save        │
-├──────────────│ 'boira.go': │
-│BBBBBBBBBBBBBB│  file is    │
-│BBBBBBBBBBBBBB│ not         │
-│BBBBBBBBBBBBBB│ writable    │
-│BBBBBBBBBBBBBB└─────────────┘
-│BBBBBBBBBBBBBB┌─────────────┐
-│BBBBBBBBBBBBBB│ save        │
-│BBBBBBBBBBBBBB│ 'caliu.go': │
-│BBBBBBBBBBBBBB│  file is    │
-│BBBBBBBBBBBBBB│ not         │
-│BBBBBBBBBBBBBB│ writable    │
-│BBBBBBBBBBBBBB└─────────────┘
-└────────────────────────────┘`},
+	}
+	handlertest.TestHandlerSequenceWriter(t, writer, e, width, height, setup)
+
+	// :writeall on two read-only files: both should produce
+	// "save '<name>': file is not writable" notifications in any
+	// order.
+	feedAutoSaveSequence(t, e, ":writeall>")
+	require.NoError(t, writer.Clear(term.Attributes{}))
+	e.Draw(writer)
+	require.NoError(t, writer.Flush())
+	render := writer.String()
+	assert.Contains(t, render, "'caliu.go'",
+		"writeall should surface caliu.go failure notification")
+	assert.Contains(t, render, "'boira.go'",
+		"writeall should surface boira.go failure notification")
+	assert.Contains(t, render, "not")
+	assert.Contains(t, render, "writable")
+
+	// After closing all notifications and forcing the write
+	// (which clears the read-only flag), :writeall should succeed
+	// silently.
+	post := []handlertest.SequenceTestCase{
 		{":notificationCloseAll>:writeall!>",
 			`┌────────────━━━━━━━━━━──────┐
 │o caliu.go  o boira.go      │
@@ -5798,15 +5820,7 @@ func TestViewForceWriteAll(t *testing.T) {
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 └────────────────────────────┘`},
 	}
-
-	opts := []text.Option{
-		text.WithCommandKey(testCommandKey),
-	}
-	e := newExForTestingWithWorkspace(t, &testLoader{},
-		texttest.NopEditor(), vte.DefaultConfig(),
-		nopPublishEvent, clipboard.NewInMemory(), opts...)
-	defer e.Close()
-	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+	handlertest.TestHandlerSequenceWriter(t, writer, e, width, height, post)
 }
 
 func TestIntegrationUndoAfterOpen(t *testing.T) {

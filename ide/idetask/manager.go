@@ -271,6 +271,18 @@ func (m *Manager) OnFocus(prevFocus, newFocus handler.Window) {
 	m.onFocus(prevFocus, newFocus)
 }
 
+// WaitInflight blocks until every currently-tracked task has settled
+// its async expandAndStart spawn goroutine and the resulting watcher
+// hand-off. Intended for tests where the async pipeline that drives
+// task bar / done state must be drained before asserting rendered
+// output.
+func (m *Manager) WaitInflight() {
+	m.tasks.Range(func(_, v any) bool {
+		v.(*Task).WaitInflight()
+		return true
+	})
+}
+
 // Close stops all tasks and closes this Manager's resources.
 func (m *Manager) Close() error {
 	m.cancelCtx()

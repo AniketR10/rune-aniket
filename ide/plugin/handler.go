@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -72,6 +73,11 @@ type Handler struct {
 	cancelCtx func()
 
 	bar *pluginHandlerBar
+	// watcherWG tracks the initEmulator goroutine that listens for
+	// the vte's process-exit error and toggles bar.setDone. Tests
+	// can call WaitInflight to block until both the vte spawn and
+	// this hand-off have completed.
+	watcherWG sync.WaitGroup
 }
 
 var _ component.Scrollable = (*Handler)(nil)
@@ -104,6 +110,21 @@ func (h *Handler) Init(
 		h.bar.initElapsedTicker()
 	})
 	return err
+}
+
+// WaitInflight blocks until the async vte spawn goroutine completes.
+// If the spawn errored, it also waits for the initEmulator watcher
+// to hand the error off to bar.setDone so the doneHandler state is
+// observable to callers. For successful spawns the watcher then
+// just observes the process lifecycle, which is not "inflight" work.
+func (e *Handler) WaitInflight() {
+	if e.emulator == nil {
+		return
+	}
+	e.emulator.Component().WaitSpawn()
+	if e.emulator.Component().SpawnErrored() {
+		e.watcherWG.Wait()
+	}
 }
 
 // Dimensions satisfies browser.Floating.
@@ -279,10 +300,12 @@ func (e *Handler) initEmulator(
 	go debug.CapturePanicReport(func() {
 		term.InterruptAt(ctx, interrupter, 1)
 	})
+	e.watcherWG.Add(1)
 	go debug.CapturePanicReport(func() {
 		var err error
 
 		defer func() {
+			defer e.watcherWG.Done()
 			e.bar.setDone(err)
 			cancel()
 		}()

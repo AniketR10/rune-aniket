@@ -93,6 +93,12 @@ type Task struct {
 	donech           chan error
 	newPlugin        pluginBuilder
 	scheduleNextTick func(fn func()) bool
+	// inflightWG tracks in-progress processing of a donech event.
+	// The donech receiver Adds(1) immediately after pulling an error
+	// off the channel and Dones() once the resulting state transition
+	// (setError/setSuccess and any restart/pause follow-up) has been
+	// applied. Tests use WaitInflight to observe the settled handler.
+	inflightWG *sync.WaitGroup
 
 	bar              tui.Component
 	barColor         term.Color
@@ -287,6 +293,7 @@ func (t *Task) init(
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)
 	t.mu = new(sync.Mutex)
+	t.inflightWG = new(sync.WaitGroup)
 	t.scheduleNextTick = scheduleNextTick
 	t.newPlugin = newPlugin
 	t.pluginOpts = pluginOpts
@@ -336,6 +343,7 @@ func (t *Task) init(
 		for {
 			select {
 			case err := <-t.donech:
+				t.inflightWG.Add(1)
 				t.mu.Lock()
 				paused := t.paused
 				restarting := t.restartPending
@@ -351,6 +359,7 @@ func (t *Task) init(
 				} else if paused {
 					t.setPause()
 				}
+				t.inflightWG.Done()
 			case <-t.ctx.Done():
 				t.setError(t.ctx.Err())
 				return
@@ -429,7 +438,7 @@ func (t *Task) doSetError(err error) {
 	t.running = false
 	t.barColor = colorError
 
-	if _, ok := t.handler.(*plugin.Handler); !ok && err != nil {
+	if err != nil {
 		t.handler = browser.NopScrollableFloatingHandler(
 			handler.NopScrollableFloatingFromComponent(
 				component.NewResponsiveString(
@@ -455,6 +464,19 @@ func (t *Task) setSuccess() {
 	t.running = false
 	t.barColor = colorSuccess
 	t.setBarColor(t.barColor)
+}
+
+// WaitInflight blocks until the currently-active plugin.Handler's
+// async vte spawn goroutine and the watcher hand-off have completed.
+// Used by tests to settle task state before asserting rendered
+// output.
+func (t *Task) WaitInflight() {
+	t.mu.Lock()
+	h := t.handler
+	t.mu.Unlock()
+	if w, ok := h.(interface{ WaitInflight() }); ok {
+		w.WaitInflight()
+	}
 }
 
 func (t *Task) pause() {
