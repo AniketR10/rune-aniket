@@ -297,3 +297,20 @@ func getGUIConfig(cfg config.Config) (config.Config, bool, error) {
 	}
 	return cfg, true, nil
 }
+
+func resolveInitialThemeAttr(b browser.Browser, rootCfg config.Config) term.Attributes {
+	guiCfg, ok, err := getGUIConfig(rootCfg)
+	if err != nil {
+		_, _ = b.Notify(browserapi.LevelError, "%v", err)
+	}
+	if !ok {
+		guiCfg = config.NopConfig()
+	}
+	defaultColorTheme := getGUIDefaultColorTheme(b, guiCfg)
+	themes := getGUIColorThemes(b, guiCfg)
+	t := themes[defaultColorTheme]
+	return term.Attributes{
+		Fg: term.FromTcellColor(t.Foreground),
+		Bg: term.FromTcellColor(t.Background),
+	}
+}

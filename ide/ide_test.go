@@ -222,6 +222,48 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		assert.True(t, initShader.called)
 		assert.NoError(t, i.closeResources())
 	})
+
+	t.Run("init shader factory receives attrs set via SetDefaultAttributes before Ready", func(t *testing.T) {
+		// Documents RUNE-203 contract: callers MUST invoke
+		// SetDefaultAttributes before Ready() so the init-shader
+		// factory observes the configured GUI theme background.
+		// Calling SetDefaultAttributes after Ready() leaves the
+		// shader runner painting with the stale config defAttr.
+		configFile, _ := makeTestFiles(t)
+
+		dataDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dataDir)
+		})
+
+		var captured term.Attributes
+		i, err := New("", configFile.Name(), dataDir,
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(new(sync.Mutex)),
+			WithInitShader(
+				func(attr term.Attributes, _ component.FrameCharSet) shader.Shader {
+					captured = attr
+					return new(mockShader)
+				},
+				30, 1*time.Second,
+			))
+		require.NoError(t, err)
+
+		wantAttr := term.Attributes{
+			Fg: term.ColorWhite,
+			Bg: term.ColorBlack,
+		}
+		i.SetDefaultAttributes(wantAttr)
+
+		_ = i.Ready()
+
+		assert.Equal(t, wantAttr, captured,
+			"init shader factory must observe attrs set via "+
+				"SetDefaultAttributes prior to Ready()")
+		assert.NoError(t, i.closeResources())
+	})
 }
 
 func TestOpen(t *testing.T) {

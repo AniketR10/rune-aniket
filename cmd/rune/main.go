@@ -641,11 +641,6 @@ func runGUI(
 	defer func() { _ = root.Close() }()
 	root.attachGUI(g, transparentWindow)
 
-	initialTheme := themes[defaultColorTheme]
-	root.setInitialThemeAttr(term.Attributes{
-		Fg: term.FromTcellColor(initialTheme.Foreground),
-		Bg: term.FromTcellColor(initialTheme.Background),
-	})
 	if fg, bg := getGUIWindowOpacity(browser, cfg); transparentWindow && (fg != 1 || bg != 1) {
 		g.SetOpacity(bg, fg)
 	}

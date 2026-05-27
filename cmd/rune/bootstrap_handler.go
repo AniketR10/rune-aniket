@@ -148,7 +148,12 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 		ide.WithScheduleNextTick(b.scheduleNextTick),
 		ide.WithZdotDir(b.zdotDir),
 	}
-	return ide.New("", b.configPath, b.dataDir, opts...)
+	preIDE, err := ide.New("", b.configPath, b.dataDir, opts...)
+	if err != nil {
+		return nil, err
+	}
+	b.applyInitialThemeAttr(preIDE)
+	return preIDE, nil
 }
 
 func (b *bootstrapHandler) buildConfiguredIDE() (*ide.IDE, error) {
@@ -215,7 +220,12 @@ func (b *bootstrapHandler) buildConfiguredIDE() (*ide.IDE, error) {
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))
 	}
-	return ide.New(b.workspace, b.configPath, b.dataDir, opts...)
+	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir, opts...)
+	if err != nil {
+		return nil, err
+	}
+	b.applyInitialThemeAttr(realIDE)
+	return realIDE, nil
 }
 
 func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
@@ -223,8 +233,15 @@ func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.transparentWindow = transparentWindow
 }
 
-func (b *bootstrapHandler) setInitialThemeAttr(attr term.Attributes) {
-	b.initialThemeAttr = attr
+// applyInitialThemeAttr seeds the IDE with the configured GUI theme
+// background before any caller invokes Ready(). Ready() materializes
+// the init shader and captures defAttr at that moment, so a later
+// SetDefaultAttributes would not propagate into the running shader
+// (RUNE-203). Keeping both the pre-bootstrap and configured IDEs on
+// the same attrs also avoids a color jump across performSwap.
+func (b *bootstrapHandler) applyInitialThemeAttr(i *ide.IDE) {
+	b.initialThemeAttr = resolveInitialThemeAttr(i.Browser(), i.Config())
+	i.SetDefaultAttributes(b.initialThemeAttr)
 }
 
 func (b *bootstrapHandler) browser() browser.Browser {
