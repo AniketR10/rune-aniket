@@ -58,7 +58,6 @@ import (
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"mvdan.cc/sh/v3/shell"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
@@ -5168,182 +5167,14 @@ func (c *captureLoader) StartCommand(
 	return 0, c.startErr
 }
 
-// TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion is a regression
-// for the RUNE_DATADIR worktree disaster: invoking the `worktreenew`
-// alias from cmd/rune/rune.star used to wrap substituted positional
-// args (e.g. "$RUNE_DATADIR/worktrees/$1") in single quotes when
-// re-handing them to the VTE-backed `!!` plugin. shell.Fields then
-// treated the value as a literal, so `git worktree add` saw
-// "$RUNE_DATADIR" rather than the expanded path, and a literal
-// "$RUNE_DATADIR" directory was created inside the repository.
-//
-// Since RUNE-155 the text component itself expands $RUNE_DATADIR,
-// $WORKSPACE, $WORKSPACE_HASH, and $1..$9 at dispatch time, so the
-// argv reaching the VTE executor for `!!` already has every variable
-// resolved. The subtests verify both that (a) reshellQuoteArgs still
-// preserves expanded values that happen to contain a `$` literal
-// downstream, and (b) the alias body wired with a workspace EnvSource
-// produces a per-workspace, per-basename-hash directory under
-// $RUNE_DATADIR/worktrees.
-func TestWorktreeNewAliasFromRuneStarPreservesEnvExpansion(t *testing.T) {
-	// Source of truth: cmd/rune/rune.star. Keep these in sync with the
-	// strings declared there.
-	const (
-		runeStarPluginCmd       = `!! git worktree add "$RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1" -b $1`
-		runeStarWorkspaceCmd    = `workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1`
-		runeStarWorkspaceRename = `workspaceready workspacerename $1`
-		worktreeName            = "tabs-refresh-gpt"
-	)
-	dataDir := t.TempDir()
-	t.Setenv("RUNE_DATADIR", dataDir)
-
-	t.Run("reshellQuoteArgs preserves $VAR through shell.Fields", func(t *testing.T) {
-		// These are exactly the args the recursive `!!` dispatch
-		// receives after Layer 1 strips the surrounding double quotes
-		// from the alias body and replacePositionalArgs has substituted
-		// $1.
-		args := []string{
-			"git", "worktree", "add",
-			"$RUNE_DATADIR/worktrees/" + worktreeName,
-			"-b", worktreeName,
-		}
-		quoted := cmdenv.QuoteArgsForShellFields(args)
-		fields, err := shell.Fields(strings.Join(quoted, " "), os.Getenv)
-		require.NoError(t, err)
-		assert.Equal(t, []string{
-			"git", "worktree", "add",
-			filepath.Join(dataDir, "worktrees", worktreeName),
-			"-b", worktreeName,
-		}, fields,
-			"$RUNE_DATADIR must survive reshellQuoteArgs round-trip; "+
-				"single-quoting would suppress shell.Fields env expansion "+
-				"and create a literal $RUNE_DATADIR directory")
-	})
-
-	t.Run("worktreenew dispatch reaches StartCommand with expanded path", func(t *testing.T) {
-		// Capture StartCommand so we observe the argv reaching the
-		// VTE's executor — i.e. after reshellQuoteArgs + shell.Fields,
-		// the same place a real `!!` invocation would land. A non-nil
-		// return makes executePluginWait fail fast.
-		runWorktreeNew(t, "/tmp/a/blue", worktreeName,
-			runeStarPluginCmd, runeStarWorkspaceCmd,
-			runeStarWorkspaceRename, dataDir)
-	})
-
-	t.Run("per-workspace hash differentiates same-basename worktrees", func(t *testing.T) {
-		gotA := runWorktreeNew(t, "/tmp/a/blue", worktreeName,
-			runeStarPluginCmd, runeStarWorkspaceCmd,
-			runeStarWorkspaceRename, dataDir)
-		gotB := runWorktreeNew(t, "/tmp/b/blue", worktreeName,
-			runeStarPluginCmd, runeStarWorkspaceCmd,
-			runeStarWorkspaceRename, dataDir)
-		assert.NotEqual(t, gotA, gotB,
-			"two workspaces sharing a basename must not collide on "+
-				"$RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH")
-	})
-
-	t.Run("remote workspace resolves WORKSPACE vars too", func(t *testing.T) {
-		// Commands run via the workspace's executor in the
-		// workspace's own filesystem, so $WORKSPACE and
-		// $WORKSPACE_HASH must resolve for remote schemes the same
-		// way they do for local file:// workspaces.
-		captured := &captureLoader{
-			testLoader: testLoader{},
-			startErr:   errors.New("captured-start-command"),
-		}
-		nonFileURI, err := workspaceapi.ParseURI(
-			"ssh://user@host/tmp/blue")
-		require.NoError(t, err)
-		envSource := envSourceForURI(nonFileURI)
-		publishEvent := func(ev term.Event) bool { return true }
-		e := newExForTestingWithWorkspace(t, captured,
-			texttest.NopEditor(), vte.DefaultConfig(),
-			publishEvent, clipboard.NewInMemory(),
-			text.WithCommandKey(testCommandKey),
-			text.WithEnvSource(envSource),
-			text.WithCommandAliases(map[string]text.CommandAlias{
-				"worktreenew": {Commands: []string{
-					runeStarPluginCmd,
-					runeStarWorkspaceCmd,
-					runeStarWorkspaceRename,
-				}},
-			}),
-		)
-		defer e.Close()
-
-		_ = e.dispatchCommand("worktreenew", worktreeName)
-		require.NotEmpty(t, captured.cmds,
-			"alias must reach the executor even on remote workspaces")
-		got := captured.cmds[0]
-		argv := append([]string{got.Path}, got.Args...)
-		expectedHash := workspaceHash(nonFileURI)
-		expectedBase := workspaceBasename(nonFileURI)
-		expectedPath := filepath.Join(dataDir, "worktrees",
-			expectedBase+"-"+expectedHash, worktreeName)
-		assert.Equal(t, []string{
-			"git", "worktree", "add", expectedPath,
-			"-b", worktreeName,
-		}, argv)
-	})
-}
-
-// runWorktreeNew dispatches the rune-style worktreenew alias against a
-// freshly constructed ex backed by a captureLoader and returns the
-// fully expanded argv of the `!! git worktree add …` plugin call. The
-// alias is configured with a workspace EnvSource bound to wsPath so
-// that $WORKSPACE and $WORKSPACE_HASH resolve per-workspace.
-func runWorktreeNew(
-	t *testing.T, wsPath, worktreeName,
-	pluginCmd, workspaceCmd, renameCmd, dataDir string,
-) []string {
-	t.Helper()
-	wsURI, err := workspaceapi.ParseURI("file://" + wsPath)
-	require.NoError(t, err)
-	captured := &captureLoader{
-		testLoader: testLoader{},
-		startErr:   errors.New("captured-start-command"),
-	}
-	envSource := envSourceForURI(wsURI)
-	publishEvent := func(ev term.Event) bool { return true }
-	e := newExForTestingWithWorkspace(t, captured,
-		texttest.NopEditor(), vte.DefaultConfig(),
-		publishEvent, clipboard.NewInMemory(),
-		text.WithCommandKey(testCommandKey),
-		text.WithEnvSource(envSource),
-		text.WithCommandAliases(map[string]text.CommandAlias{
-			"worktreenew": {Commands: []string{
-				pluginCmd, workspaceCmd, renameCmd,
-			}},
-		}),
-	)
-	defer e.Close()
-	_ = e.dispatchCommand("worktreenew", worktreeName)
-	require.NotEmpty(t, captured.cmds,
-		"!! must have reached the executor's StartCommand")
-	got := captured.cmds[0]
-	argv := append([]string{got.Path}, got.Args...)
-	expectedHash := workspaceHash(wsURI)
-	expectedBase := workspaceBasename(wsURI)
-	expectedPath := filepath.Join(dataDir, "worktrees",
-		expectedBase+"-"+expectedHash, worktreeName)
-	assert.Equal(t, []string{
-		"git", "worktree", "add", expectedPath,
-		"-b", worktreeName,
-	}, argv,
-		"worktreenew must reach git with the workspace-keyed path")
-	return argv
-}
-
 // envSourceForURI returns a cmdenv.Source that resolves $WORKSPACE
-// and $WORKSPACE_HASH from the supplied URI using the production
-// helpers in ide/workspace_env.go.
+// from the supplied URI using the production helpers in
+// ide/workspace_env.go.
 func envSourceForURI(uri workspaceapi.URI) cmdenv.Source {
 	return func(name string) (string, bool) {
 		switch name {
 		case "WORKSPACE":
 			return workspaceBasename(uri), true
-		case "WORKSPACE_HASH":
-			return workspaceHash(uri), true
 		case "WORKSPACE_URI":
 			return uri.String(), true
 		case "WORKSPACE_PATH":
@@ -5489,15 +5320,13 @@ func (w *realExecLoader) StartCommand(
 
 // TestWorktreeRemoveAliasResolvesFromInsideWorktree is the RUNE-178
 // regression: invoking worktreeremove from inside a worktree used to
-// resolve $WORKSPACE-$WORKSPACE_HASH to the worktree's own slug, so
-// the rebuilt path never matched git's worktree registry. Handing
-// git the bare basename works from parent and from any sibling
-// worktree.
+// resolve a slug from the focused workspace, so the rebuilt path
+// never matched git's worktree registry. Handing git the bare
+// basename works from parent and from any sibling worktree.
 func TestWorktreeRemoveAliasResolvesFromInsideWorktree(t *testing.T) {
 	const (
-		fixedAliasBody  = `!! git worktree remove $1`
-		brokenAliasBody = `!! git worktree remove $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1`
-		worktreeName    = "tabs-refresh-gpt"
+		fixedAliasBody = `!! git worktree remove $1`
+		worktreeName   = "tabs-refresh-gpt"
 	)
 	dataDir := t.TempDir()
 	t.Setenv("RUNE_DATADIR", dataDir)
@@ -5505,11 +5334,8 @@ func TestWorktreeRemoveAliasResolvesFromInsideWorktree(t *testing.T) {
 	// Simulate the bug's focused-workspace context: the user is sitting
 	// inside the worktree workspace that worktreenew created earlier,
 	// not the parent repo.
-	parentURI, err := workspaceapi.ParseURI("file:///tmp/a/blue")
-	require.NoError(t, err)
 	worktreePath := filepath.Join(dataDir, "worktrees",
-		workspaceBasename(parentURI)+"-"+workspaceHash(parentURI),
-		worktreeName)
+		"blue-abcd", worktreeName)
 	worktreeURI, err := workspaceapi.ParseURI("file://" + worktreePath)
 	require.NoError(t, err)
 
@@ -5537,21 +5363,6 @@ func TestWorktreeRemoveAliasResolvesFromInsideWorktree(t *testing.T) {
 		got := captured.cmds[0]
 		return append([]string{got.Path}, got.Args...)
 	}
-
-	t.Run("bug repro: old body rebuilds the wrong worktree path", func(t *testing.T) {
-		argv := run(t, brokenAliasBody)
-		// The old body uses $WORKSPACE-$WORKSPACE_HASH, which inside a
-		// worktree resolves to the worktree's own slug rather than the
-		// parent repo's. The resulting path nests the worktree slug
-		// under $RUNE_DATADIR/worktrees and never exists on disk.
-		wrongSlug := workspaceBasename(worktreeURI) + "-" + workspaceHash(worktreeURI)
-		wrongPath := filepath.Join(dataDir, "worktrees", wrongSlug, worktreeName)
-		assert.Equal(t, []string{
-			"git", "worktree", "remove", wrongPath,
-		}, argv,
-			"sanity: the broken alias body must reproduce the bug "+
-				"by handing git a worktree-slugged path that does not exist")
-	})
 
 	t.Run("fix: alias hands git the bare basename", func(t *testing.T) {
 		argv := run(t, fixedAliasBody)

@@ -1478,7 +1478,7 @@ func TestDispatchCommand(t *testing.T) {
 		var newWindowCalled, editCalled int
 
 		// $name is not in the recognised set (positional digits,
-		// $FILE, $WORKSPACE, $WORKSPACE_HASH); shell.Expand falls
+		// $FILE, $WORKSPACE); shell.Expand falls
 		// back to os.Getenv("name"). Pin it to the empty string so
 		// the expected argv is deterministic regardless of host env.
 		t.Setenv("name", "")

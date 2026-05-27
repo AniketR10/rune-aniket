@@ -145,9 +145,10 @@ config = merge(config, {
 # config["command"]["aliases"] = {
 #     "w": "write",
 #     "e": {"command": "edit", "completer": "files"},
-#     "wtopen": {
-#         "command":   "workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
-#         "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
+#     # Alias with a shell completer (here: git branch names).
+#     "gitcheckout": {
+#         "command":   "!! git -C $WORKSPACE_PATH checkout $1",
+#         "completer": '! git -C $WORKSPACE_PATH branch --format="%(refname:short)"',
 #     },
 #     "conf": "config",
 # }

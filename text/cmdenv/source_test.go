@@ -17,8 +17,8 @@ func TestExpand(t *testing.T) {
 		switch name {
 		case "WORKSPACE":
 			return "blue", true
-		case "WORKSPACE_HASH":
-			return "ab12", true
+		case "WORKSPACE_URI":
+			return "file:///tmp/blue", true
 		case "FILE":
 			return "/tmp/a b.go", true
 		case "EMPTY":
@@ -37,9 +37,9 @@ func TestExpand(t *testing.T) {
 	}{
 		{"plain", "literal", "literal", false},
 		{"simple var", "$WORKSPACE", "blue", false},
-		{"braced var", "${WORKSPACE_HASH}", "ab12", false},
-		{"compose", "$WORKSPACE-$WORKSPACE_HASH/foo",
-			"blue-ab12/foo", false},
+		{"braced var", "${WORKSPACE_URI}", "file:///tmp/blue", false},
+		{"compose", "$WORKSPACE-$FILE",
+			"blue-/tmp/a b.go", false},
 		{"env fallback", "$RUNE_DATADIR/x", "/data/x", false},
 		{"source wins over os", "$HOME-$WORKSPACE", "/home/u-blue",
 			false},

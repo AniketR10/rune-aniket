@@ -615,13 +615,20 @@ config = {
             "tabsearch":      "echo {prompt}tabfocus<space>",
             "workspacesearch":"echo {prompt}workspacefocus<space>",
             "worktreenew": [
-                '!! git worktree add "$RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1" -b $1',
-                'workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1',
+                '!! ROOT=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)',
+                '!! ROOT_HASH=$(printf %s "$ROOT" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-4)',
+                '!! ROOT_NAME=$(basename "$ROOT" | tr -c "A-Za-z0-9.\\-_" "_")',
+                '!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1',
+                '!! git worktree add "$WORKTREE" -b $1',
+                'workspacenew $WORKTREE',
                 'workspaceready workspacerename $1',
             ],
             "worktreeopen": {
                 "command": [
-                    "!! WORKTREE=$(git worktree list --porcelain | awk -v name=\"$1\" '$$1==\"worktree\" && $$2 ~ \"/\" name \"$$\" {print $$2; exit}')",
+                    '!! ROOT=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)',
+                    '!! ROOT_HASH=$(printf %s "$ROOT" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-4)',
+                    '!! ROOT_NAME=$(basename "$ROOT" | tr -c "A-Za-z0-9.\\-_" "_")',
+                    '!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1',
                     "workspacenew $WORKTREE",
                     "workspaceready workspacerename $1",
                     "workspaceready shaderrun shine 600ms",

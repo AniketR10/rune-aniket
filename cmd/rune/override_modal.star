@@ -105,11 +105,12 @@
 #     "w": "write",
 #     # Alias with a completer: typing `:e <tab>` suggests files.
 #     "e": {"command": "edit", "completer": "files"},
-#     # Alias with a shell completer (here: git worktree names). The
-#     # `! $SHELL -c '...'` template prints completion lines.
-#     "wtopen": {
-#         "command":   "workspacenew $RUNE_DATADIR/worktrees/$WORKSPACE-$WORKSPACE_HASH/$1",
-#         "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
+#     # Alias with a shell completer (here: git branch names). The
+#     # `! …` template runs a shell line whose stdout becomes one
+#     # completion candidate per line.
+#     "gitcheckout": {
+#         "command":   "!! git -C $WORKSPACE_PATH checkout $1",
+#         "completer": '! git -C $WORKSPACE_PATH branch --format="%(refname:short)"',
 #     },
 #     # Open this configuration file (already bound to <m-,>).
 #     "conf": "config",

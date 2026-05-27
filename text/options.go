@@ -140,7 +140,7 @@ type Config struct {
 	//   $WORD           identifier at the cursor
 	//   $LANG           language ID for $FILE
 	// EnvSource itself is expected to supply at least $WORKSPACE,
-	// $WORKSPACE_HASH, $WORKSPACE_URI and $WORKSPACE_PATH for every
+	// $WORKSPACE_URI and $WORKSPACE_PATH for every
 	// workspace scheme — commands dispatched through an alias run
 	// inside the workspace's own filesystem, so these names must
 	// resolve whether the workspace is local, remote, or in-memory
@@ -373,14 +373,14 @@ func DefaultConfig() Config {
 		// rune.star ships the same value via
 		// editor.max_size_for_syntax; user configs and tests can
 		// override the field through text.WithMaxSyntaxParseSize.
-		MaxSyntaxParseSize:      1 * 1024 * 1024,
-		PkgManager:              nopPkgManager{},
-		Markdown:                markdown.DefaultConfig(),
-		Clipboard:               clipboard.NewInMemory(),
-		OpenRouter:              nopOpenRouter{},
-		Comments:                CommentConfig{},
-		FileExplorerIndentAttr:  term.Attributes{Fg: term.ColorGray},
-		FileExplorerIconAttr:    term.Attributes{Fg: term.ColorGray},
+		MaxSyntaxParseSize:     1 * 1024 * 1024,
+		PkgManager:             nopPkgManager{},
+		Markdown:               markdown.DefaultConfig(),
+		Clipboard:              clipboard.NewInMemory(),
+		OpenRouter:             nopOpenRouter{},
+		Comments:               CommentConfig{},
+		FileExplorerIndentAttr: term.Attributes{Fg: term.ColorGray},
+		FileExplorerIconAttr:   term.Attributes{Fg: term.ColorGray},
 		Icons: IconSet{
 			Extensions:    map[string]rune{},
 			Directory:     '',

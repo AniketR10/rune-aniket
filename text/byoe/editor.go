@@ -166,7 +166,7 @@ func (e *Editor) Edit(
 	// shell.Fields out, no double-tokenisation.
 	cmdStr := substituteCommand(e.command, file.Path(), 1, 1)
 	// Apply Rune-side shell-style expansion so $WORKSPACE,
-	// $WORKSPACE_HASH, $FILE, $RUNE_DATADIR, … resolve before the
+	// $FILE, $RUNE_DATADIR, … resolve before the
 	// vte's own shell.Fields pass runs. Expansion failures (e.g.
 	// command substitution rejected) propagate as a clear error
 	// rather than silently producing a malformed argv.

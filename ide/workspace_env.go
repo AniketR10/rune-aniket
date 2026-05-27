@@ -5,8 +5,6 @@
 package ide
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"path/filepath"
 	"strings"
 
@@ -21,18 +19,6 @@ import (
 func workspaceBasename(uri workspaceapi.URI) string {
 	base := filepath.Base(filepath.Clean(uri.Path()))
 	return sanitiseBasename(base)
-}
-
-// workspaceHash returns a short, stable digest derived from the
-// workspace URI. Two workspaces with the same basename but different
-// underlying URIs produce different hashes so derived names (for
-// example `$WORKSPACE-$WORKSPACE_HASH`) do not collide. The hash
-// includes the scheme and host so the same path served by different
-// hosts is differentiated.
-func workspaceHash(uri workspaceapi.URI) string {
-	key := uri.Scheme() + "://" + uri.Host() + filepath.Clean(uri.Path())
-	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:2])
 }
 
 // sanitiseBasename replaces characters that are awkward in shell

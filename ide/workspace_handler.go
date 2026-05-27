@@ -612,8 +612,6 @@ func (h *workspaceManagerHandler) envSource(name string) (string, bool) {
 	switch name {
 	case "WORKSPACE":
 		return workspaceBasename(uri), true
-	case "WORKSPACE_HASH":
-		return workspaceHash(uri), true
 	case "WORKSPACE_URI":
 		return uri.String(), true
 	case "WORKSPACE_PATH":
