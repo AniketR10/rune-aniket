@@ -4455,6 +4455,91 @@ func TestSwitchToTab(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 30, 15, cases)
 }
 
+func TestTabFocusSwitchesToOwningWindow(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		// Two tabs across a vertical split: hello.go in the left
+		// window, world.go in the right window (focused).
+		{":edit hello.go>:windowsplit right>:edit world.go>",
+			`┌────────────━━━━━━━━━━──────┐
+│o hello.go  o world.go      │
+├─────────────┐┌─────────────┐
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+		// tabfocus 1 from the right (non-owning) window moves focus
+		// to the left window that owns hello.go.
+		{":tabfocus 1>",
+			`┌━━━━━━━━━━──────────────────┐
+│o hello.go  o world.go      │
+┌─────────────┐┌─────────────┤
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+		// tabfocus 1 again is a no-op because the tab is already in
+		// the focused window.
+		{":tabfocus 1>",
+			`┌━━━━━━━━━━──────────────────┐
+│o hello.go  o world.go      │
+┌─────────────┐┌─────────────┤
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+		// tabfocus 2 from the left window moves focus back to the
+		// right window that owns world.go.
+		{":tabfocus 2>",
+			`┌────────────━━━━━━━━━━──────┐
+│o hello.go  o world.go      │
+├─────────────┐┌─────────────┐
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+│AAAAAAAAAAAAA││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	handlertest.TestHandlerSequence(t, b, 30, 15, cases)
+}
+
 func TestRunStopTasks(t *testing.T) {
 	t.Run("newtask is called with incorrect number of args returns error", func(t *testing.T) {
 		b, mu, cleanup := newExForTestingTasks(t)

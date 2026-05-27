@@ -591,6 +591,15 @@ func (e *ex) tabfocus(_ context.Context, args ...string) error {
 		return errors.New("the first tab is 1")
 	}
 	b := e.comp.Browser()
+	tabs := b.Tabs()
+	if idx-1 >= 0 && idx-1 < len(tabs) {
+		if win, ok := tabs[idx-1].Window(); ok {
+			if win != e.invokeWindow() {
+				b.SetFocus(win)
+			}
+			return nil
+		}
+	}
 	b.SetContentToTab(e.invokeWindow(), idx-1)
 	return nil
 }
