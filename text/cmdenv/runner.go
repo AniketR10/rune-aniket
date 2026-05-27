@@ -45,6 +45,7 @@ type Runner struct {
 	Executor schemeapi.Executor
 	// EnvSource resolves the parent shell environment. May be nil.
 	EnvSource Source
+	Dir string
 	// Stdin/Stdout/Stderr are passed to interp; nil Stdout/Stderr is
 	// treated as io.Discard.
 	Stdin          io.Reader
@@ -75,13 +76,17 @@ func (r Runner) Run(
 		stderr = io.Discard
 	}
 
-	runner, err := interp.New(
+	opts := []interp.RunnerOption{
 		interp.Env(parentEnv(r.EnvSource)),
 		interp.StdIO(r.Stdin, stdout, stderr),
 		interp.ExecHandlers(func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			return workspaceExecHandler(r.Executor)
 		}),
-	)
+	}
+	if r.Dir != "" {
+		opts = append(opts, interp.Dir(r.Dir))
+	}
+	runner, err := interp.New(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("init shell runner: %w", err)
 	}

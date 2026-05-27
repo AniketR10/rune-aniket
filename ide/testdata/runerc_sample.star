@@ -4,9 +4,9 @@ aliases = {
     "w": "write",
     "gitblame": "! git blame $FILE",
     "worktreenew": [
-        '!! ROOT=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)',
+        '!! ROOT=$(git rev-parse --git-common-dir) && ROOT=$(cd "$ROOT/.." && pwd) || exit 1',
         '!! ROOT_HASH=$(printf %s "$ROOT" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-4)',
-        '!! ROOT_NAME=$(basename "$ROOT" | tr -c "A-Za-z0-9.\\-_" "_")',
+        '!! ROOT_NAME=${ROOT##*/}',
         '!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1',
         '!! git worktree add "$WORKTREE" -b $1',
         "workspacenew $WORKTREE",

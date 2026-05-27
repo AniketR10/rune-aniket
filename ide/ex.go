@@ -1481,6 +1481,7 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 		runner := cmdenv.Runner{
 			Executor:  e.executor,
 			EnvSource: e.config.EnvSource,
+			Dir:       e.workspaceURI.Path(),
 			Stderr:    &stderrBuf,
 		}
 		captured, runErr := runner.Run(runCtx, line, parsed)
