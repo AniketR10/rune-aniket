@@ -39,3 +39,11 @@ repos:
         entry: make test
         pass_filenames: false
         types: [go]
+
+-   repo: local
+    hooks:
+    -   id: validate_submodule_pins
+        language: system
+        name: validate_submodule_pins
+        entry: ./validate_submodule_pins.sh
+        pass_filenames: false
