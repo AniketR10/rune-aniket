@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"net/url"
 	"sync/atomic"
-	"time"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/browser"
@@ -49,7 +48,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/credentials/oauth"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/ide/ideplan"
 )
 
 //go:embed callback_page.html
@@ -236,51 +234,6 @@ func (a *Client) Close() (ret error) {
 	}
 	a.ctxCancel()
 	return
-}
-
-// PlanDecision satisfies ideplan.Source by inspecting the cached
-// oauth2 token. It never triggers a refresh or opens a browser:
-// logged-out users (no token in memory or storage) are reported as
-// Denied. Expired-but-paid tokens fall through to decidePlan, which
-// applies the offline grace window from ideplan.DefaultGraceWindow.
-func (a *Client) PlanDecision(ctx context.Context) ideplan.Decision {
-	return decidePlan(a.tokenSource.Cached(ctx), time.Now(), ideplan.DefaultGraceWindow)
-}
-
-var _ ideplan.Source = (*Client)(nil)
-
-// decidePlan evaluates the plan state for a given oauth2 token relative
-// to now. The grace window is the maximum time after token.Expiry that
-// a previously-paid user is allowed to continue using gated features
-// without refreshing.
-func decidePlan(token *oauth2.Token, now time.Time, graceWindow time.Duration) ideplan.Decision {
-	if token == nil || token.AccessToken == "" {
-		return ideplan.Decision{Kind: ideplan.Denied, Reason: "logged out"}
-	}
-	role := rolePlanFromToken(token)
-	if role < auth.RolePaid {
-		return ideplan.Decision{Kind: ideplan.Denied, Reason: "not subscribed"}
-	}
-	if token.Expiry.IsZero() || now.Before(token.Expiry) {
-		return ideplan.Decision{Kind: ideplan.Allowed}
-	}
-	if now.Sub(token.Expiry) <= graceWindow {
-		return ideplan.Decision{
-			Kind:           ideplan.GracePeriod,
-			Reason:         "subscription verification overdue",
-			GraceExpiresAt: token.Expiry.Add(graceWindow),
-		}
-	}
-	return ideplan.Decision{Kind: ideplan.Denied, Reason: "grace period expired"}
-}
-
-func rolePlanFromToken(token *oauth2.Token) auth.Role {
-	extra, ok := token.Extra("extra").(map[string]any)
-	if !ok {
-		return auth.RoleBasic
-	}
-	r, _ := extra["Role"].(auth.Role)
-	return r
 }
 
 var (

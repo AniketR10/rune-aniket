@@ -50,7 +50,6 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -500,10 +499,8 @@ func TestPkgManager_HandlePkgInstall_NotAuthenticated(t *testing.T) {
 
 // TestPkgManager_HandlePkgInstall_Forbidden verifies that the
 // interactive :pkginstall command translates a 403 from the
-// cdnrelease /api/releases/ endpoint into a user-facing
-// "subscription required" notification rather than bubbling the
-// raw cdnrelease error, mirroring how ErrNotAuthenticated is
-// suppressed into a login prompt.
+// cdnrelease endpoint into the friendly errForbidden sentinel
+// instead of bubbling up the raw cdnrelease error.
 func TestPkgManager_HandlePkgInstall_Forbidden(t *testing.T) {
 	t.Parallel()
 	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
@@ -521,8 +518,7 @@ func TestPkgManager_HandlePkgInstall_Forbidden(t *testing.T) {
 		Name: cmdPkgInstall,
 		Args: []string{"go"},
 	})
-	require.NoError(t, err,
-		"expected ErrSubscriptionRequired to be suppressed into a notification")
+	require.ErrorIs(t, err, idepkg.ErrForbidden)
 }
 
 // TestPkgManager_CompletePkgInstall_Forbidden verifies that tab
@@ -1152,7 +1148,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 	})
 }
 
-func TestSetupPackageDistribution(t *testing.T) {
+func TestSetReleaseManager(t *testing.T) {
 	t.Parallel()
 	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
@@ -1188,7 +1184,7 @@ func TestSetupPackageDistribution(t *testing.T) {
 	)
 	rm2 := idepkgtest.NewReleaseManager(pkgs, bundles)
 	rm2.SetMissProgressComplete(true)
-	m.setupPackageDistribution(rm2, ideplan.AlwaysAllowed())
+	m.setReleaseManager(rm2)
 
 	cases = []handlertest.SequenceTestCase{
 		{"<:pkginstall ",
@@ -1274,7 +1270,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 		}, runner, mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
-		ideplan.AlwaysAllowed(), shRunner, 0, nil, false, false)
+		shRunner, 0, nil, false, false)
 	require.NoError(t, err)
 	m.subscribeCommand(textapi.CommandManual{Name: "pkgwait"}, text.FuncCommandHandler(
 		func(ctx context.Context, cmd textapi.Command) error {
@@ -1372,7 +1368,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 		}, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
-		ideplan.AlwaysAllowed(), shRunner, 0, nil, false, false)
+		shRunner, 0, nil, false, false)
 	require.NoError(t, err)
 	for i, file := range files {
 		require.NoError(t, m.openFile(file, i == 0))

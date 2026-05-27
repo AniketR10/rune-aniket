@@ -38,7 +38,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace"
 )
@@ -96,7 +95,7 @@ func TestScheduleNextTickDoesNotReacquireHostLock(t *testing.T) {
 		FuncExtensionsRunner(testRunnerFn), mu, nil,
 		func() (ideConfig, error) { return cfg, nil },
 		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
-		ideplan.AlwaysAllowed(), shRunner, 0, nil, false, false)
+		shRunner, 0, nil, false, false)
 	require.NoError(t, err)
 
 	// Schedule a callback through the IDE's installed scheduler

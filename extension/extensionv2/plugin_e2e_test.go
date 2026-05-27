@@ -139,7 +139,7 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 					fn()
 					return true
 				},
-				nil, nil,
+				nil,
 			)
 			require.NoError(t, err)
 			runner, err := baseRunner.WorkspaceExtensionsRunner(

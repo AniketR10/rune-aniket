@@ -202,7 +202,7 @@ notifications:
 		dataDir,
 		configFile.Name(),
 		dataDir,
-		goide.WithPackageDistribution(clientReleaseManager, nil),
+		goide.WithReleaseManager(clientReleaseManager),
 		goide.WithScheduleNextTick(func(fn func()) bool {
 			fn()
 			return true

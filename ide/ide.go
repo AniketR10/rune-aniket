@@ -48,7 +48,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -199,13 +198,10 @@ func (i *IDE) WaitInflight() {
 	i.workspaceHandler.waitInflight()
 }
 
-// SetupPackageDistribution wires the release.Manager that serves
-// package bundles together with the PlanSource that gates downloads
-// and extension load on paid-plan status. Must be called before Run
-// or Handler runs the first time and before any extension or
-// pkgmanager command can fire.
-func (i *IDE) SetupPackageDistribution(m release.Manager, p ideplan.Source) {
-	i.workspaceHandler.setupPackageDistribution(m, p)
+// SetReleaseManager sets the release.Manager of the IDE.
+// This should be called before Run or Handler are called for the first time.
+func (i *IDE) SetReleaseManager(m release.Manager) {
+	i.workspaceHandler.setReleaseManager(m)
 }
 
 // Notifications returns an cross-workspace, goroutine-safe implementation
@@ -381,10 +377,6 @@ func (i *IDE) init(
 	}
 
 	i.workspaceHandler = new(workspaceManagerHandler)
-	planSource := op.planSource
-	if planSource == nil {
-		planSource = ideplan.AlwaysAllowed()
-	}
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,
@@ -397,7 +389,7 @@ func (i *IDE) init(
 		}, op.workspaceConfig, op.tabBarOffset,
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,
-		op.releaseManager, planSource, &i.root, i.ideConfig.initialTerminalCapacity(),
+		op.releaseManager, &i.root, i.ideConfig.initialTerminalCapacity(),
 		op.dispatchOnPreview, op.debugCommands, op.streamingOpen)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)

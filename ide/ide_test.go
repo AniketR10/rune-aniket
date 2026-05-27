@@ -284,9 +284,7 @@ func TestOpen(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		i, err := New("", config.Name(), dataDir,
-			WithPackageDistribution(rm, nil),
-			WithPublishEvent(nopPublishEvent))
+		i, err := New("", config.Name(), dataDir, WithReleaseManager(rm), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)

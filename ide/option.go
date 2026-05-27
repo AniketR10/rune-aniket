@@ -46,7 +46,6 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
-	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 )
 
@@ -96,14 +95,10 @@ func WithPublishEvent(p EventPublisher) Option {
 	}
 }
 
-// WithPackageDistribution sets the release.Manager that serves
-// package bundles and the PlanSource that gates downloads and
-// extension load on paid-plan status. A nil PlanSource disables the
-// plan gate (tests and self-hosted setups).
-func WithPackageDistribution(m release.Manager, p ideplan.Source) Option {
+// WithReleaseManager sets the release.Manager of the IDE.
+func WithReleaseManager(m release.Manager) Option {
 	return func(opts *options) {
 		opts.releaseManager = m
-		opts.planSource = p
 	}
 }
 
@@ -370,7 +365,6 @@ type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
 	releaseManager      release.Manager
-	planSource          ideplan.Source
 	tabBarOffset        int
 	tabsClickCallback   func(int) bool
 	tabBarHeight        int

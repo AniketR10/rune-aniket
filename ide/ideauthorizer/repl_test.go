@@ -68,7 +68,7 @@ func TestAuthorizerRegistersRevokeREPLCommand(t *testing.T) {
 	t.Parallel()
 
 	editor := newCapturingEditor()
-	_, err := NewAuthorizer(editor, nil, storagestub.NewInMemoryService(), syncScheduleNextTick, nil, nil)
+	_, err := NewAuthorizer(editor, nil, storagestub.NewInMemoryService(), syncScheduleNextTick, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, editor.calls)
@@ -82,7 +82,7 @@ func TestAuthorizerRegistersRevokeREPLCommand(t *testing.T) {
 func TestAuthorizerRequiresEditor(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewAuthorizer(nil, nil, storagestub.NewInMemoryService(), syncScheduleNextTick, nil, nil)
+	_, err := NewAuthorizer(nil, nil, storagestub.NewInMemoryService(), syncScheduleNextTick, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "editor is required")
 }
