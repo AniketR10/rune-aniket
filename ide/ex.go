@@ -1480,7 +1480,7 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 		var stderrBuf strings.Builder
 		runner := cmdenv.Runner{
 			Executor:  e.executor,
-			EnvSource: e.config.EnvSource,
+			EnvSource: chainOverlayEnvSource(ctx, e.config.EnvSource),
 			Dir:       e.workspaceURI.Path(),
 			Stderr:    &stderrBuf,
 		}
@@ -1540,6 +1540,22 @@ func firstWord(line string) string {
 		return line[:idx]
 	}
 	return line
+}
+
+func chainOverlayEnvSource(ctx context.Context, base cmdenv.Source) cmdenv.Source {
+	chain := idecmd.ChainFromContext(ctx)
+	if chain == nil {
+		return base
+	}
+	return func(name string) (string, bool) {
+		if v, ok := chain.Get(name); ok {
+			return v, true
+		}
+		if base != nil {
+			return base(name)
+		}
+		return "", false
+	}
 }
 
 func (e *ex) keydump(_ context.Context, _ ...string) error {

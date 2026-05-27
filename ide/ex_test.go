@@ -5239,6 +5239,19 @@ func TestPluginWaitAssignmentCapturesIntoAliasChain(t *testing.T) {
 				"so awk (and other shell-internal $N consumers) "+
 				"can use them without Rune intervening")
 	})
+
+	t.Run("parameter expansion uses chain var captured by previous step", func(t *testing.T) {
+		captured := newExForCapturingCommand(t, []string{
+			`!! ROOT=/Users/ernestrc/src/idelsp`,
+			`!! ROOT_NAME=${ROOT##*/}`,
+			"workspacenew $ROOT_NAME",
+		})
+		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, []string{"idelsp"}, captured.Args,
+			"a !! step's ${VAR##pattern} must expand against the "+
+				"chain var captured by an earlier !! step (the "+
+				"worktreenew alias relies on this for ROOT_NAME)")
+	})
 }
 
 // newExForCapturingCommand runs aliasCommands as the body of an alias

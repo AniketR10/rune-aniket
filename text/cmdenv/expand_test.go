@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package cmdenv
 
 import (
@@ -109,6 +108,8 @@ func TestExpandBodyPreservesShellConstructs(t *testing.T) {
 		{"backtick preserved",
 			"echo `date` $FILE",
 			"echo `date` '/tmp/a b.go'"},
+		{"parameter expansion suffix-strip preserved",
+			`ROOT_NAME=${ROOT##*/}`, `ROOT_NAME=${ROOT##*/}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -220,6 +221,21 @@ func TestExpandBodyAdversarial(t *testing.T) {
 func TestExpandBodyNilSource(t *testing.T) {
 	got := ExpandBody(context.Background(), "$X ${Y} $1 $$ literal", nil)
 	assert.Equal(t, "$X ${Y} $1 $ literal", got)
+}
+
+func TestExpandBodyPreservesParameterExpansionWithChainVar(t *testing.T) {
+	src := Source(func(name string) (string, bool) {
+		if name == "ROOT" {
+			return "/Users/ernestrc/src/idelsp", true
+		}
+		return "", false
+	})
+	got := ExpandBody(context.Background(),
+		`ROOT_NAME=${ROOT##*/}`, src)
+	assert.Equal(t, `ROOT_NAME=${ROOT##*/}`, got,
+		"ExpandBody must pass ${VAR##pattern} through verbatim "+
+			"so the downstream shell can evaluate it; rewriting "+
+			"to the chain value would lose the suffix-strip")
 }
 
 // TestQuoteRoundTripsThroughShellFields asserts that values quoted
@@ -434,7 +450,7 @@ func permissiveExpandCases() []expandCase {
 		{name: "cmdsubst preserved at start",
 			in: "$(date) end", want: "$(date) end"},
 		{name: "cmdsubst preserved in middle",
-			in: "before $(date) after",
+			in:   "before $(date) after",
 			want: "before $(date) after"},
 		{name: "two adjacent cmdsubsts",
 			in:   "$(a)$(b)",

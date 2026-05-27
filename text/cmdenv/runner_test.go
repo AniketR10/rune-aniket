@@ -58,3 +58,67 @@ func TestRunnerCdRelativeIsAnchoredAtDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, dir+"\n", out.String())
 }
+
+func TestRunnerCapturesParameterExpansionResult(t *testing.T) {
+	r := Runner{Executor: &osExecutor{}}
+	captured, err := r.Run(context.Background(),
+		`ROOT=/Users/ernestrc/src/idelsp; ROOT_NAME=${ROOT##*/}`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "idelsp", captured["ROOT_NAME"])
+}
+
+func TestRunnerCapturesParameterExpansionFromEnvSource(t *testing.T) {
+	src := Source(func(name string) (string, bool) {
+		if name == "ROOT" {
+			return "/Users/ernestrc/src/idelsp", true
+		}
+		return "", false
+	})
+	r := Runner{Executor: &osExecutor{}, EnvSource: src}
+	captured, err := r.Run(context.Background(),
+		`ROOT_NAME=${ROOT##*/}`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "idelsp", captured["ROOT_NAME"])
+}
+
+func TestRunnerCapturesParameterExpansionAfterExpandBody(t *testing.T) {
+	src := Source(func(name string) (string, bool) {
+		if name == "ROOT" {
+			return "/Users/ernestrc/src/idelsp", true
+		}
+		return "", false
+	})
+	line := ExpandBody(context.Background(),
+		`ROOT_NAME=${ROOT##*/}`, src)
+	r := Runner{Executor: &osExecutor{}, EnvSource: src}
+	captured, err := r.Run(context.Background(), line, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "idelsp", captured["ROOT_NAME"])
+}
+
+func TestRunnerCapturesDoubleAssignmentWithShortCircuit(t *testing.T) {
+	dir := t.TempDir()
+	r := Runner{Executor: &osExecutor{}, Dir: dir}
+	line := `ROOT=$(echo ".git") && ROOT=$(cd "$ROOT/.." && pwd) || exit 1`
+	captured, err := r.Run(context.Background(), line, nil)
+	require.NoError(t, err)
+	assert.Equal(t, dir, captured["ROOT"],
+		"chain capture must reflect the second assignment to ROOT")
+}
+
+func TestRunnerOnlyCapturesScriptAssignedVars(t *testing.T) {
+	src := Source(func(name string) (string, bool) {
+		if name == "ROOT" {
+			return "/Users/ernestrc/src/idelsp", true
+		}
+		return "", false
+	})
+	r := Runner{Executor: &osExecutor{}, EnvSource: src}
+	captured, err := r.Run(context.Background(),
+		`ROOT_HASH=hashof_$ROOT`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "hashof_/Users/ernestrc/src/idelsp", captured["ROOT_HASH"])
+	_, hasROOT := captured["ROOT"]
+	assert.False(t, hasROOT,
+		"parent-env ROOT must not leak into captured vars")
+}
