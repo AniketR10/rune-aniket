@@ -1977,3 +1977,32 @@ func testWindowManagerConfig() WindowManagerConfig {
 	ret.NoMaxSize = true
 	return ret
 }
+
+// TestWindowManagerIterateCloseDuringIteration guards Iterate's contract
+// that op may close the visited floating window. closeFloatingWindow's
+// slices.Delete shifts and zeroes the backing array of wm.float, and a
+// naive for-range would either read a nil tail slot or skip the
+// shifted-down neighbor.
+func TestWindowManagerIterateCloseDuringIteration(t *testing.T) {
+	h := component.TestComponent{Ch: 'A'}
+	wm, _ := NewWindowManager(&h, testWindowManagerConfig())
+	wm.Resize(20, 8)
+
+	for range 3 {
+		wm.FloatingWindow(
+			component.StaticFloating(&component.TestComponent{Ch: 'f'}, 2, 2),
+			FloatingConfig{Alignment: component.AlignmentCentered},
+		)
+	}
+
+	var visited int
+	assert.NotPanics(t, func() {
+		wm.Iterate(func(w Window) {
+			visited++
+			_ = w.Close()
+		})
+	})
+	// 1 root tile + 3 floating windows
+	assert.Equal(t, 4, visited)
+	assert.Equal(t, 0, wm.SizeFloating())
+}

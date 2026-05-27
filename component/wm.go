@@ -248,8 +248,17 @@ func (wm *WindowManager) Iterate(op func(Window)) {
 	wm.tree.Iterate(func(node *TileNode) {
 		op(wm.nodeToWindow(node))
 	})
-	for _, fw := range wm.float {
+	// op may close the visited window, which calls closeFloatingWindow
+	// and removes the entry from wm.float via slices.Delete. Re-read the
+	// slice each step and advance only when the current slot is still the
+	// same node, otherwise the deletion shifted a new node into this
+	// index and we must visit it next.
+	for i := 0; i < len(wm.float); {
+		fw := wm.float[i]
 		op(wm.nodeToWindow(fw))
+		if i < len(wm.float) && wm.float[i] == fw {
+			i++
+		}
 	}
 }
 
@@ -485,9 +494,6 @@ func (wm *WindowManager) withFrame(handler tui.Component) *component.Frame {
 func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
 	for i, f := range wm.float {
 		if f == w {
-			// slices.Delete clears the tail so the removed *floatingNode
-			// (which transitively holds the floating window content) is not
-			// retained in the backing array.
 			wm.float = slices.Delete(wm.float, i, i+1)
 			break
 		}
