@@ -25,6 +25,7 @@ package texttest
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,6 +41,7 @@ import (
 type externalEditor struct {
 	*TestEditor
 	readOnlyObserved *bool
+	editCalls        *int
 }
 
 // IsExternal overrides TestEditor.IsExternal to return true.
@@ -49,7 +51,12 @@ func (e externalEditor) Edit(
 	ctx context.Context,
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
 ) (text.Handler, error) {
-	*e.readOnlyObserved = readOnly
+	if e.readOnlyObserved != nil {
+		*e.readOnlyObserved = readOnly
+	}
+	if e.editCalls != nil {
+		*e.editCalls++
+	}
 	return e.TestEditor.Edit(ctx, file, buf, readOnly, recovered)
 }
 
@@ -92,4 +99,50 @@ func TestExternalEditorForcesReadOnly(t *testing.T) {
 		"workspace.Load must receive readOnly=true under an external editor")
 	assert.True(t, editorRO,
 		"editor.Edit must receive readOnly=true under an external editor")
+}
+
+// TestExternalEditorDelegatesMarkdown locks in the fix for the bug
+// where `.md` files opened under an external editor (BYOE) were
+// rendered through the built-in markdown viewer instead of being
+// handed to the external editor. The root cause was that
+// Component.openFileTab conflated the BYOE mirror-buffer
+// read-only invariant with the user's view intent: hoisting
+// `readOnly = true` for any external editor then took the
+// loadView/loadMarkdown branch unconditionally. The fix keeps the
+// hoist but gates the view branch on the caller's original intent
+// AND `!c.ed.IsExternal()` so the external editor's Edit always
+// gets the file, for both :edit (readOnly=false) and :view
+// (readOnly=true).
+func TestExternalEditorDelegatesMarkdown(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		readOnly bool
+	}{
+		{name: "edit", readOnly: false},
+		{name: "view", readOnly: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var editCalls int
+			ed := externalEditor{TestEditor: NopEditor(), editCalls: &editCalls}
+			loader := &testLoader{
+				openFile: workspace.NewMemoryFile(
+					"README.md", 1, 0,
+					[]byte("# hi\n"), new(sync.Mutex)),
+			}
+			cfg := text.DefaultConfig()
+			cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+			c, err := text.NewComponent(ed, loader, cfg)
+			require.NoError(t, err)
+
+			uri, err := workspaceapi.ParseURI("memory:///tmp/README.md")
+			require.NoError(t, err)
+
+			_, err = c.OpenFileTab(uri, tc.readOnly)
+			require.NoError(t, err)
+			assert.Equal(t, 1, editCalls,
+				"external editor.Edit must be called for .md "+
+					"opens regardless of readOnly; got %d "+
+					"calls (readOnly=%v)", editCalls, tc.readOnly)
+		})
+	}
 }

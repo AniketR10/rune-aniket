@@ -1314,6 +1314,81 @@ func TestOpenPrevSessionFilesSkipsNonTextHandler(t *testing.T) {
 	assert.True(t, foundMD, "expected to find markdown tab after session restore")
 }
 
+func TestOpenBYOEEditDelegatesMarkdown(t *testing.T) {
+	assertBYOEDelegatesMarkdown(t, "README.md", false)
+}
+
+func TestOpenBYOEViewDelegatesMarkdown(t *testing.T) {
+	assertBYOEDelegatesMarkdown(t, "NOTES.md", true)
+}
+
+func assertBYOEDelegatesMarkdown(t *testing.T, fileName string, readOnly bool) {
+	if _, err := exec.LookPath("vim"); err != nil {
+		t.Skip("vim binary not available")
+	}
+
+	dir := t.TempDir()
+	canonical, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	dir = canonical
+
+	filePath := filepath.Join(dir, fileName)
+	require.NoError(t, os.WriteFile(filePath, []byte("# hi\n"), 0o644))
+
+	cfg := defaultConfigWithWrap(false)
+	editorCfg := cfg.cfg["editor"].(map[string]any)
+	editorCfg["mode"] = "byoe"
+	editorCfg["byoe"] = map[string]any{
+		"command": `vim -Nu NONE -n {file}`,
+		"goto":    "<esc>:{line}<enter>{col}|",
+	}
+	cfg.ringBell = func() {}
+	require.Equal(t, "byoe", cfg.editorMode())
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+		nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.drainPendingWorkspaces()
+
+	h := newSafeHandler(m)
+	h.Resize(80, 24)
+
+	dispatch := func(evs ...term.Event) {
+		for _, ev := range evs {
+			_, _ = h.Handle(ev)
+		}
+	}
+	cmd := "edit"
+	if readOnly {
+		cmd = "view"
+	}
+	openSeq, err := term.ParseKeys(
+		`<c-\\>` + cmd + `<space>` + fileName + `<enter>`)
+	require.NoError(t, err)
+	for _, k := range openSeq {
+		dispatch(keyEvent(k))
+	}
+
+	ex := m.workspaces[m.focus].ex
+	mdURI, err := workspaceapi.ParseURI("file://" + filePath)
+	require.NoError(t, err)
+
+	res, ok := ex.comp.Resource(mdURI)
+	require.True(t, ok, "tab for %q must exist after :%s", fileName, cmd)
+	tab, ok := res.(*browser.Tab)
+	require.True(t, ok, "tab must be *browser.Tab")
+	_, isMarkdown := tab.Handler().(*handlermarkdown.Handler)
+	assert.False(t, isMarkdown,
+		"under editor.mode=byoe, .md must delegate to the BYOE "+
+			"handler, not the built-in markdown viewer "+
+			"(readOnly=%v)", readOnly)
+}
+
 func TestReadfileCrossWorkspaceIntegration(t *testing.T) {
 	tmp1 := t.TempDir()
 	tmp2 := t.TempDir()

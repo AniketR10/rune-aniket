@@ -454,6 +454,8 @@ func (c *Component) openFileTab(
 		return t, nil
 	}
 
+	userRequestedView := readOnly
+
 	// Editors that manage their buffer contents out of band (e.g. byoe
 	// hosting an external TUI editor) are the source of truth for file
 	// contents; Rune's mirror buffer must stay read-only so the dirty-tab
@@ -462,7 +464,7 @@ func (c *Component) openFileTab(
 		readOnly = true
 	}
 
-	if readOnly {
+	if userRequestedView && !c.ed.IsExternal() {
 		viewHandler, viewOK, viewErr := c.loadView(file)
 		if viewErr != nil {
 			return nil, viewErr
