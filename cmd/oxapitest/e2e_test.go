@@ -121,7 +121,7 @@ func TestReleaseInstallE2E(t *testing.T) {
 		oxapi.Auth0SecretID: []byte("1234"),
 	}, "client_id", "xxxx")
 
-	authCfg := auth.DefaultConfig()
+	authCfg := auth.DefaultM2MConfig()
 	authCfg.APIURL = baseURL + "/api"
 	authCfg.Endpoint.TokenURL = baseURL + auth.ServeTokenPath
 	authCfg.Endpoint.AuthURL = baseURL + "/o/oauth2/auth"
@@ -143,6 +143,7 @@ func TestReleaseInstallE2E(t *testing.T) {
 		}},
 		oxapi.RPCAuthorizer("issues", []string{"releases"}),
 		stubReportStore{}, oxapi.ReportConfig{},
+		nil,
 		nil,
 		nil,
 		nil,
