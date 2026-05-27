@@ -30,6 +30,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -46,6 +47,8 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
+const gracefulQuitTimeout = 30 * time.Second
+
 // editorHandler wraps a *vte.Handler so that the vte's tui.Handler
 // surface (Draw / Resize / Handle / Cursor / Selection / scrolling /
 // mouse / clipboard / focus) is inherited by embedding, and adds the
@@ -54,9 +57,11 @@ import (
 type editorHandler struct {
 	*vte.Handler
 
-	buf          *cell.Buffer
-	resource     workspaceapi.URI
-	gotoTemplate gotoTemplate
+	buf           *cell.Buffer
+	resource      workspaceapi.URI
+	gotoTemplate  gotoTemplate
+	quitKeys      []term.KeyComb
+	procDone      <-chan error
 
 	cwd              workspace.Workspace
 	notifications    browserapi.Notifications
@@ -85,13 +90,20 @@ func newHandler(
 	scheduleNextTick func(func()) bool,
 	reloader Reloader,
 	overrideHighlights bool,
+	quitKeys []term.KeyComb,
+	procDone <-chan error,
 ) *editorHandler {
+	if procDone == nil {
+		panic("byoe.newHandler: procDone is required")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
 		Handler:            vteH,
 		buf:                buf,
 		resource:           uri,
 		gotoTemplate:       gotoTpl,
+		quitKeys:           quitKeys,
+		procDone:           procDone,
 		cwd:                cwd,
 		notifications:      notifications,
 		scheduleNextTick:   scheduleNextTick,
@@ -400,14 +412,32 @@ func (h *editorHandler) Dimensions() (int, int) {
 	return text.ViewDimensions(h.buf.View())
 }
 
-// Close stops the watcher then defers to the embedded vte.Handler.
 func (h *editorHandler) Close() error {
 	h.cancelCtx()
 	if h.watchActive {
 		_ = h.cwd.StopWatch(h.watchID)
 		h.watchActive = false
 	}
-	return h.Handler.Close()
+	for _, k := range h.quitKeys {
+		_, _ = h.Handler.Handle(keyCombToEvent(k))
+	}
+	go debug.CapturePanicReport(func() {
+		select {
+		case <-h.procDone:
+		case <-time.After(gracefulQuitTimeout):
+			h.debugByoe("close", fmt.Sprintf(
+				"graceful quit timed out after %s; "+
+					"forcing PTY teardown", gracefulQuitTimeout))
+		}
+		h.scheduleNextTick(func() {
+			if err := h.Handler.Close(); err != nil {
+				_, _ = h.notifications.Notify(
+					browserapi.LevelWarn,
+					"byoe: close pty: %v", err)
+			}
+		})
+	})
+	return nil
 }
 
 // nopCellEditor satisfies cell.Editor without mutating anything.

@@ -104,11 +104,8 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 // validateBYOE checks that editor.byoe.command is well-formed when the
 // editor mode is "byoe". On failure it rewrites editor.mode back to
 // "modal" so the IDE still boots, and returns a descriptive error.
-// editor.byoe.goto is required and validated too. If the configured
-// goto is empty or unparseable, editor.mode is rewritten back to
-// "modal": byoe relies on goto to position the cursor (e.g. on :goto
-// and click-to-line), so an unset/invalid goto is a misconfiguration,
-// not a soft default.
+// editor.byoe.goto and editor.byoe.quit are required and validated
+// the same way; an empty or unparseable value falls back to "modal".
 func validateBYOE(c *ideConfig, cfg map[string]any) (err error) {
 	if c.editorMode() != editorModeBYOE {
 		return
@@ -135,6 +132,21 @@ func validateBYOE(c *ideConfig, cfg map[string]any) (err error) {
 			ed["mode"] = editorModeModal
 		}
 		return fmt.Errorf("editor.byoe.goto is invalid: %w; "+
+			"falling back to \"modal\"", perr)
+	}
+	quitTpl := c.byoeQuit()
+	if quitTpl == "" {
+		if ed, ok := cfg["editor"].(map[string]any); ok {
+			ed["mode"] = editorModeModal
+		}
+		return fmt.Errorf("editor.byoe.quit is required when " +
+			"editor.mode = \"byoe\"; falling back to \"modal\"")
+	}
+	if _, perr := term.ParseKeys(quitTpl); perr != nil {
+		if ed, ok := cfg["editor"].(map[string]any); ok {
+			ed["mode"] = editorModeModal
+		}
+		return fmt.Errorf("editor.byoe.quit is invalid: %w; "+
 			"falling back to \"modal\"", perr)
 	}
 	if err = validateBYOEFallback(c, cfg); err != nil {

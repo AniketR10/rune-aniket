@@ -72,6 +72,7 @@ func newTestEditor() *Editor {
 	return New(
 		"vim {file}",
 		"",
+		"<esc>:qa<enter>",
 		func(fn func()) bool { fn(); return true },
 		newStubWorkspace(),
 		workspaceapi.URI{},
@@ -188,12 +189,19 @@ func TestNewPanicsOnInvalidGotoTemplate(t *testing.T) {
 	assert.Panics(t, func() { a.call() })
 }
 
+func TestNewPanicsOnInvalidQuitTemplate(t *testing.T) {
+	a := goodArgs()
+	a.quit = "<bogus-key>"
+	assert.Panics(t, func() { a.call() })
+}
+
 // newArgs collects byoe.New's positional arguments so test cases can
 // clone a valid baseline and mutate one field at a time without
 // repeating the full signature.
 type newArgs struct {
 	command       string
 	gotoTemplate  string
+	quit          string
 	schedule      func(func()) bool
 	cwd           workspace.Workspace
 	uri           workspaceapi.URI
@@ -210,6 +218,7 @@ func goodArgs() newArgs {
 	return newArgs{
 		command:       "vim {file}",
 		gotoTemplate:  "",
+		quit:          "<esc>:qa<enter>",
 		schedule:      func(fn func()) bool { fn(); return true },
 		cwd:           newStubWorkspace(),
 		uri:           workspaceapi.URI{},
@@ -225,7 +234,7 @@ func goodArgs() newArgs {
 
 func (a newArgs) call() *Editor {
 	return New(
-		a.command, a.gotoTemplate, a.schedule,
+		a.command, a.gotoTemplate, a.quit, a.schedule,
 		a.cwd, a.uri, a.notifications, a.publisher,
 		a.terminal, a.executor, a.tabManager, a.vteCfg,
 		a.reloader, nil, true,

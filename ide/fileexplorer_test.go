@@ -73,6 +73,7 @@ func TestFileExplorerBYOEEnter(t *testing.T) {
 	editorCfg["byoe"] = map[string]any{
 		"command": `vim -Nu NONE -n "+call cursor({line}, {col})" {file}`,
 		"goto":    "<esc>:{line}<enter>{col}|",
+		"quit":    "<esc>:qa<enter>",
 	}
 	cfg.ringBell = func() {}
 	require.Equal(t, "byoe", cfg.editorMode())

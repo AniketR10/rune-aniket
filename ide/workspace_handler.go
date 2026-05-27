@@ -316,6 +316,7 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 	return byoefallback.New(
 		cfg.byoeCommand(),
 		cfg.byoeGoto(),
+		cfg.byoeQuit(),
 		cfg.scheduleNextTick,
 		ws,
 		cwd,

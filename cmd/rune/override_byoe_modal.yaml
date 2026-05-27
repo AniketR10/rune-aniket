@@ -17,6 +17,7 @@ editor:
   byoe:
     command: '<<.Command>>'
     goto: '<<.Goto>>'
+    quit: '<<.Quit>>'
     fallback: modal
 
 # ---------------------------------------------------------------------------
@@ -27,27 +28,33 @@ editor:
 #   {file}  absolute path (always required)
 #   {line}  1-based line for the initial cursor
 #   {col}   1-based column for the initial cursor
-# `goto` is a Rune key sequence (handler.ParseSequence syntax) that
-# drives the running editor to {line}/{col}. Leave empty to disable
-# :goto / click-to-line.
+# `goto` is a Rune key sequence that drives the running editor to
+# {line}/{col}. Leave empty to disable :goto / click-to-line.
+# `quit` is a Rune key sequence sent to the embedded editor on tab
+# close. Use a force-quit (e.g. `:qa!`).
 # ---------------------------------------------------------------------------
 # editor:
 #   byoe:
 #     # Vim
 #     command: 'vim "+call cursor({line}, {col})" {file}'
 #     goto:    '<esc>:{line}<enter>{col}|'
+#     quit:    '<esc>:qa!<enter>'
 #     # Neovim
 #     # command: 'nvim "+call cursor({line}, {col})" {file}'
 #     # goto:    '<esc>:{line}<enter>{col}|'
+#     # quit:    '<esc>:qa!<enter>'
 #     # Helix
 #     # command: 'hx {file}:{line}:{col}'
 #     # goto:    '<esc>:goto<space>{line}<enter>'
+#     # quit:    '<esc>:q!<enter>'
 #     # Kakoune
 #     # command: 'kak {file} +{line}:{col}'
 #     # goto:    '<esc>:edit<space>-existing<space>{file}<space>{line}<space>{col}<enter>'
+#     # quit:    '<esc>:q!<enter>'
 #     # Emacs (no window system)
 #     # command: 'emacs -nw +{line}:{col} {file}'
 #     # goto:    '<a-x>goto-line<enter>{line}<enter>'
+#     # quit:    '<a-x>kill-emacs<enter>'
 
 # log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log

@@ -258,6 +258,7 @@ func newBYOEGoTestComponent(
 		// can be deleted without "swap file exists" prompts.
 		`vim -Nu NONE -n {file}`,
 		"<esc>:{line}<enter>{col}|",
+		"<esc>:qa<enter>",
 		schedule,
 		ws,
 		uri,

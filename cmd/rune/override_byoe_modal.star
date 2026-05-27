@@ -26,6 +26,7 @@ config = merge(config, {
         "byoe": {
             "command": '''<<.Command>>''',
             "goto": '''<<.Goto>>''',
+            "quit": '''<<.Quit>>''',
             "fallback": "modal",
         },
     },
@@ -39,25 +40,31 @@ config = merge(config, {
 #   {file}  absolute path (always required)
 #   {line}  1-based line for the initial cursor
 #   {col}   1-based column for the initial cursor
-# `goto` is a Rune key sequence (handler.ParseSequence syntax) that
-# drives the running editor to {line}/{col}. Leave empty to disable
-# :goto / click-to-line.
+# `goto` is a Rune key sequence that drives the running editor to
+# {line}/{col}. Leave empty to disable :goto / click-to-line.
+# `quit` is a Rune key sequence sent to the embedded editor on tab
+# close. Use a force-quit (e.g. `:qa!`).
 # ---------------------------------------------------------------------------
 # # Vim
 # config["editor"]["byoe"]["command"] = 'vim "+call cursor({line}, {col})" {file}'
 # config["editor"]["byoe"]["goto"]    = '<esc>:{line}<enter>{col}|'
+# config["editor"]["byoe"]["quit"]    = '<esc>:qa!<enter>'
 # # Neovim
 # config["editor"]["byoe"]["command"] = 'nvim "+call cursor({line}, {col})" {file}'
 # config["editor"]["byoe"]["goto"]    = '<esc>:{line}<enter>{col}|'
+# config["editor"]["byoe"]["quit"]    = '<esc>:qa!<enter>'
 # # Helix
 # config["editor"]["byoe"]["command"] = 'hx {file}:{line}:{col}'
 # config["editor"]["byoe"]["goto"]    = '<esc>:goto<space>{line}<enter>'
+# config["editor"]["byoe"]["quit"]    = '<esc>:q!<enter>'
 # # Kakoune
 # config["editor"]["byoe"]["command"] = 'kak {file} +{line}:{col}'
 # config["editor"]["byoe"]["goto"]    = '<esc>:edit<space>-existing<space>{file}<space>{line}<space>{col}<enter>'
+# config["editor"]["byoe"]["quit"]    = '<esc>:q!<enter>'
 # # Emacs (no window system)
 # config["editor"]["byoe"]["command"] = 'emacs -nw +{line}:{col} {file}'
 # config["editor"]["byoe"]["goto"]    = '<a-x>goto-line<enter>{line}<enter>'
+# config["editor"]["byoe"]["quit"]    = '<a-x>kill-emacs<enter>'
 
 # config["log_level"] = "info"             # debug | info | warn | error
 # config["log_path"]  = "~/.rune/debug.log"

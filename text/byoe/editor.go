@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/ide/vctrl"
@@ -53,7 +54,7 @@ import (
 
 // New allocates a new byoe Editor.
 func New(
-	command, gotoTemplate string,
+	command, gotoTemplate, quit string,
 	scheduleNextTick func(func()) bool,
 	cwd workspace.Workspace,
 	workspaceURI workspaceapi.URI,
@@ -94,9 +95,14 @@ func New(
 	if err != nil {
 		panic("byoe.New: invalid gotoTemplate: " + err.Error())
 	}
+	quitKeys, err := term.ParseKeys(quit)
+	if err != nil {
+		panic("byoe.New: invalid quit: " + err.Error())
+	}
 	ret := &Editor{
 		command:            command,
 		gotoTemplate:       tpl,
+		quitKeys:           quitKeys,
 		scheduleNextTick:   scheduleNextTick,
 		cwd:                cwd,
 		workspaceURI:       workspaceURI,
@@ -124,6 +130,7 @@ func New(
 type Editor struct {
 	command            string
 	gotoTemplate       gotoTemplate
+	quitKeys           []term.KeyComb
 	scheduleNextTick   func(func()) bool
 	cwd                workspace.Workspace
 	workspaceURI       workspaceapi.URI
@@ -185,6 +192,9 @@ func (e *Editor) Edit(
 	// of the publisher-side coalescing that terminal sessions use.
 	cfg.DisablePerformanceInterrupt = true
 
+	procDone := make(chan error, 1)
+	cfg.Watcher = workspaceapi.ChanProcessWatcher(procDone)
+
 	pub := newEventPublisher(e.publisher)
 	vteH, err := vte.NewHandler(
 		pub, e.notifications,
@@ -195,7 +205,7 @@ func (e *Editor) Edit(
 
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
 		e.cwd, e.notifications, e.scheduleNextTick, e.reloader,
-		e.overrideHighlights)
+		e.overrideHighlights, e.quitKeys, procDone)
 	pub.setRefresh(h.refreshProbe)
 	var ret text.Handler = h
 	if e.fileRegistry != nil {

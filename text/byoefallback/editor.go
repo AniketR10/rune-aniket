@@ -61,7 +61,7 @@ type Editor struct {
 // fallback is nil; the byoe.New constructor panics for any missing
 // BYOE dependency.
 func New(
-	command, gotoTemplate string,
+	command, gotoTemplate, quit string,
 	scheduleNextTick func(func()) bool,
 	cwd workspace.Workspace,
 	workspaceURI workspaceapi.URI,
@@ -81,7 +81,7 @@ func New(
 ) *Editor {
 	return newWithEditors(
 		byoe.New(
-			command, gotoTemplate, scheduleNextTick,
+			command, gotoTemplate, quit, scheduleNextTick,
 			cwd, workspaceURI, notifications, publisher,
 			terminal, executor, tabManager, vteCfg, reloader, env,
 			overrideHighlights, registry, vctrlSvc, clip,

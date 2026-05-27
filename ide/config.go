@@ -1703,6 +1703,23 @@ func (c ideConfig) byoeGoto() string {
 	return s
 }
 
+// byoeQuit returns the Rune key sequence sent to the external editor
+// before the PTY is torn down. Empty when unset or invalid.
+func (c ideConfig) byoeQuit() string {
+	cfg, ok := c.byoe()
+	if !ok {
+		return ""
+	}
+	s, err := cfg.GetString("quit")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["editor.byoe.quit"] = err
+		}
+		return ""
+	}
+	return s
+}
+
 // byoeFallback returns the Rune-native fallback editor used by the
 // byoefallback router for URIs that BYOE cannot serve (e.g.
 // memory://). Valid values are "modal" or "modeless"; defaults to

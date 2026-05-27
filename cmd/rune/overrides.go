@@ -52,6 +52,7 @@ const (
 type byoePreset struct {
 	Command string
 	Goto    string
+	Quit    string
 }
 
 // byoePresets lists the editor command and goto sequence for each built-in
@@ -60,22 +61,27 @@ var byoePresets = map[string]byoePreset{
 	byoePresetVim: {
 		Command: `vim "+call cursor({line}, {col})" {file}`,
 		Goto:    `<esc>:{line}<enter>{col}|`,
+		Quit:    `<esc>:qa!<enter>`,
 	},
 	byoePresetNvim: {
 		Command: `nvim "+call cursor({line}, {col})" {file}`,
 		Goto:    `<esc>:{line}<enter>{col}|`,
+		Quit:    `<esc>:qa!<enter>`,
 	},
 	byoePresetHelix: {
 		Command: `hx {file}:{line}:{col}`,
 		Goto:    `<esc>:goto<space>{line}<enter>`,
+		Quit:    `<esc>:q!<enter>`,
 	},
 	byoePresetKak: {
 		Command: `kak {file} +{line}:{col}`,
 		Goto:    `<esc>:edit<space>-existing<space>{file}<space>{line}<space>{col}<enter>`,
+		Quit:    `<esc>:q!<enter>`,
 	},
 	byoePresetEmacs: {
 		Command: `emacs -nw +{line}:{col} {file}`,
 		Goto:    `<a-x>goto-line<enter>{line}<enter>`,
+		Quit:    `<a-x>kill-emacs<enter>`,
 	},
 }
 

@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/text"
 )
 
 // TestBYOEVimEndToEnd drives the full ide → byoe → vte → vim pipeline:
@@ -102,6 +103,7 @@ func TestBYOEVimEndToEnd(t *testing.T) {
 		// parse, otherwise the IDE silently falls back to modal
 		// mode and the test stops exercising byoe at all.
 		"goto": "<esc>:{line}<enter>{col}|",
+		"quit": "<esc>:qa<enter>",
 	}
 	// terminalConfig() reads cfg.ringBell; vte panics on a nil bell.
 	cfg.ringBell = func() {}
@@ -228,3 +230,241 @@ func keyEvent(k term.KeyComb) term.Event {
 	}
 	return ev
 }
+
+// TestBYOEVimSwapfileGracefulClose asserts that closing a byoe tab
+// hosting vim leaves no .swp file behind.
+func TestBYOEVimSwapfileGracefulClose(t *testing.T) {
+	if _, err := exec.LookPath("vim"); err != nil {
+		t.Skip("vim binary not available")
+	}
+	// Isolate HOME so vim writes its .viminfo (and the spinner of
+	// .viminf[a-z].tmp files it uses when the primary is locked)
+	// under a fresh dir. A real $HOME can carry leftover viminf*.tmp
+	// files from prior crashes, causing vim to bail with E929 before
+	// it has a chance to react to our quit sequence — and the .swp
+	// file would then linger past the Close.
+	t.Setenv("HOME", t.TempDir())
+
+	// t.TempDir() returns /var/... on macOS but the file scheme
+	// canonicalises to /private/var/... so URI lookup must match.
+	dir := t.TempDir()
+	canonical, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	dir = canonical
+
+	relFile := "byoe.txt"
+	filePath := filepath.Join(dir, relFile)
+	require.NoError(t, os.WriteFile(filePath, []byte("hello\n"), 0o644))
+
+	cfg := defaultConfigWithWrap(false)
+	editorCfg := cfg.cfg["editor"].(map[string]any)
+	editorCfg["mode"] = "byoe"
+	editorCfg["byoe"] = map[string]any{
+		// No -n so vim creates a swap file while running.
+		"command": `vim -Nu NONE {file}`,
+		"goto":    "<esc>:{line}<enter>{col}|",
+		"quit":    "<esc>:qa!<enter>",
+	}
+	cfg.ringBell = func() {}
+	require.Equal(t, "byoe", cfg.editorMode())
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+		nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.drainPendingWorkspaces()
+
+	h := newSafeHandler(m)
+	h.Resize(80, 24)
+
+	dispatch := func(evs ...term.Event) {
+		for _, ev := range evs {
+			_, _ = h.Handle(ev)
+		}
+	}
+	openSeq, err := term.ParseKeys(
+		`<c-\\>edit<space>` + relFile + `<enter>`)
+	require.NoError(t, err)
+	for _, k := range openSeq {
+		dispatch(keyEvent(k))
+	}
+
+	time.Sleep(750 * time.Millisecond)
+
+	// Confirm vim actually created a swap so the post-close
+	// assertion below is not vacuously true.
+	swapFile := filepath.Join(dir, "."+relFile+".swp")
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(swapFile)
+		return err == nil
+	}, 5*time.Second, 100*time.Millisecond,
+		"vim must have created a swap file at %q while running",
+		swapFile)
+
+	fileURI, err := m.workspaces[m.focus].ex.workspace.URI(relFile)
+	require.NoError(t, err)
+	eh, err := m.workspaces[m.focus].ex.comp.Editor(fileURI)
+	require.NoError(t, err)
+
+	require.NoError(t, eh.Close())
+
+	require.Eventually(t, func() bool {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".swp") {
+				return false
+			}
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond,
+		"editor.byoe.quit must let vim clean up its swap file "+
+			"before the PTY is torn down")
+}
+
+// TestBYOEVimSetCursorAtScroll guards the SetCursorAtScroll wiring in
+// byoe end-to-end against vim. The fix it locks in: byoe's
+// SetCursorAtScroll synthesises term.Event from the rendered goto
+// KeyComb sequence, and vte's input path falls back to ev.Raw for
+// ordinary keys (digits, ':', '|', '<enter>', '<esc>'). Without raw
+// bytes populated the entire goto sequence is silently dropped, the
+// cursor stays at (1,1), and an `i<marker><esc>:wq` prepends the
+// marker to line 1 instead of the requested position.
+//
+// The test prepares a known multi-line file, asks byoe to place the
+// cursor at (line=3, col=2), inserts a marker, writes, and asserts
+// the on-disk content matches the expectation for that exact
+// position. Any regression in cursor injection makes the marker
+// appear on the wrong line/column and the assertion fails with the
+// actual placement.
+func TestBYOEVimSetCursorAtScroll(t *testing.T) {
+	if _, err := exec.LookPath("vim"); err != nil {
+		t.Skip("vim binary not available")
+	}
+
+	dir := t.TempDir()
+	canonical, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	dir = canonical
+
+	// Fixed-width lines so column math is unambiguous. Lines are
+	// AAAA, BBBB, CCCC, DDDD, EEEE with a trailing newline.
+	initial := "AAAA\nBBBB\nCCCC\nDDDD\nEEEE\n"
+	relFile := "cursor.txt"
+	filePath := filepath.Join(dir, relFile)
+	require.NoError(t, os.WriteFile(filePath, []byte(initial), 0o644))
+
+	cfg := defaultConfigWithWrap(false)
+	editorCfg := cfg.cfg["editor"].(map[string]any)
+	editorCfg["mode"] = "byoe"
+	editorCfg["byoe"] = map[string]any{
+		// Deterministic vim: no rc, no swap. Crucially we do NOT
+		// pass +startinsert! so vim lands in normal mode and the
+		// goto sequence below ('<esc>:{line}<enter>{col}|') can
+		// position the cursor before we switch to insert.
+		"command": `vim -Nu NONE -n {file}`,
+		// Default goto: ESC, :<line><enter>, then <col>| in normal
+		// mode. `|` is vim's go-to-column motion (1-based).
+		"goto": "<esc>:{line}<enter>{col}|",
+		"quit": "<esc>:qa<enter>",
+	}
+	cfg.ringBell = func() {}
+	require.Equal(t, "byoe", cfg.editorMode())
+
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+		nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.addOrCreateWorkspace(uri))
+	m.drainPendingWorkspaces()
+
+	h := newSafeHandler(m)
+	h.Resize(80, 24)
+
+	dispatch := func(evs ...term.Event) {
+		for _, ev := range evs {
+			_, _ = h.Handle(ev)
+		}
+	}
+	openSeq, err := term.ParseKeys(
+		`<c-\\>edit<space>` + relFile + `<enter>`)
+	require.NoError(t, err)
+	for _, k := range openSeq {
+		dispatch(keyEvent(k))
+	}
+
+	// Let vim start before we interact with the byoe handler.
+	time.Sleep(750 * time.Millisecond)
+
+	// Reach into the workspace to grab the actual text.Handler for
+	// the file. SetCursorAtScroll is part of text.Handler, not the
+	// outer browser.Tab, so we go through ex.comp.Editor.
+	fileURI, err := m.workspaces[m.focus].ex.workspace.URI(relFile)
+	require.NoError(t, err)
+	eh, err := m.workspaces[m.focus].ex.comp.Editor(fileURI)
+	require.NoError(t, err)
+
+	// Position cursor on line 3 ("CCCC"), column 2: i.e. between
+	// the first and second 'C'. The goto template renders
+	// <esc>:3<enter>2|. Without the Raw-bytes fix in
+	// byoe.editorHandler.SetCursorAtScroll, those keys never reach
+	// the pty and vim stays at (1,1).
+	require.True(t, eh.SetCursorAtScroll(term.Coordinates{Y: 2, X: 1}),
+		"SetCursorAtScroll must report success when a goto "+
+			"template is configured")
+
+	// Tiny pause so vim consumes the goto sequence before we type.
+	time.Sleep(150 * time.Millisecond)
+
+	// Insert a marker at the cursor position then write.
+	const marker = "XX"
+	dispatch(keyEvent(term.KeyComb{Ch: 'i'}))
+	for _, r := range marker {
+		dispatch(keyEvent(term.KeyComb{Ch: r}))
+	}
+	dispatch(
+		keyEvent(term.KeyComb{Key: term.KeyEsc}),
+		keyEvent(term.KeyComb{Ch: ':'}),
+		keyEvent(term.KeyComb{Ch: 'w'}),
+		keyEvent(term.KeyComb{Ch: 'q'}),
+		keyEvent(term.KeyComb{Key: term.KeyEnter}),
+	)
+
+	// Expected on-disk content after the edit: line 3 becomes
+	// "CXXCCC" because `i` in vim inserts BEFORE the cursor and the
+	// cursor was on the second character of "CCCC".
+	expected := "AAAA\nBBBB\nCXXCCC\nDDDD\nEEEE\n"
+
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return false
+		}
+		return string(data) == expected
+	}, 10*time.Second, 100*time.Millisecond,
+		"file %q must equal expected content after vim :wq:\n"+
+			"want:\n%q\n",
+		filePath, expected)
+
+	got, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, expected, string(got),
+		"SetCursorAtScroll must place the marker at the exact "+
+			"position requested; mismatch means the goto "+
+			"sequence did not reach vim and the cursor stayed "+
+			"elsewhere")
+}
+
+// compile-time guard: text.Handler must expose SetCursorAtScroll.
+var _ interface {
+	SetCursorAtScroll(term.Coordinates) bool
+} = (text.Handler)(nil)

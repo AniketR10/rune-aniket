@@ -868,6 +868,7 @@ func TestIDEBYOEWellFormedConfigDoesNotFallBack(t *testing.T) {
   byoe:
     command: "vim {file}"
     goto: "<esc>:{line}<enter>{col}|"
+    quit: "<esc>:qa!<enter>"
 `
 	require.NoError(t,
 		os.WriteFile(configFile.Name(), []byte(cfg), 0666))

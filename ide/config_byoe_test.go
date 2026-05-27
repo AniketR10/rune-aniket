@@ -182,6 +182,39 @@ func TestValidateBYOEFallsBackOnMissingGoto(t *testing.T) {
 	assert.Equal(t, "modal", ic.editorMode())
 }
 
+func TestValidateBYOEFallsBackOnMissingQuit(t *testing.T) {
+	cfg := map[string]any{
+		"editor": map[string]any{
+			"mode": "byoe",
+			"byoe": map[string]any{
+				"command": "vim {file}",
+				"goto":    "<esc>:{line}<enter>",
+			},
+		},
+	}
+	err := validateConfig(cfg)
+	require.Error(t, err)
+	ic := &ideConfig{cfg: cfg, errors: map[string]error{}}
+	assert.Equal(t, "modal", ic.editorMode())
+}
+
+func TestValidateBYOEFallsBackOnInvalidQuit(t *testing.T) {
+	cfg := map[string]any{
+		"editor": map[string]any{
+			"mode": "byoe",
+			"byoe": map[string]any{
+				"command": "vim {file}",
+				"goto":    "<esc>:{line}<enter>",
+				"quit":    "<bogus-key>",
+			},
+		},
+	}
+	err := validateConfig(cfg)
+	require.Error(t, err)
+	ic := &ideConfig{cfg: cfg, errors: map[string]error{}}
+	assert.Equal(t, "modal", ic.editorMode())
+}
+
 // TestValidateBYOEAcceptsKnownTemplates table-tests the bundled sample
 // goto templates parse without errors.
 func TestValidateBYOEAcceptsKnownTemplates(t *testing.T) {
@@ -248,6 +281,7 @@ func TestValidateBYOEFallbackInvalidValueRewrites(t *testing.T) {
 			"byoe": map[string]any{
 				"command":  "vim {file}",
 				"goto":     "<esc>:{line}<enter>",
+				"quit":     "<esc>:qa<enter>",
 				"fallback": "bogus",
 			},
 		},
