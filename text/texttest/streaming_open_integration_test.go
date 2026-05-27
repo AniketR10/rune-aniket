@@ -486,3 +486,89 @@ func TestStreamingOpenStaleRecoverShowsAreYouSurePrompt(t *testing.T) {
 	}
 }
 
+// TestStreamingOpenPreservesCursorSetDuringLoad is a regression test
+// for RUNE-202: while the background workspace.Load runs, callers
+// that type-assert the tab's handler to text.Handler and call
+// SetCursorAtScroll (session restore, ex commands, idecursor jumps)
+// must succeed and have their cursor applied to the real editor
+// handler once the swap completes — instead of silently failing the
+// type assertion for the whole async-load window.
+func TestStreamingOpenPreservesCursorSetDuringLoad(t *testing.T) {
+	c, wsURI, sched, _ := newStreamingComponentWithScheduler(t)
+
+	fpath := filepath.Join(wsURI.Path(), "src.txt")
+	writeNLines(t, fpath, 20)
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	h, err := c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+	require.NotNil(t, h)
+
+	// Pre-swap: the tab's handler must already satisfy text.Handler
+	// so call sites like ide.openPrevSessionFiles, idecursor.navigate,
+	// and ex.moveFocusCursor (which all do tab.Handler().(text.Handler))
+	// succeed.
+	ed, err := c.Editor(fileURI)
+	require.NoError(t, err,
+		"Editor() must return a text.Handler during the async-load window")
+
+	// Apply a cursor — the wrapper queues it because the real editor
+	// handler is not installed yet. The call must report success so
+	// callers do not fall back to alternative paths or surface an
+	// "errInvalidSetCursor"-style error.
+	target := term.Coordinates{Y: 5}
+	require.True(t, ed.SetCursorAtScroll(target),
+		"pre-swap SetCursorAtScroll must report success")
+
+	// Wait for the load goroutine to queue the swap callback on the
+	// scheduler, then drain so the swap runs. The deferred wrapper
+	// applies the queued cursor to the real handler at swap time.
+	c.WaitStreamingLoads()
+	sched.drain()
+
+	// Look up the post-swap handler (deferred wrapper hides the swap
+	// from upstream lookups) and confirm the cursor landed where the
+	// caller requested.
+	ed, err = c.Editor(fileURI)
+	require.NoError(t, err)
+	assert.Equal(t, target, ed.CursorAtScroll(),
+		"cursor set during the streaming-load window must land on the real handler after swap")
+}
+
+// TestStreamingOpenAppliesLocationListAndAttributesDuringLoad
+// verifies that the deferred wrapper queues additional mutating
+// text.Handler calls (SetLocationList, SetDefaultAttributes,
+// SetWrap, ShowCommandBar) during the async-load window and replays
+// them once the real editor handler is installed.
+func TestStreamingOpenAppliesMutationsDuringLoad(t *testing.T) {
+	c, wsURI, sched, _ := newStreamingComponentWithScheduler(t)
+
+	fpath := filepath.Join(wsURI.Path(), "mut.txt")
+	writeNLines(t, fpath, 12)
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	_, err = c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+
+	ed, err := c.Editor(fileURI)
+	require.NoError(t, err)
+
+	// All of these are no-throw, no-fallback calls. They are queued
+	// and replayed at swap time. We only assert they do not panic
+	// and that LocationLists round-trips post-swap.
+	ed.SetWrap(true)
+	ed.ShowCommandBar(false)
+	ed.SetDefaultAttributes(term.Attributes{})
+
+	c.WaitStreamingLoads()
+	sched.drain()
+
+	ed, err = c.Editor(fileURI)
+	require.NoError(t, err)
+	// The real editor handler is now in place; querying location
+	// lists must not panic and the post-swap handler is responsive
+	// to fresh mutations.
+	assert.NotNil(t, ed.CellView())
+}

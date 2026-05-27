@@ -238,6 +238,15 @@ func (h *Handler) SeekOffset() int { return h.less.Scroll().SeekOffset() }
 // MaxSeekOffset satisfies component.Scrollable.
 func (h *Handler) MaxSeekOffset() int { return h.less.Scroll().MaxSeekOffset() }
 
+// InSearchMode reports whether the inner less handler is currently
+// consuming keystrokes for its `/` search prompt. Used by the
+// deferred text.Handler wrapper installed on streaming tabs so
+// outer handlers can honour text.Handler.IsSearchMode while the
+// streaming load is still in flight.
+func (h *Handler) InSearchMode() bool {
+	return h.less.Mode() == handler.LessSearchMode
+}
+
 // pageSize returns the current effective page height. We use the
 // last-known viewport height as the page size so a single readMore
 // covers exactly one screen of content; fall back to the configured

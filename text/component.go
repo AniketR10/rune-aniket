@@ -528,7 +528,8 @@ func (c *Component) openFileTabStreaming(
 		return nil, fmt.Errorf("stream load file: %w", err)
 	}
 	icon := c.iconFor(file)
-	streamingTab := c.newTab(file, icon, file.Name(), sh, nil)
+	def := newDeferHandler(sh)
+	streamingTab := c.newTab(file, icon, file.Name(), def, nil)
 	recovering := recoveryFilename != (workspaceapi.URI{})
 	c.streamingLoads.Add(2)
 	go debug.CapturePanicReport(func() {
@@ -545,7 +546,7 @@ func (c *Component) openFileTabStreaming(
 
 		c.config.ScheduleNextTick(func() {
 			c.streamingBufferLoaded(
-				streamingTab, sh, file, readOnly, recovering,
+				streamingTab, sh, def, file, readOnly, recovering,
 				realHandler, efc, loadErr)
 		})
 	})
@@ -554,7 +555,7 @@ func (c *Component) openFileTabStreaming(
 }
 
 func (c *Component) streamingBufferLoaded(
-	streamingTab *browser.Tab, sh *streamload.Handler,
+	streamingTab *browser.Tab, sh *streamload.Handler, def *deferHandler,
 	file workspaceapi.URI, readOnly, recovering bool,
 	realHandler Handler, efc *editorFlusherCloser, loadErr error,
 ) {
@@ -577,7 +578,7 @@ func (c *Component) streamingBufferLoaded(
 			_, _ = c.Notify(browserapi.LevelError, "open %s: %v", file, loadErr)
 		}
 	default:
-		c.streamingTabSwapHandler(streamingTab, sh, file, realHandler, efc)
+		c.streamingTabSwapHandler(streamingTab, sh, def, file, realHandler, efc)
 		return
 	}
 	if efc != nil {
@@ -589,12 +590,13 @@ func (c *Component) streamingBufferLoaded(
 }
 
 func (c *Component) streamingTabSwapHandler(
-	streamingTab *browser.Tab, sh *streamload.Handler,
+	streamingTab *browser.Tab, sh *streamload.Handler, def *deferHandler,
 	file workspaceapi.URI,
 	realHandler Handler, efc *editorFlusherCloser,
 ) {
 	offset := sh.SeekOffset()
 	width, height := sh.Dimensions()
+	def.Swap(realHandler)
 	if err := streamingTab.SetHandler(realHandler, efc); err != nil {
 		_, _ = c.Notify(browserapi.LevelError,
 			"swap streaming handler for %s: %v", file, err)
