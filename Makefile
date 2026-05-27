@@ -447,19 +447,28 @@ deps: rune-llamacpp-init ox-api-init docs-init
 # rune-llamacpp-init initialises the llama.cpp git submodule that lives
 # under rune/llm/llamacpp and is consumed by the rune host's local-model
 # backend. Safe to run repeatedly.
+#
+# Guarded on `.git` so a checked-out submodule with uncommitted local
+# edits is not silently reset to the superproject's pinned SHA.
 rune-llamacpp-init:
-	@ git submodule update --init --recursive llm/llamacpp/llama.cpp
+	@ [ -e llm/llamacpp/llama.cpp/.git ] || git submodule update --init --recursive llm/llamacpp/llama.cpp
 
 # ox-api-init makes sure the ox-api git submodule is checked out so the
 # cmd/ox-api package compiles. Safe to run repeatedly.
+#
+# Guarded on `.git` so a checked-out submodule with uncommitted local
+# edits is not silently reset to the superproject's pinned SHA.
 ox-api-init:
-	@ git submodule update --init --recursive cmd/ox-api
+	@ [ -e cmd/ox-api/.git ] || git submodule update --init --recursive cmd/ox-api
 
 # docs-init makes sure the cmd/rune/docs git submodule is checked out so the
 # //go:embed directives in cmd/rune/docs_scheme.go find the markdown sources
 # that back the in-memory docs:// workspace scheme. Safe to run repeatedly.
+#
+# Guarded on `.git` so a checked-out submodule with uncommitted local
+# edits is not silently reset to the superproject's pinned SHA.
 docs-init:
-	@ git submodule update --init --recursive cmd/rune/docs
+	@ [ -e cmd/rune/docs/.git ] || git submodule update --init --recursive cmd/rune/docs
 
 # rune-llamacpp-libs builds the static libraries used by rune/llm/llamacpp.
 # Skipped silently when the libs are already present and fresher than the
