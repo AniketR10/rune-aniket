@@ -24,22 +24,38 @@
 package byoe
 
 import (
+	"sync/atomic"
+
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 )
 
+// eventPublisher decorates browser.EventPublisher with a refresh
+// callback that fires on EventInterrupt. refresh is assigned
+// concurrently with the vte's reader goroutine (which is started
+// inside vte.NewHandler before Edit can wire the callback), so the
+// field is stored as an atomic.Pointer to avoid a data race; an
+// unset refresh is simply skipped.
 type eventPublisher struct {
 	publisher browser.EventPublisher
-	refresh   func()
+	refresh   atomic.Pointer[func()]
 }
 
 func newEventPublisher(publisher browser.EventPublisher) *eventPublisher {
 	return &eventPublisher{publisher: publisher}
 }
 
+// setRefresh installs fn as the refresh callback. Safe to call from
+// any goroutine.
+func (p *eventPublisher) setRefresh(fn func()) {
+	p.refresh.Store(&fn)
+}
+
 func (p *eventPublisher) PublishEvent(ev term.Event) error {
-	if ev.Type == term.EventInterrupt && p.refresh != nil {
-		p.refresh()
+	if ev.Type == term.EventInterrupt {
+		if fn := p.refresh.Load(); fn != nil {
+			(*fn)()
+		}
 	}
 	return p.publisher.PublishEvent(ev)
 }

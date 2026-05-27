@@ -44,7 +44,7 @@ func TestEventPublisherRefreshesOnInterruptOnly(t *testing.T) {
 	pub := &recordingPublisher{}
 	wrapper := newEventPublisher(pub)
 	var refreshes int
-	wrapper.refresh = func() { refreshes++ }
+	wrapper.setRefresh(func() { refreshes++ })
 
 	keyEv := term.Event{Type: term.EventKey, Ch: 'x'}
 	intrEv := term.Event{Type: term.EventInterrupt}

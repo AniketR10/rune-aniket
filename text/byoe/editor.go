@@ -196,7 +196,7 @@ func (e *Editor) Edit(
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
 		e.cwd, e.notifications, e.scheduleNextTick, e.reloader,
 		e.overrideHighlights)
-	pub.refresh = h.refreshProbe
+	pub.setRefresh(h.refreshProbe)
 	var ret text.Handler = h
 	if e.fileRegistry != nil {
 		var err error
