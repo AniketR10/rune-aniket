@@ -1105,11 +1105,19 @@ func loadIdePkgConfigFromBytes(
 	editorMode string,
 ) (map[string]any, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".star") {
-		return starlarkconfig.Decode(starlarkconfig.Source{
+		cfg, err := starlarkconfig.Decode(starlarkconfig.Source{
 			Src:      data,
 			Filename: filename,
 			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir, editorMode),
 		})
+		// A user config file is allowed to be empty or contain only
+		// comments. Treat a missing top-level `config` binding as an
+		// empty configuration so the package overlay can still create
+		// one.
+		if errors.Is(err, starlarkconfig.ErrMissingConfig) {
+			return map[string]any{}, nil
+		}
+		return cfg, err
 	}
 	if len(data) == 0 {
 		return map[string]any{}, nil

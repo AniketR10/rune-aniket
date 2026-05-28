@@ -56,6 +56,12 @@ import (
 // writes to. Anything else is ignored.
 const ConfigGlobal = "config"
 
+// ErrMissingConfig is returned by Decode in base mode when the script does
+// not bind a top-level `config` dict. Callers that treat a missing binding
+// as an empty configuration (for example, a user config file that only
+// contains comments) can branch on this with errors.Is.
+var ErrMissingConfig = errors.New("starlark: missing top-level \"config\" dict")
+
 // Source describes one config invocation. See package docs for the two modes.
 type Source struct {
 	// Src is the script source.
@@ -133,7 +139,7 @@ func Decode(s Source) (map[string]any, error) {
 		val, ok = predeclared[ConfigGlobal]
 	}
 	if !ok {
-		return nil, fmt.Errorf("starlark: expected top-level %q dict", ConfigGlobal)
+		return nil, ErrMissingConfig
 	}
 	dict, ok := val.(*starlark.Dict)
 	if !ok {

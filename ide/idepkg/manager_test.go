@@ -1538,6 +1538,83 @@ func TestInstallPackageVersionConfigCrossFormat(t *testing.T) {
 	}
 }
 
+// TestInstallPackageVersionConfigEmptyUserConfig verifies that a package
+// overlay can still merge into a user config file whose body is empty or
+// only contains comments. Without this, installing any package against a
+// freshly created (or fully commented-out) user config.star failed with
+// "load user config: starlark: expected top-level \"config\" dict".
+func TestInstallPackageVersionConfigEmptyUserConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		userConfigName string
+		userConfig     string
+		pkgName        string
+	}{
+		{
+			name:           "empty user config yaml",
+			userConfigName: "config.yaml",
+			userConfig:     "",
+			pkgName:        "configpkg",
+		},
+		{
+			name:           "comments-only user config yaml",
+			userConfigName: "config.yaml",
+			userConfig:     "# just a comment\n# another one\n",
+			pkgName:        "configpkg",
+		},
+		{
+			name:           "empty user config star",
+			userConfigName: "config.star",
+			userConfig:     "",
+			pkgName:        "configpkgstar",
+		},
+		{
+			name:           "whitespace-only user config star",
+			userConfigName: "config.star",
+			userConfig:     "\n   \n\t\n",
+			pkgName:        "configpkgstar",
+		},
+		{
+			name:           "comments-only user config star",
+			userConfigName: "config.star",
+			userConfig:     "# just a comment\n# another one\n",
+			pkgName:        "configpkgstar",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pkgs := idepkgtest.MakePackages()
+			versions := idepkgtest.MakeBundles([]release.Bundle{{Package: tt.pkgName, Version: "1"}})
+			m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+			configPath := filepath.Join(datadir, tt.userConfigName)
+			m.configPath = configPath
+			require.NoError(t, os.WriteFile(configPath, []byte(tt.userConfig), 0o644))
+
+			n.SetWg(2) // apply success + download success
+			err := m.InstallPackageVersion(context.Background(), tt.pkgName, "1")
+			require.NoError(t, err)
+			n.Wait()
+			n.RequireNoErrorNotification()
+
+			cfg := readUserConfigMap(t, configPath)
+
+			env, ok := cfg["env"].(map[string]any)
+			require.True(t, ok, "env not present in merged config: %#v", cfg)
+			assert.Equal(t, filepath.Join(datadir, "pkg", tt.pkgName, "1", "go"), env["GOROOT"])
+
+			settings, ok := cfg["settings"].(map[string]any)
+			require.True(t, ok, "settings not present in merged config: %#v", cfg)
+			assert.Equal(t, "dark", fmt.Sprint(settings["theme"]))
+			assert.Equal(t, "4", fmt.Sprint(settings["indent"]))
+		})
+	}
+}
+
 func TestPromptConfigChangeRender(t *testing.T) {
 	t.Parallel()
 	prompt := handler.NewPrompt(handler.PromptConfig{
@@ -2596,4 +2673,31 @@ func TestPkgConfigFileFallsBackToStar(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.star"), []byte("config = {}\n"), 0o644))
 	assert.Equal(t, filepath.Join(dir, "config.star"), pkgConfigFile(dir))
+}
+
+// TestLoadUserConfigStarEmptyOrCommentsOnly verifies that a user-side
+// config.star that is empty or contains only comments loads as an empty
+// configuration instead of failing with "expected top-level config dict".
+// Without this, installing a package against a fresh/commented user config
+// would surface a confusing "load user config" error to the user.
+func TestLoadUserConfigStarEmptyOrCommentsOnly(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"empty", ""},
+		{"whitespace only", "\n   \n\t\n"},
+		{"comments only", "# just a comment\n# another one\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := loadIdePkgConfigFromBytes(
+				"config.star", []byte(tc.src),
+				"pkg", release.Version("1"), "/data", "modal",
+			)
+			require.NoError(t, err)
+			assert.Equal(t, map[string]any{}, got)
+		})
+	}
 }

@@ -167,7 +167,7 @@ func TestDecode(t *testing.T) {
 			src: Source{
 				Src: []byte(`x = 1`),
 			},
-			wantErr: `expected top-level "config" dict`,
+			wantErr: `missing top-level "config" dict`,
 		},
 		{
 			name: "config not a dict",
