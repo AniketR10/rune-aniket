@@ -291,7 +291,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		caps:      &dap.Capabilities{SupportsTerminateRequest: true},
 	}
 	srv := grpc.NewServer()
-	server := debugrpc.NewServer(dbg)
+	server := debugrpc.NewServer(dbg, new(sync.Mutex))
 	server.Register(srv)
 	go func() { _ = srv.Serve(lis) }()
 

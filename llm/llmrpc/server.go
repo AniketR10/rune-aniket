@@ -27,6 +27,7 @@ package llmrpc
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
@@ -35,22 +36,37 @@ import (
 )
 
 // Server adapts an llmapi.Service to the generated LLMServer interface.
+//
+// The host event loop drives every UI handler on a single goroutine
+// guarded by a shared locker; gRPC handlers come in on grpc-go's own
+// goroutine pool. Server takes the locker around every llmapi.Service
+// call so the router and its provider clients (notably the local
+// llama.cpp service cache) stay single-threaded with the rest of the
+// host. The lock is released across the per-event stream drain so a
+// long-running completion does not freeze the UI.
 type Server struct {
 	llmrpc.UnimplementedLLMServer
 	ctx       context.Context
 	cancelCtx func()
 	svc       llmapi.Service
+	locker    sync.Locker
 }
 
-// NewServer returns a new Server that delegates to svc.
-func NewServer(svc llmapi.Service) *Server {
+// NewServer returns a new Server that delegates to svc. locker is
+// applied around every llmapi.Service call to serialize the router
+// with the host event loop; it must not be nil.
+func NewServer(svc llmapi.Service, locker sync.Locker) *Server {
+	if locker == nil {
+		panic("llmrpc: NewServer: locker must not be nil")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{svc: svc, ctx: ctx, cancelCtx: cancel}
+	return &Server{svc: svc, ctx: ctx, cancelCtx: cancel, locker: locker}
 }
 
-// RegisterServer registers an llmapi.Service as a gRPC service.
-func RegisterServer(registrar grpc.ServiceRegistrar, svc llmapi.Service) {
-	llmrpc.RegisterLLMServer(registrar, NewServer(svc))
+// RegisterServer registers an llmapi.Service as a gRPC service. locker
+// follows the same contract as NewServer.
+func RegisterServer(registrar grpc.ServiceRegistrar, svc llmapi.Service, locker sync.Locker) {
+	llmrpc.RegisterLLMServer(registrar, NewServer(svc, locker))
 }
 
 // Close cancels in-flight streams.
@@ -71,7 +87,9 @@ func (s *Server) CreateCompletion(
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
 	model := llmrpc.FromProtoModelEntry(req.GetModel())
+	s.locker.Lock()
 	it, err := s.svc.CreateCompletion(ctx, model, apiReq)
+	s.locker.Unlock()
 	if err != nil {
 		var cwErr *llmapi.ErrContextWindowExceeded
 		if errors.As(err, &cwErr) {
@@ -79,9 +97,15 @@ func (s *Server) CreateCompletion(
 		}
 		return err
 	}
-	defer func() { _ = it.Close() }()
+	defer func() {
+		s.locker.Lock()
+		_ = it.Close()
+		s.locker.Unlock()
+	}()
 	for {
+		s.locker.Lock()
 		ev, ok := it.Next(ctx)
+		s.locker.Unlock()
 		if !ok {
 			if iErr := it.Err(); iErr != nil {
 				var cwErr *llmapi.ErrContextWindowExceeded
@@ -113,7 +137,9 @@ func (s *Server) CountTokens(
 		msgs = append(msgs, apiReq.Messages...)
 	}
 	model := llmrpc.FromProtoModelEntry(req.GetModel())
+	s.locker.Lock()
 	count, err := s.svc.CountTokens(model, msgs)
+	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +153,18 @@ func (s *Server) Models(
 ) error {
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
+	s.locker.Lock()
 	it := s.svc.Models()
-	defer func() { _ = it.Close() }()
+	s.locker.Unlock()
+	defer func() {
+		s.locker.Lock()
+		_ = it.Close()
+		s.locker.Unlock()
+	}()
 	for {
+		s.locker.Lock()
 		entry, ok := it.Next(ctx)
+		s.locker.Unlock()
 		if !ok {
 			return it.Err()
 		}
@@ -147,7 +181,9 @@ func (s *Server) GetModel(
 	ctx context.Context, req *llmrpc.GetModelRequest,
 ) (*llmrpc.GetModelResponse, error) {
 	model := llmrpc.FromProtoModelEntry(req.GetModel())
+	s.locker.Lock()
 	entry, ok := s.svc.GetModel(ctx, model)
+	s.locker.Unlock()
 	if !ok {
 		return &llmrpc.GetModelResponse{Found: false}, nil
 	}

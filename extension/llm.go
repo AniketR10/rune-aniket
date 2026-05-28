@@ -48,9 +48,9 @@ type llmResourceServer struct {
 }
 
 func (s *llmResourceServer) Register(
-	registrar rpc.ServiceRegistrar, _ sync.Locker,
+	registrar rpc.ServiceRegistrar, locker sync.Locker,
 ) (io.Closer, error) {
-	server := llmrpc.NewServer(s.svc)
+	server := llmrpc.NewServer(s.svc, locker)
 	sdkllmrpc.RegisterLLMServer(registrar, server)
 	return server, nil
 }

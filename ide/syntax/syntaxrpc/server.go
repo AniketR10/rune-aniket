@@ -26,6 +26,7 @@ package syntaxrpc
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -42,17 +43,26 @@ type Server struct {
 	ctx       context.Context
 	cancelCtx func()
 	parser    syntaxapi.Parser
+	// locker serializes calls into parser with the host event loop. Held
+	// only around parser invocations and per-iteration iterator steps,
+	// never across stream.Send.
+	locker sync.Locker
 }
 
-// NewServer returns a new Server that delegates to s.
-func NewServer(s syntaxapi.Parser) *Server {
+// NewServer returns a new Server that delegates to s. locker serializes
+// parser access with the host event loop; it must not be nil.
+func NewServer(s syntaxapi.Parser, locker sync.Locker) *Server {
+	if locker == nil {
+		panic("syntaxrpc: NewServer: locker must not be nil")
+	}
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	return &Server{parser: s, ctx: ctx, cancelCtx: cancelCtx}
+	return &Server{parser: s, ctx: ctx, cancelCtx: cancelCtx, locker: locker}
 }
 
-// RegisterServer registers a syntaxapi.Parser as a gRPC service.
-func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Parser) {
-	syntaxrpc.RegisterSyntaxServer(registrar, NewServer(s))
+// RegisterServer registers a syntaxapi.Parser as a gRPC service. locker
+// follows the same contract as NewServer.
+func RegisterServer(registrar grpc.ServiceRegistrar, s syntaxapi.Parser, locker sync.Locker) {
+	syntaxrpc.RegisterSyntaxServer(registrar, NewServer(s, locker))
 }
 
 // Search satisfies SyntaxServer.
@@ -62,17 +72,19 @@ func (s *Server) Search(
 	langs := req.GetLanguages()
 	var it iterator.Iterator[syntaxapi.Result]
 	var err error
+	s.locker.Lock()
 	if langs == nil {
 		it, err = s.parser.Search(req.GetQuery(), req.GetCaptureNames())
 	} else {
 		it, err = s.parser.Search(req.GetQuery(), req.GetCaptureNames(), req.GetLanguages()...)
 	}
+	s.locker.Unlock()
 	if err != nil {
 		return fmt.Errorf("syntax search: %w", err)
 	}
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
-	return streamResults(ctx, stream, it)
+	return s.streamResults(ctx, stream, it)
 }
 
 // SearchNode implements SyntaxServer.
@@ -80,13 +92,15 @@ func (s *Server) SearchNode(
 	req *syntaxrpc.SearchNodeRequest,
 	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 ) error {
+	s.locker.Lock()
 	it, err := s.parser.SearchNode(syntaxapi.NodeCaptureName(req.GetNodeTypes()))
+	s.locker.Unlock()
 	if err != nil {
 		return err
 	}
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
-	return streamResults(ctx, stream, it)
+	return s.streamResults(ctx, stream, it)
 }
 
 // Query implements SyntaxServer.
@@ -98,13 +112,15 @@ func (s *Server) Query(
 	if err != nil {
 		return err
 	}
+	s.locker.Lock()
 	it, err := s.parser.Query(uri, req.GetQuery(), req.GetCaptureNames())
+	s.locker.Unlock()
 	if err != nil {
 		return err
 	}
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
-	return streamResults(ctx, stream, it)
+	return s.streamResults(ctx, stream, it)
 }
 
 // QueryNode implements SyntaxServer.
@@ -116,13 +132,15 @@ func (s *Server) QueryNode(
 	if err != nil {
 		return err
 	}
+	s.locker.Lock()
 	it, err := s.parser.QueryNode(uri, syntaxapi.NodeCaptureName(req.GetNodeTypes()))
+	s.locker.Unlock()
 	if err != nil {
 		return err
 	}
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
-	return streamResults(ctx, stream, it)
+	return s.streamResults(ctx, stream, it)
 }
 
 // Highlight implements SyntaxServer.
@@ -134,13 +152,21 @@ func (s *Server) Highlight(
 	if err != nil {
 		return err
 	}
+	s.locker.Lock()
 	it, err := s.parser.Highlight(uri, req.GetContent())
+	s.locker.Unlock()
 	if err != nil {
 		return err
 	}
-	defer func() { _ = it.Close() }()
+	defer func() {
+		s.locker.Lock()
+		_ = it.Close()
+		s.locker.Unlock()
+	}()
 	for {
+		s.locker.Lock()
 		loc, ok := it.Next(context.Background())
+		s.locker.Unlock()
 		if !ok {
 			return it.Err()
 		}
@@ -161,14 +187,20 @@ func (s *Server) Highlight(
 	}
 }
 
-func streamResults(
+func (s *Server) streamResults(
 	ctx context.Context,
 	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],
 	it iterator.Iterator[syntaxapi.Result],
 ) error {
-	defer it.Close() //nolint:errcheck
+	defer func() {
+		s.locker.Lock()
+		_ = it.Close()
+		s.locker.Unlock()
+	}()
 	for {
+		s.locker.Lock()
 		result, ok := it.Next(ctx)
+		s.locker.Unlock()
 		if !ok {
 			break
 		}

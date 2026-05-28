@@ -461,7 +461,7 @@ func setupServerClient(
 	listener, err := net.Listen("unix", socketPath)
 	require.NoError(t, err)
 
-	server := NewServer(svc)
+	server := NewServer(svc, new(sync.Mutex))
 	grpcServer := grpc.NewServer()
 	llmrpc.RegisterLLMServer(grpcServer, server)
 
