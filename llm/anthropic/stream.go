@@ -21,11 +21,11 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package anthropic
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -115,7 +115,7 @@ func (s *streamIterator) Next(ctx context.Context) (llmapi.Event, bool) {
 		case streamStateStreaming:
 			if !s.stream.Next() {
 				if err := s.stream.Err(); err != nil {
-					retryable := ratelimit.IsTransientNetworkError(err) || ratelimit.IsRetryableStreamError(err)
+					retryable := ratelimit.IsTransientNetworkError(err) || isRetryableMidStreamError(err)
 					if s.newStream != nil && s.midStreamRetries > 0 && retryable {
 						s.midStreamRetries--
 						_ = s.stream.Close()
@@ -304,4 +304,24 @@ func mapStopReason(reason ant.StopReason) llmapi.FinishReason {
 	default:
 		return llmapi.FinishReasonNull
 	}
+}
+
+// isRetryableMidStreamError reports whether err is a retryable error surfaced
+// after the SSE stream has been established. The SDK reports SSE "error"
+// events as *ant.Error with the underlying HTTP response (StatusCode 200,
+// since the stream connection itself succeeded). Older releases formatted
+// these as a plain "received error while streaming: ..." string, which
+// ratelimit.IsRetryableStreamError still handles as a fallback.
+func isRetryableMidStreamError(err error) bool {
+	var apiErr *ant.Error
+	if errors.As(err, &apiErr) && apiErr.Response != nil && apiErr.Response.StatusCode == http.StatusOK {
+		switch apiErr.Type() {
+		case ant.ErrorTypeOverloadedError,
+			ant.ErrorTypeAPIError,
+			ant.ErrorTypeRateLimitError:
+			return true
+		}
+		return false
+	}
+	return ratelimit.IsRetryableStreamError(err)
 }

@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package anthropic
 
 import (
@@ -74,8 +73,9 @@ func anthropicParamsFromRequest(model string, request llmapi.Request, config Con
 	// Adaptive thinking: Claude decides dynamically when and how much to think.
 	// budget_tokens is deprecated on 4.6 models; adaptive is the recommended mode.
 	if config.EnableThinking {
-		adaptive := ant.NewThinkingConfigAdaptiveParam()
-		params.Thinking = ant.ThinkingConfigParamUnion{OfAdaptive: &adaptive}
+		params.Thinking = ant.ThinkingConfigParamUnion{
+			OfAdaptive: &ant.ThinkingConfigAdaptiveParam{},
+		}
 	}
 
 	// Output effort — already normalized by client.CreateCompletion.
