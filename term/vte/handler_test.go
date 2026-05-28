@@ -52,6 +52,33 @@ func init() {
 	}
 }
 
+// TestMain isolates HOME for the entire package's child processes so
+// vim invocations in integration tests (e.g. TestHandlerIntegration)
+// write their .viminfo and .viminf[a-z].tmp lock files into a
+// throwaway directory. A real $HOME left over from prior crashes can
+// already carry the full a-z spinner of viminf*.tmp files, which
+// triggers E929 (too many viminfo temp files) and prevents the
+// editor banner from appearing at all — the test then fails on a
+// golden screen mismatch rather than a vim error.
+func TestMain(m *testing.M) {
+	tmp, err := os.MkdirTemp("", "vte-home")
+	if err != nil {
+		panic(err)
+	}
+	prev, hadPrev := os.LookupEnv("HOME")
+	if err := os.Setenv("HOME", tmp); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	if hadPrev {
+		_ = os.Setenv("HOME", prev)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	_ = os.RemoveAll(tmp)
+	os.Exit(code)
+}
+
 func TestHandlerIntegration(t *testing.T) {
 	t.Parallel()
 	cases := []vtetest.Case{
