@@ -92,7 +92,7 @@ func (c *Component) Draw(w term.Writer) {
 	c.root.Draw(c.buf)
 
 	cells := c.buf.RawCells()
-	c.shader.Shade(int(c.epoch.Load()), c.total, c.buf.RawCells())
+	c.shader.Shade(int(c.epoch.Load()), c.total, cells)
 
 	for y, row := range cells {
 		for x, cell := range row {

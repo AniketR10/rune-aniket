@@ -193,6 +193,7 @@ func namedShaderNames() []string {
 		"burningOnlyBlueFlamesLightsOff",
 		"noise",
 		"nop",
+		"pulse",
 		"risingChars",
 		"shine",
 		"shineFrame",
@@ -315,6 +316,8 @@ func buildNamedShader(
 		), true
 	case "nop":
 		return shader.Nop(), true
+	case "pulse":
+		return shader.Pulse(shader.DefaultPulseParams(), defAttr), true
 	case "risingChars":
 		return wrapShaderCrossFadeInOut(
 			glslshader.RisingChars(glslshader.DefaultRisingCharsParams(), defAttr),

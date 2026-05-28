@@ -173,3 +173,18 @@ func TestShaderRunnerStopLoadingUsesConfiguredOpenDuration(t *testing.T) {
 	assert.Equal(t, expect, r.shader.Total(),
 		"stopLoading must use the configured open-shader duration")
 }
+
+// TestBuildNamedShaderRegistersEveryListedName asserts that every name
+// returned by namedShaderNames resolves through buildNamedShader.
+func TestBuildNamedShaderRegistersEveryListedName(t *testing.T) {
+	defAttr := term.Attributes{}
+	fc := component.FrameCharSetDefault()
+	for _, name := range namedShaderNames() {
+		sh, ok := buildNamedShader(name, defAttr, 30, time.Second, fc)
+		assert.True(t, ok,
+			"buildNamedShader must register %q (listed by namedShaderNames)",
+			name)
+		assert.NotNil(t, sh,
+			"buildNamedShader(%q) must return a non-nil Shader", name)
+	}
+}
