@@ -417,7 +417,8 @@ func (uc *UpdateChecker) showUpdatePrompt(ctx context.Context, updates []Update)
 			switch idx {
 			case 0: // Update All
 				for _, u := range updates {
-					if err := uc.m.InstallPackageVersion(ctx, u.Package, u.Latest); err != nil {
+					pw := NewNotifyProgressWriter(uc.m.n, uc.m.interrupter, u.Package, u.Latest)
+					if err := uc.m.InstallPackageVersion(ctx, u.Package, u.Latest, pw); err != nil {
 						uc.m.log(log.WarnLevel, "install update %s %s: %v", u.Package, u.Latest, err)
 					}
 				}

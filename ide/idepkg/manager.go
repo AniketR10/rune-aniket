@@ -53,6 +53,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/debug"
@@ -292,9 +293,13 @@ func (m *Manager) ListPackageVersions(ctx context.Context, pkgID string, filters
 // that contains the extracted bundle.
 func (m *Manager) InstallPackageVersion(
 	ctx context.Context, pkgID string, version release.Version,
+	pw repl.ProgressWriter,
 ) error {
 	if pkgID == "" || version == "" {
 		return errors.New("package and version must not be empty")
+	}
+	if pw == nil {
+		pw = repl.NopProgressWriter()
 	}
 
 	// ensure no one is being naughty
@@ -337,21 +342,13 @@ func (m *Manager) InstallPackageVersion(
 		}
 	}
 
-	notificationID, err := m.n.Notify(browserapi.LevelInfo,
-		"downloading version %s of package %s", version, pkgID)
-	if err != nil {
-		m.cleanupFile(tarfile)
-		_ = m.storage.Delete(ctx, key)
-		return fmt.Errorf("notify: %w", err)
-	}
-
 	mu := new(sync.Mutex)
 	m.iterators.m[pkgID] = mu
 
 	mu.Lock() // block calls to iterator
 	go debug.CapturePanicReport(func() {
 		m.capturePanicReport(func() {
-			m.download(pkgID, version, tarfile, notificationID, key)
+			m.download(pkgID, version, tarfile, pw, key)
 		})
 	})
 
@@ -689,28 +686,25 @@ func newPkgVersionValue(pkgID string, version release.Version) pkgVersionValue {
 
 func (m *Manager) download(
 	pkgID string, version release.Version, tarfile *os.File,
-	notificationID string, key string,
+	pw repl.ProgressWriter, key string,
 ) {
 	ctx := context.Background()
 	defer m.cleanupFile(tarfile)
 
 	if err := makePkgDirs(m.dataDir); err != nil {
-		m.abortDownload(err, pkgID, version, notificationID)
+		m.abortDownload(err, pkgID, version)
 		return
 	}
 
-	writer := &notificationsProgressWriter{
-		Writer:         tarfile,
-		m:              m,
-		notificationID: notificationID,
-		pkgID:          pkgID,
-		version:        version,
+	writer := &progressTarWriter{
+		Writer: tarfile,
+		pw:     pw,
 	}
 	m.log(log.TraceLevel, "fetching package %s version %s", pkgID, version)
 	_, err := m.m.Get(ctx, pkgID, version, writer)
 	if err != nil {
 		err = translateVersionErr(err, pkgID, string(version))
-		m.abortDownload(err, pkgID, version, notificationID)
+		m.abortDownload(err, pkgID, version)
 		return
 	}
 
@@ -719,10 +713,10 @@ func (m *Manager) download(
 	stagingDir := makeStagingDirname(m.dataDir, pkgID, version)
 	_ = os.RemoveAll(stagingDir)
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
-	_, executables, err := m.untar(tarfile, stagingDir)
+	_, executables, err := m.untar(tarfile, stagingDir, pw)
 	if err != nil {
 		_ = os.RemoveAll(stagingDir)
-		m.abortDownload(err, pkgID, version, notificationID)
+		m.abortDownload(err, pkgID, version)
 		return
 	}
 
@@ -730,7 +724,7 @@ func (m *Manager) download(
 	if err := os.Rename(stagingDir, pkgVersionDirname); err != nil {
 		_ = os.RemoveAll(stagingDir)
 		err = fmt.Errorf("rename staging dir: %w", err)
-		m.abortDownload(err, pkgID, version, notificationID)
+		m.abortDownload(err, pkgID, version)
 		return
 	}
 
@@ -739,7 +733,7 @@ func (m *Manager) download(
 	err = m.linkLibCopyBin(pkgID, version, executables, pkgVersionDirname)
 	if err != nil {
 		_ = os.RemoveAll(pkgVersionDirname)
-		m.abortDownload(err, pkgID, version, notificationID)
+		m.abortDownload(err, pkgID, version)
 		return
 	}
 
@@ -751,7 +745,7 @@ func (m *Manager) download(
 		err = fmt.Errorf("update storage field: %w", err)
 		_ = os.RemoveAll(pkgVersionDirname)
 		_ = removeExecutables(executables, m.binDir)
-		m.abortDownload(err, pkgID, version, notificationID)
+		m.abortDownload(err, pkgID, version)
 		return
 	}
 
@@ -765,10 +759,10 @@ func (m *Manager) download(
 		}
 	}
 
-	if !writer.completeProgress {
-		_ = m.n.UpdateNotificationProgress(notificationID,
-			"downloaded version of package", 1, 1)
-	}
+	// Signal completion so notification-backed writers can
+	// dismiss the in-progress notification before we post the
+	// terminal success notification.
+	pw.Progress(1, 1, "done")
 	_, err = m.n.Notify(browserapi.LevelSuccess,
 		"downloaded version %s of package %s", version, pkgID)
 	if err != nil {
@@ -793,7 +787,6 @@ func (m *Manager) download(
 
 func (m *Manager) abortDownload(
 	err error, pkgID string, version release.Version,
-	notificationID string,
 ) {
 	m.log(log.WarnLevel, "aborting installation of package %s version %s: %v",
 		pkgID, version, err)
@@ -802,7 +795,7 @@ func (m *Manager) abortDownload(
 		m.log(log.ErrorLevel, "delete pkg %s version %s "+
 			"lock key (%s): %v", pkgID, version, key, err)
 	}
-	m.notifyError(err, pkgID, version, notificationID)
+	m.notifyError(err, pkgID, version)
 
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
@@ -818,15 +811,11 @@ func (m *Manager) abortDownload(
 
 func (m *Manager) notifyError(
 	err error, pkgID string, version release.Version,
-	notificationID string,
 ) {
 	newMsg := fmt.Sprintf("downloading version %s of "+
 		"package %s failed: %v", version, pkgID, err)
 	if _, err := m.n.Notify(browserapi.LevelError, newMsg); err != nil {
 		m.log(log.WarnLevel, "notify: %v", err)
-	}
-	if err := m.n.UpdateNotificationProgress(notificationID, newMsg, 1, 1); err != nil {
-		m.log(log.WarnLevel, "update notification progress: %v", err)
 	}
 	if err := m.interrupter.Interrupt(context.Background()); err != nil {
 		m.log(log.WarnLevel, "interrupt: %v", err)
@@ -1027,25 +1016,44 @@ func (m *Manager) processConfig(
 	return nil
 }
 
-func (m *Manager) untar(tarfile *os.File, dirname string) (string, []executableEntry, error) {
+func (m *Manager) untar(
+	tarfile *os.File, dirname string, pw repl.ProgressWriter,
+) (string, []executableEntry, error) {
 	if err := os.MkdirAll(dirname, 0777); err != nil {
 		err = fmt.Errorf("mkdir: %w", err)
 		return "", nil, err
 	}
-	_, err := tarfile.Seek(0, 0)
+	stat, err := tarfile.Stat()
+	if err != nil {
+		return "", nil, fmt.Errorf("stat tarball file: %w", err)
+	}
+	totalBytes := stat.Size()
+	_, err = tarfile.Seek(0, 0)
 	if err != nil {
 		err = fmt.Errorf("seek tarball file: %w", err)
 		return "", nil, err
 	}
 
-	gzr, err := gzip.NewReader(tarfile)
+	// Count compressed bytes read from disk so progress tracks
+	// against tarfile size (the only total we know up front).
+	counter := &countingReader{r: tarfile}
+	gzr, err := gzip.NewReader(counter)
 	if err != nil {
 		err = fmt.Errorf("new gzip reader: %w", err)
 		return "", nil, err
 	}
 	defer func() { _ = gzr.Close() }()
 
-	executables, err := untar(dirname, gzr)
+	executables, err := untar(dirname, gzr, func() {
+		// Hold back the terminal extract sample so notification
+		// writers that auto-dismiss on progress==total stay alive
+		// for the "installing" steps that follow.
+		n := counter.n
+		if n >= totalBytes {
+			n = totalBytes - 1
+		}
+		pw.Progress(n, totalBytes, "extracting")
+	})
 	if err != nil {
 		err = fmt.Errorf("untar into %s: %w", dirname, err)
 		return "", nil, err
@@ -1241,36 +1249,39 @@ func (m *Manager) log(level log.Level, msg string, args ...any) {
 	log.WithField(logging.KeyClass, "idepkg.Manager").Logf(level, msg, args...)
 }
 
-type notificationsProgressWriter struct {
+// progressTarWriter composes a tarfile io.Writer with a
+// caller-supplied repl.ProgressWriter to satisfy
+// release.ProgressWriter. The terminal download sample
+// (progress==total) is held back so notification-backed writers
+// don't auto-dismiss before the extract/install phases run.
+type progressTarWriter struct {
 	io.Writer
-	pkgID            string
-	version          release.Version
-	notificationID   string
-	completeProgress bool
-	m                *Manager
+	pw repl.ProgressWriter
 }
 
-func (w *notificationsProgressWriter) Progress(progress, total int64, units string) {
+func (w *progressTarWriter) Progress(progress, total int64, units string) {
 	if total == 0 || progress > total {
 		return
 	}
-	var message string
-	if units == "" {
-		perc := int(float64(progress) / float64(total) * 100)
-		message = fmt.Sprintf("downloading version %s of package %s: %d%%",
-			w.version, w.pkgID, perc)
-	} else {
-		message = fmt.Sprintf("downloading version %s of package %s: %d/%d %s",
-			w.version, w.pkgID, progress, total, units)
+	if progress == total {
+		return
 	}
-	err := w.m.n.UpdateNotificationProgress(w.notificationID, message, progress, total)
-	if err != nil {
-		w.m.log(log.WarnLevel, "could not update notification progress: %v", err)
-	}
-	w.completeProgress = total == progress
-	if err := w.m.interrupter.Interrupt(context.Background()); err != nil {
-		w.m.log(log.WarnLevel, "interrupt: %v", err)
-	}
+	w.pw.Progress(progress, total, units)
+}
+
+// countingReader wraps an io.Reader to track the total number of
+// bytes consumed. It is used to report extraction progress against
+// the on-disk tarfile size — the only total known up front, since
+// tar headers don't expose entry counts.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 func isExecutable(info fs.FileInfo) bool {
@@ -1279,7 +1290,7 @@ func isExecutable(info fs.FileInfo) bool {
 	return info.Mode()&os.ModeType == 0 && info.Mode()&0111 != 0
 }
 
-func untar(dst string, r io.Reader) ([]executableEntry, error) {
+func untar(dst string, r io.Reader, onProgress func()) ([]executableEntry, error) {
 	tr := tar.NewReader(r)
 
 	var executables []executableEntry
@@ -1290,6 +1301,9 @@ func untar(dst string, r io.Reader) ([]executableEntry, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("tar next: %w", err)
+		}
+		if onProgress != nil {
+			onProgress()
 		}
 
 		target := filepath.Join(dst, filepath.Clean(hdr.Name))

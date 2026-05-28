@@ -183,7 +183,8 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		// should prevent further attempts or errors being logged.
 		return nil, storageapi.ErrNotFound
 	}
-	if err := m.pkg.InstallPackageVersion(ctx, pkgID, version); err != nil {
+	pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, version)
+	if err := m.pkg.InstallPackageVersion(ctx, pkgID, version, pw); err != nil {
 		return nil, fmt.Errorf("install latest version: %w", err)
 	}
 	return m.pkg.LibDir(ctx, pkgID)
@@ -262,7 +263,8 @@ func (m *pkgManager) handlePkgInstall(ctx context.Context, cmd textapi.Command) 
 			return fmt.Errorf("install package: %w", err)
 		}
 	}
-	return m.pkg.InstallPackageVersion(ctx, pkgID, version)
+	pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, version)
+	return m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
 }
 
 func (m *pkgManager) makeProgressAnimation() component.Responsive {
@@ -418,7 +420,8 @@ func (m *pkgManager) handlePkgUpgradeAll(ctx context.Context) error {
 				return
 			}
 
-			if err := m.pkg.InstallPackageVersion(ctx, pkgID, latest); err != nil {
+			pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, latest)
+			if err := m.pkg.InstallPackageVersion(ctx, pkgID, latest, pw); err != nil {
 				errors[i] = fmt.Errorf("update package version: %w", err)
 			}
 		})
@@ -586,7 +589,8 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: true})
 						fallthrough
 					case yes:
-						err = m.pkg.InstallPackageVersion(ctx, pkgID, version)
+						pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, version)
+						err = m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
 						if err == nil {
 							it.it, err = m.pkg.LibDir(ctx, pkgID)
 						}

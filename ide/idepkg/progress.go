@@ -1,0 +1,162 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package idepkg
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+// NewNotifyProgressWriter returns a repl.ProgressWriter that
+// uses the given notifications to report progress.
+func NewNotifyProgressWriter(
+	n browserapi.Notifications,
+	interrupter term.Interrupter,
+	pkgID string, version release.Version,
+) repl.ProgressWriter {
+	return &notifyProgressWriter{
+		n: n, interrupter: interrupter,
+		pkgID: pkgID, version: version,
+	}
+}
+
+type notifyProgressWriter struct {
+	n           browserapi.Notifications
+	interrupter term.Interrupter
+	pkgID       string
+	version     release.Version
+
+	mu       sync.Mutex
+	notifID  string
+	lastEmit time.Time
+	lastUnit string
+}
+
+// notifyProgressInterval throttles intermediate progress samples
+// to avoid pegging the host event loop when the source emits
+// thousands of updates (e.g. per-file untar samples on a large
+// package). Boundary samples (total==progress) and phase changes
+// (new units string) always emit.
+const notifyProgressInterval = 50 * time.Millisecond
+
+func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
+	if total <= 0 || progress > total {
+		return
+	}
+
+	verb, sample := verbAndSample(progress, total, units)
+	message := fmt.Sprintf("%s version %s of package %s",
+		verb, w.version, w.pkgID)
+	if sample != "" {
+		message += ": " + sample
+	}
+
+	w.mu.Lock()
+	now := time.Now()
+	final := progress == total
+	phaseChange := units != w.lastUnit
+	if !final && !phaseChange && now.Sub(w.lastEmit) < notifyProgressInterval {
+		w.mu.Unlock()
+		return
+	}
+	w.lastEmit = now
+	w.lastUnit = units
+	if w.notifID == "" {
+		id, err := w.n.Notify(browserapi.LevelInfo,
+			"%s version %s of package %s",
+			verb, w.version, w.pkgID)
+		if err != nil {
+			w.mu.Unlock()
+			log.WithError(err).Warn(
+				"idepkg: notify download start")
+			return
+		}
+		w.notifID = id
+	}
+	id := w.notifID
+	w.mu.Unlock()
+
+	if err := w.n.UpdateNotificationProgress(
+		id, message, progress, total,
+	); err != nil {
+		log.WithError(err).Warn(
+			"idepkg: update notification progress")
+	}
+	if w.interrupter != nil {
+		if err := w.interrupter.Interrupt(context.Background()); err != nil {
+			log.WithError(err).Warn("idepkg: interrupt")
+		}
+	}
+}
+
+func verbAndSample(progress, total int64, units string) (verb, sample string) {
+	switch units {
+	case "":
+		perc := int(float64(progress) / float64(total) * 100)
+		return "downloading", fmt.Sprintf("%d%%", perc)
+	case "B", "bytes":
+		return "downloading", formatBytes(progress, total)
+	case "extracting":
+		return "extracting", formatBytes(progress, total)
+	case "done":
+		return "downloaded", ""
+	default:
+		return "downloading", fmt.Sprintf("%d/%d %s", progress, total, units)
+	}
+}
+
+func formatBytes(progress, total int64) string {
+	unit, denom := byteUnit(total)
+	return fmt.Sprintf("%.1f/%.1f %s",
+		float64(progress)/denom, float64(total)/denom, unit)
+}
+
+func byteUnit(total int64) (string, float64) {
+	const (
+		kib = 1024.0
+		mib = kib * 1024
+		gib = mib * 1024
+		tib = gib * 1024
+	)
+	switch {
+	case total >= int64(tib):
+		return "TiB", tib
+	case total >= int64(gib):
+		return "GiB", gib
+	case total >= int64(mib):
+		return "MiB", mib
+	case total >= int64(kib):
+		return "KiB", kib
+	default:
+		return "B", 1
+	}
+}

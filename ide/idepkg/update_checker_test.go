@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 )
@@ -51,7 +52,7 @@ func TestCheckForUpdates(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -73,7 +74,7 @@ func TestCheckForUpdates(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -94,9 +95,9 @@ func TestCheckForUpdates(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(2)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		err = m.InstallPackageVersion(context.Background(), "testpkg", "1")
+		err = m.InstallPackageVersion(context.Background(), "testpkg", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -117,12 +118,12 @@ func TestCheckForUpdates(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
 		n.SetWg(1)
-		err = m.InstallPackageVersion(context.Background(), "go", "2")
+		err = m.InstallPackageVersion(context.Background(), "go", "2", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -143,7 +144,7 @@ func TestCheckForUpdates(t *testing.T) {
 		m, n, rm, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -168,7 +169,7 @@ func TestStart(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -200,7 +201,7 @@ func TestStart(t *testing.T) {
 		m, n, rm, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -223,7 +224,7 @@ func TestStart(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -254,7 +255,7 @@ func TestStart(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -286,7 +287,7 @@ func TestStart(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -328,7 +329,7 @@ func TestStart(t *testing.T) {
 		storage := m.storage
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -442,7 +443,7 @@ func TestUpdatePromptActions(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -487,7 +488,7 @@ func TestUpdatePromptActions(t *testing.T) {
 		}
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
@@ -529,7 +530,7 @@ func TestUpdatePromptActions(t *testing.T) {
 		}
 
 		n.SetWg(1)
-		err := m.InstallPackageVersion(context.Background(), "go", "1")
+		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		n.Wait()
 
