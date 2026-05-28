@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package idepkg
+package text
 
 import (
 	"context"
@@ -30,27 +30,31 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-// NewNotifyProgressWriter returns a repl.ProgressWriter that
-// uses the given notifications to report progress. The Notify and
-// UpdateNotificationProgress calls hop onto the host event loop via
-// scheduleNextTick so notis.inFocus reads workspaceManagerHandler.focus
-// on the goroutine that mutates it; without that hop, progress samples
-// fired from the download goroutine race workspace switch / close.
+// NewNotifyProgressWriter returns a repl.ProgressWriter that pins
+// a notification on the first sample and updates its progress on
+// every subsequent sample. The notification message is rendered
+// as "<message>: <progress>/<total> <units>", or "<message>: X%"
+// when units is empty. interrupter is used to trigger a redraw
+// after each update so the progress UI refreshes promptly.
+//
+// The Notify and UpdateNotificationProgress calls hop onto the host
+// event loop via scheduleNextTick so notis.inFocus reads
+// workspaceManagerHandler.focus on the goroutine that mutates it;
+// without that hop, progress samples fired from the download
+// goroutine race workspace switch / close.
 func NewNotifyProgressWriter(
 	n browserapi.Notifications,
 	interrupter term.Interrupter,
-	pkgID string, version release.Version,
+	message string,
 	scheduleNextTick func(func()) bool,
 ) repl.ProgressWriter {
 	return &notifyProgressWriter{
-		n: n, interrupter: interrupter,
-		pkgID: pkgID, version: version,
+		n: n, interrupter: interrupter, message: message,
 		scheduleNextTick: scheduleNextTick,
 	}
 }
@@ -58,8 +62,7 @@ func NewNotifyProgressWriter(
 type notifyProgressWriter struct {
 	n                browserapi.Notifications
 	interrupter      term.Interrupter
-	pkgID            string
-	version          release.Version
+	message          string
 	scheduleNextTick func(func()) bool
 
 	mu       sync.Mutex
@@ -69,10 +72,9 @@ type notifyProgressWriter struct {
 }
 
 // notifyProgressInterval throttles intermediate progress samples
-// to avoid pegging the host event loop when the source emits
-// thousands of updates (e.g. per-file untar samples on a large
-// package). Boundary samples (total==progress) and phase changes
-// (new units string) always emit.
+// to avoid pegging the host event loop when the source emits many
+// updates in tight succession. Boundary samples (progress==total)
+// and phase changes (new units string) always emit.
 const notifyProgressInterval = 50 * time.Millisecond
 
 func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
@@ -80,11 +82,12 @@ func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
 		return
 	}
 
-	verb, sample := verbAndSample(progress, total, units)
-	message := fmt.Sprintf("%s version %s of package %s",
-		verb, w.version, w.pkgID)
-	if sample != "" {
-		message += ": " + sample
+	var sample string
+	if units == "" {
+		perc := int(float64(progress) / float64(total) * 100)
+		sample = fmt.Sprintf("%d%%", perc)
+	} else {
+		sample = fmt.Sprintf("%d/%d %s", progress, total, units)
 	}
 
 	w.mu.Lock()
@@ -102,13 +105,11 @@ func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
 	w.scheduleNextTick(func() {
 		w.mu.Lock()
 		if w.notifID == "" {
-			id, err := w.n.Notify(browserapi.LevelInfo,
-				"%s version %s of package %s",
-				verb, w.version, w.pkgID)
+			id, err := w.n.Notify(browserapi.LevelInfo, "%s", w.message)
 			if err != nil {
 				w.mu.Unlock()
 				log.WithError(err).Warn(
-					"idepkg: notify download start")
+					"text: notify progress start")
 				return
 			}
 			w.notifID = id
@@ -117,58 +118,15 @@ func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
 		w.mu.Unlock()
 
 		if err := w.n.UpdateNotificationProgress(
-			id, message, progress, total,
+			id, fmt.Sprintf("%s: %s", w.message, sample),
+			progress, total,
 		); err != nil {
-			log.WithError(err).Warn(
-				"idepkg: update notification progress")
+			log.WithError(err).Warn("text: update notification progress")
 		}
 	})
 	if w.interrupter != nil {
 		if err := w.interrupter.Interrupt(context.Background()); err != nil {
-			log.WithError(err).Warn("idepkg: interrupt")
+			log.WithError(err).Warn("text: interrupt")
 		}
-	}
-}
-
-func verbAndSample(progress, total int64, units string) (verb, sample string) {
-	switch units {
-	case "":
-		perc := int(float64(progress) / float64(total) * 100)
-		return "downloading", fmt.Sprintf("%d%%", perc)
-	case "B", "bytes":
-		return "downloading", formatBytes(progress, total)
-	case "extracting":
-		return "extracting", formatBytes(progress, total)
-	case "done":
-		return "downloaded", ""
-	default:
-		return "downloading", fmt.Sprintf("%d/%d %s", progress, total, units)
-	}
-}
-
-func formatBytes(progress, total int64) string {
-	unit, denom := byteUnit(total)
-	return fmt.Sprintf("%.1f/%.1f %s",
-		float64(progress)/denom, float64(total)/denom, unit)
-}
-
-func byteUnit(total int64) (string, float64) {
-	const (
-		kib = 1024.0
-		mib = kib * 1024
-		gib = mib * 1024
-		tib = gib * 1024
-	)
-	switch {
-	case total >= int64(tib):
-		return "TiB", tib
-	case total >= int64(gib):
-		return "GiB", gib
-	case total >= int64(mib):
-		return "MiB", mib
-	case total >= int64(kib):
-		return "KiB", kib
-	default:
-		return "B", 1
 	}
 }

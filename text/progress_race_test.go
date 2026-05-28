@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package idepkg
+package text
 
 import (
 	"sync"
@@ -112,7 +112,7 @@ func TestSchedNotifyProgressWriterAvoidsRace(t *testing.T) {
 	defer loop.stop()
 
 	fn := &focusNotifications{}
-	pw := NewNotifyProgressWriter(fn, nil, "pkg", "1.0", loop.schedule)
+	pw := NewNotifyProgressWriter(fn, nil, "install pkg@1.0", loop.schedule)
 
 	var producerWG sync.WaitGroup
 	producerWG.Add(1)

@@ -1040,12 +1040,13 @@ func (m *Manager) untar(
 	executables, err := untar(dirname, gzr, func() {
 		// Hold back the terminal extract sample so notification
 		// writers that auto-dismiss on progress==total stay alive
-		// for the "installing" steps that follow.
+		// until install actually completes.
 		n := counter.n
 		if n >= totalBytes {
 			n = totalBytes - 1
 		}
-		pw.Progress(n, totalBytes, "extracting")
+		scaledP, scaledT, unit := scaleBytes(n, totalBytes)
+		pw.Progress(scaledP, scaledT, unit+" extracted")
 	})
 	if err != nil {
 		err = fmt.Errorf("untar into %s: %w", dirname, err)
@@ -1255,22 +1256,49 @@ func (m *Manager) log(level log.Level, msg string, args ...any) {
 
 // progressTarWriter composes a tarfile io.Writer with a
 // caller-supplied repl.ProgressWriter to satisfy
-// release.ProgressWriter. The terminal download sample
-// (progress==total) is held back so notification-backed writers
-// don't auto-dismiss before the extract/install phases run.
+// release.ProgressWriter. Raw byte counts are scaled to the unit
+// best matching total so callers see "12.4 / 120.0 MiB downloaded"
+// instead of an unreadable byte count. The terminal download
+// sample (progress==total) is held back so notification-backed
+// writers don't auto-dismiss before the extract phase runs.
 type progressTarWriter struct {
 	io.Writer
 	pw repl.ProgressWriter
 }
 
 func (w *progressTarWriter) Progress(progress, total int64, units string) {
-	if total == 0 || progress > total {
+	if total <= 0 || progress > total {
 		return
 	}
 	if progress == total {
 		return
 	}
-	w.pw.Progress(progress, total, units)
+	scaledP, scaledT, unit := scaleBytes(progress, total)
+	w.pw.Progress(scaledP, scaledT, unit+" downloaded")
+}
+
+// scaleBytes picks a human-readable byte unit based on total and
+// returns progress/total scaled to that unit. The unit is picked
+// from total so it stays stable across successive samples.
+func scaleBytes(progress, total int64) (int64, int64, string) {
+	const (
+		kib = 1024
+		mib = kib * 1024
+		gib = mib * 1024
+		tib = gib * 1024
+	)
+	switch {
+	case total >= tib:
+		return progress / tib, total / tib, "TiB"
+	case total >= gib:
+		return progress / gib, total / gib, "GiB"
+	case total >= mib:
+		return progress / mib, total / mib, "MiB"
+	case total >= kib:
+		return progress / kib, total / kib, "KiB"
+	default:
+		return progress, total, "B"
+	}
 }
 
 // countingReader wraps an io.Reader to track the total number of

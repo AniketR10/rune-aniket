@@ -315,7 +315,7 @@ func TestStart(t *testing.T) {
 		active := n.Active()
 		// Should have the info notification but no install notification
 		for _, noti := range active {
-			assert.NotContains(t, noti.Msg, "downloading version")
+			assert.NotContains(t, noti.Msg, "install go@")
 		}
 	})
 

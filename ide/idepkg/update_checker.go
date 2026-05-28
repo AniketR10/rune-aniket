@@ -42,6 +42,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/text"
 )
 
 // Update represents an available package update.
@@ -417,7 +418,9 @@ func (uc *UpdateChecker) showUpdatePrompt(ctx context.Context, updates []Update)
 			switch idx {
 			case 0: // Update All
 				for _, u := range updates {
-					pw := NewNotifyProgressWriter(uc.m.n, uc.m.interrupter, u.Package, u.Latest, uc.m.scheduleNextTick)
+					pw := text.NewNotifyProgressWriter(uc.m.n, uc.m.interrupter,
+						fmt.Sprintf("install %s@%s", u.Package, u.Latest),
+						uc.m.scheduleNextTick)
 					if err := uc.m.InstallPackageVersion(ctx, u.Package, u.Latest, pw); err != nil {
 						uc.m.log(log.WarnLevel, "install update %s %s: %v", u.Package, u.Latest, err)
 					}

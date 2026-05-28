@@ -46,6 +46,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/text"
 )
 
 const (
@@ -183,7 +184,8 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		// should prevent further attempts or errors being logged.
 		return nil, storageapi.ErrNotFound
 	}
-	pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, version, m.scheduleNextTick)
+	pw := text.NewNotifyProgressWriter(m.n, m.interrupter,
+		fmt.Sprintf("install %s@%s", pkgID, version), m.scheduleNextTick)
 	if err := m.pkg.InstallPackageVersion(ctx, pkgID, version, pw); err != nil {
 		return nil, fmt.Errorf("install latest version: %w", err)
 	}
@@ -263,7 +265,8 @@ func (m *pkgManager) handlePkgInstall(ctx context.Context, cmd textapi.Command) 
 			return fmt.Errorf("install package: %w", err)
 		}
 	}
-	pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, version, m.scheduleNextTick)
+	pw := text.NewNotifyProgressWriter(m.n, m.interrupter,
+		fmt.Sprintf("install %s@%s", pkgID, version), m.scheduleNextTick)
 	return m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
 }
 
@@ -420,7 +423,8 @@ func (m *pkgManager) handlePkgUpgradeAll(ctx context.Context) error {
 				return
 			}
 
-			pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, latest, m.scheduleNextTick)
+			pw := text.NewNotifyProgressWriter(m.n, m.interrupter,
+				fmt.Sprintf("install %s@%s", pkgID, latest), m.scheduleNextTick)
 			if err := m.pkg.InstallPackageVersion(ctx, pkgID, latest, pw); err != nil {
 				errors[i] = fmt.Errorf("update package version: %w", err)
 			}
@@ -589,7 +593,8 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: true})
 						fallthrough
 					case yes:
-						pw := idepkg.NewNotifyProgressWriter(m.n, m.interrupter, pkgID, version, m.scheduleNextTick)
+						pw := text.NewNotifyProgressWriter(m.n, m.interrupter,
+							fmt.Sprintf("install %s@%s", pkgID, version), m.scheduleNextTick)
 						err = m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
 						if err == nil {
 							it.it, err = m.pkg.LibDir(ctx, pkgID)

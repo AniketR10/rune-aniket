@@ -177,13 +177,13 @@ func TestPackageManagerIntegration(t *testing.T) {
 └━─────────────────────────────────────┘`},
 		{"1>",
 			`┌────────────────────────┌─────────────┐
-│                        │ extracting  │
-├────────────────────────│ version 1   │
-│                        │ of package  │
-│                        │ six:        │
-│                        │ 8.0/691.5   │
-│                        │ KiB         │
-│          workspaceWallp└─────────────┘
+│                        │ install     │
+├────────────────────────│ six@1:      │
+│                        │ 8/691 KiB   │
+│                        │ extracted   │
+│                        └─────────────┘
+│                                      │
+│          workspaceWallpaper          │
 │                                      │
 │                                      │
 │                                      │
