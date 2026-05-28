@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // fsReader is a minimal walkdir.Reader rooted at a real directory on
@@ -101,31 +102,6 @@ func TestHandlerCloseIsIdempotent(t *testing.T) {
 	require.NoError(t, h.Close())
 	require.NoError(t, h.Close(), "Close must be idempotent")
 	assert.True(t, h.atEOF(), "Close should leave handler at EOF")
-}
-
-func TestHandlerSignalDoneClosesLoading(t *testing.T) {
-	dir := t.TempDir()
-	uri := writeLines(t, dir, "a.txt", 2)
-	r := newFSReader(dir)
-
-	h, err := New(r, uri, Config{})
-	require.NoError(t, err)
-	defer h.Close()
-
-	loading := h.Loading()
-	select {
-	case <-loading:
-		t.Fatal("Loading should be open before SignalDone")
-	default:
-	}
-	h.Close()
-	select {
-	case <-loading:
-	default:
-		t.Fatal("Loading should be closed after SignalDone")
-	}
-	// Close twice must not panic.
-	h.Close()
 }
 
 func TestHandlerOpenMissingFileReturnsError(t *testing.T) {
@@ -365,3 +341,27 @@ func TestHandlerLifecyclePagingAcrossLazyReads(t *testing.T) {
 
 	assert.True(t, h.atEOF(), "handler should be at EOF after paging to end")
 }
+
+// TestHandlerSingleGoroutineContract documents the invariant that
+// Handle and Close must run on the same goroutine. The test itself
+// does just that, so it passes (no race) and exists to catch a
+// future refactor that, e.g., starts driving Handle from one
+// goroutine and Close from another. Such a change would race on
+// pageReader's eof/file/scan fields and would be caught by the
+// race detector here only when the change is paired with an
+// honest concurrent-access reproduction; the comment is the
+// primary record. See pageReader's doc comment for the rationale.
+func TestHandlerSingleGoroutineContract(t *testing.T) {
+	dir := t.TempDir()
+	uri := writeLines(t, dir, "a.txt", 8)
+	r := newFSReader(dir)
+
+	h, err := New(r, uri, Config{})
+	require.NoError(t, err)
+
+	for range 100 {
+		_, _ = h.Handle(term.Event{})
+	}
+	require.NoError(t, h.Close())
+}
+

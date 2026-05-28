@@ -26,6 +26,7 @@ package vte
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -179,6 +180,75 @@ exit
 
 	_, _, show := handler.Cursor()
 	assert.False(t, show)
+}
+
+// TestHandlerPublishesEventOnPtyExit pins the auto-close behaviour
+// browser.Tab.Handle relies on: when the underlying pty child dies
+// (e.g. the user types :q in an embedded vim, or exit in a shell),
+// the host event loop must receive at least one event so it routes a
+// Handle call to the tab. Without the wake-up the dead vte sits
+// black until the user presses another key.
+func TestHandlerPublishesEventOnPtyExit(t *testing.T) {
+	t.Parallel()
+	if ci := os.Getenv("CI"); ci == "true" {
+		t.SkipNow()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	uri, err := workspaceapi.CurrentUserHostURI(os.TempDir())
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { scheme.Close() })
+
+	ps1 := os.Getenv("PS1")
+	os.Setenv("PS1", "$ ")
+	t.Cleanup(func() { os.Setenv("PS1", ps1) })
+
+	pub := &exitWakePublisher{}
+	cfg := DefaultConfig()
+	cfg.WidthHint = 20
+	cfg.HeightHint = 10
+	cfg.CommandAndArgs = []string{"sh"}
+	handler, err := NewHandler(pub, nopNotifications{}, scheme, scheme, nopTabManager{}, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { handler.Close() })
+
+	handler.Resize(20, 10)
+
+	for _, b := range []byte("exit\n") {
+		handler.Handle(term.Event{Type: term.EventKey, Ch: rune(b), Raw: []byte{b}})
+	}
+
+	require.Eventually(t, func() bool {
+		return pub.SawEventNone()
+	}, 5*time.Second, 10*time.Millisecond,
+		"vte.Handler must publish at least one event after the "+
+			"pty child exits so the host event loop can route a "+
+			"Handle call and trigger tab auto-close without "+
+			"further user input")
+}
+
+type exitWakePublisher struct {
+	mu      sync.Mutex
+	sawNone bool
+}
+
+func (p *exitWakePublisher) PublishEvent(ev term.Event) error {
+	if ev.Type == term.EventNone {
+		p.mu.Lock()
+		p.sawNone = true
+		p.mu.Unlock()
+	}
+	return nil
+}
+
+func (p *exitWakePublisher) SawEventNone() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.sawNone
 }
 
 // TestHandlerMouseSelection drives press/drag/release sequences over

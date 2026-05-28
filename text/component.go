@@ -146,6 +146,17 @@ func (c *Component) newFileBuffer(
 	return c.buildEditorHandler(file, buf, fc, readOnly, recover)
 }
 
+// loadFileBuffer performs only the disk I/O half of newFileBuffer:
+// it populates buf from the workspace and returns the resulting
+// FlusherCloser plus a recover flag derived from recSwapFile.
+//
+// The split exists so the streaming-open code path can run the I/O
+// off the host event loop and then schedule the editor-construction
+// half (buildEditorHandler) back through ScheduleNextTick. Editor
+// construction synchronously publishes Open/Focus events to
+// subscribers (history tracker, idecursor, LSP, rune-agent, UI
+// bars, ...) that read window-manager and other event-loop-owned
+// state, so it must not run on the worker goroutine.
 func (c *Component) loadFileBuffer(
 	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
@@ -532,14 +543,15 @@ func (c *Component) openFileTabStreaming(
 	def := newDeferHandler(sh)
 	streamingTab := c.newTab(file, icon, file.Name(), def, nil)
 	recovering := recoveryFilename != (workspaceapi.URI{})
+	loading := make(chan struct{})
 	c.streamingLoads.Add(2)
 	go debug.CapturePanicReport(func() {
 		defer c.streamingLoads.Done()
-		c.animateTabLoading(file, sh.Loading())
+		c.animateTabLoading(file, loading)
 	})
 	go debug.CapturePanicReport(func() {
 		defer c.streamingLoads.Done()
-		defer sh.Close() //nolint:errcheck
+		defer close(loading)
 
 		buf := cell.NewBuffer()
 		fc, _, loadErr := c.loadFileBuffer(
@@ -573,6 +585,7 @@ func (c *Component) streamingBufferLoaded(
 	file workspaceapi.URI, readOnly, recovering bool,
 	realHandler Handler, efc *editorFlusherCloser, loadErr error,
 ) {
+	defer sh.Close() //nolint:errcheck
 	switch {
 	case c.streamingTabAbandoned(streamingTab, file):
 	case loadErr != nil:

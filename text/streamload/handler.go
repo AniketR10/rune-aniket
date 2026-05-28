@@ -118,10 +118,7 @@ type Handler struct {
 	// match the streaming tab before the next Draw.
 	width int
 
-	// loadingMu guards loadingDone. SignalDone may race with the
-	// animateTabLoading goroutine reading the channel.
-	once        sync.Once
-	loadingDone chan struct{}
+	closeOnce sync.Once
 }
 
 // New opens path on reader and reads the first cfg.InitialPages
@@ -144,7 +141,6 @@ func New(
 		pr:          pr,
 		cfg:         cfg,
 		height:      cfg.PageRows,
-		loadingDone: make(chan struct{}),
 	}
 	if _, err := h.readMore(cfg.InitialPages * cfg.PageRows); err != nil {
 		_ = pr.Close()
@@ -157,18 +153,11 @@ func New(
 // URI returns the URI of the file backing this handler.
 func (h *Handler) URI() workspaceapi.URI { return h.uri }
 
-// Loading returns a channel that is closed when the parent (typically
-// text.Component) calls SignalDone, signaling that the streaming tab
-// has been swapped out for a real editor handler. Animations driven
-// by the tab can use it as their stop signal.
-func (h *Handler) Loading() <-chan struct{} { return h.loadingDone }
-
 // Close releases the underlying file. Safe to call multiple times.
-// Close also signals done so any animation goroutine watching
-// Loading() exits cleanly.
+// The underlying pageReader is documented single-goroutine; callers
+// must serialize Close against Handle.
 func (h *Handler) Close() error {
-	h.once.Do(func() {
-		close(h.loadingDone)
+	h.closeOnce.Do(func() {
 		_ = h.pr.Close()
 	})
 	return nil

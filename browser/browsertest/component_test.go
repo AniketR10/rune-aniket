@@ -1054,3 +1054,32 @@ func TestComponentRestoreTileLayoutEmptyLayout(t *testing.T) {
 
 	require.NotNil(t, c.Focus())
 }
+
+// TestComponentTabAutoCloseOnExit verifies that when a tab's inner
+// handler returns exit=true the tab is dropped from the browser's
+// tab list, not just from the focused window. Without this the tab
+// would persist as an orphan with a closed handler.
+func TestComponentTabAutoCloseOnExit(t *testing.T) {
+	c := browser.NewComponent(browserConfig())
+	c.Resize(40, 20)
+
+	_, ok := c.Split(browserapi.OrientationRight, c.Focus(), NewTestHandler())
+	require.True(t, ok)
+
+	uri, err := workspaceapi.ParseURI("file:///exiting")
+	require.NoError(t, err)
+
+	h := NewTestHandler()
+	h.Exit = true
+	h.Handled = true
+	tab := c.NewTab(uri, 'x', "exit-me", h, nil)
+	require.NoError(t, c.Focus().SetContent(tab))
+
+	require.Len(t, c.Tabs(), 1)
+
+	exit, handled := c.Handle(term.Event{})
+	require.True(t, handled)
+	require.False(t, exit)
+
+	assert.Empty(t, c.Tabs())
+}

@@ -65,9 +65,11 @@ func (b *Tab) Draw(w term.Writer) {
 
 // Handle satisfies tui.Handler
 func (b *Tab) Handle(ev term.Event) (exit, handled bool) {
-	// ignore exit, a tab is managed manually by user
-	_, handled = b.handler.Handle(ev)
-	return
+	innerExit, handled := b.handler.Handle(ev)
+	if innerExit {
+		b.parent.RemoveTab(b)
+	}
+	return false, handled
 }
 
 // Cursor satisfies tui.Handler.

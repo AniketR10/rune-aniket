@@ -139,6 +139,9 @@ func (e *Handler) Init(
 	go debug.CapturePanicReport(func() {
 		logErr := e.comp.Run(e.updateCh)
 		e.exit.Store(true)
+		if err := e.publisher.PublishEvent(term.Event{Type: term.EventNone}); err != nil {
+			e.log(log.ErrorLevel, "pty exit publish: %s", err)
+		}
 		if e.closed.Load() {
 			e.log(log.DebugLevel, "terminal run: ok")
 			return
