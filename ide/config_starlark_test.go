@@ -451,8 +451,6 @@ else:
 }
 
 func TestDecodeStarlarkOverlayRebind(t *testing.T) {
-	// The script is allowed to rebind `config` as long as the result is
-	// still a dict — we should use the rebound value, not the original.
 	base := map[string]any{"log_level": "info"}
 	src := `config = {"log_level": "error"}`
 	cfg, err := decodeStarlark(src, nil, base)
@@ -491,6 +489,57 @@ func TestDecodeOverlayConfigFileYAML(t *testing.T) {
 	// deep-merge: existing mode preserved, new autoindent added.
 	assert.Equal(t, "modal", editor["mode"])
 	assert.Equal(t, true, editor["autoindent"])
+}
+
+func TestDecodeOverlayConfigFileStarlarkRebindMergesBase(t *testing.T) {
+	base := map[string]any{
+		"editor":    map[string]any{"mode": "vi"},
+		"log_level": "info",
+	}
+	src := `config = {"command": {"key": "<c-p>"}}`
+	cfg, err := decodeOverlayConfigFile(strings.NewReader(src),
+		"override.star", base)
+	require.NoError(t, err)
+	cmd := cfg["command"].(map[string]any)
+	assert.Equal(t, "<c-p>", cmd["key"])
+	// Base keys preserved across a top-level rebind.
+	assert.Equal(t, "info", cfg["log_level"])
+	editor := cfg["editor"].(map[string]any)
+	assert.Equal(t, "vi", editor["mode"])
+}
+
+func TestDecodeOverlayConfigFileStarlarkEmptyPreservesBase(t *testing.T) {
+	base := map[string]any{"log_level": "info"}
+	cfg, err := decodeOverlayConfigFile(
+		strings.NewReader("# just a comment\n"),
+		"override.star", base)
+	require.NoError(t, err)
+	assert.Equal(t, "info", cfg["log_level"])
+}
+
+func TestLoadConfigStarUserOverlayPreservesEmbeddedRuneStar(t *testing.T) {
+	data, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "config.star")
+	require.NoError(t, os.WriteFile(userPath,
+		[]byte(`config = {"log_level": "debug"}`), 0o644))
+
+	var cfg ideConfig
+	require.NoError(t, loadConfig(&cfg, userPath, browser.NopWallpaper(),
+		defaultConfigSource{
+			src:   string(data),
+			modal: true,
+			tui:   false,
+		},
+		term.RingBell, term.ScheduleNextTick, ""))
+
+	assert.Equal(t, "debug", cfg.cfg["log_level"])
+	// Defaults from cmd/rune/rune.star survive the top-level rebind.
+	assert.Equal(t, "modal", cfg.editorMode())
+	assert.False(t, cfg.editorAutoPair())
+	assert.Equal(t, 2000, cfg.shellMaxHistory())
 }
 
 func TestLoadWorkspaceConfigStar(t *testing.T) {

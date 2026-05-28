@@ -61,6 +61,7 @@ import (
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
+	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/llm"
@@ -3140,15 +3141,10 @@ func decodeConfigFile(r io.Reader, filename string) (cfg map[string]any, err err
 	return
 }
 
-// decodeOverlayConfigFile decodes an override document on top of base.
-// Starlark scripts see the current merged tree as a predeclared `config`
-// global and mutate it in place. YAML documents are decoded normally and
-// deep-merged on top of base by the caller.
-//
-// The returned map is the full post-override config. Callers should not
-// merge it again into base — overlay mode already consumed base, and for
-// YAML we deep-merge here so the caller receives a single consistent
-// result regardless of the input format.
+// decodeOverlayConfigFile decodes a user override document and
+// deep-merges it onto base, identically for both Starlark and YAML.
+// A top-level rebind in Starlark (config = {...}) is treated as a
+// fresh overlay, not a replacement, mirroring YAML semantics.
 func decodeOverlayConfigFile(
 	r io.Reader, filename string, base map[string]any,
 ) (map[string]any, error) {
@@ -3157,11 +3153,19 @@ func decodeOverlayConfigFile(
 		return nil, err
 	}
 	if isStarlarkConfigFilename(filename) {
-		return decodeStarlarkConfig(starlarkConfigSource{
+		overrides, err := decodeStarlarkConfig(starlarkConfigSource{
 			src:      src,
 			filename: filename,
 			base:     base,
 		})
+		if err != nil {
+			if errors.Is(err, starlarkconfig.ErrMissingConfig) {
+				return base, nil
+			}
+			return nil, err
+		}
+		overrideConfig(base, overrides)
+		return base, nil
 	}
 	overrides := make(map[string]any)
 	if err := yaml.NewDecoder(bytes.NewReader(src)).Decode(&overrides); err != nil {
