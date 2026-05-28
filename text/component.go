@@ -138,8 +138,23 @@ func (c *Component) newFileBuffer(
 	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
 ) (handler Handler, ret *editorFlusherCloser, err error) {
+	fc, recover, err := c.loadFileBuffer(
+		file, recSwapFile, buf, readOnly, forceRecover)
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.buildEditorHandler(file, buf, fc, readOnly, recover)
+}
+
+func (c *Component) loadFileBuffer(
+	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
+	readOnly, forceRecover bool,
+) (workspace.FlusherCloser, bool, error) {
 	recover := recSwapFile != (workspaceapi.URI{})
-	var fc workspace.FlusherCloser
+	var (
+		fc  workspace.FlusherCloser
+		err error
+	)
 	if recover {
 		fc, err = c.workspace.Recover(file, recSwapFile, buf, forceRecover)
 	} else {
@@ -150,10 +165,9 @@ func (c *Component) newFileBuffer(
 		}
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, recover, err
 	}
-
-	return c.buildEditorHandler(file, buf, fc, readOnly, recover)
+	return fc, recover, nil
 }
 
 func (c *Component) buildEditorHandler(
@@ -434,8 +448,6 @@ func (c *Component) OverwriteTab(ctx context.Context, h browserapi.Handler) (<-c
 	return fc.ForceFlush(ctx)
 }
 
-// recoverOpenFileTab recovers the file at filename by using the file at recoverFilename
-// and opens a tab it like OpenFileTab. See OpenFileTab for more details.
 func (c *Component) recoverOpenFileTab(
 	file workspaceapi.URI, recoveryFilename workspaceapi.URI, readOnly bool,
 ) (browserapi.Handler, error) {
@@ -456,10 +468,6 @@ func (c *Component) openFileTab(
 
 	userRequestedView := readOnly
 
-	// Editors that manage their buffer contents out of band (e.g. byoe
-	// hosting an external TUI editor) are the source of truth for file
-	// contents; Rune's mirror buffer must stay read-only so the dirty-tab
-	// path, flusher, and recovery prompt all do the right thing.
 	if c.ed.IsExternal() {
 		readOnly = true
 	}
@@ -479,10 +487,6 @@ func (c *Component) openFileTab(
 	return c.openFileTabSync(file, recoveryFilename, readOnly, forceRecover)
 }
 
-// openFileTabSync is the legacy synchronous file-open path. It is
-// kept for the recovery / force-edit prompt flows, which require the
-// load error (e.g. ErrStaleData, ErrFileAlreadyOpen) to surface
-// synchronously so the prompt handler can chain to the next prompt.
 func (c *Component) openFileTabSync(
 	file workspaceapi.URI, recoveryFilename workspaceapi.URI,
 	readOnly, forceRecover bool,
@@ -496,9 +500,6 @@ func (c *Component) openFileTabSync(
 	return t, nil
 }
 
-// newViewTab wraps a non-editor view handler (e.g. markdown) in a
-// browser.Tab. Extracted so the streaming/non-streaming dispatch in
-// openFileTab stays readable.
 func (c *Component) newViewTab(
 	file workspaceapi.URI, h browserapi.Handler,
 ) *browser.Tab {
@@ -541,13 +542,26 @@ func (c *Component) openFileTabStreaming(
 		defer sh.Close() //nolint:errcheck
 
 		buf := cell.NewBuffer()
-		realHandler, efc, loadErr := c.newFileBuffer(
+		fc, _, loadErr := c.loadFileBuffer(
 			file, recoveryFilename, buf, readOnly, forceRecover)
 
 		c.config.ScheduleNextTick(func() {
+			var (
+				realHandler Handler
+				efc         *editorFlusherCloser
+				buildErr    error
+			)
+			if loadErr == nil {
+				realHandler, efc, buildErr = c.buildEditorHandler(
+					file, buf, fc, readOnly, recovering)
+			}
+			openErr := loadErr
+			if openErr == nil {
+				openErr = buildErr
+			}
 			c.streamingBufferLoaded(
 				streamingTab, sh, def, file, readOnly, recovering,
-				realHandler, efc, loadErr)
+				realHandler, efc, openErr)
 		})
 	})
 

@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -571,4 +572,146 @@ func TestStreamingOpenAppliesMutationsDuringLoad(t *testing.T) {
 	// lists must not panic and the post-swap handler is responsive
 	// to fresh mutations.
 	assert.NotNil(t, ed.CellView())
+}
+
+// goroutineRecordingEditor wraps a TestEditor and records the
+// goroutine that called Edit. Used by the regression test below to
+// prove buildEditorHandler runs on the scheduler goroutine rather
+// than the streaming-load worker.
+type goroutineRecordingEditor struct {
+	*texttest.TestEditor
+	mu        sync.Mutex
+	editGoID  uint64
+	editCalls int
+}
+
+func (e *goroutineRecordingEditor) Edit(
+	ctx context.Context,
+	resource workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) (text.Handler, error) {
+	e.mu.Lock()
+	e.editGoID = currentGoID()
+	e.editCalls++
+	e.mu.Unlock()
+	return e.TestEditor.Edit(ctx, resource, buf, readOnly, recovered)
+}
+
+// goroutineTrackingScheduler is a queuedScheduler that also records
+// the goroutine running each scheduled callback. It serves both as
+// the test's ScheduleNextTick and as the "event loop" goroutine
+// identity reference.
+type goroutineTrackingScheduler struct {
+	queuedScheduler
+	mu       sync.Mutex
+	lastRun  uint64
+	runCount int
+}
+
+func (s *goroutineTrackingScheduler) drainOnce() bool {
+	s.queuedScheduler.mu.Lock()
+	if len(s.queuedScheduler.pending) == 0 {
+		s.queuedScheduler.mu.Unlock()
+		return false
+	}
+	fn := s.queuedScheduler.pending[0]
+	s.queuedScheduler.pending = s.queuedScheduler.pending[1:]
+	s.queuedScheduler.mu.Unlock()
+
+	s.mu.Lock()
+	s.lastRun = currentGoID()
+	s.runCount++
+	s.mu.Unlock()
+	fn()
+	return true
+}
+
+func (s *goroutineTrackingScheduler) drainAll() {
+	for s.drainOnce() {
+	}
+}
+
+// TestStreamingOpenBuildsEditorOnScheduler asserts that the editor
+// construction half of the streaming-open path runs on the host
+// scheduler goroutine, not on the background load worker. Editor
+// construction synchronously publishes Open/Focus events to
+// subscribers that read event-loop-owned state (window manager,
+// history tracker, ...), so running it on the worker races with
+// concurrent event-loop work.
+func TestStreamingOpenBuildsEditorOnScheduler(t *testing.T) {
+	dir := t.TempDir()
+	wsURI, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), wsURI)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	ws := workspace.NewSchemeWorkspace(wsURI, scheme, inlineSchedule)
+
+	sched := &goroutineTrackingScheduler{}
+	ed := &goroutineRecordingEditor{TestEditor: texttest.NopEditor()}
+
+	cfg := text.DefaultConfig()
+	cfg.ScheduleNextTick = sched.Schedule
+	cfg.StreamingOpen = true
+	c, err := text.NewComponent(ed, ws, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+
+	fpath := filepath.Join(wsURI.Path(), "probe.txt")
+	writeNLines(t, fpath, 8)
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	_, err = c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+
+	// Wait for the load worker to finish I/O and queue the swap
+	// callback. Edit must NOT have been called yet — that's the
+	// whole point.
+	c.WaitStreamingLoads()
+
+	ed.mu.Lock()
+	require.Zero(t, ed.editCalls,
+		"Edit must not run on the load worker goroutine")
+	ed.mu.Unlock()
+
+	sched.drainAll()
+
+	ed.mu.Lock()
+	editGoID := ed.editGoID
+	editCalls := ed.editCalls
+	ed.mu.Unlock()
+	require.Equal(t, 1, editCalls, "Edit must run exactly once")
+
+	sched.mu.Lock()
+	lastRun := sched.lastRun
+	sched.mu.Unlock()
+	require.Equal(t, lastRun, editGoID,
+		"buildEditorHandler.Edit must run on the scheduler goroutine, "+
+			"not the load worker")
+}
+
+// currentGoID returns a unique-per-goroutine integer derived from
+// runtime.Stack. Tests use it only for equality comparisons against
+// other identifiers captured from the same process.
+func currentGoID() uint64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	s := string(buf[:n])
+	const prefix = "goroutine "
+	s = strings.TrimPrefix(s, prefix)
+	i := strings.IndexByte(s, ' ')
+	if i < 0 {
+		return 0
+	}
+	var id uint64
+	for _, ch := range s[:i] {
+		if ch < '0' || ch > '9' {
+			return 0
+		}
+		id = id*10 + uint64(ch-'0')
+	}
+	return id
 }
