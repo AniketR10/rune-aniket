@@ -211,6 +211,44 @@ else:
 			},
 			wantCfg: map[string]any{"a": 1},
 		},
+		{
+			name: "builtins callable from script",
+			src: Source{
+				Src: []byte(`config = {"echoed": echo("hi")}`),
+				Builtins: starlark.StringDict{
+					"echo": starlark.NewBuiltin("echo",
+						func(_ *starlark.Thread, _ *starlark.Builtin,
+							args starlark.Tuple, _ []starlark.Tuple,
+						) (starlark.Value, error) {
+							if len(args) != 1 {
+								return nil, errors.New("echo: want 1 arg")
+							}
+							s, ok := args[0].(starlark.String)
+							if !ok {
+								return nil, errors.New("echo: want string")
+							}
+							return starlark.String("echo:" + string(s)), nil
+						}),
+				},
+			},
+			wantCfg: map[string]any{"echoed": "echo:hi"},
+		},
+		{
+			name: "builtin name collides with param",
+			src: Source{
+				Src:    []byte(`config = {}`),
+				Params: map[string]any{"echo": "x"},
+				Builtins: starlark.StringDict{
+					"echo": starlark.NewBuiltin("echo",
+						func(_ *starlark.Thread, _ *starlark.Builtin,
+							_ starlark.Tuple, _ []starlark.Tuple,
+						) (starlark.Value, error) {
+							return starlark.None, nil
+						}),
+				},
+			},
+			wantErr: `builtin "echo" collides with predeclared param`,
+		},
 	}
 
 	for _, tt := range tests {

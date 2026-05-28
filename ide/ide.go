@@ -62,6 +62,7 @@ type IDE struct {
 	workspaceManager *workspace.Manager
 	workspaceHandler *workspaceManagerHandler
 	root             shaderRunner
+	tutorial         tutorialRunner
 	publishEventFn   EventPublisher
 	storage          storageapi.Service
 }
@@ -131,6 +132,13 @@ func (i *IDE) InputMode() term.InputMode {
 // SetDefaultAttributes sets the default attributes to be used to fill the screen.
 func (i *IDE) SetDefaultAttributes(defAttr term.Attributes) {
 	i.root.defAttr = defAttr
+	// Propagate to every registered tutorial so per-step shaders
+	// (e.g. floating_window hint blinks) blend against the active
+	// theme. Tutorials snapshot their
+	// host services at build time, but the IDE's default
+	// attribute pair is theme-time, not configuration-time, so it
+	// has to flow through the live setter.
+	i.tutorial.setDefaultAttributes(defAttr)
 }
 
 // Config returns the configuration loaded by this IDE.
@@ -242,6 +250,10 @@ func (i *IDE) closeResources() (ret error) {
 	}
 
 	if err := i.root.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	if err := i.tutorial.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 
@@ -377,6 +389,13 @@ func (i *IDE) init(
 	}
 
 	i.workspaceHandler = new(workspaceManagerHandler)
+	// The observer registry breaks the construction cycle between
+	// the workspace handler (whose ex instances dispatch commands)
+	// and the tutorial runner (which observes those dispatches).
+	// The registry is created first and threaded into newEx
+	// through workspaceManagerHandler.init; the tutorial runner
+	// subscribes after it has been built below.
+	commandObserver := newCommandObserverRegistry()
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,
@@ -390,11 +409,16 @@ func (i *IDE) init(
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,
 		op.releaseManager, &i.root, i.ideConfig.initialTerminalCapacity(),
-		op.dispatchOnPreview, op.debugCommands, op.streamingOpen)
+		op.dispatchOnPreview, op.debugCommands, op.streamingOpen,
+		commandObserver)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)
 	}
 	i.workspaceManager = workspaceManager
+	// Build tutorials before logNonFatalErrs so any per-tutorial
+	// parse errors recorded into ideConfig.errors are surfaced
+	// alongside other config decode errors.
+	tutorials := buildTutorials(i)
 	i.workspaceHandler.logNonFatalErrs(i.workspaceHandler.focusBrowser(),
 		configErr, i.ideConfig.errors)
 
@@ -441,9 +465,16 @@ func (i *IDE) init(
 	if dur, ok := i.ideConfig.animationsOpenWorkspaceDuration(); ok {
 		openShaderCfg.duration = dur
 	}
-	i.root.init(i.workspaceHandler, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
+	i.tutorial.init(i.workspaceHandler, tutorials,
+		i.workspaceHandler.events.globalInterrupter())
+	commandObserver.subscribe(&i.tutorial)
+	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
-	return i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
+	err = i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
+	if err != nil {
+		return err
+	}
+	return i.workspaceHandler.subscribeCommand(tutorialCmdManual, &i.tutorial)
 }
 
 func (i *IDE) initRunning() {
@@ -456,14 +487,6 @@ func (i *IDE) initRunning() {
 	}
 }
 
-// fileSchemeFunc returns a schemeapi.SchemeFunc that wraps
-// workspace.NewFileScheme to inject the IDE's --rune-zdotdir flag
-// into the per-scheme config under "zdotdir". The fileScheme reads
-// it back to set ZDOTDIR when starting an empty-Path login shell
-// (see workspace.fileScheme.StartCommand). zdotdir applies only to
-// the local file scheme — for SSH workspaces the *remote* rune
-// process resolves its own zdotdir from its own config, so the IDE
-// host's flag never leaks across the wire.
 func fileSchemeFunc(zdotDir string) schemeapi.SchemeFunc {
 	return func(
 		ctx context.Context, cfg config.Config, uri workspaceapi.URI,
@@ -475,10 +498,6 @@ func fileSchemeFunc(zdotDir string) schemeapi.SchemeFunc {
 	}
 }
 
-// configWithZdotDir returns a config.Config that overlays "zdotdir"
-// onto base. If the user's workspace.file config already sets
-// "zdotdir" we let it win — explicit configuration beats the
-// command-line default.
 func configWithZdotDir(base config.Config, zdotDir string) config.Config {
 	if base != nil {
 		if existing, err := base.GetString("zdotdir"); err == nil && existing != "" {

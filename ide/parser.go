@@ -88,3 +88,72 @@ func (w *lazyParser) Highlight(uri workspaceapi.URI, content string) (
 ) {
 	return w.parser().Highlight(uri, content)
 }
+
+type currentParser struct {
+	root *workspaceManagerHandler
+}
+
+var _ syntaxapi.Parser = currentParser{}
+
+func (c currentParser) parser() syntaxapi.Parser {
+	if c.root == nil {
+		return nil
+	}
+	ex := c.root.focusEx()
+	if ex == nil {
+		return nil
+	}
+	return ex.parser
+}
+
+var errNoParser = errors.New("no focused parser")
+
+func (c currentParser) Search(
+	query string, captureNames []string, languages ...string,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.Search(query, captureNames, languages...)
+}
+
+func (c currentParser) SearchNode(
+	node syntaxapi.NodeCaptureName,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.SearchNode(node)
+}
+
+func (c currentParser) Query(
+	file workspaceapi.URI, query string, captureNames []string,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.Query(file, query, captureNames)
+}
+
+func (c currentParser) QueryNode(
+	file workspaceapi.URI, node syntaxapi.NodeCaptureName,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.QueryNode(file, node)
+}
+
+func (c currentParser) Highlight(
+	uri workspaceapi.URI, content string,
+) (iterator.Iterator[textapi.Location], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.Highlight(uri, content)
+}

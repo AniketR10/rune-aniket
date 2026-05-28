@@ -2733,6 +2733,29 @@ func (c ideConfig) extensions() map[string]extensionConfig {
 	return ret
 }
 
+func (c ideConfig) tutorialFiles() map[string]string {
+	raw, ok := c.cfg["tutorials"]
+	if !ok {
+		return nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		c.errors["tutorials"] = errors.New("invalid type")
+		return nil
+	}
+	ret := make(map[string]string, len(m))
+	for name, v := range m {
+		p, ok := v.(string)
+		if !ok {
+			c.errors["tutorials."+name] = errors.New(
+				"expected string path")
+			continue
+		}
+		ret[name] = p
+	}
+	return ret
+}
+
 func (c extensionConfig) path() (string, bool) {
 	path, err := c.cfg.GetString("path")
 	if err != nil {

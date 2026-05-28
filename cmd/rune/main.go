@@ -484,6 +484,7 @@ func runTUI(
 		ide.WithScheme(docsScheme, newDocsSchemeFunc(*flagConfigPath)),
 		ide.WithStreamingOpen(true),
 	}
+	opts = append(opts, embeddedTutorialOptions()...)
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))
 	}

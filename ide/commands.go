@@ -735,6 +735,13 @@ var (
 			"The default duration is 1s and the default FPS is 30.",
 		Synopsis: "name [duration] [fps]",
 	}
+
+	tutorialCmdManual = textapi.CommandManual{
+		Name: "tutorial",
+		Summary: "Run, stop, dismiss, or reset interactive tutorials.",
+		Synopsis: "run <name> | stop | dismiss <name> | " +
+			"reset [<name>]",
+	}
 )
 
 func completeWithArrows(e *ex,

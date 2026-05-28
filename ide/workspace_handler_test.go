@@ -1808,7 +1808,8 @@ func TestWorkspaceConfig(t *testing.T) {
 				return true
 			}, runner, mu, nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
-			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil, false, false)
+			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil, false,
+			false, newCommandObserverRegistry())
 		require.NoError(t, err)
 		defer m.Close()
 		m.drainPendingWorkspaces()
@@ -2195,17 +2196,17 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  9            │
 └─────━────────────┘`},
-		{"2:wonew>", // uses tmp dir as workspace in the absence of a uri
-			`┌──────────────────┐
-│                  │
-├──────────────────┤
-│                  │
-│workspaceWallpaper│
-│                  │
-│                  │
-├──────────────────┤
-│1 1  2 2          │
-└─────━━━──────────┘`},
+		{"2:wonew>", // errors when no workspace path argument is given
+			`┌────┌─────────────┐
+│    │ expected    │
+├────│ at least    │
+│    │ one         │
+│work│ argument    │
+│    │ with the    │
+│    │ workspace   │
+├────│ path        ┤
+│1 1  2            │
+└─────━────────────┘`},
 		{"2:wofo>",
 			`┌────┌─────────────┐
 │    │ invalid     │
@@ -4967,7 +4968,8 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager,
 		notiConfig, cfg, storage, dir, publish, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil, false, false)
+		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil, false,
+		false, newCommandObserverRegistry())
 
 	require.NoError(t, err)
 	if uri != nil {

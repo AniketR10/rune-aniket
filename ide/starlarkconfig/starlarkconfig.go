@@ -78,6 +78,13 @@ type Source struct {
 
 	// Base, when non-nil, switches the decoder to overlay mode.
 	Base map[string]any
+
+	// Builtins, when non-empty, are merged into the predeclared
+	// globals before the script runs. Keys must be valid Starlark
+	// identifiers and must not collide with any key in Params or
+	// with ConfigGlobal when Base is non-nil; collisions cause
+	// Decode to return an error.
+	Builtins starlark.StringDict
 }
 
 // Decode parses and executes src. See Source for the two modes.
@@ -108,6 +115,14 @@ func Decode(s Source) (map[string]any, error) {
 	predeclared, err := StringDictFromMap(s.Params)
 	if err != nil {
 		return nil, fmt.Errorf("starlark: encode params: %w", err)
+	}
+
+	for name, v := range s.Builtins {
+		if _, taken := predeclared[name]; taken {
+			return nil, fmt.Errorf("starlark: builtin %q collides with "+
+				"predeclared param", name)
+		}
+		predeclared[name] = v
 	}
 
 	if s.Base != nil {

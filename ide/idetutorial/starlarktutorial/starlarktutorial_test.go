@@ -1,0 +1,1410 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package starlarktutorial
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+// fakeNotis captures every Notify / NotifyOnce call so tests can
+// assert on message text and severity level after a tutorial run.
+type fakeNotis struct {
+	mu       sync.Mutex
+	captured []notifyCall
+}
+
+type notifyCall struct {
+	level browserapi.NotificationLevel
+	msg   string
+	args  []any
+}
+
+func (c notifyCall) rendered() string {
+	return fmt.Sprintf(c.msg, c.args...)
+}
+
+func (f *fakeNotis) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	f.mu.Lock()
+	f.captured = append(f.captured, notifyCall{level: level, msg: msg, args: args})
+	f.mu.Unlock()
+	return "", nil
+}
+
+func (f *fakeNotis) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return f.Notify(level, msg, args...)
+}
+
+func (f *fakeNotis) UpdateNotificationProgress(_, _ string, _, _ int64) error {
+	return nil
+}
+
+func (f *fakeNotis) renderedCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.captured))
+	for i, c := range f.captured {
+		out[i] = c.rendered()
+	}
+	return out
+}
+
+func (f *fakeNotis) containsSubstring(s string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, c := range f.captured {
+		if strings.Contains(c.rendered(), s) {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *fakeNotis) len() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.captured)
+}
+
+// gridWriter is a deterministic term.Writer used to assert rendered
+// output in tests. Cells written out of range are dropped silently.
+type gridWriter struct {
+	w, h  int
+	cells [][]rune
+}
+
+func newGridWriter(w, h int) *gridWriter {
+	cells := make([][]rune, h)
+	for i := range cells {
+		cells[i] = make([]rune, w)
+	}
+	return &gridWriter{w: w, h: h, cells: cells}
+}
+
+func (g *gridWriter) SetCell(pos term.Coordinates, c term.Cell) {
+	if pos.X < 0 || pos.Y < 0 || pos.X >= g.w || pos.Y >= g.h {
+		return
+	}
+	g.cells[pos.Y][pos.X] = c.Ch
+}
+
+func (g *gridWriter) Context() context.Context                              { return context.Background() }
+func (g *gridWriter) UnionAttributes(_ term.Coordinates, _ term.Attributes) {}
+
+func (g *gridWriter) row(y int) []rune {
+	if y < 0 || y >= g.h {
+		return nil
+	}
+	return g.cells[y]
+}
+
+func gridContains(g *gridWriter, needle string) bool {
+	for y := range g.h {
+		if strings.Contains(string(g.row(y)), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
+	t.Helper()
+	notis := &fakeNotis{}
+	tut, err := New(
+		"tutorial-under-test", src,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	tut.Resize(80, 24)
+	return tut, notis
+}
+
+// resetAndWait spawns the runtime via Reset and waits until either
+// the first blocking request is published or the entry exits. Tests
+// use this in place of bare Reset to avoid racing with the run
+// goroutine on initial active publication.
+func resetAndWait(t *testing.T, tut *Tutorial, d time.Duration) {
+	t.Helper()
+	tut.Reset()
+	deadline := time.After(d)
+	for {
+		tut.mu.Lock()
+		active := tut.active
+		finished := tut.finished
+		tut.mu.Unlock()
+		if active != nil || finished {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("entry never published a request within %s", d)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+// resetAndWaitNamed is the same as resetAndWait but takes a label
+// so a test that resets multiple tutorials can tell them apart in
+// failure messages.
+func resetAndWaitNamed(t *testing.T, tut *Tutorial, d time.Duration, name string) {
+	t.Helper()
+	tut.Reset()
+	deadline := time.After(d)
+	for {
+		tut.mu.Lock()
+		active := tut.active
+		finished := tut.finished
+		tut.mu.Unlock()
+		if active != nil || finished {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("entry %q never published a request within %s", name, d)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+// activeKindFor returns the kind name of the currently active
+// request, or "" when none is set.
+func activeKindFor(t *Tutorial) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.active == nil {
+		return ""
+	}
+	return t.active.kind.String()
+}
+
+// waitFinished waits up to d for the tutorial's run goroutine to
+// exit. Tests use this to assert clean exit on exit() / fail() / normal
+// return / Stop().
+func waitFinished(t *testing.T, tut *Tutorial, d time.Duration) {
+	t.Helper()
+	deadline := time.After(d)
+	for {
+		tut.mu.Lock()
+		finished := tut.finished
+		done := tut.runDone
+		tut.mu.Unlock()
+		if finished {
+			if done == nil {
+				return
+			}
+			select {
+			case <-done:
+			case <-deadline:
+				t.Fatalf("tutorial did not finish within %s", d)
+			}
+			return
+		}
+		if done != nil {
+			select {
+			case <-done:
+				continue
+			case <-deadline:
+				t.Fatalf("tutorial did not finish within %s", d)
+			}
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("tutorial did not finish within %s", d)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+// waitNextActive waits up to d for tut.active to change kind to
+// wantKind (or for the tutorial to finish, when wantKind is "").
+// Tests use this after delivering a prompt OnSelect/OnClose because
+// the response is consumed asynchronously by the run goroutine.
+func waitNextActive(t *testing.T, tut *Tutorial, wantKind string, d time.Duration) {
+	t.Helper()
+	deadline := time.After(d)
+	for {
+		tut.mu.Lock()
+		finished := tut.finished
+		var kind string
+		if tut.active != nil {
+			kind = tut.active.kind.String()
+		}
+		tut.mu.Unlock()
+		if wantKind == "" {
+			if finished {
+				return
+			}
+		} else if kind == wantKind {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("active=%q finished=%t; want active=%q within %s",
+				kind, finished, wantKind, d)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+// TestEntryRequired asserts that tutorial() requires entry=.
+func TestEntryRequired(t *testing.T) {
+	t.Parallel()
+	_, err := New(
+		"x", `tutorial(id="x")`,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "entry")
+}
+
+// TestEntryMustBeCallable asserts that tutorial() rejects a non-
+// function entry.
+func TestEntryMustBeCallable(t *testing.T) {
+	t.Parallel()
+	_, err := New(
+		"x", `tutorial(entry="not a func")`,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "entry must be a function")
+}
+
+// TestEntryMustTakeZeroArgs asserts that tutorial() rejects an entry
+// that declares parameters.
+func TestEntryMustTakeZeroArgs(t *testing.T) {
+	t.Parallel()
+	_, err := New(
+		"x", `tutorial(entry=lambda x: 1)`,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "zero")
+}
+
+// TestDuplicateTutorialRejected asserts that calling tutorial() twice
+// fails at parse time.
+func TestDuplicateTutorialRejected(t *testing.T) {
+	t.Parallel()
+	_, err := New(
+		"x",
+		"def a(): pass\n"+
+			"def b(): pass\n"+
+			"tutorial(entry=a)\n"+
+			"tutorial(entry=b)\n",
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already called")
+}
+
+// TestEmptySourceRejected asserts that New rejects an empty source.
+func TestEmptySourceRejected(t *testing.T) {
+	t.Parallel()
+	_, err := New(
+		"x", "",
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty source")
+}
+
+// TestEntryRunsToCompletion asserts that an entry built only from
+// non-blocking builtins finishes cleanly without manual key input.
+func TestEntryRunsToCompletion(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(level=info, message="hello")
+    notify(level=success, message="bye")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.Equal(t, 2, notis.len())
+}
+
+// TestNotifyIsNonBlocking asserts that notify() returns immediately
+// and that the next request is the one after it.
+func TestNotifyIsNonBlocking(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(level=info, message="one")
+    floating_window(text="ok")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	assert.Equal(t, "floating_window", activeKindFor(tut),
+		"notify must not block the runtime; floating_window must "+
+			"be active immediately after Reset")
+	assert.Equal(t, 1, notis.len(),
+		"notify must fire eagerly even while floating_window is active")
+}
+
+// TestNotifyLevelConstants asserts that the `success` constant maps
+// to browserapi.LevelSuccess.
+func TestNotifyLevelConstants(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(level=success, message="done")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	require.Equal(t, 1, notis.len())
+	assert.Equal(t, browserapi.LevelSuccess, notis.captured[0].level)
+}
+
+// TestFloatingWindowBlocksUntilEnter asserts that floating_window
+// stays active until Enter is delivered, then the next builtin
+// becomes active.
+func TestFloatingWindowBlocksUntilEnter(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="hi", title="welcome")
+    floating_window(text="next")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "floating_window", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.False(t, exit, "first dismissal must not finish the tutorial")
+	assert.True(t, handled)
+	waitNextActive(t, tut, "floating_window", time.Second)
+
+	exit, handled = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, exit || tut.finished,
+		"tutorial must exit after final builtin")
+}
+
+// TestFloatingWindowSwallowsStrayKeys asserts that stray keys (those
+// not listed in allow_keys or dismiss_keys) do not advance and
+// report handled=true so the IDE root never opens a command prompt
+// under the overlay.
+func TestFloatingWindowSwallowsStrayKeys(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="hi")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	exit, handled := tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	assert.False(t, exit)
+	assert.True(t, handled,
+		"stray ':' on floating_window must be swallowed by the "+
+			"tutorial so the IDE root never opens a prompt")
+	assert.Equal(t, "floating_window", activeKindFor(tut),
+		"stray key must not advance")
+}
+
+// TestFloatingWindowStrayKeyArmsHintPulse asserts that a stray key
+// on floating_window arms the hint pulse shader.
+func TestFloatingWindowStrayKeyArmsHintPulse(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="hello", title="welcome")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	_, ok := tut.Shader()
+	require.False(t, ok, "fresh floating_window must not pulse")
+
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	spec, ok := tut.Shader()
+	require.True(t, ok, "wrong key must stage a hint pulse")
+	assert.NotZero(t, spec.Width)
+	assert.Equal(t, 1, spec.Height,
+		"hint pulse should target the dismissal-hint row only")
+}
+
+// TestFloatingWindowAllowKeysPassesThrough asserts that keys listed in
+// the allow_keys kwarg are NOT swallowed by the overlay: Handle reports
+// handled=false so the IDE root can act on them (e.g. <meta-1>..<meta-9>
+// while the welcome screen tells the user to try them).
+func TestFloatingWindowAllowKeysPassesThrough(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(
+        text="press meta-1",
+        allow_keys=["<meta-1>", "<meta-enter>"],
+    )
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	// <meta-1> matches an allow_keys entry: must propagate.
+	exit, handled := tut.Handle(term.Event{
+		Type: term.EventKey,
+		Mod:  term.ModMeta,
+		Ch:   '1',
+	})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"allow_keys entries must fall through to the IDE root")
+	assert.Equal(t, "floating_window", activeKindFor(tut),
+		"allowed key must not advance the tutorial")
+
+	// A key NOT in allow_keys is still swallowed.
+	exit, handled = tut.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	assert.False(t, exit)
+	assert.True(t, handled,
+		"stray keys outside allow_keys must remain swallowed")
+}
+
+// TestFloatingWindowAllowKeysInvalidErrors asserts that bad key
+// strings surface as a Starlark error at load time so authors find
+// typos before users hit them.
+func TestFloatingWindowAllowKeysInvalidErrors(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="x", allow_keys=["<not-a-key>"])
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	tut.Reset()
+	waitFinished(t, tut, 2*time.Second)
+	require.Greater(t, notis.len(), 0,
+		"invalid allow_keys must surface via notifications")
+	assert.True(t, notis.containsSubstring("allow_keys"),
+		"notification should mention allow_keys; got %v",
+		notis.renderedCalls())
+}
+
+// TestFloatingWindowDismissKeysAdvancesAndFallsThrough asserts that
+// keys listed in dismiss_keys resolve the floating_window AND let
+// the event reach the IDE root, so a "Press `:`" floating_window
+// can both advance the tutorial and open the command prompt the
+// user pressed `:` to open.
+func TestFloatingWindowDismissKeysAdvancesAndFallsThrough(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="press colon", dismiss_keys=[":"])
+    wait_command(command="wopen")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "floating_window", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{Type: term.EventKey, Ch: ':'})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"dismiss_keys entries must fall through to the IDE root "+
+			"so the action they describe actually fires")
+
+	// The floating_window must have resolved; the run goroutine
+	// should now be blocked on wait_command.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if activeKindFor(tut) == "wait_command" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	assert.Equal(t, "wait_command", activeKindFor(tut),
+		"dismiss_keys entries must also advance the tutorial")
+}
+
+// TestFloatingWindowAlignmentAndOffset asserts the (x, y) placement of
+// the framed window for a handful of alignments.
+func TestFloatingWindowAlignmentAndOffset(t *testing.T) {
+	t.Parallel()
+	const (
+		screenW = 80
+		screenH = 24
+	)
+	probe := newGridWriter(screenW, screenH)
+	probeTut, _ := newTutorial(t, `
+def run():
+    floating_window(text="hi")
+tutorial(entry=run)
+`)
+	probeTut.Resize(screenW, screenH)
+	resetAndWaitNamed(t, probeTut, time.Second, "probe")
+	probeTut.Draw(probe)
+	probeX, probeY := topLeftCorner(probe)
+	require.NotEqual(t, -1, probeX, "probe must render a frame")
+	innerW := frameWidth(probe, probeX, probeY)
+	innerH := frameHeight(probe, probeX, probeY)
+	probeTut.Stop()
+
+	cases := []struct {
+		name      string
+		alignment string
+		offset    string
+		wantX     int
+		wantY     int
+	}{
+		{"center default", "", "", (screenW - innerW) / 2, (screenH - innerH) / 2},
+		{"top-left flush", "top-left", "", 0, 0},
+		{"top-right flush", "top-right", "", screenW - innerW, 0},
+		{"bottom-left flush", "bottom-left", "", 0, screenH - innerH},
+		{"bottom-right with offset", "bottom-right", "(3, 2)",
+			screenW - innerW - 3, screenH - innerH - 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			alignArg := ""
+			if tc.alignment != "" {
+				alignArg = fmt.Sprintf(", alignment=%q", tc.alignment)
+			}
+			offsetArg := ""
+			if tc.offset != "" {
+				offsetArg = ", offset=" + tc.offset
+			}
+			src := fmt.Sprintf(`
+def run():
+    floating_window(text="hi"%s%s)
+tutorial(entry=run)
+`, alignArg, offsetArg)
+			tut, _ := newTutorial(t, src)
+			tut.Resize(screenW, screenH)
+			resetAndWait(t, tut, time.Second)
+			g := newGridWriter(screenW, screenH)
+			tut.Draw(g)
+			gotX, gotY := topLeftCorner(g)
+			assert.Equal(t, tc.wantX, gotX, "x")
+			assert.Equal(t, tc.wantY, gotY, "y")
+			tut.Stop()
+		})
+	}
+}
+
+// topLeftCorner returns the (x, y) of the first '┌' written into the
+// grid. Returns (-1, -1) when no corner is found.
+func topLeftCorner(g *gridWriter) (int, int) {
+	for y := range g.h {
+		for x, r := range g.row(y) {
+			if r == '┌' {
+				return x, y
+			}
+		}
+	}
+	return -1, -1
+}
+
+// frameWidth counts the inner width of the frame whose top-left
+// corner sits at (x0, y0), including the corner glyphs.
+func frameWidth(g *gridWriter, x0, y0 int) int {
+	row := g.row(y0)
+	for x := x0 + 1; x < g.w; x++ {
+		if row[x] == '┐' {
+			return x - x0 + 1
+		}
+	}
+	return -1
+}
+
+// frameHeight counts the inner height of the frame whose top-left
+// corner sits at (x0, y0), including the corner rows.
+func frameHeight(g *gridWriter, x0, y0 int) int {
+	for y := y0 + 1; y < g.h; y++ {
+		if g.row(y)[x0] == '└' {
+			return y - y0 + 1
+		}
+	}
+	return -1
+}
+
+// TestFloatingWindowAlignmentParses asserts that the alignment kwarg
+// accepts every documented keyword.
+func TestFloatingWindowAlignmentParses(t *testing.T) {
+	t.Parallel()
+	good := []string{
+		"", "center", "centered", "top", "bottom", "left", "right",
+		"top-left", "top-right", "bottom-left", "bottom-right",
+	}
+	for _, a := range good {
+		src := fmt.Sprintf(`
+def run():
+    floating_window(text="hi", alignment=%q)
+tutorial(entry=run)
+`, a)
+		notis := &fakeNotis{}
+		tut, err := New(
+			"align_"+a, src,
+			nil, nil, notis, nil,
+			term.Attributes{}, component.FrameCharSet{},
+			nil, nil, term.KeyComb{Ch: ':'},
+			nil,
+		)
+		require.NoError(t, err, "alignment %q must parse", a)
+		tut.Resize(80, 24)
+		resetAndWait(t, tut, time.Second)
+		tut.Stop()
+	}
+
+	src := `
+def run():
+    floating_window(text="hi", alignment="bogus")
+tutorial(entry=run)
+`
+	notis := &fakeNotis{}
+	tut, err := New(
+		"align_bogus", src,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.NoError(t, err, "unknown alignment must defer to the entry call")
+	tut.Resize(80, 24)
+	resetAndWait(t, tut, time.Second)
+	// The bad alignment surfaces at runtime: the entry call fails
+	// and the runtime emits an error notification.
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring(`alignment "bogus"`),
+		"want runtime error notification mentioning the bad alignment, "+
+			"got %v", notis.renderedCalls())
+}
+
+// TestMarkdownBlocksUntilEnter asserts that markdown gates on
+// Enter / Esc / Space and reports handled=true on stray keys.
+func TestMarkdownBlocksUntilEnter(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    markdown(text="line one")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "markdown", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{Type: term.EventKey, Ch: 'z'})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"markdown must not claim stray keys; root handles them")
+	require.Equal(t, "markdown", activeKindFor(tut))
+
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+}
+
+// TestWaitKeyBlocksUntilExactKey asserts that wait_key only advances
+// on the exact key match.
+func TestWaitKeyBlocksUntilExactKey(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_key(key="<enter>")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_key", activeKindFor(tut))
+
+	exit, _ := tut.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
+	assert.False(t, exit)
+	require.Equal(t, "wait_key", activeKindFor(tut))
+
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+}
+
+// TestWaitCommandObserveResolvesResult asserts that ObserveCommand
+// returns a command_result with the typed name and args.
+func TestWaitCommandObserveResolvesResult(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    r = wait_command(command="wopen")
+    notify(message=r.name + ":" + r.args[0])
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_command", activeKindFor(tut))
+
+	tut.ObserveCommand("wopen", "wopen", []string{"~/proj"}, nil)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("wopen:~/proj"),
+		"command_result.args[0] must reach the script, got %v",
+		notis.renderedCalls())
+}
+
+// TestWaitCommandObserveErrorStaysArmed asserts that a dispatch error
+// keeps the request active and does not surface as a notification.
+func TestWaitCommandObserveErrorStaysArmed(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_command(command="wopen", on_error="` + "<cmd>" + `wopen <dir>")
+    notify(level=success, message="advanced")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	exit := tut.ObserveCommand("wopen", "wopen", nil,
+		fmt.Errorf("missing directory"))
+	assert.False(t, exit)
+	assert.Equal(t, "wait_command", activeKindFor(tut),
+		"dispatch error must keep wait_command armed")
+	assert.Equal(t, 0, notis.len(),
+		"dispatch error must not surface as a notification")
+
+	exit = tut.ObserveCommand("wopen", "wopen", []string{"~/p"}, nil)
+	// Whether ObserveCommand returns exit=true depends on whether
+	// the runtime advances to another blocking builtin before we
+	// observe the active state. Wait for completion either way.
+	_ = exit
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("advanced"),
+		"successful dispatch must return control to Starlark, which "+
+			"then runs the next builtin")
+}
+
+// TestWaitCommandResolvesViaAlias asserts that typed="e"
+// resolved="edit" matches wait_command(command="edit").
+func TestWaitCommandResolvesViaAlias(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    r = wait_command(command="edit")
+    notify(message="opened " + r.args[0])
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	tut.ObserveCommand("e", "edit", []string{"main.go"}, nil)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("opened main.go"),
+		"alias dispatch must reach wait_command via resolved name")
+}
+
+// TestConfirmYesReturnsTrue asserts that confirm returns True when
+// the user picks Yes (the highlighted option at index 0).
+func TestConfirmYesReturnsTrue(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    if confirm("ok?"):
+        notify(message="yes")
+    else:
+        notify(message="no")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "confirm", activeKindFor(tut),
+		"confirm must publish a request as active")
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("yes"),
+		"confirm Yes must take the True branch, got %v", notis.renderedCalls())
+}
+
+// TestConfirmNoReturnsFalse asserts that confirm returns False on
+// the user picking the No option (index 1).
+func TestConfirmNoReturnsFalse(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    if confirm("ok?"):
+        notify(message="yes")
+    else:
+        notify(message="no")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "confirm", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("no"),
+		"confirm No must take the False branch")
+}
+
+// TestConfirmDismissReturnsFalse asserts that closing the prompt
+// without selecting (Esc) yields False (== dismissed).
+func TestConfirmDismissReturnsFalse(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    if confirm("ok?"):
+        notify(message="yes")
+    else:
+        notify(message="dismissed")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "confirm", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("dismissed"),
+		"confirm dismissal must take the False branch")
+}
+
+// TestChoiceDrawsPromptOverlay asserts that choice() renders the
+// message and each option label into the tutorial overlay grid.
+func TestChoiceDrawsPromptOverlay(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick one", options=["A", "B", "C"])
+    notify(message="value=" + pick.value)
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	g := newGridWriter(80, 24)
+	tut.Draw(g)
+	assert.True(t, gridContains(g, "pick one"),
+		"choice overlay must render the message")
+	for _, opt := range []string{"A", "B", "C"} {
+		assert.True(t, gridContains(g, opt),
+			"choice overlay must render option %q", opt)
+	}
+	tut.Stop()
+}
+
+// TestChoiceOnSelectResolvesResult asserts that selecting an option
+// the choice_result attributes.
+func TestChoiceOnSelectResolvesResult(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick one", options=["A", "B", "C"])
+    notify(message="value=" + pick.value + " idx=" + str(pick.index))
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("value=B idx=1"),
+		"selecting option 1 must populate value and index, got %v",
+		notis.renderedCalls())
+}
+
+// TestChoiceEscWithoutSelectIsDismissal asserts that Esc
+// alone yields selected=False, index=-1, value="".
+func TestChoiceEscWithoutSelectIsDismissal(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick", options=["x"])
+    if not pick.selected:
+        notify(message="dismissed idx=" + str(pick.index) + " v=" + repr(pick.value))
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring(`dismissed idx=-1 v=""`),
+		"Esc alone must produce a dismissal sentinel, got %v",
+		notis.renderedCalls())
+}
+
+// TestChoiceEscAfterEnterIsNoOp asserts that delivering Esc after
+// Enter has already finalised the request is a safe no-op: the
+// first selection wins via sync.Once on r.deliver.
+func TestChoiceEscAfterEnterIsNoOp(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick", options=["A", "B"])
+    notify(message="value=" + pick.value)
+    notify(message="done")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	// After Enter has resolved the prompt the runtime advances
+	// past choice; a stray Esc on a different active step (or none)
+	// must not corrupt the recorded selection.
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("value=A"),
+		"the initial Enter selection must win the delivery")
+}
+
+// TestChoiceBranchesInStarlark asserts that a choice result drives a
+// real if/elif branch in Starlark.
+func TestChoiceBranchesInStarlark(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick", options=["go", "stay"])
+    if pick.value == "go":
+        floating_window(text="go path")
+    else:
+        floating_window(text="stay path")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	waitNextActive(t, tut, "floating_window", time.Second)
+	tut.mu.Lock()
+	body := tut.active.text
+	tut.mu.Unlock()
+	assert.Equal(t, "go path", body,
+		"the `go` branch must reach the floating_window with the right body")
+	tut.Stop()
+}
+
+// TestCancelOnDismissShortCircuits asserts that cancel_on_dismiss
+// ends the entry on a dismissed choice.
+func TestCancelOnDismissShortCircuits(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = cancel_on_dismiss(choice(message="pick", options=["x"]))
+    notify(message="unreachable: " + pick.value)
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	waitFinished(t, tut, time.Second)
+	assert.False(t, notis.containsSubstring("unreachable"),
+		"cancel_on_dismiss must exit before the next notify runs")
+}
+
+// TestCancelOnDismissPassesThroughOnSelect asserts that cancel_on_dismiss
+// returns the result unchanged on a real selection.
+func TestCancelOnDismissPassesThroughOnSelect(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = cancel_on_dismiss(choice(message="pick", options=["A"]))
+    notify(message="picked " + pick.value)
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("picked A"),
+		"selected result must pass through cancel_on_dismiss")
+}
+
+// TestExitTerminatesTutorialCleanly asserts that exit() ends the
+// entry without surfacing an error notification.
+func TestExitTerminatesTutorialCleanly(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(level=info, message="before")
+    exit()
+    notify(level=info, message="after")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("before"))
+	assert.False(t, notis.containsSubstring("after"),
+		"exit() must skip the rest of the entry")
+	for _, c := range notis.captured {
+		assert.NotEqual(t, browserapi.LevelError, c.level,
+			"exit() must be a clean exit, not surface an error")
+	}
+}
+
+// TestExitFromNestedHelper asserts that exit() called from a helper
+// terminates the whole tutorial.
+func TestExitFromNestedHelper(t *testing.T) {
+	t.Parallel()
+	src := `
+def helper():
+    exit()
+
+def run():
+    helper()
+    notify(message="never")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.False(t, notis.containsSubstring("never"),
+		"exit() must propagate out of nested calls")
+}
+
+// TestStopCancelsBlockedBuiltin asserts that Stop() unblocks a
+// builtin that is waiting on user input.
+func TestStopCancelsBlockedBuiltin(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_key(key="<f12>")
+    notify(message="never")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_key", activeKindFor(tut))
+
+	done := make(chan struct{})
+	go func() {
+		tut.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Stop() did not return within 1s; runLoop is stuck")
+	}
+	assert.False(t, notis.containsSubstring("never"),
+		"Stop() must skip the rest of the entry")
+}
+
+// TestResetRestartsThread asserts that Reset() can be called twice
+// and the entry runs from the start each time.
+func TestResetRestartsThread(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="run")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	require.Equal(t, 1, notis.len())
+
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.Equal(t, 2, notis.len(),
+		"Reset() must re-run the entry from the beginning")
+}
+
+// TestStarlarkFailSurfacedAsNotification asserts that fail() in the
+// entry surfaces as an error notification and the tutorial exits.
+func TestStarlarkFailSurfacedAsNotification(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    fail("bad")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	require.Greater(t, notis.len(), 0)
+	found := false
+	for _, c := range notis.captured {
+		if c.level == browserapi.LevelError &&
+			strings.Contains(c.rendered(), "bad") {
+			found = true
+		}
+	}
+	assert.True(t, found,
+		"fail() must surface as an error notification, got %v",
+		notis.renderedCalls())
+}
+
+// TestStarlarkRuntimeErrorSurfaced asserts that a runtime error
+// (e.g. indexing None) is reported as an error notification.
+func TestStarlarkRuntimeErrorSurfaced(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    x = None
+    notify(message=x[0])
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	require.Greater(t, notis.len(), 0)
+	hasError := false
+	for _, c := range notis.captured {
+		if c.level == browserapi.LevelError {
+			hasError = true
+		}
+	}
+	assert.True(t, hasError,
+		"runtime error must surface as LevelError notification")
+}
+
+// TestCommandKeyBuiltin asserts that command_key() returns the
+// configured prompt key.
+func TestCommandKeyBuiltin(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="key=" + command_key())
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	wantKey := (term.KeyComb{Ch: ':'}).String()
+	assert.True(t, notis.containsSubstring("key="+wantKey),
+		"command_key() must expand to the configured key, got %v",
+		notis.renderedCalls())
+}
+
+// TestShaderClearsAfterFloatingWindow asserts that the hint pulse
+// goes away once floating_window is dismissed.
+func TestShaderClearsAfterFloatingWindow(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="hello", title="welcome")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	_, ok := tut.Shader()
+	require.True(t, ok, "wrong key must arm the pulse")
+
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	_, ok = tut.Shader()
+	assert.False(t, ok,
+		"after dismissal the shader must clear")
+}
+
+// TestWaitCommandHintExpandsCmdToken asserts that <cmd> in the
+// default hint and in on_error expands to the configured key.
+func TestWaitCommandHintExpandsCmdToken(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_command(command="wopen", on_error="` + "`<cmd>wopen` `<directory>`" + `")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	tut.Resize(80, 12)
+	resetAndWait(t, tut, time.Second)
+
+	w := term.NewStringWriter(80, 12)
+	tut.Draw(w)
+	require.NoError(t, w.Flush())
+	wantKey := (term.KeyComb{Ch: ':'}).String()
+	assert.Contains(t, w.String(), wantKey,
+		"default hint must mention the configured command key")
+	assert.Contains(t, w.String(), "wopen",
+		"default hint must mention the command name")
+	assert.NotContains(t, w.String(), "<cmd>",
+		"<cmd> token must not leak into the default hint")
+
+	tut.ObserveCommand("wopen", "wopen", nil,
+		fmt.Errorf("missing directory argument"))
+	w = term.NewStringWriter(80, 12)
+	tut.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Contains(t, w.String(), wantKey,
+		"on_error hint must expand <cmd> to the configured key")
+	assert.Contains(t, w.String(), "wopen",
+		"on_error hint must mention the command name")
+	assert.Contains(t, w.String(), "<directory>",
+		"on_error hint must preserve author placeholders")
+	tut.Stop()
+}
+
+// TestFloatingWindowDropsHeaderPrefix asserts that floating_window
+// renders markdown headers without the leading `#` markup glyphs.
+func TestFloatingWindowDropsHeaderPrefix(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="# WelcomeSentinel\n\nbody")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	g := newGridWriter(80, 24)
+	tut.Draw(g)
+	assert.True(t, gridContains(g, "WelcomeSentinel"),
+		"floating_window must render header text somewhere")
+	assert.False(t, gridContains(g, "# WelcomeSentinel"),
+		"floating_window must not render the leading '# '")
+	tut.Stop()
+}
+
+// TestStarlarkControlFlow asserts that the entry can use for, if,
+// and helper functions to drive a sequence of builtins.
+func TestStarlarkControlFlow(t *testing.T) {
+	t.Parallel()
+	src := `
+def banner(msg, lvl=info):
+    notify(level=lvl, message=msg)
+
+def run():
+    for i in range(3):
+        if i % 2 == 0:
+            banner("even-%d" % i, lvl=success)
+        else:
+            banner("odd-%d" % i, lvl=warn)
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	require.Equal(t, 3, notis.len())
+	assert.Equal(t, "even-0", notis.captured[0].rendered())
+	assert.Equal(t, browserapi.LevelSuccess, notis.captured[0].level)
+	assert.Equal(t, "odd-1", notis.captured[1].rendered())
+	assert.Equal(t, browserapi.LevelWarn, notis.captured[1].level)
+	assert.Equal(t, "even-2", notis.captured[2].rendered())
+}
+
+// TestLoadIsRejected asserts that load() is not allowed in tutorial
+// scripts.
+func TestLoadIsRejected(t *testing.T) {
+	t.Parallel()
+	_, err := New(
+		"x", `load("other.star", "thing")`,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load()")
+}
+
+// TestEveryBlockingKindRoundTrips asserts that each blocking builtin
+// can be invoked and resolved through its TUI path.
+func TestEveryBlockingKindRoundTrips(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="fw")
+    markdown(text="md")
+    wait_key(key="<enter>")
+    r = wait_command(command="wopen")
+    notify(message="got " + r.args[0])
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+
+	require.Equal(t, "floating_window", activeKindFor(tut))
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitNextActive(t, tut, "markdown", time.Second)
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitNextActive(t, tut, "wait_key", time.Second)
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitNextActive(t, tut, "wait_command", time.Second)
+	tut.ObserveCommand("wopen", "wopen", []string{"~/p"}, nil)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("got ~/p"))
+}
+
+// TestPromptOverlayRendersOnTutorialLayer asserts that the
+// confirm/choice prompt is drawn by the tutorial itself, not by the
+// IDE host. Drawing the tutorial alone into a buffer must paint the
+// prompt's message and options — that is what makes the overlay
+// survive a workspace switch without the IDE host needing any
+// per-tutorial prompter integration.
+func TestPromptOverlayRendersOnTutorialLayer(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    confirm("continue?")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "confirm", activeKindFor(tut))
+
+	g := newGridWriter(80, 24)
+	tut.Draw(g)
+	assert.True(t, gridContains(g, "continue?"),
+		"prompt message must be rendered on the tutorial layer")
+	assert.True(t, gridContains(g, "Yes"),
+		"prompt Yes option must be rendered on the tutorial layer")
+	assert.True(t, gridContains(g, "No"),
+		"prompt No option must be rendered on the tutorial layer")
+	tut.Stop()
+}

@@ -951,6 +951,61 @@ func TestLoadEmbededConfig(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestTutorialFilesDecoded(t *testing.T) {
+	cfg := ideConfig{
+		cfg: map[string]any{
+			"tutorials": map[string]any{
+				"basics":   "/etc/x.star",
+				"advanced": "/etc/y.star",
+			},
+		},
+		errors: map[string]error{},
+	}
+	got := cfg.tutorialFiles()
+	require.Equal(t, 2, len(got))
+	assert.Equal(t, "/etc/x.star", got["basics"])
+	assert.Equal(t, "/etc/y.star", got["advanced"])
+	assert.Empty(t, cfg.errors)
+}
+
+func TestTutorialFilesMissingReturnsNil(t *testing.T) {
+	cfg := ideConfig{
+		cfg:    map[string]any{},
+		errors: map[string]error{},
+	}
+	assert.Nil(t, cfg.tutorialFiles())
+	assert.Empty(t, cfg.errors)
+}
+
+func TestTutorialFilesWrongRootTypeRecordsError(t *testing.T) {
+	cfg := ideConfig{
+		cfg: map[string]any{
+			"tutorials": "not a map",
+		},
+		errors: map[string]error{},
+	}
+	assert.Nil(t, cfg.tutorialFiles())
+	require.NotNil(t, cfg.errors["tutorials"])
+	assert.Contains(t, cfg.errors["tutorials"].Error(), "invalid type")
+}
+
+func TestTutorialFilesEntryWrongTypeRecordsError(t *testing.T) {
+	cfg := ideConfig{
+		cfg: map[string]any{
+			"tutorials": map[string]any{
+				"good": "/etc/ok.star",
+				"bad":  42,
+			},
+		},
+		errors: map[string]error{},
+	}
+	got := cfg.tutorialFiles()
+	assert.Equal(t, map[string]string{"good": "/etc/ok.star"}, got)
+	require.NotNil(t, cfg.errors["tutorials.bad"])
+	assert.Contains(t, cfg.errors["tutorials.bad"].Error(),
+		"expected string path")
+}
+
 func TestShellMaxHistoryFromConfig(t *testing.T) {
 	f, err := os.CreateTemp("", "*.star")
 	require.NoError(t, err)

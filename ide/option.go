@@ -361,6 +361,19 @@ func WithStreamingOpen(enabled bool) Option {
 	}
 }
 
+// WithStarlarkTutorial registers an embedded Starlark tutorial under
+// the given name. The src is parsed at IDE startup and the tutorial
+// becomes invokable via `:tutorial run <name>`. If the same name is also
+// present in the user's config, the config entry wins.
+func WithStarlarkTutorial(name, src string) Option {
+	return func(opts *options) {
+		if opts.starlarkTutorials == nil {
+			opts.starlarkTutorials = make(map[string]string)
+		}
+		opts.starlarkTutorials[name] = src
+	}
+}
+
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
@@ -400,6 +413,7 @@ type options struct {
 	openShaderFPS          int
 	openShaderDuration     time.Duration
 	zdotDir                string
+	starlarkTutorials map[string]string
 }
 
 func defaultOptions() options {

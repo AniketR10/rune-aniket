@@ -570,6 +570,11 @@ config = {
         },
     },
     "extensions": {},
+    # Interactive tutorials. Each entry maps a `:tutorial run <name>` to
+    # the path of a Starlark file that calls `tutorial(...)` with a
+    # list of `step(...)` entries. Empty by default — extensions and
+    # user overlays add their own.
+    "tutorials": {},
     # Configuration for the command prompt.
     "command": {
         # Key that opens the command prompt.

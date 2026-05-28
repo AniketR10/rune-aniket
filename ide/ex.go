@@ -166,6 +166,11 @@ type ex struct {
 	sched               func(func()) bool
 	flusher             *flusher
 	debugCommands       bool
+	commandObserver     commandObserver
+}
+
+type commandObserver interface {
+	observeCommand(typed, resolved string, args []string, err error)
 }
 
 // previewFunc is a function used to preview commands.
@@ -188,6 +193,9 @@ func newEx(
 	dispatchOnPreview map[string]previewFunc,
 	tm browser.TabManager,
 	parser syntaxapi.Parser,
+	commandEditor command.Editor,
+	commandObserver commandObserver,
+	debugCommands bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
@@ -197,6 +205,9 @@ func newEx(
 	if err != nil {
 		return
 	}
+	e.commandEditor = commandEditor
+	e.commandObserver = commandObserver
+	e.debugCommands = debugCommands
 	return
 }
 
@@ -867,6 +878,9 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 			break
 		}
 		h, derr := e.comp.DispatchCommand(ctx, next)
+		if e.commandObserver != nil {
+			e.commandObserver.observeCommand(cmd, next.Name, next.Args, derr)
+		}
 		if derr != nil {
 			if isAlias {
 				return fmt.Errorf("%s: %s", formatStep(next), derr)

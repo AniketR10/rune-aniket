@@ -217,6 +217,7 @@ func (b *bootstrapHandler) buildConfiguredIDE() (*ide.IDE, error) {
 				}, true
 			}),
 	}
+	opts = append(opts, embeddedTutorialOptions()...)
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))
 	}

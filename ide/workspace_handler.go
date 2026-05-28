@@ -146,6 +146,8 @@ type workspaceManagerHandler struct {
 	streamingOpen           bool
 	reloadConfig            func() (ideConfig, error)
 
+	commandObserver *commandObserverRegistry
+
 	union               handler.FrameUnion
 	bar                 handler.Tabs
 	barIdxToSlot        []int
@@ -420,6 +422,7 @@ func (h *workspaceManagerHandler) init(
 	dispatchOnPreview map[string]previewFunc,
 	debugCommands bool,
 	streamingOpen bool,
+	commandObserver *commandObserverRegistry,
 ) (err error) {
 	ctx := context.Background()
 
@@ -462,6 +465,7 @@ func (h *workspaceManagerHandler) init(
 	h.tabBarHeight = tabBarHeight
 	h.debugCommands = debugCommands
 	h.streamingOpen = streamingOpen
+	h.commandObserver = commandObserver
 	h.pending = make(map[string]*pendingWorkspace)
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
@@ -488,12 +492,12 @@ func (h *workspaceManagerHandler) init(
 		homeWorkspace, h.ideStorage, h.notifications, h.homeURI,
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.events.newPublisher(h.homeURI), 0 /* vte capacity */, h.clip, h.macro,
-		h.dispatchOnPreview, tm, homeParser, globalOpts...)
+		h.dispatchOnPreview, tm, homeParser,
+		h.newCommandPromptEditor(cfg), h.commandObserver, h.debugCommands,
+		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
-	h.empty.debugCommands = h.debugCommands
-	h.empty.commandEditor = h.newCommandPromptEditor(cfg)
 	tm.tm = h.empty.Browser()
 	if err = h.subscribeAllCommands(h.empty); err != nil {
 		return err
@@ -1171,12 +1175,12 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.events.newPublisher(uri),
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
-		tm, parser, textOpts...)
+		tm, parser,
+		h.newCommandPromptEditor(cfg), h.commandObserver, h.debugCommands,
+		textOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("new ex: %w", err)
 	}
-	ex.commandEditor = h.newCommandPromptEditor(cfg)
-	ex.debugCommands = h.debugCommands
 	apibrowser := newBrowserAdapter(ex.Browser())
 	cursorHistoryCloser, err := idecursor.WithHistory(
 		ex.Editor(), h.ideStorage, apibrowser, apibrowser, ex.workspace,
@@ -1740,12 +1744,7 @@ func (h *workspaceManagerHandler) commandReloadWorkspace(args ...string) error {
 
 func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	if len(args) == 0 {
-		tempDir := os.TempDir()
-		uri, err := h.homeWorkspace.URI(tempDir)
-		if err != nil {
-			return fmt.Errorf("make uri %s: %v", tempDir, err)
-		}
-		args = append(args, uri.String())
+		return errors.New("expected at least one argument with the workspace path")
 	}
 	path := args[0]
 
