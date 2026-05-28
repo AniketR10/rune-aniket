@@ -1752,6 +1752,143 @@ func TestInstallConfigPromptDeny(t *testing.T) {
 	})
 }
 
+// TestInstallConfigPreservesUserValues verifies that when a package's
+// config overlaps with a key the user already has set, the install
+// does not prompt and does not overwrite the user's value.
+func TestInstallConfigPreservesUserValues(t *testing.T) {
+	t.Parallel()
+
+	t.Run("overlap with user scalar does not prompt and preserves value", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "configpkg", Version: "1"},
+		})
+		m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+		configPath := filepath.Join(datadir, "config.yaml")
+		// User pre-sets every key the package would write, with their
+		// own values that must be preserved.
+		require.NoError(t, os.WriteFile(configPath, []byte(
+			"env:\n  GOROOT: /custom/go\n"+
+				"settings:\n  theme: light\n  indent: 8\n",
+		), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		n.SetWg(1) // only download success; no apply because no prompt
+		err := m.InstallPackageVersion(context.Background(), "configpkg", "1", repl.NopProgressWriter())
+		require.NoError(t, err)
+		n.Wait()
+		n.RequireNoErrorNotification()
+
+		assert.Equal(t, 0, promptCount, "no prompt should fire when package adds no new keys")
+
+		cfg := readUserConfigMap(t, configPath)
+		env, ok := cfg["env"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "/custom/go", env["GOROOT"])
+		settings, ok := cfg["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "light", fmt.Sprint(settings["theme"]))
+		assert.Equal(t, "8", fmt.Sprint(settings["indent"]))
+	})
+
+	t.Run("new top-level key triggers prompt and is appended on accept", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "configpkg", Version: "1"},
+			{Package: "configpkg", Version: "2"},
+		})
+		m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+		configPath := filepath.Join(datadir, "config.yaml")
+		// User has all v1 keys with custom values. v2 adds settings.newkey.
+		require.NoError(t, os.WriteFile(configPath, []byte(
+			"env:\n  GOROOT: /custom/go\n"+
+				"settings:\n  theme: light\n  indent: 8\n"+
+				"other: untouched\n",
+		), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		// Install v2 directly: only the newkey is new, the rest overlap.
+		n.SetWg(2) // apply success + download success
+		err := m.InstallPackageVersion(context.Background(), "configpkg", "2", repl.NopProgressWriter())
+		require.NoError(t, err)
+		n.Wait()
+		n.RequireNoErrorNotification()
+
+		assert.Equal(t, 1, promptCount, "prompt should fire once for the genuinely new key")
+
+		cfg := readUserConfigMap(t, configPath)
+		env, ok := cfg["env"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "/custom/go", env["GOROOT"])
+		settings, ok := cfg["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "light", fmt.Sprint(settings["theme"]))
+		assert.Equal(t, "8", fmt.Sprint(settings["indent"]))
+		assert.Equal(t, "added", fmt.Sprint(settings["newkey"]))
+		assert.Equal(t, "untouched", fmt.Sprint(cfg["other"]))
+	})
+
+	t.Run("new top-level key triggers prompt; deny leaves config alone", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "configpkg", Version: "2"},
+		})
+		m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+		configPath := filepath.Join(datadir, "config.yaml")
+		userYAML := "env:\n  GOROOT: /custom/go\n" +
+			"settings:\n  theme: light\n  indent: 8\n"
+		require.NoError(t, os.WriteFile(configPath, []byte(userYAML), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		n.SetWg(1) // only download success because prompt is denied
+		err := m.InstallPackageVersion(context.Background(), "configpkg", "2", repl.NopProgressWriter())
+		require.NoError(t, err)
+		n.Wait()
+		n.RequireNoErrorNotification()
+
+		assert.Equal(t, 1, promptCount, "prompt should fire for the genuinely new key")
+
+		data, err := os.ReadFile(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, userYAML, string(data),
+			"config.yaml should be unchanged after deny")
+	})
+}
+
 // --- Test helpers for crash-safe download tests ---
 
 func createStaleEntry(

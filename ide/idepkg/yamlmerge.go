@@ -69,10 +69,11 @@ func loadOrCreateUserConfig(path string) (*yaml.Node, error) {
 	return &doc, nil
 }
 
-// mergeYAMLNodes deep-merges src into dst. Both must be mapping nodes.
-// For each key in src: if the key does not exist in dst, append it;
-// if both values are mappings, recurse; otherwise replace dst's value
-// with a clone of src's value.
+// mergeYAMLNodes additively merges src into dst. Both must be mapping
+// nodes. For each key in src: if the key does not exist in dst, append
+// it; if both values are mappings, recurse so genuinely-new sub-keys
+// are added; otherwise leave dst's existing value untouched. The merge
+// never overwrites a value the user already has set.
 func mergeYAMLNodes(dst, src *yaml.Node) {
 	if dst.Kind != yaml.MappingNode || src.Kind != yaml.MappingNode {
 		return
@@ -93,8 +94,6 @@ func mergeMappings(dst, src *yaml.Node) {
 		dstVal := dst.Content[dstIdx+1]
 		if dstVal.Kind == yaml.MappingNode && srcVal.Kind == yaml.MappingNode {
 			mergeMappings(dstVal, srcVal)
-		} else {
-			dst.Content[dstIdx+1] = cloneNode(srcVal)
 		}
 	}
 }
@@ -228,7 +227,9 @@ func writeYAMLAtomic(path string, doc *yaml.Node, expected *yaml.Node) error {
 }
 
 // verifyMerge recursively walks expected mapping keys and confirms each
-// exists in written with matching scalar values.
+// is present in written. Scalar values are not compared because the
+// additive merge intentionally preserves any value the user already
+// has set even when the package overlay declares a different value.
 func verifyMerge(written, expected *yaml.Node) error {
 	if expected.Kind != yaml.MappingNode {
 		return nil
@@ -246,14 +247,9 @@ func verifyMerge(written, expected *yaml.Node) error {
 		}
 		wVal := written.Content[wIdx+1]
 
-		switch expVal.Kind { //nolint:exhaustive
-		case yaml.MappingNode:
+		if expVal.Kind == yaml.MappingNode && wVal.Kind == yaml.MappingNode {
 			if err := verifyMerge(wVal, expVal); err != nil {
 				return fmt.Errorf("key %q: %w", key, err)
-			}
-		case yaml.ScalarNode:
-			if wVal.Value != expVal.Value {
-				return fmt.Errorf("key %q: expected %q, got %q", key, expVal.Value, wVal.Value)
 			}
 		}
 	}

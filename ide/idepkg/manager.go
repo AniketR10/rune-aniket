@@ -984,21 +984,12 @@ func (m *Manager) processConfig(
 	}
 	expandMapValues(pkgOverlayCfg, runeVarMapping)
 
-	if idePkgVerifyMergeMap(userCfg, pkgOverlayCfg) == nil {
+	missingCfg := idePkgMissingKeys(userCfg, pkgOverlayCfg)
+	if missingCfg == nil {
 		return nil
 	}
 
-	// Re-run the package overlay against the actual user config to produce
-	// the merged result the prompt will show and apply.
-	pkgCfg, err := loadIdePkgConfigOverlay(
-		pkgConfigFile, data, userCfg, pkgID, pkgVersion, m.dataDir,
-		m.editorMode,
-	)
-	if err != nil {
-		return fmt.Errorf("decode merged package config: %w", err)
-	}
-
-	pkgDoc, err := mapToYAMLDocument(pkgCfg)
+	pkgDoc, err := mapToYAMLDocument(missingCfg)
 	if err != nil {
 		return fmt.Errorf("package config to yaml: %w", err)
 	}
@@ -1007,9 +998,12 @@ func (m *Manager) processConfig(
 		return fmt.Errorf("user config to yaml: %w", err)
 	}
 
-	expandNodeValues(pkgDoc, runeVarMapping)
+	missingYAML, err := yaml.Marshal(missingCfg)
+	if err != nil {
+		return fmt.Errorf("marshal missing keys: %w", err)
+	}
 
-	err = m.promptConfigChange(pkgID, pkgVersion, data, userDoc, pkgDoc)
+	err = m.promptConfigChange(pkgID, pkgVersion, missingYAML, userDoc, pkgDoc)
 	if err != nil {
 		return fmt.Errorf("prompt config change: %w", err)
 	}
@@ -1179,28 +1173,39 @@ func normalizeIdePkgConfig(v any) any {
 	}
 }
 
-func idePkgVerifyMergeMap(written, expected map[string]any) error {
-	for key, expVal := range expected {
-		wVal, ok := written[key]
+// idePkgMissingKeys returns the subset of overlay keys that are not
+// present in user, preserving overlay values for the keys it returns.
+// For keys that are mappings on both sides, it recurses and includes
+// only the new sub-keys. The returned map is nil when every overlay
+// key (at every nesting level) is already present in user; this signals
+// that no prompt and no write is needed. Existing user values are never
+// included or compared — they are always preserved.
+func idePkgMissingKeys(user, overlay map[string]any) map[string]any {
+	var missing map[string]any
+	for key, overlayVal := range overlay {
+		userVal, ok := user[key]
 		if !ok {
-			return fmt.Errorf("key %q missing from written config", key)
-		}
-		expMap, expIsMap := expVal.(map[string]any)
-		wMap, wIsMap := wVal.(map[string]any)
-		if expIsMap {
-			if !wIsMap {
-				return fmt.Errorf("key %q: expected mapping node", key)
+			if missing == nil {
+				missing = map[string]any{}
 			}
-			if err := idePkgVerifyMergeMap(wMap, expMap); err != nil {
-				return fmt.Errorf("key %q: %w", key, err)
-			}
+			missing[key] = overlayVal
 			continue
 		}
-		if fmt.Sprint(wVal) != fmt.Sprint(expVal) {
-			return fmt.Errorf("key %q: expected %q, got %q", key, fmt.Sprint(expVal), fmt.Sprint(wVal))
+		overlayMap, overlayIsMap := overlayVal.(map[string]any)
+		userMap, userIsMap := userVal.(map[string]any)
+		if !overlayIsMap || !userIsMap {
+			continue
 		}
+		nestedMissing := idePkgMissingKeys(userMap, overlayMap)
+		if nestedMissing == nil {
+			continue
+		}
+		if missing == nil {
+			missing = map[string]any{}
+		}
+		missing[key] = nestedMissing
 	}
-	return nil
+	return missing
 }
 
 func mapToYAMLDocument(cfg map[string]any) (*yaml.Node, error) {

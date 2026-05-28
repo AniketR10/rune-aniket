@@ -74,16 +74,16 @@ func TestMergeYAMLNodes(t *testing.T) {
 			expected: "a: 1\nb: 2\n",
 		},
 		{
-			name:     "overwrite scalar",
+			name:     "preserve scalar on overlap",
 			dst:      "a: 1\n",
 			src:      "a: 2\n",
-			expected: "a: 2\n",
+			expected: "a: 1\n",
 		},
 		{
-			name:     "deep merge nested maps",
+			name:     "deep merge nested maps preserves overlapping scalars",
 			dst:      "top:\n  a: 1\n  b: 2\n",
 			src:      "top:\n  b: 3\n  c: 4\n",
-			expected: "top:\n  a: 1\n  b: 3\n  c: 4\n",
+			expected: "top:\n  a: 1\n  b: 2\n  c: 4\n",
 		},
 		{
 			name:     "deep merge two levels",
@@ -92,10 +92,16 @@ func TestMergeYAMLNodes(t *testing.T) {
 			expected: "l1:\n  l2:\n    a: 1\n    b: 2\n",
 		},
 		{
-			name:     "replace sequences",
+			name:     "preserve sequence on overlap",
 			dst:      "items:\n  - a\n  - b\n",
 			src:      "items:\n  - x\n  - y\n  - z\n",
-			expected: "items:\n  - x\n  - y\n  - z\n",
+			expected: "items:\n  - a\n  - b\n",
+		},
+		{
+			name:     "new sequence is added",
+			dst:      "a: 1\n",
+			src:      "items:\n  - x\n  - y\n",
+			expected: "a: 1\nitems:\n  - x\n  - y\n",
 		},
 		{
 			name:     "empty src is no-op",
@@ -116,16 +122,22 @@ func TestMergeYAMLNodes(t *testing.T) {
 			expected: "a: 1\nb: 2\n",
 		},
 		{
-			name:     "map key replaced by scalar",
+			name:     "map dst preserved against scalar src",
 			dst:      "a:\n  nested: 1\n",
 			src:      "a: flat\n",
+			expected: "a:\n  nested: 1\n",
+		},
+		{
+			name:     "scalar dst preserved against map src",
+			dst:      "a: flat\n",
+			src:      "a:\n  nested: 1\n",
 			expected: "a: flat\n",
 		},
 		{
-			name:     "scalar replaced by map",
-			dst:      "a: flat\n",
-			src:      "a:\n  nested: 1\n",
-			expected: "a:\n  nested: 1\n",
+			name:     "nested map adds new sub-keys without touching existing",
+			dst:      "top:\n  a: 1\n  nested:\n    x: 10\n",
+			src:      "top:\n  a: 99\n  nested:\n    x: 99\n    y: 20\n  newkey: 7\n",
+			expected: "top:\n  a: 1\n  nested:\n    x: 10\n    y: 20\n  newkey: 7\n",
 		},
 	}
 	for _, tt := range tests {
@@ -376,10 +388,9 @@ func TestVerifyMerge(t *testing.T) {
 			expectErr: `key "b" missing from written config`,
 		},
 		{
-			name:      "wrong value fails",
-			written:   "a: 1\nb: wrong\n",
-			expected:  "a: 1\nb: 2\n",
-			expectErr: `key "b": expected "2", got "wrong"`,
+			name:     "different scalar value passes",
+			written:  "a: 1\nb: wrong\n",
+			expected: "a: 1\nb: 2\n",
 		},
 		{
 			name:      "nested mismatch fails",
