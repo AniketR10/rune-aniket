@@ -774,21 +774,21 @@ func (c ideConfig) commandOverlayManualAttr() (ret term.Attributes) {
 	return c.getCommandAttr("manual_attr", def)
 }
 
-func (c ideConfig) commandOverlayShowManualAfter() (ret time.Duration) {
-	ret = text.DefaultCommandOverlayConfig().ShowManualAfter
+func (c ideConfig) commandOverlayShowManual() (ret bool) {
+	ret = text.DefaultCommandOverlayConfig().ShowManual
 	cfg, ok := c.command()
 	if !ok {
 		return
 	}
-	key := "show_manual_after"
-	dur, err := config.GetDuration(cfg, key, ret)
+	key := "show_manual"
+	v, err := cfg.GetBool(key)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("command.%s", key)] = err
 		}
 		return
 	}
-	ret = dur
+	ret = v
 	return
 }
 
@@ -933,7 +933,7 @@ func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 		FocusElementAttr: c.commandOverlayFocusElementAttr(),
 		ElementAttr:      c.commandOverlayElementAttr(),
 		ManualAttr:       c.commandOverlayManualAttr(),
-		ShowManualAfter:  c.commandOverlayShowManualAfter(),
+		ShowManual:       c.commandOverlayShowManual(),
 		ShowProgressHint: c.commandOverlayShowProgressHint(),
 	}
 	return cfg

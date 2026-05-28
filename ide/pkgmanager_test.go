@@ -1227,7 +1227,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	// ensure that command manual is always shown
 	if showManual {
 		updatedCfg := defaultCfg().cfg["command"].(map[string]any)
-		updatedCfg["show_manual_after"] = "0ms"
+		updatedCfg["show_manual"] = true
 		cfg.cfg["command"] = updatedCfg
 	}
 	runner := FuncExtensionsRunner(testRunnerFn)
@@ -1342,7 +1342,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	// ensure that command manual is always shown
 	updatedCfg := defaultCfg().cfg["command"].(map[string]any)
 	if showManual {
-		updatedCfg["show_manual_after"] = "0ms"
+		updatedCfg["show_manual"] = true
 	}
 	cfg.cfg["command"] = updatedCfg
 

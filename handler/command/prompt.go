@@ -31,9 +31,7 @@ import (
 	"math"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -103,15 +101,12 @@ type Prompt struct {
 	showingHistory bool
 
 	inputString atomic.Value
-	mu          sync.Mutex
-	animation   component.Virtual[tui.Component]
+	animation   atomic.Pointer[component.Virtual[tui.Component]]
 
 	shownWidth            int
 	manualComponent       component.Responsive
-	showManual            bool
 	previewComponent      component.Responsive
 	previewMatch          []byte
-	resetManualTimeout    chan struct{}
 	preview               func()
 	ctx                   context.Context
 	cancelCtx             func()
@@ -172,9 +167,8 @@ func (h *Prompt) doInit(
 	h.dispatcher = dispatcher
 	h.completer = completer
 	h.interrupter = interrupter
-	h.animation.C = newNopAnimation(config)
+	h.animation.Store(&component.Virtual[tui.Component]{C: newNopAnimation(config)})
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
-	h.resetManualTimeout = make(chan struct{})
 
 	h.buf.Init()
 	h.inputString.Store("")
@@ -205,7 +199,7 @@ func (h *Prompt) doInit(
 	h.completionCancel = func() {}
 
 	h.Reset(commands)
-	h.startManualTimer()
+	h.setManualComponent(h.buildManualComponent(""))
 }
 
 func (h *Prompt) getCommandOverlayHeight(width int) int {
@@ -225,7 +219,7 @@ func (h *Prompt) Resize(width, height int) {
 	h.width = width
 	h.height = height
 	h.editSession.Resize(width, height)
-	if !h.showManual || h.manualComponent == nil {
+	if !h.config.ShowManual || h.manualComponent == nil {
 		h.list.Resize(width, height)
 		return
 	}
@@ -249,7 +243,7 @@ func (h *Prompt) calculateSplitHeights(width, height int) (int, int, int) {
 
 // Draw satisfies tui.Handler
 func (h *Prompt) Draw(w term.Writer) {
-	if h.showManual && h.manualComponent != nil {
+	if h.config.ShowManual && h.manualComponent != nil {
 		manHeight, separatorHeight, listHeight := h.calculateSplitHeights(h.width, h.height)
 		if separatorHeight != 0 {
 			separatorOffset := term.Coordinates{Y: listHeight}
@@ -309,11 +303,7 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 	union.Init(h.responsive)
 	union.Frame = false
 
-	// animation could finish any time
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	union.UnionRight(&h.animation, animationWidth)
+	union.UnionRight(h.animation.Load(), animationWidth)
 	union.Resize(h.width, bufHeight)
 
 	h.list.Draw(w)
@@ -357,8 +347,6 @@ func (h *Prompt) trimmedCommandAndArgs(cmd string, args ...string) []string {
 
 func (h *Prompt) dispatchPreviewArgument() {
 	comp, data, cancel := h.doDispatchPreviewArgument()
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.setPreview(comp, data, cancel)
 }
 
@@ -432,9 +420,6 @@ func (h *Prompt) dispatchCommand() (
 		quit = h.dispatcher.Dispatch(commandAndArgsString)
 	}
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if commandAndArgsString != "" {
 		err := h.history.Add(commandAndArgsString)
 		if err != nil {
@@ -456,23 +441,18 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 	}
 
 	quit, handled = h.handle(ev, h.config.Sync)
-	if handled && !quit {
-		select {
-		// reset manual display timeout
-		case h.resetManualTimeout <- struct{}{}:
-		default:
-		}
-	}
 	if handled {
 		bufString := h.buf.String()
 		h.inputString.Store(bufString)
 		f, ok := h.list.Focus()
+		dispatchPreview := h.previewComponent != nil &&
+			h.previewComponent == h.manualComponent &&
+			(!ok || !bytes.Equal(f.Data(), h.previewMatch))
+		h.manualComponent = h.newManualComponent(bufString)
 		// if we moved focus after showing preview, reset
-		if h.previewComponent != nil && h.previewComponent == h.manualComponent &&
-			(!ok || !bytes.Equal(f.Data(), h.previewMatch)) {
+		if dispatchPreview {
 			h.dispatchPreviewArgument()
 		}
-		h.setManualComponent(h.newManualComponent(bufString))
 	}
 	return
 }
@@ -527,9 +507,7 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 			// (e.g. opening a workspace) and we don't want a still
 			// running completer (e.g. a recursive walkdir) thrashing
 			// the FS while the dispatcher does its work.
-			h.mu.Lock()
 			h.cancelCompletionPush("dispatch")
-			h.mu.Unlock()
 			quit, handled = h.dispatchCommand()
 			h.reset()
 		case term.KeyEsc:
@@ -842,11 +820,9 @@ func (h *Prompt) incArgsCompleteMode(complete bool, sync bool) {
 
 	// mode needs to be at least the number of command and arguments that have
 	// been completed as per user request
-	h.mu.Lock()
 	for int(h.mode) < len(h.commandAndArgs) {
 		h.mode++
 	}
-	h.mu.Unlock()
 	h.list.Buffer().Reset()
 	h.setCompletionList(true, sync, h.commandAndArgs[0], h.commandAndArgs[1:]...)
 }
@@ -856,9 +832,7 @@ func (h *Prompt) decArgsCompleteMode(sync bool) bool {
 	if h.mode == 1 {
 		return false
 	}
-	h.mu.Lock()
 	h.mode--
-	h.mu.Unlock()
 	lastIdx := len(h.commandAndArgs) - 1
 	last := h.commandAndArgs[lastIdx]
 	h.commandAndArgs = h.commandAndArgs[:lastIdx]
@@ -872,9 +846,7 @@ func (h *Prompt) decArgsCompleteMode(sync bool) bool {
 }
 
 func (h *Prompt) setCommandMode() {
-	h.mu.Lock()
 	h.mode = modeCommandPromptCommand
-	h.mu.Unlock()
 	h.list.Buffer().Replace(h.buf.String())
 	h.commandAndArgs = h.commandAndArgs[:0]
 	h.resetListWith(h.commandsBackup)
@@ -896,13 +868,10 @@ func (h *Prompt) setCompletionList(
 
 	ctx, cancel := context.WithCancel(h.ctx)
 
-	// cancel prev if there's any
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	h.cancelCompletionPush("re set completion list")
 	h.completionCancel = cancel
 	h.completionCtx = ctx
+
 	h.setUserScrolling(false)
 
 	// if user added any extra spaces, do not pass to internal completer
@@ -965,31 +934,27 @@ func (h *Prompt) setCompletionList(
 		ch := h.list.Push(ctx)
 		mode := h.mode
 		commandsBackup := h.commandsBackup
+		history := append([]string(nil), h.history.Slice()...)
 		// IsEmpty could be performing I/O under the hood
 		// via Next, so do not block
 		go debug.CapturePanicReport(func() {
-			var animation tui.Component
+			var virtual *component.Virtual[tui.Component]
 			var animationCloser interface{ Close() error }
 			if h.config.ShowProgressHint {
 				// draw progress animation while iterator is still returning results
 				frames, seq := component.ProgressAnimationFrames()
 				anim := component.NewAnimation(h.interrupter, frames, seq, 10)
-				animation = anim
+				virtual = &component.Virtual[tui.Component]{C: anim}
 				animationCloser = anim
-				h.mu.Lock()
-				h.animation.C = animation
-				h.mu.Unlock()
+				h.animation.Store(virtual)
 			}
 			defer func() {
-				if animation != nil {
+				if virtual != nil {
 					if animationCloser != nil {
 						_ = animationCloser.Close()
 					}
-					h.mu.Lock()
-					if animation == h.animation.C {
-						h.animation.C = newNopAnimation(h.config)
-					}
-					h.mu.Unlock()
+					nop := &component.Virtual[tui.Component]{C: newNopAnimation(h.config)}
+					h.animation.CompareAndSwap(virtual, nop)
 				}
 				_ = h.interrupter.Interrupt(ctx)
 			}()
@@ -1000,7 +965,8 @@ func (h *Prompt) setCompletionList(
 					commandsBackup, mode,
 					cmdAndArgs[0], cmdAndArgs[1:]...)
 			}
-			h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
+			pushCompletionList(ctx, h.log, &h.completingWithHistory,
+				history, mode, ch, cancel, cmdAndArgs, it)
 		})
 	}
 }
@@ -1031,55 +997,19 @@ func (h *Prompt) pushCompletionListSync(
 		return
 	}
 	// push args history if default completion iterator is empty
-	it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
+	it, ok := commandArgsHistoryIterator(ctx, h.log, &h.completingWithHistory,
+		h.history.Slice(), h.mode, cmdAndArgs)
 	if !ok {
 		return
 	}
 	push(it)
 }
 
-func (h *Prompt) commandArgsHistoryIterator(
-	ctx context.Context, cmdAndArgs []string,
-) (iterator.Iterator[string], bool) {
-	history := h.history.Slice()
-	it := iterator.FromSlice(history)
-
-	// cmdAndArgs is not orthogonal to how we want to handle them here
-	// essentially, we don't know by simply inspecting them, if we are
-	// at the start of a new arg, or at the end of the previous command
-	// as last space is handled ambigously.
-	cmdAndArgs = SplitCommandLine(strings.Join(cmdAndArgs, " "))
-	m := len(cmdAndArgs)
-	if int(h.mode) < len(cmdAndArgs) {
-		m = len(cmdAndArgs) - 1
-	}
-	queryMatch := strings.Join(cmdAndArgs[:m], " ")
-
-	h.log(log.TraceLevel, "filtering data with mode %d and cmdAndArgs: %+v, len(%d), filter: %+v",
-		h.mode, cmdAndArgs, len(cmdAndArgs), queryMatch)
-
-	filterNoArgs := iterator.Filter(it, func(query string) bool {
-		return strings.HasPrefix(query, queryMatch)
-	})
-	mapArgs := iterator.Map(filterNoArgs, func(query string) (args string) {
-		storedAndArgs := SplitCommandLine(query)
-		ret := strings.Join(storedAndArgs[m:], " ")
-		return ret
-	})
-	nonEmptyArgs := iterator.Filter(mapArgs, func(args string) bool {
-		return args != ""
-	})
-	it, isEmpty := iterator.IsEmpty(ctx, nonEmptyArgs)
-
-	if !isEmpty {
-		h.completingWithHistory.Store(true)
-	}
-
-	return it, !isEmpty
-}
-
-func (h *Prompt) pushCompletionList(
+func pushCompletionList(
 	ctx context.Context,
+	logf func(log.Level, string, ...any),
+	completingWithHistory *atomic.Bool,
+	history []string, mode commandPromptMode,
 	ch chan<- []byte, cancel func(),
 	cmdAndArgs []string,
 	it iterator.Iterator[string],
@@ -1099,16 +1029,16 @@ func (h *Prompt) pushCompletionList(
 			}
 			select {
 			case <-ctx.Done():
-				h.log(log.TraceLevel, "context canceled for ch %p before completed push", ch)
+				logf(log.TraceLevel, "context canceled for ch %p before completed push", ch)
 				return
 			case ch <- []byte(next):
-				h.log(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
+				logf(log.TraceLevel, "pushed %q onto search list for ch %p", next, ch)
 			}
 		}
 
 		err := it.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
-			h.log(log.ErrorLevel, "completion iterator error: %v", err)
+			logf(log.ErrorLevel, "completion iterator error: %v", err)
 		}
 	}
 
@@ -1117,13 +1047,53 @@ func (h *Prompt) pushCompletionList(
 		return
 	}
 
-	h.mu.Lock()
-	it, ok := h.commandArgsHistoryIterator(ctx, cmdAndArgs)
-	h.mu.Unlock()
+	it, ok := commandArgsHistoryIterator(ctx, logf, completingWithHistory,
+		history, mode, cmdAndArgs)
 	if !ok {
 		return
 	}
 	push(it)
+}
+
+func commandArgsHistoryIterator(
+	ctx context.Context, logf func(log.Level, string, ...any),
+	completingWithHistory *atomic.Bool,
+	history []string, mode commandPromptMode, cmdAndArgs []string,
+) (iterator.Iterator[string], bool) {
+	it := iterator.FromSlice(history)
+
+	// cmdAndArgs is not orthogonal to how we want to handle them here
+	// essentially, we don't know by simply inspecting them, if we are
+	// at the start of a new arg, or at the end of the previous command
+	// as last space is handled ambigously.
+	cmdAndArgs = SplitCommandLine(strings.Join(cmdAndArgs, " "))
+	m := len(cmdAndArgs)
+	if int(mode) < len(cmdAndArgs) {
+		m = len(cmdAndArgs) - 1
+	}
+	queryMatch := strings.Join(cmdAndArgs[:m], " ")
+
+	logf(log.TraceLevel, "filtering data with mode %d and cmdAndArgs: %+v, len(%d), filter: %+v",
+		mode, cmdAndArgs, len(cmdAndArgs), queryMatch)
+
+	filterNoArgs := iterator.Filter(it, func(query string) bool {
+		return strings.HasPrefix(query, queryMatch)
+	})
+	mapArgs := iterator.Map(filterNoArgs, func(query string) (args string) {
+		storedAndArgs := SplitCommandLine(query)
+		ret := strings.Join(storedAndArgs[m:], " ")
+		return ret
+	})
+	nonEmptyArgs := iterator.Filter(mapArgs, func(args string) bool {
+		return args != ""
+	})
+	it, isEmpty := iterator.IsEmpty(ctx, nonEmptyArgs)
+
+	if !isEmpty {
+		completingWithHistory.Store(true)
+	}
+
+	return it, !isEmpty
 }
 
 // Reset resets the commands listed in this Prompt.
@@ -1180,9 +1150,6 @@ func (h *Prompt) cancelCompletionPush(reason string) {
 }
 
 func (h *Prompt) resetListWith(items []Manual) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	h.cancelCompletionPush("reset list")
 
 	h.list.DataReset()
@@ -1362,20 +1329,13 @@ func visualCursorAtBufferPos(
 // it from blocking indefinitely, in case a completion
 // list takes a long time to process.
 func (h *Prompt) Wait() {
-	h.mu.Lock()
-	completionCtx := h.completionCtx
-	h.mu.Unlock()
-
-	<-completionCtx.Done()
+	<-h.completionCtx.Done()
 	h.list.Wait()
 }
 
 // Cancel cancels any asynchronous completion or search currently ongoing
 // or does nothing if there's currently no ongoing completion or search.
 func (h *Prompt) Cancel() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	h.cancelCompletionPush("cancel")
 	h.list.Cancel()
 }
@@ -1388,11 +1348,8 @@ func (h *Prompt) Dimensions() (width, height int) {
 		maxHeight    = 20
 	)
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	minWidth := 50
-	if h.showManual && h.manualComponent != nil {
+	if h.config.ShowManual && h.manualComponent != nil {
 		minWidth = minWidthManualComponent
 	}
 	// always set min width if show manual was triggered
@@ -1412,7 +1369,7 @@ func (h *Prompt) Dimensions() (width, height int) {
 	bufHeight := h.getCommandOverlayHeight(width)
 	height = int(math.Min(math.Max(float64(h.list.MatchCount()+bufHeight), minListHeight), maxHeight))
 
-	if h.showManual && h.manualComponent != nil {
+	if h.config.ShowManual && h.manualComponent != nil {
 		height += h.manualComponent.Height(width)
 		height += h.getSeparatorHeight()
 	}
@@ -1422,25 +1379,24 @@ func (h *Prompt) Dimensions() (width, height int) {
 
 // Close closes all resources associated with this Prompt.
 func (h *Prompt) Close() error {
-	h.mu.Lock()
 	h.cancelCompletionPush("close")
-	h.cancelPreview()
+	cancel := h.detachPreview()
 	h.cancelCtx()
 	h.editSession.End()
-	h.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 
 	h.Wait()
 
 	err := h.list.Close()
 
-	h.mu.Lock()
 	h.commandAndArgs = nil
 	h.commandsBackup = nil
 	h.manualComponent = nil
 	h.previewComponent = nil
 	h.previewMatch = nil
 	h.preview = nil
-	h.mu.Unlock()
 	return err
 }
 
@@ -1453,39 +1409,6 @@ func (h *Prompt) setUserScrolling(scrolling bool) bool {
 		h.list.SetFocusAttr(h.config.ElementAttr)
 	}
 	return ret
-}
-
-func (h *Prompt) startManualTimer() {
-	if h.config.ShowManualAfter == 0 {
-		h.showManualComponent()
-		return
-	}
-
-	timer := time.NewTimer(h.config.ShowManualAfter)
-	h.log(log.DebugLevel, "showing manual for commands after %s",
-		h.config.ShowManualAfter)
-
-	go debug.CapturePanicReport(func() {
-		ctx := context.Background()
-		defer timer.Stop()
-		for {
-			select {
-			case <-h.resetManualTimeout:
-				if !timer.Stop() {
-					<-timer.C
-				}
-				timer.Reset(h.config.ShowManualAfter)
-				h.log(log.TraceLevel, "reseting timeout for showing manual")
-			case <-timer.C:
-				h.log(log.DebugLevel, "showing manual for commands")
-				h.showManualComponent()
-				_ = h.interrupter.Interrupt(ctx)
-				return
-			case <-h.ctx.Done():
-				return
-			}
-		}
-	})
 }
 
 func (h *Prompt) newManualComponent(bufString string) component.Responsive {
@@ -1582,22 +1505,22 @@ func (h *Prompt) getSeparatorHeight() int {
 }
 
 func (h *Prompt) cancelPreview() {
-	if h.preview != nil {
-		h.preview()
-		h.preview = nil
+	cancel := h.detachPreview()
+	if cancel != nil {
+		cancel()
 	}
-	h.previewComponent = nil
-	h.previewMatch = nil
 }
 
-func (h *Prompt) showManualComponent() {
-	comp, data, cancel := h.doDispatchPreviewArgument()
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.setPreview(comp, data, cancel)
-	man := h.newManualComponent(h.inputString.Load().(string))
-	h.manualComponent = man
-	h.showManual = true
+// detachPreview clears the preview fields and returns the pending
+// cancel callback (if any). The cancel may synchronously re-enter
+// the prompt through the GUI resize pipeline (e.g. theme preview),
+// so callers invoke it after the prompt state has been reset.
+func (h *Prompt) detachPreview() func() {
+	cancel := h.preview
+	h.preview = nil
+	h.previewComponent = nil
+	h.previewMatch = nil
+	return cancel
 }
 
 func (h *Prompt) setPreview(comp component.Responsive, data []byte, cancel func()) {
@@ -1621,17 +1544,16 @@ func (h *Prompt) setPreview(comp component.Responsive, data []byte, cancel func(
 }
 
 func (h *Prompt) setManualComponent(man component.Responsive) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.manualComponent = man
 }
 
 func (h *Prompt) resetManualComponent() {
 	h.previewComponent = nil
 	h.previewMatch = nil
-	if h.manualComponent != nil {
-		h.setManualComponent(h.newManualComponent(h.inputString.Load().(string)))
+	if h.manualComponent == nil {
+		return
 	}
+	h.manualComponent = h.buildManualComponent(h.inputString.Load().(string))
 }
 
 func newNopAnimation(cfg Config) tui.Component {

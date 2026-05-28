@@ -6029,7 +6029,7 @@ func touchTestFile(t *testing.T, scheme schemeapi.Scheme, name string) {
 
 func testCommandOverlayConfig() text.CommandOverlayConfig {
 	return text.CommandOverlayConfig{
-		ShowManualAfter:  1 * time.Hour,
+		ShowManual:       false,
 		ShowProgressHint: false,
 	}
 }

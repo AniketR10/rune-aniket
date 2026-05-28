@@ -24,8 +24,6 @@
 package command
 
 import (
-	"time"
-
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -113,9 +111,11 @@ type Config struct {
 	// It should only be used in tests.
 	Sync bool
 
-	// ShowManualAfter configures how long to sit idle until
-	// command manual is displayed.
-	ShowManualAfter time.Duration
+	// ShowManual controls whether the alternate manual side-panel
+	// is rendered for the focused command/argument. When true (the
+	// default) the manual is computed and shown synchronously on
+	// every input change.
+	ShowManual bool
 
 	// ShowProgressHint controls whether an asynchronous completion in progress
 	// renders a transient animation in the prompt.
@@ -143,7 +143,7 @@ func DefaultConfig() Config {
 		FocusElementAttr: term.Attributes{Attrs: term.AttrBold | term.AttrUnderline, Fg: term.ColorRed},
 		ElementAttr:      term.Attributes{},
 		DocumentID:       "command-history",
-		ShowManualAfter:  1 * time.Second,
+		ShowManual:       true,
 		ShowProgressHint: true,
 	}
 }

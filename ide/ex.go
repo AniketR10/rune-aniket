@@ -2404,7 +2404,7 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	commandCfg.DocumentID = commandHistoryDocumentID
 	commandCfg.FrameCharSet = e.config.FrameCharSet
 	commandCfg.FrameAttr = e.config.FrameAttr
-	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
+	commandCfg.ShowManual = e.config.CommandOverlay.ShowManual
 	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
 	if e.commandEditor != nil {

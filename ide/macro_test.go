@@ -556,7 +556,7 @@ func macroTestConfig(t *testing.T, dir string) string {
 editor:
   mode: modal
 command:
-  show_manual_after: 1h
+  show_manual: false
   key: ":"
   key_bindings:
     qq: record q

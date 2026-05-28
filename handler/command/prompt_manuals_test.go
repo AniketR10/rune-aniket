@@ -64,7 +64,7 @@ var goodLotsTestCommands = []Manual{
 
 func TestCommandHandlerManualsDraw(t *testing.T) {
 	cfg := testDefaultConfig()
-	cfg.ShowManualAfter = 0
+	cfg.ShowManual = true
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.FrameCharSet = component.FrameCharSetDefault()
 	cfg.Sync = true

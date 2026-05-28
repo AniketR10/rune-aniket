@@ -185,7 +185,7 @@ editor:
   mode: modal
 command:
   key: ":"
-  show_manual_after: 1h
+  show_manual: false
 workspace:
   wallpaper: workspaceWallpaper
   auto_restore: false

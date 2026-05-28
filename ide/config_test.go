@@ -159,7 +159,7 @@ lsp:
         compiler: C
 
 command:
-  show_manual_after: 2s
+  show_manual: false
   aliases:
     cherry: bomb
     todo:
@@ -408,7 +408,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 		MaxLines:                 10_000,
 		MinWidth:                 defaultMinWidth,
 	}, vteConfig)
-	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
+	assert.Equal(t, command.DefaultConfig().ShowManual, cfg.commandOverlayShowManual())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
 	assert.Zero(t, cfg.defaultAttr())
 
@@ -686,7 +686,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, []string{"a", "B"}, actualOptions)
 
 	assert.Equal(t, expectedCommandAliases, actualCommandAliases)
-	assert.Equal(t, 2*time.Second, cfg.commandOverlayShowManualAfter())
+	assert.False(t, cfg.commandOverlayShowManual())
 	assert.Equal(t, term.Attributes{Fg: term.ColorBlack, Bg: term.ColorYellow, Attrs: term.AttrBold},
 		cfg.commandOverlayManualAttr())
 

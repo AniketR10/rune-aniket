@@ -54,7 +54,7 @@ type CommandOverlayConfig struct {
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
 	ManualAttr       term.Attributes
-	ShowManualAfter  time.Duration
+	ShowManual       bool
 	ShowProgressHint bool
 }
 
@@ -344,7 +344,7 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	cfg.FocusElementAttr = term.Attributes{Fg: term.ColorRed, Attrs: term.AttrBold | term.AttrUnderline}
 	cfg.ElementAttr = term.Attributes{}
 	cfg.ManualAttr = term.Attributes{}
-	cfg.ShowManualAfter = 1 * time.Second
+	cfg.ShowManual = true
 	cfg.ShowProgressHint = true
 	return
 }

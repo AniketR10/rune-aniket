@@ -379,7 +379,7 @@ func TestWonAliasIntegration(t *testing.T) {
 editor:
   mode: modal
 command:
-  show_manual_after: 1h
+  show_manual: false
   key: ":"
   aliases:
     won:

@@ -1875,7 +1875,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		cfg := defaultCfg()
 		cfg.cfg = map[string]any{
 			"command":            map[string]any{},
-			"show_manual_after":  "1h",
+			"show_manual":        false,
 			"show_progress_hint": false,
 			"extensions": map[string]any{
 				"git": map[string]any{
@@ -5254,7 +5254,7 @@ func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]any{
 		"clipboard": "memory",
 		"command": map[string]any{
-			"show_manual_after":  "1h",
+			"show_manual":        false,
 			"show_progress_hint": false,
 			"key":                "<c-\\\\>", // see handlertest.TestHandlerIsolated
 			"key_bindings": map[string]any{

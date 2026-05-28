@@ -45,7 +45,7 @@ import (
 
 func TestCommandHandlerManualsDrawTooSmallForManual(t *testing.T) {
 	cfg := testDefaultConfig()
-	cfg.ShowManualAfter = 0
+	cfg.ShowManual = true
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.FrameCharSet = component.FrameCharSetDefault()
 	cfg.Sync = true
@@ -167,7 +167,7 @@ func TestCommandHandlerPreview(t *testing.T) {
 	t.Run("esc at the end", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
@@ -269,7 +269,7 @@ arg2
 	t.Run("dispatch at the end", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
@@ -338,7 +338,7 @@ kotomichi
 	t.Run("preview returns manual", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 0
+		cfg.ShowManual = true
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
@@ -457,7 +457,7 @@ func TestCommandHandlerCursorWrapping(t *testing.T) {
 	// rendered rows or contains multi-byte runes whose byte length
 	// drifts from their display-cell width.
 	cfg := testDefaultConfig()
-	cfg.ShowManualAfter = 1 * time.Hour
+	cfg.ShowManual = false
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
 
@@ -740,7 +740,7 @@ opqrstuv▐
 func TestCommandHandlerDispatch(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	cfg := testDefaultConfig()
-	cfg.ShowManualAfter = 1 * time.Hour
+	cfg.ShowManual = false
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
 
@@ -883,7 +883,7 @@ func TestCommandHandlerDispatch(t *testing.T) {
 func TestCommandHandlerCancelsCompletionBeforeDispatch(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	cfg := testDefaultConfig()
-	cfg.ShowManualAfter = 1 * time.Hour
+	cfg.ShowManual = false
 	cfg.Sync = false
 
 	dispatchCalled := make(chan struct{})
@@ -933,6 +933,143 @@ func TestCommandHandlerCancelsCompletionBeforeDispatch(t *testing.T) {
 	require.NotNil(t, lastCompCtx, "completer must have been invoked")
 	assert.ErrorIs(t, ctxErrAtDispatch, context.Canceled,
 		"completion context must be canceled before dispatcher runs")
+}
+
+// TestCommandHandlerIncArgsCompleteModeDoesNotDeadlock verifies that
+// Tab in command mode completes without hanging when the manual is
+// primed and the async completion goroutine is still in flight, even
+// when buildManualComponent ends up calling h.list.Wait().
+func TestCommandHandlerIncArgsCompleteModeDoesNotDeadlock(t *testing.T) {
+	storage := storagestub.NewInMemoryService()
+	cfg := testDefaultConfig()
+	cfg.ShowManual = false
+	cfg.ShowProgressHint = true
+	cfg.Sync = false
+
+	iterDelay := 50 * time.Millisecond
+	completer := FuncCompleter(func(
+		ctx context.Context, _ []string,
+	) (iterator.Iterator[string], string, error) {
+		return &delayedIter{ctx: ctx, delay: iterDelay, value: "opt"}, "", nil
+	})
+
+	cmd := Manual{Name: "kotomichi", Summary: "doc"}
+	b := NewPrompt(
+		storage,
+		completer,
+		FuncDispatcher(func(string, ...string) bool { return true }),
+		term.NopInterrupter(),
+		[]Manual{cmd},
+		cfg,
+	)
+	defer b.Close()
+
+	// Prime manualComponent so the defer in incArgsCompleteMode actually
+	// reaches newManualComponent → manualForCommandInFocus → list.Wait().
+	b.setManualComponent(b.buildManualComponent(""))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Tab in command mode with empty buffer triggers
+		// incArgsCompleteMode; buildManualComponent then takes the
+		// first branch (cmdAndArgs len 0) and calls h.list.Wait().
+		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Handle deadlocked")
+	}
+}
+
+// delayedIter delivers a single value after a delay, then signals exhaustion.
+type delayedIter struct {
+	ctx       context.Context
+	delay     time.Duration
+	value     string
+	delivered bool
+}
+
+func (d *delayedIter) Next(ctx context.Context) (string, bool) {
+	if d.delivered {
+		return "", false
+	}
+	d.delivered = true
+	select {
+	case <-time.After(d.delay):
+	case <-ctx.Done():
+		return "", false
+	}
+	return d.value, true
+}
+
+func (d *delayedIter) Close() error { return nil }
+func (d *delayedIter) Err() error   { return d.ctx.Err() }
+
+// TestCommandHandlerPreviewCancelCallsBackIntoPrompt guards against a
+// self-deadlock where the preview-cancel callback synchronously re-enters
+// the Prompt (e.g. theme preview cancel triggers a GUI resize that calls
+// Prompt.Dimensions).
+func TestCommandHandlerPreviewCancelCallsBackIntoPrompt(t *testing.T) {
+	storage := storagestub.NewInMemoryService()
+	cfg := testDefaultConfig()
+	cfg.ShowManual = false
+	cfg.Sync = true
+
+	var b *Prompt
+	cancelInvoked := make(chan struct{}, 1)
+	previewFn := func(_ string, _ ...string) (component.Responsive, func(), bool) {
+		return nil, func() {
+			// Mirror the production bootstrap_handler theme preview cancel
+			// which ends up re-entering Prompt.Dimensions through the GUI
+			// resize pipeline.
+			b.Dimensions()
+			select {
+			case cancelInvoked <- struct{}{}:
+			default:
+			}
+		}, true
+	}
+
+	completeFn, cleanupComplete := completeWith("arg1", "arg2")()
+	defer cleanupComplete(t)
+
+	cmd := Manual{Name: "kotomichi"}
+	b = NewPrompt(
+		storage,
+		FuncCompleter(completeFn),
+		FuncDispatcherWithPreview(func(string, ...string) bool { return true }, previewFn),
+		term.NopInterrupter(),
+		[]Manual{cmd},
+		cfg,
+	)
+	defer b.Close()
+
+	for _, ch := range "kotomichi " {
+		b.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+	b.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
+	b.Wait()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Handle deadlocked while running preview cancel callback")
+	}
+
+	select {
+	case <-cancelInvoked:
+	default:
+		t.Fatal("preview cancel was not invoked")
+	}
 }
 
 // fakeBlockingIter is an iterator.Iterator[string] that emits a
@@ -986,7 +1123,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 	t.Run("edits buffer and replays through handler on exit", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 		cfg.Editor = stubEditor(nil)
@@ -1025,7 +1162,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 	t.Run("delegates events to edit handler and freezes completion", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 		var seen []term.Event
@@ -1095,7 +1232,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 	t.Run("places editor cursor at end of buffer on entry", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
@@ -1124,7 +1261,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 	t.Run("forwards editor selection while edit mode is active", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
@@ -1168,7 +1305,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 		// invisible; this test pins the overlay to the wrap layout.
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 
@@ -1247,7 +1384,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 	t.Run("ctrl-c exits edit mode without forwarding to editor", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 		var seen []term.Event
@@ -1282,7 +1419,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 	t.Run("tab exits edit mode without forwarding to editor", func(t *testing.T) {
 		storage := storagestub.NewInMemoryService()
 		cfg := testDefaultConfig()
-		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.ShowManual = false
 		cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 		cfg.Sync = true
 		var seen []term.Event
@@ -1311,7 +1448,7 @@ func TestCommandHandlerEditMode(t *testing.T) {
 
 func TestCommandHandlerDraw(t *testing.T) {
 	cfg := testDefaultConfig()
-	cfg.ShowManualAfter = 1 * time.Hour
+	cfg.ShowManual = false
 	cfg.HistoryCycleKey = term.KeyComb{Ch: '@'}
 	cfg.Sync = true
 
@@ -2072,7 +2209,8 @@ func TestCommandHandlerHistory(t *testing.T) {
 		// connect the consumption of the iterator to the population of the search list
 		ctx, cancel := context.WithCancel(b.ctx)
 		ch := b.list.Push(ctx)
-		go b.pushCompletionList(ctx, ch, cancel, []string{"echo"}, it)
+		go pushCompletionList(ctx, b.log, &b.completingWithHistory,
+			b.history.Slice(), b.mode, ch, cancel, []string{"echo"}, it)
 
 		startingPistol := make(chan struct{})
 

@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package shop holds the storefront tui.Handler served over SSH.
 //
 // Each SSH session constructs a fresh Root via NewRoot. The root owns a
@@ -235,7 +234,7 @@ func (r *Root) openPalette() {
 	cfg.NoMarkdown = false
 	// Always surface the manual panel for the focused entry so the
 	// user sees the synopsis/description without having to idle.
-	cfg.ShowManualAfter = 0
+	cfg.ShowManual = true
 	cfg.Editor = paletteEditor{}
 	manuals := r.commandManuals()
 
