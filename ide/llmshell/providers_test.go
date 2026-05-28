@@ -41,7 +41,7 @@ func TestProvidersNilDependencyPanics(t *testing.T) {
 	defer func() {
 		assert.NotNil(t, recover(), "expected panic for nil storage")
 	}()
-	_ = New(Config{Router: newRouterForTest(t), LocalRegistry: newRegistryForTest(t), Storage: nil})
+	_ = New(Config{Service: newRouterForTest(t), LocalRegistry: newRegistryForTest(t), Storage: nil})
 }
 
 // TestProvidersNoArgsUsage requires at least one arg under providers.

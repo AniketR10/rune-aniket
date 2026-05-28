@@ -1560,7 +1560,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	// Register the top-level `models` REPL command. The llmshell
 	// reads the local llama.cpp registry directly off the router.
 	llmHandler := llmshell.New(llmshell.Config{
-		Router:        h.llmRouter,
+		Service:       h.llmRouter,
 		LocalRegistry: h.llmRouter.LocalRegistry(),
 		Storage:       h.storage,
 	})
@@ -1952,6 +1952,11 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	}
 	if h.pkgmanager != nil {
 		if err := h.pkgmanager.Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	if h.llmRouter != nil {
+		if err := h.llmRouter.Close(); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}

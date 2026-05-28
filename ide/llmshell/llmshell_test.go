@@ -68,7 +68,7 @@ func newHandlerForTest(t *testing.T) *Handler {
 	t.Helper()
 	router := newRouterForTest(t)
 	return New(Config{
-		Router:        router,
+		Service:        router,
 		LocalRegistry: router.LocalRegistry(),
 		Storage:       stubStorageForTest(t),
 	})
@@ -162,5 +162,5 @@ func TestNewPanicsOnNilRouter(t *testing.T) {
 	defer func() {
 		assert.NotNil(t, recover(), "expected panic for nil router")
 	}()
-	_ = New(Config{Router: nil, LocalRegistry: newRegistryForTest(t), Storage: stubStorageForTest(t)})
+	_ = New(Config{Service: nil, LocalRegistry: newRegistryForTest(t), Storage: stubStorageForTest(t)})
 }

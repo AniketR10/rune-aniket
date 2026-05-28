@@ -33,8 +33,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
 // LLMProvider identifies the llama.cpp provider in the model registry.
@@ -167,7 +167,11 @@ func NewService(cfg Config) (*Service, error) {
 	}, nil
 }
 
-// Close releases all backing resources.
+// Close releases all backing resources. Callers must guarantee no
+// CreateCompletion iterator is still in flight against this Service —
+// the host arranges this by stopping the extension gRPC server (which
+// drains every streaming handler and runs its iter.Close) before tearing
+// down the Router that owns Services.
 func (s *Service) Close() {
 	s.ctxMu.Lock()
 	defer s.ctxMu.Unlock()

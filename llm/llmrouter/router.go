@@ -85,6 +85,21 @@ type Router struct {
 	localRegistry *llamacpp.Registry
 	localCfg      llamacpp.Config
 
+	// localServices caches one llama.cpp Service per distinct
+	// (name, model path, projector path, context window) tuple. Each
+	// Service mmaps a multi-GiB GGUF and allocates a KV cache;
+	// constructing one per request (the original behaviour) leaked those
+	// resources every turn. The host serializes every Router call on the
+	// event-loop locker (see llmrpc.Server), so the cache needs no lock
+	// of its own. Close drains it.
+	localServices map[localCacheKey]localService
+	// newLocal builds a llama.cpp Service. Tests swap in a fake to avoid
+	// loading a real GGUF.
+	newLocal func(llamacpp.Config) (localService, error)
+	// closed flips to true after Close so late dispatches that try to
+	// resurrect a torn-down service are rejected instead.
+	closed bool
+
 	// storage is the rune-side persistent storage used by providers
 	// that own their auth state (today: codex). The router never reads
 	// from storage itself; it only forwards it to per-provider
@@ -92,6 +107,24 @@ type Router struct {
 	// the request that needs it.
 	storage storageapi.Service
 }
+
+// localService is the minimal interface a cached llama.cpp service must
+// satisfy. It exists so tests can substitute a fake that records Close
+// calls without paying the GGUF-load cost.
+type localService interface {
+	llmapi.Service
+	Close()
+}
+
+type localCacheKey struct {
+	Name          string
+	ModelPath     string
+	ProjectorPath string
+	ContextWindow uint32
+}
+
+// ErrRouterClosed is returned by dispatches issued after Router.Close.
+var ErrRouterClosed = errors.New("llmrouter: router closed")
 
 // New constructs a Router from cfg. dataDir is used as the parent
 // directory for the llama.cpp model cache when cfg.Local.ModelsCacheDir
@@ -104,7 +137,14 @@ func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, e
 	if storage == nil {
 		panic("llmrouter: New: storage must not be nil")
 	}
-	r := &Router{cfg: cfg, storage: storage}
+	r := &Router{
+		cfg:           cfg,
+		storage:       storage,
+		localServices: make(map[localCacheKey]localService),
+	}
+	r.newLocal = func(c llamacpp.Config) (localService, error) {
+		return llamacpp.NewService(c)
+	}
 
 	r.openai = openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAIClientConfig())
 	r.anthropic = anthropic.NewClient(cfg.Anthropic.APIKey, cfg.AnthropicClientConfig())
@@ -143,12 +183,31 @@ func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, e
 // inspect cached models.
 func (r *Router) LocalRegistry() *llamacpp.Registry { return r.localRegistry }
 
+// Close releases provider clients that own off-process resources. Today
+// only cached llama.cpp services need explicit teardown — the other
+// clients hold only Go-side HTTP state. After Close the router rejects
+// further dispatches with ErrRouterClosed. Close is idempotent.
+func (r *Router) Close() error {
+	if r.closed {
+		return nil
+	}
+	r.closed = true
+	for k, svc := range r.localServices {
+		delete(r.localServices, k)
+		svc.Close()
+	}
+	return nil
+}
+
 // CreateCompletion implements llmapi.Service.
 func (r *Router) CreateCompletion(
 	ctx context.Context,
 	model llmapi.ModelEntry,
 	req llmapi.Request,
 ) (iterator.Iterator[llmapi.Event], error) {
+	if r.closed {
+		return nil, ErrRouterClosed
+	}
 	svc, err := r.resolve(ctx, model)
 	if err != nil {
 		return nil, err
@@ -158,6 +217,9 @@ func (r *Router) CreateCompletion(
 
 // CountTokens implements llmapi.Service.
 func (r *Router) CountTokens(model llmapi.ModelEntry, messages []llmapi.Message) (int, error) {
+	if r.closed {
+		return 0, ErrRouterClosed
+	}
 	svc, err := r.resolve(context.Background(), model)
 	if err != nil {
 		return 0, err
@@ -211,9 +273,10 @@ func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.
 }
 
 // resolve picks the llmapi.Service that serves model.Provider. The
-// codex and local providers build a fresh service per request — codex
-// because the access token rotates, local because each llama.cpp
-// Service owns a single loaded model.
+// codex provider builds a fresh service per request because the access
+// token rotates. Local llama.cpp services are cached per
+// (name, path, projector, context window) tuple so the multi-GiB model
+// load + KV cache happen once per configuration.
 func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.Service, error) {
 	switch model.Provider {
 	case "":
@@ -236,15 +299,35 @@ func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.S
 		// ModelEntry.BaseURL; rebuild a client tuned to that URL.
 		return openai.NewClient("ollama", r.cfg.OllamaClientConfig(model.BaseURL)), nil
 	case ProviderLocal:
-		c := r.localCfg
-		c.Model = model.Name
-		c.ModelPath = model.BaseURL
-		c.ProjectorPath = model.ProjectorPath
-		c.ContextWindow = uint32(model.ContextWindow) // #nosec G115 -- context windows fit in uint32
-		return llamacpp.NewService(c)
+		return r.resolveLocal(model)
 	default:
 		return nil, fmt.Errorf("llmrouter: no provider registered for %q", model.Provider)
 	}
+}
+
+// resolveLocal returns a cached llama.cpp Service for model, creating it
+// on first use.
+func (r *Router) resolveLocal(model llmapi.ModelEntry) (llmapi.Service, error) {
+	key := localCacheKey{
+		Name:          model.Name,
+		ModelPath:     model.BaseURL,
+		ProjectorPath: model.ProjectorPath,
+		ContextWindow: uint32(model.ContextWindow), // #nosec G115 -- context windows fit in uint32
+	}
+	if svc, ok := r.localServices[key]; ok {
+		return svc, nil
+	}
+	c := r.localCfg
+	c.Model = model.Name
+	c.ModelPath = model.BaseURL
+	c.ProjectorPath = model.ProjectorPath
+	c.ContextWindow = key.ContextWindow
+	svc, err := r.newLocal(c)
+	if err != nil {
+		return nil, err
+	}
+	r.localServices[key] = svc
+	return svc, nil
 }
 
 // customModelEntries materialises cfg.Custom.AvailableModels as a

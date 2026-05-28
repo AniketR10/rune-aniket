@@ -25,13 +25,16 @@ package llmrouter
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm"
+	"unstable.build/go-tui/llm/llamacpp"
 )
 
 // newTestRouter constructs a router with sensible defaults rooted in
@@ -159,4 +162,114 @@ func TestRouter_CreateCompletion_RejectsEmptyProvider(t *testing.T) {
 	_, err = r.CountTokens(llmapi.ModelEntry{Name: "gpt-5.5"}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ModelEntry.Provider must be set")
+}
+
+// fakeLocalService satisfies localService with no off-heap resources. It
+// counts Close calls so tests can assert that Router.Close tears down
+// every cached entry exactly once.
+type fakeLocalService struct {
+	cfg    llamacpp.Config
+	closes atomic.Int32
+}
+
+func (f *fakeLocalService) CreateCompletion(
+	_ context.Context, _ llmapi.ModelEntry, _ llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
+	return iterator.FromSlice[llmapi.Event](nil), nil
+}
+func (f *fakeLocalService) CountTokens(_ llmapi.ModelEntry, _ []llmapi.Message) (int, error) {
+	return 0, nil
+}
+func (f *fakeLocalService) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return iterator.FromSlice[llmapi.ModelEntry](nil)
+}
+func (f *fakeLocalService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	return llmapi.ModelEntry{}, false
+}
+func (f *fakeLocalService) Close() { f.closes.Add(1) }
+
+// installFakeLocal swaps the router's local-service constructor for one
+// that records every Config it sees and returns a fakeLocalService.
+func installFakeLocal(r *Router) (built *[]*fakeLocalService) {
+	var made []*fakeLocalService
+	r.newLocal = func(c llamacpp.Config) (localService, error) {
+		f := &fakeLocalService{cfg: c}
+		made = append(made, f)
+		return f, nil
+	}
+	return &made
+}
+
+func localModel(name string, ctxWindow int) llmapi.ModelEntry {
+	return llmapi.ModelEntry{
+		Name:          name,
+		Provider:      ProviderLocal,
+		BaseURL:       "/models/" + name + ".gguf",
+		ContextWindow: ctxWindow,
+	}
+}
+
+// TestRouterResolveLocal_CachesByIdentityTuple verifies the local-provider
+// cache: ten dispatches against the same model build one Service; varying
+// the context window forces a second Service.
+func TestRouterResolveLocal_CachesByIdentityTuple(t *testing.T) {
+	r := newTestRouter(t)
+	built := installFakeLocal(r)
+
+	model := localModel("m1", 4096)
+	for range 10 {
+		_, err := r.CreateCompletion(context.Background(), model, llmapi.Request{})
+		require.NoError(t, err)
+	}
+	assert.Len(t, *built, 1, "same model+ctx must reuse cached service")
+
+	_, err := r.CreateCompletion(context.Background(), localModel("m1", 8192), llmapi.Request{})
+	require.NoError(t, err)
+	assert.Len(t, *built, 2, "different context window must create new service")
+}
+
+// TestRouterClose_ClosesCachedLocalServices asserts every cached
+// llama.cpp service is Closed exactly once when the router is torn down.
+func TestRouterClose_ClosesCachedLocalServices(t *testing.T) {
+	r := newTestRouter(t)
+	built := installFakeLocal(r)
+
+	_, err := r.CreateCompletion(context.Background(), localModel("a", 4096), llmapi.Request{})
+	require.NoError(t, err)
+	_, err = r.CreateCompletion(context.Background(), localModel("b", 4096), llmapi.Request{})
+	require.NoError(t, err)
+	require.Len(t, *built, 2)
+
+	require.NoError(t, r.Close())
+	for i, svc := range *built {
+		assert.Equal(t, int32(1), svc.closes.Load(), "service %d closed wrong number of times", i)
+	}
+}
+
+// TestRouterClose_Idempotent ensures a second Close does not double-free
+// previously cached services.
+func TestRouterClose_Idempotent(t *testing.T) {
+	r := newTestRouter(t)
+	built := installFakeLocal(r)
+
+	_, err := r.CreateCompletion(context.Background(), localModel("m", 4096), llmapi.Request{})
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
+	require.NoError(t, r.Close())
+	require.Len(t, *built, 1)
+	assert.Equal(t, int32(1), (*built)[0].closes.Load())
+}
+
+// TestRouterResolveLocal_RejectsAfterClose ensures the router refuses to
+// resurrect a torn-down llama.cpp Service after Close.
+func TestRouterResolveLocal_RejectsAfterClose(t *testing.T) {
+	r := newTestRouter(t)
+	installFakeLocal(r)
+	require.NoError(t, r.Close())
+
+	_, err := r.CreateCompletion(context.Background(), localModel("m", 4096), llmapi.Request{})
+	require.ErrorIs(t, err, ErrRouterClosed)
+
+	_, err = r.CountTokens(localModel("m", 4096), nil)
+	require.ErrorIs(t, err, ErrRouterClosed)
 }

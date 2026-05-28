@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package llmshell exposes the `models` REPL command tree on the rune
 // (IDE) side. The shell wraps an llmrouter.Router and surfaces two
 // sub-commands:
@@ -38,6 +37,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -45,7 +45,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/llm/llamacpp"
-	"unstable.build/go-tui/llm/llmrouter"
 )
 
 // CommandName is the top-level REPL command exposed by this shell.
@@ -97,8 +96,8 @@ func Manual() textapi.CommandManual { return commandManual }
 // installed clients, the local registry backs the `local` subtree,
 // and storage backs codex auth state.
 type Config struct {
-	// Router is the LLM router from which available models are read.
-	Router *llmrouter.Router
+	// Service is the LLM service from which available models are read.
+	Service llmapi.Service
 	// LocalRegistry is the llama.cpp cache registry that the local
 	// subcommand operates on.
 	LocalRegistry *llamacpp.Registry
@@ -109,7 +108,7 @@ type Config struct {
 
 // Handler is the parent dispatcher for the `models` command tree.
 type Handler struct {
-	router        *llmrouter.Router
+	service       llmapi.Service
 	localRegistry *llamacpp.Registry
 	storage       storageapi.Service
 
@@ -121,7 +120,7 @@ type Handler struct {
 // dependency is nil — the rune-side wiring constructs every collaborator
 // at workspace boot, so a missing one indicates a programming error.
 func New(cfg Config) *Handler {
-	if cfg.Router == nil {
+	if cfg.Service == nil {
 		panic("llmshell: Config.Router must not be nil")
 	}
 	if cfg.LocalRegistry == nil {
@@ -131,7 +130,7 @@ func New(cfg Config) *Handler {
 		panic("llmshell: Config.Storage must not be nil")
 	}
 	return &Handler{
-		router:        cfg.Router,
+		service:       cfg.Service,
 		localRegistry: cfg.LocalRegistry,
 		storage:       cfg.Storage,
 		providers:     newProvidersHandler(cfg.Storage),

@@ -41,7 +41,7 @@ func TestLocalNilRegistryPanics(t *testing.T) {
 	defer func() {
 		assert.NotNil(t, recover(), "expected panic for nil local registry")
 	}()
-	_ = New(Config{Router: newRouterForTest(t), LocalRegistry: nil, Storage: stubStorageForTest(t)})
+	_ = New(Config{Service: newRouterForTest(t), LocalRegistry: nil, Storage: stubStorageForTest(t)})
 }
 
 // TestLocalNoArgsUsage requires a subcommand under local.
