@@ -158,6 +158,8 @@ func (s *Server) Highlight(
 	if err != nil {
 		return err
 	}
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
 	defer func() {
 		s.locker.Lock()
 		_ = it.Close()
@@ -165,7 +167,7 @@ func (s *Server) Highlight(
 	}()
 	for {
 		s.locker.Lock()
-		loc, ok := it.Next(context.Background())
+		loc, ok := it.Next(ctx)
 		s.locker.Unlock()
 		if !ok {
 			return it.Err()

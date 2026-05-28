@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -365,6 +366,7 @@ func TestHighlight(t *testing.T) {
 
 type mockParser struct {
 	locations         []textapi.Location
+	highlightIter     iterator.Iterator[textapi.Location]
 	searchResults     []syntaxapi.Result
 	searchErr         error
 	searchNodeResults []syntaxapi.Result
@@ -382,6 +384,9 @@ func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (
 ) {
 	m.lastURI = uri
 	m.lastContent = content
+	if m.highlightIter != nil {
+		return m.highlightIter, nil
+	}
 	return iterator.FromSlice(m.locations), nil
 }
 
@@ -472,4 +477,59 @@ func collectResults(t *testing.T, it iterator.Iterator[syntaxapi.Result]) []synt
 	}
 	require.NoError(t, it.Err())
 	return results
+}
+
+// TestHighlightHonoursClientCancel guards against the regression where
+// the Highlight RPC drove its iterator with context.Background, so a
+// client-side cancellation could not unblock the server goroutine.
+func TestHighlightHonoursClientCancel(t *testing.T) {
+	released := make(chan struct{})
+	stub := &mockParser{
+		highlightIter: iterator.FromFunc(
+			func(ctx context.Context) (textapi.Location, bool, error) {
+				<-ctx.Done()
+				return textapi.Location{}, false, ctx.Err()
+			},
+			func() error {
+				close(released)
+				return nil
+			},
+		),
+	}
+
+	srv := grpc.NewServer()
+	syntaxrpc.RegisterSyntaxServer(srv, NewServer(stub, new(sync.Mutex)))
+
+	tmpDir, err := os.MkdirTemp("", "syn")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	sockPath := filepath.Join(tmpDir, "cancel.sock")
+	lis, err := net.Listen("unix", sockPath)
+	require.NoError(t, err)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+
+	conn, err := grpc.NewClient(
+		"unix:"+sockPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := syntaxrpc.NewClient(ctx, conn)
+
+	uri, err := workspaceapi.ParseURI("file:///tmp/cancel.go")
+	require.NoError(t, err)
+	it, err := client.Highlight(uri, "package main")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = it.Close() })
+
+	cancel()
+
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server-side Highlight iterator never released after client cancel")
+	}
 }
