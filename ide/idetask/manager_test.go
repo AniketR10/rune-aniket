@@ -619,6 +619,44 @@ func TestManager(t *testing.T) {
 	})
 }
 
+// TestTaskHandlerAccessRace exercises the Task render/handler accessors
+// concurrently with the donech goroutine that swaps t.handler on run
+// completion. Under -race it reproduces the data race between
+// Task.Dimensions/Draw reads and doSetError writes of t.handler.
+func TestTaskHandlerAccessRace(t *testing.T) {
+	wm := newFakeBrowser()
+	exec := newFakeScheme()
+	m := newTestManager(wm, exec)
+
+	require.NoError(t, m.RunTask(Task{Name: "job", Cmd: "run"}))
+
+	taskIfc, ok := m.tasks.Load("job")
+	require.True(t, ok)
+	task := taskIfc.(*Task)
+
+	var stop atomic.Bool
+	var readers sync.WaitGroup
+	readers.Go(func() {
+		for !stop.Load() {
+			_, _ = task.Dimensions()
+			_, _ = task.Selection()
+			_, _, _ = task.Cursor()
+			_ = task.MaxSeekOffset()
+			_ = task.SeekOffset()
+			_ = task.SeekDown()
+			_ = task.SeekUp()
+		}
+	})
+
+	for range 50 {
+		task.donech <- errors.New("boom")
+		task.WaitInflight()
+	}
+
+	stop.Store(true)
+	readers.Wait()
+}
+
 func sendEvent(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename string) {
 	taskIfc, ok := m.tasks.Load(taskname)
 	require.True(t, ok)

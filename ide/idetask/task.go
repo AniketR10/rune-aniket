@@ -169,18 +169,26 @@ func (t *Task) Handle(ev term.Event) (exit, handled bool) {
 		handled = true
 		return
 	}
-	_, handled = t.handler.Handle(ev)
+	_, handled = t.currentHandler().Handle(ev)
 	return
+}
+
+// currentHandler returns the active handler under the lock so render and
+// event accessors never race the donech goroutine swapping t.handler.
+func (t *Task) currentHandler() browser.ScrollableFloating {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.handler
 }
 
 // Cursor satisfies tui.Handler.
 func (t *Task) Cursor() (c term.Coordinates, s term.CursorStyle, show bool) {
-	return t.handler.Cursor()
+	return t.currentHandler().Cursor()
 }
 
 // Selection satisfies tui.Handler.
 func (t *Task) Selection() (string, bool) {
-	return t.handler.Selection()
+	return t.currentHandler().Selection()
 }
 
 // Draw satisfies tui.Component.
@@ -189,12 +197,12 @@ func (t *Task) Draw(w term.Writer) {
 		t.bar.Draw(w)
 		return
 	}
-	t.handler.Draw(w)
+	t.currentHandler().Draw(w)
 }
 
 // Dimensions satisfies browserapi.Floating.
 func (t *Task) Dimensions() (width int, height int) {
-	width, height = t.handler.Dimensions()
+	width, height = t.currentHandler().Dimensions()
 	width = int(math.Max(
 		float64(width),
 		float64(t.minWidth)),
@@ -224,22 +232,22 @@ func (t *Task) Resize(width, height int) {
 
 // MaxSeekOffset satisfies component.Scrollable.
 func (e *Task) MaxSeekOffset() int {
-	return e.handler.MaxSeekOffset()
+	return e.currentHandler().MaxSeekOffset()
 }
 
 // SeekDown satisfies component.Scrollable.
 func (e *Task) SeekDown() bool {
-	return e.handler.SeekDown()
+	return e.currentHandler().SeekDown()
 }
 
 // SeekOffset satisfies component.Scrollable.
 func (e *Task) SeekOffset() int {
-	return e.handler.SeekOffset()
+	return e.currentHandler().SeekOffset()
 }
 
 // SeekUp satisfies component.Scrollable.
 func (e *Task) SeekUp() bool {
-	return e.handler.SeekUp()
+	return e.currentHandler().SeekUp()
 }
 
 // Close satisfies browserapi.Handler.
