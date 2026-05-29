@@ -21,6 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+
 package debugrpc
 
 import (
@@ -45,21 +46,12 @@ type Server struct {
 	debugger  debugapi.Debugger
 	ctx       context.Context
 	cancelCtx func()
-	// locker serializes calls into debugger with the host event loop.
-	// Debug RPCs come in on grpc-go goroutines; the IDE event loop also
-	// drives the debugger from REPL commands. Held only around debugger
-	// calls, never across event delivery on the stream.
-	locker sync.Locker
 }
 
-// NewServer creates a new Server wrapping the given Debugger. locker
-// serializes Debugger access with the host event loop; it must not be nil.
-func NewServer(d debugapi.Debugger, locker sync.Locker) *Server {
-	if locker == nil {
-		panic("debugrpc: NewServer: locker must not be nil")
-	}
+// NewServer creates a new Server wrapping the given Debugger.
+func NewServer(d debugapi.Debugger) *Server {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	return &Server{ctx: ctx, cancelCtx: cancelCtx, debugger: d, locker: locker}
+	return &Server{ctx: ctx, cancelCtx: cancelCtx, debugger: d}
 }
 
 // Register registers this server with the given gRPC server.
@@ -81,10 +73,8 @@ func (s *Server) CreateSession(
 	defer cancel()
 
 	sub := newStreamSubscriber(stream)
-	s.locker.Lock()
 	sessionID, caps, err := s.debugger.CreateSession(ctx, req.GetLangId(),
 		clientCapabilitiesFromProto(req.GetClient()), sub)
-	s.locker.Unlock()
 	if err != nil {
 		return err
 	}
@@ -98,6 +88,10 @@ func (s *Server) CreateSession(
 		return err
 	}
 
+	// Block until the subscriber observes a session close, the
+	// stream context is cancelled, or the server is shutting
+	// down. Errors from sub.run propagate back as the stream
+	// status code.
 	return sub.run(ctx)
 }
 
@@ -228,10 +222,7 @@ func (s *Server) Launch(ctx context.Context, req *debugrpc.LaunchRequest) (*debu
 		NoDebug:     req.GetNoDebug(),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Launch(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Launch(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -247,10 +238,7 @@ func (s *Server) Attach(ctx context.Context, req *debugrpc.AttachRequest) (*debu
 		Program: req.GetProgram(),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Attach(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Attach(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -261,10 +249,7 @@ func (s *Server) Attach(ctx context.Context, req *debugrpc.AttachRequest) (*debu
 func (s *Server) ConfigurationDone(ctx context.Context, req *debugrpc.ConfigurationDoneRequest) (*debugrpc.ConfigurationDoneResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	s.locker.Lock()
-	err := s.debugger.ConfigurationDone(ctx, req.GetSessionId())
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.ConfigurationDone(ctx, req.GetSessionId()); err != nil {
 		return nil, err
 	}
 	return &debugrpc.ConfigurationDoneResponse{}, nil
@@ -280,10 +265,7 @@ func (s *Server) Disconnect(ctx context.Context, req *debugrpc.DisconnectRequest
 		SuspendDebuggee:   req.GetSuspendDebuggee(),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Disconnect(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Disconnect(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -298,10 +280,7 @@ func (s *Server) Terminate(ctx context.Context, req *debugrpc.TerminateRequest) 
 		Restart: req.GetRestart(),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Terminate(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Terminate(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 
@@ -312,10 +291,7 @@ func (s *Server) Terminate(ctx context.Context, req *debugrpc.TerminateRequest) 
 func (s *Server) Restart(ctx context.Context, req *debugrpc.RestartRequest) (*debugrpc.RestartResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	s.locker.Lock()
-	err := s.debugger.Restart(ctx, req.GetSessionId())
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Restart(ctx, req.GetSessionId()); err != nil {
 		return nil, err
 	}
 	return &debugrpc.RestartResponse{}, nil
@@ -331,9 +307,7 @@ func (s *Server) SetBreakpoints(ctx context.Context, req *debugrpc.SetBreakpoint
 		SourceModified: req.GetSourceModified(),
 	}
 
-	s.locker.Lock()
 	bps, err := s.debugger.SetBreakpoints(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -351,9 +325,7 @@ func (s *Server) SetFunctionBreakpoints(ctx context.Context, req *debugrpc.SetFu
 		Breakpoints: functionBreakpointsFromProto(req.GetBreakpoints()),
 	}
 
-	s.locker.Lock()
 	bps, err := s.debugger.SetFunctionBreakpoints(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -371,9 +343,7 @@ func (s *Server) SetExceptionBreakpoints(ctx context.Context, req *debugrpc.SetE
 		Filters: req.GetFilters(),
 	}
 
-	s.locker.Lock()
 	bps, err := s.debugger.SetExceptionBreakpoints(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -392,9 +362,7 @@ func (s *Server) Continue(ctx context.Context, req *debugrpc.ContinueRequest) (*
 		SingleThread: req.GetSingleThread(),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.Continue(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -412,10 +380,7 @@ func (s *Server) Pause(ctx context.Context, req *debugrpc.PauseRequest) (*debugr
 		ThreadId: int(req.GetThreadId()),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Pause(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Pause(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.PauseResponse{}, nil
@@ -431,10 +396,7 @@ func (s *Server) Next(ctx context.Context, req *debugrpc.NextRequest) (*debugrpc
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Next(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Next(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.NextResponse{}, nil
@@ -451,10 +413,7 @@ func (s *Server) StepIn(ctx context.Context, req *debugrpc.StepInRequest) (*debu
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.StepIn(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.StepIn(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.StepInResponse{}, nil
@@ -470,10 +429,7 @@ func (s *Server) StepOut(ctx context.Context, req *debugrpc.StepOutRequest) (*de
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.StepOut(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.StepOut(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.StepOutResponse{}, nil
@@ -489,10 +445,7 @@ func (s *Server) StepBack(ctx context.Context, req *debugrpc.StepBackRequest) (*
 		Granularity:  dap.SteppingGranularity(req.GetGranularity()),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.StepBack(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.StepBack(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.StepBackResponse{}, nil
@@ -507,10 +460,7 @@ func (s *Server) ReverseContinue(ctx context.Context, req *debugrpc.ReverseConti
 		SingleThread: req.GetSingleThread(),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.ReverseContinue(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.ReverseContinue(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 	return &debugrpc.ReverseContinueResponse{}, nil
@@ -520,9 +470,7 @@ func (s *Server) ReverseContinue(ctx context.Context, req *debugrpc.ReverseConti
 func (s *Server) Threads(ctx context.Context, req *debugrpc.ThreadsRequest) (*debugrpc.ThreadsResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	s.locker.Lock()
 	threads, err := s.debugger.Threads(ctx, req.GetSessionId())
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -542,9 +490,7 @@ func (s *Server) StackTrace(ctx context.Context, req *debugrpc.StackTraceRequest
 		Levels:     int(req.GetLevels()),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.StackTrace(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -563,9 +509,7 @@ func (s *Server) Scopes(ctx context.Context, req *debugrpc.ScopesRequest) (*debu
 		FrameId: int(req.GetFrameId()),
 	}
 
-	s.locker.Lock()
 	scopes, err := s.debugger.Scopes(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -586,9 +530,7 @@ func (s *Server) Variables(ctx context.Context, req *debugrpc.VariablesRequest) 
 		Count:              int(req.GetCount()),
 	}
 
-	s.locker.Lock()
 	vars, err := s.debugger.Variables(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -608,9 +550,7 @@ func (s *Server) SetVariable(ctx context.Context, req *debugrpc.SetVariableReque
 		Value:              req.GetValue(),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.SetVariable(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -633,9 +573,7 @@ func (s *Server) Source(ctx context.Context, req *debugrpc.SourceRequest) (*debu
 		Source:          sourceFromProtoPtr(req.GetSource()),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.Source(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -656,9 +594,7 @@ func (s *Server) Evaluate(ctx context.Context, req *debugrpc.EvaluateRequest) (*
 		Context:    req.GetContext(),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.Evaluate(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -683,9 +619,7 @@ func (s *Server) SetExpression(ctx context.Context, req *debugrpc.SetExpressionR
 		FrameId:    int(req.GetFrameId()),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.SetExpression(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -710,9 +644,7 @@ func (s *Server) Completions(ctx context.Context, req *debugrpc.CompletionsReque
 		Line:    int(req.GetLine()),
 	}
 
-	s.locker.Lock()
 	items, err := s.debugger.Completions(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -730,9 +662,7 @@ func (s *Server) ExceptionInfo(ctx context.Context, req *debugrpc.ExceptionInfoR
 		ThreadId: int(req.GetThreadId()),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.ExceptionInfo(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -753,9 +683,7 @@ func (s *Server) Modules(ctx context.Context, req *debugrpc.ModulesRequest) (*de
 		ModuleCount: int(req.GetModuleCount()),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.Modules(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -770,9 +698,7 @@ func (s *Server) Modules(ctx context.Context, req *debugrpc.ModulesRequest) (*de
 func (s *Server) LoadedSources(ctx context.Context, req *debugrpc.LoadedSourcesRequest) (*debugrpc.LoadedSourcesResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	s.locker.Lock()
 	sources, err := s.debugger.LoadedSources(ctx, req.GetSessionId())
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -792,9 +718,7 @@ func (s *Server) ReadMemory(ctx context.Context, req *debugrpc.ReadMemoryRequest
 		Count:           int(req.GetCount()),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.ReadMemory(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -817,9 +741,7 @@ func (s *Server) WriteMemory(ctx context.Context, req *debugrpc.WriteMemoryReque
 		AllowPartial:    req.GetAllowPartial(),
 	}
 
-	s.locker.Lock()
 	resp, err := s.debugger.WriteMemory(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -842,9 +764,7 @@ func (s *Server) Disassemble(ctx context.Context, req *debugrpc.DisassembleReque
 		ResolveSymbols:    req.GetResolveSymbols(),
 	}
 
-	s.locker.Lock()
 	instructions, err := s.debugger.Disassemble(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -864,9 +784,7 @@ func (s *Server) GotoTargets(ctx context.Context, req *debugrpc.GotoTargetsReque
 		Column: int(req.GetColumn()),
 	}
 
-	s.locker.Lock()
 	targets, err := s.debugger.GotoTargets(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -885,10 +803,7 @@ func (s *Server) Goto(ctx context.Context, req *debugrpc.GotoRequest) (*debugrpc
 		TargetId: int(req.GetTargetId()),
 	}
 
-	s.locker.Lock()
-	err := s.debugger.Goto(ctx, req.GetSessionId(), args)
-	s.locker.Unlock()
-	if err != nil {
+	if err := s.debugger.Goto(ctx, req.GetSessionId(), args); err != nil {
 		return nil, err
 	}
 

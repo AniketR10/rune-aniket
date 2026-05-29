@@ -27,7 +27,6 @@ import (
 	"context"
 	"net"
 	"os"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -64,7 +63,7 @@ func runDatastoreServerOverListener(
 
 	srv := new(Server)
 	register(gsrv, srv)
-	srv.Init(other, marshaler, new(sync.Mutex))
+	srv.Init(other, marshaler)
 
 	lis, err := listener()
 	require.NoError(t, err)
@@ -495,7 +494,7 @@ func TestRPCCachesAndClosesRequestPartitions(t *testing.T) {
 
 func TestServerPartitionCacheKeyDistinguishesEmbeddedSeparators(t *testing.T) {
 	base := &partitionCloseCountingService{Service: storagestub.NewInMemoryServiceWithMarshaler(doctoml.Marshaler())}
-	srv := NewServer(base, doctoml.Marshaler(), new(sync.Mutex))
+	srv := NewServer(base, doctoml.Marshaler())
 
 	ctxA := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		storagerpc.PartitionMetadataKey, "a\x00b",

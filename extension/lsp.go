@@ -65,9 +65,9 @@ func (s *semanticResourceServer) forPermission(p extensionapi.Permission) Resour
 }
 
 func (s semanticResourcePermissionServer) Register(
-	registrar rpc.ServiceRegistrar, locker sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	server := tsemanticrpc.NewServer(s.b, locker)
+	server := tsemanticrpc.NewServer(s.b)
 	switch s.p {
 	case extensionapi.PermissionLSP:
 		semanticrpc.RegisterLSPServer(registrar, server)

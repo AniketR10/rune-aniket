@@ -64,9 +64,9 @@ func (s *debugResourceServer) forPermission(p extensionapi.Permission) ResourceR
 }
 
 func (s debugResourcePermissionServer) Register(
-	registrar rpc.ServiceRegistrar, locker sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	server := tdebugrpc.NewServer(s.b, locker)
+	server := tdebugrpc.NewServer(s.b)
 	switch s.p {
 	case extensionapi.PermissionDebugger:
 		debugrpc.RegisterDebuggerServer(registrar, server)

@@ -31,7 +31,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -524,7 +523,7 @@ func newTestEnv(t *testing.T, stub *stubLSP) testEnv {
 	require.NoError(t, err)
 
 	srv := grpc.NewServer()
-	semanticrpc.RegisterLSPServer(srv, NewServer(stub, new(sync.Mutex)))
+	semanticrpc.RegisterLSPServer(srv, NewServer(stub))
 	go func() { _ = srv.Serve(lis) }()
 
 	cc, err := grpc.NewClient(

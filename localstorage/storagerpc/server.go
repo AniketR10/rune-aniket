@@ -44,10 +44,6 @@ type Server struct {
 	other     storageapi.Service
 	mu        sync.Mutex
 	cache     map[string]*cachedPartition
-	// locker serializes calls into the wrapped storageapi.Service with the
-	// rest of the host (typically the event-loop mutex). Different RPCs
-	// can otherwise race on the underlying service's internal fields.
-	locker sync.Locker
 	docpb.UnimplementedDocumentStoreServer
 }
 
@@ -56,25 +52,19 @@ type cachedPartition struct {
 	created []storageapi.Service
 }
 
-// NewServer allocates storage for a new Server and initializes it. locker
-// serializes the wrapped storageapi.Service with the host event loop; it
-// must not be nil.
-func NewServer(other storageapi.Service, m docmarshal.Marshaler, locker sync.Locker) *Server {
+// NewServer allocates storage for a new Server and initializes it.
+func NewServer(other storageapi.Service, m docmarshal.Marshaler) *Server {
 	ret := new(Server)
-	ret.Init(other, m, locker)
+	ret.Init(other, m)
 	return ret
 }
 
-// Init initializes this server with the given underlying storageapi.Service,
-// marshaler, and host locker.
-func (s *Server) Init(other storageapi.Service, m docmarshal.Marshaler, locker sync.Locker) {
-	if locker == nil {
-		panic("storagerpc: Init: locker must not be nil")
-	}
+// Init initializes this server with the given underlying storageapi.Service
+// and marshaler.
+func (s *Server) Init(other storageapi.Service, m docmarshal.Marshaler) {
 	s.other = other
 	s.marshaler = m
 	s.cache = make(map[string]*cachedPartition)
-	s.locker = locker
 }
 
 func (s *Server) serviceForContext(ctx context.Context) (storageapi.Service, error) {
@@ -151,8 +141,6 @@ func (s *Server) Create(
 		return
 	}
 
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return nil, err
@@ -188,8 +176,6 @@ func (s *Server) Set(
 		return
 	}
 
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return nil, err
@@ -220,8 +206,6 @@ func (s *Server) Update(
 		err = errors.New("invalid request: no paths to update")
 		return nil, err
 	}
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return nil, err
@@ -248,8 +232,6 @@ func (s *Server) Get(
 	id := req.GetId()
 
 	var pr map[string]any
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return nil, err
@@ -278,8 +260,6 @@ func (s *Server) Delete(
 ) (res *docpb.DocumentResponse, err error) {
 	id := req.GetId()
 
-	s.locker.Lock()
-	defer s.locker.Unlock()
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return nil, err
@@ -301,16 +281,9 @@ func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.I
 		}
 	}
 
-	for {
-		s.locker.Lock()
-		hasNext := it.HasNext()
-		if !hasNext {
-			s.locker.Unlock()
-			return nil
-		}
+	for it.HasNext() {
 		var pr map[string]any
 		err = it.NextTo(&pr)
-		s.locker.Unlock()
 		res := docpb.ListDocumentResponse{}
 		if err != nil {
 			res.Error = err.Error()
@@ -332,6 +305,7 @@ func (s *Server) streamList(list docpb.DocumentStore_ListServer, it storageapi.I
 			return
 		}
 	}
+	return
 }
 
 // List satisfies proto.DocumentStoreServer
@@ -343,14 +317,11 @@ func (s *Server) List(
 	if err != nil {
 		return err
 	}
-	s.locker.Lock()
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
-		s.locker.Unlock()
 		return err
 	}
 	it, err := svc.List(ctx, filters)
-	s.locker.Unlock()
 	if err != nil {
 		if errors.Is(err, storageapi.ErrPermissionDenied) {
 			err = status.Error(codes.PermissionDenied, "")
@@ -358,10 +329,7 @@ func (s *Server) List(
 		return err
 	}
 	defer func() {
-		s.locker.Lock()
-		closeErr := it.Close()
-		s.locker.Unlock()
-		err = errors.Join(err, closeErr)
+		err = errors.Join(err, it.Close())
 	}()
 
 	return s.streamList(list, it, req.GetFields())

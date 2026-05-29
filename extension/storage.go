@@ -56,11 +56,11 @@ func (s *storageResourceServer) setupStorage() storageapi.Service {
 }
 
 func (s *storageResourceServer) Register(
-	registrar rpc.ServiceRegistrar, locker sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
 	svc := s.setupStorage()
 	server := new(storagerpc.Server)
-	server.Init(svc, doctoml.Marshaler(), locker)
+	server.Init(svc, doctoml.Marshaler())
 	docpb.RegisterDocumentStoreServer(registrar, server)
 	return storageServerCloser{server: server, svc: svc}, nil
 }

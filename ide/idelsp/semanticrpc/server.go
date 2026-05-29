@@ -26,7 +26,6 @@ package semanticrpc
 import (
 	"context"
 	"encoding/json"
-	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi/semanticrpc"
@@ -40,19 +39,12 @@ type Server struct {
 	impl      semanticapi.LSP
 	ctx       context.Context
 	cancelCtx func()
-	// locker serializes calls into impl with the host event loop, mirroring
-	// other extension RPC servers.
-	locker sync.Locker
 }
 
-// NewServer returns an LSPServer that delegates to impl. locker
-// serializes impl with the host event loop; it must not be nil.
-func NewServer(impl semanticapi.LSP, locker sync.Locker) *Server {
-	if locker == nil {
-		panic("semanticrpc: NewServer: locker must not be nil")
-	}
+// NewServer returns an LSPServer that delegates to impl.
+func NewServer(impl semanticapi.LSP) *Server {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	return &Server{impl: impl, ctx: ctx, cancelCtx: cancelCtx, locker: locker}
+	return &Server{impl: impl, ctx: ctx, cancelCtx: cancelCtx}
 }
 
 func (s *Server) Initialize(ctx context.Context, req *semanticrpc.InitializeRequest) (*semanticrpc.InitializeResponse, error) {
@@ -69,9 +61,7 @@ func (s *Server) Initialize(ctx context.Context, req *semanticrpc.InitializeRequ
 		pid := int(req.GetProcessId())
 		params.ProcessID = &pid
 	}
-	s.locker.Lock()
 	result, err := s.impl.Initialize(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -83,9 +73,7 @@ func (s *Server) Initialize(ctx context.Context, req *semanticrpc.InitializeRequ
 func (s *Server) Initialized(ctx context.Context, req *semanticrpc.InitializedRequest) (*semanticrpc.InitializedResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	s.locker.Lock()
 	err := s.impl.Initialized(ctx)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +99,7 @@ func (s *Server) DidOpen(ctx context.Context, req *semanticrpc.DidOpenRequest) (
 	params := semanticapi.DidOpenTextDocumentParams{
 		TextDocument: semanticrpc.TextDocumentItemFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidOpen(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -127,9 +113,7 @@ func (s *Server) DidChange(ctx context.Context, req *semanticrpc.DidChangeReques
 		TextDocument:   semanticrpc.VersionedTextDocumentIdentifierFromProto(req.GetTextDocument()),
 		ContentChanges: semanticrpc.ContentChangesFromProto(req.GetContentChanges()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidChange(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -142,9 +126,7 @@ func (s *Server) DidClose(ctx context.Context, req *semanticrpc.DidCloseRequest)
 	params := semanticapi.DidCloseTextDocumentParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidClose(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -158,9 +140,7 @@ func (s *Server) DidSave(ctx context.Context, req *semanticrpc.DidSaveRequest) (
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Text:         req.GetText(),
 	}
-	s.locker.Lock()
 	err := s.impl.DidSave(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -180,9 +160,7 @@ func (s *Server) Completion(ctx context.Context, req *semanticrpc.CompletionRequ
 			TriggerCharacter: req.GetContextTriggerCharacter(),
 		}
 	}
-	s.locker.Lock()
 	result, err := s.impl.Completion(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -196,9 +174,7 @@ func (s *Server) Hover(ctx context.Context, req *semanticrpc.HoverRequest) (*sem
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Hover(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -213,9 +189,7 @@ func (s *Server) SignatureHelp(ctx context.Context, req *semanticrpc.SignatureHe
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.SignatureHelp(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +202,7 @@ func (s *Server) Definition(ctx context.Context, req *semanticrpc.DefinitionRequ
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Definition(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -247,9 +219,7 @@ func (s *Server) Declaration(ctx context.Context, req *semanticrpc.DeclarationRe
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Declaration(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -266,9 +236,7 @@ func (s *Server) TypeDefinition(ctx context.Context, req *semanticrpc.TypeDefini
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.TypeDefinition(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -285,9 +253,7 @@ func (s *Server) Implementation(ctx context.Context, req *semanticrpc.Implementa
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Implementation(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -307,9 +273,7 @@ func (s *Server) References(ctx context.Context, req *semanticrpc.ReferencesRequ
 			IncludeDeclaration: req.GetIncludeDeclaration(),
 		},
 	}
-	s.locker.Lock()
 	result, err := s.impl.References(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -323,9 +287,7 @@ func (s *Server) DocumentHighlight(ctx context.Context, req *semanticrpc.Documen
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.DocumentHighlight(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -336,9 +298,7 @@ func (s *Server) DocumentSymbol(ctx context.Context, req *semanticrpc.DocumentSy
 	params := semanticapi.DocumentSymbolParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.DocumentSymbol(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -357,9 +317,7 @@ func (s *Server) CodeAction(ctx context.Context, req *semanticrpc.CodeActionRequ
 			Diagnostics: semanticrpc.DiagnosticsFromProto(req.GetDiagnostics()),
 		},
 	}
-	s.locker.Lock()
 	result, err := s.impl.CodeAction(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -372,9 +330,7 @@ func (s *Server) CodeLens(ctx context.Context, req *semanticrpc.CodeLensRequest)
 	params := semanticapi.CodeLensParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.CodeLens(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -391,9 +347,7 @@ func (s *Server) Formatting(ctx context.Context, req *semanticrpc.FormattingRequ
 			InsertSpaces: req.GetInsertSpaces(),
 		},
 	}
-	s.locker.Lock()
 	result, err := s.impl.Formatting(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -411,9 +365,7 @@ func (s *Server) RangeFormatting(ctx context.Context, req *semanticrpc.RangeForm
 			InsertSpaces: req.GetInsertSpaces(),
 		},
 	}
-	s.locker.Lock()
 	result, err := s.impl.RangeFormatting(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -428,9 +380,7 @@ func (s *Server) Rename(ctx context.Context, req *semanticrpc.RenameRequest) (*s
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 		NewName:      req.GetNewName(),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Rename(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -447,9 +397,7 @@ func (s *Server) PrepareRename(ctx context.Context, req *semanticrpc.PrepareRena
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.PrepareRename(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -463,9 +411,7 @@ func (s *Server) FoldingRange(ctx context.Context, req *semanticrpc.FoldingRange
 	params := semanticapi.FoldingRangeParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.FoldingRange(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -483,9 +429,7 @@ func (s *Server) SelectionRange(ctx context.Context, req *semanticrpc.SelectionR
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Positions:    positions,
 	}
-	s.locker.Lock()
 	result, err := s.impl.SelectionRange(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -498,9 +442,7 @@ func (s *Server) SemanticTokensFull(ctx context.Context, req *semanticrpc.Semant
 	params := semanticapi.SemanticTokensParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.SemanticTokensFull(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -515,9 +457,7 @@ func (s *Server) SemanticTokensRange(ctx context.Context, req *semanticrpc.Seman
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Range:        semanticrpc.RangeFromProto(req.GetRange()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.SemanticTokensRange(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -531,9 +471,7 @@ func (s *Server) Diagnostic(ctx context.Context, req *semanticrpc.DiagnosticRequ
 	params := semanticapi.DocumentDiagnosticParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Diagnostic(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -557,9 +495,7 @@ func (s *Server) WorkspaceDiagnostic(
 		Identifier:        req.GetIdentifier(),
 		PreviousResultIDs: prevIDs,
 	}
-	s.locker.Lock()
 	result, err := s.impl.WorkspaceDiagnostic(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -580,9 +516,7 @@ func (s *Server) WorkspaceSymbol(ctx context.Context, req *semanticrpc.Workspace
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
 	params := semanticapi.WorkspaceSymbolParams{Query: req.GetQuery()}
-	s.locker.Lock()
 	result, err := s.impl.WorkspaceSymbol(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -600,9 +534,7 @@ func (s *Server) ExecuteCommand(ctx context.Context, req *semanticrpc.ExecuteCom
 		Command:   req.GetCommand(),
 		Arguments: args,
 	}
-	s.locker.Lock()
 	result, err := s.impl.ExecuteCommand(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -616,9 +548,7 @@ func (s *Server) PrepareCallHierarchy(ctx context.Context, req *semanticrpc.Prep
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.PrepareCallHierarchy(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -631,9 +561,7 @@ func (s *Server) CallHierarchyIncomingCalls(ctx context.Context, req *semanticrp
 	params := semanticapi.CallHierarchyIncomingCallsParams{
 		Item: semanticrpc.CallHierarchyItemFromProto(req.GetItem()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.CallHierarchyIncomingCalls(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -646,9 +574,7 @@ func (s *Server) CallHierarchyOutgoingCalls(ctx context.Context, req *semanticrp
 	params := semanticapi.CallHierarchyOutgoingCallsParams{
 		Item: semanticrpc.CallHierarchyItemFromProto(req.GetItem()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.CallHierarchyOutgoingCalls(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -659,9 +585,7 @@ func (s *Server) CompletionResolve(ctx context.Context, req *semanticrpc.Complet
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
 	item := semanticrpc.CompletionItemFromProto(req.GetItem())
-	s.locker.Lock()
 	result, err := s.impl.CompletionResolve(ctx, item)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -672,9 +596,7 @@ func (s *Server) CodeLensResolve(ctx context.Context, req *semanticrpc.CodeLensR
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
 	lens := semanticrpc.CodeLensFromProto(req.GetLens())
-	s.locker.Lock()
 	result, err := s.impl.CodeLensResolve(ctx, lens)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -687,9 +609,7 @@ func (s *Server) DocumentColor(ctx context.Context, req *semanticrpc.DocumentCol
 	params := semanticapi.DocumentColorParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.DocumentColor(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -704,9 +624,7 @@ func (s *Server) ColorPresentation(ctx context.Context, req *semanticrpc.ColorPr
 		Color:        semanticrpc.ColorFromProto(req.GetColor()),
 		Range:        semanticrpc.RangeFromProto(req.GetRange()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.ColorPresentation(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -719,9 +637,7 @@ func (s *Server) DocumentLink(ctx context.Context, req *semanticrpc.DocumentLink
 	params := semanticapi.DocumentLinkParams{
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.DocumentLink(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -732,9 +648,7 @@ func (s *Server) DocumentLinkResolve(ctx context.Context, req *semanticrpc.Docum
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
 	link := semanticrpc.DocumentLinkFromProto(req.GetLink())
-	s.locker.Lock()
 	result, err := s.impl.DocumentLinkResolve(ctx, link)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -753,9 +667,7 @@ func (s *Server) OnTypeFormatting(ctx context.Context, req *semanticrpc.OnTypeFo
 			InsertSpaces: req.GetInsertSpaces(),
 		},
 	}
-	s.locker.Lock()
 	result, err := s.impl.OnTypeFormatting(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -769,9 +681,7 @@ func (s *Server) LinkedEditingRange(ctx context.Context, req *semanticrpc.Linked
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.LinkedEditingRange(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -786,9 +696,7 @@ func (s *Server) Moniker(ctx context.Context, req *semanticrpc.MonikerRequest) (
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.Moniker(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -802,9 +710,7 @@ func (s *Server) WillSaveWaitUntil(ctx context.Context, req *semanticrpc.WillSav
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Reason:       semanticapi.TextDocumentSaveReason(req.GetReason()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.WillSaveWaitUntil(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -818,9 +724,7 @@ func (s *Server) SemanticTokensFullDelta(ctx context.Context, req *semanticrpc.S
 		TextDocument:     semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		PreviousResultID: req.GetPreviousResultId(),
 	}
-	s.locker.Lock()
 	result, err := s.impl.SemanticTokensFullDelta(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -835,9 +739,7 @@ func (s *Server) PrepareTypeHierarchy(ctx context.Context, req *semanticrpc.Prep
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Position:     semanticrpc.PositionFromProto(req.GetPosition()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.PrepareTypeHierarchy(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -850,9 +752,7 @@ func (s *Server) TypeHierarchySupertypes(ctx context.Context, req *semanticrpc.T
 	params := semanticapi.TypeHierarchySupertypesParams{
 		Item: semanticrpc.TypeHierarchyItemFromProto(req.GetItem()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.TypeHierarchySupertypes(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -865,9 +765,7 @@ func (s *Server) TypeHierarchySubtypes(ctx context.Context, req *semanticrpc.Typ
 	params := semanticapi.TypeHierarchySubtypesParams{
 		Item: semanticrpc.TypeHierarchyItemFromProto(req.GetItem()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.TypeHierarchySubtypes(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -881,9 +779,7 @@ func (s *Server) InlayHint(ctx context.Context, req *semanticrpc.InlayHintReques
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Range:        semanticrpc.RangeFromProto(req.GetRange()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.InlayHint(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -894,9 +790,7 @@ func (s *Server) InlayHintResolve(ctx context.Context, req *semanticrpc.InlayHin
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
 	hint := semanticrpc.InlayHintFromProto(req.GetHint())
-	s.locker.Lock()
 	result, err := s.impl.InlayHintResolve(ctx, hint)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -910,9 +804,7 @@ func (s *Server) InlineValue(ctx context.Context, req *semanticrpc.InlineValueRe
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Range:        semanticrpc.RangeFromProto(req.GetRange()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.InlineValue(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -925,9 +817,7 @@ func (s *Server) WillCreateFiles(ctx context.Context, req *semanticrpc.WillCreat
 	params := semanticapi.CreateFilesParams{
 		Files: semanticrpc.FileCreatesFromProto(req.GetFiles()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.WillCreateFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -943,9 +833,7 @@ func (s *Server) WillRenameFiles(ctx context.Context, req *semanticrpc.WillRenam
 	params := semanticapi.RenameFilesParams{
 		Files: semanticrpc.FileRenamesFromProto(req.GetFiles()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.WillRenameFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -961,9 +849,7 @@ func (s *Server) WillDeleteFiles(ctx context.Context, req *semanticrpc.WillDelet
 	params := semanticapi.DeleteFilesParams{
 		Files: semanticrpc.FileDeletesFromProto(req.GetFiles()),
 	}
-	s.locker.Lock()
 	result, err := s.impl.WillDeleteFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -980,9 +866,7 @@ func (s *Server) WillSave(ctx context.Context, req *semanticrpc.WillSaveRequest)
 		TextDocument: semanticrpc.TextDocumentIdentifierFromProto(req.GetTextDocument()),
 		Reason:       semanticapi.TextDocumentSaveReason(req.GetReason()),
 	}
-	s.locker.Lock()
 	err := s.impl.WillSave(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -995,9 +879,7 @@ func (s *Server) DidChangeConfiguration(ctx context.Context, req *semanticrpc.Di
 	params := semanticapi.DidChangeConfigurationParams{
 		Settings: json.RawMessage(req.GetSettings()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidChangeConfiguration(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1010,9 +892,7 @@ func (s *Server) DidChangeWatchedFiles(ctx context.Context, req *semanticrpc.Did
 	params := semanticapi.DidChangeWatchedFilesParams{
 		Changes: semanticrpc.FileEventsFromProto(req.GetChanges()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidChangeWatchedFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1028,9 +908,7 @@ func (s *Server) DidChangeWorkspaceFolders(ctx context.Context, req *semanticrpc
 			Removed: semanticrpc.WorkspaceFoldersFromProto(req.GetRemoved()),
 		},
 	}
-	s.locker.Lock()
 	err := s.impl.DidChangeWorkspaceFolders(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1043,9 +921,7 @@ func (s *Server) WorkDoneProgressCancel(ctx context.Context, req *semanticrpc.Wo
 	params := semanticapi.WorkDoneProgressCancelParams{
 		Token: req.GetToken(),
 	}
-	s.locker.Lock()
 	err := s.impl.WorkDoneProgressCancel(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1058,9 +934,7 @@ func (s *Server) SetTrace(ctx context.Context, req *semanticrpc.SetTraceRequest)
 	params := semanticapi.SetTraceParams{
 		Value: semanticapi.TraceValue(req.GetValue()),
 	}
-	s.locker.Lock()
 	err := s.impl.SetTrace(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1073,9 +947,7 @@ func (s *Server) DidCreateFiles(ctx context.Context, req *semanticrpc.DidCreateF
 	params := semanticapi.CreateFilesParams{
 		Files: semanticrpc.FileCreatesFromProto(req.GetFiles()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidCreateFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1088,9 +960,7 @@ func (s *Server) DidRenameFiles(ctx context.Context, req *semanticrpc.DidRenameF
 	params := semanticapi.RenameFilesParams{
 		Files: semanticrpc.FileRenamesFromProto(req.GetFiles()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidRenameFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1103,9 +973,7 @@ func (s *Server) DidDeleteFiles(ctx context.Context, req *semanticrpc.DidDeleteF
 	params := semanticapi.DeleteFilesParams{
 		Files: semanticrpc.FileDeletesFromProto(req.GetFiles()),
 	}
-	s.locker.Lock()
 	err := s.impl.DidDeleteFiles(ctx, params)
-	s.locker.Unlock()
 	if err != nil {
 		return nil, err
 	}

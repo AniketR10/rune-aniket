@@ -65,9 +65,9 @@ func (s *syntaxResourceServer) forPermission(p extensionapi.Permission) Resource
 }
 
 func (s syntaxResourcePermissionServer) Register(
-	registrar rpc.ServiceRegistrar, locker sync.Locker,
+	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	server := tsyntaxrpc.NewServer(s.b, locker)
+	server := tsyntaxrpc.NewServer(s.b)
 	switch s.p {
 	case extensionapi.PermissionSyntaxTree:
 		syntaxrpc.RegisterSyntaxServer(registrar, server)

@@ -624,11 +624,7 @@ func (s *Service) setActiveAndUnlock(svc storageapi.Service) {
 }
 
 func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bool, err error) {
-	// The wrapped service already serializes on s.mu via SyncWithLocker;
-	// the storagerpc.Server takes a fresh mutex so its own per-RPC lock
-	// does not recursively reacquire s.mu and deadlock when the request
-	// reaches the inner service.
-	server := storagerpc.NewServer(schemedoc.SyncWithLocker(s.svc, &s.mu), s.cfg.Marshaler, new(sync.Mutex))
+	server := storagerpc.NewServer(schemedoc.SyncWithLocker(s.svc, &s.mu), s.cfg.Marshaler)
 	defer func() { _ = listener.Close() }()
 
 	gsrv := grpc.NewServer(

@@ -30,7 +30,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -326,7 +325,7 @@ func TestHighlight(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &mockParser{locations: tt.locations}
 			srv := grpc.NewServer()
-			syntaxrpc.RegisterSyntaxServer(srv, NewServer(stub, new(sync.Mutex)))
+			syntaxrpc.RegisterSyntaxServer(srv, NewServer(stub))
 
 			// Use a short path to avoid unix socket path length limits.
 			tmpDir, err := os.MkdirTemp("", "syn")
@@ -436,7 +435,7 @@ func setupServerClient(t *testing.T, mock *mockParser) (*Server, *syntaxrpc.Clie
 	listener, err := net.Listen("unix", socketPath)
 	require.NoError(t, err)
 
-	server := NewServer(mock, new(sync.Mutex))
+	server := NewServer(mock)
 	grpcServer := grpc.NewServer()
 	syntaxrpc.RegisterSyntaxServer(grpcServer, server)
 
@@ -498,7 +497,7 @@ func TestHighlightHonoursClientCancel(t *testing.T) {
 	}
 
 	srv := grpc.NewServer()
-	syntaxrpc.RegisterSyntaxServer(srv, NewServer(stub, new(sync.Mutex)))
+	syntaxrpc.RegisterSyntaxServer(srv, NewServer(stub))
 
 	tmpDir, err := os.MkdirTemp("", "syn")
 	require.NoError(t, err)
