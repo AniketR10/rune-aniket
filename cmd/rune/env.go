@@ -42,6 +42,40 @@ const fallbackLocale = "UTF-8"
 
 var darwinRe = regexp.MustCompile("UserShell: (/[^ ]+)\n")
 
+func initPATH(dataDir string) {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	out, err := exec.Command(shell, "-i", "-l", "-c", "echo $PATH").Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shell echo PATH: %v", err)
+		return
+	}
+
+	// Interactive rc files may print banners to stdout before our echo
+	// runs. Take the last non-empty line so prior chatter is ignored.
+	p := lastNonEmptyLine(string(out))
+	if p == "" {
+		fmt.Fprintf(os.Stderr, "set env PATH: shell return empty PATH")
+	}
+	p = fmt.Sprintf("%s:%s/bin", p, dataDir)
+	if err := os.Setenv("PATH", p); err != nil {
+		fmt.Fprintf(os.Stderr, "set env PATH: %v", err)
+	}
+}
+
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(s, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if t := strings.TrimSpace(lines[i]); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
 func setEnvForGUI(dataPath string) {
 	os.Setenv("RUNE_DATADIR", dataPath)
 

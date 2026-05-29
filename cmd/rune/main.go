@@ -30,12 +30,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -298,9 +296,6 @@ func main() {
 	if !*flagGUI && !*flagTUI && *flagWorkspaceServer == "" {
 		defaults, ok := appLaunchArgs(runtime.GOOS, exec)
 		if ok {
-			go debug.CapturePanicReport(func() {
-				initPATH(*flagDataPath)
-			})
 			os.Args = append(os.Args[:1], append(defaults, os.Args[1:]...)...)
 
 			// best effort redirect stdout/err to <datadir>/launch.log
@@ -411,6 +406,15 @@ func run() int {
 	if *flagVersion {
 		fmt.Printf("Rune %s\n", version)
 		return 0
+	}
+
+	// Resolve the user's interactive-login PATH for every startup mode
+	// except TUI, which inherits PATH from the parent shell the user
+	// already exported themselves.
+	if !*flagTUI {
+		go debug.CapturePanicReport(func() {
+			initPATH(*flagDataPath)
+		})
 	}
 
 	filenames = append(filenames, flag.Args()...)
@@ -755,26 +759,4 @@ func evalVar(value any) (ret string) {
 	}
 	ret = os.ExpandEnv(str)
 	return
-}
-
-func initPATH(dataDir string) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-
-	out, err := exec.Command(shell, "-l", "-c", "echo $PATH").Output()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "shell echo PATH: %v", err)
-		return
-	}
-
-	p := strings.TrimSpace(string(out))
-	if p == "" {
-		fmt.Fprintf(os.Stderr, "set env PATH: shell return empty PATH")
-	}
-	p = fmt.Sprintf("%s:%s/bin", p, dataDir)
-	if err := os.Setenv("PATH", p); err != nil {
-		fmt.Fprintf(os.Stderr, "set env PATH: %v", err)
-	}
 }
