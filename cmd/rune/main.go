@@ -294,18 +294,29 @@ func main() {
 	// If no manual tui/gui flag was set, assume we were launched as a desktop
 	// app and inject the same defaults the platform launcher would normally pass.
 	if !*flagGUI && !*flagTUI && *flagWorkspaceServer == "" {
-		defaults, ok := appLaunchArgs(runtime.GOOS, exec)
+		if err := os.MkdirAll(*flagDataPath, 0777); err != nil {
+			fmt.Fprintf(os.Stderr, "mkdir datadir %q: %s",
+				*flagDataPath, err)
+		}
+		// gracefully degrade; launch without zsh customization
+		// which looses ensuring modal vte works well with zsh
+		zdotDir := ""
+		if src, ok := bundleZdotDir(runtime.GOOS, exec); ok {
+			dst := filepath.Join(*flagDataPath, "zdot")
+			if err := installZdotDir(src, dst); err != nil {
+				fmt.Fprintf(os.Stderr,
+					"install zdot %q -> %q: %s", src, dst, err)
+			} else {
+				zdotDir = dst
+			}
+		}
+		defaults, ok := appLaunchArgs(runtime.GOOS, zdotDir)
 		if ok {
 			os.Args = append(os.Args[:1], append(defaults, os.Args[1:]...)...)
 
 			// best effort redirect stdout/err to <datadir>/launch.log
 			// so runtime fatal stderr dumps can later be ingested as
-			// crash reports. The data directory may not exist yet on
-			// first launch, so create it before opening the log.
-			if err := os.MkdirAll(*flagDataPath, 0777); err != nil {
-				fmt.Fprintf(os.Stderr, "mkdir datadir %q: %s",
-					*flagDataPath, err)
-			}
+			// crash reports.
 			logPath := crashreport.DefaultLaunchLogPath(*flagDataPath)
 			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err == nil {
@@ -361,29 +372,58 @@ func main() {
 	os.Exit(4)
 }
 
-func appLaunchArgs(goos, execPath string) ([]string, bool) {
+var zdotFiles = []string{".zshenv", ".zprofile", ".zshrc", ".zlogin"}
+
+func appLaunchArgs(goos, zdotDir string) ([]string, bool) {
+	var args []string
+	if zdotDir != "" {
+		args = append(args, "--rune-zdotdir="+zdotDir)
+	}
+	switch goos {
+	case "darwin", "linux":
+		return append(args, "-G", "-w", ""), true
+	default:
+		return nil, false
+	}
+}
+
+func bundleZdotDir(goos, execPath string) (string, bool) {
 	switch goos {
 	case "darwin":
 		macosDir := filepath.Dir(execPath)
 		contentsDir := filepath.Dir(macosDir)
 		resourcesDir := filepath.Join(contentsDir, "Resources")
-		return []string{
-			"--rune-zdotdir=" + filepath.Join(resourcesDir, "zdot"),
-			"-G", "-w", "",
-		}, true
+		return filepath.Join(resourcesDir, "zdot"), true
 	case "linux":
 		appDir, ok := linuxAppDir(execPath)
-		if ok {
-			return []string{
-				"--rune-zdotdir=" + filepath.Join(appDir, "share", "zdot"),
-				"-G", "-w", "",
-			}, true
+		if !ok {
+			return "", false
 		}
-
-		return []string{"-G", "-w", ""}, true
+		return filepath.Join(appDir, "share", "zdot"), true
 	default:
-		return nil, false
+		return "", false
 	}
+}
+
+func installZdotDir(srcDir, dstDir string) error {
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return err
+	}
+	for _, name := range zdotFiles {
+		src := filepath.Join(srcDir, name)
+		data, err := os.ReadFile(src)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return err
+		}
+		dst := filepath.Join(dstDir, name)
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func linuxAppDir(execPath string) (string, bool) {
