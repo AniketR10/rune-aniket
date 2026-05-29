@@ -143,11 +143,13 @@ func TestReleaseInstallE2E(t *testing.T) {
 		}},
 		oxapi.RPCAuthorizer("issues", []string{"releases"}),
 		stubReportStore{}, oxapi.ReportConfig{},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
+		nil, // stripeClient
+		nil, // stripeCfg
+		nil, // eventsStore
+		nil, // billingMailer
+		"",  // billingMailFrom
+		nil, // contactHandler
+		nil, // newsletterHandler
 	)
 	require.NoError(t, err)
 
