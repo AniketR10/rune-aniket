@@ -43,3 +43,6 @@ var BrailleTTF []byte
 
 //go:embed MesloLGL-Regular.ttf
 var FallbackTTF []byte
+
+//go:embed Symbola.ttf
+var SymbolTTF []byte

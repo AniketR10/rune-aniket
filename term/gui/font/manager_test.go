@@ -185,3 +185,26 @@ func setTestCharSize(m *Manager, x, y float64) {
 	m.charSize.X = x
 	m.charSize.Y = y
 }
+
+// TestSymbolFallbackResolvesGapGlyphs verifies that glyphs Claude Code
+// emits which are absent from the builtin user font, the braille font,
+// and the Meslo fallback (e.g. ⏺ ⏸ ※ ⑂) are still resolved by the
+// embedded Symbola symbol fallback, so they never render as tofu
+// regardless of the user-selected font.
+func TestSymbolFallbackResolvesGapGlyphs(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+	face := m.RegularFontFace()
+	require.NotNil(t, face)
+
+	gaps := map[string]rune{
+		"BLACK_CIRCLE_MAC (U+23FA)": '⏺',
+		"PAUSE (U+23F8)":            '⏸',
+		"REFERENCE_MARK (U+203B)":   '※',
+		"FORK (U+2442)":             '⑂',
+	}
+	for name, r := range gaps {
+		_, ok := face.GlyphAdvance(r)
+		assert.True(t, ok, "glyph %s must resolve through the font fallback chain", name)
+	}
+}

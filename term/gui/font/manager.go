@@ -54,6 +54,7 @@ type Manager struct {
 	findfont     findFont
 	brailleFont  *sfnt.Font
 	fallbackFont *sfnt.Font
+	symbolFont   *sfnt.Font
 	// acts as an IR to have all fonts preloaded upon
 	// size, DPI and device scale changes.
 	preloaded      []*sfnt.Font
@@ -103,6 +104,10 @@ func NewManager(overlapX, overlapY int) (*Manager, error) {
 	ret.fallbackFont, err = opentype.Parse(builtinfont.FallbackTTF)
 	if err != nil {
 		return nil, fmt.Errorf("parse braille font: %w", err)
+	}
+	ret.symbolFont, err = opentype.Parse(builtinfont.SymbolTTF)
+	if err != nil {
+		return nil, fmt.Errorf("parse symbol font: %w", err)
 	}
 
 	// compensate default cell overlap
@@ -687,10 +692,18 @@ func (m *Manager) createFace(f *sfnt.Font, bold bool) (font.Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opentype new fallback face: %w", err)
 	}
+	symbolFace, err := opentype.NewFace(m.symbolFont, &opentype.FaceOptions{
+		Size:    m.size,
+		DPI:     m.dpi(),
+		Hinting: font.HintingNone,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("opentype new symbol face: %w", err)
+	}
 	charSizeX, charSizeY, offsetY := m.calcFaceMetrics(face)
 	customFace := newCustomFace(charSizeX, charSizeY, offsetY,
 		face, bold, m.cellOverlapX, m.cellOverlapY)
-	face = newMultiFace(1, customFace, face, brailleFace, fallbackFace)
+	face = newMultiFace(1, customFace, face, brailleFace, fallbackFace, symbolFace)
 	face = newCacheFace(face)
 	return face, nil
 }
