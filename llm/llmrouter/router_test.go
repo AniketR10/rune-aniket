@@ -25,6 +25,7 @@ package llmrouter
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -272,4 +273,39 @@ func TestRouterResolveLocal_RejectsAfterClose(t *testing.T) {
 
 	_, err = r.CountTokens(localModel("m", 4096), nil)
 	require.ErrorIs(t, err, ErrRouterClosed)
+}
+
+// TestRouterConcurrentDispatch drives CreateCompletion, CountTokens, and
+// Close from many goroutines at once to prove the Router serialises access
+// to localServices and closed. Run under -race, it fails if the cache or
+// the closed flag are touched without holding r.mu.
+func TestRouterConcurrentDispatch(t *testing.T) {
+	r := newTestRouter(t)
+	var mu sync.Mutex
+	r.newLocal = func(c llamacpp.Config) (localService, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return &fakeLocalService{cfg: c}, nil
+	}
+
+	models := []llmapi.ModelEntry{
+		localModel("m1", 4096),
+		localModel("m2", 8192),
+		localModel("m3", 4096),
+	}
+
+	var wg sync.WaitGroup
+	for i := range 32 {
+		model := models[i%len(models)]
+		wg.Go(func() {
+			if it, err := r.CreateCompletion(context.Background(), model, llmapi.Request{}); err == nil {
+				_ = it.Close()
+			}
+			_, _ = r.CountTokens(model, nil)
+		})
+	}
+	wg.Go(func() {
+		_ = r.Close()
+	})
+	wg.Wait()
 }

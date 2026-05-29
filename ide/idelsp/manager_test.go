@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // TestEventTypeClose_evictsFilesCache locks in the fix for RUNE-195:
@@ -66,6 +67,49 @@ func TestEventTypeClose_evictsFilesCache(t *testing.T) {
 	defer m.mu.Unlock()
 	assert.Empty(t, m.files,
 		"EventTypeClose must evict the cached file entry")
+}
+
+// TestManagerConcurrentStateAccess drives the file/server/pendingOpens
+// accessors and Close concurrently to prove m.mu serialises every read
+// and write of the manager's maps. With NoInitializeServer the open/close
+// events stay in-process (no language server is spawned), so this is a
+// pure -race regression guard for the locking around m.files,
+// m.pendingOpens, and m.servers.
+func TestManagerConcurrentStateAccess(t *testing.T) {
+	t.Parallel()
+	workspaceURI := makeURI(t, "file:///workspace")
+	m := New(workspaceURI, nil, nil, nil, nil, nil,
+		Config{NoInitializeServer: true})
+
+	const workers = 8
+	files := []workspaceapi.URI{
+		makeURI(t, "file:///workspace/a.go"),
+		makeURI(t, "file:///workspace/b.go"),
+		makeURI(t, "file:///workspace/c.go"),
+	}
+
+	var wg sync.WaitGroup
+	for i := range workers {
+		uri := files[i%len(files)]
+		wg.Go(func() {
+			for range 50 {
+				_ = m.handle(textapi.Event{Type: textapi.EventTypeOpen, URI: uri,
+					Content: "package a\n"})
+				m.mu.Lock()
+				m.files[uri.String()] = newFile(uri, "package a\n", "go")
+				m.mu.Unlock()
+				_, _ = m.getFile(uri.String())
+				_ = m.allServers()
+				_ = m.handle(textapi.Event{Type: textapi.EventTypeClose, URI: uri})
+			}
+		})
+	}
+
+	wg.Go(func() {
+		_ = m.Close()
+	})
+
+	wg.Wait()
 }
 
 // TestManagerMaxRetriesPropagatesFromConfig locks in the fix for Bug B

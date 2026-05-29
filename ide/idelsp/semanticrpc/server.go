@@ -34,6 +34,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Server adapts a semanticapi.LSP to the generated LSPServer interface.
+//
+// gRPC dispatches each request on grpc-go's goroutine pool without the host
+// holding the event-loop locker, so impl must be safe for concurrent use.
 type Server struct {
 	semanticrpc.UnimplementedLSPServer
 	impl      semanticapi.LSP
@@ -41,7 +45,8 @@ type Server struct {
 	cancelCtx func()
 }
 
-// NewServer returns an LSPServer that delegates to impl.
+// NewServer returns an LSPServer that delegates to impl. impl must be safe
+// for concurrent use; see the Server doc comment.
 func NewServer(impl semanticapi.LSP) *Server {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	return &Server{impl: impl, ctx: ctx, cancelCtx: cancelCtx}

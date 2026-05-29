@@ -41,6 +41,10 @@ var _ debugrpc.DebuggerServer = (*Server)(nil)
 var _ io.Closer = (*Server)(nil)
 
 // Server implements DebuggerServer by wrapping a debugapi.Debugger.
+//
+// gRPC dispatches each request on grpc-go's goroutine pool without the host
+// holding the event-loop locker, so the wrapped Debugger must be safe for
+// concurrent use.
 type Server struct {
 	debugrpc.UnimplementedDebuggerServer
 	debugger  debugapi.Debugger
@@ -48,7 +52,8 @@ type Server struct {
 	cancelCtx func()
 }
 
-// NewServer creates a new Server wrapping the given Debugger.
+// NewServer creates a new Server wrapping the given Debugger. d must be safe
+// for concurrent use; see the Server doc comment.
 func NewServer(d debugapi.Debugger) *Server {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	return &Server{ctx: ctx, cancelCtx: cancelCtx, debugger: d}

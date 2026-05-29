@@ -39,6 +39,11 @@ import (
 )
 
 // Server wraps another storageapi.Service and exposes it through a grpc interface.
+//
+// gRPC dispatches each request on grpc-go's goroutine pool without the host
+// holding the event-loop locker, so the Server must be safe for concurrent
+// use: it guards its partition cache with s.mu, and the wrapped service must
+// itself be safe for concurrent use.
 type Server struct {
 	marshaler docmarshal.Marshaler
 	other     storageapi.Service
@@ -52,7 +57,9 @@ type cachedPartition struct {
 	created []storageapi.Service
 }
 
-// NewServer allocates storage for a new Server and initializes it.
+// NewServer allocates storage for a new Server and initializes it. The
+// supplied service must be safe for concurrent use; see the Server doc
+// comment.
 func NewServer(other storageapi.Service, m docmarshal.Marshaler) *Server {
 	ret := new(Server)
 	ret.Init(other, m)

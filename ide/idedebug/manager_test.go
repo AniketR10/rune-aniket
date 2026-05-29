@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -128,4 +129,46 @@ func TestManagerCloseTerminatesAdapterAndGoroutines(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("watchSession goroutine did not exit after Manager.Close")
 	}
+}
+
+// TestManagerConcurrentSessionAccess drives the session-map accessors
+// (sessionFor via the debugapi methods, removeSession, direct inserts)
+// and Close concurrently to prove m.mu serialises every read and write
+// of m.sessions. It is a -race regression guard: if any path touches
+// m.sessions without the lock, the detector fires.
+func TestManagerConcurrentSessionAccess(t *testing.T) {
+	t.Parallel()
+	m := newTestManager(t)
+
+	const workers = 8
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	for i := range workers {
+		sessionID := newTestSessionID(i)
+		wg.Go(func() {
+			for range 50 {
+				srv := newDebugServer(m.ctx, debugConfig{langID: "test", command: "test"},
+					"/bin/test", nil, m.rootURI,
+					debugapi.ClientCapabilities{}, fakeSubscriber{})
+				m.mu.Lock()
+				m.sessions[sessionID] = srv
+				m.mu.Unlock()
+
+				_, _ = m.Threads(ctx, sessionID)
+				_ = m.Terminate(ctx, "missing", &dap.TerminateArguments{})
+
+				m.removeSession(sessionID, srv)
+			}
+		})
+	}
+
+	wg.Go(func() {
+		_ = m.Close()
+	})
+
+	wg.Wait()
+}
+
+func newTestSessionID(i int) string {
+	return "session-" + string(rune('a'+i))
 }

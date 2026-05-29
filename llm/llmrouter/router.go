@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -85,13 +86,17 @@ type Router struct {
 	localRegistry *llamacpp.Registry
 	localCfg      llamacpp.Config
 
+	// mu guards localServices and closed. The host no longer serialises
+	// Router calls on the event-loop locker: llmrpc.Server dispatches each
+	// gRPC request on grpc-go's goroutine pool, so the Router must be
+	// internally goroutine-safe for the I/O-bound provider paths.
+	mu sync.Mutex
 	// localServices caches one llama.cpp Service per distinct
 	// (name, model path, projector path, context window) tuple. Each
 	// Service mmaps a multi-GiB GGUF and allocates a KV cache;
 	// constructing one per request (the original behaviour) leaked those
-	// resources every turn. The host serializes every Router call on the
-	// event-loop locker (see llmrpc.Server), so the cache needs no lock
-	// of its own. Close drains it.
+	// resources every turn. Guarded by mu because gRPC handlers may
+	// dispatch concurrently. Close drains it.
 	localServices map[localCacheKey]localService
 	// newLocal builds a llama.cpp Service. Tests swap in a fake to avoid
 	// loading a real GGUF.
@@ -188,6 +193,8 @@ func (r *Router) LocalRegistry() *llamacpp.Registry { return r.localRegistry }
 // clients hold only Go-side HTTP state. After Close the router rejects
 // further dispatches with ErrRouterClosed. Close is idempotent.
 func (r *Router) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.closed {
 		return nil
 	}
@@ -205,7 +212,10 @@ func (r *Router) CreateCompletion(
 	model llmapi.ModelEntry,
 	req llmapi.Request,
 ) (iterator.Iterator[llmapi.Event], error) {
-	if r.closed {
+	r.mu.Lock()
+	closed := r.closed
+	r.mu.Unlock()
+	if closed {
 		return nil, ErrRouterClosed
 	}
 	svc, err := r.resolve(ctx, model)
@@ -217,7 +227,10 @@ func (r *Router) CreateCompletion(
 
 // CountTokens implements llmapi.Service.
 func (r *Router) CountTokens(model llmapi.ModelEntry, messages []llmapi.Message) (int, error) {
-	if r.closed {
+	r.mu.Lock()
+	closed := r.closed
+	r.mu.Unlock()
+	if closed {
 		return 0, ErrRouterClosed
 	}
 	svc, err := r.resolve(context.Background(), model)
@@ -313,6 +326,11 @@ func (r *Router) resolveLocal(model llmapi.ModelEntry) (llmapi.Service, error) {
 		ModelPath:     model.BaseURL,
 		ProjectorPath: model.ProjectorPath,
 		ContextWindow: uint32(model.ContextWindow), // #nosec G115 -- context windows fit in uint32
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil, ErrRouterClosed
 	}
 	if svc, ok := r.localServices[key]; ok {
 		return svc, nil

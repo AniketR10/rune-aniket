@@ -37,6 +37,10 @@ import (
 )
 
 // Server adapts a syntaxapi.Parser to the generated SyntaxServer interface.
+//
+// gRPC dispatches each request on grpc-go's goroutine pool without the host
+// holding the event-loop locker, so the wrapped Parser must be safe for
+// concurrent use.
 type Server struct {
 	syntaxrpc.UnimplementedSyntaxServer
 	ctx       context.Context
@@ -44,7 +48,8 @@ type Server struct {
 	parser    syntaxapi.Parser
 }
 
-// NewServer returns a new Server that delegates to s.
+// NewServer returns a new Server that delegates to s. s must be safe for
+// concurrent use; see the Server doc comment.
 func NewServer(s syntaxapi.Parser) *Server {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	return &Server{parser: s, ctx: ctx, cancelCtx: cancelCtx}

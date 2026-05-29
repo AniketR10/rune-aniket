@@ -35,6 +35,11 @@ import (
 )
 
 // Server adapts an llmapi.Service to the generated LLMServer interface.
+//
+// gRPC dispatches each request on grpc-go's goroutine pool and the host
+// does not hold the event-loop locker around these I/O-bound calls, so the
+// supplied svc must be safe for concurrent use (e.g. llmrouter.Router
+// guards its caches with its own mutex).
 type Server struct {
 	llmrpc.UnimplementedLLMServer
 	ctx       context.Context
@@ -42,7 +47,8 @@ type Server struct {
 	svc       llmapi.Service
 }
 
-// NewServer returns a new Server that delegates to svc.
+// NewServer returns a new Server that delegates to svc. svc must be safe
+// for concurrent use; see the Server doc comment.
 func NewServer(svc llmapi.Service) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{svc: svc, ctx: ctx, cancelCtx: cancel}
