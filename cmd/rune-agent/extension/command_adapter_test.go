@@ -21,11 +21,11 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package extension
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
 )
 
@@ -57,6 +58,69 @@ func TestCommandAdapterModelCompleter(t *testing.T) {
 		"codex/gpt-5.5",
 		"openai/gpt-4o",
 	}, got)
+}
+
+// Slash-command preloads ship the skill body as a separate system
+// message, which the model reliably misses. formatSkillMessage must
+// include an inline cue telling the model to invoke the skill tool so
+// the body actually gets attended to.
+func TestFormatSkillMessageIncludesSkillToolHint(t *testing.T) {
+	skill := skills.Skill{Name: "perplexity-search"}
+
+	msg := formatSkillMessage(skill, "pico go to line")
+
+	assert.Contains(t, msg, "<command-message>perplexity-search</command-message>")
+	assert.Contains(t, msg, "<command-name>/perplexity-search</command-name>")
+	assert.Contains(t, msg, "pico go to line")
+	assert.Contains(t, msg, "<command-hint>")
+	assert.Contains(t, msg, "</command-hint>")
+	assert.Contains(t, msg, "perplexity-search")
+	// The hint must mention the skill tool by name so the model knows
+	// what action to take.
+	hintStart := strings.Index(msg, "<command-hint>")
+	hintEnd := strings.Index(msg, "</command-hint>")
+	require.Greater(t, hintEnd, hintStart)
+	hint := msg[hintStart+len("<command-hint>") : hintEnd]
+	assert.Contains(t, hint, "skill")
+}
+
+// parseStoredCommandMessage must continue to recover the slash-command
+// name and args from history even when the message carries the new
+// command-hint envelope.
+func TestParseStoredCommandMessageRoundTripsWithHint(t *testing.T) {
+	tests := []struct {
+		name     string
+		skill    skills.Skill
+		args     string
+		expected string
+	}{
+		{
+			name:     "no args",
+			skill:    skills.Skill{Name: "clear"},
+			args:     "",
+			expected: "/clear",
+		},
+		{
+			name:     "single-line args",
+			skill:    skills.Skill{Name: "perplexity-search"},
+			args:     "pico go to line",
+			expected: "/perplexity-search pico go to line",
+		},
+		{
+			name:     "multi-line args",
+			skill:    skills.Skill{Name: "issue-create"},
+			args:     "line one\nline two",
+			expected: "/issue-create\nline one\nline two",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := formatSkillMessage(tc.skill, tc.args)
+			got, ok := parseStoredCommandMessage(msg)
+			require.True(t, ok, "parse should succeed for %q", msg)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
 }
 
 // Same hazard as TestCommandAdapterModelCompleter, for :chat / :query.

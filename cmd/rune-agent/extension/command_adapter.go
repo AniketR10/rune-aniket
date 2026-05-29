@@ -268,6 +268,11 @@ func (a *commandAdapter) HandleCommand(
 // invocation. The full skill body is injected as a system message by
 // Agent.run via WithSkillName; this function only emits the
 // command envelope and any user-supplied arguments.
+//
+// A <command-hint> envelope is appended so the model is told, inline
+// in the user turn, to invoke the skill tool. Without this cue the
+// model frequently fails to notice the system-message skill body and
+// either ignores the command or falls back to request_skill.
 func formatSkillMessage(skill skills.Skill, args string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "<command-message>%s</command-message>\n", skill.Name)
@@ -276,6 +281,11 @@ func formatSkillMessage(skill skills.Skill, args string) string {
 		b.WriteString("\n")
 		b.WriteString(args)
 	}
+	fmt.Fprintf(
+		&b,
+		"\n<command-hint>Call the skill tool with name=%q to load and run this skill.</command-hint>",
+		skill.Name,
+	)
 	return b.String()
 }
 
@@ -285,6 +295,8 @@ func parseStoredCommandMessage(content string) (string, bool) {
 		messageClose = "</command-message>"
 		nameOpen     = "<command-name>"
 		nameClose    = "</command-name>"
+		hintOpen     = "<command-hint>"
+		hintClose    = "</command-hint>"
 	)
 
 	if !strings.HasPrefix(content, messageOpen) {
@@ -313,6 +325,11 @@ func parseStoredCommandMessage(content string) (string, bool) {
 	}
 	if strings.TrimPrefix(commandName, "/") != messageName {
 		return "", false
+	}
+	if hintIdx := strings.LastIndex(rest, "\n"+hintOpen); hintIdx >= 0 {
+		if strings.HasSuffix(rest, hintClose) {
+			rest = rest[:hintIdx]
+		}
 	}
 	if rest == "" {
 		return commandName, true
