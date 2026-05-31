@@ -44,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"golang.org/x/mod/semver"
 	"unstable.build/go-tui/debug"
 )
 
@@ -199,6 +200,9 @@ func newWithPlatformOps(cfg Config, ops platformOps) (*Manager, error) {
 	}
 	if cfg.ManifestURL == "" {
 		return nil, errors.New("ideupgrade: ManifestURL is required")
+	}
+	if err := requireSecureURL(cfg.ManifestURL); err != nil {
+		return nil, fmt.Errorf("ideupgrade: ManifestURL: %w", err)
 	}
 	if cfg.Arch == "" {
 		cfg.Arch = runtime.GOOS + "-" + runtime.GOARCH
@@ -378,8 +382,25 @@ func (m *Manager) fetchManifest(ctx context.Context) (Manifest, bool, error) {
 	if manifest.Version == "" || manifest.URL == "" || manifest.SHA256 == "" {
 		return Manifest{}, false, errors.New("manifest missing required fields")
 	}
+	if err := requireSecureURL(manifest.URL); err != nil {
+		return Manifest{}, false, fmt.Errorf("manifest artifact url: %w", err)
+	}
 
-	if manifest.Version == m.cfg.CurrentVersion {
+	// MinSupportedVersion is enforced before the same/older check so
+	// a client that is too old to upgrade in place still learns it
+	// must take action, even when the manifest version happens to
+	// match the current one.
+	if min := manifest.MinSupportedVersion; min != "" &&
+		compareVersions(m.cfg.CurrentVersion, min) < 0 {
+		return Manifest{}, false, fmt.Errorf(
+			"installed version %s is below manifest min_supported_version %s; manual upgrade required",
+			m.cfg.CurrentVersion, min)
+	}
+
+	// Refuse to "upgrade" to the same or an older version. The same
+	// branch also covers a notarized-but-vulnerable older artifact
+	// served by a compromised CDN.
+	if compareVersions(manifest.Version, m.cfg.CurrentVersion) <= 0 {
 		return manifest, false, nil
 	}
 
@@ -408,7 +429,47 @@ func manifestEndpoint(base, arch string) (string, error) {
 		return "", fmt.Errorf("parse manifest base: %w", err)
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/" + arch + "/manifest.json"
-	return u.String(), nil
+	endpoint := u.String()
+	if err := requireSecureURL(endpoint); err != nil {
+		return "", err
+	}
+	return endpoint, nil
+}
+
+// requireSecureURL rejects rawURL when it is not https://, unless the
+// scheme is exactly "https". There is no loopback exemption: an
+// attacker who can bind a service on localhost (a malicious package
+// running as the user, a compromised dev tool, a port-forward from a
+// hostile network) must not be able to silently feed the upgrader a
+// poisoned manifest forever. Tests stand up TLS servers via
+// httptest.NewTLSServer and pass srv.Client() through Config.HTTPClient.
+func requireSecureURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse url: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("url %q is not https", rawURL)
+	}
+	return nil
+}
+
+// compareVersions returns semver.Compare(a, b) but falls back to
+// string equality when either side is not a valid semver. Falling
+// back to "equal" on unparseable inputs is intentional: it keeps the
+// downgrade check from firing on dev-build tags like
+// "v0.42.1-2-gabcdef-dirty" that git describe produces.
+func compareVersions(a, b string) int {
+	if !semver.IsValid(a) || !semver.IsValid(b) {
+		if a == b {
+			return 0
+		}
+		// When we cannot compare, behave as if a is older so the
+		// downgrade check (a <= b) returns "no upgrade" rather than
+		// "yes upgrade" on garbage input. This is the safer default.
+		return -1
+	}
+	return semver.Compare(a, b)
 }
 
 func (m *Manager) isThrottled(ctx context.Context) bool {

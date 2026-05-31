@@ -50,13 +50,19 @@ type fakePlatformOps struct {
 	archiveLayout map[string]string
 
 	// Failure injection.
-	verifyErr     error
-	mountErr      error
-	gatekeeperErr error
-	dittoErr      error
-	extractErr    error
-	symlinkErr    error
-	renameErr     map[string]error // keyed by destination path
+	verifyErr          error
+	mountErr           error
+	gatekeeperErrs     []error // consumed FIFO across AssessGatekeeper calls; nil entry = success.
+	verifyCodesignErrs []error // consumed FIFO across VerifyCodesign calls; nil entry = success.
+	dittoErr           error
+	extractErr         error
+	symlinkErr         error
+	renameErr          map[string]error // keyed by destination path
+	// freeSpace maps a path (typically opts.installRoot or
+	// opts.cacheDir) to the free-space value the fake should report
+	// for FreeSpace queries. Missing keys default to a huge value so
+	// existing tests don't trip the pre-flight check.
+	freeSpace map[string]uint64
 	// renameOnce, when true, causes the renameErr injection to apply
 	// only on the first call to a given destination — letting the
 	// rollback rename (which targets the same path) proceed.
@@ -136,7 +142,26 @@ func (f *fakePlatformOps) MountDMG(_ context.Context, _ string) (string, func() 
 
 func (f *fakePlatformOps) AssessGatekeeper(_ context.Context, _ string) error {
 	f.record("AssessGatekeeper")
-	return f.gatekeeperErr
+	return f.popErr(&f.gatekeeperErrs)
+}
+
+func (f *fakePlatformOps) VerifyCodesign(_ context.Context, _ string) error {
+	f.record("VerifyCodesign")
+	return f.popErr(&f.verifyCodesignErrs)
+}
+
+// popErr returns and removes the next error from a FIFO slice. When
+// the slice is empty, the call succeeds. Lets tests differentiate
+// pre-install vs post-install behavior for the same op.
+func (f *fakePlatformOps) popErr(slot *[]error) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(*slot) == 0 {
+		return nil
+	}
+	err := (*slot)[0]
+	*slot = (*slot)[1:]
+	return err
 }
 
 func (f *fakePlatformOps) Ditto(_ context.Context, src, dst string) error {
@@ -199,6 +224,16 @@ func (f *fakePlatformOps) RemoveAll(path string) error {
 	f.record("RemoveAll")
 	f.removedPaths = append(f.removedPaths, path)
 	return os.RemoveAll(path)
+}
+
+func (f *fakePlatformOps) FreeSpace(path string) (uint64, error) {
+	f.record("FreeSpace")
+	if v, ok := f.freeSpace[path]; ok {
+		return v, nil
+	}
+	// Default: plenty of room. Tests that want the check to fire
+	// must inject an explicit small value for the relevant path.
+	return 1 << 40, nil
 }
 
 // copyDir recursively copies src into dst. Used by the fake Ditto so

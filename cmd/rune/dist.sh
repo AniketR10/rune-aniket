@@ -20,6 +20,36 @@ DOWNLOAD_HOST="${DOWNLOAD_HOST:-https://${DOWNLOADS_BUCKET#gs://}}"
 
 GIT_TAG=$(git describe --tags --dirty)
 
+# Reject anything that the in-product upgrader would refuse so we
+# never publish a manifest that downgrade/version checks treat as
+# garbage.
+#
+# Rules (kept in sync with ide/ideupgrade/manager.go):
+#   - version must match canonical semver ("vMAJOR[.MINOR[.PATCH]][-pre][+build]")
+#     as accepted by golang.org/x/mod/semver.
+#   - no dirty/distance suffix from `git describe` (-dirty, -<N>-g<sha>):
+#     those parse as pre-release labels and compare in surprising ways.
+#   - download host must be https://; the client refuses anything else.
+if [[ ! "$GIT_TAG" =~ ^v[0-9]+(\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+    echo "ERROR: tag '${GIT_TAG}' is not canonical semver (e.g. v1.2.3 or v1.2.3-beta.1)."
+    echo "       The in-product upgrader (golang.org/x/mod/semver) will refuse it."
+    exit 1
+fi
+case "$GIT_TAG" in
+    *-dirty|*-dirty+*)
+        echo "ERROR: tag '${GIT_TAG}' has a dirty suffix; commit or stash before publishing."
+        exit 1
+        ;;
+esac
+if [[ "$GIT_TAG" =~ -[0-9]+-g[0-9a-f]+$ ]]; then
+    echo "ERROR: tag '${GIT_TAG}' looks like an untagged describe output (-N-g<sha>); tag the commit first."
+    exit 1
+fi
+if [[ "$DOWNLOAD_HOST" != https://* ]]; then
+    echo "ERROR: DOWNLOAD_HOST must be https://...; got '${DOWNLOAD_HOST}'. The in-product upgrader refuses non-HTTPS URLs."
+    exit 1
+fi
+
 if [[ -z "${BLUE_RELEASE_TAR}" ]]; then
     echo "BLUE_RELEASE_TAR is not set. Pass the path to the release artifact."
     exit 1

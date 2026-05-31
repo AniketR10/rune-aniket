@@ -62,6 +62,14 @@ type platformOps interface {
 	// non-darwin must return ErrUnsupported.
 	AssessGatekeeper(ctx context.Context, appPath string) error
 
+	// VerifyCodesign (darwin only) runs `codesign --verify --deep
+	// --strict` on the given app bundle path. It validates the seal
+	// integrity of every signed component, catching cases where the
+	// bundle is structurally valid but has been mutated after
+	// install (e.g. an AV scanner rewriting xattrs). Implementations
+	// on non-darwin must return ErrUnsupported.
+	VerifyCodesign(ctx context.Context, appPath string) error
+
 	// Ditto recursively copies src to dst preserving extended
 	// attributes (darwin: `ditto`; linux: cp -a equivalent).
 	Ditto(ctx context.Context, src, dst string) error
@@ -81,6 +89,11 @@ type platformOps interface {
 	// RemoveAll removes path. Equivalent to os.RemoveAll, but exposed
 	// so tests can record/inspect cleanups.
 	RemoveAll(path string) error
+
+	// FreeSpace returns the number of bytes available to the calling
+	// user on the filesystem containing path. Used by the pre-flight
+	// check so we fail before downloading a release that won't fit.
+	FreeSpace(path string) (uint64, error)
 }
 
 // ErrUnsupported is returned by platformOps methods that are not

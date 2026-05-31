@@ -80,7 +80,7 @@ func TestLinuxE2E_HappyPath(t *testing.T) {
 
 	manifestArch := runtime.GOOS + "-" + runtime.GOARCH
 	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	t.Cleanup(srv.Close)
 	mux.HandleFunc("/rune.tar.gz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -151,7 +151,7 @@ func TestLinuxE2E_ChecksumMismatchRollsBack(t *testing.T) {
 
 	manifestArch := runtime.GOOS + "-" + runtime.GOARCH
 	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	t.Cleanup(srv.Close)
 	mux.HandleFunc("/rune.tar.gz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(tarData)

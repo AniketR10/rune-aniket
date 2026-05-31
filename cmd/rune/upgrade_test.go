@@ -66,7 +66,7 @@ func TestUpgradeCommandHandler_DoesNotBlockOnNetwork(t *testing.T) {
 		<-release
 		w.WriteHeader(http.StatusNotFound)
 	})
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	// Cleanups run LIFO; releaseFn must be registered AFTER
 	// srv.Close so it fires first and unblocks the in-flight
 	// handler before httptest.Server.Close waits for it.
@@ -160,7 +160,7 @@ func TestUpgradeCommandHandler_SurfacesErrorAsSeparateNotification(t *testing.T)
 		func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "boom", http.StatusInternalServerError)
 		})
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	t.Cleanup(srv.Close)
 
 	mgr, err := ideupgrade.New(ideupgrade.Config{
@@ -215,7 +215,7 @@ func TestUpgradeCommandHandler_TreatsForbiddenAsNoManifest(t *testing.T) {
 		func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 		})
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	t.Cleanup(srv.Close)
 
 	mgr, err := ideupgrade.New(ideupgrade.Config{

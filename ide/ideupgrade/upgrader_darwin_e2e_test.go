@@ -85,7 +85,7 @@ func TestDarwinE2E_HappyPath(t *testing.T) {
 	// 3. Stand up an HTTP server that serves the DMG and a manifest.
 	manifestArch := runtime.GOOS + "-" + runtime.GOARCH
 	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	t.Cleanup(srv.Close)
 
 	mux.HandleFunc("/Rune.dmg", func(w http.ResponseWriter, _ *http.Request) {
@@ -172,12 +172,17 @@ func TestDarwinE2E_HappyPath(t *testing.T) {
 }
 
 // noGatekeeperOps wraps a platformOps and forces AssessGatekeeper to
-// succeed regardless of the underlying implementation. This lets the
-// e2e test run on dev machines where the synthetic DMG is unsigned.
+// succeed regardless of the underlying implementation, and likewise
+// short-circuits VerifyCodesign. This lets the e2e test run on dev
+// machines where the synthetic DMG is unsigned.
 type noGatekeeperOps struct {
 	platformOps
 }
 
 func (n noGatekeeperOps) AssessGatekeeper(_ context.Context, _ string) error {
+	return nil
+}
+
+func (n noGatekeeperOps) VerifyCodesign(_ context.Context, _ string) error {
 	return nil
 }

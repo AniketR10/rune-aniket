@@ -38,15 +38,15 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
 
-func newTestManager(t *testing.T, baseURL string, current string, now func() time.Time) *Manager {
+func newTestManager(t *testing.T, srv *httptest.Server, current string, now func() time.Time) *Manager {
 	t.Helper()
 	storage := storagestub.NewInMemoryService()
 	cfg := Config{
 		CurrentVersion: current,
 		Arch:           "darwin-arm64",
-		ManifestURL:    baseURL,
+		ManifestURL:    srv.URL,
 		Storage:        storage,
-		HTTPClient:     http.DefaultClient,
+		HTTPClient:     srv.Client(),
 		Now:            now,
 		InitialDelay:   time.Millisecond,
 		CheckPeriod:    24 * time.Hour,
@@ -68,7 +68,7 @@ func TestManagerFetchManifest(t *testing.T) {
 	}
 
 	var requested atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requested.Add(1)
 		require.Equal(t, "/darwin-arm64/manifest.json", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
@@ -117,7 +117,7 @@ func TestManagerFetchManifest(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			now := func() time.Time { return time.Unix(1_700_000_000, 0) }
-			mgr := newTestManager(t, srv.URL, tc.current, now)
+			mgr := newTestManager(t, srv, tc.current, now)
 			if tc.setup != nil {
 				tc.setup(mgr)
 			}
@@ -255,10 +255,10 @@ func TestManagerFetchManifestErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(tc.handler)
+			srv := httptest.NewTLSServer(tc.handler)
 			t.Cleanup(srv.Close)
 			now := func() time.Time { return time.Unix(1_700_000_000, 0) }
-			mgr := newTestManager(t, srv.URL, "v1.0.0", now)
+			mgr := newTestManager(t, srv, "v1.0.0", now)
 			_, has, err := mgr.fetchManifest(context.Background())
 			if tc.wantErr == "" {
 				require.NoError(t, err)
@@ -272,14 +272,15 @@ func TestManagerFetchManifestErrors(t *testing.T) {
 }
 
 func TestManagerThrottle(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"version":"v9","os":"darwin","arch":"arm64","filename":"f","url":"u","sha256":"s"}`))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(
+			`{"version":"v9","os":"darwin","arch":"arm64","filename":"f","url":"https://example.invalid/f","sha256":"s"}`))
 	}))
 	t.Cleanup(srv.Close)
 
 	now := time.Unix(1_700_000_000, 0)
 	clock := now
-	mgr := newTestManager(t, srv.URL, "v1", func() time.Time { return clock })
+	mgr := newTestManager(t, srv, "v1", func() time.Time { return clock })
 	require.False(t, mgr.isThrottled(context.Background()))
 
 	mgr.persistChecked(context.Background())
@@ -324,4 +325,108 @@ func TestNewRequiresFields(t *testing.T) {
 	_, err = New(Config{Storage: storagestub.NewInMemoryService()})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ManifestURL")
+}
+
+func TestNewRejectsNonHTTPSManifestURL(t *testing.T) {
+	_, err := New(Config{
+		CurrentVersion: "v1.0.0",
+		ManifestURL:    "http://example.com",
+		Storage:        storagestub.NewInMemoryService(),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "https")
+}
+
+func TestNewRejectsHTTPLoopback(t *testing.T) {
+	// An attacker with the ability to bind a service on the user's
+	// machine (malicious dev tool, hostile port-forward) must not
+	// be able to feed Rune a poisoned manifest. There is no
+	// loopback exemption; tests stand up TLS servers instead.
+	for _, base := range []string{
+		"http://127.0.0.1:8080",
+		"http://localhost:8080",
+		"http://[::1]:8080",
+	} {
+		t.Run(base, func(t *testing.T) {
+			_, err := New(Config{
+				CurrentVersion: "v1.0.0",
+				ManifestURL:    base,
+				Storage:        storagestub.NewInMemoryService(),
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "https")
+		})
+	}
+}
+
+func TestFetchManifestRejectsNonHTTPSArtifactURL(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(
+			`{"version":"v9.9.9","url":"http://attacker.example/Rune.dmg","sha256":"abc"}`))
+	}))
+	t.Cleanup(srv.Close)
+	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr := newTestManager(t, srv, "v1.0.0", now)
+	_, _, err := mgr.fetchManifest(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "https")
+}
+
+func TestFetchManifestRejectsDowngrade(t *testing.T) {
+	// CDN compromised to serve a notarized-but-older Rune. Manager
+	// must not treat that as an upgrade.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(Manifest{
+			Version:  "v1.1.0",
+			Filename: "Rune.dmg",
+			URL:      "https://example.invalid/Rune.dmg",
+			SHA256:   "abc",
+		})
+	}))
+	t.Cleanup(srv.Close)
+	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr := newTestManager(t, srv, "v1.2.0", now)
+	_, has, err := mgr.fetchManifest(context.Background())
+	require.NoError(t, err)
+	require.False(t, has, "downgrade must not be offered")
+}
+
+func TestFetchManifestRejectsBelowMinSupported(t *testing.T) {
+	// Client is older than min_supported_version, so the user must
+	// upgrade out of band. Surface an error so the manager's
+	// notification path explains the situation.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(Manifest{
+			Version:             "v2.0.0",
+			MinSupportedVersion: "v1.5.0",
+			Filename:            "Rune.dmg",
+			URL:                 "https://example.invalid/Rune.dmg",
+			SHA256:              "abc",
+		})
+	}))
+	t.Cleanup(srv.Close)
+	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr := newTestManager(t, srv, "v1.0.0", now)
+	_, _, err := mgr.fetchManifest(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "min")
+}
+
+func TestFetchManifestAcceptsAtMinSupported(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(Manifest{
+			Version:             "v2.0.0",
+			MinSupportedVersion: "v1.5.0",
+			Filename:            "Rune.dmg",
+			URL:                 "https://example.invalid/Rune.dmg",
+			SHA256:              "abc",
+		})
+	}))
+	t.Cleanup(srv.Close)
+	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
+	mgr := newTestManager(t, srv, "v1.5.0", now)
+	_, has, err := mgr.fetchManifest(context.Background())
+	require.NoError(t, err)
+	require.True(t, has)
 }

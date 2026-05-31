@@ -50,7 +50,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/mod v0.35.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0

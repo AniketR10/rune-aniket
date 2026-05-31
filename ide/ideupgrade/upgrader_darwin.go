@@ -33,6 +33,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // Default install paths for darwin.
@@ -97,6 +99,16 @@ func (darwinPlatformOps) AssessGatekeeper(ctx context.Context, appPath string) e
 	return nil
 }
 
+func (darwinPlatformOps) VerifyCodesign(ctx context.Context, appPath string) error {
+	cmd := exec.CommandContext(ctx, "codesign",
+		"--verify", "--deep", "--strict", "--verbose=2", appPath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("codesign verify %s: %w: %s",
+			appPath, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (darwinPlatformOps) Ditto(ctx context.Context, src, dst string) error {
 	cmd := exec.CommandContext(ctx, "ditto", src, dst)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -120,4 +132,20 @@ func (darwinPlatformOps) RenameAtomic(src, dst string) error {
 
 func (darwinPlatformOps) RemoveAll(path string) error {
 	return os.RemoveAll(path)
+}
+
+func (darwinPlatformOps) FreeSpace(path string) (uint64, error) {
+	return statfsFreeBytes(path)
+}
+
+// statfsFreeBytes returns the bytes available to a non-root caller
+// on the filesystem containing path. Shared by darwin and linux —
+// the struct is the same shape on both, only the field types differ
+// across platforms.
+func statfsFreeBytes(path string) (uint64, error) {
+	var s unix.Statfs_t
+	if err := unix.Statfs(path, &s); err != nil {
+		return 0, fmt.Errorf("statfs %s: %w", path, err)
+	}
+	return uint64(s.Bavail) * uint64(s.Bsize), nil
 }

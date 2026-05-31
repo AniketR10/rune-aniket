@@ -75,6 +75,10 @@ func runUpgrade(ctx context.Context, opts upgradeOpts) error {
 		return fmt.Errorf("mkdir cache: %w", err)
 	}
 
+	if err := preflightFreeSpace(opts); err != nil {
+		return err
+	}
+
 	// Pick a destination filename based on the manifest filename, falling
 	// back to the URL basename. Either way we keep it inside cacheDir.
 	artifactName := opts.manifest.Filename
@@ -106,9 +110,40 @@ func runUpgrade(ctx context.Context, opts upgradeOpts) error {
 	}
 }
 
+// preflightHeadroomExtra is the constant slack we add to the
+// space-required estimate. It absorbs filesystem overhead (HFS+/APFS
+// block padding, ditto's temporary files, hdiutil's mount-point
+// staging) so the check is conservative without being noisy.
+const preflightHeadroomExtra = 200 * 1024 * 1024
+
+// preflightFreeSpace fails fast when there is not enough free space
+// on either the cache filesystem (DMG/tarball download lands here)
+// or the install-root filesystem (new bundle + backup live here
+// simultaneously until pruneBackups runs). Skipped when the manifest
+// does not advertise Size — without it we can't bound the requirement.
+func preflightFreeSpace(opts upgradeOpts) error {
+	if opts.manifest.Size <= 0 {
+		return nil
+	}
+	required := uint64(opts.manifest.Size)*2 + preflightHeadroomExtra
+	for _, p := range []string{opts.cacheDir, opts.installRoot} {
+		free, err := opts.ops.FreeSpace(p)
+		if err != nil {
+			return fmt.Errorf("check free space at %s: %w", p, err)
+		}
+		if free < required {
+			return fmt.Errorf(
+				"insufficient free space at %s: need %d MiB, have %d MiB",
+				p, required/(1024*1024), free/(1024*1024))
+		}
+	}
+	return nil
+}
+
 // runUpgradeDarwin is the macOS-specific orchestration: mount DMG,
 // assess Gatekeeper, snapshot the existing app, ditto the new bundle
-// in, refresh symlink, retire old backups, detach the DMG.
+// in, re-verify the installed bundle, refresh symlink, retire old
+// backups, detach the DMG.
 func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) error {
 	mountpoint, detach, err := opts.ops.MountDMG(ctx, dmgPath)
 	if err != nil {
@@ -141,14 +176,29 @@ func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) err
 	}
 
 	if err := opts.ops.Ditto(ctx, srcApp, dstApp); err != nil {
-		// Roll back the bundle.
-		_ = opts.ops.RemoveAll(dstApp)
-		if hasExisting {
-			if rbErr := opts.ops.RenameAtomic(backup, dstApp); rbErr != nil {
-				return fmt.Errorf("ditto failed: %w; rollback failed: %v", err, rbErr)
-			}
+		if rbErr := rollbackDarwin(opts, dstApp, backup, hasExisting); rbErr != nil {
+			return fmt.Errorf("ditto failed: %w; rollback failed: %v", err, rbErr)
 		}
 		return fmt.Errorf("ditto: %w", err)
+	}
+
+	// Post-install verification: catches mutations to the installed
+	// bundle that would prevent macOS from launching it (e.g. an
+	// async AV scanner rewriting xattrs after ditto, or a stale
+	// .zcompdump-style file inside the bundle). spctl re-checks the
+	// Gatekeeper policy at the on-disk path; codesign --verify
+	// checks the seal integrity of every signed component.
+	if err := opts.ops.AssessGatekeeper(ctx, dstApp); err != nil {
+		if rbErr := rollbackDarwin(opts, dstApp, backup, hasExisting); rbErr != nil {
+			return fmt.Errorf("post-install gatekeeper assess failed: %w; rollback failed: %v", err, rbErr)
+		}
+		return fmt.Errorf("post-install gatekeeper assess: %w", err)
+	}
+	if err := opts.ops.VerifyCodesign(ctx, dstApp); err != nil {
+		if rbErr := rollbackDarwin(opts, dstApp, backup, hasExisting); rbErr != nil {
+			return fmt.Errorf("post-install codesign verify failed: %w; rollback failed: %v", err, rbErr)
+		}
+		return fmt.Errorf("post-install codesign verify: %w", err)
 	}
 
 	if err := refreshCLISymlink(opts, dstApp, symlinkOwned); err != nil {
@@ -157,6 +207,18 @@ func runUpgradeDarwin(ctx context.Context, opts upgradeOpts, dmgPath string) err
 
 	pruneBackups(opts, dstApp)
 	return nil
+}
+
+// rollbackDarwin restores the previously snapshotted bundle. It is
+// shared by every failure path after the rename-into-backup step so
+// the error wrapping at the call site stays focused on the *cause*
+// rather than the recovery mechanics.
+func rollbackDarwin(opts upgradeOpts, dstApp, backup string, hasExisting bool) error {
+	_ = opts.ops.RemoveAll(dstApp)
+	if !hasExisting {
+		return nil
+	}
+	return opts.ops.RenameAtomic(backup, dstApp)
 }
 
 // runUpgradeLinux is the linux-specific orchestration: extract

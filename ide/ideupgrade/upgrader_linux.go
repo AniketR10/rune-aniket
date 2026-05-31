@@ -37,6 +37,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // Default install paths for linux.
@@ -72,6 +74,10 @@ func (linuxPlatformOps) MountDMG(
 }
 
 func (linuxPlatformOps) AssessGatekeeper(_ context.Context, _ string) error {
+	return ErrUnsupported
+}
+
+func (linuxPlatformOps) VerifyCodesign(_ context.Context, _ string) error {
 	return ErrUnsupported
 }
 
@@ -163,4 +169,12 @@ func (linuxPlatformOps) RenameAtomic(src, dst string) error {
 
 func (linuxPlatformOps) RemoveAll(path string) error {
 	return os.RemoveAll(path)
+}
+
+func (linuxPlatformOps) FreeSpace(path string) (uint64, error) {
+	var s unix.Statfs_t
+	if err := unix.Statfs(path, &s); err != nil {
+		return 0, fmt.Errorf("statfs %s: %w", path, err)
+	}
+	return uint64(s.Bavail) * uint64(s.Bsize), nil
 }

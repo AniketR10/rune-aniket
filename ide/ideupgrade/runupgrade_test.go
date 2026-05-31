@@ -116,11 +116,15 @@ func TestRunUpgradeDarwin_HappyPath(t *testing.T) {
 		"AssessGatekeeper",
 		"Rename:Rune.app->Rune.app.bak-v9.9.0",
 		"Ditto",
+		"VerifyCodesign",
 		"Symlink",
 	}
 	for _, want := range wantSeq {
 		require.Contains(t, seq, want, "missing call %q in sequence %v", want, seq)
 	}
+	// AssessGatekeeper runs once before the swap and once after.
+	require.Equal(t, 2, countCalls(seq, "AssessGatekeeper"))
+	require.Equal(t, 1, countCalls(seq, "VerifyCodesign"))
 	// Detach is called via deferred runUpgradeDarwin cleanup.
 	require.Contains(t, seq, "Detach")
 }
@@ -146,7 +150,7 @@ func TestRunUpgradeDarwin_SHA256Mismatch(t *testing.T) {
 }
 
 func TestRunUpgradeDarwin_GatekeeperRejection(t *testing.T) {
-	fake := &fakePlatformOps{gatekeeperErr: errors.New("denied")}
+	fake := &fakePlatformOps{gatekeeperErrs: []error{errors.New("denied")}}
 	opts, root := newDarwinFixture(t, fake)
 	writeExistingApp(t, root, "old")
 
@@ -160,6 +164,59 @@ func TestRunUpgradeDarwin_GatekeeperRejection(t *testing.T) {
 
 	seq := fake.callSeq()
 	require.NotContains(t, seq, "Ditto")
+}
+
+func TestRunUpgradeDarwin_PostInstallGatekeeperFails_RollsBack(t *testing.T) {
+	// First AssessGatekeeper (pre-install) succeeds; second (post-install)
+	// fails. The new bundle must be removed and the old one restored.
+	fake := &fakePlatformOps{
+		gatekeeperErrs: []error{nil, errors.New("post-install denied")},
+	}
+	opts, root := newDarwinFixture(t, fake)
+	writeExistingApp(t, root, "#!/bin/sh\necho old\n")
+
+	err := runUpgrade(context.Background(), opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "gatekeeper")
+
+	got, err := os.ReadFile(filepath.Join(root, "Rune.app", "Contents", "MacOS", "rune"))
+	require.NoError(t, err)
+	require.Equal(t, "#!/bin/sh\necho old\n", string(got))
+
+	_, err = os.Stat(filepath.Join(root, "Rune.app.bak-v9.9.0"))
+	require.True(t, os.IsNotExist(err), "backup should be gone after rollback")
+
+	seq := fake.callSeq()
+	require.Equal(t, 2, countCalls(seq, "AssessGatekeeper"))
+}
+
+func TestRunUpgradeDarwin_PostInstallCodesignFails_RollsBack(t *testing.T) {
+	fake := &fakePlatformOps{
+		verifyCodesignErrs: []error{errors.New("codesign verify failed")},
+	}
+	opts, root := newDarwinFixture(t, fake)
+	writeExistingApp(t, root, "#!/bin/sh\necho old\n")
+
+	err := runUpgrade(context.Background(), opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "codesign")
+
+	got, err := os.ReadFile(filepath.Join(root, "Rune.app", "Contents", "MacOS", "rune"))
+	require.NoError(t, err)
+	require.Equal(t, "#!/bin/sh\necho old\n", string(got))
+
+	_, err = os.Stat(filepath.Join(root, "Rune.app.bak-v9.9.0"))
+	require.True(t, os.IsNotExist(err), "backup should be gone after rollback")
+}
+
+func countCalls(seq []string, name string) int {
+	n := 0
+	for _, c := range seq {
+		if c == name {
+			n++
+		}
+	}
+	return n
 }
 
 func TestRunUpgradeDarwin_DittoFailureRollsBack(t *testing.T) {
@@ -337,4 +394,45 @@ func TestRunUpgradeLinux_RenameFailureRollsBack(t *testing.T) {
 	got, err := os.ReadFile(existing)
 	require.NoError(t, err)
 	require.Equal(t, "old", string(got))
+}
+
+func TestRunUpgrade_RejectsInsufficientSpace(t *testing.T) {
+	fake := &fakePlatformOps{}
+	opts, root := newDarwinFixture(t, fake)
+	writeExistingApp(t, root, "old")
+
+	// Advertise a 100 MiB artifact and pretend the install root has
+	// only 1 MiB free. The check must fail before Download runs.
+	opts.manifest.Size = 100 * 1024 * 1024
+	fake.freeSpace = map[string]uint64{
+		opts.installRoot: 1 * 1024 * 1024,
+		opts.cacheDir:    10 * 1024 * 1024 * 1024,
+	}
+
+	err := runUpgrade(context.Background(), opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "insufficient free space")
+
+	seq := fake.callSeq()
+	for _, c := range seq {
+		require.NotContains(t, c, "Download:")
+		require.NotEqual(t, "MountDMG", c)
+		require.NotEqual(t, "Ditto", c)
+	}
+}
+
+func TestRunUpgrade_AcceptsWhenSizeUnknown(t *testing.T) {
+	// Manifest doesn't advertise a size; the pre-flight check must
+	// skip rather than block the upgrade.
+	fake := &fakePlatformOps{}
+	opts, root := newDarwinFixture(t, fake)
+	writeExistingApp(t, root, "old")
+	opts.manifest.Size = 0
+	fake.freeSpace = map[string]uint64{
+		opts.installRoot: 1, // would normally be too small
+		opts.cacheDir:    1,
+	}
+
+	err := runUpgrade(context.Background(), opts)
+	require.NoError(t, err)
 }
