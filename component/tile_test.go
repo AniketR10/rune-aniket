@@ -347,6 +347,53 @@ func assertLayoutShape(
 	}
 }
 
+// TestTileAtNoGapWithFixedTailChild reproduces crash report 823596052:
+// "could not find tile at {X:215 Y:46}". Mouse coordinate lookup panicked
+// at component/tile.go:622 because TileNode.tileAt iterates children and
+// expects them to fully tile the parent. When the last child of a
+// vertical split is fixed-width and (width - fixedWidth) is odd, the
+// non-fixed children share an even integer width and the leftover
+// "spare" column gets assigned to a fixed-size child via
+// useSpareIdx, which discards it. The result is a one-column gap at the
+// right edge that produces no tile match.
+func TestTileAtNoGapWithFixedTailChild(t *testing.T) {
+	tree, m := NewTileTree(&component.TestComponent{Ch: 'A'})
+	w1 := tree.SplitVertical(m, &component.TestComponent{Ch: 'B'})
+	w2 := tree.SplitVertical(w1, &component.TestComponent{Ch: 'C'})
+
+	// Choose width so (width - fixedSize) is odd: 216 - 7 = 209.
+	const width, height = 216, 47
+	tree.Resize(width, height)
+	require.True(t, w2.SetFixedWidth(7), "SetFixedWidth on tail child")
+	tree.Resize(width, height)
+
+	for x := 0; x < width; x++ {
+		require.NotPanics(t, func() {
+			tree.TileAt(term.Coordinates{X: x, Y: 0})
+		}, "TileAt({%d, 0})", x)
+	}
+}
+
+// TestTileAtNoGapWithFixedTailChildHorizontal mirrors the bug for
+// horizontal splits: when the last child has a fixed height and
+// (height - fixedHeight) is odd, the rightmost spare row is lost.
+func TestTileAtNoGapWithFixedTailChildHorizontal(t *testing.T) {
+	tree, m := NewTileTree(&component.TestComponent{Ch: 'A'})
+	w1 := tree.SplitHorizontal(m, &component.TestComponent{Ch: 'B'})
+	w2 := tree.SplitHorizontal(w1, &component.TestComponent{Ch: 'C'})
+
+	const width, height = 80, 48
+	tree.Resize(width, height)
+	require.True(t, w2.SetFixedHeight(5), "SetFixedHeight on tail child")
+	tree.Resize(width, height)
+
+	for y := 0; y < height; y++ {
+		require.NotPanics(t, func() {
+			tree.TileAt(term.Coordinates{X: 0, Y: y})
+		}, "TileAt({0, %d})", y)
+	}
+}
+
 func TestResizeRounding(t *testing.T) {
 	tree, m, w1, w2 := setupTestCase(t, 3, 3)
 	assertTileSize(t, m, 3, 1)

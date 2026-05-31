@@ -816,54 +816,58 @@ func (t *TileNode) fixedSizeNodes() (totalFixedSize, fixedSizeNodes int) {
 func (t *TileNode) resizeHorizontal(width, height int) {
 	length := len(t.children)
 	fixedHeight, fixedSizeNodes := t.fixedSizeNodes()
-	cheight := (height - fixedHeight) / (length - fixedSizeNodes)
-	hspare := height - fixedHeight - cheight*(length-fixedSizeNodes)
-
-	useSpareIdx := length - hspare
-	spareCell := 0
+	flexNodes := length - fixedSizeNodes
+	cheight := (height - fixedHeight) / flexNodes
+	hspare := height - fixedHeight - cheight*flexNodes
+	// Distribute spare rows to the last hspare non-fixed children so
+	// fixed children never absorb (and lose) a spare row.
+	useSpareFlexIdx := flexNodes - hspare
 
 	var offset int
-	for i, ti := range t.children {
+	flexIdx := 0
+	for _, ti := range t.children {
 		fixedSize := ti.C.fixedSize
 		ti.Move(term.Coordinates{Y: offset})
 		if fixedSize != 0 {
 			ti.Resize(width, fixedSize)
 			offset += fixedSize
-		} else {
-			if i == useSpareIdx {
-				spareCell = 1
-			}
-			nheight := cheight + spareCell
-			ti.Resize(width, nheight)
-			offset += nheight
+			continue
 		}
+		nheight := cheight
+		if flexIdx >= useSpareFlexIdx {
+			nheight++
+		}
+		ti.Resize(width, nheight)
+		offset += nheight
+		flexIdx++
 	}
 }
 
 func (t *TileNode) resizeVertical(width, height int) {
 	length := len(t.children)
 	fixedWidth, fixedSizeNodes := t.fixedSizeNodes()
-	cwidth := (width - fixedWidth) / (length - fixedSizeNodes)
-	wspare := width - fixedWidth - cwidth*(length-fixedSizeNodes)
-
-	useSpareIdx := length - wspare
-	spareCell := 0
+	flexNodes := length - fixedSizeNodes
+	cwidth := (width - fixedWidth) / flexNodes
+	wspare := width - fixedWidth - cwidth*flexNodes
+	useSpareFlexIdx := flexNodes - wspare
 
 	var offset int
-	for i, ti := range t.children {
+	flexIdx := 0
+	for _, ti := range t.children {
 		fixedSize := ti.C.fixedSize
 		ti.Move(term.Coordinates{X: offset})
 		if fixedSize != 0 {
 			ti.Resize(fixedSize, height)
 			offset += fixedSize
-		} else {
-			if i == useSpareIdx {
-				spareCell = 1
-			}
-			nwidth := cwidth + spareCell
-			ti.Resize(nwidth, height)
-			offset += nwidth
+			continue
 		}
+		nwidth := cwidth
+		if flexIdx >= useSpareFlexIdx {
+			nwidth++
+		}
+		ti.Resize(nwidth, height)
+		offset += nwidth
+		flexIdx++
 	}
 }
 
