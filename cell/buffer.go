@@ -55,7 +55,11 @@ func fromToInBounds(cells View, from, to term.Coordinates) (
 	newFrom, newTo term.Coordinates, ok bool,
 ) {
 	rows := cells.Rows()
-	if rows == 0 || from.Y >= rows || (from.Y == rows-1 && from.X > cells.Columns(from.Y)) {
+	if rows == 0 || from.Y < 0 || from.Y >= rows ||
+		(from.Y == rows-1 && from.X > cells.Columns(from.Y)) {
+		return
+	}
+	if to.Y < 0 {
 		return
 	}
 
@@ -76,6 +80,9 @@ func fromToInBounds(cells View, from, to term.Coordinates) (
 func (s safeEditor) Edit(ctx context.Context, start, end term.Coordinates, str string) (
 	from, to term.Coordinates, old string,
 ) {
+	if start.Y < 0 || start.X < 0 || end.Y < 0 || end.X < 0 {
+		return
+	}
 	// only check in case of delete range
 	if start != end {
 		var ok bool
@@ -186,7 +193,7 @@ func (b *Buffer) DeleteRow(y int) (ok bool) {
 
 // DeleteRowContext deletes the row at term.Coordinates.Y
 func (b *Buffer) DeleteRowContext(ctx context.Context, y int) (ok bool) {
-	if ok = y < b.view.Rows(); !ok {
+	if y < 0 || y >= b.view.Rows() {
 		return
 	}
 	var from, to term.Coordinates
@@ -410,7 +417,7 @@ func (b *Buffer) WrapRowContext(
 		return true
 	}
 
-	if y >= b.Rows() || at > b.Columns(y) {
+	if y < 0 || y >= b.Rows() || at > b.Columns(y) {
 		return
 	}
 	pos := term.Coordinates{Y: y, X: at}

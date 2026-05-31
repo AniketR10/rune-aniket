@@ -138,6 +138,62 @@ func TestServerEdit(t *testing.T) {
 	})
 }
 
+// TestServerEditCellOutOfBoundsCoordinates exercises the wire surface
+// against malformed/out-of-buffer client coordinates. Wire-supplied
+// start/end positions land in safeEditor.Edit, whose contract
+// ("doesn't panic on out-of-bounds calls", cell/buffer.go:861) was
+// only honored for non-negative coordinates. Crash report 787830382
+// showed the same fragility on the mouse path; the RPC surface is
+// just as exposed because clients can send arbitrary int32 values.
+func TestServerEditCellOutOfBoundsCoordinates(t *testing.T) {
+	ctx := context.Background()
+	resource, err := workspaceapi.ParseURI("file:///bounds-check")
+	require.NoError(t, err)
+
+	cases := []struct {
+		name       string
+		start, end term.Coordinates
+		str        string
+	}{
+		{"negative Y insert", term.Coordinates{Y: -3}, term.Coordinates{Y: -3}, "x"},
+		{"negative Y delete", term.Coordinates{Y: -3}, term.Coordinates{Y: -3, X: 1}, ""},
+		{"negative both", term.Coordinates{X: -1, Y: -2}, term.Coordinates{X: -1, Y: -2}, "y"},
+		{"end Y negative", term.Coordinates{}, term.Coordinates{Y: -1}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock, s := newTestServer(t, ctrl)
+			expectEdit(t, mock, resource, "hello", false, false)
+			callServerEdit(t, ctx, s, resource, "hello", false, false)
+
+			buf := cell.NewBuffer()
+			buf.WriteString("hello")
+
+			h := expectEditor(t, ctrl, mock, resource)
+			h.EXPECT().CellEditor().Return(buf.Editor()).Times(1)
+
+			var protoStart, protoEnd termrpc.Coordinates
+			protoStart.FromModel(tc.start)
+			protoEnd.FromModel(tc.end)
+			req := textrpc.EditCellRequest{
+				ResourceName: NewURI(resource),
+				Start:        &protoStart,
+				End:          &protoEnd,
+				Str:          tc.str,
+			}
+
+			require.NotPanics(t, func() {
+				res, err := s.EditCell(ctx, &req)
+				require.NoError(t, err)
+				require.NotNil(t, res)
+			})
+		})
+	}
+}
+
 func assertEqualLocations(t *testing.T, loc, expected text.LocationList) {
 	var locations, expectedLocations []textapi.Location
 	for ok := true; ok; _, ok = loc.Prev() {

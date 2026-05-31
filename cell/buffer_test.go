@@ -280,13 +280,17 @@ func TestBufferDeleteRow(t *testing.T) {
 		{"ya-basic\n", 1, true, "ya-basic"},
 		{"ya-basic\na", 1, true, "ya-basic"},
 		{"a\nb\nc", 1, true, "a\nc"},
+		{"a\nb", -1, false, "a\nb"},
+		{"a\nb", -100, false, "a\nb"},
 	}
 
 	for i, tcase := range tsuite {
 		t.Run(fmt.Sprintf("test case %d", i), func(t *testing.T) {
 			buf := newBufferWithContent(t, tcase.content)
-			assert.Equal(t, tcase.wantOk, buf.DeleteRow(tcase.in))
-			assert.Equal(t, tcase.wantContent, buf.String())
+			assert.NotPanics(t, func() {
+				assert.Equal(t, tcase.wantOk, buf.DeleteRow(tcase.in))
+				assert.Equal(t, tcase.wantContent, buf.String())
+			})
 		})
 	}
 }
@@ -307,6 +311,84 @@ func TestBufferTruncateRowFrom2(t *testing.T) {
 	buf.TruncateRowFrom(term.Coordinates{X: 2, Y: 1})
 
 	assert.Equal(t, "hello\nwo", buf.String())
+}
+
+// TestBufferEditorNegativeCoordinates locks in the safeEditor.Edit
+// contract documented at cell/buffer.go:861 ("doesn't panic on
+// out-of-bounds calls") for negative coordinates. The crash report
+// 787830382 mouse path and the textrpc Edit wire surface both feed
+// arbitrary coordinates into this editor, so any panic here surfaces
+// as a process-level crash.
+func TestBufferEditorNegativeCoordinates(t *testing.T) {
+	cases := []struct {
+		name       string
+		start, end term.Coordinates
+		str        string
+	}{
+		{"negative Y insert", term.Coordinates{Y: -3}, term.Coordinates{Y: -3}, "x"},
+		{"negative Y delete", term.Coordinates{Y: -3}, term.Coordinates{Y: -3, X: 1}, ""},
+		{"negative X insert", term.Coordinates{X: -1}, term.Coordinates{X: -1}, "x"},
+		{"end Y negative", term.Coordinates{}, term.Coordinates{Y: -1}, ""},
+		{"replace with negative start", term.Coordinates{Y: -1}, term.Coordinates{X: 1}, "y"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := newBufferWithContent(t, "hello\nworld")
+			before := buf.String()
+			assert.NotPanics(t, func() {
+				from, to, old := buf.Editor().Edit(
+					context.Background(), tc.start, tc.end, tc.str)
+				assert.GreaterOrEqual(t, from.Y, 0,
+					"safeEditor must not return negative from.Y")
+				assert.GreaterOrEqual(t, from.X, 0,
+					"safeEditor must not return negative from.X")
+				assert.GreaterOrEqual(t, to.Y, 0,
+					"safeEditor must not return negative to.Y")
+				assert.GreaterOrEqual(t, to.X, 0,
+					"safeEditor must not return negative to.X")
+				assert.Equal(t, "", old,
+					"out-of-bounds edit must not report stale content")
+			})
+			assert.Equal(t, before, buf.String(),
+				"out-of-bounds edits must not mutate the buffer")
+		})
+	}
+}
+
+// TestBufferEditWithAttrNegativeCoordinates guards the downstream
+// consequence of safeEditor.Edit's negative-coord short-circuit:
+// EditWithAttr feeds the returned from/to into selector.iterateCells
+// which would panic on cells[negative]. Returning {0,0},{0,0} keeps
+// iterateCells safe.
+func TestBufferEditWithAttrNegativeCoordinates(t *testing.T) {
+	buf := newBufferWithContent(t, "hello\nworld")
+	before := buf.String()
+	assert.NotPanics(t, func() {
+		buf.EditWithAttr(context.Background(),
+			term.Coordinates{Y: -3}, term.Coordinates{Y: -3},
+			"x", term.Attributes{})
+	})
+	assert.Equal(t, before, buf.String())
+}
+
+// TestBufferWrapRowNegativeY guards both WrapRow branches (with and
+// without an undoer) against negative row indexes that previously
+// panicked through Buffer.Columns(y).
+func TestBufferWrapRowNegativeY(t *testing.T) {
+	t.Run("performance mode (no undoer)", func(t *testing.T) {
+		buf := new(Buffer)
+		buf.InitPerformance(10, 10, ' ')
+		buf.WriteString("hi")
+		assert.NotPanics(t, func() {
+			assert.False(t, buf.WrapRow(-1, 0))
+		})
+	})
+	t.Run("default mode (with undoer)", func(t *testing.T) {
+		buf := newBufferWithContent(t, "hi")
+		assert.NotPanics(t, func() {
+			assert.False(t, buf.WrapRow(-1, 0))
+		})
+	})
 }
 
 func TestBufferDeleteCell(t *testing.T) {
@@ -426,14 +508,17 @@ func TestBufferDelete(t *testing.T) {
 		assert.Equal(t, "bleh", str)
 	})
 
-	t.Run("panics if coordinates are negative", func(t *testing.T) {
+	t.Run("ignores negative coordinates without panic", func(t *testing.T) {
 		b := NewBuffer()
 		_, err := b.ReadFrom(strings.NewReader("bla\nbleh"))
 		require.NoError(t, err)
 
-		assert.Panics(t, func() {
+		before := b.String()
+		assert.NotPanics(t, func() {
 			b.Delete(term.Coordinates{X: 10}, term.Coordinates{X: -1})
 		})
+		assert.Equal(t, before, b.String(),
+			"out-of-bounds Delete must not mutate the buffer")
 	})
 
 	t.Run("does not panic if coordinates are partially out of bounds (x)", func(t *testing.T) {
