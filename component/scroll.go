@@ -762,6 +762,9 @@ func (s *Scroll) Draw(writer term.Writer) {
 func (s *Scroll) WordAt(pos term.Coordinates) (
 	term.Coordinates, term.Coordinates, string,
 ) {
+	if pos.Y < 0 || pos.Y >= s.buf.Rows() {
+		return pos, pos, ""
+	}
 	return s.buf.TokenAt(pos, wordMatcher)
 }
 

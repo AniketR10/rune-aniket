@@ -86,6 +86,10 @@ func (d mouseDelegate) ClearSelection() {
 
 func (d mouseDelegate) SelectWordAt(pos term.Coordinates) {
 	pos = d.cursor.ScrollCoordinates(pos)
+	buf := d.scroll().Buffer()
+	if pos.Y < 0 || pos.Y >= buf.Rows() {
+		return
+	}
 	start, end, word := d.scroll().WordAt(pos)
 	if word == "" {
 		return
