@@ -336,6 +336,12 @@ func buildNamedShader(
 			fadeInPerc, fadeOutPerc,
 			defAttr,
 		), true
+	case "pulseFrame":
+		return wrapShaderCrossFadeInOut(
+			glslshader.PulseFrame(glslshader.DefaultPulseFrameParams(fc), defAttr),
+			fadeInPerc, fadeOutPerc,
+			defAttr,
+		), true
 	case "grayFade":
 		return shader.GrayFade(shader.DefaultGrayFadeParams(), defAttr), true
 	case "trippy":
