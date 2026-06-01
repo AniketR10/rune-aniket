@@ -25,21 +25,15 @@ package byoe
 
 import "github.com/unstablebuild/rune-go-sdk/term"
 
-// ignoreAttrWriter wraps a term.Writer so that the embedded TUI
-// editor's draw pass writes cell content but never paints colors or
-// styles. Rune then layers its own location-list attributes on top
-// via UnionAttributes on the underlying writer, ensuring Rune-managed
-// highlights win over whatever the embedded editor would have drawn.
-//
-// The zero-value Attributes is never propagated up to the underlying
-// writer because callers reach it through the wrapper only — they hold
-// the unwrapped writer for the overlay pass themselves.
 type ignoreAttrWriter struct {
 	term.Writer
 }
 
 func (w ignoreAttrWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	c.Attributes = term.Attributes{}
+	c.Attributes = term.Attributes{
+		Bg:    c.Attributes.Bg,
+		Attrs: c.Attributes.Attrs & term.AttrReverse,
+	}
 	w.Writer.SetCell(pos, c)
 }
 

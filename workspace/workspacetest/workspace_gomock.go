@@ -27,7 +27,6 @@ import (
 type MockWorkspace struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkspaceMockRecorder
-	isgomock struct{}
 }
 
 // MockWorkspaceMockRecorder is the mock recorder for MockWorkspace.
@@ -435,11 +434,47 @@ func (mr *MockWorkspaceMockRecorder) Watch(path, c any, events ...any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Watch", reflect.TypeOf((*MockWorkspace)(nil).Watch), varargs...)
 }
 
+// MockRemoteScheme is a mock of RemoteScheme interface.
+type MockRemoteScheme struct {
+	ctrl     *gomock.Controller
+	recorder *MockRemoteSchemeMockRecorder
+}
+
+// MockRemoteSchemeMockRecorder is the mock recorder for MockRemoteScheme.
+type MockRemoteSchemeMockRecorder struct {
+	mock *MockRemoteScheme
+}
+
+// NewMockRemoteScheme creates a new mock instance.
+func NewMockRemoteScheme(ctrl *gomock.Controller) *MockRemoteScheme {
+	mock := &MockRemoteScheme{ctrl: ctrl}
+	mock.recorder = &MockRemoteSchemeMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRemoteScheme) EXPECT() *MockRemoteSchemeMockRecorder {
+	return m.recorder
+}
+
+// OnDisconnect mocks base method.
+func (m *MockRemoteScheme) OnDisconnect() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnDisconnect")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// OnDisconnect indicates an expected call of OnDisconnect.
+func (mr *MockRemoteSchemeMockRecorder) OnDisconnect() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnDisconnect", reflect.TypeOf((*MockRemoteScheme)(nil).OnDisconnect))
+}
+
 // MockLoader is a mock of Loader interface.
 type MockLoader struct {
 	ctrl     *gomock.Controller
 	recorder *MockLoaderMockRecorder
-	isgomock struct{}
 }
 
 // MockLoaderMockRecorder is the mock recorder for MockLoader.
@@ -507,7 +542,6 @@ func (mr *MockLoaderMockRecorder) Remove(file any) *gomock.Call {
 type MockSchemeManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockSchemeManagerMockRecorder
-	isgomock struct{}
 }
 
 // MockSchemeManagerMockRecorder is the mock recorder for MockSchemeManager.
@@ -559,7 +593,6 @@ func (mr *MockSchemeManagerMockRecorder) UnregisterScheme(arg0 any) *gomock.Call
 type MockWorkspaceManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkspaceManagerMockRecorder
-	isgomock struct{}
 }
 
 // MockWorkspaceManagerMockRecorder is the mock recorder for MockWorkspaceManager.
@@ -592,6 +625,32 @@ func (m *MockWorkspaceManager) AddWorkspace(arg0 context.Context, arg1 workspace
 func (mr *MockWorkspaceManagerMockRecorder) AddWorkspace(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkspace", reflect.TypeOf((*MockWorkspaceManager)(nil).AddWorkspace), arg0, arg1)
+}
+
+// DecrementReference mocks base method.
+func (m *MockWorkspaceManager) DecrementReference(arg0 workspaceapi.URI) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecrementReference", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DecrementReference indicates an expected call of DecrementReference.
+func (mr *MockWorkspaceManagerMockRecorder) DecrementReference(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecrementReference", reflect.TypeOf((*MockWorkspaceManager)(nil).DecrementReference), arg0)
+}
+
+// IncrementReference mocks base method.
+func (m *MockWorkspaceManager) IncrementReference(arg0 workspaceapi.URI) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncrementReference", arg0)
+}
+
+// IncrementReference indicates an expected call of IncrementReference.
+func (mr *MockWorkspaceManagerMockRecorder) IncrementReference(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementReference", reflect.TypeOf((*MockWorkspaceManager)(nil).IncrementReference), arg0)
 }
 
 // RegisterScheme mocks base method.
@@ -638,37 +697,10 @@ func (mr *MockWorkspaceManagerMockRecorder) Workspace(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Workspace", reflect.TypeOf((*MockWorkspaceManager)(nil).Workspace), arg0)
 }
 
-// IncrementReference mocks base method.
-func (m *MockWorkspaceManager) IncrementReference(arg0 workspaceapi.URI) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IncrementReference", arg0)
-}
-
-// IncrementReference indicates an expected call of IncrementReference.
-func (mr *MockWorkspaceManagerMockRecorder) IncrementReference(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementReference", reflect.TypeOf((*MockWorkspaceManager)(nil).IncrementReference), arg0)
-}
-
-// DecrementReference mocks base method.
-func (m *MockWorkspaceManager) DecrementReference(arg0 workspaceapi.URI) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DecrementReference", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DecrementReference indicates an expected call of DecrementReference.
-func (mr *MockWorkspaceManagerMockRecorder) DecrementReference(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecrementReference", reflect.TypeOf((*MockWorkspaceManager)(nil).DecrementReference), arg0)
-}
-
 // MockFlusherCloser is a mock of FlusherCloser interface.
 type MockFlusherCloser struct {
 	ctrl     *gomock.Controller
 	recorder *MockFlusherCloserMockRecorder
-	isgomock struct{}
 }
 
 // MockFlusherCloserMockRecorder is the mock recorder for MockFlusherCloser.
