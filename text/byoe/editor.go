@@ -220,6 +220,9 @@ func (e *Editor) Edit(
 			return nil, fmt.Errorf("byoe: subscribe git commands: %w", err)
 		}
 	}
+	if e.overrideHighlights {
+		ret = withMessageBar(ret, h)
+	}
 	return e.pub.PublishExternalEdit(file, buf, ret), nil
 }
 

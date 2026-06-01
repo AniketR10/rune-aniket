@@ -234,6 +234,25 @@ func (h *editorHandler) LocationLists() []text.LocationSet {
 	return h.locations.LocationLists()
 }
 
+// LocationMessageAtCursor returns the first non-empty Message among
+// the location lists registered at the embedded editor's current
+// cursor coordinates, or the empty string when no such location
+// exists. The "first non-empty wins" precedence mirrors
+// text/modeless/handler.go:setActiveLocationListMessage so the BYOE
+// message bar surfaces the same string the modal editors would.
+func (h *editorHandler) LocationMessageAtCursor() string {
+	locs, ok := h.locations.LocationsAtCoordinates(h.CursorAtScroll())
+	if !ok {
+		return ""
+	}
+	for _, loc := range locs {
+		if loc.Message != "" {
+			return loc.Message
+		}
+	}
+	return ""
+}
+
 // MoveToNextLocation drives the embedded editor's cursor to the next
 // location on the list named ID, picking the first location strictly
 // past CursorAtScroll (or wrapping to the start of the list when the
