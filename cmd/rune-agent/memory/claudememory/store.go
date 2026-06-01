@@ -202,7 +202,7 @@ func parseFile(path, id string) (dialoguemanager.Dialogue, error) {
 
 	return dialoguemanager.Dialogue{
 		ID:           id,
-		Version:      len(msgs),
+		Version:      int64(len(msgs)),
 		MessageCount: len(msgs),
 		Messages:     msgs,
 		UpdatedAt:    info.ModTime(),
@@ -233,7 +233,7 @@ func parseFileHeader(path, id string) (dialoguemanager.DialogueHeader, error) {
 
 	return dialoguemanager.DialogueHeader{
 		ID:           id,
-		Version:      count,
+		Version:      int64(count),
 		MessageCount: count,
 		UpdatedAt:    info.ModTime(),
 	}, nil

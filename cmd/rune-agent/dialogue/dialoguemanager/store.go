@@ -86,7 +86,7 @@ type Dialogue struct {
 	WorkspaceURI string
 	ApprovedPlan *ApprovedPlan
 	SubAgent     bool
-	Version      int
+	Version      int64
 	MessageCount int
 	MessagesPath string
 	Messages     []llmapi.Message
@@ -101,7 +101,7 @@ type storedDialogue struct {
 	WorkspaceURI string
 	ApprovedPlan *ApprovedPlan
 	SubAgent     bool
-	Version      int
+	Version      int64
 	MessageCount int
 	MessagesPath string
 	Usage        llmapi.DialogueUsage
@@ -118,7 +118,7 @@ type DialogueHeader struct {
 	WorkspaceURI    string
 	HasApprovedPlan bool
 	SubAgent        bool
-	Version         int
+	Version         int64
 	MessageCount    int
 	Usage           llmapi.DialogueUsage
 	UpdatedAt       time.Time
@@ -126,7 +126,7 @@ type DialogueHeader struct {
 
 type dialogueIndex struct {
 	Headers      map[string]DialogueHeader
-	Version      int
+	Version      int64
 	Bootstrapped bool
 }
 

@@ -38,7 +38,7 @@ const dreamStateID = "dream-state"
 //nolint:revive // Preserved imported API name for compatibility and clarity.
 type DreamState struct {
 	SchemaVersion int              // template version memories were last processed under
-	Dreamed       map[string]int   // dialogue ID → version that was dreamed
+	Dreamed       map[string]int64 // dialogue ID → version that was dreamed
 	LastExtract   int64            // incremented when extraction produces new memories
 	PhasesRun     map[string]int64 // phase name → LastExtract value it last ran at
 }
@@ -57,7 +57,7 @@ func (s *dreamStateStore) load(ctx context.Context) (DreamState, error) {
 	if err != nil {
 		if errors.Is(err, storageapi.ErrNotFound) {
 			return DreamState{
-				Dreamed:   make(map[string]int),
+				Dreamed:   make(map[string]int64),
 				PhasesRun: make(map[string]int64),
 			}, nil
 		}
@@ -67,7 +67,7 @@ func (s *dreamStateStore) load(ctx context.Context) (DreamState, error) {
 		state.SchemaVersion = 1
 	}
 	if state.Dreamed == nil {
-		state.Dreamed = make(map[string]int)
+		state.Dreamed = make(map[string]int64)
 	}
 	if state.PhasesRun == nil {
 		state.PhasesRun = make(map[string]int64)

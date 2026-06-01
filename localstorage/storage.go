@@ -29,20 +29,27 @@ import (
 	"path/filepath"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/localstorage/boltdoc"
 	"unstable.build/go-tui/localstorage/firstmover"
-	"unstable.build/go-tui/localstorage/schemedoc"
-	"unstable.build/go-tui/workspace"
 )
 
-// New returns a storageapi.Service storage service that
-// uses the local directory dir to setup a local filesystem-based
-// multi-process safe, goroutine-safe storageapi.Service.
+// New returns a storageapi.Service storage service that uses the local
+// directory dir to setup a local, filesystem-backed, multi-process safe,
+// goroutine-safe storageapi.Service.
+//
+// On-disk layout: a single bbolt file at <dir>/.db/rune.db holds every
+// document inside named buckets (one per partition; the root collection
+// lives in the "rune" bucket). Crash consistency is provided by bbolt's
+// copy-on-write WAL, and CAS Updates run inside a single RW transaction
+// so storageapi.ConsistentUpdate has serializable read-modify-write
+// semantics. A legacy schemedoc directory at <dir>/.db (one TOML file
+// per record) is migrated into rune.db on first open; on success it is
+// renamed to <dir>/.db.legacy and kept for one release as a recovery
+// path.
 func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) storageapi.Service {
 	ret := &delayedLoadingService{ready: make(chan struct{})}
 	go debug.CapturePanicReport(func() {
@@ -55,27 +62,36 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) storag
 			ret.service = storagestub.NewInMemoryService()
 			return
 		}
-		storageDirURI, err := workspaceapi.CurrentUserHostURI(storageDir)
+		dbPath := filepath.Join(storageDir, "rune.db")
+		pending, err := boltdoc.LegacyPending(storageDir, "rune.db")
 		if err != nil {
-			log.Errorf("new storage: URI: %v", err)
+			log.Errorf("new storage: scan legacy: %v", err)
 			ret.service = storagestub.NewInMemoryService()
 			return
 		}
-		scheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), storageDirURI)
-		if err != nil {
-			log.Errorf("new storage: %v", err)
-			ret.service = storagestub.NewInMemoryService()
-			return
-		}
-		storage, err := schemedoc.NewDocumentService(scheme, marshaler)
+		storage, handle, err := boltdoc.New(dbPath, marshaler)
 		if err != nil {
 			log.Errorf("new storage: %v", err)
 			ret.service = storagestub.NewInMemoryService()
 			return
 		}
+		if pending {
+			// Successful migration renames the legacy entries to
+			// <dir>/.db.legacy/; that directory is kept for one release
+			// as a recovery path. A failure here aborts: we discard the
+			// half-populated bolt file and fall back to the in-memory
+			// stub so users never see partial data.
+			if err := boltdoc.MigrateLegacy(ctx, storage, storageDir, "rune.db", marshaler); err != nil {
+				log.Errorf("new storage: migrate legacy: %v", err)
+				_ = handle.Close()
+				ret.service = storagestub.NewInMemoryService()
+				return
+			}
+		}
+		ret.handle = handle
 		cfg := firstmover.DefaultConfig()
 		cfg.Marshaler = marshaler
-		cfg.CloseError = schemedoc.ErrClosing
+		cfg.CloseError = boltdoc.ErrClosing
 
 		ret.service = firstmover.New(storage, filepath.Join(dir, ".dblock"), cfg)
 	})
@@ -84,6 +100,7 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) storag
 
 type delayedLoadingService struct {
 	service storageapi.Service
+	handle  *boltdoc.Service
 	ready   chan struct{}
 }
 

@@ -56,7 +56,7 @@ func TestEphemeralStore(t *testing.T) {
 		assert.Equal(t, "d1", d.ID)
 		assert.Len(t, d.Messages, 1)
 		assert.Equal(t, "hello", d.Messages[0].Content)
-		assert.Equal(t, 1, d.Version)
+		assert.Equal(t, int64(1), d.Version)
 	})
 
 	t.Run("Create returns ErrAlreadyExists", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestEphemeralStore(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, d.Messages, 2)
 		assert.Equal(t, "second", d.Messages[1].Content)
-		assert.Equal(t, 2, d.Version)
+		assert.Equal(t, int64(2), d.Version)
 	})
 
 	t.Run("AppendMessages returns ErrNotFound for missing dialogue", func(t *testing.T) {

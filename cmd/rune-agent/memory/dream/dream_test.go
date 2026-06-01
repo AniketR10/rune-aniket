@@ -100,7 +100,7 @@ func TestDream(t *testing.T) {
 		// Verify state was saved.
 		var state DreamState
 		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
-		assert.Equal(t, 1, state.Dreamed["d1"])
+		assert.Equal(t, int64(1), state.Dreamed["d1"])
 	})
 
 	t.Run("already dreamed dialogue is skipped", func(t *testing.T) {
@@ -117,7 +117,7 @@ func TestDream(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		svc := &mockLLMService{}
@@ -147,7 +147,7 @@ func TestDream(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
@@ -164,7 +164,7 @@ func TestDream(t *testing.T) {
 		// State should now reflect version 3.
 		var state DreamState
 		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
-		assert.Equal(t, 3, state.Dreamed["d1"])
+		assert.Equal(t, int64(3), state.Dreamed["d1"])
 	})
 
 	t.Run("agent error skips dialogue continues", func(t *testing.T) {
@@ -206,7 +206,7 @@ func TestDream(t *testing.T) {
 		var state DreamState
 		require.NoError(t, deps.Storage.Get(context.Background(), dreamStateID, &state))
 		assert.NotContains(t, state.Dreamed, "d1")
-		assert.Equal(t, 1, state.Dreamed["d2"])
+		assert.Equal(t, int64(1), state.Dreamed["d2"])
 	})
 
 	t.Run("context cancellation stops processing", func(t *testing.T) {
@@ -308,7 +308,7 @@ func TestDream(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: 1,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		svc := &mockLLMService{responses: []mockLLMResponse{
@@ -336,7 +336,7 @@ func TestDream(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: 1,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		svc := &mockLLMService{}
@@ -362,7 +362,7 @@ func TestDream(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		svc := &mockLLMService{}
@@ -394,7 +394,7 @@ func TestDream(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: 1,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		deps.LLM = &mockLLMService{responses: []mockLLMResponse{
@@ -443,7 +443,7 @@ func TestDream(t *testing.T) {
 		storage := &mockStorage{data: make(map[string]any)}
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: 1,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		d1 := dialoguemanager.Dialogue{
@@ -582,7 +582,7 @@ func TestRunPhases(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{},
+			Dreamed:       map[string]int64{},
 			LastExtract:   5,
 			PhasesRun:     map[string]int64{"custom": 5},
 		}
@@ -658,7 +658,7 @@ func TestRunPhases(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{},
+			Dreamed:       map[string]int64{},
 			LastExtract:   5,
 			PhasesRun:     map[string]int64{},
 		}
@@ -695,7 +695,7 @@ func TestRunPhases(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{},
+			Dreamed:       map[string]int64{},
 			LastExtract:   5,
 			PhasesRun:     map[string]int64{},
 		}
@@ -849,7 +849,7 @@ func TestDreamPipelineGitIntegration(t *testing.T) {
 	// State should reflect the processed dialogue.
 	var state DreamState
 	require.NoError(t, deps.Storage.Get(ctx, dreamStateID, &state))
-	assert.Equal(t, 1, state.Dreamed["d1"])
+	assert.Equal(t, int64(1), state.Dreamed["d1"])
 	assert.Equal(t, int64(1), state.LastExtract)
 }
 

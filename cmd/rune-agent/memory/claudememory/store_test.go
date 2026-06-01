@@ -187,7 +187,7 @@ func TestStoreListAndGet(t *testing.T) {
 		require.Len(t, d.Messages, 2)
 		assert.Equal(t, "Hello", d.Messages[0].Content)
 		assert.Equal(t, "Hi", d.Messages[1].Content)
-		assert.Equal(t, 2, d.Version)
+		assert.Equal(t, int64(2), d.Version)
 		assert.False(t, d.UpdatedAt.IsZero())
 	})
 

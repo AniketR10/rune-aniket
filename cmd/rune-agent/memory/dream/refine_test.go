@@ -76,7 +76,7 @@ func TestBuildRefineUserPrompt(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		prompt, err := buildRefineUserPrompt(context.Background(), deps)
@@ -100,7 +100,7 @@ func TestBuildRefineUserPrompt(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{"d1": 1, "d2": 1},
+			Dreamed:       map[string]int64{"d1": 1, "d2": 1},
 		}
 
 		prompt, err := buildRefineUserPrompt(context.Background(), deps)
@@ -116,7 +116,7 @@ func TestBuildRefineUserPrompt(t *testing.T) {
 		storage := deps.Storage.(*mockStorage)
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: templateVersion,
-			Dreamed:       map[string]int{"d-missing": 1},
+			Dreamed:       map[string]int64{"d-missing": 1},
 		}
 
 		prompt, err := buildRefineUserPrompt(context.Background(), deps)

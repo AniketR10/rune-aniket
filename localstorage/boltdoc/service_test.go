@@ -1,0 +1,136 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package boltdoc_test
+
+import (
+	"context"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/doctest"
+	"github.com/unstablebuild/ox-api/bluestore"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
+	"github.com/unstablebuild/rune-go-sdk/retry"
+
+	"unstable.build/go-tui/localstorage/boltdoc"
+)
+
+// TestStoreImplementsDocumentService runs the blue/doctest contract suite
+// against the bolt-backed storageapi.Service. The suite covers Create,
+// Set, Update with preconditions, Get, Delete, List with filters, Drop,
+// and partition isolation. We adapt the storageapi.Service back to a
+// document.Service so doctest can drive it directly. The suite seeds
+// arbitrary byte payloads that are not valid UTF-8, so we use the BSON
+// marshaler here; TOML would reject non-UTF-8 strings. The production
+// callers pick doctoml.Marshaler(), which is exercised by the other
+// tests in this file plus the broader localstorage tests.
+func TestStoreImplementsDocumentService(t *testing.T) {
+	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
+		dir := t.TempDir()
+		svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = handle.Close() })
+		return bluestore.AdaptFrom(svc)
+	})
+}
+
+// TestConsistentUpdate verifies that two goroutines racing to bump a
+// Version field via storageapi.ConsistentUpdate both succeed, with the
+// final Version reflecting both increments. This is the central
+// motivation for the schemedoc → bolt migration: bolt's RW transaction
+// makes read-modify-write atomic, whereas schemedoc could lose updates
+// under contention.
+func TestConsistentUpdate(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), doctoml.Marshaler())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = handle.Close() })
+
+	type counter struct {
+		Version int64
+		Value   string
+	}
+
+	require.NoError(t, svc.Create(ctx, "counter", &counter{Version: 1, Value: "init"}))
+
+	strategy := retry.CombinedStrategy(
+		retry.ExponentialStrategy(time.Millisecond, 50*time.Millisecond),
+		retry.LimitStrategy(20),
+	)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var c counter
+			err := storageapi.ConsistentUpdate(ctx, svc, "counter", &c, strategy,
+				func() ([]storageapi.Update, []storageapi.Precondition) {
+					return []storageapi.Update{
+							{FieldPath: []string{"Version"}, Value: c.Version + 1},
+						}, []storageapi.Precondition{
+							{FieldPath: []string{"Version"}, Value: c.Version},
+						}
+				})
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+
+	var got counter
+	require.NoError(t, svc.Get(ctx, "counter", &got))
+	assert.Equal(t, int64(3), got.Version, "both increments should have been applied")
+}
+
+// TestPartitionIsolation confirms that Partition returns a sibling Store
+// rooted at a different bucket; records written under the partition are
+// invisible to the root collection and vice-versa.
+func TestPartitionIsolation(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), doctoml.Marshaler())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = handle.Close() })
+
+	type rec struct{ Name string }
+
+	require.NoError(t, svc.Create(ctx, "a", &rec{Name: "root-a"}))
+
+	part, err := svc.Partition("memories")
+	require.NoError(t, err)
+	require.NoError(t, part.Create(ctx, "a", &rec{Name: "partition-a"}))
+
+	var rootGot, partGot rec
+	require.NoError(t, svc.Get(ctx, "a", &rootGot))
+	require.NoError(t, part.Get(ctx, "a", &partGot))
+	assert.Equal(t, "root-a", rootGot.Name)
+	assert.Equal(t, "partition-a", partGot.Name)
+}

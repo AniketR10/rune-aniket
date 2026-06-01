@@ -164,7 +164,7 @@ func TestStoreAppendMessagesAccumulatesUsage(t *testing.T) {
 	assert.Equal(t, 3*time.Second, d.Usage.TotalDuration)
 	assert.Equal(t, 2300*time.Millisecond, d.Usage.InferenceDuration)
 	assert.Equal(t, 700*time.Millisecond, d.Usage.ToolCallDuration)
-	assert.Equal(t, 3, d.Version)
+	assert.Equal(t, int64(3), d.Version)
 }
 
 func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
@@ -186,20 +186,20 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	// Read the dialogue — it sees version 1.
 	staleDialogue, err := s.Get(ctx, "d1")
 	require.NoError(t, err)
-	require.Equal(t, 1, staleDialogue.Version)
+	require.Equal(t, int64(1), staleDialogue.Version)
 
 	// Simulate a concurrent writer: bump version to 2 and add usage.
 	// This makes our staleDialogue's version outdated.
 	err = backend.Update(ctx, "d1",
 		[]storageapi.Update{
-			{FieldPath: []string{"Version"}, Value: 2},
+			{FieldPath: []string{"Version"}, Value: int64(2)},
 			{FieldPath: []string{"Usage"}, Value: llmapi.DialogueUsage{
 				TokensSent:     70,
 				TokensReceived: 10,
 				Completions:    2,
 			}},
 		},
-		storageapi.Precondition{FieldPath: []string{"Version"}, Value: 1},
+		storageapi.Precondition{FieldPath: []string{"Version"}, Value: int64(1)},
 	)
 	require.NoError(t, err)
 
@@ -220,7 +220,7 @@ func TestStoreAppendMessagesRetryAccumulatesUsageCorrectly(t *testing.T) {
 	// Verify the result: usage should be the concurrent writer's state + our delta.
 	d, err := s.Get(ctx, "d1")
 	require.NoError(t, err)
-	assert.Equal(t, 3, d.Version)               // 2 (from concurrent writer) + 1
+	assert.Equal(t, int64(3), d.Version)        // 2 (from concurrent writer) + 1
 	assert.Len(t, d.Messages, 2)                // system + user
 	assert.Equal(t, 100, d.Usage.TokensSent)    // 70 (concurrent) + 30 (ours)
 	assert.Equal(t, 15, d.Usage.TokensReceived) // 10 (concurrent) + 5 (ours)
@@ -705,7 +705,7 @@ func TestStoreArchiveAndReplacePreservesMetadata(t *testing.T) {
 			assert.Equal(t, m.Content, replaced.Messages[i].Content, "Message[%d] content", i)
 		}
 		assert.Equal(t, len(compactedMsgs), replaced.MessageCount, "MessageCount must match new messages")
-		assert.Equal(t, 1, replaced.Version, "Version must reset to 1")
+		assert.Equal(t, int64(1), replaced.Version, "Version must reset to 1")
 		assert.WithinDuration(t, time.Now(), replaced.UpdatedAt, 5*time.Second,
 			"UpdatedAt must be refreshed to ~now")
 	})
@@ -974,7 +974,7 @@ func TestStoreCreateDeleteRecreateCycle(t *testing.T) {
 	assert.Equal(t, "cycle", h.ID)
 	assert.Equal(t, "v2", h.Model)
 	assert.Equal(t, 2, h.MessageCount)
-	assert.Equal(t, 1, h.Version)
+	assert.Equal(t, int64(1), h.Version)
 }
 
 func TestStoreMultipleRapidMutations(t *testing.T) {

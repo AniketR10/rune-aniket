@@ -50,14 +50,14 @@ func TestDreamState(t *testing.T) {
 		ctx := context.Background()
 
 		state := DreamState{
-			Dreamed: map[string]int{"d1": 1, "d2": 3},
+			Dreamed: map[string]int64{"d1": 1, "d2": 3},
 		}
 		require.NoError(t, store.save(ctx, state))
 
 		loaded, err := store.load(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, 1, loaded.Dreamed["d1"])
-		assert.Equal(t, 3, loaded.Dreamed["d2"])
+		assert.Equal(t, int64(1), loaded.Dreamed["d1"])
+		assert.Equal(t, int64(3), loaded.Dreamed["d2"])
 	})
 
 	t.Run("load propagates backend error", func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestDreamState(t *testing.T) {
 		storage := &mockStorage{setErr: errors.New("write fail")}
 		store := newDreamState(storage)
 
-		err := store.save(context.Background(), DreamState{Dreamed: map[string]int{}})
+		err := store.save(context.Background(), DreamState{Dreamed: map[string]int64{}})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "write fail")
 	})
@@ -84,7 +84,7 @@ func TestDreamState(t *testing.T) {
 
 		storage.data[dreamStateID] = &DreamState{
 			SchemaVersion: 0,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 
 		loaded, err := store.load(context.Background())
@@ -99,7 +99,7 @@ func TestDreamState(t *testing.T) {
 
 		state := DreamState{
 			SchemaVersion: 5,
-			Dreamed:       map[string]int{"d1": 1},
+			Dreamed:       map[string]int64{"d1": 1},
 		}
 		require.NoError(t, store.save(ctx, state))
 
@@ -127,7 +127,7 @@ func TestDreamState(t *testing.T) {
 		ctx := context.Background()
 
 		storage.data[dreamStateID] = &DreamState{
-			Dreamed: map[string]int{"d1": 1},
+			Dreamed: map[string]int64{"d1": 1},
 		}
 
 		loaded, err := store.load(ctx)
@@ -141,7 +141,7 @@ func TestDreamState(t *testing.T) {
 		ctx := context.Background()
 
 		state := DreamState{
-			Dreamed:     map[string]int{"d1": 1},
+			Dreamed:     map[string]int64{"d1": 1},
 			LastExtract: 42,
 			PhasesRun:   map[string]int64{},
 		}
@@ -158,7 +158,7 @@ func TestDreamState(t *testing.T) {
 		ctx := context.Background()
 
 		state := DreamState{
-			Dreamed:     map[string]int{},
+			Dreamed:     map[string]int64{},
 			LastExtract: 5,
 			PhasesRun:   map[string]int64{"quality": 3, "deduplicate": 5},
 		}
