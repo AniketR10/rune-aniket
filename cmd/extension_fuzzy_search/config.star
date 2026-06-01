@@ -8,9 +8,9 @@
 #   RUNE_PKG_VERSION  string  the installed package's version.
 #   RUNE_EDITOR_MODE  string  "modal" | "modeless" — the resolved host
 #                             editor mode (empty when not yet known). The
-#                             host substitutes byoe with its configured
-#                             editor.byoe.fallback value before invoking
-#                             this script, so "byoe" never reaches here.
+#                             host substitutes exo with its configured
+#                             editor.exo.fallback value before invoking
+#                             this script, so "exo" never reaches here.
 #
 # The script writes the merged settings into the user's rune config so that
 # fuzzy_search options and search* aliases/key bindings are only registered

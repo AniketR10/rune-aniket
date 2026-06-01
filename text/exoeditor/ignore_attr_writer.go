@@ -21,41 +21,20 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
-import (
-	"sync/atomic"
+import "github.com/unstablebuild/rune-go-sdk/term"
 
-	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/browser"
-)
-
-// eventPublisher decorates browser.EventPublisher with a refresh
-// callback that fires on EventInterrupt. refresh is assigned
-// concurrently with the vte's reader goroutine (which is started
-// inside vte.NewHandler before Edit can wire the callback), so the
-// field is stored as an atomic.Pointer to avoid a data race; an
-// unset refresh is simply skipped.
-type eventPublisher struct {
-	publisher browser.EventPublisher
-	refresh   atomic.Pointer[func()]
+type ignoreAttrWriter struct {
+	term.Writer
 }
 
-func newEventPublisher(publisher browser.EventPublisher) *eventPublisher {
-	return &eventPublisher{publisher: publisher}
-}
-
-// setRefresh installs fn as the refresh callback. Safe to call from
-// any goroutine.
-func (p *eventPublisher) setRefresh(fn func()) {
-	p.refresh.Store(&fn)
-}
-
-func (p *eventPublisher) PublishEvent(ev term.Event) error {
-	if ev.Type == term.EventInterrupt {
-		if fn := p.refresh.Load(); fn != nil {
-			(*fn)()
-		}
+func (w ignoreAttrWriter) SetCell(pos term.Coordinates, c term.Cell) {
+	c.Attributes = term.Attributes{
+		Bg:    c.Attributes.Bg,
+		Attrs: c.Attributes.Attrs & term.AttrReverse,
 	}
-	return p.publisher.PublishEvent(ev)
+	w.Writer.SetCell(pos, c)
 }
+
+func (w ignoreAttrWriter) UnionAttributes(term.Coordinates, term.Attributes) {}

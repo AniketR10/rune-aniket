@@ -663,7 +663,7 @@ func TestHandlerPerformanceInterruptDefaultCoalesces(t *testing.T) {
 
 // TestHandlerDisablePerformanceInterruptPublishesEveryUpdate pins
 // the contract DisablePerformanceInterrupt=true offers: every parser
-// update reaches the publisher, so callers like BYOE can keep
+// update reaches the publisher, so callers like exo can keep
 // vteprobe in sync with the embedded editor's actual repaint cadence.
 func TestHandlerDisablePerformanceInterruptPublishesEveryUpdate(t *testing.T) {
 	t.Parallel()
@@ -694,7 +694,7 @@ func TestHandlerDisablePerformanceInterruptPublishesEveryUpdate(t *testing.T) {
 	assert.GreaterOrEqual(t, len(ch), 1,
 		"with DisablePerformanceInterrupt=true the publisher must "+
 			"see at least one EventInterrupt per keystroke that "+
-			"mutates the grid; got %d. BYOE relies on this to keep "+
+			"mutates the grid; got %d. exo relies on this to keep "+
 			"vteprobe results synchronized with the embedded "+
 			"editor's repaint cadence.", len(ch))
 }

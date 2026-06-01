@@ -397,9 +397,9 @@ config = {
         "themes":               GUI_THEMES,
     },
     "editor": {
-        # Editor mode and BYOE settings are not configured here. The
+        # Editor mode and exo settings are not configured here. The
         # bootstrap flow writes an override file with the user's choice
-        # ("modal", "modeless", or "byoe" with a preset). Without an
+        # ("modal", "modeless", or "exo" with a preset). Without an
         # override, Rune defaults to modal as configured below.
         # Enable or disable syntax-driven indentation.
         "autoindent": True,
@@ -424,7 +424,7 @@ config = {
             # Search result attributes.
             "search_attr": attr(fg = "grey", bg = "yellow"),
         },
-        # External editor configuration, only consulted when mode == "byoe".
+        # External editor configuration, only consulted when mode == "exo".
         #
         # `command` is the argv template Rune executes inside a vte to open a
         # file. Available substitutions:
@@ -467,7 +467,7 @@ config = {
         # Nano
         #   "command": "nano +{line},{col} {file}",
         #   "goto":    "<c-_>{line},{col}<enter>",
-        "byoe": {
+        "exo": {
             "command": 'vim "+call cursor({line}, {col})" {file}',
             "goto":    "<esc>:{line}<enter>{col}|",
             # Rune-native editor used to serve URIs the external editor

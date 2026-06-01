@@ -21,25 +21,49 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
-import "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+import (
+	"testing"
 
-// Reloader routes an FS-watcher-driven reload for the file at uri
-// into the IDE's canonical async reload pipeline — the same path
-// :reloadfile uses. Implementations live in the ide package and
-// resolve uri to the open tab's workspace.FlusherCloser internally.
-//
-// Reload is non-blocking: it starts the async reload and returns
-// either nil or a start-failure error (e.g. workspace.ErrFlushInProgress
-// when another op is already in flight). The actual disk I/O,
-// buffer reset, and dirty-tab attribute clear happen on the IDE's
-// own awaiter goroutine + UI scheduler — callers do not wait for
-// completion.
-//
-// Reload must be called on the host UI goroutine: it touches the
-// open-tab map and the FlusherCloser swap-worker state, which
-// cooperate with subscribers that mutate UI-owned cell.Buffer state.
-type Reloader interface {
-	Reload(uri workspaceapi.URI) error
+	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+type recordingPublisher struct {
+	events []term.Event
+}
+
+func (r *recordingPublisher) PublishEvent(ev term.Event) error {
+	r.events = append(r.events, ev)
+	return nil
+}
+
+func TestEventPublisherRefreshesOnInterruptOnly(t *testing.T) {
+	t.Parallel()
+	pub := &recordingPublisher{}
+	wrapper := newEventPublisher(pub)
+	var refreshes int
+	wrapper.setRefresh(func() { refreshes++ })
+
+	keyEv := term.Event{Type: term.EventKey, Ch: 'x'}
+	intrEv := term.Event{Type: term.EventInterrupt}
+
+	require := assert.New(t)
+	require.NoError(wrapper.PublishEvent(keyEv))
+	require.NoError(wrapper.PublishEvent(intrEv))
+	require.NoError(wrapper.PublishEvent(keyEv))
+
+	assert.Equal(t, []term.Event{keyEv, intrEv, keyEv}, pub.events,
+		"every event must be forwarded to the wrapped publisher")
+	assert.Equal(t, 1, refreshes,
+		"refresh must run exactly once per EventInterrupt")
+}
+
+func TestEventPublisherNilRefreshIsNop(t *testing.T) {
+	t.Parallel()
+	pub := &recordingPublisher{}
+	wrapper := newEventPublisher(pub)
+	assert.NoError(t, wrapper.PublishEvent(term.Event{Type: term.EventInterrupt}))
+	assert.Len(t, pub.events, 1)
 }

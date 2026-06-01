@@ -70,8 +70,8 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/text/cmdenv"
+	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/text/texttest"
@@ -1717,7 +1717,7 @@ func TestExKeySequence(t *testing.T) {
 			storagestub.NewInMemoryService(), notificationsConfig(),
 			&workspaceManagerMock{workspace: ex})
 		ex.syncCommandPrompt = true
-		require.NoError(t, ex.init(func(byoe.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, &testLoader{},
+		require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, &testLoader{},
 			storagestub.NewInMemoryService(), notifications, file2,
 			vte.DefaultConfig(), plugin.DefaultBarConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
@@ -2196,7 +2196,7 @@ func newExForTestingTerminal(
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, ex.init(func(byoe.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
 		0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
 	ex.subscribeCommands()
@@ -2227,7 +2227,7 @@ func newExForTestingWithWorkspace(
 	require.NoError(t, err)
 
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, ex.init(func(byoe.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
 	ex.subscribeCommands()
@@ -2266,7 +2266,7 @@ func newExForTestingCommandsPreview(
 	require.NoError(t, err)
 
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
-	require.NoError(t, ex.init(func(byoe.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, previews, nil, nil, finalOpts...))
 	ex.subscribeCommands()
@@ -2316,7 +2316,7 @@ func newExForTestingWithStorage(
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
 
-	require.NoError(t, ex.init(func(byoe.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
+	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
 	ex.subscribeCommands()
@@ -3360,7 +3360,7 @@ func newExForReservoirTesting(
 	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
 		&workspaceManagerMock{workspace: e})
 
-	require.NoError(t, e.init(func(byoe.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, ws, svc,
+	require.NoError(t, e.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, ws, svc,
 		notifications, uri, emCfg, plugin.DefaultBarConfig(),
 		nopPublishEvent, initialCapacity, clipboard.NewInMemory(),
 		nil, nil, nil, nil, finalOpts...))
@@ -3539,7 +3539,7 @@ func TestExUsesSharedIDEStorage(t *testing.T) {
 		notificationsConfig(), &workspaceManagerMock{workspace: ex})
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
-	require.NoError(t, ex.init(func(byoe.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, workspace, storage,
+	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, workspace, storage,
 		notifications, uri, vte.DefaultConfig(), plugin.DefaultBarConfig(),
 		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil, nil))
 

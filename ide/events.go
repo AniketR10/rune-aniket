@@ -103,7 +103,7 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 		return
 	}
 	if ex.ed.IsExternal() {
-		// Externally-managed editors (e.g. byoe) install their own
+		// Externally-managed editors (e.g. exo) install their own
 		// watcher and rewrite the cell.Buffer mirror directly. The
 		// IDE-level watcher must not call ReloadTab or surface the
 		// "changed on disk and was reloaded" notification — that

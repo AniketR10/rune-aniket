@@ -21,49 +21,31 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/browser"
 )
 
-type recordingPublisher struct {
-	events []term.Event
+// PublisherFunc adapts the IDE's `func(term.Event) bool` event-loop
+// publisher to browser.EventPublisher. ok==false from the underlying
+// function is surfaced as a non-nil error so the caller can decide
+// whether to drop or retry the event.
+type PublisherFunc func(term.Event) bool
+
+// PublishEvent satisfies browser.EventPublisher.
+func (p PublisherFunc) PublishEvent(ev term.Event) error {
+	if p(ev) {
+		return nil
+	}
+	return errPublisherClosed
 }
 
-func (r *recordingPublisher) PublishEvent(ev term.Event) error {
-	r.events = append(r.events, ev)
-	return nil
-}
+var _ browser.EventPublisher = PublisherFunc(nil)
 
-func TestEventPublisherRefreshesOnInterruptOnly(t *testing.T) {
-	t.Parallel()
-	pub := &recordingPublisher{}
-	wrapper := newEventPublisher(pub)
-	var refreshes int
-	wrapper.setRefresh(func() { refreshes++ })
+var errPublisherClosed = errPublisherClosedT("exoeditor: event publisher closed")
 
-	keyEv := term.Event{Type: term.EventKey, Ch: 'x'}
-	intrEv := term.Event{Type: term.EventInterrupt}
+type errPublisherClosedT string
 
-	require := assert.New(t)
-	require.NoError(wrapper.PublishEvent(keyEv))
-	require.NoError(wrapper.PublishEvent(intrEv))
-	require.NoError(wrapper.PublishEvent(keyEv))
-
-	assert.Equal(t, []term.Event{keyEv, intrEv, keyEv}, pub.events,
-		"every event must be forwarded to the wrapped publisher")
-	assert.Equal(t, 1, refreshes,
-		"refresh must run exactly once per EventInterrupt")
-}
-
-func TestEventPublisherNilRefreshIsNop(t *testing.T) {
-	t.Parallel()
-	pub := &recordingPublisher{}
-	wrapper := newEventPublisher(pub)
-	assert.NoError(t, wrapper.PublishEvent(term.Event{Type: term.EventInterrupt}))
-	assert.Len(t, pub.events, 1)
-}
+func (e errPublisherClosedT) Error() string { return string(e) }

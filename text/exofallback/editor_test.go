@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoefallback
+package exofallback
 
 import (
 	"context"
@@ -108,7 +108,7 @@ func (s *stubEditor) UnsubscribeEvents(text.EventHandler) (bool, error) {
 }
 
 // IsExternal: stubs default to false. Tests that need true can use
-// the byoeEd argument of newWithEditors; the wrapper's IsExternal()
+// the exoEd argument of newWithEditors; the wrapper's IsExternal()
 // is the property under test, not the children's.
 func (s *stubEditor) IsExternal() bool { return false }
 
@@ -126,8 +126,8 @@ func mustURI(t *testing.T, raw string) workspaceapi.URI {
 }
 
 // TestNewPanicsOnNilFallback verifies the constructor refuses a
-// nil fallback. (BYOE-side missing arguments panic inside byoe.New
-// and are exercised by text/byoe's own tests.)
+// nil fallback. (exo-side missing arguments panic inside exoeditor.New
+// and are exercised by text/exoeditor's own tests.)
 func TestNewPanicsOnNilFallback(t *testing.T) {
 	assert.Panics(t, func() {
 		_ = newWithEditors(&stubEditor{}, nil)
@@ -147,17 +147,17 @@ func TestEditRouting(t *testing.T) {
 	cases := []struct {
 		name   string
 		uri    string
-		expect string // "byoe" or "fallback"
+		expect string // "exo" or "fallback"
 	}{
-		{"file", "file:///tmp/a.go", "byoe"},
-		{"ssh", "ssh://host/tmp/a.go", "byoe"},
+		{"file", "file:///tmp/a.go", "exo"},
+		{"ssh", "ssh://host/tmp/a.go", "exo"},
 		{"memory", "memory:///fexplorer", "fallback"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			byoeEd := &stubEditor{name: "byoe"}
+			exoEd := &stubEditor{name: "exo"}
 			fallback := &stubEditor{name: "fallback"}
-			r := newWithEditors(byoeEd, fallback)
+			r := newWithEditors(exoEd, fallback)
 			uri := mustURI(t, tc.uri)
 
 			h, err := r.Edit(context.Background(), uri, cell.NewBuffer(), false, false)
@@ -172,9 +172,9 @@ func TestEditRouting(t *testing.T) {
 // TestEditErrorNotCached verifies a failed Edit does not record a
 // route so a subsequent Editor() lookup re-dispatches by scheme.
 func TestEditErrorNotCached(t *testing.T) {
-	byoeEd := &stubEditor{name: "byoe", editErr: errors.New("boom")}
+	exoEd := &stubEditor{name: "exo", editErr: errors.New("boom")}
 	fallback := &stubEditor{name: "fallback"}
-	r := newWithEditors(byoeEd, fallback)
+	r := newWithEditors(exoEd, fallback)
 	uri := mustURI(t, "file:///x")
 
 	_, err := r.Edit(context.Background(), uri, cell.NewBuffer(), false, false)
@@ -182,7 +182,7 @@ func TestEditErrorNotCached(t *testing.T) {
 
 	_, err = r.Editor(uri)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"file:///x"}, byoeEd.editorURIs)
+	assert.Equal(t, []string{"file:///x"}, exoEd.editorURIs)
 	assert.Empty(t, fallback.editorURIs)
 }
 
@@ -190,9 +190,9 @@ func TestEditErrorNotCached(t *testing.T) {
 // subsequent Editor() lookups hit the same child even if accepts()
 // would have picked differently.
 func TestEditorLookupUsesRecordedRoute(t *testing.T) {
-	byoeEd := &stubEditor{name: "byoe"}
+	exoEd := &stubEditor{name: "exo"}
 	fallback := &stubEditor{name: "fallback"}
-	r := newWithEditors(byoeEd, fallback)
+	r := newWithEditors(exoEd, fallback)
 
 	uri := mustURI(t, "memory:///fexplorer")
 	_, err := r.Edit(context.Background(), uri, cell.NewBuffer(), false, false)
@@ -200,65 +200,65 @@ func TestEditorLookupUsesRecordedRoute(t *testing.T) {
 
 	_, err = r.Editor(uri)
 	require.NoError(t, err)
-	assert.Empty(t, byoeEd.editorURIs)
+	assert.Empty(t, exoEd.editorURIs)
 	assert.Equal(t, []string{"memory:///fexplorer"}, fallback.editorURIs)
 }
 
 // TestEditorLookupUnseenURIUsesScheme verifies the accepts() rule
 // applies when no Edit has been called for the URI yet.
 func TestEditorLookupUnseenURIUsesScheme(t *testing.T) {
-	byoeEd := &stubEditor{name: "byoe"}
+	exoEd := &stubEditor{name: "exo"}
 	fallback := &stubEditor{name: "fallback"}
-	r := newWithEditors(byoeEd, fallback)
+	r := newWithEditors(exoEd, fallback)
 
 	_, err := r.Editor(mustURI(t, "file:///never-edited"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"file:///never-edited"}, byoeEd.editorURIs)
+	assert.Equal(t, []string{"file:///never-edited"}, exoEd.editorURIs)
 
 	_, err = r.Editor(mustURI(t, "memory:///never-edited"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"memory:///never-edited"}, fallback.editorURIs)
 }
 
-// TestSubscribeAndUnsubscribeForwardToBYOE verifies SubscribeEvents
-// and UnsubscribeEvents forward only to the byoe child. The fallback
+// TestSubscribeAndUnsubscribeForwardToExo verifies SubscribeEvents
+// and UnsubscribeEvents forward only to the exo child. The fallback
 // only serves IDE-owned pseudo-URIs (memory://) whose events the IDE
 // does not react to.
-func TestSubscribeAndUnsubscribeForwardToBYOE(t *testing.T) {
-	byoeEd := &stubEditor{unsubResult: true}
+func TestSubscribeAndUnsubscribeForwardToExo(t *testing.T) {
+	exoEd := &stubEditor{unsubResult: true}
 	fallback := &stubEditor{unsubResult: true}
-	r := newWithEditors(byoeEd, fallback)
+	r := newWithEditors(exoEd, fallback)
 
 	h := text.FuncEventHandler(
 		func(context.Context, textapi.Event) bool { return false })
 	require.NoError(t, r.SubscribeEvents(nil, h))
-	assert.Equal(t, 1, byoeEd.subEvts)
+	assert.Equal(t, 1, exoEd.subEvts)
 	assert.Equal(t, 0, fallback.subEvts)
 
 	ok, err := r.UnsubscribeEvents(h)
 	require.NoError(t, err)
 	assert.True(t, ok)
-	assert.Equal(t, 1, byoeEd.unsubCalls)
+	assert.Equal(t, 1, exoEd.unsubCalls)
 	assert.Equal(t, 0, fallback.unsubCalls)
 }
 
 // TestCommandAndREPLForwardToFallback proves command and REPL
-// register/unregister calls hit only the fallback (BYOE returns
+// register/unregister calls hit only the fallback (exo returns
 // "not supported" for these by design).
 func TestCommandAndREPLForwardToFallback(t *testing.T) {
-	byoeEd := &stubEditor{}
+	exoEd := &stubEditor{}
 	fallback := &stubEditor{}
-	r := newWithEditors(byoeEd, fallback)
+	r := newWithEditors(exoEd, fallback)
 
 	require.NoError(t, r.SubscribeCommand(textapi.CommandManual{}, nil))
 	require.NoError(t, r.RegisterREPLCommand(textapi.CommandManual{}, nil))
 	require.NoError(t, r.UnsubscribeCommand(""))
 	require.NoError(t, r.UnregisterREPLCommand(""))
 
-	assert.Equal(t, 0, byoeEd.cmdRegs)
-	assert.Equal(t, 0, byoeEd.replRegs)
-	assert.Equal(t, 0, byoeEd.cmdUnregs)
-	assert.Equal(t, 0, byoeEd.replUnregs)
+	assert.Equal(t, 0, exoEd.cmdRegs)
+	assert.Equal(t, 0, exoEd.replRegs)
+	assert.Equal(t, 0, exoEd.cmdUnregs)
+	assert.Equal(t, 0, exoEd.replUnregs)
 	assert.Equal(t, 1, fallback.cmdRegs)
 	assert.Equal(t, 1, fallback.replRegs)
 	assert.Equal(t, 1, fallback.cmdUnregs)

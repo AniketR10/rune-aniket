@@ -78,7 +78,7 @@ type bootstrapHandler struct {
 	lastResizeH       int
 	chosenEditor      string
 	chosenFormat      string
-	chosenByoePreset  string
+	chosenExoPreset   string
 }
 
 func newRoot(
@@ -366,7 +366,7 @@ func (b *bootstrapHandler) performSwap() {
 }
 
 func (b *bootstrapHandler) writeOverrideConfig() error {
-	body, err := renderOverride(b.chosenEditor, b.chosenFormat, b.chosenByoePreset)
+	body, err := renderOverride(b.chosenEditor, b.chosenFormat, b.chosenExoPreset)
 	if err != nil {
 		return fmt.Errorf("render override: %w", err)
 	}

@@ -1,4 +1,4 @@
-# Rune user configuration (BYOE editor preset, modeless fallback).
+# Rune user configuration (exo editor preset, modeless fallback).
 #
 # The block under "ACTIVE OVERRIDES" wires Rune to dispatch editing to
 # an external TUI editor; Rune still owns tabs, files, and commands,
@@ -18,13 +18,13 @@ def merge(base, overrides):
     return out
 
 # ---------------------------------------------------------------------------
-# ACTIVE OVERRIDES — required for the BYOE preset
+# ACTIVE OVERRIDES — required for the exo preset
 # ---------------------------------------------------------------------------
 config = merge(config, {
     "editor": {
-        "mode": "byoe",
+        "mode": "exo",
         "auto_pair": True,
-        "byoe": {
+        "exo": {
             "command": '''<<.Command>>''',
             "goto": '''<<.Goto>>''',
             "quit": '''<<.Quit>>''',
@@ -34,7 +34,7 @@ config = merge(config, {
 })
 
 # ---------------------------------------------------------------------------
-# Switch BYOE editor
+# Switch exo editor
 #
 # `command` is the argv template Rune executes inside a vte to open a
 # file. Available substitutions:
@@ -47,25 +47,25 @@ config = merge(config, {
 # close. Use a force-quit (e.g. `:qa!`).
 # ---------------------------------------------------------------------------
 # # Vim
-# config["editor"]["byoe"]["command"] = 'vim "+call cursor({line}, {col})" {file}'
-# config["editor"]["byoe"]["goto"]    = '<esc>:{line}<enter>{col}|'
-# config["editor"]["byoe"]["quit"]    = '<esc>:qa!<enter>'
+# config["editor"]["exo"]["command"] = 'vim "+call cursor({line}, {col})" {file}'
+# config["editor"]["exo"]["goto"]    = '<esc>:{line}<enter>{col}|'
+# config["editor"]["exo"]["quit"]    = '<esc>:qa!<enter>'
 # # Neovim
-# config["editor"]["byoe"]["command"] = 'nvim "+call cursor({line}, {col})" {file}'
-# config["editor"]["byoe"]["goto"]    = '<esc>:{line}<enter>{col}|'
-# config["editor"]["byoe"]["quit"]    = '<esc>:qa!<enter>'
+# config["editor"]["exo"]["command"] = 'nvim "+call cursor({line}, {col})" {file}'
+# config["editor"]["exo"]["goto"]    = '<esc>:{line}<enter>{col}|'
+# config["editor"]["exo"]["quit"]    = '<esc>:qa!<enter>'
 # # Helix
-# config["editor"]["byoe"]["command"] = 'hx {file}:{line}:{col}'
-# config["editor"]["byoe"]["goto"]    = '<esc>:goto<space>{line}<enter>'
-# config["editor"]["byoe"]["quit"]    = '<esc>:q!<enter>'
+# config["editor"]["exo"]["command"] = 'hx {file}:{line}:{col}'
+# config["editor"]["exo"]["goto"]    = '<esc>:goto<space>{line}<enter>'
+# config["editor"]["exo"]["quit"]    = '<esc>:q!<enter>'
 # # Kakoune
-# config["editor"]["byoe"]["command"] = 'kak {file} +{line}:{col}'
-# config["editor"]["byoe"]["goto"]    = '<esc>:edit<space>-existing<space>{file}<space>{line}<space>{col}<enter>'
-# config["editor"]["byoe"]["quit"]    = '<esc>:q!<enter>'
+# config["editor"]["exo"]["command"] = 'kak {file} +{line}:{col}'
+# config["editor"]["exo"]["goto"]    = '<esc>:edit<space>-existing<space>{file}<space>{line}<space>{col}<enter>'
+# config["editor"]["exo"]["quit"]    = '<esc>:q!<enter>'
 # # Emacs (no window system)
-# config["editor"]["byoe"]["command"] = 'emacs -nw +{line}:{col} {file}'
-# config["editor"]["byoe"]["goto"]    = '<a-x>goto-line<enter>{line}<enter>'
-# config["editor"]["byoe"]["quit"]    = '<a-x>kill-emacs<enter>'
+# config["editor"]["exo"]["command"] = 'emacs -nw +{line}:{col} {file}'
+# config["editor"]["exo"]["goto"]    = '<a-x>goto-line<enter>{line}<enter>'
+# config["editor"]["exo"]["quit"]    = '<a-x>kill-emacs<enter>'
 
 # config["log_level"] = "info"             # debug | info | warn | error
 # config["log_path"]  = "~/.rune/debug.log"

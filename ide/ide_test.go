@@ -742,65 +742,65 @@ func (r testRunner) Close() error {
 	return nil
 }
 
-// TestIDEBYOEMisconfigurationFallsBackToDefault is an end-to-end
-// guard against byoe.New panics when the user's config selects
-// `editor.mode = "byoe"` but does not supply both required fields
-// (`editor.byoe.command` containing {file}, and `editor.byoe.goto`).
-// validateBYOE rewrites the mode back to "modal" so the IDE boots
+// TestIDEExoMisconfigurationFallsBackToDefault is an end-to-end
+// guard against exoeditor.New panics when the user's config selects
+// `editor.mode = "exo"` but does not supply both required fields
+// (`editor.exo.command` containing {file}, and `editor.exo.goto`).
+// validateExo rewrites the mode back to "modal" so the IDE boots
 // with the built-in modal editor; this test asserts that the
 // rewrite actually happens at the config layer so the workspace
-// handler never reaches byoe.New on a misconfigured input.
+// handler never reaches exoeditor.New on a misconfigured input.
 //
 // Reproduces the panic chain that motivated this guard:
 //
-//	byoe.New: command is required
-//	byoe.New: invalid gotoTemplate: ...
+//	exoeditor.New: command is required
+//	exoeditor.New: invalid gotoTemplate: ...
 //
 // Either panic would crash the IDE on startup when a user
-// previously experimented with `editor.mode = "byoe"` and removed
-// only part of the byoe block.
-func TestIDEBYOEMisconfigurationFallsBackToDefault(t *testing.T) {
+// previously experimented with `editor.mode = "exo"` and removed
+// only part of the exo block.
+func TestIDEExoMisconfigurationFallsBackToDefault(t *testing.T) {
 	cases := []struct {
 		name   string
-		byoe   string // YAML body inserted under editor:byoe
-		hasKey bool   // when false, omit the byoe block entirely
+		exo    string // YAML body inserted under editor:exo
+		hasKey bool   // when false, omit the exo block entirely
 	}{
 		{
-			name:   "no byoe block at all",
+			name:   "no exo block at all",
 			hasKey: false,
 		},
 		{
 			name: "empty command, valid goto",
-			byoe: `    command: ""
+			exo: `    command: ""
     goto: "<esc>:{line}<enter>{col}|"`,
 			hasKey: true,
 		},
 		{
 			name: "command without {file}, valid goto",
-			byoe: `    command: "vim"
+			exo: `    command: "vim"
     goto: "<esc>:{line}<enter>{col}|"`,
 			hasKey: true,
 		},
 		{
 			name: "valid command, empty goto",
-			byoe: `    command: "vim {file}"
+			exo: `    command: "vim {file}"
     goto: ""`,
 			hasKey: true,
 		},
 		{
 			name:   "valid command, missing goto field",
-			byoe:   `    command: "vim {file}"`,
+			exo:    `    command: "vim {file}"`,
 			hasKey: true,
 		},
 		{
 			name: "valid command, invalid goto",
-			byoe: `    command: "vim {file}"
+			exo: `    command: "vim {file}"
     goto: "<bogus-key>"`,
 			hasKey: true,
 		},
 		{
 			name: "empty command, empty goto",
-			byoe: `    command: ""
+			exo: `    command: ""
     goto: ""`,
 			hasKey: true,
 		},
@@ -809,9 +809,9 @@ func TestIDEBYOEMisconfigurationFallsBackToDefault(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			configFile, _ := makeTestFiles(t)
-			cfg := "editor:\n  mode: byoe\n"
+			cfg := "editor:\n  mode: exo\n"
 			if tc.hasKey {
-				cfg += "  byoe:\n" + tc.byoe + "\n"
+				cfg += "  exo:\n" + tc.exo + "\n"
 			}
 			require.NoError(t,
 				os.WriteFile(configFile.Name(), []byte(cfg), 0666))
@@ -825,8 +825,8 @@ func TestIDEBYOEMisconfigurationFallsBackToDefault(t *testing.T) {
 
 			// Use init() rather than New() so we can introspect
 			// the post-load ideConfig before any workspace
-			// handler reaches byoe.New. init() must not panic
-			// for any of these inputs: validateBYOE rewrites
+			// handler reaches exoeditor.New. init() must not panic
+			// for any of these inputs: validateExo rewrites
 			// the mode back to "modal" before the workspace
 			// handler instantiates the editor.
 			i := new(IDE)
@@ -836,21 +836,21 @@ func TestIDEBYOEMisconfigurationFallsBackToDefault(t *testing.T) {
 					WithPublishEvent(nopPublishEvent),
 					WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 					WithLocker(new(sync.Mutex)))
-			}, "IDE init must not panic for misconfigured byoe; "+
-				"validateBYOE must rewrite editor.mode to a "+
-				"safe fallback before reaching byoe.New")
+			}, "IDE init must not panic for misconfigured exo; "+
+				"validateExo must rewrite editor.mode to a "+
+				"safe fallback before reaching exoeditor.New")
 			require.NoError(t, err,
 				"IDE init must still succeed for "+
-					"misconfigured byoe; validateBYOE "+
+					"misconfigured exo; validateExo "+
 					"surfaces a non-fatal config error and "+
 					"the IDE boots with the fallback mode")
 
-			assert.NotEqual(t, "byoe", i.ideConfig.editorMode(),
-				"after validateBYOE, editor.mode must not "+
-					"remain byoe; got %q",
+			assert.NotEqual(t, "exo", i.ideConfig.editorMode(),
+				"after validateExo, editor.mode must not "+
+					"remain exo; got %q",
 				i.ideConfig.editorMode())
 			assert.Equal(t, "modal", i.ideConfig.editorMode(),
-				"validateBYOE falls back to the safe "+
+				"validateExo falls back to the safe "+
 					"default mode (modal); a different "+
 					"value means the validator regressed "+
 					"or a new code path skipped the "+
@@ -861,15 +861,15 @@ func TestIDEBYOEMisconfigurationFallsBackToDefault(t *testing.T) {
 	}
 }
 
-// TestIDEBYOEWellFormedConfigDoesNotFallBack guards against an
-// over-eager validateBYOE that would rewrite legitimate byoe
+// TestIDEExoWellFormedConfigDoesNotFallBack guards against an
+// over-eager validateExo that would rewrite legitimate exo
 // configurations back to "modal". This is the positive
-// counterexample to TestIDEBYOEMisconfigurationFallsBackToDefault.
-func TestIDEBYOEWellFormedConfigDoesNotFallBack(t *testing.T) {
+// counterexample to TestIDEExoMisconfigurationFallsBackToDefault.
+func TestIDEExoWellFormedConfigDoesNotFallBack(t *testing.T) {
 	configFile, _ := makeTestFiles(t)
 	const cfg = `editor:
-  mode: byoe
-  byoe:
+  mode: exo
+  exo:
     command: "vim {file}"
     goto: "<esc>:{line}<enter>{col}|"
     quit: "<esc>:qa!<enter>"
@@ -894,17 +894,17 @@ func TestIDEBYOEWellFormedConfigDoesNotFallBack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, "byoe", i.ideConfig.editorMode(),
-		"a complete byoe config (command + goto) must be "+
-			"preserved through validateBYOE")
-	assert.Equal(t, "vim {file}", i.ideConfig.byoeCommand())
-	assert.Equal(t, "<esc>:{line}<enter>{col}|", i.ideConfig.byoeGoto())
+	assert.Equal(t, "exo", i.ideConfig.editorMode(),
+		"a complete exo config (command + goto) must be "+
+			"preserved through validateExo")
+	assert.Equal(t, "vim {file}", i.ideConfig.exoCommand())
+	assert.Equal(t, "<esc>:{line}<enter>{col}|", i.ideConfig.exoGoto())
 
 	assert.NoError(t, i.closeResources())
 }
 
-// TestE2EBYOEUserQuitAutoClosesTab boots a real IDE through ide.New
-// with a working byoe section, opens a file, types `:q<enter>` into
+// TestE2EExoUserQuitAutoClosesTab boots a real IDE through ide.New
+// with a working exo section, opens a file, types `:q<enter>` into
 // the embedded editor and asserts that the tab is removed
 // automatically once the editor process exits.
 //
@@ -918,7 +918,7 @@ func TestIDEBYOEWellFormedConfigDoesNotFallBack(t *testing.T) {
 // the host event loop by intercepting the publish via
 // WithPublishEvent and re-dispatching the event through root.Handle
 // under the IDE locker.
-func TestE2EBYOEUserQuitAutoClosesTab(t *testing.T) {
+func TestE2EExoUserQuitAutoClosesTab(t *testing.T) {
 	bin, err := exec.LookPath("nvim")
 	if err != nil {
 		bin, err = exec.LookPath("vim")
@@ -936,8 +936,8 @@ func TestE2EBYOEUserQuitAutoClosesTab(t *testing.T) {
 	configPath := filepath.Join(dataDir, "rune.yaml")
 	require.NoError(t, os.WriteFile(configPath, fmt.Appendf(nil, `
 editor:
-  mode: byoe
-  byoe:
+  mode: exo
+  exo:
     command: %s "+call cursor({line}, {col})" {file}
     goto: "<esc>:{line}<enter>{col}|"
     quit: "<esc>:q!<enter>"
@@ -945,7 +945,7 @@ command:
   key: "<c-\\\\>"
 `, bin), 0o666))
 
-	relFile := "byoe.txt"
+	relFile := "exo.txt"
 	filePath := filepath.Join(dir, relFile)
 	require.NoError(t, os.WriteFile(filePath, []byte("hello\n"), 0o644))
 
@@ -1030,10 +1030,10 @@ command:
 	require.Eventually(t, func() bool {
 		return tabCount() > 0
 	}, 10*time.Second, 100*time.Millisecond,
-		"byoe file tab must be open before quitting the editor")
+		"exo file tab must be open before quitting the editor")
 
 	// Wait for the streaming-open swap to land so the tab's
-	// handler is the byoe editor rather than the deferHandler /
+	// handler is the exo editor rather than the deferHandler /
 	// streamload pair. Without this gate the publish dispatch
 	// below can race text.(*Component).openFileTabStreaming's
 	// deferred sh.Close() with streamload.Handle (RUNE-205).
@@ -1060,7 +1060,7 @@ command:
 	require.Eventually(t, func() bool {
 		return tabCount() == 0
 	}, 10*time.Second, 100*time.Millisecond,
-		"byoe tab must auto-close after :q<enter> exits %s; if "+
+		"exo tab must auto-close after :q<enter> exits %s; if "+
 			"this assertion fails the vte exit publish -> "+
 			"root.Handle -> Tab.Handle -> RemoveTab chain is "+
 			"broken", bin)

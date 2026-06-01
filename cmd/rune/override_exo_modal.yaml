@@ -1,4 +1,4 @@
-# Rune user configuration (BYOE editor preset, modal fallback).
+# Rune user configuration (exo editor preset, modal fallback).
 #
 # The block under "ACTIVE OVERRIDES" wires Rune to dispatch editing to
 # an external TUI editor; Rune still owns tabs, files, and commands,
@@ -10,18 +10,18 @@
 # run `:config` from inside Rune to re-open this file.
 
 # ---------------------------------------------------------------------------
-# ACTIVE OVERRIDES — required for the BYOE preset
+# ACTIVE OVERRIDES — required for the exo preset
 # ---------------------------------------------------------------------------
 editor:
-  mode: byoe
-  byoe:
+  mode: exo
+  exo:
     command: '<<.Command>>'
     goto: '<<.Goto>>'
     quit: '<<.Quit>>'
     fallback: modal
 
 # ---------------------------------------------------------------------------
-# Switch BYOE editor
+# Switch exo editor
 #
 # `command` is the argv template Rune executes inside a vte to open a
 # file. Available substitutions:
@@ -34,7 +34,7 @@ editor:
 # close. Use a force-quit (e.g. `:qa!`).
 # ---------------------------------------------------------------------------
 # editor:
-#   byoe:
+#   exo:
 #     # Vim
 #     command: 'vim "+call cursor({line}, {col})" {file}'
 #     goto:    '<esc>:{line}<enter>{col}|'

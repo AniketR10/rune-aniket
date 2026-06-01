@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func (w *setCellRecorder) SetCell(pos term.Coordinates, c term.Cell) {
 }
 
 func (w *setCellRecorder) UnionAttributes(term.Coordinates, term.Attributes) {}
-func (w *setCellRecorder) Context() context.Context                         { return context.Background() }
+func (w *setCellRecorder) Context() context.Context                          { return context.Background() }
 
 func TestIgnoreAttrWriterSetCellPreservesBgAndReverse(t *testing.T) {
 	red := term.NewColor(255, 0, 0)

@@ -490,7 +490,7 @@ func TestComponentCreatePtySetsTerminalEnv(t *testing.T) {
 // PrimaryScroll for the alternate buffer: callers can reach the rendered
 // cells via Scroll.Buffer().RawCells() and the cursor via
 // CursorAtScreen, without any cloning. The inference layer
-// (term/vte/vteprobe) and BYOE's editorHandler rely on these two
+// (term/vte/vteprobe) and exo's editorHandler rely on these two
 // accessors plus IsAltBuffer to read the rendered grid of whichever
 // screen the embedded program is drawing into.
 func TestComponentAlternateScroll(t *testing.T) {
@@ -552,7 +552,7 @@ func TestComponentAlternateScroll(t *testing.T) {
 }
 
 // TestComponentSnapshotIsConsistentUnderParserPressure regresses a
-// BYOE bug where the editorHandler refreshed its vteprobe from two
+// exo bug where the editorHandler refreshed its vteprobe from two
 // separate accessors (RawCells then CursorAtScreen). Each call locked
 // Component.mu independently, so the parser goroutine could advance
 // the grid between them and the resulting (cells, cursor) pair was
@@ -642,8 +642,6 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 type ptySize struct {
 	width, height int
 }
-
-
 
 // expanderFunc adapts a plain function into the CommandExpander
 // interface for tests.

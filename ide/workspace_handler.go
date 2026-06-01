@@ -81,8 +81,8 @@ import (
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/llm/llmrouter"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/byoe"
-	"unstable.build/go-tui/text/byoefallback"
+	"unstable.build/go-tui/text/exoeditor"
+	"unstable.build/go-tui/text/exofallback"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -225,7 +225,7 @@ func (m visibleWorkspaceManager) DecrementReference(uri workspaceapi.URI) error 
 }
 
 func (h *workspaceManagerHandler) newEditor(
-	reloader byoe.Reloader,
+	reloader exoeditor.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace, tm browser.TabManager,
 	cfg ideConfig, svc vctrl.Service,
 ) (text.Editor, error) {
@@ -234,8 +234,8 @@ func (h *workspaceManagerHandler) newEditor(
 		return h.newBuiltinModalEditor(cwd, cfg, svc), nil
 	case editorModeModeless:
 		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
-	case editorModeBYOE:
-		return h.newBYOEFallbackEditor(reloader, cwd, ws, tm, cfg, svc), nil
+	case editorModeExo:
+		return h.newExoFallbackEditor(reloader, cwd, ws, tm, cfg, svc), nil
 	default:
 		panic("invalid editor mode")
 	}
@@ -303,27 +303,27 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	)
 }
 
-func (h *workspaceManagerHandler) newBYOEFallbackEditor(
-	reloader byoe.Reloader,
+func (h *workspaceManagerHandler) newExoFallbackEditor(
+	reloader exoeditor.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace,
 	tm browser.TabManager, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	var fallback text.Editor
-	switch cfg.byoeFallback() {
+	switch cfg.exoFallback() {
 	case editorFallbackModeless:
 		fallback = h.newBuiltinModelessEditor(cwd, cfg, svc)
 	default:
 		fallback = h.newBuiltinModalEditor(cwd, cfg, svc)
 	}
-	return byoefallback.New(
-		cfg.byoeCommand(),
-		cfg.byoeGoto(),
-		cfg.byoeQuit(),
+	return exofallback.New(
+		cfg.exoCommand(),
+		cfg.exoGoto(),
+		cfg.exoQuit(),
 		cfg.scheduleNextTick,
 		ws,
 		cwd,
 		h.notifications.current(),
-		byoe.PublisherFunc(h.events.newPublisher(cwd)),
+		exoeditor.PublisherFunc(h.events.newPublisher(cwd)),
 		ws, // terminal
 		ws, // executor
 		tm,
@@ -331,7 +331,7 @@ func (h *workspaceManagerHandler) newBYOEFallbackEditor(
 		reloader,
 		fallback,
 		h.envSource,
-		cfg.byoeOverrideHighlights(),
+		cfg.exoOverrideHighlights(),
 		h,
 		svc,
 		h.clip,
@@ -350,7 +350,7 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 			clipboard:        h.clip,
 			autoPair:         cfg.editorAutoPair(),
 		}
-	case editorModeModal, editorModeBYOE:
+	case editorModeModal, editorModeExo:
 		return viCommandPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),
@@ -485,7 +485,7 @@ func (h *workspaceManagerHandler) init(
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	h.empty, err = newEx(
-		func(reloader byoe.Reloader) (text.Editor, error) {
+		func(reloader exoeditor.Reloader) (text.Editor, error) {
 			return h.newEditor(reloader, homeDirUri, h.homeWorkspace,
 				tm, cfg, vctrl.NopService())
 		},
@@ -1170,7 +1170,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	tm := new(workspaceTabManager)
 	tm.parent = h
 	ex, err := newEx(
-		func(reloader byoe.Reloader) (text.Editor, error) {
+		func(reloader exoeditor.Reloader) (text.Editor, error) {
 			return h.newEditor(reloader, uri, multicwd, tm, cfg, vctrlService)
 		},
 		multicwd, h.ideStorage, h.notifications, uri,

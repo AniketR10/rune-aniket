@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"fmt"
@@ -30,7 +30,7 @@ import (
 )
 
 // keyCombToEvent renders a term.KeyComb into the term.Event that
-// vte.Handler.Handle expects when byoe forwards a synthetic key into
+// vte.Handler.Handle expects when exo forwards a synthetic key into
 // the embedded pty. Critically, it populates ev.Raw: vte's
 // handleInput falls back to ev.Raw for any key it does not specially
 // translate (plain ASCII runes, ESC, Enter, F-keys, arrows, etc.), so
@@ -41,7 +41,7 @@ import (
 // would emit so that whichever TUI editor the user picks (vim,
 // neovim, helix, kakoune, emacs -nw, …) interprets them identically
 // to a hardware keypress. The implementation mirrors the production
-// GUI input table in term/gui/input.go so that byoe-synthesised
+// GUI input table in term/gui/input.go so that exo-synthesised
 // events round-trip through vte and into the external editor exactly
 // like real keyboard events.
 func keyCombToEvent(k term.KeyComb) term.Event {
@@ -174,7 +174,7 @@ func rawForSpecialKey(k term.KeyComb) ([]byte, bool) {
 
 // rawForRune renders a printable rune under an optional modifier into
 // the same bytes a real vt100-like terminal would emit. Mirrors
-// term/gui/input.go's getCharEscapeSequence so byoe-synthesised input
+// term/gui/input.go's getCharEscapeSequence so exo-synthesised input
 // is indistinguishable from a real keypress.
 func rawForRune(ch rune, mod term.Modifier) []byte {
 	switch mod {

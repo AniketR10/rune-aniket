@@ -21,20 +21,25 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
-import "github.com/unstablebuild/rune-go-sdk/term"
+import "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 
-type ignoreAttrWriter struct {
-	term.Writer
+// Reloader routes an FS-watcher-driven reload for the file at uri
+// into the IDE's canonical async reload pipeline — the same path
+// :reloadfile uses. Implementations live in the ide package and
+// resolve uri to the open tab's workspace.FlusherCloser internally.
+//
+// Reload is non-blocking: it starts the async reload and returns
+// either nil or a start-failure error (e.g. workspace.ErrFlushInProgress
+// when another op is already in flight). The actual disk I/O,
+// buffer reset, and dirty-tab attribute clear happen on the IDE's
+// own awaiter goroutine + UI scheduler — callers do not wait for
+// completion.
+//
+// Reload must be called on the host UI goroutine: it touches the
+// open-tab map and the FlusherCloser swap-worker state, which
+// cooperate with subscribers that mutate UI-owned cell.Buffer state.
+type Reloader interface {
+	Reload(uri workspaceapi.URI) error
 }
-
-func (w ignoreAttrWriter) SetCell(pos term.Coordinates, c term.Cell) {
-	c.Attributes = term.Attributes{
-		Bg:    c.Attributes.Bg,
-		Attrs: c.Attributes.Attrs & term.AttrReverse,
-	}
-	w.Writer.SetCell(pos, c)
-}
-
-func (w ignoreAttrWriter) UnionAttributes(term.Coordinates, term.Attributes) {}

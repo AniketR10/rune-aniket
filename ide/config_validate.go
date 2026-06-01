@@ -44,7 +44,7 @@ func validateConfig(cfg map[string]any) (err error) {
 		return
 	}
 
-	if err = validateBYOE(&c, cfg); err != nil {
+	if err = validateExo(&c, cfg); err != nil {
 		return
 	}
 
@@ -101,86 +101,86 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 	return
 }
 
-// validateBYOE checks that editor.byoe.command is well-formed when the
-// editor mode is "byoe". On failure it rewrites editor.mode back to
+// validateExo checks that editor.exo.command is well-formed when the
+// editor mode is "exo". On failure it rewrites editor.mode back to
 // "modal" so the IDE still boots, and returns a descriptive error.
-// editor.byoe.goto and editor.byoe.quit are required and validated
+// editor.exo.goto and editor.exo.quit are required and validated
 // the same way; an empty or unparseable value falls back to "modal".
-func validateBYOE(c *ideConfig, cfg map[string]any) (err error) {
-	if c.editorMode() != editorModeBYOE {
+func validateExo(c *ideConfig, cfg map[string]any) (err error) {
+	if c.editorMode() != editorModeExo {
 		return
 	}
-	command := c.byoeCommand()
+	command := c.exoCommand()
 	if command == "" || !strings.Contains(command, "{file}") {
 		// Rewrite editor.mode back to modal so the IDE boots.
 		if ed, ok := cfg["editor"].(map[string]any); ok {
 			ed["mode"] = editorModeModal
 		}
-		return fmt.Errorf("editor.byoe.command is required and must contain " +
-			"{file} when editor.mode = \"byoe\"; falling back to \"modal\"")
+		return fmt.Errorf("editor.exo.command is required and must contain " +
+			"{file} when editor.mode = \"exo\"; falling back to \"modal\"")
 	}
-	gotoTpl := c.byoeGoto()
+	gotoTpl := c.exoGoto()
 	if gotoTpl == "" {
 		if ed, ok := cfg["editor"].(map[string]any); ok {
 			ed["mode"] = editorModeModal
 		}
-		return fmt.Errorf("editor.byoe.goto is required when " +
-			"editor.mode = \"byoe\"; falling back to \"modal\"")
+		return fmt.Errorf("editor.exo.goto is required when " +
+			"editor.mode = \"exo\"; falling back to \"modal\"")
 	}
 	if perr := parseGotoTemplate(gotoTpl); perr != nil {
 		if ed, ok := cfg["editor"].(map[string]any); ok {
 			ed["mode"] = editorModeModal
 		}
-		return fmt.Errorf("editor.byoe.goto is invalid: %w; "+
+		return fmt.Errorf("editor.exo.goto is invalid: %w; "+
 			"falling back to \"modal\"", perr)
 	}
-	quitTpl := c.byoeQuit()
+	quitTpl := c.exoQuit()
 	if quitTpl == "" {
 		if ed, ok := cfg["editor"].(map[string]any); ok {
 			ed["mode"] = editorModeModal
 		}
-		return fmt.Errorf("editor.byoe.quit is required when " +
-			"editor.mode = \"byoe\"; falling back to \"modal\"")
+		return fmt.Errorf("editor.exo.quit is required when " +
+			"editor.mode = \"exo\"; falling back to \"modal\"")
 	}
 	if _, perr := term.ParseKeys(quitTpl); perr != nil {
 		if ed, ok := cfg["editor"].(map[string]any); ok {
 			ed["mode"] = editorModeModal
 		}
-		return fmt.Errorf("editor.byoe.quit is invalid: %w; "+
+		return fmt.Errorf("editor.exo.quit is invalid: %w; "+
 			"falling back to \"modal\"", perr)
 	}
-	if err = validateBYOEFallback(c, cfg); err != nil {
+	if err = validateExoFallback(c, cfg); err != nil {
 		return
 	}
 	return
 }
 
-// validateBYOEFallback ensures editor.byoe.fallback, when set, is one
+// validateExoFallback ensures editor.exo.fallback, when set, is one
 // of "modal" or "modeless". Unrecognised values are rewritten to
 // "modeless" so the IDE still boots with the documented default. An
 // absent fallback key is treated as valid and uses the default.
-func validateBYOEFallback(c *ideConfig, cfg map[string]any) error {
-	byoe, ok := c.byoe()
+func validateExoFallback(c *ideConfig, cfg map[string]any) error {
+	exo, ok := c.exo()
 	if !ok {
 		return nil
 	}
-	raw, err := byoe.GetString("fallback")
+	raw, err := exo.GetString("fallback")
 	if err != nil {
 		if err == config.ErrNotFound {
 			return nil
 		}
-		return fmt.Errorf("editor.byoe.fallback: %w", err)
+		return fmt.Errorf("editor.exo.fallback: %w", err)
 	}
 	switch raw {
 	case "", editorFallbackModal, editorFallbackModeless:
 		return nil
 	}
 	if ed, ok := cfg["editor"].(map[string]any); ok {
-		if b, ok := ed["byoe"].(map[string]any); ok {
+		if b, ok := ed["exo"].(map[string]any); ok {
 			b["fallback"] = editorFallbackModeless
 		}
 	}
-	return fmt.Errorf("editor.byoe.fallback must be %q or %q; got %q, "+
+	return fmt.Errorf("editor.exo.fallback must be %q or %q; got %q, "+
 		"falling back to %q",
 		editorFallbackModal, editorFallbackModeless, raw,
 		editorFallbackModeless)

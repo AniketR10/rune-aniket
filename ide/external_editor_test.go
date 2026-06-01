@@ -81,7 +81,7 @@ func (externalEditorStub) UnsubscribeEvents(text.EventHandler) (bool, error) {
 // TestSubscribeAllEventsSkipsAutoSaveForExternalEditor exercises the
 // wiring guard in subscribeAllEvents: when the workspace's editor is
 // externally managed, the autoSaver must not be constructed even when
-// editor.auto_save is true. Otherwise byoe-driven external saves race
+// editor.auto_save is true. Otherwise exo-driven external saves race
 // the autoSaver and surface noisy ErrStaleData warnings.
 func TestSubscribeAllEventsSkipsAutoSaveForExternalEditor(t *testing.T) {
 	prev := autoSaverFactory
@@ -97,7 +97,7 @@ func TestSubscribeAllEventsSkipsAutoSaveForExternalEditor(t *testing.T) {
 
 	cfg := ideConfig{cfg: map[string]any{
 		"editor": map[string]any{
-			"mode":      "byoe",
+			"mode":      "exo",
 			"auto_save": true,
 		},
 	}, errors: map[string]error{}}

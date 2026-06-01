@@ -37,8 +37,8 @@ func TestOptionToChoiceMapping(t *testing.T) {
 	}{
 		{optModal, editorModal},
 		{optModeless, editorModeless},
-		{optBYOEModal, editorBYOEModal},
-		{optBYOEModeless, editorBYOEModeless},
+		{optExoModal, editorExoModal},
+		{optExoModeless, editorExoModeless},
 		{"unknown", editorModal}, // default fallback
 	}
 	for _, tc := range cases {
@@ -48,7 +48,7 @@ func TestOptionToChoiceMapping(t *testing.T) {
 	}
 }
 
-func TestOverrideTemplateRendersByoe(t *testing.T) {
+func TestOverrideTemplateRendersExo(t *testing.T) {
 	cases := []struct {
 		name           string
 		editor         string
@@ -58,12 +58,12 @@ func TestOverrideTemplateRendersByoe(t *testing.T) {
 		wantNoContains []string
 	}{
 		{
-			name:   "byoe modal yaml with helix",
-			editor: editorBYOEModal,
+			name:   "exo modal yaml with helix",
+			editor: editorExoModal,
 			format: configFormatYAML,
-			preset: byoePresetHelix,
+			preset: exoPresetHelix,
 			wantContains: []string{
-				"mode: byoe",
+				"mode: exo",
 				"command: 'hx {file}:{line}:{col}'",
 				"fallback: modal",
 			},
@@ -73,29 +73,29 @@ func TestOverrideTemplateRendersByoe(t *testing.T) {
 			wantNoContains: nil,
 		},
 		{
-			name:   "byoe modeless star with vim",
-			editor: editorBYOEModeless,
+			name:   "exo modeless star with vim",
+			editor: editorExoModeless,
 			format: configFormatStar,
-			preset: byoePresetVim,
+			preset: exoPresetVim,
 			wantContains: []string{
-				`"mode": "byoe"`,
+				`"mode": "exo"`,
 				`vim "+call cursor({line}, {col})" {file}`,
 				`"fallback": "modeless"`,
 			},
 			wantNoContains: nil,
 		},
 		{
-			// Regression: override_byoe_modeless.yaml previously
-			// set `editor.mode: modeless` instead of `byoe`, which
-			// disabled the BYOE pipeline despite the user picking
-			// BYOE in the bootstrap flow. The fallback is what
+			// Regression: override_exo_modeless.yaml previously
+			// set `editor.mode: modeless` instead of `exo`, which
+			// disabled the exo pipeline despite the user picking
+			// exo in the bootstrap flow. The fallback is what
 			// must be modeless, not the mode.
-			name:   "byoe modeless yaml with helix",
-			editor: editorBYOEModeless,
+			name:   "exo modeless yaml with helix",
+			editor: editorExoModeless,
 			format: configFormatYAML,
-			preset: byoePresetHelix,
+			preset: exoPresetHelix,
 			wantContains: []string{
-				"mode: byoe",
+				"mode: exo",
 				"command: 'hx {file}:{line}:{col}'",
 				"fallback: modeless",
 			},
@@ -106,12 +106,12 @@ func TestOverrideTemplateRendersByoe(t *testing.T) {
 		},
 		{
 			// Same regression for the Starlark variant.
-			name:   "byoe modeless star with nvim",
-			editor: editorBYOEModeless,
+			name:   "exo modeless star with nvim",
+			editor: editorExoModeless,
 			format: configFormatStar,
-			preset: byoePresetNvim,
+			preset: exoPresetNvim,
 			wantContains: []string{
-				`"mode": "byoe"`,
+				`"mode": "exo"`,
 				`nvim "+call cursor({line}, {col})" {file}`,
 				`"fallback": "modeless"`,
 			},
@@ -139,12 +139,12 @@ func TestOptionToFormatAndPresetMapping(t *testing.T) {
 	require.Equal(t, configFormatYAML, optionToFormat(optFormatYAML))
 	require.Equal(t, configFormatYAML, optionToFormat("unknown"))
 
-	require.Equal(t, byoePresetVim, optionToPreset(optPresetVim))
-	require.Equal(t, byoePresetNvim, optionToPreset(optPresetNvim))
-	require.Equal(t, byoePresetHelix, optionToPreset(optPresetHelix))
-	require.Equal(t, byoePresetKak, optionToPreset(optPresetKak))
-	require.Equal(t, byoePresetEmacs, optionToPreset(optPresetEmacs))
-	require.Equal(t, byoePresetVim, optionToPreset("unknown"))
+	require.Equal(t, exoPresetVim, optionToPreset(optPresetVim))
+	require.Equal(t, exoPresetNvim, optionToPreset(optPresetNvim))
+	require.Equal(t, exoPresetHelix, optionToPreset(optPresetHelix))
+	require.Equal(t, exoPresetKak, optionToPreset(optPresetKak))
+	require.Equal(t, exoPresetEmacs, optionToPreset(optPresetEmacs))
+	require.Equal(t, exoPresetVim, optionToPreset("unknown"))
 }
 
 // TestGuardedPromptChainReopensOnUnadvancedClose proves that an Esc

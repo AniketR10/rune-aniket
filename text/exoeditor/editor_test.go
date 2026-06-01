@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"context"
@@ -65,8 +65,8 @@ func (stubWorkspace) Recover(
 
 func (stubWorkspace) Remove(string) error { return nil }
 
-// newTestEditor builds a byoe.Editor with stub dependencies so other
-// tests can exercise byoe-specific behaviour without restating the
+// newTestEditor builds a exoeditor.Editor with stub dependencies so other
+// tests can exercise exo-specific behaviour without restating the
 // constructor's argument list.
 func newTestEditor() *Editor {
 	return New(
@@ -133,8 +133,8 @@ func (stubTabManager) SetTabName(workspaceapi.URI, string, term.Attributes) erro
 	return nil
 }
 
-// stubReloader satisfies byoe.Reloader for tests that only need a
-// non-nil value to satisfy byoe.New's invariants.
+// stubReloader satisfies exoeditor.Reloader for tests that only need a
+// non-nil value to satisfy exoeditor.New's invariants.
 type stubReloader struct{}
 
 func (stubReloader) Reload(workspaceapi.URI) error { return nil }
@@ -145,7 +145,7 @@ var _ schemeapi.Terminal = stubTerminal{}
 var _ schemeapi.Executor = stubExecutor{}
 var _ browser.TabManager = stubTabManager{}
 
-// TestEditorIsExternal verifies the byoe editor reports
+// TestEditorIsExternal verifies the exo editor reports
 // IsExternal()==true.
 func TestEditorIsExternal(t *testing.T) {
 	assert.True(t, newTestEditor().IsExternal())
@@ -181,7 +181,7 @@ func TestNewPanicsOnMissingArgument(t *testing.T) {
 
 // TestNewPanicsOnInvalidGotoTemplate verifies that a malformed goto
 // template causes a constructor panic instead of a silent fallback.
-// validateBYOE rewrites invalid templates back to modal mode before
+// validateExo rewrites invalid templates back to modal mode before
 // reaching New; a panic here indicates the IDE skipped validation.
 func TestNewPanicsOnInvalidGotoTemplate(t *testing.T) {
 	a := goodArgs()
@@ -195,7 +195,7 @@ func TestNewPanicsOnInvalidQuitTemplate(t *testing.T) {
 	assert.Panics(t, func() { a.call() })
 }
 
-// newArgs collects byoe.New's positional arguments so test cases can
+// newArgs collects exoeditor.New's positional arguments so test cases can
 // clone a valid baseline and mutate one field at a time without
 // repeating the full signature.
 type newArgs struct {

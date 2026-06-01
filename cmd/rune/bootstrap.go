@@ -32,20 +32,20 @@ import (
 )
 
 const (
-	editorModal        = "modal"
-	editorModeless     = "modeless"
-	editorBYOEModal    = "byoe-modal"
-	editorBYOEModeless = "byoe-modeless"
+	editorModal       = "modal"
+	editorModeless    = "modeless"
+	editorExoModal    = "exo-modal"
+	editorExoModeless = "exo-modeless"
 )
 
 // Editor-mode option labels. The strings are also used as map keys in
 // optionToChoice, so they must stay stable across the prompt and the
 // callback.
 const (
-	optModal        = "  Modal (vi)              "
-	optModeless     = "  Modeless                "
-	optBYOEModal    = "  BYOE (modal fallback)   "
-	optBYOEModeless = "  BYOE (modeless fallback)"
+	optModal       = "  Modal (vi)              "
+	optModeless    = "  Modeless                "
+	optExoModal    = "  exo (modal fallback)   "
+	optExoModeless = "  exo (modeless fallback)"
 )
 
 var (
@@ -91,7 +91,7 @@ const (
 )
 
 // openBootstrapFlow chains the welcome screen and three configuration
-// prompts (editor mode, config format, and—if BYOE was picked—editor
+// prompts (editor mode, config format, and—if exo was picked—editor
 // preset), then a login prompt against the still-alive pre-config IDE.
 // Login tokens are persisted to the shared on-disk auth partition, so
 // the configured IDE built by performSwap picks them up transparently.
@@ -125,7 +125,7 @@ func (b *bootstrapHandler) openEditorPrompt() {
 		"**Modeless** — Rune's built-in editor without modes.\n" +
 		"Type to insert; arrows, shift-select, system clipboard.\n" +
 		"Pick this if you want a familiar IDE feel.\n\n" +
-		"**BYOE** — Bring Your Own Editor.\n" +
+		"**exo** — exoeditor.\n" +
 		"Rune owns tabs, files, panes, and commands; your external\n" +
 		"editor (vim, nvim, helix, kak, emacs) owns the buffer and\n" +
 		"cursor. The `(modal fallback)` and `(modeless fallback)`\n" +
@@ -134,11 +134,11 @@ func (b *bootstrapHandler) openEditorPrompt() {
 		"explorer at `memory:///fexplorer`.\n" +
 		"You give up: syntax/diagnostic highlights, incremental edit\n" +
 		"dispatch, cursor read-back, and inline agent edits inside\n" +
-		"the BYOE pane."
+		"the exo pane."
 	guard := &guardedPromptChain{}
 	b.preIDE.Prompt(
 		msg,
-		[]string{optModal, optModeless, optBYOEModal, optBYOEModeless},
+		[]string{optModal, optModeless, optExoModal, optExoModeless},
 		bootstrapEditorKeys,
 		handler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
@@ -168,7 +168,7 @@ func (b *bootstrapHandler) openFormatPrompt() {
 		handler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
 				b.chosenFormat = optionToFormat(option)
-				if b.chosenEditor == editorBYOEModal || b.chosenEditor == editorBYOEModeless {
+				if b.chosenEditor == editorExoModal || b.chosenEditor == editorExoModeless {
 					b.openPresetPrompt()
 					return
 				}
@@ -193,7 +193,7 @@ func (b *bootstrapHandler) openPresetPrompt() {
 		bootstrapPresetKeys,
 		handler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
-				b.chosenByoePreset = optionToPreset(option)
+				b.chosenExoPreset = optionToPreset(option)
 				b.openLoginPrompt()
 			}),
 			guard.onClose(b.openPresetPrompt),
@@ -333,10 +333,10 @@ func optionToChoice(option string) string {
 		return editorModal
 	case optModeless:
 		return editorModeless
-	case optBYOEModal:
-		return editorBYOEModal
-	case optBYOEModeless:
-		return editorBYOEModeless
+	case optExoModal:
+		return editorExoModal
+	case optExoModeless:
+		return editorExoModeless
 	}
 	return editorModal
 }
@@ -353,20 +353,20 @@ func optionToFormat(option string) string {
 	return configFormatYAML
 }
 
-// optionToPreset maps a BYOE-preset prompt display string to the
+// optionToPreset maps a exo-preset prompt display string to the
 // preset key. Unknown options default to vim.
 func optionToPreset(option string) string {
 	switch option {
 	case optPresetVim:
-		return byoePresetVim
+		return exoPresetVim
 	case optPresetNvim:
-		return byoePresetNvim
+		return exoPresetNvim
 	case optPresetHelix:
-		return byoePresetHelix
+		return exoPresetHelix
 	case optPresetKak:
-		return byoePresetKak
+		return exoPresetKak
 	case optPresetEmacs:
-		return byoePresetEmacs
+		return exoPresetEmacs
 	}
-	return byoePresetVim
+	return exoPresetVim
 }

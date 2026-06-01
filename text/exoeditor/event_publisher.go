@@ -21,31 +21,41 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
+	"sync/atomic"
+
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 )
 
-// PublisherFunc adapts the IDE's `func(term.Event) bool` event-loop
-// publisher to browser.EventPublisher. ok==false from the underlying
-// function is surfaced as a non-nil error so the caller can decide
-// whether to drop or retry the event.
-type PublisherFunc func(term.Event) bool
-
-// PublishEvent satisfies browser.EventPublisher.
-func (p PublisherFunc) PublishEvent(ev term.Event) error {
-	if p(ev) {
-		return nil
-	}
-	return errPublisherClosed
+// eventPublisher decorates browser.EventPublisher with a refresh
+// callback that fires on EventInterrupt. refresh is assigned
+// concurrently with the vte's reader goroutine (which is started
+// inside vte.NewHandler before Edit can wire the callback), so the
+// field is stored as an atomic.Pointer to avoid a data race; an
+// unset refresh is simply skipped.
+type eventPublisher struct {
+	publisher browser.EventPublisher
+	refresh   atomic.Pointer[func()]
 }
 
-var _ browser.EventPublisher = PublisherFunc(nil)
+func newEventPublisher(publisher browser.EventPublisher) *eventPublisher {
+	return &eventPublisher{publisher: publisher}
+}
 
-var errPublisherClosed = errPublisherClosedT("byoe: event publisher closed")
+// setRefresh installs fn as the refresh callback. Safe to call from
+// any goroutine.
+func (p *eventPublisher) setRefresh(fn func()) {
+	p.refresh.Store(&fn)
+}
 
-type errPublisherClosedT string
-
-func (e errPublisherClosedT) Error() string { return string(e) }
+func (p *eventPublisher) PublishEvent(ev term.Event) error {
+	if ev.Type == term.EventInterrupt {
+		if fn := p.refresh.Load(); fn != nil {
+			(*fn)()
+		}
+	}
+	return p.publisher.PublishEvent(ev)
+}

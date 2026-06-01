@@ -45,7 +45,7 @@ type flusherTarget interface {
 	OverwriteTab(ctx context.Context, h browserapi.Handler) (<-chan error, error)
 	ReloadTab(ctx context.Context, h browserapi.Handler) (<-chan error, error)
 	// Resource returns the tab handler open for uri, or false if no
-	// tab with that URI is open. byoe's Reloader implementation
+	// tab with that URI is open. exo's Reloader implementation
 	// uses this to translate the FS-watcher URI into the handler
 	// the flusher's reloadAsync expects.
 	Resource(uri workspaceapi.URI) (browserapi.Handler, bool)
@@ -155,7 +155,7 @@ func (f *flusher) reloadAsync(
 	return f.startAsync(uri, opReload, f.startWith(f.comp.ReloadTab, h), onSuccess)
 }
 
-// Reload satisfies byoe.Reloader. The byoe handler's FS watcher
+// Reload satisfies exoeditor.Reloader. The exo handler's FS watcher
 // calls this from the host UI goroutine (scheduled via
 // scheduleNextTick) on every Write/Rename/Create/Remove event for
 // the open file. We resolve uri to the open tab handler through the

@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"fmt"
@@ -31,7 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-// gotoTemplate is a parsed editor.byoe.goto template. Literal segments
+// gotoTemplate is a parsed editor.exo.goto template. Literal segments
 // are pre-parsed into KeyComb slices and placeholders are kept as
 // markers so Render can splice the rendered line/col digits in at
 // runtime without re-parsing the template.

@@ -24,7 +24,7 @@
 # go-cli sample
 
 Reproduces a vteprobe `Infer` failure observed when navigating
-`blue/cli/cli.go` in neovim with byoe.
+`blue/cli/cli.go` in neovim with exo.
 
 Repro recipe captured in screenshots:
 

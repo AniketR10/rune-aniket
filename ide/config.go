@@ -80,7 +80,7 @@ const (
 	inputCurrent           = "current"
 	editorModeModal        = "modal"
 	editorModeModeless     = "modeless"
-	editorModeBYOE         = "byoe"
+	editorModeExo          = "exo"
 	editorFallbackModal    = "modal"
 	editorFallbackModeless = "modeless"
 	keyCommandAliases      = "aliases"
@@ -1666,8 +1666,8 @@ func (c ideConfig) virtual() (config.Config, bool) {
 	return c.getConfig(b, "virtual")
 }
 
-// byoe returns the `editor.byoe` configuration block, if any.
-func (c ideConfig) byoe() (config.Config, bool) {
+// exo returns the `editor.exo` configuration block, if any.
+func (c ideConfig) exo() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
@@ -1675,72 +1675,72 @@ func (c ideConfig) byoe() (config.Config, bool) {
 	if !ok {
 		return nil, false
 	}
-	return c.getConfig(b, "byoe")
+	return c.getConfig(b, "exo")
 }
 
-// byoeCommand returns the argv template for the external editor.
-func (c ideConfig) byoeCommand() string {
-	cfg, ok := c.byoe()
+// exoCommand returns the argv template for the external editor.
+func (c ideConfig) exoCommand() string {
+	cfg, ok := c.exo()
 	if !ok {
 		return ""
 	}
 	s, err := cfg.GetString("command")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.byoe.command"] = err
+			c.errors["editor.exo.command"] = err
 		}
 		return ""
 	}
 	return s
 }
 
-// byoeGoto returns the Rune key sequence template used to position the
+// exoGoto returns the Rune key sequence template used to position the
 // external editor's cursor. Empty when unset or invalid.
-func (c ideConfig) byoeGoto() string {
-	cfg, ok := c.byoe()
+func (c ideConfig) exoGoto() string {
+	cfg, ok := c.exo()
 	if !ok {
 		return ""
 	}
 	s, err := cfg.GetString("goto")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.byoe.goto"] = err
+			c.errors["editor.exo.goto"] = err
 		}
 		return ""
 	}
 	return s
 }
 
-// byoeQuit returns the Rune key sequence sent to the external editor
+// exoQuit returns the Rune key sequence sent to the external editor
 // before the PTY is torn down. Empty when unset or invalid.
-func (c ideConfig) byoeQuit() string {
-	cfg, ok := c.byoe()
+func (c ideConfig) exoQuit() string {
+	cfg, ok := c.exo()
 	if !ok {
 		return ""
 	}
 	s, err := cfg.GetString("quit")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.byoe.quit"] = err
+			c.errors["editor.exo.quit"] = err
 		}
 		return ""
 	}
 	return s
 }
 
-// byoeFallback returns the Rune-native fallback editor used by the
-// byoefallback router for URIs that BYOE cannot serve (e.g.
+// exoFallback returns the Rune-native fallback editor used by the
+// exofallback router for URIs that exo cannot serve (e.g.
 // memory://). Valid values are "modal" or "modeless"; defaults to
 // "modeless".
-func (c ideConfig) byoeFallback() string {
-	cfg, ok := c.byoe()
+func (c ideConfig) exoFallback() string {
+	cfg, ok := c.exo()
 	if !ok {
 		return editorFallbackModeless
 	}
 	s, err := cfg.GetString("fallback")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.byoe.fallback"] = err
+			c.errors["editor.exo.fallback"] = err
 		}
 		return editorFallbackModeless
 	}
@@ -1751,20 +1751,20 @@ func (c ideConfig) byoeFallback() string {
 	return editorFallbackModeless
 }
 
-// byoeOverrideHighlights reports whether Rune should overlay its
+// exoOverrideHighlights reports whether Rune should overlay its
 // location-list attributes (syntax, diagnostics, debugger variables)
 // on top of the external editor's rendered output. Defaults to true
 // so users opt out rather than in; an unparseable value also yields
 // the default while recording the error.
-func (c ideConfig) byoeOverrideHighlights() bool {
-	cfg, ok := c.byoe()
+func (c ideConfig) exoOverrideHighlights() bool {
+	cfg, ok := c.exo()
 	if !ok {
 		return true
 	}
 	enabled, err := cfg.GetBool("override_highlights")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["editor.byoe.override_highlights"] = err
+			c.errors["editor.exo.override_highlights"] = err
 		}
 		return true
 	}
@@ -1788,19 +1788,19 @@ func (c ideConfig) editorMode() (ret string) {
 		return
 	}
 	switch mode {
-	case editorModeModal, editorModeModeless, editorModeBYOE:
+	case editorModeModal, editorModeModeless, editorModeExo:
 		ret = mode
 	}
 	return
 }
 
 // pkgEditorMode returns the editor mode exposed to package config.star
-// scripts. BYOE substitutes the configured byoe.fallback so packages get a
-// concrete modal/modeless mode instead of the meta value "byoe".
+// scripts. exo substitutes the configured exo.fallback so packages get a
+// concrete modal/modeless mode instead of the meta value "exo".
 func (c ideConfig) pkgEditorMode() string {
 	mode := c.editorMode()
-	if mode == editorModeBYOE {
-		return c.byoeFallback()
+	if mode == editorModeExo {
+		return c.exoFallback()
 	}
 	return mode
 }

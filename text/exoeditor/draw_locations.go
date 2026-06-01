@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -35,7 +35,7 @@ import (
 // folded row or to a row outside the content band are skipped.
 //
 // The projector mirrors text.DrawLocations but reads its layout from
-// a vteprobe.Result rather than a component.Scroll because the byoe
+// a vteprobe.Result rather than a component.Scroll because the exo
 // editor does not own a Rune scroll: the embedded vte editor does.
 func drawLocations(
 	w term.Writer, locs []textapi.Location, probe *vteprobe.Result,

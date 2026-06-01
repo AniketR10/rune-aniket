@@ -102,10 +102,10 @@ func TestExternalEditorForcesReadOnly(t *testing.T) {
 }
 
 // TestExternalEditorDelegatesMarkdown locks in the fix for the bug
-// where `.md` files opened under an external editor (BYOE) were
+// where `.md` files opened under an external editor (exo) were
 // rendered through the built-in markdown viewer instead of being
 // handed to the external editor. The root cause was that
-// Component.openFileTab conflated the BYOE mirror-buffer
+// Component.openFileTab conflated the exo mirror-buffer
 // read-only invariant with the user's view intent: hoisting
 // `readOnly = true` for any external editor then took the
 // loadView/loadMarkdown branch unconditionally. The fix keeps the

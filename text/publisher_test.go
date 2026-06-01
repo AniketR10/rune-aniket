@@ -138,7 +138,7 @@ func TestPublishExternalEditDispatchesOpenFocusAndEdit(t *testing.T) {
 // TestPublishExternalEditHandlerHandlesEventsWithoutPanic verifies the
 // returned handler is the raw root (no cursor wrapper) so events
 // dispatched to it do not crash on a missing *Cursor. This is the
-// invariant that was actually broken when byoe used PublishEdit with
+// invariant that was actually broken when exo used PublishEdit with
 // a nil cursor: even after Open/Focus dispatch, the very first user
 // keypress would hit cursorPublisher.Handle → RecordCursorChange.
 func TestPublishExternalEditHandlerHandlesEventsWithoutPanic(t *testing.T) {

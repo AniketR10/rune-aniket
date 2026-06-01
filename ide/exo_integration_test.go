@@ -40,26 +40,26 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-// TestBYOEVimEndToEnd drives the full ide → byoe → vte → vim pipeline:
+// TestExoVimEndToEnd drives the full ide → exo → vte → vim pipeline:
 // it boots an ide pointed at a real file scheme workspace, configures
-// editor.mode = "byoe" with vim, opens a real file from disk, types
+// editor.mode = "exo" with vim, opens a real file from disk, types
 // content via the embedded vte, and asserts the file was modified on
 // disk after vim's `:wq` writes and quits.
 //
-// Reproduces the regression where byoe pre-tokenised the configured
+// Reproduces the regression where exo pre-tokenised the configured
 // argv via shell.Fields, then vte.Component.createPty joined and
 // shell.Fields-tokenised it again, causing
 //
-//	edit: byoe: new vte handler: expand shell arguments: 1:18: ( is not a valid word
+//	edit: exo: new vte handler: expand shell arguments: 1:18: ( is not a valid word
 //
 // when the configured command contained punctuation such as
 // `vim "+call cursor({line}, {col})" {file}`.
 //
-// Also acts as the end-to-end guard for the byoe noise-suppression
+// Also acts as the end-to-end guard for the exo noise-suppression
 // invariant that autoSaver must not be wired under an external editor
 // (otherwise external saves race the saver and spam ErrStaleData
 // warnings).
-func TestBYOEVimEndToEnd(t *testing.T) {
+func TestExoVimEndToEnd(t *testing.T) {
 	vimBin, err := exec.LookPath("vim")
 	if err != nil {
 		t.Skip("vim binary not available")
@@ -75,20 +75,20 @@ func TestBYOEVimEndToEnd(t *testing.T) {
 	dir = canonical
 
 	const initialContent = "hello\n"
-	const insertedContent = "BYOE"
-	relFile := "byoe.txt"
+	const insertedContent = "exo"
+	relFile := "exo.txt"
 	filePath := filepath.Join(dir, relFile)
 	require.NoError(t, os.WriteFile(filePath, []byte(initialContent), 0o644))
 
 	cfg := defaultConfigWithWrap(false)
 	editorCfg := cfg.cfg["editor"].(map[string]any)
-	editorCfg["mode"] = "byoe"
+	editorCfg["mode"] = "exo"
 	// Turning auto_save on lets the e2e also guard the
-	// "auto-save must be skipped under byoe" wiring: the
+	// "auto-save must be skipped under exo" wiring: the
 	// autoSaverFactory hook below must never fire under an
 	// external editor.
 	editorCfg["auto_save"] = true
-	editorCfg["byoe"] = map[string]any{
+	editorCfg["exo"] = map[string]any{
 		// Quoted argv segments intentionally exercise the parens
 		// that regressed in shell.Fields double-tokenisation. The
 		// extra flags make startup deterministic across machines:
@@ -97,19 +97,19 @@ func TestBYOEVimEndToEnd(t *testing.T) {
 		//   +startinsert! drop straight into insert mode at EOL so
 		//                 subsequent keystrokes type literal text.
 		"command": `vim -Nu NONE -n "+call cursor({line}, {col})" "+startinsert!" {file}`,
-		// editor.byoe.goto is required by validateBYOE. The
+		// editor.exo.goto is required by validateExo. The
 		// concrete value is irrelevant for this test (we don't
 		// drive SetCursorAtScroll) but it must be non-empty and
 		// parse, otherwise the IDE silently falls back to modal
-		// mode and the test stops exercising byoe at all.
+		// mode and the test stops exercising exo at all.
 		"goto": "<esc>:{line}<enter>{col}|",
 		"quit": "<esc>:qa<enter>",
 	}
 	// terminalConfig() reads cfg.ringBell; vte panics on a nil bell.
 	cfg.ringBell = func() {}
-	require.Equal(t, "byoe", cfg.editorMode())
+	require.Equal(t, "exo", cfg.editorMode())
 
-	// Hook the autoSaver factory so we can assert byoe never wires
+	// Hook the autoSaver factory so we can assert exo never wires
 	// the saver up. Done before constructing the test handler so
 	// the swap is in place when subscribeAllEvents runs.
 	prevFactory := autoSaverFactory
@@ -134,7 +134,7 @@ func TestBYOEVimEndToEnd(t *testing.T) {
 	m.drainPendingWorkspaces()
 
 	assert.False(t, autoSaverConstructed.Load(),
-		"byoe must skip the autoSaver wiring; otherwise external "+
+		"exo must skip the autoSaver wiring; otherwise external "+
 			"saves race the saver and surface ErrStaleData warnings")
 
 	// Resize the handler so the embedded vte has a viewport big
@@ -198,7 +198,7 @@ func TestBYOEVimEndToEnd(t *testing.T) {
 
 	assert.False(t, autoSaverConstructed.Load(),
 		"autoSaver must remain unwired for the duration of a "+
-			"byoe session, even after the external editor saves")
+			"exo session, even after the external editor saves")
 }
 
 // keyEvent renders a KeyComb into a term.Event with the Raw bytes
@@ -231,9 +231,9 @@ func keyEvent(k term.KeyComb) term.Event {
 	return ev
 }
 
-// TestBYOEVimSwapfileGracefulClose asserts that closing a byoe tab
+// TestExoVimSwapfileGracefulClose asserts that closing a exo tab
 // hosting vim leaves no .swp file behind.
-func TestBYOEVimSwapfileGracefulClose(t *testing.T) {
+func TestExoVimSwapfileGracefulClose(t *testing.T) {
 	if _, err := exec.LookPath("vim"); err != nil {
 		t.Skip("vim binary not available")
 	}
@@ -252,21 +252,21 @@ func TestBYOEVimSwapfileGracefulClose(t *testing.T) {
 	require.NoError(t, err)
 	dir = canonical
 
-	relFile := "byoe.txt"
+	relFile := "exo.txt"
 	filePath := filepath.Join(dir, relFile)
 	require.NoError(t, os.WriteFile(filePath, []byte("hello\n"), 0o644))
 
 	cfg := defaultConfigWithWrap(false)
 	editorCfg := cfg.cfg["editor"].(map[string]any)
-	editorCfg["mode"] = "byoe"
-	editorCfg["byoe"] = map[string]any{
+	editorCfg["mode"] = "exo"
+	editorCfg["exo"] = map[string]any{
 		// No -n so vim creates a swap file while running.
 		"command": `vim -Nu NONE {file}`,
 		"goto":    "<esc>:{line}<enter>{col}|",
 		"quit":    "<esc>:qa!<enter>",
 	}
 	cfg.ringBell = func() {}
-	require.Equal(t, "byoe", cfg.editorMode())
+	require.Equal(t, "exo", cfg.editorMode())
 
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
@@ -324,12 +324,12 @@ func TestBYOEVimSwapfileGracefulClose(t *testing.T) {
 		}
 		return true
 	}, 10*time.Second, 100*time.Millisecond,
-		"editor.byoe.quit must let vim clean up its swap file "+
+		"editor.exo.quit must let vim clean up its swap file "+
 			"before the PTY is torn down")
 }
 
-// TestBYOEVimSetCursorAtScroll guards the SetCursorAtScroll wiring in
-// byoe end-to-end against vim. The fix it locks in: byoe's
+// TestExoVimSetCursorAtScroll guards the SetCursorAtScroll wiring in
+// exo end-to-end against vim. The fix it locks in: exo's
 // SetCursorAtScroll synthesises term.Event from the rendered goto
 // KeyComb sequence, and vte's input path falls back to ev.Raw for
 // ordinary keys (digits, ':', '|', '<enter>', '<esc>'). Without raw
@@ -337,13 +337,13 @@ func TestBYOEVimSwapfileGracefulClose(t *testing.T) {
 // cursor stays at (1,1), and an `i<marker><esc>:wq` prepends the
 // marker to line 1 instead of the requested position.
 //
-// The test prepares a known multi-line file, asks byoe to place the
+// The test prepares a known multi-line file, asks exo to place the
 // cursor at (line=3, col=2), inserts a marker, writes, and asserts
 // the on-disk content matches the expectation for that exact
 // position. Any regression in cursor injection makes the marker
 // appear on the wrong line/column and the assertion fails with the
 // actual placement.
-func TestBYOEVimSetCursorAtScroll(t *testing.T) {
+func TestExoVimSetCursorAtScroll(t *testing.T) {
 	if _, err := exec.LookPath("vim"); err != nil {
 		t.Skip("vim binary not available")
 	}
@@ -362,8 +362,8 @@ func TestBYOEVimSetCursorAtScroll(t *testing.T) {
 
 	cfg := defaultConfigWithWrap(false)
 	editorCfg := cfg.cfg["editor"].(map[string]any)
-	editorCfg["mode"] = "byoe"
-	editorCfg["byoe"] = map[string]any{
+	editorCfg["mode"] = "exo"
+	editorCfg["exo"] = map[string]any{
 		// Deterministic vim: no rc, no swap. Crucially we do NOT
 		// pass +startinsert! so vim lands in normal mode and the
 		// goto sequence below ('<esc>:{line}<enter>{col}|') can
@@ -375,7 +375,7 @@ func TestBYOEVimSetCursorAtScroll(t *testing.T) {
 		"quit": "<esc>:qa<enter>",
 	}
 	cfg.ringBell = func() {}
-	require.Equal(t, "byoe", cfg.editorMode())
+	require.Equal(t, "exo", cfg.editorMode())
 
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
@@ -402,7 +402,7 @@ func TestBYOEVimSetCursorAtScroll(t *testing.T) {
 		dispatch(keyEvent(k))
 	}
 
-	// Let vim start before we interact with the byoe handler.
+	// Let vim start before we interact with the exo handler.
 	time.Sleep(750 * time.Millisecond)
 
 	// Reach into the workspace to grab the actual text.Handler for
@@ -416,7 +416,7 @@ func TestBYOEVimSetCursorAtScroll(t *testing.T) {
 	// Position cursor on line 3 ("CCCC"), column 2: i.e. between
 	// the first and second 'C'. The goto template renders
 	// <esc>:3<enter>2|. Without the Raw-bytes fix in
-	// byoe.editorHandler.SetCursorAtScroll, those keys never reach
+	// exoeditor.editorHandler.SetCursorAtScroll, those keys never reach
 	// the pty and vim stays at (1,1).
 	require.True(t, eh.SetCursorAtScroll(term.Coordinates{Y: 2, X: 1}),
 		"SetCursorAtScroll must report success when a goto "+

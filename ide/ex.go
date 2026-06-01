@@ -70,8 +70,8 @@ import (
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/text/cmdenv"
+	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -185,7 +185,7 @@ type commandObserver interface {
 type previewFunc = func(string, ...string) (component.Responsive, func(), bool)
 
 func newEx(
-	edFactory func(byoe.Reloader) (text.Editor, error),
+	edFactory func(exoeditor.Reloader) (text.Editor, error),
 	m workspace.Workspace,
 	storage storageapi.Service,
 	notifications *notisManager,
@@ -223,7 +223,7 @@ func newEx(
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
 func (e *ex) init(
-	edFactory func(byoe.Reloader) (text.Editor, error),
+	edFactory func(exoeditor.Reloader) (text.Editor, error),
 	m workspace.Workspace,
 	storage storageapi.Service,
 	notifications *notisManager,

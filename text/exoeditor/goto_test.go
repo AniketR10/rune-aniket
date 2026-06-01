@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"reflect"
@@ -304,7 +304,7 @@ func TestGotoTemplateParseValid(t *testing.T) {
 
 // TestGotoTemplateParseInvalid drives parseGotoTemplate over a set of
 // malformed inputs and asserts a parse error surfaces for each.
-// Errors must propagate to validateBYOE so the IDE falls back to
+// Errors must propagate to validateExo so the IDE falls back to
 // modal mode rather than silently shipping a broken goto.
 func TestGotoTemplateParseInvalid(t *testing.T) {
 	cases := []struct {

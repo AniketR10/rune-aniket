@@ -21,13 +21,13 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-// Package byoe implements a "bring-your-own-editor" text.Editor that
+// Package exo implements a "bring-your-own-editor" text.Editor that
 // hosts an external TUI editor (vim, neovim, helix, kakoune, …) inside
 // a Rune-managed vte. Rune keeps owning the tab, the cell.Buffer
 // (read-only mirror of disk), and IDE-wide commands; the external
 // editor owns the editing UX and is the source of truth for buffer
 // contents.
-package byoe
+package exoeditor
 
 import (
 	"context"
@@ -52,7 +52,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-// New allocates a new byoe Editor.
+// New allocates a new exo Editor.
 func New(
 	command, gotoTemplate, quit string,
 	scheduleNextTick func(func()) bool,
@@ -73,31 +73,31 @@ func New(
 ) *Editor {
 	switch {
 	case command == "":
-		panic("byoe.New: command is required")
+		panic("exoeditor.New: command is required")
 	case scheduleNextTick == nil:
-		panic("byoe.New: scheduleNextTick is required")
+		panic("exoeditor.New: scheduleNextTick is required")
 	case cwd == nil:
-		panic("byoe.New: cwd is required")
+		panic("exoeditor.New: cwd is required")
 	case notifications == nil:
-		panic("byoe.New: notifications is required")
+		panic("exoeditor.New: notifications is required")
 	case publisher == nil:
-		panic("byoe.New: publisher is required")
+		panic("exoeditor.New: publisher is required")
 	case terminal == nil:
-		panic("byoe.New: terminal is required")
+		panic("exoeditor.New: terminal is required")
 	case executor == nil:
-		panic("byoe.New: executor is required")
+		panic("exoeditor.New: executor is required")
 	case tabManager == nil:
-		panic("byoe.New: tabManager is required")
+		panic("exoeditor.New: tabManager is required")
 	case reloader == nil:
-		panic("byoe.New: reloader is required")
+		panic("exoeditor.New: reloader is required")
 	}
 	tpl, err := parseGotoTemplate(gotoTemplate)
 	if err != nil {
-		panic("byoe.New: invalid gotoTemplate: " + err.Error())
+		panic("exoeditor.New: invalid gotoTemplate: " + err.Error())
 	}
 	quitKeys, err := term.ParseKeys(quit)
 	if err != nil {
-		panic("byoe.New: invalid quit: " + err.Error())
+		panic("exoeditor.New: invalid quit: " + err.Error())
 	}
 	ret := &Editor{
 		command:            command,
@@ -150,7 +150,7 @@ type Editor struct {
 	pub text.Publisher
 }
 
-// IsExternal reports true: byoe hosts an external TUI editor that
+// IsExternal reports true: exo hosts an external TUI editor that
 // owns the buffer contents.
 func (e *Editor) IsExternal() bool { return true }
 
@@ -180,7 +180,7 @@ func (e *Editor) Edit(
 	if expanded, expErr := cmdenv.Expand(ctx, cmdStr, e.env); expErr == nil {
 		cmdStr = expanded
 	} else {
-		return nil, fmt.Errorf("byoe: expand command %q: %w", cmdStr, expErr)
+		return nil, fmt.Errorf("exoeditor: expand command %q: %w", cmdStr, expErr)
 	}
 
 	cfg := e.vteCfg
@@ -200,7 +200,7 @@ func (e *Editor) Edit(
 		pub, e.notifications,
 		e.terminal, e.executor, e.tabManager, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("byoe: new vte handler: %w", err)
+		return nil, fmt.Errorf("exoeditor: new vte handler: %w", err)
 	}
 
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
@@ -212,12 +212,12 @@ func (e *Editor) Edit(
 		var err error
 		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
 		if err != nil {
-			return nil, fmt.Errorf("byoe: subscribe location commands: %w", err)
+			return nil, fmt.Errorf("exoeditor: subscribe location commands: %w", err)
 		}
 		ret, err = vctrlcmd.SubscribeGitCommands(file, e.fileRegistry,
 			ret, e.vctrlSvc, e.clipboard, e.notifications)
 		if err != nil {
-			return nil, fmt.Errorf("byoe: subscribe git commands: %w", err)
+			return nil, fmt.Errorf("exoeditor: subscribe git commands: %w", err)
 		}
 	}
 	if e.overrideHighlights {
@@ -226,13 +226,13 @@ func (e *Editor) Edit(
 	return e.pub.PublishExternalEdit(file, buf, ret), nil
 }
 
-// SubscribeCommand returns an error: byoe does not host Rune-side
+// SubscribeCommand returns an error: exo does not host Rune-side
 // editing commands.
 func (e *Editor) SubscribeCommand(textapi.CommandManual, text.CommandHandler) error {
 	return errors.New("not supported")
 }
 
-// RegisterREPLCommand returns an error: byoe does not host Rune-side
+// RegisterREPLCommand returns an error: exo does not host Rune-side
 // editing commands.
 func (e *Editor) RegisterREPLCommand(textapi.CommandManual, textapi.REPLHandler) error {
 	return errors.New("not supported")
@@ -247,7 +247,7 @@ func (e *Editor) UnsubscribeCommand(string) error { return errors.New("not suppo
 // UnregisterREPLCommand returns an error: nothing was ever registered.
 func (e *Editor) UnregisterREPLCommand(string) error { return errors.New("not supported") }
 
-// Editor returns an error: byoe does not track multiple handlers.
+// Editor returns an error: exo does not track multiple handlers.
 func (e *Editor) Editor(workspaceapi.URI) (text.Handler, error) {
 	return nil, errors.New("not supported")
 }

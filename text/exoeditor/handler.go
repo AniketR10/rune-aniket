@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"context"
@@ -57,11 +57,11 @@ const gracefulQuitTimeout = 30 * time.Second
 type editorHandler struct {
 	*vte.Handler
 
-	buf           *cell.Buffer
-	resource      workspaceapi.URI
-	gotoTemplate  gotoTemplate
-	quitKeys      []term.KeyComb
-	procDone      <-chan error
+	buf          *cell.Buffer
+	resource     workspaceapi.URI
+	gotoTemplate gotoTemplate
+	quitKeys     []term.KeyComb
+	procDone     <-chan error
 
 	cwd              workspace.Workspace
 	notifications    browserapi.Notifications
@@ -94,7 +94,7 @@ func newHandler(
 	procDone <-chan error,
 ) *editorHandler {
 	if procDone == nil {
-		panic("byoe.newHandler: procDone is required")
+		panic("exoeditor.newHandler: procDone is required")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
@@ -128,7 +128,7 @@ func (h *editorHandler) startWatcher(ctx context.Context) {
 	if err != nil {
 		_, _ = h.notifications.Notify(
 			browserapi.LevelWarn,
-			"byoe: watch %s: %v", h.resource.Path(), err)
+			"exoeditor: watch %s: %v", h.resource.Path(), err)
 		return
 	}
 	h.watchID = id
@@ -174,7 +174,7 @@ func (h *editorHandler) scheduleReload(uri workspaceapi.URI) {
 		}
 		_, _ = h.notifications.Notify(
 			browserapi.LevelWarn,
-			"byoe: reload %s: %v", uri.Path(), err)
+			"exoeditor: reload %s: %v", uri.Path(), err)
 	})
 }
 
@@ -222,7 +222,7 @@ func (h *editorHandler) ShowCommandBar(show bool) {}
 // MoveTo{Next,Prev}Location remain unimplemented because they need
 // editor-specific key sequences to drive the embedded cursor, but the
 // store is updated so observers querying LocationLists see the same
-// state non-BYOE editors expose.
+// state non-exo editors expose.
 func (h *editorHandler) SetLocationList(
 	pri textapi.LocationPriority, id string, l text.LocationList,
 ) {
@@ -238,7 +238,7 @@ func (h *editorHandler) LocationLists() []text.LocationSet {
 // the location lists registered at the embedded editor's current
 // cursor coordinates, or the empty string when no such location
 // exists. The "first non-empty wins" precedence mirrors
-// text/modeless/handler.go:setActiveLocationListMessage so the BYOE
+// text/modeless/handler.go:setActiveLocationListMessage so the exo
 // message bar surfaces the same string the modal editors would.
 func (h *editorHandler) LocationMessageAtCursor() string {
 	locs, ok := h.locations.LocationsAtCoordinates(h.CursorAtScroll())
@@ -368,11 +368,11 @@ func (h *editorHandler) Draw(w term.Writer) {
 	}
 	h.Handler.Draw(ignoreAttrWriter{Writer: w})
 	if probe == nil {
-		h.debugByoe("draw", "probe=nil")
+		h.debugExo("draw", "probe=nil")
 		return
 	}
 	locs := h.locations.SortedLocations()
-	h.debugByoe("draw", fmt.Sprintf(
+	h.debugExo("draw", fmt.Sprintf(
 		"bands={top=%d,bot=%d,gutter=%d,grid=%d} rows=%d locs=%d",
 		probe.Bands.Top, probe.Bands.Bottom, probe.Bands.GutterWidth,
 		probe.Bands.GridWidth, len(probe.Rows), len(locs)))
@@ -387,17 +387,17 @@ func (h *editorHandler) refreshProbe() {
 	comp := h.Handler.Component()
 	snap, err := comp.Snapshot()
 	if err != nil {
-		h.debugByoe("refresh", fmt.Sprintf("snapshot err: %v", err))
+		h.debugExo("refresh", fmt.Sprintf("snapshot err: %v", err))
 		return
 	}
 	active := snap.Active()
 	res, err := h.probe.Infer(context.Background(), h.resource,
 		active.Cells, active.Cursor)
 	if err != nil {
-		h.debugByoe("refresh", fmt.Sprintf("infer err: %v", err))
+		h.debugExo("refresh", fmt.Sprintf("infer err: %v", err))
 		return
 	}
-	h.debugByoe("refresh", fmt.Sprintf(
+	h.debugExo("refresh", fmt.Sprintf(
 		"cursor=%+v bands={top=%d,bot=%d,gutter=%d,grid=%d} rows=%d",
 		res.CursorAtScroll, res.Bands.Top, res.Bands.Bottom,
 		res.Bands.GutterWidth, res.Bands.GridWidth, len(res.Rows)))
@@ -408,10 +408,10 @@ func (h *editorHandler) refreshProbe() {
 // only writer to the file and Rune-level edits would fight with it.
 func (h *editorHandler) CellEditor() cell.Editor { return nopCellEditor{} }
 
-// debugByoe logs msg under the given site, deduping back-to-back
+// debugExo logs msg under the given site, deduping back-to-back
 // identical messages so the log stays readable when refreshProbe /
 // Draw run on every interrupt.
-func (h *editorHandler) debugByoe(site, msg string) {
+func (h *editorHandler) debugExo(site, msg string) {
 	h.debugMu.Lock()
 	if h.debugLastMsg == nil {
 		h.debugLastMsg = make(map[string]string)
@@ -422,7 +422,7 @@ func (h *editorHandler) debugByoe(site, msg string) {
 	}
 	h.debugLastMsg[site] = msg
 	h.debugMu.Unlock()
-	log.WithField(logging.KeyClass, "byoe."+site).Info(msg)
+	log.WithField(logging.KeyClass, "exoeditor."+site).Info(msg)
 }
 
 // Dimensions reports the ideal size needed to render the buffer
@@ -444,7 +444,7 @@ func (h *editorHandler) Close() error {
 		select {
 		case <-h.procDone:
 		case <-time.After(gracefulQuitTimeout):
-			h.debugByoe("close", fmt.Sprintf(
+			h.debugExo("close", fmt.Sprintf(
 				"graceful quit timed out after %s; "+
 					"forcing PTY teardown", gracefulQuitTimeout))
 		}
@@ -452,7 +452,7 @@ func (h *editorHandler) Close() error {
 			if err := h.Handler.Close(); err != nil {
 				_, _ = h.notifications.Notify(
 					browserapi.LevelWarn,
-					"byoe: close pty: %v", err)
+					"exoeditor: close pty: %v", err)
 			}
 		})
 	})

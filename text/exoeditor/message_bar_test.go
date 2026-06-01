@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"testing"
@@ -90,7 +90,7 @@ func editorHandlerWithCursor(t *testing.T, cursor term.Coordinates) *editorHandl
 	return h
 }
 
-// TestEditorHandlerLocationMessageBar exercises the BYOE message bar
+// TestEditorHandlerLocationMessageBar exercises the exo message bar
 // in three scenarios: no probe (cursor unknown), cursor off any
 // location, and cursor on a location with a non-empty Message. It
 // asserts both LocationMessageAtCursor and the rendered frame so a

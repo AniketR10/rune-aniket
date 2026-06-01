@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoefallback
+package exofallback
 
 import (
 	"context"
@@ -36,30 +36,30 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/byoe"
 	"unstable.build/go-tui/text/cmdenv"
+	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
 
-// Editor hosts a byoe.Editor for URIs BYOE accepts (file://, ssh://)
+// Editor hosts a exoeditor.Editor for URIs exo accepts (file://, ssh://)
 // and a Rune-native fallback for everything else.
 //
 // Editor is not safe for concurrent use; all methods are expected to
 // be called from the IDE's event-loop goroutine, like every other
 // text.Editor implementation in this tree.
 type Editor struct {
-	byoe     text.Editor
+	exo      text.Editor
 	fallback text.Editor
 	routes   map[string]text.Editor
 }
 
-// New constructs a byoe.Editor with the supplied arguments and wraps
-// it with fallback. The byoe.* arguments are the same set
-// byoe.New requires; the trailing fallback argument is the
-// Rune-native editor to use for URIs BYOE cannot serve. Panics if
-// fallback is nil; the byoe.New constructor panics for any missing
-// BYOE dependency.
+// New constructs a exoeditor.Editor with the supplied arguments and wraps
+// it with fallback. The exo.* arguments are the same set
+// exoeditor.New requires; the trailing fallback argument is the
+// Rune-native editor to use for URIs exo cannot serve. Panics if
+// fallback is nil; the exoeditor.New constructor panics for any missing
+// exo dependency.
 func New(
 	command, gotoTemplate, quit string,
 	scheduleNextTick func(func()) bool,
@@ -71,7 +71,7 @@ func New(
 	executor schemeapi.Executor,
 	tabManager browser.TabManager,
 	vteCfg vte.Config,
-	reloader byoe.Reloader,
+	reloader exoeditor.Reloader,
 	fallback text.Editor,
 	env cmdenv.Source,
 	overrideHighlights bool,
@@ -80,7 +80,7 @@ func New(
 	clip clipboard.Register,
 ) *Editor {
 	return newWithEditors(
-		byoe.New(
+		exoeditor.New(
 			command, gotoTemplate, quit, scheduleNextTick,
 			cwd, workspaceURI, notifications, publisher,
 			terminal, executor, tabManager, vteCfg, reloader, env,
@@ -92,16 +92,16 @@ func New(
 
 // newWithEditors is the dependency-injection seam used by tests. It
 // is unexported because production code must go through New so the
-// BYOE editor is the real one.
-func newWithEditors(byoeEd, fallback text.Editor) *Editor {
+// exo editor is the real one.
+func newWithEditors(exoEd, fallback text.Editor) *Editor {
 	switch {
-	case byoeEd == nil:
-		panic("byoefallback: byoe editor is required")
+	case exoEd == nil:
+		panic("exofallback: exo editor is required")
 	case fallback == nil:
-		panic("byoefallback: fallback editor is required")
+		panic("exofallback: fallback editor is required")
 	}
 	return &Editor{
-		byoe:     byoeEd,
+		exo:      exoEd,
 		fallback: fallback,
 		routes:   make(map[string]text.Editor),
 	}
@@ -109,10 +109,10 @@ func newWithEditors(byoeEd, fallback text.Editor) *Editor {
 
 // IsExternal always returns true: the IDE-level invariants (no
 // auto-save, no reload notifications, read-only mirror buffers) must
-// hold workspace-wide whenever editor.mode = "byoe".
+// hold workspace-wide whenever editor.mode = "exo".
 func (*Editor) IsExternal() bool { return true }
 
-// accepts reports whether uri's scheme can be served by BYOE.
+// accepts reports whether uri's scheme can be served by exo.
 func accepts(uri workspaceapi.URI) bool {
 	switch uri.Scheme() {
 	case workspace.FileScheme, workspacessh.Scheme:
@@ -121,7 +121,7 @@ func accepts(uri workspaceapi.URI) bool {
 	return false
 }
 
-// Edit dispatches to byoe for BYOE-accepted URIs and to fallback
+// Edit dispatches to exo for exo-accepted URIs and to fallback
 // otherwise. The choice is recorded so subsequent Editor(uri) lookups
 // hit the same child.
 func (e *Editor) Edit(
@@ -148,33 +148,33 @@ func (e *Editor) Editor(uri workspaceapi.URI) (text.Handler, error) {
 	return ed.Editor(uri)
 }
 
-// pickEditor returns the byoe editor when uri's scheme is
-// BYOE-accepted, else the fallback.
+// pickEditor returns the exo editor when uri's scheme is
+// exo-accepted, else the fallback.
 func (e *Editor) pickEditor(uri workspaceapi.URI) text.Editor {
 	if accepts(uri) {
-		return e.byoe
+		return e.exo
 	}
 	return e.fallback
 }
 
-// SubscribeEvents forwards to byoe only. The IDE wires its
+// SubscribeEvents forwards to exo only. The IDE wires its
 // workspace-level subscribers (autosaver, FS reload, etc.) onto the
-// editor.EventPublisher and BYOE is the source of truth for edit
-// and save events in a BYOE workspace; the fallback only serves
+// editor.EventPublisher and exo is the source of truth for edit
+// and save events in a exo workspace; the fallback only serves
 // IDE-owned pseudo-URIs (memory://) whose events the IDE does not
 // react to.
 func (e *Editor) SubscribeEvents(
 	evs []textapi.EventType, sub text.EventHandler,
 ) error {
-	return e.byoe.SubscribeEvents(evs, sub)
+	return e.exo.SubscribeEvents(evs, sub)
 }
 
-// UnsubscribeEvents forwards to byoe only; see SubscribeEvents.
+// UnsubscribeEvents forwards to exo only; see SubscribeEvents.
 func (e *Editor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
-	return e.byoe.UnsubscribeEvents(sub)
+	return e.exo.UnsubscribeEvents(sub)
 }
 
-// SubscribeCommand forwards to the fallback only. BYOE returns
+// SubscribeCommand forwards to the fallback only. exo returns
 // "not supported" for IDE-wide command registration by design, so the
 // fallback is the only meaningful target.
 func (e *Editor) SubscribeCommand(

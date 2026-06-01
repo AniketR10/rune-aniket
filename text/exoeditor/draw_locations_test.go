@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"context"
@@ -237,7 +237,7 @@ func TestDrawLocationsExpandsTabs(t *testing.T) {
 // TestEditorHandlerOverrideHighlightsDisabled verifies the editor
 // handler's Draw does not call into the location overlay path when
 // the config flag is off: SetLocationList still updates the public
-// store (so observers see the same state as on non-BYOE editors), but
+// store (so observers see the same state as on non-exo editors), but
 // no UnionAttributes calls reach the writer beyond what the embedded
 // vte already produces.
 func TestEditorHandlerOverrideHighlightsDisabled(t *testing.T) {

@@ -512,7 +512,7 @@ func TestInferSoftWrap(t *testing.T) {
 }
 
 // TestInferExposesBandsAndRows asserts the public Bands/Rows/Tabstop
-// fields agree with the rendered fixture so byoe consumers can project
+// fields agree with the rendered fixture so exo consumers can project
 // file coordinates back to screen coordinates without reaching into
 // vteprobe internals.
 func TestInferExposesBandsAndRows(t *testing.T) {
@@ -583,7 +583,7 @@ func TestInferExposesWrappedRows(t *testing.T) {
 	assert.Equal(t, 0, got.Rows[2].WrapOffset)
 }
 
-// TestInferTabstopDefaultsToVim8 documents the BYOE-with-vim scenario:
+// TestInferTabstopDefaultsToVim8 documents the exo-with-vim scenario:
 // a Go file rendered by vim with the default tabstop=8, no gutter,
 // and no chrome. The probe must pick tabstop 8 even though smaller
 // tabstops also appear in the hint list — at ts=4 the rendered tab

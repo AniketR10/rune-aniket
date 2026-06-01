@@ -41,14 +41,14 @@ import (
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/byoe"
+	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/workspace"
 )
 
-// TestBYOESyntaxHighlightsOverlayScrolling drives the full
-// byoe → vte → real-vim pipeline against a real Go file. text.Component
+// TestExoSyntaxHighlightsOverlayScrolling drives the full
+// exo → vte → real-vim pipeline against a real Go file. text.Component
 // installs the tree-sitter syntax tree which calls SetLocationList on
-// the byoe handler; Draw then overlays those locations on top of vim's
+// the exo handler; Draw then overlays those locations on top of vim's
 // rendered output. The test verifies that the overlay tracks the
 // embedded editor as the cursor scrolls through the file.
 //
@@ -62,7 +62,7 @@ import (
 //
 // Skips when the local machine has no vim binary or no Go tree-sitter
 // grammar artefacts.
-func TestBYOESyntaxHighlightsOverlayScrolling(t *testing.T) {
+func TestExoSyntaxHighlightsOverlayScrolling(t *testing.T) {
 	if _, err := exec.LookPath("vim"); err != nil {
 		t.Skip("vim binary not available")
 	}
@@ -87,10 +87,10 @@ func main() {
 	require.NoError(t, os.WriteFile(path, []byte(sample), 0o644))
 
 	const width, height = 60, 16
-	c, h, mu := newBYOEGoTestComponent(t, dir, path, width, height)
+	c, h, mu := newExoGoTestComponent(t, dir, path, width, height)
 	defer func() { _ = c.Close() }()
 
-	// Every method that reads or writes the byoe handler's
+	// Every method that reads or writes the exo handler's
 	// LocationStore (SetLocationList from the syntax goroutine,
 	// LocationLists/Draw from the test) shares the schedule mutex
 	// in production via ScheduleNextTick. The test mimics that by
@@ -111,7 +111,7 @@ func main() {
 		locked(func() { ok = len(h.LocationLists()) > 0 })
 		return ok
 	}, 5*time.Second, 50*time.Millisecond,
-		"syntax tree must publish a location list to the byoe handler")
+		"syntax tree must publish a location list to the exo handler")
 
 	// At rest the rendered frame must contain at least one
 	// '#'-marked cell — i.e. the overlay actually drew. We don't
@@ -178,14 +178,14 @@ func main() {
 
 func dispatchKeys(h text.Handler, keys ...term.KeyComb) {
 	for _, k := range keys {
-		_, _ = h.Handle(byoeKeyEvent(k))
+		_, _ = h.Handle(exoKeyEvent(k))
 	}
 }
 
-// byoeKeyEvent renders a KeyComb into a term.Event with the Raw bytes
+// exoKeyEvent renders a KeyComb into a term.Event with the Raw bytes
 // vte expects. The vte input path falls back to ev.Raw for ordinary
 // keys, so Ch alone is insufficient to drive the embedded editor.
-func byoeKeyEvent(k term.KeyComb) term.Event {
+func exoKeyEvent(k term.KeyComb) term.Event {
 	ev := term.Event{
 		Type: term.EventKey, Mod: k.Mod, Key: k.Key, Ch: k.Ch,
 	}
@@ -211,14 +211,14 @@ func drawHandler(h text.Handler, width, height int) string {
 
 func countHash(s string) int { return strings.Count(s, "#") }
 
-// newBYOEGoTestComponent builds a text.Component whose Editor is a
-// real byoe.Editor running vim, plugged into a real file scheme so
+// newExoGoTestComponent builds a text.Component whose Editor is a
+// real exoeditor.Editor running vim, plugged into a real file scheme so
 // the embedded vim can exec and the syntax tree can stat/read the
 // underlying Go file. The returned text.Handler is the
-// SubscribeLocationCommands-wrapped byoe handler exposed to the rest
+// SubscribeLocationCommands-wrapped exo handler exposed to the rest
 // of the IDE — calling Draw / Handle on it exercises the same
 // surface workspace_handler does in production.
-func newBYOEGoTestComponent(
+func newExoGoTestComponent(
 	t *testing.T, dir, file string, width, height int,
 ) (*text.Component, text.Handler, *sync.Mutex) {
 	uri, err := workspaceapi.CurrentUserHostURI(dir)
@@ -253,7 +253,7 @@ func newBYOEGoTestComponent(
 	tcfg.PkgManager = pkgs
 	tcfg.EventPublisher = func(term.Event) bool { return true }
 
-	ed := byoe.New(
+	ed := exoeditor.New(
 		// -Nu NONE skips user vimrc; -n disables swap so tempdir
 		// can be deleted without "swap file exists" prompts.
 		`vim -Nu NONE -n {file}`,
@@ -263,12 +263,12 @@ func newBYOEGoTestComponent(
 		ws,
 		uri,
 		nopBrowserNotifications{},
-		byoe.PublisherFunc(func(term.Event) bool { return true }),
+		exoeditor.PublisherFunc(func(term.Event) bool { return true }),
 		scheme,
 		scheme,
-		stubByoeTabManager{},
+		stubExoTabManager{},
 		vteCfg,
-		stubByoeReloader{},
+		stubExoReloader{},
 		nil,
 		true,
 		nil, nil, nil,
@@ -306,7 +306,7 @@ func defaultSyntaxConfig(schedule func(func()) bool) syntax.Config {
 }
 
 // nopBrowserNotifications discards every notification routed through
-// the byoe handler — the test asserts on rendered frames, not on
+// the exo handler — the test asserts on rendered frames, not on
 // notification side effects.
 type nopBrowserNotifications struct{}
 
@@ -326,19 +326,19 @@ func (nopBrowserNotifications) UpdateNotificationProgress(
 	return nil
 }
 
-type stubByoeTabManager struct{}
+type stubExoTabManager struct{}
 
-func (stubByoeTabManager) Tab(
+func (stubExoTabManager) Tab(
 	workspaceapi.URI, rune, string, browserapi.Handler,
 ) (browserapi.Handler, error) {
 	return nil, nil
 }
-func (stubByoeTabManager) SetTabName(
+func (stubExoTabManager) SetTabName(
 	workspaceapi.URI, string, term.Attributes,
 ) error {
 	return nil
 }
 
-type stubByoeReloader struct{}
+type stubExoReloader struct{}
 
-func (stubByoeReloader) Reload(workspaceapi.URI) error { return nil }
+func (stubExoReloader) Reload(workspaceapi.URI) error { return nil }

@@ -30,17 +30,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewCommandPromptEditorBYOE asserts that the command prompt
-// editor falls back to a Rune-native prompt (vi) in byoe mode rather
+// TestNewCommandPromptEditorExo asserts that the command prompt
+// editor falls back to a Rune-native prompt (vi) in exo mode rather
 // than panicking. This reproduces the crash reported when opening a
-// workspace with editor.mode = "byoe".
-func TestNewCommandPromptEditorBYOE(t *testing.T) {
+// workspace with editor.mode = "exo".
+func TestNewCommandPromptEditorExo(t *testing.T) {
 	h := &workspaceManagerHandler{}
 	cfg := ideConfig{
 		cfg: map[string]any{
 			"editor": map[string]any{
-				"mode": "byoe",
-				"byoe": map[string]any{
+				"mode": "exo",
+				"exo": map[string]any{
 					"command": "vim {file}",
 				},
 			},
@@ -53,14 +53,14 @@ func TestNewCommandPromptEditorBYOE(t *testing.T) {
 	})
 }
 
-// TestByoeModeAndAccessors covers editorMode/byoeCommand/byoeGoto on a
+// TestExoModeAndAccessors covers editorMode/exoCommand/exoGoto on a
 // hand-crafted config map.
-func TestByoeModeAndAccessors(t *testing.T) {
+func TestExoModeAndAccessors(t *testing.T) {
 	cfg := &ideConfig{
 		cfg: map[string]any{
 			"editor": map[string]any{
-				"mode": "byoe",
-				"byoe": map[string]any{
+				"mode": "exo",
+				"exo": map[string]any{
 					"command": "vim {file}",
 					"goto":    "<esc>:{line}<enter>",
 				},
@@ -68,15 +68,15 @@ func TestByoeModeAndAccessors(t *testing.T) {
 		},
 		errors: map[string]error{},
 	}
-	assert.Equal(t, "byoe", cfg.editorMode())
-	assert.Equal(t, "vim {file}", cfg.byoeCommand())
-	assert.Equal(t, "<esc>:{line}<enter>", cfg.byoeGoto())
+	assert.Equal(t, "exo", cfg.editorMode())
+	assert.Equal(t, "vim {file}", cfg.exoCommand())
+	assert.Equal(t, "<esc>:{line}<enter>", cfg.exoGoto())
 }
 
-// TestPkgEditorModeSubstitutesByoeFallback verifies the value forwarded to
-// package config.star scripts: byoe mode is rewritten to the configured
-// byoe.fallback so packages always see a concrete modal or modeless mode.
-func TestPkgEditorModeSubstitutesByoeFallback(t *testing.T) {
+// TestPkgEditorModeSubstitutesExoFallback verifies the value forwarded to
+// package config.star scripts: exo mode is rewritten to the configured
+// exo.fallback so packages always see a concrete modal or modeless mode.
+func TestPkgEditorModeSubstitutesExoFallback(t *testing.T) {
 	cases := []struct {
 		name     string
 		fallback string
@@ -88,31 +88,31 @@ func TestPkgEditorModeSubstitutesByoeFallback(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			byoe := map[string]any{
+			exo := map[string]any{
 				"command": "vim {file}",
 				"goto":    "<esc>:{line}<enter>",
 			}
 			if tc.fallback != "" {
-				byoe["fallback"] = tc.fallback
+				exo["fallback"] = tc.fallback
 			}
 			cfg := &ideConfig{
 				cfg: map[string]any{
 					"editor": map[string]any{
-						"mode": "byoe",
-						"byoe": byoe,
+						"mode": "exo",
+						"exo":  exo,
 					},
 				},
 				errors: map[string]error{},
 			}
-			assert.Equal(t, "byoe", cfg.editorMode())
+			assert.Equal(t, "exo", cfg.editorMode())
 			assert.Equal(t, tc.want, cfg.pkgEditorMode())
 		})
 	}
 }
 
-// TestPkgEditorModePassesNonByoeThrough verifies modal/modeless are
+// TestPkgEditorModePassesNonExoThrough verifies modal/modeless are
 // forwarded verbatim to packages.
-func TestPkgEditorModePassesNonByoeThrough(t *testing.T) {
+func TestPkgEditorModePassesNonExoThrough(t *testing.T) {
 	for _, mode := range []string{"modal", "modeless"} {
 		t.Run(mode, func(t *testing.T) {
 			cfg := &ideConfig{
@@ -126,14 +126,14 @@ func TestPkgEditorModePassesNonByoeThrough(t *testing.T) {
 	}
 }
 
-// TestValidateBYOEFallsBackOnMissingFile verifies that a byoe mode
+// TestValidateExoFallsBackOnMissingFile verifies that a exo mode
 // with an invalid (no {file}) command is rewritten back to "modal" so
 // the IDE still boots.
-func TestValidateBYOEFallsBackOnMissingFile(t *testing.T) {
+func TestValidateExoFallsBackOnMissingFile(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
-			"mode": "byoe",
-			"byoe": map[string]any{
+			"mode": "exo",
+			"exo": map[string]any{
 				"command": "vim",
 			},
 		},
@@ -144,14 +144,14 @@ func TestValidateBYOEFallsBackOnMissingFile(t *testing.T) {
 	assert.Equal(t, "modal", ic.editorMode())
 }
 
-// TestValidateBYOEFallsBackOnInvalidGoto verifies that an unparseable
-// goto rewrites editor.mode back to "modal". byoe relies on goto to
+// TestValidateExoFallsBackOnInvalidGoto verifies that an unparseable
+// goto rewrites editor.mode back to "modal". exo relies on goto to
 // position the cursor, so a bad value is a hard misconfiguration.
-func TestValidateBYOEFallsBackOnInvalidGoto(t *testing.T) {
+func TestValidateExoFallsBackOnInvalidGoto(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
-			"mode": "byoe",
-			"byoe": map[string]any{
+			"mode": "exo",
+			"exo": map[string]any{
 				"command": "vim {file}",
 				"goto":    "<bogus-key>",
 			},
@@ -163,15 +163,15 @@ func TestValidateBYOEFallsBackOnInvalidGoto(t *testing.T) {
 	assert.Equal(t, "modal", ic.editorMode())
 }
 
-// TestValidateBYOEFallsBackOnMissingGoto verifies that an unset goto
+// TestValidateExoFallsBackOnMissingGoto verifies that an unset goto
 // rewrites editor.mode back to "modal" for the same reason as an
-// invalid goto: byoe requires both editor.byoe.command and
-// editor.byoe.goto.
-func TestValidateBYOEFallsBackOnMissingGoto(t *testing.T) {
+// invalid goto: exo requires both editor.exo.command and
+// editor.exo.goto.
+func TestValidateExoFallsBackOnMissingGoto(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
-			"mode": "byoe",
-			"byoe": map[string]any{
+			"mode": "exo",
+			"exo": map[string]any{
 				"command": "vim {file}",
 			},
 		},
@@ -182,11 +182,11 @@ func TestValidateBYOEFallsBackOnMissingGoto(t *testing.T) {
 	assert.Equal(t, "modal", ic.editorMode())
 }
 
-func TestValidateBYOEFallsBackOnMissingQuit(t *testing.T) {
+func TestValidateExoFallsBackOnMissingQuit(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
-			"mode": "byoe",
-			"byoe": map[string]any{
+			"mode": "exo",
+			"exo": map[string]any{
 				"command": "vim {file}",
 				"goto":    "<esc>:{line}<enter>",
 			},
@@ -198,11 +198,11 @@ func TestValidateBYOEFallsBackOnMissingQuit(t *testing.T) {
 	assert.Equal(t, "modal", ic.editorMode())
 }
 
-func TestValidateBYOEFallsBackOnInvalidQuit(t *testing.T) {
+func TestValidateExoFallsBackOnInvalidQuit(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
-			"mode": "byoe",
-			"byoe": map[string]any{
+			"mode": "exo",
+			"exo": map[string]any{
 				"command": "vim {file}",
 				"goto":    "<esc>:{line}<enter>",
 				"quit":    "<bogus-key>",
@@ -215,9 +215,9 @@ func TestValidateBYOEFallsBackOnInvalidQuit(t *testing.T) {
 	assert.Equal(t, "modal", ic.editorMode())
 }
 
-// TestValidateBYOEAcceptsKnownTemplates table-tests the bundled sample
+// TestValidateExoAcceptsKnownTemplates table-tests the bundled sample
 // goto templates parse without errors.
-func TestValidateBYOEAcceptsKnownTemplates(t *testing.T) {
+func TestValidateExoAcceptsKnownTemplates(t *testing.T) {
 	templates := []string{
 		"<esc>:{line}<enter>{col}|",
 		"<esc>:goto<space>{line}<enter>",
@@ -231,14 +231,14 @@ func TestValidateBYOEAcceptsKnownTemplates(t *testing.T) {
 	}
 }
 
-// TestByoeFallbackDefaults asserts the accessor returns "modeless"
+// TestExoFallbackDefaults asserts the accessor returns "modeless"
 // when no fallback key is set (the documented default).
-func TestByoeFallbackDefaults(t *testing.T) {
+func TestExoFallbackDefaults(t *testing.T) {
 	cfg := ideConfig{
 		cfg: map[string]any{
 			"editor": map[string]any{
-				"mode": "byoe",
-				"byoe": map[string]any{
+				"mode": "exo",
+				"exo": map[string]any{
 					"command": "vim {file}",
 					"goto":    "<esc>:{line}<enter>",
 				},
@@ -246,19 +246,19 @@ func TestByoeFallbackDefaults(t *testing.T) {
 		},
 		errors: map[string]error{},
 	}
-	assert.Equal(t, "modeless", cfg.byoeFallback())
+	assert.Equal(t, "modeless", cfg.exoFallback())
 }
 
-// TestByoeFallbackExplicitValues asserts both "modal" and "modeless"
+// TestExoFallbackExplicitValues asserts both "modal" and "modeless"
 // round-trip through the accessor.
-func TestByoeFallbackExplicitValues(t *testing.T) {
+func TestExoFallbackExplicitValues(t *testing.T) {
 	for _, want := range []string{"modal", "modeless"} {
 		t.Run(want, func(t *testing.T) {
 			cfg := ideConfig{
 				cfg: map[string]any{
 					"editor": map[string]any{
-						"mode": "byoe",
-						"byoe": map[string]any{
+						"mode": "exo",
+						"exo": map[string]any{
 							"command":  "vim {file}",
 							"goto":     "<esc>:{line}<enter>",
 							"fallback": want,
@@ -267,18 +267,18 @@ func TestByoeFallbackExplicitValues(t *testing.T) {
 				},
 				errors: map[string]error{},
 			}
-			assert.Equal(t, want, cfg.byoeFallback())
+			assert.Equal(t, want, cfg.exoFallback())
 		})
 	}
 }
 
-// TestValidateBYOEFallbackInvalidValueRewrites verifies an unknown
+// TestValidateExoFallbackInvalidValueRewrites verifies an unknown
 // fallback string is rewritten to "modeless" so the IDE still boots.
-func TestValidateBYOEFallbackInvalidValueRewrites(t *testing.T) {
+func TestValidateExoFallbackInvalidValueRewrites(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
-			"mode": "byoe",
-			"byoe": map[string]any{
+			"mode": "exo",
+			"exo": map[string]any{
 				"command":  "vim {file}",
 				"goto":     "<esc>:{line}<enter>",
 				"quit":     "<esc>:qa<enter>",
@@ -290,16 +290,16 @@ func TestValidateBYOEFallbackInvalidValueRewrites(t *testing.T) {
 	require.Error(t, err)
 
 	ic := ideConfig{cfg: cfg, errors: map[string]error{}}
-	assert.Equal(t, "modeless", ic.byoeFallback(),
+	assert.Equal(t, "modeless", ic.exoFallback(),
 		"invalid fallback must be rewritten to %q", "modeless")
-	// editor.mode remains "byoe" since command/goto are valid.
-	assert.Equal(t, "byoe", ic.editorMode())
+	// editor.mode remains "exo" since command/goto are valid.
+	assert.Equal(t, "exo", ic.editorMode())
 }
 
-// TestByoeOverrideHighlights table-tests the accessor: defaults to
+// TestExoOverrideHighlights table-tests the accessor: defaults to
 // true when unset, round-trips explicit true/false, and falls back to
 // true while recording an error when the value is the wrong type.
-func TestByoeOverrideHighlights(t *testing.T) {
+func TestExoOverrideHighlights(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -323,25 +323,25 @@ func TestByoeOverrideHighlights(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			byoe := map[string]any{
+			exo := map[string]any{
 				"command": "vim {file}",
 				"goto":    "<esc>:{line}<enter>",
 			}
 			if tc.setRaw {
-				byoe["override_highlights"] = tc.raw
+				exo["override_highlights"] = tc.raw
 			}
 			cfg := ideConfig{
 				cfg: map[string]any{
 					"editor": map[string]any{
-						"mode": "byoe",
-						"byoe": byoe,
+						"mode": "exo",
+						"exo":  exo,
 					},
 				},
 				errors: map[string]error{},
 			}
-			got := cfg.byoeOverrideHighlights()
+			got := cfg.exoOverrideHighlights()
 			assert.Equal(t, tc.wantValue, got)
-			_, hadErr := cfg.errors["editor.byoe.override_highlights"]
+			_, hadErr := cfg.errors["editor.exo.override_highlights"]
 			assert.Equal(t, tc.wantErrKey, hadErr,
 				"expected errors entry to %v", tc.wantErrKey)
 		})

@@ -65,7 +65,7 @@ func (p *Publisher) Init() {
 // subscribes to buffer updates to dispatch EventTypeEdit.
 //
 // cursor MUST be non-nil. Editors that do not own a *Cursor (e.g.
-// text/byoe, which hosts an external TUI editor inside a vte and
+// text/exoeditor, which hosts an external TUI editor inside a vte and
 // therefore has no Rune-side cursor at all) must use
 // PublishExternalEdit instead.
 func (p *Publisher) PublishEdit(

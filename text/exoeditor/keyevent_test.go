@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package byoe
+package exoeditor
 
 import (
 	"fmt"
@@ -32,7 +32,7 @@ import (
 )
 
 // TestKeyCombToEvent table-tests every term.Key value and every
-// supported rune+modifier combination byoe injects into the embedded
+// supported rune+modifier combination exo injects into the embedded
 // vte. The expected byte sequences track what a real vt100/xterm
 // would emit (mirroring term/gui/input.go) so synthetic
 // SetCursorAtScroll input is indistinguishable from a physical key
@@ -231,7 +231,7 @@ func TestKeyCombToEventCoversAllKeys(t *testing.T) {
 }
 
 // TestKeyCombToEventCoversCtrlAlpha asserts every Ctrl+letter folds
-// to the canonical C0 byte. The byoe goto-template injector relies
+// to the canonical C0 byte. The exo goto-template injector relies
 // on this for editors whose goto sequence uses Ctrl+<letter>
 // (e.g. micro's <c-l>).
 func TestKeyCombToEventCoversCtrlAlpha(t *testing.T) {

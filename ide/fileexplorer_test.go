@@ -50,7 +50,7 @@ import (
 	"unstable.build/go-tui/text/vi"
 )
 
-func TestFileExplorerBYOEEnter(t *testing.T) {
+func TestFileExplorerExoEnter(t *testing.T) {
 	if _, err := exec.LookPath("vim"); err != nil {
 		t.Skip("vim binary not available")
 	}
@@ -69,17 +69,17 @@ func TestFileExplorerBYOEEnter(t *testing.T) {
 
 	cfg := defaultConfigWithWrap(false)
 	editorCfg := cfg.cfg["editor"].(map[string]any)
-	editorCfg["mode"] = "byoe"
-	editorCfg["byoe"] = map[string]any{
+	editorCfg["mode"] = "exo"
+	editorCfg["exo"] = map[string]any{
 		"command": `vim -Nu NONE -n "+call cursor({line}, {col})" {file}`,
 		"goto":    "<esc>:{line}<enter>{col}|",
 		"quit":    "<esc>:qa<enter>",
 	}
 	cfg.ringBell = func() {}
-	require.Equal(t, "byoe", cfg.editorMode())
-	// The byoefallback default is modeless; verify it propagated so
+	require.Equal(t, "exo", cfg.editorMode())
+	// The exofallback default is modeless; verify it propagated so
 	// downstream behaviour (Enter toggles, no vi search) matches.
-	require.Equal(t, "modeless", cfg.byoeFallback())
+	require.Equal(t, "modeless", cfg.exoFallback())
 
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
@@ -96,14 +96,14 @@ func TestFileExplorerBYOEEnter(t *testing.T) {
 	ex := m.focusEx()
 	require.NotNil(t, ex)
 	assert.True(t, ex.ed.IsExternal(),
-		"byoe workspace must remain externally managed even when "+
+		"exo workspace must remain externally managed even when "+
 			"some URIs route to the fallback")
 
 	m.mu.Lock()
 	err = ex.fexplorer(context.Background())
 	m.mu.Unlock()
-	require.NoError(t, err, "fexplorer must open under byoe via the "+
-		"byoefallback router for memory:///fexplorer")
+	require.NoError(t, err, "fexplorer must open under exo via the "+
+		"exofallback router for memory:///fexplorer")
 	require.NotNil(t, ex.fileExplorerWin,
 		"file explorer window must be present")
 	require.NotNil(t, ex.fileExplorerHandler,

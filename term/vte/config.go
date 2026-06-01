@@ -111,7 +111,7 @@ type Config struct {
 	// so a single keypress that causes a multi-flush repaint results
 	// in at most one EventInterrupt reaching the publisher.
 	//
-	// Set this to true when a caller (e.g. BYOE) needs to observe
+	// Set this to true when a caller (e.g. exo) needs to observe
 	// every grid mutation as it happens, because something downstream
 	// of the publisher must keep state synchronized with the embedded
 	// program's actual repaint cadence (vteprobe.Cursor.Infer).

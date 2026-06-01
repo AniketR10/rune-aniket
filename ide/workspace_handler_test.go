@@ -1314,15 +1314,15 @@ func TestOpenPrevSessionFilesSkipsNonTextHandler(t *testing.T) {
 	assert.True(t, foundMD, "expected to find markdown tab after session restore")
 }
 
-func TestOpenBYOEEditDelegatesMarkdown(t *testing.T) {
-	assertBYOEDelegatesMarkdown(t, "README.md", false)
+func TestOpenExoEditDelegatesMarkdown(t *testing.T) {
+	assertExoDelegatesMarkdown(t, "README.md", false)
 }
 
-func TestOpenBYOEViewDelegatesMarkdown(t *testing.T) {
-	assertBYOEDelegatesMarkdown(t, "NOTES.md", true)
+func TestOpenExoViewDelegatesMarkdown(t *testing.T) {
+	assertExoDelegatesMarkdown(t, "NOTES.md", true)
 }
 
-func assertBYOEDelegatesMarkdown(t *testing.T, fileName string, readOnly bool) {
+func assertExoDelegatesMarkdown(t *testing.T, fileName string, readOnly bool) {
 	if _, err := exec.LookPath("vim"); err != nil {
 		t.Skip("vim binary not available")
 	}
@@ -1337,13 +1337,13 @@ func assertBYOEDelegatesMarkdown(t *testing.T, fileName string, readOnly bool) {
 
 	cfg := defaultConfigWithWrap(false)
 	editorCfg := cfg.cfg["editor"].(map[string]any)
-	editorCfg["mode"] = "byoe"
-	editorCfg["byoe"] = map[string]any{
+	editorCfg["mode"] = "exo"
+	editorCfg["exo"] = map[string]any{
 		"command": `vim -Nu NONE -n {file}`,
 		"goto":    "<esc>:{line}<enter>{col}|",
 	}
 	cfg.ringBell = func() {}
-	require.Equal(t, "byoe", cfg.editorMode())
+	require.Equal(t, "exo", cfg.editorMode())
 
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
@@ -1384,7 +1384,7 @@ func assertBYOEDelegatesMarkdown(t *testing.T, fileName string, readOnly bool) {
 	require.True(t, ok, "tab must be *browser.Tab")
 	_, isMarkdown := tab.Handler().(*handlermarkdown.Handler)
 	assert.False(t, isMarkdown,
-		"under editor.mode=byoe, .md must delegate to the BYOE "+
+		"under editor.mode=exo, .md must delegate to the exo "+
 			"handler, not the built-in markdown viewer "+
 			"(readOnly=%v)", readOnly)
 }
