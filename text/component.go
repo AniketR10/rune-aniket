@@ -537,6 +537,9 @@ func (c *Component) openFileTabStreaming(
 ) (browserapi.Handler, error) {
 	sh, err := streamload.New(c.workspace, file, streamload.Config{})
 	if err != nil {
+		if !readOnly && errors.Is(err, os.ErrNotExist) {
+			return c.openFileTabSync(file, recoveryFilename, readOnly, forceRecover)
+		}
 		return nil, fmt.Errorf("stream load file: %w", err)
 	}
 	icon := c.iconFor(file)

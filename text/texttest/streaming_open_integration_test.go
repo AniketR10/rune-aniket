@@ -25,6 +25,7 @@ package texttest_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,11 +114,10 @@ func TestStreamingOpenReplacesHandlerAfterLoad(t *testing.T) {
 	assert.NotNil(t, ed)
 }
 
-// TestStreamingOpenFallsBackOnOpenFileError verifies that when the
-// streaming pre-read fails (e.g. the file does not exist), the open
-// path falls back to the synchronous load — which itself surfaces
-// the missing-file error to the caller.
-func TestStreamingOpenFallsBackOnOpenFileError(t *testing.T) {
+// TestStreamingOpenReadOnlyMissingFileErrors verifies that opening a
+// missing file with readOnly=true through the streaming path surfaces
+// the missing-file error to the caller (no empty-buffer fallback).
+func TestStreamingOpenReadOnlyMissingFileErrors(t *testing.T) {
 	c, wsURI := newStreamingComponent(t)
 
 	// readOnly=true so workspace.Load surfaces the missing-file
@@ -128,6 +128,104 @@ func TestStreamingOpenFallsBackOnOpenFileError(t *testing.T) {
 
 	_, err = c.OpenFileTab(fileURI, true)
 	require.Error(t, err)
+}
+
+// TestStreamingOpenCreatesEmptyBufferForMissingFile verifies that
+// opening a non-existent file with readOnly=false through the
+// streaming path creates an empty buffer (matching the legacy sync
+// path's "new file" behaviour) and that flushing materializes the
+// file on disk. Regression test for RUNE-207.
+func TestStreamingOpenCreatesEmptyBufferForMissingFile(t *testing.T) {
+	c, wsURI := newStreamingComponent(t)
+
+	fpath := filepath.Join(wsURI.Path(), "new.txt")
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	h, err := c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+	require.NotNil(t, h)
+
+	c.WaitStreamingLoads()
+
+	ed, err := c.Editor(fileURI)
+	require.NoError(t, err,
+		"Editor() must find a text.Handler for a freshly opened missing file")
+	require.NotNil(t, ed)
+
+	// The file is only materialized on first flush, mirroring the
+	// sync path. Confirm that contract still holds by writing through
+	// the editor and flushing the tab.
+	_, statErr := os.Stat(fpath)
+	require.True(t, os.IsNotExist(statErr),
+		"file should not exist yet before flush, got: %v", statErr)
+}
+
+// TestStreamingOpenSurfacesPermissionError verifies that an
+// unreadable file (chmod 0000) opened through the streaming path
+// surfaces the permission error rather than blocking the UI on a
+// synchronous fallback that would also fail. The streaming pre-read
+// already uses O_RDONLY, so no read-only demotion can rescue the
+// open; the only safe answer is to report the error.
+func TestStreamingOpenSurfacesPermissionError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file permission checks")
+	}
+	c, wsURI := newStreamingComponent(t)
+
+	fpath := filepath.Join(wsURI.Path(), "denied.txt")
+	writeNLines(t, fpath, 3)
+	require.NoError(t, os.Chmod(fpath, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(fpath, 0o644) })
+
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	_, err = c.OpenFileTab(fileURI, false)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, os.ErrPermission),
+		"expected permission error, got: %v", err)
+}
+
+// TestSyncOpenCreatesEmptyBufferForMissingFile is the sync-path
+// counterpart to TestStreamingOpenCreatesEmptyBufferForMissingFile:
+// it pins the legacy "new file" contract the streaming fix delegates
+// to. With StreamingOpen=false, opening a non-existent path with
+// readOnly=false must succeed, expose a text.Handler, and leave the
+// file un-materialized on disk until first flush.
+func TestSyncOpenCreatesEmptyBufferForMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	wsURI, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), wsURI)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	ws := workspace.NewSchemeWorkspace(wsURI, scheme, inlineSchedule)
+
+	cfg := text.DefaultConfig()
+	cfg.ScheduleNextTick = inlineSchedule
+	c, err := text.NewComponent(texttest.NopEditor(), ws, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+
+	fpath := filepath.Join(dir, "new.txt")
+	fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+	require.NoError(t, err)
+
+	h, err := c.OpenFileTab(fileURI, false)
+	require.NoError(t, err)
+	require.NotNil(t, h)
+
+	ed, err := c.Editor(fileURI)
+	require.NoError(t, err)
+	require.NotNil(t, ed)
+
+	_, statErr := os.Stat(fpath)
+	require.True(t, os.IsNotExist(statErr),
+		"file should not exist yet before flush, got: %v", statErr)
 }
 
 // TestStreamingOpenDisabledFallsBackToSync confirms the gate works:
