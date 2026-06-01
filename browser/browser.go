@@ -102,6 +102,16 @@ type Window interface {
 
 	// SetFrameAttr sets a Window's FrameCharSet default attributes.
 	SetFrameAttr(attr term.Attributes) (term.Attributes, bool)
+
+	// Position returns the top-left coordinate of this window within
+	// its WindowManager.
+	Position() term.Coordinates
+
+	// Width returns the current rendered width of this window.
+	Width() int
+
+	// Height returns the current rendered height of this window.
+	Height() int
 }
 
 // WindowManager is the interface that groups window and tab management methods.

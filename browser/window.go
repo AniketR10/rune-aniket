@@ -49,6 +49,22 @@ func (w *browserWindow) Closed() bool {
 	return w.parent == nil || w.win.Closed()
 }
 
+// Position returns the top-left coordinate of this window within
+// its WindowManager.
+func (w *browserWindow) Position() term.Coordinates {
+	return w.win.Position()
+}
+
+// Width returns the current rendered width of this window.
+func (w *browserWindow) Width() int {
+	return w.win.Width()
+}
+
+// Height returns the current rendered height of this window.
+func (w *browserWindow) Height() int {
+	return w.win.Height()
+}
+
 func (w *browserWindow) IsFloating() bool {
 	return w.win.IsFloating()
 }

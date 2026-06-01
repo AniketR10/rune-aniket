@@ -108,6 +108,46 @@ config = {
 	assert.True(t, c.animationsOpenWorkspace())
 }
 
+// TestAnimationsCommandPromptDefaultsEnabled verifies the
+// command_prompt animation defaults to enabled when omitted.
+func TestAnimationsCommandPromptDefaultsEnabled(t *testing.T) {
+	c := newAnimConfig(t, `config = {"animations": {}}`)
+	assert.True(t, c.animationsCommandPrompt())
+	assert.Empty(t, c.errors)
+}
+
+// TestAnimationsCommandPromptExplicitFalseDisables confirms an
+// explicit False suppresses the prompt shader without disturbing
+// the other animation toggles.
+func TestAnimationsCommandPromptExplicitFalseDisables(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "command_prompt": False,
+    },
+}
+`)
+	assert.False(t, c.animationsCommandPrompt())
+	assert.True(t, c.animationsLoadingWorkspace())
+	assert.True(t, c.animationsOpenWorkspace())
+	assert.Empty(t, c.errors)
+}
+
+// TestAnimationsCommandPromptWrongType records an error and falls
+// back to enabled so a typo never accidentally disables the effect.
+func TestAnimationsCommandPromptWrongType(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {
+    "animations": {
+        "command_prompt": "yes",
+    },
+}
+`)
+	assert.True(t, c.animationsCommandPrompt(),
+		"wrong type must fall back to enabled")
+	require.Contains(t, c.errors, "animations.command_prompt")
+}
+
 // TestAnimationsWrongType records an error and falls back to enabled
 // so a typo never silently disables the animation.
 func TestAnimationsWrongType(t *testing.T) {

@@ -39,7 +39,7 @@ func Sine(baseShader shader.Shader, revolutions float64) shader.Shader {
 // Boomerang creates a half sine wave cycle (start .. end .. start) creating a
 // curved time animation playing twice the speed til the last frame and coming
 // back to initial frame.
-func Boomerang(baseShader shader.Shader, revolutions float64) shader.Shader {
+func Boomerang(baseShader shader.Shader) shader.Shader {
 	return sine(baseShader, 0.5)
 }
 

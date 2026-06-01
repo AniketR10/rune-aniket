@@ -358,6 +358,9 @@ config = {
             #"shader":   "burn",
             #"duration": "1s",
         },
+        # Plays a shineFrame sweep over the command prompt frame
+        # while it's open. Set to False to suppress the effect.
+        "command_prompt": True,
     },
     # Self-upgrade configuration. Rune polls a public manifest endpoint
     # to discover new releases and prompts before installing them.

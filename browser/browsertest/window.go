@@ -138,3 +138,31 @@ func (w WindowFromAPIWindow) MinimizeRight(padding int) bool {
 func (w WindowFromAPIWindow) Unminimize() bool {
 	return w.Win.(interface{ Unminimize() bool }).Unminimize()
 }
+
+// Position returns the top-left coordinate of this window within
+// its WindowManager.
+func (w WindowFromAPIWindow) Position() term.Coordinates {
+	p, ok := w.Win.(interface{ Position() term.Coordinates })
+	if !ok {
+		return term.Coordinates{}
+	}
+	return p.Position()
+}
+
+// Width returns the current rendered width of this window.
+func (w WindowFromAPIWindow) Width() int {
+	p, ok := w.Win.(interface{ Width() int })
+	if !ok {
+		return 0
+	}
+	return p.Width()
+}
+
+// Height returns the current rendered height of this window.
+func (w WindowFromAPIWindow) Height() int {
+	p, ok := w.Win.(interface{ Height() int })
+	if !ok {
+		return 0
+	}
+	return p.Height()
+}

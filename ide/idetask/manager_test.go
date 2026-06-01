@@ -972,6 +972,10 @@ func (w *fakeWindow) FrameAttr() term.Attributes {
 	return w.frameAttr
 }
 
+func (w *fakeWindow) Position() term.Coordinates { return term.Coordinates{} }
+func (w *fakeWindow) Width() int                 { return 0 }
+func (w *fakeWindow) Height() int                { return 0 }
+
 func (w *fakeWindow) Closed() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()

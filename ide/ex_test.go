@@ -1582,8 +1582,8 @@ func TestExCommandResponsive(t *testing.T) {
                     
                     
                     
-edit▐               
-edit                
+ edit▐              
+ edit               
                     
                     
                     
@@ -1593,9 +1593,9 @@ edit
                     
                     
                     
-eeeeeeeeeeeeeeeee   
-eeeeeeeeeeeeeeeee   
-eeeeeeeeeeeeeeee▐   
+ eeeeeeeeeeeeeee    
+ eeeeeeeeeeeeeee    
+ eeeeeeeeeeeeee▐    
                     
                     
                     `},
@@ -1604,8 +1604,8 @@ eeeeeeeeeeeeeeee▐
                     
                     
                     
-edit eeeeeeeeeeee   
-eeeeeeeeeeeee▐      
+ edit eeeeeeeeee    
+ eeeeeeeeeeeeee▐    
                     
                     
                     
@@ -2540,6 +2540,38 @@ func TestCommandPromptUsesSharedStoragePartition(t *testing.T) {
 	require.NotNil(t, b.ex.cmd)
 	require.NoError(t, b.ex.Close())
 	assert.Equal(t, int32(0), store.partitionCloseCount.Load())
+}
+
+// TestCommandPromptShaderGating verifies that the prompt shader is
+// created only when commandPromptShader is enabled, and is torn down
+// whenever the prompt closes.
+func TestCommandPromptShaderGating(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor(),
+			text.WithCommandKey(testCommandKey))
+		defer b.Close()
+		b.Resize(40, 20)
+		b.ex.commandPromptShader = false
+		b.ex.openCommandPrompt()
+		require.NotNil(t, b.ex.cmd)
+		assert.Nil(t, b.ex.promptShader,
+			"promptShader must stay nil when disabled")
+		require.NoError(t, b.ex.cmdWin.Close())
+	})
+	t.Run("enabled", func(t *testing.T) {
+		b := newExForTesting(t, texttest.NopEditor(),
+			text.WithCommandKey(testCommandKey))
+		defer b.Close()
+		b.Resize(40, 20)
+		b.ex.commandPromptShader = true
+		b.ex.openCommandPrompt()
+		require.NotNil(t, b.ex.cmd)
+		assert.NotNil(t, b.ex.promptShader,
+			"promptShader must spawn when enabled")
+		require.NoError(t, b.ex.cmdWin.Close())
+		assert.Nil(t, b.ex.promptShader,
+			"promptShader must be cleared on prompt close")
+	})
 }
 
 type closeCountingPartitionStore struct {
@@ -3835,8 +3867,8 @@ func TestEditCompletion(t *testing.T) {
                     
                     
                     
-edit re▐            
-retalls             
+ edit re▐           
+ retalls            
                     
                     
                     
@@ -3846,8 +3878,8 @@ retalls
                     
                     
                     
-edit dawo▐          
-daworg              
+ edit dawo▐         
+ daworg             
                     
                     
                     
@@ -3857,8 +3889,8 @@ daworg
                     
                     
                     
-edit daworg re▐     
-retalls             
+ edit daworg re▐    
+ retalls            
                     
                     
                     
@@ -3868,8 +3900,8 @@ retalls
                     
                     
                     
-edit daworg re▐     
-retalls             
+ edit daworg re▐    
+ retalls            
                     
                     
                     
@@ -3879,8 +3911,8 @@ retalls
                     
                     
                     
-edit dawo▐          
-daworg              
+ edit dawo▐         
+ daworg             
                     
                     
                     
@@ -3890,8 +3922,8 @@ daworg
                     
                     
                     
-edit daworg re▐     
-retalls             
+ edit daworg re▐    
+ retalls            
                     
                     
                     
@@ -3901,10 +3933,10 @@ retalls
                     
                     
                     
-edi▐                
-edit                
-readfile            
-reloadfile!         
+ edi▐               
+ edit               
+ readfile           
+ reloadfile!        
                     
                     `},
 		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
@@ -4323,9 +4355,9 @@ func TestSwitchToTab(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 ┌────────────────────────────┐
-│tabfocus ▐                  │
-│1 hello.go                  │
-│2 world.go                  │
+│ tabfocus ▐                 │
+│ 1 hello.go                 │
+│ 2 world.go                 │
 └────────────────────────────┘
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
@@ -4436,7 +4468,7 @@ func TestSwitchToTab(t *testing.T) {
 │                            │
 │                            │
 ┌────────────────────────────┐
-│tabfocus ▐                  │
+│ tabfocus ▐                 │
 │                            │
 │                            │
 └────────────────────────────┘
@@ -4636,11 +4668,11 @@ func TestRunStopTasks(t *testing.T) {
 │││                        │││
 │││                        │││
 ┌────────────────────────────┐
-│taskclose ▐                 │
-│assets                      │
-│build                       │
-│test                        │
-│validateAssets              │
+│ taskclose ▐                │
+│ assets                     │
+│ build                      │
+│ test                       │
+│ validateAssets             │
 └────────────────────────────┘
 └└└────────────────────────┘┘┘`},
 			{" assets>:taskclose test>:taskclose ",
@@ -4652,9 +4684,9 @@ func TestRunStopTasks(t *testing.T) {
 ││                          ││
 ││                          ││
 ┌────────────────────────────┐
-│taskclose ▐                 │
-│build                       │
-│validateAssets              │
+│ taskclose ▐                │
+│ build                      │
+│ validateAssets             │
 └────────────────────────────┘
 ││                          ││
 ││                          ││
@@ -5990,7 +6022,7 @@ func testCopyToClipboard(
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
 │DDDDDDDDDDDDDDDDDDDDDDDDDDDD│
 ┌────────────────────────────┐
-│AAAA▐                       │
+│ AAAA▐                      │
 │                            │
 │                            │
 └────────────────────────────┘

@@ -578,6 +578,13 @@ func (c ideConfig) animationsOpenWorkspace() bool {
 	return c.animationsBool("open_workspace")
 }
 
+// animationsCommandPrompt returns whether the shineFrame shader
+// played over the open command prompt is enabled. Defaults to true.
+// See [ideConfig.animationsLoadingWorkspace] for error semantics.
+func (c ideConfig) animationsCommandPrompt() bool {
+	return c.animationsBool("command_prompt")
+}
+
 func (c ideConfig) animationsBool(key string) bool {
 	if c.cfg == nil {
 		return true

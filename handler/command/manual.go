@@ -145,7 +145,6 @@ func (p *Prompt) makeManualComponent(
 				Attributes:           attr,
 				BackgroundAttributes: attr,
 				PaddingVertical:      2,
-				PaddingHorizontal:    2,
 				MinWidth:             minWidth,
 			},
 		})
@@ -154,10 +153,6 @@ func (p *Prompt) makeManualComponent(
 			// content won't wrap
 			_, height := markdown.Dimensions()
 			return height
-		})
-		ret = component.NewSpan(ret, component.SpanConfig{
-			ContentAlignment: component.AlignmentCentered,
-			PadHorizontal:    2,
 		})
 	}
 	return ret

@@ -493,6 +493,9 @@ func (w *fakeWindow) Unminimize() bool       { return false }
 func (w *fakeWindow) SetFrameAttr(a term.Attributes) (term.Attributes, bool) {
 	return a, false
 }
+func (w *fakeWindow) Position() term.Coordinates { return term.Coordinates{} }
+func (w *fakeWindow) Width() int                 { return 0 }
+func (w *fakeWindow) Height() int                { return 0 }
 
 var _ browser.Window = (*fakeWindow)(nil)
 

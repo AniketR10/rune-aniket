@@ -56,6 +56,7 @@ import (
 	"unstable.build/go-tui/cell"
 	fileexplorercomp "unstable.build/go-tui/component/fileexplorer"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
@@ -145,15 +146,20 @@ type ex struct {
 	pluginWaitTimeout        time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
-	cmdV             handler.Virtual[*browser.Component]
-	cmdWin           browser.Window
-	fullscreenID     uint64
-	exit             bool
-	forceExit        bool
-	height           int
-	width            int
-	isPromptDispatch bool
-	macro            macroRecorder
+	cmdV         handler.Virtual[*browser.Component]
+	cmdWin       browser.Window
+	promptShader *shader.Component
+	// commandPromptShader gates the pulseFrame effect started in
+	// newCommandPrompt. Disabled by setting animations.command_prompt
+	// to false in rune.star.
+	commandPromptShader bool
+	fullscreenID        uint64
+	exit                bool
+	forceExit           bool
+	height              int
+	width               int
+	isPromptDispatch    bool
+	macro               macroRecorder
 
 	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
@@ -196,6 +202,7 @@ func newEx(
 	commandEditor command.Editor,
 	commandObserver commandObserver,
 	debugCommands bool,
+	commandPromptShader bool,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
@@ -208,6 +215,7 @@ func newEx(
 	e.commandEditor = commandEditor
 	e.commandObserver = commandObserver
 	e.debugCommands = debugCommands
+	e.commandPromptShader = commandPromptShader
 	return
 }
 
@@ -1909,12 +1917,6 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 		for _, cmd := range e.comp.REPLCommands() {
 			handler := textapi.REPLHandler(router)
 			if cmd.Name == extensionsREPLCommandName && e.extensionsExecutor != nil {
-				// Fold the old top-level "extensions-process" REPL
-				// command under the "extensions" namespace so
-				// process management for extensions lives next to
-				// the rest of the extensions UI. The wrapper still
-				// routes through the same workspaceshell.Executor;
-				// only the surface name changes.
 				cmd.Commands = append(cmd.Commands, extensionsProcessManual())
 				handler = extensionsREPLWithProcess{
 					underlying: router,
@@ -2016,10 +2018,6 @@ func (e *ex) panic(_ context.Context, args ...string) error {
 	panic("this could be a panic")
 }
 
-// crash triggers a Go runtime fatal error (stack overflow) that cannot
-// be intercepted by recover(). It exists to exercise the launch-log
-// crash report path and is only registered in debug builds via
-// ide.WithDebugCommands.
 func (e *ex) crash(_ context.Context, args ...string) error {
 	var recurse func(int) int
 	recurse = func(n int) int { return recurse(n+1) + 1 }
@@ -2027,12 +2025,6 @@ func (e *ex) crash(_ context.Context, args ...string) error {
 	return nil
 }
 
-// datarace deliberately provokes a Go data race on a shared int by
-// spawning two goroutines that read and write it concurrently without
-// synchronization. It exists so debug builds (which are compiled with
-// `-race`) can validate that the race detector is wired up and that
-// the resulting report reaches the launch-log crash report path. Only
-// registered when ide.WithDebugCommands(true) is supplied.
 func (e *ex) datarace(_ context.Context, _ ...string) error {
 	var shared int
 	done := make(chan struct{}, 2)
@@ -2053,18 +2045,6 @@ func (e *ex) datarace(_ context.Context, _ ...string) error {
 	return nil
 }
 
-// heapdump writes a Go runtime heap dump (the format documented at
-// https://golang.org/s/go15heapdump) to a file and notifies the user
-// with the resulting path. The dump differs from the sampled pprof
-// heap profile in that it captures the full object graph with
-// per-object outgoing pointers and GC roots, which is required to
-// walk reverse reachability for live objects.
-//
-// If args[0] is set, it is used as the output path; otherwise a fresh
-// file is created via os.CreateTemp. Registered only in debug builds
-// via ide.WithDebugCommands. Note that runtime/debug.WriteHeapDump
-// suspends every goroutine for the duration of the dump, so this
-// command will freeze the IDE briefly on a large heap.
 func (e *ex) heapdump(_ context.Context, args ...string) error {
 	var (
 		f   *os.File
@@ -2087,13 +2067,6 @@ func (e *ex) heapdump(_ context.Context, args ...string) error {
 	return nil
 }
 
-// pprof starts a net/http/pprof server on the given TCP address (or
-// 127.0.0.1:0 for a random localhost port if no address is supplied)
-// and notifies the user with the listening address. It is the
-// in-IDE equivalent of sending SIGUSR1 to the process and exists for
-// convenience in debug builds where typing :pprof is faster than
-// switching to a shell to send a signal. Registered only in debug
-// builds via ide.WithDebugCommands.
 func (e *ex) pprof(_ context.Context, args ...string) error {
 	addr := "127.0.0.1:0"
 	if len(args) > 0 && args[0] != "" {
@@ -2428,25 +2401,34 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	}
 	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
+	// Pad the prompt with 1 cell of horizontal breathing room on
+	// each side of the framed content. Background is wrapped on the
+	// outside so the padding cells are filled with the overlay's
+	// background color; the Span supplies the floating dimensions so
+	// the host window grows to accommodate the padding.
+	padded := handler.NewSpan(cmd, component.SpanConfig{
+		PadHorizontal:    2,
+		ContentAlignment: component.AlignmentCentered,
+	})
+	bg := component.NewBackground(padded, term.Cell{
+		Attributes: term.Attributes{
+			Bg:    e.config.CommandOverlay.ElementAttr.Bg,
+			Attrs: e.config.CommandOverlay.ElementAttr.Attrs,
+		},
+	})
 	commandHandler := browser.FuncFloating(
 		browser.FuncHandler(
-			handler.WithComponent(cmd,
-				component.WithBackground(
-					cmd, term.Cell{
-						Attributes: term.Attributes{
-							Bg:    e.config.CommandOverlay.ElementAttr.Bg,
-							Attrs: e.config.CommandOverlay.ElementAttr.Attrs,
-						},
-					},
-				),
-			), func() error {
+			handler.WithComponent(padded, bg),
+			func() error {
 				err := cmd.Close()
 				if cmd == e.cmd {
 					e.cmd = nil
+					e.stopPromptShader()
 				}
 				return err
-			}),
-		cmd.Dimensions,
+			},
+		),
+		padded.Dimensions,
 	)
 	reset(cmd)
 
@@ -2456,6 +2438,9 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 			Alignment: component.AlignmentHorizontallyCentered,
 		})
 	e.cmd = cmd
+	if e.commandPromptShader {
+		e.startPromptShader()
+	}
 }
 
 func (e *ex) handlePrompt(ev term.Event) (exit, handled bool) {
@@ -2530,31 +2515,70 @@ func (e *ex) Resize(width, height int) {
 	width = max(0, width-offset.X)
 	height = max(0, height-offset.Y)
 	e.cmdV.Resize(width, height)
+	if e.promptShader != nil {
+		e.promptShader.Resize(e.width, e.height)
+	}
 }
 
 // Draw satisfies tui.Component
 func (e *ex) Draw(w term.Writer) {
-	if e.cmd != nil {
-		// temporarily disable auto-dimming based on focus so we
-		// can pass a DimWriter below and dim everything.
-		prev := e.comp.SetDim(false)
-		defer e.comp.SetDim(prev)
+	switch {
+	case e.cmd == nil:
+		e.container.Draw(w)
+	case e.promptShader != nil:
+		e.promptShader.Draw(w)
+	default:
+		e.drawCmdPrompt(w)
+	}
+}
 
-		if e.config.Config.Dim {
-			e.container.Draw(tterm.DimWriter(w))
-		} else {
-			e.container.Draw(w)
-		}
-		vw := component.VirtualWriter{
-			Writer: w,
-			Offset: e.cmdV.Position(),
-			Height: e.cmdV.Height(),
-			Width:  e.cmdV.Width(),
-		}
-		e.cmdV.C.DrawWindow(e.cmdWin, &vw)
+func (e *ex) drawCmdPrompt(w term.Writer) {
+	// temporarily disable auto-dimming based on focus so we
+	// can pass a DimWriter below and dim everything.
+	prev := e.comp.SetDim(false)
+	defer e.comp.SetDim(prev)
+
+	if e.config.Config.Dim {
+		e.container.Draw(tterm.DimWriter(w))
 	} else {
 		e.container.Draw(w)
 	}
+	e.cmdV.C.DrawWindow(e.cmdWin, &component.VirtualWriter{
+		Writer: w,
+		Offset: e.cmdV.Position(),
+		Height: e.cmdV.Height(),
+		Width:  e.cmdV.Width(),
+	})
+}
+
+func (e *ex) startPromptShader() {
+	if e.promptShader != nil {
+		_ = e.promptShader.Close()
+		e.promptShader = nil
+	}
+	// cmdWin.Position is relative to the inner browser's window
+	// manager, so reaching screen coordinates requires stacking
+	// the editor's outer window-manager origin (cmdV.Position)
+	// and the inner browser's wm origin.
+	wmOff := e.cmdV.C.WindowManagerPosition()
+	offset := e.cmdV.Position()
+	offset.X += wmOff.X
+	offset.Y += wmOff.Y
+	e.promptShader = newPromptShader(
+		e.config.FocusFrameCharSet, e.config.FrameAttr,
+		e.cmdWin, offset, drawFunc(e.drawCmdPrompt), e,
+	)
+	e.promptShader.Resize(e.width, e.height)
+}
+
+// stopPromptShader tears down any live promptShader. Safe to call
+// when none is set.
+func (e *ex) stopPromptShader() {
+	if e.promptShader == nil {
+		return
+	}
+	_ = e.promptShader.Close()
+	e.promptShader = nil
 }
 
 // Editor returns the underlying Editor implementation.
@@ -2562,14 +2586,6 @@ func (e *ex) Editor() text.Editor {
 	return &e.comp
 }
 
-// commandPromptEditor adapts a text.Editor to the command.Editor
-// interface expected by command.Prompt for its modal edit mode.
-// It calls text.Editor.Edit with a bare context (no
-// withAuxiliaryBars), so the editor returns just the buffer view
-// with no status / icons / aux bar chrome. That keeps the visible
-// cursor coordinates aligned with the prompt's own coordinates.
-// Production flows replace this with a bare vi.New /
-// modeless.NewHandler adapter (see workspace_handler.go).
 type commandPromptEditor struct {
 	ed text.Editor
 }
@@ -2647,6 +2663,7 @@ func (e *ex) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
+	e.stopPromptShader()
 	if err := e.container.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}

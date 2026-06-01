@@ -101,7 +101,7 @@ jeep gladiator
 sport s             
                     
 DESCRIPTION         
-2022 bottom of      `},
+2022 bottom of the  `},
 		{"initializes with lots of commands", "", goodLotsTestCommands,
 			`
 ▐                   
@@ -136,8 +136,8 @@ USAGE
 mercedes GL 450     
                     
 DESCRIPTION         
-2014 old luxury     
-car.                `},
+2014 old luxury car.
+                    `},
 	}
 
 	for _, tcase := range tsuite {

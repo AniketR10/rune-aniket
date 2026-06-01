@@ -57,6 +57,9 @@ func (w *noopWindow) Unminimize() bool                         { return false }
 func (w *noopWindow) SetFrameAttr(term.Attributes) (term.Attributes, bool) {
 	return term.Attributes{}, false
 }
+func (w *noopWindow) Position() term.Coordinates { return term.Coordinates{} }
+func (w *noopWindow) Width() int                 { return 0 }
+func (w *noopWindow) Height() int                { return 0 }
 
 // NopWindow returns a window that does nothing.
 func NopWindow() browser.Window {

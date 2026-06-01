@@ -744,6 +744,10 @@ func (w *testExplorerWindow) SetFrameAttr(attr term.Attributes) (term.Attributes
 	return term.Attributes{}, false
 }
 
+func (w *testExplorerWindow) Position() term.Coordinates { return term.Coordinates{} }
+func (w *testExplorerWindow) Width() int                 { return 0 }
+func (w *testExplorerWindow) Height() int                { return 0 }
+
 type explorerMockEntry struct {
 	name  string
 	isDir bool

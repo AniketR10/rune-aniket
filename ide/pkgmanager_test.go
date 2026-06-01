@@ -152,10 +152,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
-│six                                   │
-│──────────────────────────────────────│
+│ pkginstall ▐                         │
+│ go                                   │
+│ six                                  │
+│ ──────────────────────────────────── │
 │                                      │
 ├──────────────────────────────────────┤
 │1                                     │
@@ -168,10 +168,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall six ▐                      │
-│1                                     │
-│2                                     │
-│──────────────────────────────────────│
+│ pkginstall six ▐                     │
+│ 1                                    │
+│ 2                                    │
+│ ──────────────────────────────────── │
 │                                      │
 ├──────────────────────────────────────┤
 │1                                     │
@@ -200,10 +200,10 @@ func TestPackageManagerIntegration(t *testing.T) {
 │                        │ six         │
 │                        └─────────────┘
 ┌──────────────────────────────────────┐
-│pkgcurrent ▐                          │
-│six                                   │
+│ pkgcurrent ▐                         │
+│ six                                  │
 │                                      │
-│──────────────────────────────────────│
+│ ──────────────────────────────────── │
 │                                      │
 ├──────────────────────────────────────┤
 │1                                     │
@@ -631,10 +631,10 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
-│six                                   │
-│──────────────────────────────────────│
+│ pkginstall ▐                         │
+│ go                                   │
+│ six                                  │
+│ ──────────────────────────────────── │
 │                                      │
 │ Usage                                │
 │                                      │
@@ -662,10 +662,10 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
-│six                                   │
-│──────────────────────────────────────│
+│ pkginstall ▐                         │
+│ go                                   │
+│ six                                  │
+│ ──────────────────────────────────── │
 │                                      │
 │                                      │
 │                                      │
@@ -699,23 +699,23 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
-│six                                   │
-│──────────────────────────────────────│
-│go                                    │
+│ pkginstall ▐                         │
+│ go                                   │
+│ six                                  │
+│ ──────────────────────────────────── │
+│ go                                   │
 │                                      │
-│NOTES                                 │
-│                                      │
-│                                      │
-│VERSION                               │
+│ NOTES                                │
 │                                      │
 │                                      │
+│ VERSION                              │
 │                                      │
 │                                      │
 │                                      │
-│CREATED AT                            │
-│Apr 4, 2181 1:51 PM                   │
+│                                      │
+│                                      │
+│ CREATED AT                           │
+│ Apr 4, 2181 1:51 PM                  │
 ├──────────────────────────────────────┤
 │1                                     │
 └━─────────────────────────────────────┘`},
@@ -739,10 +739,10 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
-│six                                   │
-│──────────────────────────────────────│
+│ pkginstall ▐                         │
+│ go                                   │
+│ six                                  │
+│ ──────────────────────────────────── │
 │                                      │
 │                                      │
 │                                      │
@@ -775,23 +775,23 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
-│six                                   │
-│──────────────────────────────────────│
-│six                                   │
+│ pkginstall ▐                         │
+│ go                                   │
+│ six                                  │
+│ ──────────────────────────────────── │
+│ six                                  │
 │                                      │
-│NOTES                                 │
-│blabla                                │
+│ NOTES                                │
+│ blabla                               │
 │                                      │
-│VERSION                               │
-│2                                     │
-│                                      │
-│                                      │
+│ VERSION                              │
+│ 2                                    │
 │                                      │
 │                                      │
-│CREATED AT                            │
-│Apr 4, 2181 1:51 PM                   │
+│                                      │
+│                                      │
+│ CREATED AT                           │
+│ Apr 4, 2181 1:51 PM                  │
 ├──────────────────────────────────────┤
 │1                                     │
 └━─────────────────────────────────────┘`},
@@ -814,10 +814,10 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall six ▐                      │
-│2                                     │
+│ pkginstall six ▐                     │
+│ 2                                    │
 │                                      │
-│──────────────────────────────────────│
+│ ──────────────────────────────────── │
 │                                      │
 │                                      │
 │                                      │
@@ -850,23 +850,23 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall six ▐                      │
-│2                                     │
+│ pkginstall six ▐                     │
+│ 2                                    │
 │                                      │
-│──────────────────────────────────────│
-│six @ 2                               │
+│ ──────────────────────────────────── │
+│ six @ 2                              │
 │                                      │
-│CHANGE LOG                            │
-│Just messed up with the code a bit,   │
-│you know                              │
-│then something else                   │
-│done                                  │
+│ CHANGE LOG                           │
+│ Just messed up with the code a bit   │
+│ , you know                           │
+│ then something else                  │
+│ done                                 │
 │                                      │
-│AUTHOR                                │
-│clawdbot@clawd.bot                    │
+│ AUTHOR                               │
+│ clawdbot@clawd.bot                   │
 │                                      │
-│CREATED AT                            │
-│Apr 4, 2181 1:51 PM                   │
+│ CREATED AT                           │
+│ Apr 4, 2181 1:51 PM                  │
 ├──────────────────────────────────────┤
 │1                                     │
 └━─────────────────────────────────────┘`},
@@ -1162,7 +1162,7 @@ func TestSetReleaseManager(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
+│ pkginstall ▐                         │
 │                                      │
 │                                      │
 └──────────────────────────────────────┘
@@ -1195,8 +1195,8 @@ func TestSetReleaseManager(t *testing.T) {
 │                                      │
 │                                      │
 ┌──────────────────────────────────────┐
-│pkginstall ▐                          │
-│go                                    │
+│ pkginstall ▐                         │
+│ go                                   │
 │                                      │
 └──────────────────────────────────────┘
 │                                      │

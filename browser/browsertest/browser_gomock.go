@@ -565,6 +565,20 @@ func (mr *MockWindowMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindow)(nil).Focus))
 }
 
+// Height mocks base method.
+func (m *MockWindow) Height() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Height")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Height indicates an expected call of Height.
+func (mr *MockWindowMockRecorder) Height() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Height", reflect.TypeOf((*MockWindow)(nil).Height))
+}
+
 // IsFloating mocks base method.
 func (m *MockWindow) IsFloating() bool {
 	m.ctrl.T.Helper()
@@ -650,6 +664,20 @@ func (mr *MockWindowMockRecorder) MinimizeUp(padding any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinimizeUp", reflect.TypeOf((*MockWindow)(nil).MinimizeUp), padding)
 }
 
+// Position mocks base method.
+func (m *MockWindow) Position() term.Coordinates {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Position")
+	ret0, _ := ret[0].(term.Coordinates)
+	return ret0
+}
+
+// Position indicates an expected call of Position.
+func (mr *MockWindowMockRecorder) Position() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Position", reflect.TypeOf((*MockWindow)(nil).Position))
+}
+
 // SetContent mocks base method.
 func (m *MockWindow) SetContent(arg0 browserapi.Handler) error {
 	m.ctrl.T.Helper()
@@ -691,6 +719,20 @@ func (m *MockWindow) Unminimize() bool {
 func (mr *MockWindowMockRecorder) Unminimize() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unminimize", reflect.TypeOf((*MockWindow)(nil).Unminimize))
+}
+
+// Width mocks base method.
+func (m *MockWindow) Width() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Width")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Width indicates an expected call of Width.
+func (mr *MockWindowMockRecorder) Width() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Width", reflect.TypeOf((*MockWindow)(nil).Width))
 }
 
 // WindowID mocks base method.
