@@ -416,7 +416,7 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 			return files{langID: id}, nil
 		}
 		t.log(log.ErrorLevel, "aborting syntax parsing: %v", err)
-		t.notifyNotAvail(id)
+		t.config.ScheduleNextTick(func() { t.notifyNotAvail(id) })
 		return files{}, err
 	}
 	defer iter.Close()
@@ -424,7 +424,7 @@ func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 	if err != nil {
 		msg := fmt.Sprintf("fetch language %q package: %v", id, err)
 		t.log(log.ErrorLevel, "%s", msg)
-		t.notifyNotAvail(id)
+		t.config.ScheduleNextTick(func() { t.notifyNotAvail(id) })
 		return files{}, errors.New(msg)
 	}
 	return files{files: allFiles, langID: id, packageFound: true}, nil
