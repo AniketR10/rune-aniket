@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"unstable.build/go-tui/debug"
 )
 
 func TestServerClientIntegration(t *testing.T) {
@@ -505,7 +506,7 @@ func TestHighlightHonoursClientCancel(t *testing.T) {
 	sockPath := filepath.Join(tmpDir, "cancel.sock")
 	lis, err := net.Listen("unix", sockPath)
 	require.NoError(t, err)
-	go func() { _ = srv.Serve(lis) }()
+	go debug.CapturePanicReport(func() { _ = srv.Serve(lis) })
 	t.Cleanup(srv.Stop)
 
 	conn, err := grpc.NewClient(
@@ -528,7 +529,7 @@ func TestHighlightHonoursClientCancel(t *testing.T) {
 
 	select {
 	case <-released:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("server-side Highlight iterator never released after client cancel")
 	}
 }

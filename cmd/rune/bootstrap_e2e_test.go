@@ -1,0 +1,393 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package main
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+
+	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/text"
+)
+
+// TestBootstrapE2ESurfacesOAuthURLInWaitPrompt is the black-box e2e
+// test for the bootstrap login flow: it constructs the bootstrap
+// handler the way runGUI does, drives it through the Welcome →
+// Editor → Format → Sign-in prompts with real term.Events, and
+// asserts that once the apiclient publishes the OAuth URL on its
+// LoginSession.URL channel, that URL ends up rendered inside the
+// "Follow the instructions in your browser" wait prompt.
+//
+// The contract under test is the full plumbing:
+//
+//	bootstrapHandler.startLogin
+//	  → apiclient.Client.Login(ctx)
+//	    → context-stashed urlCh
+//	      → tokenSourceRefresh publishes the URL into ctx's chan
+//	        → bootstrap_handler URL watcher schedules mountLoginWaitPrompt
+//	          → preIDE.Prompt renders the URL on screen
+//
+// If any link in that chain breaks (the ctx key, the channel send,
+// the scheduleNextTick wiring, or the wait-prompt mount), the
+// rendered frame will not contain the URL and this test fails.
+func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
+	// Fake ox-api endpoint: every request 404s so the auth config
+	// fetch falls back to the builtin defaults and the OAuth flow
+	// reaches the OpenBrowser callback with a synthesized URL.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	dataDir := t.TempDir()
+	configPath := dataDir + "/config.yaml"
+
+	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{
+		httpAddress:    srv.URL,
+		dataPath:       dataDir,
+		configPath:     configPath,
+		websiteAddress: "https://rune.test",
+	})
+	t.Cleanup(restoreFlags)
+
+	browserURLCh := make(chan *url.URL, 1)
+	testOpenBrowserOverride = func(u *url.URL) error {
+		select {
+		case browserURLCh <- u:
+		default:
+		}
+		return nil
+	}
+	t.Cleanup(func() { testOpenBrowserOverride = nil })
+
+	mu := new(sync.Mutex)
+	publishCh := make(chan term.Event, 256)
+	publishEvent := func(ev term.Event) bool {
+		select {
+		case publishCh <- ev:
+			return true
+		default:
+			return false
+		}
+	}
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	root, err := newBootstrapHandler(
+		dataDir, configPath, "" /* workspace */, "" /* zdotDir */, nil, /* filenames */
+		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+
+	pumperDone := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		defer close(pumperDone)
+		for ev := range publishCh {
+			if ev.Type == term.EventInterrupt && ev.UserFunc != nil {
+				mu.Lock()
+				ev.UserFunc()
+				mu.Unlock()
+			}
+		}
+	})
+	t.Cleanup(func() {
+		close(publishCh)
+		<-pumperDone
+	})
+
+	const width, height = 80, 30
+	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
+	wrapped.Resize(width, height)
+
+	// Welcome → Editor → Format → Sign-in. Each key matches the
+	// per-prompt binding tables in bootstrap_handler.go. The brief
+	// pauses give the publish-channel pumper a chance to drain the
+	// scheduled-tick callbacks that mount each successor prompt
+	// before the next key arrives.
+	for _, ch := range []rune{'g', 'm', 's', 'l'} {
+		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	var oauthURL *url.URL
+	select {
+	case oauthURL = <-browserURLCh:
+		require.NotEmpty(t, oauthURL.String(),
+			"OpenBrowser hook must receive a non-empty URL")
+	case <-time.After(10 * time.Second):
+		t.Fatal("OpenBrowser hook was never invoked; OAuth flow stalled before publishing the URL")
+	}
+
+	// The bootstrap wait prompt embeds the URL in a backtick-quoted
+	// span that wraps at the prompt's width budget, so the exact
+	// string may have soft-wraps. Assert on host + path fragments
+	// that are too specific to appear by coincidence.
+	wantHost := oauthURL.Host
+	wantPath := oauthURL.Path
+	require.NotEmpty(t, wantHost, "OAuth URL must have a host")
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return containsAll(frame,
+			"Follow the instructions",
+			wantHost,
+			wantPath,
+		)
+	}, 10*time.Second, 50*time.Millisecond,
+		"expected the bootstrap wait prompt to render with the OAuth URL "+
+			"(host=%q path=%q)", wantHost, wantPath)
+
+	frame := handlertest.DrawHandler(wrapped, width, height)
+	assert.Contains(t, frame, "Follow the instructions",
+		"wait prompt header must render")
+	assert.Contains(t, frame, wantHost,
+		"wait prompt must inline the OAuth URL's host so the user can copy it")
+	assert.Contains(t, frame, wantPath,
+		"wait prompt must inline the OAuth URL's path so the user can copy it")
+}
+
+type bootstrapFlagOverrides struct {
+	httpAddress    string
+	dataPath       string
+	configPath     string
+	websiteAddress string
+}
+
+func overrideBootstrapFlags(t *testing.T, o bootstrapFlagOverrides) func() {
+	t.Helper()
+	prevHTTP := *flagHTTPAddress
+	prevData := *flagDataPath
+	prevConfig := *flagConfigPath
+	prevWebsite := *flagWebsiteAddress
+	*flagHTTPAddress = o.httpAddress
+	*flagDataPath = o.dataPath
+	*flagConfigPath = o.configPath
+	*flagWebsiteAddress = o.websiteAddress
+	return func() {
+		*flagHTTPAddress = prevHTTP
+		*flagDataPath = prevData
+		*flagConfigPath = prevConfig
+		*flagWebsiteAddress = prevWebsite
+	}
+}
+
+func containsAll(haystack string, needles ...string) bool {
+	for _, n := range needles {
+		if !strings.Contains(haystack, n) {
+			return false
+		}
+	}
+	return true
+}
+
+// bootstrapE2ELocked serializes Handle/Draw/Resize on the bootstrap
+// handler's locker so the pumper goroutine's UserFunc execution
+// cannot race the test's Handle calls. Mirrors lockedHandler in
+// ide_test.go.
+type bootstrapE2ELocked struct {
+	tui.Handler
+	mu sync.Locker
+}
+
+func (h *bootstrapE2ELocked) Handle(ev term.Event) (bool, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Handle(ev)
+}
+
+func (h *bootstrapE2ELocked) Draw(w term.Writer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Draw(w)
+}
+
+func (h *bootstrapE2ELocked) Resize(width, height int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Resize(width, height)
+}
+
+func (h *bootstrapE2ELocked) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Cursor()
+}
+
+func (h *bootstrapE2ELocked) Selection() (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Selection()
+}
+
+// TestBootstrapE2ESignUpReopensLoginPrompt pins the fix for the
+// "Sign up locks the user out" bug: pressing the Sign up button in
+// the login choice prompt opens the signup URL in the user's browser
+// and then must re-mount the Sign in / Sign up choice prompt so the
+// user can come back to Rune after completing signup on the website.
+//
+// The bug was that openLoginPrompt was invoked synchronously inside
+// the OnSelect callback, racing the SDK's prompt-teardown of the
+// just-selected choice. The fresh prompt mount got torn down by the
+// outgoing prompt's close logic, leaving the bootstrap with no
+// visible UI and no way to retry sign in.
+//
+// The fix is to schedule the re-mount via scheduleNextTick so it
+// runs on a later event-loop iteration, after the original prompt
+// has fully closed. This test drives Welcome → Editor → Format →
+// Sign-up via real keystrokes, observes the signup URL on the
+// OpenBrowser hook, and asserts the choice prompt is visible again
+// in the rendered frame.
+func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	dataDir := t.TempDir()
+	configPath := dataDir + "/config.yaml"
+
+	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{
+		httpAddress:    srv.URL,
+		dataPath:       dataDir,
+		configPath:     configPath,
+		websiteAddress: "https://rune.test",
+	})
+	t.Cleanup(restoreFlags)
+
+	browserURLCh := make(chan *url.URL, 1)
+	testOpenBrowserOverride = func(u *url.URL) error {
+		select {
+		case browserURLCh <- u:
+		default:
+		}
+		return nil
+	}
+	t.Cleanup(func() { testOpenBrowserOverride = nil })
+
+	mu := new(sync.Mutex)
+	publishCh := make(chan term.Event, 256)
+	publishEvent := func(ev term.Event) bool {
+		select {
+		case publishCh <- ev:
+			return true
+		default:
+			return false
+		}
+	}
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	root, err := newBootstrapHandler(
+		dataDir, configPath, "", "", nil,
+		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+
+	pumperDone := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		defer close(pumperDone)
+		for ev := range publishCh {
+			if ev.Type == term.EventInterrupt && ev.UserFunc != nil {
+				mu.Lock()
+				ev.UserFunc()
+				mu.Unlock()
+			}
+		}
+	})
+	t.Cleanup(func() {
+		close(publishCh)
+		<-pumperDone
+	})
+
+	const width, height = 80, 30
+	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
+	wrapped.Resize(width, height)
+
+	// Welcome → Editor → Format. 's' on the format prompt selects
+	// Starlark; control then advances to the login choice prompt.
+	for _, ch := range []rune{'g', 'm', 's'} {
+		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return containsAll(frame, "Sign in", "Sign up")
+	}, 5*time.Second, 50*time.Millisecond,
+		"login choice prompt must be visible after the format prompt advances")
+
+	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 's'})
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return containsAll(frame, "Sign in", "Sign up")
+	}, 5*time.Second, 50*time.Millisecond,
+		"after Sign up opens the browser, the login choice prompt must be re-mounted "+
+			"so the user can come back to Rune; otherwise the bootstrap is stuck "+
+			"with no visible UI")
+}
+
+func testE2EExtensionsRunner(
+	_ workspaceapi.URI,
+	_ map[extensionapi.Permission]extension.ResourceRegistrar,
+	_ string,
+	_ browser.Notifications,
+	_, _ schemeapi.Executor,
+	_ extension.Grantor,
+	_ text.Editor,
+	_ ideauthorizer.PromptOpener,
+	_ storageapi.Service,
+	_ func(func()) bool,
+) (extension.Runner, error) {
+	return nopE2ERunner{}, nil
+}
+
+type nopE2ERunner struct{}
+
+func (nopE2ERunner) Run(string, string, config.Config) error { return nil }
+func (nopE2ERunner) Close() error                            { return nil }

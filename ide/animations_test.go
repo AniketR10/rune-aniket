@@ -578,7 +578,7 @@ config = {
 	}
 
 	i := new(IDE)
-	require.NoError(t, i.init(".", configFile.Name(), dir,
+	require.NoError(t, i.init(".", configFile.Name(), dir, newTestStorage(t, dir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(new(sync.Mutex)),

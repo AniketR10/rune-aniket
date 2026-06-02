@@ -21,26 +21,54 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
-package apiclient
+package main
 
 import (
-	"strings"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 )
 
-func TestCallbackPageHTML(t *testing.T) {
-	if !strings.HasPrefix(callbackPageHTML, "<!doctype html") {
-		t.Fatalf("callbackPageHTML must start with <!doctype html, got %q",
-			callbackPageHTML[:min(40, len(callbackPageHTML))])
+// runLoginCommand must return without waiting for the OAuth flow to
+// complete. The :login command runs on the Ebiten UI goroutine, so a
+// synchronous wait freezes the IDE until the user finishes (or
+// abandons) the browser flow.
+func TestRunLoginCommandReturnsImmediately(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	config := apiclient.DefaultConfig()
+	config.HTTPEndpointAddress = srv.URL
+	client := apiclient.New(storagestub.NewInMemoryService(), config, t.TempDir())
+	defer client.Close()
+
+	returned := make(chan error, 1)
+	go func() { returned <- runLoginCommand(t.Context(), client, nopNotifier{}) }()
+
+	select {
+	case err := <-returned:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("runLoginCommand did not return; UI goroutine would deadlock")
 	}
-	for _, needle := range []string{
-		"You're in",
-		"Checking your subscription",
-		"{{.CheckoutURL}}",
-	} {
-		if !strings.Contains(callbackPageHTML, needle) {
-			t.Errorf("callbackPageHTML missing %q", needle)
-		}
-	}
+}
+
+type nopNotifier struct{}
+
+func (nopNotifier) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "", nil
+}
+func (nopNotifier) NotifyOnce(browserapi.NotificationLevel, string, ...any) (string, error) {
+	return "", nil
+}
+func (nopNotifier) UpdateNotificationProgress(string, string, int64, int64) error {
+	return nil
 }

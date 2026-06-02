@@ -36,6 +36,7 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -54,22 +55,44 @@ const (
 
 var fullscreen bool
 
+func runLoginCommand(
+	ctx context.Context, c *apiclient.Client, notifs browserapi.Notifications,
+) error {
+	_, _ = notifs.Notify(browserapi.LevelInfo,
+		"Follow the prompts in your browser to complete login.")
+	session := c.Login(ctx)
+	go debug.CapturePanicReport(func() {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-session.Done:
+			if err != nil {
+				_, _ = notifs.Notify(browserapi.LevelWarn,
+					"Login did not complete: %v", err)
+				return
+			}
+			_, _ = notifs.Notify(browserapi.LevelInfo, "Login successful.")
+		}
+	})
+	return nil
+}
+
 func subscribeCommands(
-	g *gui.GUI, c *apiclient.Client, cerr error,
+	g *gui.GUI, c *apiclient.Client,
 	i *ide.IDE, transparentEnabled bool, configPath string,
 	launchCmd []string,
 ) (ret error) {
 	if err := subscribeGUICommands(g, i, transparentEnabled, launchCmd); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	if err := subscribeOtherCommands(i, c, cerr, configPath); err != nil {
+	if err := subscribeOtherCommands(i, c, configPath); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	return ret
 }
 
 func subscribeOtherCommands(
-	i *ide.IDE, c *apiclient.Client, cerr error, configPath string,
+	i *ide.IDE, c *apiclient.Client, configPath string,
 ) (ret error) {
 	var commands = []struct {
 		cmd           textapi.CommandManual
@@ -85,10 +108,7 @@ func subscribeOtherCommands(
 					"that requires authenticated access.",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
-				if c == nil {
-					return cerr
-				}
-				return c.Login(ctx)
+				return runLoginCommand(ctx, c, i.Notifications())
 			},
 		}, {
 			cmd: textapi.CommandManual{
@@ -98,10 +118,11 @@ func subscribeOtherCommands(
 					" to the Rune API.",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
-				if c == nil {
-					return cerr
+				if err := c.Logout(ctx); err != nil {
+					return err
 				}
-				return c.Logout(ctx)
+				_, _ = i.Notifications().Notify(browserapi.LevelInfo, "Logged out.")
+				return nil
 			},
 		},
 		{

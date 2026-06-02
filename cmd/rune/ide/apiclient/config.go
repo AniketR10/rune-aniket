@@ -25,6 +25,7 @@ package apiclient
 
 import (
 	"fmt"
+	"net/url"
 	"runtime"
 	"time"
 )
@@ -54,6 +55,11 @@ var (
 // can replace it; do not assign to it at runtime.
 var DefaultDownloadsHost = "https://downloads.unstable.build"
 
+// DefaultWebsiteAddress is the public www-rune origin used by the
+// OAuth callback page to redirect users to /checkout after sign-in.
+// Overridable via `-ldflags -X` for staging builds.
+var DefaultWebsiteAddress = "https://rune.build"
+
 // defaultReleaseCollection returns the Firestore collection name for
 // the current platform, e.g. "rune-release-darwin-arm64". The prefix
 // is shared across dev and prod intentionally: collections live in
@@ -69,6 +75,7 @@ func DefaultConfig() Config {
 	return Config{
 		HTTPEndpointAddress: DefaultHTTPEndpointAddress,
 		GRPCEndpointAddress: DefaultGRPCEndpointAddress,
+		WebsiteAddress:      DefaultWebsiteAddress,
 		InsecureTransport:   false,
 		TelemetryPeriod:     defaultTelemetryPeriod,
 		ReleaseCollection:   defaultReleaseCollection(),
@@ -82,6 +89,10 @@ type Config struct {
 	HTTPEndpointAddress string
 	// GRPCEndpointAddress is the GRPC endpoint address of Rune's API.
 	GRPCEndpointAddress string
+	// WebsiteAddress is the base URL of www-rune used by the OAuth
+	// callback page to redirect the user to /checkout after sign-in.
+	// Empty means the callback HTML is served without a redirect.
+	WebsiteAddress string
 	// InsecureTransport configures the grpc client to not use per-RPC
 	// credentials or TLS.
 	InsecureTransport bool
@@ -93,4 +104,9 @@ type Config struct {
 	// EnableTelemetry controls whether telemetry is active. When false,
 	// no telemetry data is collected or sent.
 	EnableTelemetry bool
+	// OpenBrowser, when non-nil, overrides the default browser launch
+	// during the OAuth flow. Tests inject a recording function here;
+	// in production it is left nil and the client falls back to
+	// sensible/browser.Browse.
+	OpenBrowser func(*url.URL) error
 }

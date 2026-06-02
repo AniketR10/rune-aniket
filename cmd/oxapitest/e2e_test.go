@@ -49,10 +49,12 @@ import (
 	"github.com/unstablebuild/ox-api/api/oxapi"
 	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/handler/handlertest"
 	goide "unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 )
 
@@ -205,6 +207,7 @@ notifications:
 		dataDir,
 		configFile.Name(),
 		dataDir,
+		localstorage.New(context.Background(), dataDir, docbson.Marshaler()),
 		goide.WithReleaseManager(clientReleaseManager),
 		goide.WithScheduleNextTick(func(fn func()) bool {
 			fn()

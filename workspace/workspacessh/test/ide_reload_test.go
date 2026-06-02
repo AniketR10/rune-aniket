@@ -24,6 +24,7 @@
 package workspacetest
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,10 +34,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/localstorage"
 )
 
 // TestIntegrationIDEWorkspaceReloadOverSSH reproduces the user-visible
@@ -103,6 +106,7 @@ workspace:
 
 	var mu sync.Mutex
 	i, err := ide.New(workspaceURI.String(), cfgPath, dir,
+		localstorage.New(context.Background(), dir, docbson.Marshaler()),
 		ide.WithLocker(&mu),
 		ide.WithScheduleNextTick(hostScheduleNextTickIDE(&mu)),
 		ide.WithPublishEvent(func(term.Event) bool { return true }),

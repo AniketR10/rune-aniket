@@ -49,7 +49,6 @@ func newValidTestTokenSource() *auth.CachedTokenSource {
 			return ts, nil
 		}),
 		storagestub.NewInMemoryService(),
-		nil,
 	)
 }
 

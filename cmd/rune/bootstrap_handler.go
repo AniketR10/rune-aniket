@@ -27,34 +27,37 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	extbrowser "github.com/ernestrc/sensible/browser"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/clipboard/sysclip"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	sdkhandler "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/ide/ideupgrade"
 	"unstable.build/go-tui/term/gui"
 )
 
-// bootstrapHandler is the root tui.Handler given to gui.New. It either
-// fronts a pre-config IDE (until the bootstrap prompt completes) or the
-// fully-configured IDE. On first launch, the prompt(s) collect the user's
-// preferred editor mode and config format, performSwap writes the override
-// config file, then a fresh configured IDE takes over.
 type bootstrapHandler struct {
 	inner             tui.Handler
 	dataDir           string
+	storage           storageapi.Service
 	configPath        string
 	workspace         string
 	zdotDir           string
@@ -63,6 +66,8 @@ type bootstrapHandler struct {
 	runner            ide.ExtensionsRunner
 	mu                *sync.Mutex
 	publishEvent      func(term.Event) bool
+	checkoutURL       string
+	signupURL         string
 	preIDE            *ide.IDE
 	realIDE           *ide.IDE
 	g                 *gui.GUI
@@ -81,15 +86,17 @@ type bootstrapHandler struct {
 	chosenExoPreset   string
 }
 
-func newRoot(
+func newBootstrapHandler(
 	dataDir, configPath, workspace, zdotDir string,
 	filenames, launchCmd []string,
 	runner ide.ExtensionsRunner,
 	mu *sync.Mutex,
 	publishEvent func(term.Event) bool,
+	checkoutURL, signupURL string,
 ) (*bootstrapHandler, error) {
 	bh := &bootstrapHandler{
 		dataDir:      dataDir,
+		storage:      newRuneStorage(dataDir),
 		configPath:   configPath,
 		workspace:    workspace,
 		zdotDir:      zdotDir,
@@ -98,13 +105,18 @@ func newRoot(
 		runner:       runner,
 		mu:           mu,
 		publishEvent: publishEvent,
+		checkoutURL:  checkoutURL,
+		signupURL:    signupURL,
 	}
 
 	if isBootstrapped(dataDir) {
-		realIDE, err := bh.buildConfiguredIDE()
+		client, releaseManager := newAPIClient(newRuneStorage(dataDir))
+		realIDE, err := bh.buildConfiguredIDE(client, releaseManager)
 		if err != nil {
+			_ = client.Close()
 			return nil, fmt.Errorf("build configured ide: %w", err)
 		}
+		bh.client = client
 		bh.realIDE = realIDE
 		bh.inner = realIDE.Ready()
 		return bh, nil
@@ -116,6 +128,8 @@ func newRoot(
 	}
 	bh.preIDE = preIDE
 	bh.inner = preIDE.Ready()
+	client := newBootstrapAPIClient(preIDE.Storage())
+	bh.bootstrapClient = client
 	bh.openBootstrapFlow()
 	return bh, nil
 }
@@ -147,8 +161,9 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 		ide.WithPublishEvent(b.publishEvent),
 		ide.WithScheduleNextTick(b.scheduleNextTick),
 		ide.WithZdotDir(b.zdotDir),
+		ide.WithTabsClickCallback(b.handleTabsClick),
 	}
-	preIDE, err := ide.New("", b.configPath, b.dataDir, opts...)
+	preIDE, err := ide.New("", b.configPath, b.dataDir, b.storage, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +171,9 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 	return preIDE, nil
 }
 
-func (b *bootstrapHandler) buildConfiguredIDE() (*ide.IDE, error) {
+func (b *bootstrapHandler) buildConfiguredIDE(
+	client *apiclient.Client, releaseManager release.Manager,
+) (*ide.IDE, error) {
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(b.runner),
 		ide.WithInitShader(initShader, initShaderFPS, initShaderDuration),
@@ -179,20 +196,7 @@ func (b *bootstrapHandler) buildConfiguredIDE() (*ide.IDE, error) {
 		ide.WithScheduleNextTick(b.scheduleNextTick),
 		ide.WithZdotDir(b.zdotDir),
 		ide.WithScheme(docsScheme, newDocsSchemeFunc(b.configPath)),
-		// maximize window on double click
-		ide.WithTabsClickCallback(func(_ int) bool {
-			if b.clickCount == 0 || time.Since(b.lastTabsClick) < doubleClickTimeout {
-				b.clickCount++
-			} else {
-				b.clickCount = 1
-			}
-			b.lastTabsClick = time.Now()
-			if b.clickCount == 2 && b.g != nil {
-				b.g.MaximizeWindow()
-				return true
-			}
-			return false
-		}),
+		ide.WithTabsClickCallback(b.handleTabsClick),
 		ide.WithDispatchOnPreview(cmdSetTheme,
 			func(cmd string, args ...string) (component.Responsive, func(), bool) {
 				if cmd != cmdSetTheme || b.g == nil {
@@ -221,7 +225,18 @@ func (b *bootstrapHandler) buildConfiguredIDE() (*ide.IDE, error) {
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))
 	}
-	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir, opts...)
+	opts = append(opts,
+		ide.WithReleaseManager(releaseManager),
+		ide.WithPlanSource(ide.PlanSourceConfig{
+			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
+			CheckoutURL: b.checkoutURL,
+			OnReSignIn: func() {
+				lockdownReSignIn(client, b.realIDE, b.scheduleNextTick)
+			},
+		}),
+	)
+	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
+		b.storage, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -234,12 +249,11 @@ func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.transparentWindow = transparentWindow
 }
 
-// applyInitialThemeAttr seeds the IDE with the configured GUI theme
-// background before any caller invokes Ready(). Ready() materializes
-// the init shader and captures defAttr at that moment, so a later
+// applyInitialThemeAttr must run before Ready(): Ready() captures
+// defAttr to materialize the init shader, so a later
 // SetDefaultAttributes would not propagate into the running shader
-// (RUNE-203). Keeping both the pre-bootstrap and configured IDEs on
-// the same attrs also avoids a color jump across performSwap.
+// (RUNE-203). Seeding both the pre-bootstrap and configured IDEs
+// with the same attrs also avoids a color jump across performSwap.
 func (b *bootstrapHandler) applyInitialThemeAttr(i *ide.IDE) {
 	b.initialThemeAttr = resolveInitialThemeAttr(i.Browser(), i.Config())
 	i.SetDefaultAttributes(b.initialThemeAttr)
@@ -256,6 +270,16 @@ func (b *bootstrapHandler) notifications() browserapi.Notifications {
 	return bootstrapNotifications{b: b}
 }
 
+// notifyError surfaces a bootstrap-flow failure to the user. The
+// bootstrap UI has no log pane, so log-only reporting is invisible.
+func (b *bootstrapHandler) notifyError(context string, err error) {
+	log.Errorf("bootstrap %s: %v", context, err)
+	_, nerr := b.notifications().Notify(browserapi.LevelError, "%s: %v", context, err)
+	if nerr != nil {
+		log.Warnf("bootstrap %s: notify: %v", context, nerr)
+	}
+}
+
 func (b *bootstrapHandler) alreadyBootstrapped() bool {
 	return b.realIDE != nil
 }
@@ -267,28 +291,18 @@ func (b *bootstrapHandler) config() config.Config {
 	return b.preIDE.Config()
 }
 
-func (b *bootstrapHandler) storage() storageapi.Service {
-	if b.realIDE != nil {
-		return b.realIDE.Storage()
-	}
-	return b.preIDE.Storage()
-}
-
-func (b *bootstrapHandler) setupConfiguredIDE(i *ide.IDE) {
+func (b *bootstrapHandler) setupConfiguredIDE(
+	i *ide.IDE, client *apiclient.Client,
+) error {
 	i.SetDefaultAttributes(b.initialThemeAttr)
 
-	client, cerr := setupReleaseManager(i, i.Storage())
-	if cerr != nil {
-		log.Warnf("could not setup release manager: %v", cerr)
-		// continue with nil client; commands that need it surface cerr.
-	} else {
-		b.client = client
-		scheduleCrashReportCheck(i, client, b.dataDir, b.scheduleNextTick)
-	}
+	b.client = client
+	scheduleCrashReportCheck(i, client, b.dataDir, b.scheduleNextTick)
 
-	if err := subscribeCommands(b.g, client, cerr, i,
+	var errs []error
+	if err := subscribeCommands(b.g, client, i,
 		b.transparentWindow, b.configPath, b.launchCmd); err != nil {
-		log.Errorf("subscribe to GUI commands: %v", err)
+		errs = append(errs, fmt.Errorf("subscribe to GUI commands: %w", err))
 	}
 
 	openFiles(i, b.filenames)
@@ -298,12 +312,31 @@ func (b *bootstrapHandler) setupConfiguredIDE(i *ide.IDE) {
 	b.upgradeMgr = scheduleUpgradeCheck(upgradeCtx, i,
 		apiclient.DefaultDownloadsHost, b.scheduleNextTick)
 	if err := subscribeUpgradeCommands(i, b.upgradeMgr); err != nil {
-		log.Errorf("subscribe upgrade commands: %v", err)
+		errs = append(errs, fmt.Errorf("subscribe upgrade commands: %w", err))
 	}
+	return errors.Join(errs...)
 }
 
 func (b *bootstrapHandler) scheduleNextTick(fn func()) bool {
 	return b.publishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
+}
+
+// handleTabsClick maximizes the GUI window on a double-click of the
+// tabs bar. Installed on both buildPreIDE and buildConfiguredIDE so
+// the affordance is available during the bootstrap UI as well as the
+// configured IDE.
+func (b *bootstrapHandler) handleTabsClick(_ int) bool {
+	if b.clickCount == 0 || time.Since(b.lastTabsClick) < doubleClickTimeout {
+		b.clickCount++
+	} else {
+		b.clickCount = 1
+	}
+	b.lastTabsClick = time.Now()
+	if b.clickCount == 2 && b.g != nil {
+		b.g.MaximizeWindow()
+		return true
+	}
+	return false
 }
 
 func (b *bootstrapHandler) Resize(w, h int) {
@@ -323,21 +356,15 @@ func (b *bootstrapHandler) Selection() (string, bool) {
 }
 
 func (b *bootstrapHandler) Handle(ev term.Event) (exit, handled bool) {
-	// While the bootstrap flow is still owning the screen, swallow
-	// events that would let the user open the command prompt or
-	// quit/close the only thing on screen. Esc is intentionally not
-	// swallowed here; the guardedPromptChain close callback re-opens
-	// the prompt instead. See bootstrap.go shouldSwallowBootstrapEvent.
 	if b.realIDE == nil && shouldSwallowBootstrapEvent(ev) {
 		return false, true
 	}
 	return b.inner.Handle(ev)
 }
 
-func (b *bootstrapHandler) performSwap() {
+func (b *bootstrapHandler) performSwap() error {
 	if err := b.writeOverrideConfig(); err != nil {
-		log.Errorf("write bootstrap override: %v", err)
-		return
+		return fmt.Errorf("write bootstrap override: %w", err)
 	}
 
 	b.configPath = filepath.Join(b.dataDir, configFilenameForFormat(b.chosenFormat))
@@ -345,24 +372,27 @@ func (b *bootstrapHandler) performSwap() {
 	b.mu.Unlock()
 	defer b.mu.Lock()
 
-	realIDE, err := b.buildConfiguredIDE()
+	client, releaseManager := newAPIClient(newRuneStorage(b.dataDir))
+	realIDE, err := b.buildConfiguredIDE(client, releaseManager)
 	if err != nil {
-		log.Errorf("build configured ide: %v", err)
-		return
+		_ = client.Close()
+		return fmt.Errorf("build configured ide: %w", err)
 	}
 	b.realIDE = realIDE
-	b.setupConfiguredIDE(realIDE)
+	setupErr := b.setupConfiguredIDE(realIDE, client)
 	b.inner = realIDE.Ready()
 	if b.lastResizeW > 0 && b.lastResizeH > 0 {
 		b.inner.Resize(b.lastResizeW, b.lastResizeH)
 	}
 
+	var closeErr error
 	if b.preIDE != nil {
 		if cerr := b.preIDE.Close(); cerr != nil {
-			log.Warnf("close pre-config ide: %v", cerr)
+			closeErr = fmt.Errorf("close pre-config ide: %w", cerr)
 		}
 		b.preIDE = nil
 	}
+	return errors.Join(setupErr, closeErr)
 }
 
 func (b *bootstrapHandler) writeOverrideConfig() error {
@@ -408,4 +438,576 @@ func (b *bootstrapHandler) Close() error {
 		b.preIDE = nil
 	}
 	return errors.Join(errs...)
+}
+
+const (
+	editorModal       = "modal"
+	editorModeless    = "modeless"
+	editorExoModal    = "exo-modal"
+	editorExoModeless = "exo-modeless"
+)
+
+// Editor-mode option labels double as map keys in optionToChoice; they
+// must stay byte-identical between the prompt and the callback.
+const (
+	optModal       = "  Modal                "
+	optModeless    = "  Modeless             "
+	optExoModal    = "  Exoeditor (modal)    "
+	optExoModeless = "  Exoeditor (modeless) "
+)
+
+var (
+	bootstrapEditorKeys = []term.KeyComb{
+		{Ch: 'm'}, {Ch: 'l'}, {Ch: 'b'}, {Ch: 'e'},
+	}
+
+	bootstrapFormatKeys = []term.KeyComb{
+		{Ch: 's'}, {Ch: 'y'},
+	}
+
+	bootstrapPresetKeys = []term.KeyComb{
+		{Ch: 'v'}, {Ch: 'n'}, {Ch: 'h'}, {Ch: 'k'}, {Ch: 'e'},
+	}
+
+	bootstrapWelcomeKeys = []term.KeyComb{
+		{Ch: 'g'},
+	}
+
+	bootstrapLoginChoiceKeys = []term.KeyComb{
+		{Ch: 'l'}, {Ch: 's'},
+	}
+
+	bootstrapLoginWaitKeys = []term.KeyComb{
+		{Ch: 'p'}, {Ch: 'c'},
+	}
+
+	bootstrapUpgradeKeys = []term.KeyComb{
+		{Ch: 'u'},
+	}
+)
+
+const (
+	optFormatStar = "  Starlark (.star) "
+	optFormatYAML = "  YAML (.yaml)     "
+
+	optPresetVim   = "  vim   "
+	optPresetNvim  = "  nvim  "
+	optPresetHelix = "  helix "
+	optPresetKak   = "  kak   "
+	optPresetEmacs = "  emacs "
+
+	optWelcomeGo = " Let's go "
+
+	optLoginSignIn = "  Sign in  "
+	optLoginSignUp = "  Sign up  "
+	optLoginCancel = "  Cancel  "
+	optUpgradePro  = "  Upgrade to Pro  "
+	optLoginCopy   = "  Copy URL  "
+)
+
+func (b *bootstrapHandler) openBootstrapFlow() {
+	b.openWelcomePrompt()
+}
+
+func (b *bootstrapHandler) openWelcomePrompt() {
+	msg := "## Welcome to Rune\n\n" +
+		"Glad you're here. Let's get everything set up."
+	guard := &guardedPromptChain{}
+	b.preIDE.Prompt(
+		msg,
+		[]string{optWelcomeGo},
+		bootstrapWelcomeKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, _ string) {
+				b.openEditorPrompt()
+			}),
+			guard.onClose(b.openWelcomePrompt),
+		),
+	)
+}
+
+func (b *bootstrapHandler) openEditorPrompt() {
+	msg := "## Editor mode\n" +
+		"Rune ships with three editor modes. Pick how you'd like to edit files. " +
+		"This is not permanent; you can switch anytime.\n" +
+		"- **Modal**: Rune's built-in vi implementation.\n" +
+		"Modes, motions, operators and a macro system.\n" +
+		"Pick this if you already think in modes.\n\n" +
+		"- **Modeless**: Rune's built-in standard editor.\n" +
+		"Pick this if you want a familiar IDE feel.\n\n" +
+		"- **Exoeditor**: External Editor.\n" +
+		"Rune owns tabs, windows, commands and language features; your external\n" +
+		"TUI editor (vim, nvim, helix, kak, emacs, etc.) owns the buffer and\n" +
+		"cursor. The fallback editor (modal or modeless) is used for in-memory buffers\n" +
+		"like Rune's file explorer."
+	guard := &guardedPromptChain{}
+	b.preIDE.Prompt(
+		msg,
+		[]string{optModal, optModeless, optExoModal, optExoModeless},
+		bootstrapEditorKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, option string) {
+				b.chosenEditor = optionToChoice(option)
+				b.openFormatPrompt()
+			}),
+			guard.onClose(b.openEditorPrompt),
+		),
+	)
+}
+
+func (b *bootstrapHandler) openFormatPrompt() {
+	msg := "## Configuration Format\n" +
+		"Rune takes two configuration formats.\n" +
+		"- **Starlark (.star)**: Python-like config with variables,\n" +
+		"functions, and conditionals. Pick this if you want to" +
+		"compose your configuration programmatically.\n\n" +
+		"- **YAML (.yaml)**: plain declarative key/value config.\n" +
+		"Pick this if you want the simplest possible file.\n\n" +
+		"Either format lives at `~/.rune/config.<ext>` and can be\n" +
+		"changed later by editing or replacing the file."
+	guard := &guardedPromptChain{}
+	b.preIDE.Prompt(
+		msg,
+		[]string{optFormatStar, optFormatYAML},
+		bootstrapFormatKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, option string) {
+				b.chosenFormat = optionToFormat(option)
+				if b.chosenEditor == editorExoModal || b.chosenEditor == editorExoModeless {
+					b.openPresetPrompt()
+					return
+				}
+				_ = b.openLoginPrompt()
+			}),
+			guard.onClose(b.openFormatPrompt),
+		),
+	)
+}
+
+func (b *bootstrapHandler) openPresetPrompt() {
+	msg := "## Exoeditor choice\n" +
+		"You picked exo mode: Rune owns tabs, windows, and commands, while your\n" +
+		"external editor owns the buffer and cursor. Pick which editor that should be.\n\n" +
+		"The binary must be on your `PATH`. You can edit the exact command and other\n" +
+		"configuration properties in the generated config later."
+	guard := &guardedPromptChain{}
+	b.preIDE.Prompt(
+		msg,
+		[]string{optPresetVim, optPresetNvim, optPresetHelix, optPresetKak, optPresetEmacs},
+		bootstrapPresetKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, option string) {
+				b.chosenExoPreset = optionToPreset(option)
+				_ = b.openLoginPrompt()
+			}),
+			guard.onClose(b.openPresetPrompt),
+		),
+	)
+}
+
+func (b *bootstrapHandler) openLoginPrompt() error {
+	msg := "## Sign in or sign up\n" +
+		"Yes, there are free alternatives. Rune is built by a small, independent team that,\n" +
+		"while much of the industry is quietly betting that soon enough programmers\n" +
+		"won't really write code anymore, we're betting the opposite: that the people\n" +
+		"who love this craft, the technologists, the systems programmers, \n" +
+		"and the old-school hackers will want tools that make them faster and sharper, not tools that\n" +
+		"do it for them and hide the details.\n\n" +
+		"Your subscription is what keeps us user-supported, for the times to come.\n\n" +
+		"$19.90/month or $218.90/year. Cancel anytime."
+	guard := &guardedPromptChain{}
+	b.preIDE.Prompt(
+		msg,
+		[]string{optLoginSignIn, optLoginSignUp},
+		bootstrapLoginChoiceKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, option string) {
+				var err error
+				switch option {
+				case optLoginSignIn:
+					err = b.startLogin()
+				case optLoginSignUp:
+					err = openBrowserURL(b.signupURL)
+					b.scheduleNextTick(func() { _ = b.openLoginPrompt() })
+				}
+				if err != nil {
+					b.notifyError("login could not start", err)
+				}
+			}),
+			guard.onClose(func() { _ = b.openLoginPrompt() }),
+		),
+	)
+	return nil
+}
+
+// startLogin returns a Purge failure rather than swallowing it: a
+// stale cached token would short-circuit Login and silently pin the
+// bootstrap to the previous identity.
+func (b *bootstrapHandler) startLogin() error {
+	// A still-valid cached token would short-circuit TokenCtx and
+	// resolve Login without opening the browser, so the user could
+	// never switch identities from the bootstrap Sign in button.
+	if ts := b.bootstrapClient.CachedTokenSource(); ts != nil {
+		if err := ts.Purge(); err != nil {
+			return fmt.Errorf("purge cached token: %w", err)
+		}
+	}
+	loginCtx, loginCancel := context.WithCancel(context.Background())
+	session := b.bootstrapClient.Login(loginCtx)
+
+	// loginCoord shares state between the URL and Done watchers
+	// so the wait prompt is never left stranded when Done resolves
+	// before the URL tick lands. The done flag is set on the event
+	// loop inside Done's tick, after which the URL tick must be a
+	// no-op even if it already had a Window in hand.
+	coord := &loginCoord{loginCancel: loginCancel}
+
+	go debug.CapturePanicReport(func() {
+		u, ok := <-session.URL
+		if !ok {
+			return
+		}
+		b.scheduleNextTick(func() {
+			coord.mu.Lock()
+			if coord.done || coord.cancelled {
+				coord.mu.Unlock()
+				return
+			}
+			coord.mu.Unlock()
+			win := b.mountLoginWaitPrompt(u.String(), coord)
+			coord.mu.Lock()
+			if coord.done || coord.cancelled {
+				coord.mu.Unlock()
+				if win != nil {
+					_ = win.Close()
+				}
+				return
+			}
+			coord.window = win
+			coord.mu.Unlock()
+		})
+	})
+
+	go debug.CapturePanicReport(func() {
+		err, ok := <-session.Done
+		handleLoginDone(loginDoneArgs{
+			ok:           ok,
+			err:          err,
+			coord:        coord,
+			scheduleTick: b.scheduleNextTick,
+			decide: func(ctx context.Context) (ideplan.Decision, error) {
+				source := ideplan.NewJWTSource(b.bootstrapClient.CachedTokenSource(), nil)
+				return source.Decision(ctx)
+			},
+			onSwap:        b.performSwap,
+			onUpgrade:     b.openUpgradePrompt,
+			onLoginPrompt: b.openLoginPrompt,
+			notifyError:   b.notifyError,
+		})
+	})
+	return nil
+}
+
+type loginDoneArgs struct {
+	ok            bool
+	err           error
+	coord         *loginCoord
+	scheduleTick  func(func()) bool
+	decide        func(context.Context) (ideplan.Decision, error)
+	onSwap        func() error
+	onUpgrade     func() error
+	onLoginPrompt func() error
+	notifyError   func(context string, err error)
+}
+
+// handleLoginDone schedules the wait-window close before any
+// follow-up work so the user is never left staring at the "Follow
+// browser instructions" prompt while decide() makes a synchronous
+// claims read.
+func handleLoginDone(a loginDoneArgs) {
+	a.scheduleTick(func() {
+		a.coord.mu.Lock()
+		a.coord.done = true
+		win := a.coord.window
+		a.coord.window = nil
+		a.coord.mu.Unlock()
+		if win != nil {
+			_ = win.Close()
+		}
+	})
+
+	a.coord.mu.Lock()
+	cancelled := a.coord.cancelled
+	a.coord.mu.Unlock()
+	if cancelled {
+		return
+	}
+	if !a.ok || a.err != nil {
+		if a.err != nil {
+			a.notifyError("login", a.err)
+		}
+		a.scheduleTick(func() {
+			if err := a.onLoginPrompt(); err != nil {
+				a.notifyError("open login prompt", err)
+			}
+		})
+		return
+	}
+	dec, derr := a.decide(context.Background())
+	if derr != nil {
+		a.notifyError("read claims", derr)
+		a.scheduleTick(func() {
+			if err := a.onLoginPrompt(); err != nil {
+				a.notifyError("open login prompt", err)
+			}
+		})
+		return
+	}
+	if dec.Status == ideplan.StatusActive {
+		a.scheduleTick(func() {
+			if err := a.onSwap(); err != nil {
+				a.notifyError("finish bootstrap", err)
+			}
+		})
+		return
+	}
+	a.scheduleTick(func() {
+		if err := a.onUpgrade(); err != nil {
+			a.notifyError("open upgrade prompt", err)
+		}
+	})
+}
+
+// loginCoord serializes the two goroutines that drive the bootstrap
+// login wait prompt. Without this coordination the URL goroutine
+// could mount a wait prompt on top of whatever the Done goroutine
+// has already shown (upgrade prompt, choice prompt, performSwap'd
+// IDE), leaving two prompts stacked.
+type loginCoord struct {
+	mu          sync.Mutex
+	window      browser.Window
+	done        bool
+	cancelled   bool
+	loginCancel context.CancelFunc
+}
+
+func (b *bootstrapHandler) mountLoginWaitPrompt(
+	oauthURL string, coord *loginCoord,
+) browser.Window {
+	coord.mu.Lock()
+	stop := coord.cancelled || coord.done
+	coord.mu.Unlock()
+	if stop {
+		return nil
+	}
+	header := "**Follow the instructions in your browser.**\n\n"
+	msg := header +
+		"If your browser did not open automatically, copy this link:\n\n" +
+		"`" + oauthURL + "`"
+	guard := &guardedPromptChain{}
+	return b.preIDE.Prompt(
+		msg,
+		[]string{optLoginCopy, optLoginCancel},
+		bootstrapLoginWaitKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, option string) {
+				switch option {
+				case optLoginCopy:
+					guard.advanced = false // stay in this prompt
+					level, msg := copyBootstrapURL(oauthURL)
+					if _, err := b.notifications().Notify(level, "%s", msg); err != nil {
+						log.Warnf("bootstrap copy url: notify: %v", err)
+					}
+					b.mountLoginWaitPrompt(oauthURL, coord)
+				case optLoginCancel:
+					coord.mu.Lock()
+					coord.cancelled = true
+					if coord.window != nil {
+						_ = coord.window.Close()
+						coord.window = nil
+					}
+					cancel := coord.loginCancel
+					coord.mu.Unlock()
+					if cancel != nil {
+						cancel()
+					}
+					_ = b.openLoginPrompt()
+				}
+			}),
+			guard.onClose(func() {
+				b.mountLoginWaitPrompt(oauthURL, coord)
+			}),
+		),
+	)
+}
+
+// copyBootstrapURL does not retain the system clipboard register so
+// a failure to attach (e.g. headless CI) does not impede the
+// bootstrap flow.
+func copyBootstrapURL(oauthURL string) (browserapi.NotificationLevel, string) {
+	reg, err := sysclip.NewRegister()
+	if err != nil {
+		return browserapi.LevelWarn,
+			"system clipboard unavailable; copy the URL from the prompt"
+	}
+	if err := reg.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: oauthURL}); err != nil {
+		return browserapi.LevelWarn,
+			fmt.Sprintf("copy to clipboard failed: %v", err)
+	}
+	return browserapi.LevelSuccess, "OAuth URL copied to clipboard"
+}
+
+func (b *bootstrapHandler) openUpgradePrompt() error {
+	msg := "**Upgrade to Rune Pro to unlock the IDE.**\n\n" +
+		"Your account is signed in but has no paid plan. Click below\n" +
+		"to open the checkout page in your browser. Once you complete\n" +
+		"checkout, return here and click Sign in again."
+	guard := &guardedPromptChain{}
+	b.preIDE.Prompt(
+		msg,
+		[]string{optUpgradePro},
+		bootstrapUpgradeKeys,
+		sdkhandler.FuncPromptHandler(
+			guard.onSelect(func(_ int, _ string) {
+				if err := openBrowserURL(b.checkoutURL); err != nil {
+					b.notifyError("open checkout page", err)
+				}
+				_ = b.openLoginPrompt()
+			}),
+			guard.onClose(func() { _ = b.openUpgradePrompt() }),
+		),
+	)
+	return nil
+}
+
+// mustResolveBootstrapURLs panics on parse failure because in
+// practice nobody sets -rune-website-address; the default points at
+// production and a parse failure means the build itself is broken.
+func mustResolveBootstrapURLs(raw string) (checkout, signup string) {
+	base, err := url.Parse(raw)
+	if err != nil {
+		panic(fmt.Sprintf("parse -rune-website-address %q: %v", raw, err))
+	}
+	signupBase := *base
+	signupBase.Path = "/signup"
+	return checkoutURL(base).String(), signupBase.String()
+}
+
+func checkoutURL(base *url.URL) *url.URL {
+	const (
+		checkoutPath   = "/checkout"
+		checkoutSource = "rune"
+	)
+	u := *base
+	u.Path = checkoutPath
+	q := u.Query()
+	q.Set("source", checkoutSource)
+	u.RawQuery = q.Encode()
+	return &u
+}
+
+func openBrowserURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse url %q: %w", raw, err)
+	}
+	if err := extbrowser.Browse(u); err != nil {
+		return fmt.Errorf("open browser: %w", err)
+	}
+	return nil
+}
+
+// guardedPromptChain re-opens a bootstrap prompt that was closed
+// without a user selection (Esc, mouse dismissal, …). The SDK
+// invokes OnSelect synchronously before OnClose, so "advanced"
+// reliably distinguishes the two paths.
+type guardedPromptChain struct {
+	advanced bool
+}
+
+func (g *guardedPromptChain) onSelect(next func(int, string)) func(int, string) {
+	return func(idx int, option string) {
+		g.advanced = true
+		next(idx, option)
+	}
+}
+
+func (g *guardedPromptChain) onClose(reopen func()) func() error {
+	return func() error {
+		if !g.advanced {
+			reopen()
+		}
+		return nil
+	}
+}
+
+// shouldSwallowBootstrapEvent must NOT swallow Esc: the SDK prompt
+// relies on Esc to exit, and guardedPromptChain.onClose re-opens
+// the prompt right after.
+func shouldSwallowBootstrapEvent(ev term.Event) bool {
+	if ev.Type != term.EventKey {
+		return false
+	}
+	// preIDE only loads embedded defaults — no user config exists
+	// yet — so ':' is hardcoded as the command-prompt activation key.
+	if ev.Mod == 0 && ev.Ch == ':' {
+		return true
+	}
+	// Quit / close keybindings from rune.star and
+	// override_modeless.star:
+	//   <m-q> quit
+	//   <m-w> windowclose, <a-w> tabclose, <c-w> tabclose
+	//   <m-s-w> / <s-m-w> windowclose (modeless overrides)
+	if ev.Ch == 'q' && ev.Mod&term.ModMeta != 0 {
+		return true
+	}
+	if ev.Ch == 'w' && ev.Mod != 0 {
+		switch {
+		case ev.Mod&term.ModMeta != 0,
+			ev.Mod&term.ModAlt != 0,
+			ev.Mod&term.ModCtrl != 0:
+			return true
+		}
+	}
+	return false
+}
+
+func optionToChoice(option string) string {
+	switch option {
+	case optModal:
+		return editorModal
+	case optModeless:
+		return editorModeless
+	case optExoModal:
+		return editorExoModal
+	case optExoModeless:
+		return editorExoModeless
+	}
+	return editorModal
+}
+
+func optionToFormat(option string) string {
+	switch option {
+	case optFormatStar:
+		return configFormatStar
+	case optFormatYAML:
+		return configFormatYAML
+	}
+	return configFormatYAML
+}
+
+func optionToPreset(option string) string {
+	switch option {
+	case optPresetVim:
+		return exoPresetVim
+	case optPresetNvim:
+		return exoPresetNvim
+	case optPresetHelix:
+		return exoPresetHelix
+	case optPresetKak:
+		return exoPresetKak
+	case optPresetEmacs:
+		return exoPresetEmacs
+	}
+	return exoPresetVim
 }

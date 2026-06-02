@@ -24,10 +24,18 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	wmbrowser "unstable.build/go-tui/browser"
+	"unstable.build/go-tui/ide/ideplan"
 )
 
 func TestOptionToChoiceMapping(t *testing.T) {
@@ -217,4 +225,243 @@ func keyEv(ch rune, mod term.Modifier) term.Event {
 
 func namedKeyEv(k term.Key) term.Event {
 	return term.Event{Type: term.EventKey, Key: k}
+}
+
+// recordingNotifier captures notify calls so tests can assert the
+// copy-URL helper surfaces success/failure.
+type recordingNotifier struct {
+	calls []struct {
+		level browserapi.NotificationLevel
+		msg   string
+	}
+}
+
+func (r *recordingNotifier) Notify(
+	level browserapi.NotificationLevel, format string, args ...any,
+) (string, error) {
+	r.calls = append(r.calls, struct {
+		level browserapi.NotificationLevel
+		msg   string
+	}{level: level, msg: format})
+	return "", nil
+}
+func (r *recordingNotifier) NotifyOnce(
+	level browserapi.NotificationLevel, format string, args ...any,
+) (string, error) {
+	return r.Notify(level, format, args...)
+}
+func (r *recordingNotifier) UpdateNotificationProgress(string, string, int64, int64) error {
+	return nil
+}
+
+// TestCopyBootstrapURLReturnsNotification pins that copyBootstrapURL
+// always returns a non-empty notification message so the caller can
+// surface user feedback regardless of whether the system clipboard is
+// reachable. The actual clipboard write is best-effort.
+func TestCopyBootstrapURLReturnsNotification(t *testing.T) {
+	level, msg := copyBootstrapURL("https://example.test/auth?x=1")
+	require.NotEmpty(t, msg, "copyBootstrapURL must produce a notification message")
+	require.Contains(t,
+		[]browserapi.NotificationLevel{browserapi.LevelSuccess, browserapi.LevelWarn},
+		level,
+	)
+}
+
+// closeRecordingWindow stands in for wmbrowser.Window in tests. The
+// embedded interface lets the struct satisfy wmbrowser.Window without
+// reimplementing every method.
+type closeRecordingWindow struct {
+	wmbrowser.Window
+	closed bool
+}
+
+func (w *closeRecordingWindow) Close() error {
+	w.closed = true
+	return nil
+}
+
+// TestHandleLoginDoneClosesWaitWindowBeforeRefresh pins the fix for
+// the "stuck on Follow browser instructions" bug: the token refresh
+// performs synchronous HTTP I/O, so it must not run inside an event
+// loop tick. The wait window's close tick must reach the event loop
+// while refresh is still in flight; otherwise the user sees the wait
+// prompt indefinitely after a successful sign-in.
+func TestHandleLoginDoneClosesWaitWindowBeforeRefresh(t *testing.T) {
+	win := &closeRecordingWindow{}
+	coord := &loginCoord{window: win}
+
+	var mu sync.Mutex
+	var ticks []func()
+	scheduleTick := func(fn func()) bool {
+		mu.Lock()
+		ticks = append(ticks, fn)
+		mu.Unlock()
+		return true
+	}
+
+	refreshStarted := make(chan struct{})
+	refreshUnblock := make(chan struct{})
+	refresh := func(ctx context.Context) (ideplan.Decision, error) {
+		close(refreshStarted)
+		<-refreshUnblock
+		return ideplan.Decision{Status: ideplan.StatusActive}, nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		handleLoginDone(loginDoneArgs{
+			ok:            true,
+			coord:         coord,
+			scheduleTick:  scheduleTick,
+			decide:        refresh,
+			onSwap:        func() error { return nil },
+			onUpgrade:     func() error { return nil },
+			onLoginPrompt: func() error { return nil },
+			notifyError:   func(string, error) {},
+		})
+		close(done)
+	}()
+
+	select {
+	case <-refreshStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("refresh never started")
+	}
+
+	// At this point handleLoginDone is blocked inside refresh.
+	// The close-window tick must have already been scheduled so the
+	// event loop can drain it while we are still in flight.
+	mu.Lock()
+	ticksWhileRefreshing := append([]func(){}, ticks...)
+	mu.Unlock()
+	require.NotEmpty(t, ticksWhileRefreshing,
+		"window-close tick must be scheduled before refresh blocks")
+
+	ticksWhileRefreshing[0]()
+	require.True(t, win.closed,
+		"first scheduled tick must close the wait window")
+
+	close(refreshUnblock)
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, len(ticks), 2,
+		"refresh-success path must schedule a follow-up tick")
+}
+
+// TestHandleLoginDoneCancelledShortCircuits ensures that a cancelled
+// login still closes the wait window via the first tick but skips
+// refresh and any follow-up UI transition.
+func TestHandleLoginDoneCancelledShortCircuits(t *testing.T) {
+	win := &closeRecordingWindow{}
+	coord := &loginCoord{window: win, cancelled: true}
+
+	var ticks []func()
+	scheduleTick := func(fn func()) bool {
+		ticks = append(ticks, fn)
+		return true
+	}
+
+	refreshCalled := false
+	handleLoginDone(loginDoneArgs{
+		ok:           true,
+		coord:        coord,
+		scheduleTick: scheduleTick,
+		decide: func(ctx context.Context) (ideplan.Decision, error) {
+			refreshCalled = true
+			return ideplan.Decision{}, nil
+		},
+		onSwap:        func() error { t.Fatal("onSwap must not run when cancelled"); return nil },
+		onUpgrade:     func() error { t.Fatal("onUpgrade must not run when cancelled"); return nil },
+		onLoginPrompt: func() error { t.Fatal("onLoginPrompt must not run when cancelled"); return nil },
+		notifyError:   func(string, error) { t.Fatal("notifyError must not run when cancelled") },
+	})
+
+	require.False(t, refreshCalled, "refresh must not run when cancelled")
+	require.Len(t, ticks, 1, "only the close-window tick should be scheduled")
+	ticks[0]()
+	require.True(t, win.closed)
+}
+
+// TestHandleLoginDoneRefreshErrorFallsBackToLoginPrompt verifies that
+// a refresh failure routes to openLoginPrompt rather than crashing or
+// leaving the wait prompt visible.
+func TestHandleLoginDoneRefreshErrorFallsBackToLoginPrompt(t *testing.T) {
+	win := &closeRecordingWindow{}
+	coord := &loginCoord{window: win}
+
+	var ticks []func()
+	scheduleTick := func(fn func()) bool {
+		ticks = append(ticks, fn)
+		return true
+	}
+
+	loginPromptCalls := 0
+	handleLoginDone(loginDoneArgs{
+		ok:           true,
+		coord:        coord,
+		scheduleTick: scheduleTick,
+		decide: func(ctx context.Context) (ideplan.Decision, error) {
+			return ideplan.Decision{}, errors.New("refresh boom")
+		},
+		onSwap:        func() error { t.Fatal("onSwap must not run on refresh error"); return nil },
+		onUpgrade:     func() error { t.Fatal("onUpgrade must not run on refresh error"); return nil },
+		onLoginPrompt: func() error { loginPromptCalls++; return nil },
+		notifyError:   func(string, error) {},
+	})
+
+	require.Len(t, ticks, 2,
+		"expected close-window tick + login-prompt fallback tick")
+	for _, fn := range ticks {
+		fn()
+	}
+	require.True(t, win.closed)
+	require.Equal(t, 1, loginPromptCalls)
+}
+
+// TestHandleLoginDoneCallbackErrorNotifiesUser proves that a failure
+// inside any post-login callback (onSwap, onUpgrade, onLoginPrompt)
+// reaches the user via notifyError instead of being swallowed into
+// the log. The bootstrap user is staring at the prompt and would
+// otherwise see nothing happen.
+func TestHandleLoginDoneCallbackErrorNotifiesUser(t *testing.T) {
+	win := &closeRecordingWindow{}
+	coord := &loginCoord{window: win}
+
+	var ticks []func()
+	scheduleTick := func(fn func()) bool {
+		ticks = append(ticks, fn)
+		return true
+	}
+
+	swapErr := errors.New("swap exploded")
+	var notified []struct {
+		ctx string
+		err error
+	}
+	handleLoginDone(loginDoneArgs{
+		ok:           true,
+		coord:        coord,
+		scheduleTick: scheduleTick,
+		decide: func(ctx context.Context) (ideplan.Decision, error) {
+			return ideplan.Decision{Status: ideplan.StatusActive}, nil
+		},
+		onSwap:        func() error { return swapErr },
+		onUpgrade:     func() error { t.Fatal("onUpgrade must not run on active swap"); return nil },
+		onLoginPrompt: func() error { t.Fatal("onLoginPrompt must not run on active swap"); return nil },
+		notifyError: func(ctx string, err error) {
+			notified = append(notified, struct {
+				ctx string
+				err error
+			}{ctx, err})
+		},
+	})
+
+	for _, fn := range ticks {
+		fn()
+	}
+	require.Len(t, notified, 1, "swap failure must reach notifyError")
+	require.Equal(t, "finish bootstrap", notified[0].ctx)
+	require.ErrorIs(t, notified[0].err, swapErr)
 }

@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,26 +21,24 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package apiclient
 
 import (
-	"strings"
-	"testing"
+	"context"
+	"net/url"
 )
 
-func TestCallbackPageHTML(t *testing.T) {
-	if !strings.HasPrefix(callbackPageHTML, "<!doctype html") {
-		t.Fatalf("callbackPageHTML must start with <!doctype html, got %q",
-			callbackPageHTML[:min(40, len(callbackPageHTML))])
-	}
-	for _, needle := range []string{
-		"You're in",
-		"Checking your subscription",
-		"{{.CheckoutURL}}",
-	} {
-		if !strings.Contains(callbackPageHTML, needle) {
-			t.Errorf("callbackPageHTML missing %q", needle)
-		}
-	}
+// loginURLCtxKey identifies the per-call OAuth URL channel attached
+// to a Login context. The channel is the only signal that a browser
+// flow is explicitly requested: background callers do not set it, so
+// tokenSourceRefresh refuses to launch a browser when it is absent.
+type loginURLCtxKey struct{}
+
+func withLoginURLCh(ctx context.Context, ch chan<- *url.URL) context.Context {
+	return context.WithValue(ctx, loginURLCtxKey{}, ch)
+}
+
+func loginURLChFrom(ctx context.Context) (chan<- *url.URL, bool) {
+	ch, ok := ctx.Value(loginURLCtxKey{}).(chan<- *url.URL)
+	return ch, ok
 }

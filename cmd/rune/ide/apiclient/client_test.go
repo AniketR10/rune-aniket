@@ -24,6 +24,7 @@
 package apiclient
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -35,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/ox-api/auth"
-	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
 
@@ -50,10 +50,7 @@ func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {
 	config := DefaultConfig()
 	config.HTTPEndpointAddress = srv.URL
 
-	client, err := New(nil, storagestub.NewInMemoryService(), config, t.TempDir())
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
 	defer func() {
 		if err := client.Close(); err != nil {
 			t.Fatalf("Close: %v", err)
@@ -79,10 +76,7 @@ func TestNewStartsTelemetryWhenEnabled(t *testing.T) {
 	config.HTTPEndpointAddress = srv.URL
 	config.EnableTelemetry = true
 
-	client, err := New(nil, storagestub.NewInMemoryService(), config, t.TempDir())
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
 	defer func() {
 		if err := client.Close(); err != nil {
 			t.Fatalf("Close: %v", err)
@@ -114,7 +108,7 @@ func TestNewPanicsOnZeroPeriodWithTelemetryEnabled(t *testing.T) {
 	config.EnableTelemetry = true
 	config.TelemetryPeriod = 0
 	config.HTTPEndpointAddress = "http://localhost"
-	_, _ = New(nil, storagestub.NewInMemoryService(), config, t.TempDir())
+	_ = New(storagestub.NewInMemoryService(), config, t.TempDir())
 }
 
 // fakeOAuthServer responds with a minimal /config endpoint and a 400
@@ -127,36 +121,22 @@ func fakeOAuthServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-type nopNotifier struct{}
-
-func (nopNotifier) Notify(browserapi.NotificationLevel, string, ...any) (string, error) {
-	return "", nil
-}
-func (nopNotifier) NotifyOnce(browserapi.NotificationLevel, string, ...any) (string, error) {
-	return "", nil
-}
-func (nopNotifier) UpdateNotificationProgress(string, string, int64, int64) error {
-	return nil
-}
-
 func TestClient_TokenSource_NoImplicitBrowserFlow(t *testing.T) {
 	srv := fakeOAuthServer(t)
 	defer srv.Close()
 
 	config := DefaultConfig()
 	config.HTTPEndpointAddress = srv.URL
-
-	client, err := New(nopNotifier{}, storagestub.NewInMemoryService(), config, t.TempDir())
-	require.NoError(t, err)
-	defer client.Close()
-
 	var browserCalls atomic.Int32
-	client.openBrowser = func(*url.URL) error {
+	config.OpenBrowser = func(*url.URL) error {
 		browserCalls.Add(1)
 		return nil
 	}
 
-	_, err = client.OAuthTokenSource().Token()
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
+	defer client.Close()
+
+	_, err := client.OAuthTokenSource().Token()
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, auth.ErrNotAuthenticated),
 		"expected ErrNotAuthenticated, got %v", err)
@@ -170,27 +150,205 @@ func TestClient_Login_AttemptsBrowserFlow(t *testing.T) {
 
 	config := DefaultConfig()
 	config.HTTPEndpointAddress = srv.URL
-
-	client, err := New(nopNotifier{}, storagestub.NewInMemoryService(), config, t.TempDir())
-	require.NoError(t, err)
-	defer client.Close()
-
 	browserCalls := make(chan struct{}, 1)
-	client.openBrowser = func(*url.URL) error {
+	config.OpenBrowser = func(*url.URL) error {
 		select {
 		case browserCalls <- struct{}{}:
 		default:
 		}
-		// Return an error to short-circuit the underlying oauth2 flow so
-		// the test does not hang waiting for the redirect.
 		return errors.New("test: browser not actually opened")
 	}
 
-	require.NoError(t, client.Login(t.Context()))
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
+	defer client.Close()
+
+	session := client.Login(t.Context())
 
 	select {
 	case <-browserCalls:
 	case <-time.After(5 * time.Second):
 		t.Fatal("expected browser to be opened by :login flow")
+	}
+
+	select {
+	case err := <-session.Done:
+		require.Error(t, err, "openBrowser returns an error so Login must publish it")
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Login to publish completion on its channel")
+	}
+}
+
+// TestClient_Login_SecondAttemptAfterCancel reproduces the bug where
+// cancelling an in-flight Login leaves the OAuth goroutine blocked
+// inside blueauth.NewClientWithPorts holding the CachedTokenSource
+// lock, so a subsequent Login never reaches openBrowser and never
+// resolves.
+func TestClient_Login_SecondAttemptAfterCancel(t *testing.T) {
+	srv := fakeOAuthServer(t)
+	defer srv.Close()
+
+	config := DefaultConfig()
+	config.HTTPEndpointAddress = srv.URL
+	browserCalls := make(chan struct{}, 4)
+	var browserBehavior atomic.Value
+	browserBehavior.Store(func() error { return nil })
+	config.OpenBrowser = func(*url.URL) error {
+		browserCalls <- struct{}{}
+		return browserBehavior.Load().(func() error)()
+	}
+
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
+	defer client.Close()
+
+	ctx1, cancel1 := context.WithCancel(t.Context())
+	session1 := client.Login(ctx1)
+
+	select {
+	case <-browserCalls:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected first Login to open browser")
+	}
+
+	cancel1()
+
+	select {
+	case <-session1.Done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected first Login to publish completion after cancel")
+	}
+
+	browserBehavior.Store(func() error {
+		return errors.New("test: browser not actually opened")
+	})
+
+	session2 := client.Login(t.Context())
+
+	select {
+	case <-browserCalls:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected second Login to open browser after cancel of first")
+	}
+
+	select {
+	case <-session2.Done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected second Login to publish completion")
+	}
+}
+
+// TestClient_Login_PublishesOAuthURL verifies that the LoginSession
+// surfaces the OAuth authorize URL — the same URL handed to the
+// browser — so the bootstrap UI can inline it in the wait prompt.
+// The URL channel is the only signal that drives the pre-swap login
+// flow's "click here" link; if a refactor breaks the ctx plumbing
+// that carries it from Login down into tokenSourceRefresh, the
+// channel silently never resolves and the user is stuck staring at
+// an empty prompt while the browser opens in the background.
+func TestClient_Login_PublishesOAuthURL(t *testing.T) {
+	srv := fakeOAuthServer(t)
+	defer srv.Close()
+
+	config := DefaultConfig()
+	config.HTTPEndpointAddress = srv.URL
+	browserURLCh := make(chan *url.URL, 1)
+	config.OpenBrowser = func(u *url.URL) error {
+		select {
+		case browserURLCh <- u:
+		default:
+		}
+		return errors.New("test: browser not actually opened")
+	}
+
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
+	defer client.Close()
+
+	session := client.Login(t.Context())
+
+	var published *url.URL
+	select {
+	case u, ok := <-session.URL:
+		require.True(t, ok, "URL channel must emit before close")
+		require.NotNil(t, u, "URL channel must emit a non-nil URL")
+		assert.NotEmpty(t, u.String())
+		assert.Contains(t, u.Query(), "state",
+			"published URL must be an OAuth authorize URL (has state)")
+		assert.Contains(t, u.Query(), "redirect_uri",
+			"published URL must be an OAuth authorize URL (has redirect_uri)")
+		published = u
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Login to publish OAuth URL")
+	}
+
+	select {
+	case browserURL := <-browserURLCh:
+		assert.Equal(t, published.String(), browserURL.String(),
+			"URL handed to openBrowser must match the URL published on session.URL")
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected openBrowser to be invoked with the same URL")
+	}
+
+	select {
+	case <-session.Done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Login Done to resolve after openBrowser error")
+	}
+
+	_, ok := <-session.URL
+	assert.False(t, ok, "URL channel must be closed after Login completes")
+}
+
+// TestRenderCallbackHTMLSubstitutesCheckoutURL verifies that the
+// embedded OAuth callback page redirects to the configured website's
+// /checkout endpoint, so post-OAuth the browser lands on a single
+// page that decides between Stripe Checkout and /account based on
+// the user's live subscription status.
+func TestRenderCallbackHTMLSubstitutesCheckoutURL(t *testing.T) {
+	cases := []struct {
+		name           string
+		website        string
+		wantContains   []string
+		wantNoContains []string
+	}{
+		{
+			name:    "production website",
+			website: "https://rune.build",
+			wantContains: []string{
+				`window.location.replace("https://rune.build/checkout?source=rune")`,
+				`url=https://rune.build/checkout?source=rune`,
+				`href="https://rune.build/checkout?source=rune"`,
+			},
+			wantNoContains: []string{"{{CHECKOUT_URL}}"},
+		},
+		{
+			name:    "trailing slash trimmed",
+			website: "https://rune.build/",
+			wantContains: []string{
+				`window.location.replace("https://rune.build/checkout?source=rune")`,
+			},
+			wantNoContains: []string{
+				`rune.build//checkout`,
+				"{{CHECKOUT_URL}}",
+			},
+		},
+		{
+			name:    "empty website falls back to about:blank",
+			website: "",
+			wantContains: []string{
+				`window.location.replace("about:blank")`,
+			},
+			wantNoContains: []string{"{{CHECKOUT_URL}}"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Client{config: Config{WebsiteAddress: tc.website}}
+			got := c.renderCallbackHTML()
+			for _, want := range tc.wantContains {
+				assert.Contains(t, got, want)
+			}
+			for _, unwant := range tc.wantNoContains {
+				assert.NotContains(t, got, unwant)
+			}
+		})
 	}
 }

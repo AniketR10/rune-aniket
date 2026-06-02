@@ -17,7 +17,7 @@ RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(DEBUG_LDFLAGS)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
-OXAPI_GOFLAGS=
+OXAPI_GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags --always --dirty) -X main.Commit=$$(git rev-parse --short HEAD)$$(git diff --quiet || echo -dirty)"
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)

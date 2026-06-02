@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Signed in — Rune</title>
+<meta http-equiv="refresh" content="2;url={{.CheckoutURL}}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -105,10 +106,18 @@
     <section class="page">
       <span class="label">auth</span>
       <h1 class="hero">You're in<span class="cursor" aria-hidden="true"></span></h1>
-      <p class="lead">You can close this tab.</p>
-      <a class="continue" href="https://rune.build/">Continue to rune.build →</a>
+      <p class="lead">
+        Checking your subscription… You'll be redirected in a moment.
+      </p>
+      <a class="continue" href="{{.CheckoutURL}}">Continue →</a>
     </section>
   </main>
 </div>
+<script>
+  // Immediate redirect; the <meta refresh> above is the no-JS fallback.
+  // The /checkout page on rune.build runs the live status check and
+  // sends already-paid users to /account, unpaid users to Stripe.
+  window.location.replace({{.CheckoutURL}});
+</script>
 </body>
 </html>

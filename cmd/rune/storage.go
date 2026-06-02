@@ -28,6 +28,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/gui"
 )
 
@@ -35,6 +37,13 @@ const (
 	sizeKey     = "lastSize"
 	positionKey = "lastPosition"
 )
+
+// newRuneStorage opens the localstorage flavor every cmd/rune entry
+// point uses. Shared by the IDE, the apiclient (auth/release cache),
+// the bootstrap pre-IDE, and the gui window-position persistence.
+func newRuneStorage(dataDir string) storageapi.Service {
+	return localstorage.New(context.Background(), dataDir, docbson.Marshaler())
+}
 
 type size struct {
 	Width  int

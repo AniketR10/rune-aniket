@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -55,6 +57,7 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
 )
@@ -76,7 +79,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(cwdURI.String(), configFile.Name(), dir,
+		err = i.init(cwdURI.String(), configFile.Name(), dir, newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -106,7 +109,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 
 		i := new(IDE)
 		err = i.init(cwdURI.String(), configFile.Name(),
-			dir, WithPublishEvent(nopPublishEvent),
+			dir, newTestStorage(t, dir), WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
 		require.NoError(t, err)
@@ -131,7 +134,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init(".", configFile.Name(), dir,
+		err = i.init(".", configFile.Name(), dir, newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -164,7 +167,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		i := new(IDE)
-		err = i.init(".", configFile.Name(), dir,
+		err = i.init(".", configFile.Name(), dir, newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -187,7 +190,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init("", configFile.Name(), dir,
+		err = i.init("", configFile.Name(), dir, newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -208,7 +211,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		i := new(IDE)
-		err = i.init("", configFile.Name(), dataDir,
+		err = i.init("", configFile.Name(), dataDir, newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)),
@@ -242,7 +245,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 		})
 
 		var captured term.Attributes
-		i, err := New("", configFile.Name(), dataDir,
+		i, err := New("", configFile.Name(), dataDir, newTestStorage(t, dataDir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)),
@@ -285,7 +288,7 @@ func TestOpen(t *testing.T) {
 		dataDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
-		i, err := New("", config.Name(), dataDir, WithPublishEvent(nopPublishEvent))
+		i, err := New("", config.Name(), dataDir, newTestStorage(t, dataDir), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -303,7 +306,7 @@ func TestOpen(t *testing.T) {
 		dataDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
-		i, err := New(os.TempDir(), config.Name(), dataDir, WithPublishEvent(nopPublishEvent))
+		i, err := New(os.TempDir(), config.Name(), dataDir, newTestStorage(t, dataDir), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -330,7 +333,7 @@ func TestOpen(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		i, err := New("", config.Name(), dataDir, WithReleaseManager(rm), WithPublishEvent(nopPublishEvent))
+		i, err := New("", config.Name(), dataDir, newTestStorage(t, dataDir), WithReleaseManager(rm), WithPublishEvent(nopPublishEvent))
 		require.NoError(t, err)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
 		require.NoError(t, err)
@@ -400,7 +403,7 @@ command:
 	require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
 
 	mu := new(sync.Mutex)
-	i, err := New(repoB, configPath, dataDir,
+	i, err := New(repoB, configPath, dataDir, newTestStorage(t, dataDir),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(mu),
@@ -531,7 +534,7 @@ workspace:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir,
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithPublishEvent(func(term.Event) bool { return true }),
@@ -719,6 +722,13 @@ func makeTestFiles(t *testing.T) (*os.File, *os.File) {
 	return configFile, file
 }
 
+// newTestStorage returns the localstorage flavor every IDE test uses.
+// Tests pass it as the storage argument to ide.New / IDE.init.
+func newTestStorage(t *testing.T, dataDir string) storageapi.Service {
+	t.Helper()
+	return localstorage.New(context.Background(), dataDir, docbson.Marshaler())
+}
+
 func testRunnerFn(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
@@ -832,7 +842,7 @@ func TestIDEExoMisconfigurationFallsBackToDefault(t *testing.T) {
 			i := new(IDE)
 			require.NotPanics(t, func() {
 				err = i.init(cwdURI.String(),
-					configFile.Name(), dir,
+					configFile.Name(), dir, newTestStorage(t, dir),
 					WithPublishEvent(nopPublishEvent),
 					WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 					WithLocker(new(sync.Mutex)))
@@ -887,7 +897,7 @@ func TestIDEExoWellFormedConfigDoesNotFallBack(t *testing.T) {
 	i := new(IDE)
 	require.NotPanics(t, func() {
 		err = i.init(cwdURI.String(),
-			configFile.Name(), dir,
+			configFile.Name(), dir, newTestStorage(t, dir),
 			WithPublishEvent(nopPublishEvent),
 			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 			WithLocker(new(sync.Mutex)))
@@ -975,7 +985,7 @@ command:
 		return true
 	}
 
-	i, err := New(dir, configPath, dataDir,
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduleNextTick),
 		WithBell(func() {}),

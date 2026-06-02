@@ -40,7 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -48,7 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/localstorage"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -63,6 +62,8 @@ type IDE struct {
 	workspaceHandler *workspaceManagerHandler
 	root             shaderRunner
 	tutorial         tutorialRunner
+	planLockdown     *planLockdownRunner
+	planMonitor      *ideplan.Monitor
 	publishEventFn   EventPublisher
 	storage          storageapi.Service
 }
@@ -75,10 +76,10 @@ type EventPublisher func(term.Event) bool
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
 func New(
-	cwd, cfgfilename, dataDir string, opts ...Option,
+	cwd, cfgfilename, dataDir string, storage storageapi.Service, opts ...Option,
 ) (i *IDE, err error) {
 	i = new(IDE)
-	err = i.init(cwd, cfgfilename, dataDir, opts...)
+	err = i.init(cwd, cfgfilename, dataDir, storage, opts...)
 	return
 }
 
@@ -151,7 +152,7 @@ func (i *IDE) Config() config.Config {
 // Close must be called when this IDE is no longer in use.
 func (i *IDE) Ready() tui.Handler {
 	i.initRunning()
-	return &i.root
+	return i.planLockdown
 }
 
 // Browser returns the current browser in focus.
@@ -212,6 +213,53 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 	i.workspaceHandler.setReleaseManager(m)
 }
 
+// PlanSourceConfig collects the dependencies WithPlanSource needs to
+// wire the lockdown overlay and monitor. CheckoutURL is the checkout
+// URL the Upgrade button opens; OnReSignIn purges the cached token
+// and kicks a fresh Login so the user can re-auth (possibly as a
+// paid account or a different user).
+type PlanSourceConfig struct {
+	Source      ideplan.Source
+	CheckoutURL string
+	OnReSignIn  func()
+}
+
+// installPlanSource wires cfg into the existing planLockdown
+// wrapper, styles the lockdown prompt using the workspace's
+// configured frame and prompt colors, and starts the daily monitor.
+func (i *IDE) initPlanSource(cfg PlanSourceConfig) {
+	noti := i.workspaceHandler.notifications.current()
+	pcfg := i.ideConfig.promptConfig()
+	deps := planLockdownPromptDeps{
+		checkoutURL:   cfg.CheckoutURL,
+		onReSignIn:    cfg.OnReSignIn,
+		notifications: noti,
+		frameCharSet:  i.ideConfig.windowFrameCharset(),
+		textAttr:      pcfg.TextAttr,
+		highlightAttr: pcfg.HighlightAttr,
+		backgroundBg:  pcfg.BackgroundAttr,
+	}
+	i.planLockdown.setPromptFactory(func() tui.Handler {
+		return newPlanLockdownPrompt(deps)
+	})
+	i.planMonitor = ideplan.NewMonitor(ideplan.MonitorConfig{
+		Source:        cfg.Source,
+		Notifications: noti,
+		Locker:        i.planLockdown,
+	})
+	i.planMonitor.Start(context.Background())
+}
+
+// TickPlan forces an immediate plan-gating re-evaluation off the
+// daily monitor cadence, reading the currently cached token rather
+// than rotating it via refresh_token. Used by the lockdown overlay's
+// Re-signin flow to surface a freshly-paid subscription (acquired
+// through a from-scratch browser login) without waiting for the next
+// scheduled tick.
+func (i *IDE) TickPlan(ctx context.Context) {
+	i.planMonitor.Reevaluate(ctx)
+}
+
 // Notifications returns an cross-workspace, goroutine-safe implementation
 // of browserapi.Notifications.
 func (i *IDE) Notifications() browserapi.Notifications {
@@ -241,6 +289,11 @@ func (i *IDE) closeResources() (ret error) {
 	i.workspaceHandler.mu.Lock()
 	defer i.workspaceHandler.mu.Unlock()
 
+	if i.planMonitor != nil {
+		i.planMonitor.Stop()
+	}
+	i.planLockdown.SetLocked(false)
+
 	if err := i.workspaceHandler.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
@@ -261,7 +314,7 @@ func (i *IDE) closeResources() (ret error) {
 }
 
 func (i *IDE) init(
-	cwd, cfgfilename, dataDir string, opts ...Option,
+	cwd, cfgfilename, dataDir string, storage storageapi.Service, opts ...Option,
 ) error {
 	op := defaultOptions()
 	for _, o := range opts {
@@ -278,13 +331,7 @@ func (i *IDE) init(
 		op.defaultWallpaper, defaultCfg, op.bell,
 		op.scheduleFn, op.zdotDir)
 
-	// Storage is built here (not in workspaceManagerHandler.init) so
-	// ideConfig — which is consulted to build alias completer chains
-	// before any workspace is created — can resolve `{history}`
-	// placeholders against the persisted command history doc. The
-	// command Prompt writes history under the "ide" partition, so
-	// alias chains must read from the same partition.
-	i.storage = localstorage.New(context.Background(), dataDir, docbson.Marshaler())
+	i.storage = storage
 	i.ideConfig.storage = storageapi.WithPartition(i.storage, "ide")
 
 	var logger *slog.Logger
@@ -470,6 +517,9 @@ func (i *IDE) init(
 	commandObserver.subscribe(&i.tutorial)
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
+	i.planLockdown = newPlanLockdownRunner(&i.root, nil)
+	i.planLockdown.setDefaultAttr(i.DefaultAttributes)
+	i.initPlanSource(i.options.planSource)
 	err = i.workspaceHandler.subscribeCommand(runShaderCmdManual, &i.root)
 	if err != nil {
 		return err

@@ -419,7 +419,7 @@ func (h *Prompt) dispatchCommand() (
 		for i, a := range h.commandAndArgs[1:] {
 			dispatchArgs[i] = UnquoteToken(a)
 		}
-		quit = h.dispatcher.Dispatch(h.commandAndArgs[0], dispatchArgs...)
+		h.dispatcher.Dispatch(h.commandAndArgs[0], dispatchArgs...)
 	} else {
 		match, _ := h.list.Focus()
 		// if no args, then it means that we are in command mode, in which case
@@ -431,7 +431,7 @@ func (h *Prompt) dispatchCommand() (
 		}
 
 		h.log(log.TraceLevel, "dispatching command %#v", commandAndArgsString)
-		quit = h.dispatcher.Dispatch(commandAndArgsString)
+		h.dispatcher.Dispatch(commandAndArgsString)
 	}
 
 	if commandAndArgsString != "" {

@@ -35,13 +35,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/localstorage"
 )
+
+func newE2EStorage(t *testing.T, dataDir string) storageapi.Service {
+	t.Helper()
+	return localstorage.New(context.Background(), dataDir, docbson.Marshaler())
+}
 
 // hostScheduleNextTick mirrors a host event loop's UserFunc dispatch:
 // fn runs on a fresh goroutine while holding mu, exactly like
@@ -195,7 +203,7 @@ command:
 
 		var mu sync.Mutex
 		tracker := newSchedTracker(hostScheduleNextTick(&mu))
-		i, err := ide.New(dir, config.Name(), dir,
+		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
 			ide.WithLocker(&mu),
 			ide.WithScheduleNextTick(tracker.Schedule),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
@@ -271,7 +279,7 @@ command:
 			extensionv2.WithAuthTokenEnv("IDETEST_TOKEN"),
 		)
 		require.NoError(t, err)
-		i, err := ide.New(dir, config.Name(), dir,
+		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
@@ -334,7 +342,7 @@ command:
 			&mu, dir,
 		)
 		require.NoError(t, err)
-		i, err := ide.New(dir, config.Name(), dir,
+		i, err := ide.New(dir, config.Name(), dir, newE2EStorage(t, dir),
 			ide.WithExtensionsRunner(runner),
 			ide.WithLocker(&mu),
 			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),

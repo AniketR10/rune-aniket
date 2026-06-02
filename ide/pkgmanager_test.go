@@ -123,7 +123,6 @@ func TestPackageManagerConcurrent(t *testing.T) {
 }
 
 func TestPackageManagerIntegration(t *testing.T) {
-	t.Parallel()
 	pkgs := idepkgtest.MakePackages(
 		release.Package{Name: "go"},
 		release.Package{Name: "six", Latest: "2"},

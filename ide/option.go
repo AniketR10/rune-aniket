@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 )
 
@@ -99,6 +100,15 @@ func WithPublishEvent(p EventPublisher) Option {
 func WithReleaseManager(m release.Manager) Option {
 	return func(opts *options) {
 		opts.releaseManager = m
+	}
+}
+
+// WithPlanSource installs an ideplan.Source on the IDE: the lockdown
+// overlay reacts to its decisions and the daily monitor uses it as
+// its evaluation source.
+func WithPlanSource(cfg PlanSourceConfig) Option {
+	return func(opts *options) {
+		opts.planSource = cfg
 	}
 }
 
@@ -378,6 +388,7 @@ type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
 	releaseManager      release.Manager
+	planSource          PlanSourceConfig
 	tabBarOffset        int
 	tabsClickCallback   func(int) bool
 	tabBarHeight        int
@@ -430,6 +441,7 @@ func defaultOptions() options {
 		workspacesBarFrame: true,
 		workspacesIcon:     '1',
 		releaseManager:     docrelease.NewManager(document.NewInMemoryService()),
+		planSource:         PlanSourceConfig{Source: ideplan.NopSource{}},
 	}
 }
 

@@ -21,26 +21,50 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
-package apiclient
+package main
 
 import (
-	"strings"
-	"testing"
+	"context"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"unstable.build/go-tui/cmd/rune/ide/apiclient"
+	"unstable.build/go-tui/ide"
 )
 
-func TestCallbackPageHTML(t *testing.T) {
-	if !strings.HasPrefix(callbackPageHTML, "<!doctype html") {
-		t.Fatalf("callbackPageHTML must start with <!doctype html, got %q",
-			callbackPageHTML[:min(40, len(callbackPageHTML))])
+// lockdownReSignIn implements the Re-signin button on the IDE
+// lockdown overlay. It purges the cached token so a stale paid
+// session cannot resurrect, drives a fresh OAuth flow through the
+// apiclient, and asks the IDE to re-evaluate gating once the new
+// token lands so the overlay tears down without waiting for the
+// daily monitor tick.
+//
+// The caller is expected to invoke this on a background goroutine;
+// the OAuth Login call blocks until the user finishes the browser
+// flow (or cancels), which is well beyond a single event-loop tick.
+func lockdownReSignIn(
+	client *apiclient.Client,
+	i *ide.IDE,
+	scheduleNextTick func(func()) bool,
+) {
+	notifs := i.Notifications()
+	if notifs != nil {
+		_, _ = notifs.Notify(browserapi.LevelInfo,
+			"Re-authenticating. Follow the prompts in your browser.")
 	}
-	for _, needle := range []string{
-		"You're in",
-		"Checking your subscription",
-		"{{.CheckoutURL}}",
-	} {
-		if !strings.Contains(callbackPageHTML, needle) {
-			t.Errorf("callbackPageHTML missing %q", needle)
+	if ts := client.CachedTokenSource(); ts != nil {
+		if err := ts.Purge(); err != nil {
+			log.WithError(err).Warn("lockdown re-signin: purge cached token")
 		}
 	}
+	session := client.Login(context.Background())
+	err, ok := <-session.Done
+	if !ok || err != nil {
+		if notifs != nil {
+			_, _ = notifs.Notify(browserapi.LevelWarn,
+				"Re-sign in did not complete. Try again or check your browser.")
+		}
+		return
+	}
+	scheduleNextTick(func() { i.TickPlan(context.Background()) })
 }

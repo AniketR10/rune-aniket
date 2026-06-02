@@ -492,7 +492,7 @@ func newMacroIntegrationHarness(t *testing.T) *macroIntegrationHarness {
 	mu := new(sync.Mutex)
 	events := make(chan term.Event, 4096)
 	scheduler := newQueuedScheduler()
-	i, err := New(dir, cfgName, dir,
+	i, err := New(dir, cfgName, dir, newTestStorage(t, dir),
 		WithLocker(mu),
 		WithScheduleNextTick(scheduler.ScheduleNextTick),
 		WithPublishEvent(func(ev term.Event) bool {

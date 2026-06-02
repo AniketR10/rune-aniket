@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -42,6 +43,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -59,6 +61,7 @@ import (
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/gui"
 	"unstable.build/go-tui/workspace"
@@ -67,6 +70,12 @@ import (
 )
 
 const doubleClickTimeout = 500 * time.Millisecond
+
+// defaultWebsiteAddress is the production base URL of the Rune
+// website. The upgrade prompt opens "<base>/checkout?source=rune" on
+// click; the website honors the source query parameter to stash a
+// "return to Rune" intent during the OAuth + Stripe round trip.
+const defaultWebsiteAddress = "https://rune.build"
 
 var (
 	apicfg = apiclient.DefaultConfig()
@@ -108,6 +117,10 @@ var (
 		apicfg.ReleaseCollection,
 		"Collection name for the release manager.")
 	flagZdotDir = flag.String("rune-zdotdir", "", "Initial ZDOTDIR directory when using default OS shell via $SHELL.")
+
+	flagWebsiteAddress = flag.String("rune-website-address", defaultWebsiteAddress,
+		"Base URL of the Rune website. Used to build the checkout URL "+
+			"opened by the upgrade prompt during bootstrap and lockdown.")
 )
 
 func init() {
@@ -279,6 +292,9 @@ func main() {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-zdotdir"); err != nil {
+		panic(err)
+	}
+	if err := flag.CommandLine.MarkHidden("rune-website-address"); err != nil {
 		panic(err)
 	}
 
@@ -533,38 +549,48 @@ func runTUI(
 		opts = append(opts, ide.WithDebugCommands(true))
 	}
 
+	scheduleNextTick := func(fn func()) bool {
+		return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
+	}
+
+	storage := newRuneStorage(*flagDataPath)
+	client, releaseManager := newAPIClient(storage)
+	defer client.Close()
+
+	checkoutURL, _ := mustResolveBootstrapURLs(*flagWebsiteAddress)
+	var ideRef *ide.IDE
+	opts = append(opts,
+		ide.WithReleaseManager(releaseManager),
+		ide.WithPlanSource(ide.PlanSourceConfig{
+			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
+			CheckoutURL: checkoutURL,
+			OnReSignIn: func() {
+				lockdownReSignIn(client, ideRef, scheduleNextTick)
+			},
+		}),
+	)
+
 	i, err := ide.New(*flagWorkspace, *flagConfigPath,
-		*flagDataPath, opts...)
+		*flagDataPath, storage, opts...)
 	if err != nil {
 		fmt.Printf("%s", err)
 		return 1
 	}
+	ideRef = i
 
-	client, cerr := setupReleaseManager(i, i.Storage())
-	if cerr != nil {
-		log.Warnf("could not setup release manager: %v", cerr)
-		// continue with nil client
-	}
-	defer client.Close()
-
-	err = subscribeOtherCommands(i, client, cerr, *flagConfigPath)
+	err = subscribeOtherCommands(i, client, *flagConfigPath)
 	if err != nil {
 		log.Errorf("subscribe to commands: %v", err)
 	}
 
 	openFiles(i, filenames)
 
-	scheduleCrashReportCheck(i, client, *flagDataPath,
-		func(fn func()) bool {
-			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
-		})
+	scheduleCrashReportCheck(i, client, *flagDataPath, scheduleNextTick)
 
 	upgradeCtx, upgradeCancel := context.WithCancel(context.Background())
 	defer upgradeCancel()
 	upgradeMgr := scheduleUpgradeCheck(upgradeCtx, i, apiclient.DefaultDownloadsHost,
-		func(fn func()) bool {
-			return tui.PublishEvent(term.Event{Type: term.EventInterrupt, UserFunc: fn})
-		})
+		scheduleNextTick)
 	if err := subscribeUpgradeCommands(i, upgradeMgr); err != nil {
 		log.Errorf("subscribe upgrade commands: %v", err)
 	}
@@ -620,10 +646,12 @@ func runGUI(
 		}
 	}
 
-	root, err := newRoot(
+	checkoutURL, signupURL := mustResolveBootstrapURLs(*flagWebsiteAddress)
+	root, err := newBootstrapHandler(
 		*flagDataPath, *flagConfigPath,
 		*flagWorkspace, *flagZdotDir, filenames,
 		launchCmd, runner, mu, publishEvent,
+		checkoutURL, signupURL,
 	)
 	if err != nil {
 		fmt.Printf("ide: %s", err)
@@ -667,7 +695,7 @@ func runGUI(
 		gui.WithPrintFPS(*flagFPS),
 	}
 
-	storage := root.storage()
+	storage := root.storage
 	width, height, ok := getLastSize(storage)
 	if ok {
 		options = append(options, gui.WithSize(width, height))
@@ -690,7 +718,11 @@ func runGUI(
 		g.SetOpacity(bg, fg)
 	}
 	if root.alreadyBootstrapped() {
-		root.setupConfiguredIDE(root.realIDE)
+		if err := root.setupConfiguredIDE(root.realIDE, root.client); err != nil {
+			fmt.Printf("setup ide: %s", err)
+			log.Errorf("setup ide: %v", err)
+			return 1
+		}
 	}
 	err = g.Run("Rune")
 	if err != nil && !errors.Is(err, gui.ErrHandlerExited) {
@@ -706,29 +738,23 @@ func runGUI(
 	return 0
 }
 
-func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
-	*apiclient.Client, error,
-) {
+// newAPIClient constructs the production apiclient.Client and its
+// release.Manager from a shared storage. Both can be passed to
+// ide.New via WithReleaseManager / WithPlanSource without creating an
+// IDE → apiclient → IDE cycle.
+func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manager) {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
 	apicfg.InsecureTransport = *flagGRPCInsecure
 	apicfg.TelemetryPeriod = *flagTelemetryPeriod
 	apicfg.ReleaseCollection = *flagReleaseCollection
-	client, err := apiclient.New(i.Notifications(), storage, apicfg, *flagDataPath)
-	if err != nil {
-		return nil, fmt.Errorf("new api client: %v", err)
-	}
-	if client.TelemetryEnabled() {
-		if err := i.SubscribeEvents(apiclient.TelemetryEvents(), client); err != nil {
-			log.Warnf("subscribe api client to file events: %v", err)
-		}
-	}
+	apicfg.WebsiteAddress = *flagWebsiteAddress
+	client := apiclient.New(storage, apicfg, *flagDataPath)
 	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
 	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
 	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
-	i.SetReleaseManager(releaseManager)
-	return client, nil
+	return client, releaseManager
 }
 
 // newBootstrapAPIClient builds a slim apiclient.Client suitable for
@@ -738,29 +764,24 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 // configured IDE only. Tokens acquired by this client are written to
 // the shared on-disk auth partition keyed by dataDir, so the real
 // client constructed after the swap reads them back transparently.
-//
-// The caller passes a notifications service that survives the swap so
-// the OAuth goroutine's success / failure message lands on whichever
-// IDE is active when login completes — preIDE if the user is still in
-// the browser when performSwap runs would orphan the message
-// otherwise.
-func newBootstrapAPIClient(
-	notifications browserapi.Notifications,
-	storage storageapi.Service,
-) (*apiclient.Client, error) {
+func newBootstrapAPIClient(storage storageapi.Service) *apiclient.Client {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
 	apicfg.InsecureTransport = *flagGRPCInsecure
 	apicfg.TelemetryPeriod = *flagTelemetryPeriod
 	apicfg.ReleaseCollection = *flagReleaseCollection
+	apicfg.WebsiteAddress = *flagWebsiteAddress
 	apicfg.EnableTelemetry = false
-	client, err := apiclient.New(notifications, storage, apicfg, *flagDataPath)
-	if err != nil {
-		return nil, fmt.Errorf("new bootstrap api client: %v", err)
-	}
-	return client, nil
+	apicfg.OpenBrowser = testOpenBrowserOverride
+	return apiclient.New(storage, apicfg, *flagDataPath)
 }
+
+// testOpenBrowserOverride lets the bootstrap e2e test redirect the
+// OAuth browser launch to a recording hook without depending on the
+// host's $BROWSER. Nil in production builds: apiclient.New falls back
+// to sensible/browser.Browse when OpenBrowser is unset.
+var testOpenBrowserOverride func(*url.URL) error
 
 func doRunTUI(mu *sync.Mutex, i *ide.IDE) error {
 	err := tui.Run(i.Ready(),

@@ -28,8 +28,9 @@ import (
 	"crypto/x509"
 	_ "embed"
 	"fmt"
+	"html/template"
 	"net/url"
-	"sync/atomic"
+	"strings"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/sensible/browser"
@@ -39,7 +40,6 @@ import (
 	"github.com/unstablebuild/blue/logging/trace"
 	"github.com/unstablebuild/ox-api/api"
 	"github.com/unstablebuild/ox-api/auth"
-	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
@@ -53,6 +53,9 @@ import (
 //go:embed callback_page.html
 var callbackPageHTML string
 
+var callbackPageTmpl = template.Must(
+	template.New("callback_page.html").Parse(callbackPageHTML))
+
 // Client implements a client to an instance of ox-api.
 // This client should be subscribed to events as a text.EventHandler,
 // for the telemetry implementation to collect all stats.
@@ -60,39 +63,34 @@ type Client struct {
 	config               Config
 	dataDir              string
 	httpEndpointURL      *url.URL
-	notifications        browserapi.Notifications
 	tokenSource          *auth.CachedTokenSource
 	storage              storageapi.Service
 	ctx                  context.Context
 	ctxCancel            func()
-	isLogin              atomic.Bool
 	telemetry            *telemetry
 	telemetryTokenSource *auth.CachedTokenSource
-	// openBrowser opens a URL in the user's browser. Indirected for testing.
-	openBrowser func(*url.URL) error
 }
 
 // New returns allocates storage for a new Client and initializes it.
 func New(
-	n browserapi.Notifications, storage storageapi.Service,
+	storage storageapi.Service,
 	config Config, dataDir string,
-) (*Client, error) {
+) *Client {
 	httpEndpointURL, err := url.Parse(config.HTTPEndpointAddress)
 	if err != nil {
-		return nil, fmt.Errorf("parse http endpoint url: %w", err)
+		panic(fmt.Sprintf("parse http endpoint url: %s", err))
+	}
+	if config.OpenBrowser == nil {
+		config.OpenBrowser = func(u *url.URL) error { return browser.Browse(u) }
 	}
 	ret := &Client{
 		config:          config,
 		dataDir:         dataDir,
 		httpEndpointURL: httpEndpointURL,
-		notifications:   n,
-		openBrowser: func(u *url.URL) error {
-			return browser.Browse(u)
-		},
 	}
 	authStorage := storageapi.WithPartition(storage, "auth")
 	ret.storage = authStorage
-	ret.tokenSource = auth.NewCachedTokenSource(ret, authStorage, n)
+	ret.tokenSource = auth.NewCachedTokenSource(ret, authStorage)
 	ret.ctx, ret.ctxCancel = context.WithCancel(context.Background())
 
 	if config.EnableTelemetry {
@@ -102,13 +100,13 @@ func New(
 			func(ctx context.Context, t *oauth2.Token) (oauth2.TokenSource, error) {
 				return ret.tokenSourceRefresh(ctx, t, true)
 			})
-		ret.telemetryTokenSource = auth.NewCachedTokenSource(refreshOnlySourcer, authStorage, n)
+		ret.telemetryTokenSource = auth.NewCachedTokenSource(refreshOnlySourcer, authStorage)
 		ret.telemetry = newTelemetry(ret.telemetryTokenSource,
 			ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag)
 		ret.telemetry.start()
 	}
 
-	return ret, nil
+	return ret
 }
 
 // Handle satisfies text.EventHandler.
@@ -138,6 +136,13 @@ func (a *Client) OAuthTokenSource() oauth2.TokenSource {
 	return a.tokenSource
 }
 
+// CachedTokenSource returns the underlying *auth.CachedTokenSource. It
+// is exposed so the ideplan package can drive a JWT-backed
+// ideplan.Source for the upgrade prompt and lockdown monitor.
+func (a *Client) CachedTokenSource() *auth.CachedTokenSource {
+	return a.tokenSource
+}
+
 // Logout purges the user's underlying authentication credentials,
 // so next requests sent to the server via the connections created via NewConn
 // will be un-authenticated.
@@ -145,45 +150,51 @@ func (a *Client) Logout(ctx context.Context) error {
 	if err := a.tokenSource.Purge(); err != nil {
 		log.Warnf("cache reset: %v", err)
 	}
-
 	// NOTE: we do not want to purge telemetry token source, as it doesn't
 	// have effect on the user functionality, but we want to maintain authed logs
 	// _ = a.telemetryTokenSource.Purge()
-
-	if _, err := a.notifications.Notify(browserapi.LevelSuccess,
-		"You have been successfully logged out."); err != nil {
-		log.Errorf("set message: %v", err)
-	}
 	return nil
 }
 
-// Login authenticates the user using a browser oauth2 flow. After this flow
-// is successful, requests sent through the connections returned by NewConn will
-// carry the credentials acquired during this flow.
-func (a *Client) Login(ctx context.Context) error {
-	// perform async to avoid blocking event loop while
-	// we are waiting for oauth2 browser flow.
+// LoginSession exposes the asynchronous state of an in-flight Login
+// call. URL emits the OAuth authorization URL as soon as the
+// underlying flow computes it (after binding the local callback
+// port), then closes. Done receives the result of the underlying
+// CachedTokenSource.Token() call (nil on success), then closes.
+type LoginSession struct {
+	URL  <-chan *url.URL
+	Done <-chan error
+}
+
+// Login authenticates the user using a browser oauth2 flow. Cancelling
+// ctx propagates into CachedTokenSource.TokenCtx so callers may abort
+// a stuck OAuth round-trip; the session's Done channel still resolves
+// (with the cancellation error) and URL is closed without emitting if
+// the cancellation beats the local server binding.
+func (a *Client) Login(ctx context.Context) LoginSession {
+	urlCh := make(chan *url.URL, 1)
+	done := make(chan error, 1)
+	ctx = withLoginURLCh(ctx, urlCh)
 	go debug.CapturePanicReport(func() {
-		a.isLogin.Store(true)
-		defer a.isLogin.Store(false)
-		// force source to acquire new token
-		_, err := a.tokenSource.Token()
+		defer close(done)
+		defer close(urlCh)
+		_, err := a.tokenSource.TokenCtx(ctx)
 		if err != nil {
 			log.Warnf("login: %v", err)
-			_, err := a.notifications.Notify(browserapi.LevelError, "%v", err)
-			if err != nil {
-				log.Errorf("set message: %v", err)
+			select {
+			case done <- err:
+			case <-ctx.Done():
 			}
 			return
 		}
-		if _, err := a.notifications.Notify(browserapi.LevelSuccess,
-			"You are successfully logged in."); err != nil {
-			log.Errorf("set message: %v", err)
+		select {
+		case done <- nil:
+		case <-ctx.Done():
 		}
 	})
-
-	return nil
+	return LoginSession{URL: urlCh, Done: done}
 }
+
 
 // Dial creates a new grpc.ClientConn that uses the underlying
 // user authentication state to send authenticated or unauthenticated requests.
@@ -286,16 +297,12 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		return nil, auth.ErrUnavailable
 	}
 
-	if !a.isLogin.Load() {
+	urlCh, isLogin := loginURLChFrom(ctx)
+	if !isLogin {
 		// Do not implicitly open a browser for background or incidental
-		// callers. The user must explicitly invoke the login command.
+		// callers. The user must explicitly invoke the login command,
+		// which seeds the per-call URL channel into ctx.
 		return nil, auth.ErrNotAuthenticated
-	}
-
-	_, err = a.notifications.Notify(browserapi.LevelInfo,
-		"Please follow instructions in web browser")
-	if err != nil {
-		return nil, fmt.Errorf("notify: %w", err)
 	}
 
 	log.Debugf("oauth2: waiting for oauth2 flow to complete")
@@ -305,17 +312,39 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		if err != nil {
 			return err
 		}
-		if err := a.openBrowser(u); err != nil {
+		urlCh <- u
+		if err := a.config.OpenBrowser(u); err != nil {
 			return fmt.Errorf("%v. "+
 				"Make sure that $BROWSER environment variable is set correctly",
 				err)
 		}
 
 		return nil
-	}, tryPorts, blueauth.WithSuccessHTML(callbackPageHTML))
+	}, tryPorts, blueauth.WithSuccessHTML(a.renderCallbackHTML()))
 	if err != nil {
 		return nil, fmt.Errorf("new oauth2 client: %w", err)
 	}
 	log.Debugf("oauth2: successfully generated token source")
 	return source, nil
+}
+
+// renderCallbackHTML renders the embedded callback page with the
+// configured website's /checkout?source=rune link, so post-OAuth the
+// browser lands on a single page that decides whether to send the
+// user to Stripe Checkout or /account based on their live
+// subscription status. Empty WebsiteAddress falls back to
+// `about:blank` so the static "You're in" page stays in place.
+func (a *Client) renderCallbackHTML() string {
+	checkout := "about:blank"
+	if base := a.config.WebsiteAddress; base != "" {
+		checkout = strings.TrimRight(base, "/") + "/checkout?source=rune"
+	}
+	var buf strings.Builder
+	if err := callbackPageTmpl.Execute(&buf, struct {
+		CheckoutURL string
+	}{CheckoutURL: checkout}); err != nil {
+		log.Errorf("render callback page: %v", err)
+		return ""
+	}
+	return buf.String()
 }
