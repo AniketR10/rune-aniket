@@ -43,6 +43,17 @@ func makeRow(s string) extractedRow {
 	return r
 }
 
+// makeRowW is makeRow but pads the row to width visual columns with
+// spaces, so bandBodyWidth sees the intended terminal width rather than
+// the trimmed content length.
+func makeRowW(s string, width int) extractedRow {
+	runes := []rune(s)
+	for len(runes) < width {
+		runes = append(runes, ' ')
+	}
+	return makeRow(string(runes))
+}
+
 func TestParseLeadingLineNumber(t *testing.T) {
 	t.Parallel()
 

@@ -229,11 +229,20 @@ func New(
 // on the active vte.Component buffer (or the grid returned by
 // vte.Replay). No copy is made, so callers must not mutate cells (or
 // the underlying buffer) for the duration of the call.
+//
+// slab is a caller-provided scratch arena. Passing the same non-nil
+// *Slab across successive calls recycles the per-call working memory
+// (tab-expanded lines and alignment scratch), which matters for callers
+// that probe on every cursor move over a large file. The slab carries
+// no results between calls, so Infer is still a pure function of (uri
+// content, cells, cur); slab only affects allocation. A nil slab
+// allocates fresh. The slab must not be shared across concurrent calls.
 func (i *Cursor) Infer(
 	ctx context.Context,
 	uri workspaceapi.URI,
 	cells [][]term.Cell,
 	cur term.Coordinates,
+	slab *Slab,
 ) (res Result, err error) {
 	defer func() {
 		if !log.IsLevelEnabled(log.DebugLevel) {
@@ -244,12 +253,17 @@ func (i *Cursor) Infer(
 				uri.String(), cur, res, err)
 	}()
 
+	if slab == nil {
+		slab = NewSlab()
+	}
+	slab.reset()
+
 	lines, err := i.readFileLines(uri)
 	if err != nil {
 		return Result{}, err
 	}
 
-	rows := extractRows(cells)
+	rows := extractRowsWithSlab(cells, slab)
 	if len(rows) == 0 {
 		return Result{}, ErrUnknown
 	}
@@ -282,7 +296,7 @@ func (i *Cursor) Infer(
 		if gut.present {
 			gutterWidth = gut.width
 		}
-		align = alignByContentWithGutter(rows, top, bot, gutterWidth, lines, i.tabstopHints)
+		align = alignByContentWithGutter(rows, top, bot, gutterWidth, lines, i.tabstopHints, slab)
 		if !align.ok {
 			log.WithField(logging.KeyClass, "vteprobe.Cursor").
 				Debugf("Infer alignment failed: "+
@@ -296,7 +310,7 @@ func (i *Cursor) Infer(
 	// 4. Wrap / fold detection on the aligned band. Wrap detection may
 	// reject the alignment if it cannot fit visible rows into the file
 	// line range.
-	wrap := detectWrap(rows, top, bot, gut.width, align, lines)
+	wrap := detectWrap(rows, top, gut.width, align, lines, slab)
 
 	// 5. Cursor mapping.
 	fileLine, ok := wrap.fileLineAtRow(cur.Y)

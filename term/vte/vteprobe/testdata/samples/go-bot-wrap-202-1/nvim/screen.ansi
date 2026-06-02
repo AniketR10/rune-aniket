@@ -1,0 +1,51 @@
+}
+
+[93mfunc[39m (b *bot) handleDocumentModified(doc issue.ReportDocument) {
+        color := [95m"#CA9E69"
+[39m        msg := fmt.Sprintf([95m"Issue [38;5;224m%s[95m modified"[39m, doc.ID())
+        prev, ok := b.issues[doc.ID()]
+        [93mif[39m ok {
+                [93mif[39m !prev.Report.Closed && doc.Report.Closed {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m closed 🎉"[39m, doc.ID())
+                        color = [95m"#009F4D"[39m
+                } [93melse[39m [93mif[39m prev.Report.Closed && !doc.Report.Closed {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m re-opened 🧐"[39m, doc.ID())
+                        color = [95m"#A53C3C"[39m
+                } [93melse[39m [93mif[39m assignee := doc.Report.Metadata[keyAssignee]; prev.Report.Metadata[keyAssignee]
+ == [95m""[39m && assignee != [95m""[39m {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m assigned to [38;5;224m%s[95m"[39m, doc.ID(), assignee)
+                } [93melse[39m [93mif[39m assignee := doc.Report.Metadata[keyAssignee]; prev.Report.Metadata[keyAssignee]
+ != [95m""[39m && assignee == [95m""[39m {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m asignee removed (was [38;5;224m%s[95m)"[39m, doc.ID(), prev.Report.Meta
+data[keyAssignee])
+                } [93melse[39m [93mif[39m assignee := doc.Report.Metadata[keyAssignee]; prev.Report.Metadata[keyAssignee]
+ != assignee {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m asignee changed from [38;5;224m%s[95m to [38;5;224m%s[95m"[39m, doc.ID(),
+                                prev.Report.Metadata[keyAssignee], assignee)
+                } [93melse[39m [93mif[39m prev.Report.Subject != doc.Report.Subject {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m subject changed"[39m, doc.ID())
+                } [93melse[39m [93mif[39m prev.Report.Notes != doc.Report.Notes {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m notes changed"[39m, doc.ID())
+                } [93melse[39m [93mif[39m prev.Report.Package != doc.Report.Package {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m package changed"[39m, doc.ID())
+                } [93melse[39m [93mif[39m prev.Report.Version != doc.Report.Version {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m version changed"[39m, doc.ID())
+                } [93melse[39m [93mif[39m prev.Report.Author != doc.Report.Author {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m author changed"[39m, doc.ID())
+                } [93melse[39m [93mif[39m milestones := doc.Report.Metadata[keyMilestones]; prev.Report.Metadata[keyMiles
+tones] != milestones {
+                        msg = fmt.Sprintf([95m"Issue [38;5;224m%s[95m milestones changed from '[38;5;224m%s[95m' to [38;5;224m%s[95m"[39m, doc.ID(),
+                                prev.Report.Metadata[keyMilestones], milestones)
+                } [93melse[39m {
+                        [93mreturn[39m
+                }
+        }
+        b.postSlackMessage(doc, color, msg, doc.Report.UpdatedBy)
+
+        [96m// update issue in cache[39m
+        b.issues[doc.ID()] = doc
+}
+
+[93mfunc[39m (b *bot) postSlackMessage(doc issue.ReportDocument, color, msg, author [38;5;121mstring[39m) {
+[1;7mterm/vte/vteprobe/testdata/samples/go-bot-wrap-202-1/sample.txt                        202,1          67%
+[0m

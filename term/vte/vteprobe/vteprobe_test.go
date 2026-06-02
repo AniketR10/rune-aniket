@@ -239,7 +239,7 @@ func TestInferEmitsDebugLog(t *testing.T) {
 
 	inf := newCursor(t, fs)
 	_, err = inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 1, Y: 1})
+		term.Coordinates{X: 1, Y: 1}, nil)
 	require.NoError(t, err)
 
 	out := buffer.String()
@@ -279,7 +279,7 @@ func TestInferGutterAlignsWithTabs(t *testing.T) {
 	// Cursor on the body of line 6 ("    fmt.Println..."), pointing at
 	// 'f' in fmt. The gutter occupies 3 visual columns; visual column 7
 	// is the 'f'.
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 7, Y: 5})
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 7, Y: 5}, nil)
 	require.NoError(t, err)
 	// Rendered visual column 7 -> body offset 4 (after gutter width 3),
 	// which corresponds to the rune right after the tab on file line 6,
@@ -311,7 +311,7 @@ func TestInferRelativeLineNumbers(t *testing.T) {
 	require.NoError(t, err)
 
 	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 2, Y: 2})
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 2, Y: 2}, nil)
 	require.NoError(t, err)
 	// The absolute number on the cursor row is 3, so the cursor maps
 	// to file line 3 (Y=2), column 1 (X=0) — visual col 2 minus gutter
@@ -338,7 +338,7 @@ func TestInferCursorOnChromeRowIsUnknown(t *testing.T) {
 	require.NoError(t, err)
 
 	inf := newCursor(t, fs)
-	_, err = inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 5, Y: 3})
+	_, err = inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 5, Y: 3}, nil)
 	assert.ErrorIs(t, err, ErrUnknown)
 }
 
@@ -361,7 +361,7 @@ func TestInferFoldPlaceholder(t *testing.T) {
 	require.NoError(t, err)
 
 	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 10, Y: 1})
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 10, Y: 1}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got.CursorAtScroll.Y, "cursor on second file line (Y=1)")
 	assert.True(t, got.Folded)
@@ -381,7 +381,7 @@ func TestInferStaleCacheInvalidation(t *testing.T) {
 	inf := newCursor(t, fs)
 
 	buf1 := makeBuffer([]string{" 1 foo", " 2 bar"}, 30)
-	res1, err := inf.Infer(context.Background(), uri, buf1.RawCells(), term.Coordinates{X: 4, Y: 1})
+	res1, err := inf.Infer(context.Background(), uri, buf1.RawCells(), term.Coordinates{X: 4, Y: 1}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res1.CursorAtScroll.Y)
 
@@ -390,7 +390,7 @@ func TestInferStaleCacheInvalidation(t *testing.T) {
 	// its cache.
 	fs.bump(path, updated)
 	buf2 := makeBuffer([]string{" 1 foo", " 2 BAR", " 3 qux"}, 30)
-	res2, err := inf.Infer(context.Background(), uri, buf2.RawCells(), term.Coordinates{X: 5, Y: 1})
+	res2, err := inf.Infer(context.Background(), uri, buf2.RawCells(), term.Coordinates{X: 5, Y: 1}, nil)
 	require.NoError(t, err)
 	// Body offset 5-3 = 2 → rune index 2 = 'R' on "BAR" (0-based).
 	assert.Equal(t, term.Coordinates{X: 2, Y: 1}, res2.CursorAtScroll)
@@ -414,7 +414,7 @@ func TestInferLowConfidenceUnknown(t *testing.T) {
 	require.NoError(t, err)
 
 	inf := newCursor(t, fs)
-	_, err = inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 0})
+	_, err = inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 0}, nil)
 	assert.ErrorIs(t, err, ErrUnknown)
 }
 
@@ -437,7 +437,7 @@ func TestInferFuzzyContentMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 1})
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 1}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got.CursorAtScroll.Y)
 }
@@ -474,7 +474,7 @@ func TestInferWideChars(t *testing.T) {
 	// Cursor on the second visual cell of 你 (continuation cell) on
 	// the second row. The mapping should resolve to file line 2 and
 	// the rune containing 你 (file column 1).
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 1, Y: 1})
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 1, Y: 1}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, got.CursorAtScroll)
 }
@@ -501,12 +501,12 @@ func TestInferSoftWrap(t *testing.T) {
 	inf := newCursor(t, fs)
 
 	// Cursor on the continuation row (Y=1) maps back to line 1.
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 1})
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 1}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 0, got.CursorAtScroll.Y)
 
 	// Cursor on row 2 maps to line 2 ("short").
-	got2, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 2})
+	got2, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 2}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got2.CursorAtScroll.Y)
 }
@@ -533,7 +533,7 @@ func TestInferExposesBandsAndRows(t *testing.T) {
 
 	inf := newCursor(t, fs)
 	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 3, Y: 1})
+		term.Coordinates{X: 3, Y: 1}, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, got.Bands.Top, "content band starts at row 0")
@@ -570,7 +570,7 @@ func TestInferExposesWrappedRows(t *testing.T) {
 
 	inf := newCursor(t, fs)
 	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 0, Y: 0})
+		term.Coordinates{X: 0, Y: 0}, nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Rows, 3)
@@ -611,7 +611,7 @@ func TestInferTabstopDefaultsToVim8(t *testing.T) {
 
 	inf := newCursor(t, fs)
 	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 8, Y: 1})
+		term.Coordinates{X: 8, Y: 1}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 8, got.Tabstop, "vim default tabstop must be inferred")
 	// The 'd' of db sits at visual column 8 (one tab) and is the

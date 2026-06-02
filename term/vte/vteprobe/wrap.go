@@ -23,11 +23,6 @@
 
 package vteprobe
 
-import (
-	"regexp"
-	"strings"
-)
-
 // wrapInfo augments an alignment with per-row metadata about soft-wrap
 // continuations and fold placeholders.
 //
@@ -84,33 +79,21 @@ func buildRowMappings(totalRows int, w wrapInfo) []RowMapping {
 	return out
 }
 
-// foldPlaceholderRE matches a fold placeholder anywhere in the body of
-// a row. Editors typically render placeholders like
-//
-//	+--  5 lines: <preview>
-//	+-- 12 lines folded -------
-//
-// We accept any "+- … <int> line(s)…" pattern as a fold marker without
-// editor-specific tagging.
-var foldPlaceholderRE = regexp.MustCompile(`\+-+\s*\d+\s+line[s]?\b`)
-
 // detectWrap walks the content band [top, bot] and, given the
 // rowToLine map produced by alignment, decides which rows are
 // continuations (subsequent visual segments of a soft-wrapped line)
 // and which are fold placeholders.
 func detectWrap(
 	rows []extractedRow,
-	top, bot int,
+	top int,
 	gutterWidth int,
 	a alignment,
 	lines []string,
+	slab *Slab,
 ) wrapInfo {
 	totalRows := len(rows)
-	w := wrapInfo{
-		rowFileLine: make([]int, totalRows),
-		wrapOffset:  make([]int, totalRows),
-		folded:      make([]bool, totalRows),
-	}
+	w := slab.wrapInfoBuf(totalRows)
+	var expanded [][]rune
 
 	prevLine := 0
 	prevConsumed := 0
@@ -118,10 +101,11 @@ func detectWrap(
 		y := top + i
 		fileLine := a.rowToLine[i]
 		body := stripGutter(rows[y].runes, gutterWidth)
-		bodyStr := strings.TrimRight(string(body), " ")
+		bodyWidth := len(body)
+		trimmedBody := trimRightSpace(body)
 
 		// Fold placeholder detection.
-		if foldPlaceholderRE.MatchString(bodyStr) {
+		if isFoldPlaceholderBody(trimmedBody) {
 			w.rowFileLine[y] = fileLine
 			w.folded[y] = true
 			prevLine = fileLine
@@ -133,17 +117,20 @@ func detectWrap(
 		// as a continuation of the previous file line (soft wrap).
 		if fileLine == 0 && prevLine > 0 {
 			w.rowFileLine[y] = prevLine
-			expanded := ""
+			expandedLen := 0
 			if prevLine >= 1 && prevLine <= len(lines) {
-				expanded = expandTabs(lines[prevLine-1], a.tabstop)
+				if expanded == nil {
+					expanded = slab.expandLinesFor(lines, a.tabstop)
+				}
+				expandedLen = len(expanded[prevLine-1])
 			}
 			// Each continuation starts at the end of the previous
 			// segment's visible content.
-			prevConsumed += len(body)
-			if prevConsumed > len(expanded) {
-				prevConsumed = len(expanded)
+			prevConsumed += bodyWidth
+			if prevConsumed > expandedLen {
+				prevConsumed = expandedLen
 			}
-			w.wrapOffset[y] = prevConsumed - len(body)
+			w.wrapOffset[y] = prevConsumed - bodyWidth
 			if w.wrapOffset[y] < 0 {
 				w.wrapOffset[y] = 0
 			}
@@ -153,7 +140,65 @@ func detectWrap(
 		w.rowFileLine[y] = fileLine
 		w.wrapOffset[y] = 0
 		prevLine = fileLine
-		prevConsumed = len(body)
+		prevConsumed = bodyWidth
 	}
 	return w
+}
+
+// isFoldPlaceholderBody recognises editor fold markers like
+// "+--  5 lines: preview" without converting every rendered row to a
+// string for the common non-fold path.
+func isFoldPlaceholderBody(body []rune) bool {
+	for i := 0; i < len(body); i++ {
+		if body[i] != '+' {
+			continue
+		}
+		j := i + 1
+		if j >= len(body) || body[j] != '-' {
+			continue
+		}
+		for j < len(body) && body[j] == '-' {
+			j++
+		}
+		for j < len(body) && body[j] == ' ' {
+			j++
+		}
+		startDigits := j
+		for j < len(body) && body[j] >= '0' && body[j] <= '9' {
+			j++
+		}
+		if j == startDigits {
+			continue
+		}
+		if j >= len(body) || body[j] != ' ' {
+			continue
+		}
+		for j < len(body) && body[j] == ' ' {
+			j++
+		}
+		if hasWordAt(body[j:], []rune("line")) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasWordAt(body, word []rune) bool {
+	if len(body) < len(word) {
+		return false
+	}
+	for i, r := range word {
+		if body[i] != r {
+			return false
+		}
+	}
+	end := len(word)
+	if end < len(body) && body[end] == 's' {
+		end++
+	}
+	return end == len(body) || !isWordRune(body[end])
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z'
 }

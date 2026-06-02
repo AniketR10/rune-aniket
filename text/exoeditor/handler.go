@@ -67,6 +67,7 @@ type editorHandler struct {
 	notifications    browserapi.Notifications
 	scheduleNextTick func(func()) bool
 	probe            *vteprobe.Cursor
+	probeSlab        *vteprobe.Slab
 	watchID          int
 	watchActive      bool
 	cancelCtx        context.CancelFunc
@@ -110,6 +111,7 @@ func newHandler(
 		cancelCtx:          cancel,
 		reloader:           reloader,
 		probe:              vteprobe.New(cwd, []int{8, 4, 2}, 0.6, 8<<20),
+		probeSlab:          vteprobe.NewSlab(),
 		overrideHighlights: overrideHighlights,
 		locations:          text.NewLocationStore(),
 	}
@@ -392,7 +394,7 @@ func (h *editorHandler) refreshProbe() {
 	}
 	active := snap.Active()
 	res, err := h.probe.Infer(context.Background(), h.resource,
-		active.Cells, active.Cursor)
+		active.Cells, active.Cursor, h.probeSlab)
 	if err != nil {
 		h.debugExo("refresh", fmt.Sprintf("infer err: %v", err))
 		return

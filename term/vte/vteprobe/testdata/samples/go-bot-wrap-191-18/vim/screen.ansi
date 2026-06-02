@@ -1,0 +1,51 @@
+                }
+                b.postSlackMessage(doc, color, msg, doc.Report.Author)
+
+        case firestore.DocumentModified:
+                b.handleDocumentModified(doc)
+
+        case firestore.DocumentRemoved:
+                // delete from history
+                delete(b.issues, doc.ID())
+                // issues are never deleted; just marked as closed
+                log.Debugf("skipping document removed: %s", doc.ID())
+        }
+}
+
+func (b *bot) handleDocumentModified(doc issue.ReportDocument) {
+        color := "#CA9E69"
+        msg := fmt.Sprintf("Issue %s modified", doc.ID())
+        prev, ok := b.issues[doc.ID()]
+        if ok {
+                if !prev.Report.Closed && doc.Report.Closed {
+                        msg = fmt.Sprintf("Issue %s closed 🎉", doc.ID())
+                        color = "#009F4D"
+                } else if prev.Report.Closed && !doc.Report.Closed {
+                        msg = fmt.Sprintf("Issue %s re-opened 🧐", doc.ID())
+                        color = "#A53C3C"
+                } else if assignee := doc.Report.Metadata[keyAssignee]; prev.Report.Metadata[keyAssignee]
+ == "" && assignee != "" {
+                        msg = fmt.Sprintf("Issue %s assigned to %s", doc.ID(), assignee)
+                } else if assignee := doc.Report.Metadata[keyAssignee]; prev.Report.Metadata[keyAssignee]
+ != "" && assignee == "" {
+                        msg = fmt.Sprintf("Issue %s asignee removed (was %s)", doc.ID(), prev.Report.Meta
+data[keyAssignee])
+                } else if assignee := doc.Report.Metadata[keyAssignee]; prev.Report.Metadata[keyAssignee]
+ != assignee {
+                        msg = fmt.Sprintf("Issue %s asignee changed from %s to %s", doc.ID(),
+                                prev.Report.Metadata[keyAssignee], assignee)
+                } else if prev.Report.Subject != doc.Report.Subject {
+                        msg = fmt.Sprintf("Issue %s subject changed", doc.ID())
+                } else if prev.Report.Notes != doc.Report.Notes {
+                        msg = fmt.Sprintf("Issue %s notes changed", doc.ID())
+                } else if prev.Report.Package != doc.Report.Package {
+                        msg = fmt.Sprintf("Issue %s package changed", doc.ID())
+                } else if prev.Report.Version != doc.Report.Version {
+                        msg = fmt.Sprintf("Issue %s version changed", doc.ID())
+                } else if prev.Report.Author != doc.Report.Author {
+                        msg = fmt.Sprintf("Issue %s author changed", doc.ID())
+                } else if milestones := doc.Report.Metadata[keyMilestones]; prev.Report.Metadata[keyMiles
+tones] != milestones {
+                        msg = fmt.Sprintf("Issue %s milestones changed from '%s' to %s", doc.ID(),
+                                prev.Report.Metadata[keyMilestones], milestones)
+

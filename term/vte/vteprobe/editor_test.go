@@ -143,7 +143,7 @@ func runEditorCase(t *testing.T, sampleBytes []byte, ed editorCase) {
 	require.NoError(t, err)
 
 	inf := New(fs, []int{4, 2, 8}, fx.MinConfidence, 8<<20)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), cur)
+	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), cur, nil)
 	require.NoError(t, err)
 	assert.Equal(t, term.Coordinates(fx.Want.CursorAtScroll), got.CursorAtScroll, "cursorAtScroll")
 	assert.Equal(t, term.Coordinates(fx.Want.Scroll), got.Scroll, "scroll")

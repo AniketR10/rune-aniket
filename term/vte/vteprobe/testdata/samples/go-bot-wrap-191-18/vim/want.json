@@ -1,0 +1,17 @@
+{
+  "width": 105,
+  "height": 51,
+  "want": {
+    "cursorAtScroll": {
+      "x": 5,
+      "y": 190
+    },
+    "scroll": {
+      "x": 0,
+      "y": 189
+    },
+    "tabstop": 8,
+    "folded": false
+  },
+  "minConfidence": 0.6
+}

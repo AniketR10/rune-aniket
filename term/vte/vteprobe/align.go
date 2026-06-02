@@ -122,6 +122,7 @@ func alignByContentWithGutter(
 	gutterWidth int,
 	lines []string,
 	tabstopHints []int,
+	slab *Slab,
 ) alignment {
 	band := bot - top + 1
 	if band <= 0 {
@@ -131,12 +132,12 @@ func alignByContentWithGutter(
 	bestTab := tabstopHints[0]
 	var best alignment
 	for _, ts := range tabstopHints {
-		a := alignByContentForTabstop(rows, top, bot, gutterWidth, lines, ts)
+		a := alignByContentForTabstop(rows, top, bot, gutterWidth, lines, ts, slab)
 		// When the simple 1:1 alignment underperforms, try a
 		// wrap-aware variant that lets a single file line span
 		// multiple consecutive rows.
 		if !a.ok || a.coverage < 0.95 {
-			b := alignWithWrap(rows, top, bot, gutterWidth, lines, ts)
+			b := alignWithWrap(rows, top, bot, gutterWidth, lines, ts, slab)
 			if b.ok && b.coverage > a.coverage {
 				a = b
 			}
@@ -156,238 +157,55 @@ func alignByContentWithGutter(
 // alignWithWrap assigns rows to file lines under the assumption that a
 // single file line may visually span multiple consecutive rows.
 //
-// The algorithm picks a starting anchor file line whose expanded
-// rendering matches the first non-empty row's prefix, then walks rows
-// and file lines together: each file line consumes as many rows as its
-// expanded width requires (rounded up against the visible body width
-// of the band).
+// Rather than trust a single anchor row (a lone "}" or a blank line
+// matches many candidates), it votes over every plausible top file
+// line: for each candidate it simulates width-based soft wrapping down
+// the band and keeps the candidate whose simulated row→line mapping
+// best matches the rendered rows. This mirrors alignByContentForTabstop
+// but accounts for lines that span multiple visual rows.
 func alignWithWrap(
 	rows []extractedRow,
 	top, bot int,
 	gutterWidth int,
 	lines []string,
 	tabstop int,
+	slab *Slab,
 ) alignment {
 	band := bot - top + 1
 	if band <= 0 {
 		return alignment{}
 	}
-	// Estimate terminal body width from the first row.
-	bodyWidth := 0
-	if len(rows) > 0 {
-		bodyWidth = len(rows[top].runeColMap) - gutterWidth
-	}
+	bodyWidth := bandBodyWidth(rows, top, bot, gutterWidth)
 	if bodyWidth <= 0 {
 		return alignment{}
 	}
 
-	// Anchor selection: find the file line whose expanded text begins
-	// with the first non-empty row body. We try every candidate.
-	anchorRow := -1
-	var anchorBody string
-	for i := 0; i < band; i++ {
-		body := stripGutter(rows[top+i].runes, gutterWidth)
-		t := strings.TrimRight(string(body), " ")
-		if t != "" {
-			anchorRow = i
-			anchorBody = t
-			break
-		}
-	}
-	if anchorRow < 0 {
-		return alignment{}
-	}
-	bestLine := 0
-	bestRatio := 0.0
-	for li, line := range lines {
-		expanded := expandTabs(line, tabstop)
-		ratio := prefixSimilarity(anchorBody, expanded)
-		if ratio > bestRatio {
-			bestRatio = ratio
-			bestLine = li + 1
-		}
-	}
-	if bestLine == 0 || bestRatio < 0.85 {
-		return alignment{}
-	}
-
-	// Walk forward: each file line consumes ceil(width/bodyWidth) rows.
-	rowToLine := make([]int, band)
-	rowIdx := anchorRow
-	fileIdx := bestLine
-	for rowIdx < band && fileIdx-1 < len(lines) {
-		ln := lines[fileIdx-1]
-		expandedWidth := len([]rune(expandTabs(ln, tabstop)))
+	// Precompute everything that is invariant across candidate top
+	// lines so the O(lines) vote below does no per-candidate
+	// allocation: the expanded rune form and segment count of each
+	// file line, and the trimmed body text of each band row. The
+	// expanded lines are shared with the 1:1 pass via the slab.
+	expanded := slab.expandLinesFor(lines, tabstop)
+	segCounts := slab.segCountBuf(len(lines))
+	for i := range lines {
 		segs := 1
-		if expandedWidth > bodyWidth {
-			segs = (expandedWidth + bodyWidth - 1) / bodyWidth
+		if len(expanded[i]) > bodyWidth {
+			segs = (len(expanded[i]) + bodyWidth - 1) / bodyWidth
 		}
-		for s := 0; s < segs && rowIdx < band; s++ {
-			// First segment is anchored to the file line; subsequent
-			// segments are continuations (lineNo = 0 so detectWrap
-			// recognises them).
-			if s == 0 {
-				rowToLine[rowIdx] = fileIdx
-			} else {
-				rowToLine[rowIdx] = 0
-			}
-			rowIdx++
-		}
-		fileIdx++
+		segCounts[i] = segs
+	}
+	bodies := slab.bodyBuf(band)
+	for i := 0; i < band; i++ {
+		bodies[i] = trimRightSpace(stripGutter(rows[top+i].runes, gutterWidth))
 	}
 
-	// Backfill rows before the anchor by walking backwards.
-	bIdx := anchorRow - 1
-	fIdx := bestLine - 1
-	for bIdx >= 0 && fIdx >= 1 {
-		rowToLine[bIdx] = fIdx
-		bIdx--
-		fIdx--
-	}
-
-	topFileLine := rowToLine[0]
-	if topFileLine == 0 {
-		// Find first non-zero entry.
-		for _, v := range rowToLine {
-			if v > 0 {
-				topFileLine = v
-				break
-			}
-		}
-	}
-
-	coverage := scoreWrapAlignment(rows, top, gutterWidth, rowToLine, lines, tabstop, bodyWidth)
-	return alignment{
-		ok:          coverage >= 0.6,
-		rowToLine:   rowToLine,
-		topFileLine: topFileLine,
-		tabstop:     tabstop,
-		coverage:    coverage,
-	}
-}
-
-// scoreWrapAlignment is like scoreAlignment but treats consecutive rows
-// that have lineNo == 0 as continuation segments of the previous line.
-func scoreWrapAlignment(
-	rows []extractedRow,
-	top int,
-	gutterWidth int,
-	rowToLine []int,
-	lines []string,
-	tabstop int,
-	bodyWidth int,
-) float64 {
-	considered, matched := 0, 0
-	prevLine := 0
-	segIdx := 0
-	for i, ln := range rowToLine {
-		row := rows[top+i]
-		body := stripGutter(row.runes, gutterWidth)
-		bodyStr := strings.TrimRight(string(body), " ")
-		if ln > 0 {
-			prevLine = ln
-			segIdx = 0
-		} else {
-			segIdx++
-		}
-		line := prevLine
-		if line < 1 || line > len(lines) {
-			if bodyStr == "" {
-				continue
-			}
-			considered++
-			continue
-		}
-		if bodyStr == "" {
-			continue
-		}
-		expanded := expandTabs(lines[line-1], tabstop)
-		// Compare only the slice of expanded covered by this segment.
-		start := segIdx * bodyWidth
-		end := start + bodyWidth
-		runes := []rune(expanded)
-		if start > len(runes) {
-			start = len(runes)
-		}
-		if end > len(runes) {
-			end = len(runes)
-		}
-		expSegment := string(runes[start:end])
-		considered++
-		if prefixSimilarity(bodyStr, expSegment) >= 0.85 {
-			matched++
-		}
-	}
-	if considered == 0 {
-		return 0
-	}
-	return float64(matched) / float64(considered)
-}
-
-// prefixSimilarity reports how much of the (shorter) text matches the
-// prefix of the other. Returns 1.0 when one string is a prefix of the
-// other, regardless of the longer string's full length.
-func prefixSimilarity(a, b string) float64 {
-	ar := []rune(strings.TrimRight(a, " "))
-	br := []rune(strings.TrimRight(b, " "))
-	if len(ar) == 0 && len(br) == 0 {
-		return 1
-	}
-	if len(ar) == 0 || len(br) == 0 {
-		return 0
-	}
-	n := len(ar)
-	if len(br) < n {
-		n = len(br)
-	}
-	common := 0
-	for i := 0; i < n; i++ {
-		if ar[i] != br[i] {
-			break
-		}
-		common++
-	}
-	short := len(ar)
-	if len(br) < short {
-		short = len(br)
-	}
-	if short == 0 {
-		return 0
-	}
-	return float64(common) / float64(short)
-}
-
-func alignByContentForTabstop(
-	rows []extractedRow,
-	top, bot int,
-	gutterWidth int,
-	lines []string,
-	tabstop int,
-) alignment {
-	band := bot - top + 1
-	if band <= 0 {
-		return alignment{}
-	}
-
-	// Try every plausible topFileLine and keep the one with the best
-	// global score. Anchoring on the first non-empty row alone is
-	// unreliable on rendered bands that begin with ambiguous content
-	// (e.g. a lone `}` matches every top-level closing brace in the
-	// file), so we let the whole band vote on the offset instead.
 	bestTop := 0
 	bestCoverage := 0.0
 	var bestRowToLine []int
-	scratch := make([]int, band)
+	scratch := slab.rowToLineBuf(band)
 	for topFileLine := 1; topFileLine <= len(lines); topFileLine++ {
-		for i := 0; i < band; i++ {
-			ln := topFileLine + i
-			if ln >= 1 && ln <= len(lines) {
-				scratch[i] = ln
-			} else {
-				scratch[i] = 0
-			}
-		}
-		coverage := scoreAlignment(rows, top, gutterWidth, scratch, lines, tabstop)
+		simulateWrapInto(scratch, topFileLine, segCounts)
+		coverage := scoreWrapRows(bodies, scratch, expanded, bodyWidth)
 		if coverage > bestCoverage {
 			bestCoverage = coverage
 			bestTop = topFileLine
@@ -404,6 +222,212 @@ func alignByContentForTabstop(
 		tabstop:     tabstop,
 		coverage:    bestCoverage,
 	}
+}
+
+// simulateWrapInto fills dst (length band) with the row→line mapping
+// produced by walking file lines from topFileLine, consuming
+// segCounts[line] visual rows per line. The first row of each line holds
+// its 1-based file line; soft-wrap continuation rows hold 0 so detectWrap
+// recognises them. Rows past EOF hold 0.
+func simulateWrapInto(dst []int, topFileLine int, segCounts []int) {
+	rowIdx := 0
+	fileIdx := topFileLine
+	for rowIdx < len(dst) && fileIdx-1 < len(segCounts) {
+		segs := segCounts[fileIdx-1]
+		for s := 0; s < segs && rowIdx < len(dst); s++ {
+			if s == 0 {
+				dst[rowIdx] = fileIdx
+			} else {
+				dst[rowIdx] = 0
+			}
+			rowIdx++
+		}
+		fileIdx++
+	}
+	for ; rowIdx < len(dst); rowIdx++ {
+		dst[rowIdx] = 0
+	}
+}
+
+// bandBodyWidth returns the visible body width (grid width minus gutter)
+// of the content band, taken from the widest row so a short first row
+// does not under-estimate the terminal width.
+func bandBodyWidth(rows []extractedRow, top, bot, gutterWidth int) int {
+	w := 0
+	for y := top; y <= bot && y < len(rows); y++ {
+		if n := len(rows[y].runeColMap); n > w {
+			w = n
+		}
+	}
+	return w - gutterWidth
+}
+
+// scoreWrapRows scores a wrap-aware rowToLine mapping against
+// precomputed inputs without allocating: bodies[i] is the trimmed
+// rendered runes of band row i, expanded[l-1] is the tab-expanded rune
+// form of file line l, and bodyWidth is the visible body width that
+// bounds each wrap segment. Rows with rowToLine == 0 are treated as
+// continuation segments of the previous line. It is the hot inner loop
+// of alignWithWrap's candidate vote.
+func scoreWrapRows(bodies [][]rune, rowToLine []int, expanded [][]rune, bodyWidth int) float64 {
+	considered, matched := 0, 0
+	prevLine := 0
+	segIdx := 0
+	for i, ln := range rowToLine {
+		body := bodies[i]
+		if ln > 0 {
+			prevLine = ln
+			segIdx = 0
+		} else {
+			segIdx++
+		}
+		line := prevLine
+		if line < 1 || line > len(expanded) {
+			// Below-EOF filler is neutral; real text past EOF is a
+			// mismatch (see isFillerBody / scoreAlignment).
+			if !isFillerBodyRunes(body) {
+				considered++
+			}
+			continue
+		}
+		if len(body) == 0 {
+			continue
+		}
+		runes := expanded[line-1]
+		start := segIdx * bodyWidth
+		end := start + bodyWidth
+		if start > len(runes) {
+			start = len(runes)
+		}
+		if end > len(runes) {
+			end = len(runes)
+		}
+		considered++
+		if prefixSimilarityRunes(body, runes[start:end]) >= 0.85 {
+			matched++
+		}
+	}
+	if considered == 0 {
+		return 0
+	}
+	return float64(matched) / float64(considered)
+}
+
+// prefixSimilarityRunes reports the fraction of the shorter slice's
+// leading runes that match the other's prefix. a is already trimmed;
+// trailing spaces of b (a width-padded wrap segment) are ignored.
+// Returns 1.0 when one slice is a prefix of the other. Allocation-free.
+func prefixSimilarityRunes(a, b []rune) float64 {
+	bn := len(b)
+	for bn > 0 && b[bn-1] == ' ' {
+		bn--
+	}
+	if len(a) == 0 && bn == 0 {
+		return 1
+	}
+	if len(a) == 0 || bn == 0 {
+		return 0
+	}
+	short := len(a)
+	if bn < short {
+		short = bn
+	}
+	common := 0
+	for i := 0; i < short; i++ {
+		if a[i] != b[i] {
+			break
+		}
+		common++
+	}
+	return float64(common) / float64(short)
+}
+
+func alignByContentForTabstop(
+	rows []extractedRow,
+	top, bot int,
+	gutterWidth int,
+	lines []string,
+	tabstop int,
+	slab *Slab,
+) alignment {
+	band := bot - top + 1
+	if band <= 0 {
+		return alignment{}
+	}
+
+	// Try every plausible topFileLine and keep the one with the best
+	// global score. Anchoring on the first non-empty row alone is
+	// unreliable on rendered bands that begin with ambiguous content
+	// (e.g. a lone `}` matches every top-level closing brace in the
+	// file), so we let the whole band vote on the offset instead.
+	//
+	// The expanded file lines (shared with the wrap pass via the slab)
+	// and trimmed row bodies are precomputed once so this O(lines*band)
+	// vote allocates nothing per candidate. The scorer ignores trailing
+	// spaces, so the expanded lines are used untrimmed straight from the
+	// slab arena.
+	expanded := slab.expandLinesFor(lines, tabstop)
+	bodies := slab.bodyBuf(band)
+	for i := 0; i < band; i++ {
+		bodies[i] = trimRightSpace(stripGutter(rows[top+i].runes, gutterWidth))
+	}
+
+	bestTop := 0
+	bestCoverage := 0.0
+	for topFileLine := 1; topFileLine <= len(lines); topFileLine++ {
+		coverage := scoreRows1to1(bodies, expanded, topFileLine)
+		if coverage > bestCoverage {
+			bestCoverage = coverage
+			bestTop = topFileLine
+		}
+	}
+	if bestTop == 0 || bestCoverage < 0.6 {
+		return alignment{}
+	}
+	rowToLine := make([]int, band)
+	for i := 0; i < band; i++ {
+		ln := bestTop + i
+		if ln >= 1 && ln <= len(lines) {
+			rowToLine[i] = ln
+		}
+	}
+	return alignment{
+		ok:          true,
+		rowToLine:   rowToLine,
+		topFileLine: bestTop,
+		tabstop:     tabstop,
+		coverage:    bestCoverage,
+	}
+}
+
+// scoreRows1to1 scores a non-wrap 1:1 mapping (band row i -> file line
+// topFileLine+i) against precomputed trimmed bodies and trimmed
+// expanded file lines, allocating nothing. It mirrors scoreAlignment's
+// rules: empty body rows are skipped, real content predicted past EOF
+// counts as a mismatch while below-EOF filler is neutral, and a row
+// matches when its prefix-ratio against the expected line is >= 0.85.
+func scoreRows1to1(bodies, expanded [][]rune, topFileLine int) float64 {
+	considered, matched := 0, 0
+	for i, body := range bodies {
+		line := topFileLine + i
+		if line < 1 || line > len(expanded) {
+			if !isFillerBodyRunes(body) {
+				considered++
+			}
+			continue
+		}
+		if len(body) == 0 {
+			continue
+		}
+		considered++
+		if runePrefixRatioMaxLen(body, expanded[line-1]) >= 0.85 {
+			matched++
+		}
+	}
+	if considered == 0 {
+		return 0
+	}
+	return float64(matched) / float64(considered)
 }
 
 // scoreAlignment returns the fraction of non-empty rows whose rendered
@@ -424,10 +448,16 @@ func scoreAlignment(
 		body := stripGutter(row.runes, gutterWidth)
 		bodyStr := strings.TrimRight(string(body), " ")
 		if line < 1 || line > len(lines) {
-			// Predicted past EOF: ignore these rows in the score.
-			// Editors fill the visible region with placeholder glyphs
-			// (e.g. "~" or "+", possibly a status line) that we do
-			// not want to penalize the alignment for.
+			// Predicted past EOF. Genuine below-EOF filler (blank rows,
+			// or single-glyph markers like vim's "~") is ignored. But a
+			// row that still carries real text means this candidate
+			// pushed visible content past the end of the file — strong
+			// evidence the anchor is wrong — so count it as a mismatch.
+			// Without this, anchoring on the last file line scores a
+			// vacuous 1.0 from its single in-bounds row.
+			if !isFillerBody(bodyStr) {
+				considered++
+			}
 			continue
 		}
 		if bodyStr == "" {
@@ -455,6 +485,100 @@ func stripGutter(runes []rune, gutterWidth int) []rune {
 		return runes
 	}
 	return runes[gutterWidth:]
+}
+
+// isFillerBody reports whether a trimmed row body is editor filler
+// rendered below the end of the file rather than real file content.
+// Editors mark the empty region past EOF with blank rows or a short
+// run of a single non-alphanumeric marker glyph (vim's "~", or "+"),
+// never with multi-character source text. Treating such rows as
+// neutral (and any other non-empty past-EOF row as a mismatch) stops
+// an anchor near EOF from scoring a vacuous match off its lone
+// in-bounds row.
+func isFillerBody(body string) bool {
+	if body == "" {
+		return true
+	}
+	r := []rune(body)
+	if len(r) > 2 {
+		return false
+	}
+	for _, c := range r {
+		switch c {
+		case '~', '+', '-', '|':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isFillerBodyRunes is isFillerBody for an already-trimmed rune slice.
+func isFillerBodyRunes(body []rune) bool {
+	if len(body) == 0 {
+		return true
+	}
+	if len(body) > 2 {
+		return false
+	}
+	for _, c := range body {
+		switch c {
+		case '~', '+', '-', '|':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// trimRightSpace returns r with trailing spaces dropped. It reslices in
+// place and never allocates.
+func trimRightSpace(r []rune) []rune {
+	n := len(r)
+	for n > 0 && r[n-1] == ' ' {
+		n--
+	}
+	return r[:n]
+}
+
+// runePrefixRatioMaxLen mirrors similarity for two rune slices: the
+// count of common leading runes divided by the longer length, ignoring
+// trailing spaces on both sides. Allocation-free, so callers may pass
+// width-padded slices straight from the expansion arena.
+func runePrefixRatioMaxLen(a, b []rune) float64 {
+	an := trimmedLen(a)
+	bn := trimmedLen(b)
+	if an == 0 && bn == 0 {
+		return 1
+	}
+	if an == 0 || bn == 0 {
+		return 0
+	}
+	n := an
+	if bn < n {
+		n = bn
+	}
+	common := 0
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			break
+		}
+		common++
+	}
+	maxLen := an
+	if bn > maxLen {
+		maxLen = bn
+	}
+	return float64(common) / float64(maxLen)
+}
+
+// trimmedLen returns the length of r with trailing spaces excluded.
+func trimmedLen(r []rune) int {
+	n := len(r)
+	for n > 0 && r[n-1] == ' ' {
+		n--
+	}
+	return n
 }
 
 // similarity returns a coarse ratio in [0, 1] for how well rendered

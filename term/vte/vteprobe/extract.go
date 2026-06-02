@@ -68,39 +68,39 @@ func (r *extractedRow) text() string {
 // (typically obtained via Scroll.Buffer().RawCells() on a vte.Component
 // or the cloned grid returned by vte.Replay), so callers do not need
 // to wrap it in a cell.Buffer first.
-func extractRows(raw [][]term.Cell) []extractedRow {
-	out := make([]extractedRow, len(raw))
+func extractRowsWithSlab(raw [][]term.Cell, slab *Slab) []extractedRow {
+	rows, _ := slab.beginExtractRows(raw)
+	runeOff := 0
+	colOff := 0
 	for y, row := range raw {
-		out[y] = extractRow(row)
+		startRune := runeOff
+		startCol := colOff
+		idx := 0
+		for _, c := range row {
+			width := int(c.Width)
+			if width < 1 {
+				width = 1
+			}
+			ch := c.Ch
+			if ch == 0 {
+				ch = ' '
+			}
+			slab.rowRune[runeOff] = ch
+			slab.rowAttr[runeOff] = c.Attributes
+			runeOff++
+			for k := 0; k < width; k++ {
+				slab.rowCol[colOff] = idx
+				colOff++
+			}
+			idx++
+		}
+		rows[y] = extractedRow{
+			runes:      slab.rowRune[startRune:runeOff:runeOff],
+			attrs:      slab.rowAttr[startRune:runeOff:runeOff],
+			runeColMap: slab.rowCol[startCol:colOff:colOff],
+		}
 	}
-	return out
-}
-
-func extractRow(cells []term.Cell) extractedRow {
-	runes := make([]rune, 0, len(cells))
-	attrs := make([]term.Attributes, 0, len(cells))
-	runeCol := make([]int, 0, len(cells))
-	idx := 0
-	for _, c := range cells {
-		width := int(c.Width)
-		if width < 1 {
-			width = 1
-		}
-		ch := c.Ch
-		if ch == 0 {
-			ch = ' '
-		}
-		runes = append(runes, ch)
-		attrs = append(attrs, c.Attributes)
-		// The leading visual cell of a wide rune maps to idx; subsequent
-		// continuation cells map to the same idx so that a cursor placed
-		// over either cell of a wide rune resolves to the same rune.
-		for k := 0; k < width; k++ {
-			runeCol = append(runeCol, idx)
-		}
-		idx++
-	}
-	return extractedRow{runes: runes, attrs: attrs, runeColMap: runeCol}
+	return rows
 }
 
 // gridWidth reports the visual width of the rendered grid, taken from
