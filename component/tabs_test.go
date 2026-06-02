@@ -82,7 +82,7 @@ func TestTabsDraw(t *testing.T) {
 				l.Resize(20, 4)
 			}, `
 ┌━━━━━━━━──────────┐
-│X Atzari  $ Saturn│
+│X Atzari  $ Satu  │
 │                  │
 ├──────────────────┤
                     
@@ -95,8 +95,8 @@ func TestTabsDraw(t *testing.T) {
 				assert.True(t, l.MoveLeft(1))
 				assert.False(t, l.MoveLeft(0))
 			}, `
-┌──────────━━━━━━━━┐
-│$ Saturn  X Atzari│
+┌────────━━━━━━━━──┐
+│$ Satu  X Atzari  │
 │                  │
 ├──────────────────┤
                     
@@ -109,7 +109,7 @@ func TestTabsDraw(t *testing.T) {
 				assert.True(t, l.MoveTo(1, 0))
 			}, `
 ┌━━━━━━━━──────────┐
-│X Atzari  $ Saturn│
+│X Atzari  $ Satu  │
 │                  │
 ├──────────────────┤
                     
@@ -121,8 +121,8 @@ func TestTabsDraw(t *testing.T) {
 			func() {
 				assert.True(t, l.MoveTo(0, 1))
 			}, `
-┌──────────━━━━━━━━┐
-│$ Saturn  X Atzari│
+┌────────━━━━━━━━──┐
+│$ Satu  X Atzari  │
 │                  │
 ├──────────────────┤
                     
@@ -136,7 +136,7 @@ func TestTabsDraw(t *testing.T) {
 				assert.False(t, l.MoveRight(1))
 			}, `
 ┌━━━━━━━━──────────┐
-│X Atzari  $ Saturn│
+│X Atzari  $ Satu  │
 │                  │
 ├──────────────────┤
                     
@@ -148,19 +148,21 @@ func TestTabsDraw(t *testing.T) {
 		// ----------------------------------------------------------------
 		// Resize algorithm: when not all tabs fit at full width, the
 		// focused tab keeps its full label and the rest are truncated to
-		// share the remaining inner width. No scrolling, no "..", every
-		// tab stays visible.
+		// share the remaining inner width minus the reserved
+		// tabBarRightPad cells. No scrolling, no "..", every tab stays
+		// visible when min widths fit in the budget.
 		// ----------------------------------------------------------------
 		// State at this point: tabs = ["X Atzari" (focused), "$ Saturn"],
-		// width=20, inner=18.
-		// Add "X Other" — three tabs of full widths 8, 8, 7 + 2 separators
-		// (2 chars each) = 27. Doesn't fit in 18. Focused (idx 0) keeps
-		// full=8; remaining = 18 - 8 - 2*2 = 6 split equally between the
-		// two non-focused tabs (3 each → "$ S", "X O").
+		// width=20, inner=18, budgetW=16 (innerW - tabBarRightPad).
+		// Add "X Other" — three tabs of full widths 8, 8, 7 + 2
+		// separators (2 chars each) = 27. Doesn't fit in budgetW=16.
+		// Focused (idx 0) keeps full=8; remaining = 16 - 8 - 2*2 = 4
+		// split equally between the two non-focused tabs (2 each → "$ ",
+		// "X "). padAfter = innerW - used = 18 - 16 = 2.
 		{
 			func() { l.Add('X', "Other") }, `
 ┌━━━━━━━━──────────┐
-│X Atzari  $ S  X O│
+│X Atzari  $   X   │
 │                  │
 ├──────────────────┤
                     
@@ -169,14 +171,13 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		},
-		// Add "X Things" — 4 tabs, focus still idx 0. Focused keeps
-		// full=8; remaining = 18 - 8 - 3*2 = 4 over 3 non-focused →
-		// 4/3 = 1 with 1 extra column assigned to the leftmost
-		// non-focused tab. Widths: Saturn=2, Other=1, Things=1.
+		// Add "X Things" — 4 tabs, budgetW=16. Window prunes Things
+		// (idx 3) so only [0..2] is visible: A(8, focused), Saturn=2,
+		// Other=2 with 2 cells of trailing pad.
 		{
 			func() { l.Add('X', "Things") }, `
 ┌━━━━━━━━──────────┐
-│X Atzari  $   X  X│
+│X Atzari  $   X   │
 │                  │
 ├──────────────────┤
                     
@@ -185,13 +186,10 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		},
-		// Move focus to "X Other" (idx 2, full=7). Remaining = 18 - 7 - 6
-		// = 5 over 3 → 5/3 = 1 with 2 extras to the two leftmost
-		// non-focused tabs. Widths: Atzari=2, Saturn=2, Things=1.
 		{
 			func() { l.SetFocus(2) }, `
-┌────────━━━━━━━───┐
-│X   $   X Other  X│
+┌──────━━━━━━━─────┐
+│X  $  X Other  X  │
 │                  │
 ├──────────────────┤
                     
@@ -200,16 +198,10 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		},
-		// Add two more tabs (focus still on idx 2, "X Other", full=7).
-		// All 6 at full width can't fit at min=1. The visible window
-		// shrinks until it does, dropping tabs farther from the focused
-		// index first (ties shrink from the left). Window becomes
-		// [1..4]: Saturn, Other(focused), Things, Morsins. Remaining =
-		// 18 - 7 - 3*2 = 5 over 3 → widths 2,2,1.
 		{
 			func() { l.Add('#', "Morsins"); l.Add('#', "Morsillonins") }, `
-┌────━━━━━━━───────┐
-│$   X Other  X   #│
+┌───━━━━━━━────────┐
+│$  X Other  X  #  │
 │                  │
 ├──────────────────┤
                     
@@ -218,13 +210,10 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		},
-		// Move focus to the longest tab (Morsillonins, idx 5, full=14).
-		// Window shrinks to [4..5]; Morsins gets remaining = 18 - 14 -
-		// 2 = 2 columns.
 		{
 			func() { l.SetFocus(5) }, `
-┌────━━━━━━━━━━━━━━┐
-│#   # Morsillonins│
+┌━━━━━━━━━━━━━━────┐
+│# Morsillonins    │
 │                  │
 ├──────────────────┤
                     
@@ -233,15 +222,10 @@ func TestTabsDraw(t *testing.T) {
                     
                     `,
 		},
-		// ----------------------------------------------------------------
-		// Borderless mode: same algorithm but inner width = full width.
-		// ----------------------------------------------------------------
-		// width=20, no border, innerW=20. Focused idx 5 (Morsillonins,
-		// full=14). Window shrinks to [3..5]: Things, Morsins,
-		// Morsillonins. Remaining = 20 - 14 - 2*2 = 2 over 2 → 1,1.
+		// Borderless mode: innerW = full width = 20, budgetW=18.
 		{
 			func() { l.SetBorder(false); l.Resize(20, 1) }, `
-X  #  # Morsillonins
+#   # Morsillonins  
                     
                     
                     
@@ -251,12 +235,9 @@ X  #  # Morsillonins
                     
                     `,
 		},
-		// Focus shifts to Things (idx 3, full=8). Window [1..5]:
-		// Saturn, Other, Things(focused), Morsins, Morsillonins.
-		// Remaining = 20 - 8 - 4*2 = 4 over 4 → 1,1,1,1.
 		{
 			func() { l.SetFocus(3) }, `
-$  X  X Things  #  #
+X   X Things  #  #  
                     
                     
                     
@@ -563,16 +544,15 @@ func TestTabsDrawCustomSeparator(t *testing.T) {
                     
                     `,
 		}, {
-			// Custom separator is honored when both tabs fit at full width.
-			// (innerW=18; "# Atzari" + " | " + "# Saturn" = 8+3+8 = 19,
-			// doesn't fit — so the resize path runs with the custom
-			// 3-char separator. Focused (Atzari, full=8) keeps full;
-			// Saturn gets 18 - 8 - 3 = 7 columns, hard-cut to "# Satur".)
+			// innerW=18, budgetW=16. "# Atzari" + " | " + "# Saturn" =
+			// 8+3+8=19 > 16 → resize path. Focused (Atzari, full=8)
+			// keeps full; Saturn gets 16 - 8 - 3 = 5 columns, hard-cut
+			// to "# Sat".
 			func() {
 				l.Add('#', "Saturn")
 			}, `
 ┌━━━━━━━━──────────┐
-│# Atzari | # Satur│
+│# Atzari | # Sat  │
 │                  │
 └──────────────────┘
                     
@@ -605,7 +585,8 @@ func setupOneTab(width, height int) *Tabs {
 //	"A alpha"=7, "B beta"=6, "C gamma"=7, "D delta"=7,
 //	"E epsilon"=9, "F zeta"=6.
 //
-// Separator is 2 chars. Width 40 → innerW=38; width 30 → 28; width 20 → 18.
+// Separator is 2 chars. Width 40 → innerW=38, budgetW=36; width 30 → 28
+// / 26; width 20 → 18 / 16. budgetW = innerW - tabBarRightPad.
 func TestTabsDrawResize(t *testing.T) {
 	l := NewTabs()
 	l.Resize(40, 4)
@@ -613,7 +594,7 @@ func TestTabsDrawResize(t *testing.T) {
 	w := term.NewStringWriter(40, 4)
 
 	tests := []comptest.TestCase{
-		// 4 tabs, focused idx 0. Full sum 7+6+7+7=27 + 3*2 seps = 33 ≤ 38.
+		// 4 tabs, focused idx 0. Full sum 7+6+7+7=27 + 3*2 seps = 33 ≤ 36.
 		// Everyone renders full width; remaining 5 columns become
 		// trailing pad.
 		{
@@ -628,97 +609,79 @@ func TestTabsDrawResize(t *testing.T) {
 │                                      │
 └──────────────────────────────────────┘`,
 		},
-		// Add "E epsilon". Total full 42 + 4*2 seps = 50 > 38. Focused
-		// (A, 7) keeps full; remaining 23 over 4 non-focused. fairShare
-		// = 23/4 = 5 with 3 leftover columns. The 3 leftover are given
-		// to the first 3 non-focused tabs (B, C, D), but each width is
-		// capped at its full label width:
-		//   B: 5+1 = 6 → cap 6 (full)
-		//   C: 5+1 = 6 → cap 7 → 6
-		//   D: 5+1 = 6 → cap 7 → 6
-		//   E: 5     = 5 → cap 9 → 5
-		// Widths: A=7, B=6, C=6, D=6, E=5.
+		// Add "E epsilon". Total full 42 + 4*2 seps = 50 > 36. Focused
+		// (A, 7) keeps full; remaining = 36 - 7 - 8 = 21 over 4
+		// non-focused. fairShare=5, leftover=1 → leftmost (B) gets +1
+		// then caps cascade. Widths: A=7, B=6, C=6, D=5, E=5.
 		{
 			func() { l.Add('E', "epsilon") }, `
 ┌━━━━━━━───────────────────────────────┐
-│A alpha  B beta  C gamm  D delt  E eps│
+│A alpha  B beta  C gam  D del  E eps  │
 │                                      │
 └──────────────────────────────────────┘`,
 		},
-		// Shift focus to E (idx 4, full=9). remaining=38-9-8=21 over 4.
-		// fairShare = 21/4 = 5, leftover 1 → leftmost (A) gets +1.
-		//   A: 6 (cap 7), B: 5 (cap 6), C: 5 (cap 7), D: 5 (cap 7).
-		// Widths: A=6, B=5, C=5, D=5, E=9.
+		// Shift focus to E (idx 4, full=9). remaining=36-9-8=19 over 4.
+		// fairShare=4, leftover=3 → A,B,C get +1. Widths: A=5, B=5,
+		// C=5, D=4, E=9.
 		{
 			func() { l.ResetFocus(); l.SetFocus(4) }, `
-┌─────────────────────────────━━━━━━━━━┐
-│A alph  B bet  C gam  D del  E epsilon│
+┌───────────────────────────━━━━━━━━━──┐
+│A alp  B bet  C gam  D de  E epsilon  │
 │                                      │
 └──────────────────────────────────────┘`,
 		},
-		// Add "F zeta" (idx 5). 6 tabs, focus still E (idx 4, full=9).
-		// remaining = 38 - 9 - 5*2 = 19 over 5. fairShare = 19/5 = 3,
-		// leftover 4 → A,B,C,D each get +1.
-		//   A=4, B=4, C=4, D=4, F=3 (all under caps).
+		// Add "F zeta" (idx 5). 6 tabs, focus still E. remaining =
+		// 36 - 9 - 5*2 = 17 over 5. fairShare=3, leftover=2 → A,B get
+		// +1. Widths: A=4, B=4, C=3, D=3, F=3.
 		{
 			func() { l.Add('F', "zeta") }, `
-┌────────────────────────━━━━━━━━━─────┐
-│A al  B be  C ga  D de  E epsilon  F z│
+┌──────────────────────━━━━━━━━━───────┐
+│A al  B be  C g  D d  E epsilon  F z  │
 │                                      │
 └──────────────────────────────────────┘`,
 		},
-		// Resize to width=30, innerW=28. Focus still E. Writer is 40
-		// wide so each rendered row is padded with 10 trailing spaces.
-		// Window [0..5] at min fits: 9 + 5*1 + 5*2 = 24 ≤ 28.
-		// remaining = 28 - 9 - 10 = 9 over 5. fairShare = 9/5 = 1,
-		// leftover 4 → A,B,C,D get +1.
-		//   A=2, B=2, C=2, D=2, F=1.
+		// Resize to width=30, innerW=28, budgetW=26. Focus still E.
+		// Window [0..5] at min fits: 9 + 5 + 10 = 24 ≤ 26. remaining =
+		// 26 - 9 - 10 = 7 over 5. fairShare=1, leftover=2 → A,B get
+		// +1. Widths: A=2, B=2, C=1, D=1, F=1.
 		{
 			func() { l.Resize(30, 4) }, `
-┌────────────────━━━━━━━━━───┐          
-│A   B   C   D   E epsilon  F│          
+┌──────────────━━━━━━━━━─────┐          
+│A   B   C  D  E epsilon  F  │          
 │                            │          
 └────────────────────────────┘          `,
 		},
-		// Resize to width=20, innerW=18. Focus still E (idx 4).
-		// Window [0..5] at min: 9+5+10=24 > 18 → prune. focusIdx=4 is
-		// closer to end than start (dist 4 vs 1), so start++.
-		// Window [1..5] min 9+4+8=21 > 18, start++.
-		// Window [2..5] min 9+3+6=18 ≤ 18 ✓.
-		// Visible: C, D, E (focused), F. remaining = 18-9-6 = 3 over 3.
-		// fairShare = 1, leftover 0 → C=1, D=1, F=1.
+		// Resize to width=20, innerW=18, budgetW=16. Focus still E
+		// (idx 4). Window [0..5] at min 9+5+10=24 > 16 → prune until
+		// [3..5] (min 9+2+4=15 ≤ 16). Visible: D, E (focused), F.
+		// remaining = 16-9-4 = 3 over 2. fairShare=1, leftover=1 →
+		// D gets +1. Widths: D=2, E=9, F=1.
 		{
 			func() { l.Resize(20, 4) }, `
-┌──────━━━━━━━━━───┐                    
-│C  D  E epsilon  F│                    
+┌────━━━━━━━━━─────┐                    
+│D   E epsilon  F  │                    
 │                  │                    
 └──────────────────┘                    `,
 		},
-		// Focus to A (idx 0, full=7) at width=20.
-		// Window [0..5] at min 22 > 18 → prune. focusIdx=0: dist 0 vs 5
-		// → end--. Window [0..4] min 19 > 18, end--.
-		// Window [0..3] min 16 ≤ 18 ✓.
-		// remaining = 18-7-6 = 5 over 3. fairShare = 1, leftover 2 →
-		// B,C get +1.
-		//   B=2, C=2, D=1.
+		// Focus to A (idx 0, full=7) at width=20, budgetW=16.
+		// Window [0..5] min 22 > 16 → prune. Ends at [0..3] (min
+		// 7+3+6=16 ≤ 16). remaining = 16-7-6 = 3 over 3. fairShare=1,
+		// leftover=0. Widths: A=7, B=1, C=1, D=1.
 		{
 			func() { l.ResetFocus(); l.SetFocus(0) }, `
 ┌━━━━━━━───────────┐                    
-│A alpha  B   C   D│                    
+│A alpha  B  C  D  │                    
 │                  │                    
 └──────────────────┘                    `,
 		},
-		// Focus to C (idx 2, full=7) at width=20 — exercises ties in
-		// the window-shrink direction. Window [0..5] min 22 > 18 →
-		// prune. focusIdx=2: dist 2 vs 3, end--. Window [0..4] min 19 >
-		// 18; dist 2 vs 2 → tie, start++. Window [1..4] min 16 ≤ 18 ✓.
-		// Visible: B, C(focused), D, E. remaining = 18-7-6 = 5 over 3.
-		// fairShare = 1, leftover 2 → B,D get +1.
-		//   B=2, D=2, E=1.
+		// Focus to C (idx 2, full=7) at width=20 — tie-breaking in
+		// window shrink. Window shrinks to [1..3] (min 7+2+4=13 ≤ 16).
+		// remaining = 16-7-4 = 5 over 2. fairShare=2, leftover=1 →
+		// B gets +1. Widths: B=3, C=7, D=2.
 		{
 			func() { l.ResetFocus(); l.SetFocus(2) }, `
-┌────━━━━━━━───────┐                    
-│B   C gamma  D   E│                    
+┌───━━━━━━━────────┐                    
+│B  C gamma  D  E  │                    
 │                  │                    
 └──────────────────┘                    `,
 		},
@@ -752,7 +715,7 @@ func TestTabsTabAt(t *testing.T) {
 	})
 
 	t.Run("should resolve the focused tab when not all tabs fit", func(t *testing.T) {
-		l := setupOneTab(4, 4)
+		l := setupOneTab(6, 4)
 
 		l.Add(0, "1111")
 		l.Add(0, "2222222222222222222")
@@ -760,7 +723,7 @@ func TestTabsTabAt(t *testing.T) {
 		l.SetFocus(l.Add(0, "4"))
 
 		// force calculating offsets
-		w := term.NewStringWriter(4, 4)
+		w := term.NewStringWriter(6, 4)
 		l.Draw(w)
 		require.NoError(t, w.Flush())
 
@@ -790,19 +753,11 @@ func TestTabsDrawFocusLast(t *testing.T) {
 	//   "file.go"       =  7
 	//   "handler_test.go" = 15
 	//   "component.go"  = 12
-	// Σ = 66, + 5 seps · 2 = 76 > 60 → resize path.
-	// Focus on the last tab (idx 5, full=12). innerW=60, sepLen=2.
-	// Window [0..5] min: 12 + 5·1 + 5·2 = 27 ≤ 60 ✓ — no pruning.
-	// remaining = 60 − 12 − 10 = 38 over 5 non-focused.
-	// fairShare = 38/5 = 7, leftover = 3 → leftmost 3 get +1:
-	//   .golangci.yml: 8 (cap 13) → 8
-	//   context.go:    8 (cap 10) → 8
-	//   events.go:     8 (cap  9) → 8
-	//   file.go:       7 (cap  7) → 7 (capped, surplus 0)
-	//   handler_test:  7 (cap 15) → 7
-	// Used = 8+8+8+7+7 = 38, surplus = 0.
-	// Layout: .golangc + sep + context. + sep + events.g + sep + file.go
-	//         + sep + handler + sep + component.go
+	// Σ = 66, + 5 seps · 2 = 76 > budgetW=58 → resize path. Focus on
+	// the last tab (idx 5, full=12). remaining = 58 − 12 − 10 = 36 over
+	// 5. fairShare = 7, leftover = 1 → leftmost (.golangci.yml) gets
+	// +1. Widths: .golangci.yml=8, context.go=7, events.go=7,
+	// file.go=7 (cap), handler_test=7.
 	tests := []comptest.TestCase{
 		{
 			func() {
@@ -815,9 +770,120 @@ func TestTabsDrawFocusLast(t *testing.T) {
 				l.ResetFocus()
 				l.SetFocus(5)
 			}, `
-.golangc  context.  events.g  file.go  handler  component.go`,
+.golangc  context  events.  file.go  handler  component.go  `,
 		},
 	}
 
 	comptest.TestComponent(t, l, w, tests)
+}
+
+// TestTabsDrawRightPadding regression-tests that the tab bar always
+// reserves at least 2 blank cells at the right edge of the rendered
+// row, so the rightmost tab is never flush against the viewport edge.
+// The invariant holds in both the fast path (everything fits at full
+// width) and the resize path (truncation kicks in).
+func TestTabsDrawRightPadding(t *testing.T) {
+	t.Run("fast path borderless", func(t *testing.T) {
+		l := NewTabs()
+		l.SetBorder(false)
+		l.Resize(20, 1)
+		// Two tabs summing to 17 cells + 2 sep = 19. Without the
+		// reservation padAfter=1, leaving cell 19 untouched (Ch=0).
+		l.Add('A', "alphaXX")
+		l.Add('B', "beta56789")
+		l.SetFocus(0)
+
+		w := term.NewStringWriter(20, 1)
+		l.Draw(w)
+		require.NoError(t, w.Flush())
+		cells := w.Cells()
+
+		assert.Equal(t, ' ', cells[18].Ch,
+			"cell at x=18 must be blank (reserved right pad)")
+		assert.Equal(t, ' ', cells[19].Ch,
+			"cell at x=19 must be blank (reserved right pad)")
+	})
+
+	t.Run("resize path borderless", func(t *testing.T) {
+		l := NewTabs()
+		l.SetBorder(false)
+		l.Resize(20, 1)
+		for _, n := range []string{
+			"alpha", "beta", "gamma", "delta", "epsilon", "zeta",
+		} {
+			l.Add(0, n)
+		}
+		l.SetFocus(5)
+
+		w := term.NewStringWriter(20, 1)
+		l.Draw(w)
+		require.NoError(t, w.Flush())
+		cells := w.Cells()
+
+		assert.Equal(t, ' ', cells[18].Ch,
+			"cell at x=18 must be blank (reserved right pad)")
+		assert.Equal(t, ' ', cells[19].Ch,
+			"cell at x=19 must be blank (reserved right pad)")
+	})
+
+	t.Run("bordered fast path", func(t *testing.T) {
+		l := NewTabs()
+		l.Resize(20, 4)
+		// innerW=18 (border eats 2). Two tabs summing to 15 cells + 2
+		// sep = 17. Without reservation padAfter=1, leaving x=18
+		// (inside the right border at column 18) untouched.
+		l.Add('A', "alphaXX")
+		l.Add('B', "beta567")
+		l.SetFocus(0)
+
+		w := term.NewStringWriter(20, 4)
+		l.Draw(w)
+		require.NoError(t, w.Flush())
+		cells := w.Cells()
+
+		// Tab labels live on y=1, columns [1..18] (inside the border).
+		// Reserved pad lives at columns 17 and 18 on the label row.
+		assert.Equal(t, ' ', cells[20+17].Ch,
+			"label-row cell at x=17 must be blank (reserved right pad)")
+		assert.Equal(t, ' ', cells[20+18].Ch,
+			"label-row cell at x=18 must be blank (reserved right pad)")
+	})
+
+	t.Run("bordered resize path", func(t *testing.T) {
+		l := NewTabs()
+		l.Resize(20, 4)
+		for _, n := range []string{
+			"alpha", "beta", "gamma", "delta", "epsilon", "zeta",
+		} {
+			l.Add(0, n)
+		}
+		l.SetFocus(5)
+
+		w := term.NewStringWriter(20, 4)
+		l.Draw(w)
+		require.NoError(t, w.Flush())
+		cells := w.Cells()
+
+		assert.Equal(t, ' ', cells[20+17].Ch,
+			"label-row cell at x=17 must be blank (reserved right pad)")
+		assert.Equal(t, ' ', cells[20+18].Ch,
+			"label-row cell at x=18 must be blank (reserved right pad)")
+	})
+
+	// When innerW < tabBarRightPad the budget collapses to 0 and no
+	// tabs can be laid out; the row stays empty so the reservation is
+	// trivially honored.
+	t.Run("narrower than reservation", func(t *testing.T) {
+		l := NewTabs()
+		l.SetBorder(false)
+		l.Resize(1, 1)
+		l.Add(0, "alpha")
+		l.SetFocus(0)
+
+		w := term.NewStringWriter(1, 1)
+		l.Draw(w)
+		require.NoError(t, w.Flush())
+
+		assert.Empty(t, l.layout.cells)
+	})
 }

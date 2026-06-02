@@ -527,8 +527,8 @@ func TestComponentOpen(t *testing.T) {
 				_, handled := c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 				assert.True(t, handled)
 			}, `
-┌─────────────────────────━━━┐
-│o wasup  o busy  o more  o m│
+┌───────────────────────━━━──┐
+│o wasu  o busy  o mor  o m  │
 ├────────────────────────────┤
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│

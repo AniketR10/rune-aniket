@@ -51,6 +51,12 @@ const defaultFocusFrameChar = '━'
 // the inner width is smaller than that label.
 const minTabCellWidth = 1
 
+// tabBarRightPad is the minimum number of trailing blank cells reserved
+// on the right of the last visible tab. The reservation is unconditional
+// so the rightmost tab never sits flush against the viewport edge across
+// the fast-path and resize-path width distributions.
+const tabBarRightPad = 2
+
 // tabCellLayout describes how a single tab is rendered: which tab (idx)
 // and how many cells of the bar it occupies.
 type tabCellLayout struct {
@@ -684,6 +690,14 @@ func (t *Tabs) calculateLayout() tabLayout {
 	if len(t.tabs) == 0 || innerW <= 0 {
 		return tabLayout{}
 	}
+	// Reserve tabBarRightPad trailing cells so the rightmost tab is
+	// never flush against the viewport edge. All width-budget decisions
+	// run against budgetW; padAfter naturally fills the reservation
+	// plus any extra slack when the row is drawn.
+	budgetW := innerW - tabBarRightPad
+	if budgetW < 0 {
+		budgetW = 0
+	}
 
 	sepLen := len(t.separator)
 	fullWidths := make([]int, len(t.tabs))
@@ -694,7 +708,7 @@ func (t *Tabs) calculateLayout() tabLayout {
 	}
 
 	// Fast path: everything fits at full width.
-	if totalFull+sepLen*(len(t.tabs)-1) <= innerW {
+	if totalFull+sepLen*(len(t.tabs)-1) <= budgetW {
 		layout := tabLayout{cells: make([]tabCellLayout, len(t.tabs))}
 		for i := range t.tabs {
 			layout.cells[i] = tabCellLayout{idx: i, width: fullWidths[i]}
@@ -704,13 +718,13 @@ func (t *Tabs) calculateLayout() tabLayout {
 	}
 
 	focusIdx := t.focusedIndex()
-	start, end := t.visibleRangeForFocus(focusIdx, fullWidths[focusIdx], sepLen, innerW)
+	start, end := t.visibleRangeForFocus(focusIdx, fullWidths[focusIdx], sepLen, budgetW)
 	if start > end {
 		return tabLayout{}
 	}
 
 	visibleCount := end - start + 1
-	cellBudget := innerW - sepLen*(visibleCount-1)
+	cellBudget := budgetW - sepLen*(visibleCount-1)
 	if cellBudget < 0 {
 		cellBudget = 0
 	}
@@ -796,12 +810,12 @@ func (t *Tabs) calculateLayout() tabLayout {
 // tabs that should be visible. Tabs farther from focusIdx are dropped
 // first when even minTabCellWidth cannot fit all of them. On ties the
 // start side is dropped.
-func (t *Tabs) visibleRangeForFocus(focusIdx, focusFullWidth, sepLen, innerW int) (int, int) {
+func (t *Tabs) visibleRangeForFocus(focusIdx, focusFullWidth, sepLen, budgetW int) (int, int) {
 	start, end := 0, len(t.tabs)-1
 	for start < end {
 		count := end - start + 1
 		minTotal := focusFullWidth + (count-1)*minTabCellWidth + (count-1)*sepLen
-		if minTotal <= innerW {
+		if minTotal <= budgetW {
 			break
 		}
 		if focusIdx-start >= end-focusIdx {

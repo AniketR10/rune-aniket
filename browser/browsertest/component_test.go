@@ -660,7 +660,7 @@ func TestComponentPrompt(t *testing.T) {
 				c.Resize(10, 6)
 			}, `
 ┌────────┐              
-│x music │              
+│x musi  │              
 ├────────┤              
 │  Rosa  │              
 │ YayNay │              
