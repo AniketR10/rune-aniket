@@ -88,7 +88,9 @@ type Service struct {
 	store     *bluebolt.Store
 }
 
-// Close releases the underlying bolt database.
+// Close releases this Service's reference to the bolt database. Blue
+// reference-counts the shared *bolt.DB per path, so the underlying handle
+// is closed only when the last Store referencing the file closes.
 func (s *Service) Close() error {
 	if s == nil || s.store == nil {
 		return nil
@@ -118,8 +120,6 @@ type partitionStore struct {
 	dbPath    string
 	marshaler bluemarshal.Marshaler
 }
-
-func (p partitionStore) Close() error { return nil }
 
 func (p partitionStore) Partition(name string) (bluedoc.Service, error) {
 	if name == "" {

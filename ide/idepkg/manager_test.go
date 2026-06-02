@@ -2569,7 +2569,7 @@ func newTestManagerWithLocalStorage(
 			return &mockWindow{}, nil
 		},
 	}
-	storage := localstorage.New(context.Background(), temp, doctoml.Marshaler())
+	storage := localstorage.New(context.Background(), temp, docbson.Marshaler())
 	manager := NewManager(n, r, storage,
 		fileScheme, temp, configPath, wm, syncTick, term.NopInterrupter())
 	return manager, n, r, temp, storage

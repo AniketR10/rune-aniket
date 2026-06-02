@@ -40,7 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -284,7 +284,7 @@ func (i *IDE) init(
 	// placeholders against the persisted command history doc. The
 	// command Prompt writes history under the "ide" partition, so
 	// alias chains must read from the same partition.
-	i.storage = localstorage.New(context.Background(), dataDir, doctoml.Marshaler())
+	i.storage = localstorage.New(context.Background(), dataDir, docbson.Marshaler())
 	i.ideConfig.storage = storageapi.WithPartition(i.storage, "ide")
 
 	var logger *slog.Logger

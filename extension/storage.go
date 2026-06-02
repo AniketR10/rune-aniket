@@ -32,7 +32,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/localstorage/storagerpc"
@@ -51,7 +51,7 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 
 func (s *storageResourceServer) setupStorage() storageapi.Service {
 	path := filepath.Join(s.storageDir, ".dbextension")
-	svc := localstorage.New(context.Background(), path, doctoml.Marshaler())
+	svc := localstorage.New(context.Background(), path, docbson.Marshaler())
 	return svc
 }
 
@@ -60,7 +60,7 @@ func (s *storageResourceServer) Register(
 ) (io.Closer, error) {
 	svc := s.setupStorage()
 	server := new(storagerpc.Server)
-	server.Init(svc, doctoml.Marshaler())
+	server.Init(svc, docbson.Marshaler())
 	docpb.RegisterDocumentStoreServer(registrar, server)
 	return storageServerCloser{server: server, svc: svc}, nil
 }

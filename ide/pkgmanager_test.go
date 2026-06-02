@@ -41,7 +41,7 @@ import (
 	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -1259,7 +1259,7 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 
 	notiCfg := notificationsConfig()
 	notiCfg.Width = notificationsWidth
-	storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
+	storage := localstorage.New(context.Background(), dir, docbson.Marshaler())
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager,
 		notiCfg, cfg, storage,
 		dir, func(ev term.Event) bool {
@@ -1357,7 +1357,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 		return true
 	}
 
-	storage2 := localstorage.New(context.Background(), dir, doctoml.Marshaler())
+	storage2 := localstorage.New(context.Background(), dir, docbson.Marshaler())
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager,
 		notificationsConfig(), cfg, storage2,
 		dir, func(ev term.Event) bool {

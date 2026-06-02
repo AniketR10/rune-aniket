@@ -27,7 +27,7 @@ require (
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/blue v1.81.0
+	github.com/unstablebuild/blue v1.81.2
 	github.com/unstablebuild/ox-api v0.0.0-00010101000000-000000000000
 	github.com/unstablebuild/rune-go-sdk v0.0.84
 	github.com/unstablebuild/tcell/v3 v3.6.5

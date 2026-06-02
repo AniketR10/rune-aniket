@@ -52,7 +52,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -1801,7 +1801,7 @@ func TestWorkspaceConfig(t *testing.T) {
 			handler.Nop(), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig(), loadingShaderConfig{}, openShaderConfig{},
 			component.FrameCharSetDefault())
-		storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
+		storage := localstorage.New(context.Background(), dir, docbson.Marshaler())
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager,
 			notificationsConfig(), cfg, storage, dir,
 			func(term.Event) bool {
@@ -4957,7 +4957,7 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	notiConfig := notificationsConfig()
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	var storage storageapi.Service = localstorage.New(
-		context.Background(), dir, doctoml.Marshaler())
+		context.Background(), dir, docbson.Marshaler())
 	if newTestStorageWrap != nil {
 		storage = newTestStorageWrap(storage)
 	}

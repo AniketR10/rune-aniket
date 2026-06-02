@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
+	"github.com/unstablebuild/blue/document/docmarshal/docbson"
 	"github.com/unstablebuild/blue/document/doctest"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/ox-api/bluestore"
@@ -25,7 +25,7 @@ func TestStorageConcurrentInstances(t *testing.T) {
 			_ = os.RemoveAll(name)
 		})
 		require.NoError(t, err)
-		instance := New(context.Background(), name, doctoml.Marshaler())
+		instance := New(context.Background(), name, docbson.Marshaler())
 		return bluestore.AdaptFrom(instance)
 	})
 }

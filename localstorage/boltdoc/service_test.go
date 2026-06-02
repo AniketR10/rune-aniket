@@ -37,21 +37,44 @@ import (
 	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
 	"github.com/unstablebuild/rune-go-sdk/retry"
 
 	"unstable.build/go-tui/localstorage/boltdoc"
 )
 
+// TestConcurrentServicesShareDBLifecycle reproduces the multi-workspace
+// crash where each workspace opens its own boltdoc.Service against the
+// same on-disk path (the extension storage server is constructed per
+// workspace). The underlying *bolt.DB is shared process-wide, so closing
+// one Service must not pull the database out from under the others;
+// otherwise the survivors fail with "database not open".
+func TestConcurrentServicesShareDBLifecycle(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "rune.db")
+
+	_, handleA, err := boltdoc.New(dbPath, docbson.Marshaler())
+	require.NoError(t, err)
+	svcB, handleB, err := boltdoc.New(dbPath, docbson.Marshaler())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = handleB.Close() })
+
+	type rec struct{ Name string }
+	require.NoError(t, svcB.Create(ctx, "shared", &rec{Name: "b"}))
+
+	require.NoError(t, handleA.Close())
+
+	var got rec
+	require.NoError(t, svcB.Get(ctx, "shared", &got),
+		"closing one service must not close the DB shared with others")
+	assert.Equal(t, "b", got.Name)
+}
+
 // TestStoreImplementsDocumentService runs the blue/doctest contract suite
 // against the bolt-backed storageapi.Service. The suite covers Create,
 // Set, Update with preconditions, Get, Delete, List with filters, Drop,
 // and partition isolation. We adapt the storageapi.Service back to a
-// document.Service so doctest can drive it directly. The suite seeds
-// arbitrary byte payloads that are not valid UTF-8, so we use the BSON
-// marshaler here; TOML would reject non-UTF-8 strings. The production
-// callers pick doctoml.Marshaler(), which is exercised by the other
-// tests in this file plus the broader localstorage tests.
+// document.Service so doctest can drive it directly. BSON is the
+// production marshaler for local storage.
 func TestStoreImplementsDocumentService(t *testing.T) {
 	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 		dir := t.TempDir()
@@ -71,7 +94,7 @@ func TestStoreImplementsDocumentService(t *testing.T) {
 func TestConsistentUpdate(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), doctoml.Marshaler())
+	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = handle.Close() })
 
@@ -116,7 +139,7 @@ func TestConsistentUpdate(t *testing.T) {
 func TestPartitionIsolation(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), doctoml.Marshaler())
+	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = handle.Close() })
 

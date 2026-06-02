@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/release/docrelease"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/doctoml"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -80,7 +80,7 @@ func TestScheduleNextTickDoesNotReacquireHostLock(t *testing.T) {
 		workspace.NewMemoryScheme))
 
 	dir := t.TempDir()
-	storage := localstorage.New(context.Background(), dir, doctoml.Marshaler())
+	storage := localstorage.New(context.Background(), dir, docbson.Marshaler())
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 
 	shRunner := new(shaderRunner)
