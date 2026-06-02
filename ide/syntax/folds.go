@@ -43,7 +43,7 @@ func (t *Tree) getFolds(initial bool) []term.Range {
 	defer cur.Close()
 
 	captureNames := t.folds.CaptureNames()
-	matches := cur.Matches(t.folds, root, []byte(t.buf.String()))
+	matches := cur.Matches(t.folds, root, t.content)
 	for {
 		m, ok := matches.Next()
 		if !ok {
@@ -97,10 +97,9 @@ func (t *Tree) getFoldsFrom(from term.Coordinates) []term.Range {
 }
 
 func (t *Tree) treeSitterRangeToTerm(rng tree_sitter.Range) (term.Range, bool) {
-	cells := t.buf.RawCells()
-	start, sok := cell.ConvertRunePosToCoordinates(cells,
+	start, sok := cell.ConvertRunePosToCoordinates(t.cells,
 		int(rng.StartPoint.Row), int(rng.StartPoint.Column))
-	end, eok := cell.ConvertRunePosToCoordinates(cells,
+	end, eok := cell.ConvertRunePosToCoordinates(t.cells,
 		int(rng.EndPoint.Row), int(rng.EndPoint.Column))
 	return term.Range{
 		Start: start,

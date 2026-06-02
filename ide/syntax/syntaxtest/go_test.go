@@ -311,6 +311,56 @@ func TestTreeFoldsIntegration(t *testing.T) {
 	})
 }
 
+// TestTreeFoldsOffEventLoopBufferRace exercises the production pattern
+// where auxBar.rebuildBar calls Tree.Folds from a background goroutine
+// while the host event loop mutates the underlying cell.Buffer (e.g.
+// from a file.reload-scheduled callback). getFolds and
+// treeSitterRangeToTerm must not read t.buf directly — they must use
+// the snapshots persisted by persistCells under t.mu — otherwise the
+// race detector flags the unsynchronized read against the host writer.
+func TestTreeFoldsOffEventLoopBufferRace(t *testing.T) {
+	pkgs := newInstalledPkgManager(t)
+	var wg sync.WaitGroup
+	ready := func(context.Context) error {
+		wg.Done()
+		return nil
+	}
+	const width, height = 30, 15
+	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+	defer cleanup()
+
+	wg.Add(1)
+	mu.Lock()
+	_, h := newEditFile(t, mu, comp, fileContent)
+	mu.Unlock()
+	wg.Wait()
+
+	cref := h.(*text.StatusBar)
+	tree := cref.Buffer().View().(*syntax.Tree)
+	buf := cref.Buffer()
+	defer func() { require.NoError(t, tree.Close()) }()
+
+	const iterations = 50
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range iterations {
+			it, ok := tree.Folds()
+			if !ok {
+				continue
+			}
+			_, _ = iterator.ToSlice(context.Background(), it)
+		}
+	}()
+
+	for i := range iterations {
+		mu.Lock()
+		buf.InsertString(term.Coordinates{}, "// edit "+strconv.Itoa(i)+"\n")
+		mu.Unlock()
+	}
+	<-done
+}
+
 func TestTreeIndentsIntegration(t *testing.T) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
