@@ -3505,6 +3505,68 @@ func TestAutoSaveIntegration(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("fexplorer edits do not arm autoSaver", func(t *testing.T) {
+		dir := t.TempDir()
+
+		cfg := defaultConfigWithWrap(false)
+		editorCfg := cfg.cfg["editor"].(map[string]any)
+		editorCfg["auto_save"] = true
+		cfg.cfg["editor"] = editorCfg
+
+		stub := &integrationFlusher{}
+		var rec *recordingNotifications
+		var saver *autoSaver
+		prevFactory := autoSaverFactory
+		schedQ := newQueueSched()
+		autoSaverFactory = func(_ autoSaverFlusher,
+			notif browserapi.Notifications,
+			_ func(func()) bool, _ time.Duration,
+		) *autoSaver {
+			rec = &recordingNotifications{inner: notif}
+			saver = newAutoSaver(stub, rec, schedQ.sched,
+				defaultAutoSaveDelay)
+			return saver
+		}
+		t.Cleanup(func() { autoSaverFactory = prevFactory })
+
+		uri, err := workspaceapi.ParseURI("memory://" + dir)
+		require.NoError(t, err)
+		m := newTestWorkspaceManagerHandlerWithDir(t, cfg, dir,
+			nopShutdownShaderConfig())
+		require.NoError(t, m.addOrCreateWorkspace(uri))
+		m.drainPendingWorkspaces()
+		t.Cleanup(func() { _ = m.Close() })
+
+		require.NotNil(t, rec, "autoSaver was not constructed; "+
+			"check editor.auto_save config wiring")
+
+		// Simulate an editor Edit event on the fexplorer pseudo-URI
+		// straight through the wired autoSaver. We bypass the TUI
+		// here because reproducing a real fexplorer buffer edit via
+		// terminal input is brittle (the explorer intercepts most
+		// keys for navigation); what we care about is that the
+		// production wiring routes fexplorer Edit events without
+		// arming a debounce timer.
+		fexURI, err := workspaceapi.ParseURI(fileExplorerURI)
+		require.NoError(t, err)
+		saver.Handle(context.Background(), textapi.Event{
+			Type: textapi.EventTypeEdit,
+			URI:  fexURI,
+		})
+
+		time.Sleep(3 * defaultAutoSaveDelay)
+		schedQ.drainAll()
+
+		assert.Empty(t, saver.timers,
+			"autoSaver must not arm a debounce timer for fexplorer")
+		assert.False(t, stub.flushed(),
+			"autoSaver must not flush the fexplorer pseudo-buffer")
+		for _, n := range rec.snapshot() {
+			assert.NotContains(t, n.msg, "auto-save",
+				"unexpected auto-save notification: %v", n)
+		}
+	})
 }
 
 func TestNoBar(t *testing.T) {

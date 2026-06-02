@@ -93,6 +93,14 @@ func newAutoSaver(
 func (a *autoSaver) Handle(_ context.Context, ev textapi.Event) bool {
 	switch ev.Type {
 	case textapi.EventTypeEdit:
+		// The file explorer opens a regular text handler against
+		// fileExplorerURI but its "save" path is not a real flush
+		// (FlushTab returns ErrInvalidSave). Skip scheduling so
+		// every keystroke in the explorer does not arm a debounce
+		// timer that will be silently swallowed later.
+		if ev.URI.String() == fileExplorerURI {
+			return false
+		}
 		a.scheduleFlush(ev.URI)
 	case textapi.EventTypeFlush, textapi.EventTypeClose:
 		a.cancel(ev.URI)

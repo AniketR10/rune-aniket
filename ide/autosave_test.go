@@ -45,6 +45,7 @@ import (
 func TestAutoSaver(t *testing.T) {
 	uriA := mustURI(t, "memory:///tmp/a")
 	uriB := mustURI(t, "memory:///tmp/b")
+	uriFex := mustURI(t, fileExplorerURI)
 
 	cases := []autoSaverCase{
 		{
@@ -146,6 +147,15 @@ func TestAutoSaver(t *testing.T) {
 			wantCalls:    []workspaceapi.URI{uriA},
 			wantNotifLn:  0,
 		},
+		{
+			name:        "fexplorer edits do not arm a flush timer",
+			edits:       []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriFex}},
+			delay:       30 * time.Millisecond,
+			settle:      60 * time.Millisecond,
+			wantCalls:   nil,
+			wantNotifLn: 0,
+			wantNoTimer: true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -183,6 +193,7 @@ type autoSaverCase struct {
 	wantCalls      []workspaceapi.URI
 	wantNotifLn    int
 	wantNotifLevel browserapi.NotificationLevel
+	wantNoTimer    bool
 }
 
 func runAutoSaverCase(t *testing.T, tc autoSaverCase) {
@@ -220,6 +231,10 @@ func runAutoSaverCase(t *testing.T, tc autoSaverCase) {
 		assert.Empty(t, flusher.calls)
 	} else {
 		assert.Equal(t, tc.wantCalls, flusher.calls)
+	}
+	if tc.wantNoTimer {
+		assert.Empty(t, saver.timers,
+			"expected no debounce timers to be armed")
 	}
 	if tc.wantNotifLn == 0 {
 		assert.Empty(t, notif.notes)
