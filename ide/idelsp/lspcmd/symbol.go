@@ -88,7 +88,9 @@ func resolveCommandSymbol(
 			if found > 0 {
 				msg = fmt.Sprintf("%s (%d found)", msg, found)
 			}
-			_ = notify.UpdateNotificationProgress(id, msg, step, total)
+			scheduleNextTick(func() {
+				_ = notify.UpdateNotificationProgress(id, msg, step, total)
+			})
 		})
 		matches, err := resolveSymbol(context.Background(), parser, name, progress)
 		scheduleNextTick(func() {

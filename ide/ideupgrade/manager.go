@@ -237,6 +237,9 @@ func newWithPlatformOps(cfg Config, ops platformOps) (*Manager, error) {
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = defaultCacheDir()
 	}
+	if cfg.ScheduleNextTick == nil {
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	}
 
 	storage, err := cfg.Storage.Partition(storagePartition)
 	if err != nil {
@@ -536,16 +539,20 @@ func (m *Manager) runUpgrade(ctx context.Context, manifest Manifest) error {
 		if m.cfg.Notifications == nil {
 			return
 		}
-		_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo, format, args...)
+		m.cfg.ScheduleNextTick(func() {
+			_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo, format, args...)
+		})
 	}
 
 	detected, err := detectRunningInstall(m.cfg)
 	if err != nil {
 		var notSupported *ErrUpgradeNotSupported
 		if errors.As(err, &notSupported) && m.cfg.Notifications != nil {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
-				"Rune cannot upgrade itself in place: %v",
-				notSupported.Reason)
+			m.cfg.ScheduleNextTick(func() {
+				_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
+					"Rune cannot upgrade itself in place: %v",
+					notSupported.Reason)
+			})
 		}
 		return err
 	}
@@ -564,15 +571,19 @@ func (m *Manager) runUpgrade(ctx context.Context, manifest Manifest) error {
 	})
 	if err != nil {
 		if m.cfg.Notifications != nil {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
-				"Upgrade to %s failed: %v", manifest.Version, err)
+			m.cfg.ScheduleNextTick(func() {
+				_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
+					"Upgrade to %s failed: %v", manifest.Version, err)
+			})
 		}
 		return err
 	}
 	if m.cfg.Notifications != nil {
-		_, _ = m.cfg.Notifications.Notify(browserapi.LevelSuccess,
-			"Upgrade to %s complete — restart Rune to apply",
-			manifest.Version)
+		m.cfg.ScheduleNextTick(func() {
+			_, _ = m.cfg.Notifications.Notify(browserapi.LevelSuccess,
+				"Upgrade to %s complete — restart Rune to apply",
+				manifest.Version)
+		})
 	}
 	return nil
 }

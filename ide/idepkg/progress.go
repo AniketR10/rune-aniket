@@ -37,23 +37,30 @@ import (
 )
 
 // NewNotifyProgressWriter returns a repl.ProgressWriter that
-// uses the given notifications to report progress.
+// uses the given notifications to report progress. The Notify and
+// UpdateNotificationProgress calls hop onto the host event loop via
+// scheduleNextTick so notis.inFocus reads workspaceManagerHandler.focus
+// on the goroutine that mutates it; without that hop, progress samples
+// fired from the download goroutine race workspace switch / close.
 func NewNotifyProgressWriter(
 	n browserapi.Notifications,
 	interrupter term.Interrupter,
 	pkgID string, version release.Version,
+	scheduleNextTick func(func()) bool,
 ) repl.ProgressWriter {
 	return &notifyProgressWriter{
 		n: n, interrupter: interrupter,
 		pkgID: pkgID, version: version,
+		scheduleNextTick: scheduleNextTick,
 	}
 }
 
 type notifyProgressWriter struct {
-	n           browserapi.Notifications
-	interrupter term.Interrupter
-	pkgID       string
-	version     release.Version
+	n                browserapi.Notifications
+	interrupter      term.Interrupter
+	pkgID            string
+	version          release.Version
+	scheduleNextTick func(func()) bool
 
 	mu       sync.Mutex
 	notifID  string
@@ -90,27 +97,32 @@ func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
 	}
 	w.lastEmit = now
 	w.lastUnit = units
-	if w.notifID == "" {
-		id, err := w.n.Notify(browserapi.LevelInfo,
-			"%s version %s of package %s",
-			verb, w.version, w.pkgID)
-		if err != nil {
-			w.mu.Unlock()
-			log.WithError(err).Warn(
-				"idepkg: notify download start")
-			return
-		}
-		w.notifID = id
-	}
-	id := w.notifID
 	w.mu.Unlock()
 
-	if err := w.n.UpdateNotificationProgress(
-		id, message, progress, total,
-	); err != nil {
-		log.WithError(err).Warn(
-			"idepkg: update notification progress")
-	}
+	w.scheduleNextTick(func() {
+		w.mu.Lock()
+		if w.notifID == "" {
+			id, err := w.n.Notify(browserapi.LevelInfo,
+				"%s version %s of package %s",
+				verb, w.version, w.pkgID)
+			if err != nil {
+				w.mu.Unlock()
+				log.WithError(err).Warn(
+					"idepkg: notify download start")
+				return
+			}
+			w.notifID = id
+		}
+		id := w.notifID
+		w.mu.Unlock()
+
+		if err := w.n.UpdateNotificationProgress(
+			id, message, progress, total,
+		); err != nil {
+			log.WithError(err).Warn(
+				"idepkg: update notification progress")
+		}
+	})
 	if w.interrupter != nil {
 		if err := w.interrupter.Interrupt(context.Background()); err != nil {
 			log.WithError(err).Warn("idepkg: interrupt")

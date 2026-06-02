@@ -365,10 +365,12 @@ func builtinOpenFile(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			}
 		})
 		if openErr != nil {
-			if t.notifications != nil {
-				_, _ = t.notifications.Notify(browserapi.LevelError,
-					"%s: %v", t.Title(), openErr)
-			}
+			t.runOnTUI(func() {
+				if t.notifications != nil {
+					_, _ = t.notifications.Notify(browserapi.LevelError,
+						"%s: %v", t.Title(), openErr)
+				}
+			})
 		}
 		return starlark.None, nil
 	}

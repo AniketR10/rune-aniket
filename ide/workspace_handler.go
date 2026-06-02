@@ -1495,6 +1495,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		Callback:           callbacks,
 		MaxRetries:         5,
 		WorkDoneProgress:   true,
+		ScheduleNextTick:   cfg.scheduleNextTick,
 	}
 	lsp := idelsp.New(uri, cwd,
 		cwd, h.pkgmanager, notifications,
@@ -1532,7 +1533,13 @@ func (h *workspaceManagerHandler) buildExtensions(
 		Debugger:         dapCfg,
 		ScheduleNextTick: cfg.scheduleNextTick,
 	}).WithNotify(func(level browserapi.NotificationLevel, msg string, args ...any) {
-		_, _ = notifications.Notify(level, msg, args...)
+		// DAP message-reader goroutines invoke this off the event
+		// loop; hop through scheduleNextTick so notis.inFocus reads
+		// workspaceManagerHandler.focus on the goroutine that mutates
+		// it.
+		cfg.scheduleNextTick(func() {
+			_, _ = notifications.Notify(level, msg, args...)
+		})
 	})
 	dbgMan := debugshell.Manual()
 	if err := ex.comp.RegisterREPLCommand(dbgMan, dbgHandler); err != nil {

@@ -345,16 +345,20 @@ func (t *Tutorial) handleRunResult(err error) {
 	}
 	var evalErr *starlark.EvalError
 	if errors.As(err, &evalErr) {
-		if t.notifications != nil {
-			_, _ = t.notifications.Notify(browserapi.LevelError,
-				"%s: %s", t.Title(), evalErr.Msg)
-		}
+		t.runOnTUI(func() {
+			if t.notifications != nil {
+				_, _ = t.notifications.Notify(browserapi.LevelError,
+					"%s: %s", t.Title(), evalErr.Msg)
+			}
+		})
 		return
 	}
-	if t.notifications != nil {
-		_, _ = t.notifications.Notify(browserapi.LevelError,
-			"%s: %v", t.Title(), err)
-	}
+	t.runOnTUI(func() {
+		if t.notifications != nil {
+			_, _ = t.notifications.Notify(browserapi.LevelError,
+				"%s: %v", t.Title(), err)
+		}
+	})
 }
 
 // isStarlarkExit reports whether err originated from the exit()

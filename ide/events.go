@@ -150,8 +150,11 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 			} else if os.IsNotExist(err) {
 				ex.openFileChangedPrompt(uri, t, "renamed on", false)
 			} else {
-				_, _ = ex.comp.Notify(browserapi.LevelError,
-					"Failed to reload renamed file %s: stat: %v", uri.Path(), err)
+				ex.config.ScheduleNextTick(func() {
+					_, _ = ex.comp.Notify(browserapi.LevelError,
+						"Failed to reload renamed file %s: stat: %v",
+						uri.Path(), err)
+				})
 			}
 		case schemeapi.Remove:
 			ex.openFileChangedPrompt(uri, t, "removed from", false)
@@ -171,14 +174,18 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 		}
 		if os.IsNotExist(err) {
 			if err := ex.comp.RemoveTab(t); err == nil {
-				_, _ = ex.comp.Notify(browserapi.LevelInfo,
-					"File '%s' was renamed on disk and does not have unflushed changes "+
-						"so it was closed", uri.Name())
+				ex.config.ScheduleNextTick(func() {
+					_, _ = ex.comp.Notify(browserapi.LevelInfo,
+						"File '%s' was renamed on disk and does not have "+
+							"unflushed changes so it was closed", uri.Name())
+				})
 			}
 			return
 		}
-		_, _ = ex.comp.Notify(browserapi.LevelError,
-			"Failed to reload renamed file %s: stat: %v", uri.Name(), err)
+		ex.config.ScheduleNextTick(func() {
+			_, _ = ex.comp.Notify(browserapi.LevelError,
+				"Failed to reload renamed file %s: stat: %v", uri.Name(), err)
+		})
 
 		// don't manage schemeapi.Remove: it's sometimes dispatched
 		// in conjunction with other events so it's not useful.
@@ -206,6 +213,8 @@ func startReloadAndNotify(
 		// own notification.
 		return
 	}
-	_, _ = ex.comp.Notify(browserapi.LevelError,
-		"Failed to reload file %s: %v", uri.Name(), err)
+	ex.config.ScheduleNextTick(func() {
+		_, _ = ex.comp.Notify(browserapi.LevelError,
+			"Failed to reload file %s: %v", uri.Name(), err)
+	})
 }

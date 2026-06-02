@@ -89,7 +89,13 @@ func (u *workspaceWindowManagerUI) Notify(level workspacessh.NotificationLevel, 
 	case workspacessh.NotificationError:
 		apiLevel = browserapi.LevelError
 	}
-	_, _ = notifications.Notify(apiLevel, "%s", msg)
+	// SSH auth callbacks (Password, KeyboardInteractive, gatherSigners)
+	// run on the workspace-build goroutine; hop onto the event loop so
+	// notis.inFocus reads workspaceManagerHandler.focus on the same
+	// goroutine that mutates it.
+	u.ide.scheduleFn(func() {
+		_, _ = notifications.Notify(apiLevel, "%s", msg)
+	})
 }
 
 // promptInput schedules a single-line floating input on the event loop and

@@ -79,6 +79,10 @@ type Config struct {
 	EventHandleTimeout time.Duration
 	NoInitializeServer bool
 	WorkDoneProgress   bool
+	// ScheduleNextTick hops onto the host event loop. When nil,
+	// notifications fire directly from background goroutines, which
+	// races workspaceManagerHandler.focus reads in notis.inFocus.
+	ScheduleNextTick func(func()) bool
 }
 
 // Manager is a multi-language LSP server manager.
@@ -694,11 +698,13 @@ func (m *Manager) watchServer(
 		})
 
 	if retryErr != nil && m.notifications != nil {
-		_, _ = m.notifications.Notify(
-			browserapi.LevelError,
-			"LSP server %s failed after %d retries: %s",
-			lang.command, m.maxRetries, retryErr,
-		)
+		m.cfg.ScheduleNextTick(func() {
+			_, _ = m.notifications.Notify(
+				browserapi.LevelError,
+				"LSP server %s failed after %d retries: %s",
+				lang.command, m.maxRetries, retryErr,
+			)
+		})
 	}
 }
 

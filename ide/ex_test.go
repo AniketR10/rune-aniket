@@ -2817,9 +2817,13 @@ func TestCommandPluginWaitInflightNotification(t *testing.T) {
 	// time dispatchCommand returns those must already be visible.
 	rec.assertInflightSeen(t)
 
-	// Wait for the goroutine to post the closing 1/1 progress and the
-	// terminal success notification.
-	require.Eventually(t, rec.terminalReached, 2*time.Second, 10*time.Millisecond,
+	// The closing progress and terminal notification hop through
+	// cfg.ScheduleNextTick. The queued test scheduler holds those
+	// callbacks until we drain.
+	require.Eventually(t, func() bool {
+		b.flushScheduled()
+		return rec.terminalReached()
+	}, 2*time.Second, 10*time.Millisecond,
 		"expected closing 1/1 progress and a terminal LevelSuccess notification")
 }
 

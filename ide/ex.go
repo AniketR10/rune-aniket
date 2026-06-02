@@ -1525,16 +1525,12 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 	if nerr == nil {
 		_ = e.notifications.UpdateNotificationProgress(notifID, "", 0, 1)
 	}
-	closeProgress := func() {
-		if nerr != nil {
-			return
-		}
-		_ = e.notifications.UpdateNotificationProgress(notifID, "", 1, 1)
-	}
 
 	if isAliasCtx {
 		runErr := run(ctx)
-		closeProgress()
+		if nerr == nil {
+			_ = e.notifications.UpdateNotificationProgress(notifID, "", 1, 1)
+		}
 		if runErr != nil {
 			return runErr
 		}
@@ -1546,15 +1542,19 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 
 	go debug.CapturePanicReport(func() {
 		runErr := run(ctx)
-		closeProgress()
-		if runErr != nil {
-			_, _ = e.notifications.Notify(browserapi.LevelError,
-				fmt.Sprintf("%s: %s", notifyName, runErr))
-			return
-		}
-		_, _ = e.notifications.Notify(browserapi.LevelSuccess,
-			fmt.Sprintf("%s: done in %s", notifyName,
-				time.Since(start).Truncate(time.Millisecond)))
+		e.config.ScheduleNextTick(func() {
+			if nerr == nil {
+				_ = e.notifications.UpdateNotificationProgress(notifID, "", 1, 1)
+			}
+			if runErr != nil {
+				_, _ = e.notifications.Notify(browserapi.LevelError,
+					fmt.Sprintf("%s: %s", notifyName, runErr))
+				return
+			}
+			_, _ = e.notifications.Notify(browserapi.LevelSuccess,
+				fmt.Sprintf("%s: done in %s", notifyName,
+					time.Since(start).Truncate(time.Millisecond)))
+		})
 	})
 	return nil
 }

@@ -101,9 +101,23 @@ func TestResolveCommandSymbolNoMatchesShowsError(t *testing.T) {
 	}
 
 	cmd := &textapi.Command{Args: []string{"iterator.Iterator"}}
+	// resolveCommandSymbol schedules multiple callbacks: progress
+	// hops from the resolver goroutine (post-RUNE-218) and the
+	// resolution dispatch. Synchronise on the resolution callback
+	// by signaling only after a tick that produces an error
+	// notification rather than on the first tick.
+	var resolvedOnce sync.Once
 	tick := func(fn func()) bool {
+		before, _ := notify.snapshot()
 		fn()
-		close(resolved)
+		after, _ := notify.snapshot()
+		if len(after) > len(before) {
+			for _, n := range after[len(before):] {
+				if n.level == browserapi.LevelError {
+					resolvedOnce.Do(func() { close(resolved) })
+				}
+			}
+		}
 		return true
 	}
 	proceed, err := resolveCommandSymbol(

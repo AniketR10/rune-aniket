@@ -752,22 +752,21 @@ func (m *Manager) download(
 	if err := m.processConfig(pkgID, version, configFile); err != nil {
 		m.log(log.WarnLevel, "process config for package %s version %s: %v",
 			pkgID, version, err)
-		if _, notifyErr := m.n.Notify(browserapi.LevelError,
-			"process configuration for %s version %s: %s",
-			pkgID, version, err); notifyErr != nil {
-			m.log(log.WarnLevel, "notify: %v", notifyErr)
-		}
+		m.scheduleNextTick(func() {
+			_, _ = m.n.Notify(browserapi.LevelError,
+				"process configuration for %s version %s: %s",
+				pkgID, version, err)
+		})
 	}
 
 	// Signal completion so notification-backed writers can
 	// dismiss the in-progress notification before we post the
 	// terminal success notification.
 	pw.Progress(1, 1, "done")
-	_, err = m.n.Notify(browserapi.LevelSuccess,
-		"downloaded version %s of package %s", version, pkgID)
-	if err != nil {
-		m.log(log.WarnLevel, "notify: %v", err)
-	}
+	m.scheduleNextTick(func() {
+		_, _ = m.n.Notify(browserapi.LevelSuccess,
+			"downloaded version %s of package %s", version, pkgID)
+	})
 
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
@@ -812,11 +811,11 @@ func (m *Manager) abortDownload(
 func (m *Manager) notifyError(
 	err error, pkgID string, version release.Version,
 ) {
-	newMsg := fmt.Sprintf("downloading version %s of "+
-		"package %s failed: %v", version, pkgID, err)
-	if _, err := m.n.Notify(browserapi.LevelError, newMsg); err != nil {
-		m.log(log.WarnLevel, "notify: %v", err)
-	}
+	m.scheduleNextTick(func() {
+		_, _ = m.n.Notify(browserapi.LevelError,
+			"downloading version %s of package %s failed: %v",
+			version, pkgID, err)
+	})
 	if err := m.interrupter.Interrupt(context.Background()); err != nil {
 		m.log(log.WarnLevel, "interrupt: %v", err)
 	}

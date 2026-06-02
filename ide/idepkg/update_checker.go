@@ -225,9 +225,9 @@ func (uc *UpdateChecker) run(ctx context.Context) {
 	uc.cleanupStaleRecords(ctx, currentPkgIDs)
 
 	summary := formatUpdateSummary(updates)
-	if _, err := uc.m.n.NotifyOnce(browserapi.LevelInfo, summary); err != nil {
-		uc.m.log(log.WarnLevel, "notify updates: %v", err)
-	}
+	uc.m.scheduleNextTick(func() {
+		_, _ = uc.m.n.NotifyOnce(browserapi.LevelInfo, summary)
+	})
 
 	promptUpdates := uc.filterPromptUpdates(ctx, updates)
 	if len(promptUpdates) > 0 {
@@ -417,7 +417,7 @@ func (uc *UpdateChecker) showUpdatePrompt(ctx context.Context, updates []Update)
 			switch idx {
 			case 0: // Update All
 				for _, u := range updates {
-					pw := NewNotifyProgressWriter(uc.m.n, uc.m.interrupter, u.Package, u.Latest)
+					pw := NewNotifyProgressWriter(uc.m.n, uc.m.interrupter, u.Package, u.Latest, uc.m.scheduleNextTick)
 					if err := uc.m.InstallPackageVersion(ctx, u.Package, u.Latest, pw); err != nil {
 						uc.m.log(log.WarnLevel, "install update %s %s: %v", u.Package, u.Latest, err)
 					}
