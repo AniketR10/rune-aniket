@@ -53,9 +53,15 @@ var _ FlusherCloser = (*file)(nil)
 type file struct {
 	// wg tracks in-flight copy-swap work scheduled by edit
 	// subscribers (OnWillEdit Add / OnDidEdit or worker Done).
-	// asyncWG tracks in-flight Flush/ForceFlush/Reload goroutines.
-	wg      sync.WaitGroup
-	asyncWG sync.WaitGroup
+	//
+	// flushWG and reloadWG are kept separate so Close can wait for
+	// in-flight flush (mid-rename disk writes would corrupt the
+	// file) without waiting for reload (whose worker parks on the
+	// host event loop via scheduleNextTick and would deadlock
+	// Close when both run on the same loop).
+	wg       sync.WaitGroup
+	flushWG  sync.WaitGroup
+	reloadWG sync.WaitGroup
 
 	ch      chan struct{}
 	mu      sync.Mutex
@@ -77,6 +83,9 @@ type file struct {
 	lastFlush       time.Time
 	flushing        bool
 	pendingEdits    bool
+	closed          bool
+	closedOnce      sync.Once
+	closedCh        chan struct{}
 	// scheduleNextTick dispatches buffer-mutation work for async
 	// operations (reload) back onto the host event loop.
 	scheduleNextTick func(func()) bool
@@ -92,6 +101,7 @@ func newFile(
 	ret := new(file)
 	ret.scheme = p
 	ret.scheduleNextTick = scheduleNextTick
+	ret.closedCh = make(chan struct{})
 
 	err := ret.init(path, buf, swapDir, readOnly)
 	if err != nil {
@@ -112,6 +122,7 @@ func newFileRecover(
 	ret := new(file)
 	ret.scheme = p
 	ret.scheduleNextTick = scheduleNextTick
+	ret.closedCh = make(chan struct{})
 
 	err := ret.initRecover(path, swapFilePath, buf, force)
 	if err != nil {
@@ -408,6 +419,12 @@ func (f *file) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("swap file error %s: %s", f.swapFileName, err)
 }
 
+func (f *file) isClosed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closed
+}
+
 // recoverFiles closes the cached orig/swap descriptors and re-opens
 // them against the current scheme. It is used when a previous swap
 // write failed and may have left us with stale file descriptors —
@@ -548,14 +565,14 @@ func (f *file) touchFile() (isExist bool) {
 // will receive workspaceapi.ErrStaleData. See FlusherCloser for the
 // full channel contract.
 func (f *file) Flush(ctx context.Context) (<-chan error, error) {
-	return f.startAsync(ctx, false, func() error { return f.flush(false) })
+	return f.startAsync(ctx, &f.flushWG, false, func() error { return f.flush(false) })
 }
 
 // ForceFlush forces saving the contents of the buffer to disk,
 // overwriting any changes if the file was modified by another
 // process. See Flush for the channel contract.
 func (f *file) ForceFlush(ctx context.Context) (<-chan error, error) {
-	return f.startAsync(ctx, false, func() error { return f.flush(true) })
+	return f.startAsync(ctx, &f.flushWG, false, func() error { return f.flush(true) })
 }
 
 // LastFlush returns the last time this file was flushed or a zero value time
@@ -569,7 +586,7 @@ func (f *file) LastFlush() time.Time {
 // Reload reloads the contents of the buffer from disk asynchronously.
 // See Flush for the channel contract.
 func (f *file) Reload(ctx context.Context) (<-chan error, error) {
-	return f.startAsync(ctx, true, f.reload)
+	return f.startAsync(ctx, &f.reloadWG, true, f.reload)
 }
 
 // reload replaces the in-memory buffer with the on-disk contents of
@@ -617,6 +634,10 @@ func (f *file) reload() error {
 
 	f.wg.Wait()
 
+	if f.isClosed() {
+		return nil
+	}
+
 	if f.orig != nil {
 		_ = f.orig.Close()
 	}
@@ -649,26 +670,35 @@ func (f *file) reload() error {
 	infoModTime := f.infoModTime
 	scheduled := f.scheduleNextTick(func() {
 		defer close(done)
+		f.mu.Lock()
+		if f.closed {
+			f.mu.Unlock()
+			return
+		}
+		f.lastFlush = infoModTime
+		f.mu.Unlock()
 		f.buf.Reset()
 		f.buf.InsertString(term.Coordinates{}, contents)
 
 		if !f.view.EndsWithEOL() {
 			f.buf.WriteString("\n")
 		}
-
-		f.mu.Lock()
-		f.lastFlush = infoModTime
-		f.mu.Unlock()
 	})
 	if !scheduled {
 		return errors.New("reload: scheduleNextTick rejected callback")
 	}
-	<-done
+	// closeCh unblocks this wait when the host loop will no longer
+	// pump the scheduled callback (e.g. Close ran on that loop).
+	select {
+	case <-done:
+	case <-f.closedCh:
+	}
 	return nil
 }
 
 func (f *file) startAsync(
-	ctx context.Context, suppressCopySwap bool, work func() error,
+	ctx context.Context, wg *sync.WaitGroup, suppressCopySwap bool,
+	work func() error,
 ) (<-chan error, error) {
 	f.mu.Lock()
 	if f.flushing {
@@ -680,9 +710,9 @@ func (f *file) startAsync(
 	f.mu.Unlock()
 
 	ch := make(chan error, 1)
-	f.asyncWG.Add(1)
+	wg.Add(1)
 	go debug.CapturePanicReport(func() {
-		defer f.asyncWG.Done()
+		defer wg.Done()
 
 		err := work()
 
@@ -874,9 +904,18 @@ func (f *file) flush(force bool) error {
 	return nil
 }
 
-// Close should be called once when this structure is not to be used anymore.
+// Close waits for in-flight Flush/ForceFlush (interrupting a rename
+// would corrupt the on-disk file) but not for in-flight Reload:
+// reload's worker is parked on the host event loop via
+// scheduleNextTick, so waiting on it from that same loop deadlocks.
+// The reload worker observes f.closed / closedCh and bails.
 func (f *file) Close() (ret error) {
-	f.asyncWG.Wait()
+	f.mu.Lock()
+	f.closed = true
+	f.mu.Unlock()
+	f.closedOnce.Do(func() { close(f.closedCh) })
+
+	f.flushWG.Wait()
 
 	if f.fileName == "" {
 		return errors.New("trying to Close an uninitialized file")

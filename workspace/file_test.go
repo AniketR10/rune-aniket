@@ -811,6 +811,7 @@ func newTestFileBuffer(ctrl *gomock.Controller) (*file, *workspaceapitest.MockFi
 	}
 	f := new(file)
 	f.scheme = scheme
+	f.closedCh = make(chan struct{})
 	return f, mock
 }
 
@@ -939,6 +940,7 @@ func TestFileBufferInit(t *testing.T) {
 		accessDeniedErr := errors.New("access denied")
 		f := new(file)
 		f.scheme = &testScheme{}
+		f.closedCh = make(chan struct{})
 		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 			return nil, accessDeniedErr
 		}
@@ -953,6 +955,7 @@ func TestFileBufferInit(t *testing.T) {
 		origFileMock := workspaceapitest.NewMockFile(ctrl)
 		f := new(file)
 		f.scheme = &testScheme{}
+		f.closedCh = make(chan struct{})
 		i := 0
 		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
 			i++
@@ -1908,6 +1911,127 @@ func (s *reloadGIDSubscriber) OnDidEdit(
 	_ context.Context, _, _ term.Coordinates, _ string,
 ) {
 	s.onEdit()
+}
+
+// TestFileCloseDoesNotWaitForInFlightReload guards the host
+// event-loop close path: Close must not block waiting on a Reload
+// worker that is itself parked on the host loop via scheduleNextTick.
+// Production hit this when a filesystem rename event reached
+// RemoveTab from ide/events.go handleFSChange.
+func TestFileCloseDoesNotWaitForInFlightReload(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	scheme, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	// The queue is never pumped, simulating a host loop that has
+	// stopped pumping because it is blocked entering Close.
+	queue := make(chan func(), 8)
+	queueSchedule := func(fn func()) bool {
+		queue <- fn
+		return true
+	}
+
+	f, err := newFile(scheme, fileObj.Name(), buf, "", false, queueSchedule)
+	require.NoError(t, err)
+
+	ch, err := f.Reload(context.Background())
+	require.NoError(t, err)
+
+	// Wait until the worker has reached scheduleNextTick so Close
+	// races against a parked worker, not one still doing disk I/O.
+	select {
+	case <-queue:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reload never reached scheduleNextTick")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- f.Close()
+	}()
+
+	select {
+	case <-closeDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("file.Close blocked waiting for in-flight reload " +
+			"worker that needs the host event loop")
+	}
+
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reload result channel never closed after Close")
+	}
+}
+
+// TestFileCloseWaitsForInFlightFlush guards the complementary
+// invariant to TestFileCloseDoesNotWaitForInFlightReload: tearing
+// down f.orig / f.swap mid-rename would leave the on-disk file
+// half-rewritten, so Close must wait for an in-flight flush.
+func TestFileCloseWaitsForInFlightFlush(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	workspaceURI, err := makeLocalURI(filepath.Dir(fileObj.Name()))
+	require.NoError(t, err)
+	inner, err := newTestFileScheme(workspaceURI)
+	require.NoError(t, err)
+
+	renameGate := make(chan struct{})
+	closeStarted := make(chan struct{})
+	var (
+		mu             sync.Mutex
+		renameSawClose bool
+	)
+	hook := &renameHookScheme{Scheme: inner, onRename: func(string, string) {
+		select {
+		case <-closeStarted:
+			mu.Lock()
+			renameSawClose = true
+			mu.Unlock()
+		default:
+		}
+		<-renameGate
+	}}
+
+	f, err := newFile(hook, fileObj.Name(), buf, "", false, inlineSchedule)
+	require.NoError(t, err)
+
+	flushCh, err := f.Flush(context.Background())
+	require.NoError(t, err)
+
+	closeDone := make(chan error, 1)
+	go func() {
+		close(closeStarted)
+		closeDone <- f.Close()
+	}()
+
+	select {
+	case <-closeDone:
+		t.Fatal("file.Close returned while Flush was still running; " +
+			"flush may have been left mid-rename and the on-disk " +
+			"file could be in a half-written state")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(renameGate)
+
+	select {
+	case <-flushCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("flush never completed after rename gate released")
+	}
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close blocked indefinitely after flush completed")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.True(t, renameSawClose,
+		"test setup did not actually exercise the Close/Flush overlap")
 }
 
 // TestFileFlushRejectedDuringInFlightReload guards the shared
