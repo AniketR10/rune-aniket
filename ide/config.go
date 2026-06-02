@@ -558,31 +558,149 @@ func (c ideConfig) commandHistoryKey() (ret term.KeyComb) {
 	return
 }
 
-// animationsLoadingWorkspace returns whether the loading-workspace
-// animation is enabled. Defaults to true when the rune.star config
-// does not declare an `animations.loading_workspace` key. Returning
-// false here suppresses the loading shader entirely.
-//
-// Errors during type assertion are recorded under
-// "animations.loading_workspace" in c.errors and the default (true)
-// is returned so an invalid config never accidentally disables the
-// animation.
 func (c ideConfig) animationsLoadingWorkspace() bool {
 	return c.animationsBool("loading_workspace")
 }
 
-// animationsOpenWorkspace returns whether the open-workspace
-// animation is enabled. See [ideConfig.animationsLoadingWorkspace]
-// for semantics.
 func (c ideConfig) animationsOpenWorkspace() bool {
 	return c.animationsBool("open_workspace")
 }
 
-// animationsCommandPrompt returns whether the shineFrame shader
-// played over the open command prompt is enabled. Defaults to true.
-// See [ideConfig.animationsLoadingWorkspace] for error semantics.
 func (c ideConfig) animationsCommandPrompt() bool {
 	return c.animationsBool("command_prompt")
+}
+
+func (c ideConfig) animationsCommandPromptColor() (term.Color, bool) {
+	d, ok := c.animationsDict("command_prompt")
+	if !ok {
+		return 0, false
+	}
+	if _, ok := d["color"]; !ok {
+		return 0, false
+	}
+	col, err := config.MapConfig(d).GetColor("color")
+	if err != nil {
+		c.errors["animations.command_prompt.color"] = err
+		return 0, false
+	}
+	return col, true
+}
+
+func (c ideConfig) animationsCommandPromptAngularWidth() (float64, bool) {
+	d, ok := c.animationsDict("command_prompt")
+	if !ok {
+		return 0, false
+	}
+	v, ok := d["angular_width"]
+	if !ok {
+		return 0, false
+	}
+	var f float64
+	switch t := v.(type) {
+	case float64:
+		f = t
+	case int:
+		f = float64(t)
+	case int64:
+		f = float64(t)
+	default:
+		c.errors["animations.command_prompt.angular_width"] = fmt.Errorf(
+			"expected number, got %T", v)
+		return 0, false
+	}
+	if f <= 0 || f > 1 {
+		c.errors["animations.command_prompt.angular_width"] = fmt.Errorf(
+			"expected value in (0, 1], got %v", f)
+		return 0, false
+	}
+	return f, true
+}
+
+func (c ideConfig) animationsCommandPromptCycles() (int, bool) {
+	d, ok := c.animationsDict("command_prompt")
+	if !ok {
+		return 0, false
+	}
+	v, ok := d["cycles"]
+	if !ok {
+		return 0, false
+	}
+	var n int
+	switch t := v.(type) {
+	case int:
+		n = t
+	case int64:
+		n = int(t)
+	default:
+		c.errors["animations.command_prompt.cycles"] = fmt.Errorf(
+			"expected int, got %T", v)
+		return 0, false
+	}
+	if n < 1 {
+		c.errors["animations.command_prompt.cycles"] = fmt.Errorf(
+			"expected value >= 1, got %d", n)
+		return 0, false
+	}
+	return n, true
+}
+
+func (c ideConfig) commandPromptShaderCfg() commandPromptShaderConfig {
+	out := commandPromptShaderConfig{enabled: c.animationsCommandPrompt()}
+	if col, ok := c.animationsCommandPromptColor(); ok {
+		out.color = col
+		out.colorSet = true
+	}
+	if w, ok := c.animationsCommandPromptAngularWidth(); ok {
+		out.angularWidth = w
+	}
+	if n, ok := c.animationsCommandPromptCycles(); ok {
+		out.cycles = n
+	}
+	return out
+}
+
+func (c ideConfig) commandPromptSeparatorCharset() commandPromptSeparatorCharset {
+	out := defaultCommandPromptSeparatorCharset()
+	cmd, ok := c.command()
+	if !ok {
+		return out
+	}
+	cfg, err := cmd.GetConfig("separator_charset")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["command.separator_charset"] = err
+		}
+		return out
+	}
+	type field struct {
+		key  string
+		dst  *rune
+		path string
+	}
+	fields := []field{
+		{"left", &out.Left, "command.separator_charset.left"},
+		{"horizontal_left", &out.HorizontalLeft, "command.separator_charset.horizontal_left"},
+		{"horizontal_right", &out.HorizontalRight, "command.separator_charset.horizontal_right"},
+		{"right", &out.Right, "command.separator_charset.right"},
+	}
+	for _, f := range fields {
+		r, err := cfg.GetRune(f.key)
+		if err != nil {
+			if err != config.ErrNotFound {
+				c.errors[f.path] = err
+			}
+			continue
+		}
+		*f.dst = r
+	}
+	return out
+}
+
+func (c ideConfig) commandPromptCfg() commandPromptConfig {
+	return commandPromptConfig{
+		shader:    c.commandPromptShaderCfg(),
+		separator: c.commandPromptSeparatorCharset(),
+	}
 }
 
 func (c ideConfig) animationsBool(key string) bool {

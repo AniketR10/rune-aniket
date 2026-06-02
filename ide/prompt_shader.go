@@ -38,7 +38,7 @@ import (
 const (
 	promptShaderFPS      = 30
 	promptShaderDuration = time.Minute
-	promptShaderLoop     = 4400 * time.Millisecond
+	promptShaderLoop     = 1200 * time.Millisecond
 )
 
 type drawFunc func(term.Writer)
@@ -50,10 +50,19 @@ func newPromptShader(
 	charSet component.FrameCharSet, frameAttr term.Attributes,
 	win browser.Window, offset term.Coordinates,
 	root tui.Component, interrupter term.Interrupter,
+	cfg commandPromptShaderConfig,
 ) *shader.Component {
-	inner := timeshader.PingPong(glslshader.PulseFrame(
-		glslshader.DefaultPulseFrameParams(charSet), frameAttr,
-	))
+	params := glslshader.DefaultRadarFrameParams(charSet)
+	if cfg.colorSet {
+		params.Color = cfg.color
+	}
+	if cfg.angularWidth > 0 {
+		params.AngularWidth = cfg.angularWidth
+	}
+	if cfg.cycles > 0 {
+		params.Cycles = cfg.cycles
+	}
+	inner := glslshader.RadarFrame(params, frameAttr)
 	cycles := int(promptShaderDuration / promptShaderLoop)
 	virt := dynamicVirtual(timeshader.Loop(inner, cycles), win, offset)
 	return shader.New(

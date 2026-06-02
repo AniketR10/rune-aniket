@@ -2543,15 +2543,15 @@ func TestCommandPromptUsesSharedStoragePartition(t *testing.T) {
 }
 
 // TestCommandPromptShaderGating verifies that the prompt shader is
-// created only when commandPromptShader is enabled, and is torn down
-// whenever the prompt closes.
+// created only when commandPromptCfg.shader.enabled is set, and is
+// torn down whenever the prompt closes.
 func TestCommandPromptShaderGating(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		b := newExForTesting(t, texttest.NopEditor(),
 			text.WithCommandKey(testCommandKey))
 		defer b.Close()
 		b.Resize(40, 20)
-		b.ex.commandPromptShader = false
+		b.ex.commandPromptCfg.shader.enabled = false
 		b.ex.openCommandPrompt()
 		require.NotNil(t, b.ex.cmd)
 		assert.Nil(t, b.ex.promptShader,
@@ -2563,7 +2563,7 @@ func TestCommandPromptShaderGating(t *testing.T) {
 			text.WithCommandKey(testCommandKey))
 		defer b.Close()
 		b.Resize(40, 20)
-		b.ex.commandPromptShader = true
+		b.ex.commandPromptCfg.shader.enabled = true
 		b.ex.openCommandPrompt()
 		require.NotNil(t, b.ex.cmd)
 		assert.NotNil(t, b.ex.promptShader,

@@ -155,7 +155,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 │ pkginstall ▐                         │
 │ go                                   │
 │ six                                  │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 ├──────────────────────────────────────┤
 │1                                     │
@@ -171,7 +171,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 │ pkginstall six ▐                     │
 │ 1                                    │
 │ 2                                    │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 ├──────────────────────────────────────┤
 │1                                     │
@@ -203,7 +203,7 @@ func TestPackageManagerIntegration(t *testing.T) {
 │ pkgcurrent ▐                         │
 │ six                                  │
 │                                      │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 ├──────────────────────────────────────┤
 │1                                     │
@@ -634,7 +634,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall ▐                         │
 │ go                                   │
 │ six                                  │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 │ Usage                                │
 │                                      │
@@ -665,7 +665,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall ▐                         │
 │ go                                   │
 │ six                                  │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 │                                      │
 │                                      │
@@ -702,7 +702,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall ▐                         │
 │ go                                   │
 │ six                                  │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │ go                                   │
 │                                      │
 │ NOTES                                │
@@ -742,7 +742,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall ▐                         │
 │ go                                   │
 │ six                                  │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 │                                      │
 │                                      │
@@ -778,7 +778,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall ▐                         │
 │ go                                   │
 │ six                                  │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │ six                                  │
 │                                      │
 │ NOTES                                │
@@ -817,7 +817,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall six ▐                     │
 │ 2                                    │
 │                                      │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │                                      │
 │                                      │
 │                                      │
@@ -853,7 +853,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │ pkginstall six ▐                     │
 │ 2                                    │
 │                                      │
-│ ──────────────────────────────────── │
+├──────────────────────────────────────┤
 │ six @ 2                              │
 │                                      │
 │ CHANGE LOG                           │

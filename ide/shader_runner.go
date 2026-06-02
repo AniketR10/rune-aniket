@@ -42,27 +42,10 @@ import (
 )
 
 const (
-	defaultShaderFPS      = 30
-	defaultShaderDuration = 1 * time.Second
-	// defaultLoadingShaderDuration is the fallback lifetime of the
-	// loading shader's [shader.Component] when the caller does not
-	// configure one via [WithLoadingShader]. It must be longer than the
-	// shader's animated portion so the Component does not auto-expire
-	// mid-load: the loading shader is expected to "hold" at its final
-	// visual frame (see [shader.GrayFadeParams.FadeFrames]) until
-	// stopLoading explicitly swaps it out. Without this, the
-	// [shader.Component] sets done = true after duration elapses and
-	// the bare root is drawn — making the screen "gain back color"
-	// mid-load and flashing the freshly-installed workspace right
-	// before the open shader takes over.
-	//
-	// 10s is an upper bound on plausible addWorkspace latency; the
-	// shader is cancelled cleanly when stopLoading runs anyway.
+	defaultShaderFPS             = 30
+	defaultShaderDuration        = 1 * time.Second
 	defaultLoadingShaderDuration = 10 * time.Second
-	// defaultOpenShaderDuration is the fallback lifetime of the open
-	// shader's [shader.Component] when the caller does not configure
-	// one via [WithOpenShader].
-	defaultOpenShaderDuration = 1 * time.Second
+	defaultOpenShaderDuration    = 1 * time.Second
 )
 
 type shutdownShaderConfig struct {
@@ -79,24 +62,12 @@ func nopShutdownShaderConfig() shutdownShaderConfig {
 	}
 }
 
-// loadingShaderConfig describes the shader played while a
-// workspace is loading. If shader is nil, no loading shader is
-// played. duration is the lifetime of the underlying
-// [shader.Component]; it is intentionally decoupled from the
-// visual length of the effect itself (see e.g.
-// [shader.GrayFadeParams.FadeFrames]) so callers can configure a
-// "fade then hold" budget that outlives the animation. Zero falls
-// back to [defaultLoadingShaderDuration].
 type loadingShaderConfig struct {
 	shader   func(term.Attributes) shader.Shader
 	fps      int
 	duration time.Duration
 }
 
-// openShaderConfig describes the shader played when a workspace
-// finishes installing. If shader is nil, no open shader is played.
-// duration is the lifetime of the underlying [shader.Component]; zero
-// falls back to [defaultOpenShaderDuration].
 type openShaderConfig struct {
 	shader   func(term.Attributes) shader.Shader
 	fps      int
@@ -115,10 +86,6 @@ type shaderRunner struct {
 	loadingShaderCfg  loadingShaderConfig
 	openShaderCfg     openShaderConfig
 	openShaderCells   [][]term.Cell
-	// loadingShaderInst holds the live loading-shader instance while it
-	// runs, so stopLoading can query its progress (e.g.
-	// [shader.GrayFadeShader.Progress]) and forward it to the open shader
-	// for visual continuity. Reset to nil once stopLoading runs.
 	loadingShaderInst shader.Shader
 }
 
@@ -197,6 +164,7 @@ func namedShaderNames() []string {
 		"risingChars",
 		"shine",
 		"shineFrame",
+		"radarFrame",
 		"grayFade",
 		"trippy",
 	}
@@ -342,6 +310,12 @@ func buildNamedShader(
 			fadeInPerc, fadeOutPerc,
 			defAttr,
 		), true
+	case "radarFrame":
+		return wrapShaderCrossFadeInOut(
+			glslshader.RadarFrame(glslshader.DefaultRadarFrameParams(fc), defAttr),
+			fadeInPerc, fadeOutPerc,
+			defAttr,
+		), true
 	case "grayFade":
 		return shader.GrayFade(shader.DefaultGrayFadeParams(), defAttr), true
 	case "trippy":
@@ -386,10 +360,6 @@ func (r *shaderRunner) runShader(s shader.Shader, fps int, duration time.Duratio
 	r.shader.Resize(r.width, r.height)
 }
 
-// captureOpenShaderCells captures the wrapped root as it exists before the
-// workspace manager switches focus/slots. The open shader uses this as its
-// stable base layer; capturing inside Shader.Shade is too late because the
-// root has already drawn the newly opened workspace by then.
 func (r *shaderRunner) captureOpenShaderCells() {
 	if r.width <= 0 || r.height <= 0 || r.Handler == nil {
 		r.openShaderCells = nil
@@ -402,26 +372,16 @@ func (r *shaderRunner) captureOpenShaderCells() {
 }
 
 func (r *shaderRunner) cancel() {
-	// Some duration > 0 is passed so the r.shader.done stays true,
-	// that's something that happens after rendering any shader and
-	// allows us to only use one variable (c.done) to determine if a
-	// shader is running or not.
 	r.runShader(shader.Nop(), defaultShaderFPS, 100*time.Millisecond)
 }
 
 func (r *shaderRunner) runShutdownShader() {
-	// If no shutdown shader is set this will run a shader.Nop(). If a shader was
-	// running when runShutdownShader is called it will appear as canceling it.
 	r.runShader(
 		r.shutdownShaderCfg.shader(r.defAttr),
 		r.shutdownShaderCfg.fps,
 		r.shutdownShaderCfg.duration)
 }
 
-// startLoading is called every time addWorkspace begins loading
-// a workspace. It (re)starts the loading shader, cancelling any
-// shader currently playing. No-op when no loading shader was
-// configured.
 func (r *shaderRunner) startLoading() {
 	r.openShaderCells = nil
 	r.loadingShaderInst = nil
@@ -437,10 +397,6 @@ func (r *shaderRunner) startLoading() {
 	r.runShader(loading, r.loadingShaderCfg.fps, duration)
 }
 
-// stopLoading is called when an addWorkspace lifecycle
-// completes. It swaps in the open shader (or cancels back to
-// Nop if no open shader was configured). No-op when no loading
-// shader was configured.
 func (r *shaderRunner) stopLoading() {
 	openShaderCells := r.openShaderCells
 	r.openShaderCells = nil
@@ -459,11 +415,6 @@ func (r *shaderRunner) stopLoading() {
 			sh.SetInitialCells(openShaderCells)
 		}
 	}
-	// If the loading shader was the gray-fade desaturation, pre-desaturate
-	// the open shader's snapshot by the same amount so the burn starts
-	// from the same visual state instead of snapping back to the
-	// originally-captured colors. This is what makes the loading→open
-	// transition feel like one continuous effect.
 	if gf, ok := loadingShaderInst.(*shader.GrayFadeShader); ok {
 		if sh, ok := openShader.(interface {
 			SetInitialDesaturation(amount float64)
@@ -492,12 +443,6 @@ func (r *shaderRunner) Close() error {
 	return r.shader.Close()
 }
 
-// Adds fade in and out to a given shader.
-//
-// fadeInPerc specifies the percentage of the whole animation you want fading
-// in (e.g. 0.1 means 10% of the beginning frames of shader will be
-// transition), and similarly with fadeOutPerc (10% would mean at 90% of the
-// animation it starts fading out).
 func wrapShaderCrossFadeInOut(
 	sh shader.Shader, fadeInPerc, fadeOutPerc float64,
 	defaultAttr term.Attributes,

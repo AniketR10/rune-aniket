@@ -241,6 +241,20 @@ func (h *Prompt) calculateSplitHeights(width, height int) (int, int, int) {
 	return manHeight, separatorHeight, listHeight
 }
 
+// SeparatorY returns the Y coordinate of the separator row in the
+// prompt's local writer space, or false if no separator is currently
+// drawn (ShowManual disabled or no manual attached).
+func (h *Prompt) SeparatorY() (int, bool) {
+	if !h.config.ShowManual || h.manualComponent == nil {
+		return 0, false
+	}
+	_, separatorHeight, listHeight := h.calculateSplitHeights(h.width, h.height)
+	if separatorHeight == 0 {
+		return 0, false
+	}
+	return listHeight, true
+}
+
 // Draw satisfies tui.Handler
 func (h *Prompt) Draw(w term.Writer) {
 	if h.config.ShowManual && h.manualComponent != nil {

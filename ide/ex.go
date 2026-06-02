@@ -146,20 +146,17 @@ type ex struct {
 	pluginWaitTimeout        time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
-	cmdV         handler.Virtual[*browser.Component]
-	cmdWin       browser.Window
-	promptShader *shader.Component
-	// commandPromptShader gates the pulseFrame effect started in
-	// newCommandPrompt. Disabled by setting animations.command_prompt
-	// to false in rune.star.
-	commandPromptShader bool
-	fullscreenID        uint64
-	exit                bool
-	forceExit           bool
-	height              int
-	width               int
-	isPromptDispatch    bool
-	macro               macroRecorder
+	cmdV             handler.Virtual[*browser.Component]
+	cmdWin           browser.Window
+	promptShader     *shader.Component
+	commandPromptCfg commandPromptConfig
+	fullscreenID     uint64
+	exit             bool
+	forceExit        bool
+	height           int
+	width            int
+	isPromptDispatch bool
+	macro            macroRecorder
 
 	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
@@ -202,7 +199,7 @@ func newEx(
 	commandEditor command.Editor,
 	commandObserver commandObserver,
 	debugCommands bool,
-	commandPromptShader bool,
+	commandPromptCfg commandPromptConfig,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
@@ -215,7 +212,7 @@ func newEx(
 	e.commandEditor = commandEditor
 	e.commandObserver = commandObserver
 	e.debugCommands = debugCommands
-	e.commandPromptShader = commandPromptShader
+	e.commandPromptCfg = commandPromptCfg
 	return
 }
 
@@ -419,7 +416,16 @@ func (e *ex) doInit(
 	e.sequencer.Init(seqInterests, e.config.SequencerTimeout)
 
 	e.cleanPartialReissueState()
-	e.cmdV.C = browser.NewComponent(e.config.Config)
+	cmdBrowserCfg := e.config.Config
+	if cmdBrowserCfg.WindowManagerConfig.Frame {
+		wmOriginY := 2
+		if cmdBrowserCfg.TabBarHeight != 0 {
+			wmOriginY = cmdBrowserCfg.TabBarHeight - 1
+		}
+		cmdBrowserCfg.WindowManagerConfig.Frame = false
+		cmdBrowserCfg.TabBarHeight = wmOriginY
+	}
+	e.cmdV.C = browser.NewComponent(cmdBrowserCfg)
 	e.aliasExpander = idecmd.NewExpander(
 		e.config.CommandAliases, e.comp.DispatchEnv(),
 	)
@@ -2401,35 +2407,14 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	}
 	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
-	// Pad the prompt with 1 cell of horizontal breathing room on
-	// each side of the framed content. Background is wrapped on the
-	// outside so the padding cells are filled with the overlay's
-	// background color; the Span supplies the floating dimensions so
-	// the host window grows to accommodate the padding.
-	padded := handler.NewSpan(cmd, component.SpanConfig{
-		PadHorizontal:    2,
-		ContentAlignment: component.AlignmentCentered,
+	commandHandler := newCommandPromptHandler(cmd, e, func() error {
+		err := cmd.Close()
+		if cmd == e.cmd {
+			e.cmd = nil
+			e.stopPromptShader()
+		}
+		return err
 	})
-	bg := component.NewBackground(padded, term.Cell{
-		Attributes: term.Attributes{
-			Bg:    e.config.CommandOverlay.ElementAttr.Bg,
-			Attrs: e.config.CommandOverlay.ElementAttr.Attrs,
-		},
-	})
-	commandHandler := browser.FuncFloating(
-		browser.FuncHandler(
-			handler.WithComponent(padded, bg),
-			func() error {
-				err := cmd.Close()
-				if cmd == e.cmd {
-					e.cmd = nil
-					e.stopPromptShader()
-				}
-				return err
-			},
-		),
-		padded.Dimensions,
-	)
 	reset(cmd)
 
 	e.cmdWin = e.cmdV.C.Floating(commandHandler,
@@ -2438,7 +2423,7 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 			Alignment: component.AlignmentHorizontallyCentered,
 		})
 	e.cmd = cmd
-	if e.commandPromptShader {
+	if e.commandPromptCfg.shader.enabled {
 		e.startPromptShader()
 	}
 }
@@ -2567,6 +2552,7 @@ func (e *ex) startPromptShader() {
 	e.promptShader = newPromptShader(
 		e.config.FocusFrameCharSet, e.config.FrameAttr,
 		e.cmdWin, offset, drawFunc(e.drawCmdPrompt), e,
+		e.commandPromptCfg.shader,
 	)
 	e.promptShader.Resize(e.width, e.height)
 }

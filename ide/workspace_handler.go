@@ -494,7 +494,7 @@ func (h *workspaceManagerHandler) init(
 		h.events.newPublisher(h.homeURI), 0 /* vte capacity */, h.clip, h.macro,
 		h.dispatchOnPreview, tm, homeParser,
 		h.newCommandPromptEditor(cfg), h.commandObserver, h.debugCommands,
-		cfg.animationsCommandPrompt(),
+		cfg.commandPromptCfg(),
 		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -1178,7 +1178,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
 		tm, parser,
 		h.newCommandPromptEditor(cfg), h.commandObserver, h.debugCommands,
-		cfg.animationsCommandPrompt(),
+		cfg.commandPromptCfg(),
 		textOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("new ex: %w", err)

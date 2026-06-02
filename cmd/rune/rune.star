@@ -360,7 +360,12 @@ config = {
         },
         # Plays a shineFrame sweep over the command prompt frame
         # while it's open. Set to False to suppress the effect.
-        "command_prompt": True,
+        "command_prompt": {
+            "enabled":  True,
+            "color":    "red",
+            "angular_width": 0.33,
+            "cycles": 1,
+        },
     },
     # Self-upgrade configuration. Rune polls a public manifest endpoint
     # to discover new releases and prompts before installing them.
@@ -767,6 +772,14 @@ config = {
         "manual_attr":        attr(fg = "default", bg = "default"),
         "matched_text_attr":  attr(fg = "blue", bg = "default", flags = ["bold"]),
         "focus_element_attr": attr(fg = "purple", bg = "default"),
+        # Glyphs used to stitch the prompt's manual/list separator
+        # row into the surrounding window frame.
+        "separator_charset": {
+            "left":             "🭼",
+            "horizontal_left":  "▁",
+            "horizontal_right": "▁",
+            "right":            "🭿",
+        },
     },
     "browser": {
         # What the workspace bar shows: the simplified path ("path"), the
@@ -1019,6 +1032,12 @@ if tui:
             "manual_attr":       attr(fg = "default", bg = "#1e1e1e"),
             "matched_text_attr": attr(fg = "#D34728", bg = "#1e1e1e", flags = ["bold", "italic"]),
             "focus_element_attr":attr(fg = "#c6c6c6", bg = "#1e1e1e", flags = ["bold"]),
+            "separator_charset": {
+                "left":             "├",
+                "horizontal_left":  "─",
+                "horizontal_right": "─",
+                "right":            "┤",
+            },
         },
         "browser": {
             "union_frames": True,
