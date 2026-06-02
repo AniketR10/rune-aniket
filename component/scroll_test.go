@@ -1681,6 +1681,64 @@ func TestWindowCoordinatesPanicDeleteRow(t *testing.T) {
 	})
 }
 
+func TestScrollGetMaxXOffsetWithTabs(t *testing.T) {
+	tabspaces := 4
+	width, height := 10, 4
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "tabs only",
+			content: "\t\t\t\t\t\t\t\t\nshort\nshorter\n",
+		},
+		{
+			name:    "mixed tabs and text",
+			content: "ab\tcd\tef\tgh\tij\tkl\nshort\nshorter\n",
+		},
+		{
+			name:    "tabs not on longest visual line",
+			content: "\t\tx\naaaaaaaaaaaaaaaaaaaaaaaa\nshort\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scroll := newScroll(tabspaces, false /*wrap*/, width, height)
+			_, err := scroll.Buffer().ReadFrom(strings.NewReader(tc.content))
+			require.NoError(t, err)
+
+			var expanded int
+			for i := 0; i < scroll.buf.Rows(); i++ {
+				if c := scroll.viewColumns(i); c > expanded {
+					expanded = c
+				}
+			}
+			wantMax := max(0, expanded-width)
+			assert.Equal(t, wantMax, scroll.MaxOffset().X,
+				"getMaxXOffset must use tab-expanded visual width")
+
+			require.True(t, scroll.SeekEndLine())
+
+			// Pick the row that produces the longest expanded width.
+			var longestRow int
+			expanded = 0
+			for i := 0; i < scroll.buf.Rows(); i++ {
+				if c := scroll.viewColumns(i); c > expanded {
+					expanded = c
+					longestRow = i
+				}
+			}
+			rawCols := scroll.buf.Columns(longestRow)
+			win, _ := scroll.ScrollToWindowCoordinates(
+				term.Coordinates{Y: longestRow, X: rawCols - 1},
+			)
+			assert.GreaterOrEqual(t, win.X, 0)
+			assert.Less(t, win.X, width,
+				"end-of-line cursor must stay inside the viewport")
+		})
+	}
+}
+
 func BenchmarkScrollWrapDraw10(b *testing.B) {
 	benchmarkScrollWrapDraw(b, 10, 0)
 }

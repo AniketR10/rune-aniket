@@ -506,7 +506,12 @@ func (s *Scroll) getMaxXOffset() (x int) {
 		return
 	}
 
-	columns := s.buf.MaxColumns()
+	var columns int
+	for i := 0; i < s.buf.Rows(); i++ {
+		if c := s.viewColumns(i); c > columns {
+			columns = c
+		}
+	}
 	x = max(0, columns-s.width)
 	return
 }

@@ -3289,6 +3289,46 @@ func TestCursorMoveEndLineNonBlank(t *testing.T) {
 	}
 }
 
+func TestCursorMoveEndLineWithTabsNoWrap(t *testing.T) {
+	const width, height = 10, 4
+
+	// Establish the baseline window x for an end-of-line cursor on a long
+	// no-tab line. Any extra drift past this position with tabs would mean
+	// the cursor disappeared off-screen (the bug being fixed here).
+	baseline := setupCursorContent(t, width, height,
+		"abcdefghijklmnopqrstuvwxyz\nshort\n", false /*wrap*/)
+	baseline.cursor = term.Coordinates{Y: 0}
+	require.True(t, baseline.MoveEndLine())
+	baseWin, _ := baseline.WindowCoordinates(baseline.CursorAtScroll())
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "tabs only",
+			content: "\t\t\t\t\t\t\t\t\nshort\n",
+		},
+		{
+			name:    "mixed tabs and text",
+			content: "ab\tcd\tef\tgh\tij\tkl\nshort\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupCursorContent(t, width, height, tc.content, false /*wrap*/)
+			e.cursor = term.Coordinates{Y: 0}
+
+			require.True(t, e.MoveEndLine())
+
+			win, _ := e.WindowCoordinates(e.CursorAtScroll())
+			assert.GreaterOrEqual(t, win.X, 0,
+				"cursor x must not go negative")
+			assert.Equal(t, baseWin.X, win.X,
+				"end-of-line cursor with tabs must land where a no-tab line ends")
+		})
+	}
+}
+
 func TestCursorMultiMovePublish(t *testing.T) {
 	suite := []struct {
 		initialScrollPos term.Coordinates
