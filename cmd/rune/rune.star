@@ -663,6 +663,10 @@ config = {
                 ],
             },
             "docs":           "workspacenew docs:///",
+            "help": [
+                "workspacenew docs:///",
+                "extensionready rune-agent ? I need help",
+            ],
         },
         # Key bindings merge with the built-ins; set a value to "" to unbind.
         "key_bindings": {
