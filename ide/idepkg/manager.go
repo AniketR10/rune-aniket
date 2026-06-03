@@ -1361,21 +1361,48 @@ func copyExecutables(files []executableEntry, dirname, targetdirname string) err
 			ret = multierror.Append(ret, fmt.Errorf("open executable: %w", err))
 			continue
 		}
-		defer func() { _ = origfile.Close() }()
-		target := filepath.Join(targetdirname, filepath.Base(name))
-		targetfile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR,
-			os.FileMode(executable.Mode))
-		if err != nil {
-			ret = multierror.Append(ret, fmt.Errorf("create executable %s: %w", target, err))
-			continue
+		if err := swapExecutable(origfile, targetdirname, name, executable.Mode); err != nil {
+			ret = multierror.Append(ret, err)
 		}
-		defer func() { _ = targetfile.Close() }()
-		if _, err := io.Copy(targetfile, origfile); err != nil {
-			ret = multierror.Append(ret, fmt.Errorf("copy executable %s: %w", target, err))
-			continue
-		}
+		_ = origfile.Close()
 	}
 	return ret
+}
+
+// swapExecutable installs orig into targetdirname by writing a temp
+// file and atomically renaming it over the destination. Overwriting in
+// place (O_TRUNC) mutates the inode of an already-running binary, which
+// macOS Gatekeeper/AMFI detects and kills for unsigned extensions;
+// renaming installs a fresh inode and leaves the running process
+// untouched.
+func swapExecutable(orig *os.File, targetdirname, name string, mode int64) error {
+	target := filepath.Join(targetdirname, filepath.Base(name))
+	tmp, err := os.CreateTemp(targetdirname, filepath.Base(name)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp executable for %s: %w", target, err)
+	}
+	tmpName := tmp.Name()
+	if _, err := io.Copy(tmp, orig); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("copy executable %s: %w", target, err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("close temp executable for %s: %w", target, err)
+	}
+	if err := os.Chmod(tmpName, os.FileMode(mode)); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("chmod executable %s: %w", target, err)
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("rename executable %s: %w", target, err)
+	}
+	if err := clearQuarantine(target); err != nil {
+		return fmt.Errorf("clear quarantine on %s: %w", target, err)
+	}
+	return nil
 }
 
 func isHidden(file string) bool {

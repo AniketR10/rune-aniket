@@ -2839,3 +2839,59 @@ func TestLoadUserConfigStarEmptyOrCommentsOnly(t *testing.T) {
 		})
 	}
 }
+
+func fileInode(t *testing.T, path string) uint64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	st, ok := info.Sys().(*syscall.Stat_t)
+	require.True(t, ok, "expected *syscall.Stat_t")
+	return uint64(st.Ino)
+}
+
+// TestCopyExecutablesAtomicSwap verifies that upgrading an installed
+// executable replaces the directory entry with a fresh inode rather
+// than truncating the existing one in place. Rewriting the inode of a
+// running, unsigned extension binary causes macOS Gatekeeper/AMFI to
+// kill it.
+func TestCopyExecutablesAtomicSwap(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "ext"),
+		[]byte("new-binary"), 0o755))
+
+	target := filepath.Join(dstDir, "ext")
+	require.NoError(t, os.WriteFile(target, []byte("old-binary"), 0o755))
+	oldInode := fileInode(t, target)
+
+	files := []executableEntry{{Name: "ext", Mode: 0o755}}
+	require.NoError(t, copyExecutables(files, srcDir, dstDir))
+
+	got, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "new-binary", string(got))
+
+	info, err := os.Stat(target)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+
+	assert.NotEqual(t, oldInode, fileInode(t, target),
+		"executable should be swapped via rename, not truncated in place")
+
+	entries, err := os.ReadDir(dstDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "no leftover temp files")
+	assert.Equal(t, "ext", entries[0].Name())
+}
+
+func TestCopyExecutablesMissingSource(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	files := []executableEntry{{Name: "missing", Mode: 0o755}}
+	err := copyExecutables(files, srcDir, dstDir)
+	require.Error(t, err)
+	entries, derr := os.ReadDir(dstDir)
+	require.NoError(t, derr)
+	assert.Empty(t, entries, "no temp files left behind on error")
+}
