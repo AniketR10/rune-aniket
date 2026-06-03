@@ -59,13 +59,13 @@ func TestUpgradeCommandHandler_DoesNotBlockOnNetwork(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/"+runtime.GOOS+"-"+runtime.GOARCH+"/manifest.json",
 		func(w http.ResponseWriter, _ *http.Request) {
-		select {
-		case hit <- struct{}{}:
-		default:
-		}
-		<-release
-		w.WriteHeader(http.StatusNotFound)
-	})
+			select {
+			case hit <- struct{}{}:
+			default:
+			}
+			<-release
+			w.WriteHeader(http.StatusNotFound)
+		})
 	srv := httptest.NewTLSServer(mux)
 	// Cleanups run LIFO; releaseFn must be registered AFTER
 	// srv.Close so it fires first and unblocks the in-flight
@@ -74,11 +74,12 @@ func TestUpgradeCommandHandler_DoesNotBlockOnNetwork(t *testing.T) {
 	t.Cleanup(releaseFn)
 
 	mgr, err := ideupgrade.New(ideupgrade.Config{
-		CurrentVersion: "v0.0.0",
-		Arch:           runtime.GOOS + "-" + runtime.GOARCH,
-		ManifestURL:    srv.URL,
-		Storage:        storagestub.NewInMemoryService(),
-		HTTPClient:     srv.Client(),
+		CurrentVersion:   "v0.0.0",
+		Arch:             runtime.GOOS + "-" + runtime.GOARCH,
+		ManifestURL:      srv.URL,
+		Storage:          storagestub.NewInMemoryService(),
+		HTTPClient:       srv.Client(),
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
 	})
 	require.NoError(t, err)
 
@@ -164,11 +165,12 @@ func TestUpgradeCommandHandler_SurfacesErrorAsSeparateNotification(t *testing.T)
 	t.Cleanup(srv.Close)
 
 	mgr, err := ideupgrade.New(ideupgrade.Config{
-		CurrentVersion: "v0.0.0",
-		Arch:           runtime.GOOS + "-" + runtime.GOARCH,
-		ManifestURL:    srv.URL,
-		Storage:        storagestub.NewInMemoryService(),
-		HTTPClient:     srv.Client(),
+		CurrentVersion:   "v0.0.0",
+		Arch:             runtime.GOOS + "-" + runtime.GOARCH,
+		ManifestURL:      srv.URL,
+		Storage:          storagestub.NewInMemoryService(),
+		HTTPClient:       srv.Client(),
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
 	})
 	require.NoError(t, err)
 
@@ -219,12 +221,13 @@ func TestUpgradeCommandHandler_TreatsForbiddenAsNoManifest(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	mgr, err := ideupgrade.New(ideupgrade.Config{
-		CurrentVersion: "v0.0.0",
-		Arch:           runtime.GOOS + "-" + runtime.GOARCH,
-		ManifestURL:    srv.URL,
-		Storage:        storagestub.NewInMemoryService(),
-		HTTPClient:     srv.Client(),
-		Notifications:  &fakeNotifications{}, // unused but required
+		CurrentVersion:   "v0.0.0",
+		Arch:             runtime.GOOS + "-" + runtime.GOARCH,
+		ManifestURL:      srv.URL,
+		Storage:          storagestub.NewInMemoryService(),
+		HTTPClient:       srv.Client(),
+		Notifications:    &fakeNotifications{}, // unused but required
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
 	})
 	require.NoError(t, err)
 
