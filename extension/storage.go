@@ -50,7 +50,7 @@ func newStorageResourceServer(storageDir string) *storageResourceServer {
 }
 
 func (s *storageResourceServer) setupStorage() storageapi.Service {
-	path := filepath.Join(s.storageDir, ".dbextension")
+	path := filepath.Join(s.storageDir, "extensions")
 	svc := localstorage.New(context.Background(), path, docbson.Marshaler())
 	return svc
 }

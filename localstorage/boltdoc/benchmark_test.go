@@ -146,11 +146,11 @@ func benchmarkBoltUpdateVersion(b *testing.B, marshaler docmarshal.Marshaler, do
 
 func openBenchmarkService(b *testing.B, marshaler docmarshal.Marshaler) storageapi.Service {
 	b.Helper()
-	svc, handle, err := boltdoc.New(filepath.Join(b.TempDir(), "rune.db"), marshaler)
+	svc, err := boltdoc.New(filepath.Join(b.TempDir(), "rune.db"), marshaler)
 	if err != nil {
 		b.Fatal(err)
 	}
-	b.Cleanup(func() { _ = handle.Close() })
+	b.Cleanup(func() { _ = svc.Close() })
 	return svc
 }
 

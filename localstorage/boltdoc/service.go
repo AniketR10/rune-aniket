@@ -38,6 +38,7 @@ package boltdoc
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	bluebolt "github.com/unstablebuild/blue/document/bolt"
 	"github.com/unstablebuild/ox-api/bluestore"
@@ -54,9 +55,7 @@ import (
 // whether to fall back to a remote leader.
 var ErrClosing = errors.New("service is closing")
 
-// defaultCollectionID is the bucket name used for the root, unpartitioned
-// collection of the bolt-backed storage. Partitions create sibling buckets.
-const defaultCollectionID = "rune"
+const defaultCollectionID = "default"
 
 // New opens (or creates) the bolt database at dbPath and returns a
 // storageapi.Service backed by it. The marshaler is used to encode every
@@ -64,42 +63,19 @@ const defaultCollectionID = "rune"
 // be the same marshaler the wire RPC layer uses to encode precondition
 // values, otherwise CAS preconditions break due to Go's type-strict ==.
 func New(dbPath string, marshaler docmarshal.Marshaler) (
-	storageapi.Service, *Service, error,
+	storageapi.Service, error,
 ) {
 	store, err := bluebolt.NewWithMarshaler(dbPath, defaultCollectionID, marshaler)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open bolt db at %q: %w", dbPath, err)
-	}
-	svc := &Service{
-		dbPath:    dbPath,
-		marshaler: marshaler,
-		store:     store,
+		return nil, fmt.Errorf("open bolt db at %q: %w", dbPath, err)
 	}
 	root := rootStore{Store: store, dbPath: dbPath, marshaler: marshaler}
-	return bluestore.AdaptTo(root), svc, nil
-}
-
-// Service is the concrete handle to a bolt-backed storageapi.Service.
-// Callers should use the storageapi.Service returned by New for normal
-// operations; this handle exposes Close so resource ownership is explicit.
-type Service struct {
-	dbPath    string
-	marshaler bluemarshal.Marshaler
-	store     *bluebolt.Store
-}
-
-// Close releases this Service's reference to the bolt database. Blue
-// reference-counts the shared *bolt.DB per path, so the underlying handle
-// is closed only when the last Store referencing the file closes.
-func (s *Service) Close() error {
-	if s == nil || s.store == nil {
-		return nil
-	}
-	return s.store.Close()
+	return bluestore.AdaptTo(root), nil
 }
 
 type rootStore struct {
 	*bluebolt.Store
+	partition string
 	dbPath    string
 	marshaler bluemarshal.Marshaler
 }
@@ -108,26 +84,15 @@ func (p rootStore) Partition(name string) (bluedoc.Service, error) {
 	if name == "" {
 		return nil, errors.New("invalid partition: empty")
 	}
-	store, err := bluebolt.NewWithMarshaler(p.dbPath, name, p.marshaler)
+	partitionName := filepath.Join(p.partition, name)
+	store, err := bluebolt.NewWithMarshaler(p.dbPath, partitionName, p.marshaler)
 	if err != nil {
 		return nil, fmt.Errorf("open partition %q: %w", name, err)
 	}
-	return partitionStore{Store: store, dbPath: p.dbPath, marshaler: p.marshaler}, nil
-}
-
-type partitionStore struct {
-	*bluebolt.Store
-	dbPath    string
-	marshaler bluemarshal.Marshaler
-}
-
-func (p partitionStore) Partition(name string) (bluedoc.Service, error) {
-	if name == "" {
-		return nil, errors.New("invalid partition: empty")
-	}
-	store, err := bluebolt.NewWithMarshaler(p.dbPath, name, p.marshaler)
-	if err != nil {
-		return nil, fmt.Errorf("open partition %q: %w", name, err)
-	}
-	return partitionStore{Store: store, dbPath: p.dbPath, marshaler: p.marshaler}, nil
+	return rootStore{
+		Store:     store,
+		partition: partitionName,
+		dbPath:    p.dbPath,
+		marshaler: p.marshaler,
+	}, nil
 }

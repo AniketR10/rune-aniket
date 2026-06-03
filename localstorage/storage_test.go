@@ -14,9 +14,36 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/docbson"
 	"github.com/unstablebuild/blue/document/doctest"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/ox-api/bluestore"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
+
+type miniDoc struct {
+	V string
+}
+
+// TestNewMultiProcessSafeOnBolt asserts that two localstorage.New
+// instances pointing at the same directory cooperate via firstmover
+// leader election rather than racing for the bolt OS flock. Before
+// the leader-only-storage refactor, the second instance silently
+// fell back to an in-memory stub when bolt.Open timed out, so
+// follower reads returned ErrNotFound instead of leader writes.
+func TestNewMultiProcessSafeOnBolt(t *testing.T) {
+	dir := t.TempDir()
+	m := docbson.Marshaler()
+
+	a := New(context.Background(), dir, m)
+	defer func() { _ = a.Close() }()
+	b := New(context.Background(), dir, m)
+	defer func() { _ = b.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	require.NoError(t, a.Set(ctx, "k", &miniDoc{V: "from-a"}))
+	var got miniDoc
+	require.NoError(t, b.Get(ctx, "k", &got))
+	require.Equal(t, "from-a", got.V)
+}
 
 func TestStorageConcurrentInstances(t *testing.T) {
 	doctest.TestDocumentService(t, func(t *testing.T) document.Service {

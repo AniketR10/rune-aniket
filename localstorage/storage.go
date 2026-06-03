@@ -40,45 +40,33 @@ import (
 // New returns a storageapi.Service storage service that uses the local
 // directory dir to setup a local, filesystem-backed, multi-process safe,
 // goroutine-safe storageapi.Service.
-//
-// On-disk layout: a single bbolt file at <dir>/.db/rune.db holds every
-// document inside named buckets (one per partition; the root collection
-// lives in the "rune" bucket). Crash consistency is provided by bbolt's
-// copy-on-write WAL, and CAS Updates run inside a single RW transaction
-// so storageapi.ConsistentUpdate has serializable read-modify-write
-// semantics.
 func New(_ context.Context, dir string, marshaler docmarshal.Marshaler) storageapi.Service {
 	ret := &delayedLoadingService{ready: make(chan struct{})}
 	go debug.CapturePanicReport(func() {
 		defer close(ret.ready)
 
-		storageDir := filepath.Join(dir, ".db")
+		storageDir := filepath.Join(dir, "run")
 		err := os.MkdirAll(storageDir, 0777)
 		if err != nil {
 			log.Errorf("new storage: mkdir: %v", err)
 			ret.service = storagestub.NewInMemoryService()
 			return
 		}
-		dbPath := filepath.Join(storageDir, "rune.db")
-		storage, handle, err := boltdoc.New(dbPath, marshaler)
-		if err != nil {
-			log.Errorf("new storage: %v", err)
-			ret.service = storagestub.NewInMemoryService()
-			return
-		}
-		ret.handle = handle
+		dbPath := filepath.Join(storageDir, "db.data")
 		cfg := firstmover.DefaultConfig()
 		cfg.Marshaler = marshaler
 		cfg.CloseError = boltdoc.ErrClosing
 
-		ret.service = firstmover.New(storage, filepath.Join(dir, ".dblock"), cfg)
+		open := func() (storageapi.Service, error) {
+			return boltdoc.New(dbPath, marshaler)
+		}
+		ret.service = firstmover.New(open, filepath.Join(dir, "db.lock"), cfg)
 	})
 	return ret
 }
 
 type delayedLoadingService struct {
 	service storageapi.Service
-	handle  *boltdoc.Service
 	ready   chan struct{}
 }
 

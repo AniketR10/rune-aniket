@@ -101,7 +101,7 @@ func TestPubSub(t *testing.T) {
 		backend := storagestub.NewInMemoryService()
 		instances := make([]*Service, 0, n)
 		for i := 0; i < n-1; i++ {
-			instance := New(backend, lockFile, cfg)
+			instance := New(factoryFor(backend), lockFile, cfg)
 			instance.retryStrategy = retry.CombinedStrategy(
 				retry.SequentialStrategy(2*time.Millisecond),
 				retry.LimitStrategy(m*2),
@@ -148,7 +148,7 @@ func makeLeaderFollowerPairLockFileListen(
 	cfg := testConfig()
 	cfg.Marshaler = doctoml.Marshaler()
 	svc := storagestub.NewInMemoryServiceWithMarshaler(cfg.Marshaler)
-	leader := New(svc, lockFile, cfg)
+	leader := New(factoryFor(svc), lockFile, cfg)
 	var temp testStruct
 	err := leader.Get(context.Background(), lockFile, &temp)
 	require.Equal(t, storageapi.ErrNotFound, err)
@@ -156,7 +156,7 @@ func makeLeaderFollowerPairLockFileListen(
 	for i := 0; i < nfollowers; i++ {
 		follower := new(Service)
 		follower.lockFileListen = lockFileListen
-		follower.Init(svc, lockFile, cfg)
+		follower.Init(factoryFor(svc), lockFile, cfg)
 		followers = append(followers, follower)
 	}
 	return leader, followers

@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -67,6 +66,18 @@ const DefaultMaxMessageSize = 1024 * 1024 * 4
 // when message is larger than MaxMessageSize.
 var ErrMessageTooLarge = errors.New("message exceeds maximum size")
 
+// StorageFactory opens the backing storageapi.Service for a peer that
+// has just won leader election. The leader owns the returned service
+// for the duration of its leadership and closes it when leadership
+// ends (graceful close, transient failure, or coup). Followers never
+// invoke the factory because they proxy through the leader via gRPC.
+//
+// Returning the factory pattern lets backends that hold exclusive OS
+// resources (e.g. bbolt's flock on rune.db) align acquisition with
+// firstmover's "one active writer" invariant rather than racing for
+// the file at construction time.
+type StorageFactory func() (storageapi.Service, error)
+
 // Service is a storageapi.Service that either acquires a lock
 // by creating a unix socket at lockFile and exposes svc
 // to RPC clients or if it fails to acquire lock, it will connect
@@ -86,6 +97,7 @@ var ErrMessageTooLarge = errors.New("message exceeds maximum size")
 type Service struct {
 	pubsub             *pubsub
 	mu                 sync.Mutex
+	open               StorageFactory
 	svc                storageapi.Service
 	lockFileListen     string // this distinction between listen/read is only used for tests
 	lockFileRead       string
@@ -108,21 +120,14 @@ type Service struct {
 	followFailures int
 	subscriptions  map[string][][]byte
 	active         storageapi.Service
-	// children tracks Partition()-derived peers so that closing the
-	// root also closes every follower (goroutine + gRPC client
-	// subscription) it spawned. Every Partition call on a
-	// firstmover-backed Service starts a fresh leadOrFollow loop, so
-	// callers that forget to Close a partition leak ~5 goroutines
-	// per workspace open/close cycle (RUNE-189).
-	children []*Service
 }
 
 const unixSocketPathMax = 103
 
 // New allocates storage for a new Service and initializes it.
-func New(svc storageapi.Service, lockFile string, cfg Config) *Service {
+func New(open StorageFactory, lockFile string, cfg Config) *Service {
 	ret := new(Service)
-	ret.Init(svc, lockFile, cfg)
+	ret.Init(open, lockFile, cfg)
 	return ret
 }
 
@@ -130,14 +135,17 @@ func New(svc storageapi.Service, lockFile string, cfg Config) *Service {
 // lockFile has already been created or not.
 //
 // It is highly recommended to use DefaultConfig to build a sane Config.
-func (s *Service) Init(svc storageapi.Service, lockFile string, cfg Config) {
+func (s *Service) Init(open StorageFactory, lockFile string, cfg Config) {
 	if cfg.Marshaler == nil {
 		panic("empty Marshaler in config")
+	}
+	if open == nil {
+		panic("nil StorageFactory")
 	}
 
 	lockFile = normalizedLockFile(lockFile)
 
-	s.svc = svc
+	s.open = open
 	if s.lockFileListen == "" {
 		s.lockFileListen = lockFile
 	}
@@ -280,27 +288,15 @@ func (s *Service) List(ctx context.Context, filters []storageapi.Filter) (
 	return
 }
 
-// Partition returns a partitioned peer service over the same firstmover backend.
+// Partition returns a partitioned peer service backed by this Service.
 func (s *Service) Partition(name string) (storageapi.Service, error) {
-	partitioned, err := s.svc.Partition(name)
-	if err != nil {
-		return nil, err
-	}
-	ret := new(Service)
-	ret.Init(partitioned, s.lockFileListen+"."+url.PathEscape(name), s.cfg)
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
-		// Parent already closed: don't retain a child the parent
-		// will never tear down. Close it now and surface the error
-		// via the returned Service being unusable (caller checks
-		// for nil).
-		_ = ret.Close()
 		return nil, errors.New("firstmover: Partition on closed Service")
 	}
-	s.children = append(s.children, ret)
 	s.mu.Unlock()
-	return ret, nil
+	return &partitionService{root: s, chain: []string{name}}, nil
 }
 
 // Publish publishes an arbitrary message to the given topic.
@@ -385,14 +381,12 @@ func (s *Service) Close() (ret error) {
 	}
 	s.log(log.TraceLevel, "Close called on peer...")
 	s.closed = true
-	children := s.children
-	s.children = nil
-	if s.active != s.svc && s.active != nil {
+	if s.active != nil && s.svc != nil && s.active != s.svc {
 		close(s.quitCh)
 		// it's possible that Close on a follower was called after
 		// we purposely shutdown connection due to leader also closing.
 		_ = s.active.Close()
-	} else if s.active == s.svc && s.active != nil { // leader
+	} else if s.active != nil && s.active == s.svc { // leader
 		s.pubsub.ready() // make sure that if we're not ready yet, we fail immediately
 		s.mu.Unlock()
 		// best effort, use server method directly so we guarantee delivery
@@ -404,26 +398,12 @@ func (s *Service) Close() (ret error) {
 		close(s.quitCh)
 	}
 
-	if err := s.svc.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-
 	if err := s.pubsub.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	s.mu.Unlock()
 
 	<-s.closeWaitCh
-	// Close children after the parent's lock is dropped and after
-	// closeWaitCh has signaled, so child Close calls (which take
-	// their own locks and may block on their own closeWaitCh) cannot
-	// deadlock with the parent's leadOrFollow loop. A child whose
-	// caller already closed it is a no-op thanks to s.closed.
-	for _, child := range children {
-		if err := child.Close(); err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
 	return
 }
 
@@ -434,7 +414,7 @@ func (s *Service) IsLeader() bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.svc == s.active
+	return s.active != nil && s.svc == s.active
 }
 
 const (
@@ -624,18 +604,37 @@ func (s *Service) setActiveAndUnlock(svc storageapi.Service) {
 }
 
 func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bool, err error) {
-	server := storagerpc.NewServer(schemedoc.SyncWithLocker(s.svc, &s.mu), s.cfg.Marshaler)
 	defer func() { _ = listener.Close() }()
 
+	// Materialize the backing storage only now that this peer has
+	// won the unix-socket lock. Backends that take exclusive OS-level
+	// resources (bbolt's flock) rely on this contract so that
+	// followers never race the leader for the file.
+	svc, err := s.open()
+	if err != nil {
+		return true, fmt.Errorf("firstmover: open leader storage: %w", err)
+	}
+	defer func() {
+		s.mu.Lock()
+		toClose := s.svc
+		s.svc = nil
+		s.mu.Unlock()
+		if toClose != nil {
+			_ = toClose.Close()
+		}
+	}()
+
+	s.mu.Lock()
+	s.svc = svc
+	server := storagerpc.NewServer(schemedoc.SyncWithLocker(svc, &s.mu), s.cfg.Marshaler)
 	gsrv := grpc.NewServer(
 		grpc.MaxSendMsgSize(s.cfg.MaxMessageSize),
 		grpc.MaxRecvMsgSize(s.cfg.MaxMessageSize),
 	)
-	defer gsrv.Stop()
-
-	s.mu.Lock()
 	s.pubsub.init(s.lockFileListen, s.pid)
 	s.mu.Unlock()
+	defer gsrv.Stop()
+
 	docpb.RegisterDocumentStoreServer(gsrv, server)
 	pubsubpb.RegisterPubSubServer(gsrv, s.pubsub)
 
@@ -667,7 +666,7 @@ func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bo
 
 	// set active svc and unlock API
 	s.log(log.DebugLevel, "Successfully assumed position of leader. Unlocking API...")
-	s.setActiveAndUnlock(s.svc)
+	s.setActiveAndUnlock(svc)
 	subscriptions := s.subscriptions
 	s.subscriptions = make(map[string][][]byte)
 	s.mu.Unlock()
@@ -831,7 +830,7 @@ func (s *Service) isRetriableError(ctx context.Context, err error) bool {
 	}
 
 	s.mu.Lock()
-	isLeader := s.svc == s.active
+	isLeader := s.active != nil && s.svc == s.active
 	s.mu.Unlock()
 	if !isLeader && s.cfg.CloseError != nil &&
 		strings.Contains(err.Error(), s.cfg.CloseError.Error()) {

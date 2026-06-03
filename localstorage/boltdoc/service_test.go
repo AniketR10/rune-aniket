@@ -52,16 +52,16 @@ func TestConcurrentServicesShareDBLifecycle(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "rune.db")
 
-	_, handleA, err := boltdoc.New(dbPath, docbson.Marshaler())
+	svcA, err := boltdoc.New(dbPath, docbson.Marshaler())
 	require.NoError(t, err)
-	svcB, handleB, err := boltdoc.New(dbPath, docbson.Marshaler())
+	svcB, err := boltdoc.New(dbPath, docbson.Marshaler())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = handleB.Close() })
+	t.Cleanup(func() { _ = svcB.Close() })
 
 	type rec struct{ Name string }
 	require.NoError(t, svcB.Create(ctx, "shared", &rec{Name: "b"}))
 
-	require.NoError(t, handleA.Close())
+	require.NoError(t, svcA.Close())
 
 	var got rec
 	require.NoError(t, svcB.Get(ctx, "shared", &got),
@@ -78,9 +78,9 @@ func TestConcurrentServicesShareDBLifecycle(t *testing.T) {
 func TestStoreImplementsDocumentService(t *testing.T) {
 	doctest.TestDocumentService(t, func(t *testing.T) document.Service {
 		dir := t.TempDir()
-		svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
+		svc, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = handle.Close() })
+		t.Cleanup(func() { _ = svc.Close() })
 		return bluestore.AdaptFrom(svc)
 	})
 }
@@ -94,9 +94,9 @@ func TestStoreImplementsDocumentService(t *testing.T) {
 func TestConsistentUpdate(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
+	svc, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = handle.Close() })
+	t.Cleanup(func() { _ = svc.Close() })
 
 	type counter struct {
 		Version int64
@@ -110,10 +110,8 @@ func TestConsistentUpdate(t *testing.T) {
 		retry.LimitStrategy(20),
 	)
 	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 2 {
+		wg.Go(func() {
 			var c counter
 			err := storageapi.ConsistentUpdate(ctx, svc, "counter", &c, strategy,
 				func() ([]storageapi.Update, []storageapi.Precondition) {
@@ -124,7 +122,7 @@ func TestConsistentUpdate(t *testing.T) {
 						}
 				})
 			assert.NoError(t, err)
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -139,9 +137,9 @@ func TestConsistentUpdate(t *testing.T) {
 func TestPartitionIsolation(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	svc, handle, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
+	svc, err := boltdoc.New(filepath.Join(dir, "rune.db"), docbson.Marshaler())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = handle.Close() })
+	t.Cleanup(func() { _ = svc.Close() })
 
 	type rec struct{ Name string }
 
