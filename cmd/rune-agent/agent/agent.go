@@ -546,7 +546,7 @@ func (a *Agent) run(
 			return false
 		}
 		pendingUsage.TotalDuration = time.Since(checkpointStart)
-		if !a.persistMessages(ctx, dialogueID, dialogue, newMessages, pendingUsage) {
+		if !a.persistMessages(ctx, ch, dialogueID, dialogue, newMessages, pendingUsage) {
 			return false
 		}
 		if hasPersistedDialogue {
@@ -1400,7 +1400,7 @@ func (a *Agent) injectAutoDiagnostics(
 }
 
 func (a *Agent) persistMessages(
-	ctx context.Context, dialogueID string,
+	ctx context.Context, ch chan<- Event, dialogueID string,
 	dialogue dialoguemanager.Dialogue, newMessages []llmapi.Message,
 	usage llmapi.DialogueUsage,
 ) bool {
@@ -1431,6 +1431,8 @@ func (a *Agent) persistMessages(
 	}
 	if err != nil {
 		slog.Error("agent: persist messages", "error", err, "dialogueID", dialogueID)
+		emit(ctx, ch, Event{Type: EventError, Error: fmt.Errorf(
+			"persist messages: %w", err)})
 		return false
 	}
 	return true

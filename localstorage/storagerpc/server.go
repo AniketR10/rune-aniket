@@ -219,12 +219,12 @@ func (s *Server) Update(
 	}
 	err = svc.Update(ctx, req.GetId(), updates, preconds...)
 	if err != nil {
-		switch err {
-		case storageapi.ErrNotFound:
+		switch {
+		case errors.Is(err, storageapi.ErrNotFound):
 			return &docpb.UpdateDocumentResponse{NotFound: true}, nil
-		case storageapi.ErrPreconditionFailed:
+		case errors.Is(err, storageapi.ErrPreconditionFailed):
 			return &docpb.UpdateDocumentResponse{PreconditionFailed: true}, nil
-		case storageapi.ErrPermissionDenied:
+		case errors.Is(err, storageapi.ErrPermissionDenied):
 			return nil, status.Error(codes.PermissionDenied, "")
 		}
 		return nil, err

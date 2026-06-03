@@ -2701,7 +2701,8 @@ func TestPersistMessages_AppendFallback(t *testing.T) {
 }
 
 func TestPersistMessages_AppendError(t *testing.T) {
-	// When AppendMessages fails, the agent should not panic — just log
+	// When AppendMessages fails, the agent must surface the failure as a
+	// visible EventError so a dropped turn is not lost silently.
 	store := newMockStore()
 	store.appendErr = errors.New("write error")
 
@@ -2718,8 +2719,39 @@ func TestPersistMessages_AppendError(t *testing.T) {
 	it := ag.Run(context.Background(), "d", "msg")
 	events := collectEvents(t, it)
 
-	// Should still produce Done (persistence error is logged, not emitted)
-	assert.True(t, hasEventType(events, EventDone))
+	errs := eventsByType(events, EventError)
+	require.NotEmpty(t, errs, "persist failure must be surfaced as EventError")
+	assert.ErrorContains(t, errs[0].Error, "persist messages")
+	assert.ErrorContains(t, errs[0].Error, "write error")
+}
+
+func TestPersistMessages_ReloadsFullContextAcrossRuns(t *testing.T) {
+	// A successful first turn must be reloaded so the second Run sees the
+	// prior user+assistant messages, not just the latest user message.
+	store := newMockStore()
+	svc := &mockService{responses: []mockResponse{
+		stopResponse("first answer"),
+		stopResponse("second answer"),
+	}}
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(),
+		Config{SystemPrompt: "test"})
+
+	_ = collectEvents(t, ag.Run(context.Background(), "d", "first question"))
+	_ = collectEvents(t, ag.Run(context.Background(), "d", "second question"))
+
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	require.Len(t, svc.requests, 2)
+
+	var contents []string
+	for _, m := range svc.requests[1].Messages {
+		contents = append(contents, m.Content)
+	}
+	assert.Contains(t, contents, "first question",
+		"second turn must reload prior user message")
+	assert.Contains(t, contents, "first answer",
+		"second turn must reload prior assistant message")
+	assert.Contains(t, contents, "second question")
 }
 
 func TestPersistMessages_SaveOnCancelledContext(t *testing.T) {

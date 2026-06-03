@@ -335,7 +335,7 @@ func (s store) getIndex(ctx context.Context) (dialogueIndex, bool, error) {
 		}
 		return idx, true, nil
 	}
-	if err != storageapi.ErrNotFound {
+	if !errors.Is(err, storageapi.ErrNotFound) {
 		return dialogueIndex{}, false, fmt.Errorf("document service get index: %w", err)
 	}
 	return newDialogueIndex(), false, nil
@@ -381,7 +381,7 @@ func (s store) ensureIndexMode(ctx context.Context, bootstrap bool) (dialogueInd
 			idx = newDialogueIndex()
 			if err := s.backend.Create(ctx, storeIndexRecordID, &idx); err == nil {
 				return idx, nil
-			} else if err != storageapi.ErrAlreadyExists {
+			} else if !errors.Is(err, storageapi.ErrAlreadyExists) {
 				return dialogueIndex{}, fmt.Errorf("document service create index: %w", err)
 			}
 			idx, _, err = s.getIndex(ctx)
@@ -405,7 +405,7 @@ func (s store) ensureIndexMode(ctx context.Context, bootstrap bool) (dialogueInd
 		}
 		if err := s.backend.Create(ctx, storeIndexRecordID, &idx); err == nil {
 			return idx, nil
-		} else if err != storageapi.ErrAlreadyExists {
+		} else if !errors.Is(err, storageapi.ErrAlreadyExists) {
 			return dialogueIndex{}, fmt.Errorf("document service create index: %w", err)
 		}
 	}
