@@ -191,12 +191,12 @@ func TestIDELockdownE2ERendersOverlayAndSwallowsInput(t *testing.T) {
 	wrapped := &lockedHandler{Handler: root, mu: mu}
 	wrapped.Resize(80, 24)
 	frame := handlertest.DrawHandler(wrapped, 80, 24)
-	assert.Contains(t, frame, "Rune Pro subscription",
+	assert.Contains(t, frame, "subscription is not",
 		"locked IDE must render the lockdown copy")
 	assert.Contains(t, frame, "Upgrade to Pro",
 		"locked IDE must render the Upgrade button")
-	assert.Contains(t, frame, "Re-signin",
-		"locked IDE must render the Re-signin button")
+	assert.Contains(t, frame, "Sign in",
+		"locked IDE must render the Sign in button")
 
 	_, handled := root.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 	assert.True(t, handled,
@@ -302,7 +302,7 @@ func TestPlanLockdownRunnerLockedSequence(t *testing.T) {
 	// appears. We do not match the entire frame because the
 	// overlay padding depends on Prompt's internal layout.
 	frame := handlertest.DrawHandler(r, 80, 24)
-	assert.Contains(t, frame, "Rune Pro subscription")
+	assert.Contains(t, frame, "subscription is not")
 	assert.Contains(t, frame, "Upgrade to Pro")
 
 	// Pressing the bound key 'u' must not reach the inner handler.
@@ -343,7 +343,7 @@ func (r *recordingNotifier) UpdateNotificationProgress(string, string, int64, in
 }
 
 // TestPlanLockdownReSignInInvokesCallback proves that pressing the
-// Re-signin button fires the onReSignIn callback. The callback owns
+// Sign in button fires the onReSignIn callback. The callback owns
 // the purge + re-login + monitor-tick sequence; the prompt itself
 // just routes the click.
 func TestPlanLockdownReSignInInvokesCallback(t *testing.T) {
@@ -355,7 +355,7 @@ func TestPlanLockdownReSignInInvokesCallback(t *testing.T) {
 	}
 	p := newPlanLockdownPrompt(deps)
 	p.Resize(80, 24)
-	p.Handle(term.Event{Type: term.EventKey, Ch: 'r'})
+	p.Handle(term.Event{Type: term.EventKey, Ch: 's'})
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -365,7 +365,7 @@ func TestPlanLockdownReSignInInvokesCallback(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	assert.Equal(t, int32(1), reSignCalled.Load(),
-		"Re-signin button must invoke the onReSignIn callback")
+		"Sign in button must invoke the onReSignIn callback")
 }
 
 // TestPlanLockdownPromptRendersUpgradeAndReSignin documents the
@@ -380,7 +380,7 @@ func TestPlanLockdownPromptRendersUpgradeAndReSignin(t *testing.T) {
 	p.Resize(80, 24)
 	frame := handlertest.DrawHandler(p, 80, 24)
 	assert.Contains(t, frame, "Upgrade to Pro")
-	assert.Contains(t, frame, "Re-signin")
+	assert.Contains(t, frame, "Sign in")
 }
 
 // TestPlanLockdownRunnerResizeClampsPromptBox proves the lockdown
