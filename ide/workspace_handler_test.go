@@ -5378,6 +5378,10 @@ func (f fnRunner) Close() error {
 	return nil
 }
 
+func (f fnRunner) WaitReady(ctx context.Context, id string) error {
+	return nil
+}
+
 func newSafeHandler(m *testWorkspaceManagerHandler) *safeHandler {
 	// Force the command Prompt into sync mode so completion runs
 	// inline on the test goroutine. The async path spawns a raw
@@ -5677,6 +5681,47 @@ func TestWorkspaceReadyCommand(t *testing.T) {
 				"against the focused workspace")
 	})
 
+	t.Run("waits for the follow-up command to be registered", func(t *testing.T) {
+		runner := newWaitReadyRunner()
+		close(runner.ready)
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		const extCmd = "extcmd"
+		var dispatched atomic.Bool
+
+		m.mu.Lock()
+		require.NoError(t,
+			m.commandExtensionReady("ext-id", extCmd))
+		m.mu.Unlock()
+
+		// The extension is ready, but extcmd has not been registered
+		// yet: the follow-up command must not dispatch.
+		require.Never(t, func() bool {
+			m.drainSched()
+			return dispatched.Load()
+		}, 150*time.Millisecond, 15*time.Millisecond,
+			"extensionready must wait for the follow-up command to be "+
+				"registered before dispatching it")
+
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: extCmd},
+			text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					dispatched.Store(true)
+					return nil
+				}, nil)))
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			return dispatched.Load()
+		}, 2*time.Second, 10*time.Millisecond,
+			"extensionready must dispatch the follow-up command once it "+
+				"has been registered")
+	})
 	t.Run("defers until pending workspace is installed", func(t *testing.T) {
 		dir1 := t.TempDir()
 		m := newTestWorkspaceManagerHandlerWithDir(t,
@@ -5802,6 +5847,250 @@ func TestWorkspaceReadyCommand(t *testing.T) {
 		pendingB.cancelCtx()
 		delete(m.pending, uriB.String())
 		m.lastReservedPending = nil
+		m.mu.Unlock()
+	})
+}
+
+// waitReadyRunner is a fake extension.Runner that resolves WaitReady
+// when its ready channel is closed, or returns waitErr.
+type waitReadyRunner struct {
+	ready   chan struct{}
+	waitErr error
+}
+
+func newWaitReadyRunner() *waitReadyRunner {
+	return &waitReadyRunner{ready: make(chan struct{})}
+}
+
+func (r *waitReadyRunner) Run(extensionID, path string, config config.Config) error {
+	return nil
+}
+
+func (r *waitReadyRunner) Close() error { return nil }
+
+func (r *waitReadyRunner) WaitReady(ctx context.Context, id string) error {
+	if r.waitErr != nil {
+		return r.waitErr
+	}
+	select {
+	case <-r.ready:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// newTestWorkspaceManagerHandlerWithRunner builds a handler whose
+// workspaces install runner for their Extensions. Using a single
+// shared runner keeps the concrete type stored in the per-workspace
+// atomic.Value consistent.
+func newTestWorkspaceManagerHandlerWithRunner(
+	t *testing.T, cc ideConfig, dir string, runner extension.Runner,
+) *testWorkspaceManagerHandler {
+	mu, sched, drain := buildTestSchedulerForCfg(&cc)
+	manager := workspace.NewManager(config.NopConfig(), sched)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
+
+	uri := new(workspaceapi.URI)
+	var err error
+	*uri, err = workspaceapi.ParseURI("memory://" + dir)
+	require.NoError(t, err)
+
+	runnerFn := func(
+		_ workspaceapi.URI,
+		_ map[extensionapi.Permission]extension.ResourceRegistrar,
+		_ string, _ browser.Notifications,
+		_, _ schemeapi.Executor, _ extension.Grantor, _ text.Editor,
+		_ ideauthorizer.PromptOpener, _ storageapi.Service,
+		_ func(func()) bool) (extension.Runner, error) {
+		return runner, nil
+	}
+	return newTestWorkspaceManagerHandlerWithManagerMu(t, manager, mu, drain,
+		uri, cc, FuncExtensionsRunner(runnerFn), nil, dir, nil,
+		nopShutdownShaderConfig())
+}
+
+func TestExtensionReadyCommand(t *testing.T) {
+	t.Run("dispatches inline once the extension is ready", func(t *testing.T) {
+		runner := newWaitReadyRunner()
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		m.mu.Lock()
+		require.Nil(t, m.lastReservedPending)
+		require.NoError(t,
+			m.commandExtensionReady("ext-id", cmdRenameWorkspace, "inline"))
+		// The follow-up command must NOT run before the extension is
+		// ready.
+		require.Equal(t, "", m.workspaces[m.focus].tabname)
+		focus := m.focus
+		m.mu.Unlock()
+
+		close(runner.ready)
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.workspaces[focus].tabname == "inline"
+		}, time.Second, 10*time.Millisecond,
+			"extensionready must dispatch the follow-up command once "+
+				"the extension is ready")
+	})
+
+	t.Run("waits for the follow-up command to be registered", func(t *testing.T) {
+		runner := newWaitReadyRunner()
+		close(runner.ready)
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		const extCmd = "extcmd"
+		var dispatched atomic.Bool
+
+		m.mu.Lock()
+		require.NoError(t, m.commandExtensionReady("ext-id", extCmd))
+		m.mu.Unlock()
+
+		// The extension is ready, but extcmd has not been registered
+		// yet: the follow-up command must not dispatch.
+		require.Never(t, func() bool {
+			m.drainSched()
+			return dispatched.Load()
+		}, 150*time.Millisecond, 15*time.Millisecond,
+			"extensionready must wait for the follow-up command to be "+
+				"registered before dispatching it")
+
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: extCmd},
+			text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					dispatched.Store(true)
+					return nil
+				}, nil)))
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			return dispatched.Load()
+		}, 2*time.Second, 10*time.Millisecond,
+			"extensionready must dispatch the follow-up command once it "+
+				"has been registered")
+	})
+
+	t.Run("defers until pending workspace is installed", func(t *testing.T) {
+		dir1 := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithDir(t,
+			defaultConfigWithWrap(false), dir1, nopShutdownShaderConfig())
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+		firstSlot := m.focus
+
+		dir2 := t.TempDir()
+		uri2, err := workspaceapi.ParseURI("memory://" + dir2)
+		require.NoError(t, err)
+
+		m.mu.Lock()
+		require.NoError(t, m.addOrCreateWorkspace(uri2))
+		require.NotNil(t, m.lastReservedPending)
+		pending := m.lastReservedPending
+		require.NoError(t,
+			m.commandExtensionReady("ext-id", cmdRenameWorkspace, "deferred"))
+		require.Len(t, pending.onReady, 1)
+		require.Equal(t,
+			[]string{cmdExtensionReady, "ext-id", cmdRenameWorkspace, "deferred"},
+			pending.onReady[0],
+			"the queued command must preserve the extensionready envelope")
+		require.Equal(t, "", m.workspaces[firstSlot].tabname)
+		m.mu.Unlock()
+
+		m.drainPendingWorkspaces()
+
+		// The drained extensionready spawns a goroutine that waits on
+		// the freshly installed workspace's runner (the testRunner,
+		// whose WaitReady returns immediately) and then dispatches the
+		// rename via scheduleNextTick.
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			newSlot, ok := m.findInstalledSlot(uri2)
+			if !ok || m.workspaces[newSlot] == nil {
+				return false
+			}
+			return m.workspaces[newSlot].tabname == "deferred"
+		}, time.Second, 10*time.Millisecond,
+			"queued extensionready must rename the freshly installed "+
+				"workspace once its extension is ready")
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		require.Equal(t, "", m.workspaces[firstSlot].tabname,
+			"the previously focused workspace must remain unrenamed")
+	})
+
+	t.Run("surfaces a notification and dispatches nothing on error", func(t *testing.T) {
+		runner := &waitReadyRunner{ready: make(chan struct{}),
+			waitErr: errors.New("ext exited")}
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		m.mu.Lock()
+		require.NoError(t,
+			m.commandExtensionReady("ext-id", cmdRenameWorkspace, "never"))
+		focus := m.focus
+		m.mu.Unlock()
+
+		// Give the goroutine and scheduled tick time to run, then
+		// assert the follow-up command never dispatched.
+		require.Never(t, func() bool {
+			m.drainSched()
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.workspaces[focus].tabname == "never"
+		}, 200*time.Millisecond, 20*time.Millisecond,
+			"a WaitReady error must not dispatch the follow-up command")
+	})
+
+	t.Run("queue is dropped when pending is canceled", func(t *testing.T) {
+		dir1 := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithDir(t,
+			defaultConfigWithWrap(false), dir1, nopShutdownShaderConfig())
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+		firstSlot := m.focus
+
+		dir2 := t.TempDir()
+		uri2, err := workspaceapi.ParseURI("memory://" + dir2)
+		require.NoError(t, err)
+
+		m.mu.Lock()
+		_, cancel := context.WithCancel(context.Background())
+		pending, err := m.reservePendingSlot(uri2, -1, cancel)
+		require.NoError(t, err)
+		require.Same(t, pending, m.lastReservedPending)
+
+		require.NoError(t,
+			m.commandExtensionReady("ext-id", cmdRenameWorkspace, "dropped"))
+		require.Len(t, pending.onReady, 1)
+
+		m.focus = pending.slot
+		_, _, err = m.closeWorkspace()
+		require.NoError(t, err)
+		require.Nil(t, m.lastReservedPending)
+
+		m.focus = firstSlot
+		require.Equal(t, "", m.workspaces[firstSlot].tabname)
 		m.mu.Unlock()
 	})
 }

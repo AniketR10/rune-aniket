@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -424,7 +425,7 @@ type options struct {
 	openShaderFPS          int
 	openShaderDuration     time.Duration
 	zdotDir                string
-	starlarkTutorials map[string]string
+	starlarkTutorials      map[string]string
 }
 
 func defaultOptions() options {
@@ -471,5 +472,9 @@ func (n nopExtensionsRunner) Run(extensionID, path string, config config.Config)
 }
 
 func (n nopExtensionsRunner) Close() error {
+	return nil
+}
+
+func (n nopExtensionsRunner) WaitReady(ctx context.Context, id string) error {
 	return nil
 }

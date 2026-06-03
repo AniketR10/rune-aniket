@@ -752,6 +752,10 @@ func (r testRunner) Close() error {
 	return nil
 }
 
+func (r testRunner) WaitReady(ctx context.Context, id string) error {
+	return nil
+}
+
 // TestIDEExoMisconfigurationFallsBackToDefault is an end-to-end
 // guard against exoeditor.New panics when the user's config selects
 // `editor.mode = "exo"` but does not supply both required fields

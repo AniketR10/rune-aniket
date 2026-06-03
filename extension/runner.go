@@ -24,6 +24,7 @@
 package extension
 
 import (
+	"context"
 	"io"
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -33,4 +34,14 @@ import (
 type Runner interface {
 	io.Closer
 	Run(id, cmdAndArgs string, config config.Config) error
+	// WaitReady blocks until the extension with this id has been
+	// registered (Run called) and completed its protocol handshake
+	// (commands/aliases/keybindings registered), the extension has
+	// failed/exited, the runner is closed, or ctx is cancelled.
+	// Registration may happen asynchronously after WaitReady is
+	// called, so an id that is not yet known is not an error: the call
+	// waits for it to appear. It returns nil on a successful handshake,
+	// the terminal extension error on failure/exit, and ctx.Err() on
+	// cancellation.
+	WaitReady(ctx context.Context, id string) error
 }

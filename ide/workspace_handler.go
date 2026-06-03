@@ -96,6 +96,7 @@ const (
 	cmdAddWorkspace      = "workspacenew"
 	cmdRenameWorkspace   = "workspacerename"
 	cmdWorkspaceReady    = "workspaceready"
+	cmdExtensionReady    = "extensionready"
 	cmdMacroRecord       = "record"
 	workspaceSlots       = 9
 )
@@ -608,6 +609,14 @@ func (h *workspaceManagerHandler) focusURI() workspaceapi.URI {
 		return handler.uri
 	}
 	return h.homeURI
+}
+
+func (h *workspaceManagerHandler) focusRunner() extension.Runner {
+	if handler := h.workspaces[h.focus]; handler != nil {
+		runner, _ := handler.Extensions.Load().(extension.Runner)
+		return runner
+	}
+	return h.homeRunner
 }
 
 func (h *workspaceManagerHandler) envSource(name string) (string, bool) {
@@ -1800,6 +1809,87 @@ func (h *workspaceManagerHandler) commandWorkspaceReady(args ...string) error {
 	return ex.dispatchCommand(args[0], args[1:]...)
 }
 
+func (h *workspaceManagerHandler) commandExtensionReady(args ...string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("expected extension id and command")
+	}
+	if h.lastReservedPending != nil {
+		return h.commandWorkspaceReady(append([]string{cmdExtensionReady}, args...)...)
+	}
+	id := args[0]
+	rest := append([]string(nil), args[1:]...)
+	runner := h.focusRunner()
+	if runner == nil {
+		return fmt.Errorf("no extension runner on the focused workspace")
+	}
+	ex := h.exHandler(h.focusHandler())
+	go debug.CapturePanicReport(func() {
+		err := runner.WaitReady(context.Background(), id)
+		if err == nil {
+			err = h.waitCommandRegistered(ex, rest[0])
+		}
+		h.scheduleNextTick(func() {
+			if err != nil {
+				_, _ = h.notifications.current().Notify(browserapi.LevelError,
+					"extensionready %s: %v", id, err)
+				return
+			}
+			if dispErr := ex.dispatchCommand(rest[0], rest[1:]...); dispErr != nil {
+				_, _ = h.notifications.current().Notify(browserapi.LevelError,
+					"extensionready %s: %v", id, dispErr)
+			}
+		})
+	})
+	return nil
+}
+
+// extensionCommandWait bounds how long extensionready blocks for the
+// follow-up command to be registered after the extension's protocol
+// handshake completes. Registration is published asynchronously over
+// the extension's editor RPC, so the command may not exist the instant
+// WaitReady returns.
+const extensionCommandWait = 10 * time.Second
+
+// waitCommandRegistered blocks until cmd is registered on ex, the
+// timeout elapses, or scheduling fails. The registration check runs on
+// the event loop because the command registry is owned by the editor
+// component.
+func (h *workspaceManagerHandler) waitCommandRegistered(ex *ex, cmd string) error {
+	deadline := time.NewTimer(extensionCommandWait)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		registered := make(chan bool, 1)
+		scheduled := h.scheduleNextTick(func() {
+			registered <- commandRegistered(ex, cmd)
+		})
+		if !scheduled {
+			return fmt.Errorf("command %q wait: event loop is closed", cmd)
+		}
+		if <-registered {
+			return nil
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			return fmt.Errorf("command %q was not registered within %s",
+				cmd, extensionCommandWait)
+		}
+	}
+}
+
+// commandRegistered reports whether cmd is registered on ex's editor.
+// It must run on the event loop.
+func commandRegistered(ex *ex, cmd string) bool {
+	for _, man := range ex.comp.Commands() {
+		if man.Name == cmd {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *workspaceManagerHandler) closeWorkspace() (
 	workspaceapi.URI, []workspaceapi.URI, error,
 ) {
@@ -2170,6 +2260,16 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 					"currently being loaded, the command is dispatched immediately " +
 					"against the focused workspace.",
 				Synopsis: "command [args...]",
+			},
+		},
+		cmdExtensionReady: {
+			handler: (*workspaceManagerHandler).commandExtensionReady,
+			man: textapi.CommandManual{
+				Summary: "Runs another command once the extension with the given " +
+					"id has finished initializing on the workspace. If a " +
+					"workspacenew is currently pending, the wait starts after " +
+					"that workspace finishes installing.",
+				Synopsis: "<extension-id> command [args...]",
 			},
 		},
 	}

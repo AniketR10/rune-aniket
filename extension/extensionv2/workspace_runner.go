@@ -85,7 +85,12 @@ type workspaceRunner struct {
 	ctx         context.Context
 	cancelCtx   func()
 	mu          sync.Mutex
-	states      map[string]*extensionRunState
+	// registered broadcasts whenever Run installs or replaces a
+	// state. WaitReady uses it to block for an extension that has not
+	// been registered yet, since Run executes asynchronously from
+	// initExtensions.
+	registered *sync.Cond
+	states     map[string]*extensionRunState
 }
 
 type extensionRunState struct {
@@ -136,6 +141,7 @@ func (m *workspaceRunner) init(
 ) {
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
 	m.states = make(map[string]*extensionRunState)
+	m.registered = sync.NewCond(&m.mu)
 	m.cfg.authCertEnv = "RUNE_CERT"
 	m.cfg.authTokenEnv = "RUNE_TOKEN"
 	m.cfg.socketEnv = "RUNE_SOCKET"
@@ -223,6 +229,7 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 	state.startCount++
 	state.readiness = readiness
 	state.logPath = logPath
+	m.registered.Broadcast()
 	m.mu.Unlock()
 
 	return nil
@@ -239,6 +246,7 @@ func (m *workspaceRunner) Close() error {
 	// eagerly keeps /tmp tidy.
 	m.cancelCtx()
 	m.mu.Lock()
+	m.registered.Broadcast()
 	paths := make([]string, 0, len(m.states))
 	for _, state := range m.states {
 		paths = append(paths, state.logPath)
@@ -459,6 +467,34 @@ func (m *workspaceRunner) startExtension(
 	readiness := m.states[id].readiness
 	m.mu.Unlock()
 	return readiness.Wait(ctx)
+}
+
+// WaitReady blocks until the extension with this id has been registered
+// (Run called) and completed its protocol handshake, failed/exited, the
+// runner is closed, or ctx is cancelled. Registration happens
+// asynchronously, so an id that is not yet known is not an error: the
+// call waits for it to appear rather than failing immediately.
+func (m *workspaceRunner) WaitReady(ctx context.Context, id string) error {
+	stop := context.AfterFunc(ctx, func() {
+		m.mu.Lock()
+		m.registered.Broadcast()
+		m.mu.Unlock()
+	})
+	defer stop()
+
+	m.mu.Lock()
+	for m.states[id] == nil && ctx.Err() == nil && m.ctx.Err() == nil {
+		m.registered.Wait()
+	}
+	state := m.states[id]
+	m.mu.Unlock()
+	if state == nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("extension %q runner is closed: %w", id, m.ctx.Err())
+	}
+	return state.readiness.Wait(ctx)
 }
 
 func (m *workspaceRunner) stopExtensionByID(id string) error {

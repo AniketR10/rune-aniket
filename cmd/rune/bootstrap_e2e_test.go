@@ -24,6 +24,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -391,3 +392,6 @@ type nopE2ERunner struct{}
 
 func (nopE2ERunner) Run(string, string, config.Config) error { return nil }
 func (nopE2ERunner) Close() error                            { return nil }
+func (n nopE2ERunner) WaitReady(ctx context.Context, id string) error {
+	return nil
+}

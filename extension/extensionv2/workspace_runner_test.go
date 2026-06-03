@@ -534,6 +534,208 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	assert.Nil(t, states[0].LastErr)
 }
 
+func TestWorkspaceRunnerWaitReady(t *testing.T) {
+	t.Parallel()
+
+	t.Run("blocks until protocol ready", func(t *testing.T) {
+		t.Parallel()
+
+		keys, err := auth.GenerateKeys()
+		require.NoError(t, err)
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+
+		exec := &recordingExecutor{}
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+
+		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
+
+		done := make(chan error, 1)
+		go func() {
+			done <- runner.WaitReady(context.Background(), "test-extension")
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("WaitReady returned before protocol handshake: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		meta := extensionapi.Metadata{
+			DeveloperID:    "dev-id",
+			DeveloperEmail: "dev@example.com",
+			DeveloperKey:   "dev-key",
+			ExtensionID:    "test-extension",
+			ExtensionName:  "Test Extension",
+			Permissions:    extensionapi.AllPermissions(),
+		}
+		encoded, err := json.Marshal(meta)
+		require.NoError(t, err)
+		_, err = exec.snapshotCmd().Stdout.Write(encoded)
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("WaitReady did not return after protocol handshake")
+		}
+	})
+
+	t.Run("unknown id blocks until ctx cancel", func(t *testing.T) {
+		t.Parallel()
+
+		keys, err := auth.GenerateKeys()
+		require.NoError(t, err)
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+
+		exec := &recordingExecutor{}
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			done <- runner.WaitReady(ctx, "missing")
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("WaitReady returned before registration or cancellation: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		cancel()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second):
+			t.Fatal("WaitReady did not return after ctx cancel")
+		}
+	})
+
+	t.Run("registration race resolves", func(t *testing.T) {
+		t.Parallel()
+
+		keys, err := auth.GenerateKeys()
+		require.NoError(t, err)
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+
+		exec := &recordingExecutor{}
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- runner.WaitReady(context.Background(), "test-extension")
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("WaitReady returned before registration: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
+
+		select {
+		case err := <-done:
+			t.Fatalf("WaitReady returned before protocol handshake: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		meta := extensionapi.Metadata{
+			DeveloperID:    "dev-id",
+			DeveloperEmail: "dev@example.com",
+			DeveloperKey:   "dev-key",
+			ExtensionID:    "test-extension",
+			ExtensionName:  "Test Extension",
+			Permissions:    extensionapi.AllPermissions(),
+		}
+		encoded, err := json.Marshal(meta)
+		require.NoError(t, err)
+		_, err = exec.snapshotCmd().Stdout.Write(encoded)
+		require.NoError(t, err)
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("WaitReady did not return after registration and handshake")
+		}
+	})
+
+	t.Run("runner close unblocks", func(t *testing.T) {
+		t.Parallel()
+
+		keys, err := auth.GenerateKeys()
+		require.NoError(t, err)
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+
+		exec := &recordingExecutor{}
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- runner.WaitReady(context.Background(), "missing")
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("WaitReady returned before runner close: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		require.NoError(t, runner.Close())
+		select {
+		case err := <-done:
+			require.Error(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("WaitReady did not return after runner close")
+		}
+	})
+
+	t.Run("ctx cancel returns", func(t *testing.T) {
+		t.Parallel()
+
+		keys, err := auth.GenerateKeys()
+		require.NoError(t, err)
+		uri, err := workspaceapi.ParseURI("file:///tmp")
+		require.NoError(t, err)
+
+		exec := &recordingExecutor{}
+		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
+			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+
+		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			done <- runner.WaitReady(ctx, "test-extension")
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("WaitReady returned before cancellation: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		cancel()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(time.Second):
+			t.Fatal("WaitReady did not return after ctx cancel")
+		}
+	})
+}
+
 func TestWorkspaceRunnerStartExtensionReturnsProtocolError(t *testing.T) {
 	t.Parallel()
 
