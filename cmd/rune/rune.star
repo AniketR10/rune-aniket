@@ -834,6 +834,10 @@ config = {
     },
     # Workspace configuration. This configuration is never reloaded.
     "workspace": {
+        # Path to the home workspace opened when Rune starts. Defaults to the
+        # user's home directory. A leading "~" expands to the user's home
+        # directory.
+        "home":         "~",
         # Configuration for remote workspaces connected over SSH.
         "ssh":          {
             "timeout":         "5s",

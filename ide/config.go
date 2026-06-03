@@ -2917,6 +2917,24 @@ func (c ideConfig) workspaceWallpaperAttr() term.Attributes {
 		term.Attributes{})
 }
 
+// workspaceHome returns the configured home workspace path. It
+// defaults to "~" when unset; callers are responsible for expanding
+// the "~" shortcut against the user's home directory.
+func (c ideConfig) workspaceHome() string {
+	ws := c.workspace()
+	home, err := ws.GetString("home")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.home"] = err
+		}
+		return "~"
+	}
+	if home == "" {
+		return "~"
+	}
+	return home
+}
+
 func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_background_attr",
 		term.Attributes{})

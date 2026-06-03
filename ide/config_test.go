@@ -506,6 +506,32 @@ func TestTabOverrideIcon(t *testing.T) {
 	assert.Equal(t, '●', cfg.tabOverrideIcon())
 }
 
+// TestWorkspaceHome asserts workspace.home parses correctly: absent →
+// "~", empty → "~", non-empty → the configured path.
+func TestWorkspaceHome(t *testing.T) {
+	// key absent → default "~"
+	cfg := &ideConfig{cfg: map[string]any{
+		"workspace": map[string]any{},
+	}, errors: map[string]error{}}
+	assert.Equal(t, "~", cfg.workspaceHome(),
+		"absent workspace.home must default to ~")
+	assert.Empty(t, cfg.errors)
+
+	// key empty → default "~"
+	cfg = &ideConfig{cfg: map[string]any{
+		"workspace": map[string]any{"home": ""},
+	}, errors: map[string]error{}}
+	assert.Equal(t, "~", cfg.workspaceHome(),
+		"empty workspace.home must default to ~")
+	assert.Empty(t, cfg.errors)
+
+	// key present and non-empty → configured path
+	cfg = &ideConfig{cfg: map[string]any{
+		"workspace": map[string]any{"home": "~/work"},
+	}, errors: map[string]error{}}
+	assert.Equal(t, "~/work", cfg.workspaceHome())
+}
+
 func TestConfigDecodeError(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)

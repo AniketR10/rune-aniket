@@ -29,6 +29,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/user"
 	"path"
 	"sync"
 
@@ -415,7 +416,15 @@ func (i *IDE) init(
 		return fmt.Errorf("user home dir: %v", err)
 	}
 
-	homeDirURI, err := workspaceapi.CurrentUserHostURI(homeDir)
+	homePath, err := workspaceapi.ExpandPath(i.ideConfig.workspaceHome(),
+		func() (*user.User, error) {
+			return &user.User{HomeDir: homeDir}, nil
+		}, os.Getwd)
+	if err != nil {
+		return fmt.Errorf("expand home workspace path: %v", err)
+	}
+
+	homeDirURI, err := workspaceapi.CurrentUserHostURI(homePath)
 	if err != nil {
 		return fmt.Errorf("make home dir uri: %v", err)
 	}
