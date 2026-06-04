@@ -44,7 +44,7 @@ func (r *Root) commandManuals() []command.Manual {
 		{Name: "windownew", Summary: "Split the current active window vertically or horizontally in two, moving focus to the new window. If no orientation is passed, the default split orientation is used. See `windowdefaultsplit` for more details on how the default orientation works.", Synopsis: "[right|left|up|down]"},
 		{Name: "windowfocus", Summary: "Switch focus to the window on the given side of the current active window.", Synopsis: "(right|left|up|down)"},
 		{Name: "windowmove", Summary: "Move the content of the window in focus to the window in the given direction.", Synopsis: "(right|left|up|down)"},
-		{Name: "shell", Summary: "Open a new IDE shell in a durable tab and route commands through registered REPL handlers."},
+		{Name: "shell", Summary: "Open a new shell in a durable tab and route commands through registered REPL handlers."},
 		{Name: "view", Summary: "Like `edit` but opens the file in read-only mode.", Synopsis: "[page]"},
 		{Name: "fexplorer", Summary: "Toggle the file explorer floating window. The file explorer is a pre-minimized floating window on the left side. Invoking this command will un-minimize and focus the file explorer, or minimize it back if it is already open."},
 		{Name: "tabprevious", Summary: "Set the content of the current active window to the previous tab in the tabs list. Wraps around to the end of the tabs list."},

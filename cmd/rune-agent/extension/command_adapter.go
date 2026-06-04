@@ -419,7 +419,7 @@ func (a *commandAdapter) handleEffort(args []string) (dialoguetui.CommandResult,
 	}
 
 	a.agent.SetEffort(level)
-	md, err := markdown.New(fmt.Sprintf("Set effort level to **%s**", level))
+	md, err := markdown.New(fmt.Sprintf("Set effort level to **%s**.", level))
 	if err != nil {
 		return dialoguetui.CommandResult{}, err
 	}
@@ -452,7 +452,7 @@ func (a *commandAdapter) handleMaxTokens(args []string) (dialoguetui.CommandResu
 	}
 
 	a.agent.SetMaxOutputTokens(n)
-	md, err := markdown.New(fmt.Sprintf("Set max output tokens to **%d**", n))
+	md, err := markdown.New(fmt.Sprintf("Set max output tokens to **%d**.", n))
 	if err != nil {
 		return dialoguetui.CommandResult{}, err
 	}

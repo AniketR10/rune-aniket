@@ -239,40 +239,10 @@ var commandManual = textapi.CommandManual{
 		{Name: "effort", Summary: "Show or set default reasoning effort.", Synopsis: "[none|minimal|low|medium|high|xhigh|max]"},
 		{Name: "exit", Summary: "Exit the shell."},
 		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[command ...]"},
-		{
-			Name:     "local",
-			Summary:  "Manage locally cached GGUF models.",
-			Synopsis: "<list|download|delete> [args]",
-			Commands: []textapi.CommandManual{
-				{Name: "list", Summary: "List GGUF models downloaded into the local cache."},
-				{
-					Name:     "download",
-					Summary:  "Download a GGUF model from an OCI registry into the local cache; hostless references default to huggingface.co and both tags and digests are supported.",
-					Synopsis: "<host/>owner/repo[:tag|@digest]",
-				},
-				{Name: "delete", Summary: "Delete a locally cached GGUF model from the cache.", Synopsis: "<reference>"},
-			},
-		},
 		{Name: "mcp", Summary: "Show MCP server status and tool stats."},
 		{Name: "max_tokens", Summary: "Show or set the global max output tokens config value.", Synopsis: "[tokens]"},
 		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[dialogue_id]"},
 		{Name: "models", Summary: "List available models with context window sizes."},
-		{
-			Name:     "providers",
-			Summary:  "Inspect and manage provider authentication.",
-			Synopsis: "<codex> <login|status>",
-			Commands: []textapi.CommandManual{
-				{
-					Name:     "codex",
-					Summary:  "Manage Codex provider authentication.",
-					Synopsis: "<login|status>",
-					Commands: []textapi.CommandManual{
-						{Name: "login", Summary: "Authenticate with Codex."},
-						{Name: "status", Summary: "Show Codex authentication status."},
-					},
-				},
-			},
-		},
 		{
 			Name:     "skills",
 			Summary:  "Inspect discovered skills and configured skill directories.",
@@ -1219,7 +1189,7 @@ func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Respons
 	}
 
 	s.setEffort(level)
-	return markdownOutput(fmt.Sprintf("Set effort level to **%s**", level)), nil
+	return markdownOutput(fmt.Sprintf("Set effort level to **%s**.", level)), nil
 }
 
 func (s *shell) handleSkills(args []string) (iterator.Iterator[component.Responsive], error) {

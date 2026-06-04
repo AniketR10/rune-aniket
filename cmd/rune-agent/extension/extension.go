@@ -53,14 +53,15 @@ var (
 			Name: commandQuery,
 			Summary: "Send a coding question to your AI assistant. " +
 				"The current active file is loaded and available in the model's context. " +
-				"The default coding model used is configured via extension configuration. ",
+				"The default coding model is configured via extension configuration.",
 			Synopsis: "[message]",
 		},
 		{
 			Name: commandChat,
 			Summary: "Open a new conversation tab with your AI assistant. " +
 				"If no dialogue ID is provided, a new conversation is started. " +
-				"If not passed, the default model used is configured via extension configuration. ",
+				"If no model is provided, the default model configured via extension " +
+				"configuration is used.",
 			Synopsis: "[dialogue_id [model]]",
 		},
 	}
