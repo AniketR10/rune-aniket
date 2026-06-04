@@ -58,6 +58,14 @@ type streamIterator struct {
 	// In-flight tool call argument accumulation, keyed by content block index.
 	pendingCalls map[int64]*llmapi.ToolCall
 
+	// Reasoning replay accumulation. reasoningBlocks holds finalized thinking
+	// and redacted_thinking blocks in stream order so the assistant turn can
+	// be replayed faithfully (thinking blocks carry a byte-exact signature
+	// that the API requires on replay). pendingThinking tracks in-flight
+	// thinking blocks by content block index until their content_block_stop.
+	reasoningBlocks []llmapi.ReasoningBlock
+	pendingThinking map[int64]*llmapi.ReasoningBlock
+
 	// Usage from message_start and message_delta events.
 	usage      ant.Usage
 	usageDelta ant.MessageDeltaUsage
@@ -201,6 +209,28 @@ func (s *streamIterator) handleStreamEvent(event ant.MessageStreamEventUnion) (l
 					Name: tb.Name,
 				},
 			}
+
+		case "thinking":
+			tb := ev.ContentBlock.AsThinking()
+			if s.pendingThinking == nil {
+				s.pendingThinking = make(map[int64]*llmapi.ReasoningBlock)
+			}
+			s.pendingThinking[ev.Index] = &llmapi.ReasoningBlock{
+				Kind:      reasoningKindThinking,
+				Text:      tb.Thinking,
+				Signature: tb.Signature,
+			}
+
+		case "redacted_thinking":
+			rb := ev.ContentBlock.AsRedactedThinking()
+			s.reasoningBlocks = append(s.reasoningBlocks, llmapi.ReasoningBlock{
+				Kind: reasoningKindRedacted,
+				Data: rb.Data,
+			})
+
+		default:
+			slog.Debug("anthropic: unhandled content_block_start type",
+				"block_type", ev.ContentBlock.Type, "index", ev.Index)
 		}
 
 	case "content_block_delta":
@@ -214,12 +244,24 @@ func (s *streamIterator) handleStreamEvent(event ant.MessageStreamEventUnion) (l
 		case "thinking_delta":
 			thinking := ev.Delta.Thinking
 			s.reasoningContent.WriteString(thinking)
+			if tb, ok := s.pendingThinking[ev.Index]; ok {
+				tb.Text += thinking
+			}
 			return llmapi.Event{Type: llmapi.EventReasoningDelta, Reasoning: thinking}, true
+
+		case "signature_delta":
+			if tb, ok := s.pendingThinking[ev.Index]; ok {
+				tb.Signature += ev.Delta.Signature
+			}
 
 		case "input_json_delta":
 			if tc, ok := s.pendingCalls[ev.Index]; ok {
 				tc.Function.Arguments += ev.Delta.PartialJSON
 			}
+
+		default:
+			slog.Debug("anthropic: unhandled content_block_delta type",
+				"delta_type", ev.Delta.Type, "index", ev.Index)
 		}
 
 	case "content_block_stop":
@@ -232,6 +274,10 @@ func (s *streamIterator) handleStreamEvent(event ant.MessageStreamEventUnion) (l
 				ToolCall: tc,
 			}, true
 		}
+		if tb, ok := s.pendingThinking[ev.Index]; ok {
+			delete(s.pendingThinking, ev.Index)
+			s.reasoningBlocks = append(s.reasoningBlocks, *tb)
+		}
 	}
 	return llmapi.Event{}, false
 }
@@ -242,6 +288,7 @@ func (s *streamIterator) buildDoneEvent() llmapi.Event {
 		Content:          s.textContent.String(),
 		ReasoningContent: s.reasoningContent.String(),
 		ToolCalls:        s.toolCalls,
+		ReasoningBlocks:  s.reasoningBlocks,
 	}
 
 	finishReason := mapStopReason(s.stopReason)
@@ -277,6 +324,8 @@ func (s *streamIterator) resetAccumulator() {
 	s.reasoningContent.Reset()
 	s.toolCalls = nil
 	s.pendingCalls = nil
+	s.reasoningBlocks = nil
+	s.pendingThinking = nil
 	s.usage = ant.Usage{}
 	s.usageDelta = ant.MessageDeltaUsage{}
 	s.stopReason = ""

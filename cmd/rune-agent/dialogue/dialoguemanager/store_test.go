@@ -34,10 +34,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 type listFailingBackend struct {
@@ -757,6 +757,46 @@ func TestStoreCreateRoundTripsApprovedPlan(t *testing.T) {
 	assert.Equal(t, d.ApprovedPlan.Path, got.ApprovedPlan.Path)
 	assert.Equal(t, d.ApprovedPlan.Body, got.ApprovedPlan.Body)
 	assert.Len(t, got.Messages, 1)
+}
+
+func TestStoreRoundTripsReasoningBlocks(t *testing.T) {
+	ctx := context.Background()
+	s := newTempStore(t, storagestub.NewInMemoryService())
+
+	blocks := []llmapi.ReasoningBlock{
+		{Kind: "thinking", Text: "let me think", Signature: "sig-abc=="},
+		{Kind: "redacted", Data: "encrypted-blob"},
+	}
+	d := Dialogue{
+		ID: "chat-reasoning",
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleSystem, Content: "sys"},
+			{Role: llmapi.RoleAssistant, Content: "answer", ReasoningBlocks: blocks},
+		},
+	}
+	require.NoError(t, s.Create(ctx, d))
+
+	got, err := s.Get(ctx, "chat-reasoning")
+	require.NoError(t, err)
+	require.Len(t, got.Messages, 2)
+	assert.Equal(t, blocks, got.Messages[1].ReasoningBlocks,
+		"reasoning blocks (incl. signature) must survive save/load for replay")
+
+	// The live append path persists incrementally; reasoning blocks must also
+	// survive that route so replay works mid-conversation after a reload.
+	appended := llmapi.Message{
+		Role:    llmapi.RoleAssistant,
+		Content: "second",
+		ReasoningBlocks: []llmapi.ReasoningBlock{
+			{Kind: "thinking", Text: "more thought", Signature: "sig-2"},
+		},
+	}
+	require.NoError(t, s.AppendMessages(ctx, got, []llmapi.Message{appended}, llmapi.DialogueUsage{}))
+
+	reloaded, err := s.Get(ctx, "chat-reasoning")
+	require.NoError(t, err)
+	require.Len(t, reloaded.Messages, 3)
+	assert.Equal(t, appended.ReasoningBlocks, reloaded.Messages[2].ReasoningBlocks)
 }
 
 // TestStoreSharedInstanceConcurrentUpserts verifies that many goroutines

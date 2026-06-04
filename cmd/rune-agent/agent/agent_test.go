@@ -2944,6 +2944,10 @@ type mockResponse struct {
 	// (reasoning blobs, function_call entries) which must be replayed
 	// verbatim on the next request.
 	providerItems []json.RawMessage
+	// reasoningBlocks are forwarded into DoneData.Message.ReasoningBlocks so
+	// tests can simulate an Anthropic extended-thinking stream whose signed
+	// thinking blocks must be replayed on the next request.
+	reasoningBlocks []llmapi.ReasoningBlock
 }
 
 func (m *mockService) CreateCompletion(
@@ -3022,6 +3026,7 @@ func (m *mockService) CreateCompletion(
 		ReasoningContent: reasoning,
 		ToolCalls:        resp.toolCalls,
 		ProviderItems:    resp.providerItems,
+		ReasoningBlocks:  resp.reasoningBlocks,
 	}
 
 	items = append(items, llmapi.Event{
@@ -4237,6 +4242,35 @@ func TestNormalizeMessages(t *testing.T) {
 			assert.NotEqual(t, llmapi.RoleTool, msg.Role)
 		}
 	})
+
+	t.Run("keeps reasoning-only assistant message with replayable thinking block", func(t *testing.T) {
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, ReasoningBlocks: []llmapi.ReasoningBlock{
+				{Kind: "thinking", Text: "thinking out loud", Signature: "sig-1"},
+			}},
+			{Role: llmapi.RoleUser, Content: "next"},
+		})
+
+		require.Len(t, msgs, 3)
+		assert.Equal(t, llmapi.RoleAssistant, msgs[1].Role)
+		assert.Empty(t, msgs[1].Content, "reasoning must not be promoted to visible content")
+		require.Len(t, msgs[1].ReasoningBlocks, 1)
+		assert.Equal(t, "sig-1", msgs[1].ReasoningBlocks[0].Signature)
+	})
+
+	t.Run("drops legacy reasoning-only assistant message without replayable blocks", func(t *testing.T) {
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, ReasoningContent: "legacy thinking, no signature"},
+			{Role: llmapi.RoleUser, Content: "next"},
+		})
+
+		require.Len(t, msgs, 2)
+		assert.Equal(t, llmapi.RoleUser, msgs[0].Role)
+		assert.Equal(t, llmapi.RoleUser, msgs[1].Role)
+		assert.Equal(t, "next", msgs[1].Content)
+	})
 }
 
 func TestAgentRun_NormalizesNonAdjacentToolResultsBeforeReplay(t *testing.T) {
@@ -4284,6 +4318,11 @@ func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testin
 	t.Parallel()
 	const partialReasoning = "Let me analyze this step by step..."
 
+	// A truncated turn that produced only reasoning text with no replayable
+	// signature cannot be faithfully replayed: promoting private reasoning to
+	// visible Content would mislabel it as speech, and providers that require
+	// reasoning replay (Anthropic) reject unsigned thinking. So on the next
+	// turn the legacy reasoning-only message is dropped, not promoted.
 	svc := &mockService{
 		responses: []mockResponse{
 			{
@@ -4302,15 +4341,74 @@ func TestAgentRun_ContinueAfterReasoningOnlyTruncatedTurnWithRealStore(t *testin
 
 	require.Equal(t, 2, svc.getCallCount(), "expected 2 LLM requests across both turns")
 	secondReq := svc.requests[1]
-	var foundPartialAssistant bool
 	for _, msg := range secondReq.Messages {
-		if msg.Role == llmapi.RoleAssistant && msg.Content == partialReasoning {
-			foundPartialAssistant = true
-			break
+		assert.NotEqualf(t, partialReasoning, msg.Content,
+			"legacy reasoning-only turn must not be replayed as visible content (role=%v)", msg.Role)
+	}
+}
+
+func TestAgentRun_ReplaysSignedThinkingBlockOnContinuation(t *testing.T) {
+	t.Parallel()
+	const partialReasoning = "Let me analyze this step by step..."
+
+	// A turn that carries a signed thinking block must replay that block on
+	// the next request — as a reasoning block, never as visible content — so
+	// the provider can verify the signature.
+	svc := &mockService{
+		responses: []mockResponse{
+			{
+				reasoningChunks: []string{partialReasoning},
+				reasoningBlocks: []llmapi.ReasoningBlock{
+					{Kind: "thinking", Text: partialReasoning, Signature: "sig-xyz"},
+				},
+				finishReason: llmapi.FinishReasonLength,
+			},
+			stopResponse("...doing X and Y."),
+		},
+	}
+
+	store := dialoguemanager.NewStore(storagestub.NewInMemoryService(), t.TempDir())
+	ag := NewAgent(svc, NewRegistry(), noSkills(), store, NoMemory(), Config{SystemPrompt: "test"})
+
+	_ = collectEventsWithTimeout(t, ag.Run(context.Background(), "d", "explain this"), 5*time.Second)
+	_ = collectEventsWithTimeout(t, ag.Run(context.Background(), "d", "please continue"), 5*time.Second)
+
+	require.Equal(t, 2, svc.getCallCount(), "expected 2 LLM requests across both turns")
+	secondReq := svc.requests[1]
+	var foundBlock bool
+	for _, msg := range secondReq.Messages {
+		assert.NotEqual(t, partialReasoning, msg.Content,
+			"reasoning must be replayed as a block, not promoted to content")
+		for _, rb := range msg.ReasoningBlocks {
+			if rb.Signature == "sig-xyz" && rb.Text == partialReasoning {
+				foundBlock = true
+			}
 		}
 	}
-	assert.True(t, foundPartialAssistant,
-		"second LLM request must contain the partial assistant message with reasoning as content")
+	assert.True(t, foundBlock,
+		"second LLM request must replay the signed thinking block from the first turn")
+}
+
+func TestAssistantMessageHasReplayableContent(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  llmapi.Message
+		want bool
+	}{
+		{"text", llmapi.Message{Content: "hi"}, true},
+		{"tool call", llmapi.Message{ToolCalls: []llmapi.ToolCall{{ID: "c"}}}, true},
+		{"multi content", llmapi.Message{MultiContent: []llmapi.ContentPart{{Text: "x"}}}, true},
+		{"signed thinking block", llmapi.Message{ReasoningBlocks: []llmapi.ReasoningBlock{{Kind: "thinking", Signature: "s"}}}, true},
+		{"redacted block with data", llmapi.Message{ReasoningBlocks: []llmapi.ReasoningBlock{{Kind: "redacted", Data: "d"}}}, true},
+		{"empty", llmapi.Message{}, false},
+		{"reasoning content only", llmapi.Message{ReasoningContent: "thought"}, false},
+		{"unsigned thinking block", llmapi.Message{ReasoningBlocks: []llmapi.ReasoningBlock{{Kind: "thinking", Text: "t"}}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, assistantMessageHasReplayableContent(tt.msg))
+		})
+	}
 }
 
 // TestToolOutputSanitizedForWire is the RUNE-179 regression. Tools may

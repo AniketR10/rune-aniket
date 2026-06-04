@@ -1,0 +1,254 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+
+package anthropic
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+
+	ant "github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+)
+
+// thinkingSSEResponse returns an SSE stream with a thinking block (text +
+// signature deltas) followed by a visible text block and end_turn.
+func thinkingSSEResponse() string {
+	return `event: message_start
+data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"let me "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"think"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"abc=="}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"the answer"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`
+}
+
+// redactedThinkingSSEResponse returns an SSE stream with a redacted_thinking
+// block followed by a signed thinking block, exercising interleaving + order.
+func redactedThinkingSSEResponse() string {
+	return `event: message_start
+data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"encrypted-blob"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"thinking_delta","thinking":"after redacted"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"signature_delta","signature":"sig-2"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`
+}
+
+func newTestClient(url string) *client {
+	return &client{
+		config: Config{MaxTokens: 1024},
+		anthropic: ant.NewClient(
+			option.WithAPIKey("test-key"),
+			option.WithBaseURL(url),
+			option.WithMaxRetries(0),
+		),
+	}
+}
+
+func collectDone(t *testing.T, it iterator.Iterator[llmapi.Event]) (*llmapi.DoneData, []llmapi.Event) {
+	t.Helper()
+	ctx := context.Background()
+	var done *llmapi.DoneData
+	var events []llmapi.Event
+	for {
+		ev, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		events = append(events, ev)
+		if ev.Type == llmapi.EventStreamDone {
+			done = ev.DoneData
+		}
+	}
+	require.NoError(t, it.Err())
+	_ = it.Close()
+	return done, events
+}
+
+func TestStreamCapturesThinkingSignature(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(thinkingSSEResponse()))
+	}))
+	t.Cleanup(srv.Close)
+
+	it, err := newTestClient(srv.URL).CreateCompletion(context.Background(),
+		llmapi.ModelEntry{Name: "claude-test"},
+		llmapi.Request{Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}}})
+	require.NoError(t, err)
+
+	done, _ := collectDone(t, it)
+	require.NotNil(t, done)
+	assert.Equal(t, "the answer", done.Message.Content)
+	assert.Equal(t, "let me think", done.Message.ReasoningContent)
+	require.Len(t, done.Message.ReasoningBlocks, 1)
+	assert.Equal(t, llmapi.ReasoningBlock{
+		Kind:      "thinking",
+		Text:      "let me think",
+		Signature: "sig-abc==",
+	}, done.Message.ReasoningBlocks[0])
+}
+
+func TestStreamCapturesRedactedThinking(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(redactedThinkingSSEResponse()))
+	}))
+	t.Cleanup(srv.Close)
+
+	it, err := newTestClient(srv.URL).CreateCompletion(context.Background(),
+		llmapi.ModelEntry{Name: "claude-test"},
+		llmapi.Request{Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}}})
+	require.NoError(t, err)
+
+	done, _ := collectDone(t, it)
+	require.NotNil(t, done)
+	require.Len(t, done.Message.ReasoningBlocks, 2)
+	assert.Equal(t, llmapi.ReasoningBlock{Kind: "redacted", Data: "encrypted-blob"},
+		done.Message.ReasoningBlocks[0])
+	assert.Equal(t, llmapi.ReasoningBlock{Kind: "thinking", Text: "after redacted", Signature: "sig-2"},
+		done.Message.ReasoningBlocks[1])
+}
+
+func TestStreamResetClearsReasoningBlocks(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := attempts.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if n == 1 {
+			// Emit a thinking block, then fail mid-stream so the iterator
+			// retries and must discard the partially accumulated reasoning.
+			_, _ = w.Write([]byte(partialSSEWithThinkingThenOverload()))
+			return
+		}
+		_, _ = w.Write([]byte(thinkingSSEResponse()))
+	}))
+	t.Cleanup(srv.Close)
+
+	it, err := newTestClient(srv.URL).CreateCompletion(context.Background(),
+		llmapi.ModelEntry{Name: "claude-test"},
+		llmapi.Request{Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}}})
+	require.NoError(t, err)
+
+	done, events := collectDone(t, it)
+	require.NotNil(t, done)
+
+	var gotReset bool
+	for _, ev := range events {
+		if ev.Type == llmapi.EventStreamReset {
+			gotReset = true
+		}
+	}
+	assert.True(t, gotReset, "expected a stream reset before retry")
+	// After reset the second stream's single thinking block must be the only
+	// one present — no duplicate from the discarded first attempt.
+	require.Len(t, done.Message.ReasoningBlocks, 1)
+	assert.Equal(t, "sig-abc==", done.Message.ReasoningBlocks[0].Signature)
+}
+
+// partialSSEWithThinkingThenOverload emits a complete thinking block and then
+// an overloaded_error, forcing a retryable mid-stream failure.
+func partialSSEWithThinkingThenOverload() string {
+	return `event: message_start
+data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"discarded"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"discarded-sig"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: error
+data: {"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_test123"}
+
+`
+}

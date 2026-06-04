@@ -699,3 +699,90 @@ func TestAssistantContentBlocks_EmptyMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestAssistantContentBlocks_ThinkingFirst(t *testing.T) {
+	// A thinking block must be replayed before tool_use so the assistant turn
+	// preceding a tool_result starts with thinking (Anthropic requires this).
+	blocks := assistantContentBlocks(llmapi.Message{
+		Role:    llmapi.RoleAssistant,
+		Content: "calling a tool",
+		ReasoningBlocks: []llmapi.ReasoningBlock{
+			{Kind: "thinking", Text: "I should read the file", Signature: "sig-1"},
+		},
+		ToolCalls: []llmapi.ToolCall{
+			{ID: "call-1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: "read", Arguments: `{"path":"x"}`}},
+		},
+	})
+
+	require.GreaterOrEqual(t, len(blocks), 3)
+	require.NotNil(t, blocks[0].OfThinking, "first block must be thinking")
+	assert.Equal(t, "sig-1", blocks[0].OfThinking.Signature)
+	assert.Equal(t, "I should read the file", blocks[0].OfThinking.Thinking)
+	require.NotNil(t, blocks[1].OfText, "text must follow thinking")
+	assert.Equal(t, "calling a tool", blocks[1].OfText.Text)
+	require.NotNil(t, blocks[2].OfToolUse, "tool_use must come after thinking and text")
+}
+
+func TestAssistantContentBlocks_RedactedThinkingReplayedAsIs(t *testing.T) {
+	blocks := assistantContentBlocks(llmapi.Message{
+		Role: llmapi.RoleAssistant,
+		ReasoningBlocks: []llmapi.ReasoningBlock{
+			{Kind: "redacted", Data: "encrypted-blob"},
+			{Kind: "thinking", Text: "visible reasoning", Signature: "sig-2"},
+		},
+		Content: "answer",
+	})
+
+	require.Len(t, blocks, 3)
+	require.NotNil(t, blocks[0].OfRedactedThinking)
+	assert.Equal(t, "encrypted-blob", blocks[0].OfRedactedThinking.Data)
+	require.NotNil(t, blocks[1].OfThinking)
+	assert.Equal(t, "sig-2", blocks[1].OfThinking.Signature)
+	require.NotNil(t, blocks[2].OfText)
+}
+
+func TestAssistantContentBlocks_ReasoningOnlyYieldsThinkingBlock(t *testing.T) {
+	// A reasoning-only turn (no text, no tool calls) must still produce a
+	// non-empty content block so the API does not reject it with
+	// "text content blocks must be non-empty".
+	blocks := assistantContentBlocks(llmapi.Message{
+		Role: llmapi.RoleAssistant,
+		ReasoningBlocks: []llmapi.ReasoningBlock{
+			{Kind: "thinking", Text: "just thinking", Signature: "sig-3"},
+		},
+	})
+
+	require.Len(t, blocks, 1)
+	require.NotNil(t, blocks[0].OfThinking)
+	assert.Equal(t, "sig-3", blocks[0].OfThinking.Signature)
+	for _, b := range blocks {
+		assert.Nil(t, b.OfText, "reasoning-only turn must not emit a text block")
+	}
+}
+
+func TestAssistantContentBlocks_UnsignedReasoningSkipped(t *testing.T) {
+	// Legacy/unsigned reasoning cannot be replayed (the API rejects unsigned
+	// thinking), so no thinking block is emitted. With visible content the
+	// turn is still valid; with none it yields zero blocks and must be
+	// dropped upstream rather than sent.
+	withText := assistantContentBlocks(llmapi.Message{
+		Role:    llmapi.RoleAssistant,
+		Content: "the answer",
+		ReasoningBlocks: []llmapi.ReasoningBlock{
+			{Kind: "thinking", Text: "unsigned thought", Signature: ""},
+		},
+	})
+	for _, b := range withText {
+		assert.Nil(t, b.OfThinking, "unsigned thinking must not be replayed")
+	}
+	require.Len(t, withText, 1)
+	require.NotNil(t, withText[0].OfText)
+
+	reasoningOnly := assistantContentBlocks(llmapi.Message{
+		Role: llmapi.RoleAssistant,
+		ReasoningBlocks: []llmapi.ReasoningBlock{
+			{Kind: "thinking", Text: "unsigned thought", Signature: ""},
+		},
+	})
+	assert.Empty(t, reasoningOnly, "unsigned reasoning-only turn yields no replayable blocks")
+}

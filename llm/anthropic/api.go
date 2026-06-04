@@ -32,6 +32,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
+// Reasoning block kinds for llmapi.ReasoningBlock, mapping Anthropic's
+// thinking and redacted_thinking content blocks. These values are persisted
+// in dialogue history, so changing them breaks replay of saved reasoning.
+const (
+	reasoningKindThinking = "thinking"
+	reasoningKindRedacted = "redacted"
+)
+
 // anthropicParamsFromRequest converts an llmapi.Request into Anthropic API parameters.
 // System messages are extracted into the separate System field, and the remaining
 // messages are converted with strict user/assistant alternation.
@@ -236,6 +244,26 @@ func parseDataURI(uri string) (mediaType, data string) {
 // assistantContentBlocks converts an llmapi.Message with role=assistant into content blocks.
 func assistantContentBlocks(msg llmapi.Message) []ant.ContentBlockParamUnion {
 	var blocks []ant.ContentBlockParamUnion
+	// Reasoning blocks must be replayed first, before any text or tool_use,
+	// because Anthropic requires the assistant turn preceding a tool result to
+	// begin with its thinking block, and rejects out-of-order thinking.
+	for _, rb := range msg.ReasoningBlocks {
+		switch rb.Kind {
+		case reasoningKindThinking:
+			// The API rejects thinking blocks without a byte-exact signature,
+			// so skip unsigned reasoning (e.g. legacy persisted messages or
+			// thinking captured before signatures were preserved).
+			if rb.Signature == "" {
+				continue
+			}
+			blocks = append(blocks, ant.NewThinkingBlock(rb.Signature, rb.Text))
+		case reasoningKindRedacted:
+			if rb.Data == "" {
+				continue
+			}
+			blocks = append(blocks, ant.NewRedactedThinkingBlock(rb.Data))
+		}
+	}
 	if msg.Content != "" {
 		blocks = append(blocks, ant.NewTextBlock(msg.Content))
 	}

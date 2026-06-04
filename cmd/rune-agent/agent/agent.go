@@ -819,8 +819,10 @@ func (a *Agent) run(
 		// iteration falls back to CountTokens with the new message set.
 		lastAPITokensSent = completionUsage.TokensSent
 
-		messages = append(messages, assistantMsg)
-		newMessages = append(newMessages, assistantMsg)
+		if assistantMessageHasReplayableContent(assistantMsg) {
+			messages = append(messages, assistantMsg)
+			newMessages = append(newMessages, assistantMsg)
+		}
 
 		// Emit a snapshot of cumulative usage after each completion so
 		// the TUI can display token counts in the status hint.
@@ -1261,25 +1263,7 @@ func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 			}
 		}
 
-		// Fix reasoning-only assistant messages.
-		if msg.Role == llmapi.RoleAssistant &&
-			msg.Content == "" &&
-			msg.ReasoningContent != "" &&
-			len(msg.ToolCalls) == 0 {
-			msg.Content = msg.ReasoningContent
-			msg.ReasoningContent = ""
-		}
-
-		// Drop assistant messages that ended up completely empty after
-		// stripping (no text, no tool calls, no reasoning). These arise
-		// when switching models: e.g. an OpenAI assistant message had
-		// only tool calls which became orphaned. Sending an empty
-		// assistant message causes Anthropic to reject with
-		// "text content blocks must be non-empty".
-		if msg.Role == llmapi.RoleAssistant &&
-			msg.Content == "" &&
-			msg.ReasoningContent == "" &&
-			len(msg.ToolCalls) == 0 {
+		if msg.Role == llmapi.RoleAssistant && !assistantMessageHasReplayableContent(*msg) {
 			continue
 		}
 
@@ -1287,6 +1271,15 @@ func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 		n++
 	}
 	return messages[:n]
+}
+
+func assistantMessageHasReplayableContent(msg llmapi.Message) bool {
+	return msg.Content != "" ||
+		len(msg.ToolCalls) > 0 ||
+		len(msg.MultiContent) > 0 ||
+		slices.ContainsFunc(msg.ReasoningBlocks, func(rb llmapi.ReasoningBlock) bool {
+			return rb.Signature != "" || rb.Data != ""
+		})
 }
 
 func (a *Agent) injectAutoDiagnostics(
