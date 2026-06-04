@@ -342,7 +342,7 @@ func (a *client) CreateCompletion(
 
 	var it iterator.Iterator[llmapi.Event]
 	var err error
-	if a.config.ForceResponsesAPI || IsResponsesOnlyModel(model.Name) {
+	if a.config.ForceResponsesAPI {
 		it, err = a.createResponsesCompletion(ctx, model.Name, request)
 	} else {
 		it, err = a.createChatCompletion(ctx, model.Name, request)

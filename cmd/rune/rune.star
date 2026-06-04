@@ -257,7 +257,6 @@ config = {
             # "" lets the model decide; otherwise one of
             # none, minimal, low, medium, high, xhigh, max.
             "reasoning_effort":    "",
-            "force_responses_api": False,
         },
         "anthropic": {
             "api_key":          "",

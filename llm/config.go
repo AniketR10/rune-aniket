@@ -73,7 +73,6 @@ type OpenAIConfig struct {
 	APIKey            string
 	BaseURL           string
 	ReasoningEffort   string
-	ForceResponsesAPI bool
 }
 
 // AnthropicConfig captures `models.anthropic.*`.
@@ -140,7 +139,7 @@ func (c Config) OpenAIClientConfig() openai.Config {
 		BaseURL:           c.OpenAI.BaseURL,
 		ReasoningEffort:   c.OpenAI.ReasoningEffort,
 		ReasoningSummary:  c.ReasoningSummary,
-		ForceResponsesAPI: c.OpenAI.ForceResponsesAPI,
+		ForceResponsesAPI: true,
 		DebugHTTP:         c.DebugHTTP,
 	}
 }

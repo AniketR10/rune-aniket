@@ -202,7 +202,6 @@ func (c ideConfig) llmConfig() llm.Config {
 		overrideString(openai, "api_key", &out.OpenAI.APIKey)
 		overrideString(openai, "base_url", &out.OpenAI.BaseURL)
 		overrideString(openai, "reasoning_effort", &out.OpenAI.ReasoningEffort)
-		overrideBool(openai, "force_responses_api", &out.OpenAI.ForceResponsesAPI)
 	}
 	if anthropic, ok := c.getConfig(models, "anthropic"); ok {
 		overrideString(anthropic, "api_key", &out.Anthropic.APIKey)

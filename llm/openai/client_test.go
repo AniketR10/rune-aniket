@@ -357,25 +357,23 @@ func TestCreateCompletion(t *testing.T) {
 	})
 }
 
-// TestResponsesAPI exercises the /v1/responses streaming path used by
-// responses-only models (e.g. gpt-5.3-codex). Enable by removing
-// t.SkipNow() and setting OPENAI_TESTING_KEY.
+// TestResponsesAPI exercises the /v1/responses streaming path forced via
+// ForceResponsesAPI. Enable by removing t.SkipNow() and setting
+// OPENAI_TESTING_KEY.
 func TestResponsesAPI(t *testing.T) {
 	t.SkipNow()
 
 	token := os.Getenv("OPENAI_TESTING_KEY")
 	model := GPT5Dot3Codex
 
-	require.True(t, IsResponsesOnlyModel(model), "test model must be responses-only")
-
 	t.Run("streams a simple text response", func(t *testing.T) {
-		c := NewClient(token, Config{})
+		c := NewClient(token, Config{ForceResponsesAPI: true})
 		ctx := context.Background()
 		req := llmapi.Request{Messages: []llmapi.Message{
 			{Role: llmapi.RoleSystem, Content: "You are a helpful assistant. Be very brief."},
 			{Role: llmapi.RoleUser, Content: "What is 2+2? Reply with just the number."},
 		}}
-		it, err := c.CreateCompletion(ctx, llmapi.ModelEntry{Name: GPT4Dot1Nano, ContextWindow: 200000}, req)
+		it, err := c.CreateCompletion(ctx, llmapi.ModelEntry{Name: model, ContextWindow: 200000}, req)
 		require.NoError(t, err)
 		defer func() { _ = it.Close() }()
 
@@ -739,7 +737,8 @@ func TestResponsesStreamReasoningTextDelta(t *testing.T) {
 	srv := responsesSSEServer(t, sseEvents)
 
 	c := NewClient("test-key", Config{
-		BaseURL: srv.URL,
+		BaseURL:           srv.URL,
+		ForceResponsesAPI: true,
 	})
 
 	ctx := context.Background()
@@ -787,7 +786,8 @@ func TestResponsesStreamReasoningSummaryDelta(t *testing.T) {
 	srv := responsesSSEServer(t, sseEvents)
 
 	c := NewClient("test-key", Config{
-		BaseURL: srv.URL,
+		BaseURL:           srv.URL,
+		ForceResponsesAPI: true,
 	})
 
 	ctx := context.Background()
@@ -901,6 +901,37 @@ func TestResponsesStorefalseAndDisabledParallel(t *testing.T) {
 	metadata, ok := body["client_metadata"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "install-1", metadata["x-codex-installation-id"])
+}
+
+// TestForceResponsesAPIRouting is the regression guard for the original 400
+// (function tools + reasoning_effort require /v1/responses). With
+// ForceResponsesAPI enabled, a tool + reasoning-effort request must hit
+// /responses; with it disabled, it stays on /chat/completions so the
+// Gemini/custom/Ollama compatible providers keep working.
+func TestForceResponsesAPIRouting(t *testing.T) {
+	req := llmapi.Request{
+		Messages:        []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+		ReasoningEffort: llmapi.ReasoningEffort("high"),
+		Tools: []llmapi.Tool{{
+			Type: llmapi.ToolTypeFunction,
+			Function: llmapi.FunctionDefinition{
+				Name:        "noop",
+				Description: "does nothing",
+				Parameters:  map[string]any{"type": "object"},
+			},
+		}},
+	}
+
+	t.Run("forced uses responses endpoint", func(t *testing.T) {
+		path := captureRequestPath(t, Config{ForceResponsesAPI: true}, req)
+		assert.Contains(t, path, "/responses")
+		assert.NotContains(t, path, "/chat/completions")
+	})
+
+	t.Run("not forced uses chat completions endpoint", func(t *testing.T) {
+		path := captureRequestPath(t, Config{}, req)
+		assert.Contains(t, path, "/chat/completions")
+	})
 }
 
 // TestResponsesReasoningRoundTrip verifies that reasoning items emitted by
@@ -1140,6 +1171,7 @@ type capturedResponsesRequest struct {
 
 func captureResponsesRequest(t *testing.T, cfg Config, req llmapi.Request) capturedResponsesRequest {
 	t.Helper()
+	cfg.ForceResponsesAPI = true
 	var captured capturedResponsesRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured.Method = r.Method
@@ -1204,4 +1236,41 @@ func captureRequestBody(t *testing.T, cfg Config, req llmapi.Request) map[string
 	_ = it.Close()
 	require.NotNil(t, captured, "server should have received a request")
 	return captured
+}
+
+// captureRequestPath records the URL path of the request CreateCompletion
+// makes, so tests can assert which endpoint (/responses vs /chat/completions)
+// the routing chose. The server returns a minimal SSE response for both
+// endpoints so the client completes without error regardless of route.
+func captureRequestPath(t *testing.T, cfg Config, req llmapi.Request) string {
+	t.Helper()
+	var path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if strings.Contains(r.URL.Path, "/responses") {
+			_, _ = fmt.Fprintf(w, "data: %s\n\n",
+				`{"type":"response.completed","response":{"id":"resp_test","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}`)
+			return
+		}
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"\"}, \"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg.BaseURL = srv.URL
+	c := NewClient("test-key", cfg)
+	ctx := context.Background()
+	it, err := c.CreateCompletion(ctx, llmapi.ModelEntry{Name: GPT4Dot1Nano, ContextWindow: 200000}, req)
+	require.NoError(t, err)
+	for {
+		_, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+	}
+	_ = it.Close()
+	require.NotEmpty(t, path, "server should have received a request")
+	return path
 }

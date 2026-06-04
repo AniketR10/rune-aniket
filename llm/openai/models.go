@@ -241,20 +241,6 @@ func NormalizeEffort(model, effort string) (normalized string, warning string) {
 		"Effort %q is not supported by %s; using model default instead.", effort, model)
 }
 
-// responsesOnlyModels lists models that only support the /v1/responses
-// endpoint and not /v1/chat/completions.
-var responsesOnlyModels = map[string]bool{
-	GPT5Dot4Pro:   true,
-	GPT5Dot3Codex: true,
-	O3Pro:         true,
-}
-
-// IsResponsesOnlyModel returns true for models that only support the
-// /v1/responses API and cannot be used with /v1/chat/completions.
-func IsResponsesOnlyModel(model string) bool {
-	return responsesOnlyModels[model]
-}
-
 // AvailableModels returns a map from model identifier -> nominal maximum
 // context window (tokens). These values are collected from provider
 // documentation and public release notes as of early 2026. They are a

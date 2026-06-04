@@ -401,7 +401,6 @@ func TestRuneStarModelsConfig(t *testing.T) {
 	assert.Contains(t, openai, "api_key")
 	assert.Contains(t, openai, "base_url")
 	assert.Contains(t, openai, "reasoning_effort")
-	assert.Contains(t, openai, "force_responses_api")
 
 	local := models["local"].(map[string]any)
 	assert.Contains(t, local, "models_cache_dir")
