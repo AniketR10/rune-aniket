@@ -179,7 +179,7 @@ func subscribeGUICommands(
 					"gui.enable_transparent_window to be set to true in configuration. " +
 					"To make this changes permanent, you can set `gui.window_opacity` " +
 					"in your configuration.",
-				Synopsis: "background [foreground]",
+				Synopsis: "<background> [<foreground>]",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
 				if len(cmd.Args) == 0 {
@@ -214,7 +214,7 @@ func subscribeGUICommands(
 					"and background opacity must be less than 1 for the effect to be visible. " +
 					"To make this changes permanent, you can set `gui.window_blur_radius` " +
 					"in your configuration.",
-				Synopsis: "radius",
+				Synopsis: "<radius>",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
 				if len(cmd.Args) == 0 {
@@ -263,7 +263,7 @@ func subscribeGUICommands(
 		{
 			cmd: textapi.CommandManual{
 				Name:     "guiposition",
-				Synopsis: "xoffset yoffset",
+				Synopsis: "<xoffset> <yoffset>",
 				Summary: "Sets the window position as an offset from " +
 					"the upper-left corner of the current monitor, " +
 					"in device-independent pixels. " +
@@ -290,7 +290,7 @@ func subscribeGUICommands(
 		{
 			cmd: textapi.CommandManual{
 				Name:     "guisize",
-				Synopsis: "width height",
+				Synopsis: "<width> <height>",
 				Summary: "Sets the window size in pixels. " +
 					"If the application is running in fullscreen mode, set via guiToggleFullscreen, " +
 					"it will set the original window size. ",
@@ -319,7 +319,7 @@ func subscribeGUICommands(
 		{
 			cmd: textapi.CommandManual{
 				Name:     "guifont",
-				Synopsis: "[family]",
+				Synopsis: "[<family>]",
 				Summary: "Sets the font collection identified by the given family name. " +
 					"If family is set to an empty string, the default system font is used. " +
 					"If the family is set to 'builtin', the GUI's builtin fallback font is used. ",
@@ -341,7 +341,7 @@ func subscribeGUICommands(
 		{
 			cmd: textapi.CommandManual{
 				Name:     cmdSetTheme,
-				Synopsis: "[name]",
+				Synopsis: "[<name>]",
 				Summary: "Sets the color theme. If the name argument is omitted, " +
 					"the theme is reset. If a name is passed, this name must be " +
 					"one of the themes configured via `gui.themes`.",

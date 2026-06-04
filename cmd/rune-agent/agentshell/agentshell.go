@@ -217,13 +217,13 @@ var commandNames = []string{
 var commandManual = textapi.CommandManual{
 	Name:     CommandName,
 	Summary:  "Inspect and manage Rune Agent models, chats, tools, skills, and configuration.",
-	Synopsis: "<command> [args]",
+	Synopsis: "<command> [<args>]",
 	Commands: []textapi.CommandManual{
 		{Name: "agents", Summary: "List configured agent definitions."},
 		{
 			Name:     "chats",
 			Summary:  "Inspect, export, compact, clear, and fork saved conversations.",
-			Synopsis: "<list|show|log|export|clear|compact|fork> [args]",
+			Synopsis: "(list|show|log|export|clear|compact|fork) [<args>]",
 			Commands: []textapi.CommandManual{
 				{Name: "list", Summary: "List saved conversations."},
 				{Name: "show", Summary: "Show message history for a conversation.", Synopsis: "<id>"},
@@ -235,18 +235,18 @@ var commandManual = textapi.CommandManual{
 			},
 		},
 		{Name: "config", Summary: "Show current LLM config parameters."},
-		{Name: "dream", Summary: "Run memory consolidation on unprocessed dialogues.", Synopsis: "[--model MODEL] [--debug]"},
+		{Name: "dream", Summary: "Run memory consolidation on unprocessed dialogues.", Synopsis: "[--model <model>] [--debug]"},
 		{Name: "effort", Summary: "Show or set default reasoning effort.", Synopsis: "[none|minimal|low|medium|high|xhigh|max]"},
 		{Name: "exit", Summary: "Exit the shell."},
-		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[command ...]"},
+		{Name: "help", Summary: "Show usage for agent commands.", Synopsis: "[<command>...]"},
 		{Name: "mcp", Summary: "Show MCP server status and tool stats."},
-		{Name: "max_tokens", Summary: "Show or set the global max output tokens config value.", Synopsis: "[tokens]"},
-		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[dialogue_id]"},
+		{Name: "max_tokens", Summary: "Show or set the global max output tokens config value.", Synopsis: "[<tokens>]"},
+		{Name: "model", Summary: "Show the default model or a conversation's assigned model.", Synopsis: "[<dialogue_id>]"},
 		{Name: "models", Summary: "List available models with context window sizes."},
 		{
 			Name:     "skills",
 			Summary:  "Inspect discovered skills and configured skill directories.",
-			Synopsis: "<list|show|list-dirs|add-dir|remove-dir> [args]",
+			Synopsis: "(list|show|list-dirs|add-dir|remove-dir) [<args>]",
 			Commands: []textapi.CommandManual{
 				{Name: "list", Summary: "List discovered skills."},
 				{Name: "show", Summary: "Show a skill's full instructions.", Synopsis: "<name>"},
@@ -255,7 +255,7 @@ var commandManual = textapi.CommandManual{
 				{Name: "remove-dir", Summary: "Remove a skill directory from config.", Synopsis: "<dir>"},
 			},
 		},
-		{Name: "system-prompt", Summary: "Show the system prompt for an agent.", Synopsis: "[agent]"},
+		{Name: "system-prompt", Summary: "Show the system prompt for an agent.", Synopsis: "[<agent>]"},
 		{Name: "tools", Summary: "List registered agent tools."},
 	},
 }

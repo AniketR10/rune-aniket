@@ -2184,7 +2184,7 @@ func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
 			"`echo {register}a` reads register `a`, parses the recorded keys, and sends them " +
 			"back through the IDE event loop. Echo sequences can also combine literal keys, " +
 			"instructions, and registers, for example `echo i{register}a<esc>{register}b`.",
-		Synopsis: "[register]",
+		Synopsis: "[<register>]",
 	}, h.macro)
 	if err != nil {
 		return fmt.Errorf("subscribe macro commands: %w", err)
@@ -2209,7 +2209,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 				Summary: "Opens the workspace at the given URI in the current " +
 					"workspace slot if it's empty, or in the next available slot if it's not. " +
 					"If no scheme is present in the URI, file:// is assumed.",
-				Synopsis: "[scheme:][//[userinfo@]host][/]workspacepath",
+				Synopsis: "[<scheme>:][//[<userinfo>@]<host>][/]<workspacepath>",
 			},
 		},
 		cmdRenameWorkspace: {
@@ -2217,7 +2217,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 			man: textapi.CommandManual{
 				Summary: "Renames the workspace tab. The tab is displayed at the " +
 					"bottom of the screen when multiple workspaces are open.",
-				Synopsis: "name",
+				Synopsis: "<name>",
 			},
 		},
 		cmdCloseWorkspace: {
@@ -2255,7 +2255,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 					"issued `workspacenew` has finished loading. If no workspace is " +
 					"currently being loaded, the command is dispatched immediately " +
 					"against the focused workspace.",
-				Synopsis: "command [args...]",
+				Synopsis: "<command> [<args>...]",
 			},
 		},
 		cmdExtensionReady: {
@@ -2265,7 +2265,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 					"id has finished initializing on the workspace. If a " +
 					"workspacenew is currently pending, the wait starts after " +
 					"that workspace finishes installing.",
-				Synopsis: "<extension-id> command [args...]",
+				Synopsis: "<extension-id> <command> [<args>...]",
 			},
 		},
 	}

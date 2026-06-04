@@ -120,7 +120,7 @@ var locationCommands = []textapi.CommandManual{
 			"used to jump to via `locationjump %[1]s`. By default, the location list name is `%[1]s` "+
 			"but this can be overriden by passing a location list name.",
 			defaultUserLocationList),
-		Synopsis: "[location-list]",
+		Synopsis: "[<location-list>]",
 	},
 	{
 		Name: commandToggleLocation,
@@ -128,26 +128,26 @@ var locationCommands = []textapi.CommandManual{
 			"used to jump to via `locationjump %[1]s`. By default, the location list name is `%[1]s` "+
 			"but this can be overriden by passing a location list name.",
 			defaultUserLocationList),
-		Synopsis: "[location-list]",
+		Synopsis: "[<location-list>]",
 	},
 	{
 		Name: commandDeleteLocation,
 		Summary: fmt.Sprintf("Delete the current cursor location in the given location list. "+
 			"By default, the location list name is `%[1]s` "+
 			"but this can be overriden by passing a location list name.", defaultUserLocationList),
-		Synopsis: "[location-list]",
+		Synopsis: "[<location-list>]",
 	},
 	{
 		Name: CommandDeleteAllLocations,
 		Summary: fmt.Sprintf("Removes all of the locations of the given location list. The default location"+
 			" list is `%s`.", defaultUserLocationList),
-		Synopsis: "[location-list]",
+		Synopsis: "[<location-list>]",
 	},
 	{
 		Name: CommandHighlightLocations,
 		Summary: fmt.Sprintf("Highlights all locations of the given user-created location list. The default"+
 			" user-created location list is `%s`.", defaultUserLocationList),
-		Synopsis: "[location-list]",
+		Synopsis: "[<location-list>]",
 	},
 }
 

@@ -64,7 +64,7 @@ var (
 		"tabrename": {
 			man: textapi.CommandManual{
 				Summary:  "Rename the current tab in focus. Optionally set the colors of the tab title.",
-				Synopsis: "name [foreground [background]]",
+				Synopsis: "<name> [<foreground> [<background>]]",
 			},
 			handler: (*ex).tabrename,
 		},
@@ -81,7 +81,7 @@ var (
 					"auto-completer to finish populating the search list before " +
 					"processing the next key. The `{prompt}` instruction can be used to " +
 					"open the command prompt in a content-agnostic way.",
-				Synopsis: "sequence",
+				Synopsis: "<sequence>",
 			},
 			handler: (*ex).echo,
 		},
@@ -110,7 +110,7 @@ var (
 			man: textapi.CommandManual{
 				Summary: "Set the content of the current active window to " +
 					"the tab at the given position in the tabs list.",
-				Synopsis: "[position]",
+				Synopsis: "[<position>]",
 			},
 			handler: (*ex).tabfocus,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -150,7 +150,7 @@ var (
 			man: textapi.CommandManual{
 				Summary: "Move the tab in focus in the given direction within the tabs list, " +
 					"or to an absolute position if a number is passed.",
-				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9...)",
+				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9)",
 			},
 			handler: (*ex).moveTab,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -170,7 +170,7 @@ var (
 			man: textapi.CommandManual{
 				Summary: "Convert the content of the window in focus into a tab. " +
 					"If the current window is a floating window, it is closed.",
-				Synopsis: "name [icon]",
+				Synopsis: "<name> [<icon>]",
 			},
 			handler: (*ex).convertTab,
 		},
@@ -313,28 +313,28 @@ var (
 		"notificationinfo": {
 			man: textapi.CommandManual{
 				Summary:  "Send an info-level notification.",
-				Synopsis: "message",
+				Synopsis: "<message>",
 			},
 			handler: (*ex).sendNotificationInfo,
 		},
 		"notificationsuccess": {
 			man: textapi.CommandManual{
 				Summary:  "Send a success-level notification.",
-				Synopsis: "message",
+				Synopsis: "<message>",
 			},
 			handler: (*ex).sendNotificationSuccess,
 		},
 		"notificationwarning": {
 			man: textapi.CommandManual{
 				Summary:  "Send a warning-level notification.",
-				Synopsis: "message",
+				Synopsis: "<message>",
 			},
 			handler: (*ex).sendNotificationWarning,
 		},
 		"notificationerror": {
 			man: textapi.CommandManual{
 				Summary:  "Send an error-level notification.",
-				Synopsis: "message",
+				Synopsis: "<message>",
 			},
 			handler: (*ex).sendNotificationError,
 		},
@@ -364,7 +364,7 @@ var (
 					"the rest are forwarded as arguments). Otherwise the default configured " +
 					"in `terminal.shell` is used; if that is unset, the system shell defined " +
 					"via the SHELL environment variable is used.",
-				Synopsis: "[shell]",
+				Synopsis: "[<shell>]",
 			},
 			handler: (*ex).terminalnewtab,
 		},
@@ -373,7 +373,7 @@ var (
 				Summary: "Open a new Rune shell in a durable tab and route commands through registered REPL handlers. " +
 					"If arguments are provided they are submitted as a command line on the shell prompt; " +
 					"any in-flight command in the existing shell is interrupted with <ctrl-c> first.",
-				Synopsis: "[command [args...]]",
+				Synopsis: "[<command> [<args>...]]",
 			},
 			handler: (*ex).shellnewtab,
 		},
@@ -387,7 +387,7 @@ var (
 					"executable, the rest are forwarded as arguments). Otherwise the default " +
 					"configured in `terminal.shell` is used; if that is unset, the system " +
 					"shell defined via the SHELL environment variable is used.",
-				Synopsis: "[shell]",
+				Synopsis: "[<shell>]",
 			},
 			handler: (*ex).terminalnew,
 		},
@@ -403,7 +403,7 @@ var (
 					"executable, the rest are forwarded as arguments). Otherwise the default " +
 					"configured in `terminal.shell` is used; if that is unset, the system " +
 					"shell defined via the SHELL environment variable is used.",
-				Synopsis: "[shell]",
+				Synopsis: "[<shell>]",
 			},
 			handler: (*ex).terminalneworsplit,
 		},
@@ -412,7 +412,7 @@ var (
 				Summary: "Save the current terminal buffer and scrollback under the given session name. " +
 					"The saved session stores terminal output for later recovery, but does not preserve " +
 					"or resume the live pty process.",
-				Synopsis: "session-name",
+				Synopsis: "<session-name>",
 			},
 			handler: (*ex).terminalsave,
 		},
@@ -421,7 +421,7 @@ var (
 				Summary: "Open a previously saved terminal session by name in a functioning " +
 					"terminal, restoring its saved output and scrollback. This starts a new " +
 					"pty process; it does not resume the original process.",
-				Synopsis: "session-name",
+				Synopsis: "<session-name>",
 			},
 			handler: (*ex).terminalresume,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -440,7 +440,7 @@ var (
 					"If the file has any pending changes that were lost due to a crash, or " +
 					"another session is currently editing the file, a prompt is shown " +
 					"to resolve the conflict.",
-				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
+				Synopsis: "[<scheme>:][//[<userinfo>@]<host>][/]<filepath>",
 			},
 			handler: (*ex).editFiles,
 			completer: func(
@@ -453,7 +453,7 @@ var (
 		"view": {
 			man: textapi.CommandManual{
 				Summary:  "Like `edit` but opens the file in read-only mode.",
-				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
+				Synopsis: "[<scheme>:][//[<userinfo>@]<host>][/]<filepath>",
 			},
 			handler: (*ex).viewFiles,
 			completer: func(
@@ -465,7 +465,7 @@ var (
 		"tabcopypath": {
 			man: textapi.CommandManual{
 				Summary:  "Copy the path of the file in focus to the clipboard.",
-				Synopsis: "[absolute]",
+				Synopsis: "[<absolute>]",
 			},
 			handler: (*ex).tabcopypath,
 			completer: func(
@@ -480,7 +480,7 @@ var (
 		"tabcopylocation": {
 			man: textapi.CommandManual{
 				Summary:  "Copy the location of the file in focus to the clipboard.",
-				Synopsis: "[absolute]",
+				Synopsis: "[<absolute>]",
 			},
 			handler: (*ex).tabcopylocation,
 			completer: func(
@@ -504,7 +504,7 @@ var (
 					"from a terminal emulator created by `terminalnewtab` in that it preserves " +
 					"the session output across invocations. The floating window created by " +
 					"this command can be closed via standard window or tab close commands.",
-				Synopsis: "[executable [args]]",
+				Synopsis: "[<executable> [<args>]]",
 			},
 			handler: (*ex).executePlugin,
 		},
@@ -513,7 +513,7 @@ var (
 				Summary: "Run an executable like `!` but the stdout and stderr " +
 					"are not rendered in a floating window. This is useful for " +
 					"running programs that do not produce useful output.",
-				Synopsis: "[executable [args]]",
+				Synopsis: "[<executable> [<args>]]",
 			},
 			handler: (*ex).executePluginWait,
 		},
@@ -534,7 +534,7 @@ var (
 				Summary: "Change the default background and optionally foreground colors of " +
 					"the content in focus. The color can be a named color or an RGB value " +
 					"in hexadecimal notation (e.g. #FFFFFF).",
-				Synopsis: "background [foreground]",
+				Synopsis: "<background> [<foreground>]",
 			},
 			handler: (*ex).defaultcolors,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -550,7 +550,7 @@ var (
 			man: textapi.CommandManual{
 				Summary: "Insert the contents of the given file below the cursor. Takes a " +
 					"URI with a scheme as an argument. If no scheme is provided, file:// is assumed.",
-				Synopsis: "[scheme:][//[userinfo@]host][/]filepath",
+				Synopsis: "[<scheme>:][//[<userinfo>@]<host>][/]<filepath>",
 			},
 			handler: (*ex).readfile,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -566,7 +566,7 @@ var (
 					"A task can be minimized by pressing <esc>; `alignment` determines " +
 					"which side is used to display the minimized task. " +
 					"The name argument will appear in `tasklist` to help manage running tasks.",
-				Synopsis: "<name> <alignment> [filter] -- <cmd> [<args>]",
+				Synopsis: "<name> <alignment> [<filter>] -- <cmd> [<args>]",
 			},
 			handler: (*ex).newTask,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -582,7 +582,7 @@ var (
 				Summary: "Create a task like `tasknew` but convert it into a durable tab. " +
 					"This is a shortcut for calling `tasknew`, focusing on the minimized " +
 					"task, and then calling `windowconverttab` to convert it into a tab.",
-				Synopsis: "<name> [filter] -- <cmd> [<args>]",
+				Synopsis: "<name> [<filter>] -- <cmd> [<args>]",
 			},
 			handler: (*ex).newTaskTab,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
@@ -609,7 +609,7 @@ var (
 		"loglevel": {
 			man: textapi.CommandManual{
 				Summary:  "Update the log level, overriding the level set in the config.",
-				Synopsis: "<(info|debug|trace|warn|error|panic|fatal)>",
+				Synopsis: "(info|debug|trace|warn|error|panic|fatal)",
 			},
 			handler: func(e *ex, ctx context.Context, args ...string) error {
 				if len(args) != 1 {
@@ -650,7 +650,7 @@ var (
 					"shown in a syntax-highlighted preview pane on top of the list. " +
 					"Selecting an entry opens the file in the previously focused window " +
 					"at the parsed coordinates.",
-				Synopsis: "<program> [args]",
+				Synopsis: "<program> [<args>]",
 			},
 			handler: (*ex).locationpicker,
 		},
@@ -698,7 +698,7 @@ var (
 					"and is the only way to walk reverse reachability " +
 					"for live objects. The dump path is reported via " +
 					"a notification. Registered only in debug builds.",
-				Synopsis: "[path]",
+				Synopsis: "[<path>]",
 			},
 			handler: (*ex).heapdump,
 		},
@@ -710,7 +710,7 @@ var (
 					"sending SIGUSR1 to the process. Block and mutex " +
 					"profiling are enabled as a side-effect. " +
 					"Registered only in debug builds.",
-				Synopsis: "[host:port]",
+				Synopsis: "[<host>:<port>]",
 			},
 			handler: (*ex).pprof,
 		},
@@ -733,14 +733,14 @@ var (
 		Name: "shaderrun",
 		Summary: "Run a shader from the library of shaders. " +
 			"The default duration is 1s and the default FPS is 30.",
-		Synopsis: "name [duration] [fps]",
+		Synopsis: "<name> [<duration>] [<fps>]",
 	}
 
 	tutorialCmdManual = textapi.CommandManual{
 		Name: "tutorial",
 		Summary: "Run, stop, dismiss, or reset interactive tutorials.",
-		Synopsis: "run <name> | stop | dismiss <name> | " +
-			"reset [<name>]",
+		Synopsis: "(run <name> | stop | dismiss <name> | " +
+			"reset [<name>])",
 	}
 )
 

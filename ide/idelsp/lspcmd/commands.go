@@ -53,7 +53,7 @@ func Manual() textapi.CommandManual {
 			},
 			{
 				Name:     "hover",
-				Synopsis: "[symbol]",
+				Synopsis: "[<symbol>]",
 				Summary:  "Displays documentation, types, and signatures for a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{
@@ -62,27 +62,27 @@ func Manual() textapi.CommandManual {
 			},
 			{
 				Name:     "definition",
-				Synopsis: "[symbol]",
+				Synopsis: "[<symbol>]",
 				Summary:  "Go to definition of a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{
 				Name:     "declaration",
-				Synopsis: "[symbol]",
+				Synopsis: "[<symbol>]",
 				Summary:  "Go to declaration of a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{
 				Name:     "type-definition",
-				Synopsis: "[symbol]",
+				Synopsis: "[<symbol>]",
 				Summary:  "Go to type definition of a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{
 				Name:     "implementation",
-				Synopsis: "[symbol]",
+				Synopsis: "[<symbol>]",
 				Summary:  "Find implementations of a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{
 				Name:     "references",
-				Synopsis: "[symbol]",
+				Synopsis: "[<symbol>]",
 				Summary:  "Find references to a symbol; if no symbol argument is passed, then the symbol at cursor is used",
 			},
 			{

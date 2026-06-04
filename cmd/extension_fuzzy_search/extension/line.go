@@ -37,7 +37,7 @@ var (
 			"). To scroll back to previous searches, " +
 			`<ctrl-\> can be used by default or a 'history_key' can be set in the extension's ` +
 			"configuration. Ctrl-c can be used to cancel a scan in progress.",
-		Synopsis: "[command]",
+		Synopsis: "[<command>]",
 	}
 )
 

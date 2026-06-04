@@ -69,7 +69,7 @@ var gitCommands = []textapi.CommandManual{
 	{
 		Name:     commandGitLink,
 		Summary:  "Copies to clipboard the web permalink of the line at the cursor.",
-		Synopsis: "[remote]",
+		Synopsis: "[<remote>]",
 	},
 }
 

@@ -35,7 +35,7 @@ var (
 			"configuration or passing an argument (i.e. searchFile rg -l \"\"). To scroll back to previous searches, " +
 			"<ctrl-p> can be used by default or a 'history_key' can be set in the extension's " +
 			"configuration. Ctrl-c can be used to cancel a scan in progress.",
-		Synopsis: "[command]",
+		Synopsis: "[<command>]",
 	}
 )
 

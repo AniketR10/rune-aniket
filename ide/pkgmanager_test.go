@@ -637,7 +637,7 @@ func TestPackageManagerPreviewIntegration(t *testing.T) {
 │                                      │
 │ Usage                                │
 │                                      │
-│ pkginstall <package> [version]       │
+│ pkginstall <package> [<version>]     │
 │                                      │
 │                                      │
 │ Description                          │

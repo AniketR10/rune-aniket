@@ -35,7 +35,7 @@ var cmdSearchSyntax = textapi.CommandManual{
 		"The query file should be a relative or absolute path and if not found, " +
 		"it will be searched in the file's language package installation " +
 		"folder.",
-	Synopsis: "query capture1[...|captureN]",
+	Synopsis: "<query> <capture>...",
 }
 
 func readSymbolsFunction(dataDir string, queryFile string, captureNames []string) func(

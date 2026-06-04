@@ -129,7 +129,7 @@ func extensionsProcessManual() textapi.CommandManual {
 			{Name: "audit", Summary: "List all extension processes (including exited)."},
 			{Name: "tree", Summary: "Show extension process tree (parent→child)."},
 			{Name: "info", Summary: "Show detailed process information.", Synopsis: "<pid>"},
-			{Name: "signal", Summary: "Send a signal to an extension process.", Synopsis: "<pid> [N]"},
+			{Name: "signal", Summary: "Send a signal to an extension process.", Synopsis: "<pid> [<N>]"},
 			{Name: "stop", Summary: "Gracefully stop an extension process.", Synopsis: "<pid>"},
 		},
 	}

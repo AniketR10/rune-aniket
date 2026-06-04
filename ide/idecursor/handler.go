@@ -114,11 +114,11 @@ func manual() textapi.CommandManual {
 	return textapi.CommandManual{
 		Name:     commandName,
 		Summary:  "Navigate persisted cursor history across resources",
-		Synopsis: "(prev|next|jump) [location]",
+		Synopsis: "(prev|next|jump) [<location>]",
 		Commands: []textapi.CommandManual{
-			{Name: "prev", Summary: "Jump to the previous cursor history entry", Synopsis: "[location]"},
-			{Name: "next", Summary: "Jump to the next cursor history entry", Synopsis: "[location]"},
-			{Name: "jump", Summary: "Open a picker for cursor history entries", Synopsis: "[location]"},
+			{Name: "prev", Summary: "Jump to the previous cursor history entry", Synopsis: "[<location>]"},
+			{Name: "next", Summary: "Jump to the next cursor history entry", Synopsis: "[<location>]"},
+			{Name: "jump", Summary: "Open a picker for cursor history entries", Synopsis: "[<location>]"},
 		},
 	}
 }

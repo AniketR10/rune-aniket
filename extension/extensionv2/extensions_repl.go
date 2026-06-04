@@ -60,7 +60,7 @@ func registerExtensionsREPLCommand(
 	return editor.RegisterREPLCommand(textapi.CommandManual{
 		Name:     extensionsREPLCommand,
 		Summary:  "Manage workspace extensions.",
-		Synopsis: "<status|info|start|stop|restart|logs> ...",
+		Synopsis: "(status|info|start|stop|restart|logs) ...",
 		Commands: []textapi.CommandManual{
 			{Name: extensionsREPLCommandStatus, Summary: "Show workspace extension status."},
 			{Name: extensionsREPLCommandInfo, Summary: "Show detailed workspace extension information.", Synopsis: "<id>"},
@@ -74,7 +74,7 @@ func registerExtensionsREPLCommand(
 			{
 				Name:     extensionsREPLCommandLogs,
 				Summary:  "Show the captured stderr logs of an extension.",
-				Synopsis: "<id> [--tail N]",
+				Synopsis: "<id> [--tail <N>]",
 			},
 		},
 	}, extensionsREPLHandler{runner: runner})

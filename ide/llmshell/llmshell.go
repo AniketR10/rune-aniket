@@ -53,17 +53,17 @@ const CommandName = "models"
 var commandManual = textapi.CommandManual{
 	Name:     CommandName,
 	Summary:  "Inspect and manage LLM providers and local models.",
-	Synopsis: "<command> [args]",
+	Synopsis: "<command> [<args>]",
 	Commands: []textapi.CommandManual{
 		{
 			Name:     "providers",
 			Summary:  "Inspect and manage provider authentication.",
-			Synopsis: "<codex> <login|status>",
+			Synopsis: "<codex> (login|status)",
 			Commands: []textapi.CommandManual{
 				{
 					Name:     "codex",
 					Summary:  "Manage Codex provider authentication.",
-					Synopsis: "<login|status>",
+					Synopsis: "(login|status)",
 					Commands: []textapi.CommandManual{
 						{Name: "login", Summary: "Authenticate with Codex."},
 						{Name: "status", Summary: "Show Codex authentication status."},
@@ -74,13 +74,13 @@ var commandManual = textapi.CommandManual{
 		{
 			Name:     "local",
 			Summary:  "Manage locally cached GGUF models.",
-			Synopsis: "<list|download|delete> [args]",
+			Synopsis: "(list|download|delete) [<args>]",
 			Commands: []textapi.CommandManual{
 				{Name: "list", Summary: "List GGUF models in the local cache."},
 				{
 					Name:     "download",
 					Summary:  "Download a GGUF model from an OCI registry.",
-					Synopsis: "<host/>owner/repo[:tag|@digest]",
+					Synopsis: "[<host>/]<owner>/<repo>[:<tag> | @<digest>]",
 				},
 				{Name: "delete", Summary: "Delete a locally cached GGUF model.", Synopsis: "<reference>"},
 			},

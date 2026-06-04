@@ -58,7 +58,7 @@ var (
 		Name: "rtcconvertimage",
 		Summary: "Converts a local JPEG image to an 130x70 ASCII encoded image and opens" +
 			" up a window to display it.",
-		Synopsis: "image",
+		Synopsis: "<image>",
 	}
 )
 

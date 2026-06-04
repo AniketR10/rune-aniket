@@ -37,21 +37,21 @@ var (
 			Summary: "Creates a new split window with a broken TUI handler." +
 				"Two modes can be specified (panic or slow)." +
 				"If no argument is passed then 'panic' is assumed.",
-			Synopsis: "[(panic|slow [duration])]",
+			Synopsis: "[panic | slow [<duration>]]",
 		},
 		{
 			Name: commandChaosUpdateEventLatency,
 			Summary: "Updates the (added) latency of the event subscriber " +
 				"installed by the chaos extension. If no duration is passed, then " +
 				"this acts as a reset to zero, which is the default.",
-			Synopsis: "[duration]",
+			Synopsis: "[<duration>]",
 		},
 		{
 			Name: commandChaosUpdateCommandLatency,
 			Summary: "Updates the (added) latency of the chaos extension's command handler. " +
 				"If no duration is passed, then this acts as a reset to zero, " +
 				"which is the default. Note that this hinders the ability",
-			Synopsis: "[duration]",
+			Synopsis: "[<duration>]",
 		},
 	}
 

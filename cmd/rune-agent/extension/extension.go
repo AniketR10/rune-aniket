@@ -54,7 +54,7 @@ var (
 			Summary: "Send a coding question to your AI assistant. " +
 				"The current active file is loaded and available in the model's context. " +
 				"The default coding model is configured via extension configuration.",
-			Synopsis: "[message]",
+			Synopsis: "[<message>]",
 		},
 		{
 			Name: commandChat,
@@ -62,7 +62,7 @@ var (
 				"If no dialogue ID is provided, a new conversation is started. " +
 				"If no model is provided, the default model configured via extension " +
 				"configuration is used.",
-			Synopsis: "[dialogue_id [model]]",
+			Synopsis: "[<dialogue_id> [<model>]]",
 		},
 	}
 	events = []textapi.EventType{

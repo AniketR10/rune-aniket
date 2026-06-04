@@ -49,7 +49,7 @@ func registerAuthorizerREPLCommand(
 	return editor.RegisterREPLCommand(textapi.CommandManual{
 		Name:     authorizerREPLCommand,
 		Summary:  "Manage persisted plugin authorizer decisions.",
-		Synopsis: "<list|revoke> [permission]",
+		Synopsis: "(list|revoke) [<permission>]",
 		Commands: []textapi.CommandManual{
 			{
 				Name:    authorizerREPLCommandList,

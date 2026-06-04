@@ -68,7 +68,7 @@ var (
 				"If package contains executables, then this " +
 				"will be made available to terminal sessions via PATH env variable." +
 				cmdPkgUse + " is not necessary after running this command.",
-			Synopsis: "<package> [version]",
+			Synopsis: "<package> [<version>]",
 		},
 		{
 			Name:     cmdCheckUpdates,
@@ -86,7 +86,7 @@ var (
 				"If version is specified, then only the specified version is removed, " +
 				"otherwise all versions are removed. " +
 				"If version is passed and it is in use, this command errors out.",
-			Synopsis: "<package> [version]",
+			Synopsis: "<package> [<version>]",
 		},
 		{
 			Name: cmdPkgUse,

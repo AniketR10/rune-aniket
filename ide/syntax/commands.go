@@ -62,7 +62,7 @@ var commands = []textapi.CommandManual{
 			"The query file should be a relative or absolute path and if not found, " +
 			"it will be searched in the file's language package installation " +
 			"folder.",
-		Synopsis: "query capture1[...|captureN] name",
+		Synopsis: "<query> <capture>... <name>",
 	},
 }
 
