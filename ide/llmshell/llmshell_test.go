@@ -21,19 +21,25 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package llmshell
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/llm"
 	"unstable.build/go-tui/llm/llamacpp"
 	"unstable.build/go-tui/llm/llmrouter"
@@ -68,10 +74,114 @@ func newHandlerForTest(t *testing.T) *Handler {
 	t.Helper()
 	router := newRouterForTest(t)
 	return New(Config{
-		Service:        router,
-		LocalRegistry: router.LocalRegistry(),
-		Storage:       stubStorageForTest(t),
+		Service:          router,
+		Router:           router,
+		LocalRegistry:    router.LocalRegistry(),
+		Storage:          stubStorageForTest(t),
+		WindowManager:    &stubWindowManager{},
+		Notifications:    &stubNotifications{},
+		ScheduleNextTick: syncSchedule,
+		PromptOpener:     &stubPromptOpener{},
 	})
+}
+
+// syncSchedule runs scheduled work inline so tests need not pump an
+// event loop.
+func syncSchedule(fn func()) bool {
+	fn()
+	return true
+}
+
+// stubNotifications records notifications for assertions.
+type stubNotifications struct {
+	notes []stubNote
+}
+
+type stubNote struct {
+	level browserapi.NotificationLevel
+	msg   string
+}
+
+func (s *stubNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	s.notes = append(s.notes, stubNote{level: level, msg: fmt.Sprintf(msg, args...)})
+	return "", nil
+}
+
+func (s *stubNotifications) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return s.Notify(level, msg, args...)
+}
+
+func (s *stubNotifications) UpdateNotificationProgress(_, _ string, _, _ int64) error {
+	return nil
+}
+
+// stubWindowManager captures the most recent floating handler so tests
+// can drive it.
+type stubWindowManager struct {
+	lastFloating browserapi.Floating
+	floatErr     error
+}
+
+func (s *stubWindowManager) Focus() (browserapi.Window, error) { return nil, nil }
+func (s *stubWindowManager) Split(
+	browserapi.Orientation, browserapi.Window, browserapi.Handler,
+) (browserapi.Window, error) {
+	return nil, nil
+}
+func (s *stubWindowManager) Floating(
+	h browserapi.Floating, _ browserapi.FloatingConfig,
+) (browserapi.Window, error) {
+	if s.floatErr != nil {
+		return nil, s.floatErr
+	}
+	s.lastFloating = h
+	return stubWindow(1), nil
+}
+func (s *stubWindowManager) Bar(browserapi.BarConfig, tui.Handler) error { return nil }
+func (s *stubWindowManager) Tab(
+	workspaceapi.URI, rune, string, browserapi.Handler,
+) (browserapi.Handler, error) {
+	return nil, nil
+}
+func (s *stubWindowManager) SetWindowContent(browserapi.Window, browserapi.Handler) error {
+	return nil
+}
+func (s *stubWindowManager) CloseWindow(browserapi.Window) error { return nil }
+
+type stubWindow uint64
+
+func (w stubWindow) WindowID() uint64 { return uint64(w) }
+
+// stubPromptOpener records the most recent prompt and, when selectIdx is
+// non-negative, immediately drives that option's handler so tests can
+// exercise the confirm flow without an event loop.
+type stubPromptOpener struct {
+	called    bool
+	message   string
+	options   []string
+	bindings  []term.KeyComb
+	handler   handler.PromptHandler
+	selectIdx int
+}
+
+func (s *stubPromptOpener) Prompt(
+	message string, options []string,
+	bindings []term.KeyComb,
+	promptHandler handler.PromptHandler,
+) browser.Window {
+	s.called = true
+	s.message = message
+	s.options = options
+	s.bindings = bindings
+	s.handler = promptHandler
+	if s.selectIdx >= 0 && s.selectIdx < len(options) {
+		promptHandler.OnSelect(s.selectIdx, options[s.selectIdx])
+	}
+	return nil
 }
 
 // TestManualHasRequiredSubcommands verifies the public command tree

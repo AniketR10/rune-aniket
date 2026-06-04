@@ -37,14 +37,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/llm/llamacpp"
+	"unstable.build/go-tui/llm/llmrouter"
 )
 
 // CommandName is the top-level REPL command exposed by this shell.
@@ -58,7 +63,7 @@ var commandManual = textapi.CommandManual{
 		{
 			Name:     "providers",
 			Summary:  "Inspect and manage provider authentication.",
-			Synopsis: "<codex> (login|status)",
+			Synopsis: "(codex|openai|anthropic|gemini)",
 			Commands: []textapi.CommandManual{
 				{
 					Name:     "codex",
@@ -68,6 +73,24 @@ var commandManual = textapi.CommandManual{
 						{Name: "login", Summary: "Authenticate with Codex."},
 						{Name: "status", Summary: "Show Codex authentication status."},
 					},
+				},
+				{
+					Name:     "openai",
+					Summary:  "Manage OpenAI API keys.",
+					Synopsis: "(add|remove|use|status)",
+					Commands: hostedProviderManual,
+				},
+				{
+					Name:     "anthropic",
+					Summary:  "Manage Anthropic API keys.",
+					Synopsis: "(add|remove|use|status)",
+					Commands: hostedProviderManual,
+				},
+				{
+					Name:     "gemini",
+					Summary:  "Manage Gemini API keys.",
+					Synopsis: "(add|remove|use|status)",
+					Commands: hostedProviderManual,
 				},
 			},
 		},
@@ -91,6 +114,30 @@ var commandManual = textapi.CommandManual{
 // Manual returns the parent REPL command manual.
 func Manual() textapi.CommandManual { return commandManual }
 
+// hostedProviderManual is the shared subcommand manual for the
+// openai/anthropic/gemini providers, which all manage named API keys.
+var hostedProviderManual = []textapi.CommandManual{
+	{
+		Name:     "add",
+		Summary:  "Add a new API key under a name. Opens a hidden prompt to paste the key, tests it against the provider, then stores it. The first key you add becomes the active one.",
+		Synopsis: "<name>",
+	},
+	{
+		Name:     "remove",
+		Summary:  "Delete a stored API key by name. If it was the active key, another stored key is promoted automatically.",
+		Synopsis: "<name>",
+	},
+	{
+		Name:     "use",
+		Summary:  "Switch the active API key to a stored one by name. Takes effect immediately, no restart needed.",
+		Synopsis: "<name>",
+	},
+	{
+		Name:    "status",
+		Summary: "List the names of stored API keys and show which one is currently active.",
+	},
+}
+
 // Config configures a Handler. All fields are mandatory: the router
 // is the dispatcher used by the providers subtree to advertise the
 // installed clients, the local registry backs the `local` subtree,
@@ -98,12 +145,39 @@ func Manual() textapi.CommandManual { return commandManual }
 type Config struct {
 	// Service is the LLM service from which available models are read.
 	Service llmapi.Service
+	// Router is the concrete router that backs the hosted-provider key
+	// management subcommands (add/remove/use/status).
+	Router *llmrouter.Router
 	// LocalRegistry is the llama.cpp cache registry that the local
 	// subcommand operates on.
 	LocalRegistry *llamacpp.Registry
 	// Storage is the persistent storage service used by the codex
 	// provider for auth state.
 	Storage storageapi.Service
+	// WindowManager opens the floating redacted prompt and confirmation
+	// prompt used by the hosted-provider `add` flow.
+	WindowManager browserapi.WindowManager
+	// Notifications surfaces success/failure of key operations.
+	Notifications browserapi.Notifications
+	// ScheduleNextTick marshals UI work back onto the host event loop
+	// from the REPL goroutine.
+	ScheduleNextTick func(func()) bool
+	// PromptOpener opens yes/no confirmation prompts using the IDE's
+	// shared prompt machinery, so they render markdown and use the
+	// configured button styling exactly like core IDE prompts.
+	PromptOpener PromptOpener
+}
+
+// PromptOpener opens a browser prompt for host-side decisions. It mirrors
+// the core IDE prompt entry point (text.Component.Prompt) so the provider
+// flows render markdown messages and styled option buttons consistently
+// with the rest of the IDE.
+type PromptOpener interface {
+	Prompt(
+		message string, options []string,
+		bindings []term.KeyComb,
+		promptHandler handler.PromptHandler,
+	) browser.Window
 }
 
 // Handler is the parent dispatcher for the `models` command tree.
@@ -129,12 +203,34 @@ func New(cfg Config) *Handler {
 	if cfg.Storage == nil {
 		panic("llmshell: Config.Storage must not be nil")
 	}
+	if cfg.Router == nil {
+		panic("llmshell: Config.Router must not be nil")
+	}
+	if cfg.WindowManager == nil {
+		panic("llmshell: Config.WindowManager must not be nil")
+	}
+	if cfg.Notifications == nil {
+		panic("llmshell: Config.Notifications must not be nil")
+	}
+	if cfg.ScheduleNextTick == nil {
+		panic("llmshell: Config.ScheduleNextTick must not be nil")
+	}
+	if cfg.PromptOpener == nil {
+		panic("llmshell: Config.PromptOpener must not be nil")
+	}
 	return &Handler{
 		service:       cfg.Service,
 		localRegistry: cfg.LocalRegistry,
 		storage:       cfg.Storage,
-		providers:     newProvidersHandler(cfg.Storage),
-		local:         newLocalHandler(cfg.LocalRegistry),
+		providers: newProvidersHandler(providersConfig{
+			storage:  cfg.Storage,
+			router:   cfg.Router,
+			wm:       cfg.WindowManager,
+			notifs:   cfg.Notifications,
+			schedule: cfg.ScheduleNextTick,
+			prompt:   cfg.PromptOpener,
+		}),
+		local: newLocalHandler(cfg.LocalRegistry),
 	}
 }
 
@@ -206,6 +302,34 @@ func findSubcommand(man textapi.CommandManual, name string) (textapi.CommandManu
 	return textapi.CommandManual{}, false
 }
 
+// providerManual returns the manual node for `models providers <name>`
+// with its Name rewritten to the full command path, so usageMarkdown
+// renders an accurate title, usage line, and example block. ok is false
+// for unknown providers.
+func providerManual(provider string) (textapi.CommandManual, bool) {
+	providers, ok := findSubcommand(commandManual, "providers")
+	if !ok {
+		return textapi.CommandManual{}, false
+	}
+	sub, ok := findSubcommand(providers, provider)
+	if !ok {
+		return textapi.CommandManual{}, false
+	}
+	sub.Name = "models providers " + provider
+	return sub, true
+}
+
+// providersManual returns the `models providers` manual node with its
+// Name rewritten to the full command path.
+func providersManual() textapi.CommandManual {
+	man, ok := findSubcommand(commandManual, "providers")
+	if !ok {
+		return textapi.CommandManual{}
+	}
+	man.Name = "models providers"
+	return man
+}
+
 // markdownOutput wraps a markdown string into a single-shot iterator
 // suitable for returning from HandleCommand. Falls back to a plain
 // responsive string when the markdown parser rejects the content.
@@ -239,6 +363,10 @@ func filterNames(names []string, prefix string) []string {
 	return out
 }
 
+// usageMarkdown renders a full, user-friendly help page for a command
+// manual node: a title, the summary as prose, a copy-pasteable usage
+// line, a sub-command reference with each child's own synopsis, and a
+// worked example block when one is registered for the node.
 func usageMarkdown(man textapi.CommandManual) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## `%s`\n\n", man.Name)
@@ -246,13 +374,54 @@ func usageMarkdown(man textapi.CommandManual) string {
 		fmt.Fprintf(&b, "%s\n\n", man.Summary)
 	}
 	if man.Synopsis != "" {
-		fmt.Fprintf(&b, "**Usage**: `%s %s`\n\n", man.Name, man.Synopsis)
+		fmt.Fprintf(&b, "**Usage:** `%s %s`\n\n", man.Name, man.Synopsis)
 	}
 	if len(man.Commands) > 0 {
-		b.WriteString("### Commands\n\n")
+		b.WriteString("### Subcommands\n\n")
 		for _, c := range man.Commands {
-			fmt.Fprintf(&b, "- `%s` — %s\n", c.Name, c.Summary)
+			invocation := c.Name
+			if c.Synopsis != "" {
+				invocation = fmt.Sprintf("%s %s", c.Name, c.Synopsis)
+			}
+			fmt.Fprintf(&b, "- `%s`\n  %s\n", invocation, c.Summary)
+		}
+		b.WriteByte('\n')
+	}
+	if ex := commandExamples[man.Name]; ex != "" {
+		b.WriteString("### Examples\n\n")
+		b.WriteString(ex)
+		if !strings.HasSuffix(ex, "\n") {
+			b.WriteByte('\n')
 		}
 	}
 	return b.String()
+}
+
+// commandExamples holds worked-example blocks keyed by command-manual
+// node name. The key is the node's Name (e.g. "models providers
+// openai"); only nodes worth illustrating need an entry.
+var commandExamples = map[string]string{
+	"models providers": "```\n" +
+		"models providers codex login        # sign in to ChatGPT Codex\n" +
+		"models providers openai add work    # store an OpenAI key named 'work'\n" +
+		"models providers anthropic status   # see which Anthropic key is active\n" +
+		"```",
+	"models providers openai": "```\n" +
+		"models providers openai add work    # paste a key, store it as 'work'\n" +
+		"models providers openai use work    # make 'work' the active key\n" +
+		"models providers openai status      # list keys and the active one\n" +
+		"models providers openai remove work # delete the 'work' key\n" +
+		"```",
+	"models providers anthropic": "```\n" +
+		"models providers anthropic add work    # paste a key, store it as 'work'\n" +
+		"models providers anthropic use work    # make 'work' the active key\n" +
+		"models providers anthropic status      # list keys and the active one\n" +
+		"models providers anthropic remove work # delete the 'work' key\n" +
+		"```",
+	"models providers gemini": "```\n" +
+		"models providers gemini add work    # paste a key, store it as 'work'\n" +
+		"models providers gemini use work    # make 'work' the active key\n" +
+		"models providers gemini status      # list keys and the active one\n" +
+		"models providers gemini remove work # delete the 'work' key\n" +
+		"```",
 }

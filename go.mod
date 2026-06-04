@@ -205,5 +205,3 @@ replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v
 replace github.com/tree-sitter/go-tree-sitter => github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1
 
 replace github.com/unstablebuild/ox-api => ./cmd/ox-api
-
-replace github.com/unstablebuild/rune-go-sdk => ../rune-go-sdk

@@ -67,11 +67,8 @@ const (
 type Router struct {
 	cfg llm.Config
 
-	openai    llmapi.Service
-	anthropic llmapi.Service
-	gemini    llmapi.Service
-	custom    llmapi.Service
-	ollama    llmapi.Service
+	custom llmapi.Service
+	ollama llmapi.Service
 
 	// customCatalog is materialised once from cfg.Custom.AvailableModels
 	// so Models()/GetModel() can return a stable slice on each call.
@@ -98,9 +95,19 @@ type Router struct {
 	// resources every turn. Guarded by mu because gRPC handlers may
 	// dispatch concurrently. Close drains it.
 	localServices map[localCacheKey]localService
+	// hostedClients caches the constructed openai/anthropic/gemini
+	// clients keyed by the resolved API key. The key is resolved lazily
+	// (storage first, then config) so a `providers <p> setup` takes
+	// effect without restarting the IDE; a changed key produces a new
+	// cache entry. Guarded by mu.
+	hostedClients map[hostedCacheKey]llmapi.Service
 	// newLocal builds a llama.cpp Service. Tests swap in a fake to avoid
 	// loading a real GGUF.
 	newLocal func(llamacpp.Config) (localService, error)
+	// newHostedClient builds a throwaway hosted client for a given
+	// provider/key, used by VerifyProviderKey to test a key before
+	// storing it. Tests swap in a fake to avoid real network calls.
+	newHostedClient func(provider, apiKey string) (llmapi.Service, llmapi.ModelEntry, error)
 	// closed flips to true after Close so late dispatches that try to
 	// resurrect a torn-down service are rejected instead.
 	closed bool
@@ -111,6 +118,11 @@ type Router struct {
 	// credential loaders that resolve the access token lazily, on
 	// the request that needs it.
 	storage storageapi.Service
+
+	// store persists named hosted-provider API keys (set via
+	// `/models providers <p> add`). resolveAPIKey consults the active
+	// key here before falling back to the static configured key.
+	store *keyStore
 }
 
 // localService is the minimal interface a cached llama.cpp service must
@@ -126,6 +138,11 @@ type localCacheKey struct {
 	ModelPath     string
 	ProjectorPath string
 	ContextWindow uint32
+}
+
+type hostedCacheKey struct {
+	provider string
+	apiKey   string
 }
 
 // ErrRouterClosed is returned by dispatches issued after Router.Close.
@@ -146,21 +163,20 @@ func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, e
 		cfg:           cfg,
 		storage:       storage,
 		localServices: make(map[localCacheKey]localService),
+		hostedClients: make(map[hostedCacheKey]llmapi.Service),
 	}
+	r.store = newKeyStore(storage)
 	r.newLocal = func(c llamacpp.Config) (localService, error) {
 		return llamacpp.NewService(c)
 	}
+	r.newHostedClient = r.buildHostedClient
 
-	r.openai = openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAIClientConfig())
-	r.anthropic = anthropic.NewClient(cfg.Anthropic.APIKey, cfg.AnthropicClientConfig())
-	// Codex piggybacks on the OpenAI client but always forces the
-	// Responses API and carries per-credential headers + client
-	// metadata. The credential is loaded from storage at request time
-	// (see resolveCodex) so login/logout takes effect without
-	// restarting the IDE.
-	// Gemini and custom use the OpenAI-compatible API; the base URL
-	// is filled per request from the model entry / shared config.
-	r.gemini = openai.NewClient(cfg.Gemini.APIKey, cfg.GeminiClientConfig(gemini.OpenAICompatibleURL))
+	// openai, anthropic, and gemini clients are constructed lazily by
+	// resolveOpenAI / resolveAnthropic / resolveGemini so the API key
+	// can be sourced from storage (set via `providers <p> setup`) and
+	// take effect without restarting the IDE. Codex follows the same
+	// per-request pattern (see resolveCodex). Custom uses the
+	// OpenAI-compatible API with a static configured key.
 	if cfg.Custom.URL != "" {
 		r.custom = openai.NewClient(cfg.Custom.APIKey, cfg.CustomClientConfig())
 		r.customCatalog = customModelEntries(cfg.Custom)
@@ -295,13 +311,13 @@ func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.S
 	case "":
 		return nil, errors.New("llmrouter: ModelEntry.Provider must be set")
 	case ProviderOpenAI:
-		return r.openai, nil
+		return r.resolveOpenAI(ctx)
 	case ProviderAnthropic:
-		return r.anthropic, nil
+		return r.resolveAnthropic(ctx)
 	case ProviderCodex:
 		return r.resolveCodex(ctx)
 	case ProviderGemini:
-		return r.gemini, nil
+		return r.resolveGemini(ctx)
 	case ProviderCustom:
 		if r.custom == nil {
 			return nil, fmt.Errorf("llmrouter: custom provider not configured")
@@ -397,4 +413,166 @@ func (r *Router) resolveCodex(ctx context.Context) (llmapi.Service, error) {
 		cfg.DefaultPromptCacheKey = sid
 	}
 	return openai.NewClient(cred.AccessToken, cfg), nil
+}
+
+// resolveAPIKey returns the API key for a hosted provider, preferring the
+// active key stored in rune-side local storage (set via
+// `/models providers <p> add`) and falling back to the static configured
+// key. It returns an empty string when neither source supplies one.
+func (r *Router) resolveAPIKey(ctx context.Context, provider, configKey string) string {
+	if key, err := r.store.active(ctx, provider); err == nil && key != "" {
+		return key
+	}
+	return configKey
+}
+
+// hostedClient returns a cached client for the given provider/key pair,
+// constructing one via build on first use. A changed key produces a new
+// cache entry so a `/models providers <p> use` takes effect without a
+// restart.
+func (r *Router) hostedClient(
+	provider, apiKey string, build func() llmapi.Service,
+) (llmapi.Service, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil, ErrRouterClosed
+	}
+	key := hostedCacheKey{provider: provider, apiKey: apiKey}
+	if svc, ok := r.hostedClients[key]; ok {
+		return svc, nil
+	}
+	svc := build()
+	r.hostedClients[key] = svc
+	return svc, nil
+}
+
+func (r *Router) resolveOpenAI(ctx context.Context) (llmapi.Service, error) {
+	key := r.resolveAPIKey(ctx, ProviderOpenAI, r.cfg.OpenAI.APIKey)
+	if key == "" {
+		return nil, errors.New(
+			"llmrouter: openai api key not configured; run " +
+				"`/models providers openai add`")
+	}
+	return r.hostedClient(ProviderOpenAI, key, func() llmapi.Service {
+		return openai.NewClient(key, r.cfg.OpenAIClientConfig())
+	})
+}
+
+func (r *Router) resolveAnthropic(ctx context.Context) (llmapi.Service, error) {
+	key := r.resolveAPIKey(ctx, ProviderAnthropic, r.cfg.Anthropic.APIKey)
+	if key == "" {
+		return nil, errors.New(
+			"llmrouter: anthropic api key not configured; run " +
+				"`/models providers anthropic add`")
+	}
+	return r.hostedClient(ProviderAnthropic, key, func() llmapi.Service {
+		return anthropic.NewClient(key, r.cfg.AnthropicClientConfig())
+	})
+}
+
+func (r *Router) resolveGemini(ctx context.Context) (llmapi.Service, error) {
+	key := r.resolveAPIKey(ctx, ProviderGemini, r.cfg.Gemini.APIKey)
+	if key == "" {
+		return nil, errors.New(
+			"llmrouter: gemini api key not configured; run " +
+				"`/models providers gemini add`")
+	}
+	return r.hostedClient(ProviderGemini, key, func() llmapi.Service {
+		return openai.NewClient(key, r.cfg.GeminiClientConfig(gemini.OpenAICompatibleURL))
+	})
+}
+
+// AddProviderKey stores a named API key for a hosted provider. The first
+// key added for a provider becomes the active key.
+func (r *Router) AddProviderKey(ctx context.Context, provider, name, key string) error {
+	return r.store.add(ctx, provider, name, key)
+}
+
+// RemoveProviderKey deletes a named API key. When the removed key is the
+// active one, another remaining key is promoted (or the active key is
+// cleared when none remain).
+func (r *Router) RemoveProviderKey(ctx context.Context, provider, name string) error {
+	return r.store.remove(ctx, provider, name)
+}
+
+// UseProviderKey makes a stored named key the active key for a provider.
+func (r *Router) UseProviderKey(ctx context.Context, provider, name string) error {
+	return r.store.use(ctx, provider, name)
+}
+
+// ProviderKeyNames returns the stored key names for a provider, sorted.
+func (r *Router) ProviderKeyNames(ctx context.Context, provider string) ([]string, error) {
+	return r.store.names(ctx, provider)
+}
+
+// ProviderKeyActiveName returns the name of the active key for a provider,
+// or the empty string when none is set.
+func (r *Router) ProviderKeyActiveName(ctx context.Context, provider string) (string, error) {
+	return r.store.activeName(ctx, provider)
+}
+
+// ProviderKeyActive returns the value of the active key for a provider, or
+// ErrAPIKeyNotSet when none is set.
+func (r *Router) ProviderKeyActive(ctx context.Context, provider string) (string, error) {
+	return r.store.active(ctx, provider)
+}
+
+// buildHostedClient constructs a throwaway client for the given provider
+// and key plus the model entry to probe during verification. The client
+// is not cached.
+func (r *Router) buildHostedClient(
+	provider, apiKey string,
+) (llmapi.Service, llmapi.ModelEntry, error) {
+	switch provider {
+	case ProviderOpenAI:
+		entries := openai.ModelEntries()
+		if len(entries) == 0 {
+			return nil, llmapi.ModelEntry{}, errors.New("llmrouter: openai has no models to verify against")
+		}
+		return openai.NewClient(apiKey, r.cfg.OpenAIClientConfig()), entries[0], nil
+	case ProviderAnthropic:
+		entries := anthropic.ModelEntries()
+		if len(entries) == 0 {
+			return nil, llmapi.ModelEntry{}, errors.New("llmrouter: anthropic has no models to verify against")
+		}
+		return anthropic.NewClient(apiKey, r.cfg.AnthropicClientConfig()), entries[0], nil
+	case ProviderGemini:
+		entries := gemini.ModelEntries()
+		if len(entries) == 0 {
+			return nil, llmapi.ModelEntry{}, errors.New("llmrouter: gemini has no models to verify against")
+		}
+		client := openai.NewClient(apiKey, r.cfg.GeminiClientConfig(gemini.OpenAICompatibleURL))
+		return client, entries[0], nil
+	default:
+		return nil, llmapi.ModelEntry{}, fmt.Errorf("llmrouter: provider %q does not support key verification", provider)
+	}
+}
+
+// VerifyProviderKey tests an API key by issuing a minimal completion
+// against the provider's first model and consuming the first event. It
+// returns the provider error verbatim, or nil when the key works.
+func (r *Router) VerifyProviderKey(ctx context.Context, provider, key string) error {
+	client, model, err := r.newHostedClient(provider, key)
+	if err != nil {
+		return err
+	}
+	it, err := client.CreateCompletion(ctx, model, llmapi.Request{
+		MaxOutputTokens: 1,
+		Messages: []llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "ping"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = it.Close() }()
+	ev, ok := it.Next(ctx)
+	if !ok {
+		return nil
+	}
+	if ev.Type == llmapi.EventStreamError {
+		return ev.Error
+	}
+	return nil
 }

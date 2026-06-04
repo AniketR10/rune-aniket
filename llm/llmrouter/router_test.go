@@ -25,6 +25,7 @@ package llmrouter
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -151,6 +152,107 @@ func TestRouter_Resolve_RejectsEmptyProvider(t *testing.T) {
 	_, err := r.resolve(context.Background(), llmapi.ModelEntry{Name: "gpt-5.5"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ModelEntry.Provider must be set")
+}
+
+func TestRouter_ResolveHosted_StorageWinsOverConfig(t *testing.T) {
+	ctx := context.Background()
+	cfg := llm.DefaultConfig()
+	cfg.OpenAI.APIKey = "config-key"
+	storage := storagestub.NewInMemoryService()
+	r, err := New(cfg, t.TempDir(), storage)
+	require.NoError(t, err)
+	require.NoError(t, r.AddProviderKey(ctx, ProviderOpenAI, "work", "storage-key"))
+
+	svc, err := r.resolveOpenAI(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	r.mu.Lock()
+	_, fromStorage := r.hostedClients[hostedCacheKey{provider: ProviderOpenAI, apiKey: "storage-key"}]
+	_, fromConfig := r.hostedClients[hostedCacheKey{provider: ProviderOpenAI, apiKey: "config-key"}]
+	r.mu.Unlock()
+	assert.True(t, fromStorage, "client should be keyed by the storage key")
+	assert.False(t, fromConfig, "config key must not be used when storage has a key")
+}
+
+func TestRouter_ResolveHosted_FallsBackToConfig(t *testing.T) {
+	ctx := context.Background()
+	cfg := llm.DefaultConfig()
+	cfg.Anthropic.APIKey = "config-key"
+	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService())
+	require.NoError(t, err)
+
+	svc, err := r.resolveAnthropic(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	svc2, err := r.resolveAnthropic(ctx)
+	require.NoError(t, err)
+	assert.Same(t, svc, svc2, "repeated resolves must return the cached client")
+}
+
+func TestRouter_ResolveHosted_ErrorWhenUnset(t *testing.T) {
+	ctx := context.Background()
+	cfg := llm.DefaultConfig()
+	cfg.OpenAI.APIKey = ""
+	cfg.Anthropic.APIKey = ""
+	cfg.Gemini.APIKey = ""
+	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService())
+	require.NoError(t, err)
+
+	_, err = r.resolveOpenAI(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "openai api key not configured")
+
+	_, err = r.resolveAnthropic(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "anthropic api key not configured")
+
+	_, err = r.resolveGemini(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gemini api key not configured")
+}
+
+type verifyService struct {
+	events []llmapi.Event
+}
+
+func (s *verifyService) CreateCompletion(
+	_ context.Context, _ llmapi.ModelEntry, _ llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
+	return iterator.FromSlice(s.events), nil
+}
+func (s *verifyService) CountTokens(_ llmapi.ModelEntry, _ []llmapi.Message) (int, error) {
+	return 0, nil
+}
+func (s *verifyService) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return iterator.FromSlice[llmapi.ModelEntry](nil)
+}
+func (s *verifyService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+	return llmapi.ModelEntry{}, false
+}
+
+func TestRouter_VerifyProviderKey_Success(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRouter(t)
+	r.newHostedClient = func(_, _ string) (llmapi.Service, llmapi.ModelEntry, error) {
+		return &verifyService{events: []llmapi.Event{{Type: llmapi.EventTextDelta, Text: "ok"}}},
+			llmapi.ModelEntry{Name: "m", Provider: ProviderOpenAI}, nil
+	}
+	require.NoError(t, r.VerifyProviderKey(ctx, ProviderOpenAI, "good-key"))
+}
+
+func TestRouter_VerifyProviderKey_AuthError(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRouter(t)
+	authErr := errors.New("invalid api key")
+	r.newHostedClient = func(_, _ string) (llmapi.Service, llmapi.ModelEntry, error) {
+		return &verifyService{events: []llmapi.Event{{Type: llmapi.EventStreamError, Error: authErr}}},
+			llmapi.ModelEntry{Name: "m", Provider: ProviderOpenAI}, nil
+	}
+	err := r.VerifyProviderKey(ctx, ProviderOpenAI, "bad-key")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, authErr)
 }
 
 func TestRouter_CreateCompletion_RejectsEmptyProvider(t *testing.T) {
