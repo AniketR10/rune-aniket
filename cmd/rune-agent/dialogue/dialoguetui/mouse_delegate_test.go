@@ -30,13 +30,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	tterm "unstable.build/go-tui/term"
 )
 
 var _ mouse.Delegate = (*mouseDelegate)(nil)
 
-// drawGrid creates a cellGrid, resizes and draws the component into it.
-func drawGrid(comp *Component, width, height int) *cellGrid {
-	var g cellGrid
+// drawGrid creates a SelectionWriter, resizes and draws the component into it.
+func drawGrid(comp *Component, width, height int) *tterm.SelectionWriter {
+	var g tterm.SelectionWriter
 	g.Resize(width, height)
 	comp.Draw(&g)
 	return &g

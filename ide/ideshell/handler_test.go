@@ -21,13 +21,13 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ideshell
 
 import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1172,4 +1172,386 @@ func TestHandlerLoadHistoryReturnsNewestFirst(t *testing.T) {
 	assert.Equal(t,
 		[]string{"newest", "middle", "oldest"}, h.loadHistory(),
 	)
+}
+
+// TestHandlerMouseSelection drives the public handler with mouse event
+// sequences and asserts the resulting Selection(). Gestures are built
+// against the rendered output so the cases stay robust to the repl's
+// bottom-aligned output band. Edge cases (negative coordinates,
+// out-of-bounds drags, empty/whitespace cells, beyond-EOL columns)
+// must not panic and must clamp to sensible selections.
+func TestHandlerMouseSelection(t *testing.T) {
+	for _, tc := range mouseSelectionCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			w, h := tc.width, tc.height
+			if w == 0 {
+				w = mouseTestWidth
+			}
+			if h == 0 {
+				h = mouseTestHeight
+			}
+			hd, out := newMouseTestHandler(t, w, h, tc.lines)
+			for _, ev := range tc.gesture(out, w) {
+				hd.Handle(ev)
+			}
+			sel, ok := hd.Selection()
+			assert.Equal(t, tc.wantOK, ok, "Selection() ok mismatch")
+			if tc.wantOK {
+				assert.Equal(t, tc.wantSel, sel, "Selection() text mismatch")
+			}
+		})
+	}
+}
+
+// TestHandlerMouseSelectionRendersReverse verifies the selected span is
+// painted with AttrReverse and that nothing outside the span is.
+func TestHandlerMouseSelectionRendersReverse(t *testing.T) {
+	const w, h = mouseTestWidth, mouseTestHeight
+	hd, out := newMouseTestHandler(t, w, h, []string{"alpha bravo"})
+	y := rowOf(t, out, w, 'a')
+	// Drag over exactly "alpha" (columns 0..4) so the highlighted span
+	// has a precise inclusive boundary, independent of how the output
+	// row is padded.
+	for _, ev := range clickDrag(0, y, 4, y) {
+		hd.Handle(ev)
+	}
+	rw := term.NewStringWriter(w, h)
+	hd.Draw(rw)
+	_ = rw.Flush()
+	cells := rw.Cells()
+	// Columns 0..4 ("alpha") are highlighted; column 5 (the space
+	// after) is not.
+	for x := range 5 {
+		assert.NotZero(t, cells[y*w+x].Attrs&term.AttrReverse,
+			"cell (%d,%d) inside selection missing AttrReverse", x, y)
+	}
+	assert.Zero(t, cells[y*w+5].Attrs&term.AttrReverse,
+		"cell past selection should not carry AttrReverse")
+}
+
+// TestHandlerMouseWheelDoesNotSelect ensures wheel events never start a
+// selection (they scroll the inner repl instead).
+func TestHandlerMouseWheelDoesNotSelect(t *testing.T) {
+	hd, _ := newMouseTestHandler(t, mouseTestWidth, 6,
+		[]string{"l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7"})
+	hd.Handle(mouseEv(2, 0, term.MouseWheelUp))
+	hd.Handle(mouseEv(2, 0, term.MouseWheelDown))
+	_, ok := hd.Selection()
+	assert.False(t, ok, "wheel scroll must not create a selection")
+}
+
+// ----- mouse selection fixtures & helpers -----
+
+const (
+	mouseTestWidth  = 30
+	mouseTestHeight = 12
+)
+
+// mouseCase is one table entry for TestHandlerMouseSelection. gesture
+// receives the rendered framebuffer so it can locate output rows, and
+// returns the events to feed to the handler.
+type mouseCase struct {
+	name    string
+	width   int
+	height  int
+	lines   []string
+	gesture func(out *term.StringWriter, w int) []term.Event
+	wantSel string
+	wantOK  bool
+}
+
+func mouseSelectionCases() []mouseCase {
+	// atRow finds the row of the given rune; used by gestures that need
+	// a known output line.
+	return []mouseCase{
+		{
+			name:  "triple-click selects whole line",
+			lines: []string{"alpha bravo", "charlie delta"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				return tripleClick(2, rowOf(nil, out, w, 'a'))
+			},
+			wantSel: "alpha bravo",
+			wantOK:  true,
+		},
+		{
+			name:  "double-click selects word under cursor",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				return doubleClick(6, rowOf(nil, out, w, 'b'))
+			},
+			wantSel: "bravo",
+			wantOK:  true,
+		},
+		{
+			name:  "double-click on first word",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				return doubleClick(0, rowOf(nil, out, w, 'a'))
+			},
+			wantSel: "alpha",
+			wantOK:  true,
+		},
+		{
+			name:  "click-drag selects partial range",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y := rowOf(nil, out, w, 'a')
+				return clickDrag(0, y, 4, y)
+			},
+			wantSel: "alpha",
+			wantOK:  true,
+		},
+		{
+			name:  "click-drag across full line",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y := rowOf(nil, out, w, 'a')
+				return clickDrag(0, y, 10, y)
+			},
+			wantSel: "alpha bravo",
+			wantOK:  true,
+		},
+		{
+			name:  "click-drag spanning two rows",
+			lines: []string{"alpha bravo", "charlie delta"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y0 := rowOf(nil, out, w, 'a')
+				return clickDrag(0, y0, 6, y0+1)
+			},
+			wantSel: "alpha bravo\ncharlie",
+			wantOK:  true,
+		},
+		{
+			// Single click only sets an anchor; nothing is selected.
+			name:  "single click yields no selection",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y := rowOf(nil, out, w, 'a')
+				return []term.Event{
+					mouseEv(2, y, term.MouseLeft),
+					mouseEv(2, y, term.MouseRelease),
+				}
+			},
+			wantOK: false,
+		},
+		{
+			name:  "double-click on whitespace selects nothing",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				// Column 5 is the space between the two words.
+				return doubleClick(5, rowOf(nil, out, w, 'a'))
+			},
+			wantOK: false,
+		},
+		{
+			name:  "double-click past end-of-line selects nothing",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				return doubleClick(25, rowOf(nil, out, w, 'a'))
+			},
+			wantOK: false,
+		},
+		{
+			name:  "triple-click on empty row selects nothing",
+			lines: []string{"alpha"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				// Row 0 is blank (output is bottom-aligned).
+				return tripleClick(2, 0)
+			},
+			wantOK: false,
+		},
+		{
+			name:  "negative coordinates do not panic and select nothing",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				return doubleClick(-5, -3)
+			},
+			wantOK: false,
+		},
+		{
+			name:  "drag starting off-screen left clamps to line start",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y := rowOf(nil, out, w, 'a')
+				return clickDrag(-10, y, 4, y)
+			},
+			wantSel: "alpha",
+			wantOK:  true,
+		},
+		{
+			name:  "drag ending past right edge clamps to line end",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y := rowOf(nil, out, w, 'a')
+				return clickDrag(0, y, w+50, y)
+			},
+			wantSel: "alpha bravo",
+			wantOK:  true,
+		},
+		{
+			name:  "drag ending below output band clamps to last row",
+			lines: []string{"alpha bravo", "charlie delta"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y0 := rowOf(nil, out, w, 'a')
+				// Release far below the grid; Y clamps to the last
+				// output row, X stays at 5 → "charli" on row two.
+				return clickDrag(0, y0, 5, 999)
+			},
+			wantSel: "alpha bravo\ncharli",
+			wantOK:  true,
+		},
+		{
+			name:  "triple-click far below output band selects nothing",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				// Y beyond the grid height: out of bounds, no line.
+				return tripleClick(2, 100000)
+			},
+			wantOK: false,
+		},
+		{
+			name:  "selection then input-band click clears it",
+			lines: []string{"alpha bravo"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				y := rowOf(nil, out, w, 'a')
+				evs := tripleClick(2, y)
+				// A click in the input band (last row) clears the
+				// output selection.
+				evs = append(evs,
+					mouseEv(0, mouseTestHeight-1, term.MouseLeft),
+					mouseEv(0, mouseTestHeight-1, term.MouseRelease),
+				)
+				return evs
+			},
+			wantOK: false,
+		},
+		{
+			name:   "zero-size grid does not panic",
+			width:  1,
+			height: 1,
+			lines:  []string{"alpha"},
+			gesture: func(out *term.StringWriter, w int) []term.Event {
+				return tripleClick(0, 0)
+			},
+			wantOK: false,
+		},
+	}
+}
+
+// linesCmd is a CommandHandler that emits a fixed set of output lines so
+// the shell's output band has selectable text.
+type linesCmd struct{ lines []string }
+
+func (c linesCmd) HandleCommand(
+	_ context.Context, _ repl.Command, _ repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	out := make([]component.Responsive, len(c.lines))
+	for i, l := range c.lines {
+		out[i] = component.NewResponsiveString(l, component.StringResponsiveConfig{})
+	}
+	return iterator.FromSlice(out), nil
+}
+
+func (linesCmd) Complete(
+	context.Context, string, []string,
+) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
+}
+
+func (linesCmd) Help(
+	context.Context, []string,
+) (iterator.Iterator[component.Responsive], error) {
+	return iterator.Empty[component.Responsive](), nil
+}
+
+// newMouseTestHandler builds a shell handler with a "show" command that
+// prints lines, runs it once, and renders so the output band is
+// populated. Scheduled ticks are queued and drained on the test
+// goroutine after Wait to avoid racing with the dispatch goroutine.
+func newMouseTestHandler(t *testing.T, w, h int, lines []string) (*Handler, *term.StringWriter) {
+	t.Helper()
+	var mu sync.Mutex
+	var ticks []func()
+	sched := func(fn func()) bool {
+		mu.Lock()
+		ticks = append(ticks, fn)
+		mu.Unlock()
+		return true
+	}
+	hd, reg := New(sched, term.NopInterrupter(), Config{MaxHistory: 100})
+	reg.Register("show", "print lines", linesCmd{lines: lines})
+	t.Cleanup(func() { _ = hd.Close() })
+
+	hd.Resize(w, h)
+	for _, c := range "show" {
+		hd.Handle(term.Event{Type: term.EventKey, Ch: c})
+	}
+	hd.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	hd.Wait()
+	for {
+		mu.Lock()
+		if len(ticks) == 0 {
+			mu.Unlock()
+			break
+		}
+		fn := ticks[0]
+		ticks = ticks[1:]
+		mu.Unlock()
+		fn()
+	}
+
+	out := term.NewStringWriter(w, h)
+	hd.Draw(out)
+	_ = out.Flush()
+	return hd, out
+}
+
+// rowOf returns the first row whose rendered content contains want. t
+// may be nil when called from a gesture builder; in that case a missing
+// rune panics rather than calling t.Fatalf.
+func rowOf(t *testing.T, out *term.StringWriter, w int, want rune) int {
+	if t != nil {
+		t.Helper()
+	}
+	cells := out.Cells()
+	for y := range len(cells) / w {
+		for x := range w {
+			if cells[y*w+x].Ch == want {
+				return y
+			}
+		}
+	}
+	if t != nil {
+		t.Fatalf("char %q not found in rendered output", want)
+	}
+	panic(fmt.Sprintf("char %q not found in rendered output", want))
+}
+
+func mouseEv(x, y int, key term.Key) term.Event {
+	return term.Event{Type: term.EventMouse, MouseX: x, MouseY: y, Key: key}
+}
+
+// tripleClick issues three press/release pairs at (x, y). y may be out
+// of bounds for clamping/edge-case tests.
+func tripleClick(x, y int) []term.Event {
+	return []term.Event{
+		mouseEv(x, y, term.MouseLeft), mouseEv(x, y, term.MouseRelease),
+		mouseEv(x, y, term.MouseLeft), mouseEv(x, y, term.MouseRelease),
+		mouseEv(x, y, term.MouseLeft), mouseEv(x, y, term.MouseRelease),
+	}
+}
+
+func doubleClick(x, y int) []term.Event {
+	return []term.Event{
+		mouseEv(x, y, term.MouseLeft), mouseEv(x, y, term.MouseRelease),
+		mouseEv(x, y, term.MouseLeft), mouseEv(x, y, term.MouseRelease),
+	}
+}
+
+func clickDrag(x1, y1, x2, y2 int) []term.Event {
+	return []term.Event{
+		mouseEv(x1, y1, term.MouseLeft),
+		mouseEv(x2, y2, term.MouseLeft),
+		mouseEv(x2, y2, term.MouseRelease),
+	}
 }

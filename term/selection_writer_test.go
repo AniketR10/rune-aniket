@@ -1,0 +1,394 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package term
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+// writeRow paints text starting at column 0 of row y, ignoring runes
+// that would overflow the grid width.
+func writeRow(g *SelectionWriter, y int, text string) {
+	x := 0
+	for _, ch := range text {
+		if x >= g.Width() {
+			break
+		}
+		g.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ch})
+		x++
+	}
+}
+
+func TestSelectionWriterResize(t *testing.T) {
+	t.Run("dimensions and clear", func(t *testing.T) {
+		g := NewSelectionWriter(8, 3)
+		assert.Equal(t, 8, g.Width())
+		assert.Equal(t, 3, g.Height())
+		writeRow(g, 0, "abc")
+		g.Resize(4, 2)
+		assert.Equal(t, 4, g.Width())
+		assert.Equal(t, 2, g.Height())
+		// Resize clears: nothing selectable remains.
+		_, _, ok := g.LineBounds(0)
+		assert.False(t, ok)
+	})
+
+	t.Run("grow reuses backing array when cap allows", func(t *testing.T) {
+		g := NewSelectionWriter(10, 10) // cap 100
+		writeRow(g, 0, "x")
+		g.Resize(5, 5) // 25 <= 100, reuse
+		writeRow(g, 0, "hello")
+		assert.Equal(t, "hello", g.TextBetween(
+			term.Coordinates{X: 0, Y: 0}, term.Coordinates{X: 4, Y: 0}))
+	})
+
+	t.Run("zero size does not panic", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			g := NewSelectionWriter(0, 0)
+			g.SetCell(term.Coordinates{}, term.Cell{Ch: 'a'})
+			g.UnionAttributes(term.Coordinates{}, term.Attributes{Attrs: term.AttrReverse})
+			_, _, ok := g.WordBoundsAt(term.Coordinates{})
+			assert.False(t, ok)
+			_, _, ok = g.LineBounds(0)
+			assert.False(t, ok)
+			assert.Equal(t, "", g.TextBetween(term.Coordinates{}, term.Coordinates{}))
+			g.Dump(term.NewStringWriter(1, 1), nil)
+		})
+	})
+}
+
+func TestSelectionWriterSetCellBounds(t *testing.T) {
+	g := NewSelectionWriter(4, 2)
+	cases := []term.Coordinates{
+		{X: -1, Y: 0}, {X: 0, Y: -1}, {X: 4, Y: 0}, {X: 0, Y: 2},
+		{X: -5, Y: -5}, {X: 100, Y: 100},
+	}
+	for _, pos := range cases {
+		assert.NotPanics(t, func() {
+			g.SetCell(pos, term.Cell{Ch: 'z'})
+			g.UnionAttributes(pos, term.Attributes{Attrs: term.AttrReverse})
+		}, "pos %+v", pos)
+	}
+	// No in-bounds cell was touched.
+	_, _, ok := g.LineBounds(0)
+	assert.False(t, ok)
+}
+
+func TestSelectionWriterTextBetween(t *testing.T) {
+	type tc struct {
+		name       string
+		w, h       int
+		rows       map[int]string
+		start, end term.Coordinates
+		want       string
+	}
+	cases := []tc{
+		{
+			name: "single line partial",
+			w:    20, h: 3, rows: map[int]string{0: "Hello World"},
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 4, Y: 0},
+			want: "Hello",
+		},
+		{
+			name: "multi line",
+			w:    20, h: 3, rows: map[int]string{0: "line one", 1: "line two"},
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 7, Y: 1},
+			want: "line one\nline two",
+		},
+		{
+			name: "trailing whitespace trimmed",
+			w:    20, h: 3, rows: map[int]string{0: "hello   "},
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 19, Y: 0},
+			want: "hello",
+		},
+		{
+			name: "trailing empty rows trimmed",
+			w:    10, h: 5, rows: map[int]string{0: "top"},
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 9, Y: 4},
+			want: "top",
+		},
+		{
+			name: "null cells skipped within a row",
+			w:    10, h: 2, rows: map[int]string{0: "ab"}, // then a gap, then more
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 9, Y: 0},
+			want: "ab",
+		},
+		{
+			name: "reversed coordinates are sorted",
+			w:    20, h: 2, rows: map[int]string{0: "abcdef"},
+			start: term.Coordinates{X: 4, Y: 0}, end: term.Coordinates{X: 0, Y: 0},
+			want: "abcde",
+		},
+		{
+			name: "out-of-bounds rows skipped",
+			w:    10, h: 2, rows: map[int]string{0: "row0", 1: "row1"},
+			start: term.Coordinates{X: 0, Y: -3}, end: term.Coordinates{X: 9, Y: 9},
+			want: "row0\nrow1",
+		},
+		{
+			name: "negative start X clamps to row start",
+			w:    10, h: 1, rows: map[int]string{0: "abc"},
+			start: term.Coordinates{X: -5, Y: 0}, end: term.Coordinates{X: 2, Y: 0},
+			want: "abc",
+		},
+		{
+			name: "end X beyond width clamps",
+			w:    10, h: 1, rows: map[int]string{0: "abc"},
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 999, Y: 0},
+			want: "abc",
+		},
+		{
+			name: "all empty yields empty string",
+			w:    10, h: 3, rows: nil,
+			start: term.Coordinates{X: 0, Y: 0}, end: term.Coordinates{X: 9, Y: 2},
+			want: "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			g := NewSelectionWriter(c.w, c.h)
+			for y, s := range c.rows {
+				writeRow(g, y, s)
+			}
+			assert.Equal(t, c.want, g.TextBetween(c.start, c.end))
+		})
+	}
+}
+
+func TestSelectionWriterTextBetweenCombiningRunes(t *testing.T) {
+	g := NewSelectionWriter(5, 1)
+	cell := term.Cell{Ch: 'e'}
+	cell.SetCombining([]rune{0x0301}) // combining acute accent
+	g.SetCell(term.Coordinates{X: 0, Y: 0}, cell)
+	g.SetCell(term.Coordinates{X: 1, Y: 0}, term.Cell{Ch: 'x'})
+	got := g.TextBetween(term.Coordinates{X: 0, Y: 0}, term.Coordinates{X: 1, Y: 0})
+	assert.Equal(t, "e\u0301x", got)
+}
+
+func TestSelectionWriterWordBoundsAt(t *testing.T) {
+	type tc struct {
+		name              string
+		row               string
+		pos               term.Coordinates
+		wantOK            bool
+		wantStartX, wantE int
+	}
+	cases := []tc{
+		{"middle of word", "alpha bravo", term.Coordinates{X: 2, Y: 0}, true, 0, 4},
+		{"start of word", "alpha bravo", term.Coordinates{X: 6, Y: 0}, true, 6, 10},
+		{"end of word", "alpha bravo", term.Coordinates{X: 10, Y: 0}, true, 6, 10},
+		{"underscore is word char", "foo_bar baz", term.Coordinates{X: 1, Y: 0}, true, 0, 6},
+		{"digits are word chars", "abc123 x", term.Coordinates{X: 4, Y: 0}, true, 0, 5},
+		{"symbol run stops at letters", "a==b", term.Coordinates{X: 1, Y: 0}, true, 1, 2},
+		{"whitespace selects nothing", "alpha bravo", term.Coordinates{X: 5, Y: 0}, false, 0, 0},
+		{"null cell selects nothing", "ab", term.Coordinates{X: 5, Y: 0}, false, 0, 0},
+		{"negative coords select nothing", "ab", term.Coordinates{X: -1, Y: 0}, false, 0, 0},
+		{"row out of bounds", "ab", term.Coordinates{X: 0, Y: 9}, false, 0, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			g := NewSelectionWriter(20, 2)
+			writeRow(g, 0, c.row)
+			start, end, ok := g.WordBoundsAt(c.pos)
+			require.Equal(t, c.wantOK, ok)
+			if c.wantOK {
+				assert.Equal(t, term.Coordinates{X: c.wantStartX, Y: c.pos.Y}, start)
+				assert.Equal(t, term.Coordinates{X: c.wantE, Y: c.pos.Y}, end)
+			}
+		})
+	}
+}
+
+func TestSelectionWriterWordBoundsAtRowEdges(t *testing.T) {
+	g := NewSelectionWriter(5, 1)
+	writeRow(g, 0, "abcde") // fills the whole row
+	start, end, ok := g.WordBoundsAt(term.Coordinates{X: 2, Y: 0})
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{X: 0, Y: 0}, start)
+	assert.Equal(t, term.Coordinates{X: 4, Y: 0}, end)
+}
+
+func TestSelectionWriterLineBounds(t *testing.T) {
+	type tc struct {
+		name           string
+		w, h           int
+		row            string
+		atX            int // starting column for the row content
+		y              int
+		wantOK         bool
+		wantFirst, end int
+	}
+	cases := []tc{
+		{"full row", 10, 2, "hello", 0, 0, true, 0, 4},
+		{"leading gap", 10, 2, "hi", 2, 0, true, 2, 3},
+		{"empty row", 10, 2, "", 0, 0, false, 0, 0},
+		{"row out of bounds high", 10, 2, "x", 0, 9, false, 0, 0},
+		{"row out of bounds negative", 10, 2, "x", 0, -1, false, 0, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			g := NewSelectionWriter(c.w, c.h)
+			for i, ch := range c.row {
+				g.SetCell(term.Coordinates{X: c.atX + i, Y: 0}, term.Cell{Ch: ch})
+			}
+			start, end, ok := g.LineBounds(c.y)
+			require.Equal(t, c.wantOK, ok)
+			if c.wantOK {
+				assert.Equal(t, term.Coordinates{X: c.wantFirst, Y: c.y}, start)
+				assert.Equal(t, term.Coordinates{X: c.end, Y: c.y}, end)
+			}
+		})
+	}
+
+	t.Run("trailing gap with interior content", func(t *testing.T) {
+		g := NewSelectionWriter(10, 1)
+		g.SetCell(term.Coordinates{X: 2, Y: 0}, term.Cell{Ch: 'a'})
+		g.SetCell(term.Coordinates{X: 5, Y: 0}, term.Cell{Ch: 'b'})
+		start, end, ok := g.LineBounds(0)
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{X: 2, Y: 0}, start)
+		assert.Equal(t, term.Coordinates{X: 5, Y: 0}, end)
+	})
+}
+
+func TestSelectionWriterDump(t *testing.T) {
+	t.Run("fills null cells with space", func(t *testing.T) {
+		g := NewSelectionWriter(3, 1)
+		g.SetCell(term.Coordinates{X: 0, Y: 0}, term.Cell{Ch: 'a'})
+		out := term.NewStringWriter(3, 1)
+		g.Dump(out, nil)
+		require.NoError(t, out.Flush())
+		assert.Equal(t, "a  ", out.String())
+	})
+
+	t.Run("applies reverse over active selection only", func(t *testing.T) {
+		g := NewSelectionWriter(5, 1)
+		writeRow(g, 0, "abcde")
+		sel := &SelRange{
+			Start:  term.Coordinates{X: 1, Y: 0},
+			End:    term.Coordinates{X: 3, Y: 0},
+			Active: true,
+		}
+		out := term.NewStringWriter(5, 1)
+		g.Dump(out, sel)
+		require.NoError(t, out.Flush())
+		cells := out.Cells()
+		want := []bool{false, true, true, true, false}
+		for x, w := range want {
+			got := cells[x].Attrs&term.AttrReverse != 0
+			assert.Equal(t, w, got, "cell %d reverse", x)
+		}
+	})
+
+	t.Run("inactive selection applies no reverse", func(t *testing.T) {
+		g := NewSelectionWriter(3, 1)
+		writeRow(g, 0, "abc")
+		out := term.NewStringWriter(3, 1)
+		g.Dump(out, &SelRange{
+			Start: term.Coordinates{X: 0, Y: 0}, End: term.Coordinates{X: 2, Y: 0},
+		})
+		require.NoError(t, out.Flush())
+		for x, c := range out.Cells() {
+			assert.Zero(t, c.Attrs&term.AttrReverse, "cell %d", x)
+		}
+	})
+}
+
+func TestSelectionWriterClearReverse(t *testing.T) {
+	g := NewSelectionWriter(4, 2)
+	for y := range 2 {
+		for x := range 4 {
+			g.SetCell(term.Coordinates{X: x, Y: y},
+				term.Cell{Ch: 'x', Attributes: term.Attributes{Attrs: term.AttrReverse}})
+		}
+	}
+	g.ClearReverse(1, 0, 2, 1) // clears x in [1,2], y=0 only
+
+	out := term.NewStringWriter(4, 2)
+	g.Dump(out, nil)
+	require.NoError(t, out.Flush())
+	cells := out.Cells()
+	assert.NotZero(t, cells[0].Attrs&term.AttrReverse, "x0 untouched")
+	assert.Zero(t, cells[1].Attrs&term.AttrReverse, "x1 cleared")
+	assert.Zero(t, cells[2].Attrs&term.AttrReverse, "x2 cleared")
+	assert.NotZero(t, cells[3].Attrs&term.AttrReverse, "x3 untouched")
+	assert.NotZero(t, cells[4].Attrs&term.AttrReverse, "row1 untouched")
+
+	assert.NotPanics(t, func() {
+		g.ClearReverse(-5, -5, 100, 100) // fully out of range start, oversized
+	})
+}
+
+func TestSelRangeContains(t *testing.T) {
+	type tc struct {
+		name string
+		sel  SelRange
+		pos  term.Coordinates
+		want bool
+	}
+	multi := SelRange{
+		Start:  term.Coordinates{X: 3, Y: 1},
+		End:    term.Coordinates{X: 2, Y: 3},
+		Active: true,
+	}
+	single := SelRange{
+		Start:  term.Coordinates{X: 2, Y: 0},
+		End:    term.Coordinates{X: 5, Y: 0},
+		Active: true,
+	}
+	cases := []tc{
+		{"inactive contains nothing", SelRange{Start: single.Start, End: single.End}, term.Coordinates{X: 3, Y: 0}, false},
+		{"single line inside", single, term.Coordinates{X: 3, Y: 0}, true},
+		{"single line at start", single, term.Coordinates{X: 2, Y: 0}, true},
+		{"single line at end", single, term.Coordinates{X: 5, Y: 0}, true},
+		{"single line before", single, term.Coordinates{X: 1, Y: 0}, false},
+		{"single line after", single, term.Coordinates{X: 6, Y: 0}, false},
+		{"multi above range", multi, term.Coordinates{X: 5, Y: 0}, false},
+		{"multi below range", multi, term.Coordinates{X: 0, Y: 4}, false},
+		{"multi first row before startX", multi, term.Coordinates{X: 2, Y: 1}, false},
+		{"multi first row at startX", multi, term.Coordinates{X: 3, Y: 1}, true},
+		{"multi interior row any X", multi, term.Coordinates{X: 0, Y: 2}, true},
+		{"multi last row within endX", multi, term.Coordinates{X: 2, Y: 3}, true},
+		{"multi last row past endX", multi, term.Coordinates{X: 3, Y: 3}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, c.sel.Contains(c.pos))
+		})
+	}
+}
+
+func TestSelectionWriterContext(t *testing.T) {
+	g := NewSelectionWriter(2, 2)
+	assert.NotNil(t, g.Context())
+	type key struct{}
+	ctx := context.WithValue(context.Background(), key{}, "v")
+	g.SetContext(ctx)
+	assert.Equal(t, "v", g.Context().Value(key{}))
+}

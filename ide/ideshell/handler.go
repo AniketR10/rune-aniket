@@ -29,10 +29,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
+	tterm "unstable.build/go-tui/term"
 )
 
 // Handler is the IDE companion shell handler. It wraps the SDK
@@ -95,6 +97,20 @@ type Handler struct {
 	// to. It is allocated once per Begin and inspected on End to
 	// commit the final text back to the inner inputbox.
 	editBuf *cell.Buffer
+
+	// grid captures the inner repl's drawn output so the mouse
+	// delegate can extract selected text and overlay reverse-video
+	// highlight. mouseDelegate holds the active selection and
+	// mouse drives the press/drag/click state machine over it.
+	grid          tterm.SelectionWriter
+	mouseDelegate *mouseDelegate
+	mouse         *mouse.Mouse
+	// mouseDragInOutput is set while a left-button drag that began in
+	// the output band is in flight. All drag and release events are
+	// routed to the output mouse handler until MouseRelease, even if
+	// the pointer crosses into the input band, so the selection does
+	// not see a missed release.
+	mouseDragInOutput bool
 }
 
 // Wait forwards to the underlying repl.Handler so callers (including
@@ -140,6 +156,7 @@ func (h *Handler) Close() error {
 func (h *Handler) Resize(width, height int) {
 	h.width = width
 	h.height = height
+	h.grid.Resize(width, height)
 	if h.editSession != nil {
 		h.editSession.Resize(width, height)
 	}
@@ -170,10 +187,28 @@ func (h *Handler) Draw(w term.Writer) {
 		return
 	}
 	if !h.searching {
-		h.inner.Draw(w)
+		h.drawShell(w)
 		return
 	}
 	h.drawSearch(w)
+}
+
+// drawShell renders the inner repl into the capture grid so a mouse
+// text selection can be overlaid with reverse-video highlight before
+// blitting to w. The repl output band starts at row 0, so the mouse
+// delegate's selection coordinates are already screen-relative.
+func (h *Handler) drawShell(w term.Writer) {
+	h.grid.Clear()
+	h.grid.SetContext(w.Context())
+	h.inner.Draw(&h.grid)
+	_, outH := h.inner.LayoutHeights()
+	h.mouseDelegate.outH = outH
+	var sel *tterm.SelRange
+	if h.mouseDelegate.sel.Active {
+		s := h.mouseDelegate.sel
+		sel = &s
+	}
+	h.grid.Dump(w, sel)
 }
 
 // Cursor satisfies tui.Handler. In completion mode the inner inputbox
@@ -215,6 +250,9 @@ func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 // Selection satisfies tui.Handler.
 func (h *Handler) Selection() (string, bool) {
+	if sel, ok := h.mouseDelegate.Selection(); ok {
+		return sel, true
+	}
 	return h.inner.Selection()
 }
 
@@ -223,6 +261,11 @@ func (h *Handler) Selection() (string, bool) {
 // acceptance / dismissal and otherwise mirrors typed runes back into
 // the inner inputbox so the prompt and search query stay in sync.
 func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
+	if ev.Type == term.EventMouse && !h.searching &&
+		(h.editSession == nil || !h.editSession.Active()) {
+		_, outH := h.inner.LayoutHeights()
+		return h.handleMouse(ev, outH)
+	}
 	if ev.Type != term.EventKey {
 		return h.inner.Handle(ev)
 	}
@@ -254,6 +297,35 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	return h.handleSearch(ev)
+}
+
+// handleMouse routes a mouse event between the output band (text
+// selection) and the input band (inputbox). outH is the height of the
+// output band; rows [0, outH) belong to the output, [outH, height) to
+// the inputbox.
+//
+// A left-button drag that begins in the output band keeps receiving
+// drag and release events until MouseRelease, even if the pointer
+// crosses into the input band. Routing purely by the current MouseY
+// would let the output selection miss its release and leave a stale
+// in-progress drag.
+func (h *Handler) handleMouse(ev term.Event, outH int) (exit, handled bool) {
+	if h.mouseDragInOutput {
+		if ev.Key == term.MouseRelease {
+			h.mouseDragInOutput = false
+		}
+		return h.mouse.Handle(ev)
+	}
+	if ev.MouseY >= outH {
+		// Input band: the inputbox owns it; clear any active output
+		// selection and forward as-is.
+		h.mouseDelegate.ClearSelection()
+		return h.inner.Handle(ev)
+	}
+	if ev.Key == term.MouseLeft {
+		h.mouseDragInOutput = true
+	}
+	return h.mouse.Handle(ev)
 }
 
 // historyDoc mirrors the on-disk shape that repl.Handler persists via

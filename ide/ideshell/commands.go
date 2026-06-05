@@ -30,6 +30,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
@@ -104,6 +105,10 @@ func New(
 		shim:       shim,
 		prompt:     prompt,
 	}
+	h.mouseDelegate = newMouseDelegate(&h.grid, func(ev term.Event) {
+		_, _ = h.inner.Handle(ev)
+	})
+	h.mouse = mouse.New(h.mouseDelegate)
 	if cfg.EditModeKey != (term.KeyComb{}) {
 		if cfg.Editor == nil {
 			panic("ideshell.Config.Editor is required when EditModeKey is set")

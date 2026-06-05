@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/debug"
+	tterm "unstable.build/go-tui/term"
 )
 
 // SubmitMessage is a user message sent through the tx channel.
@@ -116,7 +117,7 @@ func Handler(
 }
 
 type dialogueHandler struct {
-	grid          cellGrid
+	grid          tterm.SelectionWriter
 	mouseDelegate *mouseDelegate
 	comp          *Component
 	interrupter   term.Interrupter
@@ -153,7 +154,7 @@ func (s *dialogueHandler) Draw(w term.Writer) {
 	defer s.mu.Unlock()
 
 	s.grid.Clear()
-	s.grid.ctx = w.Context()
+	s.grid.SetContext(w.Context())
 	s.comp.Draw(&s.grid)
 	s.mouseDelegate.offset = s.comp.MessagesPosition()
 
@@ -161,15 +162,15 @@ func (s *dialogueHandler) Draw(w term.Writer) {
 	// AttrReverse so the stale keyboard selection is not rendered.
 	if !s.inputFocused {
 		pos := s.comp.InputPosition()
-		s.grid.ClearReverse(pos.X, pos.Y, s.grid.width-pos.X, s.grid.height-pos.Y)
+		s.grid.ClearReverse(pos.X, pos.Y, s.grid.Width()-pos.X, s.grid.Height()-pos.Y)
 	}
 
-	var sel *selRange
-	if s.mouseDelegate.sel.active {
-		sel = &selRange{
-			start:  term.CoordinatesSum(s.mouseDelegate.sel.start, s.mouseDelegate.offset),
-			end:    term.CoordinatesSum(s.mouseDelegate.sel.end, s.mouseDelegate.offset),
-			active: true,
+	var sel *tterm.SelRange
+	if s.mouseDelegate.sel.Active {
+		sel = &tterm.SelRange{
+			Start:  term.CoordinatesSum(s.mouseDelegate.sel.Start, s.mouseDelegate.offset),
+			End:    term.CoordinatesSum(s.mouseDelegate.sel.End, s.mouseDelegate.offset),
+			Active: true,
 		}
 	}
 	s.grid.Dump(w, sel)

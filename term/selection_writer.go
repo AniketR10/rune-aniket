@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package dialoguetui
+package term
 
 import (
 	"context"
@@ -31,69 +31,95 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-// selRange represents a selection coordinate pair.
-// start and end are inclusive and sorted (start <= end in file order).
-type selRange struct {
-	start, end term.Coordinates
-	active     bool
+// SelRange is an inclusive, sorted selection coordinate pair over a
+// SelectionWriter's cell grid (Start <= End in reading order).
+type SelRange struct {
+	Start, End term.Coordinates
+	Active     bool
 }
 
-func (s *selRange) Contains(pos term.Coordinates) bool {
-	if !s.active {
+// Contains reports whether pos falls within the selection. An inactive
+// range contains nothing.
+func (s SelRange) Contains(pos term.Coordinates) bool {
+	if !s.Active {
 		return false
 	}
-	if pos.Y < s.start.Y || pos.Y > s.end.Y {
+	if pos.Y < s.Start.Y || pos.Y > s.End.Y {
 		return false
 	}
-	if s.start.Y == s.end.Y {
-		return pos.X >= s.start.X && pos.X <= s.end.X
+	if s.Start.Y == s.End.Y {
+		return pos.X >= s.Start.X && pos.X <= s.End.X
 	}
-	if pos.Y == s.start.Y {
-		return pos.X >= s.start.X
+	if pos.Y == s.Start.Y {
+		return pos.X >= s.Start.X
 	}
-	if pos.Y == s.end.Y {
-		return pos.X <= s.end.X
+	if pos.Y == s.End.Y {
+		return pos.X <= s.End.X
 	}
 	return true
 }
 
-// cellGrid is a term.Writer that captures Draw output as a flat cell grid.
-// It is modeled after term.StringWriter.
-type cellGrid struct {
+var _ term.Writer = (*SelectionWriter)(nil)
+
+// SelectionWriter is a term.Writer that captures Draw output into a
+// flat cell grid specialized for text selection: it can extract the
+// text and word/line bounds under a coordinate and blit the captured
+// cells back out with a reverse-video selection overlay.
+//
+// It is a sibling of term.StringWriter (string rendering) and
+// cell.BufferWriter (cell.Buffer bridge); unlike those, its purpose is
+// to back mouse-driven selection over already-rendered content.
+type SelectionWriter struct {
 	cells         []term.Cell
 	width, height int
 	ctx           context.Context
 }
 
-var _ term.Writer = (*cellGrid)(nil)
+// NewSelectionWriter allocates a SelectionWriter sized to width x height.
+func NewSelectionWriter(width, height int) *SelectionWriter {
+	w := new(SelectionWriter)
+	w.Resize(width, height)
+	return w
+}
 
-func (g *cellGrid) Resize(w, h int) {
-	needed := w * h
+// Resize reallocates the grid to width x height and clears it, reusing
+// the backing array when it is large enough.
+func (g *SelectionWriter) Resize(width, height int) {
+	needed := width * height
 	if cap(g.cells) >= needed {
 		g.cells = g.cells[:needed]
 	} else {
 		g.cells = make([]term.Cell, needed)
 	}
-	g.width, g.height = w, h
+	g.width, g.height = width, height
 	g.Clear()
 }
 
-func (g *cellGrid) Clear() {
+// Clear zeroes every cell while preserving the current dimensions.
+func (g *SelectionWriter) Clear() {
 	clear(g.cells)
 }
 
-func (g *cellGrid) outOfBounds(pos term.Coordinates) bool {
+// Width returns the grid width in cells.
+func (g *SelectionWriter) Width() int { return g.width }
+
+// Height returns the grid height in cells.
+func (g *SelectionWriter) Height() int { return g.height }
+
+func (g *SelectionWriter) outOfBounds(pos term.Coordinates) bool {
 	return pos.X < 0 || pos.Y < 0 || pos.X >= g.width || pos.Y >= g.height
 }
 
-func (g *cellGrid) SetCell(pos term.Coordinates, cell term.Cell) {
+// SetCell satisfies term.Writer. Out-of-bounds writes are ignored.
+func (g *SelectionWriter) SetCell(pos term.Coordinates, cell term.Cell) {
 	if g.outOfBounds(pos) {
 		return
 	}
 	g.cells[pos.Y*g.width+pos.X] = cell
 }
 
-func (g *cellGrid) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
+// UnionAttributes satisfies term.Writer. Out-of-bounds writes are ignored.
+func (g *SelectionWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
 	if g.outOfBounds(pos) {
 		return
 	}
@@ -101,27 +127,36 @@ func (g *cellGrid) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
 	g.cells[idx].Attributes = term.AttributesUnion(g.cells[idx].Attributes, attr)
 }
 
-func (g *cellGrid) Context() context.Context {
+// Context satisfies term.Writer, returning the context set via
+// SetContext or context.Background when none was set.
+func (g *SelectionWriter) Context() context.Context {
 	if g.ctx != nil {
 		return g.ctx
 	}
 	return context.Background()
 }
 
+// SetContext sets the context returned by Context. Capturing handlers
+// set this to the writer context of the in-flight Draw so downstream
+// components observe the same context.
+func (g *SelectionWriter) SetContext(ctx context.Context) {
+	g.ctx = ctx
+}
+
 // ClearReverse strips AttrReverse from every cell in the rectangle
 // starting at (x0, y0) with the given width and height.
-func (g *cellGrid) ClearReverse(x0, y0, w, h int) {
-	for y := y0; y < y0+h && y < g.height; y++ {
-		for x := x0; x < x0+w && x < g.width; x++ {
-			idx := y*g.width + x
-			g.cells[idx].Attrs &^= term.AttrReverse
+func (g *SelectionWriter) ClearReverse(x0, y0, w, h int) {
+	for y := max(y0, 0); y < y0+h && y < g.height; y++ {
+		for x := max(x0, 0); x < x0+w && x < g.width; x++ {
+			g.cells[y*g.width+x].Attrs &^= term.AttrReverse
 		}
 	}
 }
 
-// Dump copies all cells to w. If sel is non-nil and active, cells within the
-// selection range have AttrReverse applied via UnionAttributes.
-func (g *cellGrid) Dump(w term.Writer, sel *selRange) {
+// Dump copies all cells to w. When sel is non-nil and active, cells
+// within the selection have AttrReverse applied via UnionAttributes.
+// Null cells are emitted as a single space so the output is opaque.
+func (g *SelectionWriter) Dump(w term.Writer, sel *SelRange) {
 	reverseAttr := term.Attributes{Attrs: term.AttrReverse}
 	for y := range g.height {
 		for x := range g.width {
@@ -139,8 +174,10 @@ func (g *cellGrid) Dump(w term.Writer, sel *selRange) {
 	}
 }
 
-// TextBetween extracts text from cells between start and end (inclusive).
-func (g *cellGrid) TextBetween(start, end term.Coordinates) string {
+// TextBetween extracts text from cells between start and end
+// (inclusive). Trailing whitespace on each row and trailing empty rows
+// are trimmed; null cells are skipped.
+func (g *SelectionWriter) TextBetween(start, end term.Coordinates) string {
 	start, end = term.CoordinatesSort(start, end)
 	var lines []string
 	for y := start.Y; y <= end.Y; y++ {
@@ -155,9 +192,7 @@ func (g *cellGrid) TextBetween(start, end term.Coordinates) string {
 		if y == end.Y {
 			endX = end.X
 		}
-		if startX < 0 {
-			startX = 0
-		}
+		startX = max(startX, 0)
 		if endX >= g.width {
 			endX = g.width - 1
 		}
@@ -174,16 +209,17 @@ func (g *cellGrid) TextBetween(start, end term.Coordinates) string {
 		}
 		lines = append(lines, strings.TrimRight(line.String(), " \t"))
 	}
-	// Trim trailing empty lines.
 	for len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
 	return strings.Join(lines, "\n")
 }
 
-// WordBoundsAt returns the start and end coordinates (inclusive) of the word
-// at pos. ok is false if pos is out of bounds, empty, or whitespace.
-func (g *cellGrid) WordBoundsAt(pos term.Coordinates) (start, end term.Coordinates, ok bool) {
+// WordBoundsAt returns the inclusive start and end of the word at pos.
+// A word is a maximal run of same-class characters (word vs symbol),
+// where word characters are letters, digits and underscore. ok is
+// false when pos is out of bounds, empty, or whitespace.
+func (g *SelectionWriter) WordBoundsAt(pos term.Coordinates) (start, end term.Coordinates, ok bool) {
 	if g.outOfBounds(pos) {
 		return
 	}
@@ -212,9 +248,9 @@ func (g *cellGrid) WordBoundsAt(pos term.Coordinates) (start, end term.Coordinat
 	return term.Coordinates{X: startX, Y: pos.Y}, term.Coordinates{X: endX, Y: pos.Y}, true
 }
 
-// LineBounds returns the start and end coordinates (inclusive) of the
-// non-empty content on row y. ok is false if the row is entirely empty.
-func (g *cellGrid) LineBounds(y int) (start, end term.Coordinates, ok bool) {
+// LineBounds returns the inclusive start and end of the non-empty
+// content on row y. ok is false when the row is empty or out of bounds.
+func (g *SelectionWriter) LineBounds(y int) (start, end term.Coordinates, ok bool) {
 	if y < 0 || y >= g.height {
 		return
 	}
