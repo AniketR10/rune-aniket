@@ -254,6 +254,60 @@ func TestConnectSchemeSkipPreflight(t *testing.T) {
 		rec.commands[0])
 }
 
+func TestParseWorkspaceURIHomeDir(t *testing.T) {
+	tsuite := []struct {
+		desc        string
+		uri         string
+		getUser     func() (*user.User, error)
+		wantUser    string
+		wantHomeDir string
+	}{
+		{
+			desc:        "non-root user under /home",
+			uri:         "ssh://test@example.com/~/src",
+			wantUser:    "test",
+			wantHomeDir: "/home/test",
+		},
+		{
+			desc:        "root user maps to /root",
+			uri:         "ssh://root@example.com/~/src",
+			wantUser:    "root",
+			wantHomeDir: "/root",
+		},
+		{
+			desc: "empty user falls back to local user",
+			uri:  "ssh://example.com/~/src",
+			getUser: func() (*user.User, error) {
+				return &user.User{Username: "root"}, nil
+			},
+			wantUser:    "",
+			wantHomeDir: "/root",
+		},
+	}
+
+	for _, tc := range tsuite {
+		t.Run(tc.desc, func(t *testing.T) {
+			uri, err := workspaceapi.ParseURI(tc.uri)
+			require.NoError(t, err)
+
+			getUser := tc.getUser
+			if getUser == nil {
+				getUser = func() (*user.User, error) {
+					return &user.User{Username: "test", HomeDir: "/home/test"}, nil
+				}
+			}
+
+			gotUser, gotHomeDir, _, gotBasePath, err := parseWorkspaceURI(uri, getUser)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantUser, gotUser)
+			assert.Equal(t, tc.wantHomeDir, gotHomeDir,
+				"~ should expand to the remote user's real home")
+			assert.Equal(t, filepath.Join(tc.wantHomeDir, "src"), gotBasePath,
+				"basePath must expand ~ using homeDir")
+		})
+	}
+}
+
 func TestIntegrationCanWorkspaceURI(t *testing.T) {
 	tsuite := []struct {
 		workspaceURI string

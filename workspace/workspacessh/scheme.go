@@ -150,8 +150,13 @@ func parseWorkspaceURI(u workspaceapi.URI, getUser func() (*user.User, error)) (
 		}
 		usernameForHomeDir = u.Username
 	}
-	// I doubt we'll ever ssh into a non-linux host
-	homedir = filepath.Join("/", "home", usernameForHomeDir)
+	// I doubt we'll ever ssh into a non-linux host. root's home is /root,
+	// not /home/root, on every standard Linux distribution.
+	if usernameForHomeDir == "root" {
+		homedir = "/root"
+	} else {
+		homedir = filepath.Join("/", "home", usernameForHomeDir)
+	}
 
 	basePath, err = workspaceapi.ExpandPath(u.Path(), func() (*user.User, error) {
 		return &user.User{Username: username, HomeDir: homedir}, nil
