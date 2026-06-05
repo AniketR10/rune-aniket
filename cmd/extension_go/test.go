@@ -90,12 +90,10 @@ func (h *testCmd) HandleCommand(
 	if len(cmd.Args) > 0 {
 		testName = cmd.Args[0]
 		isBenchmark = strings.HasPrefix(testName, "Benchmark")
-		if cmd.Resource != nil {
-			pkgDir = filepath.Dir(cmd.URI.Path())
-			pkgTarget = "."
-		} else {
-			pkgTarget = "./..."
-		}
+		// A test selected by name comes from workspace-wide completion,
+		// so it may live in any package. Search the whole module from
+		// the workspace root rather than the open file's package.
+		pkgTarget = "./..."
 	} else {
 		if cmd.Resource == nil {
 			return fmt.Errorf("open a file and move the cursor next to a test to run it, " +
@@ -242,13 +240,19 @@ func (h *testCmd) processTestOutput(
 		_ = h.notify.UpdateNotificationProgress(id, "", 1, 1)
 	}
 
-	if failed || exitErr != nil {
+	switch {
+	case failed || exitErr != nil:
 		msg := fmt.Sprintf("%s failed", testName)
 		if completed == 0 && stderr.Len() > 0 {
 			msg = strings.TrimSpace(stderr.String())
 		}
 		_, _ = h.notify.Notify(browserapi.LevelError, "%s", msg)
-	} else {
+	case completed == 0:
+		// go test exits 0 with no per-test events when the -run pattern
+		// matches nothing; surface that rather than a misleading "passed".
+		_, _ = h.notify.Notify(browserapi.LevelWarn,
+			"%s: no matching test ran", testName)
+	default:
 		_, _ = h.notify.Notify(browserapi.LevelSuccess, "%s passed", testName)
 	}
 }

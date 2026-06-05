@@ -213,7 +213,7 @@ func TestTestCmdHandleCommand(t *testing.T) {
 			got.Args)
 	})
 
-	t.Run("arg with open file runs in package dir", func(t *testing.T) {
+	t.Run("arg with open file still searches whole module", func(t *testing.T) {
 		t.Parallel()
 
 		ex := &capturingExecutor{
@@ -234,9 +234,12 @@ func TestTestCmdHandleCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		got := ex.captured()
-		assert.Equal(t, "/work/pkg", got.Dir)
+		// A named test selected from workspace-wide completion may live
+		// in any package, so it must run module-wide from the workspace
+		// root rather than only the open file's package.
+		assert.Empty(t, got.Dir)
 		assert.Equal(t,
-			[]string{"test", "-json", "-count=1", "-run", "^TestAdd$", "."},
+			[]string{"test", "-json", "-count=1", "-run", "^TestAdd$", "./..."},
 			got.Args)
 	})
 }
@@ -362,8 +365,9 @@ func TestProcessTestOutput(t *testing.T) {
 		msgs := mn.getMessages()
 		require.GreaterOrEqual(t, len(msgs), 2)
 		last := msgs[len(msgs)-1]
-		// No tests ran but process exited cleanly.
-		assert.Equal(t, browserapi.LevelSuccess, last.Level)
-		assert.Contains(t, last.Message, "passed")
+		// A clean exit with zero matched tests must not be reported as a
+		// pass; the named test never ran (e.g. wrong package targeted).
+		assert.Equal(t, browserapi.LevelWarn, last.Level)
+		assert.Contains(t, last.Message, "no matching test ran")
 	})
 }
