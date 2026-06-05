@@ -29,7 +29,6 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
-	"github.com/unstablebuild/rune-go-sdk/clipboard/sysclip"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
@@ -106,11 +105,7 @@ func Clipboard(cfg config.Config) (clipboard.Register, error) {
 	case "memory":
 		return clipboard.NewInMemory(), nil
 	case "system":
-		clip, err := sysclip.NewRegister()
-		if err != nil {
-			return clipboard.NewInMemory(), nil
-		}
-		return clip, nil
+		return text.NewSystemClipboard(), nil
 	default:
 		return nil, errors.New("unknown clipboard")
 	}

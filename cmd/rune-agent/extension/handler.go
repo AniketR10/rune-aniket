@@ -58,7 +58,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
-	"github.com/unstablebuild/rune-go-sdk/clipboard/sysclip"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
@@ -76,6 +75,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/memory"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/text"
 )
 
 const (
@@ -546,11 +546,7 @@ func newCommandEventHandler(
 		}
 	}
 
-	ret.clip, err = sysclip.NewRegister()
-	if err != nil {
-		slog.Warn("system clipboard unsupported", "error", err)
-		ret.clip = clipboard.NewInMemory()
-	}
+	ret.clip = text.NewSystemClipboard()
 
 	ret.db = db
 	if auditEnabled, _ := pconfig.GetBool("audit_enabled"); auditEnabled {

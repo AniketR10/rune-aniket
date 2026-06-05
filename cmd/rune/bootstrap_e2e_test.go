@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -93,14 +94,13 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 	t.Cleanup(restoreFlags)
 
 	browserURLCh := make(chan *url.URL, 1)
-	testOpenBrowserOverride = func(u *url.URL) error {
+	openBrowser := func(u *url.URL) error {
 		select {
 		case browserURLCh <- u:
 		default:
 		}
 		return nil
 	}
-	t.Cleanup(func() { testOpenBrowserOverride = nil })
 
 	mu := new(sync.Mutex)
 	publishCh := make(chan term.Event, 256)
@@ -119,6 +119,7 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
+		openBrowser, clipboard.NewInMemory(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -299,14 +300,13 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 	t.Cleanup(restoreFlags)
 
 	browserURLCh := make(chan *url.URL, 1)
-	testOpenBrowserOverride = func(u *url.URL) error {
+	openBrowser := func(u *url.URL) error {
 		select {
 		case browserURLCh <- u:
 		default:
 		}
 		return nil
 	}
-	t.Cleanup(func() { testOpenBrowserOverride = nil })
 
 	mu := new(sync.Mutex)
 	publishCh := make(chan term.Event, 256)
@@ -325,6 +325,7 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
+		openBrowser, clipboard.NewInMemory(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -363,6 +364,15 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 		"login choice prompt must be visible after the format prompt advances")
 
 	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 's'})
+
+	select {
+	case got := <-browserURLCh:
+		require.Equal(t, signupURL, got.String(),
+			"Sign up must open the signup URL through the test hook, "+
+				"not launch the host's real browser")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Sign up did not open the signup URL through the test hook")
+	}
 
 	require.Eventually(t, func() bool {
 		frame := handlertest.DrawHandler(wrapped, width, height)

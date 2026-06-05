@@ -40,6 +40,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
+	extbrowser "github.com/ernestrc/sensible/browser"
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 	"github.com/unstablebuild/blue/logging"
@@ -64,6 +65,7 @@ import (
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/gui"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -652,6 +654,8 @@ func runGUI(
 		*flagWorkspace, *flagZdotDir, filenames,
 		launchCmd, runner, mu, publishEvent,
 		checkoutURL, signupURL,
+		func(u *url.URL) error { return extbrowser.Browse(u) },
+		text.NewSystemClipboard(),
 	)
 	if err != nil {
 		fmt.Printf("ide: %s", err)
@@ -764,7 +768,7 @@ func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manage
 // configured IDE only. Tokens acquired by this client are written to
 // the shared on-disk auth partition keyed by dataDir, so the real
 // client constructed after the swap reads them back transparently.
-func newBootstrapAPIClient(storage storageapi.Service) *apiclient.Client {
+func newBootstrapAPIClient(storage storageapi.Service, openBrowser func(*url.URL) error) *apiclient.Client {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
@@ -773,15 +777,9 @@ func newBootstrapAPIClient(storage storageapi.Service) *apiclient.Client {
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	apicfg.WebsiteAddress = *flagWebsiteAddress
 	apicfg.EnableTelemetry = false
-	apicfg.OpenBrowser = testOpenBrowserOverride
+	apicfg.OpenBrowser = openBrowser
 	return apiclient.New(storage, apicfg, *flagDataPath)
 }
-
-// testOpenBrowserOverride lets the bootstrap e2e test redirect the
-// OAuth browser launch to a recording hook without depending on the
-// host's $BROWSER. Nil in production builds: apiclient.New falls back
-// to sensible/browser.Browse when OpenBrowser is unset.
-var testOpenBrowserOverride func(*url.URL) error
 
 func doRunTUI(mu *sync.Mutex, i *ide.IDE) error {
 	err := tui.Run(i.Ready(),

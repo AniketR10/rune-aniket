@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	wmbrowser "unstable.build/go-tui/browser"
@@ -255,16 +256,21 @@ func (r *recordingNotifier) UpdateNotificationProgress(string, string, int64, in
 }
 
 // TestCopyBootstrapURLReturnsNotification pins that copyBootstrapURL
-// always returns a non-empty notification message so the caller can
-// surface user feedback regardless of whether the system clipboard is
-// reachable. The actual clipboard write is best-effort.
+// writes the OAuth URL to the injected clipboard and reports success,
+// never touching the developer's real system clipboard.
 func TestCopyBootstrapURLReturnsNotification(t *testing.T) {
-	level, msg := copyBootstrapURL("https://example.test/auth?x=1")
+	clip := clipboard.NewInMemory()
+	bh := &bootstrapHandler{clip: clip}
+
+	level, msg := bh.copyBootstrapURL("https://example.test/auth?x=1")
 	require.NotEmpty(t, msg, "copyBootstrapURL must produce a notification message")
-	require.Contains(t,
-		[]browserapi.NotificationLevel{browserapi.LevelSuccess, browserapi.LevelWarn},
-		level,
-	)
+	require.Equal(t, browserapi.LevelSuccess, level,
+		"in-memory clipboard copy must succeed")
+	data, err := clip.Paste(clipboard.DefaultRegisterID)
+	require.NoError(t, err)
+	require.Equal(t, "https://example.test/auth?x=1", data.Text,
+		"the OAuth URL must be written to the injected clipboard, "+
+			"never the developer's real system clipboard")
 }
 
 // closeRecordingWindow stands in for wmbrowser.Window in tests. The

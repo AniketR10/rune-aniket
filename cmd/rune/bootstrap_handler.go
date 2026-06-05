@@ -33,14 +33,12 @@ import (
 	"sync"
 	"time"
 
-	extbrowser "github.com/ernestrc/sensible/browser"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
-	"github.com/unstablebuild/rune-go-sdk/clipboard/sysclip"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	sdkhandler "github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -68,6 +66,8 @@ type bootstrapHandler struct {
 	publishEvent      func(term.Event) bool
 	checkoutURL       string
 	signupURL         string
+	openBrowser       func(*url.URL) error
+	clip              clipboard.Register
 	preIDE            *ide.IDE
 	realIDE           *ide.IDE
 	g                 *gui.GUI
@@ -93,6 +93,8 @@ func newBootstrapHandler(
 	mu *sync.Mutex,
 	publishEvent func(term.Event) bool,
 	checkoutURL, signupURL string,
+	openBrowser func(*url.URL) error,
+	clip clipboard.Register,
 ) (*bootstrapHandler, error) {
 	bh := &bootstrapHandler{
 		dataDir:      dataDir,
@@ -107,6 +109,8 @@ func newBootstrapHandler(
 		publishEvent: publishEvent,
 		checkoutURL:  checkoutURL,
 		signupURL:    signupURL,
+		openBrowser:  openBrowser,
+		clip:         clip,
 	}
 
 	if isBootstrapped(dataDir) {
@@ -128,7 +132,7 @@ func newBootstrapHandler(
 	}
 	bh.preIDE = preIDE
 	bh.inner = preIDE.Ready()
-	client := newBootstrapAPIClient(preIDE.Storage())
+	client := newBootstrapAPIClient(preIDE.Storage(), openBrowser)
 	bh.bootstrapClient = client
 	bh.openBootstrapFlow()
 	return bh, nil
@@ -627,7 +631,7 @@ func (b *bootstrapHandler) openLoginPrompt() error {
 				case optLoginSignIn:
 					err = b.startLogin()
 				case optLoginSignUp:
-					err = openBrowserURL(b.signupURL)
+					err = b.openBrowserURL(b.signupURL)
 					b.scheduleNextTick(func() { _ = b.openLoginPrompt() })
 				}
 				if err != nil {
@@ -814,7 +818,7 @@ func (b *bootstrapHandler) mountLoginWaitPrompt(
 				switch option {
 				case optLoginCopy:
 					guard.advanced = false // stay in this prompt
-					level, msg := copyBootstrapURL(oauthURL)
+					level, msg := b.copyBootstrapURL(oauthURL)
 					if _, err := b.notifications().Notify(level, "%s", msg); err != nil {
 						log.Warnf("bootstrap copy url: notify: %v", err)
 					}
@@ -841,16 +845,9 @@ func (b *bootstrapHandler) mountLoginWaitPrompt(
 	)
 }
 
-// copyBootstrapURL does not retain the system clipboard register so
-// a failure to attach (e.g. headless CI) does not impede the
-// bootstrap flow.
-func copyBootstrapURL(oauthURL string) (browserapi.NotificationLevel, string) {
-	reg, err := sysclip.NewRegister()
-	if err != nil {
-		return browserapi.LevelWarn,
-			"system clipboard unavailable; copy the URL from the prompt"
-	}
-	if err := reg.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: oauthURL}); err != nil {
+// copyBootstrapURL writes the OAuth URL to the clipboard.
+func (b *bootstrapHandler) copyBootstrapURL(oauthURL string) (browserapi.NotificationLevel, string) {
+	if err := b.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: oauthURL}); err != nil {
 		return browserapi.LevelWarn,
 			fmt.Sprintf("copy to clipboard failed: %v", err)
 	}
@@ -869,7 +866,7 @@ func (b *bootstrapHandler) openUpgradePrompt() error {
 		bootstrapUpgradeKeys,
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, _ string) {
-				if err := openBrowserURL(b.checkoutURL); err != nil {
+				if err := b.openBrowserURL(b.checkoutURL); err != nil {
 					b.notifyError("open checkout page", err)
 				}
 				_ = b.openLoginPrompt()
@@ -906,12 +903,12 @@ func checkoutURL(base *url.URL) *url.URL {
 	return &u
 }
 
-func openBrowserURL(raw string) error {
+func (b *bootstrapHandler) openBrowserURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("parse url %q: %w", raw, err)
 	}
-	if err := extbrowser.Browse(u); err != nil {
+	if err := b.openBrowser(u); err != nil {
 		return fmt.Errorf("open browser: %w", err)
 	}
 	return nil
