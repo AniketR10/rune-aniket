@@ -182,9 +182,6 @@ type goRouter struct {
 func (r *goRouter) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) error {
-	if cmd.Resource == nil {
-		return nil
-	}
 	if cmd.Name != cmdName {
 		return fmt.Errorf("unknown command: %s", cmd.Name)
 	}

@@ -29,12 +29,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
@@ -109,6 +113,132 @@ func (p *stubParser) Search(
 	_ string, _ []string, _ ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.FromSlice(p.results), nil
+}
+
+// capturingExecutor records the workspaceapi.Cmd it is asked to start and
+// drives a canned pass stream so the test command completes synchronously
+// enough to assert on the spawned command.
+type capturingExecutor struct {
+	mu     sync.Mutex
+	cmd    workspaceapi.Cmd
+	stdout string
+}
+
+var _ workspaceapi.Executor = (*capturingExecutor)(nil)
+
+func (e *capturingExecutor) Start(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	e.mu.Lock()
+	e.cmd = cmd
+	e.mu.Unlock()
+
+	go func() {
+		if cmd.Stdout != nil && e.stdout != "" {
+			_, _ = io.Copy(cmd.Stdout, bytes.NewBufferString(e.stdout))
+		}
+		if cmd.Watcher != nil {
+			if ch := cmd.Watcher.WatchProcess(); ch != nil {
+				ch <- nil
+			}
+		}
+	}()
+	return 1, nil
+}
+
+func (e *capturingExecutor) Signal(_ workspaceapi.Pid, _ syscall.Signal) error { return nil }
+func (e *capturingExecutor) Close() error                                      { return nil }
+
+func (e *capturingExecutor) captured() workspaceapi.Cmd {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cmd
+}
+
+func TestHandlersRequireOpenFile(t *testing.T) {
+	t.Parallel()
+
+	mn := &mockNotifications{}
+	handlers := map[string]textapi.CommandHandler{
+		"codelens":   &codeLensCmd{notify: mn},
+		"codeaction": &codeActionCmd{notify: mn},
+		"vulncheck":  &vulncheckCmd{notify: mn},
+		"mod":        &modCmd{notify: mn},
+		"add-import": &addImportCmd{notify: mn},
+	}
+	for name, h := range handlers {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := h.HandleCommand(t.Context(), textapi.Command{Name: name})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "no file open")
+		})
+	}
+}
+
+func TestTestCmdHandleCommand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no args and nil resource returns guidance error", func(t *testing.T) {
+		t.Parallel()
+
+		mn := &mockNotifications{}
+		h := &testCmd{notify: mn}
+		err := h.HandleCommand(t.Context(), textapi.Command{Name: "test"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "pass the name of the test to run")
+	})
+
+	t.Run("arg with nil resource runs from workspace root", func(t *testing.T) {
+		t.Parallel()
+
+		ex := &capturingExecutor{
+			stdout: `{"Action":"pass","Package":"example.com/test","Test":"TestAdd","Elapsed":0.01}`,
+		}
+		mn := &mockNotifications{}
+		h := &testCmd{notify: mn, executor: ex}
+
+		err := h.HandleCommand(t.Context(), textapi.Command{
+			Name: "test",
+			Args: []string{"TestAdd"},
+		})
+		require.NoError(t, err)
+
+		got := ex.captured()
+		assert.Equal(t, "go", got.Path)
+		assert.Empty(t, got.Dir)
+		assert.Equal(t,
+			[]string{"test", "-json", "-count=1", "-run", "^TestAdd$", "./..."},
+			got.Args)
+	})
+
+	t.Run("arg with open file runs in package dir", func(t *testing.T) {
+		t.Parallel()
+
+		ex := &capturingExecutor{
+			stdout: `{"Action":"pass","Package":"example.com/test","Test":"TestAdd","Elapsed":0.01}`,
+		}
+		mn := &mockNotifications{}
+		h := &testCmd{notify: mn, executor: ex}
+
+		uri, err := workspaceapi.ParseURI("file:///work/pkg/main_test.go")
+		require.NoError(t, err)
+
+		err = h.HandleCommand(t.Context(), textapi.Command{
+			Name:     "test",
+			Args:     []string{"TestAdd"},
+			URI:      uri,
+			Resource: &stubResource{uri: uri},
+		})
+		require.NoError(t, err)
+
+		got := ex.captured()
+		assert.Equal(t, "/work/pkg", got.Dir)
+		assert.Equal(t,
+			[]string{"test", "-json", "-count=1", "-run", "^TestAdd$", "."},
+			got.Args)
+	})
 }
 
 func TestProcessTestOutput(t *testing.T) {

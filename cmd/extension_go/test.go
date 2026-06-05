@@ -84,18 +84,24 @@ type codeLensTestArgs struct {
 func (h *testCmd) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) error {
-	if cmd.Resource == nil {
-		return nil
-	}
-
-	var testName, pkgDir string
+	var testName, pkgDir, pkgTarget string
 	var isBenchmark bool
 
 	if len(cmd.Args) > 0 {
 		testName = cmd.Args[0]
-		pkgDir = filepath.Dir(cmd.URI.Path())
 		isBenchmark = strings.HasPrefix(testName, "Benchmark")
+		if cmd.Resource != nil {
+			pkgDir = filepath.Dir(cmd.URI.Path())
+			pkgTarget = "."
+		} else {
+			pkgTarget = "./..."
+		}
 	} else {
+		if cmd.Resource == nil {
+			return fmt.Errorf("open a file and move the cursor next to a test to run it, " +
+				"or pass the name of the test to run")
+		}
+		pkgTarget = "."
 		params := semanticapi.CodeLensParams{
 			TextDocument: lspcmd.TextDocID(cmd.URI),
 		}
@@ -154,9 +160,9 @@ func (h *testCmd) HandleCommand(
 
 	var goArgs []string
 	if isBenchmark {
-		goArgs = []string{"test", "-json", "-count=1", "-run", "^$", "-bench", "^" + testName + "$", "."}
+		goArgs = []string{"test", "-json", "-count=1", "-run", "^$", "-bench", "^" + testName + "$", pkgTarget}
 	} else {
-		goArgs = []string{"test", "-json", "-count=1", "-run", "^" + testName + "$", "."}
+		goArgs = []string{"test", "-json", "-count=1", "-run", "^" + testName + "$", pkgTarget}
 	}
 
 	pr, pw := io.Pipe()

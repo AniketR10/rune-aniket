@@ -77,7 +77,7 @@ func (h *vulncheckCmd) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) error {
 	if cmd.Resource == nil {
-		return nil
+		return fmt.Errorf("no file open; open a file first")
 	}
 
 	fileURI := lspcmd.URIToLSP(cmd.URI)
@@ -120,7 +120,7 @@ func (h *modCmd) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) error {
 	if cmd.Resource == nil {
-		return nil
+		return fmt.Errorf("no file open; open a file first")
 	}
 
 	fileURI := lspcmd.URIToLSP(cmd.URI)
@@ -176,7 +176,7 @@ func (h *addImportCmd) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) error {
 	if cmd.Resource == nil {
-		return nil
+		return fmt.Errorf("no file open; open a file first")
 	}
 	if len(cmd.Args) == 0 {
 		_, _ = h.notify.Notify(browserapi.LevelError,

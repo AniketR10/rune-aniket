@@ -1908,15 +1908,39 @@ func TestGoRouter(t *testing.T) {
 		assert.Contains(t, err.Error(), "unknown go subcommand")
 	})
 
-	t.Run("NilResource", func(t *testing.T) {
+	t.Run("NilResourceRoutesToHandler", func(t *testing.T) {
 		t.Parallel()
 
-		router := &goRouter{handlers: map[string]textapi.CommandHandler{}}
+		mn := &mockNotifications{}
+		router := &goRouter{handlers: map[string]textapi.CommandHandler{
+			"tidy": &modCmd{notify: mn, goplsCommand: "gopls.tidy"},
+		}}
 		err := router.HandleCommand(t.Context(), textapi.Command{
 			Name: "go",
 			Args: []string{"tidy"},
 		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no file open")
+	})
+
+	t.Run("NilResourceTestWithArgRoutes", func(t *testing.T) {
+		t.Parallel()
+
+		ex := &capturingExecutor{
+			stdout: `{"Action":"pass","Package":"example.com/test","Test":"TestAdd","Elapsed":0.01}`,
+		}
+		mn := &mockNotifications{}
+		router := &goRouter{handlers: map[string]textapi.CommandHandler{
+			"test": &testCmd{notify: mn, executor: ex},
+		}}
+		err := router.HandleCommand(t.Context(), textapi.Command{
+			Name: "go",
+			Args: []string{"test", "TestAdd"},
+		})
 		require.NoError(t, err)
+		assert.Equal(t,
+			[]string{"test", "-json", "-count=1", "-run", "^TestAdd$", "./..."},
+			ex.captured().Args)
 	})
 }
 
