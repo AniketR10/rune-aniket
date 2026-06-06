@@ -49,12 +49,10 @@ func TestCheckForUpdates(t *testing.T) {
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
 		})
-		m, n, _, _ := newTestManager(t, pkgs, versions)
+		m, _, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 		updates, err := uc.CheckForUpdates(context.Background())
@@ -71,12 +69,10 @@ func TestCheckForUpdates(t *testing.T) {
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
 		})
-		m, n, _, _ := newTestManager(t, pkgs, versions)
+		m, _, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 		updates, err := uc.CheckForUpdates(context.Background())
@@ -92,14 +88,12 @@ func TestCheckForUpdates(t *testing.T) {
 			[]release.Bundle{{Package: "go", Version: "1"}},
 			[]release.Bundle{{Package: "testpkg", Version: "1"}},
 		)
-		m, n, _, _ := newTestManager(t, pkgs, versions)
+		m, _, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(2)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 		err = m.InstallPackageVersion(context.Background(), "testpkg", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 		updates, err := uc.CheckForUpdates(context.Background())
@@ -115,17 +109,13 @@ func TestCheckForUpdates(t *testing.T) {
 			{Package: "go", Version: "1"},
 			{Package: "go", Version: "2"},
 		})
-		m, n, _, _ := newTestManager(t, pkgs, versions)
+		m, _, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
-		n.SetWg(1)
 		err = m.InstallPackageVersion(context.Background(), "go", "2", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 		updates, err := uc.CheckForUpdates(context.Background())
@@ -141,12 +131,10 @@ func TestCheckForUpdates(t *testing.T) {
 		versions := idepkgtest.MakeBundles([]release.Bundle{
 			{Package: "go", Version: "1"},
 		})
-		m, n, rm, _ := newTestManager(t, pkgs, versions)
+		m, _, rm, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		rm.ExpectReturnErr(auth.ErrNotAuthenticated)
 
@@ -168,10 +156,8 @@ func TestStart(t *testing.T) {
 		})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		now := time.Now()
 		uc := NewUpdateChecker(m)
@@ -200,10 +186,8 @@ func TestStart(t *testing.T) {
 		})
 		m, n, rm, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		rm.ExpectReturnErr(auth.ErrNotAuthenticated)
 
@@ -223,10 +207,8 @@ func TestStart(t *testing.T) {
 		})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 
@@ -254,10 +236,8 @@ func TestStart(t *testing.T) {
 		})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		now := time.Now()
 		uc := NewUpdateChecker(m)
@@ -273,9 +253,7 @@ func TestStart(t *testing.T) {
 		// The prompt will auto-select "Update All" (index 0) via mockWindowManager
 		// which sends Enter on the first option.
 		n.Reset()
-		n.SetWg(1) // expect install notification
 		uc.run(context.Background())
-		n.Wait()
 	})
 
 	t.Run("respects skipped versions", func(t *testing.T) {
@@ -286,10 +264,8 @@ func TestStart(t *testing.T) {
 		})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		now := time.Now()
 		uc := NewUpdateChecker(m)
@@ -328,10 +304,8 @@ func TestStart(t *testing.T) {
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 		storage := m.storage
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 
@@ -442,10 +416,8 @@ func TestUpdatePromptActions(t *testing.T) {
 		})
 		m, n, _, _ := newTestManager(t, pkgs, versions)
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 
@@ -453,18 +425,12 @@ func TestUpdatePromptActions(t *testing.T) {
 
 		// Mock will auto-select first option (Update All) via Enter key
 		n.Reset()
-		n.SetWg(1)
 		uc.showUpdatePrompt(context.Background(), updates)
-		n.Wait()
 
-		active := n.Active()
-		var found bool
-		for _, noti := range active {
-			if noti.Level == browserapi.LevelSuccess {
-				found = true
-			}
-		}
-		assert.True(t, found, "expected success notification from install, got: %+v", active)
+		inUse, err := m.PackageVersionInUse(context.Background(), "go")
+		require.NoError(t, err)
+		assert.Equal(t, release.Version("2"), inUse,
+			"Upgrade All should install and switch to the latest version")
 	})
 
 	t.Run("Skip persists skip", func(t *testing.T) {
@@ -487,10 +453,8 @@ func TestUpdatePromptActions(t *testing.T) {
 			},
 		}
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 		ctx := context.Background()
@@ -529,10 +493,8 @@ func TestUpdatePromptActions(t *testing.T) {
 			},
 		}
 
-		n.SetWg(1)
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
-		n.Wait()
 
 		uc := NewUpdateChecker(m)
 		ctx := context.Background()

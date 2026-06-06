@@ -31,20 +31,6 @@ import (
 // Option configures a Manager.
 type Option func(*Manager)
 
-// WithCrashReportPackage sets the package name used in crash reports.
-func WithCrashReportPackage(pkg string) Option {
-	return func(m *Manager) {
-		m.crashReportPkg = pkg
-	}
-}
-
-// WithCrashReportVersion sets the version string used in crash reports.
-func WithCrashReportVersion(version string) Option {
-	return func(m *Manager) {
-		m.crashReportVersion = version
-	}
-}
-
 // WithFrameCharSet sets the component.FrameCharSet to use for prompts.
 func WithFrameCharSet(fcs component.FrameCharSet) Option {
 	return func(m *Manager) {

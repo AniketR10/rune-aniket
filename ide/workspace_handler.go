@@ -76,6 +76,7 @@ import (
 	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/llmshell"
+	"unstable.build/go-tui/ide/pkgshell"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
@@ -1602,6 +1603,15 @@ func (h *workspaceManagerHandler) buildExtensions(
 		log.Errorf("register llm repl command: %v", err)
 	}
 
+	// Register the top-level `pkg` REPL command for package management.
+	pkgHandler := pkgshell.New(pkgshell.Config{
+		Manager:       h.pkgmanager.pkg,
+		UpdateChecker: h.pkgmanager.uc,
+	})
+	if err := ex.comp.RegisterREPLCommand(pkgshell.Manual(), pkgHandler); err != nil {
+		log.Errorf("register pkg repl command: %v", err)
+	}
+
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
@@ -2200,10 +2210,6 @@ func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
 	if err != nil {
 		return fmt.Errorf("subscribe macro commands: %w", err)
 	}
-	err = h.pkgmanager.subscribeCommands(ex)
-	if err != nil {
-		return fmt.Errorf("subscribe idepkg commands: %w", err)
-	}
 	return nil
 }
 
@@ -2589,7 +2595,6 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser,
 		editorMode)
-	h.dispatchOnPreview[cmdPkgInstall] = h.pkgmanager.previewPkgInstall
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

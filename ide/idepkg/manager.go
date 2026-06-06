@@ -42,7 +42,6 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
-	bluedebug "github.com/unstablebuild/blue/debug"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/cdnrelease"
@@ -198,19 +197,12 @@ type Manager struct {
 	schemeURI        workspaceapi.URI
 	binDir           string
 
-	crashReportPkg     string
-	crashReportVersion string
-
 	editorMode string
 
 	iterators struct {
 		sync.Mutex
 		m map[string]*sync.Mutex
 	}
-}
-
-func (m *Manager) capturePanicReport(f func()) {
-	bluedebug.CapturePanic(log.StandardLogger(), m.crashReportPkg, m.crashReportVersion, f)
 }
 
 // LibDir returns an iterator to the lib directory of the given package.
@@ -288,9 +280,10 @@ func (m *Manager) ListPackageVersions(ctx context.Context, pkgID string, filters
 	return it, nil
 }
 
-// InstallPackageVersion downloads a Package bundle by package name and version, reports
-// progress via ProgressWriter and returns a release.Bundle and a dirname
-// that contains the extracted bundle.
+// InstallPackageVersion downloads and installs a package bundle by name
+// and version, reporting progress via the ProgressWriter. It blocks
+// until the install finishes and returns the first error encountered, so
+// callers can report success or failure directly.
 func (m *Manager) InstallPackageVersion(
 	ctx context.Context, pkgID string, version release.Version,
 	pw repl.ProgressWriter,
@@ -307,16 +300,16 @@ func (m *Manager) InstallPackageVersion(
 	version = release.Version(escapeString(string(version)))
 
 	m.iterators.Lock()
-	defer m.iterators.Unlock()
-
 	_, ok := m.iterators.m[pkgID]
 	if ok {
 		m.log(log.InfoLevel, "there's already an ongoing install of package: %s", pkgID)
+		m.iterators.Unlock()
 		return nil
 	}
 
 	tarfile, err := os.CreateTemp("", "")
 	if err != nil {
+		m.iterators.Unlock()
 		return fmt.Errorf("create temp: %w", err)
 	}
 
@@ -333,26 +326,23 @@ func (m *Manager) InstallPackageVersion(
 			}
 			if err != nil {
 				m.cleanupFile(tarfile)
+				m.iterators.Unlock()
 				return fmt.Errorf("version %s of package %s has "+
 					"already been installed", version, pkgID)
 			}
 		} else {
 			m.cleanupFile(tarfile)
+			m.iterators.Unlock()
 			return fmt.Errorf("store package version: %w", err)
 		}
 	}
 
 	mu := new(sync.Mutex)
 	m.iterators.m[pkgID] = mu
-
 	mu.Lock() // block calls to iterator
-	go debug.CapturePanicReport(func() {
-		m.capturePanicReport(func() {
-			m.download(pkgID, version, tarfile, pw, key)
-		})
-	})
+	m.iterators.Unlock()
 
-	return err
+	return m.download(pkgID, version, tarfile, pw, key)
 }
 
 // DeletePackageVersion deletes a package version from local storage. This method is idempotent.
@@ -442,11 +432,9 @@ func (m *Manager) DeletePackage(
 	for i := 0; i < len(versions); i++ {
 		i := i
 		go debug.CapturePanicReport(func() {
-			m.capturePanicReport(func() {
-				version := versions[i]
-				defer wg.Done()
-				errs[i] = m.DeletePackageVersion(ctx, pkgID, version, true)
-			})
+			version := versions[i]
+			defer wg.Done()
+			errs[i] = m.DeletePackageVersion(ctx, pkgID, version, true)
 		})
 	}
 	wg.Wait()
@@ -624,14 +612,12 @@ func (m *Manager) PackageVersionInUse(
 	for i := 0; i < len(versions); i++ {
 		version := versions[i]
 		go debug.CapturePanicReport(func() {
-			m.capturePanicReport(func() {
-				defer wg.Done()
-				var isInUse bool
-				_, _, isInUse, errs[i] = m.isPackageVersionInUse(pkgID, version)
-				if isInUse { // only one will be in use
-					inUse.Store(version)
-				}
-			})
+			defer wg.Done()
+			var isInUse bool
+			_, _, isInUse, errs[i] = m.isPackageVersionInUse(pkgID, version)
+			if isInUse { // only one will be in use
+				inUse.Store(version)
+			}
 		})
 	}
 	wg.Wait()
@@ -687,13 +673,29 @@ func newPkgVersionValue(pkgID string, version release.Version) pkgVersionValue {
 func (m *Manager) download(
 	pkgID string, version release.Version, tarfile *os.File,
 	pw repl.ProgressWriter, key string,
-) {
+) error {
+	err := m.runDownload(pkgID, version, tarfile, pw, key)
+	if err != nil {
+		m.abortDownload(err, pkgID, version)
+		return err
+	}
+	m.finishDownload(pkgID)
+	return nil
+}
+
+// runDownload performs the fetch, extract, link and config steps for a
+// single package version, returning the first error encountered. It owns
+// the on-disk cleanup of partial state so download can keep the
+// completion bookkeeping in one place.
+func (m *Manager) runDownload(
+	pkgID string, version release.Version, tarfile *os.File,
+	pw repl.ProgressWriter, key string,
+) error {
 	ctx := context.Background()
 	defer m.cleanupFile(tarfile)
 
 	if err := makePkgDirs(m.dataDir); err != nil {
-		m.abortDownload(err, pkgID, version)
-		return
+		return err
 	}
 
 	writer := &progressTarWriter{
@@ -701,11 +703,8 @@ func (m *Manager) download(
 		pw:     pw,
 	}
 	m.log(log.TraceLevel, "fetching package %s version %s", pkgID, version)
-	_, err := m.m.Get(ctx, pkgID, version, writer)
-	if err != nil {
-		err = translateVersionErr(err, pkgID, string(version))
-		m.abortDownload(err, pkgID, version)
-		return
+	if _, err := m.m.Get(ctx, pkgID, version, writer); err != nil {
+		return translateVersionErr(err, pkgID, string(version))
 	}
 
 	m.log(log.TraceLevel, "extracting package %s version %s", pkgID, version)
@@ -716,25 +715,20 @@ func (m *Manager) download(
 	_, executables, err := m.untar(tarfile, stagingDir, pw)
 	if err != nil {
 		_ = os.RemoveAll(stagingDir)
-		m.abortDownload(err, pkgID, version)
-		return
+		return err
 	}
 
 	_ = os.RemoveAll(pkgVersionDirname)
 	if err := os.Rename(stagingDir, pkgVersionDirname); err != nil {
 		_ = os.RemoveAll(stagingDir)
-		err = fmt.Errorf("rename staging dir: %w", err)
-		m.abortDownload(err, pkgID, version)
-		return
+		return fmt.Errorf("rename staging dir: %w", err)
 	}
 
 	configFile := pkgConfigFile(pkgVersionDirname)
 
-	err = m.linkLibCopyBin(pkgID, version, executables, pkgVersionDirname)
-	if err != nil {
+	if err := m.linkLibCopyBin(pkgID, version, executables, pkgVersionDirname); err != nil {
 		_ = os.RemoveAll(pkgVersionDirname)
-		m.abortDownload(err, pkgID, version)
-		return
+		return err
 	}
 
 	updates := []storageapi.Update{
@@ -742,32 +736,23 @@ func (m *Manager) download(
 		{FieldPath: []string{"Complete"}, Value: true},
 	}
 	if err := m.storage.Update(ctx, key, updates); err != nil {
-		err = fmt.Errorf("update storage field: %w", err)
 		_ = os.RemoveAll(pkgVersionDirname)
 		_ = removeExecutables(executables, m.binDir)
-		m.abortDownload(err, pkgID, version)
-		return
+		return fmt.Errorf("update storage field: %w", err)
 	}
 
 	if err := m.processConfig(pkgID, version, configFile); err != nil {
-		m.log(log.WarnLevel, "process config for package %s version %s: %v",
+		return fmt.Errorf("process configuration for %s version %s: %w",
 			pkgID, version, err)
-		m.scheduleNextTick(func() {
-			_, _ = m.n.Notify(browserapi.LevelError,
-				"process configuration for %s version %s: %s",
-				pkgID, version, err)
-		})
 	}
 
-	// Signal completion so notification-backed writers can
-	// dismiss the in-progress notification before we post the
-	// terminal success notification.
 	pw.Progress(1, 1, "done")
-	m.scheduleNextTick(func() {
-		_, _ = m.n.Notify(browserapi.LevelSuccess,
-			"downloaded version %s of package %s", version, pkgID)
-	})
+	return nil
+}
 
+// finishDownload releases the per-package install gate after a
+// successful install so blocked LibDir iterators can proceed.
+func (m *Manager) finishDownload(pkgID string) {
 	m.iterators.Lock()
 	defer m.iterators.Unlock()
 
@@ -776,12 +761,7 @@ func (m *Manager) download(
 		panic("iterator for package not found")
 	}
 	delete(m.iterators.m, pkgID)
-
 	ready.Unlock()
-
-	if err := m.interrupter.Interrupt(ctx); err != nil {
-		m.log(log.WarnLevel, "interrupt: %v", err)
-	}
 }
 
 func (m *Manager) abortDownload(
@@ -794,31 +774,7 @@ func (m *Manager) abortDownload(
 		m.log(log.ErrorLevel, "delete pkg %s version %s "+
 			"lock key (%s): %v", pkgID, version, key, err)
 	}
-	m.notifyError(err, pkgID, version)
-
-	m.iterators.Lock()
-	defer m.iterators.Unlock()
-
-	ready, ok := m.iterators.m[pkgID]
-	if !ok {
-		panic("iterator for package not found")
-	}
-	delete(m.iterators.m, pkgID)
-
-	ready.Unlock()
-}
-
-func (m *Manager) notifyError(
-	err error, pkgID string, version release.Version,
-) {
-	m.scheduleNextTick(func() {
-		_, _ = m.n.Notify(browserapi.LevelError,
-			"downloading version %s of package %s failed: %v",
-			version, pkgID, err)
-	})
-	if err := m.interrupter.Interrupt(context.Background()); err != nil {
-		m.log(log.WarnLevel, "interrupt: %v", err)
-	}
+	m.finishDownload(pkgID)
 }
 
 func (m *Manager) linkLibVersion(pkgID string, version release.Version) error {

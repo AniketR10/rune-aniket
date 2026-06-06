@@ -46,10 +46,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/pkgshell"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -122,343 +124,6 @@ func TestPackageManagerConcurrent(t *testing.T) {
 	}
 }
 
-func TestPackageManagerIntegration(t *testing.T) {
-	pkgs := idepkgtest.MakePackages(
-		release.Package{Name: "go"},
-		release.Package{Name: "six", Latest: "2"},
-	)
-	bundles := idepkgtest.MakeBundles(
-		[]release.Bundle{
-			{Package: "go", Version: "2"},
-			{Package: "go", Version: "3"},
-			{Package: "go", Version: "1", CreatedAt: time.Now()},
-		},
-		[]release.Bundle{
-			{Package: "six", Version: "1"},
-			{Package: "six", Version: "2"},
-		},
-	)
-	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-	rm.SetMissProgressComplete(true)
-	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, true, 15)
-
-	cases := []handlertest.SequenceTestCase{
-		{":pkginstall ",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│ six                                  │
-├──────────────────────────────────────┤
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{"six ",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall six ▐                     │
-│ 1                                    │
-│ 2                                    │
-├──────────────────────────────────────┤
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{"1>",
-			`┌────────────────────────┌─────────────┐
-│                        │ install     │
-├────────────────────────│ six@1:      │
-│                        │ 8/691 KiB   │
-│                        │ extracted   │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgwait six>:pkgcurrent ",
-			`┌────────────────────────┌─────────────┐
-│                        │ downloaded  │
-├────────────────────────│ version 1   │
-│                        │ of package  │
-│                        │ six         │
-│                        └─────────────┘
-┌──────────────────────────────────────┐
-│ pkgcurrent ▐                         │
-│ six                                  │
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{"six>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 1   │
-├────────────────────────│ of package  │
-│                        │ six is in   │
-│                        │ use         │
-│                        └─────────────┘
-│                        ┌─────────────┐
-│          workspaceWallp│ downloaded  │
-│                        │ version 1   │
-│                        │ of package  │
-│                        │ six         │
-│                        └─────────────┘
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkginstall six 1>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 1   │
-├────────────────────────│ of package  │
-│                        │ six has     │
-│                        │ already     │
-│                        │ been        │
-│                        │ installed   │
-│          workspaceWallp└─────────────┘
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkginstall go>:pkgwait go>",
-			`┌────────────────────────┌─────────────┐
-│                        │ downloaded  │
-├────────────────────────│ version 1   │
-│                        │ of package  │
-│                        │ go          │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgupdateall>:pkgwait six>",
-			`┌────────────────────────┌─────────────┐
-│                        │ downloaded  │
-├────────────────────────│ version 2   │
-│                        │ of package  │
-│                        │ six         │
-│                        └─────────────┘
-│                        ┌─────────────┐
-│          workspaceWallp│ package go  │
-│                        │ already     │
-│                        │ updated to  │
-│                        │ the latest  │
-│                        │ version (1) │
-├────────────────────────└─────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkguse six 1>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 1   │
-├────────────────────────│ of package  │
-│                        │ six is now  │
-│                        │ in use      │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkginstall six>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 2   │
-├────────────────────────│ of package  │
-│                        │ six has     │
-│                        │ already     │
-│                        │ been        │
-│                        │ installed   │
-│          workspaceWallp└─────────────┘
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkginstall go>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 1   │
-├────────────────────────│ of package  │
-│                        │ go has      │
-│                        │ already     │
-│                        │ been        │
-│                        │ installed   │
-│          workspaceWallp└─────────────┘
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgremove six 1>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 1   │
-├────────────────────────│ of package  │
-│                        │ six is      │
-│                        │ currently   │
-│                        │ in use,     │
-│                        │ run         │
-│          workspaceWallp│ 'pkguse'    │
-│                        │ with some   │
-│                        │ other       │
-│                        │ version     │
-│                        │ first       │
-├────────────────────────│ before      ┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgremove six 2>",
-			`┌────────────────────────┌─────────────┐
-│                        │ version 2   │
-├────────────────────────│ of package  │
-│                        │ six has     │
-│                        │ been        │
-│                        │ removed     │
-│                        └─────────────┘
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgremove go>",
-			`┌────────────────────────┌─────────────┐
-│                        │ package go  │
-├────────────────────────│ has been    │
-│                        │ removed     │
-│                        └─────────────┘
-│                                      │
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkginstall ox>",
-			`┌────────────────────────┌─────────────┐
-│                        │ install     │
-├────────────────────────│ package:    │
-│                        │ document    │
-│                        │ not found   │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgremove ox>",
-			`┌────────────────────────┌─────────────┐
-│                        │ package ox  │
-├────────────────────────│ is not      │
-│                        │ installed   │
-│                        └─────────────┘
-│                                      │
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkguse six 2>",
-			`┌────────────────────────┌─────────────┐
-│                        │ package     │
-├────────────────────────│ version is  │
-│                        │ not         │
-│                        │ installed   │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkgremove six>",
-			`┌────────────────────────┌─────────────┐
-│                        │ package     │
-├────────────────────────│ six has     │
-│                        │ been        │
-│                        │ removed     │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{":noticlose>:pkguse six 1>",
-			`┌────────────────────────┌─────────────┐
-│                        │ package     │
-├────────────────────────│ version is  │
-│                        │ not         │
-│                        │ installed   │
-│                        └─────────────┘
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	h := newSafeHandler(m)
-
-	handlertest.TestHandlerSequence(t, h, 40, 15, cases)
-
-	require.NoError(t, m.Close())
-}
-
-// TestPkgManager_LibDir_NotAuthenticated verifies that LibDir does not
-// surface auth.ErrNotAuthenticated to the caller — it must be converted
-// to storageapi.ErrNotFound so that callers such as syntax.Tree.downloadFiles
-// silently skip the missing package rather than logging an error.
 func TestPkgManager_LibDir_NotAuthenticated(t *testing.T) {
 	t.Parallel()
 	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
@@ -477,8 +142,7 @@ func TestPkgManager_LibDir_NotAuthenticated(t *testing.T) {
 
 // TestPkgManager_HandlePkgInstall_NotAuthenticated verifies that the
 // interactive :pkginstall command suppresses ErrNotAuthenticated and
-// surfaces a "Run :login to ..." notification instead of bubbling up
-// a raw error.
+// surfaces the raw auth error from the `pkg install` shell command.
 func TestPkgManager_HandlePkgInstall_NotAuthenticated(t *testing.T) {
 	t.Parallel()
 	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
@@ -489,17 +153,21 @@ func TestPkgManager_HandlePkgInstall_NotAuthenticated(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 	defer m.Close()
 
-	err := m.pkgmanager.HandleCommand(context.Background(), textapi.Command{
-		Name: cmdPkgInstall,
-		Args: []string{"go"},
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       m.pkgmanager.pkg,
+		UpdateChecker: m.pkgmanager.uc,
 	})
-	require.NoError(t, err, "expected ErrNotAuthenticated to be suppressed into a notification")
+	_, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: pkgshell.CommandName,
+		Args: []string{"install", "go"},
+	}, repl.NopProgressWriter())
+	require.ErrorIs(t, err, auth.ErrNotAuthenticated)
 }
 
 // TestPkgManager_HandlePkgInstall_Forbidden verifies that the
-// interactive :pkginstall command translates a 403 from the
-// cdnrelease endpoint into the friendly errForbidden sentinel
-// instead of bubbling up the raw cdnrelease error.
+// `pkg install` shell command translates a 403 from the cdnrelease
+// endpoint into the friendly ErrForbidden sentinel instead of
+// bubbling up the raw cdnrelease error.
 func TestPkgManager_HandlePkgInstall_Forbidden(t *testing.T) {
 	t.Parallel()
 	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
@@ -513,16 +181,20 @@ func TestPkgManager_HandlePkgInstall_Forbidden(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 	defer m.Close()
 
-	err := m.pkgmanager.HandleCommand(context.Background(), textapi.Command{
-		Name: cmdPkgInstall,
-		Args: []string{"go"},
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       m.pkgmanager.pkg,
+		UpdateChecker: m.pkgmanager.uc,
 	})
+	_, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: pkgshell.CommandName,
+		Args: []string{"install", "go"},
+	}, repl.NopProgressWriter())
 	require.ErrorIs(t, err, idepkg.ErrForbidden)
 }
 
 // TestPkgManager_CompletePkgInstall_Forbidden verifies that tab
 // completion against the releases endpoint surfaces the friendly
-// errForbidden sentinel to the completer framework when the server
+// ErrForbidden sentinel to the completer framework when the server
 // returns 403.
 func TestPkgManager_CompletePkgInstall_Forbidden(t *testing.T) {
 	t.Parallel()
@@ -537,10 +209,12 @@ func TestPkgManager_CompletePkgInstall_Forbidden(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 	defer m.Close()
 
-	_, _, err := m.pkgmanager.Complete(context.Background(), textapi.Command{
-		Name: cmdPkgInstall,
-		Args: []string{""},
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       m.pkgmanager.pkg,
+		UpdateChecker: m.pkgmanager.uc,
 	})
+	_, err := h.Complete(context.Background(), pkgshell.CommandName,
+		[]string{"install", ""})
 	require.ErrorIs(t, err, idepkg.ErrForbidden)
 }
 
@@ -559,324 +233,15 @@ func TestPkgManager_HandlePkgInstall_Forbidden_Integration(t *testing.T) {
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 	defer m.Close()
 
-	err := m.pkgmanager.HandleCommand(context.Background(), textapi.Command{
-		Name: cmdPkgInstall,
-		Args: []string{"go"},
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       m.pkgmanager.pkg,
+		UpdateChecker: m.pkgmanager.uc,
 	})
+	_, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: pkgshell.CommandName,
+		Args: []string{"install", "go"},
+	}, repl.NopProgressWriter())
 	require.ErrorIs(t, err, idepkg.ErrForbidden)
-}
-
-func TestPackageManagerPreviewIntegration(t *testing.T) {
-	createdAt := time.Unix(6666666666, 0)
-	t.Parallel()
-	pkgs := idepkgtest.MakePackages(
-		release.Package{Name: "go", CreatedAt: createdAt},
-		release.Package{
-			Name:      "six",
-			Latest:    "2",
-			Notes:     "blabla",
-			Metadata:  map[string]string{},
-			CreatedAt: createdAt,
-		},
-	)
-	bundles := idepkgtest.MakeBundles(
-		[]release.Bundle{
-			{Package: "go", Version: "2"},
-		},
-		[]release.Bundle{
-			{
-				Package: "six",
-				Version: "2",
-				Notes:   "yikes",
-				Metadata: map[string]string{
-					"git-author-email": "clawdbot@clawd.bot",
-					"git-log":          "Just messed up with the code a bit, you know\nthen something else\ndone",
-				},
-				CreatedAt: createdAt,
-			},
-		},
-	)
-	// used to ensure that animation is deterministically rendered:
-	// Interrupt is blocked until wg.Wait returns, so after we have verified
-	// Drawing animation.
-	var pkgsema, interruptsema sync.Mutex
-	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-	rm.SetMissProgressComplete(true)
-
-	rm.SetHook(func() {
-		pkgsema.Lock()
-		defer pkgsema.Unlock()
-	})
-
-	i := term.FuncInterrupter(func(ctx context.Context) error {
-		if component.IsAsyncContext(ctx) {
-			interruptsema.Unlock()
-		}
-		return nil
-	})
-
-	m := newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(t, rm, true, i)
-	h := newSafeHandler(m)
-
-	cases := []handlertest.SequenceTestCase{
-		{"<c-\\\\>pkginstall<space>",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│ six                                  │
-├──────────────────────────────────────┤
-│                                      │
-│ Usage                                │
-│                                      │
-│ pkginstall <package> [<version>]     │
-│                                      │
-│                                      │
-│ Description                          │
-│                                      │
-│ Installs a package from the official │
-│ distribution. If version is omitted, │
-└──────────────────────────────────────┘
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		{"<down>",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│ six                                  │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                  ⠃                   │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-
-	pkgsema.Lock()
-	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
-
-	cases = []handlertest.SequenceTestCase{
-		{"",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│ six                                  │
-├──────────────────────────────────────┤
-│ go                                   │
-│                                      │
-│ NOTES                                │
-│                                      │
-│                                      │
-│ VERSION                              │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│ CREATED AT                           │
-│ Apr 4, 2181 1:51 PM                  │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-
-	interruptsema.Lock()
-	pkgsema.Unlock()
-	interruptsema.Lock()
-	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
-	interruptsema.Unlock()
-
-	cases = []handlertest.SequenceTestCase{
-		{"<down>",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│ six                                  │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                  ⠃                   │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	pkgsema.Lock()
-	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
-
-	cases = []handlertest.SequenceTestCase{
-		{"",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│ six                                  │
-├──────────────────────────────────────┤
-│ six                                  │
-│                                      │
-│ NOTES                                │
-│ blabla                               │
-│                                      │
-│ VERSION                              │
-│ 2                                    │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│ CREATED AT                           │
-│ Apr 4, 2181 1:51 PM                  │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	interruptsema.Lock()
-	pkgsema.Unlock()
-	interruptsema.Lock()
-	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
-	interruptsema.Unlock()
-
-	cases = []handlertest.SequenceTestCase{
-		{"<tab><down>",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall six ▐                     │
-│ 2                                    │
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                  ⠃                   │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	pkgsema.Lock()
-	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
-
-	cases = []handlertest.SequenceTestCase{
-		{"",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall six ▐                     │
-│ 2                                    │
-│                                      │
-├──────────────────────────────────────┤
-│ six @ 2                              │
-│                                      │
-│ CHANGE LOG                           │
-│ Just messed up with the code a bit   │
-│ , you know                           │
-│ then something else                  │
-│ done                                 │
-│                                      │
-│ AUTHOR                               │
-│ clawdbot@clawd.bot                   │
-│                                      │
-│ CREATED AT                           │
-│ Apr 4, 2181 1:51 PM                  │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	interruptsema.Lock()
-	pkgsema.Unlock()
-	interruptsema.Lock()
-	handlertest.RunHandlerSequence(t, h, 40, 30, cases)
-	interruptsema.Unlock()
-
-	require.NoError(t, m.Close())
 }
 
 func TestPackageManagerLibDir(t *testing.T) {
@@ -1152,58 +517,36 @@ func TestSetReleaseManager(t *testing.T) {
 	rm := idepkgtest.NewReleaseManager(idepkgtest.MakePackages(), idepkgtest.MakeBundles())
 	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
 
-	cases := []handlertest.SequenceTestCase{
-		{":pkginstall ",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│                                      │
-│                                      │
-└──────────────────────────────────────┘
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	h := newSafeHandler(m)
-	handlertest.TestHandlerSequence(t, h, 40, 15, cases)
+	// Before the second release manager is set, there are no packages.
+	h0 := pkgshell.New(pkgshell.Config{
+		Manager:       m.pkgmanager.pkg,
+		UpdateChecker: m.pkgmanager.uc,
+	})
+	it0, err := h0.Complete(context.Background(), pkgshell.CommandName,
+		[]string{"install", ""})
+	require.NoError(t, err)
+	names0, err := iterator.ToSlice(context.Background(), it0)
+	require.NoError(t, err)
+	require.Empty(t, names0)
 
-	pkgs := idepkgtest.MakePackages(
-		release.Package{Name: "go"},
-	)
-	bundles := idepkgtest.MakeBundles(
-		[]release.Bundle{
-			{Package: "go", Version: "3"},
-		},
-	)
+	pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "3"}})
 	rm2 := idepkgtest.NewReleaseManager(pkgs, bundles)
 	rm2.SetMissProgressComplete(true)
 	m.setReleaseManager(rm2)
 
-	cases = []handlertest.SequenceTestCase{
-		{"<:pkginstall ",
-			`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-┌──────────────────────────────────────┐
-│ pkginstall ▐                         │
-│ go                                   │
-│                                      │
-└──────────────────────────────────────┘
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-	}
-	handlertest.TestHandlerSequence(t, h, 40, 15, cases)
+	// After re-setting the release manager, the new packages are
+	// reachable through a freshly constructed pkg shell.
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       m.pkgmanager.pkg,
+		UpdateChecker: m.pkgmanager.uc,
+	})
+	it, err := h.Complete(context.Background(), pkgshell.CommandName,
+		[]string{"install", ""})
+	require.NoError(t, err)
+	names, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	require.Equal(t, []string{"go"}, names)
 
 	require.NoError(t, m.Close())
 }
@@ -1283,15 +626,6 @@ func newTestWorkspaceManagerHandlerForPkgManager(
 	return m
 }
 
-func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupter(
-	t *testing.T, releaseManager release.Manager, showManual bool,
-	interrupter term.Interrupter,
-) *testWorkspaceManagerHandler {
-	cfg := defaultCfg()
-	return newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
-		t, releaseManager, showManual, interrupter, cfg, new(sync.Mutex),
-	)
-}
 func newTestWorkspaceManagerHandlerForPkgManagerWithInterrupterCfg(
 	t *testing.T, releaseManager release.Manager, showManual bool,
 	interrupter term.Interrupter,

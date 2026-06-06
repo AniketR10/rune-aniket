@@ -1,0 +1,307 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package pkgshell
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ernestrc/go-multierror"
+	blueiterator "github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/idepkg"
+)
+
+func (h *Handler) handleInstall(
+	ctx context.Context, args []string, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, errors.New("package name is missing")
+	}
+	pkgID := args[0]
+	version := release.Version(release.Latest)
+	if len(args) >= 2 {
+		version = release.Version(args[1])
+	}
+	if version == release.Latest {
+		var err error
+		version, err = h.getLatestVersion(ctx, pkgID)
+		if err != nil {
+			return nil, fmt.Errorf("install package: %w", err)
+		}
+	}
+	if err := h.mgr.InstallPackageVersion(ctx, pkgID, version, pw); err != nil {
+		return nil, err
+	}
+	return markdownOutput(fmt.Sprintf("Installed **%s@%s**", pkgID, version)), nil
+}
+
+func (h *Handler) handleRemove(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, errors.New("package name is missing")
+	}
+	pkgID := args[0]
+	var version release.Version
+	if len(args) >= 2 {
+		version = release.Version(args[1])
+	}
+	if version == "" {
+		err := h.mgr.DeletePackage(ctx, pkgID)
+		if err != nil {
+			if errors.Is(err, idepkg.ErrNotInstalled) {
+				return nil, fmt.Errorf("package %s is not installed", pkgID)
+			}
+			return nil, err
+		}
+		return markdownOutput(fmt.Sprintf("Removed package **%s**", pkgID)), nil
+	}
+	err := h.mgr.DeletePackageVersion(ctx, pkgID, version, false)
+	if err != nil {
+		if errors.Is(err, idepkg.ErrNotInstalled) {
+			return nil, fmt.Errorf("version %s of package %s is not installed", version, pkgID)
+		}
+		if errors.Is(err, idepkg.ErrVersionInUse) {
+			return nil, fmt.Errorf("version %s of package %s is "+
+				"currently in use, run 'pkg use' with some other version first before removing, "+
+				"or pass no version argument to remove all package versions",
+				version, pkgID)
+		}
+		return nil, err
+	}
+	return markdownOutput(
+		fmt.Sprintf("Removed version **%s** of package **%s**", version, pkgID)), nil
+}
+
+func (h *Handler) handleUse(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) < 2 {
+		return nil, errors.New("package name or version are missing")
+	}
+	pkgID := args[0]
+	version := release.Version(args[1])
+	if err := h.mgr.UsePackageVersion(ctx, pkgID, version); err != nil {
+		if errors.Is(err, idepkg.ErrVersionInUse) {
+			return nil, fmt.Errorf("version %s is already in use", version)
+		}
+		return nil, err
+	}
+	return markdownOutput(
+		fmt.Sprintf("Version **%s** of package **%s** is now in use", version, pkgID)), nil
+}
+
+func (h *Handler) handleCurrent(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) < 1 {
+		return nil, errors.New("package name is missing")
+	}
+	pkgID := args[0]
+	version, err := h.mgr.PackageVersionInUse(ctx, pkgID)
+	if err != nil {
+		return nil, err
+	}
+	return markdownOutput(
+		fmt.Sprintf("Version **%s** of package **%s** is in use", version, pkgID)), nil
+}
+
+func (h *Handler) handleUpdateAll(
+	ctx context.Context, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	it, err := h.mgr.ListInstalledPackages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	packages, err := blueiterator.ToSlice(ctx, it)
+	if err != nil {
+		return nil, err
+	}
+	if len(packages) == 0 {
+		return nil, errors.New("no packages are installed")
+	}
+
+	type result struct {
+		pkg     string
+		latest  release.Version
+		updated bool
+		err     error
+	}
+	results := make([]result, len(packages))
+	var wg sync.WaitGroup
+	wg.Add(len(packages))
+	for i := range packages {
+		go debug.CapturePanicReport(func() {
+			defer wg.Done()
+			pkgID := packages[i]
+			results[i].pkg = pkgID
+			inUse, err := h.mgr.PackageVersionInUse(ctx, pkgID)
+			if err != nil {
+				results[i].err = fmt.Errorf("package version in use: %w", err)
+				return
+			}
+			latest, err := h.getLatestVersion(ctx, pkgID)
+			if err != nil {
+				results[i].err = fmt.Errorf("cannot update package %s: %w", pkgID, err)
+				return
+			}
+			results[i].latest = latest
+			if latest == inUse {
+				return
+			}
+			if err := h.mgr.InstallPackageVersion(ctx, pkgID, latest, pw); err != nil {
+				results[i].err = fmt.Errorf("update package version: %w", err)
+				return
+			}
+			results[i].updated = true
+		})
+	}
+	wg.Wait()
+
+	var b strings.Builder
+	b.WriteString("## Package updates\n\n")
+	var ret error
+	for _, r := range results {
+		switch {
+		case r.err != nil:
+			fmt.Fprintf(&b, "- **%s**: error: %v\n", r.pkg, r.err)
+			ret = multierror.Append(ret, r.err)
+		case r.updated:
+			fmt.Fprintf(&b, "- **%s**: updated to %s\n", r.pkg, r.latest)
+		default:
+			fmt.Fprintf(&b, "- **%s**: already at latest version (%s)\n", r.pkg, r.latest)
+		}
+	}
+	return markdownOutput(b.String()), ret
+}
+
+func (h *Handler) handleUpdateCheck(
+	ctx context.Context,
+) (iterator.Iterator[component.Responsive], error) {
+	updates, err := h.uc.CheckForUpdates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(updates) == 0 {
+		return markdownOutput("All packages are up to date."), nil
+	}
+	var b strings.Builder
+	b.WriteString("## Available updates\n\n")
+	for _, u := range updates {
+		fmt.Fprintf(&b, "- **%s**: %s → %s\n", u.Package, u.Current, u.Latest)
+	}
+	return markdownOutput(b.String()), nil
+}
+
+func (h *Handler) completePkgInstall(
+	ctx context.Context, args []string,
+) (iterator.Iterator[string], error) {
+	if len(args) <= 1 {
+		it, err := h.mgr.ListPackages(ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("list packages: %w", err)
+		}
+		return blueiterator.Map(it,
+			func(in release.Package) string { return in.Name }), nil
+	}
+	if len(args) == 2 {
+		it, err := h.mgr.ListPackageVersions(ctx, args[0], nil)
+		if err != nil {
+			return nil, fmt.Errorf("list packages: %w", err)
+		}
+		return blueiterator.Map(it,
+			func(in release.Bundle) string { return string(in.Version) }), nil
+	}
+	return iterator.FromSlice[string](nil), nil
+}
+
+func (h *Handler) completePkgInstalled(
+	ctx context.Context, args []string, showVersions bool,
+) (iterator.Iterator[string], error) {
+	if len(args) <= 1 {
+		it, err := h.mgr.ListInstalledPackages(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list packages: %w", err)
+		}
+		return it, nil
+	}
+	if len(args) == 2 && showVersions {
+		it, err := h.mgr.ListInstalledPackageVersions(ctx, args[0])
+		if err != nil {
+			return nil, fmt.Errorf("list packages: %w", err)
+		}
+		return blueiterator.Map(it,
+			func(in release.Version) string { return string(in) }), nil
+	}
+	return iterator.FromSlice[string](nil), nil
+}
+
+func (h *Handler) getLatestVersion(
+	ctx context.Context, pack string,
+) (release.Version, error) {
+	p, err := h.mgr.DescribePackage(ctx, pack)
+	if err != nil {
+		if err.Error() == "not found" {
+			return "", storageapi.ErrNotFound
+		}
+		return "", err
+	}
+	if p.Latest != "" {
+		return p.Latest, nil
+	}
+	iter, err := h.mgr.ListPackageVersions(ctx, pack, nil)
+	if err != nil {
+		return "", fmt.Errorf("list %q versions: %w", pack, err)
+	}
+	defer iter.Close()
+	var latest time.Time
+	var version release.Version
+	for {
+		bundle, ok := iter.Next(ctx)
+		if !ok {
+			break
+		}
+		if bundle.CreatedAt.After(latest) {
+			latest = bundle.CreatedAt
+			version = bundle.Version
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return "", fmt.Errorf("iterate over versions of %q: %w", pack, err)
+	}
+	if version == "" {
+		return "", fmt.Errorf("package %q has no releases", pack)
+	}
+	return version, nil
+}

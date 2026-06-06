@@ -165,9 +165,7 @@ func (uc *UpdateChecker) checkPackage(ctx context.Context, pkgID string) (*Updat
 func (uc *UpdateChecker) Start(ctx context.Context) {
 	ctx, uc.cancel = context.WithCancel(ctx)
 	go debug.CapturePanicReport(func() {
-		uc.m.capturePanicReport(func() {
-			uc.run(ctx)
-		})
+		uc.run(ctx)
 	})
 }
 
