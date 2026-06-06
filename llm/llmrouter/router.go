@@ -257,15 +257,17 @@ func (r *Router) CountTokens(model llmapi.ModelEntry, messages []llmapi.Message)
 }
 
 // Models implements llmapi.Service by concatenating every known
-// provider's static catalog plus the dynamic ollama / llamacpp
-// registries. The order is deterministic: openai, anthropic, codex,
-// gemini, custom, ollama, local.
+// provider's static catalog plus the dynamic gemini / ollama /
+// llamacpp registries. The order is deterministic: openai, anthropic,
+// codex, custom, ollama, local, gemini. Gemini is queried live and
+// surfaces list errors through its iterator; it is placed last so a
+// failed Gemini query (e.g. missing key) cannot truncate the
+// preceding providers when iterator.Aggregate halts on error.
 func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 	its := []iterator.Iterator[llmapi.ModelEntry]{
 		iterator.FromSlice(openai.ModelEntries()),
 		iterator.FromSlice(anthropic.ModelEntries()),
 		iterator.FromSlice(codex.ModelEntries()),
-		iterator.FromSlice(gemini.ModelEntries()),
 	}
 	if len(r.customCatalog) > 0 {
 		its = append(its, iterator.FromSlice(r.customCatalog))
@@ -274,6 +276,7 @@ func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 		its = append(its, r.ollamaRegistry.Models())
 	}
 	its = append(its, r.localRegistry.Models())
+	its = append(its, r.geminiCatalog(context.Background()))
 	return iterator.Aggregate(its...)
 }
 
@@ -426,10 +429,6 @@ func (r *Router) resolveAPIKey(ctx context.Context, provider, configKey string) 
 	return configKey
 }
 
-// hostedClient returns a cached client for the given provider/key pair,
-// constructing one via build on first use. A changed key produces a new
-// cache entry so a `/models providers <p> use` takes effect without a
-// restart.
 func (r *Router) hostedClient(
 	provider, apiKey string, build func() llmapi.Service,
 ) (llmapi.Service, error) {
@@ -479,8 +478,16 @@ func (r *Router) resolveGemini(ctx context.Context) (llmapi.Service, error) {
 				"`/models providers gemini add`")
 	}
 	return r.hostedClient(ProviderGemini, key, func() llmapi.Service {
-		return openai.NewClient(key, r.cfg.GeminiClientConfig(gemini.OpenAICompatibleURL))
+		return gemini.NewClient(key, r.cfg.GeminiClientConfig())
 	})
+}
+
+func (r *Router) geminiCatalog(ctx context.Context) iterator.Iterator[llmapi.ModelEntry] {
+	svc, err := r.resolveGemini(ctx)
+	if err != nil {
+		return iterator.FromSlice(gemini.ModelEntries())
+	}
+	return svc.Models()
 }
 
 // AddProviderKey stores a named API key for a hosted provider. The first
@@ -538,12 +545,9 @@ func (r *Router) buildHostedClient(
 		}
 		return anthropic.NewClient(apiKey, r.cfg.AnthropicClientConfig()), entries[0], nil
 	case ProviderGemini:
-		entries := gemini.ModelEntries()
-		if len(entries) == 0 {
-			return nil, llmapi.ModelEntry{}, errors.New("llmrouter: gemini has no models to verify against")
-		}
-		client := openai.NewClient(apiKey, r.cfg.GeminiClientConfig(gemini.OpenAICompatibleURL))
-		return client, entries[0], nil
+		client := gemini.NewClient(apiKey, r.cfg.GeminiClientConfig())
+		model := llmapi.ModelEntry{Name: gemini.VerificationModel, Provider: ProviderGemini}
+		return client, model, nil
 	default:
 		return nil, llmapi.ModelEntry{}, fmt.Errorf("llmrouter: provider %q does not support key verification", provider)
 	}

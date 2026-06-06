@@ -1,0 +1,222 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+
+package geminitools
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+)
+
+// recordingTool is a base agent.Tool that records the arguments passed to it.
+type recordingTool struct {
+	name     string
+	lastArgs string
+	result   agent.ToolResult
+}
+
+func (t *recordingTool) Definition() llmapi.Tool {
+	return llmapi.Tool{Function: llmapi.FunctionDefinition{Name: t.name}}
+}
+
+func (t *recordingTool) Execute(_ context.Context, arguments string) agent.ToolResult {
+	t.lastArgs = arguments
+	return t.result
+}
+
+func (t *recordingTool) Summary(arguments string) string { return arguments }
+
+func decode(t *testing.T, s string) map[string]any {
+	t.Helper()
+	var m map[string]any
+	require.NoError(t, json.Unmarshal([]byte(s), &m))
+	return m
+}
+
+func TestRunCommandTranslatesArgs(t *testing.T) {
+	base := &recordingTool{name: "bash", result: agent.ToolResult{Content: "ok"}}
+	tool := runCommand(base)
+
+	assert.Equal(t, "run_command", tool.Definition().Function.Name)
+
+	res := tool.Execute(context.Background(),
+		`{"CommandLine":"go test ./...","Cwd":"/repo/pkg"}`)
+	assert.Equal(t, "ok", res.Content)
+
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, "go test ./...", got["command"])
+	assert.Equal(t, "/repo/pkg", got["working_dir"])
+	// bash requires a description; synthesize it from the command.
+	assert.Equal(t, "go test ./...", got["description"])
+
+	assert.Equal(t, "go test ./...", tool.Summary(`{"CommandLine":"go test ./...","Cwd":"/"}`))
+}
+
+func TestGrepSearchEscapesLiteralQuery(t *testing.T) {
+	base := &recordingTool{name: "search_content"}
+	tool := grepSearch(base)
+
+	// Literal (IsRegexp=false): special chars must be escaped for RE2.
+	tool.Execute(context.Background(),
+		`{"Query":"foo.bar(","SearchDirectory":"sub","IsRegexp":false,"Includes":"*.go"}`)
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, `foo\.bar\(`, got["pattern"])
+	assert.Equal(t, "sub", got["path"])
+	assert.Equal(t, "*.go", got["include"])
+}
+
+func TestGrepSearchPassesRegexThrough(t *testing.T) {
+	base := &recordingTool{name: "search_content"}
+	tool := grepSearch(base)
+
+	tool.Execute(context.Background(),
+		`{"Query":"foo.*bar","SearchDirectory":"","IsRegexp":true}`)
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, "foo.*bar", got["pattern"])
+}
+
+func TestFindGlobToRegex(t *testing.T) {
+	base := &recordingTool{name: "find_files"}
+	tool := find(base)
+
+	tool.Execute(context.Background(),
+		`{"SearchDirectory":"cmd","Pattern":"*.go"}`)
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, `.*\.go$`, got["pattern"])
+	assert.Equal(t, "cmd", got["path"])
+}
+
+func TestCodebaseSearchForwardsQuery(t *testing.T) {
+	base := &recordingTool{name: "search_symbols"}
+	tool := codebaseSearch(base)
+
+	tool.Execute(context.Background(),
+		`{"Query":"http handler","TargetDirectories":["/a","/b"]}`)
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, "http handler", got["query"])
+	// TargetDirectories is advisory for our symbol search; not forwarded.
+	_, hasTargets := got["TargetDirectories"]
+	assert.False(t, hasTargets)
+}
+
+func TestViewFileOutlineTranslatesPath(t *testing.T) {
+	base := &recordingTool{name: "outline_file"}
+	tool := viewFileOutline(base)
+
+	tool.Execute(context.Background(), `{"AbsolutePath":"/repo/main.go"}`)
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, "/repo/main.go", got["path"])
+}
+
+func TestListDirectoryTranslatesPath(t *testing.T) {
+	base := &recordingTool{name: "list_dir"}
+	tool := listDirectory(base)
+
+	tool.Execute(context.Background(), `{"DirectoryPath":"/repo"}`)
+	got := decode(t, base.lastArgs)
+	assert.Equal(t, "/repo", got["dir_path"])
+}
+
+func TestExecuteRejectsInvalidArgs(t *testing.T) {
+	base := &recordingTool{name: "bash"}
+	tool := runCommand(base)
+	res := tool.Execute(context.Background(), `not json`)
+	assert.True(t, res.IsError)
+	assert.Empty(t, base.lastArgs, "base tool must not be invoked on bad args")
+}
+
+func TestAllSpecializedDefinitionsAreValid(t *testing.T) {
+	bases := map[string]agent.Tool{
+		"bash":           &recordingTool{name: "bash"},
+		"search_content": &recordingTool{name: "search_content"},
+		"find_files":     &recordingTool{name: "find_files"},
+		"search_symbols": &recordingTool{name: "search_symbols"},
+		"outline_file":   &recordingTool{name: "outline_file"},
+		"list_dir":       &recordingTool{name: "list_dir"},
+	}
+	wantNames := map[string]string{
+		"bash":           "run_command",
+		"search_content": "grep_search",
+		"find_files":     "find",
+		"search_symbols": "codebase_search",
+		"outline_file":   "view_file_outline",
+		"list_dir":       "list_dir",
+	}
+	for baseName, wrap := range geminiSpecializations {
+		def := wrap(bases[baseName]).Definition()
+		assert.Equal(t, wantNames[baseName], def.Function.Name)
+		params, ok := def.Function.Parameters.(map[string]any)
+		require.True(t, ok, "%s parameters must be an object", def.Function.Name)
+		assert.Equal(t, "object", params["type"])
+		assert.Equal(t, false, params["additionalProperties"])
+	}
+}
+
+func TestRegisterInstallsGeminiOverrides(t *testing.T) {
+	r := agent.NewRegistry(
+		&recordingTool{name: "bash"},
+		&recordingTool{name: "search_content"},
+		&recordingTool{name: "find_files"},
+		&recordingTool{name: "search_symbols"},
+		&recordingTool{name: "outline_file"},
+		&recordingTool{name: "list_dir"},
+		&recordingTool{name: "read_file"},
+	)
+	Register(r)
+
+	gemini := map[string]bool{}
+	for _, td := range r.Tools(LLMProvider) {
+		gemini[td.Function.Name] = true
+	}
+	// Antigravity names present; base names hidden.
+	for _, name := range []string{"run_command", "grep_search", "find", "codebase_search", "view_file_outline"} {
+		assert.True(t, gemini[name], "gemini must expose %q", name)
+	}
+	for _, name := range []string{"bash", "search_content", "find_files", "search_symbols", "outline_file"} {
+		assert.False(t, gemini[name], "gemini must not expose base %q", name)
+	}
+	// Non-specialized tools remain.
+	assert.True(t, gemini["read_file"])
+
+	// Base providers are unaffected.
+	base := map[string]bool{}
+	for _, td := range r.Tools("") {
+		base[td.Function.Name] = true
+	}
+	assert.True(t, base["bash"])
+	assert.False(t, base["run_command"])
+}
+
+func TestRegisterSkipsMissingBaseTools(t *testing.T) {
+	r := agent.NewRegistry(&recordingTool{name: "read_file"})
+	Register(r)
+	_, ok := r.Get("run_command", LLMProvider)
+	assert.False(t, ok, "missing base tools must not produce specialized tools")
+}

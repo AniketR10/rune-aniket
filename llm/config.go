@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package llm holds the top-level Config struct that the rune-side
 // llmrouter consumes. It is intentionally a leaf package: it does not
 // import any of the provider sub-packages directly, only their typed
@@ -32,6 +31,7 @@ package llm
 import (
 	"unstable.build/go-tui/llm/anthropic"
 	"unstable.build/go-tui/llm/codex"
+	"unstable.build/go-tui/llm/gemini"
 	"unstable.build/go-tui/llm/llamacpp"
 	"unstable.build/go-tui/llm/openai"
 )
@@ -85,7 +85,9 @@ type AnthropicConfig struct {
 
 // GeminiConfig captures `models.gemini.*`.
 type GeminiConfig struct {
-	APIKey string
+	APIKey          string
+	BaseURL         string
+	ReasoningEffort string
 }
 
 // CodexConfig captures `models.codex.*`.
@@ -177,14 +179,14 @@ func (c Config) CodexClientConfig() openai.Config {
 	}
 }
 
-// GeminiClientConfig projects the openai-compatible config used for
-// Gemini's OpenAI-compatible endpoint. The base URL is filled per
-// request from the model entry.
-func (c Config) GeminiClientConfig(baseURL string) openai.Config {
-	return openai.Config{
-		BaseURL:          baseURL,
-		ReasoningSummary: c.ReasoningSummary,
-		DebugHTTP:        c.DebugHTTP,
+// GeminiClientConfig projects the native gemini.Config used by the
+// Gemini provider, which talks to the Gemini API through Google's
+// google.golang.org/genai SDK.
+func (c Config) GeminiClientConfig() gemini.Config {
+	return gemini.Config{
+		BaseURL:         c.Gemini.BaseURL,
+		ReasoningEffort: c.Gemini.ReasoningEffort,
+		DebugHTTP:       c.DebugHTTP,
 	}
 }
 

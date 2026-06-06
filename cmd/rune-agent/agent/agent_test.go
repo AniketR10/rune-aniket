@@ -108,6 +108,10 @@ func TestAgentRun(t *testing.T) {
 					if msg.Role == llmapi.RoleTool && msg.ToolCallID == "call_1" {
 						foundToolMsg = true
 						assert.Equal(t, "tool output", msg.Content)
+						// The tool-result message must carry its function
+						// name; Gemini rejects function_response with an
+						// empty name (RUNE: "Name cannot be empty").
+						assert.Equal(t, "my_tool", msg.Name)
 					}
 				}
 				assert.True(t, foundToolMsg, "second request should contain tool result message")
@@ -1117,6 +1121,28 @@ func TestParallelToolExecution(t *testing.T) {
 	})
 }
 
+// TestBuildToolCallMessages asserts that pre-computed tool results produce
+// tool-role messages carrying the tool name. Gemini rejects a
+// function_response with an empty name, so the result message must echo the
+// call's tool name, not only its ID.
+func TestBuildToolCallMessages(t *testing.T) {
+	msgs := buildToolCallMessages([]ToolCallResult{
+		{ToolName: "bash", Arguments: `{"command":"ls"}`, Content: "out"},
+		{ToolName: "read_file", Arguments: `{"path":"a.go"}`, Content: "data"},
+	})
+	require.Len(t, msgs, 3) // 1 assistant + 2 tool results
+
+	assert.Equal(t, llmapi.RoleAssistant, msgs[0].Role)
+	require.Len(t, msgs[0].ToolCalls, 2)
+
+	for i, want := range []string{"bash", "read_file"} {
+		msg := msgs[i+1]
+		assert.Equal(t, llmapi.RoleTool, msg.Role)
+		assert.Equal(t, want, msg.Name)
+		assert.Equal(t, msgs[0].ToolCalls[i].ID, msg.ToolCallID)
+	}
+}
+
 func TestAutoDiagnostics(t *testing.T) {
 	t.Run("single-file apply_patch injects check_file_errors", func(t *testing.T) {
 		// LLM calls apply_patch (which reports one touched file).
@@ -1162,12 +1188,17 @@ func TestAutoDiagnostics(t *testing.T) {
 		require.Equal(t, 2, svc.getCallCount())
 		secondReq := svc.requests[1]
 		var toolIDs []string
+		toolNames := map[string]string{}
 		for _, msg := range secondReq.Messages {
 			if msg.Role == llmapi.RoleTool {
 				toolIDs = append(toolIDs, msg.ToolCallID)
+				toolNames[msg.ToolCallID] = msg.Name
 			}
 		}
 		assert.Equal(t, []string{"c1", "auto-diag-c1"}, toolIDs)
+		// Gemini requires function_response.name; the synthetic auto-diagnostics
+		// tool result must carry the tool name, not just the call ID.
+		assert.Equal(t, "check_file_errors", toolNames["auto-diag-c1"])
 
 		// The assistant message should have both tool calls
 		var assistantToolCalls int
@@ -3228,19 +3259,24 @@ func (s *mockStore) getDialogue(id string) (dialoguemanager.Dialogue, bool) {
 }
 
 type mockTool struct {
-	name      string
-	result    ToolResult
-	summary   string
-	execCount atomic.Int32
-	executeFn func(ctx context.Context, arguments string) ToolResult
+	name        string
+	description string
+	result      ToolResult
+	summary     string
+	execCount   atomic.Int32
+	executeFn   func(ctx context.Context, arguments string) ToolResult
 }
 
 func (t *mockTool) Definition() llmapi.Tool {
+	desc := t.description
+	if desc == "" {
+		desc = "mock tool"
+	}
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
 		Function: llmapi.FunctionDefinition{
 			Name:        t.name,
-			Description: "mock tool",
+			Description: desc,
 			Parameters:  map[string]any{"type": "object"},
 		},
 	}
@@ -4270,6 +4306,32 @@ func TestNormalizeMessages(t *testing.T) {
 		assert.Equal(t, llmapi.RoleUser, msgs[0].Role)
 		assert.Equal(t, llmapi.RoleUser, msgs[1].Role)
 		assert.Equal(t, "next", msgs[1].Content)
+	})
+
+	// Gemini rejects a function_response with an empty name. Legacy sessions
+	// (saved before tool results carried Name) and any missed injection site
+	// must be repaired by backfilling Name from the matching tool call.
+	t.Run("backfills tool result Name from matching tool call", func(t *testing.T) {
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, ToolCalls: []llmapi.ToolCall{toolCall("c1")}},
+			{Role: llmapi.RoleTool, ToolCallID: "c1", Content: "out"}, // Name omitted (legacy)
+			{Role: llmapi.RoleUser, Content: "next"},
+		})
+		require.Len(t, msgs, 4)
+		assert.Equal(t, llmapi.RoleTool, msgs[2].Role)
+		assert.Equal(t, "read_file", msgs[2].Name)
+	})
+
+	t.Run("does not overwrite an existing tool result Name", func(t *testing.T) {
+		msgs := normalizeMessages([]llmapi.Message{
+			{Role: llmapi.RoleUser, Content: "hello"},
+			{Role: llmapi.RoleAssistant, ToolCalls: []llmapi.ToolCall{toolCall("c1")}},
+			{Role: llmapi.RoleTool, ToolCallID: "c1", Name: "explicit", Content: "out"},
+			{Role: llmapi.RoleUser, Content: "next"},
+		})
+		require.Len(t, msgs, 4)
+		assert.Equal(t, "explicit", msgs[2].Name)
 	})
 }
 

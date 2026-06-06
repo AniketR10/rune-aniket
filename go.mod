@@ -78,6 +78,7 @@ require (
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
 	golang.org/x/oauth2 v0.36.0
+	google.golang.org/genai v1.59.0
 	mvdan.cc/sh/v3 v3.12.0
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -125,10 +126,12 @@ require (
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect

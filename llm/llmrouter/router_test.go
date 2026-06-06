@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm"
+	"unstable.build/go-tui/llm/gemini"
 	"unstable.build/go-tui/llm/llamacpp"
 )
 
@@ -43,7 +44,14 @@ import (
 // a fresh temp directory.
 func newTestRouter(t *testing.T) *Router {
 	t.Helper()
-	r, err := New(llm.DefaultConfig(), t.TempDir(), storagestub.NewInMemoryService())
+	cfg := llm.DefaultConfig()
+	// Pin the Gemini client at a closed loopback endpoint with a dummy key so
+	// the live model listing fails instantly without reaching Google, keeping
+	// catalog tests hermetic regardless of GOOGLE_API_KEY/GEMINI_API_KEY in
+	// the environment.
+	cfg.Gemini.APIKey = "test-key"
+	cfg.Gemini.BaseURL = "http://127.0.0.1:1"
+	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService())
 	require.NoError(t, err)
 	return r
 }
@@ -98,8 +106,11 @@ func TestRouter_CustomCatalogSurfacesEntries(t *testing.T) {
 	assert.Equal(t, ProviderCustom, got.Provider)
 }
 
-// TestRouter_StaticCatalog includes the OpenAI/Anthropic/Codex/Gemini
-// model lists.
+// TestRouter_StaticCatalog includes the OpenAI/Anthropic/Codex model
+// lists, plus Gemini's static fallback catalog. Gemini is queried live
+// but falls back to its static catalog when the listing is unavailable
+// (here, the test router's loopback endpoint), so the provider always
+// contributes models.
 func TestRouter_StaticCatalog(t *testing.T) {
 	r := newTestRouter(t)
 	names := map[string]string{}
@@ -125,6 +136,57 @@ func TestRouter_StaticCatalog(t *testing.T) {
 	assert.True(t, hasProvider(ProviderAnthropic), "no anthropic models")
 	assert.True(t, hasProvider(ProviderCodex), "no codex models")
 	assert.True(t, hasProvider(ProviderGemini), "no gemini models")
+}
+
+// TestRouter_Models_GeminiErrorDoesNotTruncate verifies that a failing
+// live Gemini list (the test router points Gemini at a loopback
+// endpoint) does not drop the other providers from r.Models(). Gemini is
+// aggregated last so any error it surfaces through Err cannot truncate
+// the providers ahead of it.
+func TestRouter_Models_GeminiErrorDoesNotTruncate(t *testing.T) {
+	r := newTestRouter(t)
+	ctx := context.Background()
+	it := r.Models()
+	defer func() { _ = it.Close() }()
+
+	providers := map[string]bool{}
+	for {
+		entry, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		providers[entry.Provider] = true
+	}
+	assert.True(t, providers[ProviderOpenAI], "openai dropped")
+	assert.True(t, providers[ProviderAnthropic], "anthropic dropped")
+	assert.True(t, providers[ProviderCodex], "codex dropped")
+}
+
+// TestRouter_Models_GeminiStaticWithoutKey verifies the router still
+// surfaces Gemini's static catalog when no key is configured — the
+// bootstrap case, where listing models live is impossible because it
+// requires a working key.
+func TestRouter_Models_GeminiStaticWithoutKey(t *testing.T) {
+	cfg := llm.DefaultConfig()
+	cfg.Gemini.APIKey = ""
+	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService())
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	it := r.Models()
+	defer func() { _ = it.Close() }()
+
+	var hasGemini bool
+	for {
+		entry, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		if entry.Provider == ProviderGemini {
+			hasGemini = true
+		}
+	}
+	assert.True(t, hasGemini, "gemini static catalog should be present without a key")
 }
 
 func TestRouter_GetModel_RequiresProvider(t *testing.T) {
@@ -253,6 +315,22 @@ func TestRouter_VerifyProviderKey_AuthError(t *testing.T) {
 	err := r.VerifyProviderKey(ctx, ProviderOpenAI, "bad-key")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, authErr)
+}
+
+// TestRouter_Resolve_Gemini verifies the Gemini provider resolves to a
+// native gemini client, cached per resolved key.
+func TestRouter_Resolve_Gemini(t *testing.T) {
+	r := newTestRouter(t)
+	ctx := context.Background()
+	svc, err := r.resolve(ctx,
+		llmapi.ModelEntry{Provider: ProviderGemini, Name: gemini.Gemini_2_5_Pro})
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	svc2, err := r.resolve(ctx,
+		llmapi.ModelEntry{Provider: ProviderGemini, Name: gemini.Gemini_2_5_Pro})
+	require.NoError(t, err)
+	assert.Same(t, svc, svc2, "repeated resolves must return the cached client")
 }
 
 func TestRouter_CreateCompletion_RejectsEmptyProvider(t *testing.T) {

@@ -21,10 +21,14 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package gemini
 
-import "github.com/unstablebuild/rune-go-sdk/api/llmapi"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+)
 
 // LLMProvider identifies the Gemini provider in the model registry.
 const LLMProvider = "gemini"
@@ -46,16 +50,20 @@ const (
 	Gemini_2_0_Flash = "gemini-2.0-flash"
 	// Gemini_2_0_FlashLite is the Gemini 2.0 Flash Lite model.
 	Gemini_2_0_FlashLite = "gemini-2.0-flash-lite"
-
-	// OpenAICompatibleURL is the OpenAI-compatible Gemini endpoint.
-	OpenAICompatibleURL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
+// VerificationModel is the model used to probe a key during
+// VerifyProviderKey. Flash is chosen because it is cheap and broadly
+// available across accounts.
+const VerificationModel = Gemini_2_5_Flash
+
 // AvailableModels returns a map from model identifier -> nominal maximum
-// context window (tokens). These values are collected from provider
-// documentation and public release notes as of early 2026. They are a
-// convenience for client-side capacity checks — always verify with the
-// provider at runtime for account- or region-specific limits.
+// context window (tokens). This static catalog is the offline fallback
+// used when the live Gemini listing cannot be queried — for example at
+// bootstrap, before a valid API key has been entered, since the
+// generativelanguage models endpoint rejects requests without a working
+// key. Values are from provider documentation as of early 2026; always
+// verify with the provider at runtime for account-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
 		Gemini_3_1_Pro_Preview:       1048576,
@@ -69,9 +77,9 @@ func AvailableModels() map[string]int {
 	}
 }
 
-// ModelEntries returns the static catalog of Gemini models in this
-// provider, suitable for registering with an llmrouter.Router via
-// llmrouter.WithModels.
+// ModelEntries returns the static catalog of Gemini models. It is the
+// offline fallback for the live listing (see client.Models) and the
+// bootstrap catalog shown before a key is verified.
 func ModelEntries() []llmapi.ModelEntry {
 	avail := AvailableModels()
 	out := make([]llmapi.ModelEntry, 0, len(avail))
@@ -80,8 +88,53 @@ func ModelEntries() []llmapi.ModelEntry {
 			Name:          name,
 			Provider:      LLMProvider,
 			ContextWindow: ctxWindow,
-			BaseURL:       OpenAICompatibleURL,
 		})
 	}
 	return out
+}
+
+// supportedEfforts are the reasoning-effort levels that map onto a Gemini
+// thinking level. "none" and "xhigh"/"max" have no Gemini equivalent.
+var supportedEfforts = map[string]bool{
+	"minimal": true,
+	"low":     true,
+	"medium":  true,
+	"high":    true,
+}
+
+// defaultGemini3Effort is the thinking level applied to Gemini 3 models when
+// no usable effort is requested. Gemini 3 returns (and on the next turn
+// requires) a thought_signature on function-call parts; this requirement holds
+// even at the minimal thinking level. Always sending a thinking config — never
+// omitting it — keeps signatures flowing so long tool-calling conversations do
+// not degrade into empty completions.
+const defaultGemini3Effort = "minimal"
+
+// isGemini3 reports whether the model is a Gemini 3.x model, which mandates
+// thought signatures during function calling.
+func isGemini3(model string) bool {
+	return strings.HasPrefix(model, "gemini-3")
+}
+
+// NormalizeEffort validates the requested effort against Gemini's thinking
+// levels. It returns the effort to use (empty means omit the thinking config)
+// and a human-readable warning when the requested effort is unsupported.
+func NormalizeEffort(model, effort string) (normalized, warning string) {
+	if effort == "" || effort == "none" {
+		if isGemini3(model) {
+			return defaultGemini3Effort, ""
+		}
+		return "", ""
+	}
+	if supportedEfforts[effort] {
+		return effort, ""
+	}
+	// Unsupported effort: warn, then fall back. Gemini 3 still needs a thinking
+	// config, so it falls back to minimal rather than omitting it.
+	warning = fmt.Sprintf(
+		"Effort %q is not supported by %s; using model default instead.", effort, model)
+	if isGemini3(model) {
+		return defaultGemini3Effort, warning
+	}
+	return "", warning
 }

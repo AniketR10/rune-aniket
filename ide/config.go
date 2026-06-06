@@ -211,6 +211,8 @@ func (c ideConfig) llmConfig() llm.Config {
 	}
 	if gemini, ok := c.getConfig(models, "gemini"); ok {
 		overrideString(gemini, "api_key", &out.Gemini.APIKey)
+		overrideString(gemini, "base_url", &out.Gemini.BaseURL)
+		overrideString(gemini, "reasoning_effort", &out.Gemini.ReasoningEffort)
 	}
 	if codex, ok := c.getConfig(models, "codex"); ok {
 		overrideString(codex, "base_url", &out.Codex.BaseURL)

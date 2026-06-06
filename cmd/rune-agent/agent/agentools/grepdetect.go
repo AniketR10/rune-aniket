@@ -393,9 +393,16 @@ func setForceBuiltinTools(ctx context.Context, cfg configedit.Setter, v, ephemer
 // grep_files).
 func builtinToolsErrorMessage(provider string) string {
 	searchTool := "search_content"
+	symbolSearchTool := "search_symbols"
+	outlineTool := "outline_file"
 	switch provider {
 	case "openai", "codex":
 		searchTool = "grep_files"
+	case "gemini":
+		// Gemini sees Antigravity-native tool names (see package geminitools).
+		searchTool = "grep_search"
+		symbolSearchTool = "codebase_search"
+		outlineTool = "view_file_outline"
 	}
 	return "Do not use grep for searching. Prefer Rune's semantic " +
 		"tools, which understand code structure:\n" +
@@ -407,9 +414,9 @@ func builtinToolsErrorMessage(provider string) string {
 		"all concrete types that satisfy an interface.\n" +
 		"  • `describe_symbol` (takes a symbol name) — show the type " +
 		"signature and doc comment for a symbol without reading the file.\n" +
-		"  • `search_symbols` (takes a fuzzy query) — find a symbol " +
+		"  • `" + symbolSearchTool + "` (takes a fuzzy query) — find a symbol " +
 		"by partial or approximate name when the exact name is unknown.\n" +
-		"  • `outline_file` (takes a file path) — inspect a file's " +
+		"  • `" + outlineTool + "` (takes a file path) — inspect a file's " +
 		"top-level structure instead of reading the whole file with " +
 		"`read_file`.\n" +
 		"Only when you are searching for a non-symbol string (a comment, " +

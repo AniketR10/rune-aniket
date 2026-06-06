@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/agentools/webfetch"
 	"unstable.build/go-tui/cmd/rune-agent/agent/audit"
+	"unstable.build/go-tui/cmd/rune-agent/agent/geminitools"
 	"unstable.build/go-tui/cmd/rune-agent/agent/taskstore"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 
@@ -317,6 +318,7 @@ func newCommandEventHandler(
 		"search_content", "compact", "bash")
 	ret.toolRegistry.RegisterExclusions("codex",
 		"search_content", "compact", "bash")
+	geminitools.Register(ret.toolRegistry)
 	ret.systemPrompt = agent.DefaultSystemPrompt(cwd)
 
 	// Discover and load project instruction files (e.g. AGENTS.md).

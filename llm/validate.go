@@ -81,6 +81,12 @@ func ValidateConfig(cfg Config) error {
 				"none|minimal|low|medium|high|xhigh|max",
 			cfg.Anthropic.ReasoningEffort)
 	}
+	if _, ok := validReasoningEffort[cfg.Gemini.ReasoningEffort]; !ok {
+		return fmt.Errorf(
+			"models.gemini.reasoning_effort: %q is not one of "+
+				"none|minimal|low|medium|high|xhigh|max",
+			cfg.Gemini.ReasoningEffort)
+	}
 	// llmrouter.New mints a llamacpp.Registry whose root must not be
 	// empty. The router falls back to filepath.Join(dataDir, "models")
 	// when ModelsCacheDir is empty, so the only failure case here is

@@ -1120,6 +1120,7 @@ func (a *Agent) run(
 				toolMsgs[tr.index] = llmapi.Message{
 					Role:       llmapi.RoleTool,
 					Content:    result.Content,
+					Name:       tr.info.call.Function.Name,
 					ToolCallID: tr.info.call.ID,
 				}
 				if len(result.MultiContent) > 0 {
@@ -1206,14 +1207,20 @@ func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 	// immediately follows the assistant message containing its tool call.
 	validToolCallIDs := make(map[int]map[string]struct{})
 	validToolResultIndexes := make(map[int]struct{})
+	// resultNameByIndex backfills a tool result's Name from its matching tool
+	// call when the result omitted it. Gemini requires function_response.name,
+	// and legacy sessions (or any missed injection site) may lack it.
+	resultNameByIndex := make(map[int]string)
 	for i := range messages {
 		if messages[i].Role != llmapi.RoleAssistant || len(messages[i].ToolCalls) == 0 {
 			continue
 		}
 
 		callIDs := make(map[string]struct{}, len(messages[i].ToolCalls))
+		callNames := make(map[string]string, len(messages[i].ToolCalls))
 		for _, tc := range messages[i].ToolCalls {
 			callIDs[tc.ID] = struct{}{}
+			callNames[tc.ID] = tc.Function.Name
 		}
 
 		seenResults := make(map[string]struct{}, len(messages[i].ToolCalls))
@@ -1231,6 +1238,9 @@ func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 
 			seenResults[id] = struct{}{}
 			validToolResultIndexes[j] = struct{}{}
+			if messages[j].Name == "" {
+				resultNameByIndex[j] = callNames[id]
+			}
 			if validToolCallIDs[i] == nil {
 				validToolCallIDs[i] = make(map[string]struct{}, len(messages[i].ToolCalls))
 			}
@@ -1260,6 +1270,9 @@ func normalizeMessages(messages []llmapi.Message) []llmapi.Message {
 		if msg.Role == llmapi.RoleTool {
 			if _, ok := validToolResultIndexes[i]; !ok {
 				continue
+			}
+			if name := resultNameByIndex[i]; name != "" {
+				msg.Name = name
 			}
 		}
 
@@ -1383,6 +1396,7 @@ func (a *Agent) injectAutoDiagnostics(
 		toolMsgs = append(toolMsgs, llmapi.Message{
 			Role:       llmapi.RoleTool,
 			Content:    diagResult.Content,
+			Name:       "check_file_errors",
 			ToolCallID: syntheticID,
 		})
 	}
@@ -1938,6 +1952,7 @@ func buildToolCallMessages(results []ToolCallResult) []llmapi.Message {
 		msgs = append(msgs, llmapi.Message{
 			Role:       llmapi.RoleTool,
 			Content:    utf8validate.Sanitize(r.Content),
+			Name:       calls[i].Function.Name,
 			ToolCallID: calls[i].ID,
 		})
 	}

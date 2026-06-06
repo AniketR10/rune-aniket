@@ -310,6 +310,16 @@ func TestBuiltinToolsErrorMessage(t *testing.T) {
 		assert.Contains(t, msg, "grep_files")
 		assert.NotContains(t, msg, "search_content")
 	})
+
+	t.Run("gemini uses antigravity-native names", func(t *testing.T) {
+		msg := builtinToolsErrorMessage("gemini")
+		assert.Contains(t, msg, "grep_search")
+		assert.Contains(t, msg, "codebase_search")
+		assert.Contains(t, msg, "view_file_outline")
+		assert.NotContains(t, msg, "search_content")
+		assert.NotContains(t, msg, "search_symbols")
+		assert.NotContains(t, msg, "outline_file")
+	})
 }
 
 // errConfig is a memConfig variant whose GetBool returns a non-ErrNotFound
