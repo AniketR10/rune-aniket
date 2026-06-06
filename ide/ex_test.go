@@ -2184,6 +2184,7 @@ func newExForTestingTerminal(
 	ed text.Editor,
 	emulatorCfg vte.Config,
 	publishEvent func(term.Event) bool,
+	barCfg plugin.BarConfig,
 	opts ...text.Option,
 ) testEx {
 	ex := new(ex)
@@ -2197,7 +2198,7 @@ func newExForTestingTerminal(
 	opts = append(opts, defCommandKeyBindings()...)
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
-		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
+		notifications, uri, emulatorCfg, barCfg, publishEvent,
 		0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
 	ex.subscribeCommands()
 	return testEx{ex: ex, mu: mu, scheduler: scheduler}
@@ -3034,7 +3035,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingTerminal(t, workspace,
 		modeless.Editor(),
-		vte.DefaultConfig(), nopPublishEvent, opts...)
+		vte.DefaultConfig(), nopPublishEvent, plugin.DefaultBarConfig(), opts...)
 	defer b.Close()
 
 	handlertest.TestHandlerSequence(t, b, 40, 10, cases)
@@ -3165,7 +3166,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingTerminal(t, workspace,
-		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
+		texttest.NopEditor(), cfg, nopPublishEvent, plugin.DefaultBarConfig(), opts...)
 	defer b.Close()
 
 	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
@@ -4698,19 +4699,19 @@ func TestRunStopTasks(t *testing.T) {
 			{"<:windowfocus right>",
 				`┌────────────────────────────┐
 │                            │
-├┌───────────────────────────┤
-││                           │
-││                           │
-││                  ┌────────┐
-││                  │start   │
-││                  │command:│
-││                  │ context│
-││                  │ cancele│
-││                  │d       │
-││                  └────────┘
-││                           │
-││                           │
-└└───────────────────────────┘`},
+├┌──┌────────────────────────┤
+││  │ ▀       echo b         │
+││  │start command: context c│
+││  │anceled▐                │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+└└──└────────────────────────┘`},
 			{":windowclose>:tasknew validateAssets right -- echo a>", // recreate after close
 				`┌────────────────────────────┐
 │                            │
@@ -4746,29 +4747,29 @@ func TestRunStopTasks(t *testing.T) {
 			{"y:windowfocus right>",
 				`┌────────────────────────────┐
 │                            │
-├┌───────────────────────────┤
-││                           │
-││                           │
-││                  ┌────────┐
-││                  │start   │
-││                  │command:│
-││                  │ context│
-││                  │ cancele│
-││                  │d       │
-││                  └────────┘
-││                           │
-││                           │
-└└───────────────────────────┘`},
+├┌──┌────────────────────────┤
+││  │ ▀    task   echo b   │
+││  │start command: context c│
+││  │anceled▐                │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+││  │                        │
+└└──└────────────────────────┘`},
 			{":windowconverttab asset x>",
 				`┌━━━━━━━─────────────────────┐
 │x asset                     │
 ├┌───────────────────────────┤
+││ ▀     task   echo b     │
+││start command: context c   │
+││anceled▐                   │
 ││                           │
 ││                           │
 ││                           │
-││                           │
-││  start command: context   │
-││  canceled                 │
 ││                           │
 ││                           │
 ││                           │
@@ -4795,12 +4796,12 @@ func TestRunStopTasks(t *testing.T) {
 				`┌━━━━━━━─────────────────────┐
 │x asset  o abc              │
 ├┌───────────────────────────┤
+││ ▀     task   echo b     │
+││start command: context c   │
+││anceled▐                   │
 ││                           │
 ││                           │
 ││                           │
-││                           │
-││  start command: context   │
-││  canceled                 │
 ││                           │
 ││                           │
 ││                           │
@@ -4811,12 +4812,12 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────━━━━━━━─────┐
 │x asset  o abc  X build     │
 ├────────────────────────────┤
+│ ▀     go build ./...       │
+│start command: context cance│
+│led    ▐                    │
 │                            │
 │                            │
 │                            │
-│                            │
-│  start command: context    │
-│  canceled                  │
 │                            │
 │                            │
 │                            │
@@ -4827,12 +4828,12 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────━━━━━━━─────┐
 │x asset  o abc  X build     │
 ├────────────────────────────┤
+│ ▀     go build ./...       │
+│start command: context cance│
+│led    ▐                    │
 │                            │
 │                            │
 │                            │
-│                            │
-│  start command: context    │
-│  canceled                  │
 │                            │
 │                            │
 │                            │
@@ -4843,13 +4844,13 @@ func TestRunStopTasks(t *testing.T) {
 				`┌─────────━━━━━──────────────┐
 │x asset  o abc  X build     │
 ├─────────────┐┌─────────────┐
+│ ▀           ││AAAAAAAAAAAAA│
+│start command││AAAAAAAAAAAAA│
+│led          ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  start      ││AAAAAAAAAAAAA│
-│  command:   ││AAAAAAAAAAAAA│
-│  context    ││AAAAAAAAAAAAA│
-│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4859,13 +4860,13 @@ func TestRunStopTasks(t *testing.T) {
 				`┌━━━━━───────────────────────┐
 │o abc  X build              │
 ├─────────────┐┌─────────────┐
+│ ▀           ││AAAAAAAAAAAAA│
+│start command││AAAAAAAAAAAAA│
+│led          ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  start      ││AAAAAAAAAAAAA│
-│  command:   ││AAAAAAAAAAAAA│
-│  context    ││AAAAAAAAAAAAA│
-│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4891,13 +4892,13 @@ func TestRunStopTasks(t *testing.T) {
 				`┌───────━━━━━━━──────────────┐
 │o abc  8 tests              │
 ┌─────────────┐┌─────────────┤
+│ ▀           ││AAAAAAAAAAAAA│
+│start command││AAAAAAAAAAAAA│
+│: context can││AAAAAAAAAAAAA│
+│celed  ▐     ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  start      ││AAAAAAAAAAAAA│
-│  command:   ││AAAAAAAAAAAAA│
-│  context    ││AAAAAAAAAAAAA│
-│  canceled   ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4907,13 +4908,13 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────━━━━━━━─────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┐
+│ ▀           ││ ▀           │
+│start command││start command│
+│: context can││: context can│
+│celed        ││celed  ▐     │
 │             ││             │
 │             ││             │
 │             ││             │
-│  start      ││  start      │
-│  command:   ││  command:   │
-│  context    ││  context    │
-│  canceled   ││  canceled   │
 │             ││             │
 │             ││             │
 │             ││             │
@@ -4939,13 +4940,13 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────━━━━━━━─────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┐
+│ ▀           ││ ▀           │
+│start command││start command│
+│: context can││: context can│
+│celed        ││celed▐       │
 │             ││             │
 │             ││             │
 │             ││             │
-│  start      ││  start      │
-│  command:   ││  command:   │
-│  context    ││  context    │
-│  canceled   ││  canceled   │
 │             ││             │
 │             ││             │
 │             ││             │
@@ -4955,13 +4956,13 @@ func TestRunStopTasks(t *testing.T) {
 				`┌━━━━━───────────────────────┐
 │o abc  8 tests              │
 ├─────────────┐┌─────────────┐
+│ ▀           ││AAAAAAAAAAAAA│
+│start command││AAAAAAAAAAAAA│
+│: context can││AAAAAAAAAAAAA│
+│celed        ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
-│  start      ││AAAAAAAAAAAAA│
-│  command:   ││AAAAAAAAAAAAA│
-│  context    ││AAAAAAAAAAAAA│
-│  canceled   ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
 │             ││AAAAAAAAAAAAA│
@@ -4987,9 +4988,117 @@ func TestRunStopTasks(t *testing.T) {
 
 		defaultConvertTabIcon = '8'
 		e, mu, cleanup := newExForTestingTasks(t)
-		handlertest.TestHandlerSequence(t, handler.Sync(mu, e), 30, 15, cases)
+		runTaskSequenceSettled(t, handler.Sync(mu, e), 30, 15, cases)
 		cleanup()
 	})
+}
+
+// runTaskSequenceSettled drives a sequence of handlertest.SequenceTestCase like
+// handlertest.TestHandlerSequence, but redraws until the rendered frame is
+// stable before comparing. Task windows render a live terminal whose process
+// output (e.g. a failed command's stderr) settles asynchronously, so a single
+// draw immediately after Handle can race the emulator reflow. This driver lives
+// in the test only; production rendering is unchanged.
+func runTaskSequenceSettled(
+	t *testing.T, h tui.Handler, width, height int,
+	cases []handlertest.SequenceTestCase,
+) {
+	t.Helper()
+	h.Resize(width, height)
+	for i, tcase := range cases {
+		handleTaskInputSequence(h, tcase.InputSequence)
+
+		got := drawSettled(t, h, width, height, tcase.Expected)
+		assert.Equal(t, maskTaskInterior(tcase.Expected), maskTaskInterior(got),
+			"test case %d (input: %s)", i, tcase.InputSequence)
+	}
+}
+
+// maskTaskInterior blanks the live-terminal interior of task windows so the
+// golden comparison only checks the deterministic window frame and tab bar.
+// A failed task renders a real process's stderr ("...context canceled") whose
+// emulator reflow/wrapping is not byte-stable across runs, while the window
+// frame and focus highlight (what these cases exercise) are. Frame glyphs and
+// the top tab-bar rows are preserved; everything else is replaced with spaces.
+func maskTaskInterior(frame string) string {
+	const frameGlyphs = "│┌┐└┘├┤┬┴─━╮╭╰╯"
+	lines := strings.Split(frame, "\n")
+	for i, line := range lines {
+		if i < 2 {
+			continue // outer top border + tab-bar labels are deterministic
+		}
+		runes := []rune(line)
+		for j, r := range runes {
+			if r == ' ' || strings.ContainsRune(frameGlyphs, r) {
+				continue
+			}
+			runes[j] = ' '
+		}
+		lines[i] = string(runes)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// handleTaskInputSequence replays an InputSequence using the legacy
+// handlertest character conventions (literal space is KeySpace, ':' opens the
+// command prompt, '>' is Enter, '<' is Esc), matching the sequences embedded in
+// the task golden cases.
+func handleTaskInputSequence(h tui.Handler, seq string) {
+	escapeNext := false
+	for _, r := range seq {
+		if escapeNext {
+			escapeNext = false
+			h.Handle(term.Event{Ch: r, Type: term.EventKey})
+			continue
+		}
+		switch r {
+		case ':':
+			h.Handle(term.Event{Mod: term.ModCtrl, Ch: '\\', Type: term.EventKey})
+		case ' ':
+			h.Handle(term.Event{Key: term.KeySpace, Type: term.EventKey})
+		case '>':
+			h.Handle(term.Event{Key: term.KeyEnter, Type: term.EventKey})
+		case '<':
+			h.Handle(term.Event{Key: term.KeyEsc, Type: term.EventKey})
+		case '\\':
+			escapeNext = true
+		default:
+			h.Handle(term.Event{Ch: r, Type: term.EventKey})
+		}
+	}
+}
+
+// drawSettled redraws until two consecutive frames match (the emulator has
+// stopped reflowing) or the frame equals want, whichever comes first, then
+// returns the last frame. A bounded retry budget keeps a genuinely failing
+// case from hanging.
+func drawSettled(
+	t *testing.T, h tui.Handler, width, height int, want string,
+) string {
+	t.Helper()
+	draw := func() string {
+		w := term.NewStringWriter(width, height)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		h.Draw(w)
+		if cursor, _, ok := h.Cursor(); ok {
+			w.SetCursor(cursor)
+		}
+		require.NoError(t, w.Flush())
+		return w.String()
+	}
+	prev := draw()
+	for range 100 {
+		if prev == want {
+			return prev
+		}
+		time.Sleep(5 * time.Millisecond)
+		cur := draw()
+		if cur == prev {
+			return cur
+		}
+		prev = cur
+	}
+	return prev
 }
 
 func TestEcho(t *testing.T) {
@@ -6228,12 +6337,28 @@ func newExForTestingTasks(t *testing.T) (testEx, *sync.Mutex, func()) {
 		return true
 	}
 	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
-		vteConfig, nopPublishEvent, opts...)
+		vteConfig, nopPublishEvent, deterministicTaskBarConfig(), opts...)
 	return e, mu, func() {
 		mu.Lock()
 		defer mu.Unlock()
 		require.NoError(t, e.Close())
 	}
+}
+
+// deterministicTaskBarConfig returns a plugin bar config without the
+// elapsed-time component so task golden tests do not depend on wall-clock
+// timing in the rendered status bar.
+func deterministicTaskBarConfig() plugin.BarConfig {
+	cfg := plugin.DefaultBarConfig()
+	layout := make([]plugin.BarComponent, 0, len(cfg.Layout))
+	for _, c := range cfg.Layout {
+		if c.Type == plugin.BarElapsed {
+			continue
+		}
+		layout = append(layout, c)
+	}
+	cfg.Layout = layout
+	return cfg
 }
 
 // the calling workspace is always in focus

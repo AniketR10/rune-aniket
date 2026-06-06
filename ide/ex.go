@@ -303,6 +303,7 @@ func (e *ex) init(
 	e.tasks = idetask.NewManager(&e.comp, tm, m,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
 	e.tasks.SetFrameAttr(e.config.FrameAttr)
+	e.tasks.SetFocusFrameAttr(e.config.FocusFrameAttr)
 	e.comp.SubscribeWindow(e.tasks)
 	return
 }

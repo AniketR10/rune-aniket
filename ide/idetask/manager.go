@@ -58,6 +58,7 @@ type Manager struct {
 	width            int
 	height           int
 	frameAttr        term.Attributes
+	focusFrameAttr   term.Attributes
 	newPlugin        pluginBuilder
 	scheduleNextTick func(func()) bool
 }
@@ -84,6 +85,13 @@ func NewManager(
 // this value.
 func (m *Manager) SetFrameAttr(attr term.Attributes) {
 	m.frameAttr = attr
+}
+
+// SetFocusFrameAttr configures the frame attrs used when a task window is
+// focused (unminimized). Without this, focused task windows would render with
+// the non-focus frame attrs and miss the focus highlight.
+func (m *Manager) SetFocusFrameAttr(attr term.Attributes) {
+	m.focusFrameAttr = attr
 }
 
 // Init initializes this Manager with the given browser, scheme and options.
@@ -154,6 +162,7 @@ func (m *Manager) RunTask(t Task) error {
 		return fmt.Errorf("workspace watch: %w", err)
 	}
 	t.defaultFrameAttr = m.frameAttr
+	t.focusFrameAttr = m.focusFrameAttr
 	ctx, cancel, err := t.init(id, m.ctx, m.b, m.scheme,
 		m.newPlugin, m.width, m.height, func() {
 			m.tasks.Delete(t.Name)

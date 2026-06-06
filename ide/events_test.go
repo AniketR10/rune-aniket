@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
@@ -688,7 +689,7 @@ func newExForEventTesting(t *testing.T) *ex {
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 
 	e := newExForTestingTerminal(t, workspace, texttest.NopEditor(),
-		vte.DefaultConfig(), nopPublishEvent, opts...)
+		vte.DefaultConfig(), nopPublishEvent, plugin.DefaultBarConfig(), opts...)
 
 	t.Cleanup(func() {
 		require.NoError(t, e.Close())

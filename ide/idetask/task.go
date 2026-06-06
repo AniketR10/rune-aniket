@@ -103,6 +103,7 @@ type Task struct {
 	bar              tui.Component
 	barColor         term.Color
 	defaultFrameAttr term.Attributes
+	focusFrameAttr   term.Attributes
 	width            int
 	maxWidth         int
 	minWidth         int
@@ -409,15 +410,27 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 	}
 	opts := append([]plugin.Option{}, t.pluginOpts...)
 	opts = append(opts, plugin.WithTitle(title.String()))
-	handler, err := t.newPlugin(b, b, scheme, scheme, b,
+	pluginHandler, err := t.newPlugin(b, b, scheme, scheme, b,
 		t.cmdAndArgs, t.maxWidth, opts...)
 	if err != nil {
+		t.handler = browser.NopScrollableFloatingHandler(
+			handler.NopScrollableFloatingFromComponent(
+				component.NewResponsiveString(
+					err.Error(),
+					component.StringResponsiveConfig{
+						NoSplitWords: true,
+						StringConfig: component.StringConfig{
+							Alignment: component.AlignmentCentered,
+						},
+					},
+				),
+			))
 		t.doSetError(err)
 		return false
 	}
-	handler.Resize(t.width, t.height)
+	pluginHandler.Resize(t.width, t.height)
 
-	t.setRunning(handler)
+	t.setRunning(pluginHandler)
 	return true
 }
 
@@ -445,21 +458,6 @@ func (t *Task) doSetError(err error) {
 	t.lastExit = err
 	t.running = false
 	t.barColor = colorError
-
-	if err != nil {
-		t.handler = browser.NopScrollableFloatingHandler(
-			handler.NopScrollableFloatingFromComponent(
-				component.NewResponsiveString(
-					err.Error(),
-					component.StringResponsiveConfig{
-						NoSplitWords: true,
-						StringConfig: component.StringConfig{
-							Alignment: component.AlignmentCentered,
-						},
-					},
-				),
-			))
-	}
 	t.setBarColor(t.barColor)
 }
 
@@ -586,7 +584,7 @@ func (t *Task) unminimize() {
 		return
 	}
 	t.win.Unminimize()
-	t.win.SetFrameAttr(t.defaultFrameAttr)
+	t.win.SetFrameAttr(t.focusFrameAttr)
 	t.scheduleNextTick(func() { t.setTabColor(term.ColorDefault) })
 }
 

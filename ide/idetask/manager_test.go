@@ -149,6 +149,12 @@ func TestManager(t *testing.T) {
 				Attrs: term.AttrBold,
 			}
 			m.SetFrameAttr(configured)
+			focusConfigured := term.Attributes{
+				Fg:    term.ColorWhite,
+				Bg:    term.ColorTeal,
+				Attrs: term.AttrUnderline,
+			}
+			m.SetFocusFrameAttr(focusConfigured)
 			wm.nextFrameAttr = term.Attributes{Fg: term.ColorRed}
 
 			require.NoError(t, m.RunTask(Task{Name: "build", Cmd: "echo"}))
@@ -164,8 +170,8 @@ func TestManager(t *testing.T) {
 				"configured frame Attrs must be preserved")
 
 			m.onFocus(&fakeWindow{}, ws[0])
-			assert.Equal(t, configured, ws[0].FrameAttr(),
-				"unminimize should restore the configured frame attrs")
+			assert.Equal(t, focusConfigured, ws[0].FrameAttr(),
+				"unminimize should apply the configured focus frame attrs")
 		})
 
 	t.Run("SetMaxWidth changes to max width passed to new task's plugin handler", func(t *testing.T) {
@@ -369,6 +375,48 @@ func TestManager(t *testing.T) {
 				assert.NotZero(t, info.LastDuration)
 				return true
 			})
+	})
+
+	t.Run("process exit failure preserves captured task output", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		const output = "captured task output"
+		m.newPlugin = func(
+			publisher browser.EventPublisher, notifications browser.Notifications,
+			e schemeapi.Executor, t schemeapi.Terminal, tm browser.TabManager,
+			cmdAndArgs []string, maxWidth int, opts ...plugin.Option,
+		) (browser.ScrollableFloating, error) {
+			return browser.NopScrollableFloatingHandler(
+				handler.NopScrollableFloatingFromComponent(
+					component.NewResponsiveString(output, component.StringResponsiveConfig{}),
+				)), nil
+		}
+
+		require.NoError(t, m.RunTask(Task{Name: "build", Cmd: "make"}))
+
+		taskIfc, ok := m.tasks.Load("build")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+		task.Resize(80, 24)
+
+		assertTaskRunsWithin(t, m, 1*time.Second, "build", errors.New("exit status 1"),
+			func(info TaskInfo) bool {
+				return !info.Running
+			})
+		task.WaitInflight()
+
+		w := term.NewStringWriter(80, 24)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		task.currentHandler().Draw(w)
+		require.NoError(t, w.Flush())
+		rendered := w.String()
+
+		assert.Contains(t, rendered, output,
+			"failed task should keep showing captured stdout/stderr")
+		assert.NotContains(t, rendered, "exit status 1",
+			"failed task must not replace output with the error string")
 	})
 
 	t.Run("if files change on workspace, task is re-run when idle", func(t *testing.T) {
