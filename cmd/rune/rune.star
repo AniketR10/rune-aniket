@@ -886,8 +886,6 @@ config = {
     "terminal": {
         # Whether to respect the title set by the shell.
         "dynamic_tab_name":   True,
-        # Enable terminal modal mode on <esc>.
-        "modal":              True,
         # Maximum emulator lines. Increasing this slows resizing linearly.
         "max_lines":          1000,
         # Number of pre-initialized emulator instances kept in the reservoir.

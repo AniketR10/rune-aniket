@@ -3088,7 +3088,26 @@ func (c ideConfig) terminalBool(key string) (ret bool) {
 }
 
 func (c ideConfig) terminalModal() (ret bool) {
-	return c.terminalBool("modal")
+	cfg, ok := c.terminal()
+	if !ok {
+		return c.terminalModalDefault()
+	}
+	val, err := cfg.GetBool("modal")
+	if err != nil {
+		if err == config.ErrNotFound {
+			return c.terminalModalDefault()
+		}
+		c.errors["terminal.modal"] = err
+		return false
+	}
+	return val
+}
+
+// terminalModalDefault resolves terminal.modal when it is not set: modal
+// editors default to modal terminals, modeless editors to modeless. exo
+// follows its configured fallback.
+func (c ideConfig) terminalModalDefault() bool {
+	return c.pkgEditorMode() == editorModeModal
 }
 
 func (c ideConfig) terminalDebug() (ret bool) {

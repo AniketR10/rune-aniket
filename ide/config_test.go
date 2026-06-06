@@ -403,7 +403,7 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 		Clipboard:                cfg.clipboard(),
 		SelectionAttributes:      selectAttr,
 		NeedsAttentionAttributes: term.Attributes{Attrs: term.AttrBlink},
-		Modal:                    false,
+		Modal:                    true,
 		ClipboardRegister:        clipboard.DefaultRegisterID,
 		MaxLines:                 10_000,
 		MinWidth:                 defaultMinWidth,
@@ -444,6 +444,51 @@ func TestConfigDefault(t *testing.T) {
 	initDefaultConfig(ret, browser.NopWallpaper(),
 		term.RingBell, term.ScheduleNextTick, "", "")
 	assertDefaultConfig(t, ret)
+}
+
+// TestTerminalModalDefaultFromEditorMode asserts that when terminal.modal
+// is not set its default follows editor.mode: modal editors default to
+// modal terminals, modeless to modeless, and exo follows its fallback.
+func TestTerminalModalDefaultFromEditorMode(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		editor map[string]any
+		want   bool
+	}{
+		{"unset editor defaults modal", nil, true},
+		{"modal", map[string]any{"mode": "modal"}, true},
+		{"modeless", map[string]any{"mode": "modeless"}, false},
+		{"exo fallback modal", map[string]any{
+			"mode": "exo",
+			"exo":  map[string]any{"command": "vim {file}", "fallback": "modal"},
+		}, true},
+		{"exo fallback modeless", map[string]any{
+			"mode": "exo",
+			"exo":  map[string]any{"command": "vim {file}", "fallback": "modeless"},
+		}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := map[string]any{}
+			if tc.editor != nil {
+				m["editor"] = tc.editor
+			}
+			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
+			assert.Equal(t, tc.want, cfg.terminalModal())
+		})
+	}
+
+	// An explicit terminal.modal always wins over the editor-mode default.
+	cfg := &ideConfig{cfg: map[string]any{
+		"editor":   map[string]any{"mode": "modeless"},
+		"terminal": map[string]any{"modal": true},
+	}, errors: map[string]error{}}
+	assert.True(t, cfg.terminalModal())
+
+	cfg = &ideConfig{cfg: map[string]any{
+		"editor":   map[string]any{"mode": "modal"},
+		"terminal": map[string]any{"modal": false},
+	}, errors: map[string]error{}}
+	assert.False(t, cfg.terminalModal())
 }
 
 // TestHighlightTabCharEmptyDisables asserts that an explicitly empty
