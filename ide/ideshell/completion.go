@@ -21,12 +21,12 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ideshell
 
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -62,12 +62,46 @@ type completionShim struct {
 	// completion overlay was opened. Handler reads it on accept to
 	// know how many runes to delete before inserting the candidate.
 	lastPrefix string
+	// inFlight counts commands whose output iterator the inner repl
+	// has not yet closed. It is bumped here rather than read from the
+	// SDK because repl.Handler exposes no "is a command running"
+	// accessor. Mutated from both the event-loop goroutine (dispatch)
+	// and the dispatch goroutine (Close), so it must be atomic.
+	inFlight atomic.Int64
 }
 
 func (s *completionShim) HandleCommand(
 	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
-	return s.underlying.HandleCommand(ctx, cmd, pw)
+	iter, err := s.underlying.HandleCommand(ctx, cmd, pw)
+	if err != nil {
+		return nil, err
+	}
+	s.inFlight.Add(1)
+	return &trackedIterator{Iterator: iter, shim: s}, nil
+}
+
+// running reports whether a dispatched command's output iterator is
+// still open. <c-l> consults this to avoid clearing (and thereby
+// aborting) a command that is still producing output.
+func (s *completionShim) running() bool {
+	return s.inFlight.Load() > 0
+}
+
+// trackedIterator decrements the shim's in-flight counter when the
+// inner repl closes the command's output iterator, which it does once
+// the iterator is fully drained.
+type trackedIterator struct {
+	iterator.Iterator[component.Responsive]
+	shim *completionShim
+	done atomic.Bool
+}
+
+func (t *trackedIterator) Close() error {
+	if t.done.CompareAndSwap(false, true) {
+		t.shim.inFlight.Add(-1)
+	}
+	return t.Iterator.Close()
 }
 
 // Complete proxies the call to the underlying handler and intercepts

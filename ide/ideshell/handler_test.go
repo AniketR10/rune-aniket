@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1555,4 +1556,190 @@ func clickDrag(x1, y1, x2, y2 int) []term.Event {
 		mouseEv(x2, y2, term.MouseLeft),
 		mouseEv(x2, y2, term.MouseRelease),
 	}
+}
+
+// renderText returns the full rendered screen as a single string with
+// rows separated by newlines, used to assert presence/absence of output.
+func renderText(t *testing.T, hd *Handler, w, h int) string {
+	t.Helper()
+	out := term.NewStringWriter(w, h)
+	hd.Draw(out)
+	_ = out.Flush()
+	cells := out.Cells()
+	var b strings.Builder
+	for y := range h {
+		for x := range w {
+			ch := cells[y*w+x].Ch
+			if ch == 0 {
+				ch = ' '
+			}
+			b.WriteRune(ch)
+		}
+		b.WriteRune('\n')
+	}
+	return b.String()
+}
+
+// TestHandlerCtrlLClearsOutput verifies that <c-l> discards accumulated
+// command output while leaving the in-progress input line intact.
+func TestHandlerCtrlLClearsOutput(t *testing.T) {
+	const w, h = 30, 12
+	hd, _ := newMouseTestHandler(t, w, h, []string{"clearme-marker"})
+
+	require.Contains(t, renderText(t, hd, w, h), "clearme-marker",
+		"command output should be present before clear")
+
+	for _, c := range "draft" {
+		hd.Handle(term.Event{Type: term.EventKey, Ch: c})
+	}
+	require.Equal(t, "draft", hd.editBuf.String())
+
+	_, handled := hd.Handle(term.Event{Type: term.EventKey, Ch: 'l', Mod: term.ModCtrl})
+	assert.True(t, handled, "<c-l> must be handled")
+
+	rendered := renderText(t, hd, w, h)
+	assert.NotContains(t, rendered, "clearme-marker",
+		"command output should be gone after clear")
+	assert.Equal(t, "draft", hd.editBuf.String(),
+		"in-progress input line must be preserved across clear")
+	assert.Contains(t, rendered, "draft",
+		"the prompt with the input line should still render")
+}
+
+// TestHandlerCtrlLPreservesHistory verifies that the inner repl rebuilt
+// on <c-l> reloads the persisted history so recall still works.
+func TestHandlerCtrlLPreservesHistory(t *testing.T) {
+	h := newTestHandler(t, []string{"oldest", "middle", "newest"})
+	h.Resize(testWidthH, testHeight)
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'l', Mod: term.ModCtrl})
+	require.True(t, handled, "<c-l> must be handled")
+
+	h.Handle(arrowUp)
+	assert.Equal(t, "newest", h.editBuf.String(),
+		"history must still be recallable after clear")
+	h.Handle(arrowUp)
+	assert.Equal(t, "middle", h.editBuf.String())
+}
+
+// blockingCmd emits one line then blocks in Next until release is
+// closed, so a command can be held in-flight for the duration of a
+// test. Close (invoked by the inner repl once the iterator is drained)
+// signals via closed.
+type blockingCmd struct {
+	line    string
+	release chan struct{}
+	closed  chan struct{}
+}
+
+func (c *blockingCmd) HandleCommand(
+	_ context.Context, _ repl.Command, _ repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	return &blockingIter{cmd: c}, nil
+}
+
+func (*blockingCmd) Complete(
+	context.Context, string, []string,
+) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
+}
+
+func (*blockingCmd) Help(
+	context.Context, []string,
+) (iterator.Iterator[component.Responsive], error) {
+	return iterator.Empty[component.Responsive](), nil
+}
+
+type blockingIter struct {
+	cmd  *blockingCmd
+	sent bool
+}
+
+func (it *blockingIter) Next(ctx context.Context) (component.Responsive, bool) {
+	if !it.sent {
+		it.sent = true
+		return component.NewResponsiveString(
+			it.cmd.line, component.StringResponsiveConfig{}), true
+	}
+	select {
+	case <-it.cmd.release:
+	case <-ctx.Done():
+	}
+	return nil, false
+}
+
+func (*blockingIter) Err() error { return nil }
+
+func (it *blockingIter) Close() error {
+	select {
+	case <-it.cmd.closed:
+	default:
+		close(it.cmd.closed)
+	}
+	return nil
+}
+
+// TestHandlerCtrlLIgnoredWhileCommandRunning verifies that <c-l> is a
+// no-op while a command's output iterator is still open: the output
+// stays put (the running command is not aborted), and once the command
+// finishes <c-l> clears as usual.
+func TestHandlerCtrlLIgnoredWhileCommandRunning(t *testing.T) {
+	const w, h = 30, 12
+	var mu sync.Mutex
+	var ticks []func()
+	sched := func(fn func()) bool {
+		mu.Lock()
+		ticks = append(ticks, fn)
+		mu.Unlock()
+		return true
+	}
+	drain := func() {
+		for {
+			mu.Lock()
+			if len(ticks) == 0 {
+				mu.Unlock()
+				return
+			}
+			fn := ticks[0]
+			ticks = ticks[1:]
+			mu.Unlock()
+			fn()
+		}
+	}
+
+	cmd := &blockingCmd{
+		line:    "running-marker",
+		release: make(chan struct{}),
+		closed:  make(chan struct{}),
+	}
+	hd, reg := New(sched, term.NopInterrupter(), stubEditor{}, Config{MaxHistory: 100})
+	reg.Register("block", "blocks", cmd)
+	t.Cleanup(func() { _ = hd.Close() })
+	hd.Resize(w, h)
+
+	for _, c := range "block" {
+		hd.Handle(term.Event{Type: term.EventKey, Ch: c})
+	}
+	hd.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+
+	require.Eventually(t, func() bool {
+		drain()
+		return strings.Contains(renderText(t, hd, w, h), "running-marker")
+	}, time.Second, 5*time.Millisecond, "blocking command output should render")
+	require.True(t, hd.shim.running(), "command should be in-flight")
+
+	_, handled := hd.Handle(term.Event{Type: term.EventKey, Ch: 'l', Mod: term.ModCtrl})
+	assert.True(t, handled, "<c-l> must be handled (consumed) even when ignored")
+	assert.Contains(t, renderText(t, hd, w, h), "running-marker",
+		"<c-l> must not clear output while a command is running")
+
+	close(cmd.release)
+	<-cmd.closed
+	hd.Wait()
+	drain()
+	require.False(t, hd.shim.running(), "command should be finished")
+
+	hd.Handle(term.Event{Type: term.EventKey, Ch: 'l', Mod: term.ModCtrl})
+	assert.NotContains(t, renderText(t, hd, w, h), "running-marker",
+		"<c-l> must clear once the command has finished")
 }

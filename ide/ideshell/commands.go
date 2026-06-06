@@ -104,6 +104,10 @@ func New(
 		shim:       shim,
 		prompt:     prompt,
 		editor:     editor,
+
+		scheduleNextTick: scheduleNextTick,
+		interrupter:      interrupter,
+		replOpts:         opts,
 	}
 	h.mouseDelegate = newMouseDelegate(&h.grid, func(ev term.Event) {
 		_, _ = h.inner.Handle(ev)

@@ -85,6 +85,12 @@ type Handler struct {
 	// continuation of the shell prompt.
 	prompt string
 
+	// The following retain the inputs originally passed to repl.New so
+	// the inner repl can be rebuilt from scratch on <c-l>.
+	scheduleNextTick func(func()) bool
+	interrupter      term.Interrupter
+	replOpts         []repl.Option
+
 	// editor spawns the EditHandler that owns the shell input
 	// line. It is the only input mode: there is no inputbox
 	// fallback and no modal toggle.
@@ -151,6 +157,19 @@ func (h *Handler) Close() error {
 		}
 	}
 	return err
+}
+
+// clearScreen discards all accumulated command output by replacing the
+// inner repl with a fresh one. repl.New reloads the persisted history,
+// and the current input line lives in editBuf, so neither is lost.
+func (h *Handler) clearScreen() {
+	old := h.inner
+	h.inner = repl.New(h.shim, h.scheduleNextTick, h.interrupter, h.replOpts...)
+	if h.width > 0 && h.height > 0 {
+		h.inner.Resize(h.width, h.height)
+	}
+	_ = old.Close()
+	h.mouseDelegate.ClearSelection()
 }
 
 // Resize satisfies tui.Component. While the search overlay is open
@@ -323,6 +342,22 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	// This mirrors how a VTE owns <c-r> for the shell it hosts.
 	if ev.Mod == term.ModCtrl && ev.Ch == 'r' {
 		h.openSearch()
+		return false, true
+	}
+
+	// <c-l> clears the output band and re-anchors the prompt at the
+	// bottom, mirroring how a terminal owns <c-l> for the shell it
+	// hosts. The current input line and history are preserved.
+	//
+	// While a command is running we ignore it: clearing recreates the
+	// inner repl, which would abort the in-flight command. A terminal
+	// keeps the running program alive on <c-l>, so doing nothing is the
+	// closer match until the command finishes.
+	if ev.Mod == term.ModCtrl && ev.Ch == 'l' {
+		if h.shim.running() {
+			return false, true
+		}
+		h.clearScreen()
 		return false, true
 	}
 
