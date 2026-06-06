@@ -262,6 +262,7 @@ func TestNewRegistersHelp(t *testing.T) {
 	_, r := New(
 		func(func()) bool { return false },
 		term.NopInterrupter(),
+		stubEditor{},
 		Config{},
 	)
 
@@ -387,6 +388,7 @@ func TestShellHandlerForwardsProgressToRegisteredCommand(t *testing.T) {
 	shellHandler, r := New(
 		func(func()) bool { return false },
 		term.NopInterrupter(),
+		stubEditor{},
 		Config{},
 	)
 	t.Cleanup(func() { _ = shellHandler.Close() })

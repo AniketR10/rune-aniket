@@ -142,7 +142,10 @@ type ex struct {
 	reissueEvent             term.Event
 	cmd                      *command.Prompt
 	syncCommandPrompt        bool
-	commandEditor            command.Editor
+	// promptEditor backs both the command prompt's modal edit mode
+	// and the companion shell's input line. It is a required
+	// dependency (see newEx) so neither consumer has to guard nil.
+	promptEditor             command.Editor
 	pluginWaitTimeout        time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
@@ -196,7 +199,7 @@ func newEx(
 	dispatchOnPreview map[string]previewFunc,
 	tm browser.TabManager,
 	parser syntaxapi.Parser,
-	commandEditor command.Editor,
+	promptEditor command.Editor,
 	commandObserver commandObserver,
 	debugCommands bool,
 	commandPromptCfg commandPromptConfig,
@@ -205,11 +208,10 @@ func newEx(
 	e = new(ex)
 	err = e.init(edFactory, m, storage, notifications, uri,
 		emulatorConfig, pluginBarConfig, publishEvent, initialVTECapacity, clip, macro,
-		dispatchOnPreview, tm, parser, opts...)
+		dispatchOnPreview, tm, parser, promptEditor, opts...)
 	if err != nil {
 		return
 	}
-	e.commandEditor = commandEditor
 	e.commandObserver = commandObserver
 	e.debugCommands = debugCommands
 	e.commandPromptCfg = commandPromptCfg
@@ -234,8 +236,13 @@ func (e *ex) init(
 	dispatchOnPreview map[string]previewFunc,
 	tm browser.TabManager,
 	parser syntaxapi.Parser,
+	promptEditor command.Editor,
 	opts ...text.Option,
 ) (err error) {
+	if promptEditor == nil {
+		panic("ide.ex requires a prompt editor")
+	}
+	e.promptEditor = promptEditor
 	err = e.doInit(m, storage, notifications, uri,
 		emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
@@ -1908,12 +1915,8 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 			HistoryDocumentID: shellHistoryDocumentID,
 			MaxHistory:        e.config.ShellMaxHistory,
 		}
-		if e.commandEditor != nil {
-			shellCfg.EditModeKey = command.DefaultConfig().EditModeKey
-			shellCfg.Editor = e.commandEditor
-		}
 		h, registry := ideshell.New(
-			e.emulatorConfig.ScheduleNextTick, e,
+			e.emulatorConfig.ScheduleNextTick, e, e.promptEditor,
 			shellCfg,
 		)
 		if e.wsExecutor != nil {
@@ -2401,11 +2404,7 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	commandCfg.ShowManual = e.config.CommandOverlay.ShowManual
 	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
-	if e.commandEditor != nil {
-		commandCfg.Editor = e.commandEditor
-	} else {
-		commandCfg.Editor = commandPromptEditor{ed: e.ed}
-	}
+	commandCfg.Editor = e.promptEditor
 	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := newCommandPromptHandler(cmd, e, func() error {
@@ -2571,23 +2570,6 @@ func (e *ex) stopPromptShader() {
 // Editor returns the underlying Editor implementation.
 func (e *ex) Editor() text.Editor {
 	return &e.comp
-}
-
-type commandPromptEditor struct {
-	ed text.Editor
-}
-
-func (c commandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
-	uri := workspaceapi.RandomURI("memory")
-	h, err := c.ed.Edit(context.Background(), uri, buf, false, false)
-	if err != nil {
-		// text.Editor implementations used here are in-process and
-		// do not return errors for in-memory buffers.
-		panic(fmt.Errorf("command prompt editor: %w", err))
-	}
-	h.SetWrap(true)
-	h.ShowCommandBar(false)
-	return h
 }
 
 // Browser returns the underlying browser.Browser implementaiton.

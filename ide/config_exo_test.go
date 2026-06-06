@@ -30,11 +30,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewCommandPromptEditorExo asserts that the command prompt
-// editor falls back to a Rune-native prompt (vi) in exo mode rather
-// than panicking. This reproduces the crash reported when opening a
-// workspace with editor.mode = "exo".
-func TestNewCommandPromptEditorExo(t *testing.T) {
+// TestNewPromptEditorExo asserts that the prompt editor falls back to
+// a Rune-native prompt (vi) in exo mode rather than panicking. This
+// reproduces the crash reported when opening a workspace with
+// editor.mode = "exo".
+func TestNewPromptEditorExo(t *testing.T) {
 	h := &workspaceManagerHandler{}
 	cfg := ideConfig{
 		cfg: map[string]any{
@@ -48,7 +48,7 @@ func TestNewCommandPromptEditorExo(t *testing.T) {
 		errors: map[string]error{},
 	}
 	require.NotPanics(t, func() {
-		ed := h.newCommandPromptEditor(cfg)
+		ed := h.newPromptEditor(cfg)
 		assert.NotNil(t, ed)
 	})
 }

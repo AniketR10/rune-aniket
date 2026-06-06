@@ -339,12 +339,18 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 	)
 }
 
-func (h *workspaceManagerHandler) newCommandPromptEditor(
+// newPromptEditor builds the editor that backs both the command
+// prompt's modal edit mode and the companion shell's input line. Both
+// edit a single logical line and wrap it through their own responsive
+// renderer, so the editor itself stays wrap=false: cursor motions
+// (0, $, l, …) traverse the whole command rather than a wrapped
+// visual row.
+func (h *workspaceManagerHandler) newPromptEditor(
 	cfg ideConfig,
 ) command.Editor {
 	switch cfg.editorMode() {
 	case editorModeModeless:
-		return modelessCommandPromptEditor{
+		return modelessPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),
 			scheduleNextTick: cfg.scheduleNextTick,
@@ -352,7 +358,7 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 			autoPair:         cfg.editorAutoPair(),
 		}
 	case editorModeModal, editorModeExo:
-		return viCommandPromptEditor{
+		return viPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),
 			scheduleNextTick: cfg.scheduleNextTick,
@@ -364,7 +370,7 @@ func (h *workspaceManagerHandler) newCommandPromptEditor(
 	}
 }
 
-type modelessCommandPromptEditor struct {
+type modelessPromptEditor struct {
 	tabspaces        int
 	indents          text.IndentConfig
 	scheduleNextTick func(func()) bool
@@ -372,7 +378,7 @@ type modelessCommandPromptEditor struct {
 	autoPair         bool
 }
 
-func (m modelessCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+func (m modelessPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	uri := workspaceapi.RandomURI("memory")
 	return modeless.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
 		modeless.WithCommandBar(false),
@@ -385,7 +391,7 @@ func (m modelessCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler 
 	)
 }
 
-type viCommandPromptEditor struct {
+type viPromptEditor struct {
 	tabspaces        int
 	indents          text.IndentConfig
 	scheduleNextTick func(func()) bool
@@ -393,7 +399,7 @@ type viCommandPromptEditor struct {
 	autoPair         bool
 }
 
-func (v viCommandPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+func (v viPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	uri := workspaceapi.RandomURI("memory")
 	return vi.NewWithIndent(buf, uri, text.IndentRuneTab, v.tabspaces,
 		vi.WithTabspaces(v.tabspaces),
@@ -494,7 +500,7 @@ func (h *workspaceManagerHandler) init(
 		cfg.terminalConfig(), cfg.pluginBarConfig(),
 		h.events.newPublisher(h.homeURI), 0 /* vte capacity */, h.clip, h.macro,
 		h.dispatchOnPreview, tm, homeParser,
-		h.newCommandPromptEditor(cfg), h.commandObserver, h.debugCommands,
+		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
 		globalOpts...)
 	if err != nil {
@@ -1186,7 +1192,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.events.newPublisher(uri),
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
 		tm, parser,
-		h.newCommandPromptEditor(cfg), h.commandObserver, h.debugCommands,
+		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
 		textOpts...)
 	if err != nil {

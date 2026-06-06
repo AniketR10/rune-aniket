@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term/sh"
@@ -51,28 +52,26 @@ type Config struct {
 	// regular shell view and on the search overlay's input bar.
 	// Defaults to "> ".
 	Prompt string
-	// EditModeKey toggles a modal text-editor mode where the shell
-	// input can be freely edited without triggering completion or
-	// history-search overlays. Pressing it again, <enter>, <tab>,
-	// or <ctrl-c> exits the mode and the edited buffer replaces
-	// the inner inputbox text. Zero value disables modal edit.
-	EditModeKey term.KeyComb
-	// Editor drives the shell's modal edit mode (see EditModeKey).
-	// Required when EditModeKey is non-zero.
-	Editor command.Editor
 }
 
 // New creates an IDE shell Handler wired with a CommandRegistry, sh
 // layer, and the built-in help command. The returned Handler wraps an
 // SDK repl.Handler and adds an interactive reverse-history search
-// overlay. The returned registry can be used to register additional
-// commands.
+// overlay. The shell input line is edited with editor, which is the
+// only input mode: every key first goes to the spawned EditHandler
+// and only events the editor leaves unhandled fall through to the
+// history-search / completion overlays. editor is required. The
+// returned registry can be used to register additional commands.
 func New(
 	scheduleNextTick func(func()) bool,
 	interrupter term.Interrupter,
+	editor command.Editor,
 	cfg Config,
 	opts ...repl.Option,
 ) (*Handler, *CommandRegistry) {
+	if editor == nil {
+		panic("ideshell.New requires an Editor")
+	}
 	r := NewRegistry()
 	registerBaseCommands(r)
 	prompt := cfg.Prompt
@@ -104,18 +103,19 @@ func New(
 		list:       list,
 		shim:       shim,
 		prompt:     prompt,
+		editor:     editor,
 	}
 	h.mouseDelegate = newMouseDelegate(&h.grid, func(ev term.Event) {
 		_, _ = h.inner.Handle(ev)
 	})
 	h.mouse = mouse.New(h.mouseDelegate)
-	if cfg.EditModeKey != (term.KeyComb{}) {
-		if cfg.Editor == nil {
-			panic("ideshell.Config.Editor is required when EditModeKey is set")
-		}
-		h.editSession = command.NewEditSession(cfg.Editor, cfg.EditModeKey)
-		h.editKey = cfg.EditModeKey
-	}
+	h.editBuf = cell.NewBuffer()
+	h.editHandler = editor.Edit(h.editBuf)
+	// Seed a non-zero size so the editor's cursor math works for
+	// input that arrives before the first Resize (e.g. headless
+	// command submission in tests). Resize overrides this with the
+	// real input-band geometry before the editor is ever drawn.
+	h.editHandler.Resize(1, 1)
 	return h, r
 }
 

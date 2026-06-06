@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
 	tterm "unstable.build/go-tui/term"
@@ -84,19 +85,25 @@ type Handler struct {
 	// continuation of the shell prompt.
 	prompt string
 
-	// editSession drives the shell's modal edit mode (toggled via
-	// editKey). When active, all input events are routed to the
-	// spawned EditHandler instead of the inner repl. On exit the
-	// edited buffer is committed back to the inner repl by
-	// re-issuing key events. Nil when modal edit is disabled.
-	editSession *command.EditSession
-	// editKey is the configured modal-edit toggle. Equals
-	// editSession's exit key when editSession is non-nil.
-	editKey term.KeyComb
-	// editBuf is the cell.Buffer the active EditSession is bound
-	// to. It is allocated once per Begin and inspected on End to
-	// commit the final text back to the inner inputbox.
+	// editor spawns the EditHandler that owns the shell input
+	// line. It is the only input mode: there is no inputbox
+	// fallback and no modal toggle.
+	editor command.Editor
+	// editHandler is the live editor bound to editBuf. It receives
+	// every key first; events it leaves unhandled fall through to
+	// the history-search / completion overlays.
+	editHandler command.EditHandler
+	// editBuf holds the current input line. On submit its contents
+	// are dispatched to the inner repl and then cleared so the next
+	// prompt starts empty.
 	editBuf *cell.Buffer
+	// cycling is set while the user is walking through command history
+	// with up/down (or <c-j>/<c-k>). The inner repl's inputbox owns the
+	// history cursor, so during a cycle the editor buffer is treated as
+	// a mirror of the inner inputbox and is not re-seeded between
+	// presses (which would reset the cursor to the newest entry). Any
+	// other key the editor handles ends the cycle.
+	cycling bool
 
 	// grid captures the inner repl's drawn output so the mouse
 	// delegate can extract selected text and overlay reverse-video
@@ -137,9 +144,6 @@ func (h *Handler) Submit(line string) {
 
 // Close releases both the inner repl handler and the search list.
 func (h *Handler) Close() error {
-	if h.editSession != nil {
-		h.editSession.End()
-	}
 	err := h.inner.Close()
 	if h.list != nil {
 		if cerr := h.list.Close(); cerr != nil && err == nil {
@@ -157,11 +161,12 @@ func (h *Handler) Resize(width, height int) {
 	h.width = width
 	h.height = height
 	h.grid.Resize(width, height)
-	if h.editSession != nil {
-		h.editSession.Resize(width, height)
-	}
 	if !h.searching {
 		h.inner.Resize(width, height)
+		// Keep the editor at a usable width even when the host has
+		// not been given real dimensions yet; a zero width breaks
+		// the editor's cursor math (input would reverse).
+		h.editHandler.Resize(max(1, width), max(1, h.editEditorH()))
 		h.lastSearchH = 0
 		return
 	}
@@ -177,15 +182,12 @@ func (h *Handler) Resize(width, height int) {
 		innerSlice = max(0, searchH-h.list.InputHeight())
 	}
 	h.inner.Resize(width, max(0, height-innerSlice))
+	h.editHandler.Resize(max(1, width), max(1, h.editEditorH()))
 	h.lastSearchH = searchH
 }
 
 // Draw satisfies tui.Component.
 func (h *Handler) Draw(w term.Writer) {
-	if h.editSession != nil && h.editSession.Active() {
-		h.drawEdit(w)
-		return
-	}
 	if !h.searching {
 		h.drawShell(w)
 		return
@@ -193,10 +195,11 @@ func (h *Handler) Draw(w term.Writer) {
 	h.drawSearch(w)
 }
 
-// drawShell renders the inner repl into the capture grid so a mouse
-// text selection can be overlaid with reverse-video highlight before
-// blitting to w. The repl output band starts at row 0, so the mouse
-// delegate's selection coordinates are already screen-relative.
+// drawShell renders the inner repl's output band into the capture
+// grid so a mouse text selection can be overlaid with reverse-video
+// highlight, then paints the editor over the bottom input band. The
+// output band starts at row 0, so the mouse delegate's selection
+// coordinates are already screen-relative.
 func (h *Handler) drawShell(w term.Writer) {
 	h.grid.Clear()
 	h.grid.SetContext(w.Context())
@@ -209,43 +212,62 @@ func (h *Handler) drawShell(w term.Writer) {
 		sel = &s
 	}
 	h.grid.Dump(w, sel)
+	h.drawEdit(w)
 }
 
-// Cursor satisfies tui.Handler. In completion mode the inner inputbox
-// owns the cursor (the inner repl is anchored to the top, so its
-// cursor coordinates are already correct). In history mode the
-// cursor belongs to the search bar that we render on the bottom
+// drawInnerOutput renders the inner repl's previous-command output
+// into the top limit rows of w, clipping out the inner's own input
+// band (the editor owns the input line). It renders the inner to a
+// scratch buffer sized to the full screen so its output wrapping is
+// unaffected, then copies only the leading output rows.
+func (h *Handler) drawInnerOutput(w term.Writer, limit int) {
+	if limit <= 0 || h.width <= 0 {
+		return
+	}
+	buf := term.NewStringWriter(h.width, h.height)
+	h.inner.Draw(buf)
+	_, outH := h.inner.LayoutHeights()
+	copyH := min(outH, limit)
+	cells := buf.Cells()
+	for y := range copyH {
+		for x := range h.width {
+			w.SetCell(term.Coordinates{X: x, Y: y}, cells[y*h.width+x])
+		}
+	}
+}
+
+// Cursor satisfies tui.Handler. Outside the history overlay the
+// editor owns the cursor in the bottom input band. In history mode
+// the cursor belongs to the search bar that we render on the bottom
 // row.
 func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	if h.editSession != nil {
-		if pos, style, ok := h.editSession.Cursor(); ok {
-			// drawEdit paints the editor below the inner repl,
-			// offset by innerH; mirror that translation here.
-			pos.Y += h.editInnerH()
-			return pos, style, true
-		}
+	if h.searching && h.mode == modeHistory {
+		return term.Coordinates{
+			X: len(h.prompt) + len(h.query),
+			Y: max(0, h.height-1),
+		}, term.CursorStyleSteadyBar, true
 	}
-	if !h.searching {
-		return h.inner.Cursor()
+	if _, style, ok := h.editHandler.Cursor(); ok {
+		// The host renders the prompt-prefixed buffer itself (see
+		// drawEdit), so translate the editor's buffer-relative
+		// cursor through the same hanging-indent wrap geometry and
+		// offset it into the bottom input band.
+		pos := h.editCursorVisual()
+		pos.Y += h.editInnerH()
+		return pos, style, true
 	}
-	if h.mode == modeCompletion {
-		coords, style, ok := h.inner.Cursor()
-		if !ok {
-			return coords, style, ok
-		}
-		// drawCompletion shifts the inner's rl band down by
-		// listRows when compositing onto the screen, so the
-		// cursor (which the inner places inside its rl band)
-		// must be translated by the same amount.
-		searchH := h.searchHeight(h.height)
-		listRows := max(0, searchH-h.list.InputHeight())
-		coords.Y += listRows
-		return coords, style, true
-	}
-	return term.Coordinates{
-		X: len(h.prompt) + len(h.query),
-		Y: max(0, h.height-1),
-	}, term.CursorStyleSteadyBar, true
+	return h.inner.Cursor()
+}
+
+// editCursorVisual converts the editor's buffer-relative cursor into
+// the wrapped on-screen position within the editor band, accounting
+// for the prompt folded into the rendered content. The shell input is
+// a single logical line, so the prompt width plus the cursor column
+// wraps over the full width.
+func (h *Handler) editCursorVisual() term.Coordinates {
+	width := max(1, h.width)
+	col := len(h.prompt) + h.editHandler.CursorAtScroll().X
+	return term.Coordinates{X: col % width, Y: col / width}
 }
 
 // Selection satisfies tui.Handler.
@@ -253,50 +275,133 @@ func (h *Handler) Selection() (string, bool) {
 	if sel, ok := h.mouseDelegate.Selection(); ok {
 		return sel, true
 	}
+	if sel, ok := h.editHandler.Selection(); ok && sel != "" {
+		return sel, true
+	}
 	return h.inner.Selection()
 }
 
-// Handle satisfies tui.Handler. <c-r> opens the reverse-history search
-// overlay; while open, the overlay consumes keys for navigation /
-// acceptance / dismissal and otherwise mirrors typed runes back into
-// the inner inputbox so the prompt and search query stay in sync.
+// Handle satisfies tui.Handler. The editor owns the input line: every
+// key first goes to the spawned EditHandler. <enter> commits the
+// buffer to the inner repl for dispatch and then clears it. Events
+// the editor leaves unhandled fall through to the host overlays:
+// <c-r> opens the reverse-history search overlay and <tab> opens the
+// completion overlay. While an overlay is open it consumes keys for
+// navigation / acceptance / dismissal and otherwise mirrors typed
+// runes into the editor buffer so the prompt and overlay stay in sync.
 func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
-	if ev.Type == term.EventMouse && !h.searching &&
-		(h.editSession == nil || !h.editSession.Active()) {
+	if ev.Type == term.EventMouse && !h.searching {
 		_, outH := h.inner.LayoutHeights()
 		return h.handleMouse(ev, outH)
 	}
 	if ev.Type != term.EventKey {
-		return h.inner.Handle(ev)
+		return h.editHandler.Handle(ev)
 	}
 
-	if h.editSession != nil && h.editSession.Active() {
-		done, handled := h.editSession.Handle(ev)
-		switch done {
-		case command.EditDoneExit:
-			return h.exitEditMode(false, ev)
-		case command.EditDoneSubmit:
-			return h.exitEditMode(true, ev)
-		}
-		return false, handled
+	if h.searching {
+		return h.handleSearch(ev)
 	}
-	if h.editSession != nil && ev.KeyComb() == h.editKey {
-		h.enterEditMode()
+
+	// Plain <enter> submits the current input line.
+	if ev.Mod == 0 && ev.Key == term.KeyEnter {
+		h.submitEdit()
 		return false, true
 	}
 
-	if !h.searching {
-		if ev.Mod == term.ModCtrl && ev.Ch == 'r' {
-			h.openSearch()
-			return false, true
-		}
-		if ev.Key == term.KeyTab && ev.Mod == 0 {
-			return h.handleTabClosed(ev)
-		}
-		return h.inner.Handle(ev)
+	// <tab> always triggers completion and is never delegated to the
+	// editor. A modal editor would otherwise consume it to insert
+	// indentation, which is why completion previously stopped working.
+	// This mirrors how a VTE owns <tab> and never forwards it to the
+	// program it hosts.
+	if ev.Key == term.KeyTab && ev.Mod == 0 {
+		return h.handleTab(ev)
 	}
 
-	return h.handleSearch(ev)
+	// <c-r> always opens reverse-history search and is never delegated
+	// to the editor. vi's insert mode would otherwise consume it to
+	// insert a register, which is why search stopped working there.
+	// This mirrors how a VTE owns <c-r> for the shell it hosts.
+	if ev.Mod == term.ModCtrl && ev.Ch == 'r' {
+		h.openSearch()
+		return false, true
+	}
+
+	// up/down (and the vi-style <c-k>/<c-j> aliases) cycle through
+	// command history, but only at the vertical edges of the input. A
+	// recalled multi-line command must let the editor move the cursor
+	// between its rows first; history is reached only when the cursor
+	// is already on the top row (up) or bottom row (down). This mirrors
+	// how shells navigate a multi-line buffer before stepping history.
+	if up, ok := historyDir(ev); ok {
+		if h.editAtHistoryEdge(up) {
+			h.cycleHistory(up)
+			return false, true
+		}
+		if _, handled := h.editHandler.Handle(ev); handled {
+			h.cycling = false
+			return false, true
+		}
+		return false, false
+	}
+
+	// Give the editor a crack at the remaining events. Only events it
+	// leaves unhandled fall through to the host overlays.
+	if _, handled := h.editHandler.Handle(ev); handled {
+		// Any edit ends an in-progress history cycle; the next up
+		// press should recall relative to the freshly edited line.
+		h.cycling = false
+		return false, true
+	}
+	return false, false
+}
+
+// historyDir maps a key event to a history-navigation direction. The
+// second result is false for events that are not history-cycle keys.
+// Up moves toward older entries (<up>, <c-k>); down moves toward newer
+// ones (<down>, <c-j>).
+func historyDir(ev term.Event) (up, ok bool) {
+	switch {
+	case ev.Mod == 0 && ev.Key == term.KeyArrowUp:
+		return true, true
+	case ev.Mod == 0 && ev.Key == term.KeyArrowDown:
+		return false, true
+	case ev.Mod == term.ModCtrl && ev.Ch == 'k':
+		return true, true
+	case ev.Mod == term.ModCtrl && ev.Ch == 'j':
+		return false, true
+	}
+	return false, false
+}
+
+// editAtHistoryEdge reports whether the editor cursor sits at the
+// vertical edge of the input buffer in the direction history would be
+// stepped: the top row for an upward step, the bottom row for a
+// downward one. Only then should up/down cycle history instead of
+// moving the cursor within a (possibly multi-line) recalled command.
+func (h *Handler) editAtHistoryEdge(up bool) bool {
+	y := h.editHandler.CursorAtScroll().Y
+	if up {
+		return y <= 0
+	}
+	return y >= h.editBuf.Rows()-1
+}
+
+// cycleHistory walks the inner repl's command history in the given
+// direction and mirrors the resulting line into the editor buffer. The
+// inner inputbox owns the history cursor, so on the first press of a
+// cycle the current editor line is seeded into it; subsequent presses
+// feed the arrow key directly so the cursor keeps advancing.
+func (h *Handler) cycleHistory(up bool) {
+	if !h.cycling {
+		h.replaceInputText(h.editBuf.String())
+		h.cycling = true
+	}
+	key := term.KeyArrowDown
+	if up {
+		key = term.KeyArrowUp
+	}
+	_, _ = h.inner.Handle(term.Event{Type: term.EventKey, Key: key})
+	h.setEditText(h.inner.Text())
 }
 
 // handleMouse routes a mouse event between the output band (text
@@ -317,10 +422,10 @@ func (h *Handler) handleMouse(ev term.Event, outH int) (exit, handled bool) {
 		return h.mouse.Handle(ev)
 	}
 	if ev.MouseY >= outH {
-		// Input band: the inputbox owns it; clear any active output
+		// Input band: the editor owns it; clear any active output
 		// selection and forward as-is.
 		h.mouseDelegate.ClearSelection()
-		return h.inner.Handle(ev)
+		return h.editHandler.Handle(ev)
 	}
 	if ev.Key == term.MouseLeft {
 		h.mouseDragInOutput = true
@@ -409,11 +514,11 @@ func (h *Handler) drawHistory(w term.Writer) {
 	}
 	h.inner.Draw(innerW)
 	if innerH > 0 {
-		// Blank out the inner's bottom row so its (often
-		// empty) inputbox prompt doesn't appear in addition
-		// to the search bar at the bottom of the screen.
-		// Multi-row wrapped input above this row stays
-		// visible.
+		// Blank out the inner's bottom row so its inputbox prompt
+		// (mirroring the input line while searching) doesn't
+		// appear in addition to the search bar at the bottom of
+		// the screen. Multi-row wrapped input above this row
+		// stays visible.
 		clearY := innerH - 1
 		for x := range h.width {
 			w.SetCell(term.Coordinates{X: x, Y: clearY},
@@ -434,60 +539,57 @@ func (h *Handler) drawHistory(w term.Writer) {
 	h.list.Draw(overlayW)
 }
 
-// drawCompletion implements the tab-completion overlay. See drawSearch.
+// drawCompletion implements the tab-completion overlay. The editor
+// input line stays anchored to the bottom band (showing the partial
+// word being completed) and the candidate list is drawn just above
+// it, with the inner repl's prior output above that.
 func (h *Handler) drawCompletion(w term.Writer) {
 	searchH := h.searchHeight(h.height)
 	listW := max(1, h.width-len(h.prompt))
 	listRows := max(0, searchH-h.list.InputHeight())
-	innerH := max(0, h.height-listRows)
+	editorH := h.editEditorH()
+	innerH := max(0, h.height-listRows-editorH)
 	if searchH != h.lastSearchH {
-		h.inner.Resize(h.width, innerH)
+		h.inner.Resize(h.width, h.height)
 		h.list.Resize(listW, searchH)
 		h.lastSearchH = searchH
 	}
-	buf := term.NewStringWriter(h.width, innerH)
-	h.inner.Draw(buf)
-	rlH, _ := h.inner.LayoutHeights()
-	outH := innerH - rlH
-	cells := buf.Cells()
-	for y := range outH {
-		for x := range h.width {
-			w.SetCell(term.Coordinates{X: x, Y: y},
-				cells[y*h.width+x])
-		}
-	}
-	for y := range rlH {
-		srcY := outH + y
-		dstY := h.height - rlH + y
-		for x := range h.width {
-			w.SetCell(term.Coordinates{X: x, Y: dstY},
-				cells[srcY*h.width+x])
-		}
-	}
+	h.drawInnerOutput(w, innerH)
 	overlayW := &component.VirtualWriter{
 		Writer: w,
-		Offset: term.Coordinates{X: len(h.prompt), Y: outH},
+		Offset: term.Coordinates{X: len(h.prompt), Y: innerH},
 		Width:  listW,
 		Height: listRows,
 	}
 	h.list.Draw(overlayW)
+	h.drawEdit(w)
 }
 
-// handleTabClosed forwards <tab> to the inner repl.Handler so its
-// inputbox calls our completion shim. If the shim captured more than
-// one candidate, we open the completion overlay seeded with them.
+// handleTab forwards <tab> to the inner repl.Handler so its inputbox
+// calls our completion shim. If the shim captured more than one
+// candidate, we open the completion overlay seeded with them.
 // Otherwise we let the inner handler's response stand (zero or one
 // candidate is best handled inline, exactly like the SDK default).
-func (h *Handler) handleTabClosed(ev term.Event) (exit, handled bool) {
+//
+// The editor owns the visible input line, so the inner inputbox is
+// seeded from the editor buffer before the tab is forwarded (so the
+// completion prefix is computed against the real line) and cleared
+// afterwards. When the inner resolves the completion inline (0 or 1
+// candidate), the resulting text is synced back into the editor.
+func (h *Handler) handleTab(ev term.Event) (exit, handled bool) {
 	h.shim.reset()
+	h.replaceInputText(h.editBuf.String())
 	exit, handled = h.inner.Handle(ev)
 	if exit {
 		return exit, handled
 	}
 	captured, ok := h.shim.consume()
 	if !ok || len(captured.candidates) <= 1 {
-		return false, handled
+		h.setEditText(h.inner.Text())
+		h.clearInner()
+		return false, true
 	}
+	h.clearInner()
 	h.openCompletion(captured)
 	return false, true
 }
@@ -571,9 +673,12 @@ func (h *Handler) handleCompletion(ev term.Event) (exit, handled bool) {
 			return h.completionBackspace()
 		case term.KeySpace:
 			// space ends the current argument: close the
-			// overlay and forward the space to the inputbox.
+			// overlay and append the space to the input line.
 			h.cancelSearch()
-			return h.inner.Handle(ev)
+			h.editBuf.WriteString(" ")
+			h.editHandler.SetCursorAtScroll(
+				term.Coordinates{X: h.editBuf.Columns(0)})
+			return false, true
 		}
 		if ev.Ch != 0 {
 			h.completionAppend(ev.Ch)
@@ -595,43 +700,48 @@ func (h *Handler) handleCompletion(ev term.Event) (exit, handled bool) {
 	return false, false
 }
 
-// completionAppend forwards a printable rune to the inner inputbox
-// so the prompt visually grows, then mirrors the same character into
-// the list's filter buffer so the candidate set narrows.
+// completionAppend appends a printable rune to the editor buffer so
+// the prompt visually grows, then mirrors the same character into the
+// list's filter buffer so the candidate set narrows.
 func (h *Handler) completionAppend(r rune) {
-	_, _ = h.inner.Handle(term.Event{Type: term.EventKey, Ch: r})
+	h.editBuf.WriteString(string(r))
+	h.editHandler.SetCursorAtScroll(term.Coordinates{X: h.editBuf.Columns(0)})
 	h.compTyped++
 	h.appendQuery(r)
 }
 
 // completionBackspace either shrinks the typed-after-tab portion of
-// the partial word (forwarded to the inputbox AND mirrored into the
-// filter buffer), or closes the overlay when the user has back-
-// spaced past everything they typed since opening it. The backspace
-// itself is forwarded to the inputbox in either case so the prompt
+// the partial word (removed from the editor buffer AND mirrored into
+// the filter buffer), or closes the overlay when the user has back-
+// spaced past everything they typed since opening it. The character
+// is removed from the editor buffer in either case so the prompt
 // keeps shrinking.
 func (h *Handler) completionBackspace() (exit, handled bool) {
+	h.editDeleteFromEnd(1)
 	if h.compTyped <= 0 {
 		// Backspaces have caught up to the original partial
 		// word boundary; further deletions should affect the
 		// underlying line, not the overlay.
 		h.cancelSearch()
-		return h.inner.Handle(
-			term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+		return false, true
 	}
-	_, _ = h.inner.Handle(
-		term.Event{Type: term.EventKey, Key: term.KeyBackspace})
 	h.compTyped--
 	h.shrinkQuery()
 	return false, true
 }
 
 func (h *Handler) openSearch() {
+	h.cycling = false
 	h.list.DataReset()
 	for _, item := range h.loadHistory() {
 		h.list.PushSync([]byte(item))
 	}
-	seed := h.inner.Text()
+	seed := h.editBuf.String()
+	// While the history overlay is open the inner inputbox mirrors
+	// the input line so its wrapping renders the (possibly
+	// multi-row) prompt above the candidate band; the editor band
+	// itself is not drawn in history mode.
+	h.replaceInputText(seed)
 	h.query = append(h.query[:0], []rune(seed)...)
 	h.list.Buffer().Replace(seed)
 	h.list.FocusStart()
@@ -664,6 +774,7 @@ func (h *Handler) cancelSearch() {
 	h.query = h.query[:0]
 	h.compTyped = 0
 	h.list.Buffer().Replace("")
+	h.clearInner()
 	h.Resize(h.width, h.height)
 }
 
@@ -678,18 +789,27 @@ func (h *Handler) acceptSearch() {
 	h.query = h.query[:0]
 	h.compTyped = 0
 	h.Resize(h.width, h.height)
+	if mode == modeHistory {
+		// The inner inputbox was only mirroring the input line for
+		// the history overlay's wrapped rendering; the editor owns
+		// the line again now.
+		h.clearInner()
+	}
 	if !ok {
 		return
 	}
 	text := string(match.Data())
 	switch mode {
 	case modeHistory:
-		h.replaceInputText(text)
+		h.setEditText(text)
 	case modeCompletion:
-		// The inputbox currently contains the original
+		// The editor buffer currently ends with the original
 		// prefix plus everything the user typed after <tab>;
-		// delete both, then insert the chosen candidate.
-		h.deleteAndType(len([]rune(prefix))+typed, text)
+		// delete both, then append the chosen candidate.
+		h.editDeleteFromEnd(len([]rune(prefix)) + typed)
+		h.editBuf.WriteString(text)
+		h.editHandler.SetCursorAtScroll(
+			term.Coordinates{X: h.editBuf.Columns(0)})
 	}
 }
 
@@ -719,19 +839,25 @@ func (h *Handler) replaceInputText(text string) {
 	}
 }
 
-// deleteAndType deletes n runes to the left of the cursor and then
-// types text. It is used to swap the partial word at the cursor for
-// a chosen completion candidate while preserving everything else on
-// the line.
-func (h *Handler) deleteAndType(n int, text string) {
-	bs := term.Event{Type: term.EventKey, Key: term.KeyBackspace}
-	for i := 0; i < n; i++ {
-		_, _ = h.inner.Handle(bs)
+// clearInner empties the inner inputbox. The inner repl is only used
+// transiently to compute completion prefixes; the editor owns the
+// visible input line.
+func (h *Handler) clearInner() {
+	_, _ = h.inner.Handle(
+		term.Event{Type: term.EventKey, Ch: 'u', Mod: term.ModCtrl})
+}
+
+// editDeleteFromEnd removes n cells from the end of the editor buffer
+// and re-anchors the editor cursor to the new end of line.
+func (h *Handler) editDeleteFromEnd(n int) {
+	for range n {
+		cols := h.editBuf.Columns(0)
+		if cols <= 0 {
+			break
+		}
+		h.editBuf.DeleteCell(term.Coordinates{X: cols - 1})
 	}
-	for _, r := range text {
-		ev := term.Event{Type: term.EventKey, Ch: r}
-		_, _ = h.inner.Handle(ev)
-	}
+	h.editHandler.SetCursorAtScroll(term.Coordinates{X: h.editBuf.Columns(0)})
 }
 
 // loadHistory reads the persisted shell history from storage. It
@@ -779,4 +905,98 @@ func (h *Handler) searchHeight(total int) int {
 		want = maxOverlay
 	}
 	return want
+}
+
+// submitEdit dispatches the editor's current buffer to the inner repl
+// and then clears the buffer so the next prompt starts empty. The
+// inner repl still owns command dispatch and history persistence, so
+// the buffer text is seeded into its inputbox and submitted with a
+// synthesized <enter>.
+func (h *Handler) submitEdit() {
+	line := h.editBuf.String()
+	h.replaceInputText(line)
+	enter := term.Event{Type: term.EventKey, Key: term.KeyEnter}
+	_, _ = h.inner.Handle(enter)
+	h.clearEdit()
+}
+
+// setEditText replaces the editor buffer with text and moves the
+// editor cursor to the end of the last row. It is used by the overlay
+// accept paths (history match / completion candidate) and history
+// cycling, which mutate the input line directly rather than re-issuing
+// key events. Multi-line history entries span several rows, so the
+// cursor must land on the final row (not row 0) for the editor to
+// navigate the recalled block correctly.
+func (h *Handler) setEditText(text string) {
+	h.editBuf.Replace(text)
+	lastRow := h.editBuf.Rows() - 1
+	h.editHandler.SetCursorAtScroll(
+		term.Coordinates{X: h.editBuf.Columns(lastRow), Y: lastRow})
+}
+
+// clearEdit empties the editor buffer and resets the cursor to the
+// start of the line.
+func (h *Handler) clearEdit() {
+	h.editBuf.Replace("")
+	h.editHandler.SetCursorAtScroll(term.Coordinates{})
+	h.cycling = false
+}
+
+// editEditorH returns the number of rows reserved for the editor
+// input line. The editor lives in the same vertical band the inner
+// inputbox would otherwise own, so the prompt visually stays anchored
+// to the bottom of the screen. The band grows with the wrapped height
+// of the prompt-prefixed buffer (long lines wrap with a hanging
+// indent so continuation rows use the full width), capped so the
+// inner repl's output keeps at least one row.
+func (h *Handler) editEditorH() int {
+	if h.height <= 0 || h.width <= 0 {
+		return 0
+	}
+	rows := h.editContent().Height(h.width)
+	// When the line exactly fills the width the cursor wraps onto a
+	// fresh row that the content itself does not occupy; reserve it
+	// so the caret stays visible (mirrors the inputbox behavior).
+	if cursorRows := h.editCursorVisual().Y + 1; cursorRows > rows {
+		rows = cursorRows
+	}
+	return min(max(rows, 1), h.height)
+}
+
+// editInnerH returns the number of rows allocated to the inner repl
+// (its previous output). The editor owns the remaining bottom rows.
+func (h *Handler) editInnerH() int {
+	return max(0, h.height-h.editEditorH())
+}
+
+// drawEdit paints the shell prompt prefix and the input line onto the
+// bottom band, where the inner inputbox would normally be drawn. The
+// real text editors render a bare buffer (no shell prompt and a
+// wrap geometry tied to their own width), so — like the command
+// Prompt — the host renders the buffer itself through a responsive
+// view with the prompt folded into the content. This yields a hanging
+// indent: the first row is "prompt + text" and continuation rows use
+// the full width. The caller draws the inner repl's output band above.
+func (h *Handler) drawEdit(w term.Writer) {
+	innerH := h.editInnerH()
+	editorH := h.editEditorH()
+	view := h.editContent()
+	view.Resize(h.width, editorH)
+	editorW := &component.VirtualWriter{
+		Writer: w,
+		Offset: term.Coordinates{Y: innerH},
+		Width:  h.width,
+		Height: editorH,
+	}
+	view.Draw(editorW)
+}
+
+// editContent returns a responsive view over a transient buffer
+// holding the shell prompt followed by the editor's current text.
+// Folding the prompt into the rendered content (rather than offsetting
+// the editor) reproduces the inputbox's hanging-indent wrapping.
+func (h *Handler) editContent() component.Responsive {
+	buf := cell.NewBuffer()
+	buf.WriteString(h.prompt + h.editBuf.String())
+	return tcomponent.Buffer(buf, component.StringResponsiveConfig{})
 }

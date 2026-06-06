@@ -64,6 +64,7 @@ import (
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	thandler "unstable.build/go-tui/handler"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/ide/plugin"
@@ -1728,7 +1729,7 @@ func TestExKeySequence(t *testing.T) {
 				defer mu.Unlock()
 				ex.Handle(ev)
 				return true
-			}, 0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
+			}, 0, clipboard.NewInMemory(), nil, nil, nil, nil, testPromptEditor(), opts...))
 		ex.subscribeCommands()
 		b := testEx{ex: ex}
 		closeFns = append(closeFns, func() error {
@@ -2179,6 +2180,16 @@ func defCommandKeyBindings() (opts []text.Option) {
 	return
 }
 
+// testPromptEditor returns the prompt editor used to satisfy ex.init's
+// required dependency in tests that build an *ex directly.
+func testPromptEditor() command.Editor {
+	return modelessPromptEditor{
+		tabspaces:        4,
+		scheduleNextTick: func(fn func()) bool { fn(); return true },
+		clipboard:        clipboard.NewInMemory(),
+	}
+}
+
 func newExForTestingTerminal(
 	t *testing.T, workspace workspace.Workspace,
 	ed text.Editor,
@@ -2199,7 +2210,7 @@ func newExForTestingTerminal(
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, barCfg, publishEvent,
-		0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
+		0, clipboard.NewInMemory(), nil, nil, nil, nil, testPromptEditor(), opts...))
 	ex.subscribeCommands()
 	return testEx{ex: ex, mu: mu, scheduler: scheduler}
 }
@@ -2230,7 +2241,7 @@ func newExForTestingWithWorkspace(
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
+		publishEvent, 0, clip, nil, nil, nil, nil, testPromptEditor(), finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -2269,7 +2280,7 @@ func newExForTestingCommandsPreview(
 	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, previews, nil, nil, finalOpts...))
+		publishEvent, 0, clip, nil, previews, nil, nil, testPromptEditor(), finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -2319,7 +2330,7 @@ func newExForTestingWithStorage(
 
 	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return ed, nil }, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
-		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
+		publishEvent, 0, clip, nil, nil, nil, nil, testPromptEditor(), finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
@@ -3368,7 +3379,7 @@ func newExForReservoirTesting(
 	require.NoError(t, e.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, ws, svc,
 		notifications, uri, emCfg, plugin.DefaultBarConfig(),
 		nopPublishEvent, initialCapacity, clipboard.NewInMemory(),
-		nil, nil, nil, nil, finalOpts...))
+		nil, nil, nil, nil, testPromptEditor(), finalOpts...))
 	require.NoError(t, e.subscribeCommands())
 
 	// Wrap the closure created by init so we can observe which branch
@@ -3546,7 +3557,7 @@ func TestExUsesSharedIDEStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ex.init(func(exoeditor.Reloader) (text.Editor, error) { return texttest.NopEditor(), nil }, workspace, storage,
 		notifications, uri, vte.DefaultConfig(), plugin.DefaultBarConfig(),
-		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil, nil))
+		nopPublishEvent, 0, clipboard.NewInMemory(), nil, nil, nil, nil, testPromptEditor()))
 
 	require.Equal(t, 0, storage.partitionCalls)
 	require.Same(t, storage, ex.storage)

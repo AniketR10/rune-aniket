@@ -49,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/ide/syntax"
@@ -1087,10 +1088,32 @@ func newFakeShellHandler() *ideshell.Handler {
 	h, _ := ideshell.New(
 		func(func()) bool { return false },
 		term.NopInterrupter(),
+		nopShellEditor{},
 		ideshell.Config{},
 	)
 	return h
 }
+
+// nopShellEditor is a minimal command.Editor for tests that need an
+// *ideshell.Handler purely as a content-type marker. The spawned
+// handler is never driven.
+type nopShellEditor struct{}
+
+func (nopShellEditor) Edit(*cell.Buffer) command.EditHandler {
+	return nopShellEditHandler{}
+}
+
+type nopShellEditHandler struct{}
+
+func (nopShellEditHandler) Resize(int, int)  {}
+func (nopShellEditHandler) Draw(term.Writer) {}
+func (nopShellEditHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleSteadyBar, false
+}
+func (nopShellEditHandler) CursorAtScroll() term.Coordinates        { return term.Coordinates{} }
+func (nopShellEditHandler) SetCursorAtScroll(term.Coordinates) bool { return true }
+func (nopShellEditHandler) Selection() (string, bool)               { return "", false }
+func (nopShellEditHandler) Handle(term.Event) (bool, bool)          { return false, false }
 
 // outputPath returns the absolute path of the active output
 // capture file, or "" when no session has been launched.

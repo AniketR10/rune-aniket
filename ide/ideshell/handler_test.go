@@ -65,6 +65,7 @@ func newTestHandlerFull(
 	h, r := New(
 		func(func()) bool { return false },
 		term.NopInterrupter(),
+		stubEditor{},
 		Config{
 			Storage:           svc,
 			HistoryDocumentID: testDocID,
@@ -1478,7 +1479,7 @@ func newMouseTestHandler(t *testing.T, w, h int, lines []string) (*Handler, *ter
 		mu.Unlock()
 		return true
 	}
-	hd, reg := New(sched, term.NopInterrupter(), Config{MaxHistory: 100})
+	hd, reg := New(sched, term.NopInterrupter(), stubEditor{}, Config{MaxHistory: 100})
 	reg.Register("show", "print lines", linesCmd{lines: lines})
 	t.Cleanup(func() { _ = hd.Close() })
 
