@@ -47,6 +47,11 @@ const (
 	defaultFileMode os.FileMode = 0644
 )
 
+// SwapFileExtensionName is the extension Rune appends to its per-file
+// swap files. It is deliberately distinct from Vim's ".swp" so the two
+// never collide and mistake each other's swap files for their own.
+const SwapFileExtensionName = ".rswp"
+
 var _ FlusherCloser = (*file)(nil)
 
 // file implements the sync (swap file) logic
@@ -135,7 +140,7 @@ func swapFileName(swapDir, filePath string) (string, string) {
 	if swapDir == "" {
 		swapDir = filepath.Dir(filePath)
 	}
-	return swapDir, path.Join(swapDir, fmt.Sprintf(".%s.swp", filepath.Base(filePath)))
+	return swapDir, path.Join(swapDir, "."+filepath.Base(filePath)+SwapFileExtensionName)
 }
 
 func (f *file) initSwapFile(orig workspaceapi.File, origPerms os.FileMode) (workspaceapi.File, error) {

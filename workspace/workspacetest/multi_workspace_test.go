@@ -82,10 +82,10 @@ func TestMultiWorkspace(t *testing.T) {
 			cwd = workspace.Multi(ctx, mockManager, cwd, tcase.defURI)
 
 			if tcase.recover {
-				swapFile := fmt.Sprintf("%s.swp", tcase.fileURI.Path())
+				swapFile := fmt.Sprintf("%s.rswp", tcase.fileURI.Path())
 				_, werr := memScheme.OpenFile(swapFile, os.O_CREATE, 0)
 				require.Nil(t, werr)
-				swapFileURI := parseURI(t, fmt.Sprintf("%s.swp", tcase.fileURI.String()))
+				swapFileURI := parseURI(t, fmt.Sprintf("%s.rswp", tcase.fileURI.String()))
 				_, err = cwd.Recover(tcase.fileURI, swapFileURI, cell.NewBuffer(), false)
 			} else {
 				_, err = cwd.Load(tcase.fileURI, cell.NewBuffer(), workspaceapi.Dir(tcase.fileURI), false)

@@ -19,6 +19,7 @@ target
 
 # fractal swap files
 *.swp
+*.rswp
 .sixrc
 go.work
 go.work.sum

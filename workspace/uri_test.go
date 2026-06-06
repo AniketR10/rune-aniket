@@ -66,20 +66,20 @@ func TestDefaultSwapFile(t *testing.T) {
 		wantSwapFile string
 		wantErr      bool
 	}{
-		{"other:///tmp/a.go", "other:///tmp", "other:///tmp/.a.go.swp", false},
-		{"file:///a.go", "file:///tmp", "file:///tmp/.a.go.swp", false},
-		{"file:///a.go", "file:///", "file:///.a.go.swp", false},
-		{"file:///tmp/a.go", "file:///tmp", "file:///tmp/.a.go.swp", false},
-		{"file:///tmp/a.go", "file:///", "file:///.a.go.swp", false},
-		{"file://./tmp/a.go", "file://./", "file://./.a.go.swp", false},
-		{"file://./a.go", "file://./tmp", "file://./tmp/.a.go.swp", false},
+		{"other:///tmp/a.go", "other:///tmp", "other:///tmp/.a.go.rswp", false},
+		{"file:///a.go", "file:///tmp", "file:///tmp/.a.go.rswp", false},
+		{"file:///a.go", "file:///", "file:///.a.go.rswp", false},
+		{"file:///tmp/a.go", "file:///tmp", "file:///tmp/.a.go.rswp", false},
+		{"file:///tmp/a.go", "file:///", "file:///.a.go.rswp", false},
+		{"file://./tmp/a.go", "file://./", "file://./.a.go.rswp", false},
+		{"file://./a.go", "file://./tmp", "file://./tmp/.a.go.rswp", false},
 		{"ssh:///a.go", "ssh://my_host/tmp", "", true},
 		{"ssh://my_host/a.go", "ssh:///tmp", "", true},
 		{"ssh://my_host/a.go", "ssh://creepy_host/tmp", "", true},
 		{"ssh://unstablebuild@my_host/a.go", "ssh://jj.furman@my_host/tmp", "", true},
-		{"ssh://user@my_host/a.go", "ssh://user@my_host/tmp", "ssh://user@my_host/tmp/.a.go.swp", false},
-		{"ssh://my_host/a.go", "ssh://my_host/tmp", "ssh://my_host/tmp/.a.go.swp", false},
-		{"ssh://my_host/./a.go", "ssh://my_host/./tmp", "ssh://my_host/tmp/.a.go.swp", false},
+		{"ssh://user@my_host/a.go", "ssh://user@my_host/tmp", "ssh://user@my_host/tmp/.a.go.rswp", false},
+		{"ssh://my_host/a.go", "ssh://my_host/tmp", "ssh://my_host/tmp/.a.go.rswp", false},
+		{"ssh://my_host/./a.go", "ssh://my_host/./tmp", "ssh://my_host/tmp/.a.go.rswp", false},
 	}
 
 	for i, tcase := range tsuite {

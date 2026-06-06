@@ -255,7 +255,7 @@ func TestIntegrationManagerWithWorkspaceLoad(t *testing.T) {
 	jakeFileURI, err := workspaceapi.ParseURI("jake:///tmp/hello")
 	require.NoError(t, err)
 
-	jakeSwapDirURI, err := workspaceapi.ParseURI("jake:///tmp/hello/.hallo.txt.swp")
+	jakeSwapDirURI, err := workspaceapi.ParseURI("jake:///tmp/hello/.hallo.txt.rswp")
 	require.NoError(t, err)
 
 	ctx := context.Background()

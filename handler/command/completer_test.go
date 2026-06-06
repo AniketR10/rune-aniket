@@ -306,7 +306,8 @@ func newCompleterFixture(tb testing.TB) completerFixture {
 		"café.txt",       // composed (NFC)
 		"cafe\u0301.txt", // decomposed (NFD)
 		".hidden",
-		"plain.swp", // filtered by completer
+		"plain.swp",
+		"plain.rswp", // filtered by completer
 		"normal.swp.go",
 	}
 	for _, f := range files {
@@ -381,8 +382,8 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 		{
 			name:       "no args lists workspace root",
 			args:       []string{"edit"},
-			wantSubset: []string{"alpha.go", "beta.txt"},
-			wantNotIn:  []string{"plain.swp"},
+			wantSubset: []string{"alpha.go", "beta.txt", "plain.swp"},
+			wantNotIn:  []string{"plain.rswp"},
 		},
 		{
 			name:       "empty last arg lists workspace root",

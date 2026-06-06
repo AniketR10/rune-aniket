@@ -112,6 +112,8 @@ func TestLoadGitignore(t *testing.T) {
 
 		assert.True(t, matcher.Match(makeURI(t, cwd, "file.swp"), false))
 		assert.True(t, matcher.Match(makeURI(t, cwd, ".file.swp"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, "file.rswp"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, ".file.rswp"), false))
 		assert.True(t, matcher.Match(makeURI(t, cwd, ".ox.sock"), false))
 		assert.False(t, matcher.Match(makeURI(t, cwd, ".ox.awe"), false))
 	})

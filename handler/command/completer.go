@@ -42,6 +42,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -113,7 +114,7 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 			return nil, err
 		}
 		it = iterator.Filter(it, func(val string) bool {
-			return !strings.HasSuffix(val, ".swp")
+			return !strings.HasSuffix(val, workspace.SwapFileExtensionName)
 		})
 		if dirOnly {
 			it = iterator.Filter(it, func(val string) bool {

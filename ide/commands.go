@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -435,7 +436,8 @@ var (
 					"window, replacing its contents. If no scheme is provided, file:// " +
 					"is used by default. This allows opening files in " +
 					"workspaces outside the current workspace or on a different host. " +
-					"A .swp file is created in the same directory to prevent multiple sessions " +
+					"A " + workspace.SwapFileExtensionName +
+					" file is created in the same directory to prevent multiple sessions " +
 					"from overwriting each other's changes. " +
 					"If the file has any pending changes that were lost due to a crash, or " +
 					"another session is currently editing the file, a prompt is shown " +
@@ -737,7 +739,7 @@ var (
 	}
 
 	tutorialCmdManual = textapi.CommandManual{
-		Name: "tutorial",
+		Name:    "tutorial",
 		Summary: "Run, stop, dismiss, or reset interactive tutorials.",
 		Synopsis: "(run <name> | stop | dismiss <name> | " +
 			"reset [<name>])",

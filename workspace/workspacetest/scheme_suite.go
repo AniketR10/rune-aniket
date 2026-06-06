@@ -408,14 +408,14 @@ func TestWorkspaceLoadIntegration(
 		_, cleanup1 := createTestFile(t, scheme, "file", "")
 		defer cleanup1()
 
-		_, cleanup2 := createTestFile(t, scheme, ".file.swp", "mosca")
+		_, cleanup2 := createTestFile(t, scheme, ".file.rswp", "mosca")
 		defer cleanup2()
 
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "file")
-		swapuri := workspaceapi.Join(uri, ".file.swp")
+		swapuri := workspaceapi.Join(uri, ".file.rswp")
 		buf := cell.NewBuffer()
 
 		fc, err := wp.Recover(fileuri, swapuri, buf, false)
@@ -433,14 +433,14 @@ func TestWorkspaceLoadIntegration(
 	t.Run("recovers a file that doesn't exist yet into a buffer", func(t *testing.T) {
 		scheme := schemeFn(t)
 		defer scheme.Close()
-		_, cleanup2 := createTestFile(t, scheme, ".file.swp", "mosca")
+		_, cleanup2 := createTestFile(t, scheme, ".file.rswp", "mosca")
 		defer cleanup2()
 
 		uri, err := scheme.URI(".")
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "file")
-		swapuri := workspaceapi.Join(uri, ".file.swp")
+		swapuri := workspaceapi.Join(uri, ".file.rswp")
 		buf := cell.NewBuffer()
 
 		fc, err := wp.Recover(fileuri, swapuri, buf, false)
@@ -496,7 +496,7 @@ func TestWorkspaceLoadIntegration(
 		require.NoError(t, err)
 		wp := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
 		fileuri := workspaceapi.Join(uri, "dataAtRestTest")
-		swapfileuri := workspaceapi.Join(uri, ".dataAtRestTest.swp")
+		swapfileuri := workspaceapi.Join(uri, ".dataAtRestTest.rswp")
 		swapDir := workspaceapi.Join(uri, ".")
 
 		buf := cell.NewBuffer()

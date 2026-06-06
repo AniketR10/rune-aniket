@@ -320,11 +320,11 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 //     render in the tree.
 //  2. Close the explorer via :fexplorer (toggle).
 //  3. Open and write gamma.go via :edit / :write so the FS watcher
-//     fires a create event under the workspace root. vi
-//     transiently creates `.gamma.go.swp` while the editor is
-//     open, but the explorer's gitignore-derived ignore matcher
-//     (RUNE-143) hides `*.swp` so the swap file does not pollute
-//     the rendered tree.
+//     fires a create event under the workspace root. The editor
+//     transiently creates `.gamma.go.rswp` while it is open, but
+//     the explorer's gitignore-derived ignore matcher (RUNE-143)
+//     hides `*.rswp` so the swap file does not pollute the
+//     rendered tree.
 //  4. Re-open the explorer via :fexplorer; the rendered tree must
 //     now include gamma.go.
 //

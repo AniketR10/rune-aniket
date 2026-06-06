@@ -34,6 +34,7 @@ import (
 
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -54,6 +55,7 @@ var commonExcludes = []gitignore.Pattern{
 
 	// temporary files
 	gitignore.ParsePattern("*.swp", nil),
+	gitignore.ParsePattern("*"+workspace.SwapFileExtensionName, nil),
 	gitignore.ParsePattern("*.sock", nil),
 }
 
