@@ -377,6 +377,10 @@ var (
 				Synopsis: "[<command> [<args>...]]",
 			},
 			handler: (*ex).shellnewtab,
+			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
+			) (iterator.Iterator[string], string, error) {
+				return e.completeShell(ctx, cmd)
+			},
 		},
 		"terminalnew": {
 			man: textapi.CommandManual{

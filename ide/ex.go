@@ -145,8 +145,8 @@ type ex struct {
 	// promptEditor backs both the command prompt's modal edit mode
 	// and the companion shell's input line. It is a required
 	// dependency (see newEx) so neither consumer has to guard nil.
-	promptEditor             command.Editor
-	pluginWaitTimeout        time.Duration
+	promptEditor      command.Editor
+	pluginWaitTimeout time.Duration
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
 	cmdV             handler.Virtual[*browser.Component]
@@ -1987,6 +1987,32 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 		e.companionShell.Submit(line)
 	}
 	return nil
+}
+
+func (e *ex) completeShell(ctx context.Context, cmd textapi.Command) (
+	iterator.Iterator[string], string, error,
+) {
+	if len(cmd.Args) <= 1 {
+		var prefix string
+		if len(cmd.Args) == 1 {
+			prefix = cmd.Args[0]
+		}
+		var names []string
+		for _, c := range e.comp.REPLCommands() {
+			if strings.HasPrefix(c.Name, prefix) {
+				names = append(names, c.Name)
+			}
+		}
+		sort.Strings(names)
+		return iterator.FromSlice(names), "", nil
+	}
+
+	router := text.NewREPLHandler(&e.comp)
+	it, err := router.Complete(ctx, cmd.Args[0], cmd.Args[1:])
+	if err != nil {
+		return iterator.FromSlice[string](nil), "", err
+	}
+	return it, "", nil
 }
 
 func (e *ex) terminalnew(_ context.Context, args ...string) error {

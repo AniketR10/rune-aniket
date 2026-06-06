@@ -1100,6 +1100,66 @@ func TestShellCommandOpensTab(t *testing.T) {
 	assert.Equal(t, "shell:///tmp/my-workspace", tabs[0].URI().String())
 }
 
+func TestShellCommandComplete(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-complete")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	b := newExForTestingWithWorkspace(t, w, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	require.NoError(t, b.comp.RegisterREPLCommand(
+		textapi.CommandManual{Name: "status", Summary: "show status"},
+		&testShellREPLHandler{},
+	))
+	require.NoError(t, b.comp.RegisterREPLCommand(
+		textapi.CommandManual{Name: "deploy", Summary: "deploy"},
+		&completeStubREPLHandler{candidates: []string{"prod", "staging"}},
+	))
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "top level lists sorted command names",
+			args: []string{""},
+			want: []string{"deploy", "status"},
+		},
+		{
+			name: "top level filters by prefix",
+			args: []string{"de"},
+			want: []string{"deploy"},
+		},
+		{
+			name: "delegates to command handler completion",
+			args: []string{"deploy", "pr"},
+			want: []string{"prod", "staging"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			it, _, err := b.comp.CompleteCommand(t.Context(),
+				textapi.Command{Name: "shell", Args: tc.args})
+			require.NoError(t, err)
+			defer func() { _ = it.Close() }()
+
+			got, err := sdkiterator.ToSlice(t.Context(), it)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // TestShellCommandPastesArgument verifies that arguments passed to the
 // `:shell` ex command are submitted to the shell prompt as a single
 // command line, both when the shell tab is created on first use and
@@ -2459,6 +2519,30 @@ func (*testShellREPLHandler) Complete(
 }
 
 func (*testShellREPLHandler) Help(
+	context.Context, []string,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
+}
+
+// completeStubREPLHandler returns a fixed set of completion candidates
+// so completion delegation can be asserted.
+type completeStubREPLHandler struct {
+	candidates []string
+}
+
+func (*completeStubREPLHandler) HandleCommand(
+	context.Context, repl.Command, repl.ProgressWriter,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	return sdkiterator.Empty[component.Responsive](), nil
+}
+
+func (h *completeStubREPLHandler) Complete(
+	context.Context, string, []string,
+) (sdkiterator.Iterator[string], error) {
+	return sdkiterator.FromSlice(h.candidates), nil
+}
+
+func (*completeStubREPLHandler) Help(
 	context.Context, []string,
 ) (sdkiterator.Iterator[component.Responsive], error) {
 	return sdkiterator.Empty[component.Responsive](), nil
