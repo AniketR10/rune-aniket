@@ -60,7 +60,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
-	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
@@ -75,7 +74,10 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/memory"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/text"
+
+	tconfig "unstable.build/go-tui/api/config"
 )
 
 const (
@@ -471,6 +473,8 @@ func newCommandEventHandler(
 	} else {
 		ret.cfg.InputBox.ContentAttr = inputBoxAttr
 	}
+	ret.cfg.InputBackgroundColor = resolveInputBackgroundColor(
+		ret.cfg.InputBackgroundColor, pconfig)
 	inputBoxPlaceholderAttr, err := config.GetAttributes(pconfig, "input_box_placeholder_attr")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -488,6 +492,25 @@ func newCommandEventHandler(
 		}
 	} else {
 		ret.cfg.InputBox.FrameAttr = inputBoxFrameAttr
+	}
+
+	inputBoxFrameCharset, err := tconfig.GetFrameCharset(
+		pconfig, "input_box_frame_charset", ret.cfg.InputBox.FrameCharSet)
+	if err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'input_box_frame_charset' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.InputBox.FrameCharSet = inputBoxFrameCharset
+	}
+
+	inputBgColor, err := pconfig.GetColor("input_background_color")
+	if err != nil {
+		if err != config.ErrNotFound {
+			slog.Warn("get 'input_background_color' from extension config", "error", err)
+		}
+	} else {
+		ret.cfg.InputBackgroundColor = inputBgColor
 	}
 
 	ret.contextHintCfg = contextHintConfig{
@@ -547,6 +570,19 @@ func newCommandEventHandler(
 	}
 
 	ret.clip = text.NewSystemClipboard()
+
+	// Resolve the configured editor for composing messages. On error the
+	// compose editor stays nil and dialoguetui falls back to its inputbox.
+	if editor, cerr := extutil.Editor(ret.clip, w.Config(ctx)); cerr != nil {
+		slog.Warn("resolve dialogue editor, using inputbox", "error", cerr)
+	} else {
+		ret.cfg.Editor = editor
+		if modal, merr := extutil.EditorModal(w.Config(ctx)); merr != nil {
+			slog.Warn("resolve dialogue editor mode", "error", merr)
+		} else {
+			ret.cfg.EditorModal = modal
+		}
+	}
 
 	ret.db = db
 	if auditEnabled, _ := pconfig.GetBool("audit_enabled"); auditEnabled {
@@ -939,10 +975,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		interrupter:   h.p,
 	})
 
-	// Create component with tab-completion wired to the adapter.
-	cfg := h.cfg
-	cfg.InputBox.WordCompleter = makeCommandCompleter(ctx, adapter)
-	comp = dialoguetui.NewComponent(cfg)
+	comp = dialoguetui.NewComponent(h.cfg)
 
 	// Replay dialogue history.
 	pendingTools := make(map[string]llmapi.ToolCall)
@@ -2044,64 +2077,6 @@ func createAgentCompletions(
 	}
 }
 
-// makeCommandCompleter builds a WordCompleter that translates
-// /command-style input into calls to the CommandHandler's Complete method.
-func makeCommandCompleter(ctx context.Context, ch dialoguetui.CommandHandler) inputbox.WordCompleter {
-	return func(line string, pos int) (string, []string, string) {
-		head := line[:pos]
-		tail := line[pos:]
-		if len(head) < 1 || head[0] != '/' {
-			return head, nil, tail
-		}
-		cmdLine := head[1:]
-		parts := strings.Fields(cmdLine)
-		var cmd string
-		var args []string
-		if len(parts) > 0 {
-			cmd = parts[0]
-			if len(parts) > 1 || strings.HasSuffix(cmdLine, " ") {
-				if len(parts) > 1 {
-					args = parts[1:]
-				}
-				if strings.HasSuffix(cmdLine, " ") {
-					args = append(args, "")
-				}
-			}
-		}
-		lastSpace := strings.LastIndex(head, " ")
-		if lastSpace >= 0 {
-			head = head[:lastSpace+1]
-		} else {
-			head = "/"
-		}
-		it, err := ch.Complete(ctx, cmd, args)
-		if err != nil {
-			return line[:pos], nil, tail
-		}
-		all, err := iterator.ToSlice(ctx, it)
-		_ = it.Close()
-		if err != nil {
-			return line[:pos], nil, tail
-		}
-
-		// Filter candidates by the prefix the user has already
-		// typed (the text after head, before cursor).
-		prefix := line[len([]rune(head)):pos]
-		var candidates []string
-		if prefix == "" {
-			candidates = all
-		} else {
-			lower := strings.ToLower(prefix)
-			for _, c := range all {
-				if strings.HasPrefix(strings.ToLower(c), lower) {
-					candidates = append(candidates, c)
-				}
-			}
-		}
-		return head, candidates, tail
-	}
-}
-
 func readWorkspaceFile(wfs workspaceapi.FileSystem, path string) ([]byte, error) {
 	f, err := wfs.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
@@ -2123,4 +2098,16 @@ func agentMemoriesToTUI(ev agent.Event) dialoguetui.MessageEvent {
 		Memories:       entries,
 		MemoryDuration: ev.MemoryDuration,
 	}
+}
+
+// resolveInputBackgroundColor returns the compose input background color.
+// It keeps def unless input_box_attr.bg is set to an explicit,
+// non-default color, letting the shared input_box_attr drive the compose
+// background without a dedicated key.
+func resolveInputBackgroundColor(def term.Color, pconfig config.Config) term.Color {
+	attr, err := config.GetAttributes(pconfig, "input_box_attr")
+	if err != nil || attr.Bg == term.ColorDefault {
+		return def
+	}
+	return attr.Bg
 }

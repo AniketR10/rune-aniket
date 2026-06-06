@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/handler/inputbox"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/text"
 )
 
 // ComponentConfig holds configuration options for dialogue.Component.
@@ -182,34 +182,31 @@ type ComponentConfig struct {
 	BackgroundColor term.Color
 
 	InputBox InputBoxConfig
+
+	// Editor, when non-nil, is used to compose the message to the
+	// assistant via the user's configured editor (modal/modeless). When
+	// nil, the component falls back to a default modeless editor.
+	Editor text.Editor
+
+	// EditorModal reports whether Editor is a modal (vi-style) editor.
+	// It distinguishes modal from modeless compose editors so a bare
+	// <Enter> can submit in normal mode while inserting a newline in
+	// insert mode. Ignored when Editor is nil.
+	EditorModal bool
+
+	// InputBackgroundColor, when valid, sets the background color of the
+	// compose input: the editor's scroll area (via SetDefaultAttributes)
+	// and the surrounding Frame. ColorDefault leaves both at the
+	// terminal default.
+	InputBackgroundColor term.Color
 }
 
-// InputBoxConfig holds configuration optons for a inputbox.Handler.
+// InputBoxConfig holds styling configuration for the compose input
+// frame and the prompt feedback inputbox.
 type InputBoxConfig struct {
 	Placeholder       string
 	PlaceholderConfig component.StringResponsiveConfig
 	FrameAttr         term.Attributes
 	FrameCharSet      component.FrameCharSet
 	ContentAttr       term.Attributes
-	WordCompleter     inputbox.WordCompleter
-}
-
-// Options returns a slice of inputobx.Option, which can
-// be passed in a call to inputbo.New.
-func (i InputBoxConfig) Options() (ret []inputbox.Option) {
-	if i.Placeholder != "" {
-		if i.PlaceholderConfig == (component.StringResponsiveConfig{}) {
-			ret = append(ret, inputbox.WithPlaceholderText(i.Placeholder))
-		} else {
-			ret = append(ret, inputbox.WithPlaceholder(i.Placeholder, i.PlaceholderConfig))
-		}
-	}
-	if i.ContentAttr != (term.Attributes{}) {
-		ret = append(ret, inputbox.WithAttributes(i.ContentAttr))
-	}
-	if i.WordCompleter != nil {
-		ret = append(ret, inputbox.WithWordCompleter(i.WordCompleter))
-		ret = append(ret, inputbox.WithTabStyle(inputbox.TabPrints))
-	}
-	return
 }

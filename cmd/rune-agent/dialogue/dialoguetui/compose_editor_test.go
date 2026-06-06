@@ -1,0 +1,452 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package dialoguetui
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/vi"
+)
+
+func TestComposeEditorNilUsesModelessEditor(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	typeText(h, "hello")
+	assert.Equal(t, "hello", comp.Input().Text())
+
+	in, ok := comp.Input().(*textHandlerInput)
+	require.True(t, ok, "nil Editor must build an editor-backed compose input")
+	assert.False(t, in.modal, "default compose editor is modeless")
+
+	go func() {
+		msg := <-rx
+		assert.Equal(t, "hello", msg.Text)
+	}()
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "", comp.Input().Text(), "submit must clear the input")
+}
+
+func TestComposeEditorModelessAcceptsInput(t *testing.T) {
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	typeText(h, "from editor")
+	assert.Equal(t, "from editor", comp.Input().Text())
+
+	go func() {
+		msg := <-rx
+		assert.Equal(t, "from editor", msg.Text)
+	}()
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "", comp.Input().Text(), "submit must clear the compose editor")
+}
+
+func TestComposeEditorSetTextClear(t *testing.T) {
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+	comp.Resize(30, 10)
+
+	comp.Input().SetText("recalled message")
+	assert.Equal(t, "recalled message", comp.Input().Text())
+
+	comp.Input().SetText("replaced")
+	assert.Equal(t, "replaced", comp.Input().Text(),
+		"SetText must replace, not append")
+
+	comp.Input().Clear()
+	assert.Equal(t, "", comp.Input().Text())
+}
+
+func TestComposeEditorHeightGrowsWithWrap(t *testing.T) {
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+	comp.Resize(30, 10)
+	in := comp.Input()
+
+	const width = 10
+	assert.Equal(t, 1, in.Height(width), "empty input occupies one line")
+
+	in.SetText("0123456789ABCDEFGHIJ") // 20 cols wraps to 2 lines at width 10
+	assert.Equal(t, 2, in.Height(width),
+		"a line longer than width must wrap and grow the box")
+}
+
+// TestComposeEditorResizeResetsScrollAfterWrap reproduces the bug where
+// the compose editor stays scrolled down by one row after a typed line
+// wraps and the box grows. The editor scrolls to keep the cursor visible
+// while still one row tall, but a later Resize to the taller height does
+// not re-clamp the scroll offset, hiding the first visual line.
+func TestComposeEditorResizeResetsScrollAfterWrap(t *testing.T) {
+	ed := modeless.Editor(
+		modeless.WithClipboard(clipboard.NewInMemory()),
+		modeless.WithWrap(true),
+	)
+	comp := NewComponent(ComponentConfig{Editor: ed})
+	comp.Resize(30, 10)
+
+	in, ok := comp.Input().(*textHandlerInput)
+	require.True(t, ok)
+
+	const width = 10
+
+	// One visible row: type a line long enough to wrap to two visual
+	// lines. Typing moves the cursor onto the second visual line, so the
+	// editor scrolls down to keep it visible while still one row tall.
+	in.Resize(width, 1)
+	for _, ch := range "0123456789ABCDEFGHIJ" {
+		in.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+	in.Resize(width, 1)
+	require.Equal(t, 1, in.SeekOffset(),
+		"editor scrolls down to keep the cursor visible at one row")
+
+	cursorBefore := in.Handler.CursorAtScroll()
+
+	// The box grows to fit both wrapped lines; the offset must reset so
+	// the first line is visible again.
+	in.Resize(width, in.Height(width))
+	assert.Equal(t, 0, in.SeekOffset(),
+		"growing the box must re-clamp the scroll offset to the top")
+	assert.Equal(t, cursorBefore, in.Handler.CursorAtScroll(),
+		"re-clamping the offset must not move the cursor in the buffer")
+}
+
+// TestComposeEditorResizeKeepsScrollWhenContentOverflows ensures the
+// resize re-clamp does not force the box to the top when the content is
+// taller than the viewport: the offset must stay only as far down as
+// needed to keep the cursor visible.
+func TestComposeEditorResizeKeepsScrollWhenContentOverflows(t *testing.T) {
+	ed := modeless.Editor(
+		modeless.WithClipboard(clipboard.NewInMemory()),
+		modeless.WithWrap(true),
+	)
+	comp := NewComponent(ComponentConfig{Editor: ed})
+	comp.Resize(30, 10)
+
+	in, ok := comp.Input().(*textHandlerInput)
+	require.True(t, ok)
+
+	const width = 10
+
+	// Five wrapped visual lines, cursor at the end, in a 2-row viewport.
+	in.Resize(width, 2)
+	for _, ch := range "0123456789ABCDEFGHIJabcdefghijKLMNOPQRST" {
+		in.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+	cursorBefore := in.Handler.CursorAtScroll()
+	in.Resize(width, 2)
+
+	// Content (4 visual lines) overflows the 2-row viewport, so the box
+	// must remain scrolled down to keep the cursor visible rather than
+	// snapping to the top.
+	assert.Greater(t, in.SeekOffset(), 0,
+		"overflowing content must stay scrolled to keep the cursor visible")
+	assert.Equal(t, in.MaxSeekOffset(), in.SeekOffset(),
+		"offset must be clamped to the maximum for the current height")
+	assert.Equal(t, cursorBefore, in.Handler.CursorAtScroll(),
+		"resize must not move the cursor in the buffer")
+}
+
+// TestComposeEditorHeightCappedLeavesMessagesVisible reproduces the bug
+// where a long compose buffer grew the input box to the full viewport,
+// collapsing the messages row to zero so conversation rows bled through
+// the input frame. The box height must be capped to keep messages
+// visible; the editor scrolls its content internally.
+func TestComposeEditorHeightCappedLeavesMessagesVisible(t *testing.T) {
+	const width, height = 80, 30
+	ed := modeless.Editor(
+		modeless.WithClipboard(clipboard.NewInMemory()),
+		modeless.WithWrap(true),
+	)
+	comp := NewComponent(ComponentConfig{Editor: ed})
+
+	comp.AddToolCall("tc1", "bash", `{"command":"ls -l"}`, "List directory")
+	comp.CompleteToolCall("tc1", "bash", `{"command":"ls -l"}`, "List directory", "total 0\n", false)
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(width, height)
+
+	var lines []string
+	for range 60 {
+		lines = append(lines, "package workspaceapi import errors")
+	}
+	comp.Input().SetText(strings.Join(lines, "\n"))
+	h.Resize(width, height)
+
+	boxW := comp.boxWidth(width)
+	require.Greater(t, comp.box.Height(boxW), height,
+		"precondition: the raw editor height must exceed the viewport")
+
+	capped := comp.boxHeight(boxW)
+	assert.LessOrEqual(t, capped, height-minMessagesRows,
+		"capped box must leave at least minMessagesRows for the conversation")
+
+	messagesHeight := height - capped
+	assert.GreaterOrEqual(t, messagesHeight, minMessagesRows,
+		"the messages row must stay visible above the input box")
+}
+
+func TestComposeEditorModelessShiftEnterInsertsNewline(t *testing.T) {
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	typeText(h, "line1")
+	_, handled := h.Handle(term.Event{
+		Type: term.EventKey, Key: term.KeyEnter, Mod: term.ModShift,
+	})
+	assert.True(t, handled)
+	typeText(h, "line2")
+
+	assert.Equal(t, "line1\nline2", comp.Input().Text(),
+		"shift-enter must insert a newline, not submit")
+}
+
+func TestComposeEditorInputBackgroundColorAppliesToFrameAndEditor(t *testing.T) {
+	const width, height = 40, 12
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{
+		Editor:               ed,
+		InputBackgroundColor: term.ColorGray,
+	})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(width, height)
+
+	assert.Equal(t, term.ColorGray, comp.box.Bg,
+		"frame background must use the configured input color")
+
+	typeText(h, "hello")
+
+	sw := term.NewStringWriter(width, height)
+	h.Draw(sw)
+
+	// The editor content sits inside the frame border; the typed text
+	// cells must carry the configured background color.
+	inputPos := comp.InputPosition()
+	cells := sw.Cells()
+	var found bool
+	for x := inputPos.X + 1; x < width; x++ {
+		c := cells[(inputPos.Y+1)*width+x]
+		if c.Ch == 'h' {
+			found = true
+			assert.Equal(t, term.ColorGray, c.Bg,
+				"editor content background must use the configured input color")
+			break
+		}
+	}
+	assert.True(t, found, "typed text must be rendered in the input area")
+}
+
+func TestComposeEditorInputBackgroundDefaultLeftUnset(t *testing.T) {
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+
+	assert.Equal(t, term.ColorDefault, comp.box.Bg,
+		"frame background stays at terminal default when unset")
+}
+
+func TestComposeEditorFrameCharSetAppliesToFrame(t *testing.T) {
+	const width, height = 40, 12
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	charset := component.FrameCharSetHighlight()
+	comp := NewComponent(ComponentConfig{
+		Editor: ed,
+		InputBox: InputBoxConfig{
+			FrameCharSet: charset,
+		},
+	})
+
+	assert.Equal(t, charset, comp.box.FrameCharSet,
+		"frame must use the configured frame charset")
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(width, height)
+
+	sw := term.NewStringWriter(width, height)
+	h.Draw(sw)
+
+	inputPos := comp.InputPosition()
+	cells := sw.Cells()
+	topLeft := cells[inputPos.Y*width+inputPos.X]
+	assert.Equal(t, charset.TopLeft, topLeft.Ch,
+		"rendered top-left corner must use the configured frame charset rune")
+}
+
+func TestComposeEditorModalEnterSubmitsInNormalMode(t *testing.T) {
+	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed, EditorModal: true})
+
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	// Enter insert mode, type, then return to normal mode.
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	typeText(h, "modal msg")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	assert.Equal(t, "modal msg", comp.Input().Text())
+
+	go func() {
+		msg := <-rx
+		assert.Equal(t, "modal msg", msg.Text)
+	}()
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "", comp.Input().Text(),
+		"normal-mode enter must submit and clear")
+}
+
+func TestComposeEditorModalEnterInsertsNewlineInInsertMode(t *testing.T) {
+	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed, EditorModal: true})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	typeText(h, "line1")
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	typeText(h, "line2")
+
+	assert.Equal(t, "line1\nline2", comp.Input().Text(),
+		"insert-mode enter must insert a newline, not submit")
+}
+
+// TestComposeEditorSelectionSurvivesUnfocused reproduces issue #1: the
+// editor bakes its selection as AttrReverse cells, and Draw must not
+// strip them when the messages area (not the input) is focused. The
+// selection highlight must remain visible regardless of mouse hover.
+func TestComposeEditorSelectionSurvivesUnfocused(t *testing.T) {
+	const width, height = 40, 12
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(width, height)
+
+	typeText(h, "hello")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyHome})
+	for range 3 {
+		h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight, Mod: term.ModShift})
+	}
+
+	dh := h.(*dialogueHandler)
+	dh.inputFocused = false
+
+	sw := term.NewStringWriter(width, height)
+	h.Draw(sw)
+	require.NoError(t, sw.Flush())
+
+	inputPos := comp.InputPosition()
+	cells := sw.Cells()
+	var reverseCells int
+	for y := inputPos.Y; y < height; y++ {
+		for x := inputPos.X; x < width; x++ {
+			if cells[y*width+x].Attrs&term.AttrReverse != 0 {
+				reverseCells++
+			}
+		}
+	}
+	assert.GreaterOrEqual(t, reverseCells, 3,
+		"editor selection must keep its AttrReverse cells when the input is not focused")
+}
+
+// TestComposeEditorArrowUpNavigatesBeforeHistory verifies that ArrowUp
+// is delegated to the editor first: within a multi-line buffer it moves
+// the cursor between lines, and history recall only takes over once the
+// editor leaves the event unhandled at the top edge.
+func TestComposeEditorArrowUpNavigatesBeforeHistory(t *testing.T) {
+	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed})
+
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	// Submit a message so history has an entry to recall.
+	go func() { <-rx }()
+	typeText(h, "old message")
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	require.True(t, handled)
+	require.Equal(t, "", comp.Input().Text())
+
+	// Compose a two-line draft; the cursor sits on the second line.
+	typeText(h, "line1")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter, Mod: term.ModShift})
+	typeText(h, "line2")
+	require.Equal(t, "line1\nline2", comp.Input().Text())
+
+	// First ArrowUp moves the cursor up within the editor; the draft is
+	// untouched and history is not recalled.
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+	assert.Equal(t, "line1\nline2", comp.Input().Text(),
+		"ArrowUp inside a multi-line draft must move the cursor, not recall history")
+
+	// Second ArrowUp is at the top edge: the editor leaves it unhandled,
+	// so history recall replaces the draft with the previous message.
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+	assert.Equal(t, "old message", comp.Input().Text(),
+		"ArrowUp at the top edge must recall the previous history entry")
+}

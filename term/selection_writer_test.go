@@ -320,31 +320,6 @@ func TestSelectionWriterDump(t *testing.T) {
 	})
 }
 
-func TestSelectionWriterClearReverse(t *testing.T) {
-	g := NewSelectionWriter(4, 2)
-	for y := range 2 {
-		for x := range 4 {
-			g.SetCell(term.Coordinates{X: x, Y: y},
-				term.Cell{Ch: 'x', Attributes: term.Attributes{Attrs: term.AttrReverse}})
-		}
-	}
-	g.ClearReverse(1, 0, 2, 1) // clears x in [1,2], y=0 only
-
-	out := term.NewStringWriter(4, 2)
-	g.Dump(out, nil)
-	require.NoError(t, out.Flush())
-	cells := out.Cells()
-	assert.NotZero(t, cells[0].Attrs&term.AttrReverse, "x0 untouched")
-	assert.Zero(t, cells[1].Attrs&term.AttrReverse, "x1 cleared")
-	assert.Zero(t, cells[2].Attrs&term.AttrReverse, "x2 cleared")
-	assert.NotZero(t, cells[3].Attrs&term.AttrReverse, "x3 untouched")
-	assert.NotZero(t, cells[4].Attrs&term.AttrReverse, "row1 untouched")
-
-	assert.NotPanics(t, func() {
-		g.ClearReverse(-5, -5, 100, 100) // fully out of range start, oversized
-	})
-}
-
 func TestSelRangeContains(t *testing.T) {
 	type tc struct {
 		name string

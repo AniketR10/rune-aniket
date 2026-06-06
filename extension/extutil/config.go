@@ -119,10 +119,66 @@ func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error
 	}
 	switch mode {
 	case "modal":
-		return vi.Editor(vi.WithClipboard(clipboard)), nil
+		return viEditor(clipboard), nil
+	case "exo":
+		fallback, err := exoFallback(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if fallback == "modal" {
+			return viEditor(clipboard), nil
+		}
+		return modelessEditor(clipboard), nil
 	default:
-		return modeless.Editor(modeless.WithClipboard(clipboard)), nil
+		return modelessEditor(clipboard), nil
 	}
+}
+
+// EditorModal reports whether the configured compose editor is modal
+// (vi-style). It mirrors the resolution Editor performs, including the
+// editor.exo fallback. A bare <Enter> submits in modal normal mode and
+// inserts a newline in insert mode, so callers gate submission on this.
+func EditorModal(cfg config.Config) (bool, error) {
+	mode, err := editorMode(cfg)
+	if err != nil {
+		return false, err
+	}
+	switch mode {
+	case "modal":
+		return true, nil
+	case "exo":
+		fallback, err := exoFallback(cfg)
+		if err != nil {
+			return false, err
+		}
+		return fallback == "modal", nil
+	default:
+		return false, nil
+	}
+}
+
+// viEditor builds a vi editor with all chrome bars disabled so an
+// extension-hosted compose buffer shows only the text area.
+func viEditor(clipboard clipboard.Register) text.Editor {
+	return vi.Editor(
+		vi.WithClipboard(clipboard),
+		vi.WithWrap(true),
+		vi.WithStatusBarConfig(false, text.StatusBarConfig{}),
+		vi.WithAuxiliaryBar(false, text.AuxBarConfig{}),
+		vi.WithGitBar(false, text.IconsBarConfig{}),
+	)
+}
+
+// modelessEditor builds a modeless editor with all chrome bars disabled
+// so an extension-hosted compose buffer shows only the text area.
+func modelessEditor(clipboard clipboard.Register) text.Editor {
+	return modeless.Editor(
+		modeless.WithClipboard(clipboard),
+		modeless.WithWrap(true),
+		modeless.WithStatusBarConfig(false, text.StatusBarConfig{}),
+		modeless.WithAuxiliaryBar(false, text.AuxBarConfig{}),
+		modeless.WithGitBar(false, text.IconsBarConfig{}),
+	)
 }
 
 // Wrap returns the current editor implementation is configured with wrap mode.
@@ -161,7 +217,7 @@ func Wrap(cfg config.Config) (bool, error) {
 }
 
 func editorMode(cfg config.Config) (string, error) {
-	def := "modeless"
+	def := "modal"
 	edConfig, err := cfg.GetConfig("editor")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -180,4 +236,41 @@ func editorMode(cfg config.Config) (string, error) {
 		mode = def
 	}
 	return mode, nil
+}
+
+// exoFallback returns the Rune-native fallback editor used when
+// editor.mode is "exo". The full external editor is not viable inside
+// an extension process, so compose input uses this fallback. Valid
+// values are "modal" or "modeless"; defaults to "modeless".
+func exoFallback(cfg config.Config) (string, error) {
+	def := "modeless"
+	edConfig, err := cfg.GetConfig("editor")
+	if err != nil {
+		if err != config.ErrNotFound {
+			return "", fmt.Errorf("failed to get 'editor' from config: %v", err)
+		}
+		return def, nil
+	}
+
+	exoConfig, err := edConfig.GetConfig("exo")
+	if err != nil {
+		if err != config.ErrNotFound {
+			return "", fmt.Errorf("failed to get 'exo' from editor config: %v", err)
+		}
+		return def, nil
+	}
+
+	fallback, err := exoConfig.GetString("fallback")
+	if err != nil {
+		if err != config.ErrNotFound {
+			return "", fmt.Errorf("failed to get 'fallback' from editor.exo config: %v", err)
+		}
+		return def, nil
+	}
+
+	switch fallback {
+	case "modal", "modeless":
+		return fallback, nil
+	}
+	return def, nil
 }

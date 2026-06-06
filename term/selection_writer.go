@@ -143,16 +143,6 @@ func (g *SelectionWriter) SetContext(ctx context.Context) {
 	g.ctx = ctx
 }
 
-// ClearReverse strips AttrReverse from every cell in the rectangle
-// starting at (x0, y0) with the given width and height.
-func (g *SelectionWriter) ClearReverse(x0, y0, w, h int) {
-	for y := max(y0, 0); y < y0+h && y < g.height; y++ {
-		for x := max(x0, 0); x < x0+w && x < g.width; x++ {
-			g.cells[y*g.width+x].Attrs &^= term.AttrReverse
-		}
-	}
-}
-
 // Dump copies all cells to w. When sel is non-nil and active, cells
 // within the selection have AttrReverse applied via UnionAttributes.
 // Null cells are emitted as a single space so the output is opaque.

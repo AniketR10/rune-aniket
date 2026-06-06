@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -40,9 +41,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 	mdhandler "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/text/modeless"
 )
 
 // reasoningEntry tracks a finalized reasoning node for toggling visibility.
@@ -57,7 +60,7 @@ type Component struct {
 	messages     component.ResponsiveList
 	spanMessages component.Span
 	box          *handler.Frame
-	input        *inputbox.Handler
+	input        Input
 	container    component.Container
 	inputRow     *component.Row
 	inputCol     *component.Virtual[component.Responsive]
@@ -147,21 +150,51 @@ func (c *Component) Init(cfg ComponentConfig) {
 	messagesResponsive := component.FuncResponsive(&c.spanMessages, func(width int) int {
 		// do not use ResponsiveList.Height, otherwise it might not leave space for prompt
 		// assumes c.height has been set prior to call to Container.Resize
-		return int(math.Max(float64(c.height-c.box.Height(c.boxWidth(width))), 0))
+		return int(math.Max(float64(c.height-c.boxHeight(c.boxWidth(width))), 0))
 	})
 	c.container.AddRow().AddComponent(messagesResponsive, component.MaxCols)
 
-	box := inputbox.New(cfg.InputBox.Options()...)
-	c.box = handler.NewFrame(box)
-	c.input = box
+	c.input = c.newInputBackend(cfg)
+	c.box = handler.NewFrame(c.input)
 	c.inputRow = c.container.AddRow()
 	c.inputRow.AddComponent(component.NopResponsive(), (component.MaxCols-c.cfg.InputRowColumns)/2)
 	c.box.SetAttr(cfg.InputBox.FrameAttr)
+	if cfg.InputBackgroundColor != term.ColorDefault {
+		c.box.Bg = cfg.InputBackgroundColor
+	}
 	if cfg.InputBox.FrameCharSet != (component.FrameCharSet{}) {
 		c.box.FrameCharSet = cfg.InputBox.FrameCharSet
 	}
-	box.SetAttr(cfg.InputBox.ContentAttr) // override frame SetAttr
-	c.inputCol = c.inputRow.AddComponent(c.box, c.boxWidth(component.MaxCols))
+	cappedBox := component.FuncResponsive(c.box, func(width int) int {
+		return c.boxHeight(width)
+	})
+	c.inputCol = c.inputRow.AddComponent(cappedBox, c.boxWidth(component.MaxCols))
+}
+
+func (c *Component) newInputBackend(cfg ComponentConfig) Input {
+	editor := cfg.Editor
+	modal := cfg.EditorModal
+	if editor == nil {
+		editor = modeless.Editor()
+		modal = false
+	}
+	buf := cell.NewBuffer()
+	h, err := editor.Edit(context.Background(),
+		dialogueComposeURI, buf, false, false)
+	if err != nil {
+		slog.Error("dialoguetui: compose editor unavailable, using modeless editor", "err", err)
+		buf = cell.NewBuffer()
+		h, err = modeless.Editor().Edit(context.Background(),
+			dialogueComposeURI, buf, false, false)
+		if err != nil {
+			panic(fmt.Sprintf("dialoguetui: default compose editor unavailable: %v", err))
+		}
+		modal = false
+	}
+	if cfg.InputBackgroundColor != term.ColorDefault {
+		h.SetDefaultAttributes(term.Attributes{Bg: cfg.InputBackgroundColor})
+	}
+	return &textHandlerInput{Handler: h, buf: buf, modal: modal}
 }
 
 // Draw satisfies tui.Component.
@@ -186,9 +219,9 @@ func (c *Component) Resize(width, height int) {
 	c.container.Resize(width, height)
 }
 
-// Input returns the input.Box employed by this Component.
-func (c *Component) Input() *inputbox.Handler {
-	return c.box.Content().(*inputbox.Handler)
+// Input returns the compose input employed by this Component.
+func (c *Component) Input() Input {
+	return c.input
 }
 
 // Cursor returns the input.Box cursor.
@@ -945,7 +978,7 @@ func (c *Component) RemoveReceiveMessageHint() {
 func (c *Component) Height(width int) (height int) {
 	// do not use container.Height, as first row (messages) is designed
 	// to take the remaining space
-	height = c.box.Height(c.boxWidth(width))
+	height = c.boxHeight(c.boxWidth(width))
 	height += c.spanMessages.Height(width)
 	return
 }
@@ -1305,6 +1338,31 @@ func (c *Component) PromptInputCursor() (term.Coordinates, term.CursorStyle, boo
 
 func (c *Component) boxWidth(width int) int {
 	return int(float64(width) * float64(c.cfg.InputRowColumns) / float64(component.MaxCols))
+}
+
+// minMessagesRows is the number of message rows the compose box must
+// always leave visible so a growing input never hides the conversation.
+const minMessagesRows = 2
+
+// boxHeight returns the compose box height capped so it never consumes
+// the whole viewport. The editor's frame and content can report a height
+// taller than the screen for long buffers; without a cap the messages row
+// collapses to zero and stale conversation rows show through the input.
+// The capped box scrolls its content internally instead.
+func (c *Component) boxHeight(width int) int {
+	h := c.box.Height(width)
+	if c.height <= 0 {
+		return h
+	}
+	maxH := c.height - minMessagesRows
+	const minH = 3 // top border + one content row + bottom border
+	if maxH < minH {
+		maxH = minH
+	}
+	if h > maxH {
+		return maxH
+	}
+	return h
 }
 
 const maxToolArgs = 100

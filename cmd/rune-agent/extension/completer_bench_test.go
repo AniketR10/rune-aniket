@@ -29,12 +29,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
-	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // benchDialogueStore creates a dialoguemanager.Store backed by an in-memory
@@ -183,83 +182,6 @@ func BenchmarkCompleteWithDialoguesIterator(b *testing.B) {
 	}
 }
 
-// BenchmarkMakeCommandCompleter measures the end-to-end Tab-completion path:
-// makeCommandCompleter → Complete → Store.List → filter → collect → prefix filter.
-// This is what the user experiences when pressing Tab in the input box.
-func BenchmarkMakeCommandCompleter(b *testing.B) {
-	ws, _ := workspaceapi.ParseURI("file:///test/workspace")
-
-	for _, numDialogues := range []int{10, 50, 100, 500} {
-		b.Run(fmt.Sprintf("dialogues=%d/store=inmemory", numDialogues), func(b *testing.B) {
-			store := benchDialogueStore(b, numDialogues, 10, ws.String())
-			h := &aiEditorHandler{
-				dialogueStore: store,
-				cwd:           ws,
-			}
-			completer := makeCommandCompleter(context.Background(), &benchCommandAdapter{handler: h})
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				head, comps, tail := completer("/agent ", 7)
-				if len(comps) != numDialogues {
-					b.Fatalf("expected %d completions, got %d (head=%q tail=%q)", numDialogues, len(comps), head, tail)
-				}
-			}
-		})
-
-		b.Run(fmt.Sprintf("dialogues=%d/store=mock", numDialogues), func(b *testing.B) {
-			mockStore := benchMockListStore(numDialogues, ws.String())
-			h := &aiEditorHandler{
-				dialogueStore: mockStore,
-				cwd:           ws,
-			}
-			completer := makeCommandCompleter(context.Background(), &benchCommandAdapter{handler: h})
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				head, comps, tail := completer("/agent ", 7)
-				if len(comps) != numDialogues {
-					b.Fatalf("expected %d completions, got %d (head=%q tail=%q)", numDialogues, len(comps), head, tail)
-				}
-			}
-		})
-	}
-}
-
-// BenchmarkMakeCommandCompleter_WithPrefix measures Tab completion with a
-// prefix filter applied (simulating the user typing part of a dialogue name).
-func BenchmarkMakeCommandCompleter_WithPrefix(b *testing.B) {
-	ws, _ := workspaceapi.ParseURI("file:///test/workspace")
-
-	for _, numDialogues := range []int{100, 500} {
-		b.Run(fmt.Sprintf("dialogues=%d", numDialogues), func(b *testing.B) {
-			store := benchDialogueStore(b, numDialogues, 10, ws.String())
-			h := &aiEditorHandler{
-				dialogueStore: store,
-				cwd:           ws,
-			}
-			completer := makeCommandCompleter(context.Background(), &benchCommandAdapter{handler: h})
-
-			// Only ~2% of dialogues will match "dialogue-00" prefix.
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, comps, _ := completer("/agent dialogue-00", 18)
-				_ = comps
-			}
-		})
-	}
-}
-
-// benchCommandAdapter wraps aiEditorHandler to satisfy dialoguetui.CommandHandler
-// for benchmarking the complete flow.
-type benchCommandAdapter struct {
-	handler *aiEditorHandler
-}
-
-func (a *benchCommandAdapter) HandleCommand(context.Context, string, []string) (dialoguetui.CommandResult, error) {
-	return dialoguetui.CommandResult{}, nil
-}
-
-func (a *benchCommandAdapter) Complete(ctx context.Context, name string, args []string) (iterator.Iterator[string], error) {
-	return a.handler.Complete(ctx, name, args)
-}
+// (Tab-completion benchmarks removed along with the inputbox compose
+// backend; the editor-backed compose input no longer uses a
+// WordCompleter.)

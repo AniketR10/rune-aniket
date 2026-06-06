@@ -779,9 +779,9 @@ func TestHandlerMouseSelectionFullConfigScrolled(t *testing.T) {
 //	Screen Y=9, X=20: "charlie"
 //
 // TestHandlerInputBoxSelection verifies that Selection() returns the
-// inputbox's selected text when the inputbox has an active selection,
-// and that focus transitions between the inputbox and messages area
-// correctly clear the other area's selection.
+// compose editor's selected text when the input has an active
+// selection, and that focus transitions between the input and messages
+// area correctly clear the other area's selection.
 //
 // Layout: width=60, height=20. Messages area: rows 0-16 (17 rows).
 // Input box: rows 17-19 (3 rows). With ParagraphSpacing=0, "alpha"
