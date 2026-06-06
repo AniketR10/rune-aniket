@@ -27,6 +27,7 @@ import (
 	"context"
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -52,6 +53,10 @@ type Config struct {
 	// regular shell view and on the search overlay's input bar.
 	// Defaults to "> ".
 	Prompt string
+	// Workspace seeds the shell interpreter's working directory.
+	// Without it the interpreter inherits the process working
+	// directory, which under a macOS .app launch is the bundle.
+	Workspace workspaceapi.URI
 }
 
 // New creates an IDE shell Handler wired with a CommandRegistry, sh
@@ -87,7 +92,7 @@ func New(
 		opts = append(opts, repl.WithMaxHistory(cfg.MaxHistory))
 	}
 	opts = append(opts, repl.WithPrompt(prompt))
-	shim := &completionShim{underlying: sh.New(r)}
+	shim := &completionShim{underlying: sh.New(r, cfg.Workspace)}
 	inner := repl.New(shim, scheduleNextTick, interrupter, opts...)
 	list := search.NewList(search.ListConfig{
 		Algo:            search.FuzzyMatch,

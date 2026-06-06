@@ -306,10 +306,10 @@ type fixtureOpts struct {
 }
 
 type fixture struct {
-	t           *testing.T
-	h           *repl.Handler
-	flush       *asyncFlusher
-	sched       *syncScheduler
+	t     *testing.T
+	h     *repl.Handler
+	flush *asyncFlusher
+	sched *syncScheduler
 
 	mu         sync.Mutex
 	pwCallsLog []progressCall
@@ -358,7 +358,7 @@ func newShellFixture(t *testing.T, opts fixtureOpts) *fixture {
 	reg := &shellRegistry{cmds: map[string]repl.CommandHandler{
 		"agent": &agentParentCommand{child: dreamCmd},
 	}}
-	shHandler := sh.New(reg)
+	shHandler := sh.New(reg, workspaceapi.URI{})
 
 	f.h = repl.New(shHandler, sched.schedule, term.NopInterrupter(),
 		repl.WithPrompt("> "),

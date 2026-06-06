@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package sh
 
 import (
@@ -37,6 +36,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -47,15 +47,18 @@ import (
 // New returns a repl.CommandHandler that interprets
 // shell syntax (pipes, semicolons, variables, etc.)
 // using mvdan/sh and delegates actual command execution
-// to the underlying handler.
-func New(underlying repl.CommandHandler) repl.CommandHandler {
-	return &commandHandler{underlying: underlying}
+// to the underlying handler. The interpreter's working
+// directory is seeded from cwd; passing the zero URI leaves
+// it at the process working directory.
+func New(underlying repl.CommandHandler, cwd workspaceapi.URI) repl.CommandHandler {
+	return &commandHandler{underlying: underlying, cwd: cwd}
 }
 
 const pipeWidth = 200
 
 type commandHandler struct {
 	underlying repl.CommandHandler
+	cwd        workspaceapi.URI
 }
 
 // HandleCommand parses the command line as shell syntax
@@ -81,13 +84,17 @@ func (h *commandHandler) HandleCommand(
 	outW := &lineWriter{ch: ch, ctx: ctx}
 	errW := &lineWriter{ch: ch, ctx: ctx}
 
-	runner, err := interp.New(
+	opts := []interp.RunnerOption{
 		interp.StdIO(nil, outW, errW),
 		interp.ExecHandlers(func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			return h.execMiddleware(pw, next)
 		}),
 		interp.Interactive(true),
-	)
+	}
+	if dir := h.cwd.Path(); dir != "" {
+		opts = append(opts, interp.Dir(dir))
+	}
+	runner, err := interp.New(opts...)
 	if err != nil {
 		return nil, err
 	}

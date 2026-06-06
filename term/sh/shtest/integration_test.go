@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package shtest
 
 import (
@@ -30,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -316,7 +316,7 @@ func TestIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			underlying := &testHandler{}
 			h := repl.New(
-				sh.New(underlying),
+				sh.New(underlying, workspaceapi.URI{}),
 				nopSchedule, nopInterrupter(),
 				repl.WithPrompt("$ "),
 			)
@@ -330,7 +330,7 @@ func TestIntegration(t *testing.T) {
 func TestCtrlDEOF(t *testing.T) {
 	underlying := &testHandler{}
 	h := repl.New(
-		sh.New(underlying),
+		sh.New(underlying, workspaceapi.URI{}),
 		nopSchedule, nopInterrupter(),
 		repl.WithPrompt("$ "),
 	)
@@ -358,7 +358,7 @@ func TestTabCompletionPassthrough(t *testing.T) {
 		},
 	}
 	h := repl.New(
-		sh.New(underlying),
+		sh.New(underlying, workspaceapi.URI{}),
 		nopSchedule, nopInterrupter(),
 		repl.WithPrompt("$ "),
 	)
@@ -380,7 +380,7 @@ func TestTabCompletionPassthrough(t *testing.T) {
 func TestHistoryRecall(t *testing.T) {
 	underlying := &testHandler{}
 	h := repl.New(
-		sh.New(underlying),
+		sh.New(underlying, workspaceapi.URI{}),
 		nopSchedule, nopInterrupter(),
 		repl.WithPrompt("$ "),
 	)
@@ -404,7 +404,7 @@ func TestHistoryRecall(t *testing.T) {
 func TestCustomPrompt(t *testing.T) {
 	underlying := &testHandler{}
 	h := repl.New(
-		sh.New(underlying),
+		sh.New(underlying, workspaceapi.URI{}),
 		nopSchedule, nopInterrupter(),
 		repl.WithPrompt(">> "),
 	)

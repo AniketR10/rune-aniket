@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ideshell
 
 import (
@@ -33,6 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -408,7 +408,7 @@ func TestShellHandlerForwardsProgressToRegisteredCommand(t *testing.T) {
 	// sh wraps the registry; the repl.Handler uses sh as its underlying
 	// CommandHandler. Drive a command end-to-end through that path with
 	// our recording ProgressWriter.
-	shCmd := sh.New(r)
+	shCmd := sh.New(r, workspaceapi.URI{})
 	pw := &recordingProgressWriter{}
 	ctx := context.Background()
 	iter, err := shCmd.HandleCommand(ctx, repl.Command{Name: "dl"}, pw)

@@ -1910,10 +1910,15 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 
 func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 	if e.companionShell == nil {
+		workspaceURI, err := e.workspace.URI(".")
+		if err != nil {
+			return fmt.Errorf("workspace uri: %w", err)
+		}
 		shellCfg := ideshell.Config{
 			Storage:           e.storage,
 			HistoryDocumentID: shellHistoryDocumentID,
 			MaxHistory:        e.config.ShellMaxHistory,
+			Workspace:         workspaceURI,
 		}
 		h, registry := ideshell.New(
 			e.emulatorConfig.ScheduleNextTick, e, e.promptEditor,
@@ -1937,12 +1942,6 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 				_ = h.Close()
 				return fmt.Errorf("register repl command %q: %w", cmd.Name, err)
 			}
-		}
-
-		workspaceURI, err := e.workspace.URI(".")
-		if err != nil {
-			_ = h.Close()
-			return fmt.Errorf("workspace uri: %w", err)
 		}
 
 		uri, err := workspaceapi.ParseURI("shell:///")

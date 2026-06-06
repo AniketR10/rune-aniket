@@ -1055,7 +1055,7 @@ IIII`},
 }
 
 func TestShellCommandOpensTab(t *testing.T) {
-	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/my-workspace")
+	workspaceURI, err := workspaceapi.ParseURI("file://" + t.TempDir())
 	require.NoError(t, err)
 	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
 	cfg := vte.DefaultConfig()
@@ -1097,11 +1097,11 @@ func TestShellCommandOpensTab(t *testing.T) {
 	_, ok := tabs[0].Handler().(*ideshell.Handler)
 	assert.True(t, ok)
 	assert.Equal(t, text.DefaultConfig().Icons.Shell, b.config.Icons.Shell)
-	assert.Equal(t, "shell:///tmp/my-workspace", tabs[0].URI().String())
+	assert.Equal(t, "shell://"+workspaceURI.Path(), tabs[0].URI().String())
 }
 
 func TestShellCommandComplete(t *testing.T) {
-	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-complete")
+	workspaceURI, err := workspaceapi.ParseURI("file://" + t.TempDir())
 	require.NoError(t, err)
 	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
 	cfg := vte.DefaultConfig()
@@ -1263,7 +1263,7 @@ func TestDebuggerCommandOpensShellWithDebugger(t *testing.T) {
 // shellHistoryDocumentID, and that a second ex booted on the same
 // storage observes the previously persisted entries.
 func TestShellCommandPersistsHistory(t *testing.T) {
-	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-hist")
+	workspaceURI, err := workspaceapi.ParseURI("file://" + t.TempDir())
 	require.NoError(t, err)
 	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
 
@@ -1335,7 +1335,7 @@ func TestShellCommandPersistsHistory(t *testing.T) {
 }
 
 func TestShellCommandRespectsMaxHistory(t *testing.T) {
-	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-hist-max")
+	workspaceURI, err := workspaceapi.ParseURI("file://" + t.TempDir())
 	require.NoError(t, err)
 	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
 

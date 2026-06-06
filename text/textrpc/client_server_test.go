@@ -1070,7 +1070,7 @@ func TestClientServer_ShellProgressE2E(t *testing.T) {
 
 	// Wrap the captured REPLHandler in a sh layer — this is the exact
 	// flow the companion shell uses: repl.Handler -> sh -> registry -> REPL.
-	shellCmd := sh.New(replByNameHandler{router: subscribedRepl})
+	shellCmd := sh.New(replByNameHandler{router: subscribedRepl}, workspaceapi.URI{})
 
 	pw := &recordingProgressWriter{}
 	ctx := context.Background()

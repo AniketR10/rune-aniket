@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package sh
 
 import (
@@ -29,12 +28,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -259,7 +260,7 @@ func TestHandleCommand(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := &mockHandler{handleFn: tc.handleFn}
-			h := New(mock)
+			h := New(mock, workspaceapi.URI{})
 			ctx := context.Background()
 			iter, err := h.HandleCommand(ctx, tc.cmd, repl.NopProgressWriter())
 			if tc.wantErr {
@@ -299,7 +300,7 @@ func TestCancelStopsCommand(t *testing.T) {
 			return nil, repl.ErrNotFound
 		},
 	}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// "yes" produces infinite output; the iterator must
@@ -368,7 +369,7 @@ func TestHandleCommandForwardsProgressWriter(t *testing.T) {
 			return iterator.FromSlice[component.Responsive](nil), nil
 		},
 	}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	pw := &recordingProgressWriter{}
 
 	iter, err := h.HandleCommand(context.Background(), repl.Command{
@@ -393,7 +394,7 @@ func TestHandleCommandForwardsProgressWriter(t *testing.T) {
 
 func TestExitStatusError(t *testing.T) {
 	mock := &mockHandler{}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	ctx := context.Background()
 	iter, err := h.HandleCommand(ctx, repl.Command{
 		Name: "false",
@@ -420,7 +421,7 @@ func TestComplete(t *testing.T) {
 			return iterator.FromSlice([]string{"baz"}), nil
 		},
 	}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	iter, err := h.Complete(
 		context.Background(), "foo", []string{"bar"},
 	)
@@ -430,6 +431,60 @@ func TestComplete(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, called)
 	assert.Equal(t, []string{"baz"}, got)
+}
+
+func TestInterpreterDirFromWorkspaceURI(t *testing.T) {
+	// pwd must report the workspace directory, not the process
+	// working directory. Under a macOS .app launch the process cwd
+	// is the bundle, so inheriting it would let commands run inside
+	// the application and corrupt it.
+	wsDir := t.TempDir()
+	otherDir := t.TempDir()
+	t.Chdir(otherDir)
+
+	uri, err := workspaceapi.CurrentUserHostURI(wsDir)
+	require.NoError(t, err)
+
+	mock := &mockHandler{}
+	h := New(mock, uri)
+	iter, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: "pwd",
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out, iterErr := collectOutput(t, iter)
+	require.NoError(t, iterErr)
+	require.Len(t, out, 1)
+	wantDir, err := filepath.EvalSymlinks(wsDir)
+	require.NoError(t, err)
+	gotDir, err := filepath.EvalSymlinks(strings.TrimSpace(out[0]))
+	require.NoError(t, err)
+	assert.Equal(t, wantDir, gotDir)
+}
+
+func TestInterpreterDirDefaultsToProcessCwd(t *testing.T) {
+	// The zero URI leaves the interpreter at the process working
+	// directory so non-IDE callers keep their previous behavior.
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	mock := &mockHandler{}
+	h := New(mock, workspaceapi.URI{})
+	iter, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: "pwd",
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out, iterErr := collectOutput(t, iter)
+	require.NoError(t, iterErr)
+	require.Len(t, out, 1)
+	wantDir, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	gotDir, err := filepath.EvalSymlinks(strings.TrimSpace(out[0]))
+	require.NoError(t, err)
+	assert.Equal(t, wantDir, gotDir)
 }
 
 func TestFileCompletion(t *testing.T) {
@@ -447,7 +502,7 @@ func TestFileCompletion(t *testing.T) {
 	t.Chdir(dir)
 
 	mock := &mockHandler{}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	ctx := context.Background()
 
 	cases := []struct {
@@ -509,7 +564,7 @@ func TestPathCompletion(t *testing.T) {
 	t.Setenv("PATH", dir)
 
 	mock := &mockHandler{}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	ctx := context.Background()
 
 	// Should find fake-cmd with prefix "fak".
@@ -547,7 +602,7 @@ func TestForwardsResponsivesDirectly(t *testing.T) {
 			return iterator.FromSlice(want), nil
 		},
 	}
-	h := New(mock)
+	h := New(mock, workspaceapi.URI{})
 	ctx := context.Background()
 	iter, err := h.HandleCommand(ctx, repl.Command{Name: "mycmd"}, repl.NopProgressWriter())
 	require.NoError(t, err)
