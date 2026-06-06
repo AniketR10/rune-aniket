@@ -165,6 +165,7 @@ func viEditor(clipboard clipboard.Register) text.Editor {
 		vi.WithWrap(true),
 		vi.WithStatusBarConfig(false, text.StatusBarConfig{}),
 		vi.WithAuxiliaryBar(false, text.AuxBarConfig{}),
+		vi.WithIconsBar(false, text.IconsBarConfig{}),
 		vi.WithGitBar(false, text.IconsBarConfig{}),
 	)
 }
@@ -177,6 +178,7 @@ func modelessEditor(clipboard clipboard.Register) text.Editor {
 		modeless.WithWrap(true),
 		modeless.WithStatusBarConfig(false, text.StatusBarConfig{}),
 		modeless.WithAuxiliaryBar(false, text.AuxBarConfig{}),
+		modeless.WithIconsBar(false, text.IconsBarConfig{}),
 		modeless.WithGitBar(false, text.IconsBarConfig{}),
 	)
 }

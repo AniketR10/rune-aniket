@@ -315,6 +315,31 @@ func TestComponentOpenEditorIntegration(t *testing.T) {
 	assert.NoError(t, b.Close())
 }
 
+// TestHandlerInFocusNonTextTabReturnsURI guards command routing for tabs
+// whose handler is not a text.Handler (e.g. rune-agent chat tabs). The
+// focused tab's URI must still be returned so command-prompt commands can
+// resolve the focused resource; only the inner text.Handler is absent.
+func TestHandlerInFocusNonTextTabReturnsURI(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	)
+	defer b.Close()
+
+	uri, err := workspaceapi.ParseURI("rune-agent://openai_gpt-5/rolling-fox")
+	require.NoError(t, err)
+
+	// A non-text handler, mirroring how rune-agent wraps its chat tab.
+	tab, err := b.ex.comp.Tab(uri, '+', "rolling-fox", browsertest.NewTestHandler())
+	require.NoError(t, err)
+	require.NoError(t, b.ex.invokeWindow().SetContent(tab))
+
+	gotURI, h, ok := b.ex.handlerInFocus()
+	assert.False(t, ok, "non-text tab must not yield a text.Handler")
+	assert.Nil(t, h)
+	assert.Equal(t, uri, gotURI, "tab URI must be returned even without a text.Handler")
+}
+
 func TestReadfileCommandReadsFileInOtherWorkspace(t *testing.T) {
 	currentDir := t.TempDir()
 	currentWorkspaceURI, err := workspaceapi.ParseURI("file://" + currentDir)

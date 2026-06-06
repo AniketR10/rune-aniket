@@ -533,7 +533,7 @@ func (e *ex) handlerInFocus() (workspaceapi.URI, text.Handler, bool) {
 	}
 	ret, ok := t.Handler().(text.Handler)
 	if !ok {
-		return workspaceapi.URI{}, nil, false
+		return t.URI(), nil, false
 	}
 	return t.URI(), ret, true
 }

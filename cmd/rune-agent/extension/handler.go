@@ -83,6 +83,11 @@ import (
 const (
 	commandQuery = "?"
 	commandChat  = "agent"
+
+	commandEffort    = "effort"
+	commandMaxTokens = "maxtokens"
+	commandSkill     = "skill"
+	commandModel     = "model"
 )
 
 var (
@@ -717,8 +722,13 @@ type aiEditorHandler struct {
 
 	openChats      sync.Map
 	openChatAgents sync.Map
-	ctx            context.Context
-	cancelCtx      func()
+	// openChatTx maps an open chat's dialogue ID to its dialoguetui event
+	// channel, letting workspace command-prompt commands inject in-chat
+	// commands into the focused chat. Stored and deleted alongside
+	// openChats / openChatAgents.
+	openChatTx sync.Map
+	ctx        context.Context
+	cancelCtx  func()
 
 	// hookRunner dispatches Claude-Code-style hooks. nil when no
 	// hooks are configured.
@@ -821,8 +831,70 @@ func (h *aiEditorHandler) HandleCommand(
 		return h.handleQuery(cmd)
 	case commandChat:
 		return h.handleChat(cmd)
+	case commandModel, commandEffort, commandMaxTokens, commandSkill:
+		return h.routeChatCommand(cmd)
 	}
 
+	return nil
+}
+
+// dialogueIDFromURI extracts the dialogue ID from a rune-agent chat tab URI
+// of the form rune-agent://<model>/<id>. It returns false for any other
+// scheme or a URI without a dialogue ID path segment.
+func dialogueIDFromURI(uri workspaceapi.URI) (string, bool) {
+	if uri.Scheme() != "rune-agent" {
+		return "", false
+	}
+	id := strings.TrimPrefix(uri.Path(), "/")
+	if id == "" {
+		return "", false
+	}
+	return id, true
+}
+
+// routeChatCommand forwards a workspace command-prompt command (model,
+// effort, maxtokens, skill) to the focused rune-agent chat, where it runs
+// exactly as if the user had typed the equivalent /command in that chat.
+func (h *aiEditorHandler) routeChatCommand(cmd textapi.Command) error {
+	id, ok := dialogueIDFromURI(cmd.URI)
+	if !ok {
+		return fmt.Errorf("%s must be run from an open agent chat tab", cmd.Name)
+	}
+	v, ok := h.openChatTx.Load(id)
+	if !ok {
+		return fmt.Errorf("%s must be run from an open agent chat tab", cmd.Name)
+	}
+	tx := v.(chan<- dialoguetui.MessageEvent)
+
+	name, args := cmd.Name, cmd.Args
+	switch cmd.Name {
+	case commandMaxTokens:
+		// The prompt command "maxtokens" maps to the in-chat adapter's
+		// "max_tokens" command name.
+		name = "max_tokens"
+	case commandSkill:
+		// In-chat skills are invoked as /<skill> [args]; the prompt
+		// command "skill <name> [args]" shifts the first argument into
+		// the command name so the chat's skill resolution path fires.
+		if len(cmd.Args) == 0 {
+			return fmt.Errorf("%s requires a skill name", cmd.Name)
+		}
+		name, args = cmd.Args[0], cmd.Args[1:]
+	}
+
+	ev := dialoguetui.MessageEvent{
+		Type:        dialoguetui.MessageEventCommand,
+		CommandName: name,
+		CommandArgs: args,
+	}
+	// Sending on tx must not block the event loop, so dispatch the send
+	// to a goroutine bounded by the handler context.
+	go debug.CapturePanicReport(func() {
+		select {
+		case tx <- ev:
+		case <-h.ctx.Done():
+		}
+	})
 	return nil
 }
 
@@ -852,6 +924,21 @@ func (h *aiEditorHandler) Complete(ctx context.Context, name string, args []stri
 		default:
 			return iterator.FromSlice[string](nil), nil
 		}
+	case commandModel:
+		return h.completeWithModelsIterator(ctx)
+	case commandEffort:
+		levels := make([]string, len(validEffortLevels))
+		for i, l := range validEffortLevels {
+			levels[i] = string(l)
+		}
+		return iterator.FromSlice(levels), nil
+	case commandSkill:
+		skills := h.skillRegistry.List()
+		names := make([]string, len(skills))
+		for i, s := range skills {
+			names[i] = s.Name
+		}
+		return iterator.FromSlice(names), nil
 	default:
 		return iterator.FromSlice[string](nil), nil
 	}
@@ -1069,6 +1156,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	}
 	adapter.agent = chatAgent
 	h.openChatAgents.Store(d.ID, chatAgent)
+	h.openChatTx.Store(d.ID, tx)
 
 	handler, msgRx := h.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
 	go debug.CapturePanicReport(func() {
@@ -1081,6 +1169,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		cancel()
 		h.openChats.Delete(d.ID)
 		h.openChatAgents.Delete(d.ID)
+		h.openChatTx.Delete(d.ID)
 		// SessionEnd hook (reason=tab_close): fire-and-forget.
 		// Purely observational; no result fields are honored.
 		h.hookRunner.Run(h.ctx, hooks.Payload{

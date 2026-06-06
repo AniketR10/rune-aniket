@@ -562,6 +562,69 @@ func TestHandlerCommandIntercepted(t *testing.T) {
 	}
 }
 
+// TestHandlerCommandInjected verifies that sending a MessageEventCommand on
+// the tx channel runs the command exactly as if it had been typed in the
+// chat: HandleCommand is invoked with the given name/args and its Display
+// output is rendered.
+func TestHandlerCommandInjected(t *testing.T) {
+	interrupt := make(chan struct{}, 20)
+	gotName := make(chan string, 1)
+	gotArgs := make(chan []string, 1)
+	mock := &mockCommandHandler{
+		handleFunc: func(_ context.Context, name string, args []string) (CommandResult, error) {
+			gotName <- name
+			gotArgs <- args
+			r := component.NewResponsiveString("output-"+name, component.StringResponsiveConfig{})
+			return CommandResult{Display: iterator.FromSlice([]component.Responsive{r})}, nil
+		},
+	}
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex),
+		NewComponent(ComponentConfig{}), term.FuncInterrupter(func(context.Context) error {
+			interrupt <- struct{}{}
+			return nil
+		}),
+		WithCommands(mock),
+	)
+	defer close(tx)
+	h.Resize(30, 9)
+
+	tx <- MessageEvent{
+		Type:        MessageEventCommand,
+		CommandName: "effort",
+		CommandArgs: []string{"high"},
+	}
+
+	select {
+	case name := <-gotName:
+		assert.Equal(t, "effort", name)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for HandleCommand")
+	}
+	assert.Equal(t, []string{"high"}, <-gotArgs)
+
+	// rx should NOT receive a user message (effort renders Display only).
+	select {
+	case msg := <-rx:
+		t.Fatalf("expected no message on rx, got %q", msg.Text)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case <-interrupt:
+		case <-deadline:
+			t.Fatal("timed out waiting for command output")
+		}
+		w := term.NewStringWriter(30, 9)
+		h.Draw(w)
+		_ = w.Flush()
+		if assert.ObjectsAreEqual(true, containsStr(w.String(), "output-effort")) {
+			break
+		}
+	}
+}
+
 func TestHandlerNonCommandGoesToLLM(t *testing.T) {
 	interrupt := make(chan struct{}, 10)
 	mock := &mockCommandHandler{

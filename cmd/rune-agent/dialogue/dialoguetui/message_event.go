@@ -61,6 +61,10 @@ const (
 	// final result should be displayed as a child leaf node under the
 	// parent tool call.
 	MessageEventChildResult
+	// MessageEventCommand injects an in-chat slash command into the
+	// dialogue, running it exactly as if the user had typed it. Used to
+	// route workspace command-prompt commands to the focused chat.
+	MessageEventCommand
 )
 
 // MessageEvent is a structured event sent through the display channel.
@@ -92,6 +96,10 @@ type MessageEvent struct {
 	// Busy field (MessageEventBusy): true when the agent starts processing,
 	// false when it finishes.
 	Busy bool
+
+	// Command fields (MessageEventCommand)
+	CommandName string
+	CommandArgs []string
 }
 
 // MemoryRecallEntry represents a single memory in a recall event.

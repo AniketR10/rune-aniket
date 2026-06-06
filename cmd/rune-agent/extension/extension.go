@@ -64,6 +64,30 @@ var (
 				"configuration is used.",
 			Synopsis: "[<dialogue_id> [<model>]]",
 		},
+		{
+			Name: commandModel,
+			Summary: "Show or switch the model of the focused agent chat. " +
+				"Run from an open agent chat tab.",
+			Synopsis: "[model]",
+		},
+		{
+			Name: commandEffort,
+			Summary: "Show or set the reasoning effort of the focused agent chat. " +
+				"Run from an open agent chat tab.",
+			Synopsis: "[none|minimal|low|medium|high|xhigh|max]",
+		},
+		{
+			Name: commandMaxTokens,
+			Summary: "Show or set the max output tokens of the focused agent chat. " +
+				"Run from an open agent chat tab.",
+			Synopsis: "[tokens]",
+		},
+		{
+			Name: commandSkill,
+			Summary: "Load a skill into the focused agent chat. " +
+				"Run from an open agent chat tab.",
+			Synopsis: "<skill> [args]",
+		},
 	}
 	events = []textapi.EventType{
 		textapi.EventTypeOpen, textapi.EventTypeFocus,

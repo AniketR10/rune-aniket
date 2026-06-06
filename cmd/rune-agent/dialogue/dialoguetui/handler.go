@@ -519,6 +519,11 @@ func (s *dialogueHandler) consumeIncoming() {
 			if !s.busy {
 				s.drainQueue()
 			}
+		case MessageEventCommand:
+			name, args := ev.CommandName, ev.CommandArgs
+			go debug.CapturePanicReport(func() {
+				s.executeCommand(name, args)
+			})
 		}
 		s.mu.Unlock()
 		s.publishInterrupt(ctx)
@@ -538,6 +543,9 @@ func parseCommand(text string) (string, []string) {
 }
 
 func (s *dialogueHandler) executeCommand(name string, args []string) {
+	if s.commands == nil {
+		return
+	}
 	result, err := s.commands.HandleCommand(s.ctx, name, args)
 	defer s.publishInterrupt(s.ctx)
 	if err != nil {
