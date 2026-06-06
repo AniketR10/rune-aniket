@@ -672,6 +672,48 @@ func TestBufferReset(t *testing.T) {
 	})
 }
 
+func TestBufferReloadContents(t *testing.T) {
+	t.Run("replaces the whole buffer", func(t *testing.T) {
+		b := newBufferWithContent(t, "old\ncontent")
+		b.ReloadContents(context.Background(), "fresh")
+		assert.Equal(t, "fresh", b.String())
+	})
+
+	t.Run("does not notify usage subscribers", func(t *testing.T) {
+		b := newBufferWithContent(t, "old\ncontent")
+		usage := testSubscriber{}
+		b.SubscribeUsage(&usage)
+
+		b.ReloadContents(context.Background(), "fresh")
+
+		assert.Equal(t, 0, usage.onWillEdit,
+			"reload must not reach SubscribeUsage subscribers")
+		assert.Equal(t, 0, usage.onDidEdit,
+			"reload must not reach SubscribeUsage subscribers")
+	})
+
+	t.Run("notifies root subscribers", func(t *testing.T) {
+		b := newBufferWithContent(t, "old\ncontent")
+		root := testSubscriber{}
+		b.Subscribe(&root)
+
+		b.ReloadContents(context.Background(), "fresh")
+
+		assert.Equal(t, 1, root.onDidEdit,
+			"reload must reach Subscribe subscribers")
+	})
+
+	t.Run("is undoable", func(t *testing.T) {
+		b := newBufferWithContent(t, "old")
+		b.ReloadContents(context.Background(), "fresh")
+		require.Equal(t, "fresh", b.String())
+
+		ok, _ := b.Undo()
+		assert.True(t, ok)
+		assert.Equal(t, "old", b.String())
+	})
+}
+
 // recordingEditor counts Edit invocations so tests can assert whether a
 // Buffer routed a mutation through its installed Editor chain.
 type recordingEditor struct {

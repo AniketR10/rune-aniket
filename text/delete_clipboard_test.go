@@ -24,6 +24,7 @@
 package text
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,4 +59,28 @@ func TestDeleteClipboard(t *testing.T) {
 	data, err = clip.Paste("")
 	require.NoError(t, err)
 	assert.Equal(t, clipboard.Data{Text: content, Metadata: LineSelection}, data)
+}
+
+// TestDeleteClipboardReloadDoesNotCopy guards against a disk reload
+// clobbering the user's clipboard. A reload replaces the whole buffer
+// via ReloadContents, which must not reach the copy-on-delete usage
+// subscriber the way a user delete does.
+func TestDeleteClipboardReloadDoesNotCopy(t *testing.T) {
+	buf := cell.NewBuffer()
+	clip := clipboard.NewInMemory()
+	var scroll component.Scroll
+	scroll.Init(buf)
+	c := NewCursor(&scroll, nil)
+	WithCopyDelete("", clip, c, buf)
+
+	clip.Copy("", clipboard.Data{Text: "user clipboard"})
+	buf.InsertString(term.Coordinates{}, "the entire file contents")
+
+	buf.ReloadContents(context.Background(), "reloaded from disk")
+
+	require.Equal(t, "reloaded from disk", buf.String())
+	data, err := clip.Paste("")
+	require.NoError(t, err)
+	assert.Equal(t, "user clipboard", data.Text,
+		"reload must not overwrite the clipboard with the replaced contents")
 }

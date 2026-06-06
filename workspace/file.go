@@ -682,9 +682,7 @@ func (f *file) reload() error {
 		}
 		f.lastFlush = infoModTime
 		f.mu.Unlock()
-		f.buf.Reset()
-		f.buf.InsertString(term.Coordinates{}, contents)
-
+		f.buf.ReloadContents(context.Background(), contents)
 		if !f.view.EndsWithEOL() {
 			f.buf.WriteString("\n")
 		}

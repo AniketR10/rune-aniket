@@ -622,6 +622,22 @@ func (b *Buffer) Reset() {
 	b.truncateFromContextView(context.Background(), term.Coordinates{}, b.cells)
 }
 
+// ReloadContents replaces the whole buffer with str as a single edit
+// dispatched at the undo layer, so SubscribeUsage subscribers do not
+// observe it while Subscribe subscribers and undo do. A disk reload is
+// an internal full-buffer replacement, not a user edit: usage
+// subscribers that translate user edits into side effects (clipboard
+// copy-on-delete, dot-repeat capture) must not see the cleared
+// contents, the same way they do not see undo replays.
+func (b *Buffer) ReloadContents(ctx context.Context, str string) {
+	from, to, ok := fromToInBounds(b.cells,
+		term.Coordinates{}, term.Coordinates{Y: b.cells.Rows()})
+	if !ok {
+		return
+	}
+	b.undoer.Edit(ctx, from, to, str)
+}
+
 // ResetPerformance resets the underlying cells, without discarding their capacity.
 // This shopuld only be used when buffer has been initialized with InitPerformance,
 // as subscribers won't be notified of this change, and it will break undo correctness.
