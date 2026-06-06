@@ -33,7 +33,7 @@ require (
 	github.com/unstablebuild/tcell/v3 v3.6.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.52.0
-	golang.org/x/image v0.39.0
+	golang.org/x/image v0.41.0
 	golang.org/x/term v0.43.0 // indirect
 	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
