@@ -228,7 +228,7 @@ func (c *Component) NewTabFromContent(
 	if ok {
 		tab.Subscribe(subscriber)
 	}
-	c.tabs.SetFocus(c.findTabID(tab))
+	c.tabs.SetFocus(c.mustFindTabID(tab))
 	c.dirtyTabs = true
 	return tab, true
 }
@@ -366,7 +366,7 @@ func (c *Component) MoveTabLeft(win Window) error {
 	if !ok {
 		return errors.New("window content is not a tab")
 	}
-	idx := c.findTabID(t)
+	idx := c.mustFindTabID(t)
 	if idx == 0 {
 		return errors.New("tab is already at the start of the list")
 	}
@@ -385,7 +385,7 @@ func (c *Component) MoveTabRight(win Window) error {
 	if !ok {
 		return errors.New("window content is not a tab")
 	}
-	idx := c.findTabID(t)
+	idx := c.mustFindTabID(t)
 	if idx == c.tabs.Size()-1 {
 		return errors.New("tab is already at the end of the list")
 	}
@@ -406,7 +406,7 @@ func (c *Component) MoveTabTo(win Window, idx int) error {
 	if idx > c.tabs.Size()-1 {
 		idx = c.tabs.Size() - 1
 	}
-	curridx := c.findTabID(t)
+	curridx := c.mustFindTabID(t)
 	if c.tabs.MoveTo(curridx, idx) {
 		c.doRemoveTab(curridx)
 		c.doInsertTab(idx, t)
@@ -498,8 +498,7 @@ func (c *Component) RemoveInactiveTabs() (removed bool) {
 			// used by a window
 			continue
 		}
-		c.removeTab(tab)
-		removed = true
+		removed = c.removeTab(tab) || removed
 	}
 	return
 }
@@ -575,9 +574,9 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 	return isNotStartHandler
 }
 
-// RemoveTab removes the given tab. If the given handler is not
-// a tab, this method returns false. If the tab has already been removed, this
-// method will panic.
+// RemoveTab removes the given tab and reports whether it removed a tab.
+// It returns false if the given handler is not a tab or if the tab has
+// already been removed.
 func (c *Component) RemoveTab(h browserapi.Handler) bool {
 	t, ok := h.(*Tab)
 	if !ok {
@@ -587,8 +586,7 @@ func (c *Component) RemoveTab(h browserapi.Handler) bool {
 		_ = c.RemoveWindowContent(t.win)
 		return true
 	}
-	c.removeTab(t)
-	return true
+	return c.removeTab(t)
 }
 
 // SetDefaultSplit sets the default split to be used when Split
@@ -725,8 +723,9 @@ func (c *Component) Draw(w term.Writer) {
 				t, ok := browserTabAtWindow(win)
 				if ok {
 					// reset tab override attributes
-					c.tabs.SetIconAttr(c.findTabID(t), c.focusTabIconAttr())
-					c.tabs.SetFocus(c.findTabID(t))
+					id := c.mustFindTabID(t)
+					c.tabs.SetIconAttr(id, c.focusTabIconAttr())
+					c.tabs.SetFocus(id)
 				}
 			}
 		}
@@ -1099,17 +1098,21 @@ func (c *Component) closeTab(t *Tab) {
 	}
 }
 
-func (c *Component) removeTab(t *Tab) {
+func (c *Component) removeTab(t *Tab) bool {
 	if !t.free {
 		panic("trying to remove tab that is still attached to a window")
 	}
+	id, found := c.findTabID(t)
+	if !found {
+		return false
+	}
 	c.closeTab(t)
-	id := c.findTabID(t)
 	c.doRemoveTab(id)
 	ok := c.tabs.Remove(id)
 	if !ok {
 		panic(fmt.Sprintf("corrupted tabs: could not find tab with id %v", id))
 	}
+	return true
 }
 
 func (c *Component) doRemoveTab(idx int) {
@@ -1125,13 +1128,23 @@ func (c *Component) doInsertTab(idx int, t *Tab) {
 	c.buffers[idx] = t
 }
 
-func (c *Component) findTabID(t *Tab) int {
+func (c *Component) findTabID(t *Tab) (int, bool) {
 	for i, f := range c.buffers {
 		if f == t {
-			return i
+			return i, true
 		}
 	}
-	panic("could not find tab")
+	return -1, false
+}
+
+// mustFindTabID resolves a tab known to be present in the component. Use
+// findTabID directly when the tab may have already been removed.
+func (c *Component) mustFindTabID(t *Tab) int {
+	id, ok := c.findTabID(t)
+	if !ok {
+		panic("could not find tab")
+	}
+	return id
 }
 
 func (c *Component) browserTabID(win *browserWindow) (
@@ -1141,7 +1154,7 @@ func (c *Component) browserTabID(win *browserWindow) (
 	if !ok {
 		return nil, 0
 	}
-	return t, c.findTabID(t)
+	return t, c.mustFindTabID(t)
 }
 
 func (c *Component) updateWindowTab(
@@ -1193,7 +1206,7 @@ func (c *Component) updateWindowContent(
 ) browserapi.Handler {
 	tab, ok := content.(*Tab)
 	if ok {
-		id := c.findTabID(tab)
+		id := c.mustFindTabID(tab)
 		c.tabs.SetFocus(id)
 		c.dirtyTabs = true
 		prevt, _ := prev.(*Tab)

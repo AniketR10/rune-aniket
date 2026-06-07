@@ -413,12 +413,13 @@ func (c *Component) ReloadTab(ctx context.Context, h browserapi.Handler) (<-chan
 }
 
 // RemoveTab removes the given handler, if it is a tab,
-// and if it can be removed.
+// and if it can be removed. A handler that is a tab but has already
+// been removed is treated as success.
 func (c *Component) RemoveTab(h browserapi.Handler) error {
-	ok := c.comp.RemoveTab(h)
-	if !ok {
+	if _, ok := h.(*browser.Tab); !ok {
 		return errors.New("content is not a tab")
 	}
+	c.comp.RemoveTab(h)
 	return nil
 }
 

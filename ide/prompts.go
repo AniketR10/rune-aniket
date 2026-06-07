@@ -343,7 +343,7 @@ func (h *fileChangedPrompt) OnSelect(
 }
 
 func (h *fileChangedPrompt) OnClose() error {
-	if h.selected {
+	if h.selected || h.ex.closed {
 		return nil
 	}
 	h.ex.openSurePrompt(h.uri, h.h, h.op, h.reload)
@@ -385,7 +385,7 @@ func (h *areYouSurePrompt) OnSelect(
 }
 
 func (h *areYouSurePrompt) OnClose() error {
-	if h.selected {
+	if h.selected || h.ex.closed {
 		return nil
 	}
 	h.ex.openFileChangedPrompt(h.uri, h.h, h.op, h.reload)

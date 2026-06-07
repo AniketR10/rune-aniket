@@ -266,7 +266,7 @@ func TestWindowDraw(t *testing.T) {
 				if ok {
 					tab, ok := browserTabAtWindow(win)
 					if ok {
-						b.tabs.SetIconAttr(b.findTabID(tab), term.Attributes{})
+						b.tabs.SetIconAttr(b.mustFindTabID(tab), term.Attributes{})
 					}
 				}
 			}
@@ -925,6 +925,24 @@ func TestRemoveTab(t *testing.T) {
 	assert.True(t, b.RemoveTab(tabs[1]))
 	assert.True(t, b.RemoveTab(tabs[3]))
 	assertTabNames(t, b, []string{"c"})
+}
+
+// TestRemoveTabStale asserts that removing a tab whose handle is already
+// gone from the component returns false without panicking. A non-modal
+// prompt can capture a *Tab, the user closes that tab, and the prompt's
+// discard later calls RemoveTab on the now-stale handle.
+func TestRemoveTabStale(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	uri, err := workspaceapi.ParseURI("file:///a")
+	require.NoError(t, err)
+	h := newTestHandler()
+	tab := b.NewTab(uri, 'o', "a", h, h)
+
+	assert.True(t, b.RemoveTab(tab))
+	assert.NotPanics(t, func() {
+		assert.False(t, b.RemoveTab(tab))
+	})
 }
 
 // TestRemoveTabDoesNotRetainPointersInTail asserts that after RemoveTab the
