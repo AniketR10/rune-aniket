@@ -43,7 +43,6 @@ import (
 //  2. it.Close()       — calls compactFn which does Reset + replay
 type compactIterator struct {
 	handler    repl.CommandHandler
-	args       []string
 	store      dialoguemanager.Store
 	dialogueID string
 	compactFn  func(msgs []llmapi.Message)
@@ -61,7 +60,7 @@ func (c *compactIterator) Next(ctx context.Context) (component.Responsive, bool)
 
 	// This call blocks while the LLM summarises the conversation.
 	it, err := c.handler.HandleCommand(ctx, repl.Command{
-		Name: "chats", Args: append([]string{"compact"}, c.args...),
+		Name: "chats", Args: []string{"compact", c.dialogueID},
 	}, repl.NopProgressWriter())
 	if err != nil {
 		c.err = err

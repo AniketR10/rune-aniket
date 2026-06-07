@@ -67,6 +67,11 @@ func TestRouteChatCommandDelivers(t *testing.T) {
 		{"effort", commandEffort, []string{"high"}, "effort", []string{"high"}},
 		{"maxtokens", commandMaxTokens, []string{"4096"}, "max_tokens", []string{"4096"}},
 		{"skill", commandSkill, []string{"review", "foo"}, "review", []string{"foo"}},
+		{"clear", commandClear, nil, "clear", nil},
+		{"compact", commandCompact, nil, "compact", nil},
+		{"fork", commandFork, nil, "fork", nil},
+		{"export", commandExport, []string{"--audit"}, "export", []string{"--audit"}},
+		{"log", commandLog, nil, "log", nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -119,6 +124,19 @@ func TestRouteChatCommandErrors(t *testing.T) {
 		URI:  mustURI(t, "rune-agent://openai_gpt-5/rolling-fox"),
 	})
 	require.Error(t, err)
+
+	// Store commands reject a positional dialogue id; they act on the
+	// focused chat only.
+	for _, name := range []string{
+		commandClear, commandCompact, commandFork, commandExport, commandLog,
+	} {
+		err = h.routeChatCommand(textapi.Command{
+			Name: name,
+			Args: []string{"other-chat"},
+			URI:  mustURI(t, "rune-agent://openai_gpt-5/rolling-fox"),
+		})
+		require.Errorf(t, err, "%s with positional id should error", name)
+	}
 }
 
 func TestCompleteChatPromptCommands(t *testing.T) {
@@ -148,6 +166,22 @@ func TestCompleteChatPromptCommands(t *testing.T) {
 		got := completeToSlice(t, ctx, h, commandMaxTokens)
 		assert.Empty(t, got)
 	})
+}
+
+func TestCompleteChatPromptCommandsDialogues(t *testing.T) {
+	// Store commands act on the open chat only, so they offer no
+	// dialogue-id completion candidates.
+	h := &aiEditorHandler{}
+	ctx := context.Background()
+
+	for _, name := range []string{
+		commandClear, commandCompact, commandFork, commandExport, commandLog,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := completeToSlice(t, ctx, h, name)
+			assert.Empty(t, got)
+		})
+	}
 }
 
 func completeToSlice(

@@ -88,6 +88,36 @@ var (
 				"Run from an open agent chat tab.",
 			Synopsis: "<skill> [args]",
 		},
+		{
+			Name: commandClear,
+			Summary: "Clear the focused agent chat and archive its previous " +
+				"contents. Run from an open agent chat tab.",
+			Synopsis: "",
+		},
+		{
+			Name: commandCompact,
+			Summary: "Compact the focused agent chat into a summarized copy. " +
+				"Run from an open agent chat tab.",
+			Synopsis: "",
+		},
+		{
+			Name: commandFork,
+			Summary: "Open a picker to fork the focused agent chat at a selected " +
+				"message. Run from an open agent chat tab.",
+			Synopsis: "",
+		},
+		{
+			Name: commandExport,
+			Summary: "Export the focused agent chat or its audit log to a temp " +
+				"file. Run from an open agent chat tab.",
+			Synopsis: "[--audit]",
+		},
+		{
+			Name: commandLog,
+			Summary: "Show the LLM token audit log for the focused agent chat. " +
+				"Run from an open agent chat tab.",
+			Synopsis: "",
+		},
 	}
 	events = []textapi.EventType{
 		textapi.EventTypeOpen, textapi.EventTypeFocus,

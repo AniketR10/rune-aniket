@@ -85,10 +85,15 @@ const (
 	commandQuery = "?"
 	commandChat  = "agent"
 
-	commandEffort    = "effort"
-	commandMaxTokens = "maxtokens"
-	commandSkill     = "skill"
-	commandModel     = "model"
+	commandEffort    = "chateffort"
+	commandMaxTokens = "chatmaxtokens"
+	commandSkill     = "chatskill"
+	commandModel     = "chatmodel"
+	commandClear     = "chatclear"
+	commandCompact   = "chatcompact"
+	commandFork      = "chatfork"
+	commandExport    = "chatexport"
+	commandLog       = "chatlog"
 )
 
 var (
@@ -833,7 +838,8 @@ func (h *aiEditorHandler) HandleCommand(
 		return h.handleQuery(cmd)
 	case commandChat:
 		return h.handleChat(cmd)
-	case commandModel, commandEffort, commandMaxTokens, commandSkill:
+	case commandModel, commandEffort, commandMaxTokens, commandSkill,
+		commandClear, commandCompact, commandFork, commandExport, commandLog:
 		return h.routeChatCommand(cmd)
 	}
 
@@ -854,9 +860,10 @@ func dialogueIDFromURI(uri workspaceapi.URI) (string, bool) {
 	return id, true
 }
 
-// routeChatCommand forwards a workspace command-prompt command (model,
-// effort, maxtokens, skill) to the focused rune-agent chat, where it runs
-// exactly as if the user had typed the equivalent /command in that chat.
+// routeChatCommand forwards a workspace command-prompt command (the
+// chat-prefixed commands like chatmodel, chateffort, chatclear) to the
+// focused rune-agent chat, where it runs exactly as if the user had typed
+// the equivalent /command in that chat.
 func (h *aiEditorHandler) routeChatCommand(cmd textapi.Command) error {
 	id, ok := dialogueIDFromURI(cmd.URI)
 	if !ok {
@@ -870,14 +877,43 @@ func (h *aiEditorHandler) routeChatCommand(cmd textapi.Command) error {
 
 	name, args := cmd.Name, cmd.Args
 	switch cmd.Name {
+	case commandModel:
+		name = "model"
+	case commandEffort:
+		name = "effort"
+	case commandClear:
+		if err := rejectPositionalID("clear", cmd.Args); err != nil {
+			return err
+		}
+		name = "clear"
+	case commandCompact:
+		if err := rejectPositionalID("compact", cmd.Args); err != nil {
+			return err
+		}
+		name = "compact"
+	case commandFork:
+		if err := rejectPositionalID("fork", cmd.Args); err != nil {
+			return err
+		}
+		name = "fork"
+	case commandExport:
+		if err := rejectPositionalID("export", cmd.Args); err != nil {
+			return err
+		}
+		name = "export"
+	case commandLog:
+		if err := rejectPositionalID("log", cmd.Args); err != nil {
+			return err
+		}
+		name = "log"
 	case commandMaxTokens:
-		// The prompt command "maxtokens" maps to the in-chat adapter's
+		// The prompt command "chatmaxtokens" maps to the in-chat adapter's
 		// "max_tokens" command name.
 		name = "max_tokens"
 	case commandSkill:
 		// In-chat skills are invoked as /<skill> [args]; the prompt
-		// command "skill <name> [args]" shifts the first argument into
-		// the command name so the chat's skill resolution path fires.
+		// command "chatskill <name> [args]" shifts the first argument
+		// into the command name so the chat's skill resolution path fires.
 		if len(cmd.Args) == 0 {
 			return fmt.Errorf("%s requires a skill name", cmd.Name)
 		}

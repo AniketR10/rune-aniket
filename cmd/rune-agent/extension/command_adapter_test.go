@@ -31,11 +31,94 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
 )
+
+// captureCommandHandler records the last repl.Command it received and
+// yields no output components.
+type captureCommandHandler struct {
+	last repl.Command
+}
+
+func (c *captureCommandHandler) HandleCommand(
+	_ context.Context, cmd repl.Command, _ repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	c.last = cmd
+	return iterator.FromSlice[component.Responsive](nil), nil
+}
+
+func (c *captureCommandHandler) Complete(
+	_ context.Context, _ string, _ []string,
+) (iterator.Iterator[string], error) {
+	return iterator.FromSlice[string](nil), nil
+}
+
+func newCaptureAdapter(h repl.CommandHandler) *commandAdapter {
+	return &commandAdapter{
+		handler:       h,
+		dialogueID:    "rolling-fox",
+		skillRegistry: skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+	}
+}
+
+// Chat commands act on the open chat only: each must dispatch the
+// equivalent shell subcommand with the adapter's own dialogue id and no
+// caller-supplied positional id.
+func TestCommandAdapterScopesToOpenChat(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantName string
+		wantArgs []string
+	}{
+		{"history", nil, "chats", []string{"show", "rolling-fox"}},
+		{"log", nil, "chats", []string{"log", "rolling-fox"}},
+		{"fork", nil, "chats", []string{"fork", "rolling-fox"}},
+		{"export", nil, "chats", []string{"export", "rolling-fox"}},
+		{"export", []string{"--audit"}, "chats", []string{"export", "--audit", "rolling-fox"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name+strings.Join(tc.args, ""), func(t *testing.T) {
+			h := &captureCommandHandler{}
+			a := newCaptureAdapter(h)
+			_, err := a.HandleCommand(context.Background(), tc.name, tc.args)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantName, h.last.Name)
+			assert.Equal(t, tc.wantArgs, h.last.Args)
+		})
+	}
+}
+
+// compact returns a lazy iterator that dispatches against the open
+// chat; draining it issues "chats compact <dialogueID>".
+func TestCommandAdapterCompactScopesToOpenChat(t *testing.T) {
+	h := &captureCommandHandler{}
+	a := newCaptureAdapter(h)
+	res, err := a.HandleCommand(context.Background(), "compact", nil)
+	require.NoError(t, err)
+	require.NotNil(t, res.Display)
+	_, _ = res.Display.Next(context.Background())
+	assert.Equal(t, "chats", h.last.Name)
+	assert.Equal(t, []string{"compact", "rolling-fox"}, h.last.Args)
+}
+
+// Any positional dialogue id is rejected; chat commands no longer
+// target other dialogues.
+func TestCommandAdapterRejectsPositionalID(t *testing.T) {
+	for _, name := range []string{"clear", "history", "compact", "export", "log", "fork"} {
+		t.Run(name, func(t *testing.T) {
+			h := &captureCommandHandler{}
+			a := newCaptureAdapter(h)
+			_, err := a.HandleCommand(context.Background(), name, []string{"other-chat"})
+			require.Error(t, err)
+		})
+	}
+}
 
 // Bare names must not appear in /model completions: two providers
 // can ship the same Name (e.g. openai/gpt-5.5 vs codex/gpt-5.5),

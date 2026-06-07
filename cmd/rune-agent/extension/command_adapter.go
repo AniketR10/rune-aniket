@@ -158,75 +158,34 @@ func (a *commandAdapter) HandleCommand(
 
 	switch name {
 	case "clear":
-		if len(args) == 0 {
-			return a.handleClear(ctx)
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
 		}
-		// /clear [id] → chats clear <id>
-		name = "chats"
-		args = append([]string{"clear"}, args...)
-	case "chats":
-		// /chats <subcmd> → inject current dialogue ID when missing
-		if len(args) >= 1 && a.dialogueID != "" {
-			switch args[0] {
-			case "show", "log", "clear", "compact":
-				if len(args) < 2 {
-					args = append(args, a.dialogueID)
-				}
-			case "export":
-				// export accepts flags like --audit, so check
-				// for a non-flag positional argument.
-				hasID := false
-				for _, arg := range args[1:] {
-					if !strings.HasPrefix(arg, "--") {
-						hasID = true
-						break
-					}
-				}
-				if !hasID {
-					args = append(args, a.dialogueID)
-				}
-			}
-		}
-		if len(args) >= 1 && args[0] == "compact" {
-			return a.handleCompact(ctx, args[1:])
-		}
+		return a.handleClear(ctx)
 	case "history":
-		// /history [id] → chats show <id>
-		if len(args) == 0 && a.dialogueID != "" {
-			args = []string{a.dialogueID}
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
 		}
 		name = "chats"
-		args = append([]string{"show"}, args...)
+		args = []string{"show", a.dialogueID}
 	case "compact":
-		// /compact [id] → chats compact <id>
-		if len(args) == 0 && a.dialogueID != "" {
-			args = []string{a.dialogueID}
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
 		}
-		return a.handleCompact(ctx, args)
+		return a.handleCompact(ctx)
 	case "export":
-		// /export [--audit] [id] → chats export [--audit] <id>
-		var flags []string
-		var positional []string
-		for _, arg := range args {
-			if strings.HasPrefix(arg, "--") {
-				flags = append(flags, arg)
-			} else {
-				positional = append(positional, arg)
-			}
-		}
-		if len(positional) == 0 && a.dialogueID != "" {
-			positional = []string{a.dialogueID}
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
 		}
 		name = "chats"
-		args = append([]string{"export"}, flags...)
-		args = append(args, positional...)
+		args = append([]string{"export"}, args...)
+		args = append(args, a.dialogueID)
 	case "log":
-		// /log [id] → chats log <id>
-		if len(args) == 0 && a.dialogueID != "" {
-			args = []string{a.dialogueID}
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
 		}
 		name = "chats"
-		args = append([]string{"log"}, args...)
+		args = []string{"log", a.dialogueID}
 	case "model":
 		return a.handleModel(ctx, args)
 	case "effort":
@@ -234,12 +193,11 @@ func (a *commandAdapter) HandleCommand(
 	case "max_tokens":
 		return a.handleMaxTokens(args)
 	case "fork":
-		// /fork [id] → chats fork <dialogueID>
-		if len(args) == 0 && a.dialogueID != "" {
-			args = []string{a.dialogueID}
+		if err := rejectPositionalID(name, args); err != nil {
+			return dialoguetui.CommandResult{}, err
 		}
 		name = "chats"
-		args = append([]string{"fork"}, args...)
+		args = []string{"fork", a.dialogueID}
 	}
 	it, err := a.handler.HandleCommand(
 		ctx, repl.Command{Name: name, Args: args}, repl.NopProgressWriter(),
@@ -262,6 +220,18 @@ func (a *commandAdapter) HandleCommand(
 
 	a.openCommandFloating(items)
 	return dialoguetui.CommandResult{}, nil
+}
+
+// rejectPositionalID returns an error if args contains a non-flag
+// positional argument. Chat commands act on the open chat only, so a
+// dialogue id is no longer accepted.
+func rejectPositionalID(name string, args []string) error {
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "--") {
+			return fmt.Errorf("/%s does not take a dialogue id; it acts on the open chat", name)
+		}
+	}
+	return nil
 }
 
 // formatSkillMessage formats the user-visible portion of a slash-command
@@ -492,12 +462,11 @@ func (a *commandAdapter) handleClear(ctx context.Context) (dialoguetui.CommandRe
 // the animation node) resets the component and replays the compacted
 // messages. This ordering avoids the panic from Remove-after-Reset.
 func (a *commandAdapter) handleCompact(
-	_ context.Context, args []string,
+	_ context.Context,
 ) (dialoguetui.CommandResult, error) {
 	return dialoguetui.CommandResult{
 		Display: &compactIterator{
 			handler:    a.handler,
-			args:       args,
 			store:      a.store,
 			dialogueID: a.dialogueID,
 			compactFn:  a.compactFn,
