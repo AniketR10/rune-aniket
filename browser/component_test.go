@@ -483,6 +483,39 @@ func TestTabClickFocusesOwningWindow(t *testing.T) {
 	}
 }
 
+// TestSplitAlreadyBoundTabFocusesOwningWindow reproduces RUNE-236's
+// sibling crash: `runectl wm split <focus> <file>` with the file already
+// open resolves to the existing, already-bound *Tab. Binding that one
+// tab to a second window corrupts the tab/window bookkeeping and later
+// panics in Draw when the tab is removed. Split must instead focus the
+// window already showing the tab, like the tab-click path.
+func TestSplitAlreadyBoundTabFocusesOwningWindow(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	uri, err := workspaceapi.ParseURI("file:///CHANGELOG.md")
+	require.NoError(t, err)
+	h := newTestHandler()
+	tab := b.NewTab(uri, 'o', "CHANGELOG.md", h, h)
+	leftWin := b.Focus()
+	require.NoError(t, leftWin.SetContent(tab))
+
+	got, ok := b.Split(browserapi.OrientationRight, leftWin, tab)
+	require.True(t, ok)
+	assert.Equal(t, leftWin, got,
+		"splitting with an already-open tab must return its existing window")
+	assert.Equal(t, leftWin, b.Focus(),
+		"splitting with an already-open tab must focus its existing window")
+
+	assert.Len(t, b.buffers, 1, "the tab must not be duplicated in buffers")
+	refs := 0
+	for _, w := range b.windows {
+		if bt, ok := browserTabAtWindow(w); ok && bt == tab {
+			refs++
+		}
+	}
+	assert.Equal(t, 1, refs, "exactly one window may reference the tab")
+}
+
 // TestTabClickOnFocusedTabIsNoOp verifies that clicking the tab of the
 // currently-focused window does not change focus or surface an error.
 func TestTabClickOnFocusedTabIsNoOp(t *testing.T) {

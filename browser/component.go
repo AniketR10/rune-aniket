@@ -611,6 +611,10 @@ func (c *Component) Split(
 	if win.(*browserWindow).parent == nil {
 		panic("trying to split over a closed window")
 	}
+	// A tab is bound to at most one window
+	if existing, ok := boundTabWindow(h); ok {
+		return c.SetFocus(existing), true
+	}
 	if o == browserapi.OrientationDefault {
 		o = c.nextSplit
 	}
@@ -630,6 +634,9 @@ func (c *Component) Split(
 
 // SplitRoot creates a new top-level split in the root tiled layout.
 func (c *Component) SplitRoot(alignment component.Alignment, h browserapi.Handler) (Window, bool) {
+	if existing, ok := boundTabWindow(h); ok {
+		return c.SetFocus(existing), true
+	}
 	h, isTab := c.newWindowContent(h)
 	win, ok := c.wm.SplitRoot(alignment, h)
 	if !ok {
@@ -1243,6 +1250,17 @@ func (c *Component) releaseHandler(h browserapi.Handler) {
 func browserTabAtWindow(win *browserWindow) (*Tab, bool) {
 	t, ok := win.win.Content().(*Tab)
 	return t, ok
+}
+
+// boundTabWindow reports the window currently showing h when h is a tab
+// already bound to a window, so callers can refuse to bind one tab to a
+// second window.
+func boundTabWindow(h browserapi.Handler) (Window, bool) {
+	t, ok := h.(*Tab)
+	if !ok || t.free {
+		return nil, false
+	}
+	return t.Window()
 }
 
 func (c *Component) freeTabs() []int {
