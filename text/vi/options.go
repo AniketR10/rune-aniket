@@ -52,6 +52,7 @@ type viConfig struct {
 	autoCenter         bool
 	autoPair           bool
 	enableInitialFolds bool
+	disableSearch      bool
 	enableAuxBar       bool
 	auxBarConfig       text.AuxBarConfig
 	statusBarConfig    text.StatusBarConfig
@@ -289,6 +290,16 @@ func WithHideInitialFolds(enabled bool) Option {
 func WithWindowManager(wm InsertCompletionWindowManager) Option {
 	return func(cfg *viConfig) {
 		cfg.windowManager = wm
+	}
+}
+
+// WithSearch enables or disables the `/` and `?` search commands. Search is
+// enabled by default; disabling it makes those keys no-ops so editors embedded
+// in a shell that owns search (such as the modal shell or the Rune Agent
+// compose editor) do not capture them.
+func WithSearch(enabled bool) Option {
+	return func(cfg *viConfig) {
+		cfg.disableSearch = !enabled
 	}
 }
 

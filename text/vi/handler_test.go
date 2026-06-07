@@ -9715,6 +9715,41 @@ func TestSetNormalModeClearing(t *testing.T) {
 	assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
 }
 
+func TestWithSearchDisabled(t *testing.T) {
+	t.Run("normal mode / and ? are no-ops", func(t *testing.T) {
+		vi := setupVi(t, "aaaa\nbbbb\ncccc", 2, WithSearch(false))
+		vi.Resize(4, 4)
+
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '/'})
+		assert.Equal(t, normalMode, vi.mode())
+		assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
+
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '?'})
+		assert.Equal(t, normalMode, vi.mode())
+		assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
+	})
+
+	t.Run("operator-pending / cancels back to normal mode", func(t *testing.T) {
+		vi := setupVi(t, "aaaa\nbbbb\ncccc", 2, WithSearch(false))
+		vi.Resize(4, 4)
+
+		vi.Handle(term.Event{Type: term.EventKey, Ch: 'd'})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '/'})
+		assert.Equal(t, normalMode, vi.mode())
+		assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
+		assert.Equal(t, "aaaa\nbbbb\ncccc", vi.less.Buffer().String())
+	})
+
+	t.Run("search remains enabled by default", func(t *testing.T) {
+		vi := setupVi(t, "aaaa\nbbbb\ncccc", 2)
+		vi.Resize(4, 4)
+
+		vi.Handle(term.Event{Type: term.EventKey, Ch: '/'})
+		assert.Equal(t, searchMode, vi.mode())
+		assert.Equal(t, thandler.LessSearchMode, vi.less.Mode())
+	})
+}
+
 func TestViRegisters(t *testing.T) {
 	strPtr := func(s string) *string { return &s }
 

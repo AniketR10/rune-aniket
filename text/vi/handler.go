@@ -1147,10 +1147,14 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveNextParagraphs(vi.count)
 		case '?':
 			vi.searchMode = moveToPrev
-			vi.less.Handle(ev)
+			if !vi.config.disableSearch {
+				vi.less.Handle(ev)
+			}
 		case '/':
 			vi.searchMode = moveToNext
-			vi.less.Handle(ev)
+			if !vi.config.disableSearch {
+				vi.less.Handle(ev)
+			}
 		case '%':
 			cell, _ := vi.cursor.Cell()
 			switch cell.Ch {
@@ -2231,12 +2235,10 @@ func (vi *viHandlerImpl) handleYank(ev term.Event) (quit, handled bool) {
 			vi.setTextObjectPending(true)
 			return false, true
 		case '/':
-			vi.beginYankSearchOp(moveToNext)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToNext, vi.beginYankSearchOp)
 			return false, true
 		case '?':
-			vi.beginYankSearchOp(moveToPrev)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToPrev, vi.beginYankSearchOp)
 			return false, true
 		case '\'':
 			vi.beginYankMarkOp(true)
@@ -2366,12 +2368,10 @@ func (vi *viHandlerImpl) handleShift(ev term.Event) (quit, handled bool) {
 			vi.setTextObjectPending(true)
 			return false, true
 		case '/':
-			vi.beginShiftSearchOp(moveToNext)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToNext, vi.beginShiftSearchOp)
 			return false, true
 		case '?':
-			vi.beginShiftSearchOp(moveToPrev)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToPrev, vi.beginShiftSearchOp)
 			return false, true
 		case '\'':
 			vi.beginShiftMarkOp(true)
@@ -2487,12 +2487,10 @@ func (vi *viHandlerImpl) handleCaseChange(ev term.Event) (quit, handled bool) {
 			vi.setTextObjectPending(true)
 			return false, true
 		case '/':
-			vi.beginCaseChangeSearchOp(moveToNext)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToNext, vi.beginCaseChangeSearchOp)
 			return false, true
 		case '?':
-			vi.beginCaseChangeSearchOp(moveToPrev)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToPrev, vi.beginCaseChangeSearchOp)
 			return false, true
 		case '\'':
 			vi.beginCaseChangeMarkOp(true)
@@ -2636,12 +2634,10 @@ func (vi *viHandlerImpl) handleComment(ev term.Event) (quit, handled bool) {
 			vi.setTextObjectPending(true)
 			return false, true
 		case '/':
-			vi.beginCommentSearchOp(moveToNext)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToNext, vi.beginCommentSearchOp)
 			return false, true
 		case '?':
-			vi.beginCommentSearchOp(moveToPrev)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToPrev, vi.beginCommentSearchOp)
 			return false, true
 		case '\'':
 			vi.beginCommentMarkOp(true)
@@ -2694,6 +2690,20 @@ func (vi *viHandlerImpl) beginSearchOp(direction moveMode, linewise bool, apply,
 // beginCommentSearchOp arms the search-pending state for the gq/gw
 // operators. Formatting is linewise: the resolved range is extended to
 // whole lines before the formatter runs.
+
+// beginSearchMotion arms an operator's search-pending state and forwards the
+// triggering `/`/`?` event to vi.less so the search bar is shown. When search
+// is disabled it cancels the operator instead, treating the key as an
+// unsupported motion.
+func (vi *viHandlerImpl) beginSearchMotion(ev term.Event, direction moveMode, begin func(moveMode)) {
+	if vi.config.disableSearch {
+		vi.setNormalMode()
+		return
+	}
+	begin(direction)
+	vi.less.Handle(ev)
+}
+
 func (vi *viHandlerImpl) beginCommentSearchOp(direction moveMode) {
 	commentFn := vi.commentFn
 	vi.beginSearchOp(direction, true,
@@ -3125,12 +3135,10 @@ func (vi *viHandlerImpl) handleDelete(ev term.Event) (quit, handled bool) {
 			vi.setTextObjectPending(true)
 			return false, true
 		case '/':
-			vi.beginDeleteSearchOp(moveToNext)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToNext, vi.beginDeleteSearchOp)
 			return false, true
 		case '?':
-			vi.beginDeleteSearchOp(moveToPrev)
-			vi.less.Handle(ev)
+			vi.beginSearchMotion(ev, moveToPrev, vi.beginDeleteSearchOp)
 			return false, true
 		case '\'':
 			vi.beginDeleteMarkOp(true)

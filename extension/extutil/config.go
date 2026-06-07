@@ -163,6 +163,7 @@ func viEditor(clipboard clipboard.Register) text.Editor {
 	return vi.Editor(
 		vi.WithClipboard(clipboard),
 		vi.WithWrap(true),
+		vi.WithSearch(false),
 		vi.WithStatusBarConfig(false, text.StatusBarConfig{}),
 		vi.WithAuxiliaryBar(false, text.AuxBarConfig{}),
 		vi.WithIconsBar(false, text.IconsBarConfig{}),
