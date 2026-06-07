@@ -35,7 +35,14 @@ pkg: $(BIN)/rune-agent
 	@mkdir -p $(PKG)/bin
 	@cp $(BIN)/rune-agent $(PKG)/bin/
 	@cp config.yaml $(PKG)/
-	@cp -r skills $(PKG)/skills
+	@mkdir -p $(PKG)/skills
+	@cp -r skills/code-* $(PKG)/skills/
+	@go_files=$$(find $(PKG) -name '*.go'); \
+		if [ -n "$$go_files" ]; then \
+			echo "error: .go files found in package:" >&2; \
+			echo "$$go_files" >&2; \
+			exit 1; \
+		fi
 
 ifeq ($(UNAME),Darwin)
 sign: pkg

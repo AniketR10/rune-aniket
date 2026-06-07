@@ -20,6 +20,12 @@ pkg: $(BIN)/extension_fuzzy_search
 	@mkdir -p $(PKG)/bin
 	@cp $(BIN)/extension_fuzzy_search $(PKG)/bin/
 	@cp config.star $(PKG)/
+	@go_files=$$(find $(PKG) -name '*.go'); \
+		if [ -n "$$go_files" ]; then \
+			echo "error: .go files found in package:" >&2; \
+			echo "$$go_files" >&2; \
+			exit 1; \
+		fi
 $(TAR): pkg
 	cd $(PKG) && tar -czvf $(TAR) .
 

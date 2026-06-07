@@ -86,6 +86,12 @@ make-release:
 	@cd $(ROOT_DIR) && $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune
 	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(OXAPI_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/ox-api ./cmd/ox-api
 	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/claudeimport ./cmd/claudeimport
+	@go_files=$$(find $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH) -name '*.go'); \
+		if [ -n "$$go_files" ]; then \
+			echo "error: .go files found in package:" >&2; \
+			echo "$$go_files" >&2; \
+			exit 1; \
+		fi
 ifeq ($(UNAME),Linux)
 release:
 	@rm -rf $(TARGET)/rune_linux_amd64
