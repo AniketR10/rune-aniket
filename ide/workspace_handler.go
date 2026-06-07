@@ -503,6 +503,7 @@ func (h *workspaceManagerHandler) init(
 		h.dispatchOnPreview, tm, homeParser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
+		cfg.shellCfg(),
 		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -1195,6 +1196,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		tm, parser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
+		cfg.shellCfg(),
 		textOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("new ex: %w", err)

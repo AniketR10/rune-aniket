@@ -327,6 +327,10 @@ config = {
     },
     "shell": {
         "max_history": 2000,
+        # Open the companion shell's input line in insert mode when the
+        # editor is modal (vi). Set to False to start in normal mode.
+        # Ignored in modeless mode, which has no normal mode.
+        "modal_start_insert": True,
     },
     # Toggle workspace transition animations.
     #

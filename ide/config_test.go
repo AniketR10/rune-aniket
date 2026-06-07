@@ -1098,6 +1098,80 @@ func TestShellMaxHistoryFromConfig(t *testing.T) {
 	assert.Equal(t, 7, cfg.shellMaxHistory())
 }
 
+func TestShellModalStartInsertFromConfig(t *testing.T) {
+	f, err := os.CreateTemp("", "*.star")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`config = {
+    "shell": {
+        "modal_start_insert": False,
+    },
+}`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.False(t, cfg.shellModalStartInsert())
+}
+
+func TestShellModalStartInsertDefaultsTrue(t *testing.T) {
+	f, err := os.CreateTemp("", "*.star")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`config = {
+    "shell": {
+        "max_history": 7,
+    },
+}`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.True(t, cfg.shellModalStartInsert())
+}
+
+// TestShellEditorModalFromEditorMode asserts shellCfg().modal mirrors the
+// editor backing the shell prompt: modal and exo (which builds the vi
+// prompt editor regardless of its fallback) are modal, modeless is not.
+func TestShellEditorModalFromEditorMode(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		editor map[string]any
+		want   bool
+	}{
+		{"unset editor defaults modal", nil, true},
+		{"modal", map[string]any{"mode": "modal"}, true},
+		{"modeless", map[string]any{"mode": "modeless"}, false},
+		{"exo fallback modal", map[string]any{
+			"mode": "exo",
+			"exo":  map[string]any{"command": "vim {file}", "fallback": "modal"},
+		}, true},
+		{"exo fallback modeless", map[string]any{
+			"mode": "exo",
+			"exo":  map[string]any{"command": "vim {file}", "fallback": "modeless"},
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := map[string]any{}
+			if tc.editor != nil {
+				m["editor"] = tc.editor
+			}
+			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
+			assert.Equal(t, tc.want, cfg.shellCfg().modal)
+		})
+	}
+}
+
 func TestInvalidAliases(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)

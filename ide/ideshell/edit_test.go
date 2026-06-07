@@ -174,6 +174,47 @@ func TestEditorReceivesTypedRunes(t *testing.T) {
 	assert.Len(t, seen, 11)
 }
 
+func countInsertKeys(events []term.Event) int {
+	n := 0
+	for _, ev := range events {
+		if ev.Type == term.EventKey && ev.Ch == 'i' && ev.Mod == 0 {
+			n++
+		}
+	}
+	return n
+}
+
+func TestModalStartInsertForwardsInsertKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		modal       bool
+		startInsert bool
+		wantInserts int
+	}{
+		{name: "modal start insert", modal: true, startInsert: true, wantInserts: 1},
+		{name: "modal no start insert", modal: true, startInsert: false, wantInserts: 0},
+		{name: "modeless start insert", modal: false, startInsert: true, wantInserts: 0},
+		{name: "modeless no start insert", modal: false, startInsert: false, wantInserts: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var seen []term.Event
+			h, _ := New(
+				func(func()) bool { return false },
+				term.NopInterrupter(),
+				stubEditor{seen: &seen},
+				Config{
+					MaxHistory:       100,
+					Modal:            tt.modal,
+					ModalStartInsert: tt.startInsert,
+				},
+			)
+			t.Cleanup(func() { _ = h.Close() })
+			assert.Equal(t, tt.wantInserts, countInsertKeys(seen))
+		})
+	}
+}
+
 func TestEditorSubmitDispatchesAndClears(t *testing.T) {
 	var dispatched []string
 	h, registry := New(

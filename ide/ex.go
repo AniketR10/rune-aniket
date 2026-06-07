@@ -173,6 +173,7 @@ type ex struct {
 	flusher             *flusher
 	debugCommands       bool
 	commandObserver     commandObserver
+	shellCfg            shellConfig
 }
 
 type commandObserver interface {
@@ -203,6 +204,7 @@ func newEx(
 	commandObserver commandObserver,
 	debugCommands bool,
 	commandPromptCfg commandPromptConfig,
+	shellCfg shellConfig,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
@@ -215,6 +217,7 @@ func newEx(
 	e.commandObserver = commandObserver
 	e.debugCommands = debugCommands
 	e.commandPromptCfg = commandPromptCfg
+	e.shellCfg = shellCfg
 	return
 }
 
@@ -1919,6 +1922,8 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 			HistoryDocumentID: shellHistoryDocumentID,
 			MaxHistory:        e.config.ShellMaxHistory,
 			Workspace:         workspaceURI,
+			Modal:             e.shellCfg.modal,
+			ModalStartInsert:  e.shellCfg.modalStartInsert,
 		}
 		h, registry := ideshell.New(
 			e.emulatorConfig.ScheduleNextTick, e, e.promptEditor,

@@ -57,6 +57,14 @@ type Config struct {
 	// Without it the interpreter inherits the process working
 	// directory, which under a macOS .app launch is the bundle.
 	Workspace workspaceapi.URI
+	// Modal reports whether the editor backing the input line is
+	// modal (vi). Only when true does ModalStartInsert take effect; a
+	// modeless editor has no normal mode to switch out of.
+	Modal bool
+	// ModalStartInsert opens the input line in insert mode at
+	// construction when Modal is true, sparing the user from pressing
+	// `i` before typing into a fresh shell prompt.
+	ModalStartInsert bool
 }
 
 // New creates an IDE shell Handler wired with a CommandRegistry, sh
@@ -125,6 +133,9 @@ func New(
 	// command submission in tests). Resize overrides this with the
 	// real input-band geometry before the editor is ever drawn.
 	h.editHandler.Resize(1, 1)
+	if cfg.Modal && cfg.ModalStartInsert {
+		h.editHandler.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	}
 	return h, r
 }
 

@@ -537,6 +537,52 @@ func (c ideConfig) shellMaxHistory() (ret int) {
 	return
 }
 
+func (c ideConfig) shellModalStartInsert() bool {
+	cfg, ok := c.shell()
+	if !ok {
+		return true
+	}
+	enabled, err := cfg.GetBool("modal_start_insert")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["shell.modal_start_insert"] = err
+		}
+		return true
+	}
+	return enabled
+}
+
+// shellConfig bundles the resolved companion-shell settings that the ex
+// editor needs at shell-construction time. It is passed explicitly to
+// newEx rather than threaded through the SDK text.Config, which models
+// the editor component, not the shell prompt.
+type shellConfig struct {
+	// modal reports whether the resolved editor mode is modal (vi).
+	modal bool
+	// modalStartInsert opens the shell input in insert mode when modal.
+	modalStartInsert bool
+}
+
+func (c ideConfig) shellCfg() shellConfig {
+	return shellConfig{
+		modal:            c.shellEditorModal(),
+		modalStartInsert: c.shellModalStartInsert(),
+	}
+}
+
+// shellEditorModal reports whether the companion shell's input line is
+// backed by a modal (vi) editor. It mirrors newPromptEditor's mode
+// switch: exo builds the vi prompt editor regardless of its fallback,
+// so only modeless is non-modal here.
+func (c ideConfig) shellEditorModal() bool {
+	switch c.editorMode() {
+	case editorModeModal, editorModeExo:
+		return true
+	default:
+		return false
+	}
+}
+
 func (c ideConfig) commandHistoryKey() (ret term.KeyComb) {
 	ret = text.DefaultConfig().CommandHistoryKey
 	cfg, ok := c.command()
