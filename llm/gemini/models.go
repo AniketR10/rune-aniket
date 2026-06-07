@@ -104,11 +104,12 @@ var supportedEfforts = map[string]bool{
 
 // defaultGemini3Effort is the thinking level applied to Gemini 3 models when
 // no usable effort is requested. Gemini 3 returns (and on the next turn
-// requires) a thought_signature on function-call parts; this requirement holds
-// even at the minimal thinking level. Always sending a thinking config — never
-// omitting it — keeps signatures flowing so long tool-calling conversations do
-// not degrade into empty completions.
-const defaultGemini3Effort = "minimal"
+// requires) a thought_signature on function-call parts, so a thinking config
+// must always be sent — never omitted — to keep signatures flowing so long
+// tool-calling conversations do not degrade into empty completions. Medium is
+// used as the default because the minimal level is not accepted by every
+// Gemini 3 model (Pro rejects it), whereas medium is broadly supported.
+const defaultGemini3Effort = "medium"
 
 // isGemini3 reports whether the model is a Gemini 3.x model, which mandates
 // thought signatures during function calling.
@@ -130,7 +131,7 @@ func NormalizeEffort(model, effort string) (normalized, warning string) {
 		return effort, ""
 	}
 	// Unsupported effort: warn, then fall back. Gemini 3 still needs a thinking
-	// config, so it falls back to minimal rather than omitting it.
+	// config, so it falls back to the default rather than omitting it.
 	warning = fmt.Sprintf(
 		"Effort %q is not supported by %s; using model default instead.", effort, model)
 	if isGemini3(model) {

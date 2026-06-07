@@ -236,15 +236,15 @@ func TestNormalizeEffort(t *testing.T) {
 		hasWarn bool
 	}{
 		// Gemini 3 requires a thinking config for function-call signatures, so
-		// an unset/none/unsupported effort falls back to minimal rather than
+		// an unset/none/unsupported effort falls back to medium rather than
 		// omitting thinking entirely.
-		{"gemini-3-flash-preview", "", "minimal", false},
-		{"gemini-3-flash-preview", "none", "minimal", false},
+		{"gemini-3-flash-preview", "", "medium", false},
+		{"gemini-3-flash-preview", "none", "medium", false},
 		{"gemini-3-flash-preview", "high", "high", false},
 		{"gemini-3-flash-preview", "minimal", "minimal", false},
-		{"gemini-3-flash-preview", "xhigh", "minimal", true},
-		{"gemini-3-flash-preview", "bogus", "minimal", true},
-		{"gemini-3.1-pro-preview", "", "minimal", false},
+		{"gemini-3-flash-preview", "xhigh", "medium", true},
+		{"gemini-3-flash-preview", "bogus", "medium", true},
+		{"gemini-3.1-pro-preview", "", "medium", false},
 		// Gemini 2.x does not require signatures; empty stays empty.
 		{"gemini-2.5-flash", "", "", false},
 		{"gemini-2.5-flash", "none", "", false},
