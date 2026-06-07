@@ -79,3 +79,34 @@ func (f failingRegister) Copy(string, clipboard.Data) error { return f.err }
 func (f failingRegister) Paste(string) (clipboard.Data, error) {
 	return clipboard.Data{}, f.err
 }
+
+// recordingRegister records every register ID written to the underlying OS
+// clipboard so tests can assert what is forwarded to the system layer.
+type recordingRegister struct {
+	clipboard.Register
+	copied []string
+}
+
+func (r *recordingRegister) Copy(registerID string, data clipboard.Data) error {
+	r.copied = append(r.copied, registerID)
+	return r.Register.Copy(registerID, data)
+}
+
+// TestSystemClipboardOnlyDefaultRegisterReachesOS reproduces the bug where
+// typing in the modal compose editor leaked to the OS clipboard: the vi
+// editor writes the typed run to its "." register on insert-mode exit, and
+// the system clipboard forwarded every register to the OS. Only the default
+// register represents the single OS clipboard; all other registers must stay
+// in the in-memory shadow.
+func TestSystemClipboardOnlyDefaultRegisterReachesOS(t *testing.T) {
+	sys := &recordingRegister{Register: clipboard.NewInMemory()}
+	clip := newSystemClipboard(sys, nil)
+
+	require.NoError(t, clip.Copy(".", clipboard.Data{Text: "typed text"}))
+	require.Empty(t, sys.copied,
+		"a non-default register write must not reach the OS clipboard")
+
+	require.NoError(t, clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: "yanked"}))
+	require.Equal(t, []string{clipboard.DefaultRegisterID}, sys.copied,
+		"only the default register write may reach the OS clipboard")
+}

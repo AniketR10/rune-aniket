@@ -51,6 +51,9 @@ func newSystemClipboard(sys clipboard.Register, err error) clipboard.Register {
 
 func (c *systemClipboard) Copy(registerID string, data clipboard.Data) error {
 	_ = c.mem.Copy(registerID, data)
+	if registerID != clipboard.DefaultRegisterID {
+		return nil
+	}
 	if c.openErr != nil {
 		return c.openErr
 	}
