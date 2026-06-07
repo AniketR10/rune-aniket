@@ -26,14 +26,11 @@ package exoeditor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -91,9 +88,6 @@ type editorHandler struct {
 	// production; tests inject a fake snapshotter so the full probe path
 	// runs without a pty-backed handler.
 	component componentSnapshotter
-
-	debugMu      sync.Mutex
-	debugLastMsg map[string]string
 }
 
 // componentSnapshotter is the slice of *vte.Component refreshProbe needs:
@@ -442,14 +436,9 @@ func (h *editorHandler) Draw(w term.Writer) {
 	}
 	h.Handler.Draw(ignoreAttrWriter{Writer: w})
 	if probe == nil {
-		h.debugExo("draw", "probe=nil")
 		return
 	}
 	locs := h.locations.SortedLocations()
-	h.debugExo("draw", fmt.Sprintf(
-		"bands={top=%d,bot=%d,gutter=%d,grid=%d} rows=%d locs=%d",
-		probe.Bands.Top, probe.Bands.Bottom, probe.Bands.GutterWidth,
-		probe.Bands.GridWidth, len(probe.Rows), len(locs)))
 	drawLocations(w, locs, probe)
 }
 
@@ -465,20 +454,14 @@ func (h *editorHandler) refreshProbe() {
 
 	snap, err := h.component.Snapshot()
 	if err != nil {
-		h.debugExo("refresh", fmt.Sprintf("snapshot err: %v", err))
 		return
 	}
 	active := snap.Active()
 	lines := h.bufferLines()
 	res, err := h.probe.Infer(active.Cells, active.Cursor, lines, h.probeSlab)
 	if err != nil {
-		h.debugExo("refresh", fmt.Sprintf("infer err: %v", err))
 		return
 	}
-	h.debugExo("refresh", fmt.Sprintf(
-		"cursor=%+v bands={top=%d,bot=%d,gutter=%d,grid=%d} rows=%d",
-		res.CursorAtScroll, res.Bands.Top, res.Bands.Bottom,
-		res.Bands.GutterWidth, res.Bands.GridWidth, len(res.Rows)))
 	h.lastProbe.Store(&res)
 }
 
@@ -507,23 +490,6 @@ func (h *editorHandler) snapshotBufferLines() {
 // only writer to the file and Rune-level edits would fight with it.
 func (h *editorHandler) CellEditor() cell.Editor { return nopCellEditor{} }
 
-// debugExo logs msg under the given site, deduping back-to-back
-// identical messages so the log stays readable when refreshProbe /
-// Draw run on every interrupt.
-func (h *editorHandler) debugExo(site, msg string) {
-	h.debugMu.Lock()
-	if h.debugLastMsg == nil {
-		h.debugLastMsg = make(map[string]string)
-	}
-	if h.debugLastMsg[site] == msg {
-		h.debugMu.Unlock()
-		return
-	}
-	h.debugLastMsg[site] = msg
-	h.debugMu.Unlock()
-	log.WithField(logging.KeyClass, "exoeditor."+site).Info(msg)
-}
-
 // Dimensions reports the ideal size needed to render the buffer
 // without clipping.
 func (h *editorHandler) Dimensions() (int, int) {
@@ -547,9 +513,6 @@ func (h *editorHandler) Close() error {
 		select {
 		case <-h.procDone:
 		case <-time.After(gracefulQuitTimeout):
-			h.debugExo("close", fmt.Sprintf(
-				"graceful quit timed out after %s; "+
-					"forcing PTY teardown", gracefulQuitTimeout))
 		}
 		h.scheduleNextTick(func() {
 			if err := h.Handler.Close(); err != nil {

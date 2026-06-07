@@ -26,6 +26,7 @@ package exoeditor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,11 +42,11 @@ import (
 
 // bufferOf builds an editable *cell.Buffer (with an undoer so Version
 // advances on edits) seeded with content.
-func bufferOf(t *testing.T, content string) *cell.Buffer {
-	t.Helper()
+func bufferOf(tb testing.TB, content string) *cell.Buffer {
+	tb.Helper()
 	buf := cell.NewBuffer()
 	_, err := buf.ReadFrom(strings.NewReader(content))
-	require.NoError(t, err)
+	require.NoError(tb, err)
 	return buf
 }
 
@@ -73,9 +74,9 @@ func (c *fakeComponent) Snapshot() (vte.Snapshot, error) {
 // drives. The full newHandler is not used because it spawns a PTY-backed
 // vte handler a unit test cannot drive.
 func handlerForBufferTest(
-	t *testing.T, buf *cell.Buffer,
+	tb testing.TB, buf *cell.Buffer,
 ) (*editorHandler, *fakeComponent) {
-	t.Helper()
+	tb.Helper()
 	comp := &fakeComponent{}
 	h := &editorHandler{
 		buf:       buf,
@@ -85,7 +86,7 @@ func handlerForBufferTest(
 	h.snapshotBufferLines()
 	h.bufSub = &bufLineWatcher{h: h}
 	buf.Subscribe(h.bufSub)
-	t.Cleanup(func() { buf.Unsubscribe(h.bufSub) })
+	tb.Cleanup(func() { buf.Unsubscribe(h.bufSub) })
 	return h, comp
 }
 
@@ -228,4 +229,37 @@ func TestRefreshProbeKeepsLastResultOnSnapshotError(t *testing.T) {
 	h.refreshProbe()
 	assert.Same(t, good, h.lastProbe.Load(),
 		"a snapshot error must keep the last good probe")
+}
+
+// BenchmarkRefreshProbe measures the steady-state cost of one
+// refreshProbe on the exo handler: a component snapshot, the buffer-line
+// load, and the vteprobe alignment over a realistic gutter-rendered
+// screen. The fixture is built once outside the timing loop and the
+// probe slab is reused across calls, mirroring how refreshProbe runs on
+// every grid mutation.
+func BenchmarkRefreshProbe(b *testing.B) {
+	const lines = 48
+
+	var content strings.Builder
+	rows := make([]string, 0, lines)
+	for i := range lines {
+		body := fmt.Sprintf("x%d := compute(%d) + offset", i, i)
+		fmt.Fprintf(&content, "%s\n", body)
+		rows = append(rows, fmt.Sprintf(" %d %s", i+1, body))
+	}
+
+	buf := bufferOf(b, content.String())
+	h, comp := handlerForBufferTest(b, buf)
+	comp.cells = gutterGrid(rows, 80)
+	comp.cursor = term.Coordinates{X: 6, Y: lines / 2}
+
+	h.refreshProbe()
+	if h.lastProbe.Load() == nil {
+		b.Fatal("warmup refreshProbe did not produce a result")
+	}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		h.refreshProbe()
+	}
 }
