@@ -385,6 +385,17 @@ func WithStarlarkTutorial(name, src string) Option {
 	}
 }
 
+// WithStartingTutorial schedules the named tutorial to run
+// automatically once the IDE becomes ready. The name must match a
+// tutorial registered via WithStarlarkTutorial or the user config;
+// if it is empty or unknown, no tutorial is started. Intended for
+// first-run onboarding after bootstrap.
+func WithStartingTutorial(name string) Option {
+	return func(opts *options) {
+		opts.startingTutorial = name
+	}
+}
+
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
@@ -426,6 +437,7 @@ type options struct {
 	openShaderDuration     time.Duration
 	zdotDir                string
 	starlarkTutorials      map[string]string
+	startingTutorial       string
 }
 
 func defaultOptions() options {

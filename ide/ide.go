@@ -153,7 +153,21 @@ func (i *IDE) Config() config.Config {
 // Close must be called when this IDE is no longer in use.
 func (i *IDE) Ready() tui.Handler {
 	i.initRunning()
+	i.maybeStartTutorial()
 	return i.planLockdown
+}
+
+func (i *IDE) maybeStartTutorial() {
+	name := i.options.startingTutorial
+	if name == "" {
+		return
+	}
+	if _, ok := i.tutorial.tutorials[name]; !ok {
+		return
+	}
+	i.options.scheduleFn(func() {
+		i.workspaceHandler.focusEx().Dispatch("tutorial", "run", name)
+	})
 }
 
 // Browser returns the current browser in focus.

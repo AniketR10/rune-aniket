@@ -1125,3 +1125,96 @@ func (h *lockedHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	defer h.mu.Unlock()
 	return h.Handler.Cursor()
 }
+
+// minimalStarTutorial is a self-contained Starlark tutorial that
+// renders a single floating window. It is enough for the runner to
+// install an overlay once dispatched.
+const minimalStarTutorial = `
+def run():
+    floating_window(title="welcome", text="hello")
+tutorial(entry=run)
+`
+
+// TestIDEStartingTutorialDispatchesOnReady verifies that
+// WithStartingTutorial schedules a `:tutorial run <name>` dispatch on
+// the event loop once the IDE is ready, and that an unknown name is a
+// no-op.
+func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
+	cases := []struct {
+		name          string
+		starting      string
+		wantScheduled bool
+		wantActive    string
+	}{
+		{
+			name:          "known tutorial runs",
+			starting:      "basics",
+			wantScheduled: true,
+			wantActive:    "basics",
+		},
+		{
+			name:          "unknown tutorial is a no-op",
+			starting:      "missing",
+			wantScheduled: false,
+		},
+		{
+			name:          "empty starting tutorial is a no-op",
+			starting:      "",
+			wantScheduled: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, _ := makeTestFiles(t)
+			dataDir := t.TempDir()
+
+			mu := new(sync.Mutex)
+			var scheduled []func()
+			scheduleNextTick := func(fn func()) bool {
+				scheduled = append(scheduled, fn)
+				return true
+			}
+
+			opts := []Option{
+				WithPublishEvent(nopPublishEvent),
+				WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+				WithLocker(mu),
+				WithScheduleNextTick(scheduleNextTick),
+				WithStarlarkTutorial("basics", minimalStarTutorial),
+			}
+			if tc.starting != "" {
+				opts = append(opts, WithStartingTutorial(tc.starting))
+			}
+
+			i, err := New("", configFile.Name(), dataDir,
+				newTestStorage(t, dataDir), opts...)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = i.Close() })
+
+			root := i.Ready()
+			mu.Lock()
+			root.Resize(80, 24)
+			mu.Unlock()
+			i.WaitWorkspaces()
+
+			if !tc.wantScheduled {
+				assert.Empty(t, scheduled,
+					"no tutorial dispatch should be scheduled")
+				assert.Nil(t, i.tutorial.overlay,
+					"no tutorial overlay should be active")
+				return
+			}
+
+			require.Len(t, scheduled, 1,
+				"exactly one tutorial dispatch should be scheduled")
+			mu.Lock()
+			scheduled[0]()
+			mu.Unlock()
+
+			assert.NotNil(t, i.tutorial.overlay,
+				"tutorial overlay should be active after dispatch")
+			assert.Equal(t, tc.wantActive, i.tutorial.activeName)
+		})
+	}
+}

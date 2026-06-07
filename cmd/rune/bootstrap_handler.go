@@ -115,7 +115,7 @@ func newBootstrapHandler(
 
 	if isBootstrapped(dataDir) {
 		client, releaseManager := newAPIClient(newRuneStorage(dataDir))
-		realIDE, err := bh.buildConfiguredIDE(client, releaseManager)
+		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {
 			_ = client.Close()
 			return nil, fmt.Errorf("build configured ide: %w", err)
@@ -177,6 +177,7 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 
 func (b *bootstrapHandler) buildConfiguredIDE(
 	client *apiclient.Client, releaseManager release.Manager,
+	startingTutorial bool,
 ) (*ide.IDE, error) {
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(b.runner),
@@ -226,6 +227,9 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 			}),
 	}
 	opts = append(opts, embeddedTutorialOptions()...)
+	if startingTutorial {
+		opts = append(opts, ide.WithStartingTutorial("basics"))
+	}
 	if debug.DebugBuild == "true" {
 		opts = append(opts, ide.WithDebugCommands(true))
 	}
@@ -377,7 +381,7 @@ func (b *bootstrapHandler) performSwap() error {
 	defer b.mu.Lock()
 
 	client, releaseManager := newAPIClient(newRuneStorage(b.dataDir))
-	realIDE, err := b.buildConfiguredIDE(client, releaseManager)
+	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
 	if err != nil {
 		_ = client.Close()
 		return fmt.Errorf("build configured ide: %w", err)
