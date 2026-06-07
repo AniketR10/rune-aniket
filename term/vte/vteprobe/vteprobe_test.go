@@ -25,17 +25,11 @@ package vteprobe
 
 import (
 	"bytes"
-	"context"
-	"errors"
-	"io"
-	"os"
 	"testing"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 )
@@ -116,100 +110,17 @@ func plainRow(s string) rowSpec {
 	return rowSpec{text: s}
 }
 
-// ----- fakeFS: minimal in-memory workspaceapi.FileSystem for tests -----
-
-type fakeFS struct {
-	files map[string]*fakeFileData
-}
-
-type fakeFileData struct {
-	data    []byte
-	modTime time.Time
-}
-
-func newFakeFS(files map[string][]byte) *fakeFS {
-	fs := &fakeFS{files: map[string]*fakeFileData{}}
-	now := time.Now()
-	for path, data := range files {
-		fs.files[path] = &fakeFileData{data: data, modTime: now}
-	}
-	return fs
-}
-
-func (f *fakeFS) bump(path string, data []byte) {
-	if fd, ok := f.files[path]; ok {
-		fd.data = data
-		fd.modTime = fd.modTime.Add(time.Second)
-		return
-	}
-	f.files[path] = &fakeFileData{data: data, modTime: time.Now()}
-}
-
-func (f *fakeFS) URI(path string) (workspaceapi.URI, error) {
-	return workspaceapi.ParseURI("file://" + path)
-}
-
-func (f *fakeFS) OpenFile(path string, _ int, _ os.FileMode) (workspaceapi.File, error) {
-	fd, ok := f.files[path]
-	if !ok {
-		return nil, errors.New("fakeFS: no such file: " + path)
-	}
-	return &fakeFile{data: bytes.NewReader(fd.data)}, nil
-}
-
-func (f *fakeFS) Stat(path string) (os.FileInfo, error) {
-	fd, ok := f.files[path]
-	if !ok {
-		return nil, errors.New("fakeFS: no such file: " + path)
-	}
-	return fakeFileInfo{name: path, size: int64(len(fd.data)), modTime: fd.modTime}, nil
-}
-
-func (f *fakeFS) Remove(string) error { panic("fakeFS.Remove: not implemented") }
-func (f *fakeFS) ReadDir(string) ([]os.DirEntry, error) {
-	panic("fakeFS.ReadDir: not implemented")
-}
-func (f *fakeFS) MkdirAll(string, os.FileMode) error {
-	panic("fakeFS.MkdirAll: not implemented")
-}
-
-type fakeFile struct {
-	data *bytes.Reader
-}
-
-func (f *fakeFile) Name() string               { return "" }
-func (f *fakeFile) Stat() (os.FileInfo, error) { return nil, io.EOF }
-func (f *fakeFile) Sync() error                { return nil }
-func (f *fakeFile) Truncate(int64) error       { return nil }
-func (f *fakeFile) Fd() uintptr                { return 0 }
-func (f *fakeFile) Seek(o int64, w int) (int64, error) {
-	return f.data.Seek(o, w)
-}
-func (f *fakeFile) Read(p []byte) (int, error) { return f.data.Read(p) }
-func (f *fakeFile) ReadAt(p []byte, off int64) (int, error) {
-	return f.data.ReadAt(p, off)
-}
-func (f *fakeFile) Write([]byte) (int, error) { return 0, errors.New("read-only") }
-func (f *fakeFile) Close() error              { return nil }
-
-type fakeFileInfo struct {
-	name    string
-	size    int64
-	modTime time.Time
-}
-
-func (i fakeFileInfo) Name() string       { return i.name }
-func (i fakeFileInfo) Size() int64        { return i.size }
-func (i fakeFileInfo) Mode() os.FileMode  { return 0 }
-func (i fakeFileInfo) ModTime() time.Time { return i.modTime }
-func (i fakeFileInfo) IsDir() bool        { return false }
-func (i fakeFileInfo) Sys() any           { return nil }
-
 // ----- synthetic test cases -----
 
-func newCursor(t *testing.T, fs workspaceapi.FileSystem) *Cursor {
+func newCursor(t *testing.T) *Cursor {
 	t.Helper()
-	return New(fs, []int{4, 2, 8}, 0.6, 1<<20)
+	return New([]int{4, 2, 8}, 0.6, 1<<20)
+}
+
+// linesOf splits file content into the lines slice the content-supplied
+// Infer expects, matching the on-disk splitting semantics.
+func linesOf(content string) []string {
+	return splitLines([]byte(content))
 }
 
 // TestInferEmitsDebugLog verifies that every Infer call writes at least
@@ -218,12 +129,8 @@ func newCursor(t *testing.T, fs workspaceapi.FileSystem) *Cursor {
 // The deferred log in Infer is the contract we lock in here; the
 // internal alignment-detail entries are best-effort.
 func TestInferEmitsDebugLog(t *testing.T) {
-	const path = "/code.go"
-	content := []byte("aaa\nbbb\nccc\n")
+	content := "aaa\nbbb\nccc\n"
 	buf := makeBuffer([]string{"aaa", "bbb", "ccc"}, 8)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
 	// Logrus is process-global; flip it on for this test and restore
 	// the prior state afterwards so parallel tests are not affected.
@@ -237,22 +144,21 @@ func TestInferEmitsDebugLog(t *testing.T) {
 		log.SetOutput(prevOut)
 	})
 
-	inf := newCursor(t, fs)
-	_, err = inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 1, Y: 1}, nil)
+	inf := newCursor(t)
+	_, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 1, Y: 1},
+		linesOf(content), nil)
 	require.NoError(t, err)
 
 	out := buffer.String()
 	assert.Contains(t, out, "class=vteprobe.Cursor",
 		"Infer must log under the vteprobe.Cursor class")
-	assert.Contains(t, out, "Infer uri=",
-		"deferred Infer log must include uri and result; got %q", out)
+	assert.Contains(t, out, "Infer lines=",
+		"deferred Infer log must include line count and result; got %q", out)
 }
 
 func TestInferGutterAlignsWithTabs(t *testing.T) {
 	t.Parallel()
 
-	const path = "/sample.go"
 	const content = "package main\n" +
 		"\n" +
 		"import \"fmt\"\n" +
@@ -271,15 +177,12 @@ func TestInferGutterAlignsWithTabs(t *testing.T) {
 		" 7 }",
 	}
 	buf := makeBuffer(rows, 60)
-	fs := newFakeFS(map[string][]byte{path: []byte(content)})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
+	inf := newCursor(t)
 	// Cursor on the body of line 6 ("    fmt.Println..."), pointing at
 	// 'f' in fmt. The gutter occupies 3 visual columns; visual column 7
 	// is the 'f'.
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 7, Y: 5}, nil)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 7, Y: 5}, linesOf(content), nil)
 	require.NoError(t, err)
 	// Rendered visual column 7 -> body offset 4 (after gutter width 3),
 	// which corresponds to the rune right after the tab on file line 6,
@@ -292,8 +195,7 @@ func TestInferGutterAlignsWithTabs(t *testing.T) {
 func TestInferRelativeLineNumbers(t *testing.T) {
 	t.Parallel()
 
-	const path = "/code.go"
-	content := []byte("aaa\nbbb\nccc\nddd\neee\n")
+	content := "aaa\nbbb\nccc\nddd\neee\n"
 
 	// Relative numbering around line 3 (the current line). Editors
 	// typically render the absolute number on the cursor row and
@@ -306,12 +208,9 @@ func TestInferRelativeLineNumbers(t *testing.T) {
 		"2 eee",
 	}
 	buf := makeBuffer(rows, 40)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 2, Y: 2}, nil)
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 2, Y: 2}, linesOf(content), nil)
 	require.NoError(t, err)
 	// The absolute number on the cursor row is 3, so the cursor maps
 	// to file line 3 (Y=2), column 1 (X=0) — visual col 2 minus gutter
@@ -324,8 +223,7 @@ func TestInferCursorOnChromeRowIsUnknown(t *testing.T) {
 
 	reverse := term.Attributes{Attrs: term.AttrReverse}
 
-	const path = "/code.go"
-	content := []byte("foo\nbar\nbaz\n")
+	content := "foo\nbar\nbaz\n"
 	rows := []rowSpec{
 		plainRow("foo"),
 		plainRow("bar"),
@@ -333,20 +231,16 @@ func TestInferCursorOnChromeRowIsUnknown(t *testing.T) {
 		styledRow("-- INSERT --", reverse),
 	}
 	buf := makeBufferWithAttrs(rows, 40)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	_, err = inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 5, Y: 3}, nil)
+	inf := newCursor(t)
+	_, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 5, Y: 3}, linesOf(content), nil)
 	assert.ErrorIs(t, err, ErrUnknown)
 }
 
 func TestInferFoldPlaceholder(t *testing.T) {
 	t.Parallel()
 
-	const path = "/code.go"
-	content := []byte("alpha\nbeta\ngamma\ndelta\nepsilon\n")
+	content := "alpha\nbeta\ngamma\ndelta\nepsilon\n"
 
 	// Row 1 hides lines 2..4 inside a fold; gutter shows the first
 	// folded line (2).
@@ -356,51 +250,78 @@ func TestInferFoldPlaceholder(t *testing.T) {
 		" 5 epsilon",
 	}
 	buf := makeBuffer(rows, 60)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 10, Y: 1}, nil)
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 10, Y: 1}, linesOf(content), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got.CursorAtScroll.Y, "cursor on second file line (Y=1)")
 	assert.True(t, got.Folded)
 }
 
-func TestInferStaleCacheInvalidation(t *testing.T) {
+func TestInferContentChange(t *testing.T) {
 	t.Parallel()
 
-	const path = "/code.go"
-	original := []byte("foo\nbar\n")
-	updated := []byte("foo\nBAR\nqux\n")
+	original := "foo\nbar\n"
+	updated := "foo\nBAR\nqux\n"
 
-	fs := newFakeFS(map[string][]byte{path: original})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
-
-	inf := newCursor(t, fs)
+	inf := newCursor(t)
 
 	buf1 := makeBuffer([]string{" 1 foo", " 2 bar"}, 30)
-	res1, err := inf.Infer(context.Background(), uri, buf1.RawCells(), term.Coordinates{X: 4, Y: 1}, nil)
+	res1, err := inf.Infer(buf1.RawCells(), term.Coordinates{X: 4, Y: 1}, linesOf(original), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res1.CursorAtScroll.Y)
 
-	// Bump the file: line 2 is now "BAR". The new buffer reflects the
-	// edit; the inferrer must read the new content rather than trust
-	// its cache.
-	fs.bump(path, updated)
+	// Line 2 is now "BAR". The probe reads the supplied lines, not a
+	// cache, so the new buffer plus updated lines drive the mapping.
 	buf2 := makeBuffer([]string{" 1 foo", " 2 BAR", " 3 qux"}, 30)
-	res2, err := inf.Infer(context.Background(), uri, buf2.RawCells(), term.Coordinates{X: 5, Y: 1}, nil)
+	res2, err := inf.Infer(buf2.RawCells(), term.Coordinates{X: 5, Y: 1}, linesOf(updated), nil)
 	require.NoError(t, err)
 	// Body offset 5-3 = 2 → rune index 2 = 'R' on "BAR" (0-based).
 	assert.Equal(t, term.Coordinates{X: 2, Y: 1}, res2.CursorAtScroll)
 }
 
+// TestInferReadsNoDisk locks in that inference is driven entirely by the
+// caller-supplied lines (here derived from an in-memory cell.View via
+// LinesFromView) and never touches a filesystem: New takes no fs and
+// Infer takes no URI, so there is no disk path to read.
+func TestInferReadsNoDisk(t *testing.T) {
+	t.Parallel()
+
+	rows := []string{" 1 foo", " 2 bar", " 3 baz"}
+	buf := makeBuffer(rows, 30)
+
+	// The content the editor displays, supplied as a cell.View mirror
+	// rather than read from disk.
+	contentBuf := makeBuffer([]string{"foo", "bar", "baz"}, 3)
+	lines := LinesFromView(contentBuf.View())
+
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 3, Y: 1}, lines, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, got.CursorAtScroll.Y)
+	assert.Equal(t, []string{"foo", "bar", "baz"}, got.FileLines)
+}
+
+// TestInferTooLargeUnknown verifies the maxFileBytes guard: content
+// larger than the configured bound yields ErrUnknown instead of an
+// alignment attempt.
+func TestInferTooLargeUnknown(t *testing.T) {
+	t.Parallel()
+
+	rows := []string{" 1 foo", " 2 bar"}
+	buf := makeBuffer(rows, 30)
+	lines := []string{"foo", "bar"}
+
+	// maxFileBytes of 4 is below the supplied content size.
+	inf := New([]int{4, 2, 8}, 0.6, 4)
+	_, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 4, Y: 1}, lines, nil)
+	assert.ErrorIs(t, err, ErrUnknown)
+}
+
 func TestInferLowConfidenceUnknown(t *testing.T) {
 	t.Parallel()
 
-	const path = "/code.go"
-	content := []byte("alpha\nbeta\ngamma\n")
+	content := "alpha\nbeta\ngamma\n"
 
 	// Render content totally unrelated to the file — no gutter, no
 	// numeric markers, every line different from anything on disk.
@@ -409,20 +330,16 @@ func TestInferLowConfidenceUnknown(t *testing.T) {
 		"yyy ppp",
 	}
 	buf := makeBuffer(rows, 20)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	_, err = inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 0}, nil)
+	inf := newCursor(t)
+	_, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 0}, linesOf(content), nil)
 	assert.ErrorIs(t, err, ErrUnknown)
 }
 
 func TestInferFuzzyContentMatch(t *testing.T) {
 	t.Parallel()
 
-	const path = "/code.go"
-	content := []byte("alpha foo\nbeta bar\ngamma baz\n")
+	content := "alpha foo\nbeta bar\ngamma baz\n"
 
 	// The middle row swaps one char (b → B in "bar"); the alignment
 	// must still succeed thanks to the fuzzy-prefix similarity ratio.
@@ -432,12 +349,9 @@ func TestInferFuzzyContentMatch(t *testing.T) {
 		"gamma baz",
 	}
 	buf := makeBuffer(rows, 20)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 1}, nil)
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 1}, linesOf(content), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got.CursorAtScroll.Y)
 }
@@ -445,9 +359,8 @@ func TestInferFuzzyContentMatch(t *testing.T) {
 func TestInferWideChars(t *testing.T) {
 	t.Parallel()
 
-	const path = "/cjk.txt"
 	// File content uses one wide rune (你, width 2) per line.
-	content := []byte("你好 alpha\n你好 beta\n")
+	content := "你好 alpha\n你好 beta\n"
 
 	// Build the rendered rows manually with explicit cell widths.
 	wide := func(text string) []term.Cell {
@@ -466,15 +379,12 @@ func TestInferWideChars(t *testing.T) {
 		padRow(wide("你好 beta"), 20),
 	}
 	buf := cell.CellsToBuffer(rowCells)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
+	inf := newCursor(t)
 	// Cursor on the second visual cell of 你 (continuation cell) on
 	// the second row. The mapping should resolve to file line 2 and
 	// the rune containing 你 (file column 1).
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 1, Y: 1}, nil)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 1, Y: 1}, linesOf(content), nil)
 	require.NoError(t, err)
 	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, got.CursorAtScroll)
 }
@@ -482,10 +392,9 @@ func TestInferWideChars(t *testing.T) {
 func TestInferSoftWrap(t *testing.T) {
 	t.Parallel()
 
-	const path = "/long.txt"
 	// One very long line that wraps across two terminal rows.
 	long := "aaaaaaaaaa" + "bbbbbbbbbb" + "cccccccccc"
-	content := []byte(long + "\nshort\n")
+	content := long + "\nshort\n"
 
 	// Terminal width 20 -> two wrap segments of 20+20 cells.
 	rows := []string{
@@ -494,19 +403,16 @@ func TestInferSoftWrap(t *testing.T) {
 		"short",
 	}
 	buf := makeBuffer(rows, 20)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
+	inf := newCursor(t)
 
 	// Cursor on the continuation row (Y=1) maps back to line 1.
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 1}, nil)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 1}, linesOf(content), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 0, got.CursorAtScroll.Y)
 
 	// Cursor on row 2 maps to line 2 ("short").
-	got2, err := inf.Infer(context.Background(), uri, buf.RawCells(), term.Coordinates{X: 0, Y: 2}, nil)
+	got2, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 2}, linesOf(content), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got2.CursorAtScroll.Y)
 }
@@ -518,8 +424,7 @@ func TestInferSoftWrap(t *testing.T) {
 func TestInferExposesBandsAndRows(t *testing.T) {
 	t.Parallel()
 
-	const path = "/sample.go"
-	content := []byte("aaa\nbbb\nccc\n")
+	content := "aaa\nbbb\nccc\n"
 
 	rows := []string{
 		" 1 aaa",
@@ -527,13 +432,10 @@ func TestInferExposesBandsAndRows(t *testing.T) {
 		" 3 ccc",
 	}
 	buf := makeBuffer(rows, 20)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 3, Y: 1}, nil)
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 3, Y: 1},
+		linesOf(content), nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, got.Bands.Top, "content band starts at row 0")
@@ -554,9 +456,8 @@ func TestInferExposesBandsAndRows(t *testing.T) {
 func TestInferExposesWrappedRows(t *testing.T) {
 	t.Parallel()
 
-	const path = "/long.txt"
 	long := "aaaaaaaaaa" + "bbbbbbbbbb" + "cccccccccc"
-	content := []byte(long + "\nshort\n")
+	content := long + "\nshort\n"
 
 	rows := []string{
 		long[:20],
@@ -564,13 +465,10 @@ func TestInferExposesWrappedRows(t *testing.T) {
 		"short",
 	}
 	buf := makeBuffer(rows, 20)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 0, Y: 0}, nil)
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 0},
+		linesOf(content), nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Rows, 3)
@@ -591,12 +489,10 @@ func TestInferExposesWrappedRows(t *testing.T) {
 func TestInferTabstopDefaultsToVim8(t *testing.T) {
 	t.Parallel()
 
-	const path = "/document_tracker.go"
-	content := []byte(
-		"type documentTracker struct {\n" +
-			"\tdb              document.Service\n" +
-			"\tlastIssueNumber map[string]int\n" +
-			"}\n")
+	content := "type documentTracker struct {\n" +
+		"\tdb              document.Service\n" +
+		"\tlastIssueNumber map[string]int\n" +
+		"}\n"
 
 	rows := []string{
 		"type documentTracker struct {",
@@ -605,13 +501,10 @@ func TestInferTabstopDefaultsToVim8(t *testing.T) {
 		"}",
 	}
 	buf := makeBuffer(rows, 80)
-	fs := newFakeFS(map[string][]byte{path: content})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
 
-	inf := newCursor(t, fs)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(),
-		term.Coordinates{X: 8, Y: 1}, nil)
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 8, Y: 1},
+		linesOf(content), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 8, got.Tabstop, "vim default tabstop must be inferred")
 	// The 'd' of db sits at visual column 8 (one tab) and is the

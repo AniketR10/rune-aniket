@@ -23,7 +23,7 @@
 
 // Package vteprobe maps a VTE-rendered terminal-cursor position back to
 // a file-content (line, col) by aligning the cell grid against the
-// on-disk file content.
+// file content supplied by the caller.
 //
 // The package has zero knowledge of which editor produced the buffer.
 // Chrome (status lines), gutters (line numbers), wraps, and fold
@@ -34,24 +34,20 @@
 //   - the rendered cell grid (a *cell.Buffer returned by, for example,
 //     vte.Replay or vte.Component.Snapshot);
 //   - the cursor position in screen coordinates (X column, Y row);
-//   - the URI of the file currently displayed by the editor.
+//   - the file content the editor is displaying, split into lines.
 //
 // Output: the inferred (line, col) into the file content together with
 // a confidence score.
 package vteprobe
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 )
 
 // Result is the outcome of Cursor.Infer when the cursor is mapped to a
@@ -95,14 +91,13 @@ type Result struct {
 	// reports WrapOffset == 0; soft-wrap continuation rows carry a
 	// positive WrapOffset (rune-cell offset into the file line).
 	Rows []RowMapping
-	// FileLines is the on-disk file content split into lines (no
-	// trailing newline). Callers that need to translate raw file
-	// columns into the visual columns used by Rows/Bands (e.g. to
-	// project a location's tab-relative coordinates onto the
-	// rendered grid) can read this slice instead of re-opening the
-	// file. Indices are 0-based; Len matches the number of source
-	// lines. The slice is shared with the probe's internal cache —
-	// callers must not mutate it.
+	// FileLines is the file content split into lines (no trailing
+	// newline), as supplied to Infer. Callers that need to translate
+	// raw file columns into the visual columns used by Rows/Bands
+	// (e.g. to project a location's tab-relative coordinates onto the
+	// rendered grid) can read this slice. Indices are 0-based; Len
+	// matches the number of source lines. The slice is the same one
+	// passed to Infer — callers must not mutate it.
 	FileLines []string
 }
 
@@ -148,22 +143,11 @@ type RowMapping struct {
 var ErrUnknown = errors.New("vteprobe: cursor position unknown")
 
 // Cursor maps a terminal cursor position to a file-content (line, col).
-// Cursors are safe for concurrent use; the only mutable state is a
-// small mtime-keyed content cache protected by a mutex.
+// Cursors are safe for concurrent use; they hold no mutable state.
 type Cursor struct {
-	fs            workspaceapi.FileSystem
 	tabstopHints  []int
 	minConfidence float64
 	maxFileBytes  int64
-
-	mu    sync.Mutex
-	cache map[string]fileCacheEntry
-}
-
-type fileCacheEntry struct {
-	mtimeUnixNano int64
-	size          int64
-	lines         []string
 }
 
 // New constructs a Cursor.
@@ -172,23 +156,18 @@ type fileCacheEntry struct {
 // candidate tabstop list that does not include the value the editor is
 // using) silently yields wrong Results. Callers must pass real values.
 //
-//   - fs:            the file system used to read on-disk file content.
 //   - tabstopHints:  candidate tabstops to try when aligning content
 //     with rendered rows. The first hint is the tie-breaker when
 //     two candidates score equally.
 //   - minConfidence: threshold in [0, 1] below which Infer returns
 //     ErrUnknown instead of a Result.
-//   - maxFileBytes:  upper bound for file content read from fs. Files
-//     larger than this cause Infer to return ErrUnknown.
+//   - maxFileBytes:  upper bound for the supplied file content. Content
+//     larger than this causes Infer to return ErrUnknown.
 func New(
-	fs workspaceapi.FileSystem,
 	tabstopHints []int,
 	minConfidence float64,
 	maxFileBytes int64,
 ) *Cursor {
-	if fs == nil {
-		panic("vteprobe: nil FileSystem")
-	}
 	if len(tabstopHints) == 0 {
 		panic("vteprobe: tabstopHints must not be empty")
 	}
@@ -212,16 +191,14 @@ func New(
 	}
 
 	return &Cursor{
-		fs:            fs,
 		tabstopHints:  cleaned,
 		minConfidence: minConfidence,
 		maxFileBytes:  maxFileBytes,
-		cache:         make(map[string]fileCacheEntry),
 	}
 }
 
 // Infer maps cur (a screen-relative cursor position inside the rendered
-// cell grid cells) to a position in the file identified by uri.
+// cell grid cells) to a position in the file content given by lines.
 // Returns ErrUnknown when the resulting confidence falls below the
 // threshold configured in New.
 //
@@ -230,18 +207,23 @@ func New(
 // vte.Replay). No copy is made, so callers must not mutate cells (or
 // the underlying buffer) for the duration of the call.
 //
+// lines is the file content the editor is displaying, split into lines
+// without trailing newlines (see LinesFromView). It is the caller's
+// authoritative copy of the buffer, never re-read from disk here. The
+// slice is not copied and surfaces unchanged as Result.FileLines, so
+// callers must not mutate it for the duration of the call.
+//
 // slab is a caller-provided scratch arena. Passing the same non-nil
 // *Slab across successive calls recycles the per-call working memory
 // (tab-expanded lines and alignment scratch), which matters for callers
 // that probe on every cursor move over a large file. The slab carries
-// no results between calls, so Infer is still a pure function of (uri
-// content, cells, cur); slab only affects allocation. A nil slab
-// allocates fresh. The slab must not be shared across concurrent calls.
+// no results between calls, so Infer is still a pure function of (lines,
+// cells, cur); slab only affects allocation. A nil slab allocates
+// fresh. The slab must not be shared across concurrent calls.
 func (i *Cursor) Infer(
-	ctx context.Context,
-	uri workspaceapi.URI,
 	cells [][]term.Cell,
 	cur term.Coordinates,
+	lines []string,
 	slab *Slab,
 ) (res Result, err error) {
 	defer func() {
@@ -249,8 +231,8 @@ func (i *Cursor) Infer(
 			return
 		}
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
-			Debugf("Infer uri=%q cur=%+v -> res=%+v err=%v",
-				uri.String(), cur, res, err)
+			Debugf("Infer lines=%d cur=%+v -> res=%+v err=%v",
+				len(lines), cur, res, err)
 	}()
 
 	if slab == nil {
@@ -258,9 +240,8 @@ func (i *Cursor) Infer(
 	}
 	slab.reset()
 
-	lines, err := i.readFileLines(uri)
-	if err != nil {
-		return Result{}, err
+	if i.tooLarge(lines) {
+		return Result{}, ErrUnknown
 	}
 
 	rows := extractRowsWithSlab(cells, slab)
@@ -375,64 +356,27 @@ func (i *Cursor) Infer(
 	return res, nil
 }
 
-// readFileLines reads the file at uri and returns its content split into
-// lines (without trailing newline). Results are cached keyed by URI plus
-// mtime so repeated calls during a session are cheap, while edits to the
-// file invalidate the cache.
-func (i *Cursor) readFileLines(uri workspaceapi.URI) ([]string, error) {
-	path := uri.Path()
-	if path == "" {
-		return nil, fmt.Errorf("vteprobe: empty path for URI %q", uri.String())
+// tooLarge reports whether the supplied lines exceed the maxFileBytes
+// guard configured in New, counting one byte per rune plus a newline
+// per line. The bound only needs to be approximate: it keeps Infer from
+// aligning against pathologically large buffers.
+func (i *Cursor) tooLarge(lines []string) bool {
+	var n int64
+	for _, l := range lines {
+		n += int64(len(l)) + 1
+		if n > i.maxFileBytes {
+			return true
+		}
 	}
+	return false
+}
 
-	info, err := i.fs.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("vteprobe: stat %q: %w", path, err)
-	}
-	if info.IsDir() {
-		return nil, fmt.Errorf("vteprobe: %q is a directory", path)
-	}
-	if info.Size() > i.maxFileBytes {
-		return nil, fmt.Errorf(
-			"vteprobe: file %q size %d exceeds limit %d",
-			path, info.Size(), i.maxFileBytes)
-	}
-
-	key := uri.String()
-	mtime := info.ModTime().UnixNano()
-	size := info.Size()
-
-	i.mu.Lock()
-	hit, ok := i.cache[key]
-	i.mu.Unlock()
-	if ok && hit.mtimeUnixNano == mtime && hit.size == size {
-		return hit.lines, nil
-	}
-
-	f, err := i.fs.OpenFile(path, os.O_RDONLY, 0)
-	if err != nil {
-		return nil, fmt.Errorf("vteprobe: open %q: %w", path, err)
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(io.LimitReader(f, i.maxFileBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("vteprobe: read %q: %w", path, err)
-	}
-	if int64(len(data)) > i.maxFileBytes {
-		return nil, fmt.Errorf(
-			"vteprobe: file %q size exceeds limit %d", path, i.maxFileBytes)
-	}
-
-	lines := splitLines(data)
-	i.mu.Lock()
-	i.cache[key] = fileCacheEntry{
-		mtimeUnixNano: mtime,
-		size:          size,
-		lines:         lines,
-	}
-	i.mu.Unlock()
-	return lines, nil
+// LinesFromView splits a cell.View's text into file lines (without
+// trailing newlines), matching the semantics Infer expects. Callers
+// that hold the editor's buffer mirror (for example *cell.Buffer) can
+// feed v.View() here and pass the result straight to Infer.
+func LinesFromView(v cell.View) []string {
+	return splitLines([]byte(v.String()))
 }
 
 // splitLines splits data on \n, stripping a single trailing \r per line.

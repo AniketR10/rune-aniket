@@ -24,14 +24,12 @@
 package vteprobe
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte"
 )
@@ -46,7 +44,6 @@ func BenchmarkCursorInfer(b *testing.B) {
 	const (
 		sampleDir = "testdata/samples/go-complex"
 		editorDir = sampleDir + "/hx"
-		filePath  = "/sample.txt"
 	)
 
 	sampleBytes, err := os.ReadFile(filepath.Join(sampleDir, "sample.txt"))
@@ -72,25 +69,17 @@ func BenchmarkCursorInfer(b *testing.B) {
 		b.Fatalf("replay: %v", err)
 	}
 
-	fs := newFakeFS(map[string][]byte{filePath: sampleBytes})
-	uri, err := workspaceapi.ParseURI("file://" + filePath)
-	if err != nil {
-		b.Fatalf("parse uri: %v", err)
-	}
-
-	c := New(fs, []int{4, 2, 8}, fx.MinConfidence, 8<<20)
-	// Warm the file-content cache so the steady-state path is what we
-	// actually measure; a separate Stat hit on the first call would
-	// otherwise distort the first iteration.
-	if _, err := c.Infer(context.Background(), uri, buf.RawCells(), cur, nil); err != nil {
+	lines := splitLines(sampleBytes)
+	c := New([]int{4, 2, 8}, fx.MinConfidence, 8<<20)
+	// Warm the path once so the steady-state cost is what we measure.
+	if _, err := c.Infer(buf.RawCells(), cur, lines, nil); err != nil {
 		b.Fatalf("warmup infer: %v", err)
 	}
 
-	ctx := context.Background()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, err := c.Infer(ctx, uri, buf.RawCells(), cur, nil); err != nil {
+		if _, err := c.Infer(buf.RawCells(), cur, lines, nil); err != nil {
 			b.Fatalf("infer: %v", err)
 		}
 	}
@@ -104,26 +93,21 @@ func BenchmarkCursorInfer(b *testing.B) {
 func BenchmarkCursorInferWrapBraceTop(b *testing.B) {
 	const (
 		sampleDir = "testdata/samples/go-bot-wrap-202-1"
-		filePath  = "/sample.txt"
 	)
 
 	sampleBytes, err := os.ReadFile(filepath.Join(sampleDir, "sample.txt"))
 	if err != nil {
 		b.Fatalf("read sample: %v", err)
 	}
-	uri, err := workspaceapi.ParseURI("file://" + filePath)
-	if err != nil {
-		b.Fatalf("parse uri: %v", err)
-	}
 	ed := editorCase{
 		name: "nvim",
 		dir:  sampleDir + "/nvim",
 	}
 	b.Run("fresh", func(b *testing.B) {
-		benchInferFixture(b, sampleBytes, uri, ed)
+		benchInferFixture(b, sampleBytes, ed)
 	})
 	b.Run("slab", func(b *testing.B) {
-		benchInferFixtureWithSlab(b, sampleBytes, uri, ed)
+		benchInferFixtureWithSlab(b, sampleBytes, ed)
 	})
 }
 
@@ -136,24 +120,19 @@ func BenchmarkCursorInferWrapBraceTop(b *testing.B) {
 func BenchmarkCursorInferWrapMidFile(b *testing.B) {
 	const (
 		sampleDir = "testdata/samples/go-bot-wrap-191-18"
-		filePath  = "/sample.txt"
 	)
 
 	sampleBytes, err := os.ReadFile(filepath.Join(sampleDir, "sample.txt"))
 	if err != nil {
 		b.Fatalf("read sample: %v", err)
 	}
-	uri, err := workspaceapi.ParseURI("file://" + filePath)
-	if err != nil {
-		b.Fatalf("parse uri: %v", err)
-	}
 	for _, editor := range []string{"nvim", "vim"} {
 		ed := editorCase{name: editor, dir: sampleDir + "/" + editor}
 		b.Run(editor+"/fresh", func(b *testing.B) {
-			benchInferFixture(b, sampleBytes, uri, ed)
+			benchInferFixture(b, sampleBytes, ed)
 		})
 		b.Run(editor+"/slab", func(b *testing.B) {
-			benchInferFixtureWithSlab(b, sampleBytes, uri, ed)
+			benchInferFixtureWithSlab(b, sampleBytes, ed)
 		})
 	}
 }
@@ -166,14 +145,9 @@ func BenchmarkCursorInferWrapMidFile(b *testing.B) {
 // at a few sizes so regressions in the per-candidate cost are visible.
 func BenchmarkCursorInferLargeFile(b *testing.B) {
 	const (
-		filePath = "/big.go"
-		width    = 100
-		height   = 50
+		width  = 100
+		height = 50
 	)
-	uri, err := workspaceapi.ParseURI("file://" + filePath)
-	if err != nil {
-		b.Fatalf("parse uri: %v", err)
-	}
 
 	for _, nlines := range []int{500, 2000, 10000} {
 		content := syntheticGoFile(nlines)
@@ -191,10 +165,8 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 		cells := buf.RawCells()
 		cur := term.Coordinates{X: 0, Y: 0} // top visible row
 
-		fs := newFakeFS(map[string][]byte{filePath: content})
-		c := New(fs, []int{4, 2, 8}, 0.6, 64<<20)
-		ctx := context.Background()
-		if _, err := c.Infer(ctx, uri, cells, cur, nil); err != nil {
+		c := New([]int{4, 2, 8}, 0.6, 64<<20)
+		if _, err := c.Infer(cells, cur, lines, nil); err != nil {
 			b.Fatalf("warmup infer: %v", err)
 		}
 
@@ -203,7 +175,7 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				if _, err := c.Infer(ctx, uri, cells, cur, nil); err != nil {
+				if _, err := c.Infer(cells, cur, lines, nil); err != nil {
 					b.Fatalf("infer: %v", err)
 				}
 			}
@@ -213,13 +185,13 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 		// caller that probes on every cursor move).
 		b.Run(fmt.Sprintf("lines=%d/slab", nlines), func(b *testing.B) {
 			slab := NewSlab()
-			if _, err := c.Infer(ctx, uri, cells, cur, slab); err != nil {
+			if _, err := c.Infer(cells, cur, lines, slab); err != nil {
 				b.Fatalf("warmup slab infer: %v", err)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				if _, err := c.Infer(ctx, uri, cells, cur, slab); err != nil {
+				if _, err := c.Infer(cells, cur, lines, slab); err != nil {
 					b.Fatalf("infer: %v", err)
 				}
 			}
@@ -263,12 +235,6 @@ func BenchmarkCursorInferMatrix(b *testing.B) {
 		b.Skip("no samples under testdata/samples")
 	}
 
-	const filePath = "/sample.txt"
-	uri, err := workspaceapi.ParseURI("file://" + filePath)
-	if err != nil {
-		b.Fatalf("parse uri: %v", err)
-	}
-
 	for _, s := range samples {
 		if len(s.editors) == 0 {
 			continue
@@ -279,38 +245,39 @@ func BenchmarkCursorInferMatrix(b *testing.B) {
 		}
 		for _, ed := range s.editors {
 			b.Run(s.name+"/"+ed.name, func(b *testing.B) {
-				benchInferFixture(b, sampleBytes, uri, ed)
+				benchInferFixture(b, sampleBytes, ed)
 			})
 		}
 	}
 }
 
 func benchInferFixture(
-	b *testing.B, sampleBytes []byte, uri workspaceapi.URI, ed editorCase,
+	b *testing.B, sampleBytes []byte, ed editorCase,
 ) {
-	benchInferFixtureWithRunner(b, sampleBytes, ed,
-		func(ctx context.Context, c *Cursor, cells [][]term.Cell, cur term.Coordinates) error {
-			_, err := c.Infer(ctx, uri, cells, cur, nil)
+	lines := splitLines(sampleBytes)
+	benchInferFixtureWithRunner(b, ed,
+		func(c *Cursor, cells [][]term.Cell, cur term.Coordinates) error {
+			_, err := c.Infer(cells, cur, lines, nil)
 			return err
 		})
 }
 
 func benchInferFixtureWithSlab(
-	b *testing.B, sampleBytes []byte, uri workspaceapi.URI, ed editorCase,
+	b *testing.B, sampleBytes []byte, ed editorCase,
 ) {
+	lines := splitLines(sampleBytes)
 	slab := NewSlab()
-	benchInferFixtureWithRunner(b, sampleBytes, ed,
-		func(ctx context.Context, c *Cursor, cells [][]term.Cell, cur term.Coordinates) error {
-			_, err := c.Infer(ctx, uri, cells, cur, slab)
+	benchInferFixtureWithRunner(b, ed,
+		func(c *Cursor, cells [][]term.Cell, cur term.Coordinates) error {
+			_, err := c.Infer(cells, cur, lines, slab)
 			return err
 		})
 }
 
 func benchInferFixtureWithRunner(
 	b *testing.B,
-	sampleBytes []byte,
 	ed editorCase,
-	run func(context.Context, *Cursor, [][]term.Cell, term.Coordinates) error,
+	run func(*Cursor, [][]term.Cell, term.Coordinates) error,
 ) {
 	b.Helper()
 
@@ -333,18 +300,16 @@ func benchInferFixtureWithRunner(
 		b.Fatalf("replay: %v", err)
 	}
 
-	fs := newFakeFS(map[string][]byte{"/sample.txt": sampleBytes})
-	c := New(fs, []int{4, 2, 8}, fx.MinConfidence, 8<<20)
+	c := New([]int{4, 2, 8}, fx.MinConfidence, 8<<20)
 	cells := buf.RawCells()
-	if err := run(context.Background(), c, cells, cur); err != nil {
+	if err := run(c, cells, cur); err != nil {
 		b.Fatalf("warmup infer: %v", err)
 	}
 
-	ctx := context.Background()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if err := run(ctx, c, cells, cur); err != nil {
+		if err := run(c, cells, cur); err != nil {
 			b.Fatalf("infer: %v", err)
 		}
 	}

@@ -77,8 +77,29 @@ type editorHandler struct {
 	locations          *text.LocationStore
 	lastProbe          atomic.Pointer[vteprobe.Result]
 
+	bufLines atomic.Pointer[[]string]
+	bufSub   *bufLineWatcher
+
+	// probeMu serializes refreshProbe so the interrupt path (vte reader
+	// goroutine) and the reload path (host event loop, via
+	// bufLineWatcher) never run Infer concurrently — they share
+	// probeSlab, which is not safe for concurrent use.
+	probeMu sync.Mutex
+
+	// component is the source of the rendered grid the probe aligns
+	// against. It is the embedded vte handler's *vte.Component in
+	// production; tests inject a fake snapshotter so the full probe path
+	// runs without a pty-backed handler.
+	component componentSnapshotter
+
 	debugMu      sync.Mutex
 	debugLastMsg map[string]string
+}
+
+// componentSnapshotter is the slice of *vte.Component refreshProbe needs:
+// a consistent snapshot of the rendered grid and cursor.
+type componentSnapshotter interface {
+	Snapshot() (vte.Snapshot, error)
 }
 
 // newHandler builds a wrapper around vteH, hooks the file watcher, and
@@ -110,13 +131,42 @@ func newHandler(
 		scheduleNextTick:   scheduleNextTick,
 		cancelCtx:          cancel,
 		reloader:           reloader,
-		probe:              vteprobe.New(cwd, []int{8, 4, 2}, 0.6, 8<<20),
+		probe:              vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
 		probeSlab:          vteprobe.NewSlab(),
 		overrideHighlights: overrideHighlights,
 		locations:          text.NewLocationStore(),
 	}
+	h.component = vteH.Component()
+	// Seed the line snapshot from the buffer's current content (on this
+	// goroutine, before the vte goroutine starts) and keep it fresh on
+	// every subsequent buffer edit. refreshProbe reads the snapshot,
+	// never the buffer, so it never races the reload writer.
+	h.snapshotBufferLines()
+	h.bufSub = &bufLineWatcher{h: h}
+	buf.Subscribe(h.bufSub)
 	h.startWatcher(ctx)
 	return h
+}
+
+// bufLineWatcher recomputes the editorHandler's line snapshot whenever
+// the mirrored buffer is edited. OnDidEdit fires synchronously on the
+// goroutine that performed the edit (the reload runs on the UI tick),
+// so reading the buffer here is safe and keeps the snapshot consistent
+// with the writer.
+type bufLineWatcher struct{ h *editorHandler }
+
+func (w *bufLineWatcher) OnWillEdit(
+	context.Context, term.Coordinates, term.Coordinates, string) {
+}
+
+func (w *bufLineWatcher) OnDidEdit(
+	context.Context, term.Coordinates, term.Coordinates, string) {
+	w.h.snapshotBufferLines()
+	// A reload changed the mirror, so the cached probe was aligned
+	// against stale lines. Re-run it against the now-current snapshot
+	// here on the host loop (where the reload's repaint follows), so
+	// the overlay is correct without waiting for the next keystroke.
+	w.h.refreshProbe()
 }
 
 // startWatcher subscribes to Write/Rename events for the underlying
@@ -403,20 +453,24 @@ func (h *editorHandler) Draw(w term.Writer) {
 	drawLocations(w, locs, probe)
 }
 
-// refreshProbe re-runs vteprobe against the current cell grid.
-// A failed Infer (cursor on chrome, transient redraw mid-clear,
-// confidence below threshold, …) keeps the previous result so the
-// overlay does not flicker off between successful probes.
+// refreshProbe re-runs vteprobe against the current cell grid. It is
+// called from the vte interrupt path (grid mutations) and from
+// bufLineWatcher (buffer reloads); probeMu serializes the two. A failed
+// Infer (cursor on chrome, transient redraw mid-clear, confidence below
+// threshold, …) keeps the previous result so the overlay does not
+// flicker off between successful probes.
 func (h *editorHandler) refreshProbe() {
-	comp := h.Handler.Component()
-	snap, err := comp.Snapshot()
+	h.probeMu.Lock()
+	defer h.probeMu.Unlock()
+
+	snap, err := h.component.Snapshot()
 	if err != nil {
 		h.debugExo("refresh", fmt.Sprintf("snapshot err: %v", err))
 		return
 	}
 	active := snap.Active()
-	res, err := h.probe.Infer(context.Background(), h.resource,
-		active.Cells, active.Cursor, h.probeSlab)
+	lines := h.bufferLines()
+	res, err := h.probe.Infer(active.Cells, active.Cursor, lines, h.probeSlab)
 	if err != nil {
 		h.debugExo("refresh", fmt.Sprintf("infer err: %v", err))
 		return
@@ -426,6 +480,27 @@ func (h *editorHandler) refreshProbe() {
 		res.CursorAtScroll, res.Bands.Top, res.Bands.Bottom,
 		res.Bands.GutterWidth, res.Bands.GridWidth, len(res.Rows)))
 	h.lastProbe.Store(&res)
+}
+
+// bufferLines returns the most recent snapshot of the in-memory buffer
+// content split into file lines — the authoritative mirror Rune uses
+// everywhere else. The snapshot is recomputed on the buffer-owning
+// goroutine by bufLineWatcher whenever the buffer is edited and read
+// locklessly here, so refreshProbe never touches the non-thread-safe
+// cell.Buffer from the vte goroutine.
+func (h *editorHandler) bufferLines() []string {
+	if p := h.bufLines.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// snapshotBufferLines recomputes the line snapshot from the buffer. It
+// must run on the goroutine that owns h.buf (construction or a buffer
+// edit notification), never on the vte goroutine.
+func (h *editorHandler) snapshotBufferLines() {
+	lines := vteprobe.LinesFromView(h.buf.View())
+	h.bufLines.Store(&lines)
 }
 
 // CellEditor returns a no-op cell.Editor: the external editor is the
@@ -457,6 +532,10 @@ func (h *editorHandler) Dimensions() (int, int) {
 
 func (h *editorHandler) Close() error {
 	h.cancelCtx()
+	if h.bufSub != nil {
+		h.buf.Unsubscribe(h.bufSub)
+		h.bufSub = nil
+	}
 	if h.watchActive {
 		_ = h.cwd.StopWatch(h.watchID)
 		h.watchActive = false

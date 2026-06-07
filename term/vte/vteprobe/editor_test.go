@@ -24,7 +24,6 @@
 package vteprobe
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -36,7 +35,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte"
 )
@@ -137,13 +135,8 @@ func runEditorCase(t *testing.T, sampleBytes []byte, ed editorCase) {
 	buf, _, err := vte.Replay(fx.Width, fx.Height, data)
 	require.NoError(t, err)
 
-	const path = "/sample.txt"
-	fs := newFakeFS(map[string][]byte{path: sampleBytes})
-	uri, err := workspaceapi.ParseURI("file://" + path)
-	require.NoError(t, err)
-
-	inf := New(fs, []int{4, 2, 8}, fx.MinConfidence, 8<<20)
-	got, err := inf.Infer(context.Background(), uri, buf.RawCells(), cur, nil)
+	inf := New([]int{4, 2, 8}, fx.MinConfidence, 8<<20)
+	got, err := inf.Infer(buf.RawCells(), cur, splitLines(sampleBytes), nil)
 	require.NoError(t, err)
 	assert.Equal(t, term.Coordinates(fx.Want.CursorAtScroll), got.CursorAtScroll, "cursorAtScroll")
 	assert.Equal(t, term.Coordinates(fx.Want.Scroll), got.Scroll, "scroll")
