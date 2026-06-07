@@ -45,3 +45,8 @@ extensions:
         bg: default
       context_hint_attr:
         fg: red
+      # When the modal (vi-style) composer opens, enter insert mode so
+      # the first keystroke types instead of requiring `i`. Set to false
+      # to keep the composer in normal mode at startup. Only affects the
+      # modal composer; modeless is unchanged.
+      editor_modal_start_insert: true

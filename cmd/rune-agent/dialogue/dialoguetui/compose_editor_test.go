@@ -369,6 +369,51 @@ func TestComposeEditorModalEnterInsertsNewlineInInsertMode(t *testing.T) {
 		"insert-mode enter must insert a newline, not submit")
 }
 
+func TestComposeEditorModalStartInsert(t *testing.T) {
+	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{
+		Editor:           ed,
+		EditorModal:      true,
+		ModalStartInsert: true,
+	})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	// No 'i' press: the composer must already be in insert mode.
+	typeText(h, "hello")
+	assert.Equal(t, "hello", comp.Input().Text(),
+		"modal composer with ModalStartInsert must accept text without pressing i")
+}
+
+func TestComposeEditorModalStartNormalByDefault(t *testing.T) {
+	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{
+		Editor:           ed,
+		EditorModal:      true,
+		ModalStartInsert: false,
+	})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	// Without ModalStartInsert the composer starts in normal mode, so a
+	// bare letter key is consumed as a motion/command and inserts nothing.
+	typeText(h, "x")
+	assert.Equal(t, "", comp.Input().Text(),
+		"modal composer without ModalStartInsert must start in normal mode")
+
+	// Pressing 'i' enters insert mode; text typed afterwards is inserted.
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	typeText(h, "world")
+	assert.Equal(t, "world", comp.Input().Text(),
+		"text inserts after entering insert mode")
+}
+
 // TestComposeEditorSelectionSurvivesUnfocused reproduces issue #1: the
 // editor bakes its selection as AttrReverse cells, and Draw must not
 // strip them when the messages area (not the input) is focused. The

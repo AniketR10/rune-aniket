@@ -194,6 +194,11 @@ type ComponentConfig struct {
 	// insert mode. Ignored when Editor is nil.
 	EditorModal bool
 
+	// ModalStartInsert, when true, makes a modal compose editor enter
+	// insert mode at startup so the user can type immediately. Ignored
+	// for modeless editors.
+	ModalStartInsert bool
+
 	// InputBackgroundColor, when valid, sets the background color of the
 	// compose input: the editor's scroll area (via SetDefaultAttributes)
 	// and the surrounding Frame. ColorDefault leaves both at the

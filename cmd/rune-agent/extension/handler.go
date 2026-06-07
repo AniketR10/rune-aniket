@@ -594,6 +594,12 @@ func newCommandEventHandler(
 		} else {
 			ret.cfg.EditorModal = modal
 		}
+		ret.cfg.ModalStartInsert = true
+		if startInsert, serr := pconfig.GetBool("editor_modal_start_insert"); serr == nil {
+			ret.cfg.ModalStartInsert = startInsert
+		} else if !errors.Is(serr, config.ErrNotFound) {
+			slog.Warn("get 'editor_modal_start_insert' from config", "error", serr)
+		}
 	}
 
 	ret.db = db

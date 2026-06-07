@@ -194,6 +194,9 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 	if cfg.InputBackgroundColor != term.ColorDefault {
 		h.SetDefaultAttributes(term.Attributes{Bg: cfg.InputBackgroundColor})
 	}
+	if modal && cfg.ModalStartInsert {
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	}
 	return &textHandlerInput{Handler: h, buf: buf, modal: modal}
 }
 
