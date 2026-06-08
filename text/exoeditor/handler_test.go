@@ -27,8 +27,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/term/vte/vteprobe"
 	"unstable.build/go-tui/text"
 )
 
@@ -110,4 +112,140 @@ func TestMoveToLocationReturnsFalseForUnknownList(t *testing.T) {
 	h := &editorHandler{locations: text.NewLocationStore()}
 	assert.False(t, h.MoveToNextLocation("missing"))
 	assert.False(t, h.MoveToPrevLocation("missing"))
+}
+
+// stubVTEHandler records the events the readiness gate injects so tests
+// can assert on the keystrokes forwarded to the embedded editor without
+// a live vte. Every other vteHandler method is unused by these tests and
+// panics if exercised, surfacing accidental dependencies.
+type stubVTEHandler struct {
+	events []term.Event
+}
+
+func (s *stubVTEHandler) Handle(ev term.Event) (bool, bool) {
+	s.events = append(s.events, ev)
+	return false, true
+}
+
+func (s *stubVTEHandler) Resize(int, int)                                    { panic("unused") }
+func (s *stubVTEHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) { panic("unused") }
+func (s *stubVTEHandler) Selection() (string, bool)                          { panic("unused") }
+func (s *stubVTEHandler) Draw(term.Writer)                                   { panic("unused") }
+func (s *stubVTEHandler) Close() error                                       { panic("unused") }
+func (s *stubVTEHandler) MaxSeekOffset() int                                 { panic("unused") }
+func (s *stubVTEHandler) SeekOffset() int                                    { panic("unused") }
+func (s *stubVTEHandler) SeekUp() bool                                       { panic("unused") }
+func (s *stubVTEHandler) SeekDown() bool                                     { panic("unused") }
+
+// gotoReadinessHarness builds a minimal editorHandler with a real goto
+// template, a recording vteHandler stub, and a recording scheduleNextTick
+// so the readiness gate can be exercised without a live vte.
+type gotoReadinessHarness struct {
+	h         *editorHandler
+	vte       *stubVTEHandler
+	scheduled []func()
+}
+
+func newGotoReadinessHarness(t *testing.T, tpl string) *gotoReadinessHarness {
+	t.Helper()
+	parsed, err := parseGotoTemplate(tpl)
+	require.NoError(t, err)
+
+	hr := &gotoReadinessHarness{}
+	hr.vte = &stubVTEHandler{}
+	h := &editorHandler{gotoTemplate: parsed, vteHandler: hr.vte}
+	h.scheduleNextTick = func(fn func()) bool {
+		hr.scheduled = append(hr.scheduled, fn)
+		return true
+	}
+	hr.h = h
+	return hr
+}
+
+// wantEvents renders tpl for the 1-based coords of pos and converts the
+// keys into the events injectGoto forwards, for exact assertion.
+func wantEvents(g gotoTemplate, pos term.Coordinates) []term.Event {
+	keys := g.Render(pos.Y+1, pos.X+1)
+	out := make([]term.Event, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, keyCombToEvent(k))
+	}
+	return out
+}
+
+// markReady simulates refreshProbe's first successful probe: it stores a
+// probe result and flushes any pending goto via scheduleNextTick.
+func (hr *gotoReadinessHarness) markReady() {
+	h := hr.h
+	h.probeStateMu.Lock()
+	firstProbe := h.lastProbe.Load() == nil
+	h.lastProbe.Store(&vteprobe.Result{})
+	var flush *term.Coordinates
+	if firstProbe {
+		flush = h.pendingGoto
+		h.pendingGoto = nil
+	}
+	h.probeStateMu.Unlock()
+
+	if flush != nil {
+		pos := *flush
+		h.scheduleNextTick(func() { h.injectGoto(pos) })
+	}
+}
+
+func (hr *gotoReadinessHarness) runScheduled() {
+	for _, fn := range hr.scheduled {
+		fn()
+	}
+}
+
+const readinessTpl = "<esc>:{line}<enter>"
+
+func TestSetCursorAtScrollGatedUntilReady(t *testing.T) {
+	hr := newGotoReadinessHarness(t, readinessTpl)
+	pos := term.Coordinates{X: 4, Y: 9}
+
+	require.True(t, hr.h.SetCursorAtScroll(pos))
+	assert.Empty(t, hr.vte.events, "keys must not be injected before the editor is ready")
+	assert.Empty(t, hr.scheduled, "nothing scheduled before first probe")
+	require.NotNil(t, hr.h.pendingGoto)
+	assert.Equal(t, pos, *hr.h.pendingGoto)
+
+	hr.markReady()
+	require.Len(t, hr.scheduled, 1, "first probe flushes the queued goto exactly once")
+	assert.Empty(t, hr.vte.events, "flush is deferred to the scheduled tick")
+	assert.Nil(t, hr.h.pendingGoto)
+
+	hr.runScheduled()
+	assert.Equal(t, wantEvents(hr.h.gotoTemplate, pos), hr.vte.events)
+}
+
+func TestSetCursorAtScrollReadyInjectsImmediately(t *testing.T) {
+	hr := newGotoReadinessHarness(t, readinessTpl)
+	hr.markReady()
+	require.Empty(t, hr.scheduled, "no pending goto means nothing is scheduled")
+
+	pos := term.Coordinates{X: 2, Y: 5}
+	require.True(t, hr.h.SetCursorAtScroll(pos))
+	assert.Empty(t, hr.scheduled, "ready path injects synchronously, no tick")
+	assert.Equal(t, wantEvents(hr.h.gotoTemplate, pos), hr.vte.events)
+}
+
+func TestSecondProbeDoesNotReflush(t *testing.T) {
+	hr := newGotoReadinessHarness(t, readinessTpl)
+	require.True(t, hr.h.SetCursorAtScroll(term.Coordinates{X: 1, Y: 1}))
+
+	hr.markReady()
+	require.Len(t, hr.scheduled, 1)
+
+	hr.markReady()
+	assert.Len(t, hr.scheduled, 1, "a subsequent probe must not re-schedule the goto")
+}
+
+func TestSetCursorAtScrollEmptyTemplate(t *testing.T) {
+	hr := newGotoReadinessHarness(t, "")
+	assert.False(t, hr.h.SetCursorAtScroll(term.Coordinates{X: 1, Y: 1}))
+	assert.Empty(t, hr.vte.events)
+	assert.Empty(t, hr.scheduled)
+	assert.Nil(t, hr.h.pendingGoto)
 }

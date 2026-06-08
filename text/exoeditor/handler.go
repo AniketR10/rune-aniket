@@ -47,7 +47,7 @@ import (
 const gracefulQuitTimeout = 30 * time.Second
 
 type editorHandler struct {
-	*vte.Handler
+	vteHandler
 
 	buf          *cell.Buffer
 	resource     workspaceapi.URI
@@ -70,6 +70,7 @@ type editorHandler struct {
 	probeStateMu       sync.RWMutex
 	lastProbe          atomic.Pointer[vteprobe.Result]
 	lastProbeCells     [][]term.Cell
+	pendingGoto        *term.Coordinates
 
 	bufCells        [][]term.Cell
 	bufCellsScratch [][]term.Cell
@@ -78,6 +79,19 @@ type editorHandler struct {
 	probeMu    sync.Mutex
 	probeCells [][]term.Cell
 	component  componentSnapshotter
+}
+
+type vteHandler interface {
+	Handle(term.Event) (exit bool, handled bool)
+	Resize(width, height int)
+	Cursor() (term.Coordinates, term.CursorStyle, bool)
+	Selection() (string, bool)
+	Draw(term.Writer)
+	Close() error
+	MaxSeekOffset() int
+	SeekOffset() int
+	SeekUp() bool
+	SeekDown() bool
 }
 
 type componentSnapshotter interface {
@@ -100,7 +114,7 @@ func newHandler(
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
-		Handler:            vteH,
+		vteHandler:         vteH,
 		buf:                buf,
 		resource:           uri,
 		gotoTemplate:       gotoTpl,
@@ -201,17 +215,27 @@ func (h *editorHandler) CursorAtScroll() term.Coordinates {
 	return probe.CursorAtScroll
 }
 
-// SetCursorAtScroll injects the configured goto sequence into the
-// embedded vte. Returns true when the template is non-empty.
 func (h *editorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	if h.gotoTemplate.IsEmpty() {
 		return false
 	}
+	h.probeStateMu.Lock()
+	if h.lastProbe.Load() == nil {
+		p := pos
+		h.pendingGoto = &p
+		h.probeStateMu.Unlock()
+		return true
+	}
+	h.probeStateMu.Unlock()
+	h.injectGoto(pos)
+	return true
+}
+
+func (h *editorHandler) injectGoto(pos term.Coordinates) {
 	keys := h.gotoTemplate.Render(pos.Y+1, pos.X+1)
 	for _, k := range keys {
-		_, _ = h.Handler.Handle(keyCombToEvent(k))
+		_, _ = h.vteHandler.Handle(keyCombToEvent(k))
 	}
-	return true
 }
 
 // SetWrap is a nop — the external editor manages its own wrapping.
@@ -324,10 +348,10 @@ func (h *editorHandler) CellView() cell.View { return h.buf.View() }
 
 func (h *editorHandler) Draw(w term.Writer) {
 	if !h.overrideHighlights {
-		h.Handler.Draw(w)
+		h.vteHandler.Draw(w)
 		return
 	}
-	h.Handler.Draw(ignoreAttrWriter{Writer: w})
+	h.vteHandler.Draw(ignoreAttrWriter{Writer: w})
 	h.probeStateMu.RLock()
 	defer h.probeStateMu.RUnlock()
 	probe := h.lastProbe.Load()
@@ -355,13 +379,24 @@ func (h *editorHandler) refreshProbe() {
 		return
 	}
 	h.probeStateMu.Lock()
+	firstProbe := h.lastProbe.Load() == nil
 	oldProbeCells := h.lastProbeCells
 	h.lastProbe.Store(&res)
 	h.lastProbeCells = res.FileLines
 	if !cellMatricesAlias(oldProbeCells, h.bufCells) {
 		h.bufCellsScratch = oldProbeCells
 	}
+	var flush *term.Coordinates
+	if firstProbe {
+		flush = h.pendingGoto
+		h.pendingGoto = nil
+	}
 	h.probeStateMu.Unlock()
+
+	if flush != nil {
+		pos := *flush
+		h.scheduleNextTick(func() { h.injectGoto(pos) })
+	}
 }
 
 func (h *editorHandler) bufferCells() [][]term.Cell {
@@ -442,7 +477,7 @@ func (h *editorHandler) Close() error {
 		h.watchActive = false
 	}
 	for _, k := range h.quitKeys {
-		_, _ = h.Handler.Handle(keyCombToEvent(k))
+		_, _ = h.vteHandler.Handle(keyCombToEvent(k))
 	}
 	go debug.CapturePanicReport(func() {
 		select {
@@ -450,7 +485,7 @@ func (h *editorHandler) Close() error {
 		case <-time.After(gracefulQuitTimeout):
 		}
 		h.scheduleNextTick(func() {
-			if err := h.Handler.Close(); err != nil {
+			if err := h.vteHandler.Close(); err != nil {
 				_, _ = h.notifications.Notify(
 					browserapi.LevelWarn,
 					"exoeditor: close pty: %v", err)
