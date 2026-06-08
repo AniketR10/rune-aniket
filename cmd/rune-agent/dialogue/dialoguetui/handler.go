@@ -128,6 +128,12 @@ type dialogueHandler struct {
 	closeFn       func()
 	ctx           context.Context
 	inputFocused  bool // true when last mouse interaction was in the input area
+	// messagesDragging is true while a left-button selection drag that
+	// started in the messages area is in progress. While set, mouse events
+	// keep routing to the messages selection even when the pointer crosses
+	// into the input area, so the drag keeps selecting and auto-scrolls
+	// instead of handing focus to the input mid-drag.
+	messagesDragging bool
 
 	// busy is true while an agent completion is active. When busy,
 	// follow-up user messages are queued instead of being sent directly.
@@ -168,10 +174,10 @@ func (s *dialogueHandler) Draw(w term.Writer) {
 	s.mouseDelegate.offset = s.comp.MessagesPosition()
 
 	var sel *tterm.SelRange
-	if s.mouseDelegate.sel.Active {
+	if win, ok := s.mouseDelegate.WindowSelection(); ok {
 		sel = &tterm.SelRange{
-			Start:  term.CoordinatesSum(s.mouseDelegate.sel.Start, s.mouseDelegate.offset),
-			End:    term.CoordinatesSum(s.mouseDelegate.sel.End, s.mouseDelegate.offset),
+			Start:  term.CoordinatesSum(win.Start, s.mouseDelegate.offset),
+			End:    term.CoordinatesSum(win.End, s.mouseDelegate.offset),
 			Active: true,
 		}
 	}
@@ -193,8 +199,22 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 	if ev.Type == term.EventMouse {
+		// The mouse delegate reads and seeks the messages list, which the
+		// consumeIncoming goroutine mutates under s.mu. Hold the lock so
+		// selection/scroll stays consistent with concurrent streamed
+		// content updates.
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		pos := s.comp.InputPosition()
-		if ev.MouseY >= pos.Y {
+		// A held drag that began in the messages area keeps selecting even
+		// over the input box: route it (and its terminating release) to the
+		// mouse handler so selection continues and the bottom edge
+		// auto-scrolls instead of the input stealing focus mid-drag.
+		dragging := s.messagesDragging
+		if ev.Key == term.MouseRelease {
+			s.messagesDragging = false
+		}
+		if ev.MouseY >= pos.Y && !dragging {
 			if !s.inputFocused {
 				s.inputFocused = true
 				s.mouseDelegate.ClearSelection()
@@ -205,6 +225,9 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 		}
 		if s.inputFocused {
 			s.inputFocused = false
+		}
+		if ev.Key == term.MouseLeft {
+			s.messagesDragging = true
 		}
 		pos = s.comp.MessagesPosition()
 		ev.MouseY -= pos.Y

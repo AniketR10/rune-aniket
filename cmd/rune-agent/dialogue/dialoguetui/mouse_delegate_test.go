@@ -98,6 +98,55 @@ func TestMouseDelegateSelection(t *testing.T) {
 			wantOK:  false,
 		},
 		{
+			desc: "drag up off the top selects from press to first line",
+			setup: func(c *Component) {
+				c.AddSendMessage("msg1")
+				c.AddSendMessage("msg2")
+				c.AddSendMessage("msg3")
+			},
+			// Press on msg3, drag above the window: the selection must span
+			// from the press up to the top of the conversation.
+			input:   "<mouse-left><mouse-left><mouse-release>",
+			coords:  [][2]int{{4, 2}, {2, -5}, {2, -5}},
+			wantSel: "msg1\nmsg2\nmsg3",
+			wantOK:  true,
+		},
+		{
+			desc: "drag to negative X clamps to line start",
+			setup: func(c *Component) {
+				c.AddSendMessage("msg1")
+				c.AddSendMessage("msg2")
+			},
+			// Press at end of msg2, drag left past column 0 on the same row.
+			input:   "<mouse-left><mouse-left><mouse-release>",
+			coords:  [][2]int{{3, 1}, {-6, 1}, {-6, 1}},
+			wantSel: "msg2",
+			wantOK:  true,
+		},
+		{
+			desc: "press off-window above then drag onto content",
+			setup: func(c *Component) {
+				c.AddSendMessage("msg1")
+				c.AddSendMessage("msg2")
+			},
+			// Press above the window, then drag down onto msg2: selection runs
+			// from the off-window press down to the release cell.
+			input:   "<mouse-left><mouse-left><mouse-release>",
+			coords:  [][2]int{{0, -3}, {3, 1}, {3, 1}},
+			wantSel: "msg1\nmsg2",
+			wantOK:  true,
+		},
+		{
+			desc: "drag fully off-window in both axes yields no content",
+			setup: func(c *Component) {
+				c.AddSendMessage("msg1")
+			},
+			input:   "<mouse-left><mouse-left><mouse-release>",
+			coords:  [][2]int{{-4, -4}, {-8, -8}, {-8, -8}},
+			wantSel: "",
+			wantOK:  false,
+		},
+		{
 			desc: "cross-element selection across two send messages",
 			setup: func(c *Component) {
 				c.AddSendMessage("msg1")
@@ -227,6 +276,352 @@ func TestMouseDelegateScrollN(t *testing.T) {
 		"ScrollDown(3) should scroll the same distance as three ScrollDown(1) calls")
 }
 
+type dragStep struct {
+	endY   int
+	scroll int // >0 scrolls up N rows, <0 scrolls down N rows, 0 = no scroll
+	// mutate models scroll sources the delegate does not drive itself
+	// (streamed content via restoreScroll, keyboard SeekUp); it runs after
+	// SetSelectionEnd so the anchor must survive the resulting scroll.
+	mutate func(*Component)
+}
+
+type scrollSelectCase struct {
+	desc          string
+	cfg           ComponentConfig
+	setup         func(*Component)
+	width, height int
+	preScroll     int
+	// pressText is the message the click lands on; the harness resolves its
+	// rendered row at press time so cases avoid bottom-aligned row math.
+	pressText  string
+	steps      []dragStep
+	wantActive bool
+}
+
+// TestMouseDelegateSelectionStartPinnedAcrossAutoScroll asserts that the
+// selection start stays pinned to the originally pressed content row while
+// the message list scrolls under it from any source.
+func TestMouseDelegateSelectionStartPinnedAcrossAutoScroll(t *testing.T) {
+	const (
+		defWidth  = 30
+		defHeight = 10
+	)
+
+	manyMessages := func(prefix string, n int) func(*Component) {
+		return func(c *Component) {
+			for i := range n {
+				c.AddSendMessage(prefix + " " + string(rune('A'+i)))
+			}
+		}
+	}
+
+	upwardDrag := func(scrolls int) []dragStep {
+		steps := make([]dragStep, 0, scrolls+1)
+		for range scrolls {
+			steps = append(steps, dragStep{endY: 0, scroll: 1})
+		}
+		return append(steps, dragStep{endY: 0})
+	}
+
+	suite := []scrollSelectCase{
+		{
+			desc:       "single upward auto-scroll keeps pressed row",
+			setup:      manyMessages("message", 12),
+			preScroll:  1,
+			pressText:  "message G",
+			steps:      upwardDrag(2),
+			wantActive: true,
+		},
+		{
+			desc:       "no scroll leaves pressed row selected",
+			setup:      manyMessages("message", 12),
+			preScroll:  1,
+			pressText:  "message G",
+			steps:      []dragStep{{endY: 0}},
+			wantActive: true,
+		},
+		{
+			desc:      "drag down then auto-scroll back up returns to pressed row",
+			setup:     manyMessages("message", 14),
+			preScroll: 2,
+			pressText: "message G",
+			steps: append(
+				[]dragStep{{endY: 4, scroll: -1}},
+				upwardDrag(3)...,
+			),
+			wantActive: true,
+		},
+		{
+			desc:       "auto-scroll past top of history clamps and still pins row",
+			setup:      manyMessages("message", 12),
+			preScroll:  1,
+			pressText:  "message F",
+			steps:      upwardDrag(8),
+			wantActive: true,
+		},
+		{
+			desc: "wrapped message stays selected across auto-scroll",
+			setup: func(c *Component) {
+				c.AddSendMessage("alpha")
+				c.AddSendMessage("bravo")
+				// Wider than the 20-col viewport: wraps onto two rows.
+				c.AddSendMessage("this-message-is-long-enough-to-wrap")
+				c.AddSendMessage("charlie")
+				c.AddSendMessage("delta")
+				c.AddSendMessage("echo")
+				c.AddSendMessage("foxtrot")
+				c.AddSendMessage("golf")
+			},
+			width:      20,
+			height:     9,
+			preScroll:  2,
+			pressText:  "this-message-is-long",
+			steps:      upwardDrag(2),
+			wantActive: true,
+		},
+		{
+			desc: "padded send messages pin row across auto-scroll",
+			cfg:  ComponentConfig{SendMessageBottomPad: 1},
+			setup: func(c *Component) {
+				for i := range 10 {
+					c.AddSendMessage("padded " + string(rune('A'+i)))
+				}
+			},
+			preScroll:  2,
+			pressText:  "padded G",
+			steps:      upwardDrag(2),
+			wantActive: true,
+		},
+		{
+			desc:      "content streamed in mid-drag keeps pressed row pinned",
+			setup:     manyMessages("message", 12),
+			preScroll: 3,
+			pressText: "message F",
+			steps: []dragStep{
+				{endY: 1, mutate: func(c *Component) { c.AddSendMessage("streamed one") }},
+				{endY: 0, scroll: 1, mutate: func(c *Component) { c.AddSendMessage("streamed two") }},
+				{endY: 0},
+			},
+			wantActive: true,
+		},
+		{
+			desc:      "keyboard scroll mid-drag keeps pressed row pinned",
+			setup:     manyMessages("message", 14),
+			preScroll: 4,
+			pressText: "message F",
+			steps: []dragStep{
+				{endY: 1, mutate: func(c *Component) { c.SeekUp() }},
+				{endY: 0, mutate: func(c *Component) { c.SeekUp() }},
+				{endY: 0},
+			},
+			wantActive: true,
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.desc, func(t *testing.T) {
+			width, height := tc.width, tc.height
+			if width == 0 {
+				width = defWidth
+			}
+			if height == 0 {
+				height = defHeight
+			}
+
+			comp := NewComponent(tc.cfg)
+			tc.setup(comp)
+			comp.Resize(width, height)
+
+			grid := drawGrid(comp, width, height)
+			d := newMouseDelegate(grid, &comp.messages)
+
+			redraw := func() {
+				grid.Clear()
+				comp.Draw(grid)
+			}
+
+			for i := range tc.preScroll {
+				require.Truef(t, d.ScrollUp(1), "pre-scroll %d should move the list", i)
+				redraw()
+			}
+
+			pressRow := gridRowOf(grid, tc.pressText)
+			require.GreaterOrEqualf(t, pressRow, 0,
+				"press text %q should be visible after pre-scroll", tc.pressText)
+
+			// Press at the end of the row so an upward drag's reverse-ordered
+			// selection spans the whole pressed row.
+			press := term.Coordinates{X: len(tc.pressText) - 1, Y: pressRow}
+			d.SetSelectionStart(press)
+			for _, step := range tc.steps {
+				d.SetSelectionEnd(term.Coordinates{Y: step.endY})
+				if step.mutate != nil {
+					step.mutate(comp)
+				}
+				switch {
+				case step.scroll > 0:
+					d.ScrollUp(step.scroll)
+				case step.scroll < 0:
+					d.ScrollDown(-step.scroll)
+				}
+				redraw()
+			}
+
+			data, ok := d.Selection()
+			require.Equal(t, tc.wantActive, ok)
+			if tc.wantActive {
+				assert.Contains(t, data, tc.pressText,
+					"selection must keep the originally pressed row after auto-scroll")
+			}
+		})
+	}
+}
+
+// gridRowOf returns the first grid row whose rendered text equals want, or
+// -1 when none match.
+func gridRowOf(g *tterm.SelectionWriter, want string) int {
+	for y := range g.Height() {
+		row := g.TextBetween(
+			term.Coordinates{X: 0, Y: y},
+			term.Coordinates{X: g.Width() - 1, Y: y},
+		)
+		if row == want {
+			return y
+		}
+	}
+	return -1
+}
+
+// TestMouseDelegateSelectionCopiesOffscreenContent asserts that copying a
+// selection returns the full selected text even when the selection's start or
+// end rows have scrolled off the visible viewport. The grid backing the
+// on-screen highlight only holds the visible viewport, so Selection must
+// render the entire list into a private full-height grid to extract the
+// off-screen rows.
+func TestMouseDelegateSelectionCopiesOffscreenContent(t *testing.T) {
+	manyMessages := func(prefix string, n int) func(*Component) {
+		return func(c *Component) {
+			for i := range n {
+				c.AddSendMessage(prefix + " " + string(rune('A'+i)))
+			}
+		}
+	}
+
+	suite := []struct {
+		desc          string
+		cfg           ComponentConfig
+		setup         func(*Component)
+		width, height int
+		// pressText/releaseText are resolved to rendered rows at the time of the
+		// press and the release, respectively, so cases avoid hardcoding
+		// bottom-aligned row math.
+		pressText string
+		// preScroll scrolls the list toward the start (older messages) before
+		// the press so the pressed row is visible in the bottom-aligned
+		// viewport.
+		preScroll int
+		// scrollUpBeforeRelease scrolls the list toward the start (older
+		// messages) between the press and the release, pushing the pressed row
+		// off the bottom of the viewport.
+		scrollUpBeforeRelease int
+		releaseText           string
+		wantContains          []string
+	}{
+		{
+			desc:                  "start scrolls off bottom before release",
+			setup:                 manyMessages("message", 30),
+			width:                 30,
+			height:                8,
+			pressText:             "message T",
+			preScroll:             8,
+			scrollUpBeforeRelease: 6,
+			releaseText:           "message N",
+			wantContains: []string{
+				"message N", "message O", "message S", "message T",
+			},
+		},
+		{
+			desc:                  "selection spanning many off-screen rows",
+			setup:                 manyMessages("message", 30),
+			width:                 30,
+			height:                6,
+			pressText:             "message T",
+			preScroll:             8,
+			scrollUpBeforeRelease: 9,
+			releaseText:           "message K",
+			wantContains: []string{
+				"message K", "message P", "message T",
+			},
+		},
+		{
+			desc: "wrapped message off-screen is fully copied",
+			setup: func(c *Component) {
+				c.AddSendMessage("alpha")
+				c.AddSendMessage("this-message-is-long-enough-to-wrap-twice-over")
+				for i := range 20 {
+					c.AddSendMessage("tail " + string(rune('A'+i)))
+				}
+			},
+			width:                 20,
+			height:                6,
+			pressText:             "alpha",
+			preScroll:             40,
+			scrollUpBeforeRelease: 0,
+			releaseText:           "alpha",
+			wantContains:          []string{"alpha"},
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.desc, func(t *testing.T) {
+			comp := NewComponent(tc.cfg)
+			tc.setup(comp)
+			comp.Resize(tc.width, tc.height)
+
+			grid := drawGrid(comp, tc.width, tc.height)
+			d := newMouseDelegate(grid, &comp.messages)
+
+			redraw := func() {
+				grid.Clear()
+				comp.Draw(grid)
+			}
+
+			for range tc.preScroll {
+				if !d.ScrollUp(1) {
+					break
+				}
+				redraw()
+			}
+
+			pressRow := gridRowOf(grid, tc.pressText)
+			require.GreaterOrEqualf(t, pressRow, 0,
+				"press text %q should be visible after pre-scroll", tc.pressText)
+			// Press at the end of the (newer, lower) line; it scrolls off the
+			// bottom before release. Releasing at column 0 of the (older, upper)
+			// line makes the sorted selection span both full lines.
+			d.SetSelectionStart(term.Coordinates{X: len(tc.pressText) - 1, Y: pressRow})
+
+			for i := range tc.scrollUpBeforeRelease {
+				require.Truef(t, d.ScrollUp(1), "scroll %d should move the list", i)
+				redraw()
+			}
+
+			releaseRow := gridRowOf(grid, tc.releaseText)
+			require.GreaterOrEqualf(t, releaseRow, 0,
+				"release text %q should be visible at release time", tc.releaseText)
+			d.SetSelectionEnd(term.Coordinates{X: 0, Y: releaseRow})
+			redraw()
+
+			text, ok := d.Selection()
+			require.True(t, ok)
+			for _, want := range tc.wantContains {
+				assert.Contains(t, text, want,
+					"copied selection must include off-screen content")
+			}
+		})
+	}
+}
+
 func TestMouseDelegateClearAndReselect(t *testing.T) {
 	comp := NewComponent(ComponentConfig{})
 	comp.AddSendMessage("Hello send")
@@ -255,4 +650,192 @@ func TestMouseDelegateClearAndReselect(t *testing.T) {
 	text, ok = d.Selection()
 	assert.True(t, ok)
 	assert.Equal(t, "Hello", text)
+}
+
+// TestMouseDelegateSelectionEndPinnedAcrossScroll asserts that once a selection
+// end is set, scrolling the list (without moving the pointer) keeps both
+// endpoints anchored to their content rows. The end must not follow the scroll
+// offset; the copied text must stay identical across the scroll.
+func TestMouseDelegateSelectionEndPinnedAcrossScroll(t *testing.T) {
+	const (
+		width  = 30
+		height = 8
+	)
+
+	suite := []struct {
+		desc string
+		// scrollAfter is applied after SetSelectionEnd: >0 scrolls up (toward
+		// older messages), <0 scrolls down.
+		scrollAfter int
+	}{
+		{desc: "scroll up after selecting end", scrollAfter: 3},
+		{desc: "scroll down after selecting end", scrollAfter: -3},
+		{desc: "scroll up far enough to push both endpoints off", scrollAfter: 6},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.desc, func(t *testing.T) {
+			comp := NewComponent(ComponentConfig{})
+			for i := range 30 {
+				comp.AddSendMessage("message " + string(rune('A'+i)))
+			}
+			comp.Resize(width, height)
+
+			grid := drawGrid(comp, width, height)
+			d := newMouseDelegate(grid, &comp.messages)
+
+			redraw := func() {
+				grid.Clear()
+				comp.Draw(grid)
+			}
+
+			// Scroll up a bit so a span of older messages is visible, then
+			// select two adjacent full lines.
+			for range 5 {
+				require.True(t, d.ScrollUp(1))
+				redraw()
+			}
+
+			startRow := gridRowOf(grid, "message V")
+			endRow := gridRowOf(grid, "message W")
+			require.GreaterOrEqual(t, startRow, 0)
+			require.GreaterOrEqual(t, endRow, 0)
+
+			d.SetSelectionStart(term.Coordinates{X: 0, Y: startRow})
+			d.SetSelectionEnd(term.Coordinates{X: len("message W") - 1, Y: endRow})
+			redraw()
+
+			before, ok := d.Selection()
+			require.True(t, ok)
+			require.Equal(t, "message V\nmessage W", before)
+
+			// Scroll without issuing a new SetSelectionEnd. Both endpoints must
+			// stay pinned to their content rows, so the copy is unchanged.
+			switch {
+			case tc.scrollAfter > 0:
+				for range tc.scrollAfter {
+					d.ScrollUp(1)
+					redraw()
+				}
+			case tc.scrollAfter < 0:
+				for range -tc.scrollAfter {
+					d.ScrollDown(1)
+					redraw()
+				}
+			}
+
+			after, ok := d.Selection()
+			require.True(t, ok)
+			assert.Equal(t, before, after,
+				"selection end must stay anchored to its content row across scroll")
+		})
+	}
+}
+
+// TestMouseDelegateSelectionNegativeCoords exercises drags whose pointer leaves
+// the window into negative coordinates, which the terminal reports while the
+// mouse is dragged above or to the left of the viewport. The selection must not
+// panic and must resolve to sensible content. Events are driven through the
+// real mouse.Mouse so the drag/auto-scroll path matches production.
+func TestMouseDelegateSelectionNegativeCoords(t *testing.T) {
+	const (
+		width  = 30
+		height = 8
+	)
+
+	suite := []struct {
+		desc string
+		// preScroll scrolls toward older messages before the press so the
+		// pressed row sits inside the bottom-aligned viewport.
+		preScroll int
+		// pressText is resolved to its rendered row at press time.
+		pressText string
+		pressX    int
+		// dragTo is the pointer position reported during the drag; negative
+		// values model the pointer leaving the window.
+		dragTo [2]int
+		// wantContains lists substrings the copied selection must include.
+		wantContains []string
+		// wantNotContains lists substrings the selection must not include.
+		wantNotContains []string
+	}{
+		{
+			desc:         "drag above the top while scrolled selects off-screen content above",
+			preScroll:    5,
+			pressText:    "message O",
+			pressX:       len("message O") - 1,
+			dragTo:       [2]int{2, -12},
+			wantContains: []string{"message A", "message H", "message O"},
+		},
+		{
+			desc:            "drag to negative X stays on pressed row",
+			preScroll:       5,
+			pressText:       "message O",
+			pressX:          len("message O") - 1,
+			dragTo:          [2]int{-20, 0},
+			wantContains:    []string{"message", "message N", "message O"},
+			wantNotContains: []string{"message P"},
+		},
+		{
+			desc:         "drag far above the top clamps to first message",
+			preScroll:    5,
+			pressText:    "message N",
+			pressX:       len("message N") - 1,
+			dragTo:       [2]int{0, -100},
+			wantContains: []string{"message A", "message N"},
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.desc, func(t *testing.T) {
+			comp := NewComponent(ComponentConfig{})
+			for i := range 20 {
+				comp.AddSendMessage("message " + string(rune('A'+i)))
+			}
+			comp.Resize(width, height)
+
+			grid := drawGrid(comp, width, height)
+			d := newMouseDelegate(grid, &comp.messages)
+			m := mouse.New(d)
+
+			redraw := func() {
+				grid.Clear()
+				comp.Draw(grid)
+			}
+			send := func(x, y int, k term.Key) {
+				m.Handle(term.Event{Type: term.EventMouse, Key: k, MouseX: x, MouseY: y})
+				redraw()
+			}
+
+			for range tc.preScroll {
+				require.True(t, d.ScrollUp(1))
+				redraw()
+			}
+
+			pressRow := gridRowOf(grid, tc.pressText)
+			require.GreaterOrEqualf(t, pressRow, 0,
+				"press text %q must be visible after pre-scroll", tc.pressText)
+
+			require.NotPanics(t, func() {
+				send(tc.pressX, pressRow, term.MouseLeft)
+				// Repeat the off-window drag so the edge auto-scroll runs to
+				// completion, as it would while the button is held.
+				for range height + tc.preScroll + 2 {
+					send(tc.dragTo[0], tc.dragTo[1], term.MouseLeft)
+				}
+				send(tc.dragTo[0], tc.dragTo[1], term.MouseRelease)
+			})
+
+			text, ok := d.Selection()
+			require.True(t, ok)
+			for _, want := range tc.wantContains {
+				assert.Containsf(t, text, want,
+					"selection must include %q", want)
+			}
+			for _, notWant := range tc.wantNotContains {
+				assert.NotContainsf(t, text, notWant,
+					"selection must not include %q", notWant)
+			}
+		})
+	}
 }

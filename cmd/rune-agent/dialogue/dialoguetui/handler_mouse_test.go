@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/markdown"
@@ -52,6 +53,263 @@ func tripleClick(x, y int) []term.Event {
 		mouseEv(x, y, term.MouseLeft),
 		mouseEv(x, y, term.MouseRelease),
 	}
+}
+
+type scrollDir int
+
+const (
+	scrollSame scrollDir = iota
+	scrollDown           // raw offset decreases toward the latest messages
+	scrollUp             // raw offset increases toward older messages
+)
+
+// TestHandlerDragSelectionScrolling asserts that a held left-button drag
+// keeps selecting and edge-auto-scrolls instead of letting the input box
+// steal focus when the pointer crosses the messages/input boundary.
+func TestHandlerDragSelectionScrolling(t *testing.T) {
+	const (
+		width  = 120
+		height = 30
+	)
+
+	mdCfg := markdown.DefaultConfig()
+	mdCfg.ParagraphSpacing = 0
+	mdCfg.HeaderPrefix = false
+
+	cfg := ComponentConfig{
+		MarkdownConfig: &mdCfg,
+		MessagesRowConfig: component.SpanConfig{
+			PadHorizontal:    -80,
+			PadVertical:      2,
+			ContentAlignment: component.AlignmentCentered,
+		},
+		ReceiveMessageSpanConfig: component.SpanConfig{
+			PadVertical:      1,
+			ContentAlignment: component.AlignmentLeft,
+		},
+		SendMessageSpanConfig: component.SpanConfig{
+			PadVertical:      1,
+			ContentAlignment: component.AlignmentLeft,
+		},
+	}
+
+	manyPairs := func(c *Component) {
+		for i := range 20 {
+			c.AddSendMessage(fmt.Sprintf("user%02d", i))
+			c.AddReceiveMessage(fmt.Sprintf("reply%02d", i))
+		}
+	}
+
+	// events is built lazily because some coordinates depend on the live
+	// input-box position, which is only known after Resize/Draw.
+	suite := []struct {
+		desc          string
+		setup         func(*Component)
+		preScrollTop  bool
+		events        func(h *dialogueHandler, comp *Component) []term.Event
+		wantDir       scrollDir
+		wantFocused   bool
+		wantDragging  bool
+		wantSelection bool
+	}{
+		{
+			desc:         "drag from top into input auto-scrolls down and keeps selecting",
+			setup:        manyPairs,
+			preScrollTop: true,
+			events: func(h *dialogueHandler, comp *Component) []term.Event {
+				inputTop := comp.InputPosition().Y
+				return []term.Event{
+					mouseEv(25, 1, term.MouseLeft),
+					mouseEv(25, inputTop+1, term.MouseLeft),
+				}
+			},
+			wantDir:       scrollDown,
+			wantFocused:   false,
+			wantDragging:  true,
+			wantSelection: true,
+		},
+		{
+			desc:         "drag toward top edge auto-scrolls up",
+			setup:        manyPairs,
+			preScrollTop: false,
+			events: func(h *dialogueHandler, comp *Component) []term.Event {
+				return []term.Event{
+					mouseEv(25, 6, term.MouseLeft),
+					mouseEv(25, 0, term.MouseLeft),
+				}
+			},
+			wantDir:       scrollUp,
+			wantFocused:   false,
+			wantDragging:  true,
+			wantSelection: true,
+		},
+		{
+			desc:         "drag within messages middle does not scroll",
+			setup:        manyPairs,
+			preScrollTop: true,
+			events: func(h *dialogueHandler, comp *Component) []term.Event {
+				return []term.Event{
+					mouseEv(25, 6, term.MouseLeft),
+					mouseEv(30, 8, term.MouseLeft),
+				}
+			},
+			wantDir:       scrollSame,
+			wantFocused:   false,
+			wantDragging:  true,
+			wantSelection: true,
+		},
+		{
+			desc:         "release ends drag and a later input click focuses input",
+			setup:        manyPairs,
+			preScrollTop: true,
+			events: func(h *dialogueHandler, comp *Component) []term.Event {
+				inputTop := comp.InputPosition().Y
+				return []term.Event{
+					mouseEv(25, 1, term.MouseLeft),
+					mouseEv(25, inputTop+1, term.MouseLeft),
+					mouseEv(25, inputTop+1, term.MouseRelease),
+					mouseEv(0, inputTop, term.MouseLeft),
+					mouseEv(0, inputTop, term.MouseRelease),
+				}
+			},
+			wantDir:       scrollDown,
+			wantFocused:   true,
+			wantDragging:  false,
+			wantSelection: false,
+		},
+		{
+			desc:         "release over input keeps the messages selection",
+			setup:        manyPairs,
+			preScrollTop: true,
+			events: func(h *dialogueHandler, comp *Component) []term.Event {
+				inputTop := comp.InputPosition().Y
+				return []term.Event{
+					mouseEv(25, 1, term.MouseLeft),
+					mouseEv(25, inputTop+1, term.MouseLeft),
+					mouseEv(25, inputTop+1, term.MouseRelease),
+				}
+			},
+			wantDir:       scrollDown,
+			wantFocused:   false,
+			wantDragging:  false,
+			wantSelection: true,
+		},
+		{
+			desc:         "plain click in input area still focuses input",
+			setup:        manyPairs,
+			preScrollTop: true,
+			events: func(h *dialogueHandler, comp *Component) []term.Event {
+				inputTop := comp.InputPosition().Y
+				return []term.Event{
+					mouseEv(0, inputTop, term.MouseLeft),
+					mouseEv(0, inputTop, term.MouseRelease),
+				}
+			},
+			wantDir:       scrollSame,
+			wantFocused:   true,
+			wantDragging:  false,
+			wantSelection: false,
+		},
+	}
+
+	for _, tc := range suite {
+		t.Run(tc.desc, func(t *testing.T) {
+			comp := NewComponent(cfg)
+			tc.setup(comp)
+
+			h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp, term.FuncInterrupter(
+				func(context.Context) error { return nil },
+			))
+			defer close(tx)
+			dh := h.(*dialogueHandler)
+			h.Resize(width, height)
+			h.Draw(term.NewStringWriter(width+1, height+1))
+
+			if tc.preScrollTop {
+				for range 500 {
+					h.Handle(mouseEv(5, 5, term.MouseWheelUp))
+				}
+				h.Draw(term.NewStringWriter(width+1, height+1))
+			}
+
+			offsetBefore := comp.messages.Offset()
+			switch tc.wantDir {
+			case scrollDown:
+				require.Positive(t, offsetBefore,
+					"precondition: list must be scrolled up to scroll down")
+			case scrollUp:
+				require.Less(t, offsetBefore, comp.messages.MaxOffset(),
+					"precondition: list must have headroom to scroll up")
+			}
+
+			for _, ev := range tc.events(dh, comp) {
+				h.Handle(ev)
+			}
+
+			offsetAfter := comp.messages.Offset()
+			switch tc.wantDir {
+			case scrollDown:
+				assert.Less(t, offsetAfter, offsetBefore, "expected scroll down")
+			case scrollUp:
+				assert.Greater(t, offsetAfter, offsetBefore, "expected scroll up")
+			case scrollSame:
+				assert.Equal(t, offsetBefore, offsetAfter, "expected no scroll")
+			}
+
+			assert.Equal(t, tc.wantFocused, dh.inputFocused, "inputFocused")
+			assert.Equal(t, tc.wantDragging, dh.messagesDragging, "messagesDragging")
+			_, ok := h.Selection()
+			assert.Equal(t, tc.wantSelection, ok, "Selection() ok")
+		})
+	}
+}
+
+// TestHandlerDragSelectionNegativeCoords drives a left-button drag whose
+// pointer leaves the window into negative coordinates, as the terminal reports
+// while the mouse is dragged above or left of the viewport. Routed through the
+// full dialogueHandler.Handle path, it must not panic and must keep a sensible
+// messages selection that includes content scrolled in from above.
+func TestHandlerDragSelectionNegativeCoords(t *testing.T) {
+	const (
+		width  = 40
+		height = 12
+	)
+
+	comp := NewComponent(ComponentConfig{})
+	for i := range 20 {
+		comp.AddSendMessage("message " + string(rune('A'+i)))
+	}
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp, term.FuncInterrupter(
+		func(context.Context) error { return nil },
+	))
+	defer close(tx)
+	dh := h.(*dialogueHandler)
+	h.Resize(width, height)
+	h.Draw(term.NewStringWriter(width+1, height+1))
+
+	// Scroll up so older messages are visible, leaving headroom above.
+	for range 4 {
+		h.Handle(mouseEv(5, 5, term.MouseWheelUp))
+	}
+	h.Draw(term.NewStringWriter(width+1, height+1))
+
+	require.NotPanics(t, func() {
+		// Press inside the messages area, then drag above the window into
+		// negative coordinates and release there. The repeated drag events let
+		// the edge auto-scroll run as it would while the button is held.
+		h.Handle(mouseEv(8, 6, term.MouseLeft))
+		for range height + 8 {
+			h.Handle(mouseEv(2, -15, term.MouseLeft))
+		}
+		h.Handle(mouseEv(2, -15, term.MouseRelease))
+	})
+
+	assert.False(t, dh.inputFocused, "drag must keep messages focus")
+	text, ok := h.Selection()
+	require.True(t, ok, "Selection() ok")
+	assert.Contains(t, text, "message A",
+		"dragging above the window must select up to the first message")
 }
 
 // doubleClick returns the 4-event sequence for a double-click.
@@ -592,6 +850,110 @@ func TestHandlerMouseSelectionScrolled(t *testing.T) {
 	})
 }
 
+// highlightedRows returns, for each grid row, the contiguous AttrReverse text
+// drawn on that row. Rows without any reversed cells are omitted.
+func highlightedRows(sw *term.StringWriter, width, height int) map[int]string {
+	cells := sw.Cells()
+	rows := make(map[int]string)
+	for y := range height {
+		var b strings.Builder
+		for x := range width {
+			c := cells[y*width+x]
+			if c.Attrs&term.AttrReverse == 0 {
+				continue
+			}
+			if c.Ch == 0 {
+				b.WriteRune(' ')
+			} else {
+				b.WriteRune(c.Ch)
+			}
+		}
+		if s := strings.TrimRight(b.String(), " "); s != "" {
+			rows[y] = s
+		}
+	}
+	return rows
+}
+
+// TestHandlerMouseSelectionHighlightPinnedAcrossScroll asserts that after a
+// selection is made, scrolling the messages list (without moving the pointer)
+// keeps the highlight on the selected content. The highlight must track the
+// content rows, not stay fixed to the viewport rows it occupied at selection
+// time.
+func TestHandlerMouseSelectionHighlightPinnedAcrossScroll(t *testing.T) {
+	const (
+		width  = 40
+		height = 12
+	)
+
+	cfg := ComponentConfig{}
+	comp := NewComponent(cfg)
+	for i := range 20 {
+		comp.AddSendMessage("message " + string(rune('A'+i)))
+	}
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp, term.FuncInterrupter(
+		func(context.Context) error { return nil },
+	))
+	defer close(tx)
+	h.Resize(width, height)
+
+	draw := func() *term.StringWriter {
+		sw := term.NewStringWriter(width, height)
+		h.Draw(sw)
+		require.NoError(t, sw.Flush())
+		return sw
+	}
+
+	// Scroll up so a middle message is visible, then select its whole line.
+	for range 5 {
+		h.Handle(mouseEv(5, 5, term.MouseWheelUp))
+	}
+	sw := draw()
+
+	selRow := -1
+	cells := sw.Cells()
+	for y := range height {
+		if selRow >= 0 {
+			break
+		}
+		var b strings.Builder
+		for x := range width {
+			if ch := cells[y*width+x].Ch; ch != 0 {
+				b.WriteRune(ch)
+			}
+		}
+		if strings.TrimSpace(b.String()) == "message J" {
+			selRow = y
+		}
+	}
+	require.GreaterOrEqual(t, selRow, 0, "message J must be visible after scroll")
+
+	for _, ev := range clickDrag(0, selRow, len("message J")-1, selRow) {
+		h.Handle(ev)
+	}
+
+	before := highlightedRows(draw(), width, height)
+	var highlighted string
+	for _, s := range before {
+		highlighted = s
+	}
+	require.Equal(t, "message J", highlighted,
+		"the highlighted text should be the selected message")
+
+	// Scroll up one more row without moving the pointer; the highlight must
+	// stay on "message J", just shifted to its new viewport row.
+	h.Handle(mouseEv(5, 5, term.MouseWheelUp))
+	after := highlightedRows(draw(), width, height)
+
+	var afterText string
+	for _, s := range after {
+		afterText = s
+	}
+	assert.Equal(t, "message J", afterText,
+		"highlight must stay on the selected content after scrolling")
+}
+
 // TestHandlerMouseSelectionFullConfigScrolled exercises mouse selection
 // with the full production config AND a scrolled conversation loaded from
 // storage. This is the case that breaks when grid coordinates don't
@@ -758,6 +1120,7 @@ func TestHandlerMouseSelectionFullConfigScrolled(t *testing.T) {
 			assert.NotEmpty(t, sel, "Selection() text should not be empty when ok=true")
 		}
 	})
+
 }
 
 // TestHandlerMouseSelectionFullConfig exercises mouse selection with

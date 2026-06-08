@@ -43,8 +43,19 @@ type mouseDelegate struct {
 	grid   *tterm.SelectionWriter
 	list   *component.ResponsiveList
 	offset term.Coordinates // messages-area offset within the grid, updated each Draw
-	sel    tterm.SelRange   // messages-relative coordinates
-	anchor term.Coordinates // raw start position (before sorting)
+	// sel holds both selection endpoints in content coordinates: each Y is a
+	// row index into the full conversation, independent of the scroll offset.
+	// Both endpoints therefore stay pinned to their content rows however the
+	// list scrolls, and copy reads them directly from the full grid.
+	sel tterm.SelRange
+	// anchor is the selection start in content coordinates, kept so a drag's
+	// SetSelectionEnd can re-sort against the originally pressed cell.
+	anchor term.Coordinates
+	// fullGrid renders the entire messages list on demand so Selection can
+	// extract text from rows that have scrolled out of the visible viewport.
+	// The on-screen grid only ever holds the visible viewport, so reading it
+	// would clip the selection to whatever is currently shown.
+	fullGrid tterm.SelectionWriter
 }
 
 func (d *mouseDelegate) OnAction(ev term.Event, pos term.Coordinates, action mouse.Action) bool {
@@ -71,16 +82,17 @@ func (d *mouseDelegate) ScrollDown(n int) (ok bool) {
 
 func (d *mouseDelegate) SetSelectionStart(pos term.Coordinates) {
 	d.sel = tterm.SelRange{}
-	d.anchor = pos
+	d.anchor = d.toContent(pos)
 }
 
 func (d *mouseDelegate) SetSelectionEnd(pos term.Coordinates) {
-	start, end := term.CoordinatesSort(d.anchor, pos)
+	start, end := term.CoordinatesSort(d.anchor, d.toContent(pos))
 	d.sel = tterm.SelRange{Start: start, End: end, Active: true}
 }
 
 func (d *mouseDelegate) ClearSelection() {
 	d.sel = tterm.SelRange{}
+	d.anchor = term.Coordinates{}
 }
 
 func (d *mouseDelegate) SelectWordAt(pos term.Coordinates) {
@@ -91,8 +103,8 @@ func (d *mouseDelegate) SelectWordAt(pos term.Coordinates) {
 		return
 	}
 	d.sel = tterm.SelRange{
-		Start:  term.CoordinatesDiff(start, d.offset),
-		End:    term.CoordinatesDiff(end, d.offset),
+		Start:  d.toContent(term.CoordinatesDiff(start, d.offset)),
+		End:    d.toContent(term.CoordinatesDiff(end, d.offset)),
 		Active: true,
 	}
 }
@@ -105,8 +117,8 @@ func (d *mouseDelegate) SelectLine(y int) {
 		return
 	}
 	d.sel = tterm.SelRange{
-		Start:  term.CoordinatesDiff(start, d.offset),
-		End:    term.CoordinatesDiff(end, d.offset),
+		Start:  d.toContent(term.CoordinatesDiff(start, d.offset)),
+		End:    d.toContent(term.CoordinatesDiff(end, d.offset)),
 		Active: true,
 	}
 }
@@ -115,10 +127,69 @@ func (d *mouseDelegate) Selection() (string, bool) {
 	if !d.sel.Active {
 		return "", false
 	}
-	start := term.CoordinatesSum(d.sel.Start, d.offset)
-	end := term.CoordinatesSum(d.sel.End, d.offset)
-	text := d.grid.TextBetween(start, end)
+	start, end, ok := d.renderFullGrid()
+	if !ok {
+		return "", false
+	}
+	text := d.fullGrid.TextBetween(start, end)
 	return text, text != ""
+}
+
+// renderFullGrid draws the entire messages list into d.fullGrid and returns
+// the selection endpoints translated into that full-content grid. The visible
+// grid only holds the current viewport, so off-screen selected rows must be
+// re-rendered here to be copyable.
+func (d *mouseDelegate) renderFullGrid() (start, end term.Coordinates, ok bool) {
+	width := d.list.SizeWidth()
+	if width <= 0 {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+
+	savedHeight := d.list.SizeHeight()
+	savedOffset := d.list.Offset()
+	total := d.list.MaxOffset() + savedHeight
+	if total <= 0 {
+		return term.Coordinates{}, term.Coordinates{}, false
+	}
+
+	d.fullGrid.Resize(width, total)
+	d.fullGrid.SetContext(d.grid.Context())
+
+	d.list.Resize(width, total)
+	d.list.SeekStart()
+	d.list.Draw(&d.fullGrid)
+
+	d.list.Resize(width, savedHeight)
+	d.restoreOffset(savedOffset)
+
+	// d.sel is already in content coordinates and the full grid is rendered
+	// fully sought toward the start, so content row r maps directly to grid row
+	// r.
+	return d.sel.Start, d.sel.End, true
+}
+
+// restoreOffset seeks the list back to the given raw seek offset. SeekUp and
+// SeekDown are alignment-flipped, so this drives Offset() directly rather than
+// reasoning about visual direction.
+func (d *mouseDelegate) restoreOffset(offset int) {
+	for d.list.Offset() < offset {
+		if d.list.Alignment == component.AlignmentBottom {
+			if !d.list.SeekUp() {
+				break
+			}
+		} else if !d.list.SeekDown() {
+			break
+		}
+	}
+	for d.list.Offset() > offset {
+		if d.list.Alignment == component.AlignmentBottom {
+			if !d.list.SeekDown() {
+				break
+			}
+		} else if !d.list.SeekUp() {
+			break
+		}
+	}
 }
 
 func (d *mouseDelegate) Width() int {
@@ -127,4 +198,32 @@ func (d *mouseDelegate) Width() int {
 
 func (d *mouseDelegate) Height() int {
 	return d.grid.Height()
+}
+
+// WindowSelection converts the content-coordinate selection into the current
+// messages-relative window coordinates for the on-screen highlight. It returns
+// false when there is no active selection.
+func (d *mouseDelegate) WindowSelection() (tterm.SelRange, bool) {
+	if !d.sel.Active {
+		return tterm.SelRange{}, false
+	}
+	return tterm.SelRange{
+		Start:  d.toWindow(d.sel.Start),
+		End:    d.toWindow(d.sel.End),
+		Active: true,
+	}, true
+}
+
+// toContent maps a messages-relative window coordinate to a content
+// coordinate whose Y is a row index into the full conversation, independent of
+// the current scroll offset.
+func (d *mouseDelegate) toContent(pos term.Coordinates) term.Coordinates {
+	pos.Y += d.list.MaxOffset() - d.list.Offset()
+	return pos
+}
+
+// toWindow is the inverse of toContent for the current scroll offset.
+func (d *mouseDelegate) toWindow(pos term.Coordinates) term.Coordinates {
+	pos.Y -= d.list.MaxOffset() - d.list.Offset()
+	return pos
 }
