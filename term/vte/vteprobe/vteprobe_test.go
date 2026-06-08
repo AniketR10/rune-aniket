@@ -117,10 +117,18 @@ func newCursor(t *testing.T) *Cursor {
 	return New([]int{4, 2, 8}, 0.6, 1<<20)
 }
 
-// linesOf splits file content into the lines slice the content-supplied
-// Infer expects, matching the on-disk splitting semantics.
-func linesOf(content string) []string {
-	return splitLines([]byte(content))
+// linesOf builds the pre-split file-content cell rows Infer expects,
+// matching the on-disk splitting semantics.
+func linesOf(content string) [][]term.Cell {
+	return cellLines(splitLines([]byte(content)))
+}
+
+func cellLines(parts []string) [][]term.Cell {
+	lines := make([][]term.Cell, len(parts))
+	for i, line := range parts {
+		lines[i] = drawRow(line, nil)
+	}
+	return lines
 }
 
 // TestInferEmitsDebugLog verifies that every Infer call writes at least
@@ -293,13 +301,13 @@ func TestInferReadsNoDisk(t *testing.T) {
 	// The content the editor displays, supplied as a cell.View mirror
 	// rather than read from disk.
 	contentBuf := makeBuffer([]string{"foo", "bar", "baz"}, 3)
-	lines := LinesFromView(contentBuf.View())
+	lines := contentBuf.View().RawCells()
 
 	inf := newCursor(t)
 	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 3, Y: 1}, lines, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got.CursorAtScroll.Y)
-	assert.Equal(t, []string{"foo", "bar", "baz"}, got.FileLines)
+	assert.Equal(t, "foo\nbar\nbaz", term.CellsToString(got.FileLines))
 }
 
 // TestInferTooLargeUnknown verifies the maxFileBytes guard: content
@@ -310,7 +318,7 @@ func TestInferTooLargeUnknown(t *testing.T) {
 
 	rows := []string{" 1 foo", " 2 bar"}
 	buf := makeBuffer(rows, 30)
-	lines := []string{"foo", "bar"}
+	lines := linesOf("foo\nbar")
 
 	// maxFileBytes of 4 is below the supplied content size.
 	inf := New([]int{4, 2, 8}, 0.6, 4)

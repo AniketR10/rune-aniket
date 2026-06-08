@@ -67,10 +67,13 @@ type editorHandler struct {
 
 	overrideHighlights bool
 	locations          *text.LocationStore
+	probeStateMu       sync.RWMutex
 	lastProbe          atomic.Pointer[vteprobe.Result]
+	lastProbeCells     [][]term.Cell
 
-	bufLines atomic.Pointer[[]string]
-	bufSub   *bufLineWatcher
+	bufCells        [][]term.Cell
+	bufCellsScratch [][]term.Cell
+	bufSub          *bufCellWatcher
 
 	probeMu    sync.Mutex
 	probeCells [][]term.Cell
@@ -114,22 +117,22 @@ func newHandler(
 		locations:          text.NewLocationStore(),
 	}
 	h.component = vteH.Component()
-	h.snapshotBufferLines()
-	h.bufSub = &bufLineWatcher{h: h}
+	h.snapshotBufferCells()
+	h.bufSub = &bufCellWatcher{h: h}
 	buf.Subscribe(h.bufSub)
 	h.startWatcher(ctx)
 	return h
 }
 
-type bufLineWatcher struct{ h *editorHandler }
+type bufCellWatcher struct{ h *editorHandler }
 
-func (w *bufLineWatcher) OnWillEdit(
+func (w *bufCellWatcher) OnWillEdit(
 	context.Context, term.Coordinates, term.Coordinates, string) {
 }
 
-func (w *bufLineWatcher) OnDidEdit(
+func (w *bufCellWatcher) OnDidEdit(
 	context.Context, term.Coordinates, term.Coordinates, string) {
-	w.h.snapshotBufferLines()
+	w.h.snapshotBufferCells()
 	w.h.refreshProbe()
 }
 
@@ -320,12 +323,14 @@ func (h *editorHandler) IsSearchMode() bool { return false }
 func (h *editorHandler) CellView() cell.View { return h.buf.View() }
 
 func (h *editorHandler) Draw(w term.Writer) {
-	probe := h.lastProbe.Load()
 	if !h.overrideHighlights {
 		h.Handler.Draw(w)
 		return
 	}
 	h.Handler.Draw(ignoreAttrWriter{Writer: w})
+	h.probeStateMu.RLock()
+	defer h.probeStateMu.RUnlock()
+	probe := h.lastProbe.Load()
 	if probe == nil {
 		return
 	}
@@ -344,24 +349,80 @@ func (h *editorHandler) refreshProbe() {
 	active := snap.Active()
 	// Retain the (possibly grown) backing grid for the next refresh.
 	h.probeCells = active.Cells
-	lines := h.bufferLines()
-	res, err := h.probe.Infer(active.Cells, active.Cursor, lines, h.probeSlab)
+	fileCells := h.bufCells
+	res, err := h.probe.Infer(active.Cells, active.Cursor, fileCells, h.probeSlab)
 	if err != nil {
 		return
 	}
+	h.probeStateMu.Lock()
+	oldProbeCells := h.lastProbeCells
 	h.lastProbe.Store(&res)
-}
-
-func (h *editorHandler) bufferLines() []string {
-	if p := h.bufLines.Load(); p != nil {
-		return *p
+	h.lastProbeCells = res.FileLines
+	if !cellMatricesAlias(oldProbeCells, h.bufCells) {
+		h.bufCellsScratch = oldProbeCells
 	}
-	return nil
+	h.probeStateMu.Unlock()
 }
 
-func (h *editorHandler) snapshotBufferLines() {
-	lines := vteprobe.LinesFromView(h.buf.View())
-	h.bufLines.Store(&lines)
+func (h *editorHandler) bufferCells() [][]term.Cell {
+	h.probeMu.Lock()
+	defer h.probeMu.Unlock()
+	return h.bufCells
+}
+
+func snapshotFileCells(rows [][]term.Cell) [][]term.Cell {
+	return snapshotFileCellsInto(nil, rows)
+}
+
+func snapshotFileCellsInto(dst [][]term.Cell, rows [][]term.Cell) [][]term.Cell {
+	if len(rows) == 0 {
+		return nil
+	}
+	if n := len(rows); len(rows[n-1]) == 0 {
+		rows = rows[:n-1]
+		if len(rows) == 0 {
+			return nil
+		}
+	}
+	return term.CopyCells(dst, rows)
+}
+
+func (h *editorHandler) snapshotBufferCells() {
+	h.probeMu.Lock()
+	defer h.probeMu.Unlock()
+
+	dst := h.bufCellsScratch
+	if dst == nil && !cellMatricesAlias(h.bufCells, h.lastProbeCells) {
+		dst = h.bufCells
+	}
+	oldCells := h.bufCells
+	h.bufCells = snapshotFileCellsInto(dst, h.buf.View().RawCells())
+	h.bufCellsScratch = nil
+	if !cellMatricesAlias(oldCells, h.lastProbeCells) && !cellMatricesAlias(oldCells, h.bufCells) {
+		h.bufCellsScratch = oldCells
+	}
+}
+
+func cellMatricesAlias(a, b [][]term.Cell) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	if &a[0] == &b[0] {
+		return true
+	}
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		if len(a[i]) == 0 || len(b[i]) == 0 {
+			continue
+		}
+		if &a[i][0] == &b[i][0] {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *editorHandler) CellEditor() cell.Editor { return nopCellEditor{} }

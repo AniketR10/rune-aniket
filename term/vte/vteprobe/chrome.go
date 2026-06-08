@@ -24,7 +24,7 @@
 package vteprobe
 
 import (
-	"strings"
+	"unicode"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
@@ -48,7 +48,7 @@ import (
 //
 // The band always retains at least one content row. Whether the cursor
 // lies in chrome is the caller's responsibility.
-func detectChrome(rows []extractedRow, fileLines []string) (top, bot int) {
+func detectChrome(rows []extractedRow, fileLines [][]term.Cell) (top, bot int) {
 	if len(rows) == 0 {
 		return 0, -1
 	}
@@ -65,12 +65,12 @@ func detectChrome(rows []extractedRow, fileLines []string) (top, bot int) {
 // soft messages before stopping. When fileLines is nil/empty we fall
 // back to attribute-only chrome detection to avoid eating content rows
 // in unit-test scenarios that intentionally skip the file context.
-func peelTop(rows []extractedRow, top *int, bot int, fileLines []string) {
+func peelTop(rows []extractedRow, top *int, bot int, fileLines [][]term.Cell) {
 	softInARow := 0
 	for *top < bot {
 		row := rows[*top]
-		text := strings.TrimRight(row.text(), " ")
-		if text == "" {
+		text := trimRightSpace(row.runes)
+		if len(text) == 0 {
 			*top++
 			softInARow = 0
 			continue
@@ -103,12 +103,12 @@ func peelTop(rows []extractedRow, top *int, bot int, fileLines []string) {
 // appear in fileLines. When fileLines is nil/empty we restrict the
 // soft path so unit tests calling with nil keep the conservative
 // behaviour (attribute-marked and blank rows only).
-func peelBottom(rows []extractedRow, bot *int, top int, fileLines []string) {
+func peelBottom(rows []extractedRow, bot *int, top int, fileLines [][]term.Cell) {
 	softInARow := 0
 	for *bot > top {
 		row := rows[*bot]
-		text := strings.TrimRight(row.text(), " ")
-		if text == "" {
+		text := trimRightSpace(row.runes)
+		if len(text) == 0 {
 			*bot--
 			softInARow = 0
 			continue
@@ -133,17 +133,83 @@ func peelBottom(rows []extractedRow, bot *int, top int, fileLines []string) {
 // appearsInFile returns true when text is a prefix or suffix of any
 // file line (which is enough for our purposes — a row containing a
 // trimmed-down version of a file line is content, not chrome).
-func appearsInFile(text string, fileLines []string) bool {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
+func appearsInFile(text []rune, fileLines [][]term.Cell) bool {
+	trimmed := trimSpaceRunes(text)
+	if len(trimmed) == 0 {
 		return false
 	}
 	for _, line := range fileLines {
-		ts := strings.TrimSpace(line)
-		if ts == "" {
+		trimmedLine := trimSpaceCells(line)
+		if len(trimmedLine) == 0 {
 			continue
 		}
-		if strings.Contains(ts, trimmed) || strings.Contains(trimmed, ts) {
+		if containsCellsRunes(trimmedLine, trimmed) || containsRunesCells(trimmed, trimmedLine) {
+			return true
+		}
+	}
+	return false
+}
+
+func trimSpaceRunes(rs []rune) []rune {
+	start, end := 0, len(rs)
+	for start < end && unicode.IsSpace(rs[start]) {
+		start++
+	}
+	for end > start && unicode.IsSpace(rs[end-1]) {
+		end--
+	}
+	return rs[start:end]
+}
+
+func trimSpaceCells(cells []term.Cell) []term.Cell {
+	start, end := 0, len(cells)
+	for start < end && unicode.IsSpace(cells[start].Ch) {
+		start++
+	}
+	for end > start && unicode.IsSpace(cells[end-1].Ch) {
+		end--
+	}
+	return cells[start:end]
+}
+
+func containsCellsRunes(hay []term.Cell, needle []rune) bool {
+	if len(needle) == 0 {
+		return true
+	}
+	if len(hay) < len(needle) {
+		return false
+	}
+	for i := 0; i <= len(hay)-len(needle); i++ {
+		ok := true
+		for j, r := range needle {
+			if hay[i+j].Ch != r {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func containsRunesCells(hay []rune, needle []term.Cell) bool {
+	if len(needle) == 0 {
+		return true
+	}
+	if len(hay) < len(needle) {
+		return false
+	}
+	for i := 0; i <= len(hay)-len(needle); i++ {
+		ok := true
+		for j, cell := range needle {
+			if hay[i+j] != cell.Ch {
+				ok = false
+				break
+			}
+		}
+		if ok {
 			return true
 		}
 	}

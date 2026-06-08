@@ -32,7 +32,7 @@ import (
 func TestAlignByGutter(t *testing.T) {
 	t.Parallel()
 
-	lines := []string{
+	lines := cellLines([]string{
 		"package main",
 		"",
 		"import \"fmt\"",
@@ -40,7 +40,7 @@ func TestAlignByGutter(t *testing.T) {
 		"func main() {",
 		"\tfmt.Println(\"hello\")",
 		"}",
-	}
+	})
 	rows := []extractedRow{
 		makeRow(" 1 package main"),
 		makeRow(" 2 "),
@@ -53,7 +53,7 @@ func TestAlignByGutter(t *testing.T) {
 	g := detectGutter(rows, 0, len(rows)-1)
 	assert.True(t, g.present)
 
-	a := alignByGutter(rows, 0, len(rows)-1, g, lines, []int{4, 2, 8})
+	a := alignByGutter(rows, 0, len(rows)-1, g, lines, []int{4, 2, 8}, NewSlab())
 	assert.True(t, a.ok, "expected aligned, coverage=%v", a.coverage)
 	assert.Equal(t, 1, a.topFileLine)
 	assert.Equal(t, 4, a.tabstop, "should infer tabstop 4 because line 6 renders 4 spaces before fmt")
@@ -62,7 +62,7 @@ func TestAlignByGutter(t *testing.T) {
 func TestAlignByContent(t *testing.T) {
 	t.Parallel()
 
-	lines := []string{
+	lines := cellLines([]string{
 		"package main",
 		"",
 		"import \"fmt\"",
@@ -70,7 +70,7 @@ func TestAlignByContent(t *testing.T) {
 		"func main() {",
 		"\tfmt.Println(\"hello\")",
 		"}",
-	}
+	})
 	rows := []extractedRow{
 		makeRow("import \"fmt\""),
 		makeRow(""),
@@ -96,7 +96,7 @@ func TestAlignWithWrapAmbiguousAnchor(t *testing.T) {
 	// A file with several lone "}" lines so the anchor row is ambiguous,
 	// and one long line that wraps at the 20-column body width.
 	long := "\tx := aaaaaaaaaa + bbbbbbbbbb + cccccccccc" // > 20 cols expanded
-	lines := []string{
+	lines := cellLines([]string{
 		"func a() {", // 1
 		"\treturn",   // 2
 		"}",          // 3
@@ -106,7 +106,7 @@ func TestAlignWithWrapAmbiguousAnchor(t *testing.T) {
 		"func c() {", // 7
 		"\treturn",   // 8
 		"}",          // 9
-	}
+	})
 	// Render the band starting at file line 6 (a lone "}"), which also
 	// appears at lines 3 and 9. Width 20 forces the long line to wrap,
 	// but here the band starts after it.
@@ -139,14 +139,14 @@ func TestAlignTailViewNotAnchoredPastEOF(t *testing.T) {
 	// end of the file (line 6, the last line).
 	const width = 20
 	long := "\tprint(aaaaaaaaaa, bbbbbbbbbb)" // expands well past 20 cols
-	lines := []string{
+	lines := cellLines([]string{
 		"func a() {", // 1
 		long,         // 2 (wraps -> 2 rows)
 		"}",          // 3
 		"func b() {", // 4
 		"\tnoop()",   // 5
 		"}",          // 6 (last line, recurs)
-	}
+	})
 	// Visible band: line 3 "}" at the top, then 4,5,6 and "~" filler.
 	// A correct 1:1 anchor at line 3 also matches; but to force the
 	// wrap path to be the discriminator we include the wrapped line's
@@ -170,10 +170,10 @@ func TestAlignTailViewNotAnchoredPastEOF(t *testing.T) {
 	band := len(rows)
 	tailMap := make([]int, band)
 	tailMap[0] = 6 // "}" on the last line; rows 1..n fall past EOF
-	tailCov := scoreAlignment(rows, 0, 0, tailMap, lines, 8)
+	tailCov := scoreAlignment(rows, 0, 0, tailMap, lines, 8, NewSlab())
 
 	trueMap := []int{3, 4, 5, 6, 0, 0, 0}
-	trueCov := scoreAlignment(rows, 0, 0, trueMap, lines, 8)
+	trueCov := scoreAlignment(rows, 0, 0, trueMap, lines, 8, NewSlab())
 
 	assert.Greater(t, trueCov, tailCov,
 		"true anchor (line 3) must score above the vacuous tail anchor (line 6): true=%v tail=%v",

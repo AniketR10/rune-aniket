@@ -34,7 +34,7 @@
 //   - the rendered cell grid (a *cell.Buffer returned by, for example,
 //     vte.Replay or vte.Component.Snapshot);
 //   - the cursor position in screen coordinates (X column, Y row);
-//   - the file content the editor is displaying, split into lines.
+//   - the file content the editor is displaying, as pre-split cell rows.
 //
 // Output: the inferred (line, col) into the file content together with
 // a confidence score.
@@ -47,7 +47,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/cell"
 )
 
 // Result is the outcome of Cursor.Infer when the cursor is mapped to a
@@ -91,14 +90,12 @@ type Result struct {
 	// reports WrapOffset == 0; soft-wrap continuation rows carry a
 	// positive WrapOffset (rune-cell offset into the file line).
 	Rows []RowMapping
-	// FileLines is the file content split into lines (no trailing
-	// newline), as supplied to Infer. Callers that need to translate
-	// raw file columns into the visual columns used by Rows/Bands
-	// (e.g. to project a location's tab-relative coordinates onto the
-	// rendered grid) can read this slice. Indices are 0-based; Len
-	// matches the number of source lines. The slice is the same one
-	// passed to Infer — callers must not mutate it.
-	FileLines []string
+	// FileLines is the file content as pre-split cell rows, as supplied
+	// to Infer. Callers that need to translate raw file columns into the
+	// visual columns used by Rows/Bands can read this slice. Indices are
+	// 0-based; Len matches the number of source lines. The slice is the
+	// same one passed to Infer — callers must not mutate it.
+	FileLines [][]term.Cell
 }
 
 // Bands describes the chrome and gutter layout the probe inferred.
@@ -198,7 +195,7 @@ func New(
 }
 
 // Infer maps cur (a screen-relative cursor position inside the rendered
-// cell grid cells) to a position in the file content given by lines.
+// cell grid cells) to a position in the file content given by fileLines.
 // Returns ErrUnknown when the resulting confidence falls below the
 // threshold configured in New.
 //
@@ -207,8 +204,8 @@ func New(
 // vte.Replay). No copy is made, so callers must not mutate cells (or
 // the underlying buffer) for the duration of the call.
 //
-// lines is the file content the editor is displaying, split into lines
-// without trailing newlines (see LinesFromView). It is the caller's
+// fileLines is the file content the editor is displaying, as pre-split
+// cell rows without a trailing synthetic empty row. It is the caller's
 // authoritative copy of the buffer, never re-read from disk here. The
 // slice is not copied and surfaces unchanged as Result.FileLines, so
 // callers must not mutate it for the duration of the call.
@@ -217,13 +214,13 @@ func New(
 // *Slab across successive calls recycles the per-call working memory
 // (tab-expanded lines and alignment scratch), which matters for callers
 // that probe on every cursor move over a large file. The slab carries
-// no results between calls, so Infer is still a pure function of (lines,
+// no results between calls, so Infer is still a pure function of (fileLines,
 // cells, cur); slab only affects allocation. A nil slab allocates
 // fresh. The slab must not be shared across concurrent calls.
 func (i *Cursor) Infer(
 	cells [][]term.Cell,
 	cur term.Coordinates,
-	lines []string,
+	fileLines [][]term.Cell,
 	slab *Slab,
 ) (res Result, err error) {
 	defer func() {
@@ -232,7 +229,7 @@ func (i *Cursor) Infer(
 		}
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
 			Debugf("Infer lines=%d cur=%+v -> res=%+v err=%v",
-				len(lines), cur, res, err)
+				len(fileLines), cur, res, err)
 	}()
 
 	if slab == nil {
@@ -240,7 +237,7 @@ func (i *Cursor) Infer(
 	}
 	slab.reset()
 
-	if i.tooLarge(lines) {
+	if i.tooLarge(fileLines) {
 		return Result{}, ErrUnknown
 	}
 
@@ -250,7 +247,7 @@ func (i *Cursor) Infer(
 	}
 
 	// 1. Chrome detection: trim status-line bands.
-	top, bot := detectChrome(rows, lines)
+	top, bot := detectChrome(rows, fileLines)
 	if cur.Y < top || cur.Y > bot {
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
 			Debugf("Infer cursor outside content band: "+
@@ -269,7 +266,7 @@ func (i *Cursor) Infer(
 	// editor-specific logic.
 	var align alignment
 	if gut.present {
-		align = alignByGutter(rows, top, bot, gut, lines, i.tabstopHints)
+		align = alignByGutter(rows, top, bot, gut, fileLines, i.tabstopHints, slab)
 	}
 	gutterAligned := align.ok
 	if !align.ok {
@@ -277,7 +274,7 @@ func (i *Cursor) Infer(
 		if gut.present {
 			gutterWidth = gut.width
 		}
-		align = alignByContentWithGutter(rows, top, bot, gutterWidth, lines, i.tabstopHints, slab)
+		align = alignByContentWithGutter(rows, top, bot, gutterWidth, fileLines, i.tabstopHints, slab)
 		if !align.ok {
 			log.WithField(logging.KeyClass, "vteprobe.Cursor").
 				Debugf("Infer alignment failed: "+
@@ -291,7 +288,7 @@ func (i *Cursor) Infer(
 	// 4. Wrap / fold detection on the aligned band. Wrap detection may
 	// reject the alignment if it cannot fit visible rows into the file
 	// line range.
-	wrap := detectWrap(rows, top, gut.width, align, lines, slab)
+	wrap := detectWrap(rows, top, gut.width, align, fileLines, slab)
 
 	// 5. Cursor mapping.
 	fileLine, ok := wrap.fileLineAtRow(cur.Y)
@@ -311,11 +308,11 @@ func (i *Cursor) Infer(
 		// Cursor is inside the gutter; treat as column 1 on the line.
 		runeOffset = 0
 	}
-	fileLineText := ""
-	if fileLine >= 1 && fileLine <= len(lines) {
-		fileLineText = lines[fileLine-1]
+	var fileLineCells []term.Cell
+	if fileLine >= 1 && fileLine <= len(fileLines) {
+		fileLineCells = fileLines[fileLine-1]
 	}
-	fileCol := visualToRawCol(fileLineText, runeOffset, align.tabstop)
+	fileCol := visualToRawColCells(fileLineCells, runeOffset, align.tabstop)
 
 	res = Result{
 		CursorAtScroll: term.Coordinates{
@@ -336,7 +333,7 @@ func (i *Cursor) Infer(
 			GridWidth:   gridWidth(rows),
 		},
 		Rows:      buildRowMappings(len(rows), wrap),
-		FileLines: lines,
+		FileLines: fileLines,
 	}
 	if log.IsLevelEnabled(log.DebugLevel) {
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
@@ -360,23 +357,15 @@ func (i *Cursor) Infer(
 // guard configured in New, counting one byte per rune plus a newline
 // per line. The bound only needs to be approximate: it keeps Infer from
 // aligning against pathologically large buffers.
-func (i *Cursor) tooLarge(lines []string) bool {
+func (i *Cursor) tooLarge(lines [][]term.Cell) bool {
 	var n int64
 	for _, l := range lines {
-		n += int64(len(l)) + 1
+		n += int64(lineRuneLen(l)) + 1
 		if n > i.maxFileBytes {
 			return true
 		}
 	}
 	return false
-}
-
-// LinesFromView splits a cell.View's text into file lines (without
-// trailing newlines), matching the semantics Infer expects. Callers
-// that hold the editor's buffer mirror (for example *cell.Buffer) can
-// feed v.View() here and pass the result straight to Infer.
-func LinesFromView(v cell.View) []string {
-	return splitLines([]byte(v.String()))
 }
 
 // splitLines splits data on \n, stripping a single trailing \r per line.

@@ -70,16 +70,17 @@ func BenchmarkCursorInfer(b *testing.B) {
 	}
 
 	lines := splitLines(sampleBytes)
+	fileCells := cellLines(lines)
 	c := New([]int{4, 2, 8}, fx.MinConfidence, 8<<20)
 	// Warm the path once so the steady-state cost is what we measure.
-	if _, err := c.Infer(buf.RawCells(), cur, lines, nil); err != nil {
+	if _, err := c.Infer(buf.RawCells(), cur, fileCells, nil); err != nil {
 		b.Fatalf("warmup infer: %v", err)
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, err := c.Infer(buf.RawCells(), cur, lines, nil); err != nil {
+		if _, err := c.Infer(buf.RawCells(), cur, fileCells, nil); err != nil {
 			b.Fatalf("infer: %v", err)
 		}
 	}
@@ -152,6 +153,7 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 	for _, nlines := range []int{500, 2000, 10000} {
 		content := syntheticGoFile(nlines)
 		lines := splitLines(content)
+		fileCells := cellLines(lines)
 
 		// Render the bottom `height-1` file lines plus one status row so
 		// the visible band is the tail of the file.
@@ -166,7 +168,7 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 		cur := term.Coordinates{X: 0, Y: 0} // top visible row
 
 		c := New([]int{4, 2, 8}, 0.6, 64<<20)
-		if _, err := c.Infer(cells, cur, lines, nil); err != nil {
+		if _, err := c.Infer(cells, cur, fileCells, nil); err != nil {
 			b.Fatalf("warmup infer: %v", err)
 		}
 
@@ -175,7 +177,7 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				if _, err := c.Infer(cells, cur, lines, nil); err != nil {
+				if _, err := c.Infer(cells, cur, fileCells, nil); err != nil {
 					b.Fatalf("infer: %v", err)
 				}
 			}
@@ -185,13 +187,13 @@ func BenchmarkCursorInferLargeFile(b *testing.B) {
 		// caller that probes on every cursor move).
 		b.Run(fmt.Sprintf("lines=%d/slab", nlines), func(b *testing.B) {
 			slab := NewSlab()
-			if _, err := c.Infer(cells, cur, lines, slab); err != nil {
+			if _, err := c.Infer(cells, cur, fileCells, slab); err != nil {
 				b.Fatalf("warmup slab infer: %v", err)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				if _, err := c.Infer(cells, cur, lines, slab); err != nil {
+				if _, err := c.Infer(cells, cur, fileCells, slab); err != nil {
 					b.Fatalf("infer: %v", err)
 				}
 			}
@@ -254,10 +256,10 @@ func BenchmarkCursorInferMatrix(b *testing.B) {
 func benchInferFixture(
 	b *testing.B, sampleBytes []byte, ed editorCase,
 ) {
-	lines := splitLines(sampleBytes)
+	fileCells := cellLines(splitLines(sampleBytes))
 	benchInferFixtureWithRunner(b, ed,
 		func(c *Cursor, cells [][]term.Cell, cur term.Coordinates) error {
-			_, err := c.Infer(cells, cur, lines, nil)
+			_, err := c.Infer(cells, cur, fileCells, nil)
 			return err
 		})
 }
@@ -265,11 +267,11 @@ func benchInferFixture(
 func benchInferFixtureWithSlab(
 	b *testing.B, sampleBytes []byte, ed editorCase,
 ) {
-	lines := splitLines(sampleBytes)
+	fileCells := cellLines(splitLines(sampleBytes))
 	slab := NewSlab()
 	benchInferFixtureWithRunner(b, ed,
 		func(c *Cursor, cells [][]term.Cell, cur term.Coordinates) error {
-			_, err := c.Infer(cells, cur, lines, slab)
+			_, err := c.Infer(cells, cur, fileCells, slab)
 			return err
 		})
 }

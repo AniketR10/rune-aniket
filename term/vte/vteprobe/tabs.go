@@ -23,7 +23,7 @@
 
 package vteprobe
 
-import "github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
+import "github.com/unstablebuild/rune-go-sdk/term"
 
 // expandTabs returns the visual rendering of line according to tabstop:
 // tab characters are expanded to the next multiple of tabstop. The
@@ -66,7 +66,7 @@ func containsTab(line string) bool {
 // rendering of line (with tabstop) back to a 1-based rune column in the
 // raw file content. A tab in the raw file always counts as a single
 // rune column even though it expands to multiple visual cells.
-func visualToRawCol(line string, runeOffset int, tabstop int) int {
+func visualToRawColCells(line []term.Cell, runeOffset int, tabstop int) int {
 	if tabstop <= 0 {
 		tabstop = 1
 	}
@@ -75,17 +75,9 @@ func visualToRawCol(line string, runeOffset int, tabstop int) int {
 	}
 	visual := 0
 	rawCol := 0
-	state := -1
-	remainder := line
-	for len(remainder) > 0 {
-		var cluster string
-		var width uint8
-		cluster, remainder, width, state = graphemecluster.StepString(remainder, state)
-		if cluster == "" {
-			break
-		}
+	for _, cell := range line {
 		rawCol++
-		if cluster == "\t" {
+		if cell.Ch == '\t' {
 			pad := tabstop - (visual % tabstop)
 			if pad <= 0 {
 				pad = tabstop
@@ -96,10 +88,7 @@ func visualToRawCol(line string, runeOffset int, tabstop int) int {
 			visual += pad
 			continue
 		}
-		// graphemecluster.StringWidth reports 0 for combining-only
-		// clusters; treat as zero-width without advancing the visual
-		// cursor but still consuming a rune column.
-		visual += int(width)
+		visual += cellWidth(cell)
 		if visual > runeOffset {
 			return rawCol
 		}
@@ -114,7 +103,7 @@ func visualToRawCol(line string, runeOffset int, tabstop int) int {
 // expand to the next tabstop multiple; combining-only clusters
 // contribute zero visual cells but still consume one raw column. Out
 // of range rawCol values are clamped to the line's visual width.
-func RawToVisualCol(line string, rawCol, tabstop int) int {
+func RawToVisualCol(line []term.Cell, rawCol, tabstop int) int {
 	if tabstop <= 0 {
 		tabstop = 1
 	}
@@ -123,25 +112,39 @@ func RawToVisualCol(line string, rawCol, tabstop int) int {
 	}
 	visual := 0
 	raw := 0
-	state := -1
-	remainder := line
-	for len(remainder) > 0 && raw < rawCol {
-		var cluster string
-		var width uint8
-		cluster, remainder, width, state = graphemecluster.StepString(remainder, state)
-		if cluster == "" {
+	for _, cell := range line {
+		if raw >= rawCol {
 			break
 		}
-		if cluster == "\t" {
+		if cell.Ch == '\t' {
 			pad := tabstop - (visual % tabstop)
 			if pad <= 0 {
 				pad = tabstop
 			}
 			visual += pad
 		} else {
-			visual += int(width)
+			visual += cellWidth(cell)
 		}
 		raw++
 	}
 	return visual
+}
+
+func cellWidth(cell term.Cell) int {
+	width := int(cell.Width)
+	if width < 1 {
+		return 1
+	}
+	return width
+}
+
+func lineRuneLen(line []term.Cell) int {
+	n := 0
+	for _, cell := range line {
+		n++
+		if cell.Combining != nil {
+			n += len(*cell.Combining)
+		}
+	}
+	return n
 }

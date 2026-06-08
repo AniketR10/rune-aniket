@@ -75,12 +75,12 @@ func drawLocation(
 			continue
 		}
 		startRaw, endRaw := lineCellRange(loc, fileLine, fromY, toY)
-		lineText := ""
+		var lineCells []term.Cell
 		if fileLine >= 0 && fileLine < len(probe.FileLines) {
-			lineText = probe.FileLines[fileLine]
+			lineCells = probe.FileLines[fileLine]
 		}
-		startCol := vteprobe.RawToVisualCol(lineText, startRaw, probe.Tabstop)
-		endCol := vteprobe.RawToVisualCol(lineText, endRaw, probe.Tabstop)
+		startCol := vteprobe.RawToVisualCol(lineCells, startRaw, probe.Tabstop)
+		endCol := vteprobe.RawToVisualCol(lineCells, endRaw, probe.Tabstop)
 		segStart := rm.WrapOffset
 		segEnd := segStart + bodyWidth
 		if startCol < segStart {

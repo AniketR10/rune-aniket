@@ -79,7 +79,7 @@ func (c *fakeComponent) SnapshotInto(dst [][]term.Cell) (vte.Snapshot, error) {
 }
 
 // handlerForBufferTest builds an editorHandler around buf the way
-// newHandler does for the parts relevant to line snapshots and probe
+// newHandler does for the parts relevant to cell snapshots and probe
 // refresh: it seeds the snapshot, subscribes to buffer edits, installs a
 // real probe, and points the component at a fake snapshotter the caller
 // drives. The full newHandler is not used because it spawns a PTY-backed
@@ -94,8 +94,8 @@ func handlerForBufferTest(
 		probe:     vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
 		component: comp,
 	}
-	h.snapshotBufferLines()
-	h.bufSub = &bufLineWatcher{h: h}
+	h.snapshotBufferCells()
+	h.bufSub = &bufCellWatcher{h: h}
 	buf.Subscribe(h.bufSub)
 	tb.Cleanup(func() { buf.Unsubscribe(h.bufSub) })
 	return h, comp
@@ -120,11 +120,18 @@ func gutterGrid(lines []string, width int) [][]term.Cell {
 	return cells
 }
 
-// TestBufferLinesFollowsBufferNotDisk proves the lines the probe sees
-// come from the in-memory cell.Buffer mirror, never from disk. Mutating
-// the on-disk file without touching h.buf must not change the lines;
-// editing h.buf must.
-func TestBufferLinesFollowsBufferNotDisk(t *testing.T) {
+func bufferCellLinesForTest(cells [][]term.Cell) []string {
+	if len(cells) == 0 {
+		return nil
+	}
+	return strings.Split(term.CellsToString(cells), "\n")
+}
+
+// TestBufferCellsFollowsBufferNotDisk proves the file cells the probe
+// sees come from the in-memory cell.Buffer mirror, never from disk.
+// Mutating the on-disk file without touching h.buf must not change the
+// cells; editing h.buf must.
+func TestBufferCellsFollowsBufferNotDisk(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -135,12 +142,12 @@ func TestBufferLinesFollowsBufferNotDisk(t *testing.T) {
 	buf := bufferOf(t, "foo\nbar\nbaz\n")
 	h, _ := handlerForBufferTest(t, buf)
 
-	// Lines reflect the buffer, not the diverged disk content.
-	assert.Equal(t, []string{"foo", "bar", "baz"}, h.bufferLines())
+	// Cells reflect the buffer, not the diverged disk content.
+	assert.Equal(t, []string{"foo", "bar", "baz"}, bufferCellLinesForTest(h.bufferCells()))
 
 	// Mutate disk again without touching the buffer: lines are stable.
 	require.NoError(t, os.WriteFile(path, []byte("OTHER\n"), 0o600))
-	assert.Equal(t, []string{"foo", "bar", "baz"}, h.bufferLines())
+	assert.Equal(t, []string{"foo", "bar", "baz"}, bufferCellLinesForTest(h.bufferCells()))
 
 	// Edit the buffer: the version advances and lines now follow it.
 	beforeV := buf.Version()
@@ -148,28 +155,64 @@ func TestBufferLinesFollowsBufferNotDisk(t *testing.T) {
 		term.Coordinates{X: 0, Y: 1}, term.Coordinates{X: 3, Y: 1}, "BAR")
 	require.NotEqual(t, beforeV, buf.Version(),
 		"editing the buffer must advance its Version")
-	assert.Equal(t, []string{"foo", "BAR", "baz"}, h.bufferLines())
+	assert.Equal(t, []string{"foo", "BAR", "baz"}, bufferCellLinesForTest(h.bufferCells()))
 }
 
-// TestBufferLinesSnapshotStableBetweenEdits verifies repeated reads
+// TestBufferCellsSnapshotStableBetweenEdits verifies repeated reads
 // return the same snapshot while the buffer is unchanged, and a fresh
 // snapshot once it is edited.
-func TestBufferLinesSnapshotStableBetweenEdits(t *testing.T) {
+func TestBufferCellsSnapshotStableBetweenEdits(t *testing.T) {
 	t.Parallel()
 
 	buf := bufferOf(t, "foo\nbar\n")
 	h, _ := handlerForBufferTest(t, buf)
 
-	first := h.bufferLines()
-	again := h.bufferLines()
+	first := h.bufferCells()
+	again := h.bufferCells()
 	// No edit -> same backing slice (no re-split, no re-store).
-	assert.Equal(t, &first[0], &again[0],
+	assert.Equal(t, &first[0][0], &again[0][0],
 		"unchanged buffer must reuse the cached snapshot")
 
 	buf.Edit(context.Background(),
 		term.Coordinates{X: 0, Y: 0}, term.Coordinates{X: 3, Y: 0}, "FOO")
-	updated := h.bufferLines()
-	assert.Equal(t, []string{"FOO", "bar"}, updated)
+	updated := h.bufferCells()
+	assert.Equal(t, []string{"FOO", "bar"}, bufferCellLinesForTest(updated))
+}
+
+func TestBufferCellsReuseRetiredProbeSnapshot(t *testing.T) {
+	t.Parallel()
+
+	buf := bufferOf(t, "foo\nbar\n")
+	h, comp := handlerForBufferTest(t, buf)
+	comp.cells = gutterGrid([]string{" 1 foo", " 2 bar"}, 30)
+	comp.cursor = term.Coordinates{X: 3, Y: 0}
+
+	h.refreshProbe()
+	firstProbe := h.lastProbe.Load()
+	require.NotNil(t, firstProbe)
+	firstPublished := firstProbe.FileLines
+
+	comp.cells = gutterGrid([]string{" 1 FOO", " 2 bar"}, 30)
+	buf.Edit(context.Background(),
+		term.Coordinates{X: 0, Y: 0}, term.Coordinates{X: 3, Y: 0}, "FOO")
+	secondProbe := h.lastProbe.Load()
+	require.NotNil(t, secondProbe)
+	secondPublished := secondProbe.FileLines
+
+	comp.cells = gutterGrid([]string{" 1 FOO", " 2 BAR"}, 30)
+	buf.Edit(context.Background(),
+		term.Coordinates{X: 0, Y: 1}, term.Coordinates{X: 3, Y: 1}, "BAR")
+	thirdProbe := h.lastProbe.Load()
+	require.NotNil(t, thirdProbe)
+
+	assert.Equal(t, []string{"FOO", "BAR"}, bufferCellLinesForTest(firstPublished),
+		"the retired first snapshot storage may be recycled")
+	assert.Equal(t, []string{"FOO", "bar"}, bufferCellLinesForTest(secondPublished),
+		"the second snapshot stays immutable while it is current")
+	assert.True(t, cellMatricesAlias(firstPublished, thirdProbe.FileLines),
+		"retired probe cell storage should be recycled for later snapshots")
+	assert.False(t, cellMatricesAlias(secondPublished, thirdProbe.FileLines),
+		"currently published probe cells must not be overwritten")
 }
 
 // TestRefreshProbeFollowsBufferAcrossDiskMutation drives the real
@@ -243,7 +286,7 @@ func TestRefreshProbeKeepsLastResultOnSnapshotError(t *testing.T) {
 }
 
 // BenchmarkRefreshProbe measures the steady-state cost of one
-// refreshProbe on the exo handler: a component snapshot, the buffer-line
+// refreshProbe on the exo handler: a component snapshot, the buffer-cell
 // load, and the vteprobe alignment over a realistic gutter-rendered
 // screen. The fixture is built once outside the timing loop and the
 // probe slab is reused across calls, mirroring how refreshProbe runs on
@@ -272,5 +315,53 @@ func BenchmarkRefreshProbe(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		h.refreshProbe()
+	}
+}
+
+// BenchmarkSnapshotBufferCells measures the per-edit cost of
+// recomputing the cell snapshot, which runs on the buffer-owning
+// goroutine on every edit.
+func BenchmarkSnapshotBufferCells(b *testing.B) {
+	const lines = 48
+
+	var content strings.Builder
+	for i := range lines {
+		fmt.Fprintf(&content, "x%d := compute(%d) + offset\n", i, i)
+	}
+	buf := bufferOf(b, content.String())
+	h, _ := handlerForBufferTest(b, buf)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		h.snapshotBufferCells()
+	}
+}
+
+// TestSnapshotFileCellsMatchesViewSplit pins the line shape the probe
+// receives: copying cells straight from the buffer rows must preserve the
+// previous logical line shape, including trailing newline behavior.
+func TestSnapshotFileCellsMatchesViewSplit(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{"trailing newline", "foo\nbar\nbaz\n", []string{"foo", "bar", "baz"}},
+		{"no trailing newline", "foo\nbar", []string{"foo", "bar"}},
+		{"single line newline", "foo\n", []string{"foo"}},
+		{"interior blank", "foo\n\nbar\n", []string{"foo", "", "bar"}},
+		{"trailing blank line", "a\n\n", []string{"a", ""}},
+		{"empty", "", nil},
+		{"lone newline", "\n", []string{""}},
+		{"single char", "x", []string{"x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			buf := bufferOf(t, tc.content)
+			assert.Equal(t, tc.want, bufferCellLinesForTest(snapshotFileCells(buf.View().RawCells())))
+		})
 	}
 }

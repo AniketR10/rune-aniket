@@ -57,11 +57,6 @@ func (r *extractedRow) runeColAt(visualX int) int {
 	return r.runeColMap[visualX]
 }
 
-// text returns the rendered row as a string, useful for regex matching.
-func (r *extractedRow) text() string {
-	return string(r.runes)
-}
-
 // extractRows extracts each row of the rendered cell grid into an
 // extractedRow, trimming trailing space-padded cells while preserving
 // columns that contain real content. The input is the raw cell grid

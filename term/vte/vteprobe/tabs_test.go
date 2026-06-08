@@ -76,7 +76,7 @@ func TestVisualToRawCol(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := visualToRawCol(tt.line, tt.runeOffset, tt.tabstop)
+			got := visualToRawColCells(drawRow(tt.line, nil), tt.runeOffset, tt.tabstop)
 			assert.Equal(t, tt.want, got)
 		})
 	}

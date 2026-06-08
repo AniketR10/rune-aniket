@@ -23,6 +23,8 @@
 
 package vteprobe
 
+import "github.com/unstablebuild/rune-go-sdk/term"
+
 // wrapInfo augments an alignment with per-row metadata about soft-wrap
 // continuations and fold placeholders.
 //
@@ -88,7 +90,7 @@ func detectWrap(
 	top int,
 	gutterWidth int,
 	a alignment,
-	lines []string,
+	lines [][]term.Cell,
 	slab *Slab,
 ) wrapInfo {
 	totalRows := len(rows)

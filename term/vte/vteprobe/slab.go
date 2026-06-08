@@ -88,7 +88,7 @@ func (s *Slab) reset() {
 // not retain them across Infer calls. tab expansion writes into the
 // bump arena so a steady-state caller that reuses the slab performs no
 // allocation once the arena is large enough.
-func (s *Slab) expandLinesFor(lines []string, tabstop int) [][]rune {
+func (s *Slab) expandLinesFor(lines [][]term.Cell, tabstop int) [][]rune {
 	if s.memoTabstop == tabstop && len(s.expanded) == len(lines) {
 		return s.expanded
 	}
@@ -102,26 +102,31 @@ func (s *Slab) expandLinesFor(lines []string, tabstop int) [][]rune {
 		s.expanded = make([][]rune, len(lines))
 	}
 	for i, ln := range lines {
-		s.expanded[i] = s.expandInto(ln, tabstop)
+		s.expanded[i] = s.expandCellsInto(ln, tabstop)
 	}
 	s.memoTabstop = tabstop
 	return s.expanded
 }
 
-// expandInto tab-expands one line into the bump arena and returns the
-// sub-slice holding it. The slice aliases the arena, so it stays valid
-// only while the arena is not reset or grown past it; within a single
-// expandLinesFor pass the arena only grows by appends, so earlier
+// expandCellsInto tab-expands one line into the bump arena and returns
+// the sub-slice holding it. The slice aliases the arena, so it stays
+// valid only while the arena is not reset or grown past it; within a
+// single expandLinesFor pass the arena only grows by appends, so earlier
 // slices remain valid for the duration of the call.
-func (s *Slab) expandInto(line string, tabstop int) []rune {
+func (s *Slab) expandCellsInto(line []term.Cell, tabstop int) []rune {
 	if tabstop <= 0 {
 		tabstop = 1
 	}
 	start := s.used
 	col := 0
-	for _, r := range line {
-		if r != '\t' {
-			s.runes = appendRune(s.runes, &s.used, r)
+	for _, cell := range line {
+		if cell.Ch != '\t' {
+			s.runes = appendRune(s.runes, &s.used, cell.Ch)
+			if cell.Combining != nil {
+				for _, comb := range *cell.Combining {
+					s.runes = appendRune(s.runes, &s.used, comb)
+				}
+			}
 			col++
 			continue
 		}

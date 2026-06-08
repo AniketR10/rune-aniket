@@ -84,7 +84,7 @@ func TestDetectChrome(t *testing.T) {
 			makeRow("b"),
 			makeRow("c"),
 		}
-		top, bot := detectChrome(rows, []string{"a", "b", "c"})
+		top, bot := detectChrome(rows, cellLines([]string{"a", "b", "c"}))
 		assert.Equal(t, 0, top)
 		assert.Equal(t, 2, bot)
 	})

@@ -26,6 +26,7 @@ package exoeditor
 import (
 	"context"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,6 +43,10 @@ func locationStoreForTest(t *testing.T) *text.LocationStore {
 
 func sliceList(locs []textapi.Location) text.LocationList {
 	return text.LocationSlice(locs)
+}
+
+func fileCellsForTest(lines ...string) [][]term.Cell {
+	return term.StringToCells(strings.Join(lines, "\n"))
 }
 
 // recordingWriter captures every UnionAttributes call so a test can
@@ -93,12 +98,12 @@ func fakeProbeUnwrapped() *vteprobe.Result {
 			{FileLine: 4, Folded: true},
 			{FileLine: 0},
 		},
-		FileLines: []string{
+		FileLines: fileCellsForTest(
 			"abcdefghij",
 			"abcdefghij",
 			"abcdefghij",
 			"abcdefghij",
-		},
+		),
 		Tabstop: 4,
 	}
 }
@@ -156,7 +161,7 @@ func TestDrawLocations(t *testing.T) {
 					{FileLine: 1},
 					{FileLine: 1, WrapOffset: 5},
 				},
-				FileLines: []string{"abcdefghij"},
+				FileLines: fileCellsForTest("abcdefghij"),
 				Tabstop:   4,
 			},
 			locs: []textapi.Location{{
@@ -214,7 +219,7 @@ func TestDrawLocationsExpandsTabs(t *testing.T) {
 		Rows: []vteprobe.RowMapping{
 			{FileLine: 1},
 		},
-		FileLines: []string{"\tdb              document.Service"},
+		FileLines: fileCellsForTest("\tdb              document.Service"),
 		Tabstop:   8,
 	}
 	highlight := term.Attributes{Attrs: term.AttrUnderline}

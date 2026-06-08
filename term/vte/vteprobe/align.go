@@ -23,9 +23,7 @@
 
 package vteprobe
 
-import (
-	"strings"
-)
+import "github.com/unstablebuild/rune-go-sdk/term"
 
 // alignment is the result of mapping rendered rows in the content band
 // back to file lines.
@@ -54,8 +52,9 @@ func alignByGutter(
 	rows []extractedRow,
 	top, bot int,
 	gut gutter,
-	lines []string,
+	lines [][]term.Cell,
 	tabstopHints []int,
+	slab *Slab,
 ) alignment {
 	band := bot - top + 1
 	if band <= 0 || len(gut.lineNo) != band {
@@ -89,7 +88,7 @@ func alignByGutter(
 	// Score each tabstop and pick the best.
 	bestTab, bestScore := tabstopHints[0], -1.0
 	for _, ts := range tabstopHints {
-		score := scoreAlignment(rows, top, gut.width, rowToLine, lines, ts)
+		score := scoreAlignment(rows, top, gut.width, rowToLine, lines, ts, slab)
 		if score > bestScore {
 			bestScore = score
 			bestTab = ts
@@ -120,7 +119,7 @@ func alignByContentWithGutter(
 	rows []extractedRow,
 	top, bot int,
 	gutterWidth int,
-	lines []string,
+	lines [][]term.Cell,
 	tabstopHints []int,
 	slab *Slab,
 ) alignment {
@@ -167,7 +166,7 @@ func alignWithWrap(
 	rows []extractedRow,
 	top, bot int,
 	gutterWidth int,
-	lines []string,
+	lines [][]term.Cell,
 	tabstop int,
 	slab *Slab,
 ) alignment {
@@ -346,7 +345,7 @@ func alignByContentForTabstop(
 	rows []extractedRow,
 	top, bot int,
 	gutterWidth int,
-	lines []string,
+	lines [][]term.Cell,
 	tabstop int,
 	slab *Slab,
 ) alignment {
@@ -439,14 +438,15 @@ func scoreAlignment(
 	top int,
 	gutterWidth int,
 	rowToLine []int,
-	lines []string,
+	lines [][]term.Cell,
 	tabstop int,
+	slab *Slab,
 ) float64 {
 	considered, matched := 0, 0
+	expanded := slab.expandLinesFor(lines, tabstop)
 	for i, line := range rowToLine {
 		row := rows[top+i]
-		body := stripGutter(row.runes, gutterWidth)
-		bodyStr := strings.TrimRight(string(body), " ")
+		body := trimRightSpace(stripGutter(row.runes, gutterWidth))
 		if line < 1 || line > len(lines) {
 			// Predicted past EOF. Genuine below-EOF filler (blank rows,
 			// or single-glyph markers like vim's "~") is ignored. But a
@@ -455,17 +455,16 @@ func scoreAlignment(
 			// evidence the anchor is wrong — so count it as a mismatch.
 			// Without this, anchoring on the last file line scores a
 			// vacuous 1.0 from its single in-bounds row.
-			if !isFillerBody(bodyStr) {
+			if !isFillerBodyRunes(body) {
 				considered++
 			}
 			continue
 		}
-		if bodyStr == "" {
+		if len(body) == 0 {
 			continue
 		}
-		expected := expandTabs(lines[line-1], tabstop)
 		considered++
-		if similarity(bodyStr, expected) >= 0.85 {
+		if runePrefixRatioMaxLen(body, expanded[line-1]) >= 0.85 {
 			matched++
 		}
 	}
@@ -487,33 +486,8 @@ func stripGutter(runes []rune, gutterWidth int) []rune {
 	return runes[gutterWidth:]
 }
 
-// isFillerBody reports whether a trimmed row body is editor filler
+// isFillerBodyRunes reports whether a trimmed row body is editor filler
 // rendered below the end of the file rather than real file content.
-// Editors mark the empty region past EOF with blank rows or a short
-// run of a single non-alphanumeric marker glyph (vim's "~", or "+"),
-// never with multi-character source text. Treating such rows as
-// neutral (and any other non-empty past-EOF row as a mismatch) stops
-// an anchor near EOF from scoring a vacuous match off its lone
-// in-bounds row.
-func isFillerBody(body string) bool {
-	if body == "" {
-		return true
-	}
-	r := []rune(body)
-	if len(r) > 2 {
-		return false
-	}
-	for _, c := range r {
-		switch c {
-		case '~', '+', '-', '|':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// isFillerBodyRunes is isFillerBody for an already-trimmed rune slice.
 func isFillerBodyRunes(body []rune) bool {
 	if len(body) == 0 {
 		return true
@@ -579,44 +553,4 @@ func trimmedLen(r []rune) int {
 		n--
 	}
 	return n
-}
-
-// similarity returns a coarse ratio in [0, 1] for how well rendered
-// matches expected. We use prefix matching plus length ratio rather
-// than full Levenshtein: editors rarely rewrite the middle of a line,
-// so prefix similarity is a cheap and effective signal.
-func similarity(rendered, expected string) float64 {
-	if rendered == "" && expected == "" {
-		return 1
-	}
-	rendered = strings.TrimRight(rendered, " ")
-	expected = strings.TrimRight(expected, " ")
-	if rendered == expected {
-		return 1
-	}
-	if rendered == "" || expected == "" {
-		return 0
-	}
-	// Compare in runes for stable behavior with wide chars.
-	rr := []rune(rendered)
-	er := []rune(expected)
-	common := 0
-	n := len(rr)
-	if len(er) < n {
-		n = len(er)
-	}
-	for i := 0; i < n; i++ {
-		if rr[i] != er[i] {
-			break
-		}
-		common++
-	}
-	maxLen := len(rr)
-	if len(er) > maxLen {
-		maxLen = len(er)
-	}
-	if maxLen == 0 {
-		return 1
-	}
-	return float64(common) / float64(maxLen)
 }
