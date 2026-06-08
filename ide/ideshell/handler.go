@@ -321,6 +321,14 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return h.handleSearch(ev)
 	}
 
+	// <c-c> is the shell interrupt key, so it must reach the inner
+	// repl before modal editors can consume it as an edit command.
+	if ev.Mod == term.ModCtrl && ev.Ch == 'c' {
+		exit, handled = h.inner.Handle(ev)
+		h.clearEdit()
+		return exit, handled
+	}
+
 	// Plain <enter> submits the current input line.
 	if ev.Mod == 0 && ev.Key == term.KeyEnter {
 		h.submitEdit()

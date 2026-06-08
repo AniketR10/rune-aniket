@@ -24,9 +24,11 @@
 package ideshell
 
 import (
-	"testing"
-
 	"context"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -545,6 +547,78 @@ func TestTabNeverReachesEditor(t *testing.T) {
 	assert.Equal(t, "foo", h.editBuf.String())
 	assert.True(t, h.searching)
 	h.cancelSearch()
+}
+
+func TestCtrlCCancelsRunningCommandBeforeEditor(t *testing.T) {
+	var mu sync.Mutex
+	var ticks []func()
+	sched := func(fn func()) bool {
+		mu.Lock()
+		ticks = append(ticks, fn)
+		mu.Unlock()
+		return true
+	}
+	drain := func() {
+		for {
+			mu.Lock()
+			if len(ticks) == 0 {
+				mu.Unlock()
+				return
+			}
+			fn := ticks[0]
+			ticks = ticks[1:]
+			mu.Unlock()
+			fn()
+		}
+	}
+
+	cmd := &blockingCmd{
+		line:    "running-marker",
+		release: make(chan struct{}),
+		closed:  make(chan struct{}),
+	}
+	var seen []term.Event
+	h, registry := New(
+		sched,
+		term.NopInterrupter(),
+		stubEditor{seen: &seen},
+		Config{MaxHistory: 100},
+	)
+	t.Cleanup(func() {
+		select {
+		case <-cmd.release:
+		default:
+			close(cmd.release)
+		}
+		_ = h.Close()
+	})
+	registry.Register("block", "blocks", cmd)
+
+	feedRunes(h, "block")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	require.Eventually(t, func() bool {
+		drain()
+		return h.shim.running()
+	}, time.Second, 5*time.Millisecond, "command should be in-flight")
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
+	require.True(t, handled, "<c-c> must be handled")
+
+	require.Eventually(t, func() bool {
+		drain()
+		select {
+		case <-cmd.closed:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond, "<c-c> should cancel the command")
+	assert.False(t, h.shim.running(), "command should no longer be in-flight")
+	assert.Equal(t, "", h.editBuf.String(), "<c-c> should not be typed into the editor")
+	for _, ev := range seen {
+		require.False(t, ev.Mod == term.ModCtrl && ev.Ch == 'c',
+			"editor must never receive <c-c>")
+	}
 }
 
 // TestAcceptHistoryMatchReplacesEditorBuffer verifies that choosing a
