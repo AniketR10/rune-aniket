@@ -147,8 +147,7 @@ func (s *auditService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return s.inner.Models()
 }
 
-// GetModel delegates to the inner service.
-func (s *auditService) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (s *auditService) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	return s.inner.GetModel(ctx, model)
 }
 

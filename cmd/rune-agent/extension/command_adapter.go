@@ -322,7 +322,7 @@ func (a *commandAdapter) handleModel(
 	ctx context.Context, args []string,
 ) (dialoguetui.CommandResult, error) {
 	if len(args) == 0 {
-		md, err := markdown.New(a.currentModel)
+		md, err := markdown.New(a.resolvedModelLabel(ctx))
 		if err != nil {
 			return dialoguetui.CommandResult{}, err
 		}
@@ -349,6 +349,16 @@ func (a *commandAdapter) handleModel(
 	return dialoguetui.CommandResult{
 		Display: iterator.FromSlice([]component.Responsive{md}),
 	}, nil
+}
+
+// resolvedModelLabel returns the qualified provider/model the session
+// currently uses. currentModel may be a router alias (e.g. "default"),
+// so it is resolved through the service rather than displayed verbatim.
+func (a *commandAdapter) resolvedModelLabel(ctx context.Context) string {
+	if entry, err := llmarg.Resolve(ctx, a.llmSvc, a.currentModel); err == nil {
+		return entry.Provider + "/" + entry.Name
+	}
+	return a.currentModel
 }
 
 // validEffortLevels lists the allowed reasoning effort values.

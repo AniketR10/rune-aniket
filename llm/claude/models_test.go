@@ -31,6 +31,10 @@ import (
 	"unstable.build/go-tui/llm/anthropic"
 )
 
+func TestFlagshipModelMirrorsAnthropic(t *testing.T) {
+	assert.Equal(t, anthropic.FlagshipModel(), FlagshipModel())
+}
+
 func TestModelEntriesStampClaudeProvider(t *testing.T) {
 	entries := ModelEntries()
 	require.NotEmpty(t, entries)

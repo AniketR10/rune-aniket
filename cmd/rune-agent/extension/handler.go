@@ -96,6 +96,15 @@ const (
 	commandLog       = "chatlog"
 )
 
+// Router-side model aliases the agent resolves to for its own concepts.
+// Each is managed through `models alias` and falls back to `default`
+// when unset.
+const (
+	queryModelAlias   = "query"
+	compactModelAlias = "compact"
+	dreamModelAlias   = "dream"
+)
+
 var (
 	defaultComponentCfg = dialoguetui.ComponentConfig{
 		MessagesRowConfig: component.SpanConfig{
@@ -230,7 +239,6 @@ func defaultMarkdownConfig() *markdown.Config {
 func newCommandEventHandler(
 	ctx context.Context, ed textapi.Editor, w *extensionapi.Workspace,
 	pconfig config.Config,
-	defaultModel string,
 ) (ret *aiEditorHandler, err error) {
 	fs := w.FileSystem(ctx)
 	executor := w.Executor(ctx)
@@ -350,13 +358,9 @@ func newCommandEventHandler(
 	ret.lsp = lsp
 	ret.parser = parser
 	ret.memoryDataPath = filepath.Join(w.DataDir(ctx), "memory")
-	ret.defaultModel, err = pconfig.GetString("default_model")
-	if err != nil {
-		if err != config.ErrNotFound {
-			slog.Warn("get 'model' from config", "error", err)
-		}
-		ret.defaultModel = defaultModel
-	}
+	// Pass the alias name through unresolved; the router resolves it per
+	// request so a `models alias` change takes effect without a restart.
+	ret.defaultModel = llmapi.DefaultModel
 	if v, err := pconfig.GetInt("max_tool_output_bytes"); err == nil {
 		ret.maxToolOutputBytes = v
 	} else if err != nil && !errors.Is(err, config.ErrNotFound) {
@@ -391,18 +395,6 @@ func newCommandEventHandler(
 			"hooks: invalid config: %v", hookErr)
 	}
 	ret.hookRunner = hooks.NewRunner(hooksCfg, executor, noti, cwd.Path())
-
-	if entry, err := llmarg.Resolve(ctx, ret.llmSvc, ret.defaultModel); err != nil {
-		slog.Warn("default model not found in registry, falling back",
-			"requested", ret.defaultModel, "error", err)
-		fallback := firstModel(ret.llmSvc)
-		if fallback != "" {
-			ret.defaultModel = fallback
-		}
-	} else {
-		// Persist the qualified form so the strict router can find it.
-		ret.defaultModel = entry.Provider + "/" + entry.Name
-	}
 
 	ret.cfg = defaultComponentCfg
 	ret.cfg.MarkdownConfig.Parser = w.Parser(ctx)
@@ -541,44 +533,9 @@ func newCommandEventHandler(
 		ret.contextHintCfg.labelAttr.Attrs |= term.AttrDim
 	}
 
-	ret.queryDefaultModel, err = pconfig.GetString("query_default_model")
-	if err != nil {
-		if err != config.ErrNotFound {
-			slog.Warn("get 'query_default_model' from config", "error", err)
-		}
-		ret.queryDefaultModel = defaultModel
-	}
-	if entry, err := llmarg.Resolve(ctx, ret.llmSvc, ret.queryDefaultModel); err != nil {
-		first := firstModel(ret.llmSvc)
-		if first == "" {
-			return nil, fmt.Errorf("query default model %q not found and registry is empty: %w",
-				ret.queryDefaultModel, err)
-		}
-		_, _ = noti.Notify(browserapi.LevelWarn,
-			"query default model %q not found in registry, falling back to %q",
-			ret.queryDefaultModel, first)
-		ret.queryDefaultModel = first
-	} else {
-		ret.queryDefaultModel = entry.Provider + "/" + entry.Name
-	}
+	ret.queryDefaultModel = queryModelAlias
 
-	ret.compactModel, err = pconfig.GetString("compact_model")
-	if err != nil {
-		if err != config.ErrNotFound {
-			slog.Warn("get 'compact_model' from config", "error", err)
-		}
-		// empty string means "use the chat model" — no separate service needed.
-	}
-	if ret.compactModel != "" {
-		if entry, err := llmarg.Resolve(ctx, ret.llmSvc, ret.compactModel); err != nil {
-			_, _ = noti.Notify(browserapi.LevelWarn,
-				"compact model %q not found in registry, compaction will use the chat model (%v)",
-				ret.compactModel, err)
-			ret.compactModel = ""
-		} else {
-			ret.compactModel = entry.Provider + "/" + entry.Name
-		}
-	}
+	ret.compactModel = compactModelAlias
 
 	ret.clip = text.NewSystemClipboard()
 
@@ -617,17 +574,14 @@ func newCommandEventHandler(
 
 	ret.dialogueStore = dialogueStore
 
-	if ret.compactModel != "" {
-		compactSvc, _, cerr := ret.modelService(ctx, ret.compactModel)
-		err = cerr
+	if compactSvc, _, cerr := ret.modelService(ctx, ret.compactModel); cerr != nil {
+		_, _ = noti.Notify(browserapi.LevelWarn,
+			"failed to create backend for compact model (%v), compaction will use the chat model",
+			cerr)
+		ret.compactModel = ""
+		ret.compactSvc = nil
+	} else {
 		ret.compactSvc = compactSvc
-		if err != nil {
-			_, _ = noti.Notify(browserapi.LevelWarn,
-				"failed to create backend for compact model %q (%v), compaction will use the chat model",
-				ret.compactModel, err)
-			ret.compactModel = ""
-			ret.compactSvc = nil
-		}
 	}
 
 	queryService, queryEntry, err := ret.modelService(ctx, ret.queryDefaultModel)
@@ -1009,6 +963,7 @@ func (h *aiEditorHandler) newAgentShell() textapi.REPLHandler {
 		agentshell.WithHistorySystemPrompt(true),
 		agentshell.WithEffort(h.getDefaultEffort, h.setDefaultEffort),
 		agentshell.WithMaxTokens(h.getDefaultMaxTokens, h.setDefaultMaxTokens),
+		agentshell.WithDreamModel(dreamModelAlias),
 	}
 	if h.auditStore != nil {
 		opts = append(opts, agentshell.WithAuditStore(h.auditStore))

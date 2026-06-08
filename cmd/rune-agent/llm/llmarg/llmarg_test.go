@@ -46,16 +46,16 @@ type strictService struct {
 
 func (s *strictService) GetModel(
 	_ context.Context, m llmapi.ModelEntry,
-) (llmapi.ModelEntry, bool) {
+) (llmapi.ModelEntry, error) {
 	if m.Provider == "" {
-		return llmapi.ModelEntry{}, false
+		return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 	}
 	for _, e := range s.models {
 		if e.Name == m.Name && e.Provider == m.Provider {
-			return e, true
+			return e, nil
 		}
 	}
-	return llmapi.ModelEntry{}, false
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 func newStrictService(models ...llmapi.ModelEntry) *strictService {
@@ -140,4 +140,35 @@ func TestAvailable(t *testing.T) {
 	)
 	got := llmarg.Available(context.Background(), svc)
 	assert.Equal(t, "codex/gpt-5.5, openai/gpt-4o, openai/gpt-5.5", got)
+}
+
+// aliasService resolves the bare name "default" through GetModel,
+// mirroring how the host router exposes alias resolution. Any other
+// empty-provider name returns ErrModelNotFound.
+type aliasService struct {
+	*llmtest.Service
+	target llmapi.ModelEntry
+}
+
+func (s *aliasService) GetModel(
+	_ context.Context, m llmapi.ModelEntry,
+) (llmapi.ModelEntry, error) {
+	if m.Provider == "" && m.Name == "default" {
+		return s.target, nil
+	}
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
+}
+
+// TestResolve_BareAliasResolvesViaGetModel verifies a bare name that the
+// service resolves through GetModel (an alias) is returned directly,
+// without requiring a single-provider catalog match.
+func TestResolve_BareAliasResolvesViaGetModel(t *testing.T) {
+	target := llmapi.ModelEntry{Provider: "openai", Name: "gpt-5.5"}
+	svc := &aliasService{
+		Service: llmtest.New([]llmapi.ModelEntry{target}),
+		target:  target,
+	}
+	entry, err := llmarg.Resolve(context.Background(), svc, "default")
+	require.NoError(t, err)
+	assert.Equal(t, target, entry)
 }

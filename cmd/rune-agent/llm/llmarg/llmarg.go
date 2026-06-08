@@ -35,6 +35,7 @@ package llmarg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -49,12 +50,22 @@ func Resolve(
 	ctx context.Context, svc llmapi.Service, arg string,
 ) (llmapi.ModelEntry, error) {
 	if provider, name, ok := Split(arg); ok {
-		entry, found := svc.GetModel(ctx, llmapi.ModelEntry{Provider: provider, Name: name})
-		if !found {
-			return llmapi.ModelEntry{}, fmt.Errorf(
-				"model %q is not available. Available models: %s",
-				arg, available(ctx, svc))
+		entry, err := svc.GetModel(ctx, llmapi.ModelEntry{Provider: provider, Name: name})
+		if err != nil {
+			if errors.Is(err, llmapi.ErrModelNotFound) {
+				return llmapi.ModelEntry{}, fmt.Errorf(
+					"model %q is not available. Available models: %s",
+					arg, available(ctx, svc))
+			}
+			return llmapi.ModelEntry{}, err
 		}
+		return entry, nil
+	}
+	// A bare name may be a router-side alias (e.g. "default", "query")
+	// that the host resolves through GetModel with an empty Provider. A
+	// normal model name returns ErrModelNotFound and falls through to the
+	// single-provider catalog match below.
+	if entry, err := svc.GetModel(ctx, llmapi.ModelEntry{Name: arg}); err == nil {
 		return entry, nil
 	}
 	var matches []llmapi.ModelEntry

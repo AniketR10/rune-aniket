@@ -1152,14 +1152,14 @@ func (m *mockLLMService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.FromSlice([]llmapi.ModelEntry{{Name: "test", ContextWindow: 100000}})
 }
 
-func (m *mockLLMService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (m *mockLLMService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	if model.Name == "" {
 		model.Name = "test"
 	}
 	if model.ContextWindow == 0 {
 		model.ContextWindow = 100000
 	}
-	return model, true
+	return model, nil
 }
 
 func (m *mockLLMService) getCallCount() int {

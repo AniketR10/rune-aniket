@@ -432,13 +432,13 @@ func TestModelsFallsBackOnMissingClient(t *testing.T) {
 func TestGetModel(t *testing.T) {
 	svc := NewClient("test-key", listServer(t, modelsListBody))
 
-	got, ok := svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "gemini-2.5-pro"})
-	require.True(t, ok)
+	got, err := svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "gemini-2.5-pro"})
+	require.NoError(t, err)
 	assert.Equal(t, LLMProvider, got.Provider)
 	assert.Equal(t, 1048576, got.ContextWindow)
 
-	_, ok = svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "nonexistent"})
-	assert.False(t, ok)
+	_, err = svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "nonexistent"})
+	assert.ErrorIs(t, err, llmapi.ErrModelNotFound)
 }
 
 // TestGetModelFallsBackToStatic verifies GetModel resolves a known model
@@ -446,11 +446,11 @@ func TestGetModel(t *testing.T) {
 func TestGetModelFallsBackToStatic(t *testing.T) {
 	svc := NewClient("", Config{})
 
-	got, ok := svc.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_2_5_Pro})
-	require.True(t, ok)
+	got, err := svc.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_2_5_Pro})
+	require.NoError(t, err)
 	assert.Equal(t, LLMProvider, got.Provider)
 	assert.Positive(t, got.ContextWindow)
 
-	_, ok = svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "nonexistent"})
-	assert.False(t, ok)
+	_, err = svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "nonexistent"})
+	assert.ErrorIs(t, err, llmapi.ErrModelNotFound)
 }

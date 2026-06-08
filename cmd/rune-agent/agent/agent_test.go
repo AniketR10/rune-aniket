@@ -3143,12 +3143,12 @@ func (m *mockService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.FromSlice(entries)
 }
 
-func (m *mockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (m *mockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.modelCatalog {
 		if e.Name == model.Name {
-			return e, true
+			return e, nil
 		}
 	}
 	if len(m.modelCatalog) == 0 {
@@ -3156,9 +3156,9 @@ func (m *mockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llma
 		if model.Name != "" {
 			entry.Name = model.Name
 		}
-		return entry, true
+		return entry, nil
 	}
-	return llmapi.ModelEntry{}, false
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 // defaultEntry constructs the synthetic ModelEntry that callers see when
@@ -3481,12 +3481,12 @@ func (m *streamResetMockService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.FromSlice([]llmapi.ModelEntry{{Name: "stream-reset", ContextWindow: 1_000_000}})
 }
 
-func (m *streamResetMockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (m *streamResetMockService) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	entry := llmapi.ModelEntry{Name: "stream-reset", ContextWindow: 1_000_000}
 	if model.Name != "" {
 		entry.Name = model.Name
 	}
-	return entry, true
+	return entry, nil
 }
 
 func stopResponse(chunks ...string) mockResponse {

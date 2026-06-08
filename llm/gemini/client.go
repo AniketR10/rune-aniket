@@ -248,7 +248,7 @@ func (c *client) liveModels() iterator.Iterator[llmapi.ModelEntry] {
 // GetModel looks up the canonical entry for the given model from the live
 // Gemini catalog, falling back to the static catalog when the live query
 // is unavailable (e.g. no working key during bootstrap).
-func (c *client) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (c *client) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	if c.initErr == nil {
 		for m, err := range c.genai.Models.All(ctx) {
 			if err != nil {
@@ -256,16 +256,16 @@ func (c *client) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.
 			}
 			entry, ok := modelEntryFromGenAI(m)
 			if ok && entry.Name == model.Name {
-				return entry, true
+				return entry, nil
 			}
 		}
 	}
 	for _, e := range ModelEntries() {
 		if e.Name == model.Name {
-			return e, true
+			return e, nil
 		}
 	}
-	return llmapi.ModelEntry{}, false
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 // Verify at compile time that client implements llmapi.Service.

@@ -227,12 +227,12 @@ func (s *Service) Models() iterator.Iterator[llmapi.ModelEntry] {
 }
 
 // GetModel satisfies llmapi.Service.
-func (s *Service) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (s *Service) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, m := range s.models {
 		if m.Name == model.Name {
-			return m, true
+			return m, nil
 		}
 	}
 	// When the catalog is empty, return a synthetic entry with a
@@ -243,9 +243,9 @@ func (s *Service) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.M
 		if out.ContextWindow == 0 {
 			out.ContextWindow = math.MaxInt
 		}
-		return out, true
+		return out, nil
 	}
-	return llmapi.ModelEntry{}, false
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 // errAfterIterator wraps an iterator and surfaces a final error from Err().

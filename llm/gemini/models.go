@@ -93,6 +93,11 @@ func ModelEntries() []llmapi.ModelEntry {
 	return out
 }
 
+// FlagshipModel returns the provider's top model identifier. It is
+// deterministic, unlike iterating ModelEntries() whose order is
+// map-random.
+func FlagshipModel() string { return Gemini_3_1_Pro_Preview }
+
 // supportedEfforts are the reasoning-effort levels that map onto a Gemini
 // thinking level. "none" and "xhigh"/"max" have no Gemini equivalent.
 var supportedEfforts = map[string]bool{

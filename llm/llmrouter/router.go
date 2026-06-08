@@ -125,6 +125,11 @@ type Router struct {
 	// `/models providers <p> add`). resolveAPIKey consults the active
 	// key here before falling back to the static configured key.
 	store *keyStore
+
+	// aliasStore persists named model aliases (e.g. "default", "query")
+	// that resolve to a "provider/name" target. resolveAlias consults it
+	// when a bare-name model entry is dispatched.
+	aliasStore *aliasStore
 }
 
 // localService is the minimal interface a cached llama.cpp service must
@@ -168,6 +173,7 @@ func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, e
 		hostedClients: make(map[hostedCacheKey]llmapi.Service),
 	}
 	r.store = newKeyStore(storage)
+	r.aliasStore = newAliasStore(storage)
 	r.newLocal = func(c llamacpp.Config) (localService, error) {
 		return llamacpp.NewService(c)
 	}
@@ -236,6 +242,13 @@ func (r *Router) CreateCompletion(
 	if closed {
 		return nil, ErrRouterClosed
 	}
+	if model.Provider == "" {
+		if resolved, ok, err := r.resolveAlias(ctx, model); err != nil {
+			return nil, err
+		} else if ok {
+			model = resolved
+		}
+	}
 	svc, err := r.resolve(ctx, model)
 	if err != nil {
 		return nil, err
@@ -251,7 +264,15 @@ func (r *Router) CountTokens(model llmapi.ModelEntry, messages []llmapi.Message)
 	if closed {
 		return 0, ErrRouterClosed
 	}
-	svc, err := r.resolve(context.Background(), model)
+	ctx := context.Background()
+	if model.Provider == "" {
+		if resolved, ok, err := r.resolveAlias(ctx, model); err != nil {
+			return 0, err
+		} else if ok {
+			model = resolved
+		}
+	}
+	svc, err := r.resolve(ctx, model)
 	if err != nil {
 		return 0, err
 	}
@@ -284,18 +305,24 @@ func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 }
 
 // GetModel implements llmapi.Service. Bare-name lookups (empty
-// Provider) return (zero, false) so name collisions across providers
-// cannot silently dispatch to the wrong backend.
-func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+// Provider) resolve through the alias store when the name is a known
+// alias; otherwise they return ErrModelNotFound so name collisions
+// across providers cannot silently dispatch to the wrong backend.
+func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	if model.Provider == "" {
-		return llmapi.ModelEntry{}, false
+		if resolved, ok, err := r.resolveAlias(ctx, model); err != nil {
+			return llmapi.ModelEntry{}, err
+		} else if ok {
+			return resolved, nil
+		}
+		return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 	}
 	it := r.Models()
 	defer func() { _ = it.Close() }()
 	for {
 		entry, ok := it.Next(ctx)
 		if !ok {
-			return llmapi.ModelEntry{}, false
+			return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 		}
 		if entry.Name != model.Name {
 			continue
@@ -303,7 +330,7 @@ func (r *Router) GetModel(ctx context.Context, model llmapi.ModelEntry) (llmapi.
 		if entry.Provider != model.Provider {
 			continue
 		}
-		return entry, true
+		return entry, nil
 	}
 }
 

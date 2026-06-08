@@ -153,9 +153,12 @@ func (s *Server) GetModel(
 	ctx context.Context, req *llmrpc.GetModelRequest,
 ) (*llmrpc.GetModelResponse, error) {
 	model := llmrpc.FromProtoModelEntry(req.GetModel())
-	entry, ok := s.svc.GetModel(ctx, model)
-	if !ok {
-		return &llmrpc.GetModelResponse{Found: false}, nil
+	entry, err := s.svc.GetModel(ctx, model)
+	if err != nil {
+		if errors.Is(err, llmapi.ErrModelNotFound) {
+			return &llmrpc.GetModelResponse{Found: false}, nil
+		}
+		return nil, err
 	}
 	return &llmrpc.GetModelResponse{
 		Model: llmrpc.ToProtoModelEntry(entry),

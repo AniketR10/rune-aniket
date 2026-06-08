@@ -147,8 +147,7 @@ type workspaceExtension struct{}
 func (e *workspaceExtension) ExtendWorkspace(
 	ctx context.Context, w *extensionapi.Workspace, cfg config.Config,
 ) error {
-	defaultModel, _ := cfg.GetString("default_model")
-	h, err := newCommandEventHandler(ctx, w.Editor(ctx), w, cfg, defaultModel)
+	h, err := newCommandEventHandler(ctx, w.Editor(ctx), w, cfg)
 	if err != nil {
 		return err
 	}

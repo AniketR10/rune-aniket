@@ -47,8 +47,8 @@ func (s *stubAuditService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.FromSlice[llmapi.ModelEntry](nil)
 }
 
-func (s *stubAuditService) GetModel(_ context.Context, m llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
-	return m, true
+func (s *stubAuditService) GetModel(_ context.Context, m llmapi.ModelEntry) (llmapi.ModelEntry, error) {
+	return m, nil
 }
 
 func testModel() llmapi.ModelEntry {

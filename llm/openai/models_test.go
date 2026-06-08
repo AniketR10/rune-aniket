@@ -30,6 +30,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestFlagshipModelInCatalog(t *testing.T) {
+	_, ok := AvailableModels()[FlagshipModel()]
+	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
+	assert.Equal(t, GPT5Dot5, FlagshipModel())
+}
+
 func TestIsReasoningModel(t *testing.T) {
 	tests := []struct {
 		model string

@@ -266,13 +266,13 @@ func (c *client) Models() iterator.Iterator[llmapi.ModelEntry] {
 }
 
 // GetModel scans the static model catalog for the given model name.
-func (c *client) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (c *client) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	for _, e := range ModelEntries() {
 		if e.Name == model.Name {
-			return e, true
+			return e, nil
 		}
 	}
-	return llmapi.ModelEntry{}, false
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 // isRetryableError reports whether err represents a transient Anthropic API error.

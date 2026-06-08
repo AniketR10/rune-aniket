@@ -152,6 +152,25 @@ var commandManual = textapi.CommandManual{
 				{Name: "delete", Summary: "Delete a locally cached GGUF model.", Synopsis: "<reference>"},
 			},
 		},
+		{
+			Name: "alias",
+			Summary: "Manage named model aliases. An alias is an arbitrary " +
+				"name you choose that resolves to a `provider/name` model " +
+				"and can be used anywhere a model is accepted, including the " +
+				"model name you pass when opening a chat. An unset alias " +
+				"falls back to `default`; an unset `default` resolves to " +
+				"the latest authenticated provider's flagship model.",
+			Synopsis: "(list|set|remove) [<args>]",
+			Commands: []textapi.CommandManual{
+				{Name: "list", Summary: "List aliases and the models they resolve to."},
+				{
+					Name:     "set",
+					Summary:  "Point an alias at a model. The bare form `alias <name> <provider/name>` also works.",
+					Synopsis: "<name> <provider/name>",
+				},
+				{Name: "remove", Summary: "Delete a named alias.", Synopsis: "<name>"},
+			},
+		},
 	},
 }
 
@@ -232,6 +251,7 @@ type Handler struct {
 
 	providers *providersHandler
 	local     *localHandler
+	alias     *aliasHandler
 }
 
 // New returns a Handler configured with cfg. It panics if any
@@ -275,6 +295,7 @@ func New(cfg Config) *Handler {
 			prompt:   cfg.PromptOpener,
 		}),
 		local: newLocalHandler(cfg.LocalRegistry),
+		alias: newAliasHandler(cfg.Router),
 	}
 }
 
@@ -293,6 +314,8 @@ func (h *Handler) HandleCommand(
 		return h.providers.HandleCommand(ctx, rest, pw)
 	case "local":
 		return h.local.HandleCommand(ctx, rest, pw)
+	case "alias":
+		return h.alias.HandleCommand(ctx, rest, pw)
 	case "help":
 		return markdownOutput(usageMarkdown(commandManual)), nil
 	default:
@@ -309,13 +332,15 @@ func (h *Handler) Complete(
 		if len(args) == 1 {
 			filter = args[0]
 		}
-		return iterator.FromSlice(filterNames([]string{"providers", "local", "help"}, filter)), nil
+		return iterator.FromSlice(filterNames([]string{"providers", "local", "alias", "help"}, filter)), nil
 	}
 	switch args[0] {
 	case "providers":
 		return h.providers.Complete(ctx, cmd, args[1:])
 	case "local":
 		return h.local.Complete(ctx, cmd, args[1:])
+	case "alias":
+		return h.alias.Complete(ctx, cmd, args[1:])
 	}
 	return iterator.FromSlice[string](nil), nil
 }
@@ -468,5 +493,11 @@ var commandExamples = map[string]string{
 		"models providers gemini use work    # make 'work' the active key\n" +
 		"models providers gemini status      # list keys and the active one\n" +
 		"models providers gemini remove work # delete the 'work' key\n" +
+		"```",
+	"alias": "```\n" +
+		"models alias                          # list aliases and what they resolve to\n" +
+		"models alias set default openai/gpt-5.5  # point 'default' at a model\n" +
+		"models alias default openai/gpt-5.5      # shorthand for set\n" +
+		"models alias remove default           # clear 'default' (back to auto)\n" +
 		"```",
 }

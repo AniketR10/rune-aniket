@@ -105,6 +105,13 @@ func WithMaxTokens(get func() int, set func(int)) Option {
 	}
 }
 
+// WithDreamModel sets the model the `dream` command uses when no
+// --model flag is given. Without this option the dream command falls
+// back to the shell's default model.
+func WithDreamModel(model string) Option {
+	return func(s *shell) { s.dreamModel = model }
+}
+
 // CommandName is the parent REPL command exposed by the agent shell.
 const CommandName = "agent"
 
@@ -173,6 +180,7 @@ var _ textapi.REPLHandler = (*shell)(nil)
 
 type shell struct {
 	defaultModel        string
+	dreamModel          string
 	store               dialoguemanager.Store
 	registry            *agent.Registry
 	agentsConfig        *agent.Cfg

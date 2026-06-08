@@ -733,14 +733,14 @@ func (m *mockLLMService) Models() iterator.Iterator[llmapi.ModelEntry] {
 
 func (m *mockLLMService) GetModel(
 	_ context.Context, model llmapi.ModelEntry,
-) (llmapi.ModelEntry, bool) {
+) (llmapi.ModelEntry, error) {
 	if model.Name == "" {
 		model.Name = "test-model"
 	}
 	if model.ContextWindow == 0 {
 		model.ContextWindow = 100000
 	}
-	return model, true
+	return model, nil
 }
 
 // mockDialogueStore implements dialoguemanager.Store with an

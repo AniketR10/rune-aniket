@@ -380,8 +380,8 @@ func TestServerClientIntegration(t *testing.T) {
 			},
 			action: func(t *testing.T, mock *mockService, client llmapi.Service) {
 				lookup := llmapi.ModelEntry{Name: "claude-opus-4-6"}
-				entry, ok := client.GetModel(context.Background(), lookup)
-				require.True(t, ok)
+				entry, err := client.GetModel(context.Background(), lookup)
+				require.NoError(t, err)
 				assert.Equal(t, "claude-opus-4-6", entry.Name)
 				assert.Equal(t, "anthropic", entry.Provider)
 				assert.Equal(t, 200_000, entry.ContextWindow)
@@ -391,14 +391,14 @@ func TestServerClientIntegration(t *testing.T) {
 			},
 		},
 		{
-			name: "GetModel returns false when missing",
+			name: "GetModel returns ErrModelNotFound when missing",
 			setup: func(m *mockService) {
 				m.getModelFound = false
 			},
 			action: func(t *testing.T, mock *mockService, client llmapi.Service) {
 				lookup := llmapi.ModelEntry{Name: "unknown"}
-				_, ok := client.GetModel(context.Background(), lookup)
-				assert.False(t, ok)
+				_, err := client.GetModel(context.Background(), lookup)
+				assert.ErrorIs(t, err, llmapi.ErrModelNotFound)
 				mock.mu.Lock()
 				defer mock.mu.Unlock()
 				assert.Equal(t, lookup, mock.lastGetModelArg)
@@ -596,11 +596,14 @@ func (m *mockService) Models() iterator.Iterator[llmapi.ModelEntry] {
 
 func (m *mockService) GetModel(
 	_ context.Context, model llmapi.ModelEntry,
-) (llmapi.ModelEntry, bool) {
+) (llmapi.ModelEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastGetModelArg = model
-	return m.getModelResult, m.getModelFound
+	if !m.getModelFound {
+		return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
+	}
+	return m.getModelResult, nil
 }
 
 // schemaMarshaler is a test helper json.Marshaler used to feed a

@@ -163,3 +163,8 @@ func ModelEntries() []llmapi.ModelEntry {
 	}
 	return out
 }
+
+// FlagshipModel returns the provider's top model identifier. It is
+// deterministic, unlike iterating ModelEntries() whose order is
+// map-random.
+func FlagshipModel() string { return ClaudeOpus4Dot8 }

@@ -698,13 +698,13 @@ func (a *client) Models() iterator.Iterator[llmapi.ModelEntry] {
 }
 
 // GetModel scans the static model catalog for the given model name.
-func (a *client) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+func (a *client) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	for _, e := range ModelEntries() {
 		if e.Name == model.Name {
-			return e, true
+			return e, nil
 		}
 	}
-	return llmapi.ModelEntry{}, false
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 // streamState tracks the streaming state machine.

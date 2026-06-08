@@ -245,14 +245,14 @@ func TestHandleCommandNoArgsShowsUsage(t *testing.T) {
 	require.NotNil(t, v)
 }
 
-// TestCompleteTopLevel returns the three top-level subcommands.
+// TestCompleteTopLevel returns the top-level subcommands.
 func TestCompleteTopLevel(t *testing.T) {
 	h := newHandlerForTest(t)
 	it, err := h.Complete(context.Background(), "models", nil)
 	require.NoError(t, err)
 	names, err := iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"providers", "local", "help"}, names)
+	assert.ElementsMatch(t, []string{"providers", "local", "alias", "help"}, names)
 }
 
 // TestCompleteFiltersByPrefix filters when a partial first arg is

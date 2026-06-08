@@ -10,13 +10,12 @@ extensions:
       # walks up from the workspace root looking for files with this
       # name and injects their contents into the system prompt.
       agents_file: AGENTS.md
-      # Model used for chat sessions (agent command).
-      default_model: codex/gpt-5.5
-      # Model used for quick queries (? command).
-      query_default_model: codex/gpt-5.5
-      # Model used for conversation compaction/summarization.
-      # When empty, the chat model is used.
-      # compact_model: ''
+      # The chat (`agent`), query (`?`), compaction, and memory
+      # consolidation models are host-side aliases named `default`,
+      # `query`, `compact`, and `dream`. An unset alias falls back to
+      # `default`, which itself resolves to the latest authenticated
+      # provider's flagship model. Point any of them at a specific model
+      # with the `models alias` rune shell command.
       skills:
         - .rune/skills
         - ~/.rune/skills

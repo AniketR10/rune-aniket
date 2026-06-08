@@ -99,9 +99,9 @@ func TestRouter_CustomCatalogSurfacesEntries(t *testing.T) {
 	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService())
 	require.NoError(t, err)
 
-	got, ok := r.GetModel(context.Background(),
+	got, err := r.GetModel(context.Background(),
 		llmapi.ModelEntry{Provider: ProviderCustom, Name: "my-model"})
-	require.True(t, ok)
+	require.NoError(t, err)
 	assert.Equal(t, 8192, got.ContextWindow)
 	assert.Equal(t, ProviderCustom, got.Provider)
 }
@@ -188,20 +188,20 @@ func TestRouter_Models_GeminiStaticWithoutKey(t *testing.T) {
 func TestRouter_GetModel_RequiresProvider(t *testing.T) {
 	r := newTestRouter(t)
 	// gpt-5.5 collides across openai and codex catalogs.
-	_, ok := r.GetModel(context.Background(), llmapi.ModelEntry{Name: "gpt-5.5"})
-	assert.False(t, ok, "GetModel must reject empty Provider")
+	_, err := r.GetModel(context.Background(), llmapi.ModelEntry{Name: "gpt-5.5"})
+	assert.ErrorIs(t, err, llmapi.ErrModelNotFound, "GetModel must reject empty Provider")
 }
 
 func TestRouter_GetModel_QualifiedDisambiguates(t *testing.T) {
 	r := newTestRouter(t)
 	ctx := context.Background()
 
-	got, ok := r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderCodex, Name: "gpt-5.5"})
-	require.True(t, ok)
+	got, err := r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderCodex, Name: "gpt-5.5"})
+	require.NoError(t, err)
 	assert.Equal(t, ProviderCodex, got.Provider)
 
-	got, ok = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderOpenAI, Name: "gpt-5.5"})
-	require.True(t, ok)
+	got, err = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderOpenAI, Name: "gpt-5.5"})
+	require.NoError(t, err)
 	assert.Equal(t, ProviderOpenAI, got.Provider)
 }
 
@@ -211,15 +211,15 @@ func TestRouter_GetModel_ClaudeDisambiguates(t *testing.T) {
 
 	// claude-opus-4-8 collides across the anthropic and claude catalogs;
 	// a bare-name lookup must fail.
-	_, ok := r.GetModel(ctx, llmapi.ModelEntry{Name: "claude-opus-4-8"})
-	assert.False(t, ok, "bare-name claude-opus-4-8 must require a provider")
+	_, err := r.GetModel(ctx, llmapi.ModelEntry{Name: "claude-opus-4-8"})
+	assert.ErrorIs(t, err, llmapi.ErrModelNotFound, "bare-name claude-opus-4-8 must require a provider")
 
-	got, ok := r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderClaude, Name: "claude-opus-4-8"})
-	require.True(t, ok)
+	got, err := r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderClaude, Name: "claude-opus-4-8"})
+	require.NoError(t, err)
 	assert.Equal(t, ProviderClaude, got.Provider)
 
-	got, ok = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderAnthropic, Name: "claude-opus-4-8"})
-	require.True(t, ok)
+	got, err = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderAnthropic, Name: "claude-opus-4-8"})
+	require.NoError(t, err)
 	assert.Equal(t, ProviderAnthropic, got.Provider)
 }
 
@@ -313,8 +313,8 @@ func (s *verifyService) CountTokens(_ llmapi.ModelEntry, _ []llmapi.Message) (in
 func (s *verifyService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.FromSlice[llmapi.ModelEntry](nil)
 }
-func (s *verifyService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
-	return llmapi.ModelEntry{}, false
+func (s *verifyService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi.ModelEntry, error) {
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 func TestRouter_VerifyProviderKey_Success(t *testing.T) {
@@ -387,8 +387,8 @@ func (f *fakeLocalService) CountTokens(_ llmapi.ModelEntry, _ []llmapi.Message) 
 func (f *fakeLocalService) Models() iterator.Iterator[llmapi.ModelEntry] {
 	return iterator.FromSlice[llmapi.ModelEntry](nil)
 }
-func (f *fakeLocalService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
-	return llmapi.ModelEntry{}, false
+func (f *fakeLocalService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi.ModelEntry, error) {
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 func (f *fakeLocalService) Close() { f.closes.Add(1) }
 

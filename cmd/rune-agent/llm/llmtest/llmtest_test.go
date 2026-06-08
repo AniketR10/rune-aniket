@@ -74,17 +74,17 @@ func TestService_GetModel_uses_catalog_then_falls_back(t *testing.T) {
 		{Name: "a", ContextWindow: 1234},
 	})
 
-	got, ok := svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "a"})
-	require.True(t, ok)
+	got, err := svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "a"})
+	require.NoError(t, err)
 	assert.Equal(t, 1234, got.ContextWindow)
 
-	_, ok = svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "unknown"})
-	assert.False(t, ok)
+	_, err = svc.GetModel(context.Background(), llmapi.ModelEntry{Name: "unknown"})
+	assert.ErrorIs(t, err, llmapi.ErrModelNotFound)
 
 	// Empty catalog returns a synthetic entry.
 	empty := New(nil)
-	got, ok = empty.GetModel(context.Background(), llmapi.ModelEntry{Name: "x"})
-	require.True(t, ok)
+	got, err = empty.GetModel(context.Background(), llmapi.ModelEntry{Name: "x"})
+	require.NoError(t, err)
 	assert.Equal(t, "x", got.Name)
 	assert.NotZero(t, got.ContextWindow)
 }

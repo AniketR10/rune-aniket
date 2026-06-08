@@ -213,16 +213,16 @@ func (s *Service) Models() iterator.Iterator[llmapi.ModelEntry] {
 }
 
 // GetModel returns the model entry for the loaded GGUF if the given name
-// matches; otherwise reports not-found.
-func (s *Service) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, bool) {
+// matches; otherwise returns ErrModelNotFound.
+func (s *Service) GetModel(_ context.Context, model llmapi.ModelEntry) (llmapi.ModelEntry, error) {
 	if model.Name == "" || model.Name != s.cfg.Model {
-		return llmapi.ModelEntry{}, false
+		return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 	}
 	return llmapi.ModelEntry{
 		Name:          s.cfg.Model,
 		Provider:      LLMProvider,
 		ContextWindow: s.ContextWindow(),
-	}, true
+	}, nil
 }
 
 // CountTokens returns an exact token count for the given messages by applying

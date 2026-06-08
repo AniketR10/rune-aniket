@@ -47,3 +47,7 @@ func ModelEntries() []llmapi.ModelEntry {
 	}
 	return out
 }
+
+// FlagshipModel returns the provider's top model identifier. It mirrors
+// the Anthropic flagship since the catalog is re-stamped from there.
+func FlagshipModel() string { return anthropic.FlagshipModel() }

@@ -219,6 +219,20 @@ func (s *keyStore) activeName(ctx context.Context, provider string) (string, err
 	return doc.Active, nil
 }
 
+func (s *keyStore) activeUpdatedAt(ctx context.Context, provider string) (time.Time, bool, error) {
+	doc, err := s.load(ctx, provider)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if doc.Active == "" {
+		return time.Time{}, false, nil
+	}
+	if key, ok := doc.Keys[doc.Active]; !ok || key == "" {
+		return time.Time{}, false, nil
+	}
+	return doc.UpdatedAt, true, nil
+}
+
 func sortedNames(keys map[string]string) []string {
 	names := make([]string, 0, len(keys))
 	for name := range keys {

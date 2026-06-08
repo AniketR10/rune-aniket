@@ -49,8 +49,8 @@ func TestLiveCreateCompletion(t *testing.T) {
 	require.NotEmpty(t, token, "set GEMINI_TESTING_KEY to run the live Gemini suite")
 
 	resolve := NewClient(token, Config{})
-	model, ok := resolve.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_2_5_Flash})
-	require.True(t, ok, "model %q must be in the live catalog", Gemini_2_5_Flash)
+	model, err := resolve.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_2_5_Flash})
+	require.NoError(t, err, "model %q must be in the live catalog", Gemini_2_5_Flash)
 
 	t.Run("plain chat completion", func(t *testing.T) {
 		c := NewClient(token, Config{Temperature: 0.1})
@@ -76,8 +76,8 @@ func TestLiveCreateCompletion(t *testing.T) {
 
 	t.Run("reasoning effort emits reasoning", func(t *testing.T) {
 		c := NewClient(token, Config{})
-		model, ok := c.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_3_Flash_Preview})
-		require.True(t, ok, "model %q must be in the live catalog", Gemini_3_Flash_Preview)
+		model, err := c.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_3_Flash_Preview})
+		require.NoError(t, err, "model %q must be in the live catalog", Gemini_3_Flash_Preview)
 		req := llmapi.Request{
 			ReasoningEffort: llmapi.ReasoningEffortHigh,
 			Messages: []llmapi.Message{
@@ -214,8 +214,8 @@ func TestLiveCreateCompletion(t *testing.T) {
 		// Thinking must be enabled (as the agent runs it) for Gemini 3 to emit
 		// signatures, so request high effort explicitly.
 		c := NewClient(token, Config{ReasoningEffort: "high", DebugHTTP: true})
-		m3, ok := c.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_3_Flash_Preview})
-		require.True(t, ok)
+		m3, err := c.GetModel(context.Background(), llmapi.ModelEntry{Name: Gemini_3_Flash_Preview})
+		require.NoError(t, err)
 		tools := []llmapi.Tool{{
 			Type: llmapi.ToolTypeFunction,
 			Function: llmapi.FunctionDefinition{

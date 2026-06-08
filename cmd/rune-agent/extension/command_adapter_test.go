@@ -143,6 +143,36 @@ func TestCommandAdapterModelCompleter(t *testing.T) {
 	}, got)
 }
 
+// aliasResolvingService resolves the bare name "default" to a
+// fully-qualified entry, mirroring how the host router exposes alias
+// resolution through GetModel with an empty Provider.
+type aliasResolvingService struct {
+	*llmtest.Service
+	target llmapi.ModelEntry
+}
+
+func (s *aliasResolvingService) GetModel(
+	_ context.Context, model llmapi.ModelEntry,
+) (llmapi.ModelEntry, error) {
+	if model.Provider == "" && model.Name == "default" {
+		return s.target, nil
+	}
+	return s.Service.GetModel(context.Background(), model)
+}
+
+// /model with no args must show the resolved provider/model, not the
+// bare alias the session was created with (e.g. "default").
+func TestCommandAdapterModelResolvesAliasLabel(t *testing.T) {
+	target := llmapi.ModelEntry{Provider: "openai", Name: "gpt-5.5"}
+	svc := &aliasResolvingService{
+		Service: llmtest.New([]llmapi.ModelEntry{target}),
+		target:  target,
+	}
+	a := &commandAdapter{llmSvc: svc, currentModel: "default"}
+
+	assert.Equal(t, "openai/gpt-5.5", a.resolvedModelLabel(context.Background()))
+}
+
 // Slash-command preloads ship the skill body as a separate system
 // message, which the model reliably misses. formatSkillMessage must
 // include an inline cue telling the model to invoke the skill tool so

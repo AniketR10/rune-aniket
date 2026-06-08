@@ -21,8 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
-package codex
+package gemini
 
 import (
 	"testing"
@@ -33,28 +32,5 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, GPT5Dot5, FlagshipModel())
-}
-
-func TestModelEntries(t *testing.T) {
-	entries := ModelEntries()
-	byName := make(map[string]int, len(entries))
-	for _, e := range entries {
-		byName[e.Name] = e.ContextWindow
-		assert.Equal(t, LLMProvider, e.Provider)
-		assert.Equal(t, OpenAICompatibleURL, e.BaseURL)
-	}
-	// Catalog names are bare upstream slugs; the router disambiguates
-	// duplicates between providers via ModelEntry.Provider.
-	assert.Equal(t, "gpt-5.4", GPT5Dot4)
-	assert.Equal(t, 1000000, byName["gpt-5.4"])
-	assert.Equal(t, 272000, byName["gpt-5.5"])
-	assert.Equal(t, 1000000, byName["codex-auto-review"])
-}
-
-func TestUpstreamModelName(t *testing.T) {
-	// On the rune side the catalog already holds upstream slugs so
-	// UpstreamModelName is the identity function.
-	assert.Equal(t, "gpt-5.4", UpstreamModelName("gpt-5.4"))
-	assert.Equal(t, "unknown", UpstreamModelName("unknown"))
+	assert.Equal(t, Gemini_3_1_Pro_Preview, FlagshipModel())
 }

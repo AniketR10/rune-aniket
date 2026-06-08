@@ -80,6 +80,11 @@ func ModelEntries() []llmapi.ModelEntry {
 	return out
 }
 
+// FlagshipModel returns the provider's top model identifier. It is
+// deterministic, unlike iterating ModelEntries() whose order is
+// map-random.
+func FlagshipModel() string { return GPT5Dot5 }
+
 // UpstreamModelName returns the Codex backend model slug for a given
 // catalog name. The rune-side codex catalog stores the upstream slug
 // directly (the legacy `codex/` registry prefix was only ever needed

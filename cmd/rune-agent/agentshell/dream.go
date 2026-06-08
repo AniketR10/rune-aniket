@@ -39,7 +39,10 @@ import (
 func (s *shell) handleDream(
 	ctx context.Context, args []string, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
-	model := s.defaultModel
+	model := s.dreamModel
+	if model == "" {
+		model = s.defaultModel
+	}
 	debug := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {

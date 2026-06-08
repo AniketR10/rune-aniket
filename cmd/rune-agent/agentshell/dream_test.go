@@ -214,14 +214,14 @@ func (s *stopOnlyLLMService) Models() iterator.Iterator[llmapi.ModelEntry] {
 
 func (s *stopOnlyLLMService) GetModel(
 	_ context.Context, model llmapi.ModelEntry,
-) (llmapi.ModelEntry, bool) {
+) (llmapi.ModelEntry, error) {
 	if model.Name == "" {
 		model.Name = "test-model"
 	}
 	if model.ContextWindow == 0 {
 		model.ContextWindow = 100000
 	}
-	return model, true
+	return model, nil
 }
 
 var _ llmapi.Service = (*stopOnlyLLMService)(nil)
