@@ -61,13 +61,18 @@ type Tool interface {
 type Registry struct {
 	tools     map[string]Tool
 	overrides map[string]map[string]Tool // provider -> name -> Tool (nil = exclude)
+	// replacements maps provider -> excluded base name -> replacement name.
+	// It records the pairing established by RegisterReplacement so an
+	// excluded base tool can hint the caller toward its replacement.
+	replacements map[string]map[string]string
 }
 
 // NewRegistry creates a Registry from the given tools.
 func NewRegistry(tools ...Tool) *Registry {
 	r := &Registry{
-		tools:     make(map[string]Tool, len(tools)),
-		overrides: make(map[string]map[string]Tool),
+		tools:        make(map[string]Tool, len(tools)),
+		overrides:    make(map[string]map[string]Tool),
+		replacements: make(map[string]map[string]string),
 	}
 	for _, t := range tools {
 		r.tools[t.Definition().Function.Name] = t
@@ -99,6 +104,28 @@ func (r *Registry) RegisterExclusions(provider string, names ...string) {
 	for _, name := range names {
 		m[name] = nil
 	}
+}
+
+// RegisterReplacement records that, for the given provider, the base tool
+// baseName is excluded and replaced by replacement. It adds replacement as a
+// provider override, excludes baseName, and records the pairing so
+// ReplacementFor can later hint a caller that invokes the excluded base tool.
+func (r *Registry) RegisterReplacement(provider, baseName string, replacement Tool) {
+	r.RegisterOverrides(provider, replacement)
+	r.RegisterExclusions(provider, baseName)
+	m := r.replacements[provider]
+	if m == nil {
+		m = make(map[string]string)
+		r.replacements[provider] = m
+	}
+	m[baseName] = replacement.Definition().Function.Name
+}
+
+// ReplacementFor returns the name of the tool that replaces an excluded base
+// tool for the given provider, or an empty string if there is no recorded
+// replacement.
+func (r *Registry) ReplacementFor(name, provider string) string {
+	return r.replacements[provider][name]
 }
 
 // resolvedTools returns the merged tool map for the given provider.
@@ -135,6 +162,16 @@ func (r *Registry) CopyOverridesFrom(src *Registry) {
 			m[name] = tool
 		}
 	}
+	for provider, srcRepl := range src.replacements {
+		m := r.replacements[provider]
+		if m == nil {
+			m = make(map[string]string, len(srcRepl))
+			r.replacements[provider] = m
+		}
+		for name, repl := range srcRepl {
+			m[name] = repl
+		}
+	}
 }
 
 // Get returns the tool with the given name, resolved for provider.
@@ -154,8 +191,9 @@ func (r *Registry) WithFilteredTools(allowedNames []string) *Registry {
 		allowed[name] = true
 	}
 	filtered := &Registry{
-		tools:     make(map[string]Tool, len(allowedNames)),
-		overrides: make(map[string]map[string]Tool),
+		tools:        make(map[string]Tool, len(allowedNames)),
+		overrides:    make(map[string]map[string]Tool),
+		replacements: make(map[string]map[string]string),
 	}
 	for _, name := range allowedNames {
 		if t, ok := r.tools[name]; ok {
@@ -177,6 +215,17 @@ func (r *Registry) WithFilteredTools(allowedNames []string) *Registry {
 				filtered.overrides[provider] = make(map[string]Tool)
 			}
 			filtered.overrides[provider][name] = tool
+		}
+	}
+	for provider, provRepl := range r.replacements {
+		for baseName, replName := range provRepl {
+			if !allowed[replName] {
+				continue
+			}
+			if filtered.replacements[provider] == nil {
+				filtered.replacements[provider] = make(map[string]string)
+			}
+			filtered.replacements[provider][baseName] = replName
 		}
 	}
 	return filtered

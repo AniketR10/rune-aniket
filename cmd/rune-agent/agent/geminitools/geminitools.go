@@ -110,7 +110,6 @@ func Register(r *agent.Registry) {
 		if !ok {
 			continue
 		}
-		r.RegisterOverrides(LLMProvider, wrap(base))
-		r.RegisterExclusions(LLMProvider, baseName)
+		r.RegisterReplacement(LLMProvider, baseName, wrap(base))
 	}
 }

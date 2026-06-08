@@ -959,8 +959,12 @@ func (a *Agent) run(
 						var dur time.Duration
 						if !info.found {
 							log.Warn("unknown tool", "name", info.call.Function.Name)
+							msg := fmt.Sprintf("error: unknown tool %q", info.call.Function.Name)
+							if repl := a.registry.ReplacementFor(info.call.Function.Name, a.provider()); repl != "" {
+								msg += fmt.Sprintf("; use the %q tool instead", repl)
+							}
 							result = ToolResult{
-								Content: fmt.Sprintf("error: unknown tool %q", info.call.Function.Name),
+								Content: msg,
 								IsError: true,
 							}
 						} else {

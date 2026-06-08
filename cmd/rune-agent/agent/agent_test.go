@@ -646,6 +646,52 @@ func TestAgentRun(t *testing.T) {
 	}
 }
 
+func TestUnknownToolHintsReplacement(t *testing.T) {
+	t.Run("excluded-and-replaced tool hints the replacement", func(t *testing.T) {
+		svc := &mockService{responses: []mockResponse{
+			toolCallResponse("bash", "{}", "c1"),
+			stopResponse("ok"),
+		}}
+		store := newMockStore()
+		registry := NewRegistry(&mockTool{name: "bash"})
+		registry.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
+		ag := NewAgent(svc, registry, noSkills(), store, NoMemory(), Config{
+			SystemPrompt: "test",
+			Model:        llmapi.ModelEntry{Name: "m", Provider: "openai"},
+		})
+
+		events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+
+		results := eventsByType(events, EventToolResult)
+		require.Len(t, results, 1)
+		assert.True(t, results[0].IsError)
+		assert.Contains(t, results[0].ToolOutput, "unknown tool")
+		assert.Contains(t, results[0].ToolOutput, `use the "exec_command" tool instead`)
+	})
+
+	t.Run("truly unknown tool keeps the plain message", func(t *testing.T) {
+		svc := &mockService{responses: []mockResponse{
+			toolCallResponse("nonexistent", "{}", "c1"),
+			stopResponse("ok"),
+		}}
+		store := newMockStore()
+		registry := NewRegistry(&mockTool{name: "bash"})
+		registry.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
+		ag := NewAgent(svc, registry, noSkills(), store, NoMemory(), Config{
+			SystemPrompt: "test",
+			Model:        llmapi.ModelEntry{Name: "m", Provider: "openai"},
+		})
+
+		events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+
+		results := eventsByType(events, EventToolResult)
+		require.Len(t, results, 1)
+		assert.True(t, results[0].IsError)
+		assert.Contains(t, results[0].ToolOutput, "unknown tool")
+		assert.NotContains(t, results[0].ToolOutput, "tool instead")
+	})
+}
+
 func TestCompactDialoguePreservesPlanContent(t *testing.T) {
 	plan := &dialoguemanager.ApprovedPlan{Path: "/tmp/plan.md", Body: "Plan approved.\n\n## Step 1\nDo X"}
 

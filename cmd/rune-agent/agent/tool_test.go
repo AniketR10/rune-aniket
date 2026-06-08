@@ -231,3 +231,63 @@ func TestRegistryCopyOverridesFrom(t *testing.T) {
 		assert.Equal(t, "b", got.Definition().Function.Name, "copied override should be present")
 	})
 }
+
+func TestRegistryRegisterReplacement(t *testing.T) {
+	t.Run("excludes base, adds replacement, records pairing", func(t *testing.T) {
+		r := NewRegistry(
+			&mockTool{name: "bash"},
+			&mockTool{name: "read_file"},
+		)
+		r.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
+
+		_, ok := r.Get("bash", "openai")
+		assert.False(t, ok, "bash should be excluded for openai")
+
+		got, ok := r.Get("exec_command", "openai")
+		require.True(t, ok, "exec_command should be present for openai")
+		assert.Equal(t, "exec_command", got.Definition().Function.Name)
+
+		assert.Equal(t, "exec_command", r.ReplacementFor("bash", "openai"))
+	})
+
+	t.Run("ReplacementFor is scoped per provider", func(t *testing.T) {
+		r := NewRegistry(&mockTool{name: "bash"})
+		r.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
+
+		assert.Equal(t, "exec_command", r.ReplacementFor("bash", "openai"))
+		assert.Empty(t, r.ReplacementFor("bash", "codex"))
+		assert.Empty(t, r.ReplacementFor("bash", ""))
+		assert.Empty(t, r.ReplacementFor("search_content", "openai"))
+	})
+
+	t.Run("replacements survive CopyOverridesFrom", func(t *testing.T) {
+		src := NewRegistry(&mockTool{name: "bash"})
+		src.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
+
+		dst := NewRegistry(&mockTool{name: "bash"})
+		dst.CopyOverridesFrom(src)
+
+		_, ok := dst.Get("bash", "openai")
+		assert.False(t, ok, "bash should be excluded after copy")
+		_, ok = dst.Get("exec_command", "openai")
+		assert.True(t, ok, "exec_command should be present after copy")
+		assert.Equal(t, "exec_command", dst.ReplacementFor("bash", "openai"))
+	})
+
+	t.Run("WithFilteredTools drops replacements whose target is filtered out", func(t *testing.T) {
+		r := NewRegistry(
+			&mockTool{name: "bash"},
+			&mockTool{name: "exec_command"},
+			&mockTool{name: "read_file"},
+		)
+		r.RegisterReplacement("openai", "bash", &mockTool{name: "exec_command"})
+
+		// exec_command not in allowed set -> replacement dropped.
+		filtered := r.WithFilteredTools([]string{"read_file"})
+		assert.Empty(t, filtered.ReplacementFor("bash", "openai"))
+
+		// exec_command allowed -> replacement preserved.
+		kept := r.WithFilteredTools([]string{"read_file", "exec_command"})
+		assert.Equal(t, "exec_command", kept.ReplacementFor("bash", "openai"))
+	})
+}

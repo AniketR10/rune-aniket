@@ -308,21 +308,20 @@ func newCommandEventHandler(
 	ret.executor = executor
 	ret.sessionMgr = agentools.NewSessionManager(ret.ctx, executor, terminal)
 	ret.toolRegistry.RegisterOverrides("openai",
-		agentools.NewGrepFiles(fs, cwd, tracker),
 		agentools.NewListDir(fs, cwd),
-		agentools.NewExecCommand(ret.sessionMgr, cwd, cfg),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
 	ret.toolRegistry.RegisterOverrides("codex",
-		agentools.NewGrepFiles(fs, cwd, tracker),
 		agentools.NewListDir(fs, cwd),
-		agentools.NewExecCommand(ret.sessionMgr, cwd, cfg),
 		agentools.NewWriteStdin(ret.sessionMgr),
 	)
-	ret.toolRegistry.RegisterExclusions("openai",
-		"search_content", "compact", "bash")
-	ret.toolRegistry.RegisterExclusions("codex",
-		"search_content", "compact", "bash")
+	for _, provider := range []string{"openai", "codex"} {
+		ret.toolRegistry.RegisterReplacement(provider, "search_content",
+			agentools.NewGrepFiles(fs, cwd, tracker))
+		ret.toolRegistry.RegisterReplacement(provider, "bash",
+			agentools.NewExecCommand(ret.sessionMgr, cwd, cfg))
+		ret.toolRegistry.RegisterExclusions(provider, "compact")
+	}
 	geminitools.Register(ret.toolRegistry)
 	ret.systemPrompt = agent.DefaultSystemPrompt(cwd)
 

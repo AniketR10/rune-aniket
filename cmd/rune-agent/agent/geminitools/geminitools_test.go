@@ -212,6 +212,12 @@ func TestRegisterInstallsGeminiOverrides(t *testing.T) {
 	}
 	assert.True(t, base["bash"])
 	assert.False(t, base["run_command"])
+
+	// Replacement pairings are recorded so excluded base tools can hint
+	// the gemini-specialized replacement.
+	assert.Equal(t, "run_command", r.ReplacementFor("bash", LLMProvider))
+	assert.Equal(t, "grep_search", r.ReplacementFor("search_content", LLMProvider))
+	assert.Empty(t, r.ReplacementFor("bash", ""))
 }
 
 func TestRegisterSkipsMissingBaseTools(t *testing.T) {
