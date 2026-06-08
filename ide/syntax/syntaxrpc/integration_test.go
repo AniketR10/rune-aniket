@@ -30,6 +30,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -484,9 +485,12 @@ func collectResults(t *testing.T, it iterator.Iterator[syntaxapi.Result]) []synt
 // client-side cancellation could not unblock the server goroutine.
 func TestHighlightHonoursClientCancel(t *testing.T) {
 	released := make(chan struct{})
+	started := make(chan struct{})
+	var startOnce sync.Once
 	stub := &mockParser{
 		highlightIter: iterator.FromFunc(
 			func(ctx context.Context) (textapi.Location, bool, error) {
+				startOnce.Do(func() { close(started) })
 				<-ctx.Done()
 				return textapi.Location{}, false, ctx.Err()
 			},
@@ -524,6 +528,15 @@ func TestHighlightHonoursClientCancel(t *testing.T) {
 	it, err := client.Highlight(uri, "package main")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = it.Close() })
+
+	// Wait until the server goroutine is actually blocked inside the
+	// parser iterator before cancelling; otherwise the cancel can race
+	// the stream establishment and never reach the server handler.
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("server-side Highlight iterator never started")
+	}
 
 	cancel()
 
