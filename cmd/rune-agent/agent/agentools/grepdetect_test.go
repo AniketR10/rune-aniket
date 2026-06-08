@@ -61,16 +61,22 @@ func TestIsGrepInvocation(t *testing.T) {
 		{"ugrep", "ugrep foo .", true},
 		{"ripgrep binary name", "ripgrep foo .", true},
 
-		// --- awk / sed / perl: ad-hoc text-processor evasion -----------
-		{"plain awk", "awk '/foo/' file", true},
-		{"gawk", "gawk '{print}' file", true},
-		{"mawk", "mawk '/foo/' file", true},
-		{"nawk", "nawk '/foo/' file", true},
-		{"plain sed", `sed -n '/foo/p' file`, true},
-		{"gsed", `gsed -n '/foo/p' file`, true},
-		{"sed substitute", `sed -i 's/foo/bar/g' file`, true},
-		{"plain perl -ne", `perl -ne 'print if /foo/' file`, true},
-		{"perl -pe", `perl -pe 's/foo/bar/' file`, true},
+		// --- awk / sed / perl are not grep guard targets ----------------
+		{"plain awk", "awk '/foo/' file", false},
+		{"gawk", "gawk '{print}' file", false},
+		{"mawk", "mawk '/foo/' file", false},
+		{"nawk", "nawk '/foo/' file", false},
+		{"plain sed", `sed -n '/foo/p' file`, false},
+		{"gsed", `gsed -n '/foo/p' file`, false},
+		{"sed substitute", `sed -i 's/foo/bar/g' file`, false},
+		{"sed inplace macOS", `sed -i '' 's/foo/bar/g' file`, false},
+		{"sed inplace backup", `sed -i.bak 's/foo/bar/g' file`, false},
+		{"gsed inplace", `gsed -i 's/x/y/g' file`, false},
+		{"plain perl -ne", `perl -ne 'print if /foo/' file`, false},
+		{"perl -pe", `perl -pe 's/foo/bar/' file`, false},
+		{"perl inplace", `perl -i -pe 's/x/y/g' file`, false},
+		{"awk print field", `awk '{print $1}' file`, false},
+		{"awk aggregate", `awk 'BEGIN{s=0}{s+=$1}END{print s}' file`, false},
 
 		// --- path / quoting variants -----------------------------------
 		{"absolute path grep", "/usr/bin/grep foo .", true},
@@ -104,9 +110,9 @@ func TestIsGrepInvocation(t *testing.T) {
 		// performing a filesystem search.
 		{"grep first stage", "grep foo | head", true},
 		{"grep then sort", "grep -rl foo . 2>/dev/null | sort -u", true},
-		{"sed first stage", `sed -n '/foo/p' file | sort`, true},
-		{"awk first stage", `awk '/foo/' file | sort`, true},
-		{"perl first stage", `perl -ne 'print if /foo/' file | sort`, true},
+		{"sed first stage", `sed -n '/foo/p' file | sort`, false},
+		{"awk first stage", `awk '/foo/' file | sort`, false},
+		{"perl first stage", `perl -ne 'print if /foo/' file | sort`, false},
 		{"grep first in 3-stage", "grep foo file | cmd1 | cmd2", true},
 		{"cat | grep (filter)", "cat file | grep foo", false},
 		{"cat | sed (filter)", "cat file | sed -n '/foo/p'", false},
@@ -160,7 +166,7 @@ func TestIsGrepInvocation(t *testing.T) {
 
 		// --- find -exec ------------------------------------------------
 		{"find -exec grep", `find . -name '*.go' -exec grep foo {} \;`, true},
-		{"find -exec sed", `find . -name '*.go' -exec sed -n '/foo/p' {} \;`, true},
+		{"find -exec sed", `find . -name '*.go' -exec sed -n '/foo/p' {} \;`, false},
 
 		// --- negatives: must NOT flag legitimate non-search shell work -
 		{"empty script", "", false},

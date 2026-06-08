@@ -36,20 +36,16 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 )
 
-// grepProgramNames lists the search and text-pattern programs we want
-// to intercept. They are matched after stripping the directory part
-// (so /usr/bin/grep matches) and after stripping a leading backslash
-// (so `\grep` matches — that idiom bypasses shell aliases). Includes:
+// grepProgramNames lists the search programs we want to intercept.
+// They are matched after stripping the directory part (so
+// /usr/bin/grep matches) and after stripping a leading backslash (so
+// `\grep` matches — that idiom bypasses shell aliases). Includes:
 //   - grep family: grep, egrep, fgrep, rgrep, plus compression
 //     wrappers (zgrep, zegrep, zfgrep, bzgrep, bzegrep, bzfgrep,
 //     xzgrep, xzegrep, xzfgrep, lzgrep, lzegrep, lzfgrep) and
 //     PCRE/PCRE2/ugrep variants.
 //   - alternative searchers: rg (ripgrep), ripgrep, ag (the silver
 //     searcher), ack, ack-grep.
-//   - text processors used as ad-hoc pattern matchers in lieu of
-//     grep: sed, gsed, awk, gawk, mawk, nawk, perl. These are
-//     included because models routinely substitute `sed -n
-//     '/foo/p'` or `awk '/foo/'` when grep is unavailable.
 var grepProgramNames = map[string]bool{
 	// grep family.
 	"grep": true, "egrep": true, "fgrep": true, "rgrep": true,
@@ -61,10 +57,6 @@ var grepProgramNames = map[string]bool{
 	// alternative searchers.
 	"rg": true, "ripgrep": true,
 	"ag": true, "ack": true, "ack-grep": true,
-	// text processors used as pattern matchers.
-	"sed": true, "gsed": true,
-	"awk": true, "gawk": true, "mawk": true, "nawk": true,
-	"perl": true,
 }
 
 // grepWrapperPrograms run another command as their effective payload.
@@ -110,11 +102,11 @@ var grepWrapperPrograms = map[string]bool{
 // isGrepInvocation reports whether the script invokes grep/rg/ag/ack
 // as the first stage of execution — directly, behind &&/||, inside
 // command substitution, after env assignments, or as a redirection
-// source/target. We deliberately allow grep/sed/awk/perl when they
-// appear as a downstream stage of a pipeline (e.g. `cat file | grep
-// foo`, `find . | xargs grep foo`, `git ls-files | xargs sed`)
-// because in that role they are filtering data that is already on
-// stdin rather than performing a filesystem search.
+// source/target. We deliberately allow search tools when they appear
+// as a downstream stage of a pipeline (e.g. `cat file | grep foo`,
+// `find . | xargs grep foo`) because in that role they are filtering
+// data that is already on stdin rather than performing a filesystem
+// search.
 //
 // Known gap: we do not re-parse the body of `bash -c "..."`. A model
 // determined enough to wrap grep in a subshell string still gets
@@ -478,7 +470,7 @@ func (g grepGuard) decideGrep(ctx context.Context) (rejected, decided bool) {
 		Title:  "Allow grep via shell?",
 		Header: "grep",
 		Body: "The model is trying to search code by shelling out to a " +
-			"text-pattern tool (grep, rg, ag, ack, awk, sed, perl, or a " +
+			"text-pattern tool (grep, rg, ag, ack, or a " +
 			"wrapper such as `git grep` / `xargs grep`). Rune ships " +
 			"builtin tools that are usually better: semantic " +
 			"symbol-based search (find_definition, find_references, " +
