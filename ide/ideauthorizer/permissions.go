@@ -91,6 +91,21 @@ func pluginPermissionStorageKey(
 	}, ":")
 }
 
+// pluginPermissionProgramStorageKey returns the storage key for a
+// program-scoped API-access decision. Unlike pluginPermissionStorageKey it
+// ignores argv so that an "Always" grant for an executable persists across
+// invocations launched with different arguments.
+func pluginPermissionProgramStorageKey(
+	path string, perm extensionapi.Permission,
+) string {
+	return strings.Join([]string{
+		"extensionv2",
+		"plugin-permissions",
+		pluginProgramHash(path, nil),
+		url.PathEscape(string(perm)),
+	}, ":")
+}
+
 // pluginPermissionCommandStorageKeys returns the storage keys for a
 // command-scoped permission decision. When the command can be decomposed
 // into a known set of effective commands, returns one key per command

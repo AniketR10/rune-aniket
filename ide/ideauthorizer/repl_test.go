@@ -94,7 +94,7 @@ func TestAuthorizerListREPLListsPersistedDecisions(t *testing.T) {
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(),
-		pluginPermissionStorageKey(ext.Path, ext.Args,
+		pluginPermissionProgramStorageKey(ext.Path,
 			extensionapi.PermissionBrowserWindowManager),
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
 		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionAllow))
@@ -197,7 +197,7 @@ func TestAuthorizerRevokeREPLCompletesPersistedDecisions(t *testing.T) {
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(),
-		pluginPermissionStorageKey(ext.Path, ext.Args,
+		pluginPermissionProgramStorageKey(ext.Path,
 			extensionapi.PermissionBrowserWindowManager),
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
 		extensionapi.PermissionBrowserWindowManager, nil, pluginPermissionDecisionAllow))
@@ -223,7 +223,7 @@ func TestAuthorizerRevokeREPLDeletesPersistedDecisionByID(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
-	key := pluginPermissionStorageKey(ext.Path, ext.Args,
+	key := pluginPermissionProgramStorageKey(ext.Path,
 		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(), key,
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},
@@ -250,7 +250,7 @@ func TestAuthorizerRevokeREPLDeletesPersistedDecision(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	ext := testPluginExtension(nil)
 	authorizer := newTestAuthorizerCore(nil, storage)
-	key := pluginPermissionStorageKey(ext.Path, ext.Args,
+	key := pluginPermissionProgramStorageKey(ext.Path,
 		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, authorizer.setStoredDecision(context.Background(), key,
 		pluginPermissionIdentity{Path: ext.Path, Args: ext.Args},

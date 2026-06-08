@@ -288,13 +288,13 @@ func TestAuthorizerPluginUsesPeerProcessForPromptAndStorageKey(t *testing.T) {
 	assert.Contains(t, opener.messages[0], "/bin/zsh")
 	assert.Contains(t, opener.messages[0], "[--login]")
 
-	peerKey := pluginPermissionStorageKey("/usr/local/bin/trusted-cli",
-		[]string{"run", "--verbose"}, extensionapi.PermissionBrowserWindowManager)
+	peerKey := pluginPermissionProgramStorageKey("/usr/local/bin/trusted-cli",
+		extensionapi.PermissionBrowserWindowManager)
 	var stored storedPermissionDecision
 	require.NoError(t, storage.Get(context.Background(), peerKey, &stored))
 	assert.Equal(t, pluginPermissionDecisionAllow, stored.Decision)
 
-	launcherKey := pluginPermissionStorageKey("/bin/zsh", []string{"--login"},
+	launcherKey := pluginPermissionProgramStorageKey("/bin/zsh",
 		extensionapi.PermissionBrowserWindowManager)
 	err = storage.Get(context.Background(), launcherKey, &stored)
 	assert.ErrorIs(t, err, storageapi.ErrNotFound)
@@ -326,6 +326,36 @@ func TestAuthorizerPluginOmitsLauncherWhenPeerMatchesClaim(t *testing.T) {
 	assert.NotContains(t, opener.messages[0], "running inside")
 }
 
+func TestAuthorizerPluginAlwaysPersistsAcrossDifferentArgs(t *testing.T) {
+	t.Parallel()
+
+	storage := storagestub.NewInMemoryService()
+	opener := &stubPromptOpener{decision: PermissionAllowAlways}
+	a := mustNewAuthorizer(t, opener, storage, texttest.NopEditor())
+	ext := Extension{
+		Metadata: extensionapi.Metadata{Permissions: extensionapi.AllPermissions()},
+		Plugin:   true,
+		Path:     "/usr/local/bin/runectl",
+	}
+
+	firstCtx := contextWithPeerProcess(context.Background(), peerprocess.Process{
+		Exe:  "/usr/local/bin/runectl",
+		Argv: []string{"runectl", "lsp", "definition", "--file", "a"},
+	})
+	require.NoError(t, a.Authorize(firstCtx,
+		blueauth.UserClaims[Extension]{Extra: ext}, testWindowManagerResource))
+	require.Equal(t, 1, opener.calls)
+
+	secondCtx := contextWithPeerProcess(context.Background(), peerprocess.Process{
+		Exe:  "/usr/local/bin/runectl",
+		Argv: []string{"runectl", "lsp", "hover", "--file", "b"},
+	})
+	require.NoError(t, a.Authorize(secondCtx,
+		blueauth.UserClaims[Extension]{Extra: ext}, testWindowManagerResource))
+	assert.Equal(t, 1, opener.calls,
+		"an Always grant must persist across invocations with different args")
+}
+
 func TestAuthorizerPluginPeerDecisionIsIndependentFromLauncherDecision(t *testing.T) {
 	t.Parallel()
 
@@ -335,7 +365,7 @@ func TestAuthorizerPluginPeerDecisionIsIndependentFromLauncherDecision(t *testin
 		Path:   "/bin/zsh",
 		Args:   []string{"--login"},
 	}
-	launcherKey := pluginPermissionStorageKey(ext.Path, ext.Args,
+	launcherKey := pluginPermissionProgramStorageKey(ext.Path,
 		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, storage.Set(context.Background(), launcherKey,
 		storedPermissionDecision{Decision: pluginPermissionDecisionAllow}))
@@ -545,7 +575,7 @@ func TestAuthorizerPluginPersistedDecisionsSkipPrompt(t *testing.T) {
 
 			storage := storagestub.NewInMemoryService()
 			ext := testPluginExtension(nil)
-			key := pluginPermissionStorageKey(ext.Path, ext.Args,
+			key := pluginPermissionProgramStorageKey(ext.Path,
 				extensionapi.PermissionBrowserWindowManager)
 			require.NoError(t, storage.Set(context.Background(), key,
 				storedPermissionDecision{Decision: tc.stored}))
@@ -572,7 +602,7 @@ func TestAuthorizerPluginStoredUnknownDecisionReturnsError(t *testing.T) {
 
 	storage := storagestub.NewInMemoryService()
 	ext := testPluginExtension(nil)
-	key := pluginPermissionStorageKey(ext.Path, ext.Args,
+	key := pluginPermissionProgramStorageKey(ext.Path,
 		extensionapi.PermissionBrowserWindowManager)
 	require.NoError(t, storage.Set(context.Background(), key,
 		storedPermissionDecision{Decision: "maybe"}))
@@ -633,7 +663,7 @@ func TestAuthorizerPluginPersistsAlwaysDecisions(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			key := pluginPermissionStorageKey(ext.Path, ext.Args,
+			key := pluginPermissionProgramStorageKey(ext.Path,
 				extensionapi.PermissionBrowserWindowManager)
 			var stored storedPermissionDecision
 			require.NoError(t, storage.Get(context.Background(), key, &stored))
@@ -684,7 +714,7 @@ func TestAuthorizerPluginDoesNotPersistOnceDecisions(t *testing.T) {
 
 			_ = a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
 				testWindowManagerResource)
-			key := pluginPermissionStorageKey(ext.Path, ext.Args,
+			key := pluginPermissionProgramStorageKey(ext.Path,
 				extensionapi.PermissionBrowserWindowManager)
 			var stored storedPermissionDecision
 			err := storage.Get(context.Background(), key, &stored)

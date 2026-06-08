@@ -27,6 +27,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 )
 
 func TestPluginPermissionEffectiveCommands(t *testing.T) {
@@ -204,4 +206,26 @@ func TestPluginPermissionEffectiveCommands(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPluginPermissionProgramStorageKeyIgnoresArgs(t *testing.T) {
+	t.Parallel()
+
+	keyA := pluginPermissionProgramStorageKey("/bin/test",
+		extensionapi.PermissionBrowserWindowManager)
+	keyB := pluginPermissionProgramStorageKey("/bin/test",
+		extensionapi.PermissionBrowserWindowManager)
+	assert.Equal(t, keyA, keyB)
+
+	assert.NotEqual(t, keyA, pluginPermissionProgramStorageKey("/bin/test",
+		extensionapi.PermissionStorage),
+		"key must differ by permission")
+	assert.NotEqual(t, keyA, pluginPermissionProgramStorageKey("/bin/other",
+		extensionapi.PermissionBrowserWindowManager),
+		"key must differ by path")
+
+	argKey := pluginPermissionStorageKey("/bin/test", []string{"a"},
+		extensionapi.PermissionBrowserWindowManager)
+	assert.NotEqual(t, keyA, argKey,
+		"program-scoped key must not collide with the argv-scoped key")
 }

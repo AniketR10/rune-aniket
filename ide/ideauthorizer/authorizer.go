@@ -196,7 +196,7 @@ func (a *Authorizer) authorizePlugin(
 	ctx context.Context, ext Extension, perm extensionapi.Permission, resource string,
 ) error {
 	identity := pluginPermissionIdentityFromContext(ctx, ext)
-	key := pluginPermissionStorageKey(identity.Path, identity.Args, perm)
+	key := pluginPermissionProgramStorageKey(identity.Path, perm)
 	onceKey := pluginPermissionOnceKey(identity, perm, nil)
 	return a.authorizePermission(ctx, ext, identity, []string{key}, onceKey, perm, resource, nil)
 }
