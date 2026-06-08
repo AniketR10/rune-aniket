@@ -432,6 +432,20 @@ func (t *Component) ScrollOffset() int {
 	return t.scroll.MaxOffset().Y - t.scroll.Offset().Y
 }
 
+// scrollY returns the raw vertical scroll offset that Select, SelectEnd,
+// SelectWordAt and SelectLine subtract when translating window
+// coordinates into buffer coordinates. The alt buffer has no
+// scrollback, so it reports 0 to match those methods.
+func (t *Component) scrollY() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parserHandler.useAlt {
+		return 0
+	}
+
+	return t.scroll.Offset().Y
+}
+
 // MaxScrollOffset returns the current vertical scroll offset.
 func (t *Component) MaxScrollOffset() int {
 	t.mu.Lock()

@@ -36,9 +36,16 @@ import (
 type mouseDriver struct {
 	t              *Component
 	selectionStart term.Coordinates
-	hookRawBytes   []byte
-	clipboard      clipboard.Register
-	lastButton     rune // last pressed button (0=left, 1=middle, 2=right)
+	// selectionStartScrollY is the buffer scroll offset captured when
+	// selectionStart was anchored. Select/SelectEnd translate window
+	// coordinates by the *current* scroll offset, so an upward drag that
+	// auto-scrolls the buffer would otherwise drag the start anchor along
+	// with the content. Recording the offset lets SetSelectionEnd keep the
+	// anchor pinned to the originally pressed content cell.
+	selectionStartScrollY int
+	hookRawBytes          []byte
+	clipboard             clipboard.Register
+	lastButton            rune // last pressed button (0=left, 1=middle, 2=right)
 }
 
 func (e *mouseDriver) OnAction(
@@ -112,18 +119,28 @@ func (e *mouseDriver) ScrollDown(n int) (ok bool) {
 
 func (e *mouseDriver) ClearSelection() {
 	e.t.Unselect()
+	e.selectionStart = term.Coordinates{}
+	e.selectionStartScrollY = 0
 }
 
 func (e *mouseDriver) SetSelectionStart(pos term.Coordinates) {
 	e.selectionStart = pos
+	e.selectionStartScrollY = e.t.scrollY()
 }
 
 func (e *mouseDriver) SetSelectionEnd(pos term.Coordinates) {
+	// The start was captured at selectionStartScrollY, but Select translates
+	// window->buffer coordinates by subtracting the current scroll offset.
+	// Shift the stored start into the current window coordinate system by the
+	// scroll delta so it maps back to the same content cell as the buffer
+	// scrolls (scrollY grows as the view scrolls up toward older rows).
+	start := e.selectionStart
+	start.Y += e.t.scrollY() - e.selectionStartScrollY
 	// Select/SelectEnd assume reading order: from is the top-left and
 	// to is one past the bottom-right. A leftward drag would otherwise
 	// produce from > to, and the buffer's internal sort then drops the
 	// press cell and the drag-end cell from the selection.
-	start, end := e.selectionStart, pos
+	end := pos
 	if end.Y < start.Y || (end.Y == start.Y && end.X < start.X) {
 		start, end = end, start
 	}

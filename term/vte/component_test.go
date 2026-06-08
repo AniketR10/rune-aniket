@@ -397,6 +397,69 @@ func TestIntegrationComponent(t *testing.T) {
 	}
 }
 
+// TestMouseDriverSelectionStartPinnedAcrossAutoScroll reproduces an upward
+// drag selection that auto-scrolls the buffer. The SDK keeps re-applying the
+// stored selection start on every drag tick via SetSelectionEnd; because
+// Select translates window coordinates by the current scroll offset, the start
+// anchor used to drift up with the content and drop the originally pressed
+// cell from the selection.
+func TestMouseDriverSelectionStartPinnedAcrossAutoScroll(t *testing.T) {
+	t.Parallel()
+	tm := mockTabManager{}
+
+	cfg := DefaultConfig()
+	comp, err := NewComponent(&testExecutor{}, &testExecutor{}, &tm, cfg)
+	require.NoError(t, err)
+
+	p := comp.parserHandler
+	p.sync.primBuf.SetDefaultChar(' ')
+	p.sync.altBuf.SetDefaultChar(' ')
+	comp.Resize(5, 5)
+
+	resetBuffer(t, p, "a    \nb    \nc    \nd    \ne    \nf    \ng    ")
+	assertDraw(t, comp, "c    \nd    \ne    \nf    \ng    ")
+
+	// Establish scrollback headroom so the upward drag has somewhere to go.
+	// scrollY() is the raw offset and grows as the view scrolls up.
+	require.True(t, comp.ScrollUp(1))
+	assertDraw(t, comp, "b    \nc    \nd    \ne    \nf    ")
+	require.Equal(t, 1, comp.scrollY())
+
+	// Anchor the press coordinate empirically: window row 2 currently shows
+	// "d". Selecting it directly proves the press target before the drag.
+	const pressRow = 2
+	comp.Select(term.Coordinates{Y: pressRow})
+	comp.SelectEnd(term.Coordinates{Y: pressRow})
+	pressed, ok := comp.Selection()
+	require.True(t, ok)
+	require.Equal(t, "d", pressed)
+	comp.Unselect()
+
+	driver := &mouseDriver{t: comp, clipboard: cfg.Clipboard}
+
+	// Mirror mouse.Mouse.handleLeftClickSelect: the press anchors the start,
+	// then each upward drag tick calls SetSelectionEnd before the top zone
+	// triggers ScrollUp(1).
+	driver.ClearSelection()
+	driver.SetSelectionStart(term.Coordinates{Y: pressRow})
+
+	driver.SetSelectionEnd(term.Coordinates{Y: 0})
+	require.True(t, comp.ScrollUp(1))
+	require.Equal(t, 2, comp.scrollY())
+
+	// Already at the top of the scrollback, so further ScrollUp is a no-op,
+	// but the SDK still issues the drag tick.
+	driver.SetSelectionEnd(term.Coordinates{Y: 0})
+	require.False(t, comp.ScrollUp(1))
+
+	driver.SetSelectionEnd(term.Coordinates{Y: 0})
+
+	data, ok := comp.Selection()
+	require.True(t, ok)
+	assert.Contains(t, data, "d",
+		"selection must keep the originally pressed cell after auto-scroll")
+}
+
 type testExecutor struct {
 }
 
