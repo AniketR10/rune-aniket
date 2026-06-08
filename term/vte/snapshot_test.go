@@ -38,7 +38,7 @@ func TestTerminalSnapshotStorageRoundTripTermCells(t *testing.T) {
 	}
 
 	stored := doc{Snapshot: Snapshot{
-		Version:      terminalSnapshotVersion,
+		Schema:       terminalSnapshotVersion,
 		Title:        "saved",
 		Width:        80,
 		Height:       24,

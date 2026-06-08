@@ -622,13 +622,12 @@ func TestHandlerHandleReturnsHandledWithoutPtyEcho(t *testing.T) {
 			"(e.g. ide/ex) duplicate input on slow remote ptys.")
 }
 
-// TestHandlerPerformanceInterruptDefaultCoalesces pins the default
-// behaviour that vte.Handler suppresses publisher-bound EventInterrupts
-// for the duration of a Handle call (so a single keystroke that drives
-// the embedded program to flush in multiple stages produces at most
-// one publish, not one per stage). Terminal sessions rely on this to
-// avoid redraw thrash.
-func TestHandlerPerformanceInterruptDefaultCoalesces(t *testing.T) {
+// TestHandlerCoalescesInterruptsDuringHandle pins that vte.Handler
+// suppresses publisher-bound EventInterrupts for the duration of a
+// Handle call, so a single keystroke that drives the embedded program
+// to flush in multiple stages produces at most one publish, not one
+// per stage. Terminal sessions rely on this to avoid redraw thrash.
+func TestHandlerCoalescesInterruptsDuringHandle(t *testing.T) {
 	t.Parallel()
 	cases := []vtetest.Case{
 		{"", `$ ▐                 
@@ -654,49 +653,9 @@ func TestHandlerPerformanceInterruptDefaultCoalesces(t *testing.T) {
 	time.Sleep(defaultWaitForIdleVte)
 
 	assert.LessOrEqual(t, len(ch), 1,
-		"with the default Config (DisablePerformanceInterrupt=false) "+
-			"a single Handle call must publish at most one "+
-			"EventInterrupt; got %d. The sema-gated publisher plus "+
-			"the post-write wait in Handle exist to keep terminal "+
-			"redraws cheap.", len(ch))
-}
-
-// TestHandlerDisablePerformanceInterruptPublishesEveryUpdate pins
-// the contract DisablePerformanceInterrupt=true offers: every parser
-// update reaches the publisher, so callers like exo can keep
-// vteprobe in sync with the embedded editor's actual repaint cadence.
-func TestHandlerDisablePerformanceInterruptPublishesEveryUpdate(t *testing.T) {
-	t.Parallel()
-	cases := []vtetest.Case{
-		{"", `$ ▐                 
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    `},
-	}
-	cfg := DefaultConfig()
-	cfg.DisablePerformanceInterrupt = true
-	handler, ch := testSequence(t, cfg, defaultWaitForIdleVte, cases)
-
-	drain(ch)
-	exit, handled := handler.Handle(term.Event{
-		Type: term.EventKey, Ch: 'a', Raw: []byte("a"),
-	})
-	assert.False(t, exit)
-	assert.True(t, handled)
-	time.Sleep(defaultWaitForIdleVte)
-
-	assert.GreaterOrEqual(t, len(ch), 1,
-		"with DisablePerformanceInterrupt=true the publisher must "+
-			"see at least one EventInterrupt per keystroke that "+
-			"mutates the grid; got %d. exo relies on this to keep "+
-			"vteprobe results synchronized with the embedded "+
-			"editor's repaint cadence.", len(ch))
+		"a single Handle call must publish at most one EventInterrupt; "+
+			"got %d. The sema-gated publisher plus the post-write wait "+
+			"in Handle exist to keep terminal redraws cheap.", len(ch))
 }
 
 func drain(ch chan struct{}) {

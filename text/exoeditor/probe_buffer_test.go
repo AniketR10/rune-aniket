@@ -29,11 +29,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term/vte"
@@ -58,6 +60,9 @@ type fakeComponent struct {
 	cells  [][]term.Cell
 	cursor term.Coordinates
 	err    error
+	// version is returned verbatim by Version. Tests bump it to mimic a
+	// changed rendered grid and defeat refreshProbe's version guard.
+	version uint64
 }
 
 func (c *fakeComponent) Snapshot() (vte.Snapshot, error) {
@@ -67,6 +72,10 @@ func (c *fakeComponent) Snapshot() (vte.Snapshot, error) {
 	return vte.Snapshot{Primary: vte.ScreenSnapshot{Cells: c.cells, Cursor: c.cursor}}, nil
 }
 
+// Version reports the test-controlled grid revision. refreshProbe
+// compares it to decide whether to re-run Infer.
+func (c *fakeComponent) Version() uint64 { return c.version }
+
 // SnapshotInto mirrors Component.SnapshotInto: it copies the fixed test
 // grid into dst, reusing its capacity, so the reuse path refreshProbe
 // takes in production is exercised here too.
@@ -75,7 +84,21 @@ func (c *fakeComponent) SnapshotInto(dst [][]term.Cell) (vte.Snapshot, error) {
 		return vte.Snapshot{}, c.err
 	}
 	cells := term.CopyCells(dst, c.cells)
-	return vte.Snapshot{Primary: vte.ScreenSnapshot{Cells: cells, Cursor: c.cursor}}, nil
+	return vte.Snapshot{
+		Version: c.version,
+		Primary: vte.ScreenSnapshot{Cells: cells, Cursor: c.cursor},
+	}, nil
+}
+
+// DrawSnapshot mirrors Component.DrawSnapshot: it returns the same
+// snapshot SnapshotInto would and stamps it with the current version,
+// so the Draw path's single-lock paint+probe can be exercised without a
+// pty. The paint to w is a no-op because the buffer tests assert on the
+// probe, not the rendered grid.
+func (c *fakeComponent) DrawSnapshot(
+	_ term.Writer, dst [][]term.Cell,
+) (vte.Snapshot, error) {
+	return c.SnapshotInto(dst)
 }
 
 // handlerForBufferTest builds an editorHandler around buf the way
@@ -88,7 +111,10 @@ func handlerForBufferTest(
 	tb testing.TB, buf *cell.Buffer,
 ) (*editorHandler, *fakeComponent) {
 	tb.Helper()
-	comp := &fakeComponent{}
+	// vte.Component starts its version at 1; mirror that so the guard in
+	// refreshProbe falls through on the first call exactly as in
+	// production (inferredVersion is the 0 zero value).
+	comp := &fakeComponent{version: 1}
 	h := &editorHandler{
 		buf:       buf,
 		probe:     vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
@@ -280,9 +306,70 @@ func TestRefreshProbeKeepsLastResultOnSnapshotError(t *testing.T) {
 	require.NotNil(t, good)
 
 	comp.err = errors.New("snapshot failed")
+	// Bump the grid version so refreshProbe gets past its change guard
+	// and actually attempts (and fails) the snapshot.
+	comp.version++
 	h.refreshProbe()
 	assert.Same(t, good, h.lastProbe.Load(),
 		"a snapshot error must keep the last good probe")
+}
+
+// highlightedRows returns the sorted, de-duplicated screen rows the
+// overlay touched via UnionAttributes.
+func highlightedRows(calls []writerCall) []int {
+	seen := map[int]bool{}
+	var rows []int
+	for _, c := range calls {
+		if !seen[c.pos.Y] {
+			seen[c.pos.Y] = true
+			rows = append(rows, c.pos.Y)
+		}
+	}
+	sort.Ints(rows)
+	return rows
+}
+
+// TestDrawOverlayFollowsScrolledGrid is the regression guard for the
+// stale-overlay bug: the editor painted the live terminal grid but
+// overlaid highlights from a probe computed against an earlier grid, so
+// after the embedded editor scrolled, a highlight landed on the screen
+// row the file line used to occupy. Draw now paints and snapshots under
+// one component lock (DrawSnapshot) and aligns the overlay to that exact
+// snapshot, so the highlight must move with the grid.
+func TestDrawOverlayFollowsScrolledGrid(t *testing.T) {
+	t.Parallel()
+
+	buf := bufferOf(t, "foo\nbar\nbaz\n")
+	h, comp := handlerForBufferTest(t, buf)
+	h.overrideHighlights = true
+	h.locations = locationStoreForTest(t)
+	h.scheduleNextTick = func(fn func()) bool { fn(); return true }
+
+	// Highlight the whole of file line 2 ("bar").
+	h.locations.SetLocationList(0, "loc", sliceList([]textapi.Location{{
+		From: term.Coordinates{X: 0, Y: 1},
+		To:   term.Coordinates{X: 3, Y: 1},
+		Attr: term.Attributes{Attrs: term.AttrUnderline},
+	}}))
+
+	// First frame: line 2 is rendered on screen row 1.
+	comp.cells = gutterGrid([]string{" 1 foo", " 2 bar", " 3 baz"}, 30)
+	comp.cursor = term.Coordinates{X: 3, Y: 1}
+	w1 := &recordingWriter{}
+	h.Draw(w1)
+	require.Equal(t, []int{1}, highlightedRows(w1.calls),
+		"line 2 highlight must land on its screen row")
+
+	// The embedded editor scrolls up one line: line 2 is now on screen
+	// row 0. The parser advancing bumps the grid version.
+	comp.cells = gutterGrid([]string{" 2 bar", " 3 baz", " 4 qux"}, 30)
+	comp.cursor = term.Coordinates{X: 3, Y: 0}
+	comp.version++
+	w2 := &recordingWriter{}
+	h.Draw(w2)
+	assert.Equal(t, []int{0}, highlightedRows(w2.calls),
+		"after scroll the highlight must follow line 2 to its new row, "+
+			"not stay on the row from the previous grid")
 }
 
 // BenchmarkRefreshProbe measures the steady-state cost of one

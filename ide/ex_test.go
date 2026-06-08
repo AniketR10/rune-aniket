@@ -6461,7 +6461,7 @@ func (v *testVte) Snapshot() (vte.Snapshot, error) {
 		title = "terminal"
 	}
 	return vte.Snapshot{
-		Version: 1,
+		Schema:  1,
 		Title:   title,
 		Width:   10,
 		Height:  10,

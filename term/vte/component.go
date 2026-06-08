@@ -91,6 +91,13 @@ type Component struct {
 	complete          bool
 	selectionAttr     term.Attributes
 	defAttr           term.Attributes
+
+	// version increments after each batch of pty output the parser
+	// applies, so it changes whenever the rendered grid may have. It
+	// lets consumers cheaply detect a changed grid without diffing
+	// cells; it is not a lock — Snapshot/Draw still take mu. It starts
+	// at 1 so the zero value reads as "never observed".
+	version atomic.Uint64
 }
 
 // NOTE: this is an integrator implementation, it shouldn't really do much other
@@ -119,6 +126,9 @@ func (t *Component) Init(
 	t.executor = e
 	t.writech = make(chan []byte, 64)
 	t.cfg = cfg
+	// Start at 1 so the zero value (0) means "never observed" for
+	// consumers comparing Version across calls.
+	t.version.Store(1)
 
 	t.ctx, t.cancelCtx = context.WithCancel(context.Background())
 	err := t.createPty(cfg.CommandAndArgs)
@@ -508,7 +518,12 @@ func (t *Component) IsNewLineMode() bool {
 func (t *Component) Draw(w term.Writer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.drawLocked(w)
+}
 
+// drawLocked paints the active buffer and selection to w. The caller
+// must hold t.mu.
+func (t *Component) drawLocked(w term.Writer) {
 	if t.parserHandler.useAlt {
 		t.parserHandler.sync.altBuf.Draw(w)
 	} else if t.scroll.Offset().Y == 0 {
@@ -678,6 +693,13 @@ func (t *Component) Snapshot() (Snapshot, error) {
 	return t.SnapshotInto(nil)
 }
 
+// Version returns the current grid revision. It increments whenever the
+// parser applies pty output, so callers can compare it across calls to
+// detect a changed grid without diffing cells.
+func (t *Component) Version() uint64 {
+	return t.version.Load()
+}
+
 // SnapshotInto behaves like Snapshot but copies the active buffer's
 // cells into dst, reusing dst's row and per-row capacity instead of
 // allocating a fresh grid on every call. Passing nil allocates a new
@@ -689,9 +711,15 @@ func (t *Component) Snapshot() (Snapshot, error) {
 func (t *Component) SnapshotInto(dst [][]term.Cell) (Snapshot, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.snapshotLocked(dst), nil
+}
 
+// snapshotLocked builds a Snapshot from the active buffer, reusing dst
+// for the cell grid. The caller must hold t.mu.
+func (t *Component) snapshotLocked(dst [][]term.Cell) Snapshot {
 	snap := Snapshot{
-		Version:      terminalSnapshotVersion,
+		Schema:       terminalSnapshotVersion,
+		Version:      t.version.Load(),
 		Title:        t.parserHandler.title,
 		Width:        t.width,
 		Height:       t.height,
@@ -709,7 +737,27 @@ func (t *Component) SnapshotInto(dst [][]term.Cell) (Snapshot, error) {
 			Cursor: cursor,
 		}
 	}
-	return snap, nil
+	return snap
+}
+
+// DrawSnapshot paints the active grid to w and, under the same single
+// t.mu acquire, returns a Snapshot of the very cells and cursor it
+// painted. Holding the lock across both the draw and the snapshot is
+// what guarantees the returned grid is exactly what was written to w:
+// the parser goroutine cannot advance the grid in between. Callers that
+// overlay on top of the painted grid (e.g. exo location highlights,
+// which translate file coordinates to screen rows via a snapshot) rely
+// on this so the overlay can never land on a row the grid has since
+// scrolled away from.
+//
+// dst is reused for the snapshot's cell grid exactly as in SnapshotInto;
+// the returned cells are backed by dst and must not be retained across
+// the next call or shared across goroutines.
+func (t *Component) DrawSnapshot(w term.Writer, dst [][]term.Cell) (Snapshot, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.drawLocked(w)
+	return t.snapshotLocked(dst), nil
 }
 
 // RestoreFromSnapshot restores a previously captured terminal snapshot
@@ -1084,6 +1132,7 @@ func (t *Component) run(updateChan chan struct{}) error {
 		for i := range n {
 			t.parser.Advance(buf[i])
 		}
+		t.version.Add(1)
 		select {
 		// Close was called, just return error
 		case <-t.ctx.Done():

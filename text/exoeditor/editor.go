@@ -187,10 +187,6 @@ func (e *Editor) Edit(
 	cfg.CommandAndArgs = []string{cmdStr}
 	cfg.Modal = false
 	cfg.ScheduleNextTick = e.scheduleNextTick
-	// refreshProbe must see every grid mutation to keep vteprobe
-	// in sync with the embedded editor's repaint cadence; opt out
-	// of the publisher-side coalescing that terminal sessions use.
-	cfg.DisablePerformanceInterrupt = true
 
 	procDone := make(chan error, 1)
 	cfg.Watcher = workspaceapi.ChanProcessWatcher(procDone)

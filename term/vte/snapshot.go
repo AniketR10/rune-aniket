@@ -42,7 +42,13 @@ const terminalSnapshotVersion = 1
 // is what callers like vteprobe rely on to keep the two consistent
 // across parser callbacks.
 type Snapshot struct {
-	Version int
+	// Schema is the on-disk snapshot format version, bumped only when
+	// the persisted layout changes. Version is the live grid revision
+	// from the source Component, used by callers to detect whether the
+	// rendered grid changed between snapshots; it is not part of the
+	// durable format's compatibility contract.
+	Schema  int
+	Version uint64
 	Title   string
 	Width   int
 	Height  int

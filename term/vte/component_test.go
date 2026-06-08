@@ -692,6 +692,69 @@ func TestComponentSnapshotIsConsistentUnderParserPressure(t *testing.T) {
 	writerWG.Wait()
 }
 
+// TestComponentDrawSnapshotIsConsistentUnderParserPressure regresses the
+// stale-overlay race at its source: exo paints the grid and probes a
+// snapshot, then overlays highlights using that probe. When the paint
+// and the snapshot came from two separate Component.mu acquisitions the
+// parser goroutine could advance the grid in between, so the overlay was
+// computed for a grid the paint had already scrolled past. DrawSnapshot
+// paints and snapshots under one acquire; the snapshot it returns must
+// therefore satisfy the same cells/cursor consistency invariant the
+// split path could violate: the row holding the cursor has at least
+// cursor.X populated cells.
+func TestComponentDrawSnapshotIsConsistentUnderParserPressure(t *testing.T) {
+	t.Parallel()
+
+	comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+		&mockTabManager{}, DefaultConfig())
+	require.NoError(t, err)
+	ph := comp.parserHandler
+	ph.sync.primBuf.SetDefaultChar(' ')
+	ph.sync.altBuf.SetDefaultChar(' ')
+	require.NoError(t, comp.Resize(40, 4))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var writerWG sync.WaitGroup
+	writerWG.Go(func() {
+		row := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			ph.Goto(row, 0)
+			ph.ClearLine(vteparser.LineClearModeAll)
+			ph.Input('x')
+			row = (row + 1) % 4
+		}
+	})
+
+	writer := term.NewStringWriter(comp.width, comp.height)
+	const iterations = 5000
+	for range iterations {
+		writer.Reset()
+		snap, err := comp.DrawSnapshot(writer, nil)
+		require.NoError(t, err)
+		active := snap.Active()
+		cells, cursor := active.Cells, active.Cursor
+		if cursor.X == 0 {
+			continue
+		}
+		require.Less(t, cursor.Y, len(cells),
+			"cursor.Y must be within the snapshotted cells")
+		assert.GreaterOrEqual(t, len(cells[cursor.Y]), cursor.X,
+			"DrawSnapshot must return the very grid it painted: the row "+
+				"holding the cursor must have at least cursor.X cells. "+
+				"Fewer means the snapshot was taken from a different "+
+				"parser state than the paint.")
+	}
+	cancel()
+	writerWG.Wait()
+}
+
 func assertDraw(t *testing.T, comp *Component, expected string) {
 	t.Helper()
 	writer := term.NewStringWriter(comp.width, comp.height)
@@ -902,7 +965,7 @@ func TestComponentRestoreFromSnapshotDrivesSetPtySize(t *testing.T) {
 	exe.setPtySize = nil
 
 	snap := Snapshot{
-		Version: terminalSnapshotVersion,
+		Schema:  terminalSnapshotVersion,
 		Width:   w,
 		Height:  h,
 		Primary: ScreenSnapshot{

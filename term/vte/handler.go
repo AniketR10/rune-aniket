@@ -74,7 +74,7 @@ type Handler struct {
 	exit          atomic.Bool // whether running shell/program has exited
 	width, height int
 	updateCh      chan struct{}
-	sema          chan struct{} // nil when DisablePerformanceInterrupt
+	sema          chan struct{}
 }
 
 // NewHandler allocates storage for a new Handler and initializes it.
@@ -133,9 +133,7 @@ func (e *Handler) Init(
 	e.ctx, e.cancelCtx = context.WithCancel(context.Background())
 
 	e.updateCh = make(chan struct{}, 1)
-	if !config.DisablePerformanceInterrupt {
-		e.sema = make(chan struct{})
-	}
+	e.sema = make(chan struct{})
 	go debug.CapturePanicReport(func() {
 		logErr := e.comp.Run(e.updateCh)
 		e.exit.Store(true)
@@ -155,25 +153,16 @@ func (e *Handler) Init(
 
 	go debug.CapturePanicReport(func() {
 		for {
-			if e.sema != nil {
-				// Park the publisher while Handle is running so a
-				// keystroke that triggers a multi-flush repaint
-				// produces at most one EventInterrupt downstream.
-				// The handshake mirrors Handle's send/receive on
-				// the same channel.
-				select {
-				case <-e.sema:
-					e.sema <- struct{}{}
-				case <-e.ctx.Done():
-					return
-				case <-e.updateCh:
-				}
-			} else {
-				select {
-				case <-e.ctx.Done():
-					return
-				case <-e.updateCh:
-				}
+			// Park the publisher while Handle is running so a
+			// keystroke that triggers a multi-flush repaint produces
+			// at most one EventInterrupt downstream. The handshake
+			// mirrors Handle's send/receive on the same channel.
+			select {
+			case <-e.sema:
+				e.sema <- struct{}{}
+			case <-e.ctx.Done():
+				return
+			case <-e.updateCh:
 			}
 			err = e.publisher.PublishEvent(term.Event{Type: term.EventInterrupt})
 			if err != nil {
@@ -208,6 +197,21 @@ func (e *Handler) Snapshot() (Snapshot, error) {
 // the dst ownership contract.
 func (e *Handler) SnapshotInto(dst [][]term.Cell) (Snapshot, error) {
 	return e.comp.SnapshotInto(dst)
+}
+
+// Version returns the underlying Component's grid revision. See
+// Component.Version.
+func (e *Handler) Version() uint64 {
+	return e.comp.Version()
+}
+
+// DrawSnapshot paints the active terminal grid to w and returns a
+// Snapshot of the same grid taken under one lock. See
+// Component.DrawSnapshot. Unlike Draw it does not render the modal (vi)
+// overlay; it is intended for non-modal embeddings that overlay on the
+// terminal grid itself.
+func (e *Handler) DrawSnapshot(w term.Writer, dst [][]term.Cell) (Snapshot, error) {
+	return e.comp.DrawSnapshot(w, dst)
 }
 
 // RestoreFromSnapshot restores a saved terminal snapshot into this
@@ -347,15 +351,13 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if e.sema != nil {
-		select {
-		case e.sema <- struct{}{}:
-		case <-e.ctx.Done():
-			exit = true
-			return
-		}
-		defer func() { <-e.sema }()
+	select {
+	case e.sema <- struct{}{}:
+	case <-e.ctx.Done():
+		exit = true
+		return
 	}
+	defer func() { <-e.sema }()
 
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
@@ -382,21 +384,19 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.comp.ScrollBottom()
 		e.log(log.TraceLevel, "written cltr-c to pty: %q", raw)
 	}
-	if e.sema != nil {
-		// Debounce: give the embedded program up to handleTimeout
-		// to flush its post-keystroke repaint before returning.
-		// One update is consumed directly off updateCh so it does
-		// not redundantly wake the publisher we just parked.
-		e.handleTimer.Reset(e.handleTimeout)
-		select {
-		case <-e.handleTimer.C:
-			e.handleTimer.Stop()
-		case <-e.ctx.Done():
-			exit = true
-		case <-e.updateCh:
-			if !e.handleTimer.Stop() {
-				<-e.handleTimer.C
-			}
+	// Debounce: give the embedded program up to handleTimeout to flush
+	// its post-keystroke repaint before returning. One update is
+	// consumed directly off updateCh so it does not redundantly wake
+	// the publisher we just parked.
+	e.handleTimer.Reset(e.handleTimeout)
+	select {
+	case <-e.handleTimer.C:
+		e.handleTimer.Stop()
+	case <-e.ctx.Done():
+		exit = true
+	case <-e.updateCh:
+		if !e.handleTimer.Stop() {
+			<-e.handleTimer.C
 		}
 	}
 	return

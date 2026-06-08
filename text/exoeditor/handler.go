@@ -79,6 +79,19 @@ type editorHandler struct {
 	probeMu    sync.Mutex
 	probeCells [][]term.Cell
 	component  componentSnapshotter
+
+	// inferredVersion/inferredBufGen record the component grid version
+	// and file-cell generation the last successful Infer ran against, so
+	// refreshProbe — called on every draw — returns immediately when
+	// neither changed. The component version starts at 1, so the zero
+	// value here forces the first refreshProbe to run. This keeps idle
+	// editor windows free on the shared redraw that fires for any
+	// window's interrupt.
+	inferredVersion uint64
+	inferredBufGen  uint64
+	// bufCellsGen bumps whenever snapshotBufferCells replaces bufCells,
+	// i.e. on every file-buffer edit.
+	bufCellsGen uint64
 }
 
 type vteHandler interface {
@@ -97,6 +110,11 @@ type vteHandler interface {
 type componentSnapshotter interface {
 	Snapshot() (vte.Snapshot, error)
 	SnapshotInto(dst [][]term.Cell) (vte.Snapshot, error)
+	// DrawSnapshot paints the grid to w and returns a Snapshot of the
+	// same grid under one lock, so the overlay can be aligned to exactly
+	// what was painted.
+	DrawSnapshot(w term.Writer, dst [][]term.Cell) (vte.Snapshot, error)
+	Version() uint64
 }
 
 func newHandler(
@@ -351,7 +369,27 @@ func (h *editorHandler) Draw(w term.Writer) {
 		h.vteHandler.Draw(w)
 		return
 	}
-	h.vteHandler.Draw(ignoreAttrWriter{Writer: w})
+	// Paint and snapshot the grid under one component lock, then align
+	// the overlay to that exact snapshot. Going through DrawSnapshot —
+	// rather than drawing and snapshotting separately — is what stops the
+	// parser goroutine from scrolling the grid between the cells we paint
+	// and the probe we overlay, which would land highlights on the wrong
+	// rows. The probe itself is only recomputed when the grid version (or
+	// the file cells) changed, so an idle window redrawn for some other
+	// window's interrupt still pays nothing.
+	h.probeMu.Lock()
+	snap, err := h.component.DrawSnapshot(ignoreAttrWriter{Writer: w}, h.probeCells)
+	var flush *term.Coordinates
+	if err == nil {
+		flush = h.inferFromSnapshotLocked(snap, snap.Version)
+	}
+	h.probeMu.Unlock()
+
+	if flush != nil {
+		pos := *flush
+		h.scheduleNextTick(func() { h.injectGoto(pos) })
+	}
+
 	h.probeStateMu.RLock()
 	defer h.probeStateMu.RUnlock()
 	probe := h.lastProbe.Load()
@@ -366,9 +404,37 @@ func (h *editorHandler) refreshProbe() {
 	h.probeMu.Lock()
 	defer h.probeMu.Unlock()
 
+	version := h.component.Version()
+	// Cheap change check first: when neither the rendered grid nor the
+	// file cells changed since the last inference there is nothing to
+	// do. The component version starts at 1, so the zero-valued
+	// inferredVersion makes the very first call fall through and probe.
+	if version == h.inferredVersion && h.bufCellsGen == h.inferredBufGen {
+		return
+	}
+
 	snap, err := h.component.SnapshotInto(h.probeCells)
 	if err != nil {
 		return
+	}
+	flush := h.inferFromSnapshotLocked(snap, snap.Version)
+	if flush != nil {
+		pos := *flush
+		h.scheduleNextTick(func() { h.injectGoto(pos) })
+	}
+}
+
+// inferFromSnapshotLocked runs vteprobe against snap, stores the result
+// as the current probe, and records version as the inferred revision.
+// It is a no-op when version and the file-cell generation match the last
+// inference. It returns a pending goto position to flush on the first
+// successful probe (so the caller can schedule injectGoto outside the
+// lock), or nil. The caller must hold probeMu.
+func (h *editorHandler) inferFromSnapshotLocked(
+	snap vte.Snapshot, version uint64,
+) *term.Coordinates {
+	if version == h.inferredVersion && h.bufCellsGen == h.inferredBufGen {
+		return nil
 	}
 	active := snap.Active()
 	// Retain the (possibly grown) backing grid for the next refresh.
@@ -376,8 +442,10 @@ func (h *editorHandler) refreshProbe() {
 	fileCells := h.bufCells
 	res, err := h.probe.Infer(active.Cells, active.Cursor, fileCells, h.probeSlab)
 	if err != nil {
-		return
+		return nil
 	}
+	h.inferredVersion = version
+	h.inferredBufGen = h.bufCellsGen
 	h.probeStateMu.Lock()
 	firstProbe := h.lastProbe.Load() == nil
 	oldProbeCells := h.lastProbeCells
@@ -392,11 +460,7 @@ func (h *editorHandler) refreshProbe() {
 		h.pendingGoto = nil
 	}
 	h.probeStateMu.Unlock()
-
-	if flush != nil {
-		pos := *flush
-		h.scheduleNextTick(func() { h.injectGoto(pos) })
-	}
+	return flush
 }
 
 func (h *editorHandler) bufferCells() [][]term.Cell {
@@ -432,6 +496,7 @@ func (h *editorHandler) snapshotBufferCells() {
 	}
 	oldCells := h.bufCells
 	h.bufCells = snapshotFileCellsInto(dst, h.buf.View().RawCells())
+	h.bufCellsGen++
 	h.bufCellsScratch = nil
 	if !cellMatricesAlias(oldCells, h.lastProbeCells) && !cellMatricesAlias(oldCells, h.bufCells) {
 		h.bufCellsScratch = oldCells
