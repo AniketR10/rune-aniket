@@ -100,4 +100,35 @@ func TestDetectChrome(t *testing.T) {
 		assert.Equal(t, 0, top)
 		assert.Equal(t, 0, bot)
 	})
+
+	t.Run("leading blank file line is not peeled as chrome", func(t *testing.T) {
+		t.Parallel()
+		// A viewport scrolled so its first visible row is a real blank
+		// file line. With no chrome above it, the blank must stay content
+		// so the inferred scroll position is not shifted down by one.
+		rows := []extractedRow{
+			makeRow(""),
+			makeRow("func main() {"),
+			makeRow("\treturn"),
+		}
+		top, bot := detectChrome(rows,
+			cellLines([]string{"", "func main() {", "\treturn"}))
+		assert.Equal(t, 0, top)
+		assert.Equal(t, 2, bot)
+	})
+
+	t.Run("blank separator under top chrome is peeled", func(t *testing.T) {
+		t.Parallel()
+		// nano draws a title bar then a blank separator before content.
+		// The blank trails peeled chrome, so it is padding and peeled.
+		rows := []extractedRow{
+			makeStyledRow("File: main.go", reverse),
+			makeRow(""),
+			makeRow("package main"),
+		}
+		top, bot := detectChrome(rows,
+			cellLines([]string{"package main"}))
+		assert.Equal(t, 2, top)
+		assert.Equal(t, 2, bot)
+	})
 }

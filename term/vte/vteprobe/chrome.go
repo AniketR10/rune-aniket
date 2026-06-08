@@ -65,12 +65,22 @@ func detectChrome(rows []extractedRow, fileLines [][]term.Cell) (top, bot int) {
 // soft messages before stopping. When fileLines is nil/empty we fall
 // back to attribute-only chrome detection to avoid eating content rows
 // in unit-test scenarios that intentionally skip the file context.
+//
+// A leading blank row is only peeled when it trails chrome already
+// peeled above it (e.g. the separator nano draws under its title bar).
+// A blank row with no chrome above it is a real blank file line at the
+// top of the viewport, not padding, so peeling it would drop a line and
+// shift the inferred scroll position.
 func peelTop(rows []extractedRow, top *int, bot int, fileLines [][]term.Cell) {
 	softInARow := 0
+	peeledChrome := false
 	for *top < bot {
 		row := rows[*top]
 		text := trimRightSpace(row.runes)
 		if len(text) == 0 {
+			if !peeledChrome {
+				return
+			}
 			*top++
 			softInARow = 0
 			continue
@@ -87,11 +97,13 @@ func peelTop(rows []extractedRow, top *int, bot int, fileLines [][]term.Cell) {
 		if isAttrChromeRow(row) {
 			*top++
 			softInARow = 0
+			peeledChrome = true
 			continue
 		}
 		if len(fileLines) > 0 && softInARow < 2 && !appearsInFile(text, fileLines) {
 			*top++
 			softInARow++
+			peeledChrome = true
 			continue
 		}
 		return
