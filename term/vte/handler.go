@@ -203,6 +203,13 @@ func (e *Handler) Snapshot() (Snapshot, error) {
 	return e.comp.Snapshot()
 }
 
+// SnapshotInto behaves like Snapshot but copies the active buffer's
+// cells into dst, reusing dst's capacity. See Component.SnapshotInto for
+// the dst ownership contract.
+func (e *Handler) SnapshotInto(dst [][]term.Cell) (Snapshot, error) {
+	return e.comp.SnapshotInto(dst)
+}
+
 // RestoreFromSnapshot restores a saved terminal snapshot into this
 // live terminal emulator.
 //

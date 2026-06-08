@@ -67,6 +67,17 @@ func (c *fakeComponent) Snapshot() (vte.Snapshot, error) {
 	return vte.Snapshot{Primary: vte.ScreenSnapshot{Cells: c.cells, Cursor: c.cursor}}, nil
 }
 
+// SnapshotInto mirrors Component.SnapshotInto: it copies the fixed test
+// grid into dst, reusing its capacity, so the reuse path refreshProbe
+// takes in production is exercised here too.
+func (c *fakeComponent) SnapshotInto(dst [][]term.Cell) (vte.Snapshot, error) {
+	if c.err != nil {
+		return vte.Snapshot{}, c.err
+	}
+	cells := term.CopyCells(dst, c.cells)
+	return vte.Snapshot{Primary: vte.ScreenSnapshot{Cells: cells, Cursor: c.cursor}}, nil
+}
+
 // handlerForBufferTest builds an editorHandler around buf the way
 // newHandler does for the parts relevant to line snapshots and probe
 // refresh: it seeds the snapshot, subscribes to buffer edits, installs a

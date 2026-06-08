@@ -675,6 +675,18 @@ func (t *Component) AlternateScroll() (*component.Scroll, sync.Locker) {
 // matching the buffer that was active at snapshot time. Snapshot does
 // not attempt to persist the live pty process or the inactive buffer.
 func (t *Component) Snapshot() (Snapshot, error) {
+	return t.SnapshotInto(nil)
+}
+
+// SnapshotInto behaves like Snapshot but copies the active buffer's
+// cells into dst, reusing dst's row and per-row capacity instead of
+// allocating a fresh grid on every call. Passing nil allocates a new
+// grid, matching Snapshot exactly.
+//
+// The returned cells are backed by dst. The caller must not retain them
+// across the next SnapshotInto(dst) call, and dst must not be shared
+// across goroutines.
+func (t *Component) SnapshotInto(dst [][]term.Cell) (Snapshot, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -688,12 +700,12 @@ func (t *Component) Snapshot() (Snapshot, error) {
 	cursor := t.parserHandler.sync.buf.CursorAtScreen()
 	if t.parserHandler.useAlt {
 		snap.Alternate = ScreenSnapshot{
-			Cells:  term.CloneCells(t.parserHandler.sync.altBuf.Cells.RawCells()),
+			Cells:  term.CopyCells(dst, t.parserHandler.sync.altBuf.Cells.RawCells()),
 			Cursor: cursor,
 		}
 	} else {
 		snap.Primary = ScreenSnapshot{
-			Cells:  term.CloneCells(t.parserHandler.sync.primBuf.Cells.RawCells()),
+			Cells:  term.CopyCells(dst, t.parserHandler.sync.primBuf.Cells.RawCells()),
 			Cursor: cursor,
 		}
 	}

@@ -700,6 +700,59 @@ func assertDraw(t *testing.T, comp *Component, expected string) {
 	assert.Equal(t, expected, writer.String())
 }
 
+// newPopulatedComponentForBench builds a component with a fully written
+// grid so Snapshot/SnapshotInto copy a realistic amount of cells.
+func newPopulatedComponentForBench(b *testing.B, width, height int) *Component {
+	b.Helper()
+	comp, err := NewComponent(&testExecutor{}, &testExecutor{},
+		&mockTabManager{}, DefaultConfig())
+	require.NoError(b, err)
+	ph := comp.parserHandler
+	ph.sync.primBuf.SetDefaultChar(' ')
+	ph.sync.altBuf.SetDefaultChar(' ')
+	require.NoError(b, comp.Resize(width, height))
+	for row := range height {
+		ph.Goto(row, 0)
+		for col := range width {
+			ph.Input(rune('a' + (col+row)%26))
+		}
+	}
+	return comp
+}
+
+// BenchmarkSnapshot and BenchmarkSnapshotInto document the allocation
+// win of reusing a destination grid: Snapshot deep-copies the whole grid
+// each call, while SnapshotInto copies into caller-owned scratch and only
+// allocates when a row must grow (never, in steady state).
+func BenchmarkSnapshot(b *testing.B) {
+	comp := newPopulatedComponentForBench(b, 80, 48)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := comp.Snapshot(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkSnapshotInto(b *testing.B) {
+	comp := newPopulatedComponentForBench(b, 80, 48)
+
+	var dst [][]term.Cell
+	snap, err := comp.SnapshotInto(dst)
+	require.NoError(b, err)
+	dst = snap.Active().Cells
+
+	b.ReportAllocs()
+	for b.Loop() {
+		snap, err := comp.SnapshotInto(dst)
+		if err != nil {
+			b.Fatal(err)
+		}
+		dst = snap.Active().Cells
+	}
+}
+
 // ptySize captures a single SetPtySize call so tests can assert the
 // component drives the pty winsize via the schemeapi.Terminal contract.
 type ptySize struct {
