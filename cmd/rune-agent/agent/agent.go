@@ -302,6 +302,22 @@ type executedToolCall struct {
 	duration time.Duration
 }
 
+// emptyToolResultPlaceholder stands in for a tool result that produced no
+// textual output. Anthropic rejects an empty tool_result text block with
+// "text content blocks must be non-empty", so the replayed content must
+// always carry at least this marker.
+const emptyToolResultPlaceholder = "(tool produced no output)"
+
+// nonEmptyToolResult guarantees a tool-role message never carries empty
+// content. A tool that writes nothing to stdout/stderr (e.g. `touch`)
+// otherwise yields an empty tool_result that the provider rejects mid-turn.
+func nonEmptyToolResult(content string) string {
+	if content == "" {
+		return emptyToolResultPlaceholder
+	}
+	return content
+}
+
 // WithSkillName sets the skill pre-loaded via slash command.
 func WithSkillName(name string) RunOption {
 	return func(o *runOptions) {
@@ -1123,7 +1139,7 @@ func (a *Agent) run(
 				}
 				toolMsgs[tr.index] = llmapi.Message{
 					Role:       llmapi.RoleTool,
-					Content:    result.Content,
+					Content:    nonEmptyToolResult(result.Content),
 					Name:       tr.info.call.Function.Name,
 					ToolCallID: tr.info.call.ID,
 				}
@@ -1955,7 +1971,7 @@ func buildToolCallMessages(results []ToolCallResult) []llmapi.Message {
 	for i, r := range results {
 		msgs = append(msgs, llmapi.Message{
 			Role:       llmapi.RoleTool,
-			Content:    utf8validate.Sanitize(r.Content),
+			Content:    nonEmptyToolResult(utf8validate.Sanitize(r.Content)),
 			Name:       calls[i].Function.Name,
 			ToolCallID: calls[i].ID,
 		})

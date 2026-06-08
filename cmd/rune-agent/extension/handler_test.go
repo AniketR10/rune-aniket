@@ -757,6 +757,72 @@ func TestE2EUTF8SafetyAcrossAgentLoop(t *testing.T) {
 		"grep must skip binary files even when their bytes contain the pattern")
 }
 
+// TestE2EEmptyToolResultIsNeverSentEmpty reproduces the mid-turn 400
+// "text content blocks must be non-empty" failure. A bash command that
+// produces no output (and matches no tool hint) returns an empty
+// ToolResult; that empty content flows verbatim into the tool-role
+// message replayed on the next turn. Anthropic rejects an empty
+// tool_result text block, so the agent must guarantee the replayed
+// tool result content is non-empty. The assertion runs at the
+// llmapi.Service boundary — the exact bytes the provider would send.
+func TestE2EEmptyToolResultIsNeverSentEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	// `touch` writes nothing to stdout/stderr and matches none of the
+	// bashToolHint rules, so the bash tool returns ToolResult{Content: ""}.
+	svc := llmtest.New(
+		[]llmapi.ModelEntry{{Provider: "test", Name: "test-model", ContextWindow: 128_000}},
+		llmtest.Response{
+			ToolCalls: []llmapi.ToolCall{{
+				ID:   "call-empty",
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{
+					Name:      "bash",
+					Arguments: `{"command":"touch empty_marker.txt"}`,
+				},
+			}},
+			FinishReason: llmapi.FinishReasonToolCall,
+		},
+		llmtest.Response{
+			Chunks:       []string{"done"},
+			FinishReason: llmapi.FinishReasonStop,
+		},
+	)
+
+	h := utf8E2EHandler(t, svc, dir)
+
+	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+		InputSequence: "hi<enter>",
+		Expected: frame(
+			"hi",
+			blanks(), blanks(), blanks(), blanks(), blanks(), blanks(),
+			"   ┌───────────────────────────────┐    ",
+			"   │▐                              │    ",
+			"   └───────────────────────────────┘    ",
+		),
+	}})
+
+	// Wait for both scripted calls: the tool turn and the stop reply.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if svc.CallCount() >= 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	require.GreaterOrEqualf(t, svc.CallCount(), 2,
+		"expected the scripted agent loop to issue both CreateCompletion calls, got %d", svc.CallCount())
+
+	// The tool result for call-empty is replayed on the second request.
+	requests := svc.Requests()
+	require.GreaterOrEqual(t, len(requests), 2)
+	result, ok := findToolResult(requests[1].Request.Messages, "call-empty")
+	require.True(t, ok, "expected tool result for call-empty in request 1")
+	assert.NotEmpty(t, result,
+		"empty tool output must not be replayed as an empty tool_result; "+
+			"Anthropic rejects it with \"text content blocks must be non-empty\"")
+}
+
 // TestE2ECtrlCDismissesFreeFormPrompt drives the same handler with an
 // ask_user_question call that has no options (free-form text input).
 // The user types "Ali" into the main inputbox; Ctrl-C must dismiss
