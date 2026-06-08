@@ -317,9 +317,9 @@ func TestCompleteWithDialoguesIterator(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{
-			"worktree-b:sibling-chat",
 			"local-new",
 			"local-old",
+			"worktree-b:sibling-chat",
 			"<legacy>:legacy",
 		}, ids)
 	})
@@ -331,9 +331,9 @@ func TestCompleteWithDialoguesIterator(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{
-			"worktree-b:sibling-chat",
 			"local-new",
 			"local-old",
+			"worktree-b:sibling-chat",
 			"<legacy>:legacy",
 			"ssh://host/other/project:other-chat",
 		}, ids)

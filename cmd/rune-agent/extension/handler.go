@@ -1388,22 +1388,22 @@ func (h *aiEditorHandler) completeWithDialoguesIterator(ctx context.Context, sho
 		return nil, fmt.Errorf("dialogue store list collect: %w", err)
 	}
 
-	// dialogueTier assigns a sort bucket:
-	//   0 = current workspace or known worktree (local)
-	//   1 = empty workspace (legacy)
-	//   2 = foreign workspace
 	dialogueTier := func(d dialoguemanager.DialogueHeader) int {
 		ws, hasWS := d.Workspace()
-		switch {
-		case hasWS && ws.Equal(h.cwd):
+		if hasWS && ws.Equal(h.cwd) {
 			return 0
-		case hasWS && h.gitID.worktrees[ws.String()] != "":
-			return 0
-		case !hasWS:
+		}
+		if hasWS && h.gitID.worktrees[ws.String()] != "" {
 			return 1
-		default:
+		}
+		if !hasWS {
 			return 2
 		}
+		return 3
+	}
+	isForeign := func(d dialoguemanager.DialogueHeader) bool {
+		ws, hasWS := d.Workspace()
+		return hasWS && !ws.Equal(h.cwd) && h.gitID.worktrees[ws.String()] == ""
 	}
 
 	// Filter: drop empty IDs, sub-agents, and (unless showAll)
@@ -1413,17 +1413,20 @@ func (h *aiEditorHandler) completeWithDialoguesIterator(ctx context.Context, sho
 		if d.ID == "" || d.SubAgent {
 			continue
 		}
-		if !showAll && dialogueTier(d) == 2 {
+		if !showAll && isForeign(d) {
 			continue
 		}
 		filtered = append(filtered, d)
 	}
 
-	// Sort: local first, then legacy, then foreign.
-	// Within each tier, preserve the store's UpdatedAt-descending order
-	// via a stable sort.
+	// Current-workspace dialogues stay pinned above newer sibling worktree
+	// dialogues so completions prefer the user's active context.
 	sort.SliceStable(filtered, func(i, j int) bool {
-		return dialogueTier(filtered[i]) < dialogueTier(filtered[j])
+		ti, tj := dialogueTier(filtered[i]), dialogueTier(filtered[j])
+		if ti != tj {
+			return ti < tj
+		}
+		return filtered[i].UpdatedAt.After(filtered[j].UpdatedAt)
 	})
 
 	// Map to display strings.
