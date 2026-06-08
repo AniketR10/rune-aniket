@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/idetutorial"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
 )
@@ -234,6 +235,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,
@@ -300,6 +302,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,
@@ -351,6 +354,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,
@@ -397,6 +401,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,
@@ -477,6 +482,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,
@@ -532,6 +538,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,

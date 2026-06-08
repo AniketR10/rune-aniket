@@ -37,6 +37,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+
+	"unstable.build/go-tui/browser"
 )
 
 // fakeNotis captures every Notify / NotifyOnce call so tests can
@@ -149,7 +151,7 @@ func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 	tut, err := New(
 		"tutorial-under-test", src,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
 		nil,
@@ -293,7 +295,7 @@ func TestEntryRequired(t *testing.T) {
 	_, err := New(
 		"x", `tutorial(id="x")`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)
@@ -308,7 +310,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 	_, err := New(
 		"x", `tutorial(entry="not a func")`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)
@@ -323,7 +325,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 	_, err := New(
 		"x", `tutorial(entry=lambda x: 1)`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)
@@ -342,7 +344,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 			"tutorial(entry=a)\n"+
 			"tutorial(entry=b)\n",
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)
@@ -356,7 +358,7 @@ func TestEmptySourceRejected(t *testing.T) {
 	_, err := New(
 		"x", "",
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)
@@ -700,7 +702,7 @@ tutorial(entry=run)
 		tut, err := New(
 			"align_"+a, src,
 			nil, nil, notis, nil,
-			term.Attributes{}, component.FrameCharSet{},
+			term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 			nil, nil, term.KeyComb{Ch: ':'},
 			nil,
 		)
@@ -719,7 +721,7 @@ tutorial(entry=run)
 	tut, err := New(
 		"align_bogus", src,
 		nil, nil, notis, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)
@@ -936,6 +938,84 @@ tutorial(entry=run)
 		assert.True(t, gridContains(g, opt),
 			"choice overlay must render option %q", opt)
 	}
+	tut.Stop()
+}
+
+// TestChoiceOptionsPaddedButValueUnpadded asserts that prompt option
+// labels render with surrounding space padding while the selected
+// value reported to the script stays the original unpadded label.
+func TestChoiceOptionsPaddedButValueUnpadded(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick one", options=["Alpha", "Beta"])
+    notify(message="value=[" + pick.value + "]")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+
+	g := newGridWriter(80, 24)
+	tut.Draw(g)
+	assert.True(t, gridContains(g, " Alpha "),
+		"option label must render with surrounding space padding")
+
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("value=[Alpha]"),
+		"selected value must be the unpadded label, got %v",
+		notis.renderedCalls())
+}
+
+// TestPromptUsesConfiguredStyling asserts that confirm/choice prompts
+// pick up the IDE prompt styling passed to New: the highlighted option
+// is drawn with the configured HighlightAttr background, matching the
+// IDE's browser-driven prompts instead of the SDK's reverse-video
+// default.
+func TestPromptUsesConfiguredStyling(t *testing.T) {
+	t.Parallel()
+	notis := &fakeNotis{}
+	tut, err := New(
+		"styled", `
+def run():
+    choice(message="pick", options=["Alpha", "Beta"])
+tutorial(entry=run)
+`,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{},
+		browser.PromptConfig{
+			HighlightAttr: term.Attributes{Bg: term.ColorRed, Fg: term.ColorWhite},
+			MinWidth:      60,
+		},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		nil,
+	)
+	require.NoError(t, err)
+	tut.Resize(80, 24)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "choice", activeKindFor(tut))
+
+	g := newAttrGridWriter(80, 24)
+	tut.Draw(g)
+
+	found := false
+	for y := 0; y < 24 && !found; y++ {
+		runes := []rune(g.rowRunes(y))
+		attrs := g.rowAttrs(y)
+		for x := 0; x+4 < len(runes); x++ {
+			if string(runes[x:x+5]) == "Alpha" {
+				if attrs[x].Bg == term.ColorRed {
+					found = true
+				}
+				break
+			}
+		}
+	}
+	assert.True(t, found,
+		"the highlighted option must render with the configured "+
+			"HighlightAttr background")
 	tut.Stop()
 }
 
@@ -1345,7 +1425,7 @@ func TestLoadIsRejected(t *testing.T) {
 	_, err := New(
 		"x", `load("other.star", "thing")`,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		nil,
 	)

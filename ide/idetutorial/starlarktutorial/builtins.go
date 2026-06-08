@@ -60,6 +60,7 @@ func builtins(t *Tutorial) starlark.StringDict {
 		"markdown":        starlark.NewBuiltin("markdown", builtinMarkdown(t)),
 		"wait_key":        starlark.NewBuiltin("wait_key", builtinWaitKey(t)),
 		"wait_command":    starlark.NewBuiltin("wait_command", builtinWaitCommand(t)),
+		"wait_shell":      starlark.NewBuiltin("wait_shell", builtinWaitShell(t)),
 		"confirm":         starlark.NewBuiltin("confirm", builtinConfirm(t)),
 		"choice":          starlark.NewBuiltin("choice", builtinChoice(t)),
 
@@ -237,6 +238,41 @@ func builtinWaitCommand(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			kind:    reqWaitCommand,
 			command: string(command),
 			onError: string(onError),
+		}
+		res, err := t.publishRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		return newCommandResult(res.cmdName, res.cmdArgs), nil
+	}
+}
+
+func builtinWaitShell(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, _ *starlark.Builtin,
+		args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var (
+			argList *starlark.List
+			onError starlark.String
+		)
+		if err := starlark.UnpackArgs("wait_shell", args, kwargs,
+			"args", &argList,
+			"on_error?", &onError); err != nil {
+			return nil, err
+		}
+		want, err := starlarkStringList(argList, "args")
+		if err != nil {
+			return nil, fmt.Errorf("wait_shell: %w", err)
+		}
+		if len(want) == 0 {
+			return nil, errors.New("wait_shell: args must be non-empty")
+		}
+		req := &request{
+			kind:      reqWaitShell,
+			shellArgs: want,
+			onError:   string(onError),
 		}
 		res, err := t.publishRequest(req)
 		if err != nil {

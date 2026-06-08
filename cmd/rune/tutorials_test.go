@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
 )
 
@@ -51,6 +52,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 		nil,
 		term.Attributes{},
 		component.FrameCharSet{},
+		browser.PromptConfig{},
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
@@ -61,7 +63,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "2", tut.Version())
+	assert.Equal(t, "3", tut.Version())
 }
 
 // TestEmbeddedTutorialOptionsRegistersBasics asserts that the embedded

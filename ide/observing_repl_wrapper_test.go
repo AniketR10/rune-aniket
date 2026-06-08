@@ -1,0 +1,172 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package ide
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
+)
+
+// stubREPLHandler records the last command it received and returns a
+// canned iterator/error so the wrapper's forwarding and observation
+// can be asserted in isolation.
+type stubREPLHandler struct {
+	lastCmd      repl.Command
+	handleErr    error
+	lastComplete struct {
+		cmd  string
+		args []string
+	}
+	lastHelpArgs []string
+}
+
+func (s *stubREPLHandler) HandleCommand(
+	_ context.Context, cmd repl.Command, _ repl.ProgressWriter,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	s.lastCmd = cmd
+	return sdkiterator.Empty[component.Responsive](), s.handleErr
+}
+
+func (s *stubREPLHandler) Complete(
+	_ context.Context, cmd string, args []string,
+) (sdkiterator.Iterator[string], error) {
+	s.lastComplete.cmd = cmd
+	s.lastComplete.args = args
+	return sdkiterator.Empty[string](), nil
+}
+
+func (s *stubREPLHandler) Help(
+	_ context.Context, args []string,
+) (sdkiterator.Iterator[component.Responsive], error) {
+	s.lastHelpArgs = args
+	return sdkiterator.Empty[component.Responsive](), nil
+}
+
+var _ textapi.REPLHandler = (*stubREPLHandler)(nil)
+
+// recordingArgsObserver captures the full observeCommand tuple so the
+// wrapper's reported shape can be asserted.
+type recordingArgsObserver struct {
+	typed    string
+	resolved string
+	args     []string
+	err      error
+	calls    int
+}
+
+func (o *recordingArgsObserver) observeCommand(
+	typed, resolved string, args []string, err error,
+) {
+	o.typed = typed
+	o.resolved = resolved
+	o.args = args
+	o.err = err
+	o.calls++
+}
+
+// TestObservingREPLHandlerReportsShellCommand verifies that a
+// companion-shell submission is reported to the observer as the
+// "shell" command with the REPL command name prepended to its
+// arguments, and that the underlying iterator and nil error are
+// forwarded unchanged.
+func TestObservingREPLHandlerReportsShellCommand(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubREPLHandler{}
+	obs := &recordingArgsObserver{}
+	wrapper := observingREPLHandler{underlying: stub, observer: obs, name: "pkg"}
+
+	iter, err := wrapper.HandleCommand(
+		context.Background(),
+		repl.Command{Name: "pkg", Args: []string{"install", "rune-agent"}},
+		repl.NopProgressWriter(),
+	)
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	require.Equal(t, 1, obs.calls)
+	assert.Equal(t, "shell", obs.typed)
+	assert.Equal(t, "shell", obs.resolved)
+	assert.Equal(t, []string{"pkg", "install", "rune-agent"}, obs.args)
+	assert.NoError(t, obs.err)
+
+	assert.Equal(t, repl.Command{Name: "pkg", Args: []string{"install", "rune-agent"}},
+		stub.lastCmd, "the wrapper must forward the command unchanged")
+}
+
+// TestObservingREPLHandlerForwardsError verifies that the underlying
+// handler's error is both forwarded to the caller and reported to the
+// observer so the tutorial keeps the wait_command step armed.
+func TestObservingREPLHandlerForwardsError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("boom")
+	stub := &stubREPLHandler{handleErr: wantErr}
+	obs := &recordingArgsObserver{}
+	wrapper := observingREPLHandler{underlying: stub, observer: obs, name: "models"}
+
+	iter, err := wrapper.HandleCommand(
+		context.Background(),
+		repl.Command{Name: "models", Args: []string{"providers", "openai", "add", "default"}},
+		repl.NopProgressWriter(),
+	)
+	require.ErrorIs(t, err, wantErr)
+	if iter != nil {
+		_ = iter.Close()
+	}
+
+	require.Equal(t, 1, obs.calls)
+	assert.Equal(t, "shell", obs.typed)
+	assert.Equal(t, "shell", obs.resolved)
+	assert.Equal(t,
+		[]string{"models", "providers", "openai", "add", "default"}, obs.args)
+	assert.ErrorIs(t, obs.err, wantErr)
+}
+
+// TestObservingREPLHandlerForwardsCompleteAndHelp verifies the
+// non-observed methods pass straight through to the underlying handler.
+func TestObservingREPLHandlerForwardsCompleteAndHelp(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubREPLHandler{}
+	wrapper := observingREPLHandler{underlying: stub, observer: &recordingArgsObserver{}, name: "pkg"}
+
+	_, err := wrapper.Complete(context.Background(), "pkg", []string{"inst"})
+	require.NoError(t, err)
+	assert.Equal(t, "pkg", stub.lastComplete.cmd)
+	assert.Equal(t, []string{"inst"}, stub.lastComplete.args)
+
+	_, err = wrapper.Help(context.Background(), []string{"install"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"install"}, stub.lastHelpArgs)
+}

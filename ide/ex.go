@@ -1943,6 +1943,13 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 					proc:       e.extensionsExecutor,
 				}
 			}
+			if e.commandObserver != nil {
+				handler = observingREPLHandler{
+					underlying: handler,
+					observer:   e.commandObserver,
+					name:       cmd.Name,
+				}
+			}
 			if err := registry.RegisterREPLCommand(cmd, handler); err != nil {
 				_ = h.Close()
 				return fmt.Errorf("register repl command %q: %w", cmd.Name, err)

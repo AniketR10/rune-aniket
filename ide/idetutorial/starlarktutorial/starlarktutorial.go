@@ -52,6 +52,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idetutorial"
 	"unstable.build/go-tui/text"
@@ -92,6 +93,10 @@ type Tutorial struct {
 	scheduleNextTick func(func()) bool
 	storage          storageapi.Service
 	commandKey       term.KeyComb
+	// promptConfig carries the IDE's confirm/choice prompt styling
+	// (option, highlight, background attributes and minimum width) so
+	// tutorial prompts match the IDE's browser-driven prompts.
+	promptConfig browser.PromptConfig
 	// commandManualLookup resolves a command name to its registered
 	// manual, used by the wait_command hint window so the user sees
 	// the command's synopsis and description while the request is
@@ -144,6 +149,7 @@ func New(
 	parser syntaxapi.Parser,
 	defaultAttr term.Attributes,
 	frameCharSet component.FrameCharSet,
+	promptConfig browser.PromptConfig,
 	scheduleNextTick func(func()) bool,
 	storage storageapi.Service,
 	commandKey term.KeyComb,
@@ -160,6 +166,7 @@ func New(
 		parser:              parser,
 		defaultAttr:         defaultAttr,
 		frameCharSet:        frameCharSet,
+		promptConfig:        promptConfig,
 		scheduleNextTick:    scheduleNextTick,
 		storage:             storage,
 		commandKey:          commandKey,
@@ -441,6 +448,9 @@ func (t *Tutorial) Draw(w term.Writer) {
 	case reqWaitCommand:
 		body := buildWaitCommandHint(active, cmdKey, lookup)
 		drawHintBox(w, width, height, body, fcs, attr)
+	case reqWaitShell:
+		body := buildWaitShellHint(active, cmdKey)
+		drawHintBox(w, width, height, body, fcs, attr)
 	case reqChoice, reqConfirm:
 		drawPromptOverlay(w, width, height, active, fcs, attr)
 	}
@@ -470,6 +480,8 @@ func (t *Tutorial) Handle(ev term.Event) (bool, bool) {
 	case reqWaitKey:
 		return t.handleWaitKey(active, ev)
 	case reqWaitCommand:
+		return t.handleWaitCommand(active, ev)
+	case reqWaitShell:
 		return t.handleWaitCommand(active, ev)
 	case reqChoice, reqConfirm:
 		return t.handlePrompt(active, ev)
@@ -597,7 +609,13 @@ func (t *Tutorial) ObserveCommand(
 	if finished {
 		return true
 	}
-	if active == nil || active.kind != reqWaitCommand {
+	if active == nil {
+		return false
+	}
+	if active.kind == reqWaitShell {
+		return t.observeShellCommand(active, typed, resolved, args, err)
+	}
+	if active.kind != reqWaitCommand {
 		return false
 	}
 	if active.command != typed && active.command != resolved {
@@ -613,6 +631,47 @@ func (t *Tutorial) ObserveCommand(
 	}
 	t.resolve(active, response{cmdName: active.command, cmdArgs: args})
 	return t.exitState()
+}
+
+// shellCommandName is the typed/resolved command name under which the
+// IDE reports companion-shell REPL submissions to the command
+// observer. The shell wrapper prepends the REPL command name to the
+// observed args (e.g. ["pkg", "install", "rune-agent"]) so a
+// wait_shell step can match on argument tokens alone.
+const shellCommandName = "shell"
+
+// observeShellCommand advances a reqWaitShell step. It only reacts to
+// companion-shell observations (typed/resolved == shellCommandName)
+// and requires every expected token to be present in the observed
+// args (containment, so completion and alias variants still match). A
+// dispatch error keeps the step armed and swaps in the on_error hint.
+func (t *Tutorial) observeShellCommand(
+	active *request, typed, resolved string, args []string, err error,
+) bool {
+	if typed != shellCommandName && resolved != shellCommandName {
+		return false
+	}
+	if err != nil {
+		if active.onError != "" {
+			active.text = expandCmdTemplate(active.onError, t.commandKey)
+		}
+		return false
+	}
+	if !argsContainAll(args, active.shellArgs) {
+		return false
+	}
+	t.resolve(active, response{cmdName: shellCommandName, cmdArgs: args})
+	return t.exitState()
+}
+
+// argsContainAll reports whether every token in want appears in have.
+func argsContainAll(have, want []string) bool {
+	for _, w := range want {
+		if !slices.Contains(have, w) {
+			return false
+		}
+	}
+	return true
 }
 
 // publishRequest blocks until the runLoop is allowed to install r as
@@ -641,7 +700,7 @@ func (t *Tutorial) publishRequest(r *request) (response, error) {
 		r.stepNum = t.stepCount
 	}
 	if r.kind == reqConfirm || r.kind == reqChoice {
-		buildPromptOverlay(r, defAttr)
+		buildPromptOverlay(r, t.promptConfig)
 	}
 	t.active = r
 	signal := t.firstSignal
@@ -666,12 +725,16 @@ func (t *Tutorial) publishRequest(r *request) (response, error) {
 // place before delivery. OnClose is a no-op here: handlePrompt
 // observes prompt exit and resolves with the dismissal response
 // directly when no OnSelect ran.
-func buildPromptOverlay(r *request, defAttr term.Attributes) {
+func buildPromptOverlay(r *request, promptCfg browser.PromptConfig) {
 	ph := handler.FuncPromptHandler(
 		func(idx int, option string) {
+			value := option
+			if idx >= 0 && idx < len(r.options) {
+				value = r.options[idx]
+			}
 			r.pendingResp = response{
 				selectedIdx:   idx,
-				selectedValue: option,
+				selectedValue: value,
 				selected:      true,
 			}
 			if r.kind == reqConfirm {
@@ -686,14 +749,59 @@ func buildPromptOverlay(r *request, defAttr term.Attributes) {
 	cfg := handler.PromptConfig{
 		PromptConfig: component.PromptConfig{
 			Message:              r.message,
-			Options:              r.options,
-			BackgroundAttributes: defAttr,
+			Options:              padPromptOptions(r.options),
+			BackgroundAttributes: promptCfg.BackgroundAttr,
+			MinWidth:             promptCfg.MinWidth,
+			NewMessage:           newPromptMarkdownMessage,
 		},
 		PromptHandler: ph,
+		OptionAttr:    promptCfg.TextAttr,
+		HighlightAttr: promptCfg.HighlightAttr,
 	}
 	r.prompt = handler.NewPrompt(cfg)
 	r.promptVirtual = &handler.Virtual[*handler.Prompt]{}
 	r.promptVirtual.C = r.prompt
+}
+
+// padPromptOptions surrounds each option label with a single space on
+// either side so the rendered prompt buttons are naturally padded,
+// matching the IDE's browser-driven prompts. The returned slice is for
+// display only; the unpadded labels remain the authoritative selection
+// values via request.options.
+func padPromptOptions(options []string) []string {
+	padded := make([]string, len(options))
+	for i, o := range options {
+		padded[i] = " " + o + " "
+	}
+	return padded
+}
+
+// newPromptMarkdownMessage renders a confirm/choice prompt message as
+// markdown, mirroring browser.Component.Prompt so tutorial prompts
+// match the IDE's prompts. It falls back to a centered plain string
+// when the message is not valid markdown.
+func newPromptMarkdownMessage(str string) component.Floating {
+	mcfg := markdown.DefaultConfig()
+	mcfg.HeaderPrefix = false
+	if mkd, err := markdown.NewWithConfig(str, mcfg); err == nil {
+		return component.NewAspectRatioFloatingResponsive(
+			component.NewSpan(mkd, component.SpanConfig{
+				PadHorizontal:    4,
+				PadVertical:      2,
+				ContentAlignment: component.AlignmentCentered,
+			}), component.DefaultAspectRatio)
+	}
+	messageResponsive := component.NewResponsiveString(str,
+		component.StringResponsiveConfig{
+			NoSplitWords: true,
+			StringConfig: component.StringConfig{
+				PaddingVertical:   4,
+				PaddingHorizontal: 4,
+				Alignment:         component.AlignmentCentered,
+			},
+		})
+	return component.NewAspectRatioFloatingResponsive(
+		messageResponsive, component.DefaultAspectRatio)
 }
 
 // resolve delivers res to r and clears the active slot. The TUI loop

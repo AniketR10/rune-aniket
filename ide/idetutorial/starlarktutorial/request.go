@@ -44,6 +44,7 @@ const (
 	reqMarkdown
 	reqWaitKey
 	reqWaitCommand
+	reqWaitShell
 	reqConfirm
 	reqChoice
 )
@@ -59,6 +60,8 @@ func (k requestKind) String() string {
 		return "wait_key"
 	case reqWaitCommand:
 		return "wait_command"
+	case reqWaitShell:
+		return "wait_shell"
 	case reqConfirm:
 		return "confirm"
 	case reqChoice:
@@ -109,6 +112,11 @@ type request struct {
 	// wait_command.
 	command string
 	onError string
+
+	// wait_shell: the expected companion-shell argument tokens (e.g.
+	// ["pkg", "install", "rune-agent"]). Always non-empty — wait_shell
+	// is exclusively for commands run inside the shell.
+	shellArgs []string
 
 	// choice / confirm.
 	message string

@@ -53,6 +53,7 @@ func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 	notifications := i.workspaceHandler.notifications.current()
 	defaultAttr := i.ideConfig.defaultAttr()
 	frameCharSet := i.ideConfig.windowFrameCharset()
+	promptConfig := i.ideConfig.promptConfig()
 	scheduleNextTick := i.options.scheduleFn
 	commandKey := i.ideConfig.commandKey()
 	manualLookup := buildTutorialCommandManualLookup(i.workspaceHandler)
@@ -63,7 +64,7 @@ func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 		t, err := starlarktutorial.New(
 			name, src,
 			br, ed, notifications, parser,
-			defaultAttr, frameCharSet,
+			defaultAttr, frameCharSet, promptConfig,
 			scheduleNextTick, partition, commandKey,
 			manualLookup,
 		)
@@ -83,7 +84,7 @@ func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 		t, err := starlarktutorial.New(
 			name, string(src),
 			br, ed, notifications, parser,
-			defaultAttr, frameCharSet,
+			defaultAttr, frameCharSet, promptConfig,
 			scheduleNextTick, partition, commandKey,
 			manualLookup,
 		)

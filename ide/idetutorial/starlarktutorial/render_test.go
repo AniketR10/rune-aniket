@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/handler/command"
 )
 
@@ -378,7 +379,7 @@ tutorial(entry=run)
 	tut, err := New(
 		"manual-test", src,
 		nil, nil, nil, nil,
-		term.Attributes{}, component.FrameCharSet{},
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
 		lookup,
 	)
