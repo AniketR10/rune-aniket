@@ -59,9 +59,10 @@ type Input interface {
 	Clear()
 	// EnterSubmits handles an <Enter> / <Shift-Enter> key event and
 	// reports whether the dialogue should submit the composed message.
+	// A bare <Enter> always submits; <Shift-Enter> inserts a newline.
 	// When it returns false the event has been consumed by the input as
-	// a newline insertion (or ignored); when it returns true the caller
-	// should submit. The event is forwarded to the underlying handler as
+	// a newline insertion; when it returns true the caller should
+	// submit. The event is forwarded to the underlying handler as
 	// needed, so callers must not forward it again.
 	EnterSubmits(ev term.Event) bool
 }
@@ -72,31 +73,19 @@ type Input interface {
 type textHandlerInput struct {
 	text.Handler
 	buf *cell.Buffer
-	// modal reports whether Handler is a modal (vi-style) editor. For
-	// modal editors the handler's own handled signal separates
-	// normal-mode <Enter> (unhandled → submit) from insert-mode <Enter>
-	// (handled → newline). For modeless editors <Enter> always inserts a
-	// newline, so submission is gated on the absence of Shift instead.
-	modal bool
 }
 
 // EnterSubmits decides newline-vs-submit for the configured editor.
-//
-// modeless: a bare <Enter> submits; <Shift-Enter> inserts a newline.
-// modal: forward <Enter> to the handler; insert mode consumes it as a
-// newline (handled), normal mode leaves it unhandled (submit).
+// A bare <Enter> always submits, regardless of modal (vi) mode;
+// <Shift-Enter> inserts a newline. This holds for both modal and
+// modeless editors.
 func (b *textHandlerInput) EnterSubmits(ev term.Event) bool {
-	if !b.modal {
-		if ev.Mod&term.ModShift != 0 {
-			ev.Mod &^= term.ModShift
-			b.Handler.Handle(ev)
-			return false
-		}
-		return true
+	if ev.Mod&term.ModShift != 0 {
+		ev.Mod &^= term.ModShift
+		b.Handler.Handle(ev)
+		return false
 	}
-	ev.Mod &^= term.ModShift
-	_, handled := b.Handler.Handle(ev)
-	return !handled
+	return true
 }
 
 func (b *textHandlerInput) Text() string {

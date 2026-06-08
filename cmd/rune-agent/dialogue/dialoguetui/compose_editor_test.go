@@ -49,9 +49,8 @@ func TestComposeEditorNilUsesModelessEditor(t *testing.T) {
 	typeText(h, "hello")
 	assert.Equal(t, "hello", comp.Input().Text())
 
-	in, ok := comp.Input().(*textHandlerInput)
+	_, ok := comp.Input().(*textHandlerInput)
 	require.True(t, ok, "nil Editor must build an editor-backed compose input")
-	assert.False(t, in.modal, "default compose editor is modeless")
 
 	go func() {
 		msg := <-rx
@@ -350,7 +349,30 @@ func TestComposeEditorModalEnterSubmitsInNormalMode(t *testing.T) {
 		"normal-mode enter must submit and clear")
 }
 
-func TestComposeEditorModalEnterInsertsNewlineInInsertMode(t *testing.T) {
+func TestComposeEditorModalEnterSubmitsInInsertMode(t *testing.T) {
+	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed, EditorModal: true})
+
+	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	typeText(h, "modal msg")
+	assert.Equal(t, "modal msg", comp.Input().Text())
+
+	go func() {
+		msg := <-rx
+		assert.Equal(t, "modal msg", msg.Text)
+	}()
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	assert.Equal(t, "", comp.Input().Text(),
+		"insert-mode enter must submit and clear, not insert a newline")
+}
+
+func TestComposeEditorModalShiftEnterInsertsNewline(t *testing.T) {
 	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed, EditorModal: true})
 
@@ -361,12 +383,14 @@ func TestComposeEditorModalEnterInsertsNewlineInInsertMode(t *testing.T) {
 
 	h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
 	typeText(h, "line1")
-	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	_, handled := h.Handle(term.Event{
+		Type: term.EventKey, Key: term.KeyEnter, Mod: term.ModShift,
+	})
 	assert.True(t, handled)
 	typeText(h, "line2")
 
 	assert.Equal(t, "line1\nline2", comp.Input().Text(),
-		"insert-mode enter must insert a newline, not submit")
+		"insert-mode shift-enter must insert a newline, not submit")
 }
 
 func TestComposeEditorModalStartInsert(t *testing.T) {

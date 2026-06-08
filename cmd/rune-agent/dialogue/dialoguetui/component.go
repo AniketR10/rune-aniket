@@ -197,7 +197,7 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 	if modal && cfg.ModalStartInsert {
 		h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
 	}
-	return &textHandlerInput{Handler: h, buf: buf, modal: modal}
+	return &textHandlerInput{Handler: h, buf: buf}
 }
 
 // Draw satisfies tui.Component.
