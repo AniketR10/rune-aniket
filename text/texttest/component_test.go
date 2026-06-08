@@ -206,7 +206,10 @@ func (t *testLoader) Open(path string) (workspaceapi.File, error) {
 }
 
 func (t *testLoader) Stat(path string) (os.FileInfo, error) {
-	panic("unused")
+	if t.openFile == nil {
+		return nil, os.ErrNotExist
+	}
+	return t.openFile.Stat()
 }
 
 func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {

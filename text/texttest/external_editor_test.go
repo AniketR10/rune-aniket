@@ -25,11 +25,13 @@ package texttest
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
@@ -82,7 +84,10 @@ func (l recordingLoader) Load(
 func TestExternalEditorForcesReadOnly(t *testing.T) {
 	var loaderRO, editorRO bool
 	ed := externalEditor{TestEditor: NopEditor(), readOnlyObserved: &editorRO}
-	loader := &testLoader{}
+	loader := &testLoader{
+		openFile: workspace.NewMemoryFile(
+			"external.txt", 1, 0, []byte("hi\n"), new(sync.Mutex)),
+	}
 	wrappedLoader := recordingLoader{testLoader: loader, readOnlyObserved: &loaderRO}
 	cfg := text.DefaultConfig()
 	cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
@@ -143,6 +148,53 @@ func TestExternalEditorDelegatesMarkdown(t *testing.T) {
 				"external editor.Edit must be called for .md "+
 					"opens regardless of readOnly; got %d "+
 					"calls (readOnly=%v)", editCalls, tc.readOnly)
+		})
+	}
+}
+
+// TestExternalEditorOpensMissingFile locks in the fix for the bug
+// where opening a non-existent file under an external editor (exo /
+// nvim) failed with "cannot open file that doesn't exist in
+// read-only". Component.openFileTab hoists readOnly=true for external
+// editors so the mirror buffer never fights the editor for an
+// existing file, but workspace.Load refuses to materialize a
+// read-only buffer for a path that does not exist yet. A new file
+// has no on-disk content to mirror, so the mirror must open writable
+// instead of surfacing the read-only error.
+func TestExternalEditorOpensMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	wsURI, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), wsURI)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	inline := func(fn func()) bool { fn(); return true }
+	ws := workspace.NewSchemeWorkspace(wsURI, scheme, inline)
+
+	for _, streaming := range []bool{false, true} {
+		name := "sync"
+		if streaming {
+			name = "streaming"
+		}
+		t.Run(name, func(t *testing.T) {
+			ed := externalEditor{TestEditor: NopEditor()}
+			cfg := text.DefaultConfig()
+			cfg.ScheduleNextTick = inline
+			cfg.StreamingOpen = streaming
+			c, err := text.NewComponent(ed, ws, cfg)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = c.Close() })
+
+			fpath := filepath.Join(dir, name+"-new.txt")
+			fileURI, err := workspaceapi.ParseURI("file://" + fpath)
+			require.NoError(t, err)
+
+			h, err := c.OpenFileTab(fileURI, false)
+			require.NoError(t, err)
+			require.NotNil(t, h)
 		})
 	}
 }

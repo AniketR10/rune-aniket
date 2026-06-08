@@ -122,19 +122,38 @@ func newHandler(
 // startWatcher subscribes to Write/Rename events for the underlying
 // file. On each event, the file contents are re-read off the event-loop
 // goroutine and the buffer is replaced via scheduleNextTick.
+//
+// A file opened for the first time does not exist on disk yet, and the
+// notify backend lstats the watched path at registration time, so
+// watching the file directly would fail. In that case watch the parent
+// directory instead and filter events down to the resource path; the
+// external editor's first save then materializes the file and triggers
+// the reload like any other write.
 func (h *editorHandler) startWatcher(ctx context.Context) {
+	watchPath := h.resource.Path()
+	dirWatch := false
+	if _, err := h.cwd.Stat(watchPath); errors.Is(err, os.ErrNotExist) {
+		watchPath = workspaceapi.Dir(h.resource).Path()
+		dirWatch = true
+	}
+
 	ch := make(chan schemeapi.EventInfo, 8)
-	id, err := h.cwd.Watch(h.resource.Path(), ch,
+	id, err := h.cwd.Watch(watchPath, ch,
 		schemeapi.Write, schemeapi.Rename,
 		schemeapi.Create, schemeapi.Remove)
 	if err != nil {
 		_, _ = h.notifications.Notify(
 			browserapi.LevelWarn,
-			"exoeditor: watch %s: %v", h.resource.Path(), err)
+			"exoeditor: watch %s: %v", watchPath, err)
 		return
 	}
 	h.watchID = id
 	h.watchActive = true
+	// The notify backend reports the symlink-resolved path (e.g.
+	// /private/tmp/a for /tmp/a), which would not match the tab keyed
+	// by the original resource URI. Always reload the resource itself,
+	// and in directory-watch mode filter sibling events by base name.
+	resourceName := h.resource.Name()
 	go debug.CapturePanicReport(func() {
 		for {
 			select {
@@ -144,7 +163,10 @@ func (h *editorHandler) startWatcher(ctx context.Context) {
 				if !ok {
 					return
 				}
-				h.scheduleReload(ev.URI())
+				if dirWatch && ev.URI().Name() != resourceName {
+					continue
+				}
+				h.scheduleReload(h.resource)
 			}
 		}
 	})

@@ -134,6 +134,14 @@ func (c *Component) getSwapDir(file workspaceapi.URI) (workspaceapi.URI, error) 
 	return workspace.DefaultSwapDirectory(file)
 }
 
+// fileExists reports whether file is present on the backing
+// workspace. A Stat error (including not-exist) is treated as
+// absent.
+func (c *Component) fileExists(file workspaceapi.URI) bool {
+	_, err := c.workspace.Stat(file.Path())
+	return err == nil
+}
+
 func (c *Component) newFileBuffer(
 	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
@@ -481,7 +489,15 @@ func (c *Component) openFileTab(
 	userRequestedView := readOnly
 
 	if c.ed.IsExternal() {
-		readOnly = true
+		// The external editor is the source of truth for existing
+		// files, so the mirror buffer stays read-only to keep the
+		// dirty-tab path, flusher, and recovery prompt out of its
+		// way. A file that does not exist yet has no content to
+		// mirror; forcing the mirror read-only would make
+		// workspace.Load refuse to create the empty buffer, so let
+		// the new file open writable and let the editor materialize
+		// it on disk.
+		readOnly = c.fileExists(file)
 	}
 
 	if userRequestedView && !c.ed.IsExternal() {
