@@ -27,6 +27,8 @@ import (
 	"context"
 	"crypto/x509"
 	_ "embed"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -195,6 +197,43 @@ func (a *Client) Login(ctx context.Context) LoginSession {
 	return LoginSession{URL: urlCh, Done: done}
 }
 
+// AccountStatus returns the authenticated user's account details parsed
+// from the cached access token. It returns ok=false when no token is
+// cached (the user is not signed in) and an error only when a cached
+// token cannot be decoded.
+func (a *Client) AccountStatus(ctx context.Context) (user auth.RPCUser, ok bool, err error) {
+	tok := a.tokenSource.Cached(ctx)
+	if tok == nil || tok.AccessToken == "" {
+		return auth.RPCUser{}, false, nil
+	}
+	user, err = parseAccountClaims(tok.AccessToken)
+	if err != nil {
+		return auth.RPCUser{}, false, err
+	}
+	return user, true, nil
+}
+
+// parseAccountClaims decodes the JWT payload without verifying the
+// signature: ox-api verifies tokens server-side before issuing them.
+// The account fields live in the token's "extra" claim, which ox-api's
+// granter serializes from auth.RPCUser.
+func parseAccountClaims(token string) (auth.RPCUser, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return auth.RPCUser{}, fmt.Errorf("jwt: expected at least 2 segments, got %d", len(parts))
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return auth.RPCUser{}, fmt.Errorf("jwt: decode payload: %w", err)
+	}
+	var payload struct {
+		Extra auth.RPCUser `json:"extra"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return auth.RPCUser{}, fmt.Errorf("jwt: unmarshal payload: %w", err)
+	}
+	return payload.Extra, nil
+}
 
 // Dial creates a new grpc.ClientConn that uses the underlying
 // user authentication state to send authenticated or unauthenticated requests.

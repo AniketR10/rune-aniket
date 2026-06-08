@@ -6140,3 +6140,30 @@ func TestWorkspaceNewResolvesRelativeAgainstHome(t *testing.T) {
 
 	m.drainPendingWorkspaces()
 }
+
+func TestRegisterREPLCommand(t *testing.T) {
+	if ci := os.Getenv("CI"); ci == "true" {
+		t.SkipNow()
+	}
+
+	dir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), dir,
+		nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.registerREPLCommand(
+		textapi.CommandManual{Name: "loginz"}, &stubREPLHandler{}))
+
+	var names []string
+	for _, c := range m.empty.comp.REPLCommands() {
+		names = append(names, c.Name)
+	}
+	assert.Contains(t, names, "loginz")
+
+	err = m.registerREPLCommand(textapi.CommandManual{Name: "loginz"}, &stubREPLHandler{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already registered")
+}

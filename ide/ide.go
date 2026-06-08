@@ -101,6 +101,18 @@ func (c *IDE) SubscribeCommand(
 	return c.workspaceHandler.subscribeCommand(cmd, handler)
 }
 
+// RegisterREPLCommand registers the given handler as a top-level REPL
+// command in the IDE shell, or returns an error if a REPL command with
+// the same name is already registered.
+//
+// The command will be automatically installed to all active
+// and future workspaces.
+func (c *IDE) RegisterREPLCommand(
+	cmd textapi.CommandManual, handler textapi.REPLHandler,
+) error {
+	return c.workspaceHandler.registerREPLCommand(cmd, handler)
+}
+
 // SubscribeEvents subscribes the given handler to all the given events,
 // or returns an error if there's an error while subscribing it.
 //

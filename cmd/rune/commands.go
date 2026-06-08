@@ -36,11 +36,11 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
+	"unstable.build/go-tui/cmd/rune/loginshell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/term/gui"
@@ -54,28 +54,6 @@ const (
 )
 
 var fullscreen bool
-
-func runLoginCommand(
-	ctx context.Context, c *apiclient.Client, notifs browserapi.Notifications,
-) error {
-	_, _ = notifs.Notify(browserapi.LevelInfo,
-		"Follow the prompts in your browser to complete login.")
-	session := c.Login(ctx)
-	go debug.CapturePanicReport(func() {
-		select {
-		case <-ctx.Done():
-			return
-		case err := <-session.Done:
-			if err != nil {
-				_, _ = notifs.Notify(browserapi.LevelWarn,
-					"Login did not complete: %v", err)
-				return
-			}
-			_, _ = notifs.Notify(browserapi.LevelInfo, "Login successful.")
-		}
-	})
-	return nil
-}
 
 func subscribeCommands(
 	g *gui.GUI, c *apiclient.Client,
@@ -94,6 +72,16 @@ func subscribeCommands(
 func subscribeOtherCommands(
 	i *ide.IDE, c *apiclient.Client, configPath string,
 ) (ret error) {
+	for _, register := range []func(loginshell.Client) (textapi.CommandManual, textapi.REPLHandler){
+		loginshell.Login,
+		loginshell.Logout,
+	} {
+		cmd, handler := register(c)
+		if err := i.RegisterREPLCommand(cmd, handler); err != nil {
+			ret = multierror.Append(ret,
+				fmt.Errorf("register repl '%s': %v", cmd.Name, err))
+		}
+	}
 	var commands = []struct {
 		cmd           textapi.CommandManual
 		handleCommand func(context.Context, textapi.Command) (err error)
@@ -101,30 +89,6 @@ func subscribeOtherCommands(
 			iterator.Iterator[string], string, error,
 		)
 	}{
-		{
-			cmd: textapi.CommandManual{
-				Name: "login",
-				Summary: "Authenticate with Rune API to enable free and paid-only functionality " +
-					"that requires authenticated access.",
-			},
-			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
-				return runLoginCommand(ctx, c, i.Notifications())
-			},
-		}, {
-			cmd: textapi.CommandManual{
-				Name: "logout",
-				Summary: "Log out from the current session. " +
-					"You will still be able to use functionality that does not require access " +
-					" to the Rune API.",
-			},
-			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
-				if err := c.Logout(ctx); err != nil {
-					return err
-				}
-				_, _ = i.Notifications().Notify(browserapi.LevelInfo, "Logged out.")
-				return nil
-			},
-		},
 		{
 			cmd: textapi.CommandManual{
 				Name:    "config",

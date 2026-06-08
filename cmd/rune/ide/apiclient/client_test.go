@@ -25,6 +25,8 @@ package apiclient
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -351,4 +353,37 @@ func TestRenderCallbackHTMLSubstitutesCheckoutURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseAccountClaims(t *testing.T) {
+	planEnds := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	token := makeAccountJWT(t, auth.RPCUser{
+		ID:       "auth0|abc",
+		Email:    "user@example.com",
+		Role:     auth.RolePaid,
+		Account:  "acc-1",
+		PlanEnds: planEnds,
+	})
+
+	user, err := parseAccountClaims(token)
+	require.NoError(t, err)
+	assert.Equal(t, "user@example.com", user.Email)
+	assert.Equal(t, auth.RolePaid, user.Role)
+	assert.Equal(t, "acc-1", user.Account)
+	assert.True(t, planEnds.Equal(user.PlanEnds))
+}
+
+func TestParseAccountClaimsRejectsMalformedToken(t *testing.T) {
+	_, err := parseAccountClaims("not-a-jwt")
+	require.Error(t, err)
+}
+
+func makeAccountJWT(t *testing.T, user auth.RPCUser) string {
+	t.Helper()
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload, err := json.Marshal(struct {
+		Extra auth.RPCUser `json:"extra"`
+	}{Extra: user})
+	require.NoError(t, err)
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
 }

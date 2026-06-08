@@ -140,6 +140,7 @@ type workspaceManagerHandler struct {
 	workspacesBarHeight     int
 	workspacesIcon          rune
 	externalCommands        map[string]externalCommand
+	externalREPLCommands    map[string]externalREPLCommand
 	externalEvents          []externalEvents
 	initialVTECapacity      int
 	dispatchOnPreview       map[string]previewFunc
@@ -449,6 +450,7 @@ func (h *workspaceManagerHandler) init(
 	h.shaderRunner = shaderRunner
 	h.mu = locker
 	h.externalCommands = make(map[string]externalCommand)
+	h.externalREPLCommands = make(map[string]externalREPLCommand)
 	h.frame = cfg.frame()
 	h.scheduleNextTick = cfg.scheduleNextTick
 	h.configPath = cfg.configPath
@@ -2196,6 +2198,10 @@ func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
 	if err != nil {
 		return fmt.Errorf("subscribe external commands: %w", err)
 	}
+	err = h.subscribeAllExternalREPLCommands(ex)
+	if err != nil {
+		return fmt.Errorf("subscribe external repl commands: %w", err)
+	}
 	err = ex.comp.SubscribeCommand(textapi.CommandManual{
 		Name: cmdMacroRecord,
 		Summary: "Toggle recording all user key events into the given clipboard register. " +
@@ -2369,6 +2375,61 @@ func (h *workspaceManagerHandler) subscribeExternalCommands(
 type externalCommand struct {
 	cmd     textapi.CommandManual
 	handler text.CommandHandler
+}
+
+func (h *workspaceManagerHandler) subscribeAllExternalREPLCommands(ex *ex) (ret error) {
+	var cmds []externalREPLCommand
+	for _, cmd := range h.externalREPLCommands {
+		cmds = append(cmds, cmd)
+	}
+	return h.subscribeExternalREPLCommands(ex, cmds...)
+}
+
+func (h *workspaceManagerHandler) subscribeExternalREPLCommands(
+	ex *ex, commands ...externalREPLCommand,
+) (ret error) {
+	for _, cmd := range commands {
+		err := ex.comp.RegisterREPLCommand(cmd.cmd, cmd.handler)
+		if err != nil {
+			ret = multierror.Append(ret,
+				fmt.Errorf("register repl command '%s': %v", cmd.cmd.Name, err))
+		}
+	}
+	return ret
+}
+
+type externalREPLCommand struct {
+	cmd     textapi.CommandManual
+	handler textapi.REPLHandler
+}
+
+func (h *workspaceManagerHandler) registerREPLCommand(
+	cmd textapi.CommandManual, handler textapi.REPLHandler,
+) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, ok := h.externalREPLCommands[cmd.Name]; ok {
+		return fmt.Errorf("repl command '%s' already registered", cmd.Name)
+	}
+
+	extCmd := externalREPLCommand{cmd: cmd, handler: handler}
+
+	ret := h.subscribeExternalREPLCommands(h.empty, extCmd)
+	for _, w := range h.workspaces {
+		if w == nil {
+			continue
+		}
+		if err := h.subscribeExternalREPLCommands(w.ex, extCmd); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	if ret != nil {
+		return ret
+	}
+
+	h.externalREPLCommands[cmd.Name] = extCmd
+	return nil
 }
 
 func (h *workspaceManagerHandler) SubscribeCommandForWorkspace(
