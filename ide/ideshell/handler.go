@@ -280,13 +280,27 @@ func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 // editCursorVisual converts the editor's buffer-relative cursor into
 // the wrapped on-screen position within the editor band, accounting
-// for the prompt folded into the rendered content. The shell input is
-// a single logical line, so the prompt width plus the cursor column
-// wraps over the full width.
+// for the prompt folded into the rendered content. The input may span
+// multiple buffer lines (<shift-enter> inserts a newline), so each
+// preceding line contributes its own wrapped rows, and only the first
+// line carries the prompt prefix (the hanging indent of editContent).
 func (h *Handler) editCursorVisual() term.Coordinates {
 	width := max(1, h.width)
-	col := len(h.prompt) + h.editHandler.CursorAtScroll().X
-	return term.Coordinates{X: col % width, Y: col / width}
+	cur := h.editHandler.CursorAtScroll()
+	lastLine := min(cur.Y, h.editBuf.Rows())
+	row := 0
+	for line := range lastLine {
+		cols := h.editBuf.Columns(line)
+		if line == 0 {
+			cols += len(h.prompt)
+		}
+		row += cols/width + 1
+	}
+	col := cur.X
+	if cur.Y == 0 {
+		col += len(h.prompt)
+	}
+	return term.Coordinates{X: col % width, Y: row + col/width}
 }
 
 // Selection satisfies tui.Handler.
@@ -332,6 +346,14 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	// Plain <enter> submits the current input line.
 	if ev.Mod == 0 && ev.Key == term.KeyEnter {
 		h.submitEdit()
+		return false, true
+	}
+
+	// <shift-enter> inserts a newline into the input line. The shell
+	// owns it so it never ambiguously falls through to the editor.
+	if ev.Mod == term.ModShift && ev.Key == term.KeyEnter {
+		ev.Mod &^= term.ModShift
+		h.editHandler.Handle(ev)
 		return false, true
 	}
 

@@ -31,12 +31,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/modeless"
 )
 
 // stubEditor is a minimal command.Editor for tests. It records every
@@ -238,6 +241,99 @@ func TestEditorSubmitDispatchesAndClears(t *testing.T) {
 	assert.Equal(t, "", h.editBuf.String())
 }
 
+// TestModalEnterSubmitsAndClears is a regression for the "must leave
+// modal mode to submit" bug: a bare <enter> must submit even while a
+// modal editor is in insert mode.
+func TestModalEnterSubmitsAndClears(t *testing.T) {
+	var dispatched []string
+	h, registry := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{MaxHistory: 100, Modal: true},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	registry.Register("e", "echo", echoCmd{out: &dispatched})
+
+	h.Resize(testWidthH, testHeight)
+	feedRunes(h, "e")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	h.inner.Wait()
+
+	require.Equal(t, []string{"e"}, dispatched)
+	assert.Equal(t, "", h.editBuf.String(),
+		"modal insert-mode enter must submit and clear")
+}
+
+// TestShiftEnterInsertsNewlineNotSubmit verifies the shell owns
+// <shift-enter>: it forwards a plain <enter> to the editor (newline
+// insertion) instead of submitting the line.
+func TestShiftEnterInsertsNewlineNotSubmit(t *testing.T) {
+	var dispatched []string
+	var seen []term.Event
+	h, registry := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{seen: &seen},
+		Config{MaxHistory: 100},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	registry.Register("e", "echo", echoCmd{out: &dispatched})
+
+	h.Resize(testWidthH, testHeight)
+	feedRunes(h, "e")
+	exit, handled := h.Handle(term.Event{
+		Type: term.EventKey, Key: term.KeyEnter, Mod: term.ModShift,
+	})
+	h.inner.Wait()
+
+	assert.False(t, exit)
+	assert.True(t, handled, "shell owns shift-enter")
+	assert.Empty(t, dispatched, "shift-enter must not submit the line")
+	assert.Equal(t, "e", h.editBuf.String(),
+		"shift-enter must not clear the input buffer")
+	last := seen[len(seen)-1]
+	assert.Equal(t, term.KeyEnter, last.Key,
+		"shift-enter must forward a plain enter to the editor")
+	assert.Equal(t, term.Modifier(0), last.Mod,
+		"the shift modifier must be stripped before forwarding")
+}
+
+// realModelessEditor adapts a real modeless text editor to
+// command.Editor, matching what production wires into the shell. The
+// stub editors elsewhere in this file do not model newline insertion,
+// so a real editor is required to exercise <shift-enter>.
+type realModelessEditor struct{}
+
+func (realModelessEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	return modeless.NewHandler(buf, workspaceapi.RandomURI("memory"),
+		text.IndentRuneTab, 4, modeless.WithCommandBar(false))
+}
+
+// TestShiftEnterInsertsLiteralNewline reproduces the bug where
+// <shift-enter> inserted a placeholder glyph instead of a real newline:
+// driving "a", <shift-enter>, "b" through the shell must leave the
+// editor buffer holding exactly "a\nb".
+func TestShiftEnterInsertsLiteralNewline(t *testing.T) {
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		realModelessEditor{},
+		Config{MaxHistory: 100},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Resize(testWidthH, testHeight)
+
+	feedRunes(h, "a")
+	h.Handle(term.Event{
+		Type: term.EventKey, Key: term.KeyEnter, Mod: term.ModShift,
+	})
+	feedRunes(h, "b")
+
+	assert.Equal(t, "a\nb", h.editBuf.String(),
+		"shift-enter must insert a literal newline, not a placeholder rune")
+}
+
 func TestNewPanicsWithoutEditor(t *testing.T) {
 	assert.Panics(t, func() {
 		_, _ = New(
@@ -389,6 +485,109 @@ func (s *multilineStubHandler) Handle(ev term.Event) (bool, bool) {
 }
 
 var _ command.EditHandler = (*multilineStubHandler)(nil)
+
+// cursorStubEditor builds an edit handler whose buffer-relative cursor
+// position is fixed by the test, so cursor-geometry assertions do not
+// depend on a real editor's wrap/scroll behavior.
+type cursorStubEditor struct{ cursor term.Coordinates }
+
+func (s cursorStubEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	return &cursorStubHandler{buf: buf, cursor: s.cursor}
+}
+
+type cursorStubHandler struct {
+	buf    *cell.Buffer
+	cursor term.Coordinates
+}
+
+func (s *cursorStubHandler) Resize(int, int)  {}
+func (s *cursorStubHandler) Draw(term.Writer) {}
+func (s *cursorStubHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return s.cursor, term.CursorStyleSteadyBar, true
+}
+func (s *cursorStubHandler) CursorAtScroll() term.Coordinates        { return s.cursor }
+func (s *cursorStubHandler) SetCursorAtScroll(term.Coordinates) bool { return true }
+func (s *cursorStubHandler) Selection() (string, bool)               { return "", false }
+func (s *cursorStubHandler) Handle(term.Event) (bool, bool)          { return false, false }
+
+var _ command.EditHandler = (*cursorStubHandler)(nil)
+
+// TestCursorVisualHonorsBufferLineForMultilineInput reproduces the bug
+// where a multi-line input line (produced by <shift-enter>) placed the
+// caret on the wrong row: the visual cursor ignored the editor's buffer
+// line and folded every column onto the first row through the prompt's
+// hanging indent. The prompt is "> " (2 cols) and the width is 30, so
+// only buffer line 0 carries the prompt offset and continuation lines
+// start at column 0.
+func TestCursorVisualHonorsBufferLineForMultilineInput(t *testing.T) {
+	tests := []struct {
+		name   string
+		text   string
+		cursor term.Coordinates // buffer line/column of the caret
+		wantX  int
+		wantY  int // visual row within the editor band
+	}{
+		{
+			name:   "single line keeps prompt offset",
+			text:   "hello",
+			cursor: term.Coordinates{X: 5, Y: 0},
+			wantX:  7, // len("> ") + 5
+			wantY:  0,
+		},
+		{
+			name:   "second line drops prompt offset",
+			text:   "hello\nworld",
+			cursor: term.Coordinates{X: 5, Y: 1},
+			wantX:  5,
+			wantY:  1,
+		},
+		{
+			name:   "third line accumulates preceding rows",
+			text:   "a\nbb\nccc",
+			cursor: term.Coordinates{X: 3, Y: 2},
+			wantX:  3,
+			wantY:  2,
+		},
+		{
+			name:   "long first line wraps before continuation",
+			text:   "0123456789012345678901234567\nx", // 28 cols + prompt = 30
+			cursor: term.Coordinates{X: 1, Y: 1},
+			wantX:  1,
+			wantY:  2, // first line occupies rows 0-1, continuation on row 2
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandlerFull(t, nil, 100, nil)
+			h.editHandler = cursorStubEditor{cursor: tt.cursor}.Edit(h.editBuf)
+			h.editBuf.WriteString(tt.text)
+			h.Resize(testWidthH, testHeight)
+
+			pos, _, ok := h.Cursor()
+			require.True(t, ok)
+			innerH := h.editInnerH()
+			assert.Equal(t,
+				term.Coordinates{X: tt.wantX, Y: innerH + tt.wantY}, pos)
+		})
+	}
+}
+
+// TestCursorVisualClampsLineBeyondBuffer guards against a panic when the
+// editor reports a cursor line past the buffer's last row: editBuf.Columns
+// would index out of range, so the row accumulation must clamp to Rows().
+func TestCursorVisualClampsLineBeyondBuffer(t *testing.T) {
+	h := newTestHandlerFull(t, nil, 100, nil)
+	// Cursor reports line 5 while the buffer only has one row ("hi").
+	h.editHandler = cursorStubEditor{
+		cursor: term.Coordinates{X: 0, Y: 5},
+	}.Edit(h.editBuf)
+	h.editBuf.WriteString("hi")
+	h.Resize(testWidthH, testHeight)
+
+	assert.NotPanics(t, func() {
+		_, _, _ = h.Cursor()
+	})
+}
 
 // TestArrowKeysMoveWithinMultilineItemBeforeCyclingHistory reproduces
 // the bug where recalling a multi-line history entry trapped the cursor:
