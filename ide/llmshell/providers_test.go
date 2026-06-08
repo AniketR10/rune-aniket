@@ -36,6 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/llm/claude"
 	"unstable.build/go-tui/llm/llmrouter"
 )
 
@@ -118,6 +119,37 @@ func TestProvidersCodexNoArgsShowsHelp(t *testing.T) {
 	renderedOnce(t, it, err)
 }
 
+// TestProvidersClaudeNoArgsShowsHelp renders claude help when no claude
+// subcommand is given.
+func TestProvidersClaudeNoArgsShowsHelp(t *testing.T) {
+	h, _, _, _ := newProvidersHandlerForTest(t)
+	it, err := h.HandleCommand(context.Background(),
+		repl.Command{Name: "models providers", Args: []string{"claude"}}, nil)
+	renderedOnce(t, it, err)
+}
+
+// TestProvidersClaudeStatusDispatches renders claude status (not
+// authenticated) without error.
+func TestProvidersClaudeStatusDispatches(t *testing.T) {
+	h, _, _, _ := newProvidersHandlerForTest(t)
+	it, err := h.HandleCommand(context.Background(),
+		repl.Command{Name: "models providers", Args: []string{"claude", "status"}}, nil)
+	renderedOnce(t, it, err)
+}
+
+// TestFormatClaudeStatusUsageCreditNote verifies the authenticated status
+// surfaces the Agent-SDK usage-credit guidance.
+func TestFormatClaudeStatusUsageCreditNote(t *testing.T) {
+	out := formatClaudeStatus(claude.AuthStatus{
+		Authenticated: true,
+		Email:         "dev@example.com",
+		PlanType:      "max_20x",
+	})
+	assert.Contains(t, out, "dev@example.com")
+	assert.Contains(t, out, "Agent-SDK credit")
+	assert.Contains(t, out, "Settings > Usage")
+}
+
 // TestProvidersHostedNoArgsShowsHelp renders provider help when no hosted
 // subcommand is given.
 func TestProvidersHostedNoArgsShowsHelp(t *testing.T) {
@@ -184,11 +216,17 @@ func TestProvidersComplete(t *testing.T) {
 	require.NoError(t, err)
 	names, err := iterator.ToSlice(ctx, level1)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"codex", "openai", "anthropic", "gemini"}, names)
+	assert.ElementsMatch(t, []string{"codex", "claude", "openai", "anthropic", "gemini"}, names)
 
 	codexSubs, err := h.Complete(ctx, "providers", []string{"codex", ""})
 	require.NoError(t, err)
 	names, err = iterator.ToSlice(ctx, codexSubs)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"login", "status"}, names)
+
+	claudeSubs, err := h.Complete(ctx, "providers", []string{"claude", ""})
+	require.NoError(t, err)
+	names, err = iterator.ToSlice(ctx, claudeSubs)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"login", "status"}, names)
 

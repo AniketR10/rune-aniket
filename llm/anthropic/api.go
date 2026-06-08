@@ -55,6 +55,14 @@ func anthropicParamsFromRequest(model string, request llmapi.Request, config Con
 		Tools:    tools,
 	}
 
+	// Claude Code request shaping: lead the system array with the billing
+	// header, agent identifier, and static system prompt so the Claude
+	// subscription backend accepts the request. The billing-header cch is
+	// signed later by claudeCodeMiddleware over the serialized body.
+	if config.ClaudeCodeSpoof {
+		params.System = append(claudeCodeSystemBlocks(system), system...)
+	}
+
 	switch {
 	case request.MaxOutputTokens > 0:
 		params.MaxTokens = int64(request.MaxOutputTokens)

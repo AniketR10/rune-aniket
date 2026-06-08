@@ -140,6 +140,71 @@ func TestMaxOutputTokensOverridesConfig(t *testing.T) {
 	assert.Equal(t, int64(8192), captured.MaxTokens)
 }
 
+func TestNewClientOAuthBearerAuth(t *testing.T) {
+	tests := []struct {
+		name       string
+		oauthToken string
+		wantAuth   string
+		wantAPIKey string
+		wantBeta   string
+	}{
+		{
+			name:       "oauth bearer suppresses x-api-key",
+			oauthToken: "oauth-access-token",
+			wantAuth:   "Bearer oauth-access-token",
+			wantAPIKey: "",
+			wantBeta:   "oauth-2025-04-20",
+		},
+		{
+			name:       "legacy api key path unchanged",
+			oauthToken: "",
+			wantAuth:   "",
+			wantAPIKey: "test-key",
+			wantBeta:   "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var (
+				gotAuth   string
+				gotAPIKey string
+				gotBeta   string
+			)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth = r.Header.Get("Authorization")
+				gotAPIKey = r.Header.Get("x-api-key")
+				gotBeta = r.Header.Get("anthropic-beta")
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = fmt.Fprint(w, minimalSSEResponse("ok"))
+			}))
+			defer srv.Close()
+
+			cfg := Config{BaseURL: srv.URL, MaxTokens: 1024}
+			if tt.oauthToken != "" {
+				cfg.OAuthToken = tt.oauthToken
+				cfg.Headers = map[string]string{"anthropic-beta": tt.wantBeta}
+			}
+			c := NewClient("test-key", cfg)
+
+			it, err := c.CreateCompletion(context.Background(),
+				llmapi.ModelEntry{Name: "claude-test"},
+				llmapi.Request{Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "Hello"}}})
+			require.NoError(t, err)
+			for {
+				if _, ok := it.Next(context.Background()); !ok {
+					break
+				}
+			}
+			require.NoError(t, it.Err())
+			require.NoError(t, it.Close())
+
+			assert.Equal(t, tt.wantAuth, gotAuth)
+			assert.Equal(t, tt.wantAPIKey, gotAPIKey)
+			assert.Equal(t, tt.wantBeta, gotBeta)
+		})
+	}
+}
+
 func TestCreateCompletion_NormalizedReplayDoesNotEmitUnpairedToolUse(t *testing.T) {
 	var captured requestBody
 

@@ -63,6 +63,7 @@ require (
 	cloud.google.com/go/storage v1.62.1
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.9.2
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/ebitengine/purego v0.9.0
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/go-git/go-billy/v6 v6.0.0-20251022185412-61e52df296a5
@@ -70,6 +71,8 @@ require (
 	github.com/google/go-dap v0.12.0
 	github.com/sergi/go-diff v1.4.0
 	github.com/spf13/cobra v1.10.2
+	github.com/tidwall/gjson v1.18.0
+	github.com/tidwall/sjson v1.2.5
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/pty v1.3.1
@@ -103,7 +106,6 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.6.2 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
@@ -171,10 +173,8 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/stripe/stripe-go/v82 v82.5.1 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
-	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect

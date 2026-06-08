@@ -21,12 +21,13 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package ratelimit
 
 import (
 	"fmt"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -103,4 +104,54 @@ func TestIsRetryableStreamError(t *testing.T) {
 			assert.Equal(t, tt.retryable, IsRetryableStreamError(tt.err))
 		})
 	}
+}
+
+func TestRetryWait(t *testing.T) {
+	base := time.Date(2026, 6, 7, 18, 0, 0, 0, time.UTC)
+	prev := nowFunc
+	nowFunc = func() time.Time { return base }
+	t.Cleanup(func() { nowFunc = prev })
+
+	t.Run("Retry-After integer wins", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("Retry-After", "30")
+		h.Set("anthropic-ratelimit-requests-reset", base.Add(5*time.Second).Format(time.RFC3339))
+		assert.Equal(t, 30*time.Second, RetryWait(h, 0))
+	})
+
+	// Regression: a per-minute 429 omits Retry-After and carries reset
+	// timestamps. Backoff must wait for the reset window, not fall back to
+	// the 1s/2s/4s exponential default that gave up before the window
+	// cleared.
+	t.Run("reset timestamp drives backoff when Retry-After absent", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("anthropic-ratelimit-input-tokens-reset", base.Add(42*time.Second).Format(time.RFC3339))
+		assert.Equal(t, 42*time.Second, RetryWait(h, 0))
+	})
+
+	t.Run("soonest reset across resources is used", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("anthropic-ratelimit-input-tokens-reset", base.Add(50*time.Second).Format(time.RFC3339))
+		h.Set("anthropic-ratelimit-requests-reset", base.Add(12*time.Second).Format(time.RFC3339))
+		assert.Equal(t, 12*time.Second, RetryWait(h, 0))
+	})
+
+	t.Run("reset wait is capped", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("anthropic-ratelimit-requests-reset", base.Add(10*time.Minute).Format(time.RFC3339))
+		assert.Equal(t, maxResetWait, RetryWait(h, 0))
+	})
+
+	t.Run("duration-form reset header", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("anthropic-ratelimit-output-tokens-reset", "8s")
+		assert.Equal(t, 8*time.Second, RetryWait(h, 0))
+	})
+
+	t.Run("falls back to exponential backoff without headers", func(t *testing.T) {
+		// attempt 2 -> base 4s, plus up to 25% jitter.
+		wait := RetryWait(http.Header{}, 2)
+		assert.GreaterOrEqual(t, wait, 4*time.Second)
+		assert.Less(t, wait, 5*time.Second)
+	})
 }

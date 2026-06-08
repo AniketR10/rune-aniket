@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm"
 	"unstable.build/go-tui/llm/anthropic"
+	"unstable.build/go-tui/llm/claude"
 	"unstable.build/go-tui/llm/codex"
 	"unstable.build/go-tui/llm/gemini"
 	"unstable.build/go-tui/llm/llamacpp"
@@ -53,6 +54,7 @@ const (
 	ProviderOpenAI    = "openai"
 	ProviderAnthropic = "anthropic"
 	ProviderCodex     = "codex"
+	ProviderClaude    = "claude"
 	ProviderGemini    = "gemini"
 	ProviderCustom    = "custom"
 	ProviderOllama    = "ollama"
@@ -268,6 +270,7 @@ func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 		iterator.FromSlice(openai.ModelEntries()),
 		iterator.FromSlice(anthropic.ModelEntries()),
 		iterator.FromSlice(codex.ModelEntries()),
+		iterator.FromSlice(claude.ModelEntries()),
 	}
 	if len(r.customCatalog) > 0 {
 		its = append(its, iterator.FromSlice(r.customCatalog))
@@ -319,6 +322,8 @@ func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.S
 		return r.resolveAnthropic(ctx)
 	case ProviderCodex:
 		return r.resolveCodex(ctx)
+	case ProviderClaude:
+		return r.resolveClaude(ctx)
 	case ProviderGemini:
 		return r.resolveGemini(ctx)
 	case ProviderCustom:
@@ -416,6 +421,26 @@ func (r *Router) resolveCodex(ctx context.Context) (llmapi.Service, error) {
 		cfg.DefaultPromptCacheKey = sid
 	}
 	return openai.NewClient(cred.AccessToken, cfg), nil
+}
+
+// resolveClaude loads the stored Claude Code subscription credential and
+// constructs a fresh Anthropic client authenticated with the OAuth bearer
+// token plus the Agent-SDK identifying headers. The credential's access
+// token rotates, so the client is rebuilt per request (like codex).
+func (r *Router) resolveClaude(ctx context.Context) (llmapi.Service, error) {
+	cred, err := claude.CredentialForClient(ctx, r.storage)
+	if err != nil {
+		if errors.Is(err, claude.ErrCredentialNotFound) {
+			return nil, fmt.Errorf(
+				"llmrouter: no claude credential found; run " +
+					"`models providers claude login` from the rune shell")
+		}
+		return nil, fmt.Errorf("llmrouter: load claude credential: %w", err)
+	}
+	cfg := r.cfg.ClaudeClientConfig()
+	cfg.OAuthToken = cred.AccessToken
+	cfg.Headers = cred.ClientHeaders()
+	return anthropic.NewClient(cred.AccessToken, cfg), nil
 }
 
 // resolveAPIKey returns the API key for a hosted provider, preferring the

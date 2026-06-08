@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package ratelimit provides shared retry and rate-limit utilities used by
 // multiple LLM provider clients.
 package ratelimit
@@ -131,8 +130,30 @@ func IsTransientNetworkError(err error) bool {
 	return false
 }
 
-// RetryWait determines how long to wait before the next retry.
-// It prefers the Retry-After header; otherwise falls back to exponential backoff.
+// nowFunc returns the current time. It is a package variable so tests can
+// pin "now" when exercising reset-header-derived backoff.
+var nowFunc = time.Now
+
+// maxResetWait caps how long RetryWait will sleep based on a rate-limit
+// reset header. Per-minute windows reset within a minute, so a value above
+// that only adds latency without improving the odds of success.
+const maxResetWait = 90 * time.Second
+
+// anthropicResetHeaders are the per-resource reset headers Anthropic
+// returns on 429 responses. Each carries the time at which that resource's
+// limit refreshes, either as an RFC3339 timestamp or an "<n>s" duration.
+var anthropicResetHeaders = []string{
+	"anthropic-ratelimit-input-tokens-reset",
+	"anthropic-ratelimit-output-tokens-reset",
+	"anthropic-ratelimit-requests-reset",
+}
+
+// RetryWait determines how long to wait before the next retry. It prefers
+// the Retry-After header, then the soonest Anthropic rate-limit reset
+// header, and finally falls back to exponential backoff. Honoring the
+// reset headers matters for per-minute (ITPM/RPM) 429s, where Anthropic
+// omits a plain Retry-After and the window needs up to a minute to clear;
+// the old exponential default (1s, 2s, 4s) gave up long before then.
 func RetryWait(headers http.Header, attempt int) time.Duration {
 	if headers != nil {
 		if ra := headers.Get("Retry-After"); ra != "" {
@@ -140,11 +161,60 @@ func RetryWait(headers http.Header, attempt int) time.Duration {
 				return time.Duration(secs) * time.Second
 			}
 		}
+		if wait, ok := resetHeaderWait(headers); ok {
+			return wait
+		}
 	}
 	d := time.Duration(1<<uint(attempt)) * time.Second
 	d = min(d, 60*time.Second)
 	jitter := time.Duration(rand.Int64N(int64(d) / 4))
 	return d + jitter
+}
+
+// resetHeaderWait returns the wait until the soonest Anthropic rate-limit
+// reset, capped at maxResetWait. The bool is false when no reset header is
+// present or parseable, so callers fall back to exponential backoff.
+func resetHeaderWait(headers http.Header) (time.Duration, bool) {
+	now := nowFunc()
+	var soonest time.Duration
+	found := false
+	for _, key := range anthropicResetHeaders {
+		raw := strings.TrimSpace(headers.Get(key))
+		if raw == "" {
+			continue
+		}
+		wait, ok := parseResetWait(raw, now)
+		if !ok {
+			continue
+		}
+		if !found || wait < soonest {
+			soonest = wait
+			found = true
+		}
+	}
+	if !found {
+		return 0, false
+	}
+	if soonest < 0 {
+		soonest = 0
+	}
+	soonest = min(soonest, maxResetWait)
+	return soonest, true
+}
+
+// parseResetWait interprets an Anthropic reset header value, which may be
+// an RFC3339 timestamp or an "<n>s" duration, into a wait relative to now.
+func parseResetWait(raw string, now time.Time) (time.Duration, bool) {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t.Sub(now), true
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		return d, true
+	}
+	if secs, err := strconv.Atoi(strings.TrimSuffix(raw, "s")); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second, true
+	}
+	return 0, false
 }
 
 // RetryMessage composes a human-readable retry message.

@@ -269,6 +269,17 @@ config = {
             "api_key": "",
         },
         "codex": {
+            # OpenAI models via a ChatGPT Codex subscription (browser
+            # sign-in, no api_key). Sign in with `models providers codex
+            # login`. The "openai" block above bills the same models by
+            # API key instead.
+            "base_url": "",
+        },
+        "claude": {
+            # Anthropic (Claude) models via a Claude Pro/Max subscription
+            # (browser sign-in, no api_key). Sign in with `models
+            # providers claude login`. The "anthropic" block above bills
+            # the same models by API key instead.
             "base_url": "",
         },
         "custom": {

@@ -217,6 +217,9 @@ func (c ideConfig) llmConfig() llm.Config {
 	if codex, ok := c.getConfig(models, "codex"); ok {
 		overrideString(codex, "base_url", &out.Codex.BaseURL)
 	}
+	if claude, ok := c.getConfig(models, "claude"); ok {
+		overrideString(claude, "base_url", &out.Claude.BaseURL)
+	}
 	if custom, ok := c.getConfig(models, "custom"); ok {
 		overrideString(custom, "url", &out.Custom.URL)
 		overrideString(custom, "api_key", &out.Custom.APIKey)

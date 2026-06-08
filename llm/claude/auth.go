@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package codex
+package claude
 
 import (
 	"context"
@@ -41,42 +41,56 @@ import (
 
 	sensiblebrowser "github.com/ernestrc/sensible/browser"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/llm/authcallback"
 )
 
 const (
-	credentialDocumentID = "provider:codex:credential"
+	credentialDocumentID = "provider:claude:credential"
 
-	oauthAuthURL     = "https://auth.openai.com/oauth/authorize"
-	oauthTokenURL    = "https://auth.openai.com/oauth/token"
-	oauthClientID    = "app_EMoamEEZ73f0CkXaXp7hrann"
-	defaultCallback  = ":1455"
-	defaultRedirect  = "http://localhost:1455/auth/callback"
+	// OAuth endpoints and client for the Claude Code subscription flow,
+	// matching what the Claude Code CLI sends.
+	oauthAuthURL    = "https://claude.ai/oauth/authorize"
+	oauthClientID   = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+	oauthScopes     = "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
+	defaultCallback = ":54545"
+	defaultRedirect = "http://localhost:54545/callback"
+
 	defaultLoginWait = 5 * time.Minute
 	refreshLead      = 5 * time.Minute
-	codexOriginator  = "codex_cli_rs"
+
+	// agentBetaHeader is the anthropic-beta value the Claude Code client
+	// sends. oauth-2025-04-20 enables the OAuth bearer path and
+	// claude-code-20250219 identifies the request as Claude Code so usage
+	// attributes to the subscription's Agent-SDK credit pool.
+	agentBetaHeader = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14"
+	// anthropicVersion is the required Anthropic API version header.
+	anthropicVersion = "2023-06-01"
 )
 
-// ErrCredentialNotFound is returned when no Codex credential has been saved.
-var ErrCredentialNotFound = errors.New("codex credential not found")
+// oauthTokenURL is the token-exchange endpoint. It is a package variable
+// (not a const) so tests can point it at an httptest.Server via the
+// injected *http.Client seam.
+var oauthTokenURL = "https://api.anthropic.com/v1/oauth/token"
 
-// Credential is the token data needed to authenticate Codex API calls.
+// ErrCredentialNotFound is returned when no Claude credential has been saved.
+var ErrCredentialNotFound = errors.New("claude credential not found")
+
+// Credential is the token data needed to authenticate Claude API calls
+// using a Claude Code subscription.
 type Credential struct {
-	AccessToken    string
-	RefreshToken   string
-	IDToken        string
-	TokenType      string
-	Expiry         time.Time
-	LastRefresh    time.Time
-	Email          string
-	AccountID      string
-	PlanType       string
-	UserID         string
-	FedRAMP        bool
-	InstallationID string
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	Expiry       time.Time
+	LastRefresh  time.Time
+	Email        string
+	AccountID    string
+	PlanType     string
+	Scopes       string
 }
 
-// AuthStatus describes the currently stored Codex credential, if any.
+// AuthStatus describes the currently stored Claude credential, if any.
 type AuthStatus struct {
 	Authenticated   bool
 	Expired         bool
@@ -88,19 +102,13 @@ type AuthStatus struct {
 	HasRefreshToken bool
 }
 
-// ClientHeaders returns Codex-specific headers inferred from the credential.
+// ClientHeaders returns the Agent-SDK identifying headers the Anthropic
+// client must send when authenticating with a Claude Code subscription.
 func (c Credential) ClientHeaders() map[string]string {
-	headers := map[string]string{
-		"originator": codexOriginator,
-		"User-Agent": codexOriginator + "/0.0.0 (Rune Agent)",
+	return map[string]string{
+		"anthropic-beta":    agentBetaHeader,
+		"anthropic-version": anthropicVersion,
 	}
-	if c.AccountID != "" {
-		headers["ChatGPT-Account-ID"] = c.AccountID
-	}
-	if c.FedRAMP {
-		headers["X-OpenAI-Fedramp"] = "true"
-	}
-	return headers
 }
 
 func (c Credential) expired(now time.Time) bool {
@@ -111,22 +119,15 @@ func (c Credential) needsRefresh(now time.Time) bool {
 	return !c.Expiry.IsZero() && !now.Add(refreshLead).Before(c.Expiry)
 }
 
-// SaveCredential stores the Codex credential in extension storage.
+// SaveCredential stores the Claude credential in extension storage.
 func SaveCredential(ctx context.Context, storage storageapi.Service, cred Credential) error {
 	if storage == nil {
-		return errors.New("codex credential storage is unavailable")
-	}
-	if cred.InstallationID == "" {
-		id, err := randomUUID()
-		if err != nil {
-			return fmt.Errorf("generate Codex installation ID: %w", err)
-		}
-		cred.InstallationID = id
+		return errors.New("claude credential storage is unavailable")
 	}
 	return storage.Set(ctx, credentialDocumentID, credentialRecordFromPublic(cred))
 }
 
-// LoadCredential loads the stored Codex credential.
+// LoadCredential loads the stored Claude credential.
 func LoadCredential(ctx context.Context, storage storageapi.Service) (Credential, error) {
 	if storage == nil {
 		return Credential{}, ErrCredentialNotFound
@@ -136,25 +137,25 @@ func LoadCredential(ctx context.Context, storage storageapi.Service) (Credential
 		if errors.Is(err, storageapi.ErrNotFound) {
 			return Credential{}, ErrCredentialNotFound
 		}
-		return Credential{}, fmt.Errorf("load codex credential: %w", err)
+		return Credential{}, fmt.Errorf("load claude credential: %w", err)
 	}
 	return rec.public(), nil
 }
 
-// CredentialForClient returns a non-expired Codex credential, refreshing it when needed.
+// CredentialForClient returns a non-expired Claude credential, refreshing it when needed.
 func CredentialForClient(ctx context.Context, storage storageapi.Service) (Credential, error) {
 	cred, err := LoadCredential(ctx, storage)
 	if err != nil {
 		return Credential{}, err
 	}
 	if cred.AccessToken == "" {
-		return Credential{}, errors.New("codex credential missing access token")
+		return Credential{}, errors.New("claude credential missing access token")
 	}
 	if !cred.needsRefresh(time.Now()) {
-		return ensureInstallationID(ctx, storage, cred)
+		return cred, nil
 	}
 	if cred.RefreshToken == "" {
-		return Credential{}, errors.New("codex credential expired and has no refresh token")
+		return Credential{}, errors.New("claude credential expired and has no refresh token")
 	}
 	refreshed, err := refreshCredential(ctx, http.DefaultClient, cred)
 	if err != nil {
@@ -163,25 +164,10 @@ func CredentialForClient(ctx context.Context, storage storageapi.Service) (Crede
 	if err := SaveCredential(ctx, storage, refreshed); err != nil {
 		return Credential{}, err
 	}
-	return ensureInstallationID(ctx, storage, refreshed)
+	return refreshed, nil
 }
 
-func ensureInstallationID(ctx context.Context, storage storageapi.Service, cred Credential) (Credential, error) {
-	if cred.InstallationID != "" {
-		return cred, nil
-	}
-	id, err := randomUUID()
-	if err != nil {
-		return Credential{}, fmt.Errorf("generate Codex installation ID: %w", err)
-	}
-	cred.InstallationID = id
-	if err := SaveCredential(ctx, storage, cred); err != nil {
-		return Credential{}, err
-	}
-	return cred, nil
-}
-
-// Status returns the stored Codex authentication status.
+// Status returns the stored Claude authentication status.
 func Status(ctx context.Context, storage storageapi.Service) (AuthStatus, error) {
 	cred, err := LoadCredential(ctx, storage)
 	if err != nil {
@@ -203,18 +189,15 @@ func Status(ctx context.Context, storage storageapi.Service) (AuthStatus, error)
 }
 
 type credentialRecord struct {
-	AccessToken    string
-	RefreshToken   string
-	IDToken        string
-	TokenType      string
-	Expiry         time.Time
-	LastRefresh    time.Time
-	Email          string
-	AccountID      string
-	PlanType       string
-	UserID         string
-	FedRAMP        bool
-	InstallationID string
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	Expiry       time.Time
+	LastRefresh  time.Time
+	Email        string
+	AccountID    string
+	PlanType     string
+	Scopes       string
 }
 
 func credentialRecordFromPublic(cred Credential) credentialRecord {
@@ -225,7 +208,7 @@ func (r credentialRecord) public() Credential {
 	return Credential(r)
 }
 
-// LoginSession is an in-progress Codex OAuth login.
+// LoginSession is an in-progress Claude OAuth login.
 type LoginSession struct {
 	storage     storageapi.Service
 	state       string
@@ -259,17 +242,17 @@ func (s *LoginSession) Wait(ctx context.Context) (Credential, error) {
 	case <-ctx.Done():
 		return Credential{}, ctx.Err()
 	case <-timer.C:
-		return Credential{}, errors.New("timed out waiting for Codex authentication callback")
+		return Credential{}, errors.New("timed out waiting for Claude authentication callback")
 	case cb = <-s.callbackCh:
 	}
 	if cb.err != nil {
 		return Credential{}, cb.err
 	}
 	if cb.state != s.state {
-		return Credential{}, errors.New("codex authentication state mismatch")
+		return Credential{}, errors.New("claude authentication state mismatch")
 	}
 
-	cred, err := exchangeCode(ctx, s.httpClient, cb.code, s.pkce.verifier, s.redirectURI)
+	cred, err := exchangeCode(ctx, s.httpClient, cb.code, cb.state, s.pkce.verifier, s.redirectURI)
 	if err != nil {
 		return Credential{}, err
 	}
@@ -292,7 +275,7 @@ func (s *LoginSession) Close() error {
 	return s.closeErr
 }
 
-// LoginOption configures a Codex OAuth login.
+// LoginOption configures a Claude OAuth login.
 type LoginOption func(*loginConfig)
 
 type loginConfig struct {
@@ -308,10 +291,23 @@ func WithBrowserOpener(open func(string) error) LoginOption {
 	return func(c *loginConfig) { c.openBrowser = open }
 }
 
-// StartLogin starts a Codex OAuth login and returns the URL to display to the user.
+// WithHTTPClient overrides the HTTP client used for the token exchange.
+func WithHTTPClient(client *http.Client) LoginOption {
+	return func(c *loginConfig) { c.httpClient = client }
+}
+
+// WithCallbackAddr overrides the local callback listen address and redirect URI.
+func WithCallbackAddr(addr, redirectURI string) LoginOption {
+	return func(c *loginConfig) {
+		c.callbackAddr = addr
+		c.redirectURI = redirectURI
+	}
+}
+
+// StartLogin starts a Claude OAuth login and returns the URL to display to the user.
 func StartLogin(ctx context.Context, storage storageapi.Service, opts ...LoginOption) (*LoginSession, error) {
 	if storage == nil {
-		return nil, errors.New("codex credential storage is unavailable")
+		return nil, errors.New("claude credential storage is unavailable")
 	}
 	cfg := loginConfig{
 		callbackAddr: defaultCallback,
@@ -335,7 +331,7 @@ func StartLogin(ctx context.Context, storage storageapi.Service, opts ...LoginOp
 
 	listener, err := net.Listen("tcp", cfg.callbackAddr)
 	if err != nil {
-		return nil, fmt.Errorf("start Codex OAuth callback server: %w", err)
+		return nil, fmt.Errorf("start Claude OAuth callback server: %w", err)
 	}
 
 	callbackCh := make(chan oauthCallback, 1)
@@ -352,18 +348,18 @@ func StartLogin(ctx context.Context, storage storageapi.Service, opts ...LoginOp
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/auth/callback", session.handleCallback)
+	mux.HandleFunc("/callback", session.handleCallback)
 	mux.HandleFunc("/success", handleSuccess)
 	session.server = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	serveErr := make(chan error, 1)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		if err := session.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 			return
 		}
 		serveErr <- nil
-	}()
+	})
 
 	select {
 	case <-ctx.Done():
@@ -372,10 +368,10 @@ func StartLogin(ctx context.Context, storage storageapi.Service, opts ...LoginOp
 	case err := <-serveErr:
 		if err != nil {
 			_ = session.Close()
-			return nil, fmt.Errorf("start Codex OAuth callback server: %w", err)
+			return nil, fmt.Errorf("start Claude OAuth callback server: %w", err)
 		}
 		_ = session.Close()
-		return nil, errors.New("codex OAuth callback server stopped unexpectedly")
+		return nil, errors.New("claude OAuth callback server stopped unexpectedly")
 	default:
 	}
 
@@ -387,16 +383,14 @@ func StartLogin(ctx context.Context, storage storageapi.Service, opts ...LoginOp
 
 func authURL(state, challenge, redirectURI string) string {
 	v := url.Values{}
+	v.Set("code", "true")
 	v.Set("client_id", oauthClientID)
 	v.Set("response_type", "code")
 	v.Set("redirect_uri", redirectURI)
-	v.Set("scope", "openid email profile offline_access")
+	v.Set("scope", oauthScopes)
 	v.Set("state", state)
 	v.Set("code_challenge", challenge)
 	v.Set("code_challenge_method", "S256")
-	v.Set("prompt", "login")
-	v.Set("id_token_add_organizations", "true")
-	v.Set("codex_cli_simplified_flow", "true")
 	return oauthAuthURL + "?" + v.Encode()
 }
 
@@ -429,14 +423,14 @@ func (s *LoginSession) handleCallback(w http.ResponseWriter, r *http.Request) {
 		if desc == "" {
 			desc = oauthErr
 		}
-		s.sendCallback(oauthCallback{err: fmt.Errorf("codex authentication failed: %s", desc)})
+		s.sendCallback(oauthCallback{err: fmt.Errorf("claude authentication failed: %s", desc)})
 		http.Error(w, desc, http.StatusBadRequest)
 		return
 	}
 	code := q.Get("code")
 	state := q.Get("state")
 	if code == "" || state == "" {
-		s.sendCallback(oauthCallback{err: errors.New("codex authentication callback missing code or state")})
+		s.sendCallback(oauthCallback{err: errors.New("claude authentication callback missing code or state")})
 		http.Error(w, "missing code or state", http.StatusBadRequest)
 		return
 	}
@@ -454,9 +448,9 @@ func (s *LoginSession) sendCallback(cb oauthCallback) {
 func handleSuccess(w http.ResponseWriter, _ *http.Request) {
 	authcallback.WriteSuccess(w, authcallback.Page{
 		Label:   "rune",
-		Title:   "Codex authentication complete — Rune",
+		Title:   "Claude authentication complete — Rune",
 		Heading: "Done",
-		Message: "Codex authentication complete. You can return to Rune.",
+		Message: "Claude authentication complete. You can return to Rune.",
 	})
 }
 
@@ -483,103 +477,105 @@ func randomURLSafe(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func randomUUID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
-}
-
-// NewSessionID returns a freshly-generated UUID v4 suitable for use as
-// the ChatGPT Codex backend's session_id / x-client-request-id header.
-// Used by the router as a per-resolve default PromptCacheKey for
-// callers that do not supply their own conversation correlation key.
-func NewSessionID() (string, error) {
-	return randomUUID()
-}
-
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	IDToken      string `json:"id_token"`
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int64  `json:"expires_in"`
+	Scope        string `json:"scope"`
+	Account      struct {
+		UUID         string `json:"uuid"`
+		EmailAddress string `json:"email_address"`
+	} `json:"account"`
+	Organization struct {
+		UUID         string `json:"uuid"`
+		Name         string `json:"name"`
+		BillingType  string `json:"billing_type"`
+		Subscription string `json:"subscription_type"`
+	} `json:"organization"`
 }
 
 func exchangeCode(
-	ctx context.Context, client *http.Client, code, verifier, redirectURI string,
+	ctx context.Context, client *http.Client, code, state, verifier, redirectURI string,
 ) (Credential, error) {
-	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
-	form.Set("client_id", oauthClientID)
-	form.Set("code", code)
-	form.Set("redirect_uri", redirectURI)
-	form.Set("code_verifier", verifier)
-	resp, err := postTokenForm(ctx, client, form)
+	// The authorization code may arrive as "code#state"; the fragment
+	// state takes precedence when present (matches the Claude Code CLI).
+	if rawCode, fragState, found := strings.Cut(code, "#"); found {
+		code = rawCode
+		if fragState != "" {
+			state = fragState
+		}
+	}
+	body := map[string]string{
+		"grant_type":    "authorization_code",
+		"client_id":     oauthClientID,
+		"code":          code,
+		"state":         state,
+		"redirect_uri":  redirectURI,
+		"code_verifier": verifier,
+	}
+	resp, err := postTokenForm(ctx, client, body)
 	if err != nil {
 		return Credential{}, err
 	}
-	return credentialFromTokenResponse(resp, Credential{}, time.Now())
+	return credentialFromTokenResponse(resp, Credential{}, time.Now()), nil
 }
 
 func refreshCredential(ctx context.Context, client *http.Client, current Credential) (Credential, error) {
-	form := url.Values{}
-	form.Set("grant_type", "refresh_token")
-	form.Set("client_id", oauthClientID)
-	form.Set("refresh_token", current.RefreshToken)
-	form.Set("scope", "openid profile email")
-	resp, err := postTokenForm(ctx, client, form)
+	body := map[string]string{
+		"grant_type":    "refresh_token",
+		"client_id":     oauthClientID,
+		"refresh_token": current.RefreshToken,
+	}
+	resp, err := postTokenForm(ctx, client, body)
 	if err != nil {
 		return Credential{}, err
 	}
-	return credentialFromTokenResponse(resp, current, time.Now())
+	return credentialFromTokenResponse(resp, current, time.Now()), nil
 }
 
-func postTokenForm(ctx context.Context, client *http.Client, form url.Values) (tokenResponse, error) {
+func postTokenForm(ctx context.Context, client *http.Client, body map[string]string) (tokenResponse, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oauthTokenURL, strings.NewReader(form.Encode()))
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return tokenResponse{}, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oauthTokenURL, strings.NewReader(string(payload)))
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("codex token exchange: %w", err)
+		return tokenResponse{}, fmt.Errorf("claude token exchange: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("read Codex token response: %w", err)
+		return tokenResponse{}, fmt.Errorf("read Claude token response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return tokenResponse{}, fmt.Errorf("codex token exchange failed: status %d: %s",
-			resp.StatusCode, strings.TrimSpace(string(body)))
+		return tokenResponse{}, fmt.Errorf("claude token exchange failed: status %d: %s",
+			resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	var token tokenResponse
-	if err := json.Unmarshal(body, &token); err != nil {
-		return tokenResponse{}, fmt.Errorf("decode Codex token response: %w", err)
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return tokenResponse{}, fmt.Errorf("decode Claude token response: %w", err)
 	}
 	if token.AccessToken == "" {
-		return tokenResponse{}, errors.New("codex token response missing access_token")
+		return tokenResponse{}, errors.New("claude token response missing access_token")
 	}
 	return token, nil
 }
 
-func credentialFromTokenResponse(resp tokenResponse, fallback Credential, now time.Time) (Credential, error) {
+func credentialFromTokenResponse(resp tokenResponse, fallback Credential, now time.Time) Credential {
 	cred := fallback
 	cred.AccessToken = resp.AccessToken
 	if resp.RefreshToken != "" {
 		cred.RefreshToken = resp.RefreshToken
-	}
-	if resp.IDToken != "" {
-		cred.IDToken = resp.IDToken
 	}
 	if resp.TokenType != "" {
 		cred.TokenType = resp.TokenType
@@ -589,74 +585,20 @@ func credentialFromTokenResponse(resp tokenResponse, fallback Credential, now ti
 	if resp.ExpiresIn > 0 {
 		cred.Expiry = now.Add(time.Duration(resp.ExpiresIn) * time.Second)
 	}
+	if resp.Scope != "" {
+		cred.Scopes = resp.Scope
+	}
+	if resp.Account.EmailAddress != "" {
+		cred.Email = resp.Account.EmailAddress
+	}
+	if resp.Organization.UUID != "" {
+		cred.AccountID = resp.Organization.UUID
+	}
+	if resp.Organization.Subscription != "" {
+		cred.PlanType = resp.Organization.Subscription
+	} else if resp.Organization.BillingType != "" {
+		cred.PlanType = resp.Organization.BillingType
+	}
 	cred.LastRefresh = now
-	if cred.IDToken != "" {
-		claims, err := parseIDTokenClaims(cred.IDToken)
-		if err != nil {
-			return Credential{}, err
-		}
-		if claims.Email != "" {
-			cred.Email = claims.Email
-		}
-		if claims.PlanType != "" {
-			cred.PlanType = claims.PlanType
-		}
-		if claims.UserID != "" {
-			cred.UserID = claims.UserID
-		}
-		if claims.AccountID != "" {
-			cred.AccountID = claims.AccountID
-		}
-		cred.FedRAMP = claims.FedRAMP
-	}
-	return cred, nil
-}
-
-type parsedClaims struct {
-	Email     string
-	PlanType  string
-	UserID    string
-	AccountID string
-	FedRAMP   bool
-}
-
-func parseIDTokenClaims(jwt string) (parsedClaims, error) {
-	parts := strings.Split(jwt, ".")
-	if len(parts) < 2 || parts[1] == "" {
-		return parsedClaims{}, errors.New("invalid Codex id_token")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return parsedClaims{}, fmt.Errorf("decode Codex id_token: %w", err)
-	}
-	var claims struct {
-		Email   string `json:"email"`
-		Profile struct {
-			Email string `json:"email"`
-		} `json:"https://api.openai.com/profile"`
-		Auth struct {
-			PlanType  string `json:"chatgpt_plan_type"`
-			UserID    string `json:"chatgpt_user_id"`
-			UserIDAlt string `json:"user_id"`
-			AccountID string `json:"chatgpt_account_id"`
-			FedRAMP   bool   `json:"chatgpt_account_is_fedramp"`
-		} `json:"https://api.openai.com/auth"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return parsedClaims{}, fmt.Errorf("parse Codex id_token: %w", err)
-	}
-	ret := parsedClaims{
-		Email:     claims.Email,
-		PlanType:  claims.Auth.PlanType,
-		UserID:    claims.Auth.UserID,
-		AccountID: claims.Auth.AccountID,
-		FedRAMP:   claims.Auth.FedRAMP,
-	}
-	if ret.Email == "" {
-		ret.Email = claims.Profile.Email
-	}
-	if ret.UserID == "" {
-		ret.UserID = claims.Auth.UserIDAlt
-	}
-	return ret, nil
+	return cred
 }

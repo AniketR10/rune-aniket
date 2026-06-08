@@ -63,6 +63,7 @@ type Config struct {
 	Anthropic AnthropicConfig
 	Gemini    GeminiConfig
 	Codex     CodexConfig
+	Claude    ClaudeConfig
 	Custom    CustomConfig
 	Local     LocalConfig
 }
@@ -70,9 +71,9 @@ type Config struct {
 // OpenAIConfig wraps openai.Config with the credentials and base URL
 // fields that come from `models.openai.*`.
 type OpenAIConfig struct {
-	APIKey            string
-	BaseURL           string
-	ReasoningEffort   string
+	APIKey          string
+	BaseURL         string
+	ReasoningEffort string
 }
 
 // AnthropicConfig captures `models.anthropic.*`.
@@ -92,6 +93,12 @@ type GeminiConfig struct {
 
 // CodexConfig captures `models.codex.*`.
 type CodexConfig struct {
+	BaseURL string
+}
+
+// ClaudeConfig captures `models.claude.*`. The claude provider is
+// OAuth-only (no API key); only the base URL is configurable.
+type ClaudeConfig struct {
 	BaseURL string
 }
 
@@ -187,6 +194,20 @@ func (c Config) GeminiClientConfig() gemini.Config {
 		BaseURL:         c.Gemini.BaseURL,
 		ReasoningEffort: c.Gemini.ReasoningEffort,
 		DebugHTTP:       c.DebugHTTP,
+	}
+}
+
+// ClaudeClientConfig projects the anthropic.Config view used by the
+// claude provider, which authenticates an Anthropic client with a Claude
+// Code subscription OAuth token. The router fills OAuthToken and Headers
+// per-request from the resolved credential.
+func (c Config) ClaudeClientConfig() anthropic.Config {
+	return anthropic.Config{
+		BaseURL:         c.Claude.BaseURL,
+		ReasoningEffort: c.Anthropic.ReasoningEffort,
+		CacheControl:    c.Anthropic.CacheControl,
+		DebugHTTP:       c.DebugHTTP,
+		ClaudeCodeSpoof: true,
 	}
 }
 

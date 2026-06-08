@@ -113,7 +113,7 @@ func TestRouter_CustomCatalogSurfacesEntries(t *testing.T) {
 // contributes models.
 func TestRouter_StaticCatalog(t *testing.T) {
 	r := newTestRouter(t)
-	names := map[string]string{}
+	seen := map[string]bool{}
 	ctx := context.Background()
 	it := r.Models()
 	for {
@@ -121,20 +121,16 @@ func TestRouter_StaticCatalog(t *testing.T) {
 		if !ok {
 			break
 		}
-		names[entry.Name] = entry.Provider
+		seen[entry.Provider] = true
 	}
-	// At least one entry per static provider should be present.
-	hasProvider := func(p string) bool {
-		for _, v := range names {
-			if v == p {
-				return true
-			}
-		}
-		return false
-	}
+	// At least one entry per static provider should be present. Tracking
+	// a provider set (not a name->provider map) keeps the assertion valid
+	// even though claude and anthropic share identical model names.
+	hasProvider := func(p string) bool { return seen[p] }
 	assert.True(t, hasProvider(ProviderOpenAI), "no openai models")
 	assert.True(t, hasProvider(ProviderAnthropic), "no anthropic models")
 	assert.True(t, hasProvider(ProviderCodex), "no codex models")
+	assert.True(t, hasProvider(ProviderClaude), "no claude models")
 	assert.True(t, hasProvider(ProviderGemini), "no gemini models")
 }
 
@@ -207,6 +203,33 @@ func TestRouter_GetModel_QualifiedDisambiguates(t *testing.T) {
 	got, ok = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderOpenAI, Name: "gpt-5.5"})
 	require.True(t, ok)
 	assert.Equal(t, ProviderOpenAI, got.Provider)
+}
+
+func TestRouter_GetModel_ClaudeDisambiguates(t *testing.T) {
+	r := newTestRouter(t)
+	ctx := context.Background()
+
+	// claude-opus-4-8 collides across the anthropic and claude catalogs;
+	// a bare-name lookup must fail.
+	_, ok := r.GetModel(ctx, llmapi.ModelEntry{Name: "claude-opus-4-8"})
+	assert.False(t, ok, "bare-name claude-opus-4-8 must require a provider")
+
+	got, ok := r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderClaude, Name: "claude-opus-4-8"})
+	require.True(t, ok)
+	assert.Equal(t, ProviderClaude, got.Provider)
+
+	got, ok = r.GetModel(ctx, llmapi.ModelEntry{Provider: ProviderAnthropic, Name: "claude-opus-4-8"})
+	require.True(t, ok)
+	assert.Equal(t, ProviderAnthropic, got.Provider)
+}
+
+func TestRouter_ResolveClaude_NotLoggedIn(t *testing.T) {
+	r, err := New(llm.DefaultConfig(), t.TempDir(), storagestub.NewInMemoryService())
+	require.NoError(t, err)
+	_, err = r.resolveClaude(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no claude credential found")
+	assert.Contains(t, err.Error(), "models providers claude login")
 }
 
 func TestRouter_Resolve_RejectsEmptyProvider(t *testing.T) {

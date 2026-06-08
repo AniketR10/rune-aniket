@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000000;
+    --panel: #0a0a0a;
+    --panel-2: #121418;
+    --fg: #BBC2CF;
+    --fg-high: #D5DCE3;
+    --fg-dim: #6B7280;
+    --hair: #282C34;
+    --orange: #BA0E2E;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+    font-feature-settings: 'liga' 1, 'calt' 1;
+    min-height: 100vh;
+  }
+  .shell { min-height: 100vh; display: flex; flex-direction: column; }
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 44px;
+  }
+  @media (max-width: 960px) {
+    main { padding: 0 22px; }
+  }
+  .page {
+    padding: 110px 0 140px;
+    max-width: 56ch;
+  }
+  .label {
+    display: block;
+    font-size: 14.5px;
+    color: var(--fg-dim);
+    margin-bottom: 22px;
+  }
+  .label::before { content: "// "; color: var(--fg-dim); }
+  .hero {
+    font-size: clamp(2.6rem, 8vw, 5rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--orange);
+    margin: 0 0 18px;
+  }
+  .lead {
+    color: var(--fg);
+    font-size: 1rem;
+    line-height: 1.6;
+    margin: 0 0 30px;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <main>
+    <section class="page">
+      <span class="label">{{.Label}}</span>
+      <h1 class="hero">{{.Heading}}</h1>
+      <p class="lead">{{.Message}}</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>

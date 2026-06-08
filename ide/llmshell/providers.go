@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/llm/claude"
 	"unstable.build/go-tui/llm/codex"
 	"unstable.build/go-tui/llm/llmrouter"
 )
@@ -112,6 +113,8 @@ func (h *providersHandler) HandleCommand(
 	switch {
 	case provider == "codex":
 		return h.handleCodex(ctx, cmd.Args[1:])
+	case provider == "claude":
+		return h.handleClaude(ctx, cmd.Args[1:])
 	case isHostedProvider(provider):
 		return h.handleHostedKeyProvider(ctx, provider, cmd.Args[1:])
 	default:
@@ -123,7 +126,7 @@ func (h *providersHandler) HandleCommand(
 func (h *providersHandler) Complete(
 	ctx context.Context, _ string, args []string,
 ) (iterator.Iterator[string], error) {
-	providerNames := append([]string{"codex"}, hostedProviders...)
+	providerNames := append([]string{"codex", "claude"}, hostedProviders...)
 	switch len(args) {
 	case 0:
 		return iterator.FromSlice(providerNames), nil
@@ -132,6 +135,8 @@ func (h *providersHandler) Complete(
 	case 2:
 		switch {
 		case args[0] == "codex":
+			return iterator.FromSlice(filterNames([]string{"login", "status"}, args[1])), nil
+		case args[0] == "claude":
 			return iterator.FromSlice(filterNames([]string{"login", "status"}, args[1])), nil
 		case isHostedProvider(args[0]):
 			return iterator.FromSlice(
@@ -234,9 +239,13 @@ func formatCodexLoginStart(session *codex.LoginSession) string {
 func formatCodexStatus(status codex.AuthStatus) string {
 	var b strings.Builder
 	b.WriteString("## Codex Provider\n\n")
+	b.WriteString("Runs OpenAI models through your ChatGPT Codex subscription " +
+		"(OAuth sign-in, no API key). The separate `openai` provider bills the " +
+		"same models by API key instead.\n\n")
 	if !status.Authenticated {
 		b.WriteString("- **Status**: not authenticated\n\n")
-		b.WriteString("Run `models providers codex login` to authenticate.\n")
+		b.WriteString("Run `models providers codex login` to sign in with your " +
+			"ChatGPT subscription.\n")
 		return b.String()
 	}
 	if status.Expired {
@@ -262,6 +271,125 @@ func formatCodexStatus(status codex.AuthStatus) string {
 	if !status.HasRefreshToken {
 		b.WriteString("- **Refresh token**: missing\n")
 	}
+	return b.String()
+}
+
+func (h *providersHandler) handleClaude(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return markdownOutput(providerHelp("claude")), nil
+	}
+	switch args[0] {
+	case "status":
+		return h.claudeStatus(ctx)
+	case "login":
+		return h.claudeLogin(ctx)
+	default:
+		return markdownOutput(unknownClaudeSubcommandMarkdown(args[0])), nil
+	}
+}
+
+func (h *providersHandler) claudeStatus(
+	ctx context.Context,
+) (iterator.Iterator[component.Responsive], error) {
+	status, err := claude.Status(ctx, h.storage)
+	if err != nil {
+		return nil, err
+	}
+	return markdownOutput(formatClaudeStatus(status)), nil
+}
+
+func (h *providersHandler) claudeLogin(
+	ctx context.Context,
+) (iterator.Iterator[component.Responsive], error) {
+	session, err := claude.StartLogin(ctx, h.storage)
+	if err != nil {
+		return nil, err
+	}
+	started := false
+	waited := false
+	return iterator.FromFunc(
+		func(ctx context.Context) (component.Responsive, bool, error) {
+			if !started {
+				started = true
+				return markdownResponsive(formatClaudeLoginStart(session)), true, nil
+			}
+			if waited {
+				return nil, false, nil
+			}
+			waited = true
+			cred, err := session.Wait(ctx)
+			if err != nil {
+				return nil, false, err
+			}
+			status := claude.AuthStatus{
+				Authenticated:   true,
+				Email:           cred.Email,
+				AccountID:       cred.AccountID,
+				PlanType:        cred.PlanType,
+				Expiry:          cred.Expiry,
+				LastRefresh:     cred.LastRefresh,
+				HasRefreshToken: cred.RefreshToken != "",
+			}
+			return markdownResponsive(formatClaudeStatus(status)), true, nil
+		},
+		session.Close,
+	), nil
+}
+
+func formatClaudeLoginStart(session *claude.LoginSession) string {
+	var b strings.Builder
+	b.WriteString("Sign in with your Claude Pro/Max subscription to use Anthropic " +
+		"models without an API key. Open this URL in your browser to continue:\n\n")
+	b.WriteByte('<')
+	b.WriteString(session.AuthURL())
+	b.WriteString(">\n")
+	if err := session.BrowserError(); err != nil {
+		fmt.Fprintf(&b, "\nCould not open a browser automatically: `%v`.\n", err)
+	}
+	return b.String()
+}
+
+func formatClaudeStatus(status claude.AuthStatus) string {
+	var b strings.Builder
+	b.WriteString("## Claude Provider\n\n")
+	b.WriteString("Runs Anthropic models through your Claude Pro/Max subscription " +
+		"(OAuth sign-in, no API key). The separate `anthropic` provider bills the " +
+		"same models by API key instead.\n\n")
+	if !status.Authenticated {
+		b.WriteString("- **Status**: not authenticated\n\n")
+		b.WriteString("Run `models providers claude login` to sign in with your " +
+			"Claude subscription.\n")
+		return b.String()
+	}
+	if status.Expired {
+		b.WriteString("- **Status**: authenticated credential expired\n")
+	} else {
+		b.WriteString("- **Status**: authenticated\n")
+	}
+	if status.Email != "" {
+		fmt.Fprintf(&b, "- **Account**: %s\n", status.Email)
+	}
+	if status.AccountID != "" {
+		fmt.Fprintf(&b, "- **Account ID**: `%s`\n", status.AccountID)
+	}
+	if status.PlanType != "" {
+		fmt.Fprintf(&b, "- **Plan**: %s\n", status.PlanType)
+	}
+	if !status.Expiry.IsZero() {
+		fmt.Fprintf(&b, "- **Expires**: %s\n", status.Expiry.Format("2006-01-02T15:04:05Z07:00"))
+	}
+	if !status.LastRefresh.IsZero() {
+		fmt.Fprintf(&b, "- **Last refresh**: %s\n", status.LastRefresh.Format("2006-01-02T15:04:05Z07:00"))
+	}
+	if !status.HasRefreshToken {
+		b.WriteString("- **Refresh token**: missing\n")
+	}
+	b.WriteString("\nSubscription usage here draws from a separate monthly " +
+		"Agent-SDK credit (distinct from your Claude.ai and official Claude Code " +
+		"limits). To continue past that credit, enable usage credits " +
+		"(\"extra usage\") in your Claude account under Settings > Usage.\n")
 	return b.String()
 }
 
@@ -368,8 +496,8 @@ func providerHelp(provider string) string {
 // one.
 func unknownProviderMarkdown(provider string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Unknown provider `%s`. Choose one of `codex`, `openai`, "+
-		"`anthropic`, or `gemini`.\n\n", provider)
+	fmt.Fprintf(&b, "Unknown provider `%s`. Choose one of `codex`, `claude`, "+
+		"`openai`, `anthropic`, or `gemini`.\n\n", provider)
 	b.WriteString(usageMarkdown(providersManual()))
 	return b.String()
 }
@@ -391,6 +519,16 @@ func unknownCodexSubcommandMarkdown(sub string) string {
 	fmt.Fprintf(&b, "Unknown `codex` subcommand `%s`. Choose one of `login` "+
 		"or `status`.\n\n", sub)
 	b.WriteString(providerHelp("codex"))
+	return b.String()
+}
+
+// unknownClaudeSubcommandMarkdown explains that a claude subcommand is not
+// recognised and shows the claude help.
+func unknownClaudeSubcommandMarkdown(sub string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Unknown `claude` subcommand `%s`. Choose one of `login` "+
+		"or `status`.\n\n", sub)
+	b.WriteString(providerHelp("claude"))
 	return b.String()
 }
 

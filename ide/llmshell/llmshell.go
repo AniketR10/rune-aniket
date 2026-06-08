@@ -61,34 +61,78 @@ var commandManual = textapi.CommandManual{
 	Synopsis: "<command> [<args>]",
 	Commands: []textapi.CommandManual{
 		{
-			Name:     "providers",
-			Summary:  "Inspect and manage provider authentication.",
-			Synopsis: "(codex|openai|anthropic|gemini)",
+			Name: "providers",
+			Summary: "Sign in to model providers. `codex` and `claude` use a " +
+				"ChatGPT/Claude subscription via browser sign-in; `openai`, " +
+				"`anthropic`, and `gemini` use pay-as-you-go API keys.",
+			Synopsis: "(codex|claude|openai|anthropic|gemini)",
 			Commands: []textapi.CommandManual{
 				{
-					Name:     "codex",
-					Summary:  "Manage Codex provider authentication.",
+					Name: "codex",
+					Summary: "Use OpenAI models through your ChatGPT Codex " +
+						"subscription (OAuth sign-in, no API key). The separate " +
+						"`openai` provider bills the same models by API key " +
+						"instead.",
 					Synopsis: "(login|status)",
 					Commands: []textapi.CommandManual{
-						{Name: "login", Summary: "Authenticate with Codex."},
-						{Name: "status", Summary: "Show Codex authentication status."},
+						{
+							Name: "login",
+							Summary: "Open your browser to sign in with your ChatGPT " +
+								"account. Requests then bill against your Codex " +
+								"subscription instead of an API key.",
+						},
+						{
+							Name: "status",
+							Summary: "Show whether you are signed in with a ChatGPT " +
+								"Codex subscription, and which account and plan.",
+						},
 					},
 				},
 				{
-					Name:     "openai",
-					Summary:  "Manage OpenAI API keys.",
+					Name: "claude",
+					Summary: "Use Anthropic models through your Claude Pro/Max " +
+						"subscription (OAuth sign-in, no API key). The " +
+						"separate `anthropic` provider bills the same models " +
+						"by API key instead.",
+					Synopsis: "(login|status)",
+					Commands: []textapi.CommandManual{
+						{
+							Name: "login",
+							Summary: "Open your browser to sign in with your Claude " +
+								"Pro/Max account. Requests then bill against your " +
+								"subscription instead of an API key. Subscription " +
+								"usage draws from a separate monthly Agent-SDK " +
+								"credit; to continue past it, enable usage credits " +
+								"(\"extra usage\") in your Claude account under " +
+								"Settings > Usage.",
+						},
+						{
+							Name: "status",
+							Summary: "Show whether you are signed in with a Claude " +
+								"subscription, which account and plan, and how " +
+								"subscription usage is billed.",
+						},
+					},
+				},
+				{
+					Name: "openai",
+					Summary: "Use OpenAI models with a pay-as-you-go API key. To " +
+						"use a ChatGPT subscription instead, see the `codex` " +
+						"provider.",
 					Synopsis: "(add|remove|use|status)",
 					Commands: hostedProviderManual,
 				},
 				{
-					Name:     "anthropic",
-					Summary:  "Manage Anthropic API keys.",
+					Name: "anthropic",
+					Summary: "Use Anthropic (Claude) models with a pay-as-you-go " +
+						"API key. To use a Claude Pro/Max subscription instead, " +
+						"see the `claude` provider.",
 					Synopsis: "(add|remove|use|status)",
 					Commands: hostedProviderManual,
 				},
 				{
 					Name:     "gemini",
-					Summary:  "Manage Gemini API keys.",
+					Summary:  "Use Google Gemini models with a pay-as-you-go API key.",
 					Synopsis: "(add|remove|use|status)",
 					Commands: hostedProviderManual,
 				},
@@ -403,6 +447,7 @@ func usageMarkdown(man textapi.CommandManual) string {
 var commandExamples = map[string]string{
 	"models providers": "```\n" +
 		"models providers codex login        # sign in to ChatGPT Codex\n" +
+		"models providers claude login       # sign in with a Claude subscription\n" +
 		"models providers openai add work    # store an OpenAI key named 'work'\n" +
 		"models providers anthropic status   # see which Anthropic key is active\n" +
 		"```",

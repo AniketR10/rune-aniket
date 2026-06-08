@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package anthropic
 
 import (
@@ -35,9 +34,9 @@ import (
 	ant "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/retry"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/llm/ratelimit"
 )
 
@@ -63,6 +62,26 @@ type Config struct {
 	// CacheControl configures prompt caching. Valid values:
 	// "ephemeral" (5m default TTL), "5m", "1h", or "" (disabled).
 	CacheControl string
+
+	// OAuthToken, when set, authenticates requests with an OAuth bearer
+	// token (Authorization: Bearer ...) instead of an x-api-key. It is
+	// used by the `claude` provider, which onboards a Claude Code
+	// subscription via OAuth2. When OAuthToken is set the SDK's x-api-key
+	// header is suppressed.
+	OAuthToken string
+	// Headers are extra per-request headers merged into every request,
+	// used by the `claude` provider to send the Agent-SDK identifying
+	// headers (notably anthropic-beta). Values here override headers the
+	// SDK would otherwise set.
+	Headers map[string]string
+
+	// ClaudeCodeSpoof shapes requests like the official Claude Code CLI.
+	// When set, the system prompt array is prefixed with the Claude Code
+	// billing header, agent identifier, and static system prompt, and the
+	// serialized body's billing-header cch field is signed. Required by the
+	// `claude` provider so the subscription backend does not throttle the
+	// request as third-party traffic.
+	ClaudeCodeSpoof bool
 }
 
 type client struct {
@@ -312,14 +331,38 @@ func debugMiddleware() option.Middleware {
 	}
 }
 
+// oauthHeaderMiddleware suppresses the SDK-attached x-api-key header (the
+// OAuth bearer path authenticates via Authorization) and sets the
+// Agent-SDK identifying headers from the credential.
+func oauthHeaderMiddleware(headers map[string]string) option.Middleware {
+	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		req.Header.Del("x-api-key")
+		req.Header.Del("X-Api-Key")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		return next(req)
+	}
+}
+
 // NewClientWithHTTP creates an llmapi.Service backed by the Anthropic Messages API
 // using the supplied HTTP client. Pass nil to use the default transport.
 // Intended for tests and benchmarks that need an in-process transport without
 // starting a real server.
 func NewClientWithHTTP(token string, config Config, httpClient *http.Client) llmapi.Service {
 	opts := []option.RequestOption{
-		option.WithAPIKey(token),
 		option.WithMaxRetries(0), // We handle retries ourselves.
+	}
+	if config.OAuthToken != "" {
+		opts = append(opts,
+			option.WithAuthToken(config.OAuthToken),
+			option.WithMiddleware(oauthHeaderMiddleware(config.Headers)),
+		)
+	} else {
+		opts = append(opts, option.WithAPIKey(token))
+	}
+	if config.ClaudeCodeSpoof {
+		opts = append(opts, option.WithMiddleware(claudeCodeMiddleware()))
 	}
 	if config.BaseURL != "" {
 		opts = append(opts, option.WithBaseURL(config.BaseURL))
