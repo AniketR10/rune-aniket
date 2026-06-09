@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -47,6 +48,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/idelsp/languages"
 )
 
 // Config holds agent configuration.
@@ -123,6 +125,11 @@ type Agent struct {
 	effort          llmapi.ReasoningEffort // session-level effort override
 	maxOutputTokens int                    // session-level max-output-token override
 	memory          MemoryRecaller
+	// autoDiagDisabled records language ids (keyed by string) for which
+	// auto-injected check_file_errors has been observed to fail because no
+	// LSP is running for that language. Once disabled, auto-diagnostics is
+	// skipped for that language for the rest of the session.
+	autoDiagDisabled sync.Map
 }
 
 // SwapService replaces the LLM service and model used by the agent.
@@ -1398,6 +1405,22 @@ func (a *Agent) injectAutoDiagnostics(
 	assistantIdx := len(messages) - 1
 	for _, cand := range diagCandidates {
 		filePath := cand.result.TouchedFiles[0]
+
+		// Resolve the language id so the disable set can be keyed by it.
+		// If the language cannot be determined we skip auto-injection
+		// (the LSP would fail anyway) without polluting the disable set.
+		langID, err := languages.LanguageForFile(filepath.Base(filePath))
+		if err != nil {
+			log.Debug("auto-diagnostics: skipping, unknown language",
+				"file", filePath, "error", err)
+			continue
+		}
+		if _, disabled := a.autoDiagDisabled.Load(langID); disabled {
+			log.Debug("auto-diagnostics: skipping, language disabled this session",
+				"file", filePath, "language", langID)
+			continue
+		}
+
 		syntheticID := "auto-diag-" + cand.info.call.ID
 		diagArgs := fmt.Sprintf(`{"path":%q}`, filePath)
 		diagSummary := diagTool.Summary(diagArgs)
@@ -1463,6 +1486,12 @@ func (a *Agent) injectAutoDiagnostics(
 			"duration", diagDur,
 		)
 
+		if diagResult.IsError && isNoLSPForLanguage(diagResult.Content, langID) {
+			a.autoDiagDisabled.Store(langID, struct{}{})
+			log.Debug("auto-diagnostics: disabling for language this session",
+				"language", langID, "file", filePath)
+		}
+
 		emit(ctx, ch, Event{
 			Type:         EventToolResult,
 			ToolCallID:   syntheticID,
@@ -1484,6 +1513,17 @@ func (a *Agent) injectAutoDiagnostics(
 	messages[assistantIdx] = assistantMsg
 	newMessages[len(newMessages)-1] = assistantMsg
 	return toolMsgs, assistantMsg
+}
+
+// isNoLSPForLanguage reports whether a check_file_errors error message
+// indicates that no language server is available for the file's language,
+// as opposed to a transient or generic diagnostic failure. The matched
+// phrases are the stable strings produced by the LSP manager that survive
+// the gRPC boundary (the in-process ErrNoServer sentinel does not).
+func isNoLSPForLanguage(content, langID string) bool {
+	return strings.Contains(content, "LSP is not supported yet") ||
+		strings.Contains(content, "no language server") ||
+		strings.Contains(content, "server "+langID+" not running")
 }
 
 func (a *Agent) persistMessages(

@@ -7,6 +7,7 @@ package extension
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
@@ -457,6 +459,129 @@ func TestE2ECtrlCDismissesSelectionPrompt(t *testing.T) {
 	})
 }
 
+// applyPatchResponse scripts one apply_patch tool call that creates a
+// new file via an Add File patch so the tool reports it as touched and
+// the agent's auto-diagnostics candidate selection fires.
+func applyPatchResponse(callID, path string) llmtest.Response {
+	patch := "*** Begin Patch\n*** Add File: " + path + "\n+print('hi')\n*** End Patch"
+	args, _ := json.Marshal(map[string]string{"patch": patch})
+	return llmtest.Response{
+		ToolCalls: []llmapi.ToolCall{{
+			ID:   callID,
+			Type: llmapi.ToolTypeFunction,
+			Function: llmapi.FunctionCall{
+				Name:      "apply_patch",
+				Arguments: string(args),
+			},
+		}},
+		FinishReason: llmapi.FinishReasonToolCall,
+	}
+}
+
+// assistantSyntheticDiagCalls counts auto-injected check_file_errors
+// tool calls (their IDs are prefixed "auto-diag-") carried on assistant
+// messages in a captured request.
+func assistantSyntheticDiagCalls(msgs []llmapi.Message) int {
+	n := 0
+	for _, m := range msgs {
+		if m.Role != llmapi.RoleAssistant {
+			continue
+		}
+		for _, tc := range m.ToolCalls {
+			if tc.Function.Name == "check_file_errors" &&
+				strings.HasPrefix(tc.ID, "auto-diag-") {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// TestE2ENoLSPLanguageDisablesAutoDiagnostics is the RUNE-AGENT-96
+// end-to-end regression. The scripted LLM edits a .py file on two
+// consecutive turns through a real apply_patch tool, while the stub LSP
+// reports that no language server is running for python. The first edit
+// must still auto-inject check_file_errors (so the user sees the error
+// once); the second edit must not, because the language was learned to
+// be unsupported for the remainder of the session.
+func TestE2ENoLSPLanguageDisablesAutoDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		diagErr string
+	}{
+		{"not supported yet", "python language LSP is not supported yet"},
+		{"server not running", "no language server: server python not running"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			svc := llmtest.New(
+				[]llmapi.ModelEntry{{Provider: "test", Name: "test-model", ContextWindow: 128_000}},
+				applyPatchResponse("call-edit-1", "a.py"),
+				applyPatchResponse("call-edit-2", "b.py"),
+				llmtest.Response{
+					Chunks:       []string{"done"},
+					FinishReason: llmapi.FinishReasonStop,
+				},
+			)
+
+			lsp := stubLSP{
+				diagnosticFn: func(semanticapi.DocumentDiagnosticParams) (semanticapi.DocumentDiagnosticReport, error) {
+					return semanticapi.DocumentDiagnosticReport{}, errors.New(tc.diagErr)
+				},
+			}
+
+			h := agentE2EHandler(t, svc, dir, lsp)
+
+			handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+				InputSequence: "hi<enter>",
+				Expected: frame(
+					"hi",
+					blanks(), blanks(), blanks(), blanks(), blanks(), blanks(),
+					"   ┌───────────────────────────────┐    ",
+					"   │▐                              │    ",
+					"   └───────────────────────────────┘    ",
+				),
+			}})
+
+			// Wait for the full scripted loop (3 CreateCompletion calls).
+			deadline := time.Now().Add(3 * time.Second)
+			for time.Now().Before(deadline) {
+				if svc.CallCount() >= 3 {
+					break
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			require.GreaterOrEqualf(t, svc.CallCount(), 3,
+				"expected scripted agent loop to issue all 3 CreateCompletion calls, got %d",
+				svc.CallCount())
+
+			requests := svc.Requests()
+			require.GreaterOrEqual(t, len(requests), 3)
+
+			// request[1] carries the messages produced after turn 1: the
+			// first apply_patch and its auto-injected check_file_errors.
+			firstTurn := requests[1].Request.Messages
+			assert.Equal(t, 1, assistantSyntheticDiagCalls(firstTurn),
+				"first .py edit must auto-inject check_file_errors")
+			diagResult, ok := findToolResult(firstTurn, "auto-diag-call-edit-1")
+			require.True(t, ok, "first turn must carry the synthetic diagnostic result")
+			assert.Contains(t, diagResult, tc.diagErr,
+				"synthetic diagnostic must surface the no-LSP error once")
+
+			// request[2] carries the messages produced after turn 2: the
+			// second apply_patch must have NO synthetic check_file_errors,
+			// because python was disabled for the session on turn 1.
+			secondTurn := requests[2].Request.Messages
+			assert.Equal(t, 1, assistantSyntheticDiagCalls(secondTurn),
+				"second .py edit must not re-inject check_file_errors for a disabled language")
+			_, ok = findToolResult(secondTurn, "auto-diag-call-edit-2")
+			assert.False(t, ok,
+				"second edit must not produce a synthetic diagnostic for a disabled language")
+		})
+	}
+}
+
 // -----------------------------------------------------------------------------
 // E2E fixture for RUNE-179 (UTF-8 / binary safety across the agent loop)
 // -----------------------------------------------------------------------------
@@ -467,6 +592,14 @@ func TestE2ECtrlCDismissesSelectionPrompt(t *testing.T) {
 // wrapped tui.Handler plus the scripted service so the test can
 // inspect the captured request log after the sequence completes.
 func utf8E2EHandler(t *testing.T, svc *llmtest.Service, workspaceDir string) tui.Handler {
+	return agentE2EHandler(t, svc, workspaceDir, nil)
+}
+
+// agentE2EHandler wires a scripted llmapi.Service through the full agent
+// loop against a real on-disk workspace, optionally installing a stub
+// LSP so tests can exercise check_file_errors behavior. When lsp is nil
+// the agent runs without a language server, matching the UTF-8 fixture.
+func agentE2EHandler(t *testing.T, svc *llmtest.Service, workspaceDir string, lsp semanticapi.LSP) tui.Handler {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -488,9 +621,15 @@ func utf8E2EHandler(t *testing.T, svc *llmtest.Service, workspaceDir string) tui
 	require.NoError(t, err)
 
 	fs := testLocalFS{root: workspaceDir}
-	tools, _ := agentools.DefaultTools(
-		fs, testLocalExec{}, cwd, nil, agentools.Config{}, configedit.NopConfig(),
+	tools, tracker := agentools.DefaultTools(
+		fs, testLocalExec{}, cwd, lsp, agentools.Config{}, configedit.NopConfig(),
 	)
+	// LSP-backed tools (including check_file_errors) are only wired when
+	// the fixture installs an LSP; they share DefaultTools' tracker so
+	// auto-diagnostics can find the registered check_file_errors tool.
+	if lsp != nil {
+		tools = append(tools, agentools.LSPTools(lsp, fs, nil, cwd, tracker)...)
+	}
 	// DefaultTools does not include grep_files (the host-side ripgrep
 	// integration covers that path in production). RUNE-179 fixed the
 	// in-process grep_files implementation, so register it explicitly

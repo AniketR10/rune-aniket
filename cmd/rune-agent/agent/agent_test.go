@@ -1552,6 +1552,125 @@ func TestAutoDiagnostics(t *testing.T) {
 		assert.Equal(t, int32(0), diagTool.execCount.Load())
 	})
 
+	t.Run("unsupported-language apply_patch disables auto-diagnostics for that language for the session", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			diagErr string
+		}{
+			{"not supported yet", "error: diagnostic: python language LSP is not supported yet"},
+			{"server not running", "error: diagnostic: no language server: server python not running"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				svc := &mockService{
+					responses: []mockResponse{
+						toolCallResponse("apply_patch", `{"patch":"p"}`, "c1"),
+						toolCallResponse("apply_patch", `{"patch":"p"}`, "c2"),
+						stopResponse("done"),
+					},
+				}
+				patchTool := &mockTool{
+					name: "apply_patch",
+					result: ToolResult{
+						Content:      "applied 1/1 operations successfully",
+						TouchedFiles: []string{"/workspace/main.py"},
+					},
+				}
+				diagTool := &mockTool{
+					name:   "check_file_errors",
+					result: ToolResult{Content: tc.diagErr, IsError: true},
+				}
+				store := newMockStore()
+				ag := NewAgent(svc, NewRegistry(patchTool, diagTool), noSkills(), store, NoMemory(),
+					Config{SystemPrompt: "test"})
+
+				events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+				assert.True(t, hasEventType(events, EventDone))
+
+				// Auto-injection ran only on the first turn.
+				assert.Equal(t, int32(1), diagTool.execCount.Load())
+
+				// First turn carries the synthetic auto-diag call with IsError.
+				diagResults := eventsByType(events, EventToolResult)
+				var synthetic []Event
+				for _, ev := range diagResults {
+					if ev.ToolCallID == "auto-diag-c1" {
+						synthetic = append(synthetic, ev)
+					}
+				}
+				require.Len(t, synthetic, 1)
+				assert.True(t, synthetic[0].IsError)
+
+				// Second turn must not emit a synthetic call for the language.
+				for _, ev := range diagResults {
+					assert.NotEqual(t, "auto-diag-c2", ev.ToolCallID)
+				}
+			})
+		}
+	})
+
+	t.Run("supported-language apply_patch keeps auto-diagnostics for every turn", func(t *testing.T) {
+		svc := &mockService{
+			responses: []mockResponse{
+				toolCallResponse("apply_patch", `{"patch":"p"}`, "c1"),
+				toolCallResponse("apply_patch", `{"patch":"p"}`, "c2"),
+				stopResponse("done"),
+			},
+		}
+		patchTool := &mockTool{
+			name: "apply_patch",
+			result: ToolResult{
+				Content:      "applied 1/1 operations successfully",
+				TouchedFiles: []string{"/workspace/main.go"},
+			},
+		}
+		diagTool := &mockTool{
+			name:   "check_file_errors",
+			result: ToolResult{Content: "no errors or warnings"},
+		}
+		store := newMockStore()
+		ag := NewAgent(svc, NewRegistry(patchTool, diagTool), noSkills(), store, NoMemory(),
+			Config{SystemPrompt: "test"})
+
+		events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+		assert.True(t, hasEventType(events, EventDone))
+
+		// Successful diagnostics never disable a language; both turns inject.
+		assert.Equal(t, int32(2), diagTool.execCount.Load())
+	})
+
+	t.Run("generic diagnostic error does not disable the language", func(t *testing.T) {
+		svc := &mockService{
+			responses: []mockResponse{
+				toolCallResponse("apply_patch", `{"patch":"p"}`, "c1"),
+				toolCallResponse("apply_patch", `{"patch":"p"}`, "c2"),
+				stopResponse("done"),
+			},
+		}
+		patchTool := &mockTool{
+			name: "apply_patch",
+			result: ToolResult{
+				Content:      "applied 1/1 operations successfully",
+				TouchedFiles: []string{"/workspace/main.py"},
+			},
+		}
+		diagTool := &mockTool{
+			name: "check_file_errors",
+			result: ToolResult{
+				Content: "error: diagnostic: context deadline exceeded",
+				IsError: true,
+			},
+		}
+		store := newMockStore()
+		ag := NewAgent(svc, NewRegistry(patchTool, diagTool), noSkills(), store, NoMemory(),
+			Config{SystemPrompt: "test"})
+
+		events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+		assert.True(t, hasEventType(events, EventDone))
+
+		// A generic error must not poison the skip set; both turns inject.
+		assert.Equal(t, int32(2), diagTool.execCount.Load())
+	})
+
 	t.Run("diagnostics results are appended after original tool results", func(t *testing.T) {
 		// LLM requests two tools: apply_patch and another tool.
 		// The auto-diagnostics message should appear after all original results.
