@@ -140,6 +140,121 @@ func TestAuxBarDrawLinesAbsolute(t *testing.T) {
 	comptest.TestComponent(t, bar, w, tests)
 }
 
+func TestAuxBarDrawLinesAbsolute_NoFoldsService(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	cb := func(fn func()) bool {
+		fn()
+		return true
+	}
+
+	cfg := text.AuxBarConfig{
+		LinesEnabled:     true,
+		AbsoluteLines:    true,
+		FoldsEnabled:     true,
+		ScheduleNextTick: cb,
+	}
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
+	bar.Resize(20, 10)
+	w := term.NewStringWriter(20, 10)
+
+	tests := []comptest.TestCase{
+		{Expected: `
+1    package main   
+2                   
+3    import (       
+4        "fmt"      
+5                   
+6        "github.com
+7    )              
+8                   
+9    func main() {  
+10       fmt.Println`,
+		},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+}
+
+func TestAuxBarDrawLines_FoldsServiceNotReady(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &blockingFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	cb := func(fn func()) bool {
+		fn()
+		return true
+	}
+
+	cfg := text.AuxBarConfig{
+		LinesEnabled:     true,
+		AbsoluteLines:    true,
+		FoldsEnabled:     true,
+		ScheduleNextTick: cb,
+	}
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
+	bar.Resize(20, 10)
+	w := term.NewStringWriter(20, 10)
+
+	tests := []comptest.TestCase{
+		{Expected: `
+1    package main   
+2                   
+3    import (       
+4        "fmt"      
+5                   
+6        "github.com
+7    )              
+8                   
+9    func main() {  
+10       fmt.Println`,
+		},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+}
+
+func TestAuxBarResizeLinesRelative_FoldsServiceNotReady(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString(copy)
+	fs := &blockingFoldsService{}
+	fs.view = buf.WithView(fs)
+	scroll := component.NewScroll(buf)
+	h := newTestHandler(scroll)
+	cb := func(fn func()) bool {
+		fn()
+		return true
+	}
+
+	cfg := text.AuxBarConfig{
+		LinesEnabled:     true,
+		FoldsEnabled:     true,
+		ScheduleNextTick: cb,
+	}
+	bar := text.WithAuxBar(h, buf, scroll, cfg)
+	bar.Resize(20, 5)
+	w := term.NewStringWriter(20, 10)
+
+	bar.Resize(20, 10)
+	tests := []comptest.TestCase{
+		{Expected: `
+1    package main   
+1                   
+2    import (       
+3        "fmt"      
+4                   
+5        "github.com
+6    )              
+7                   
+8    func main() {  
+9        fmt.Println`,
+		},
+	}
+	comptest.TestComponent(t, bar, w, tests)
+}
+
 func TestAuxBarDrawFolds(t *testing.T) {
 	buf := cell.NewBuffer()
 	buf.WriteString(copy)
@@ -455,6 +570,36 @@ func (f testFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
 		{Start: term.Coordinates{Y: 8}, End: term.Coordinates{Y: 13}},
 		{Start: term.Coordinates{Y: 8, X: 12}, End: term.Coordinates{Y: 13}},
 	}), true
+}
+
+var _ = (foldsService)(blockingFoldsService{})
+
+// blockingFoldsService simulates a syntax.Tree whose parser is not yet
+// ready: Folds/FoldsFrom return iterators whose Next blocks until the
+// context is cancelled (mirroring the waitingReady channel never
+// closing).
+type blockingFoldsService struct {
+	testFoldsService
+}
+
+func blockingIterator() iterator.Iterator[term.Range] {
+	return iterator.FromFunc(
+		func(ctx context.Context) (term.Range, bool, error) {
+			<-ctx.Done()
+			return term.Range{}, false, ctx.Err()
+		},
+		func() error { return nil },
+	)
+}
+
+func (f blockingFoldsService) Folds() (iterator.Iterator[term.Range], bool) {
+	return blockingIterator(), true
+}
+
+func (f blockingFoldsService) FoldsFrom(term.Coordinates) (
+	iterator.Iterator[term.Range], bool,
+) {
+	return blockingIterator(), true
 }
 
 type testHandler struct {

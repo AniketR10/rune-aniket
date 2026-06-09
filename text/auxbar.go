@@ -417,6 +417,10 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 	var diff textapi.LocationList
 	var foldsIterator iterator.Iterator[term.Range]
 	var wg sync.WaitGroup
+
+	b.bar.Buffer().ResetPerformance()
+	b.rebuildLines(ctx)
+
 	if b.gitEnabled {
 		wg.Add(1)
 		go debug.CapturePanicReport(func() {
@@ -466,12 +470,6 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 	// rebuild it synchronously if there's no pending work
 	pendingWork := (b.foldsEnabled && ok) || b.gitEnabled
 	if !pendingWork {
-		b.bar.Buffer().ResetPerformance()
-		if b.linesEnabled && b.absoluteLines {
-			b.rebuildLinesAbsolute(ctx)
-		} else if b.linesEnabled {
-			b.rebuildLinesRelative(ctx)
-		}
 		return
 	}
 
@@ -485,11 +483,7 @@ func (b *auxBar) rebuildBar(ctx context.Context) {
 			}
 
 			b.bar.Buffer().ResetPerformance()
-			if b.linesEnabled && b.absoluteLines {
-				b.rebuildLinesAbsolute(ctx)
-			} else if b.linesEnabled {
-				b.rebuildLinesRelative(ctx)
-			}
+			b.rebuildLines(ctx)
 			if diff != nil {
 				if b.linesEnabled && !b.absoluteLines {
 					b.rebuildGitRelative(diff)
@@ -583,6 +577,17 @@ func (b *auxBar) rebuildGitAbsolute(ll textapi.LocationList) {
 		}
 	}
 	b.Handler.SetLocationList(textapi.LocationPriorityInfo, gitLocationsID, ll)
+}
+
+func (b *auxBar) rebuildLines(ctx context.Context) {
+	if !b.linesEnabled {
+		return
+	}
+	if b.absoluteLines {
+		b.rebuildLinesAbsolute(ctx)
+	} else {
+		b.rebuildLinesRelative(ctx)
+	}
 }
 
 func (b *auxBar) rebuildLinesAbsolute(ctx context.Context) {
