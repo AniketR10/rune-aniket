@@ -965,9 +965,9 @@ func TestComponentRestoreFromSnapshotDrivesSetPtySize(t *testing.T) {
 	exe.setPtySize = nil
 
 	snap := Snapshot{
-		Schema:  terminalSnapshotVersion,
-		Width:   w,
-		Height:  h,
+		Schema: terminalSnapshotVersion,
+		Width:  w,
+		Height: h,
 		Primary: ScreenSnapshot{
 			Cells:  [][]term.Cell{{{Ch: 'h'}, {Ch: 'i'}}},
 			Cursor: term.Coordinates{X: 2, Y: 0},
@@ -995,6 +995,33 @@ func TestComponentRestoreFromSnapshotDrivesSetPtySize(t *testing.T) {
 	require.NoError(t, comp.Resize(w, h))
 	assert.Empty(t, exe.setPtySize,
 		"follow-up Resize at the same size is a legitimate no-op")
+}
+
+type pidExecutor struct {
+	testExecutor
+	startedPid workspaceapi.Pid
+}
+
+func (e *pidExecutor) StartCommand(
+	context.Context, workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return e.startedPid, nil
+}
+
+// TestComponentPidExposesStartedProcess asserts that Pid returns the pid
+// of the started process, and 0 before any process is started.
+func TestComponentPidExposesStartedProcess(t *testing.T) {
+	t.Parallel()
+
+	withProc := &pidExecutor{startedPid: 4242}
+	comp, err := NewComponent(withProc, withProc, &mockTabManager{}, DefaultConfig())
+	require.NoError(t, err)
+	assert.Equal(t, workspaceapi.Pid(4242), comp.Pid())
+
+	noProc := &pidExecutor{startedPid: 0}
+	comp, err = NewComponent(noProc, noProc, &mockTabManager{}, DefaultConfig())
+	require.NoError(t, err)
+	assert.Equal(t, workspaceapi.Pid(0), comp.Pid())
 }
 
 // TestComponentResizeIsSerialized pins that Component.Resize takes

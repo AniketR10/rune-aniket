@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -70,6 +71,31 @@ func New(
 	registry text.WorkspaceCommandRegistry,
 	vctrlSvc vctrl.Service,
 	clip clipboard.Register,
+) *Editor {
+	return new(command, gotoTemplate, quit, scheduleNextTick, cwd,
+		workspaceURI, notifications, publisher, terminal, executor,
+		tabManager, vteCfg, reloader, env, overrideHighlights, registry,
+		vctrlSvc, clip, gracefulQuitTimeout)
+}
+
+func new(
+	command, gotoTemplate, quit string,
+	scheduleNextTick func(func()) bool,
+	cwd workspace.Workspace,
+	workspaceURI workspaceapi.URI,
+	notifications browserapi.Notifications,
+	publisher browser.EventPublisher,
+	terminal schemeapi.Terminal,
+	executor schemeapi.Executor,
+	tabManager browser.TabManager,
+	vteCfg vte.Config,
+	reloader Reloader,
+	env cmdenv.Source,
+	overrideHighlights bool,
+	registry text.WorkspaceCommandRegistry,
+	vctrlSvc vctrl.Service,
+	clip clipboard.Register,
+	quitTimeout time.Duration,
 ) *Editor {
 	switch {
 	case command == "":
@@ -117,6 +143,7 @@ func New(
 		overrideHighlights: overrideHighlights,
 		vctrlSvc:           vctrlSvc,
 		clipboard:          clip,
+		quitTimeout:        quitTimeout,
 	}
 	if registry != nil {
 		ret.fileRegistry = text.NewFileCommandRegistry(workspaceURI, registry)
@@ -146,6 +173,7 @@ type Editor struct {
 	fileRegistry       text.FileCommandRegistry
 	vctrlSvc           vctrl.Service
 	clipboard          clipboard.Register
+	quitTimeout        time.Duration
 
 	pub text.Publisher
 }
@@ -201,7 +229,8 @@ func (e *Editor) Edit(
 
 	h := newHandler(vteH, buf, file, e.gotoTemplate,
 		e.cwd, e.notifications, e.scheduleNextTick, e.reloader,
-		e.overrideHighlights, e.quitKeys, procDone)
+		e.overrideHighlights, e.quitKeys, procDone, e.quitTimeout,
+		e.executor)
 	pub.setRefresh(h.refreshProbe)
 	var ret text.Handler = h
 	if e.fileRegistry != nil {

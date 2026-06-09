@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term/vte"
@@ -63,6 +64,7 @@ type fakeComponent struct {
 	// version is returned verbatim by Version. Tests bump it to mimic a
 	// changed rendered grid and defeat refreshProbe's version guard.
 	version uint64
+	pid     workspaceapi.Pid
 }
 
 func (c *fakeComponent) Snapshot() (vte.Snapshot, error) {
@@ -100,6 +102,8 @@ func (c *fakeComponent) DrawSnapshot(
 ) (vte.Snapshot, error) {
 	return c.SnapshotInto(dst)
 }
+
+func (c *fakeComponent) Pid() workspaceapi.Pid { return c.pid }
 
 // handlerForBufferTest builds an editorHandler around buf the way
 // newHandler does for the parts relevant to cell snapshots and probe

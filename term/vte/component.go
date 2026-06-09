@@ -83,6 +83,7 @@ type Component struct {
 	// would otherwise block waiting for a process exit that may be
 	// minutes or hours away.
 	spawnErrored atomic.Bool
+	pid          atomic.Int64
 
 	width, height     int
 	parserHandler     *parserHandler
@@ -848,6 +849,13 @@ func (t *Component) Close() (ret error) {
 	return ret
 }
 
+// Pid returns the pid of the process started for this Component, or 0
+// if no process has been started. A started process always has a
+// nonzero pid, so 0 doubles as the "not started" sentinel.
+func (t *Component) Pid() workspaceapi.Pid {
+	return workspaceapi.Pid(t.pid.Load())
+}
+
 // WaitSpawn blocks until the async expandAndStart goroutine
 // (created by createPty when Config.CommandExpander is set) has
 // finished, including any reportSpawnError watcher hand-off.
@@ -976,7 +984,10 @@ func (t *Component) startCommand(cmdAndArgsStr string) error {
 		t.mu.Unlock()
 		return nil
 	}
-	_, err = t.executor.StartCommand(t.ctx, cmd)
+	pid, err := t.executor.StartCommand(t.ctx, cmd)
+	if err == nil {
+		t.pid.Store(int64(pid))
+	}
 	t.mu.Unlock()
 	if err != nil {
 		return fmt.Errorf("start command: %w", err)
@@ -990,18 +1001,8 @@ func (t *Component) startCommand(cmdAndArgsStr string) error {
 //
 // The COLORTERM clear is intentional: we want programs running in
 // the vte to render with the 256-color ANSI palette so the editor
-// theme remains the single source of truth for colors. The
-// executor's host env typically carries COLORTERM=truecolor (the
-// local rune process sets it via setEnvForGUI); without an explicit
-// empty override, fileScheme would append it after our entries when
-// it merges stdcmd.Environ() with cmd.Env, and the child would
-// advertise truecolor and bypass the theme palette.
+// theme remains the single source of truth for colors.
 func appendDefaultTerminalEnv(env []string) []string {
-	// We pick plain "xterm" (16-color ANSI) rather than
-	// "xterm-256color" so programs emit SGR 30-37/40-47/90-97/100-107
-	// and the editor's theme palette is the single source of truth
-	// for colors. xterm terminfo still carries Ss/Se, so the cursor
-	// shape contract (block in vim normal mode) is preserved.
 	const defaultTerm = "xterm"
 	hasTerm, hasColorTerm := false, false
 	for _, e := range env {

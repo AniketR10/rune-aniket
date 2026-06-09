@@ -29,6 +29,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -46,6 +47,10 @@ import (
 
 const gracefulQuitTimeout = 30 * time.Second
 
+// hangUpGraceTimeout bounds how long Close waits after SIGHUP for the
+// editor to exit cleanly before the pty teardown forces a SIGKILL.
+const hangUpGraceTimeout = 2 * time.Second
+
 type editorHandler struct {
 	vteHandler
 
@@ -54,10 +59,14 @@ type editorHandler struct {
 	gotoTemplate gotoTemplate
 	quitKeys     []term.KeyComb
 	procDone     <-chan error
+	// Overridable in tests; default to the package-level values.
+	gracefulQuitTimeout time.Duration
+	hangUpGraceTimeout  time.Duration
 
 	cwd              workspace.Workspace
 	notifications    browserapi.Notifications
 	scheduleNextTick func(func()) bool
+	executor         schemeapi.Executor
 	probe            *vteprobe.Cursor
 	probeSlab        *vteprobe.Slab
 	watchID          int
@@ -79,6 +88,11 @@ type editorHandler struct {
 	probeMu    sync.Mutex
 	probeCells [][]term.Cell
 	component  componentSnapshotter
+
+	// Set when Close runs before the first probe so the quit sequence is
+	// flushed once the editor is ready rather than dropped. Guarded by
+	// probeStateMu, mirroring pendingGoto.
+	pendingQuit bool
 
 	// inferredVersion/inferredBufGen record the component grid version
 	// and file-cell generation the last successful Infer ran against, so
@@ -115,6 +129,8 @@ type componentSnapshotter interface {
 	// what was painted.
 	DrawSnapshot(w term.Writer, dst [][]term.Cell) (vte.Snapshot, error)
 	Version() uint64
+	// Pid is the hosted editor process, or 0 when none is running.
+	Pid() workspaceapi.Pid
 }
 
 func newHandler(
@@ -126,27 +142,32 @@ func newHandler(
 	overrideHighlights bool,
 	quitKeys []term.KeyComb,
 	procDone <-chan error,
+	quitTimeout time.Duration,
+	executor schemeapi.Executor,
 ) *editorHandler {
 	if procDone == nil {
 		panic("exoeditor.newHandler: procDone is required")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &editorHandler{
-		vteHandler:         vteH,
-		buf:                buf,
-		resource:           uri,
-		gotoTemplate:       gotoTpl,
-		quitKeys:           quitKeys,
-		procDone:           procDone,
-		cwd:                cwd,
-		notifications:      notifications,
-		scheduleNextTick:   scheduleNextTick,
-		cancelCtx:          cancel,
-		reloader:           reloader,
-		probe:              vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
-		probeSlab:          vteprobe.NewSlab(),
-		overrideHighlights: overrideHighlights,
-		locations:          text.NewLocationStore(),
+		vteHandler:          vteH,
+		buf:                 buf,
+		resource:            uri,
+		gotoTemplate:        gotoTpl,
+		quitKeys:            quitKeys,
+		procDone:            procDone,
+		gracefulQuitTimeout: quitTimeout,
+		hangUpGraceTimeout:  hangUpGraceTimeout,
+		cwd:                 cwd,
+		notifications:       notifications,
+		scheduleNextTick:    scheduleNextTick,
+		executor:            executor,
+		cancelCtx:           cancel,
+		reloader:            reloader,
+		probe:               vteprobe.New([]int{8, 4, 2}, 0.6, 8<<20),
+		probeSlab:           vteprobe.NewSlab(),
+		overrideHighlights:  overrideHighlights,
+		locations:           text.NewLocationStore(),
 	}
 	h.component = vteH.Component()
 	h.snapshotBufferCells()
@@ -455,11 +476,17 @@ func (h *editorHandler) inferFromSnapshotLocked(
 		h.bufCellsScratch = oldProbeCells
 	}
 	var flush *term.Coordinates
+	var flushQuit bool
 	if firstProbe {
 		flush = h.pendingGoto
 		h.pendingGoto = nil
+		flushQuit = h.pendingQuit
+		h.pendingQuit = false
 	}
 	h.probeStateMu.Unlock()
+	if flushQuit {
+		h.scheduleNextTick(h.dispatchQuit)
+	}
 	return flush
 }
 
@@ -541,13 +568,25 @@ func (h *editorHandler) Close() error {
 		_ = h.cwd.StopWatch(h.watchID)
 		h.watchActive = false
 	}
-	for _, k := range h.quitKeys {
-		_, _ = h.vteHandler.Handle(keyCombToEvent(k))
+	// Before the first probe the editor may not yet consume input, so a
+	// quit dispatched now could be dropped; defer it to the first probe.
+	h.probeStateMu.Lock()
+	if h.lastProbe.Load() == nil {
+		h.pendingQuit = true
+		h.probeStateMu.Unlock()
+	} else {
+		h.probeStateMu.Unlock()
+		h.dispatchQuit()
 	}
 	go debug.CapturePanicReport(func() {
 		select {
 		case <-h.procDone:
-		case <-time.After(gracefulQuitTimeout):
+		case <-time.After(h.gracefulQuitTimeout):
+			_, _ = h.notifications.Notify(
+				browserapi.LevelWarn,
+				"exoeditor: %s did not exit within %s of quit; "+
+					"closing pty", h.resource.Name(), h.gracefulQuitTimeout)
+			h.hangUp()
 		}
 		h.scheduleNextTick(func() {
 			if err := h.vteHandler.Close(); err != nil {
@@ -558,6 +597,33 @@ func (h *editorHandler) Close() error {
 		})
 	})
 	return nil
+}
+
+func (h *editorHandler) dispatchQuit() {
+	for _, k := range h.quitKeys {
+		_, _ = h.vteHandler.Handle(keyCombToEvent(k))
+	}
+}
+
+// hangUp delivers SIGHUP to an editor that ignored the quit sequence,
+// then waits briefly for it to exit cleanly before the pty teardown
+// SIGKILLs it. Closing the pty alone does not deliver the hangup while
+// the vte read loop is blocked on the master.
+func (h *editorHandler) hangUp() {
+	pid := h.component.Pid()
+	if pid == 0 {
+		return
+	}
+	if err := h.executor.Signal(pid, syscall.SIGHUP); err != nil {
+		_, _ = h.notifications.Notify(
+			browserapi.LevelWarn, "exoeditor: hang up %s: %v",
+			h.resource.Name(), err)
+		return
+	}
+	select {
+	case <-h.procDone:
+	case <-time.After(h.hangUpGraceTimeout):
+	}
 }
 
 type nopCellEditor struct{}
