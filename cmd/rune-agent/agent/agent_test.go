@@ -625,6 +625,64 @@ func TestAgentRun(t *testing.T) {
 				assert.True(t, hasEventType(events, EventDone))
 			},
 		},
+		{
+			name: "pause_turn resumes loop with partial message preserved",
+			responses: []mockResponse{
+				{chunks: []string{"thinking out loud"}, finishReason: llmapi.FinishReasonPause},
+				{chunks: []string{"final answer"}, finishReason: llmapi.FinishReasonStop},
+			},
+			config: Config{SystemPrompt: "test"},
+			assertFn: func(t *testing.T, events []Event, store *mockStore, svc *mockService) {
+				require.Equal(t, 2, svc.getCallCount(), "pause must re-enter the loop")
+
+				// No "unexpected finish reason" error.
+				for _, e := range eventsByType(events, EventError) {
+					assert.NotContains(t, e.Error.Error(), "unexpected finish reason")
+				}
+
+				// Exactly one EventDone (from the final stop), not from the pause.
+				assert.Len(t, eventsByType(events, EventDone), 1)
+
+				// The partial assistant message must be re-sent on the resume.
+				require.Len(t, svc.requests, 2)
+				resume := svc.requests[1].Messages
+				var found bool
+				for _, m := range resume {
+					if m.Role == llmapi.RoleAssistant && m.Content == "thinking out loud" {
+						found = true
+					}
+				}
+				assert.True(t, found, "partial assistant message must be preserved on resume")
+			},
+		},
+		{
+			name: "refusal terminates with refusal event",
+			responses: []mockResponse{
+				{chunks: []string{"I can't help with that"}, finishReason: llmapi.FinishReasonRefusal},
+			},
+			config: Config{SystemPrompt: "test"},
+			assertFn: func(t *testing.T, events []Event, store *mockStore, svc *mockService) {
+				require.Equal(t, 1, svc.getCallCount())
+				assert.True(t, hasEventType(events, EventRefusal), "must emit EventRefusal")
+				assert.False(t, hasEventType(events, EventDone))
+				for _, e := range eventsByType(events, EventError) {
+					assert.NotContains(t, e.Error.Error(), "unexpected finish reason")
+				}
+			},
+		},
+		{
+			name: "unknown finish reason still errors",
+			responses: []mockResponse{
+				{chunks: []string{""}, finishReason: llmapi.FinishReasonNull},
+			},
+			config: Config{SystemPrompt: "test"},
+			assertFn: func(t *testing.T, events []Event, store *mockStore, svc *mockService) {
+				errs := eventsByType(events, EventError)
+				require.NotEmpty(t, errs)
+				assert.Contains(t, errs[0].Error.Error(), "unexpected finish reason")
+				assert.False(t, hasEventType(events, EventDone))
+			},
+		},
 	}
 
 	for _, tt := range tests {

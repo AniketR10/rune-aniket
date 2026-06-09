@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
-	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -34,6 +34,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
+	"unstable.build/go-tui/debug"
 )
 
 // recordingWindowManager is a stub browserapi.WindowManager that records the
@@ -376,7 +377,6 @@ func mustJSON(t *testing.T, v any) string {
 	require.NoError(t, err)
 	return string(b)
 }
-
 
 // dismissedFrame is the rendered frame after a prompt is dismissed:
 // the agent's prior tool spinner clears, the user message remains on
@@ -755,6 +755,162 @@ func TestE2EUTF8SafetyAcrossAgentLoop(t *testing.T) {
 	assert.Contains(t, grepResult, "utf8.txt", "grep must find the text file")
 	assert.NotContains(t, grepResult, "bin.dat",
 		"grep must skip binary files even when their bytes contain the pattern")
+}
+
+// nopSpawner is an agent.Spawner that is never expected to run: the
+// scripted stop-reason fixtures emit no sub-agent tool calls.
+type nopSpawner struct{}
+
+func (nopSpawner) Run(context.Context, agent.RunRequest) (agent.RunHandle, error) {
+	return agent.RunHandle{}, nil
+}
+
+// stopReasonE2EHandler wires the real floating chat handler through the
+// production createAgentCompletions consumer — the same path
+// handleChat builds — so tests exercise the agent-loop stop-reason
+// handling (pause_turn resume, refusal) exactly as the shipped "agent"
+// command does. Only llmapi.Service is stubbed.
+func stopReasonE2EHandler(t *testing.T, svc *llmtest.Service) tui.Handler {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	interruptCh := make(chan struct{}, 64)
+	interrupter := term.FuncInterrupter(func(context.Context) error {
+		select {
+		case interruptCh <- struct{}{}:
+		default:
+		}
+		return nil
+	})
+
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	mu := new(sync.Mutex)
+	dhandler, tx, rx := dialoguetui.Handler(ctx, mu, comp, interrupter)
+
+	registry := agent.NewRegistry()
+	skillReg := skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil)
+	store := newMemDialogueStore()
+	const dialogueID = "test-dialogue"
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{
+		SystemPrompt: "test",
+		Model:        llmapi.ModelEntry{Provider: "test", Name: "test-model", ContextWindow: 128_000},
+	})
+
+	owner := &aiEditorHandler{n: stubNotifications{}}
+	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+
+	childEvents := make(chan agent.ChildEvent)
+	go debug.CapturePanicReport(func() {
+		createAgentCompletions(ctx, cancel, tx, msgRx, ag, nopSpawner{},
+			childEvents, skillReg, dialogueID, syncComp, stubNotifications{}, nil, store)
+	})
+
+	t.Cleanup(cancel)
+
+	return &promptFlusher{
+		t:           t,
+		inner:       wrapped,
+		interruptCh: interruptCh,
+		settle:      100 * time.Millisecond,
+	}
+}
+
+// TestE2EPauseTurnResumesAgentLoop drives the chat handler end-to-end
+// through the "agent" command path. The scripted LLM ends the first
+// turn with FinishReasonPause (Anthropic's pause_turn) carrying a
+// partial assistant message, then completes on the resume. The agent
+// loop must re-enter without a user turn, re-sending the partial
+// assistant message, instead of ending with "unexpected finish
+// reason".
+func TestE2EPauseTurnResumesAgentLoop(t *testing.T) {
+	svc := llmtest.New(
+		[]llmapi.ModelEntry{{Provider: "test", Name: "test-model", ContextWindow: 128_000}},
+		llmtest.Response{
+			Chunks:       []string{"thinking out loud"},
+			FinishReason: llmapi.FinishReasonPause,
+		},
+		llmtest.Response{
+			Chunks:       []string{"final answer"},
+			FinishReason: llmapi.FinishReasonStop,
+		},
+	)
+
+	h := stopReasonE2EHandler(t, svc)
+
+	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+		InputSequence: "hi<enter>",
+		// The paused turn's partial text ("thinking out loud") and the
+		// resumed turn's text ("final answer") render as one continuous
+		// assistant message, proving the loop resumed in place.
+		Expected: frame(
+			"hi",
+			"thinking out loudfinal answer",
+			blanks(), blanks(), blanks(), blanks(), blanks(),
+			"   ┌───────────────────────────────┐    ",
+			"   │▐                              │    ",
+			"   └───────────────────────────────┘    ",
+		),
+	}})
+
+	// The pause must trigger a second CreateCompletion with no
+	// intervening user turn, whose request re-sends the partial
+	// assistant message so the model can continue where it paused.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		requests := svc.Requests()
+		require.GreaterOrEqual(c, len(requests), 2)
+		var foundPartial bool
+		for _, m := range requests[1].Request.Messages {
+			if m.Role == llmapi.RoleAssistant && strings.Contains(m.Content, "thinking out loud") {
+				foundPartial = true
+			}
+		}
+		assert.True(c, foundPartial,
+			"resume request must re-send the partial assistant message from the paused turn")
+	}, 3*time.Second, 10*time.Millisecond)
+}
+
+// TestE2ERefusalTerminatesCleanly drives the chat handler end-to-end
+// through the "agent" command path. The scripted LLM ends the turn
+// with FinishReasonRefusal. The agent loop must terminate without a
+// resume and without emitting the generic "unexpected finish reason"
+// error: exactly one CreateCompletion call is issued.
+func TestE2ERefusalTerminatesCleanly(t *testing.T) {
+	svc := llmtest.New(
+		[]llmapi.ModelEntry{{Provider: "test", Name: "test-model", ContextWindow: 128_000}},
+		llmtest.Response{
+			Chunks:       []string{"I can't help with that"},
+			FinishReason: llmapi.FinishReasonRefusal,
+		},
+	)
+
+	h := stopReasonE2EHandler(t, svc)
+
+	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+		InputSequence: "hi<enter>",
+		// The refusal renders the partial assistant text followed by
+		// the distinct refusal banner from the EventRefusal branch.
+		Expected: frame(
+			"hi",
+			"I can't help with that",
+			blanks(),
+			"The model declined to continue with",
+			"this request.",
+			blanks(), blanks(),
+			"   ┌───────────────────────────────┐    ",
+			"   │▐                              │    ",
+			"   └───────────────────────────────┘    ",
+		),
+	}})
+
+	// The refusal banner above only renders after the single
+	// completion finished and EventRefusal was processed, so the turn
+	// is already terminal here. A resume would require a second
+	// completion; assert it never happens (and stays at one).
+	assert.Never(t, func() bool { return svc.CallCount() != 1 },
+		300*time.Millisecond, 10*time.Millisecond,
+		"refusal must terminate the turn without resuming the agent loop")
 }
 
 // TestE2EEmptyToolResultIsNeverSentEmpty reproduces the mid-turn 400

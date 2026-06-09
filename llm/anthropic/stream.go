@@ -350,7 +350,12 @@ func mapStopReason(reason ant.StopReason) llmapi.FinishReason {
 		return llmapi.FinishReasonLength
 	case ant.StopReasonStopSequence:
 		return llmapi.FinishReasonStop
+	case ant.StopReasonPauseTurn:
+		return llmapi.FinishReasonPause
+	case ant.StopReasonRefusal:
+		return llmapi.FinishReasonRefusal
 	default:
+		slog.Warn("anthropic: unmapped stop_reason", "reason", reason)
 		return llmapi.FinishReasonNull
 	}
 }

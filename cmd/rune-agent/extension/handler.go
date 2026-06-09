@@ -1671,6 +1671,8 @@ func outcomeAndReasonForFinishReason(reason llmapi.FinishReason) (turnOutcome, s
 		return turnOutcomeError, "the model stopped while requesting tool calls"
 	case llmapi.FinishReasonContentFilter:
 		return turnOutcomeError, "the response was blocked by a content filter"
+	case llmapi.FinishReasonRefusal:
+		return turnOutcomeError, "the model declined to continue"
 	case llmapi.FinishReasonNull:
 		return turnOutcomeError, "the response ended unexpectedly"
 	default:
@@ -2101,6 +2103,24 @@ func createAgentCompletions(
 						case <-ctx.Done():
 							return
 						}
+					}
+					select {
+					case tx <- dialoguetui.MessageEvent{
+						Type: dialoguetui.MessageEventBreak,
+					}:
+						breakSent = true
+					case <-ctx.Done():
+						return
+					}
+				case agent.EventRefusal:
+					outcome, outcomeReason = outcomeAndReasonForFinishReason(ev.FinishReason)
+					select {
+					case tx <- dialoguetui.MessageEvent{
+						Type: dialoguetui.MessageEventWarning,
+						Text: "The model declined to continue with this request.",
+					}:
+					case <-ctx.Done():
+						return
 					}
 					select {
 					case tx <- dialoguetui.MessageEvent{

@@ -112,25 +112,29 @@ func TestNormalizeEffort(t *testing.T) {
 		{"sonnet-4.5 xhigh", ClaudeSonnet4Dot5, "xhigh", "", true},
 		{"haiku-4.5 max", ClaudeHaiku4Dot5, "max", "", true},
 
-		// Claude 4.6: low/medium/high/max are all supported.
+		// Claude 4.6+: low/medium/high/xhigh/max are all supported.
 		{"opus-4.6 low", ClaudeOpus4Dot6, "low", "low", false},
 		{"opus-4.6 medium", ClaudeOpus4Dot6, "medium", "medium", false},
 		{"opus-4.6 high", ClaudeOpus4Dot6, "high", "high", false},
+		{"opus-4.6 xhigh", ClaudeOpus4Dot6, "xhigh", "xhigh", false},
 		{"opus-4.6 max", ClaudeOpus4Dot6, "max", "max", false},
 		{"opus-4.7 low", ClaudeOpus4Dot7, "low", "low", false},
 		{"opus-4.7 medium", ClaudeOpus4Dot7, "medium", "medium", false},
 		{"opus-4.7 high", ClaudeOpus4Dot7, "high", "high", false},
+		{"opus-4.7 xhigh", ClaudeOpus4Dot7, "xhigh", "xhigh", false},
 		{"opus-4.7 max", ClaudeOpus4Dot7, "max", "max", false},
+		{"opus-4.8 low", ClaudeOpus4Dot8, "low", "low", false},
+		{"opus-4.8 high", ClaudeOpus4Dot8, "high", "high", false},
+		{"opus-4.8 xhigh", ClaudeOpus4Dot8, "xhigh", "xhigh", false},
+		{"opus-4.8 max", ClaudeOpus4Dot8, "max", "max", false},
 		{"sonnet-4.6 max", ClaudeSonnet4Dot6, "max", "max", false},
+		{"sonnet-4.6 xhigh", ClaudeSonnet4Dot6, "xhigh", "xhigh", false},
 
 		// Claude 4.6: unsupported levels are dropped with warning.
 		{"opus-4.6 none", ClaudeOpus4Dot6, "none", "", true},
 		{"opus-4.6 minimal", ClaudeOpus4Dot6, "minimal", "", true},
-		{"opus-4.6 xhigh", ClaudeOpus4Dot6, "xhigh", "", true},
 		{"sonnet-4.6 none", ClaudeSonnet4Dot6, "none", "", true},
-		{"sonnet-4.6 xhigh", ClaudeSonnet4Dot6, "xhigh", "", true},
 		{"sonnet-4.7 none", ClaudeOpus4Dot7, "none", "", true},
-		{"sonnet-4.7 xhigh", ClaudeOpus4Dot7, "xhigh", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

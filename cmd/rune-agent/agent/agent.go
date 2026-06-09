@@ -922,6 +922,44 @@ func (a *Agent) run(
 			log.Debug("agent loop done", "reason", finishReason)
 			return
 
+		case llmapi.FinishReasonPause:
+			// Anthropic paused a long-running turn (pause_turn). The partial
+			// assistant message was already appended above; re-enter the loop
+			// without running tools or emitting EventDone so the next
+			// CreateCompletion re-sends the conversation and the model resumes.
+			usage.Add(completionUsage, 0, inferenceDuration, 0)
+			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+			persistPending()
+			log.Debug("agent loop paused: resuming", "reason", finishReason)
+			continue
+
+		case llmapi.FinishReasonRefusal:
+			// The model declined to continue for safety reasons. This is
+			// terminal: run the Stop hook for parity but do not honor any
+			// continuation, then surface a distinct refusal event so the TUI
+			// can render a refusal banner rather than a generic error.
+			a.config.Hooks.Run(ctx, hooks.Payload{
+				SessionID:     dialogueID,
+				Cwd:           a.config.Workspace,
+				HookEventName: hooks.EventStop,
+			})
+			usage.Add(completionUsage, 0, inferenceDuration, 0)
+			usage.TotalDuration = time.Since(runStart)
+			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
+			persistPending()
+			emit(ctx, ch, Event{
+				Type:         EventRefusal,
+				FinishReason: finishReason,
+				Context: ContextSnapshot{
+					TokensSent:     completionUsage.TokensSent,
+					TokensReceived: completionUsage.TokensReceived,
+					Window:         contextWindow,
+					AutoCompactAt:  int(float64(contextWindow) * autoCompactRatio),
+				},
+			})
+			log.Warn("agent loop done: model refused", "reason", finishReason)
+			return
+
 		case llmapi.FinishReasonToolCall:
 			if len(assistantMsg.ToolCalls) == 0 {
 				emit(ctx, ch, Event{Type: EventError,
@@ -1190,7 +1228,13 @@ func (a *Agent) run(
 			usage.TotalDuration = time.Since(runStart)
 			pendingUsage.Add(completionUsage, 0, inferenceDuration, 0)
 			persistPending()
-			log.Warn("agent loop done: unexpected finish reason", "reason", finishReason)
+			log.Warn("agent loop done: unexpected finish reason",
+				"reason", finishReason,
+				"text_len", len(assistantMsg.Content),
+				"reasoning_len", len(assistantMsg.ReasoningContent),
+				"tool_calls", len(assistantMsg.ToolCalls),
+				"tokens_sent", completionUsage.TokensSent,
+				"tokens_received", completionUsage.TokensReceived)
 			return
 		}
 	}

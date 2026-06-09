@@ -21,13 +21,15 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package anthropic
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -38,6 +40,37 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
+
+func TestMapStopReason(t *testing.T) {
+	tests := []struct {
+		name string
+		in   ant.StopReason
+		want llmapi.FinishReason
+		warn bool
+	}{
+		{"end_turn", ant.StopReasonEndTurn, llmapi.FinishReasonStop, false},
+		{"tool_use", ant.StopReasonToolUse, llmapi.FinishReasonToolCall, false},
+		{"max_tokens", ant.StopReasonMaxTokens, llmapi.FinishReasonLength, false},
+		{"stop_sequence", ant.StopReasonStopSequence, llmapi.FinishReasonStop, false},
+		{"pause_turn", ant.StopReasonPauseTurn, llmapi.FinishReasonPause, false},
+		{"refusal", ant.StopReasonRefusal, llmapi.FinishReasonRefusal, false},
+		{"unknown", ant.StopReason("frobnicate"), llmapi.FinishReasonNull, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+			defer slog.SetDefault(prev)
+
+			got := mapStopReason(tt.in)
+			assert.Equal(t, tt.want, got)
+
+			warned := strings.Contains(buf.String(), "unmapped stop_reason")
+			assert.Equal(t, tt.warn, warned, "warn log expectation mismatch: %q", buf.String())
+		})
+	}
+}
 
 // thinkingSSEResponse returns an SSE stream with a thinking block (text +
 // signature deltas) followed by a visible text block and end_turn.

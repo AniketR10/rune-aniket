@@ -298,30 +298,34 @@ const (
 	EventToolsDropped // Tool results were dropped from history
 	// EventMemoryRecall reports that memory recall completed for the conversation.
 	EventMemoryRecall // A memory was recalled for this conversation
+	// EventRefusal reports that the model declined to continue (provider
+	// refusal stop reason). Terminal, distinct from EventDone/EventError so
+	// the TUI can render a refusal banner.
+	EventRefusal // Model refused to continue
 )
 
 // Event is emitted by the agent loop to drive the TUI.
 type Event struct {
 	Type               EventType
-	Text               string             // For EventText: the text chunk
-	Reasoning          string             // For EventReasoning: reasoning chunk
+	Text               string                // For EventText: the text chunk
+	Reasoning          string                // For EventReasoning: reasoning chunk
 	FinishReason       llmapi.FinishReason   // For EventDone: why the turn ended
-	ToolCallID         string             // For EventToolCall/EventToolResult: unique call identifier
-	ToolName           string             // For EventToolCall/EventToolResult
-	ToolArgs           string             // For EventToolCall: JSON arguments
-	ToolSummary        string             // For EventToolCall/EventToolResult: short human-readable args summary
-	ToolOutput         string             // For EventToolResult: execution output
-	IsError            bool               // For EventToolResult: was it an error?
-	ToolStartTime      time.Time          // For EventToolCall: when the tool call was announced
-	ToolDuration       time.Duration      // For EventToolResult: how long the tool took
-	Error              error              // For EventError
+	ToolCallID         string                // For EventToolCall/EventToolResult: unique call identifier
+	ToolName           string                // For EventToolCall/EventToolResult
+	ToolArgs           string                // For EventToolCall: JSON arguments
+	ToolSummary        string                // For EventToolCall/EventToolResult: short human-readable args summary
+	ToolOutput         string                // For EventToolResult: execution output
+	IsError            bool                  // For EventToolResult: was it an error?
+	ToolStartTime      time.Time             // For EventToolCall: when the tool call was announced
+	ToolDuration       time.Duration         // For EventToolResult: how long the tool took
+	Error              error                 // For EventError
 	RateLimit          *llmapi.RateLimitInfo // For EventRateLimitWarning
 	Usage              llmapi.DialogueUsage  // For EventUsageUpdate: cumulative token usage
-	DroppedToolCallIDs []string           // For EventToolsDropped: tool call IDs removed from history
-	ArchivedDialogueID string             // For EventCompacted: ID under which old messages were archived
-	Context            ContextSnapshot    // For EventUsageUpdate/EventDone: point-in-time context state
-	Memories           []Memory           // For EventMemoryRecall: recalled memories
-	MemoryDuration     time.Duration      // For EventMemoryRecall: how long recall took
+	DroppedToolCallIDs []string              // For EventToolsDropped: tool call IDs removed from history
+	ArchivedDialogueID string                // For EventCompacted: ID under which old messages were archived
+	Context            ContextSnapshot       // For EventUsageUpdate/EventDone: point-in-time context state
+	Memories           []Memory              // For EventMemoryRecall: recalled memories
+	MemoryDuration     time.Duration         // For EventMemoryRecall: how long recall took
 }
 
 // ContextSnapshot captures the point-in-time state of the conversation

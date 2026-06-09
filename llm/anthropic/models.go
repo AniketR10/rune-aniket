@@ -111,11 +111,12 @@ var claude4Efforts = map[string]bool{
 }
 
 // claude46Efforts are the effort levels supported by Claude 4.6 models.
-// These models additionally support "max".
+// These models additionally support "xhigh" and "max".
 var claude46Efforts = map[string]bool{
 	"low":    true,
 	"medium": true,
 	"high":   true,
+	"xhigh":  true,
 	"max":    true,
 }
 
