@@ -98,6 +98,34 @@ func mergeMappings(dst, src *yaml.Node) {
 	}
 }
 
+// applyConfigDiff merges the approved overlay diff src into dst. Both must
+// be mapping nodes. Unlike mergeYAMLNodes, it overwrites an existing dst
+// scalar with src's value. src carries only the keys the user agreed to
+// apply (the prompt diff: genuinely new keys plus version-dependent keys
+// whose resolved value changed, RUNE-225), so overwriting never clobbers
+// an unrelated user customization.
+func applyConfigDiff(dst, src *yaml.Node) {
+	if dst.Kind != yaml.MappingNode || src.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i < len(src.Content)-1; i += 2 {
+		srcKey := src.Content[i]
+		srcVal := src.Content[i+1]
+
+		dstIdx := findMappingKey(dst, srcKey.Value)
+		if dstIdx < 0 {
+			dst.Content = append(dst.Content, cloneNode(srcKey), cloneNode(srcVal))
+			continue
+		}
+		dstVal := dst.Content[dstIdx+1]
+		if dstVal.Kind == yaml.MappingNode && srcVal.Kind == yaml.MappingNode {
+			applyConfigDiff(dstVal, srcVal)
+			continue
+		}
+		dst.Content[dstIdx+1] = cloneNode(srcVal)
+	}
+}
+
 // findMappingKey returns the index of the key node in a mapping's Content
 // slice, or -1 if not found.
 func findMappingKey(mapping *yaml.Node, key string) int {

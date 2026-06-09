@@ -165,6 +165,296 @@ func TestMergeYAMLNodesPreservesComments(t *testing.T) {
 	assert.Contains(t, actual, "b: 2")
 }
 
+// TestApplyConfigDiff exhaustively pins applyConfigDiff's contract:
+// it adds new keys, recurses into mappings present on both sides, and —
+// unlike the append-only mergeYAMLNodes — overwrites any existing dst
+// value (scalar, sequence, or type-mismatched node) with src's value.
+// src is always the approved prompt diff, so overwriting is intentional.
+func TestApplyConfigDiff(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		dst      string
+		src      string
+		expected string
+	}{
+		// --- additive behavior (shared with mergeYAMLNodes) ---
+		{
+			name:     "add new top-level key",
+			dst:      "a: 1\n",
+			src:      "b: 2\n",
+			expected: "a: 1\nb: 2\n",
+		},
+		{
+			name:     "empty dst gets all src keys",
+			dst:      "",
+			src:      "a: 1\nb: 2\n",
+			expected: "a: 1\nb: 2\n",
+		},
+		{
+			name:     "empty src is a no-op",
+			dst:      "a: 1\nb: 2\n",
+			src:      "",
+			expected: "a: 1\nb: 2\n",
+		},
+		{
+			name:     "both empty stays empty",
+			dst:      "",
+			src:      "",
+			expected: "{}\n",
+		},
+		{
+			name:     "new nested mapping is added whole",
+			dst:      "a: 1\n",
+			src:      "nested:\n  x: 1\n  y: 2\n",
+			expected: "a: 1\nnested:\n  x: 1\n  y: 2\n",
+		},
+		{
+			name:     "new sequence is added whole",
+			dst:      "a: 1\n",
+			src:      "items:\n  - x\n  - y\n",
+			expected: "a: 1\nitems:\n  - x\n  - y\n",
+		},
+
+		// --- overwrite behavior (the key difference vs mergeYAMLNodes) ---
+		{
+			name:     "overlapping scalar is overwritten",
+			dst:      "a: 1\n",
+			src:      "a: 2\n",
+			expected: "a: 2\n",
+		},
+		{
+			name:     "overlapping scalar with same value is idempotent",
+			dst:      "a: 1\nb: 2\n",
+			src:      "a: 1\nb: 2\n",
+			expected: "a: 1\nb: 2\n",
+		},
+		{
+			name:     "overlapping string scalar is overwritten",
+			dst:      "path: /old/value\n",
+			src:      "path: /new/value\n",
+			expected: "path: /new/value\n",
+		},
+		{
+			name:     "overlapping sequence is overwritten wholesale",
+			dst:      "items:\n  - a\n  - b\n",
+			src:      "items:\n  - x\n  - y\n  - z\n",
+			expected: "items:\n  - x\n  - y\n  - z\n",
+		},
+		{
+			name:     "overlapping sequence shrinks to src length",
+			dst:      "items:\n  - a\n  - b\n  - c\n",
+			src:      "items:\n  - x\n",
+			expected: "items:\n  - x\n",
+		},
+
+		// --- type-mismatch overwrites ---
+		{
+			name:     "map dst overwritten by scalar src",
+			dst:      "a:\n  nested: 1\n",
+			src:      "a: flat\n",
+			expected: "a: flat\n",
+		},
+		{
+			name:     "scalar dst overwritten by map src",
+			dst:      "a: flat\n",
+			src:      "a:\n  nested: 1\n",
+			expected: "a:\n  nested: 1\n",
+		},
+		{
+			name:     "scalar dst overwritten by sequence src",
+			dst:      "a: flat\n",
+			src:      "a:\n  - x\n  - y\n",
+			expected: "a:\n  - x\n  - y\n",
+		},
+		{
+			name:     "sequence dst overwritten by scalar src",
+			dst:      "a:\n  - x\n  - y\n",
+			src:      "a: flat\n",
+			expected: "a: flat\n",
+		},
+		{
+			name:     "map dst overwritten by sequence src",
+			dst:      "a:\n  nested: 1\n",
+			src:      "a:\n  - x\n",
+			expected: "a:\n  - x\n",
+		},
+		{
+			name:     "sequence dst overwritten by map src",
+			dst:      "a:\n  - x\n",
+			src:      "a:\n  nested: 1\n",
+			expected: "a:\n  nested: 1\n",
+		},
+
+		// --- recursion into mappings present on both sides ---
+		{
+			name:     "deep merge adds new sub-keys and overwrites overlapping ones",
+			dst:      "top:\n  a: 1\n  b: 2\n",
+			src:      "top:\n  b: 3\n  c: 4\n",
+			expected: "top:\n  a: 1\n  b: 3\n  c: 4\n",
+		},
+		{
+			name:     "deep merge two levels adds and overwrites",
+			dst:      "l1:\n  l2:\n    a: 1\n    b: 2\n",
+			src:      "l1:\n  l2:\n    b: 9\n    c: 3\n",
+			expected: "l1:\n  l2:\n    a: 1\n    b: 9\n    c: 3\n",
+		},
+		{
+			name:     "nested map overwrites scalar leaf but keeps untouched siblings",
+			dst:      "top:\n  a: 1\n  nested:\n    x: 10\n",
+			src:      "top:\n  nested:\n    x: 99\n    y: 20\n  newkey: 7\n",
+			expected: "top:\n  a: 1\n  nested:\n    x: 99\n    y: 20\n  newkey: 7\n",
+		},
+		{
+			name:     "three-level deep overwrite of a single leaf",
+			dst:      "a:\n  b:\n    c:\n      d: old\n      keep: yes\n",
+			src:      "a:\n  b:\n    c:\n      d: new\n",
+			expected: "a:\n  b:\n    c:\n      d: new\n      keep: yes\n",
+		},
+
+		// --- mixed operations in one pass ---
+		{
+			name: "mixed add, overwrite, recurse, and preserve",
+			dst: "keep: untouched\n" +
+				"scalar: old\n" +
+				"nested:\n  a: 1\n  b: 2\n",
+			src: "scalar: new\n" +
+				"nested:\n  b: 22\n  c: 3\n" +
+				"fresh: added\n",
+			expected: "keep: untouched\n" +
+				"scalar: new\n" +
+				"nested:\n  a: 1\n  b: 22\n  c: 3\n" +
+				"fresh: added\n",
+		},
+
+		// --- ordering: overwrites stay in place, additions append ---
+		{
+			name:     "overwrite preserves key position; new key appends",
+			dst:      "a: 1\nb: 2\nc: 3\n",
+			src:      "b: 22\nd: 4\n",
+			expected: "a: 1\nb: 22\nc: 3\nd: 4\n",
+		},
+
+		// --- value type fidelity ---
+		{
+			name:     "bool scalar overwrites",
+			dst:      "flag: false\n",
+			src:      "flag: true\n",
+			expected: "flag: true\n",
+		},
+		{
+			name:     "float scalar overwrites",
+			dst:      "ratio: 1.5\n",
+			src:      "ratio: 2.25\n",
+			expected: "ratio: 2.25\n",
+		},
+		{
+			name:     "null dst overwritten by scalar",
+			dst:      "a: null\n",
+			src:      "a: 1\n",
+			expected: "a: 1\n",
+		},
+		{
+			name:     "scalar dst overwritten by null",
+			dst:      "a: 1\n",
+			src:      "a: null\n",
+			expected: "a: null\n",
+		},
+		{
+			name:     "int overwritten by string of same digits keeps string type",
+			dst:      "a: 1\n",
+			src:      `a: "1"` + "\n",
+			expected: `a: "1"` + "\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dstDoc := mustParseYAML(t, tt.dst)
+			srcDoc := mustParseYAML(t, tt.src)
+			applyConfigDiff(dstDoc.Content[0], srcDoc.Content[0])
+			assert.Equal(t, tt.expected, nodeToString(t, dstDoc))
+		})
+	}
+}
+
+// TestApplyConfigDiffNonMappingGuard verifies the top-level guard: when
+// either node is not a mapping, applyConfigDiff is a no-op rather than
+// panicking or producing malformed output.
+func TestApplyConfigDiffNonMappingGuard(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		dst  *yaml.Node
+		src  *yaml.Node
+	}{
+		{
+			name: "scalar dst",
+			dst:  &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "x"},
+			src:  &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
+		},
+		{
+			name: "scalar src",
+			dst:  &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
+			src:  &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "x"},
+		},
+		{
+			name: "sequence dst",
+			dst:  &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"},
+			src:  &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			before := tt.dst.Content
+			assert.NotPanics(t, func() {
+				applyConfigDiff(tt.dst, tt.src)
+			})
+			assert.Equal(t, before, tt.dst.Content, "dst must be untouched")
+		})
+	}
+}
+
+// TestApplyConfigDiffClonesSrc verifies that appended and overwritten
+// values are deep-cloned from src: mutating src after the merge must not
+// affect dst (no shared node aliasing).
+func TestApplyConfigDiffClonesSrc(t *testing.T) {
+	t.Parallel()
+	dstDoc := mustParseYAML(t, "a: 1\n")
+	srcDoc := mustParseYAML(t, "a: 2\nb:\n  c: 3\n")
+	applyConfigDiff(dstDoc.Content[0], srcDoc.Content[0])
+	require.Equal(t, "a: 2\nb:\n  c: 3\n", nodeToString(t, dstDoc))
+
+	// Mutate every scalar in src; dst must remain stable.
+	expandNodeValues(srcDoc, func(string) string { return "MUTATED" })
+	for i := 1; i < len(srcDoc.Content[0].Content); i += 2 {
+		v := srcDoc.Content[0].Content[i]
+		if v.Kind == yaml.ScalarNode {
+			v.Value = "MUTATED"
+		}
+	}
+	assert.Equal(t, "a: 2\nb:\n  c: 3\n", nodeToString(t, dstDoc),
+		"dst must not alias src nodes")
+}
+
+// TestApplyConfigDiffPreservesUntouchedComments verifies comments on dst
+// keys that src does not touch survive the merge, while an overwritten
+// key takes src's value.
+func TestApplyConfigDiffPreservesUntouchedComments(t *testing.T) {
+	t.Parallel()
+	dst := "# top comment\nkeep: 1 # inline\nchange: old\n"
+	src := "change: new\nadd: 2\n"
+	dstDoc := mustParseYAML(t, dst)
+	srcDoc := mustParseYAML(t, src)
+	applyConfigDiff(dstDoc.Content[0], srcDoc.Content[0])
+	actual := nodeToString(t, dstDoc)
+	assert.Contains(t, actual, "# top comment")
+	assert.Contains(t, actual, "# inline")
+	assert.Contains(t, actual, "change: new")
+	assert.Contains(t, actual, "add: 2")
+}
+
 func TestExpandNodeValues(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

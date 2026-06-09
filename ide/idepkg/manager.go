@@ -819,7 +819,11 @@ func (m *Manager) promptConfigChange(
 		pkgID, pkgVersion, string(configYAML))
 
 	apply := func() error {
-		mergeYAMLNodes(userDoc.Content[0], pkgDoc.Content[0])
+		starConfig := strings.HasSuffix(strings.ToLower(m.configPath), ".star")
+		merged, err := buildMergedConfig(userDoc, pkgDoc, starConfig)
+		if err != nil {
+			return err
+		}
 
 		backup, err := backupUserConfig(m.configPath)
 		if err != nil {
@@ -829,16 +833,12 @@ func (m *Manager) promptConfigChange(
 		m.log(log.InfoLevel, "created config backup "+
 			"before applying package updates: %s", backup)
 
-		if strings.HasSuffix(strings.ToLower(m.configPath), ".star") {
-			mergedCfg, err := loadIdePkgConfigFromYAMLDoc(userDoc)
-			if err != nil {
-				return fmt.Errorf("decode merged yaml doc: %w", err)
-			}
-			if err := starlarkconfig.WriteConfigFileAtomic(m.configPath, mergedCfg); err != nil {
+		if starConfig {
+			if err := starlarkconfig.WriteConfigFileAtomic(m.configPath, merged.starConfig); err != nil {
 				return fmt.Errorf("write starlark config: %w", err)
 			}
 		} else {
-			if err := writeYAMLAtomic(m.configPath, userDoc, pkgDoc.Content[0]); err != nil {
+			if err := writeYAMLAtomic(m.configPath, merged.yamlDoc, pkgDoc.Content[0]); err != nil {
 				return fmt.Errorf("write config: %w", err)
 			}
 		}
@@ -915,50 +915,20 @@ func (m *Manager) processConfig(
 		return fmt.Errorf("load user config: %w", err)
 	}
 
-	runeVarMapping := func(key string) string {
-		switch key {
-		case "RUNE_DATADIR":
-			return m.dataDir
-		case "RUNE_PKG_ID":
-			return pkgID
-		case "RUNE_PKG_VERSION":
-			return string(pkgVersion)
-		}
-		return ""
-	}
-
-	pkgOverlayCfg, err := loadIdePkgConfigOverlay(
-		pkgConfigFile, data, map[string]any{},
+	plan, err := planConfigChange(
+		pkgConfigFile, data, userCfg,
 		pkgID, pkgVersion, m.dataDir, m.editorMode,
 	)
 	if err != nil {
-		return fmt.Errorf("decode package config: %w", err)
+		return err
 	}
-	if len(pkgOverlayCfg) == 0 {
-		return nil
-	}
-	expandMapValues(pkgOverlayCfg, runeVarMapping)
-
-	missingCfg := idePkgMissingKeys(userCfg, pkgOverlayCfg)
-	if missingCfg == nil {
+	if !plan.prompt {
 		return nil
 	}
 
-	pkgDoc, err := mapToYAMLDocument(missingCfg)
-	if err != nil {
-		return fmt.Errorf("package config to yaml: %w", err)
-	}
-	userDoc, err := mapToYAMLDocument(userCfg)
-	if err != nil {
-		return fmt.Errorf("user config to yaml: %w", err)
-	}
-
-	missingYAML, err := yaml.Marshal(missingCfg)
-	if err != nil {
-		return fmt.Errorf("marshal missing keys: %w", err)
-	}
-
-	err = m.promptConfigChange(pkgID, pkgVersion, missingYAML, userDoc, pkgDoc)
+	err = m.promptConfigChange(
+		pkgID, pkgVersion, plan.missingYAML, plan.userDoc, plan.pkgDoc,
+	)
 	if err != nil {
 		return fmt.Errorf("prompt config change: %w", err)
 	}
@@ -1129,14 +1099,25 @@ func normalizeIdePkgConfig(v any) any {
 	}
 }
 
-// idePkgMissingKeys returns the subset of overlay keys that are not
-// present in user, preserving overlay values for the keys it returns.
-// For keys that are mappings on both sides, it recurses and includes
-// only the new sub-keys. The returned map is nil when every overlay
-// key (at every nesting level) is already present in user; this signals
-// that no prompt and no write is needed. Existing user values are never
-// included or compared — they are always preserved.
-func idePkgMissingKeys(user, overlay map[string]any) map[string]any {
+// idePkgMissingKeys returns the subset of overlay keys that should be
+// offered to the user: keys not present in user, plus version-dependent
+// scalars whose resolved value differs from the user value.
+//
+// For keys that are mappings on both sides, it recurses and includes only
+// the new (or version-dependent, changed) sub-keys. The returned map is nil
+// when there is nothing to offer; this signals that no prompt and no write
+// is needed.
+//
+// Static present scalars are always skipped so user customizations are
+// preserved (RUNE-187). The exception is keys flagged in versionDependent:
+// because their raw template references $RUNE_PKG_VERSION, their value is
+// package-version-derived rather than a user customization, so a changed
+// resolved value is safe to re-offer (RUNE-225). versionDependent mirrors
+// the overlay's nesting: scalar leaves are bool, nested maps are
+// map[string]any.
+func idePkgMissingKeys(
+	user, overlay map[string]any, versionDependent map[string]any,
+) map[string]any {
 	var missing map[string]any
 	for key, overlayVal := range overlay {
 		userVal, ok := user[key]
@@ -1150,9 +1131,17 @@ func idePkgMissingKeys(user, overlay map[string]any) map[string]any {
 		overlayMap, overlayIsMap := overlayVal.(map[string]any)
 		userMap, userIsMap := userVal.(map[string]any)
 		if !overlayIsMap || !userIsMap {
+			if isVersionDependentScalar(versionDependent, key) &&
+				fmt.Sprint(overlayVal) != fmt.Sprint(userVal) {
+				if missing == nil {
+					missing = map[string]any{}
+				}
+				missing[key] = overlayVal
+			}
 			continue
 		}
-		nestedMissing := idePkgMissingKeys(userMap, overlayMap)
+		nestedVersionDependent, _ := versionDependent[key].(map[string]any)
+		nestedMissing := idePkgMissingKeys(userMap, overlayMap, nestedVersionDependent)
 		if nestedMissing == nil {
 			continue
 		}
@@ -1162,6 +1151,61 @@ func idePkgMissingKeys(user, overlay map[string]any) map[string]any {
 		missing[key] = nestedMissing
 	}
 	return missing
+}
+
+func isVersionDependentScalar(versionDependent map[string]any, key string) bool {
+	dep, ok := versionDependent[key].(bool)
+	return ok && dep
+}
+
+// versionDependentKeys walks the raw (pre-expansion) overlay and returns a
+// structure mirroring its nesting that marks scalar leaves whose template
+// references $RUNE_PKG_VERSION. Such values change across package versions,
+// so a changed resolved value should re-prompt (RUNE-225). It must be
+// computed before expandMapValues replaces the template with its value.
+//
+// Limitation: this applies to the YAML overlay path only. For .star
+// overlays starlarkconfig.Decode resolves RUNE_PKG_VERSION during decode,
+// so the literal template is gone by the time this runs and such keys are
+// not detected as version-dependent.
+func versionDependentKeys(overlay map[string]any) map[string]any {
+	var out map[string]any
+	for key, val := range overlay {
+		switch t := val.(type) {
+		case map[string]any:
+			nested := versionDependentKeys(t)
+			if nested == nil {
+				continue
+			}
+			if out == nil {
+				out = map[string]any{}
+			}
+			out[key] = nested
+		case string:
+			if !referencesPkgVersion(t) {
+				continue
+			}
+			if out == nil {
+				out = map[string]any{}
+			}
+			out[key] = true
+		}
+	}
+	return out
+}
+
+// referencesPkgVersion reports whether s expands $RUNE_PKG_VERSION (in
+// either $VAR or ${VAR} form), using os.Expand so detection matches the
+// expansion semantics applied by expandMapValues.
+func referencesPkgVersion(s string) bool {
+	var found bool
+	os.Expand(s, func(name string) string {
+		if name == "RUNE_PKG_VERSION" {
+			found = true
+		}
+		return ""
+	})
+	return found
 }
 
 func mapToYAMLDocument(cfg map[string]any) (*yaml.Node, error) {

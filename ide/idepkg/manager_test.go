@@ -1695,7 +1695,7 @@ func TestInstallConfigPromptDeny(t *testing.T) {
 func TestInstallConfigPreservesUserValues(t *testing.T) {
 	t.Parallel()
 
-	t.Run("overlap with user scalar does not prompt and preserves value", func(t *testing.T) {
+	t.Run("static overlap does not prompt; version-dependent key re-prompts", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
@@ -1704,8 +1704,10 @@ func TestInstallConfigPreservesUserValues(t *testing.T) {
 		m, n, _, datadir := newTestManager(t, pkgs, versions)
 
 		configPath := filepath.Join(datadir, "config.yaml")
-		// User pre-sets every key the package would write, with their
-		// own values that must be preserved.
+		// User pre-sets every key the package would write. Static keys
+		// (theme, indent) must be preserved (RUNE-187); GOROOT derives
+		// from $RUNE_PKG_VERSION so it must be re-prompted and updated
+		// to the resolved value (RUNE-225).
 		require.NoError(t, os.WriteFile(configPath, []byte(
 			"env:\n  GOROOT: /custom/go\n"+
 				"settings:\n  theme: light\n  indent: 8\n",
@@ -1725,19 +1727,21 @@ func TestInstallConfigPreservesUserValues(t *testing.T) {
 		require.NoError(t, err)
 		n.RequireNoErrorNotification()
 
-		assert.Equal(t, 0, promptCount, "no prompt should fire when package adds no new keys")
+		assert.Equal(t, 1, promptCount, "prompt fires for the version-dependent GOROOT change")
 
 		cfg := readUserConfigMap(t, configPath)
 		env, ok := cfg["env"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "/custom/go", env["GOROOT"])
+		wantGOROOT := filepath.Join(datadir, "pkg", "configpkg", "1", "go")
+		assert.Equal(t, wantGOROOT, fmt.Sprint(env["GOROOT"]),
+			"version-dependent GOROOT updates to the resolved value")
 		settings, ok := cfg["settings"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "light", fmt.Sprint(settings["theme"]))
 		assert.Equal(t, "8", fmt.Sprint(settings["indent"]))
 	})
 
-	t.Run("new top-level key triggers prompt and is appended on accept", func(t *testing.T) {
+	t.Run("new key and version-dependent change prompt; static values preserved", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
@@ -1747,7 +1751,10 @@ func TestInstallConfigPreservesUserValues(t *testing.T) {
 		m, n, _, datadir := newTestManager(t, pkgs, versions)
 
 		configPath := filepath.Join(datadir, "config.yaml")
-		// User has all v1 keys with custom values. v2 adds settings.newkey.
+		// User has all v1 keys with custom values. v2 adds settings.newkey
+		// and resolves GOROOT against version 2. The new key and the
+		// version-dependent GOROOT are offered together; static theme/indent
+		// and the unrelated `other` key are preserved.
 		require.NoError(t, os.WriteFile(configPath, []byte(
 			"env:\n  GOROOT: /custom/go\n"+
 				"settings:\n  theme: light\n  indent: 8\n"+
@@ -1769,12 +1776,15 @@ func TestInstallConfigPreservesUserValues(t *testing.T) {
 		require.NoError(t, err)
 		n.RequireNoErrorNotification()
 
-		assert.Equal(t, 1, promptCount, "prompt should fire once for the genuinely new key")
+		assert.Equal(t, 1, promptCount,
+			"prompt fires once for the new key and the version-dependent change")
 
 		cfg := readUserConfigMap(t, configPath)
 		env, ok := cfg["env"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "/custom/go", env["GOROOT"])
+		wantGOROOT := filepath.Join(datadir, "pkg", "configpkg", "2", "go")
+		assert.Equal(t, wantGOROOT, fmt.Sprint(env["GOROOT"]),
+			"version-dependent GOROOT updates to the v2 resolved value")
 		settings, ok := cfg["settings"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "light", fmt.Sprint(settings["theme"]))
@@ -2401,6 +2411,135 @@ func TestProcessConfigSkipsPromptWhenAlreadyMerged(t *testing.T) {
 		// Re-process settings: should detect config is already merged and skip
 		err = m.ProcessInstalledSettings(context.Background())
 		require.NoError(t, err)
+	})
+}
+
+// TestProcessConfigRepromptsOnVersionDependentChange is a regression test
+// for RUNE-225: when a package config scalar's raw template depends on
+// $RUNE_PKG_VERSION, the resolved value changes across versions. Rune must
+// re-prompt and persist the new value when it differs from what is stored,
+// while leaving user-customized static scalars untouched (RUNE-187).
+func TestProcessConfigRepromptsOnVersionDependentChange(t *testing.T) {
+	t.Parallel()
+
+	t.Run("version-dependent scalar re-prompts and updates on version bump", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+			{Package: "vpkg", Version: "2"},
+		})
+		m, _, _, datadir := newTestManager(t, pkgs, versions)
+
+		require.NoError(t, os.WriteFile(m.configPath, []byte("{}\n"), 0o644))
+
+		pkgDir := t.TempDir()
+		pkgConfig := filepath.Join(pkgDir, "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n",
+		), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		// v1: new key, prompt fires and value is written.
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		assert.Equal(t, 1, promptCount, "first install prompts for the new key")
+
+		v1Want := filepath.Join(datadir, "pkg", "vpkg", "1", "go")
+		cfg := readUserConfigMap(t, m.configPath)
+		env, ok := cfg["env"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, v1Want, fmt.Sprint(env["GOROOT"]))
+
+		// v2: same template, different resolved value -> must re-prompt and update.
+		require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
+		assert.Equal(t, 2, promptCount, "version bump re-prompts the version-dependent key")
+
+		v2Want := filepath.Join(datadir, "pkg", "vpkg", "2", "go")
+		cfg = readUserConfigMap(t, m.configPath)
+		env, ok = cfg["env"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, v2Want, fmt.Sprint(env["GOROOT"]), "on-disk value updates to v2")
+	})
+
+	t.Run("version-dependent scalar does not re-prompt when value is unchanged", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+		})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		require.NoError(t, os.WriteFile(m.configPath, []byte("{}\n"), 0o644))
+
+		pkgDir := t.TempDir()
+		pkgConfig := filepath.Join(pkgDir, "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n",
+		), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		assert.Equal(t, 1, promptCount, "first install prompts for the new key")
+
+		// Same version again: resolved value matches disk, no re-prompt.
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		assert.Equal(t, 1, promptCount, "unchanged version-dependent value must not re-prompt")
+	})
+
+	t.Run("static user-customized scalar is preserved and not re-prompted", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+		})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		// User customized a static scalar the package also ships.
+		require.NoError(t, os.WriteFile(m.configPath, []byte(
+			"settings:\n  theme: light\n",
+		), 0o644))
+
+		pkgDir := t.TempDir()
+		pkgConfig := filepath.Join(pkgDir, "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"settings:\n  theme: dark\n",
+		), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		assert.Equal(t, 0, promptCount, "static differing scalar must not re-prompt (RUNE-187)")
+
+		cfg := readUserConfigMap(t, m.configPath)
+		settings, ok := cfg["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "light", fmt.Sprint(settings["theme"]), "user value preserved")
 	})
 }
 
