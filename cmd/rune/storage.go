@@ -38,9 +38,6 @@ const (
 	positionKey = "lastPosition"
 )
 
-// newRuneStorage opens the localstorage flavor every cmd/rune entry
-// point uses. Shared by the IDE, the apiclient (auth/release cache),
-// the bootstrap pre-IDE, and the gui window-position persistence.
 func newRuneStorage(dataDir string) storageapi.Service {
 	return localstorage.New(context.Background(), dataDir, docbson.Marshaler())
 }

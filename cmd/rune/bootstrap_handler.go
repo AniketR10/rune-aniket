@@ -114,7 +114,7 @@ func newBootstrapHandler(
 	}
 
 	if isBootstrapped(dataDir) {
-		client, releaseManager := newAPIClient(newRuneStorage(dataDir))
+		client, releaseManager := newAPIClient(bh.storage)
 		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {
 			_ = client.Close()
@@ -380,7 +380,7 @@ func (b *bootstrapHandler) performSwap() error {
 	b.mu.Unlock()
 	defer b.mu.Lock()
 
-	client, releaseManager := newAPIClient(newRuneStorage(b.dataDir))
+	client, releaseManager := newAPIClient(b.storage)
 	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
 	if err != nil {
 		_ = client.Close()
@@ -444,6 +444,12 @@ func (b *bootstrapHandler) Close() error {
 			errs = append(errs, err)
 		}
 		b.preIDE = nil
+	}
+	if b.storage != nil {
+		if err := b.storage.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		b.storage = nil
 	}
 	return errors.Join(errs...)
 }
