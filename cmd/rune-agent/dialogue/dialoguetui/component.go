@@ -1253,7 +1253,7 @@ func (c *Component) StartPromptInput() bool {
 
 	// Create a simple inputbox for typing feedback.
 	ib := inputbox.New(
-		inputbox.WithPlaceholderText("Type your feedback and press Enter to submit (Esc to go back)"),
+		inputbox.WithPlaceholderText("Type your feedback and press Enter to submit (Ctrl-C to go back)"),
 	)
 	// Ensure the inputbox has a non-zero width so that Cursor() does not
 	// divide by zero before the next Draw/layout pass sizes it properly.
@@ -1284,25 +1284,6 @@ func (c *Component) removePromptInput() {
 	c.promptInput = nil
 	c.promptInputMode = false
 	c.promptLabel = ""
-}
-
-// CancelPromptInput transitions from text input mode back to selection
-// mode. It removes the inputbox and re-inserts the selection node into
-// the message list. Returns false if not in input mode.
-func (c *Component) CancelPromptInput() bool {
-	if !c.promptInputMode || c.activePrompt == nil {
-		return false
-	}
-	maxOff, scrolled := c.scrollState()
-	defer c.restoreScroll(maxOff, scrolled)
-
-	c.removePromptInput()
-
-	// Re-insert the selection into the message list.
-	c.activePromptNode = new(component.ListNode)
-	*c.activePromptNode = c.messages.PushBack(c.activePrompt)
-	c.moveHintToBack()
-	return true
 }
 
 // PreparePromptInputSubmit removes the prompt input and returns the

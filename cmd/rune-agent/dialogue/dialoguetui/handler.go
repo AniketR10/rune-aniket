@@ -253,8 +253,6 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 				ch <- []string{label, text}
 			}
 			s.mu.Lock()
-		case term.KeyEsc:
-			s.comp.CancelPromptInput()
 		default:
 			if ev.Mod == term.ModCtrl && ev.Ch == 'c' {
 				// Ctrl-C dismisses the entire prompt while in text input mode.

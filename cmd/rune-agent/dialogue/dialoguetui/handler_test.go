@@ -1503,6 +1503,47 @@ func TestHandlerPromptCtrlCDismissesRequiresInput(t *testing.T) {
 	assert.Nil(t, vals, "Ctrl-C in input mode should dismiss the prompt")
 }
 
+// TestHandlerPromptEscIgnoredInRequiresInput verifies that pressing Esc
+// while typing feedback (RequiresInput text-input mode) neither dismisses
+// the prompt nor cancels back to the selection menu, so accidental Esc
+// presses do not discard the user's typed feedback.
+func TestHandlerPromptEscIgnoredInRequiresInput(t *testing.T) {
+	h, tx, interrupt := newPromptHandler(t)
+	resultCh := make(chan []string, 1)
+
+	tx <- MessageEvent{
+		Type:        MessageEventPrompt,
+		PromptTitle: "Choose",
+		PromptOptions: []PromptEventOption{
+			{Label: "Other", RequiresInput: true},
+		},
+		PromptResult: resultCh,
+	}
+	<-interrupt
+
+	// Enter the requires-input text mode and type some feedback.
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.True(t, handled)
+	for _, ch := range "wip" {
+		h.Handle(term.Event{Type: term.EventKey, Ch: ch})
+	}
+
+	// Esc must not cancel back to selection nor dismiss the prompt.
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	assert.True(t, handled, "Esc should be absorbed in input mode")
+
+	// The cursor is only visible while the prompt is in text-input mode, so a
+	// visible cursor proves Esc did not cancel back to the selection menu.
+	_, _, ok := h.Cursor()
+	assert.True(t, ok, "Esc should keep the prompt in text-input mode")
+
+	select {
+	case <-resultCh:
+		t.Fatal("Esc should not dismiss the prompt or send a result")
+	default:
+	}
+}
+
 // TestHandlerPromptCtrlCDismissesFreeForm verifies that Ctrl-C dismisses
 // a free-form (zero-option) prompt without submitting the typed text.
 func TestHandlerPromptCtrlCDismissesFreeForm(t *testing.T) {
