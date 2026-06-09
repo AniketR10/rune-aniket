@@ -266,6 +266,7 @@ func (e *ex) init(
 		e.config.CommandFallbacks = map[string]text.FallbackPrompter{}
 	}
 	e.config.CommandFallbacks["agent"] = e
+	e.config.CommandFallbacks["?"] = e
 	e.config.CommandFallbacks["searchfile"] = e
 	e.config.CommandFallbacks["searchtext"] = e
 	e.config.CommandFallbacks["searchast"] = e

@@ -1189,35 +1189,39 @@ func TestShellCommandComplete(t *testing.T) {
 // fallback for an unhandled command opens a Yes/No prompt and, on Yes,
 // opens the companion shell submitting `pkg install rune-agent`.
 func TestShowFallbackPromptInstallsExtension(t *testing.T) {
-	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-install")
-	require.NoError(t, err)
-	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
-	cfg := vte.DefaultConfig()
-	scheduler := newQueuedScheduler()
-	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
-	svc := storagestub.NewInMemoryService()
-	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
-		cfg, nopPublishEvent, clipboard.NewInMemory(),
-		text.WithCommandKey(testCommandKey),
-	)
-	b.mu = &sync.Mutex{}
-	b.scheduler = scheduler
-	defer b.Close()
+	for _, command := range []string{"agent", "?"} {
+		t.Run(command, func(t *testing.T) {
+			workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-install")
+			require.NoError(t, err)
+			w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+			cfg := vte.DefaultConfig()
+			scheduler := newQueuedScheduler()
+			cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+			svc := storagestub.NewInMemoryService()
+			b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+				cfg, nopPublishEvent, clipboard.NewInMemory(),
+				text.WithCommandKey(testCommandKey),
+			)
+			b.mu = &sync.Mutex{}
+			b.scheduler = scheduler
+			defer b.Close()
 
-	b.ShowFallbackPrompt(context.Background(), "agent")
-	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+			b.ShowFallbackPrompt(context.Background(), command)
+			assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
 
-	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
-	assert.False(t, exit)
-	assert.True(t, handled)
-	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+			exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+			assert.False(t, exit)
+			assert.True(t, handled)
+			assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
 
-	var doc struct{ Items []string }
-	require.NoError(t, svc.Get(
-		context.Background(), shellHistoryDocumentID, &doc,
-	))
-	require.NotEmpty(t, doc.Items)
-	assert.Equal(t, "pkg install rune-agent", doc.Items[len(doc.Items)-1])
+			var doc struct{ Items []string }
+			require.NoError(t, svc.Get(
+				context.Background(), shellHistoryDocumentID, &doc,
+			))
+			require.NotEmpty(t, doc.Items)
+			assert.Equal(t, "pkg install rune-agent", doc.Items[len(doc.Items)-1])
+		})
+	}
 }
 
 // TestShowFallbackPromptInstallsFuzzySearch verifies that the fuzzy-search

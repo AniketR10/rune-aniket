@@ -452,7 +452,7 @@ func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
 // providing extension is not installed).
 func (e *ex) ShowFallbackPrompt(_ context.Context, command string, _ ...string) {
 	switch command {
-	case "agent":
+	case "agent", "?":
 		e.openInstallExtensionPrompt("rune-agent",
 			"This command requires the **rune-agent** extension. "+
 				"Do you want to install it now?")
