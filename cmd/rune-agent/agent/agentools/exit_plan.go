@@ -130,6 +130,10 @@ func (t *ExitPlanTool) Summary(arguments string) string {
 	return title
 }
 
+// NeedsDeterministicOrder reports that exit_plan writes the plan file
+// to disk and so must run sequentially within a batch.
+func (t *ExitPlanTool) NeedsDeterministicOrder() bool { return true }
+
 // Execute persists the plan and asks the user to approve or revise it.
 func (t *ExitPlanTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args exitPlanArgs

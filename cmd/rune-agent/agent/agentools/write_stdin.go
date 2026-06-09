@@ -100,6 +100,8 @@ func (t *writeStdinTool) Summary(arguments string) string {
 	return fmt.Sprintf("session %d: %s", args.SessionID, chars)
 }
 
+func (t *writeStdinTool) NeedsDeterministicOrder() bool { return true }
+
 func (t *writeStdinTool) Execute(_ context.Context, arguments string) agent.ToolResult {
 	var args writeStdinArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {

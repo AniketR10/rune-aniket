@@ -58,6 +58,8 @@ type taskCreateArgs struct {
 	Metadata    map[string]any `json:"metadata"`
 }
 
+func (t *taskCreateTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *taskCreateTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -134,6 +136,8 @@ type taskUpdateArgs struct {
 	Owner        *string        `json:"owner"`
 	Metadata     map[string]any `json:"metadata"`
 }
+
+func (t *taskUpdateTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *taskUpdateTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
@@ -238,6 +242,8 @@ type taskGetArgs struct {
 	TaskID string `json:"taskId"`
 }
 
+func (t *taskGetTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *taskGetTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -287,6 +293,8 @@ func (t *taskGetTool) Execute(_ context.Context, arguments string) agent.ToolRes
 type taskListTool struct {
 	store *taskstore.Store
 }
+
+func (t *taskListTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *taskListTool) Definition() llmapi.Tool {
 	return llmapi.Tool{

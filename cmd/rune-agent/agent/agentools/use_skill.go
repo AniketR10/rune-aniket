@@ -58,6 +58,8 @@ type skillArgs struct {
 	Args string `json:"args,omitempty"`
 }
 
+func (t *skillTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *skillTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

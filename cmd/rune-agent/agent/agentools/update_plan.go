@@ -63,6 +63,8 @@ func NewUpdatePlan(updater agent.ProgressUpdater) agent.Tool {
 	}
 }
 
+func (t *updatePlanTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *updatePlanTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

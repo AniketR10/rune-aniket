@@ -34,6 +34,8 @@ type compactTool struct{}
 
 func newCompact() agent.Tool { return &compactTool{} }
 
+func (t *compactTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *compactTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

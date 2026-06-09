@@ -304,6 +304,8 @@ type symbolArgs struct {
 	Symbol string `json:"symbol"`
 }
 
+func (t *findDefinitionTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *findDefinitionTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -382,6 +384,8 @@ type findImplementationsTool struct {
 	tracker *FileTracker
 }
 
+func (t *findImplementationsTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *findImplementationsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -454,6 +458,8 @@ type findReferencesTool struct {
 	cwd     workspaceapi.URI
 	tracker *FileTracker
 }
+
+func (t *findReferencesTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *findReferencesTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
@@ -632,6 +638,8 @@ func (a filePathArgs) filePath() (string, error) {
 	return "", fmt.Errorf("missing required parameter: path")
 }
 
+func (t *outlineFileTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *outlineFileTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -741,6 +749,8 @@ type searchSymbolsArgs struct {
 	Query string `json:"query"`
 }
 
+func (t *searchSymbolsTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *searchSymbolsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -830,6 +840,8 @@ type describeSymbolTool struct {
 	parser syntaxapi.Parser
 	cwd    workspaceapi.URI
 }
+
+func (t *describeSymbolTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *describeSymbolTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
@@ -924,6 +936,8 @@ type checkFileErrorsTool struct {
 	cwd     workspaceapi.URI
 	tracker *FileTracker
 }
+
+func (t *checkFileErrorsTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *checkFileErrorsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
@@ -1053,6 +1067,8 @@ func (t *formatFileTool) Summary(arguments string) string {
 	fp, _ := args.filePath()
 	return summaryPath(t.cwd, fp)
 }
+
+func (t *formatFileTool) NeedsDeterministicOrder() bool { return true }
 
 func (t *formatFileTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args filePathArgs

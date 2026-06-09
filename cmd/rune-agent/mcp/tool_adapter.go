@@ -94,6 +94,10 @@ func (t *toolAdapter) Definition() llmapi.Tool {
 	}
 }
 
+// NeedsDeterministicOrder conservatively serializes every MCP tool
+// since the agent cannot know a dynamic server tool's side effects.
+func (t *toolAdapter) NeedsDeterministicOrder() bool { return true }
+
 func (t *toolAdapter) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	start := time.Now()
 

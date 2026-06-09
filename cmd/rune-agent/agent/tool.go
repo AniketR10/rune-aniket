@@ -53,6 +53,15 @@ type Tool interface {
 	// arguments for display in the TUI. On parse error it returns
 	// an empty string and the TUI falls back to formatToolArgs.
 	Summary(arguments string) string
+	// NeedsDeterministicOrder reports whether this tool must run
+	// sequentially relative to the other tool calls in the same
+	// assistant turn. Tools whose Execute mutates the filesystem or
+	// spawns processes return true: when any tool in a batch needs
+	// deterministic order, the agent loop runs the whole batch in
+	// call order instead of fanning out in parallel, so file
+	// operations on the same path cannot race (e.g. bash "rm X"
+	// followed by apply_patch "Add X"). Read-only tools return false.
+	NeedsDeterministicOrder() bool
 }
 
 // Registry holds available tools and provides lookup.

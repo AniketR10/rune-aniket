@@ -57,6 +57,8 @@ type listConversationsTool struct {
 	sessionsDir string
 }
 
+func (t *listConversationsTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *listConversationsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -132,6 +134,8 @@ type searchConversationsTool struct {
 type searchConversationsArgs struct {
 	Pattern string `json:"pattern"`
 }
+
+func (t *searchConversationsTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *searchConversationsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{

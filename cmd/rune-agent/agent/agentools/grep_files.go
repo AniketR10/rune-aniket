@@ -69,6 +69,8 @@ func NewGrepFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *Fi
 	return &grepFilesTool{fs: wfs, cwd: cwd, tracker: tracker}
 }
 
+func (t *grepFilesTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *grepFilesTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

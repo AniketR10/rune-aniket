@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package geminitools provides Gemini-specialized tools that present the
 // Antigravity-native tool names and argument schemas Gemini 3 was post-trained
 // to call (e.g. run_command, grep_search, codebase_search). Each tool
@@ -57,6 +56,10 @@ type specializedTool struct {
 }
 
 func (t *specializedTool) Definition() llmapi.Tool { return t.def }
+
+func (t *specializedTool) NeedsDeterministicOrder() bool {
+	return t.base.NeedsDeterministicOrder()
+}
 
 func (t *specializedTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	translated, err := t.translate(arguments)

@@ -49,6 +49,8 @@ func NewRecallConversation(exec workspaceapi.Executor, memoryPath string) agent.
 	return &recallConversationTool{exec: exec, memoryPath: memoryPath}
 }
 
+func (t *recallConversationTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *recallConversationTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

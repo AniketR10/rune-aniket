@@ -129,6 +129,8 @@ func (t *bashTool) Summary(arguments string) string {
 	return args.Command
 }
 
+func (t *bashTool) NeedsDeterministicOrder() bool { return true }
+
 // Execute runs the bash command.
 func (t *bashTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args bashArgs

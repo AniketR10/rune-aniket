@@ -49,6 +49,8 @@ func NewRequestSkill(prompter agent.Prompter) agent.Tool {
 	return &requestSkillTool{prompter: prompter}
 }
 
+func (t *requestSkillTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *requestSkillTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

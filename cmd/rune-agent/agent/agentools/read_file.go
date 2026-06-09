@@ -66,6 +66,8 @@ func newReadFile(fs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *File
 	return &readFileTool{fs: fs, cwd: cwd, tracker: tracker, maxLineBytes: maxLineBytes}
 }
 
+func (t *readFileTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *readFileTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

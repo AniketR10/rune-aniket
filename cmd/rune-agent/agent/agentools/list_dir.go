@@ -60,6 +60,8 @@ func NewListDir(wfs workspaceapi.FileSystem, cwd workspaceapi.URI) agent.Tool {
 	return &listDirTool{fs: wfs, cwd: cwd}
 }
 
+func (t *listDirTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *listDirTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

@@ -153,6 +153,8 @@ type nodeTypesArgs struct {
 	NodeTypes string `json:"node_types"`
 }
 
+func (t *listSymbolsTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *listSymbolsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -220,6 +222,8 @@ type fileNodeTypesArgs struct {
 	filePathArgs
 	NodeTypes string `json:"node_types"`
 }
+
+func (t *listFileSymbolsTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *listFileSymbolsTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
@@ -304,6 +308,8 @@ type queryASTArgs struct {
 	Captures []string `json:"captures"`
 }
 
+func (t *queryASTTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *queryASTTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
@@ -381,6 +387,8 @@ type queryFileASTArgs struct {
 	Query    string   `json:"query"`
 	Captures []string `json:"captures"`
 }
+
+func (t *queryFileASTTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *queryFileASTTool) Definition() llmapi.Tool {
 	return llmapi.Tool{

@@ -704,6 +704,143 @@ func TestAgentRun(t *testing.T) {
 	}
 }
 
+func twoToolCallResponse(name1, name2 string) mockResponse {
+	return mockResponse{
+		chunks:       []string{""},
+		finishReason: llmapi.FinishReasonToolCall,
+		toolCalls: []llmapi.ToolCall{
+			{ID: "c1", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: name1, Arguments: "{}"}},
+			{ID: "c2", Type: llmapi.ToolTypeFunction, Function: llmapi.FunctionCall{Name: name2, Arguments: "{}"}},
+		},
+	}
+}
+
+func TestAgentRun_FSMutatorBatchRunsSequentially(t *testing.T) {
+	t.Run("batch with a mutator runs in array order", func(t *testing.T) {
+		var mu sync.Mutex
+		var mutEnd, otherStart time.Time
+
+		mut := &mockTool{name: "tool_mut", needsOrder: true}
+		mut.executeFn = func(context.Context, string) ToolResult {
+			time.Sleep(20 * time.Millisecond)
+			mu.Lock()
+			mutEnd = time.Now()
+			mu.Unlock()
+			return ToolResult{Content: "mut"}
+		}
+		other := &mockTool{name: "tool_other"}
+		other.executeFn = func(context.Context, string) ToolResult {
+			mu.Lock()
+			otherStart = time.Now()
+			mu.Unlock()
+			return ToolResult{Content: "other"}
+		}
+
+		svc := &mockService{responses: []mockResponse{
+			twoToolCallResponse("tool_mut", "tool_other"),
+			stopResponse("done"),
+		}}
+		ag := NewAgent(svc, NewRegistry(mut, other), noSkills(), newMockStore(), NoMemory(), Config{SystemPrompt: "test"})
+
+		events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+
+		require.Len(t, eventsByType(events, EventToolResult), 2)
+		mu.Lock()
+		defer mu.Unlock()
+		assert.True(t, otherStart.After(mutEnd),
+			"second tool must start after the mutator finished; mutEnd=%v otherStart=%v", mutEnd, otherStart)
+	})
+
+	t.Run("batch without a mutator runs in parallel", func(t *testing.T) {
+		var mu sync.Mutex
+		var aStart, aEnd, bStart, bEnd time.Time
+
+		mk := func(start, end *time.Time) func(context.Context, string) ToolResult {
+			return func(context.Context, string) ToolResult {
+				mu.Lock()
+				*start = time.Now()
+				mu.Unlock()
+				time.Sleep(30 * time.Millisecond)
+				mu.Lock()
+				*end = time.Now()
+				mu.Unlock()
+				return ToolResult{Content: "x"}
+			}
+		}
+		toolA := &mockTool{name: "tool_a", executeFn: mk(&aStart, &aEnd)}
+		toolB := &mockTool{name: "tool_b", executeFn: mk(&bStart, &bEnd)}
+
+		svc := &mockService{responses: []mockResponse{
+			twoToolCallResponse("tool_a", "tool_b"),
+			stopResponse("done"),
+		}}
+		ag := NewAgent(svc, NewRegistry(toolA, toolB), noSkills(), newMockStore(), NoMemory(), Config{SystemPrompt: "test"})
+
+		events := collectEvents(t, ag.Run(context.Background(), "d", "go"))
+
+		require.Len(t, eventsByType(events, EventToolResult), 2)
+		mu.Lock()
+		defer mu.Unlock()
+		assert.True(t, aStart.Before(bEnd) && bStart.Before(aEnd),
+			"non-mutator tools should overlap; a=[%v,%v] b=[%v,%v]", aStart, aEnd, bStart, bEnd)
+	})
+}
+
+// TestAgentRun_DeleteThenAddSamePathSucceeds reproduces RUNE-AGENT-98:
+// when the LLM batches a delete and a recreate of the same path, the
+// recreate must not observe the file before the delete completes. The
+// "rm" tool sleeps then removes; the "add" tool mirrors
+// applypatch.applyAdd by failing if the path still exists. Dispatcher
+// serialization makes the add run only after rm finished.
+func TestAgentRun_DeleteThenAddSamePathSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "foo.txt")
+	require.NoError(t, os.WriteFile(path, []byte("old\n"), 0o644))
+	const body = "new content\n"
+
+	rm := &mockTool{name: "bash", needsOrder: true}
+	rm.executeFn = func(context.Context, string) ToolResult {
+		time.Sleep(20 * time.Millisecond)
+		if err := os.Remove(path); err != nil {
+			return ToolResult{Content: err.Error(), IsError: true}
+		}
+		return ToolResult{Content: "removed"}
+	}
+	add := &mockTool{name: "apply_patch", needsOrder: true}
+	add.executeFn = func(context.Context, string) ToolResult {
+		if _, err := os.Stat(path); err == nil {
+			return ToolResult{Content: "applied 0/1 operations; errors: file already exists", IsError: true}
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			return ToolResult{Content: err.Error(), IsError: true}
+		}
+		return ToolResult{Content: "applied 1/1 operations successfully"}
+	}
+
+	svc := &mockService{responses: []mockResponse{
+		twoToolCallResponse("bash", "apply_patch"),
+		stopResponse("done"),
+	}}
+	ag := NewAgent(svc, NewRegistry(rm, add), noSkills(), newMockStore(), NoMemory(), Config{SystemPrompt: "test"})
+
+	events := collectEvents(t, ag.Run(context.Background(), "d", "delete and recreate foo.txt"))
+
+	results := eventsByType(events, EventToolResult)
+	require.Len(t, results, 2)
+	var addResult Event
+	for _, ev := range results {
+		if ev.ToolName == "apply_patch" {
+			addResult = ev
+		}
+	}
+	assert.False(t, addResult.IsError, "apply_patch must succeed; got: %s", addResult.ToolOutput)
+	assert.Equal(t, "applied 1/1 operations successfully", addResult.ToolOutput)
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, body, string(got))
+}
+
 func TestUnknownToolHintsReplacement(t *testing.T) {
 	t.Run("excluded-and-replaced tool hints the replacement", func(t *testing.T) {
 		svc := &mockService{responses: []mockResponse{
@@ -3367,6 +3504,7 @@ type mockTool struct {
 	description string
 	result      ToolResult
 	summary     string
+	needsOrder  bool
 	execCount   atomic.Int32
 	executeFn   func(ctx context.Context, arguments string) ToolResult
 }
@@ -3397,6 +3535,8 @@ func (t *mockTool) Execute(ctx context.Context, arguments string) ToolResult {
 func (t *mockTool) Summary(_ string) string {
 	return t.summary
 }
+
+func (t *mockTool) NeedsDeterministicOrder() bool { return t.needsOrder }
 
 func collectEvents(t *testing.T, it iterator.Iterator[Event]) []Event {
 	t.Helper()

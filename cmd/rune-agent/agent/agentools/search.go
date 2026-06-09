@@ -56,6 +56,8 @@ func newSearch(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileT
 	return &searchTool{fs: wfs, cwd: cwd, tracker: tracker}
 }
 
+func (t *searchTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *searchTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

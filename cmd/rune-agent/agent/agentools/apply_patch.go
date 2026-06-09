@@ -121,6 +121,8 @@ func (t *applyPatchTool) Summary(arguments string) string {
 	return strings.Join(paths, ", ")
 }
 
+func (t *applyPatchTool) NeedsDeterministicOrder() bool { return true }
+
 func (t *applyPatchTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args applyPatchArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {

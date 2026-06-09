@@ -1001,12 +1001,23 @@ func (a *Agent) run(
 				})
 			}
 
-			// 2. Fan out: launch all tool executions in parallel.
+			// 2. Fan out: launch all tool executions in parallel,
+			// unless a tool in the batch needs deterministic order, in
+			// which case run them sequentially in call order so file
+			// operations on the same path cannot race (RUNE-AGENT-98).
+			serialize := false
+			for _, info := range infos {
+				if info.found && info.tool.NeedsDeterministicOrder() {
+					serialize = true
+					break
+				}
+			}
+
 			results := make(chan executedToolCall, len(infos))
 			var wg sync.WaitGroup
 			for i, info := range infos {
 				wg.Add(1)
-				go debug.CapturePanicReport(func() {
+				run := func() {
 					func(i int, info toolCallInfo) {
 						defer wg.Done()
 						var result ToolResult
@@ -1049,7 +1060,12 @@ func (a *Agent) run(
 						result.Content = utf8validate.Sanitize(result.Content)
 						results <- executedToolCall{index: i, info: info, result: result, duration: dur}
 					}(i, info)
-				})
+				}
+				if serialize {
+					run()
+				} else {
+					go debug.CapturePanicReport(run)
+				}
 			}
 			go debug.CapturePanicReport(func() {
 				wg.Wait()

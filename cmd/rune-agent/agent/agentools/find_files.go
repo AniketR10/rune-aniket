@@ -55,6 +55,8 @@ func newFindFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *Fi
 	return &findFilesTool{fs: wfs, cwd: cwd, tracker: tracker}
 }
 
+func (t *findFilesTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *findFilesTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

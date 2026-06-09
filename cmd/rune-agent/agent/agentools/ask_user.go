@@ -60,6 +60,8 @@ func NewAskUser(prompter agent.Prompter) agent.Tool {
 	return &askUserTool{prompter: prompter}
 }
 
+func (t *askUserTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *askUserTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

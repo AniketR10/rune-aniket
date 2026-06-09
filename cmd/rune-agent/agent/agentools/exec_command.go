@@ -136,6 +136,8 @@ func (t *execCommandTool) Summary(arguments string) string {
 	return args.Cmd
 }
 
+func (t *execCommandTool) NeedsDeterministicOrder() bool { return true }
+
 func (t *execCommandTool) Execute(ctx context.Context, arguments string) agent.ToolResult {
 	var args execCommandArgs
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {

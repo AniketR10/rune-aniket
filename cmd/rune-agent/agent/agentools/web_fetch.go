@@ -53,6 +53,8 @@ func NewWebFetch(f webfetch.Fetcher) agent.Tool {
 	return &webFetchTool{fetcher: f}
 }
 
+func (t *webFetchTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *webFetchTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,

@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package geminitools
 
 import (
@@ -52,6 +51,8 @@ func (t *recordingTool) Execute(_ context.Context, arguments string) agent.ToolR
 }
 
 func (t *recordingTool) Summary(arguments string) string { return arguments }
+
+func (t *recordingTool) NeedsDeterministicOrder() bool { return false }
 
 func decode(t *testing.T, s string) map[string]any {
 	t.Helper()

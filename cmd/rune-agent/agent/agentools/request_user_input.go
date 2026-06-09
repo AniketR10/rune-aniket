@@ -60,6 +60,8 @@ func NewRequestUserInput(prompter agent.Prompter) agent.Tool {
 	return &requestUserInputTool{prompter: prompter}
 }
 
+func (t *requestUserInputTool) NeedsDeterministicOrder() bool { return false }
+
 func (t *requestUserInputTool) Definition() llmapi.Tool {
 	return llmapi.Tool{
 		Type: llmapi.ToolTypeFunction,
