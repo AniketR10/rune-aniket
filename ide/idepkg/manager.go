@@ -199,6 +199,11 @@ type Manager struct {
 
 	editorMode string
 
+	// configBase returns the editor's default config tree, used as the
+	// predeclared `config` base when reading the user's .star config so
+	// overlay-style mutations (config[...] = ...) resolve. May be nil.
+	configBase func() map[string]any
+
 	iterators struct {
 		sync.Mutex
 		m map[string]*sync.Mutex
@@ -834,7 +839,7 @@ func (m *Manager) promptConfigChange(
 			"before applying package updates: %s", backup)
 
 		if starConfig {
-			if err := starlarkconfig.WriteConfigFileAtomic(m.configPath, merged.starConfig); err != nil {
+			if err := starlarkconfig.WriteManagedConfigFileAtomic(m.configPath, merged.starDiff); err != nil {
 				return fmt.Errorf("write starlark config: %w", err)
 			}
 		} else {
@@ -910,7 +915,7 @@ func (m *Manager) processConfig(
 		return nil
 	}
 
-	userCfg, err := loadIdePkgConfigFile(m.configPath)
+	userCfg, err := loadIdePkgConfigFile(m.configPath, m.configBaseTree())
 	if err != nil {
 		return fmt.Errorf("load user config: %w", err)
 	}
@@ -983,12 +988,21 @@ func (m *Manager) untar(
 	return configFile, executables, nil
 }
 
-func loadIdePkgConfigFile(path string) (map[string]any, error) {
+func loadIdePkgConfigFile(path string, base map[string]any) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return loadIdePkgConfigFromBytes(path, data, "", "", "", "")
+	return loadIdePkgConfigFromBytes(path, data, base, "", "", "", "")
+}
+
+// configBaseTree returns the editor's default config tree to predeclare as
+// `config` when reading the user's .star config, or nil when unavailable.
+func (m *Manager) configBaseTree() map[string]any {
+	if m.configBase == nil {
+		return nil
+	}
+	return m.configBase()
 }
 
 // pkgConfigFile returns the path to the package's settings file inside dir.
@@ -1028,20 +1042,25 @@ func idePkgStarlarkParams(
 }
 
 func loadIdePkgConfigFromBytes(
-	filename string, data []byte,
+	filename string, data []byte, base map[string]any,
 	pkgID string, pkgVersion release.Version, dataDir string,
 	editorMode string,
 ) (map[string]any, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".star") {
+		// User configs are authored as overlays that mutate a
+		// predeclared `config` (config[...] = ...) and never bind it,
+		// matching how the editor loads them. Decode in overlay mode
+		// against the editor's default config tree so subscript
+		// mutations on nested keys — and Rune's appended managed block's
+		// reference to `config` — resolve without "undefined: config".
+		// A nil base still predeclares `config` as an empty dict, so
+		// empty or comments-only files yield an empty configuration.
 		cfg, err := starlarkconfig.Decode(starlarkconfig.Source{
 			Src:      data,
 			Filename: filename,
 			Params:   idePkgStarlarkParams(pkgID, pkgVersion, dataDir, editorMode),
+			Base:     base,
 		})
-		// A user config file is allowed to be empty or contain only
-		// comments. Treat a missing top-level `config` binding as an
-		// empty configuration so the package overlay can still create
-		// one.
 		if errors.Is(err, starlarkconfig.ErrMissingConfig) {
 			return map[string]any{}, nil
 		}
@@ -1070,8 +1089,8 @@ func loadIdePkgConfigOverlay(
 			Base:     base,
 		})
 	}
-	return loadIdePkgConfigFromBytes(filename, data, pkgID, pkgVersion, dataDir,
-		editorMode)
+	return loadIdePkgConfigFromBytes(filename, data, base, pkgID, pkgVersion,
+		dataDir, editorMode)
 }
 
 func normalizeIdePkgConfig(v any) any {
@@ -1164,10 +1183,10 @@ func isVersionDependentScalar(versionDependent map[string]any, key string) bool 
 // so a changed resolved value should re-prompt (RUNE-225). It must be
 // computed before expandMapValues replaces the template with its value.
 //
-// Limitation: this applies to the YAML overlay path only. For .star
-// overlays starlarkconfig.Decode resolves RUNE_PKG_VERSION during decode,
-// so the literal template is gone by the time this runs and such keys are
-// not detected as version-dependent.
+// This handles the YAML overlay path, where the raw $RUNE_PKG_VERSION
+// template survives in the decoded map. The .star path resolves the
+// template during decode, so its version-dependent leaves are detected
+// separately by versionDependentByDecode.
 func versionDependentKeys(overlay map[string]any) map[string]any {
 	var out map[string]any
 	for key, val := range overlay {
@@ -1190,6 +1209,71 @@ func versionDependentKeys(overlay map[string]any) map[string]any {
 			}
 			out[key] = true
 		}
+	}
+	return out
+}
+
+// versionDependentSentinel is an implausible package version used to
+// re-resolve a .star overlay so that leaves whose value depends on
+// $RUNE_PKG_VERSION can be detected by comparison.
+const versionDependentSentinel = "\x00rune-version-sentinel\x00"
+
+// versionDependentOverlayKeys returns the version-dependent structure for
+// the overlay, dispatching by format so .star and YAML re-prompt
+// identically on version bumps (RUNE-225). overlay is the overlay decoded
+// for the real version; for YAML it still carries raw $RUNE_PKG_VERSION
+// templates, while for .star the template is already resolved and must be
+// detected by decoding a second time with a sentinel version.
+func versionDependentOverlayKeys(
+	filename string, data []byte, overlay map[string]any,
+	pkgID string, dataDir, editorMode string,
+) (map[string]any, error) {
+	if !strings.HasSuffix(strings.ToLower(filename), ".star") {
+		return versionDependentKeys(overlay), nil
+	}
+	sentinel, err := loadIdePkgConfigOverlay(
+		filename, data, map[string]any{},
+		pkgID, versionDependentSentinel, dataDir, editorMode,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("decode package config (version probe): %w", err)
+	}
+	return versionDependentByDecode(overlay, sentinel), nil
+}
+
+// versionDependentByDecode returns a structure mirroring real's nesting
+// that marks every scalar leaf whose value differs from sentinel, i.e. the
+// leaves that changed solely because RUNE_PKG_VERSION changed.
+func versionDependentByDecode(real, sentinel map[string]any) map[string]any {
+	var out map[string]any
+	for key, realVal := range real {
+		sentinelVal, ok := sentinel[key]
+		if !ok {
+			continue
+		}
+		realMap, realIsMap := realVal.(map[string]any)
+		sentinelMap, sentinelIsMap := sentinelVal.(map[string]any)
+		if realIsMap && sentinelIsMap {
+			nested := versionDependentByDecode(realMap, sentinelMap)
+			if nested == nil {
+				continue
+			}
+			if out == nil {
+				out = map[string]any{}
+			}
+			out[key] = nested
+			continue
+		}
+		if realIsMap || sentinelIsMap {
+			continue
+		}
+		if fmt.Sprint(realVal) == fmt.Sprint(sentinelVal) {
+			continue
+		}
+		if out == nil {
+			out = map[string]any{}
+		}
+		out[key] = true
 	}
 	return out
 }

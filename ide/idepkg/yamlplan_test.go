@@ -180,34 +180,39 @@ func TestBuildMergedConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		user string
-		pkg  string
-		want map[string]any
+		name     string
+		user     string
+		pkg      string
+		want     map[string]any
+		wantDiff map[string]any
 	}{
 		{
-			name: "append new key",
-			user: "a: 1\n",
-			pkg:  "b: 2\n",
-			want: map[string]any{"a": 1, "b": 2},
+			name:     "append new key",
+			user:     "a: 1\n",
+			pkg:      "b: 2\n",
+			want:     map[string]any{"a": 1, "b": 2},
+			wantDiff: map[string]any{"b": 2},
 		},
 		{
-			name: "overwrite version-dependent key",
-			user: "goroot: /old\n",
-			pkg:  "goroot: /new\n",
-			want: map[string]any{"goroot": "/new"},
+			name:     "overwrite version-dependent key",
+			user:     "goroot: /old\n",
+			pkg:      "goroot: /new\n",
+			want:     map[string]any{"goroot": "/new"},
+			wantDiff: map[string]any{"goroot": "/new"},
 		},
 		{
-			name: "preserve untouched user keys",
-			user: "a: 1\nkeep: yes\n",
-			pkg:  "b: 2\n",
-			want: map[string]any{"a": 1, "keep": "yes", "b": 2},
+			name:     "preserve untouched user keys",
+			user:     "a: 1\nkeep: yes\n",
+			pkg:      "b: 2\n",
+			want:     map[string]any{"a": 1, "keep": "yes", "b": 2},
+			wantDiff: map[string]any{"b": 2},
 		},
 		{
-			name: "nested merge adds sub-key without clobbering siblings",
-			user: "env:\n  A: 1\n",
-			pkg:  "env:\n  B: 2\n",
-			want: map[string]any{"env": map[string]any{"A": 1, "B": 2}},
+			name:     "nested merge adds sub-key without clobbering siblings",
+			user:     "env:\n  A: 1\n",
+			pkg:      "env:\n  B: 2\n",
+			want:     map[string]any{"env": map[string]any{"A": 1, "B": 2}},
+			wantDiff: map[string]any{"env": map[string]any{"B": 2}},
 		},
 	}
 
@@ -219,7 +224,7 @@ func TestBuildMergedConfig(t *testing.T) {
 			merged, err := buildMergedConfig(userDoc, pkgDoc, false)
 			require.NoError(t, err)
 			require.NotNil(t, merged.yamlDoc)
-			assert.Nil(t, merged.starConfig)
+			assert.Nil(t, merged.starDiff)
 			assert.Equal(t, normalizeYAML(t, tt.want), docToMap(t, merged.yamlDoc))
 		})
 		t.Run("star/"+tt.name, func(t *testing.T) {
@@ -228,8 +233,8 @@ func TestBuildMergedConfig(t *testing.T) {
 			pkgDoc := mustParseYAML(t, tt.pkg)
 			merged, err := buildMergedConfig(userDoc, pkgDoc, true)
 			require.NoError(t, err)
-			require.NotNil(t, merged.starConfig)
-			assert.Equal(t, normalizeYAML(t, tt.want), merged.starConfig)
+			require.NotNil(t, merged.starDiff)
+			assert.Equal(t, normalizeYAML(t, tt.wantDiff), merged.starDiff)
 		})
 	}
 }
@@ -250,4 +255,56 @@ func normalizeYAML(t *testing.T, want map[string]any) map[string]any {
 	var out map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &out))
 	return normalizeIdePkgConfig(out).(map[string]any)
+}
+
+// TestVersionDependentByDecode asserts that diffing a real-version decode
+// against a sentinel-version decode marks exactly the leaves whose value
+// changed, mirroring the nesting, so .star overlays re-prompt on version
+// bumps identically to YAML (RUNE-225).
+func TestVersionDependentByDecode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		real, sentinel map[string]any
+		want           map[string]any
+	}{
+		{
+			name:     "no difference",
+			real:     map[string]any{"a": "x"},
+			sentinel: map[string]any{"a": "x"},
+			want:     nil,
+		},
+		{
+			name:     "top-level scalar differs",
+			real:     map[string]any{"a": "v1", "b": "same"},
+			sentinel: map[string]any{"a": "v0", "b": "same"},
+			want:     map[string]any{"a": true},
+		},
+		{
+			name:     "nested scalar differs keeps sibling untouched",
+			real:     map[string]any{"env": map[string]any{"GOROOT": "/1", "STATIC": "x"}},
+			sentinel: map[string]any{"env": map[string]any{"GOROOT": "/0", "STATIC": "x"}},
+			want:     map[string]any{"env": map[string]any{"GOROOT": true}},
+		},
+		{
+			name:     "key missing in sentinel is ignored",
+			real:     map[string]any{"a": "v1"},
+			sentinel: map[string]any{},
+			want:     nil,
+		},
+		{
+			name:     "type change map vs scalar is not version-dependent",
+			real:     map[string]any{"a": map[string]any{"b": 1}},
+			sentinel: map[string]any{"a": "scalar"},
+			want:     nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, versionDependentByDecode(tt.real, tt.sentinel))
+		})
+	}
 }

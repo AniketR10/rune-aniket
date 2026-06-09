@@ -66,7 +66,13 @@ func planConfigChange(
 		return configChangePlan{}, nil
 	}
 
-	versionDependent := versionDependentKeys(pkgOverlayCfg)
+	versionDependent, err := versionDependentOverlayKeys(
+		pkgConfigFile, pkgConfigData, pkgOverlayCfg,
+		pkgID, dataDir, editorMode,
+	)
+	if err != nil {
+		return configChangePlan{}, err
+	}
 	expandMapValues(pkgOverlayCfg, runeVarMapping)
 
 	missingCfg := idePkgMissingKeys(userCfg, pkgOverlayCfg, versionDependent)
@@ -97,20 +103,22 @@ func planConfigChange(
 }
 
 type mergedConfig struct {
-	yamlDoc    *yaml.Node
-	starConfig map[string]any
+	yamlDoc *yaml.Node
+	// starDiff is the approved diff to deep-merge into the managed
+	// rune_config section. It is only populated on the .star path.
+	starDiff map[string]any
 }
 
 func buildMergedConfig(
 	userDoc, pkgDoc *yaml.Node, starConfig bool,
 ) (mergedConfig, error) {
+	if starConfig {
+		diff, err := loadIdePkgConfigFromYAMLDoc(pkgDoc)
+		if err != nil {
+			return mergedConfig{}, fmt.Errorf("decode package diff doc: %w", err)
+		}
+		return mergedConfig{starDiff: diff}, nil
+	}
 	applyConfigDiff(userDoc.Content[0], pkgDoc.Content[0])
-	if !starConfig {
-		return mergedConfig{yamlDoc: userDoc}, nil
-	}
-	mergedCfg, err := loadIdePkgConfigFromYAMLDoc(userDoc)
-	if err != nil {
-		return mergedConfig{}, fmt.Errorf("decode merged yaml doc: %w", err)
-	}
-	return mergedConfig{yamlDoc: userDoc, starConfig: mergedCfg}, nil
+	return mergedConfig{yamlDoc: userDoc}, nil
 }

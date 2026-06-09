@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -61,6 +62,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/starlarkconfig"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -1251,9 +1253,26 @@ func readUserConfig(t *testing.T, datadir string) *yaml.Node {
 
 func readUserConfigMap(t *testing.T, path string) map[string]any {
 	t.Helper()
-	cfg, err := loadIdePkgConfigFile(path)
+	return readUserConfigMapBase(t, path, nil)
+}
+
+func readUserConfigMapBase(t *testing.T, path string, base map[string]any) map[string]any {
+	t.Helper()
+	cfg, err := loadIdePkgConfigFile(path, base)
 	require.NoError(t, err)
 	return cfg
+}
+
+func deepCopyConfig(v map[string]any) map[string]any {
+	out := make(map[string]any, len(v))
+	for k, val := range v {
+		if m, ok := val.(map[string]any); ok {
+			out[k] = deepCopyConfig(m)
+			continue
+		}
+		out[k] = val
+	}
+	return out
 }
 
 func assertYAMLKey(t *testing.T, mapping *yaml.Node, key, expected string) {
@@ -1553,6 +1572,13 @@ func TestInstallPackageVersionConfigEmptyUserConfig(t *testing.T) {
 			require.True(t, ok, "settings not present in merged config: %#v", cfg)
 			assert.Equal(t, "dark", fmt.Sprint(settings["theme"]))
 			assert.Equal(t, "4", fmt.Sprint(settings["indent"]))
+
+			if strings.HasSuffix(strings.ToLower(configPath), ".star") {
+				raw, err := os.ReadFile(configPath)
+				require.NoError(t, err)
+				assert.Contains(t, string(raw), starlarkconfig.ManagedBegin)
+				assert.Contains(t, string(raw), starlarkconfig.ManagedEnd)
+			}
 		})
 	}
 }
@@ -2819,7 +2845,7 @@ else:
 		t.Run(tc.mode, func(t *testing.T) {
 			got, err := loadIdePkgConfigFromBytes(
 				"config.star", []byte(src),
-				"pkg", release.Version("1"), "/data",
+				nil, "pkg", release.Version("1"), "/data",
 				tc.mode,
 			)
 			require.NoError(t, err)
@@ -2866,7 +2892,7 @@ func TestLoadUserConfigStarEmptyOrCommentsOnly(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := loadIdePkgConfigFromBytes(
 				"config.star", []byte(tc.src),
-				"pkg", release.Version("1"), "/data", "modal",
+				nil, "pkg", release.Version("1"), "/data", "modal",
 			)
 			require.NoError(t, err)
 			assert.Equal(t, map[string]any{}, got)
@@ -2928,4 +2954,660 @@ func TestCopyExecutablesMissingSource(t *testing.T) {
 	entries, derr := os.ReadDir(dstDir)
 	require.NoError(t, derr)
 	assert.Empty(t, entries, "no temp files left behind on error")
+}
+
+// mergeStep is one apply iteration in a TestConfigMergeIntegration case:
+// it supplies the package overlay and version, and the expectations to
+// check after the apply.
+type mergeStep struct {
+	pkgConfig       string
+	version         string
+	wantPrompt      bool
+	wantConfig      map[string]any
+	wantContains    []string
+	wantNotContains []string
+}
+
+// TestConfigMergeIntegration is the black-box contract for extension config
+// updates. It drives the real production path (processConfig ->
+// planConfigChange -> auto-accepted prompt -> buildMergedConfig -> atomic
+// write) for both .star and .yaml user configs, asserting only inputs and
+// final on-disk + decoded outputs. It is the primary guard for RUNE-225:
+// .star updates must preserve user comments, helpers, and custom logic.
+func TestConfigMergeIntegration(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		configName string
+		base       map[string]any
+		userConfig string
+		steps      []mergeStep
+	}{
+		{
+			name:       "star comments and helper preserved",
+			configName: "config.star",
+			userConfig: "# top comment\n" +
+				"def merge(a, b):\n    return a\n\n" +
+				"config = {\"editor\": {\"mode\": \"exo\"}}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"editor": map[string]any{"mode": "exo"},
+					"env":    map[string]any{"GOROOT": "/go"},
+				},
+				wantContains: []string{
+					"# top comment", "def merge(a, b):",
+					starlarkconfig.ManagedBegin, starlarkconfig.ManagedEnd,
+				},
+			}},
+		},
+		{
+			name:       "star fresh empty user config",
+			configName: "config.star",
+			userConfig: "",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
+				wantContains: []string{
+					starlarkconfig.ManagedBegin, "config = {}",
+				},
+			}},
+		},
+		{
+			name:       "star comments-only user config",
+			configName: "config.star",
+			userConfig: "# just a comment\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
+				wantContains: []string{
+					"# just a comment", starlarkconfig.ManagedBegin,
+				},
+			}},
+		},
+		{
+			name:       "star deep merge keeps sibling",
+			configName: "config.star",
+			userConfig: "config = {\"settings\": {\"theme\": \"light\"}}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"settings\": {\"indent\": 4}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"settings": map[string]any{"theme": "light", "indent": 4},
+				},
+			}},
+		},
+		{
+			name:       "star static user scalar preserved",
+			configName: "config.star",
+			userConfig: "config = {\"settings\": {\"theme\": \"light\"}}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"settings\": {\"theme\": \"dark\"}}\n",
+				version:    "1",
+				wantPrompt: false,
+				wantConfig: map[string]any{
+					"settings": map[string]any{"theme": "light"},
+				},
+				wantNotContains: []string{starlarkconfig.ManagedBegin},
+			}},
+		},
+		{
+			name:       "star accumulation across extensions",
+			configName: "config.star",
+			userConfig: "config = {}\n",
+			steps: []mergeStep{
+				{
+					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+					version:    "1",
+					wantPrompt: true,
+					wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
+				},
+				{
+					pkgConfig:  "config = {\"settings\": {\"indent\": 4}}\n",
+					version:    "1",
+					wantPrompt: true,
+					wantConfig: map[string]any{
+						"env":      map[string]any{"GOROOT": "/go"},
+						"settings": map[string]any{"indent": 4},
+					},
+				},
+			},
+		},
+		{
+			name:       "star already merged no prompt",
+			configName: "config.star",
+			userConfig: "config = {}\n",
+			steps: []mergeStep{
+				{
+					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+					version:    "1",
+					wantPrompt: true,
+				},
+				{
+					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+					version:    "1",
+					wantPrompt: false,
+				},
+			},
+		},
+		{
+			name:       "yaml new key",
+			configName: "config.yaml",
+			userConfig: "a: 1\n",
+			steps: []mergeStep{{
+				pkgConfig:  "env:\n  GOROOT: /go\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"a": 1, "env": map[string]any{"GOROOT": "/go"}},
+			}},
+		},
+		{
+			name:       "yaml nested sibling merge keeps siblings",
+			configName: "config.yaml",
+			userConfig: "settings:\n  theme: light\n",
+			steps: []mergeStep{{
+				pkgConfig:  "settings:\n  indent: 4\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"settings": map[string]any{"theme": "light", "indent": 4},
+				},
+			}},
+		},
+		{
+			name:       "yaml static scalar preserved",
+			configName: "config.yaml",
+			userConfig: "settings:\n  theme: light\n",
+			steps: []mergeStep{{
+				pkgConfig:  "settings:\n  theme: dark\n",
+				version:    "1",
+				wantPrompt: false,
+				wantConfig: map[string]any{"settings": map[string]any{"theme": "light"}},
+			}},
+		},
+		// ---- parity edge cases: .star and .yaml must agree ----
+		{
+			name:       "star list new key added",
+			configName: "config.star",
+			userConfig: "config = {}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"plugins\": [\"a\", \"b\"]}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"plugins": []any{"a", "b"}},
+			}},
+		},
+		{
+			name:       "yaml list new key added",
+			configName: "config.yaml",
+			userConfig: "{}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "plugins:\n  - a\n  - b\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"plugins": []any{"a", "b"}},
+			}},
+		},
+		{
+			name:       "star existing list key preserved no prompt",
+			configName: "config.star",
+			userConfig: "config = {\"plugins\": [\"x\"]}\n",
+			steps: []mergeStep{{
+				pkgConfig:       "config = {\"plugins\": [\"a\", \"b\"]}\n",
+				version:         "1",
+				wantPrompt:      false,
+				wantConfig:      map[string]any{"plugins": []any{"x"}},
+				wantNotContains: []string{starlarkconfig.ManagedBegin},
+			}},
+		},
+		{
+			name:       "yaml existing list key preserved no prompt",
+			configName: "config.yaml",
+			userConfig: "plugins:\n  - x\n",
+			steps: []mergeStep{{
+				pkgConfig:  "plugins:\n  - a\n  - b\n",
+				version:    "1",
+				wantPrompt: false,
+				wantConfig: map[string]any{"plugins": []any{"x"}},
+			}},
+		},
+		{
+			name:       "star null value new key",
+			configName: "config.star",
+			userConfig: "config = {}\n",
+			steps: []mergeStep{{
+				pkgConfig:    "config = {\"feature\": None}\n",
+				version:      "1",
+				wantPrompt:   true,
+				wantConfig:   map[string]any{"feature": nil},
+				wantContains: []string{"\"feature\": None"},
+			}},
+		},
+		{
+			name:       "yaml null value new key",
+			configName: "config.yaml",
+			userConfig: "{}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "feature:\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"feature": nil},
+			}},
+		},
+		{
+			name:       "star user scalar vs overlay map preserves user no prompt",
+			configName: "config.star",
+			userConfig: "config = {\"x\": 1}\n",
+			steps: []mergeStep{{
+				pkgConfig:       "config = {\"x\": {\"y\": 2}}\n",
+				version:         "1",
+				wantPrompt:      false,
+				wantConfig:      map[string]any{"x": 1},
+				wantNotContains: []string{starlarkconfig.ManagedBegin},
+			}},
+		},
+		{
+			name:       "yaml user scalar vs overlay map preserves user no prompt",
+			configName: "config.yaml",
+			userConfig: "x: 1\n",
+			steps: []mergeStep{{
+				pkgConfig:  "x:\n  y: 2\n",
+				version:    "1",
+				wantPrompt: false,
+				wantConfig: map[string]any{"x": 1},
+			}},
+		},
+		{
+			name:       "star user map vs overlay scalar preserves user no prompt",
+			configName: "config.star",
+			userConfig: "config = {\"x\": {\"y\": 2}}\n",
+			steps: []mergeStep{{
+				pkgConfig:       "config = {\"x\": 1}\n",
+				version:         "1",
+				wantPrompt:      false,
+				wantConfig:      map[string]any{"x": map[string]any{"y": 2}},
+				wantNotContains: []string{starlarkconfig.ManagedBegin},
+			}},
+		},
+		{
+			name:       "yaml user map vs overlay scalar preserves user no prompt",
+			configName: "config.yaml",
+			userConfig: "x:\n  y: 2\n",
+			steps: []mergeStep{{
+				pkgConfig:  "x: 1\n",
+				version:    "1",
+				wantPrompt: false,
+				wantConfig: map[string]any{"x": map[string]any{"y": 2}},
+			}},
+		},
+		{
+			name:       "star mixed scalar types added",
+			configName: "config.star",
+			userConfig: "config = {}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"b\": True, \"i\": 7, \"f\": 1.5, \"s\": \"hi\"}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"b": true, "i": 7, "f": 1.5, "s": "hi"},
+			}},
+		},
+		{
+			name:       "yaml mixed scalar types added",
+			configName: "config.yaml",
+			userConfig: "{}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "b: true\ni: 7\nf: 1.5\ns: hi\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"b": true, "i": 7, "f": 1.5, "s": "hi"},
+			}},
+		},
+		{
+			name:       "star deep nested add leaf keeps sibling",
+			configName: "config.star",
+			userConfig: "config = {\"a\": {\"b\": {\"c\": 1}}}\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"a\": {\"b\": {\"d\": 2}}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"a": map[string]any{"b": map[string]any{"c": 1, "d": 2}},
+				},
+			}},
+		},
+		{
+			name:       "yaml deep nested add leaf keeps sibling",
+			configName: "config.yaml",
+			userConfig: "a:\n  b:\n    c: 1\n",
+			steps: []mergeStep{{
+				pkgConfig:  "a:\n  b:\n    d: 2\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"a": map[string]any{"b": map[string]any{"c": 1, "d": 2}},
+				},
+			}},
+		},
+		{
+			name:       "star empty overlay is a no-op",
+			configName: "config.star",
+			userConfig: "config = {\"a\": 1}\n",
+			steps: []mergeStep{{
+				pkgConfig:       "config = {}\n",
+				version:         "1",
+				wantPrompt:      false,
+				wantConfig:      map[string]any{"a": 1},
+				wantNotContains: []string{starlarkconfig.ManagedBegin},
+			}},
+		},
+		{
+			name:       "yaml empty overlay is a no-op",
+			configName: "config.yaml",
+			userConfig: "a: 1\n",
+			steps: []mergeStep{{
+				pkgConfig:  "{}\n",
+				version:    "1",
+				wantPrompt: false,
+				wantConfig: map[string]any{"a": 1},
+			}},
+		},
+		{
+			name:       "star subscript-mutated config preserved",
+			configName: "config.star",
+			userConfig: "config = {\"editor\": {}}\nconfig[\"editor\"][\"mode\"] = \"exo\"\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"editor": map[string]any{"mode": "exo"},
+					"env":    map[string]any{"GOROOT": "/go"},
+				},
+				wantContains: []string{"config[\"editor\"][\"mode\"] = \"exo\""},
+			}},
+		},
+		{
+			// Bootstrap-generated user configs never bind `config`; they
+			// only mutate the predeclared overlay dict (config[...] = ...).
+			// Rune must read and update these without "undefined: config".
+			name:       "star overlay-style config without binding",
+			configName: "config.star",
+			base:       map[string]any{"editor": map[string]any{"mode": "modeless"}},
+			userConfig: "config[\"editor\"][\"mode\"] = \"modal\"\n",
+			steps: []mergeStep{{
+				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{
+					"editor": map[string]any{"mode": "modal"},
+					"env":    map[string]any{"GOROOT": "/go"},
+				},
+				wantContains: []string{"config[\"editor\"][\"mode\"] = \"modal\""},
+			}},
+		},
+		{
+			name:       "star vdep nested keeps static sibling across bump",
+			configName: "config.star",
+			userConfig: "config = {}\n",
+			steps: []mergeStep{
+				{
+					pkgConfig:  "config = {\"env\": {\"GOROOT\": RUNE_DATADIR + \"/\" + RUNE_PKG_VERSION, \"STATIC\": \"x\"}}\n",
+					version:    "1",
+					wantPrompt: true,
+				},
+				{
+					pkgConfig:  "config = {\"env\": {\"GOROOT\": RUNE_DATADIR + \"/\" + RUNE_PKG_VERSION, \"STATIC\": \"y\"}}\n",
+					version:    "2",
+					wantPrompt: true,
+				},
+			},
+		},
+		{
+			name:       "yaml vdep nested keeps static sibling across bump",
+			configName: "config.yaml",
+			userConfig: "{}\n",
+			steps: []mergeStep{
+				{
+					pkgConfig:  "env:\n  GOROOT: $RUNE_DATADIR/$RUNE_PKG_VERSION\n  STATIC: x\n",
+					version:    "1",
+					wantPrompt: true,
+				},
+				{
+					pkgConfig:  "env:\n  GOROOT: $RUNE_DATADIR/$RUNE_PKG_VERSION\n  STATIC: y\n",
+					version:    "2",
+					wantPrompt: true,
+				},
+			},
+		},
+		{
+			name:       "star whitespace-only user config seeds and merges",
+			configName: "config.star",
+			userConfig: "\n   \n\t\n",
+			steps: []mergeStep{{
+				pkgConfig:    "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+				version:      "1",
+				wantPrompt:   true,
+				wantConfig:   map[string]any{"env": map[string]any{"GOROOT": "/go"}},
+				wantContains: []string{"config = {}", starlarkconfig.ManagedBegin},
+			}},
+		},
+		{
+			name:       "yaml empty user config merges",
+			configName: "config.yaml",
+			userConfig: "",
+			steps: []mergeStep{{
+				pkgConfig:  "env:\n  GOROOT: /go\n",
+				version:    "1",
+				wantPrompt: true,
+				wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
+			}},
+		},
+		{
+			name:       "star stray marker in user comment survives accumulation",
+			configName: "config.star",
+			userConfig: "config = {\"a\": 1}\n" +
+				starlarkconfig.ManagedBegin + "\n# trailing user note\n",
+			steps: []mergeStep{
+				{
+					pkgConfig:    "config = {\"b\": 2}\n",
+					version:      "1",
+					wantPrompt:   true,
+					wantConfig:   map[string]any{"a": 1, "b": 2},
+					wantContains: []string{"# trailing user note"},
+				},
+				{
+					pkgConfig:    "config = {\"c\": 3}\n",
+					version:      "1",
+					wantPrompt:   true,
+					wantConfig:   map[string]any{"a": 1, "b": 2, "c": 3},
+					wantContains: []string{"# trailing user note"},
+				},
+			},
+		},
+		{
+			name:       "star multi-extension accumulation three steps",
+			configName: "config.star",
+			userConfig: "config = {\"user\": \"keep\"}\n",
+			steps: []mergeStep{
+				{
+					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
+					version:    "1",
+					wantPrompt: true,
+					wantConfig: map[string]any{
+						"user": "keep",
+						"env":  map[string]any{"GOROOT": "/go"},
+					},
+				},
+				{
+					pkgConfig:  "config = {\"settings\": {\"indent\": 4}}\n",
+					version:    "1",
+					wantPrompt: true,
+					wantConfig: map[string]any{
+						"user":     "keep",
+						"env":      map[string]any{"GOROOT": "/go"},
+						"settings": map[string]any{"indent": 4},
+					},
+				},
+				{
+					pkgConfig:  "config = {\"env\": {\"GOPATH\": \"/gp\"}}\n",
+					version:    "1",
+					wantPrompt: true,
+					wantConfig: map[string]any{
+						"user":     "keep",
+						"env":      map[string]any{"GOROOT": "/go", "GOPATH": "/gp"},
+						"settings": map[string]any{"indent": 4},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pkgs := idepkgtest.MakePackages()
+			versions := idepkgtest.MakeBundles([]release.Bundle{
+				{Package: "mpkg", Version: "1"},
+				{Package: "mpkg", Version: "2"},
+			})
+			m, n, _, datadir := newTestManager(t, pkgs, versions)
+			m.configPath = filepath.Join(datadir, tc.configName)
+			if tc.base != nil {
+				base := tc.base
+				m.configBase = func() map[string]any { return deepCopyConfig(base) }
+			}
+			require.NoError(t, os.WriteFile(m.configPath, []byte(tc.userConfig), 0o644))
+
+			var promptCount int
+			m.wm = &mockWindowManager{
+				floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+					promptCount++
+					h.Resize(70, 20)
+					h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+					return &mockWindow{}, nil
+				},
+			}
+
+			pkgDir := t.TempDir()
+			for i, step := range tc.steps {
+				prev := promptCount
+				pkgConfig := filepath.Join(pkgDir, tc.configName)
+				require.NoError(t, os.WriteFile(pkgConfig, []byte(step.pkgConfig), 0o644))
+
+				require.NoError(t, m.processConfig("mpkg", release.Version(step.version), pkgConfig),
+					"step %d", i)
+				n.RequireNoErrorNotification()
+
+				if step.wantPrompt {
+					assert.Equal(t, prev+1, promptCount, "step %d expected a prompt", i)
+				} else {
+					assert.Equal(t, prev, promptCount, "step %d expected no prompt", i)
+				}
+
+				if step.wantConfig != nil {
+					got := readUserConfigMapBase(t, m.configPath, m.configBaseTree())
+					assert.Equal(t, normalizeYAML(t, step.wantConfig), got, "step %d decoded config", i)
+				}
+
+				raw, err := os.ReadFile(m.configPath)
+				require.NoError(t, err)
+				for _, want := range step.wantContains {
+					assert.Contains(t, string(raw), want, "step %d must contain", i)
+				}
+				for _, notWant := range step.wantNotContains {
+					assert.NotContains(t, string(raw), notWant, "step %d must not contain", i)
+				}
+				// Rune renders exactly one managed block. Counting the
+				// end marker (which only Rune emits) is robust to a user
+				// who pasted a bare begin-marker line into a comment.
+				assert.LessOrEqual(t, strings.Count(string(raw), starlarkconfig.ManagedEnd), 1,
+					"step %d managed block duplicated", i)
+			}
+		})
+	}
+
+	// Version-dependent re-prompt must behave identically for .star and
+	// .yaml overlays: a value that resolves differently across package
+	// versions re-prompts and updates, while a value unchanged across the
+	// bump does not. This is the .star counterpart of
+	// TestProcessConfigRepromptsOnVersionDependentChange.
+	t.Run("star version-dependent re-prompts and updates on bump", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+			{Package: "vpkg", Version: "2"},
+		})
+		m, _, _, datadir := newTestManager(t, pkgs, versions)
+		m.configPath = filepath.Join(datadir, "config.star")
+		require.NoError(t, os.WriteFile(m.configPath, []byte("config = {}\n"), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.star")
+		src := "config = {\"env\": {\"GOROOT\": RUNE_DATADIR + \"/pkg/\" + RUNE_PKG_ID + \"/\" + RUNE_PKG_VERSION + \"/go\"}}\n"
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(src), 0o644))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		assert.Equal(t, 1, promptCount, "first install prompts for the new key")
+		cfg := readUserConfigMap(t, m.configPath)
+		env := cfg["env"].(map[string]any)
+		assert.Equal(t, filepath.Join(datadir, "pkg", "vpkg", "1", "go"), fmt.Sprint(env["GOROOT"]))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
+		assert.Equal(t, 2, promptCount, "version bump re-prompts the version-dependent key")
+		cfg = readUserConfigMap(t, m.configPath)
+		env = cfg["env"].(map[string]any)
+		assert.Equal(t, filepath.Join(datadir, "pkg", "vpkg", "2", "go"), fmt.Sprint(env["GOROOT"]))
+
+		raw, err := os.ReadFile(m.configPath)
+		require.NoError(t, err)
+		assert.Equal(t, 1, strings.Count(string(raw), starlarkconfig.ManagedBegin),
+			"version bump updates in place without duplicating the managed block")
+	})
+
+	t.Run("star version-dependent does not re-prompt when unchanged", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+		})
+		m, _, _, datadir := newTestManager(t, pkgs, versions)
+		m.configPath = filepath.Join(datadir, "config.star")
+		require.NoError(t, os.WriteFile(m.configPath, []byte("config = {}\n"), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.star")
+		src := "config = {\"env\": {\"GOROOT\": RUNE_DATADIR + \"/pkg/\" + RUNE_PKG_ID + \"/\" + RUNE_PKG_VERSION + \"/go\"}}\n"
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(src), 0o644))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		assert.Equal(t, 1, promptCount, "unchanged version-dependent value must not re-prompt")
+	})
 }

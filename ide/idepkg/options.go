@@ -53,3 +53,14 @@ func WithEditorMode(mode string) Option {
 		m.editorMode = mode
 	}
 }
+
+// WithConfigBase sets a provider for the editor's default config tree. It is
+// predeclared as `config` when reading the user's .star config so
+// overlay-style mutations (config[...] = ...) and Rune's managed block
+// resolve without binding `config`. The provider is called per read so it
+// reflects the current configuration.
+func WithConfigBase(base func() map[string]any) Option {
+	return func(m *Manager) {
+		m.configBase = base
+	}
+}

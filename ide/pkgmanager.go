@@ -81,6 +81,13 @@ func (m *pkgManager) init(
 		idepkg.WithFrameCharSet(fcs),
 		idepkg.WithSyntaxParser(parser),
 		idepkg.WithEditorMode(editorMode),
+		idepkg.WithConfigBase(func() map[string]any {
+			cfg, err := wh.reloadConfig()
+			if err != nil {
+				return nil
+			}
+			return cfg.cfg
+		}),
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick
