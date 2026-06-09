@@ -34,6 +34,9 @@ Good starting points at the workspace root:
 - `/troubleshoot.md` — common issues and fixes.
 - `/develop/` — developer-facing material (SDK, extensions).
 - `/learn/` — task-oriented guides and tutorials.
+- `/defaults.star` — the configuration shipped with Rune, in
+  Starlark. Read this to see the exact default value of any setting
+  before answering a configuration question.
 
 When a user asks about a feature, prefer this flow:
 
@@ -43,9 +46,14 @@ When a user asks about a feature, prefer this flow:
 3. Quote or paraphrase the documentation, and cite the file path
    (e.g. `config.md`) so the user can verify.
 
-If nothing in the workspace matches, reply with something like
-"The embedded Rune docs do not cover this" rather than speculating
-about behavior, config keys, or product names.
+If nothing in the guides matches, check `/defaults.star` before
+giving up: anything a guide does not explain may still be present
+there, especially when the user wants to configure something about
+Rune. The shipped defaults often reveal the exact key name,
+accepted values, and default for a setting the prose does not cover.
+Only if neither the guides nor `/defaults.star` cover it, reply with
+something like "The embedded Rune docs do not cover this" rather than
+speculating about behavior, config keys, or product names.
 
 ## Editing the user's Rune configuration
 
@@ -59,7 +67,10 @@ use. When a question asks how to change a setting, do the
 following:
 
 1. Locate the relevant key in `/config.md` (and any provider-
-   specific page under `/providers.md` or `/develop/`).
+   specific page under `/providers.md` or `/develop/`). If the
+   guides do not mention the key, look it up in `/defaults.star`,
+   which ships the real default config and frequently documents
+   keys the prose omits.
 2. Show the user the snippet they need to add or change, in the
    same format as their existing config (YAML vs Starlark — infer
    from the extension of the path above).

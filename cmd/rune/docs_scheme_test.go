@@ -193,6 +193,25 @@ func TestDocsSchemeAgentsMDPresent(t *testing.T) {
 		"AGENTS.md must embed the user's resolved config path")
 }
 
+func TestDocsSchemeDefaultsStar(t *testing.T) {
+	cfgPath := newTestConfigPath(t)
+	uri, err := workspaceapi.ParseURI("docs:///")
+	require.NoError(t, err)
+
+	s, err := newDocsSchemeFunc(cfgPath)(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	f, err := s.Open(docsDefaultsPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+
+	data, err := io.ReadAll(f)
+	require.NoError(t, err)
+	assert.Equal(t, defaultStarlarkConfig, string(data),
+		"defaults.star must match the embedded rune.star verbatim")
+}
+
 func TestDocsSchemeConfigYAML(t *testing.T) {
 	cfgPath := newTestConfigPath(t)
 	uri, err := workspaceapi.ParseURI("docs:///")

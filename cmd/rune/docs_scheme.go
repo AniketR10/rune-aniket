@@ -41,7 +41,14 @@ import (
 
 const docsScheme = "docs"
 
-//go:embed all:docs/docs
+// Only markdown is embedded: the docs submodule may carry gifs and
+// other assets that the in-memory workspace never serves, so baking
+// them into the binary would only bloat it. Patterns are listed per
+// nesting level because go:embed globs do not recurse; add a deeper
+// level here if the docs tree grows one.
+//
+//go:embed docs/docs/*.md
+//go:embed docs/docs/*/*.md
 var docsFS embed.FS
 
 // docsSchemeRoot is treated as the workspace root: paths under it are
@@ -73,6 +80,12 @@ var docsConfigYAML []byte
 // (".rune/config.yaml") so loadWorkspaceConfig overlays this file
 // onto the IDE config when docs:/// opens.
 const docsConfigPath = "/.rune/config.yaml"
+
+// docsDefaultsPath surfaces the shipped Starlark default config
+// (cmd/rune/rune.star, embedded as defaultStarlarkConfig) inside the
+// docs workspace so the agent can read Rune's effective defaults when
+// answering configuration questions.
+const docsDefaultsPath = "/defaults.star"
 
 func renderDocsAgentsMD(configPath string) ([]byte, error) {
 	t, err := template.New("docs_agents.md").Parse(docsAgentsMDTmpl)
@@ -155,6 +168,9 @@ func prefillDocsScheme(s schemeapi.Scheme, agentsMD, configYAML []byte) error {
 		return err
 	}
 	if err := writeDocsFile(s, docsAgentsPath, agentsMD); err != nil {
+		return err
+	}
+	if err := writeDocsFile(s, docsDefaultsPath, []byte(defaultStarlarkConfig)); err != nil {
 		return err
 	}
 	return writeDocsFile(s, docsConfigPath, configYAML)
