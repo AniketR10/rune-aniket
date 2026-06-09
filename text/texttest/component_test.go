@@ -1334,6 +1334,20 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 	})
 }
 
+type fakeFallbackPrompter struct {
+	calls   int
+	command string
+	args    []string
+}
+
+func (f *fakeFallbackPrompter) ShowFallbackPrompt(
+	_ context.Context, command string, args ...string,
+) {
+	f.calls++
+	f.command = command
+	f.args = args
+}
+
 func TestDispatchCommand(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("file:///MacMecMic")
 	require.NoError(t, err)
@@ -1349,6 +1363,49 @@ func TestDispatchCommand(t *testing.T) {
 			Window:   win,
 		}
 		ok, err := dispatchWithAliases(context.Background(), c, cmd)
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("invokes fallback when no handler is registered", func(t *testing.T) {
+		fb := &fakeFallbackPrompter{}
+		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+		config.CommandFallbacks = map[string]text.FallbackPrompter{"agent": fb}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+
+		win, _ := c.Focus()
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "agent",
+			Args:     []string{"hello"},
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(context.Background(), cmd)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, 1, fb.calls)
+		assert.Equal(t, "agent", fb.command)
+		assert.Equal(t, []string{"hello"}, fb.args)
+	})
+
+	t.Run("returns false with neither handler nor fallback", func(t *testing.T) {
+		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+		config.CommandFallbacks = map[string]text.FallbackPrompter{
+			"agent": &fakeFallbackPrompter{},
+		}
+		c, _ := newTestComponentConfig(t, NopEditor(), config)
+
+		win, _ := c.Focus()
+		cmd := textapi.Command{
+			Resource: NewTestHandler(),
+			URI:      uri,
+			Name:     "SELL",
+			Window:   win,
+		}
+		ok, err := c.DispatchCommand(context.Background(), cmd)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})

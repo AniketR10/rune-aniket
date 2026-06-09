@@ -262,6 +262,13 @@ func (e *ex) init(
 		return err
 	}
 	e.ed = ed
+	if e.config.CommandFallbacks == nil {
+		e.config.CommandFallbacks = map[string]text.FallbackPrompter{}
+	}
+	e.config.CommandFallbacks["agent"] = e
+	e.config.CommandFallbacks["searchfile"] = e
+	e.config.CommandFallbacks["searchtext"] = e
+	e.config.CommandFallbacks["searchast"] = e
 	err = e.comp.Init(ed, m, e.config)
 	if err != nil {
 		return

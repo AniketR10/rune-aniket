@@ -446,3 +446,50 @@ func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
 	)
 	return nil
 }
+
+// ShowFallbackPrompt satisfies text.FallbackPrompter. It is invoked when a
+// command was dispatched but no handler is registered for it (e.g. the
+// providing extension is not installed).
+func (e *ex) ShowFallbackPrompt(_ context.Context, command string, _ ...string) {
+	switch command {
+	case "agent":
+		e.openInstallExtensionPrompt("rune-agent",
+			"This command requires the **rune-agent** extension. "+
+				"Do you want to install it now?")
+	case "searchfile", "searchtext", "searchast":
+		e.openInstallExtensionPrompt("fuzzy-search",
+			"This command requires the **fuzzy-search** extension. "+
+				"Do you want to install it now?")
+	}
+}
+
+func (e *ex) openInstallExtensionPrompt(pkg, message string) {
+	h := &installExtensionPrompt{ex: e, pkg: pkg}
+	h.promptWindow = e.comp.Prompt(
+		message,
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
+		h,
+	)
+}
+
+type installExtensionPrompt struct {
+	ex           *ex
+	pkg          string
+	promptWindow browser.Window
+}
+
+func (h *installExtensionPrompt) OnSelect(_ int, option string) {
+	if h.promptWindow != nil {
+		_ = h.promptWindow.Close()
+	}
+	if option == yesOpt {
+		if err := h.ex.shellnewtab(context.Background(),
+			"pkg", "install", h.pkg); err != nil {
+			_, _ = h.ex.comp.Notify(browserapi.LevelError,
+				"failed to open shell: %v", err)
+		}
+	}
+}
+
+func (h *installExtensionPrompt) OnClose() error { return nil }

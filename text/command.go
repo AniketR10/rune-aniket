@@ -44,6 +44,12 @@ type CommandHandler interface {
 	)
 }
 
+// FallbackPrompter handles a command that was invoked but has no
+// registered handler (e.g. its providing extension is not installed).
+type FallbackPrompter interface {
+	ShowFallbackPrompt(ctx context.Context, command string, args ...string)
+}
+
 // WorkspaceCommandRegistry abstracts the ability to subscribe to commands
 // for a particular workspace.
 type WorkspaceCommandRegistry interface {

@@ -1001,6 +1001,11 @@ func (c *Component) DispatchCommand(
 
 	man, ok := c.cmdSubscribers[cmd.Name]
 	if !ok {
+		if fb, ok := c.config.CommandFallbacks[cmd.Name]; ok {
+			c.log(log.DebugLevel, "Dispatching command %q: running fallback", cmd.Name)
+			fb.ShowFallbackPrompt(ctx, cmd.Name, cmd.Args...)
+			return true, nil
+		}
 		c.log(log.DebugLevel, "Dispatching command %q: no subscribers", cmd.Name)
 		return false, nil
 	}

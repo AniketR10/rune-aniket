@@ -1185,6 +1185,107 @@ func TestShellCommandComplete(t *testing.T) {
 	}
 }
 
+// TestShowFallbackPromptInstallsExtension verifies that the ex command
+// fallback for an unhandled command opens a Yes/No prompt and, on Yes,
+// opens the companion shell submitting `pkg install rune-agent`.
+func TestShowFallbackPromptInstallsExtension(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-install")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	svc := storagestub.NewInMemoryService()
+	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	b.ShowFallbackPrompt(context.Background(), "agent")
+	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+
+	var doc struct{ Items []string }
+	require.NoError(t, svc.Get(
+		context.Background(), shellHistoryDocumentID, &doc,
+	))
+	require.NotEmpty(t, doc.Items)
+	assert.Equal(t, "pkg install rune-agent", doc.Items[len(doc.Items)-1])
+}
+
+// TestShowFallbackPromptInstallsFuzzySearch verifies that the fuzzy-search
+// commands fall back to a prompt that installs the fuzzy-search extension.
+func TestShowFallbackPromptInstallsFuzzySearch(t *testing.T) {
+	for _, command := range []string{"searchfile", "searchtext", "searchast"} {
+		t.Run(command, func(t *testing.T) {
+			workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-fuzzy")
+			require.NoError(t, err)
+			w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+			cfg := vte.DefaultConfig()
+			scheduler := newQueuedScheduler()
+			cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+			svc := storagestub.NewInMemoryService()
+			b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+				cfg, nopPublishEvent, clipboard.NewInMemory(),
+				text.WithCommandKey(testCommandKey),
+			)
+			b.mu = &sync.Mutex{}
+			b.scheduler = scheduler
+			defer b.Close()
+
+			b.ShowFallbackPrompt(context.Background(), command)
+			assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+			exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'y'})
+			assert.False(t, exit)
+			assert.True(t, handled)
+			assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+
+			var doc struct{ Items []string }
+			require.NoError(t, svc.Get(
+				context.Background(), shellHistoryDocumentID, &doc,
+			))
+			require.NotEmpty(t, doc.Items)
+			assert.Equal(t, "pkg install fuzzy-search", doc.Items[len(doc.Items)-1])
+		})
+	}
+}
+
+// TestShowFallbackPromptNoDoesNothing verifies that selecting No on the
+// install prompt closes the prompt without opening the companion shell.
+func TestShowFallbackPromptNoDoesNothing(t *testing.T) {
+	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-no")
+	require.NoError(t, err)
+	w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+	cfg := vte.DefaultConfig()
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	svc := storagestub.NewInMemoryService()
+	b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+		cfg, nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(testCommandKey),
+	)
+	b.mu = &sync.Mutex{}
+	b.scheduler = scheduler
+	defer b.Close()
+
+	b.ShowFallbackPrompt(context.Background(), "agent")
+	assert.Equal(t, 1, b.comp.Browser().FloatingWindows())
+
+	exit, handled := b.Handle(term.Event{Type: term.EventKey, Ch: 'n'})
+	assert.False(t, exit)
+	assert.True(t, handled)
+	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
+	assert.Nil(t, b.ex.companionShell)
+}
+
 // TestShellCommandPastesArgument verifies that arguments passed to the
 // `:shell` ex command are submitted to the shell prompt as a single
 // command line, both when the shell tab is created on first use and

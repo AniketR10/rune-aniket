@@ -152,6 +152,9 @@ type Config struct {
 	EventPublisher func(term.Event) bool
 
 	CommandOverlay CommandOverlayConfig
+	// CommandFallbacks maps a command name to a FallbackPrompter invoked
+	// when the command is dispatched but no handler is registered for it.
+	CommandFallbacks map[string]FallbackPrompter
 	browser.Config
 }
 
@@ -438,6 +441,14 @@ func WithClipboard(clip clipboard.Register) Option {
 func WithComments(comments CommentConfig) Option {
 	return func(cfg *Config) {
 		cfg.Comments = maps.Clone(comments)
+	}
+}
+
+// WithCommandFallbacks returns an Option that sets the command fallback map
+// consulted when a dispatched command has no registered handler.
+func WithCommandFallbacks(f map[string]FallbackPrompter) Option {
+	return func(cfg *Config) {
+		cfg.CommandFallbacks = f
 	}
 }
 
