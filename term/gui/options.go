@@ -183,6 +183,20 @@ func WithPrintFPS(print bool) Option {
 	}
 }
 
+// WithScrollMultiplier sets the mouse wheel scroll multiplier: the number of
+// lines scrolled per unit of wheel movement reported by the host. Higher values
+// scroll faster. Fractional wheel deltas from high-resolution devices such as
+// trackpads are accumulated, so the multiplier scales smooth scrolling as well
+// as discrete notches. Values <= 0 are ignored. Default is 3.
+func WithScrollMultiplier(multiplier float64) Option {
+	return func(g *GUI) error {
+		if multiplier > 0 {
+			g.mouse.multiplier = multiplier
+		}
+		return nil
+	}
+}
+
 // Theme is a color theme which defines the default foreground and background colors
 // as well as color mappings between colors. Tipically the initial 16-bit colors supported
 // by XTERM/ECMA are mapped to arbitrary RGB colors.

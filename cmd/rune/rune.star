@@ -397,9 +397,13 @@ config = {
     },
     "gui": {
         # Add or remove pixels from the font's default column width.
-        "column-width-offset": -1,
+        "column_width_offset": -1,
         # Add or remove pixels from the font's default line height.
-        "line-height-offset":   0,
+        "line_height_offset":   0,
+        # Number of lines scrolled per unit of mouse-wheel movement. Higher
+        # values scroll faster; fractional deltas from high-resolution devices
+        # such as trackpads are accumulated so smooth scrolling is scaled too.
+        "scroll_multiplier":    3,
         # Pick a theme by name; see the `guitheme` command for the full list.
         "default_theme":        "romero",
         # Enables or disables transparent-window rendering, effectively

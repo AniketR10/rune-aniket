@@ -335,7 +335,7 @@ func subscribeGUICommands(
 			cmd: textapi.CommandManual{
 				Name: "guifontsize",
 				Summary: "Increase or decrease the size of the rendered font." +
-					"To make changes permanent, update the 'gui.font-size' configuration.",
+					"To make changes permanent, update the 'gui.font_size' configuration.",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
 				if len(cmd.Args) != 1 {
@@ -363,7 +363,7 @@ func subscribeGUICommands(
 			cmd: textapi.CommandManual{
 				Name: "guicellwidth",
 				Summary: "Increases or decreases the cell width of the rendered font. " +
-					"To make changes permanent, update the 'gui.column-width-offset' configuration.",
+					"To make changes permanent, update the 'gui.column_width_offset' configuration.",
 				Synopsis: "(increase|decrease)",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {
@@ -392,7 +392,7 @@ func subscribeGUICommands(
 			cmd: textapi.CommandManual{
 				Name: "guilineheight",
 				Summary: "Increases or decreases the line height of the rendered font. " +
-					"To make changes permanent, update the 'gui.line-height-offset' configuration.",
+					"To make changes permanent, update the 'gui.line_height_offset' configuration.",
 				Synopsis: "(increase|decrease)",
 			},
 			handleCommand: func(ctx context.Context, cmd textapi.Command) (err error) {

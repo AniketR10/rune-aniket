@@ -690,6 +690,7 @@ func runGUI(
 		gui.WithFontFamily(getGUIFontFamily(browser, cfg)),
 		gui.WithColumnWidthOffset(getGUIColumnWidthOffset(browser, cfg)),
 		gui.WithLineHeightOffset(getGUILineHeightOffset(browser, cfg)),
+		gui.WithScrollMultiplier(getGUIScrollMultiplier(browser, cfg)),
 		gui.WithRenderOffset(0, 10),
 		gui.WithLigatures(getGUILigatures(browser, cfg)),
 		gui.WithTransparentWindow(transparentWindow),

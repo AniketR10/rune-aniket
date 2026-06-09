@@ -203,13 +203,9 @@ func (g *GUI) Draw(screen *ebiten.Image) {
 
 // Update satisfies ebiten.Game. It's called every time a new frame is to be scheduled.
 func (g *GUI) Update() error {
-	mouseEv, mouseOk := g.mouse.processMouse()
+	g.pendingEvents = append(g.pendingEvents, g.mouse.processMouse()...)
 	g.pendingEvents = g.input.processEvents(g.pendingEvents)
 	needsDraw := g.needsDraw
-
-	if mouseOk {
-		g.pendingEvents = append(g.pendingEvents, mouseEv)
-	}
 
 	var interruptPending bool
 loop:

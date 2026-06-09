@@ -40,11 +40,11 @@ import (
 var defaultStarlarkConfig string
 
 func getGUIFontFamily(browser browser.Browser, cfg config.Config) (ret string) {
-	family, err := cfg.GetString("font-family")
+	family, err := cfg.GetString("font_family")
 	if err != nil {
 		if err != config.ErrNotFound {
 			_, _ = browser.Notify(browserapi.LevelError,
-				"Could not load 'gui.font-family' from config: %v", err)
+				"Could not load 'gui.font_family' from config: %v", err)
 		}
 		return
 	}
@@ -54,11 +54,11 @@ func getGUIFontFamily(browser browser.Browser, cfg config.Config) (ret string) {
 
 func getGUIFontSize(browser browser.Browser, cfg config.Config) (ret float64) {
 	ret = 13
-	size, err := cfg.GetFloat("font-size")
+	size, err := cfg.GetFloat("font_size")
 	if err != nil {
 		if err != config.ErrNotFound {
 			_, _ = browser.Notify(browserapi.LevelError,
-				"Could not load 'gui.font-size' from config: %v", err)
+				"Could not load 'gui.font_size' from config: %v", err)
 		}
 		return
 	}
@@ -66,13 +66,27 @@ func getGUIFontSize(browser browser.Browser, cfg config.Config) (ret float64) {
 	return
 }
 
-func getGUILineHeightOffset(browser browser.Browser, cfg config.Config) (ret float64) {
-	ret = -1
-	size, err := cfg.GetFloat("line-height-offset")
+func getGUIScrollMultiplier(browser browser.Browser, cfg config.Config) (ret float64) {
+	ret = 3
+	multiplier, err := cfg.GetFloat("scroll_multiplier")
 	if err != nil {
 		if err != config.ErrNotFound {
 			_, _ = browser.Notify(browserapi.LevelError,
-				"Could not load 'gui.line-height-offset' from config: %v", err)
+				"Could not load 'gui.scroll_multiplier' from config: %v", err)
+		}
+		return
+	}
+	ret = multiplier
+	return
+}
+
+func getGUILineHeightOffset(browser browser.Browser, cfg config.Config) (ret float64) {
+	ret = -1
+	size, err := cfg.GetFloat("line_height_offset")
+	if err != nil {
+		if err != config.ErrNotFound {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"Could not load 'gui.line_height_offset' from config: %v", err)
 		}
 		return
 	}
@@ -82,11 +96,11 @@ func getGUILineHeightOffset(browser browser.Browser, cfg config.Config) (ret flo
 
 func getGUIColumnWidthOffset(browser browser.Browser, cfg config.Config) (ret float64) {
 	ret = 0
-	size, err := cfg.GetFloat("column-width-offset")
+	size, err := cfg.GetFloat("column_width_offset")
 	if err != nil {
 		if err != config.ErrNotFound {
 			_, _ = browser.Notify(browserapi.LevelError,
-				"Could not load 'gui.column-width-offset' from config: %v", err)
+				"Could not load 'gui.column_width_offset' from config: %v", err)
 		}
 		return
 	}
