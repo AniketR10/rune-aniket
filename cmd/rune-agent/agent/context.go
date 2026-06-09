@@ -26,6 +26,7 @@ package agent
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
 )
@@ -52,14 +53,14 @@ func ParentToolCallID(ctx context.Context) string {
 	return v
 }
 
-// WithCurrentModel returns a context carrying the current model name.
-func WithCurrentModel(ctx context.Context, model string) context.Context {
+// WithCurrentModel returns a context carrying the current model entry.
+func WithCurrentModel(ctx context.Context, model llmapi.ModelEntry) context.Context {
 	return context.WithValue(ctx, currentModelKey, model)
 }
 
-// CurrentModel extracts the current model name from the context.
-func CurrentModel(ctx context.Context) string {
-	v, _ := ctx.Value(currentModelKey).(string)
+// CurrentModel extracts the current model entry from the context.
+func CurrentModel(ctx context.Context) llmapi.ModelEntry {
+	v, _ := ctx.Value(currentModelKey).(llmapi.ModelEntry)
 	return v
 }
 

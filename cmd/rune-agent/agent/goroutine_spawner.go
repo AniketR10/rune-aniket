@@ -37,6 +37,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/hooks"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 )
 
 // ServiceFactory resolves an LLM service for the given model name.
@@ -172,7 +173,7 @@ func (s *GoroutineSpawner) Run(
 		model = def.Model
 	}
 	if model == "" {
-		model = CurrentModel(ctx)
+		model = llmarg.Qualify(CurrentModel(ctx))
 	}
 
 	svc, entry, err := s.serviceFactory(model)

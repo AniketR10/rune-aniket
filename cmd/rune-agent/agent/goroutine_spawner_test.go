@@ -241,6 +241,49 @@ func TestGoroutineSpawner_Run_uses_request_model(t *testing.T) {
 		"should use RunRequest.Model when set")
 }
 
+func TestGoroutineSpawner_Run_inherits_context_model_qualified(t *testing.T) {
+	cfg := NewConfig([]Definition{
+		{
+			ID:       "agent",
+			Name:     "Agent",
+			AllowAny: true,
+		},
+	})
+
+	var mu sync.Mutex
+	var requestedModels []string
+	factory := func(model string) (llmapi.Service, llmapi.ModelEntry, error) {
+		mu.Lock()
+		requestedModels = append(requestedModels, model)
+		mu.Unlock()
+		return &mockService{
+			responses: []mockResponse{stopResponse("ok")},
+		}, llmapi.ModelEntry{Name: "test", Provider: "openai"}, nil
+	}
+	spawner := NewGoroutineSpawner(
+		newMockStore(), factory, cfg,
+		skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil),
+		NoMemory(), "",
+		"session-1", "agent", workspaceapi.URI{},
+		noopPrompter{},
+	)
+
+	ctx := WithCurrentModel(context.Background(),
+		llmapi.ModelEntry{Name: "claude-opus-4-8", Provider: "anthropic"})
+	handle, err := spawner.Run(ctx, RunRequest{
+		AgentID: "agent",
+		Message: "hello",
+	})
+	require.NoError(t, err)
+	consumeReply(t, handle)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, requestedModels, 1)
+	assert.Equal(t, "anthropic/claude-opus-4-8", requestedModels[0],
+		"should qualify the inherited context model with its provider")
+}
+
 func TestGoroutineSpawner_RunWithCleanup(t *testing.T) {
 	cfg := NewConfig([]Definition{
 		{

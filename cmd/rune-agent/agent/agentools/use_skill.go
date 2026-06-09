@@ -29,9 +29,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 )
 
 // NewSkillTool creates a skill tool backed by a skill registry.
@@ -171,7 +172,7 @@ func (t *skillTool) executeAgentSkill(
 
 	handle, err := t.spawner.Run(ctx, agent.RunRequest{
 		Label:        skill.Name,
-		Model:        agent.CurrentModel(ctx),
+		Model:        llmarg.Qualify(agent.CurrentModel(ctx)),
 		Message:      task,
 		AllowedTools: allowedTools,
 		SystemPrompt: skill.Body,

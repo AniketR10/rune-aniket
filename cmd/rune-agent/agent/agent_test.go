@@ -3869,6 +3869,35 @@ func TestAgentRun_MultiContentInjectsSyntheticUserMessage(t *testing.T) {
 	assert.True(t, persistedImageMsg, "synthetic user message should be persisted")
 }
 
+// TestToolContextCarriesModelEntry verifies that the fully-qualified
+// ModelEntry (Provider set) is carried into a tool's context, so
+// sub-agents inheriting the model resolve to a single provider instead
+// of failing on an ambiguous bare name.
+func TestToolContextCarriesModelEntry(t *testing.T) {
+	var gotModel llmapi.ModelEntry
+	tool := &mockTool{
+		name:   "capture",
+		result: ToolResult{Content: "ok"},
+		executeFn: func(ctx context.Context, _ string) ToolResult {
+			gotModel = CurrentModel(ctx)
+			return ToolResult{Content: "ok"}
+		},
+	}
+	svc := &mockService{responses: []mockResponse{
+		toolCallResponse("capture", "{}", "c1"),
+		stopResponse("done"),
+	}}
+	want := llmapi.ModelEntry{Name: "claude-opus-4-8", Provider: "anthropic"}
+	ag := NewAgent(svc, NewRegistry(tool), noSkills(), newMockStore(), NoMemory(), Config{
+		SystemPrompt: "test",
+		Model:        want,
+	})
+
+	collectEvents(t, ag.Run(context.Background(), "d", "go"))
+
+	assert.Equal(t, want, gotModel)
+}
+
 func TestSwapService(t *testing.T) {
 	t.Run("swaps service and model for next run", func(t *testing.T) {
 		svc1 := &mockService{responses: []mockResponse{stopResponse("from svc1")}}

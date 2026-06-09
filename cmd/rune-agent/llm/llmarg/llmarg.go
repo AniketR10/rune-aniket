@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package llmarg resolves user-supplied model arguments into
 // fully-qualified llmapi.ModelEntry values. The host llmrouter is
 // strict on empty Provider (see llm/llmrouter); this package is the
@@ -108,6 +107,17 @@ func Split(arg string) (provider, name string, ok bool) {
 		return "", "", false
 	}
 	return provider, name, true
+}
+
+// Qualify renders entry as the `provider/name` argument that Resolve
+// routes deterministically to a single provider. It is the inverse of
+// Split. When the provider is unset it returns the bare name, which
+// remains valid input for Resolve when the name is unique.
+func Qualify(entry llmapi.ModelEntry) string {
+	if entry.Provider != "" && entry.Name != "" {
+		return entry.Provider + "/" + entry.Name
+	}
+	return entry.Name
 }
 
 // Available returns a sorted, comma-separated list of

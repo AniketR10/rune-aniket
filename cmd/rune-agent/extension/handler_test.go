@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
+	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
 	"unstable.build/go-tui/debug"
 )
@@ -1213,4 +1214,216 @@ func TestE2ECtrlCDismissesRequiresInputPrompt(t *testing.T) {
 			),
 		},
 	})
+}
+
+// noopAgentPrompter is an agent.Prompter that never blocks; the
+// sub-agent fixture wires no tools that prompt the user.
+type noopAgentPrompter struct{}
+
+func (noopAgentPrompter) Prompt(
+	context.Context, agent.PromptRequest,
+) (agent.PromptResponse, error) {
+	return agent.PromptResponse{}, nil
+}
+
+// strictProviderService wraps a llmtest.Service so GetModel honours the
+// Provider field, matching the host llmrouter contract that rejects a
+// bare model name shared by more than one provider. The default
+// llmtest.Service matches on Name alone and would hide the ambiguity
+// the sub-agent spawn path must avoid.
+type strictProviderService struct {
+	*llmtest.Service
+	models []llmapi.ModelEntry
+}
+
+func (s *strictProviderService) GetModel(
+	_ context.Context, m llmapi.ModelEntry,
+) (llmapi.ModelEntry, error) {
+	if m.Provider == "" {
+		return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
+	}
+	for _, e := range s.models {
+		if e.Name == m.Name && e.Provider == m.Provider {
+			return e, nil
+		}
+	}
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
+}
+
+// TestE2ESubAgentInheritsQualifiedModel drives the chat handler
+// end-to-end through the production "agent" command path: the parent
+// agent emits one `agent` tool call (no model override), which spawns a
+// sub-agent through a real agent.GoroutineSpawner. The sub-agent
+// inherits the parent model from context, and the spawner's service
+// factory resolves it through llmarg against a catalog that exposes the
+// same model name under two providers. A bare name would be ambiguous
+// and fail; the test asserts the factory received the provider-
+// qualified name and the sub-agent ran without surfacing an error.
+func TestE2ESubAgentInheritsQualifiedModel(t *testing.T) {
+	const (
+		modelName = "claude-opus-4-8"
+		provider  = "anthropic"
+	)
+	// Two providers expose the same model name, so a bare-name lookup
+	// is ambiguous; only a provider-qualified argument resolves.
+	catalog := []llmapi.ModelEntry{
+		{Provider: "anthropic", Name: modelName, ContextWindow: 128_000},
+		{Provider: "claude", Name: modelName, ContextWindow: 128_000},
+	}
+
+	// Parent LLM: one agent-tool call (inherits the model), then stop.
+	parentSvc := llmtest.New(catalog,
+		llmtest.Response{
+			ToolCalls: []llmapi.ToolCall{{
+				ID:   "call-spawn",
+				Type: llmapi.ToolTypeFunction,
+				Function: llmapi.FunctionCall{
+					Name:      "agent",
+					Arguments: `{"description":"do work","prompt":"investigate"}`,
+				},
+			}},
+			FinishReason: llmapi.FinishReasonToolCall,
+		},
+		llmtest.Response{
+			Chunks:       []string{"done"},
+			FinishReason: llmapi.FinishReasonStop,
+		},
+	)
+
+	// Sub-agent LLM: a single stop reply. Wrapped in a strict service
+	// so the spawner's llmarg.Resolve must disambiguate by provider.
+	subSvc := &strictProviderService{
+		Service: llmtest.New(catalog, llmtest.Response{
+			Chunks:       []string{"sub done"},
+			FinishReason: llmapi.FinishReasonStop,
+		}),
+		models: catalog,
+	}
+
+	var (
+		factoryMu     sync.Mutex
+		factoryModels []string
+		factoryErr    error
+	)
+	serviceFactory := func(model string) (llmapi.Service, llmapi.ModelEntry, error) {
+		entry, err := llmarg.Resolve(context.Background(), subSvc, model)
+		factoryMu.Lock()
+		factoryModels = append(factoryModels, model)
+		if err != nil {
+			factoryErr = err
+		}
+		factoryMu.Unlock()
+		if err != nil {
+			return nil, llmapi.ModelEntry{}, err
+		}
+		return subSvc, entry, nil
+	}
+
+	h := subAgentSpawnE2EHandler(t, parentSvc, serviceFactory,
+		llmapi.ModelEntry{Provider: provider, Name: modelName, ContextWindow: 128_000})
+
+	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+		InputSequence: "hi<enter>",
+		Expected: frame(
+			"hi",
+			// "✓" is one display column but three bytes; frame's
+			// byte-based padding would under-pad, so pad this row
+			// explicitly to the 40-column frame width.
+			"✓ agent do work"+strings.Repeat(" ", frameWidth-len([]rune("✓ agent do work"))),
+			"sub done",
+			"done",
+			blanks(), blanks(), blanks(),
+			"   ┌───────────────────────────────┐    ",
+			"   │▐                              │    ",
+			"   └───────────────────────────────┘    ",
+		),
+	}})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		factoryMu.Lock()
+		defer factoryMu.Unlock()
+		require.NotEmpty(c, factoryModels,
+			"spawner service factory should have been invoked for the sub-agent")
+	}, 3*time.Second, 10*time.Millisecond)
+
+	factoryMu.Lock()
+	defer factoryMu.Unlock()
+	require.NoError(t, factoryErr,
+		"sub-agent model must resolve without an ambiguity error")
+	for _, m := range factoryModels {
+		assert.Equalf(t, provider+"/"+modelName, m,
+			"sub-agent must inherit the provider-qualified model, got %q", m)
+	}
+}
+
+// subAgentSpawnE2EHandler wires the real floating chat handler through
+// the production createAgentCompletions consumer with a real
+// agent.GoroutineSpawner and the "agent" tool registered, so the agent
+// tool call spawns a sub-agent exactly as the shipped "agent" command
+// does. Only the llmapi.Service and the spawner's service factory are
+// stubbed.
+func subAgentSpawnE2EHandler(
+	t *testing.T,
+	svc *llmtest.Service,
+	serviceFactory agent.ServiceFactory,
+	model llmapi.ModelEntry,
+) tui.Handler {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	interruptCh := make(chan struct{}, 64)
+	interrupter := term.FuncInterrupter(func(context.Context) error {
+		select {
+		case interruptCh <- struct{}{}:
+		default:
+		}
+		return nil
+	})
+
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	mu := new(sync.Mutex)
+	dhandler, tx, rx := dialoguetui.Handler(ctx, mu, comp, interrupter)
+
+	skillReg := skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil)
+	store := newMemDialogueStore()
+	const dialogueID = "test-dialogue"
+	const agentID = "default"
+
+	cfg := agent.NewConfig([]agent.Definition{
+		{ID: agentID, Name: "Default Agent", AllowAny: true},
+	})
+	spawner := agent.NewGoroutineSpawner(
+		store, serviceFactory, cfg, skillReg, agent.NoMemory(), "",
+		dialogueID, agentID, dirURI(""), noopAgentPrompter{},
+	)
+	childEvents := make(chan agent.ChildEvent, 64)
+	sessionTools := agentools.SessionTools(spawner, spawner.ListAgents(), childEvents, skillReg)
+	registry := agent.NewRegistry(sessionTools...)
+	spawner.SetRegistry(registry)
+
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{
+		SystemPrompt: "test",
+		Model:        model,
+		SessionKey:   dialogueID,
+		AgentID:      agentID,
+	})
+
+	owner := &aiEditorHandler{n: stubNotifications{}}
+	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
+	wrapped, msgRx := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+
+	go debug.CapturePanicReport(func() {
+		createAgentCompletions(ctx, cancel, tx, msgRx, ag, spawner,
+			childEvents, skillReg, dialogueID, syncComp, stubNotifications{}, nil, store)
+	})
+
+	t.Cleanup(cancel)
+
+	return &promptFlusher{
+		t:           t,
+		inner:       wrapped,
+		interruptCh: interruptCh,
+		settle:      150 * time.Millisecond,
+	}
 }

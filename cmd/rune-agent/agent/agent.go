@@ -1040,7 +1040,7 @@ func (a *Agent) run(
 								IsError: true,
 							}
 						} else {
-							toolCtx := WithCurrentModel(ctx, a.Model())
+							toolCtx := WithCurrentModel(ctx, a.ModelEntry())
 							toolCtx = WithParentToolCallID(toolCtx, info.call.ID)
 							toolCtx = WithHooks(toolCtx, a.config.Hooks)
 							toolCtx = WithWorkspaceURI(toolCtx, a.config.Workspace)
@@ -1471,7 +1471,7 @@ func (a *Agent) injectAutoDiagnostics(
 
 		diagStart := time.Now()
 		diagResult := diagTool.Execute(
-			WithParentToolCallID(WithCurrentModel(ctx, a.Model()), syntheticID),
+			WithParentToolCallID(WithCurrentModel(ctx, a.ModelEntry()), syntheticID),
 			diagArgs,
 		)
 		diagDur := time.Since(diagStart)

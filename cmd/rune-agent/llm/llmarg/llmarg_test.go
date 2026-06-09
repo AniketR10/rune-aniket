@@ -132,6 +132,40 @@ func TestSplit(t *testing.T) {
 	}
 }
 
+func TestQualify(t *testing.T) {
+	cases := []struct {
+		name  string
+		entry llmapi.ModelEntry
+		want  string
+	}{
+		{
+			name:  "provider and name",
+			entry: llmapi.ModelEntry{Provider: "anthropic", Name: "claude-opus-4-8"},
+			want:  "anthropic/claude-opus-4-8",
+		},
+		{
+			name:  "name only",
+			entry: llmapi.ModelEntry{Name: "gpt-5.5"},
+			want:  "gpt-5.5",
+		},
+		{
+			name:  "empty",
+			entry: llmapi.ModelEntry{},
+			want:  "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := llmarg.Qualify(tc.entry)
+			assert.Equal(t, tc.want, got)
+			if p, n, ok := llmarg.Split(got); ok {
+				assert.Equal(t, tc.entry.Provider, p)
+				assert.Equal(t, tc.entry.Name, n)
+			}
+		})
+	}
+}
+
 func TestAvailable(t *testing.T) {
 	svc := newStrictService(
 		llmapi.ModelEntry{Provider: "openai", Name: "gpt-5.5"},
