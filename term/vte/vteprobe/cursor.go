@@ -248,7 +248,13 @@ func (i *Cursor) Infer(
 
 	// 1. Chrome detection: trim status-line bands.
 	top, bot := detectChrome(rows, fileLines)
-	if cur.Y < top || cur.Y > bot {
+	// Editors such as nano let the cursor rest on the blank virtual line
+	// immediately past the last file line (between the last content row
+	// and the bottom chrome). Treat that one row as part of the band so
+	// the cursor maps to the line just past EOF instead of being rejected
+	// outright, which would discard the otherwise-valid row mapping.
+	cursorPastEOF := cur.Y == bot+1 && bot >= top && isBlankRow(rows, cur.Y)
+	if cur.Y < top || (cur.Y > bot && !cursorPastEOF) {
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
 			Debugf("Infer cursor outside content band: "+
 				"cur.Y=%d band=[%d,%d]", cur.Y, top, bot)
@@ -291,7 +297,13 @@ func (i *Cursor) Infer(
 	wrap := detectWrap(rows, top, gut.width, align, fileLines, slab)
 
 	// 5. Cursor mapping.
-	fileLine, ok := wrap.fileLineAtRow(cur.Y)
+	// When the cursor sits past EOF, anchor it to the row above (the last
+	// content row) and report the file line one past it at column 0.
+	cursorRow := cur.Y
+	if cursorPastEOF {
+		cursorRow = bot
+	}
+	fileLine, ok := wrap.fileLineAtRow(cursorRow)
 	if !ok {
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
 			Debugf("Infer cursor row has no file line: "+
@@ -301,18 +313,29 @@ func (i *Cursor) Infer(
 				align.coverage, align.tabstop)
 		return Result{}, ErrUnknown
 	}
-	folded := wrap.foldedAtRow(cur.Y)
-	row := rows[cur.Y]
-	runeOffset := row.runeColAt(cur.X) - gut.width + wrap.wrapOffsetAtRow(cur.Y)
-	if runeOffset < 0 {
-		// Cursor is inside the gutter; treat as column 1 on the line.
-		runeOffset = 0
+	folded := wrap.foldedAtRow(cursorRow)
+	var (
+		fileCol    int
+		runeOffset int
+	)
+	if cursorPastEOF {
+		// One file line past the last content row, at column 0.
+		fileLine++
+		fileCol = 1
+		folded = false
+	} else {
+		row := rows[cur.Y]
+		runeOffset = row.runeColAt(cur.X) - gut.width + wrap.wrapOffsetAtRow(cur.Y)
+		if runeOffset < 0 {
+			// Cursor is inside the gutter; treat as column 1 on the line.
+			runeOffset = 0
+		}
+		var fileLineCells []term.Cell
+		if fileLine >= 1 && fileLine <= len(fileLines) {
+			fileLineCells = fileLines[fileLine-1]
+		}
+		fileCol = visualToRawColCells(fileLineCells, runeOffset, align.tabstop)
 	}
-	var fileLineCells []term.Cell
-	if fileLine >= 1 && fileLine <= len(fileLines) {
-		fileLineCells = fileLines[fileLine-1]
-	}
-	fileCol := visualToRawColCells(fileLineCells, runeOffset, align.tabstop)
 
 	res = Result{
 		CursorAtScroll: term.Coordinates{
@@ -342,7 +365,7 @@ func (i *Cursor) Infer(
 				"runeOffset=%d wrapOffset=%d folded=%t",
 				top, bot, gut, gutterAligned, align.coverage,
 				align.tabstop, runeOffset,
-				wrap.wrapOffsetAtRow(cur.Y), folded)
+				wrap.wrapOffsetAtRow(cursorRow), folded)
 	}
 	if res.Confidence < i.minConfidence {
 		log.WithField(logging.KeyClass, "vteprobe.Cursor").
@@ -366,6 +389,16 @@ func (i *Cursor) tooLarge(lines [][]term.Cell) bool {
 		}
 	}
 	return false
+}
+
+// isBlankRow reports whether the terminal row at y holds no visible
+// content (only blanks). Used to recognise the empty virtual line some
+// editors leave past the last file line.
+func isBlankRow(rows []extractedRow, y int) bool {
+	if y < 0 || y >= len(rows) {
+		return false
+	}
+	return len(trimRightSpace(rows[y].runes)) == 0
 }
 
 // splitLines splits data on \n, stripping a single trailing \r per line.

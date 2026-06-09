@@ -266,6 +266,30 @@ func TestInferFoldPlaceholder(t *testing.T) {
 	assert.True(t, got.Folded)
 }
 
+// TestInferCursorPastLastLine covers editors such as nano that let the
+// cursor rest on the blank virtual line one row below the last file
+// line. The cursor falls just outside the content band, but Infer must
+// still resolve it (to the line one past EOF) and return a populated
+// result instead of giving up with ErrUnknown.
+func TestInferCursorPastLastLine(t *testing.T) {
+	t.Parallel()
+
+	content := "foo\nbar\nbaz\n"
+
+	// Three content rows followed by a blank virtual line; the cursor
+	// sits on that blank row (Y=3), past the last file line.
+	buf := makeBuffer([]string{"foo", "bar", "baz", ""}, 20)
+
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 3}, linesOf(content), nil)
+	require.NoError(t, err)
+	assert.Equal(t, term.Coordinates{X: 0, Y: 3}, got.CursorAtScroll,
+		"cursor maps to column 0 of the line one past the last (index 3)")
+	assert.False(t, got.Folded)
+	assert.Equal(t, 3, got.Rows[2].FileLine,
+		"last content row still maps to file line 3 (baz)")
+}
+
 func TestInferContentChange(t *testing.T) {
 	t.Parallel()
 

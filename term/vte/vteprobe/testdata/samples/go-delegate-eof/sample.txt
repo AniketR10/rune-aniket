@@ -1,0 +1,49 @@
+// Copyright 2026 Unstable Build, LLC.
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+//
+// See <https://www.gnu.org/licenses/> for a copy of the license.
+package mouse
+
+import "github.com/unstablebuild/rune-go-sdk/term"
+
+// Action represents a mouse action.
+type Action uint16
+
+// List of mouse actions.
+const (
+	LeftClick Action = iota
+	RightClick
+	MiddleClick
+	WheelUp
+	WheelDown
+	Release
+	none
+)
+
+// Delegate is an interface that wraps callbacks to enable
+// scrolling and text selection.
+//
+// OnAction is provided to extend to other features. It takes precedence
+// over builtin features so if it returns true, Mouse won't call
+// any other callbacks.
+type Delegate interface {
+	OnAction(ev term.Event, pos term.Coordinates, action Action) bool
+	ScrollUp(n int) bool
+	ScrollDown(n int) bool
+	SetSelectionEnd(pos term.Coordinates)
+	SetSelectionStart(pos term.Coordinates)
+	ClearSelection()
+	SelectWordAt(pos term.Coordinates)
+	SelectLine(y int)
+	Width() int
+	Height() int
+}
