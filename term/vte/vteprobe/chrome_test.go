@@ -131,4 +131,27 @@ func TestDetectChrome(t *testing.T) {
 		assert.Equal(t, 2, top)
 		assert.Equal(t, 2, bot)
 	})
+
+	t.Run("blank file line under top chrome is kept", func(t *testing.T) {
+		t.Parallel()
+		// A viewport scrolled so its first file line is a real blank
+		// line (e.g. the blank above a doc comment), drawn under nano's
+		// title bar. The blank mirrors the file line preceding the
+		// content below it, so it must stay content rather than be
+		// peeled as a separator.
+		rows := []extractedRow{
+			makeStyledRow("File: main.go", reverse),
+			makeRow(""),
+			makeRow("// Doc comment."),
+			makeRow("func main() {"),
+		}
+		top, bot := detectChrome(rows, cellLines([]string{
+			"package main",
+			"",
+			"// Doc comment.",
+			"func main() {",
+		}))
+		assert.Equal(t, 1, top)
+		assert.Equal(t, 3, bot)
+	})
 }

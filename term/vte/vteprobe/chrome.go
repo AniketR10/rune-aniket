@@ -66,11 +66,12 @@ func detectChrome(rows []extractedRow, fileLines [][]term.Cell) (top, bot int) {
 // back to attribute-only chrome detection to avoid eating content rows
 // in unit-test scenarios that intentionally skip the file context.
 //
-// A leading blank row is only peeled when it trails chrome already
-// peeled above it (e.g. the separator nano draws under its title bar).
-// A blank row with no chrome above it is a real blank file line at the
-// top of the viewport, not padding, so peeling it would drop a line and
-// shift the inferred scroll position.
+// A leading blank row is padding (a title/content separator) and is
+// peeled, unless it mirrors a real blank file line at the top of the
+// viewport: when the content just below the blank matches a file line
+// that is itself preceded by a blank line, the rendered blank is that
+// preceding file line, so peeling it would drop a line and shift the
+// inferred scroll position.
 func peelTop(rows []extractedRow, top *int, bot int, fileLines [][]term.Cell) {
 	softInARow := 0
 	peeledChrome := false
@@ -78,7 +79,7 @@ func peelTop(rows []extractedRow, top *int, bot int, fileLines [][]term.Cell) {
 		row := rows[*top]
 		text := trimRightSpace(row.runes)
 		if len(text) == 0 {
-			if !peeledChrome {
+			if !peeledChrome || leadingBlankIsFileLine(rows, *top, bot, fileLines) {
 				return
 			}
 			*top++
@@ -248,6 +249,64 @@ func isAttrChromeRow(r extractedRow) bool {
 		return false
 	}
 	return float64(chrome)/float64(visible) >= 0.7
+}
+
+// leadingBlankIsFileLine reports whether the blank row at blankIdx is a
+// real blank file line shown at the top of the viewport rather than a
+// title/content separator. It locates the first non-blank content row
+// below the blank in the file (disambiguated by also matching the row
+// after it to the next file line) and returns true when that file line
+// is itself preceded by a blank line — i.e. the rendered blank mirrors
+// fileLines[k-1].
+func leadingBlankIsFileLine(rows []extractedRow, blankIdx, bot int, fileLines [][]term.Cell) bool {
+	if len(fileLines) == 0 {
+		return false
+	}
+	first := blankIdx + 1
+	for first <= bot && len(trimRightSpace(rows[first].runes)) == 0 {
+		first++
+	}
+	if first > bot {
+		return false
+	}
+	firstText := trimSpaceRunes(rows[first].runes)
+	if len(firstText) == 0 {
+		return false
+	}
+	var nextText []rune
+	if first+1 <= bot {
+		nextText = trimSpaceRunes(rows[first+1].runes)
+	}
+	// k is a 0-based file line index. A leading blank can only be a real
+	// file line when the content below maps to file line >= 2 (so a
+	// preceding line exists).
+	for k := 1; k < len(fileLines); k++ {
+		line := trimSpaceCells(fileLines[k])
+		if !runesEqualCells(firstText, line) {
+			continue
+		}
+		if len(nextText) > 0 && k+1 < len(fileLines) {
+			if !runesEqualCells(nextText, trimSpaceCells(fileLines[k+1])) {
+				continue
+			}
+		}
+		if len(trimSpaceCells(fileLines[k-1])) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func runesEqualCells(rs []rune, cells []term.Cell) bool {
+	if len(rs) != len(cells) {
+		return false
+	}
+	for i := range rs {
+		if rs[i] != cells[i].Ch {
+			return false
+		}
+	}
+	return true
 }
 
 // isChromeAttr returns true when the attribute mask of a cell signals

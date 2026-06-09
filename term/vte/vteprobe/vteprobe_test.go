@@ -290,6 +290,34 @@ func TestInferCursorPastLastLine(t *testing.T) {
 		"last content row still maps to file line 3 (baz)")
 }
 
+// TestInferCursorOnBlankFileLineAtTop covers a viewport scrolled so the
+// first file line is a real blank line drawn under a styled title bar
+// (nano), with the cursor parked on it. The blank must be kept as
+// content — not peeled as a separator — so the cursor and the row
+// mapping resolve to the right file lines instead of shifting by one.
+func TestInferCursorOnBlankFileLineAtTop(t *testing.T) {
+	t.Parallel()
+
+	content := "package main\n\n// Doc comment.\nfunc main() {\n"
+
+	reverse := term.Attributes{Attrs: term.AttrReverse}
+	buf := makeBufferWithAttrs([]rowSpec{
+		styledRow("File: main.go", reverse),
+		plainRow(""),
+		plainRow("// Doc comment."),
+		plainRow("func main() {"),
+	}, 40)
+
+	inf := newCursor(t)
+	got, err := inf.Infer(buf.RawCells(), term.Coordinates{X: 0, Y: 1}, linesOf(content), nil)
+	require.NoError(t, err)
+	assert.Equal(t, term.Coordinates{X: 0, Y: 1}, got.CursorAtScroll,
+		"cursor sits on the blank file line (index 1)")
+	assert.Equal(t, 1, got.Scroll.Y, "top content row is the blank file line")
+	assert.Equal(t, 2, got.Rows[1].FileLine, "blank row maps to file line 2")
+	assert.Equal(t, 3, got.Rows[2].FileLine, "comment row maps to file line 3")
+}
+
 func TestInferContentChange(t *testing.T) {
 	t.Parallel()
 
