@@ -1,0 +1,36 @@
+[7m  GNU nano 9.0     /Users/ernestrc/.rune/worktrees/rune-7bf2/RUNE-228/term/vte/vteprobe/testdata/samples/go-mouse/sample.txt
+[0m[38;5;208m        [39mm.mousePressedMiddle = false
+[38;5;208m        [39mm.lastClick = time.Time{}
+[38;5;208m        [39mm.clickCount = 0
+}
+
+// Handle satisfies tui.Handler.
+func (h *Mouse) Handle(ev term.Event) (exit, handled bool) {
+[38;5;208m        [39mdefer func() {
+[38;5;208m                [39mh.mousePressedLeft = ev.Key == term.MouseLeft
+[38;5;208m                [39mh.mousePressedMiddle = ev.Key == term.MouseMiddle
+[38;5;208m                [39mh.mousePressedRight = ev.Key == term.MouseRight
+[38;5;208m        [39m}()
+
+[38;5;208m        [39mif ev.Type != term.EventMouse || ev.Mod != 0 {
+[38;5;208m                [39mreturn
+[38;5;208m        [39m}
+
+[38;5;208m        [39mpos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
+[38;5;208m        [39mpressedLeft := ev.Key == term.MouseLeft && !h.mousePressedLeft
+[38;5;208m        [39mpressedMiddle := ev.Key == term.MouseMiddle && !h.mousePressedMiddle
+[38;5;208m        [39mpressedRight := ev.Key == term.MouseRight && !h.mousePressedRight
+[38;5;208m        [39mwheelUp := ev.Key == term.MouseWheelUp
+[38;5;208m        [39mwheelDown := ev.Key == term.MouseWheelDown
+[38;5;208m        [39mreleased := ev.Key == term.MouseRelease
+
+[38;5;208m        [39mvar action Action
+[38;5;208m        [39mswitch true {
+[38;5;208m        [39mcase pressedLeft:
+[38;5;208m                [39maction = LeftClick
+[38;5;208m        [39mcase pressedMiddle:
+[38;5;208m                [39maction = MiddleClick
+[38;5;208m        [39mcase pressedRight:
+                                                             [7m[ Read 146 lines ][0m
+[7m^G[0m Help        [7m^O[0m Write Out   [7m^F[0m Where Is    [7m^K[0m Cut         [7m^T[0m Execute     [7m^C[0m Location    [7mM-U[0m Undo       [7mM-A[0m Set Mark   [7mM-][0m To Bracket
+[7m^X[0m Exit        [7m^R[0m Read File   [7m^\[0m Replace     [7m^U[0m Paste       [7m^J[0m Justify     [7m^/[0m Go To Line  [7mM-E[0m Redo       [7mM-6[0m Copy       [7m^B[0m Where Was
