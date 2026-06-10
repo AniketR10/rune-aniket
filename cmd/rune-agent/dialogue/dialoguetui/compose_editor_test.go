@@ -519,3 +519,34 @@ func TestComposeEditorArrowUpNavigatesBeforeHistory(t *testing.T) {
 	assert.Equal(t, "old message", comp.Input().Text(),
 		"ArrowUp at the top edge must recall the previous history entry")
 }
+
+// TestComposeEditorModalArrowUpRecallsQueuedMessage verifies that, with a
+// modal (vi) compose editor, ArrowUp on an empty buffer recalls a queued
+// message. The vi handler reports the edge ArrowUp as unhandled so the
+// dialogue's recall fallback runs.
+func TestComposeEditorModalArrowUpRecallsQueuedMessage(t *testing.T) {
+	ed := vi.Editor(vi.WithClipboard(clipboard.NewInMemory()))
+	comp := NewComponent(ComponentConfig{Editor: ed, EditorModal: true})
+
+	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
+		term.FuncInterrupter(func(context.Context) error { return nil }))
+	defer close(tx)
+	h.Resize(30, 10)
+
+	dh := h.(*dialogueHandler)
+	dh.busy = true
+
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	typeText(h, "queued msg")
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	require.True(t, handled)
+	require.Equal(t, "", comp.Input().Text())
+	require.Equal(t, 1, comp.QueueLen())
+
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+	assert.True(t, handled)
+	assert.Equal(t, "queued msg", comp.Input().Text(),
+		"ArrowUp on an empty modal buffer must recall the queued message")
+	assert.Equal(t, 0, comp.QueueLen())
+}

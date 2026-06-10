@@ -1176,16 +1176,16 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 				vi.cursor.Unselect()
 			case term.KeyArrowUp:
 				vi.cursor.MoveToScroll(vi.anchor)
-				vi.cursor.MoveUp()
+				handled = vi.cursor.MoveUp()
 			case term.KeyArrowRight:
 				vi.cursor.MoveToScroll(vi.anchor)
-				vi.cursor.MoveRight()
+				handled = vi.cursor.MoveRight()
 			case term.KeyArrowDown:
 				vi.cursor.MoveToScroll(vi.anchor)
-				vi.cursor.MoveDown()
+				handled = vi.cursor.MoveDown()
 			case term.KeyArrowLeft:
 				vi.cursor.MoveToScroll(vi.anchor)
-				vi.cursor.MoveLeft()
+				handled = vi.cursor.MoveLeft()
 			default:
 				if ev.Ch == '0' && vi.countDigits == "" {
 					vi.cursor.MoveStartLine()

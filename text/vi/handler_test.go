@@ -5609,6 +5609,60 @@ func TestViCountChangeToLineVisualMode(t *testing.T) {
 	}
 }
 
+// TestViNormalModeArrowEdgeReturnsUnhandled verifies that, in normal
+// mode, arrow-key cursor moves report handled=false when the cursor is
+// already at the buffer edge and cannot move. Outer handlers rely on
+// this to fall through (e.g. the dialogue compose box recalling queued
+// messages on ArrowUp).
+func TestViNormalModeArrowEdgeReturnsUnhandled(t *testing.T) {
+	newVi := func(t *testing.T, content string) *viHandlerImpl {
+		t.Helper()
+		vi := setupVi(t, content, 2)
+		vi.Resize(40, 10)
+		vi.Draw(term.NoopWriter{})
+		return vi
+	}
+
+	t.Run("ArrowUp at top line is unhandled", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld")
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+		assert.False(t, handled)
+	})
+
+	t.Run("ArrowUp below top line is handled", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld")
+		require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1}))
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowUp})
+		assert.True(t, handled)
+	})
+
+	t.Run("ArrowDown at bottom line is unhandled", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld")
+		require.True(t, vi.setCursorAtScroll(term.Coordinates{Y: 1}))
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
+		assert.False(t, handled)
+	})
+
+	t.Run("ArrowDown above bottom line is handled", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld")
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
+		assert.True(t, handled)
+	})
+
+	t.Run("ArrowLeft at column zero is unhandled", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld")
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowLeft})
+		assert.False(t, handled)
+	})
+
+	t.Run("ArrowLeft mid-line is handled", func(t *testing.T) {
+		vi := newVi(t, "hello\nworld")
+		require.True(t, vi.setCursorAtScroll(term.Coordinates{X: 2}))
+		_, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowLeft})
+		assert.True(t, handled)
+	})
+}
+
 func TestViJoinNoSpace(t *testing.T) {
 	newVi := func(t *testing.T, content string, opts ...Option) *viHandlerImpl {
 		t.Helper()
