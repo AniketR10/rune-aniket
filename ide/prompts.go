@@ -421,7 +421,7 @@ func (h *replaceTaskHandler) OnSelect(
 ) {
 	switch option {
 	case yesOpt:
-		if err := h.ex.tasks.ReplaceTask(h.t.Name, h.t.Cmd, h.t.Args...); err != nil {
+		if err := h.ex.tasks.ReplaceTask(h.t); err != nil {
 			_, _ = h.ex.comp.Notify(browserapi.LevelError, "replace task: %v", err)
 			return
 		}

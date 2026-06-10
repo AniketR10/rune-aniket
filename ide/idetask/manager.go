@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
@@ -43,6 +44,14 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/vctrl"
+)
+
+const (
+	// loopWindow and loopThreshold define when a task is considered stuck
+	// in a build -> file-change -> rebuild infinite loop: when a single
+	// file triggers loopThreshold reruns within loopWindow.
+	loopWindow    = 5 * time.Second
+	loopThreshold = 5
 )
 
 // Manager runs and manages tasks, which are processes that
@@ -163,7 +172,7 @@ func (m *Manager) RunTask(t Task) error {
 	}
 	t.defaultFrameAttr = m.frameAttr
 	t.focusFrameAttr = m.focusFrameAttr
-	ctx, cancel, err := t.init(id, m.ctx, m.b, m.scheme,
+	ctx, _, err := t.init(id, m.ctx, m.b, m.scheme,
 		m.newPlugin, m.width, m.height, func() {
 			m.tasks.Delete(t.Name)
 		}, m.scheduleNextTick, m.pluginOpts...)
@@ -173,9 +182,27 @@ func (m *Manager) RunTask(t Task) error {
 		return fmt.Errorf("init task: %w", err)
 	}
 
+	m.startWatch(&t, ctx, ch, id)
+
+	return nil
+}
+
+// startWatch launches the goroutine that reruns t on matching workspace
+// changes. ch and id are the channel and handle returned by Watch; ctx is
+// the task lifetime context, so closing the task (which cancels ctx) also
+// stops the watcher. The watcher's own cancel is recorded on the task so
+// ReplaceTask can stop just this watch and start a fresh one without
+// disturbing the task window.
+func (m *Manager) startWatch(
+	t *Task, ctx context.Context, ch <-chan schemeapi.EventInfo, id int,
+) {
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	t.mu.Lock()
+	t.watchCancel = watchCancel
+	filter := t.Filter
+	t.mu.Unlock()
 	go debug.CapturePanicReport(func() {
 		defer m.scheme.StopWatch(id) //nolint:errcheck
-		defer cancel()
 		ignore, err := vctrl.LoadGitignore(m.scheme)
 		if err != nil {
 			m.log(log.ErrorLevel, "load gitignore: %v", err)
@@ -183,21 +210,26 @@ func (m *Manager) RunTask(t Task) error {
 		}
 		matcher := vctrl.NopMatcher(true)
 		var filters []gitignore.Pattern
-		if t.Filter != "" {
-			filtersStr := strings.Split(t.Filter, ",")
-			filters = make([]gitignore.Pattern, len(filtersStr))
-			for i, filter := range filtersStr {
-				filters[i] = gitignore.ParsePattern(filter, nil)
+		if filter != "" {
+			for segment := range strings.SplitSeq(filter, ",") {
+				segment = strings.TrimSpace(segment)
+				if segment == "" {
+					continue
+				}
+				filters = append(filters, gitignore.ParsePattern(segment, nil))
 			}
+		}
+		if len(filters) > 0 {
 			matcher, err = vctrl.MatcherFromPatterns(m.scheme, filters...)
 			if err != nil {
 				matcher = vctrl.NopMatcher(true)
 				m.log(log.ErrorLevel, "new matcher: %v", err)
 			}
 		}
+		rerunsByFile := make(map[string][]time.Time)
 		for {
 			select {
-			case <-ctx.Done():
+			case <-watchCtx.Done():
 				return
 			case ev := <-ch:
 				isDir, _ := ev.IsDir()
@@ -223,12 +255,31 @@ func (m *Manager) RunTask(t Task) error {
 					icon = " "
 				}
 
-				t.tryRunning(m.b, m.scheme, icon+ev.URI().Name())
+				if !t.tryRunning(m.b, m.scheme, icon+ev.URI().Name()) {
+					continue
+				}
+
+				path := ev.URI().Path()
+				now := time.Now()
+				cutoff := now.Add(-loopWindow)
+				kept := rerunsByFile[path][:0]
+				for _, ts := range rerunsByFile[path] {
+					if ts.After(cutoff) {
+						kept = append(kept, ts)
+					}
+				}
+				kept = append(kept, now)
+				rerunsByFile[path] = kept
+				if len(kept) >= loopThreshold {
+					m.log(log.ErrorLevel,
+						"task %q halted: %s retriggered it %d times within %s",
+						t.Name, path, len(kept), loopWindow)
+					t.haltLoop(path)
+					return
+				}
 			}
 		}
 	})
-
-	return nil
 }
 
 // ListTasks creates a floating window that displays
@@ -258,19 +309,44 @@ func (m *Manager) StopTask(name string) (err error) {
 	return err
 }
 
-// ReplaceTask replaces the command of the given task and attempts to
-// run the task.
-func (m *Manager) ReplaceTask(name string, cmd string, args ...string) error {
-	info, ok := m.tasks.Load(name)
+// ReplaceTask updates an existing task's command, args, and filter in
+// place and runs it, preserving the task's window or tab. The previous
+// watcher is stopped and a fresh one is started so the new filter takes
+// effect and a task that halted itself on an infinite loop is re-armed
+// (its old watcher had already exited).
+func (m *Manager) ReplaceTask(spec Task) error {
+	info, ok := m.tasks.Load(spec.Name)
 	if !ok {
 		return errors.New("task with this name does not exist")
 	}
 	task := info.(*Task)
+
+	// Arm the new watch before touching task state, so a failed Watch
+	// leaves the existing task and its live watcher untouched rather than
+	// stranding it without any watch.
+	ch := make(chan schemeapi.EventInfo)
+	id, err := m.scheme.Watch("./...", ch, schemeapi.AllEvents()...)
+	if err != nil {
+		return fmt.Errorf("workspace watch: %w", err)
+	}
+
 	task.mu.Lock()
-	task.Cmd = cmd
-	task.Args = args
+	task.Cmd = spec.Cmd
+	task.Args = spec.Args
+	task.Filter = spec.Filter
 	task.cmdAndArgs = append([]string{task.Cmd}, task.Args...)
+	task.loopHalted = false
+	task.lastExit = nil
+	watchCancel := task.watchCancel
+	taskCtx := task.ctx
+	task.watchID = id
 	task.mu.Unlock()
+
+	if watchCancel != nil {
+		watchCancel()
+	}
+	m.startWatch(task, taskCtx, ch, id)
+
 	task.tryRunning(m.b, m.scheme, "  task")
 	return nil
 }

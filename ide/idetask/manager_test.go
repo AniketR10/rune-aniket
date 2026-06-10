@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -496,7 +496,7 @@ func TestManager(t *testing.T) {
 				return true
 			})
 
-		require.NoError(t, m.ReplaceTask(task.Name, "rumtask", "arg1"))
+		require.NoError(t, m.ReplaceTask(Task{Name: task.Name, Cmd: "rumtask", Args: []string{"arg1"}}))
 		assertTaskWithin(t, m, 1*time.Second, "task",
 			func(info TaskInfo) bool {
 				assert.Equal(t, []string{"rumtask", "arg1"}, info.CmdAndArgs)
@@ -665,6 +665,165 @@ func TestManager(t *testing.T) {
 				return true
 			})
 	})
+
+	t.Run("same file retriggering the task is detected as an infinite loop", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		taskIfc, ok := m.tasks.Load("task")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+		task.Resize(80, 24)
+
+		for range loopThreshold {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+
+		assertTaskWithin(t, m, 1*time.Second, "task",
+			func(info TaskInfo) bool {
+				if !info.LoopHalted {
+					return false
+				}
+				assert.False(t, info.Running)
+				assert.False(t, info.LastSuccess)
+				return true
+			})
+
+		assert.Eventually(t, func() bool {
+			return watchStopped(m, exec, "task")
+		}, 1*time.Second, 10*time.Millisecond,
+			"watch should be stopped once the loop is detected")
+
+		w := term.NewStringWriter(80, 24)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		task.currentHandler().Draw(w)
+		require.NoError(t, w.Flush())
+		assert.Contains(t, w.String(), "out.bin",
+			"loop error should name the offending file")
+	})
+
+	t.Run("recreating a loop-halted task recovers and runs normally", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		for range loopThreshold {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		assertTaskWithin(t, m, 1*time.Second, "task",
+			func(info TaskInfo) bool { return info.LoopHalted })
+
+		// The user recreates the task, e.g. with a filter that excludes
+		// the offending file. Recovery requires removing the halted task
+		// and starting a fresh one under the same name.
+		require.NoError(t, m.StopTask("task"))
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build", Filter: "*.go"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		info := mustTaskInfo(t, m, "task")
+		assert.False(t, info.LoopHalted, "recreated task must not stay halted")
+		assert.True(t, info.LastSuccess)
+		assert.False(t, watchStopped(m, exec, "task"),
+			"recreated task should hold a live watch")
+
+		// A subsequent matching change reruns the recovered task normally.
+		triggerRerun(t, m, exec, "task", "main.go")
+		info = mustTaskInfo(t, m, "task")
+		assert.False(t, info.LoopHalted)
+		assert.True(t, info.LastSuccess)
+		assert.Equal(t, 2, info.Runs)
+	})
+
+	t.Run("replacing a loop-halted task with a new filter recovers and retriggers", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		for range loopThreshold {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		assertTaskWithin(t, m, 1*time.Second, "task",
+			func(info TaskInfo) bool { return info.LoopHalted })
+
+		// Replace the halted task with one that filters to source files,
+		// matching the tasknew -> "replace?" -> yes recovery flow.
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "build", Filter: "*.go"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		info := mustTaskInfo(t, m, "task")
+		assert.False(t, info.LoopHalted, "replaced task must not stay halted")
+		assert.Equal(t, "*.go", info.Filter, "replace must apply the new filter")
+		assert.False(t, watchStopped(m, exec, "task"),
+			"replaced task should hold a live watch")
+
+		// A subsequent matching change retriggers the replaced task.
+		runsBefore := info.Runs
+		triggerRerun(t, m, exec, "task", "main.go")
+		info = mustTaskInfo(t, m, "task")
+		assert.False(t, info.LoopHalted)
+		assert.True(t, info.LastSuccess)
+		assert.Equal(t, runsBefore+1, info.Runs,
+			"matching change should rerun the recovered task")
+
+		// A change that does not match the new filter must not retrigger it.
+		runsBefore = info.Runs
+		sendEvent(t, m, exec, "task", "out.bin")
+		time.Sleep(200 * time.Millisecond)
+		info = mustTaskInfo(t, m, "task")
+		assert.Equal(t, runsBefore, info.Runs,
+			"non-matching change must not rerun the recovered task")
+	})
+
+	t.Run("reruns below threshold do not halt the task", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		for range loopThreshold - 1 {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+
+		info := mustTaskInfo(t, m, "task")
+		assert.False(t, info.LoopHalted)
+		assert.False(t, watchStopped(m, exec, "task"))
+	})
+
+	t.Run("different files below threshold do not halt the task", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskRunsWithin(t, m, 1*time.Second, "task", nil,
+			func(info TaskInfo) bool { return !info.Running })
+
+		for i := range loopThreshold + 2 {
+			triggerRerun(t, m, exec, "task", fmt.Sprintf("out-%d.bin", i))
+		}
+
+		info := mustTaskInfo(t, m, "task")
+		assert.False(t, info.LoopHalted)
+		assert.False(t, watchStopped(m, exec, "task"))
+	})
 }
 
 // TestTaskHandlerAccessRace exercises the Task render/handler accessors
@@ -706,15 +865,65 @@ func TestTaskHandlerAccessRace(t *testing.T) {
 }
 
 func sendEvent(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename string) {
+	sendEventInfo(t, m, exec, taskname, testEventInfo{uri: mustURI(t, filename)})
+}
+
+// sendEventInfo pushes a fully-specified event onto the task's watch
+// channel, locking the fake scheme so the lookup does not race the
+// watcher's StopWatch.
+func sendEventInfo(t *testing.T, m *Manager, exec *fakeScheme, taskname string, ev testEventInfo) {
+	t.Helper()
 	taskIfc, ok := m.tasks.Load(taskname)
 	require.True(t, ok)
 	task := taskIfc.(*Task)
-	ch := exec.tasks[task.watchID]
+	task.mu.Lock()
+	id := task.watchID
+	task.mu.Unlock()
+	exec.mu.Lock()
+	ch := exec.tasks[id]
+	exec.mu.Unlock()
 	require.NotNil(t, ch)
+	ch <- ev
+}
 
-	uri, err := workspaceapi.ParseURI(filepath.Join("memory:///", filename))
+func mustURI(t *testing.T, filename string) workspaceapi.URI {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("memory:///" + strings.TrimPrefix(filename, "/"))
 	require.NoError(t, err)
-	ch <- testEventInfo{uri: uri}
+	return uri
+}
+
+// triggerRerun emits a file event, waits for the resulting run to start,
+// and settles it successfully so the task returns to idle. It models one
+// build -> file-change -> rebuild cycle.
+func triggerRerun(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename string) {
+	t.Helper()
+	sendEvent(t, m, exec, taskname, filename)
+	assertTaskWithin(t, m, 1*time.Second, taskname,
+		func(info TaskInfo) bool { return info.Running })
+	assertTaskRunsWithin(t, m, 1*time.Second, taskname, nil,
+		func(info TaskInfo) bool { return !info.Running })
+}
+
+// watchStopped reports whether the task's workspace watch channel has
+// been removed from the fake scheme (i.e. StopWatch ran).
+func watchStopped(m *Manager, exec *fakeScheme, taskname string) bool {
+	taskIfc, ok := m.tasks.Load(taskname)
+	if !ok {
+		return true
+	}
+	task := taskIfc.(*Task)
+	exec.mu.Lock()
+	defer exec.mu.Unlock()
+	_, ok = exec.tasks[task.watchID]
+	return !ok
+}
+
+func mustTaskInfo(t *testing.T, m *Manager, taskname string) TaskInfo {
+	t.Helper()
+	taskIfc, ok := m.tasks.Load(taskname)
+	require.True(t, ok)
+	return taskIfc.(*Task).Info()
 }
 
 func newTestManager(b *fakeBrowser, scheme schemeapi.Scheme) *Manager {
@@ -801,6 +1010,7 @@ type fakeScheme struct {
 	pidSeq    atomic.Int64
 	procs     map[workspaceapi.Pid]*procState
 	startErr  error                      // if set, StartCommand will return this error
+	watchErr  error                      // if set, Watch will return this error
 	startHook func(cmd workspaceapi.Cmd) // optional test hook
 	tasks     map[int]chan<- schemeapi.EventInfo
 	next      int
@@ -833,9 +1043,12 @@ func (f *fakeScheme) Watch(
 	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.watchErr != nil {
+		return 0, f.watchErr
+	}
 	f.next++
 	f.tasks[f.next] = c
-	f.mu.Unlock()
 	return f.next, nil
 }
 
@@ -844,7 +1057,16 @@ func (f *fakeScheme) ReadDir(string) ([]os.DirEntry, error) {
 }
 
 func (f *fakeScheme) URI(path string) (workspaceapi.URI, error) {
-	return workspaceapi.ParseURI(filepath.Join("memory://", path))
+	// Root the workspace at "/" so that workspaceapi.RelPath of an event
+	// URI (built as memory:///<file>) yields a clean relative path with
+	// no leading separator. A "memory://." cwd would relativize to
+	// "/<file>", whose empty leading path component breaks nested-path
+	// glob filters like "src/*.go". filepath.Join collapses the "///"
+	// scheme separator, so build the URI string directly.
+	if path == "" || path == "." {
+		return workspaceapi.ParseURI("memory:///")
+	}
+	return workspaceapi.ParseURI("memory:///" + strings.TrimPrefix(path, "/"))
 }
 
 func (f *fakeScheme) OpenFile(path string, flag int, perm os.FileMode) (
@@ -1106,10 +1328,12 @@ func (m *fakeBrowser) Created() []*fakeWindow {
 
 type testEventInfo struct {
 	uri workspaceapi.URI
+	ev  schemeapi.Event
+	dir bool
 }
 
 func (t testEventInfo) Event() schemeapi.Event {
-	return 0
+	return t.ev
 }
 
 func (t testEventInfo) URI() workspaceapi.URI {
@@ -1117,5 +1341,590 @@ func (t testEventInfo) URI() workspaceapi.URI {
 }
 
 func (t testEventInfo) IsDir() (bool, error) {
-	return false, nil
+	return t.dir, nil
+}
+
+// settleRun pushes a successful donech completion and waits for the task
+// to become idle. Unlike triggerRerun it does not send a file event, so
+// it settles a run started by some other path (ReplaceTask, ctrl-r).
+func settleRun(t *testing.T, m *Manager, name string) {
+	t.Helper()
+	assertTaskRunsWithin(t, m, time.Second, name, nil,
+		func(info TaskInfo) bool { return !info.Running })
+}
+
+func runAndSettle(t *testing.T, m *Manager, task Task) {
+	t.Helper()
+	require.NoError(t, m.RunTask(task))
+	settleRun(t, m, task.Name)
+}
+
+// TestManagerReplaceTaskEdgeCases probes ReplaceTask, the most fragile
+// surface: it tears down and re-arms a watcher in place while preserving
+// the window. These cases hunt for lost state, leaked watches, and
+// mishandled error/race paths.
+func TestManagerReplaceTaskEdgeCases(t *testing.T) {
+	t.Run("replace nonexistent task is an error", func(t *testing.T) {
+		m := newTestManager(newFakeBrowser(), newFakeScheme())
+		err := m.ReplaceTask(Task{Name: "ghost", Cmd: "run"})
+		require.Error(t, err)
+	})
+
+	t.Run("replace preserves the same window (no new window created)", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+		require.Len(t, wm.Created(), 1)
+
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "rebuild"}))
+		settleRun(t, m, "task")
+		assert.Len(t, wm.Created(), 1,
+			"replace must reuse the existing window, not create a new one")
+	})
+
+	t.Run("replace stops the old watch and leaves exactly one live watch", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "build", Filter: "*.go"}))
+		settleRun(t, m, "task")
+
+		assert.Eventually(t, func() bool {
+			exec.mu.Lock()
+			defer exec.mu.Unlock()
+			return len(exec.tasks) == 1
+		}, time.Second, 10*time.Millisecond,
+			"exactly one watch must remain live after replace")
+	})
+
+	t.Run("replace clearing a filter reruns on any file again", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build", Filter: "*.go"})
+
+		// With the *.go filter, a .txt change is ignored.
+		sendEvent(t, m, exec, "task", "data.txt")
+		time.Sleep(150 * time.Millisecond)
+		assert.Equal(t, 1, mustTaskInfo(t, m, "task").Runs)
+
+		// Replace with an empty filter; now any file should retrigger.
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "build", Filter: ""}))
+		settleRun(t, m, "task")
+		runsBefore := mustTaskInfo(t, m, "task").Runs
+		triggerRerun(t, m, exec, "task", "data.txt")
+		assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
+			"cleared filter should rerun on previously-ignored files")
+	})
+
+	t.Run("replace while running does not lose the new command", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		// Start a task and leave it running (do not settle).
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool { return info.Running })
+
+		// Replace while the first run is still in flight.
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "rebuild", Args: []string{"x"}}))
+		info := mustTaskInfo(t, m, "task")
+		assert.Equal(t, []string{"rebuild", "x"}, info.CmdAndArgs,
+			"replace must update CmdAndArgs even when a run was in flight")
+	})
+
+	t.Run("replace surfaces watch errors without leaving a dead task", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		taskIfc, _ := m.tasks.Load("task")
+		oldID := func() int {
+			tk := taskIfc.(*Task)
+			tk.mu.Lock()
+			defer tk.mu.Unlock()
+			return tk.watchID
+		}()
+
+		exec.watchErr = errors.New("watch exploded")
+		err := m.ReplaceTask(Task{Name: "task", Cmd: "build", Filter: "*.go"})
+		require.Error(t, err)
+
+		// A failed replace must leave the original watch untouched: it must
+		// never tear down the existing watch (which the watcher's deferred
+		// StopWatch would do asynchronously after a stray cancel).
+		assert.Never(t, func() bool {
+			exec.mu.Lock()
+			defer exec.mu.Unlock()
+			_, live := exec.tasks[oldID]
+			return !live
+		}, 300*time.Millisecond, 10*time.Millisecond,
+			"a failed replace must not strand the task without a watch")
+
+		// And the task must still retrigger via that surviving watch.
+		exec.watchErr = nil
+		runsBefore := mustTaskInfo(t, m, "task").Runs
+		triggerRerun(t, m, exec, "task", "main.go")
+		assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
+			"task must still retrigger after a failed replace")
+	})
+
+	t.Run("rapid successive replaces leave exactly one live watch", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		for i := range 8 {
+			require.NoError(t, m.ReplaceTask(Task{
+				Name: "task", Cmd: "build", Filter: fmt.Sprintf("*.v%d", i),
+			}))
+			settleRun(t, m, "task")
+		}
+
+		assert.Eventually(t, func() bool {
+			exec.mu.Lock()
+			defer exec.mu.Unlock()
+			return len(exec.tasks) == 1
+		}, time.Second, 10*time.Millisecond,
+			"rapid replaces must not leak watches")
+	})
+
+	t.Run("replace then stop leaves no live watch", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "build", Filter: "*.go"}))
+		settleRun(t, m, "task")
+		require.NoError(t, m.StopTask("task"))
+
+		assert.Eventually(t, func() bool {
+			exec.mu.Lock()
+			defer exec.mu.Unlock()
+			return len(exec.tasks) == 0
+		}, time.Second, 10*time.Millisecond,
+			"stopping a replaced task must close its watch")
+	})
+
+	t.Run("replace gives the task a fresh loop window", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		// Almost trip the loop on out.bin.
+		for range loopThreshold - 1 {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		// Replace (new watcher, fresh goroutine-local rerun map).
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "build"}))
+		settleRun(t, m, "task")
+
+		// One more out.bin event must not immediately halt.
+		triggerRerun(t, m, exec, "task", "out.bin")
+		assert.False(t, mustTaskInfo(t, m, "task").LoopHalted,
+			"replaced task must not inherit the prior loop window")
+	})
+}
+
+// TestManagerLoopDetection probes the build -> file-change -> rebuild
+// loop detector at its boundaries and against interacting state
+// transitions (pause, restart, replace).
+func TestManagerLoopDetection(t *testing.T) {
+	t.Run("exactly threshold reruns halts", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		for range loopThreshold {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool { return info.LoopHalted })
+	})
+
+	t.Run("threshold minus one reruns does not halt", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		for range loopThreshold - 1 {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		assert.False(t, mustTaskInfo(t, m, "task").LoopHalted)
+		assert.False(t, watchStopped(m, exec, "task"))
+	})
+
+	t.Run("two files each below threshold do not halt", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		// Interleave A and B so each accumulates threshold-1 within the
+		// window; neither alone crosses the line.
+		for range loopThreshold - 1 {
+			triggerRerun(t, m, exec, "task", "a.bin")
+			triggerRerun(t, m, exec, "task", "b.bin")
+		}
+		assert.False(t, mustTaskInfo(t, m, "task").LoopHalted)
+	})
+
+	t.Run("loop attributed to the offending file even when interleaved", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		taskIfc, _ := m.tasks.Load("task")
+		task := taskIfc.(*Task)
+		task.Resize(80, 24)
+
+		// "noise.bin" fires a few times but never crosses; "loop.bin"
+		// crosses the threshold and must be the named culprit.
+		triggerRerun(t, m, exec, "task", "noise.bin")
+		for range loopThreshold {
+			triggerRerun(t, m, exec, "task", "loop.bin")
+		}
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool { return info.LoopHalted })
+
+		w := term.NewStringWriter(80, 24)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		task.currentHandler().Draw(w)
+		require.NoError(t, w.Flush())
+		rendered := w.String()
+		assert.Contains(t, rendered, "loop.bin", "must name the culprit file")
+		assert.NotContains(t, rendered, "noise.bin", "must not blame the noise file")
+	})
+
+	t.Run("events that do not start a run are not counted", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		// Leave the task running so every event hits the t.running guard in
+		// tryRunning and returns false: these must NOT count toward the loop.
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool { return info.Running })
+
+		for range loopThreshold * 3 {
+			sendEvent(t, m, exec, "task", "out.bin")
+		}
+		time.Sleep(200 * time.Millisecond)
+		assert.False(t, mustTaskInfo(t, m, "task").LoopHalted,
+			"events suppressed by the running guard must not trip the loop detector")
+	})
+
+	t.Run("halted task ignores further events", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		for range loopThreshold {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool { return info.LoopHalted })
+
+		runs := mustTaskInfo(t, m, "task").Runs
+		// The watch is stopped; sending more events must be inert. The
+		// channel may already be gone, so do a best-effort non-blocking send.
+		assert.Eventually(t, func() bool { return watchStopped(m, exec, "task") },
+			time.Second, 10*time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, runs, mustTaskInfo(t, m, "task").Runs,
+			"a halted task must not run again")
+	})
+}
+
+// triggerRerunInfo behaves like triggerRerun but sends a fully-specified
+// event (event type, dir flag) instead of a bare Create on a file.
+func triggerRerunInfo(t *testing.T, m *Manager, exec *fakeScheme, name string, ev testEventInfo) {
+	t.Helper()
+	sendEventInfo(t, m, exec, name, ev)
+	assertTaskWithin(t, m, time.Second, name,
+		func(info TaskInfo) bool { return info.Running })
+	assertTaskRunsWithin(t, m, time.Second, name, nil,
+		func(info TaskInfo) bool { return !info.Running })
+}
+
+// TestManagerEventHandling exercises event-type and filter-matching
+// behavior that the default Create-on-file event could not reach.
+func TestManagerEventHandling(t *testing.T) {
+	eventTypes := []struct {
+		name string
+		ev   schemeapi.Event
+	}{
+		{"create", schemeapi.Create},
+		{"write", schemeapi.Write},
+		{"rename", schemeapi.Rename},
+		{"remove", schemeapi.Remove},
+	}
+	for _, tc := range eventTypes {
+		t.Run("event type "+tc.name+" reruns an idle task", func(t *testing.T) {
+			wm := newFakeBrowser()
+			exec := newFakeScheme()
+			m := newTestManager(wm, exec)
+			runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+			triggerRerunInfo(t, m, exec, "task",
+				testEventInfo{uri: mustURI(t, "x.txt"), ev: tc.ev})
+			assert.Equal(t, 2, mustTaskInfo(t, m, "task").Runs,
+				"%s event should rerun the task", tc.name)
+		})
+	}
+
+	t.Run("directory event matching filter reruns the task", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		triggerRerunInfo(t, m, exec, "task",
+			testEventInfo{uri: mustURI(t, "subdir"), ev: schemeapi.Create, dir: true})
+		assert.Equal(t, 2, mustTaskInfo(t, m, "task").Runs)
+	})
+
+	filterCases := []struct {
+		name    string
+		filter  string
+		file    string
+		matches bool
+	}{
+		{"single glob match", "*.go", "main.go", true},
+		{"single glob no match", "*.go", "main.rs", false},
+		{"multi glob first", "*.go,*.md", "readme.md", true},
+		{"multi glob none", "*.go,*.md", "main.rs", false},
+		{"nested path glob", "src/*.go", "src/main.go", true},
+		{"nested path glob miss", "src/*.go", "lib/main.go", false},
+		{"double-star glob", "src/**", "src/a/b/c.go", true},
+		{"leading whitespace segment", " *.go", "main.go", true},
+		{"trailing whitespace segment", "*.go ", "main.go", true},
+		{"empty middle segment", "*.go,,*.md", "readme.md", true},
+		{"trailing comma", "*.md,", "readme.md", true},
+		{"leading comma", ",*.md", "readme.md", true},
+	}
+	for _, tc := range filterCases {
+		t.Run("filter "+tc.name, func(t *testing.T) {
+			wm := newFakeBrowser()
+			exec := newFakeScheme()
+			m := newTestManager(wm, exec)
+			runAndSettle(t, m, Task{Name: "task", Cmd: "build", Filter: tc.filter})
+
+			runsBefore := mustTaskInfo(t, m, "task").Runs
+			if tc.matches {
+				triggerRerun(t, m, exec, "task", tc.file)
+				assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
+					"filter %q should match %q", tc.filter, tc.file)
+			} else {
+				sendEvent(t, m, exec, "task", tc.file)
+				time.Sleep(150 * time.Millisecond)
+				assert.Equal(t, runsBefore, mustTaskInfo(t, m, "task").Runs,
+					"filter %q should not match %q", tc.filter, tc.file)
+			}
+		})
+	}
+
+	t.Run("filename with spaces matching filter reruns", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build", Filter: "*.txt"})
+
+		triggerRerun(t, m, exec, "task", "my notes.txt")
+		assert.Equal(t, 2, mustTaskInfo(t, m, "task").Runs)
+	})
+
+	t.Run("unicode filename matching filter reruns", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build", Filter: "*.go"})
+
+		triggerRerun(t, m, exec, "task", "café.go")
+		assert.Equal(t, 2, mustTaskInfo(t, m, "task").Runs)
+	})
+}
+
+// TestManagerLifecycleEdgeCases probes construction validation, idempotent
+// teardown, and the pause/restart interactions around a watched task.
+func TestManagerLifecycleEdgeCases(t *testing.T) {
+	t.Run("RunTask with empty command panics", func(t *testing.T) {
+		m := newTestManager(newFakeBrowser(), newFakeScheme())
+		assert.Panics(t, func() {
+			_ = m.RunTask(Task{Name: "x", Cmd: ""})
+		})
+	})
+
+	t.Run("RunTask with empty name panics", func(t *testing.T) {
+		m := newTestManager(newFakeBrowser(), newFakeScheme())
+		assert.Panics(t, func() {
+			_ = m.RunTask(Task{Name: "", Cmd: "run"})
+		})
+	})
+
+	t.Run("Resize after close is a no-op and does not panic", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+		taskIfc, _ := m.tasks.Load("task")
+		task := taskIfc.(*Task)
+		require.NoError(t, m.StopTask("task"))
+
+		assert.NotPanics(t, func() { task.Resize(40, 12) })
+	})
+
+	t.Run("FocusTask on unknown task returns false", func(t *testing.T) {
+		m := newTestManager(newFakeBrowser(), newFakeScheme())
+		assert.False(t, m.FocusTask("nope"))
+	})
+
+	t.Run("ListTasks reflects running and finished tasks", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		require.NoError(t, m.RunTask(Task{Name: "a", Cmd: "run"}))
+		runAndSettle(t, m, Task{Name: "b", Cmd: "run"})
+
+		infos := m.ListTasks()
+		require.Len(t, infos, 2)
+		byName := map[string]TaskInfo{}
+		for _, i := range infos {
+			byName[i.Name] = i
+		}
+		assert.True(t, byName["a"].Running)
+		assert.False(t, byName["b"].Running)
+	})
+
+	t.Run("ctrl-c pause then file change still reruns the task", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		taskIfc, _ := m.tasks.Load("task")
+		task := taskIfc.(*Task)
+		task.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c'})
+
+		runsBefore := mustTaskInfo(t, m, "task").Runs
+		triggerRerun(t, m, exec, "task", "main.go")
+		assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
+			"a paused-but-idle task should still rerun on file changes")
+	})
+
+	t.Run("loop detector resets after the task is stopped and recreated", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		// Almost trip the loop, then stop+recreate. The new task's loop
+		// window must start fresh, not inherit prior timestamps.
+		for range loopThreshold - 1 {
+			triggerRerun(t, m, exec, "task", "out.bin")
+		}
+		require.NoError(t, m.StopTask("task"))
+		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+		// One more event on the same file must not immediately halt.
+		triggerRerun(t, m, exec, "task", "out.bin")
+		assert.False(t, mustTaskInfo(t, m, "task").LoopHalted,
+			"recreated task must not inherit the prior loop window")
+	})
+
+	t.Run("concurrent StopTask calls do not double-close or panic", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+
+		var wg sync.WaitGroup
+		var errs [4]error
+		for i := range errs {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				errs[i] = m.StopTask("task")
+			}(i)
+		}
+		wg.Wait()
+
+		okCount := 0
+		for _, e := range errs {
+			if e == nil {
+				okCount++
+			}
+		}
+		assert.Equal(t, 1, okCount, "exactly one concurrent StopTask should succeed")
+	})
+
+	t.Run("Close stops all tasks and their watches", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		for i := range 5 {
+			require.NoError(t, m.RunTask(Task{Name: fmt.Sprintf("t%d", i), Cmd: "run"}))
+		}
+		require.NoError(t, m.Close())
+
+		assert.Eventually(t, func() bool {
+			exec.mu.Lock()
+			defer exec.mu.Unlock()
+			return len(exec.tasks) == 0
+		}, time.Second, 10*time.Millisecond,
+			"Close should stop every task watch")
+		assert.Empty(t, m.ListTasks())
+	})
+
+	t.Run("SetMaxWidthHeight concurrent with task runs does not race or panic", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		m := newTestManager(wm, exec)
+
+		for i := range 4 {
+			require.NoError(t, m.RunTask(Task{Name: fmt.Sprintf("t%d", i), Cmd: "run"}))
+		}
+
+		// Models the real production interaction: a single resize caller
+		// (the event loop) ranges over tasks calling setMaxWidthHeight while
+		// watcher goroutines drive tryRunning on those same tasks.
+		var stop atomic.Bool
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			for j := 0; !stop.Load(); j++ {
+				m.SetMaxWidthHeight(80+j%40, 24+j%20)
+			}
+		})
+		for i := range 4 {
+			name := fmt.Sprintf("t%d", i)
+			settleRun(t, m, name)
+			for range 5 {
+				triggerRerun(t, m, exec, name, fmt.Sprintf("%s.go", name))
+			}
+		}
+		stop.Store(true)
+		wg.Wait()
+
+		assert.Len(t, m.ListTasks(), 4)
+	})
 }

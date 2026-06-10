@@ -81,6 +81,7 @@ type Task struct {
 
 	b                Browser
 	watchID          int
+	watchCancel      func()
 	ctx              context.Context
 	cancelCtx        func()
 	closeHook        func()
@@ -112,6 +113,7 @@ type Task struct {
 	running          bool
 	paused           bool
 	restartPending   bool
+	loopHalted       bool
 	lastExit         error
 	lastStart        time.Time
 	lastDuration     time.Duration
@@ -133,6 +135,7 @@ type TaskInfo struct {
 	WindowMinimizedAlignment component.Alignment
 	Running                  bool
 	LastSuccess              bool
+	LoopHalted               bool
 	// Runs represents the number of times this task has been run.
 	Runs         int
 	LastDuration time.Duration
@@ -155,6 +158,7 @@ func (t *Task) Info() TaskInfo {
 		Running:                  t.running,
 		Runs:                     t.runs,
 		LastSuccess:              t.lastExit == nil,
+		LoopHalted:               t.loopHalted,
 		LastDuration:             t.lastDuration,
 	}
 }
@@ -450,6 +454,9 @@ func (t *Task) setError(err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	if t.loopHalted {
+		return
+	}
 	t.doSetError(err)
 }
 
@@ -461,10 +468,41 @@ func (t *Task) doSetError(err error) {
 	t.setBarColor(t.barColor)
 }
 
+func (t *Task) haltLoop(file string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.loopHalted = true
+	err := fmt.Errorf(
+		"%q keeps retriggering this task, creating an infinite loop. "+
+			"The task filter is an inclusive, comma-separated list of glob "+
+			"patterns: only matching files retrigger the task. Recreate the "+
+			"task with a filter that matches your source files but not %q, "+
+			"e.g. filter \"*.go,src/**\"", file, file)
+	h := browser.NopScrollableFloatingHandler(
+		handler.NopScrollableFloatingFromComponent(
+			component.NewResponsiveString(
+				err.Error(),
+				component.StringResponsiveConfig{
+					StringConfig: component.StringConfig{
+						Alignment: component.AlignmentCentered,
+					},
+				},
+			),
+		))
+	h.Resize(t.width, t.height)
+	_ = t.handler.Close()
+	t.handler = h
+	t.doSetError(err)
+}
+
 func (t *Task) setSuccess() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	if t.loopHalted {
+		return
+	}
 	t.lastDuration = time.Since(t.lastStart)
 	t.lastExit = nil
 	t.running = false
