@@ -89,7 +89,6 @@ config = merge(config, {
             "<m-=>":       "guifontsize increase",
             "<m-->":       "guifontsize decrease",
             "<m-t>":       "tabnew",
-            "<m-w>":       "tabclose",
             "<a-s-right>": "tabmove right",
             "<a-s-left>":  "tabmove left",
             "<m-n>":       "windownew",
