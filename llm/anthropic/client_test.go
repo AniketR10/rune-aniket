@@ -851,3 +851,126 @@ func TestAssistantContentBlocks_UnsignedReasoningSkipped(t *testing.T) {
 	})
 	assert.Empty(t, reasoningOnly, "unsigned reasoning-only turn yields no replayable blocks")
 }
+
+// noEmptyTextBlock asserts that no text content block in blocks is empty.
+// Newer Claude models reject requests containing an empty text block with
+// "text content blocks must be non-empty".
+func noEmptyTextBlock(t *testing.T, blocks []ant.ContentBlockParamUnion) {
+	t.Helper()
+	for _, b := range blocks {
+		if b.OfText != nil {
+			assert.NotEmpty(t, b.OfText.Text, "text content block must not be empty")
+		}
+	}
+}
+
+func TestUserContentBlocks_ImageWithEmptyTextPart(t *testing.T) {
+	// Image sessions carry an image part alongside a text summary in
+	// MultiContent. If the text part is empty (e.g. stripped upstream), the
+	// image block must still be emitted without an accompanying empty text
+	// block.
+	blocks := userContentBlocks(llmapi.Message{
+		Role: llmapi.RoleUser,
+		MultiContent: []llmapi.ContentPart{
+			{Type: llmapi.ContentPartTypeText, Text: ""},
+			{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+		},
+	})
+
+	noEmptyTextBlock(t, blocks)
+	require.Len(t, blocks, 1, "empty text part must be dropped, image kept")
+	require.NotNil(t, blocks[0].OfImage, "image block must be preserved")
+}
+
+func TestUserContentBlocks_WhitespaceOnlyTextPartDropped(t *testing.T) {
+	blocks := userContentBlocks(llmapi.Message{
+		Role: llmapi.RoleUser,
+		MultiContent: []llmapi.ContentPart{
+			{Type: llmapi.ContentPartTypeText, Text: "   \n\t "},
+			{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+		},
+	})
+
+	noEmptyTextBlock(t, blocks)
+	require.Len(t, blocks, 1)
+	require.NotNil(t, blocks[0].OfImage)
+}
+
+func TestUserContentBlocks_ImageOnly(t *testing.T) {
+	blocks := userContentBlocks(llmapi.Message{
+		Role: llmapi.RoleUser,
+		MultiContent: []llmapi.ContentPart{
+			{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+		},
+	})
+
+	noEmptyTextBlock(t, blocks)
+	require.Len(t, blocks, 1)
+	require.NotNil(t, blocks[0].OfImage)
+}
+
+func TestUserContentBlocks_AllEmptyTextPartsYieldSentinel(t *testing.T) {
+	// When every MultiContent part is empty text (no image), the per-part skip
+	// empties the loop, so the message-level sentinel must keep the turn
+	// present rather than emitting an empty content array.
+	blocks := userContentBlocks(llmapi.Message{
+		Role: llmapi.RoleUser,
+		MultiContent: []llmapi.ContentPart{
+			{Type: llmapi.ContentPartTypeText, Text: ""},
+			{Type: llmapi.ContentPartTypeText, Text: "   "},
+		},
+	})
+
+	noEmptyTextBlock(t, blocks)
+	require.Len(t, blocks, 1)
+	require.NotNil(t, blocks[0].OfText)
+	assert.Equal(t, "(no content)", blocks[0].OfText.Text)
+}
+
+func TestUserContentBlocks_EmptyContentNoMultiContent(t *testing.T) {
+	// A user message with empty Content and no MultiContent must keep the turn
+	// present with a non-empty sentinel block: the API rejects both an empty
+	// text block and a trailing non-user message.
+	blocks := userContentBlocks(llmapi.Message{
+		Role:    llmapi.RoleUser,
+		Content: "",
+	})
+
+	noEmptyTextBlock(t, blocks)
+	require.Len(t, blocks, 1)
+	require.NotNil(t, blocks[0].OfText)
+	assert.Equal(t, "(no content)", blocks[0].OfText.Text)
+}
+
+func TestUserContentBlocks_TextPreserved(t *testing.T) {
+	blocks := userContentBlocks(llmapi.Message{
+		Role: llmapi.RoleUser,
+		MultiContent: []llmapi.ContentPart{
+			{Type: llmapi.ContentPartTypeText, Text: "describe this"},
+			{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+		},
+	})
+
+	require.Len(t, blocks, 2)
+	require.NotNil(t, blocks[0].OfText)
+	assert.Equal(t, "describe this", blocks[0].OfText.Text)
+	require.NotNil(t, blocks[1].OfImage)
+}
+
+func TestConvertMessages_EmptyUserMessageKeptWithSentinel(t *testing.T) {
+	// A blank trailing user message must be preserved as a non-empty user turn
+	// so the request neither sends an empty text block nor ends on a non-user
+	// message — both are rejected by the API.
+	_, msgs := convertMessages([]llmapi.Message{
+		{Role: llmapi.RoleUser, Content: "hello"},
+		{Role: llmapi.RoleAssistant, Content: "hi"},
+		{Role: llmapi.RoleUser, Content: "   "},
+	})
+
+	require.Len(t, msgs, 3, "blank trailing user message must be kept")
+	assert.Equal(t, ant.MessageParamRoleUser, msgs[2].Role,
+		"request must still end with a user message")
+	require.Len(t, msgs[2].Content, 1)
+	require.NotNil(t, msgs[2].Content[0].OfText)
+	assert.Equal(t, "(no content)", msgs[2].Content[0].OfText.Text)
+}

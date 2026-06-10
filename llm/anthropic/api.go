@@ -40,6 +40,11 @@ const (
 	reasoningKindRedacted = "redacted"
 )
 
+// emptyUserContentSentinel stands in for a user message that has no renderable
+// content (no text, no image). The API rejects both empty text blocks and a
+// trailing non-user message, so the turn is kept with this placeholder.
+const emptyUserContentSentinel = "(no content)"
+
 // anthropicParamsFromRequest converts an llmapi.Request into Anthropic API parameters.
 // System messages are extracted into the separate System field, and the remaining
 // messages are converted with strict user/assistant alternation.
@@ -205,10 +210,26 @@ func userContentBlocks(msg llmapi.Message) []ant.ContentBlockParamUnion {
 			case llmapi.ContentPartTypeImageURL:
 				blocks = append(blocks, imageBlockFromURL(p.ImageURL))
 			default:
+				// Skip empty text parts: the API rejects empty text blocks
+				// with "text content blocks must be non-empty". An empty text
+				// part alongside an image would otherwise still be sent.
+				if strings.TrimSpace(p.Text) == "" {
+					continue
+				}
 				blocks = append(blocks, ant.NewTextBlock(p.Text))
 			}
 		}
-		return blocks
+		if len(blocks) > 0 {
+			return blocks
+		}
+		// Every part was empty: keep the turn present with a sentinel so the
+		// request still ends with a non-empty user message. Dropping it would
+		// trade an empty-text-block rejection for a "final message must be
+		// from the user" rejection.
+		return []ant.ContentBlockParamUnion{ant.NewTextBlock(emptyUserContentSentinel)}
+	}
+	if strings.TrimSpace(msg.Content) == "" {
+		return []ant.ContentBlockParamUnion{ant.NewTextBlock(emptyUserContentSentinel)}
 	}
 	return []ant.ContentBlockParamUnion{ant.NewTextBlock(msg.Content)}
 }
