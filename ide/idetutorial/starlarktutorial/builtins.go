@@ -46,6 +46,8 @@ func builtins(t *Tutorial) starlark.StringDict {
 		// Registration + helpers.
 		"tutorial":          starlark.NewBuiltin("tutorial", builtinTutorial(t)),
 		"command_key":       starlark.NewBuiltin("command_key", builtinCommandKey(t)),
+		"editor_mode":       starlark.NewBuiltin("editor_mode", builtinEditorMode(t)),
+		"key_for":           starlark.NewBuiltin("key_for", builtinKeyFor(t)),
 		"exit":              starlark.NewBuiltin("exit", builtinExit()),
 		"cancel_on_dismiss": starlark.NewBuiltin("cancel_on_dismiss", builtinCancelOnDismiss()),
 
@@ -228,16 +230,19 @@ func builtinWaitCommand(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 		var (
 			command starlark.String
 			onError starlark.String
+			title   starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_command", args, kwargs,
 			"command", &command,
-			"on_error?", &onError); err != nil {
+			"on_error?", &onError,
+			"title?", &title); err != nil {
 			return nil, err
 		}
 		req := &request{
 			kind:    reqWaitCommand,
 			command: string(command),
 			onError: string(onError),
+			title:   string(title),
 		}
 		res, err := t.publishRequest(req)
 		if err != nil {
@@ -256,10 +261,12 @@ func builtinWaitShell(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 		var (
 			argList *starlark.List
 			onError starlark.String
+			title   starlark.String
 		)
 		if err := starlark.UnpackArgs("wait_shell", args, kwargs,
 			"args", &argList,
-			"on_error?", &onError); err != nil {
+			"on_error?", &onError,
+			"title?", &title); err != nil {
 			return nil, err
 		}
 		want, err := starlarkStringList(argList, "args")
@@ -273,6 +280,7 @@ func builtinWaitShell(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			kind:      reqWaitShell,
 			shellArgs: want,
 			onError:   string(onError),
+			title:     string(title),
 		}
 		res, err := t.publishRequest(req)
 		if err != nil {
@@ -616,6 +624,56 @@ func builtinCommandKey(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 	return func(_ *starlark.Thread, _ *starlark.Builtin,
 		_ starlark.Tuple, _ []starlark.Tuple,
 	) (starlark.Value, error) {
-		return starlark.String(t.commandKey.String()), nil
+		return starlark.String(t.commandKeyDisplay), nil
+	}
+}
+
+// builtinEditorMode implements editor_mode(): it returns the user's
+// resolved editor mode, "modal" or "modeless" (exo is resolved to its
+// fallback by the host before the tutorial runs).
+func builtinEditorMode(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, _ *starlark.Builtin,
+		_ starlark.Tuple, _ []starlark.Tuple,
+	) (starlark.Value, error) {
+		return starlark.String(t.editorMode), nil
+	}
+}
+
+// builtinKeyFor implements key_for(command, *args): it returns the
+// user's configured key spec bound to command (with optional args), or
+// "" when unbound or when no lookup func is wired.
+func builtinKeyFor(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, b *starlark.Builtin,
+		args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		if len(kwargs) != 0 {
+			return nil, fmt.Errorf("%s: unexpected keyword arguments",
+				b.Name())
+		}
+		if len(args) == 0 {
+			return nil, fmt.Errorf("%s: missing command argument", b.Name())
+		}
+		cmd, ok := starlark.AsString(args[0])
+		if !ok {
+			return nil, fmt.Errorf("%s: command must be a string, got %s",
+				b.Name(), args[0].Type())
+		}
+		var cmdArgs []string
+		for _, a := range args[1:] {
+			s, ok := starlark.AsString(a)
+			if !ok {
+				return nil, fmt.Errorf("%s: args must be strings, got %s",
+					b.Name(), a.Type())
+			}
+			cmdArgs = append(cmdArgs, s)
+		}
+		if t.keyForCommand == nil {
+			return starlark.String(""), nil
+		}
+		return starlark.String(t.keyForCommand(cmd, cmdArgs)), nil
 	}
 }

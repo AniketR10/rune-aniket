@@ -94,11 +94,11 @@ func (o *recordingArgsObserver) observeCommand(
 	o.calls++
 }
 
-// TestObservingREPLHandlerReportsShellCommand verifies that a
-// companion-shell submission is reported to the observer as the
-// "shell" command with the REPL command name prepended to its
-// arguments, and that the underlying iterator and nil error are
-// forwarded unchanged.
+// TestObservingREPLHandlerReportsShellCommand verifies that a successful
+// companion-shell submission is reported to the observer as the "shell"
+// command with the REPL command name prepended to its arguments, that the
+// report is deferred until the output iterator completes, and that the
+// command is forwarded unchanged.
 func TestObservingREPLHandlerReportsShellCommand(t *testing.T) {
 	t.Parallel()
 
@@ -112,7 +112,12 @@ func TestObservingREPLHandlerReportsShellCommand(t *testing.T) {
 		repl.NopProgressWriter(),
 	)
 	require.NoError(t, err)
-	defer func() { _ = iter.Close() }()
+
+	assert.Equal(t, 0, obs.calls,
+		"a successful command must not be observed until its iterator completes")
+
+	_, err = sdkiterator.ToSlice(context.Background(), iter)
+	require.NoError(t, err)
 
 	require.Equal(t, 1, obs.calls)
 	assert.Equal(t, "shell", obs.typed)
@@ -122,6 +127,31 @@ func TestObservingREPLHandlerReportsShellCommand(t *testing.T) {
 
 	assert.Equal(t, repl.Command{Name: "pkg", Args: []string{"install", "rune-agent"}},
 		stub.lastCmd, "the wrapper must forward the command unchanged")
+}
+
+// TestObservingREPLHandlerObservesOnceOnCloseAfterDrain verifies the
+// success report fires exactly once even when the iterator is both drained
+// and closed.
+func TestObservingREPLHandlerObservesOnceOnCloseAfterDrain(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubREPLHandler{}
+	obs := &recordingArgsObserver{}
+	wrapper := observingREPLHandler{underlying: stub, observer: obs, name: "pkg"}
+
+	iter, err := wrapper.HandleCommand(
+		context.Background(),
+		repl.Command{Name: "pkg", Args: []string{"status"}},
+		repl.NopProgressWriter(),
+	)
+	require.NoError(t, err)
+
+	_, err = sdkiterator.ToSlice(context.Background(), iter)
+	require.NoError(t, err)
+	require.NoError(t, iter.Close())
+
+	assert.Equal(t, 1, obs.calls,
+		"observation must fire exactly once across drain and Close")
 }
 
 // TestObservingREPLHandlerForwardsError verifies that the underlying

@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -352,6 +353,108 @@ func TestProviderAddWhitespaceOnlyKeyAborts(t *testing.T) {
 	assert.False(t, verifyCalled, "whitespace-only key must not be verified")
 	_, err = h.router.ProviderKeyActive(ctx, llmrouter.ProviderOpenAI)
 	require.ErrorIs(t, err, llmrouter.ErrAPIKeyNotSet)
+}
+
+// drainDone reports a channel that closes once it has been fully drained
+// (Next returned false). Used to observe when providerAdd's completion
+// iterator resolves.
+func drainDone(
+	t *testing.T, it iterator.Iterator[component.Responsive],
+) <-chan struct{} {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ctx := context.Background()
+		for {
+			if _, ok := it.Next(ctx); !ok {
+				return
+			}
+		}
+	}()
+	return done
+}
+
+// TestProviderAddIteratorBlocksUntilStore proves the command's output
+// iterator stays open until the asynchronous key prompt resolves: it does
+// not complete at dispatch, only after the key is submitted and stored.
+func TestProviderAddIteratorBlocksUntilStore(t *testing.T) {
+	ctx := context.Background()
+	h, wm, _, _ := newProvidersHandlerForTest(t)
+	h.verify = func(context.Context, string, string) error { return nil }
+
+	it, err := h.HandleCommand(ctx,
+		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, wm.lastFloating, "expected a floating prompt to open")
+
+	done := drainDone(t, it)
+	select {
+	case <-done:
+		t.Fatal("iterator completed before the key was submitted")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	submitKey(t, wm.lastFloating, "sk-secret")
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("iterator did not complete after the key was stored")
+	}
+
+	active, err := h.router.ProviderKeyActive(ctx, llmrouter.ProviderOpenAI)
+	require.NoError(t, err)
+	assert.Equal(t, "sk-secret", active)
+}
+
+// TestProviderAddIteratorUnblocksOnContextCancel proves a closed shell tab
+// (cancelled context) releases the still-open completion iterator instead
+// of leaking the draining goroutine.
+func TestProviderAddIteratorUnblocksOnContextCancel(t *testing.T) {
+	h, wm, _, _ := newProvidersHandlerForTest(t)
+	h.verify = func(context.Context, string, string) error { return nil }
+
+	it, err := h.HandleCommand(context.Background(),
+		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, wm.lastFloating)
+
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := it.Next(cancelCtx); !ok {
+				return
+			}
+		}
+	}()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("iterator did not unblock on context cancellation")
+	}
+}
+
+// TestProviderAddIteratorCloseIsIdempotent proves Close releases a
+// still-pending iterator and is safe to call more than once.
+func TestProviderAddIteratorCloseIsIdempotent(t *testing.T) {
+	h, wm, _, _ := newProvidersHandlerForTest(t)
+	h.verify = func(context.Context, string, string) error { return nil }
+
+	it, err := h.HandleCommand(context.Background(),
+		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, wm.lastFloating)
+
+	require.NoError(t, it.Close())
+	require.NoError(t, it.Close())
+
+	_, ok := it.Next(context.Background())
+	assert.False(t, ok, "Next must report completion after Close")
 }
 
 // TestProviderAddVerifyFailOpensConfirm exercises the failure path: a key

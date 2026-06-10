@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -48,16 +49,55 @@ type observingREPLHandler struct {
 var _ textapi.REPLHandler = observingREPLHandler{}
 
 // HandleCommand forwards to the underlying handler and reports the
-// submission to the observer once the real result is known.
+// submission to the observer. A failed dispatch is reported immediately so
+// tutorial wait_command steps stay armed with their error hint. A
+// successful dispatch is reported only when the returned output iterator
+// completes, so commands whose work continues after dispatch (e.g. the
+// asynchronous `models providers <p> add` key prompt) are observed as
+// finished only once that work resolves.
 func (w observingREPLHandler) HandleCommand(
 	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	it, err := w.underlying.HandleCommand(ctx, cmd, pw)
-	if w.observer != nil {
-		args := append([]string{w.name}, cmd.Args...)
-		w.observer.observeCommand("shell", "shell", args, err)
+	if w.observer == nil {
+		return it, err
 	}
-	return it, err
+	args := append([]string{w.name}, cmd.Args...)
+	if err != nil {
+		w.observer.observeCommand("shell", "shell", args, err)
+		return it, err
+	}
+	return &observingCompletionIter{
+		inner: it,
+		fire: func() {
+			w.observer.observeCommand("shell", "shell", args, nil)
+		},
+	}, nil
+}
+
+// observingCompletionIter wraps a REPL command's output iterator and fires
+// fire exactly once, when the iterator is first exhausted or closed.
+type observingCompletionIter struct {
+	inner iterator.Iterator[component.Responsive]
+	fire  func()
+	once  sync.Once
+}
+
+func (w *observingCompletionIter) Next(
+	ctx context.Context,
+) (component.Responsive, bool) {
+	v, ok := w.inner.Next(ctx)
+	if !ok {
+		w.once.Do(w.fire)
+	}
+	return v, ok
+}
+
+func (w *observingCompletionIter) Err() error { return w.inner.Err() }
+
+func (w *observingCompletionIter) Close() error {
+	w.once.Do(w.fire)
+	return w.inner.Close()
 }
 
 // Complete forwards completion requests unchanged.

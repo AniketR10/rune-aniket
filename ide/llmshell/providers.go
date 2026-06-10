@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
@@ -532,11 +533,45 @@ func unknownClaudeSubcommandMarkdown(sub string) string {
 	return b.String()
 }
 
+// completionIter is a blocking output iterator that returns no rows and
+// completes only when signalDone is called. providerAdd returns one so
+// the companion shell (and the tutorial observing it) treats the `add`
+// command as running until the asynchronous key prompt, verification, and
+// storage have reached a terminal outcome. signalDone is safe to call from
+// both the event loop and verification goroutine, and more than once.
+type completionIter struct {
+	done chan struct{}
+	once sync.Once
+}
+
+func newCompletionIter() *completionIter {
+	return &completionIter{done: make(chan struct{})}
+}
+
+func (c *completionIter) signalDone() { c.once.Do(func() { close(c.done) }) }
+
+func (c *completionIter) Next(ctx context.Context) (component.Responsive, bool) {
+	select {
+	case <-c.done:
+	case <-ctx.Done():
+	}
+	return nil, false
+}
+
+func (c *completionIter) Err() error { return nil }
+
+// Close unblocks Next so a closed shell tab does not leak the iterator.
+func (c *completionIter) Close() error {
+	c.signalDone()
+	return nil
+}
+
 // providerAdd opens a redacted floating prompt to capture an API key for
 // the given provider, verifies it live, and stores it on success. On a
 // verification failure it opens a yes/no confirmation prompt carrying the
-// provider's error. The work is asynchronous; the command returns an empty
-// iterator immediately.
+// provider's error. The work is asynchronous; the returned iterator stays
+// open until the prompt resolves (key stored, declined, or aborted) so
+// callers can observe true completion.
 func (h *providersHandler) providerAdd(
 	ctx context.Context, provider string, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
@@ -544,8 +579,9 @@ func (h *providersHandler) providerAdd(
 		return markdownOutput(addKeyHelp(provider)), nil
 	}
 	name := args[0]
-	h.openKeyPrompt(ctx, provider, name)
-	return iterator.Empty[component.Responsive](), nil
+	ci := newCompletionIter()
+	h.openKeyPrompt(ctx, provider, name, ci)
+	return ci, nil
 }
 
 func providerLabel(provider string) string {
@@ -570,8 +606,12 @@ func addKeyHelp(provider string) string {
 	return usageMarkdown(add)
 }
 
-// openKeyPrompt schedules the redacted inputbox onto the event loop.
-func (h *providersHandler) openKeyPrompt(ctx context.Context, provider, name string) {
+// openKeyPrompt schedules the redacted inputbox onto the event loop. ci is
+// signaled on every terminal outcome so the add command's iterator
+// completes only once the prompt has fully resolved.
+func (h *providersHandler) openKeyPrompt(
+	ctx context.Context, provider, name string, ci *completionIter,
+) {
 	h.schedule(func() {
 		ib := inputbox.New(
 			inputbox.WithPrompt(
@@ -585,9 +625,10 @@ func (h *providersHandler) openKeyPrompt(ctx context.Context, provider, name str
 			onDone: func(key string, aborted bool) {
 				key = strings.TrimSpace(key)
 				if aborted || key == "" {
+					ci.signalDone()
 					return
 				}
-				h.verifyAndStore(ctx, provider, name, key)
+				h.verifyAndStore(ctx, provider, name, key, ci)
 			},
 		}
 		win, err := h.wm.Floating(fh, browserapi.FloatingConfig{
@@ -596,6 +637,7 @@ func (h *providersHandler) openKeyPrompt(ctx context.Context, provider, name str
 		if err != nil {
 			_, _ = h.notifs.Notify(browserapi.LevelError,
 				"open %s api key prompt: %v", provider, err)
+			ci.signalDone()
 			return
 		}
 		fh.win = win
@@ -604,21 +646,27 @@ func (h *providersHandler) openKeyPrompt(ctx context.Context, provider, name str
 
 // verifyAndStore runs key verification off the event loop and marshals the
 // result back via schedule. On success it stores the key; on failure it
-// opens a yes/no confirmation prompt.
-func (h *providersHandler) verifyAndStore(ctx context.Context, provider, name, key string) {
+// opens a yes/no confirmation prompt. ci is propagated so completion is
+// signaled from whichever terminal branch runs.
+func (h *providersHandler) verifyAndStore(
+	ctx context.Context, provider, name, key string, ci *completionIter,
+) {
 	h.spawn(func() {
 		verifyErr := h.verify(ctx, provider, key)
 		h.schedule(func() {
 			if verifyErr == nil {
-				h.storeKey(ctx, provider, name, key)
+				h.storeKey(ctx, provider, name, key, ci)
 				return
 			}
-			h.openConfirmPrompt(ctx, provider, name, key, verifyErr)
+			h.openConfirmPrompt(ctx, provider, name, key, verifyErr, ci)
 		})
 	})
 }
 
-func (h *providersHandler) storeKey(ctx context.Context, provider, name, key string) {
+func (h *providersHandler) storeKey(
+	ctx context.Context, provider, name, key string, ci *completionIter,
+) {
+	defer ci.signalDone()
 	if err := h.router.AddProviderKey(ctx, provider, name, key); err != nil {
 		_, _ = h.notifs.Notify(browserapi.LevelError,
 			"store %s api key: %v", provider, err)
@@ -631,7 +679,7 @@ func (h *providersHandler) storeKey(ctx context.Context, provider, name, key str
 // openConfirmPrompt asks the user whether to store a key that failed
 // verification, showing the provider's error.
 func (h *providersHandler) openConfirmPrompt(
-	ctx context.Context, provider, name, key string, verifyErr error,
+	ctx context.Context, provider, name, key string, verifyErr error, ci *completionIter,
 ) {
 	const (
 		yesOpt = " yes "
@@ -646,11 +694,12 @@ func (h *providersHandler) openConfirmPrompt(
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
 		handler.FuncPromptHandler(func(idx int, _ string) {
 			if idx == 0 {
-				h.storeKey(ctx, provider, name, key)
+				h.storeKey(ctx, provider, name, key, ci)
 				return
 			}
 			_, _ = h.notifs.Notify(browserapi.LevelInfo,
 				"%s api key '%s' not added", provider, name)
-		}, func() error { return nil }),
+			ci.signalDone()
+		}, func() error { ci.signalDone(); return nil }),
 	)
 }

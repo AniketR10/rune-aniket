@@ -263,6 +263,7 @@ def run():
 tutorial(entry=run)
 `
 	tut, _ := newTutorial(t, src)
+	tut.Resize(80, 60)
 	resetAndWait(t, tut, time.Second)
 
 	exit := tut.ObserveCommand("shell", "shell",
@@ -271,7 +272,7 @@ tutorial(entry=run)
 	assert.Equal(t, "wait_shell", activeKindFor(tut),
 		"a dispatch error must keep the wait_shell step armed")
 
-	g := newGridWriter(80, 24)
+	g := newGridWriter(80, 60)
 	tut.Draw(g)
 	assert.True(t, gridContains(g, "install failed"),
 		"on_error hint must be rendered after a dispatch error")

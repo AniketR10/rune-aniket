@@ -92,7 +92,20 @@ type Tutorial struct {
 	frameCharSet     component.FrameCharSet
 	scheduleNextTick func(func()) bool
 	storage          storageapi.Service
-	commandKey       term.KeyComb
+	// commandKeyDisplay is the prettified, display-ready command-prompt
+	// key spec (e.g. ":" rather than "<shift-;>"). It is the single
+	// rendered form every tutorial surface uses; nothing re-renders the
+	// raw term.KeyComb, so a new render site cannot reintroduce the ugly
+	// spec.
+	commandKeyDisplay string
+	// editorMode is the user's resolved editor mode ("modal" or
+	// "modeless"), exposed to the DSL via editor_mode(). exo is
+	// resolved to its fallback by the host before New.
+	editorMode string
+	// keyForCommand resolves a command (and optional args) to the
+	// user's configured key spec, or "" when unbound. nil disables
+	// key_for() lookups (they return ""). Used by key_for().
+	keyForCommand func(cmd string, args []string) string
 	// promptConfig carries the IDE's confirm/choice prompt styling
 	// (option, highlight, background attributes and minimum width) so
 	// tutorial prompts match the IDE's browser-driven prompts.
@@ -153,6 +166,8 @@ func New(
 	scheduleNextTick func(func()) bool,
 	storage storageapi.Service,
 	commandKey term.KeyComb,
+	editorMode string,
+	keyForCommand func(cmd string, args []string) string,
 	commandManualLookup CommandManualLookup,
 ) (*Tutorial, error) {
 	if src == "" {
@@ -169,7 +184,9 @@ func New(
 		promptConfig:        promptConfig,
 		scheduleNextTick:    scheduleNextTick,
 		storage:             storage,
-		commandKey:          commandKey,
+		commandKeyDisplay:   PrettyKeySpec(commandKey.String()),
+		editorMode:          editorMode,
+		keyForCommand:       keyForCommand,
 		commandManualLookup: commandManualLookup,
 	}
 
@@ -430,8 +447,9 @@ func (t *Tutorial) Draw(w term.Writer) {
 	fcs := t.frameCharSet
 	attr := t.defaultAttr
 	finished := t.finished
-	cmdKey := t.commandKey
+	cmdKey := t.commandKeyDisplay
 	lookup := t.commandManualLookup
+	keyForCmd := t.keyForCommand
 	t.mu.Unlock()
 	if finished || active == nil {
 		return
@@ -442,15 +460,15 @@ func (t *Tutorial) Draw(w term.Writer) {
 	case reqMarkdown:
 		drawBanner(w, width, height, []string{active.text})
 	case reqWaitKey:
-		drawHintBox(w, width, height,
+		drawHintBox(w, width, height, active.title, active.stepNum,
 			"Press "+active.waitKey+" to continue.",
 			fcs, attr)
 	case reqWaitCommand:
-		body := buildWaitCommandHint(active, cmdKey, lookup)
-		drawHintBox(w, width, height, body, fcs, attr)
+		body := buildWaitCommandHint(active, cmdKey, lookup, keyForCmd)
+		drawHintBox(w, width, height, active.title, active.stepNum, body, fcs, attr)
 	case reqWaitShell:
 		body := buildWaitShellHint(active, cmdKey)
-		drawHintBox(w, width, height, body, fcs, attr)
+		drawHintBox(w, width, height, active.title, active.stepNum, body, fcs, attr)
 	case reqChoice, reqConfirm:
 		drawPromptOverlay(w, width, height, active, fcs, attr)
 	}
@@ -490,8 +508,8 @@ func (t *Tutorial) Handle(ev term.Event) (bool, bool) {
 }
 
 func (t *Tutorial) handleFloatingWindow(r *request, ev term.Event) (bool, bool) {
-	if ev.Key == term.KeyEnter || ev.Key == term.KeyEsc ||
-		ev.Key == term.KeySpace || ev.Ch == ' ' {
+	if ev.Mod == 0 && (ev.Key == term.KeyEnter || ev.Key == term.KeyEsc ||
+		ev.Key == term.KeySpace || ev.Ch == ' ') {
 		t.resolve(r, response{})
 		return t.exitState(), true
 	}
@@ -625,7 +643,7 @@ func (t *Tutorial) ObserveCommand(
 		// Do not surface err as a tutorial notification: the IDE's
 		// command prompt already shows the underlying error.
 		if active.onError != "" {
-			active.text = expandCmdTemplate(active.onError, t.commandKey)
+			active.text = expandCmdTemplate(active.onError, t.commandKeyDisplay)
 		}
 		return false
 	}
@@ -653,7 +671,7 @@ func (t *Tutorial) observeShellCommand(
 	}
 	if err != nil {
 		if active.onError != "" {
-			active.text = expandCmdTemplate(active.onError, t.commandKey)
+			active.text = expandCmdTemplate(active.onError, t.commandKeyDisplay)
 		}
 		return false
 	}

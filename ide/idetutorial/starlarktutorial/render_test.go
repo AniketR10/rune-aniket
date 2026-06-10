@@ -25,6 +25,7 @@ package starlarktutorial
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -163,6 +164,27 @@ func TestFloatingWindowTitleBarPresent(t *testing.T) {
 		"title bar cells must merge AttrReverse")
 }
 
+// TestFloatingWindowTitleBarHasTopPadding asserts a blank content row
+// separates the title bar from the first body line, so the body does
+// not butt directly against the inverse-video title row.
+func TestFloatingWindowTitleBarHasTopPadding(t *testing.T) {
+	t.Parallel()
+	tut, g := drawProbe(t, "Welcome", "body line", 80, 24)
+	defer tut.Stop()
+
+	_, sideY := findFrameSideX(g)
+	titleY := sideY - 1
+	require.GreaterOrEqual(t, titleY, 0)
+	require.Contains(t, g.rowRunes(titleY), "Welcome")
+
+	// The row immediately below the title bar must be blank padding;
+	// the body text appears one row further down.
+	assert.NotContains(t, g.rowRunes(titleY+1), "body line",
+		"body must not butt against the title bar")
+	assert.Contains(t, g.rowRunes(titleY+2), "body line",
+		"body must render one padded row below the title bar")
+}
+
 // TestFloatingWindowNoTitleKeepsTopEdge asserts that without a title
 // the floating_window still renders the standard top frame edge with
 // corner glyphs.
@@ -213,6 +235,54 @@ func TestFloatingWindowTitleBarTruncatesOnNarrow(t *testing.T) {
 	}
 	assert.Contains(t, row, "…",
 		"truncated title bar must carry an ellipsis, got %q", row)
+}
+
+// TestWaitCommandHintTitleBarPresent asserts that a wait_command with a
+// title renders a status-bar style title row on its hint window, matching
+// the floating_window title treatment (inverse video, "Step N" carried
+// over from the preceding visible step).
+func TestWaitCommandHintTitleBarPresent(t *testing.T) {
+	t.Parallel()
+	src := "def run():\n" +
+		"    floating_window(text=\"intro\", title=\"Manage windows\")\n" +
+		"    wait_command(command=\"windownew\", title=\"Manage windows\")\n" +
+		"tutorial(entry=run)\n"
+	tut, _ := newTutorial(t, src)
+	const w, h = 80, 24
+	tut.Resize(w, h)
+	resetAndWait(t, tut, time.Second)
+
+	// Dismiss the floating window so the run goroutine blocks on
+	// wait_command, which is the state we want to render.
+	tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && activeKindFor(tut) != "wait_command" {
+		time.Sleep(time.Millisecond)
+	}
+	require.Equal(t, "wait_command", activeKindFor(tut))
+
+	g := newAttrGridWriter(w, h)
+	tut.Draw(g)
+
+	sideX, sideY := findFrameSideX(g)
+	require.NotEqual(t, -1, sideX,
+		"expected a frame edge in the rendered hint window")
+	titleY := sideY - 1
+	require.GreaterOrEqual(t, titleY, 0)
+
+	row := g.rowRunes(titleY)
+	assert.Contains(t, row, "Manage windows",
+		"wait_command hint must show its title left-aligned, got %q", row)
+
+	attrs := g.rowAttrs(titleY)
+	reverseSeen := 0
+	for x := sideX; x < sideX+10 && x < len(attrs); x++ {
+		if attrs[x].Attrs&term.AttrReverse != 0 {
+			reverseSeen++
+		}
+	}
+	assert.Greater(t, reverseSeen, 0,
+		"wait_command title bar cells must merge AttrReverse")
 }
 
 // TestFloatingWindowStepCounterIncrements asserts that consecutive
@@ -333,7 +403,7 @@ tutorial(entry=run)
 	// The body must include the prefix line with the expanded
 	// command key and the bare command name, and must not leak the
 	// raw `<cmd>` template token.
-	wantKey := (term.KeyComb{Ch: ':'}).String()
+	wantKey := PrettyKeySpec((term.KeyComb{Ch: ':'}).String())
 	combined := gridText(g)
 	assert.Contains(t, combined, wantKey,
 		"wait_command hint must mention the configured command key")
@@ -381,11 +451,14 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		lookup,
 	)
 	require.NoError(t, err)
 
-	const screenW, screenH = 80, 24
+	// A tall screen so the prompt-aware height cap (0.2*height) leaves
+	// room for the full manual body beneath the instruction line.
+	const screenW, screenH = 80, 60
 	tut.Resize(screenW, screenH)
 	resetAndWait(t, tut, time.Second)
 	defer tut.Stop()
@@ -400,6 +473,88 @@ tutorial(entry=run)
 		"hint must include the manual's synopsis")
 	assert.Contains(t, body, "Open the workspace",
 		"hint must include the manual's summary")
+}
+
+// TestWaitCommandHintIncludesBoundKey asserts that when the awaited
+// command has a key binding, the default hint tells the user they can
+// press that key to run it.
+func TestWaitCommandHintIncludesBoundKey(t *testing.T) {
+	t.Parallel()
+	keyFor := func(cmd string, args []string) string {
+		if cmd == "windownew" && len(args) == 0 {
+			return "<meta-n>"
+		}
+		return ""
+	}
+	src := `
+def run():
+    wait_command(command="windownew")
+tutorial(entry=run)
+`
+	tut, err := New(
+		"boundkey-test", src,
+		nil, nil, nil, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", keyFor,
+		nil,
+	)
+	require.NoError(t, err)
+
+	const screenW, screenH = 80, 60
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	g := newAttrGridWriter(screenW, screenH)
+	tut.Draw(g)
+	body := gridText(g)
+
+	assert.Contains(t, body, "windownew",
+		"hint must name the awaited command")
+	assert.Contains(t, body, "<meta-n>",
+		"hint must mention the command's bound key")
+}
+
+// TestWaitCommandHintCapsAboveCommandPrompt asserts that a long hint
+// body does not grow the window past the command prompt's anchor row
+// (0.2*height), so the prompt the user is told to open stays visible
+// below the hint.
+func TestWaitCommandHintCapsAboveCommandPrompt(t *testing.T) {
+	t.Parallel()
+	longHint := strings.Repeat("This is a long recovery hint line. ", 40)
+	src := `
+def run():
+    wait_command(command="wopen", on_error="` + longHint + `")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	const screenW, screenH = 80, 50
+	tut.Resize(screenW, screenH)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+
+	// Swap in the (long) on_error hint by simulating a failed dispatch.
+	tut.ObserveCommand("wopen", "wopen", nil,
+		fmt.Errorf("missing argument"))
+
+	g := newAttrGridWriter(screenW, screenH)
+	tut.Draw(g)
+
+	fcs := component.FrameCharSetDefault()
+	bottomY := -1
+	for y := range screenH {
+		if strings.ContainsRune(g.rowRunes(y), fcs.BottomLeft) {
+			bottomY = y
+		}
+	}
+	require.NotEqual(t, -1, bottomY, "hint window must render a bottom edge")
+
+	promptTopY := int(float64(screenH) * commandPromptTopFraction)
+	assert.LessOrEqual(t, bottomY, promptTopY,
+		"hint window bottom (row %d) must stay at or above the command "+
+			"prompt anchor (row %d) so the prompt stays visible",
+		bottomY, promptTopY)
 }
 
 // TestConfirmOverlayMeetsMinimumSize asserts that even with a very

@@ -154,6 +154,7 @@ func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -297,6 +298,7 @@ func TestEntryRequired(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -312,6 +314,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -327,6 +330,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -346,6 +350,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -360,6 +365,7 @@ func TestEmptySourceRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -582,6 +588,44 @@ tutorial(entry=run)
 		"dismiss_keys entries must also advance the tutorial")
 }
 
+// TestFloatingWindowDismissKeysModifiedEnterFallsThrough guards that a
+// modified Enter chord listed in dismiss_keys (e.g. <shift-meta-enter>,
+// the companion-terminal binding) is matched against dismiss_keys and
+// falls through to the IDE root, instead of being swallowed by the
+// plain Enter/Space/Esc "continue" shortcut.
+func TestFloatingWindowDismissKeysModifiedEnterFallsThrough(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="press shift-meta-enter", dismiss_keys=["<shift-meta-enter>"])
+    wait_command(command="!")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "floating_window", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{
+		Type: term.EventKey,
+		Key:  term.KeyEnter,
+		Mod:  term.ModShiftMeta,
+	})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"a modified Enter in dismiss_keys must fall through to the IDE "+
+			"root so the bound command (e.g. companion terminal) fires")
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if activeKindFor(tut) == "wait_command" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	assert.Equal(t, "wait_command", activeKindFor(tut),
+		"a modified Enter in dismiss_keys must also advance the tutorial")
+}
+
 // TestFloatingWindowAlignmentAndOffset asserts the (x, y) placement of
 // the framed window for a handful of alignments.
 func TestFloatingWindowAlignmentAndOffset(t *testing.T) {
@@ -704,6 +748,7 @@ tutorial(entry=run)
 			nil, nil, notis, nil,
 			term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 			nil, nil, term.KeyComb{Ch: ':'},
+			"modeless", nil,
 			nil,
 		)
 		require.NoError(t, err, "alignment %q must parse", a)
@@ -723,6 +768,7 @@ tutorial(entry=run)
 		nil, nil, notis, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.NoError(t, err, "unknown alignment must defer to the entry call")
@@ -990,6 +1036,7 @@ tutorial(entry=run)
 		},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -1303,9 +1350,110 @@ tutorial(entry=run)
 	tut, notis := newTutorial(t, src)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
-	wantKey := (term.KeyComb{Ch: ':'}).String()
+	wantKey := ":"
 	assert.True(t, notis.containsSubstring("key="+wantKey),
 		"command_key() must expand to the configured key, got %v",
+		notis.renderedCalls())
+}
+
+// TestPrettyKeySpec asserts the display-only rename rewrites <shift-;>
+// to ":" and passes everything else through unchanged.
+func TestPrettyKeySpec(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, ":", PrettyKeySpec("<shift-;>"))
+	assert.Equal(t, "<meta-n>", PrettyKeySpec("<meta-n>"))
+	assert.Equal(t, "", PrettyKeySpec(""))
+}
+
+// newTutorialWith builds a Tutorial with an explicit editor mode and
+// key_for lookup so tests can exercise editor_mode() and key_for().
+func newTutorialWith(
+	t *testing.T, src, mode string,
+	keyFor func(string, []string) string,
+) (*Tutorial, *fakeNotis) {
+	t.Helper()
+	notis := &fakeNotis{}
+	tut, err := New(
+		"tutorial-under-test", src,
+		nil, nil, notis, nil,
+		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		mode, keyFor,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	tut.Resize(80, 24)
+	return tut, notis
+}
+
+// TestEditorModeBuiltin asserts that editor_mode() returns the
+// injected mode string.
+func TestEditorModeBuiltin(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="mode=" + editor_mode())
+tutorial(entry=run)
+`
+	tut, notis := newTutorialWith(t, src, "modal", nil)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("mode=modal"),
+		"editor_mode() must expand to the injected mode, got %v",
+		notis.renderedCalls())
+}
+
+// TestKeyForBuiltin asserts that key_for() returns the bound key,
+// resolves the bare-command fallback, and yields "" when unbound.
+func TestKeyForBuiltin(t *testing.T) {
+	t.Parallel()
+	lookup := func(cmd string, args []string) string {
+		switch {
+		case cmd == "windownew" && len(args) == 0:
+			return "<meta-n>"
+		case cmd == "windowfocus" && len(args) == 1 && args[0] == "left":
+			return "<ctrl-x><ctrl-h>"
+		default:
+			return ""
+		}
+	}
+	src := `
+def run():
+    notify(message="a=[" + key_for("windownew") + "]")
+    notify(message="b=[" + key_for("windowfocus", "left") + "]")
+    notify(message="c=[" + key_for("tabclose") + "]")
+tutorial(entry=run)
+`
+	tut, notis := newTutorialWith(t, src, "modeless", lookup)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("a=[<meta-n>]"),
+		"key_for(windownew) must return its bound key, got %v",
+		notis.renderedCalls())
+	assert.True(t, notis.containsSubstring("b=[<ctrl-x><ctrl-h>]"),
+		"key_for(windowfocus, left) must return its chord, got %v",
+		notis.renderedCalls())
+	assert.True(t, notis.containsSubstring("c=[]"),
+		"key_for for an unbound command must return empty, got %v",
+		notis.renderedCalls())
+}
+
+// TestKeyForBuiltinNilLookup asserts that key_for() returns "" when no
+// lookup func is wired.
+func TestKeyForBuiltinNilLookup(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    notify(message="k=[" + key_for("windownew") + "]")
+tutorial(entry=run)
+`
+	tut, notis := newTutorialWith(t, src, "modeless", nil)
+	resetAndWait(t, tut, time.Second)
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("k=[]"),
+		"key_for must return empty when the lookup func is nil, got %v",
 		notis.renderedCalls())
 }
 
@@ -1342,13 +1490,13 @@ def run():
 tutorial(entry=run)
 `
 	tut, _ := newTutorial(t, src)
-	tut.Resize(80, 12)
+	tut.Resize(80, 60)
 	resetAndWait(t, tut, time.Second)
 
-	w := term.NewStringWriter(80, 12)
+	w := term.NewStringWriter(80, 60)
 	tut.Draw(w)
 	require.NoError(t, w.Flush())
-	wantKey := (term.KeyComb{Ch: ':'}).String()
+	wantKey := PrettyKeySpec((term.KeyComb{Ch: ':'}).String())
 	assert.Contains(t, w.String(), wantKey,
 		"default hint must mention the configured command key")
 	assert.Contains(t, w.String(), "wopen",
@@ -1358,7 +1506,7 @@ tutorial(entry=run)
 
 	tut.ObserveCommand("wopen", "wopen", nil,
 		fmt.Errorf("missing directory argument"))
-	w = term.NewStringWriter(80, 12)
+	w = term.NewStringWriter(80, 60)
 	tut.Draw(w)
 	require.NoError(t, w.Flush())
 	assert.Contains(t, w.String(), wantKey,
@@ -1427,6 +1575,7 @@ func TestLoadIsRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
+		"modeless", nil,
 		nil,
 	)
 	require.Error(t, err)

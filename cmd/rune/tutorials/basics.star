@@ -2,8 +2,10 @@
 #
 # Walks the user through the three things they need to know to be
 # productive in Rune: where to put work in the empty workspace,
-# how to open a workspace (`:wopen`), and how to start editing
-# files inside that workspace (`:edit`).
+# how to open a workspace (`:workspaceopen`), and how to start editing
+# files inside that workspace (`:edit`), plus the layout model
+# (the meta/alt/shift system) and the windows and tabs that hold
+# that content.
 #
 # The DSL is interpreted by ide/idetutorial/starlarktutorial. The
 # entry function runs on its own Starlark goroutine; each blocking
@@ -12,12 +14,67 @@
 # regular Starlark control flow.
 
 ck = command_key()
-if ck == "":
-    ck = "<cmd-key>"
+mode = editor_mode()
+
+# Direction keys differ by editor mode: modal points with the home
+# row, modeless points with the arrow keys. The layout copy adapts to
+# whichever the user is running.
+if mode == "modal":
+    dir_phrase = "the home row, `h` `j` `k` `l`"
+    focus_example = "`<meta-h>`"
+else:
+    dir_phrase = "the arrow keys"
+    focus_example = "`<meta-left>`"
+
+# Tab switching is directional too: one key focuses the tab to the left
+# (tabprevious), the other the tab to the right (tabnext). Show the
+# user's real bound keys when they exist.
+_tab_left = key_for("tabprevious")
+_tab_right = key_for("tabnext")
+if _tab_left and _tab_right:
+    tab_dir_sentence = ("`" + _tab_left + "` focuses the tab to the left, " +
+                        "`" + _tab_right + "` the tab to the right.")
+else:
+    tab_dir_sentence = ("One direction focuses the tab to the left, the " +
+                        "other the tab to the right.")
+
+def keyhint(cmd, *args):
+    k = key_for(cmd, *args)
+    return (" Default key: `" + k + "`.") if k else ""
+
+def keypress(cmd, *args):
+    # The user's real bound key for cmd, phrased as a keypress
+    # instruction. Falls back to the command-prompt wording when the
+    # command is unbound, so copy adapts to mode and custom rebinds.
+    k = key_for(cmd, *args)
+    if k:
+        return "press `" + k + "`"
+    return "open the command prompt (`" + ck + "`) and run `" + cmd + "`"
+
+# In modal mode the shell's input line captures keys while you are in
+# insert mode, so `:` types a literal colon instead of opening the
+# command prompt. The user must press <esc> to enter modal mode first.
+# These snippets are spliced into the agent steps that open the command
+# prompt while the companion shell is focused.
+if mode == "modal":
+    shell_esc_step = "1. Press `<esc>` to enter modal mode.\n"
+    shell_prompt_step_num = "2"
+    shell_run_step_num = "3"
+else:
+    shell_esc_step = ""
+    shell_prompt_step_num = "1"
+    shell_run_step_num = "2"
+
+def dismiss_for(cmd, *args):
+    # Keys that dismiss a teaching window. Always include the command
+    # prompt key. When the command has a bound key, include it too so
+    # the single keypress the copy asks for dismisses the window AND
+    # falls through to the IDE, dispatching the command that the
+    # following wait_command observes.
+    k = key_for(cmd, *args)
+    return [ck, k] if k else [ck]
 
 welcome_md = """\
-# Welcome to Rune
-
 This is the **home workspace**: a scratch workspace rooted at `~/` that
 Rune shows when no project workspace is attached. Use it for files
 outside any project, quick terminals, or to keep notes between
@@ -47,16 +104,14 @@ are bound to those commands through your user configuration under
 ## Opening a workspace
 
 1. Press `""" + ck + """` to open the command prompt.
-2. Type `wopen` and use the auto-completer (Tab / arrow keys) to
-   pick a workspace.
+2. Type `workspaceopen` and use the auto-completer (Tab / arrow keys)
+   to pick a workspace.
 3. Press Enter to open it.
 
 Press `<enter>` or `<space>` to continue.
 """
 
 edit_md = """\
-# Editing a file
-
 You're in a real workspace now. To open a file:
 
 1. Press `""" + ck + """` to open the command prompt.
@@ -67,9 +122,213 @@ You're in a real workspace now. To open a file:
 Press `<enter>` or `<space>` to continue.
 """
 
-agent_install_md = """\
-# Set up Rune Agent
+layout_md = """\
+Rune is a full tiling window manager: you split the screen into
+**windows**, fill each one with **tabs** (files, terminals, task
+output), and group whole projects into **workspaces**. The editor is
+just one kind of content among many. Every layout action is a command
+you can type at the prompt; the default keys are just shortcuts, and
+they follow one small, standardized system.
 
+## The three layers
+
+- **`<meta>` is the window and workspace layer.** Anything that
+  focuses, moves, or splits a window, or switches a workspace, is a
+  `<meta>` chord. (On macOS `<meta>` is Command; on Linux and Windows
+  it is the Super or Windows key.)
+- **`<alt>` is the tab layer.** Switching or reordering the tabs
+  inside a window lives on `<alt>`.
+- **`<shift>` means "move" instead of "go to".** `<meta>` plus a
+  direction *focuses* a window; add `<shift>` and the same direction
+  *moves* it. The rule holds for tabs and workspaces too.
+
+## Pointing a direction
+
+In your editor, direction is """ + dir_phrase + """. So """ + focus_example + """
+focuses the window in that direction, and adding `<shift>` moves it
+there instead.
+
+Once "`<meta>` = windows and workspaces, `<alt>` = tabs, `<shift>` =
+move" clicks, the bindings stop being something to memorize: they
+follow a standardized system you can derive.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
+windows_md = """\
+A **window** is a tile on screen. A fresh workspace has one window
+filling the editor area; you split it to get more, like a test beside
+its source or a terminal under an editor.
+
+## Split
+
+- `windownew` splits the focused window and moves into the new pane.
+  Add a direction (`windownew right`, `left`, `up`, or `down`) to
+  place it.""" + keyhint("windownew") + """
+- `windowdefaultsplit h` / `v` sets which way a bare `windownew`
+  splits.""" + keyhint("windowdefaultsplit", "h") + """
+
+## Move between windows
+
+`<meta>` plus a direction focuses across splits; add `<shift>` to move
+the focused window that way.""" + keyhint("windowfocus", "left") + """
+
+## Close
+
+- `windowclose` closes the focused split. It will not close your last
+  window, since a workspace always keeps at least one.""" + keyhint("windowclose") + """
+
+Right now this workspace has one window. To split it into two,
+""" + keypress("windownew") + """.
+"""
+
+focus_window_md = """\
+You have two windows now. `<meta>` plus a direction moves focus across
+the splits, so you can hop between them without the mouse.
+
+- `windowfocus left` focuses the window to the left.""" + keyhint("windowfocus", "left") + """
+- `windowfocus right` focuses the window to the right.""" + keyhint("windowfocus", "right") + """
+
+First focus the window on the left (""" + keypress("windowfocus", "left") + """),
+then the window on the right (""" + keypress("windowfocus", "right") + """).
+"""
+
+move_window_md = """\
+`<shift>` turns "go to" into "move". So `<meta>` plus a direction
+focuses a window, and adding `<shift>` *moves* the focused window's
+content that way instead, swapping it with the neighbor.
+
+- `windowmove left` moves the focused window to the left.""" + keyhint("windowmove", "left") + """
+- `windowmove right` moves it to the right.""" + keyhint("windowmove", "right") + """
+
+Move the focused window to the left (""" + keypress("windowmove", "left") + """),
+then back to the right (""" + keypress("windowmove", "right") + """).
+"""
+
+fullscreen_window_md = """\
+When you want to focus on one window, `windowtogglemaximize` grows it
+to fill the whole editor area. Run it again, or focus another window,
+to restore the layout.""" + keyhint("windowtogglemaximize") + """
+
+Toggle fullscreen now: """ + keypress("windowtogglemaximize") + """.
+"""
+
+close_window_md = """\
+You have two windows now. `windowclose` closes the focused split and
+moves focus to the next window. It will not close your last window: a
+workspace always keeps at least one.""" + keyhint("windowclose") + """
+
+To close the split you just made, """ + keypress("windowclose") + """.
+"""
+
+tabs_md = """\
+A window does not own a file; it **shows content**, and the content it
+can show is a list of **tabs**: files, terminals, task output.
+Switching tabs swaps what the focused window shows without touching
+the layout. Tabs are the `<alt>` layer.
+
+## Open
+
+- `edit <file>` opens a file as a tab in the focused window.
+
+## Switch
+
+- `tabnext` / `tabprevious` cycle the window's tabs and wrap around.
+  """ + keyhint("tabnext") + keyhint("tabprevious") + """
+- """ + tab_dir_sentence + """
+- `tabfocus N` jumps straight to a position.
+
+## Reorder and close
+
+- `tabmove left` / `right` (or `tabmove N`) reorders the current tab.
+  That is the `<shift>` = move rule again, on the `<alt>`
+  layer.""" + keyhint("tabmove", "left") + """
+- `tabclose` closes the focused tab; the next one takes its
+  place.""" + keyhint("tabclose") + """
+
+## Splits versus tabs
+
+Split into a new **window** to see two things at once; open a new
+**tab** to keep something in the *same* window, one at a time.
+
+## Try it
+
+This window has one tab so far, so first open a second one:
+""" + keypress("edit") + """ and pick another file. Then switch to the
+next tab (""" + keypress("tabnext") + """) and back to the previous one
+(""" + keypress("tabprevious") + """). The tutorial advances once you
+have switched in both directions.
+"""
+
+close_tab_md = """\
+`tabclose` closes the focused tab; the next tab in the list takes its
+place.""" + keyhint("tabclose") + """
+
+To close the current tab, """ + keypress("tabclose") + """.
+"""
+
+terminals_md = """\
+Rune runs terminals as content, so they live in windows and tabs just
+like files.
+
+## Kinds of terminal
+
+- `terminalnew` opens an ephemeral terminal in the current window. It
+  closes automatically when the window's content is replaced, for
+  example by `tabnext`.""" + keyhint("terminalnew") + """
+- `terminalnewtab` opens a durable terminal in its own tab; it stays
+  until you close it.""" + keyhint("terminalnewtab") + """
+
+## The companion terminal
+
+Running `!` with no arguments opens the **companion terminal**: a
+single persistent terminal that preserves its session output across
+invocations, so you can summon it, hide it, and bring it back without
+losing scrollback.""" + keyhint("!") + """
+
+The same key toggles it: press it once to open the companion terminal,
+again to hide it.
+
+## Running a program
+
+- `! <cmd>` runs a program in a floating window that shows its output,
+  for example `! git log`.
+- `!!` runs a program the same way but without showing its output.
+
+First, open the companion terminal: """ + keypress("!") + """.
+"""
+
+terminals_hide_md = """\
+The companion terminal is open. Because `!` toggles it, the same key
+hides it again while keeping its session and scrollback alive for next
+time.
+
+Hide it now: """ + keypress("!") + """.
+"""
+
+terminals_run_md = """\
+`! <cmd>` runs a one-off program in a floating output window. Let's run
+`git log`.
+
+At the command prompt (`""" + ck + """`), type `! git log` and press
+Enter. Rune opens a floating window streaming its output.
+"""
+
+terminals_close_md = """\
+The `git log` output is sitting in a floating window. Close it the same
+way you close any tab.
+
+Close it now: """ + keypress("tabclose") + """.
+"""
+
+terminals_done_md = """\
+That is the whole layout model: windows, tabs, and terminals, all
+driven by the same commands.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
+agent_install_md = """\
 The **Rune Agent** is an in-editor AI coding assistant. It ships as a
 package you install on demand, so the first step is to add it.
 
@@ -82,8 +341,6 @@ Press `<enter>` or `<space>` to continue.
 """
 
 agent_pkg_install_md = """\
-# Install the agent package
-
 You're in the companion shell now. Install the agent package:
 
 1. Type `pkg install rune-agent`.
@@ -92,13 +349,24 @@ You're in the companion shell now. Install the agent package:
 Press `<enter>` or `<space>` to continue.
 """
 
-agent_open_md = """\
-# Open Rune Agent
+agent_reload_md = """\
+Extensions are loaded when a workspace opens. The agent is installed,
+but this workspace was already running before you added it, so it is
+not active yet. Reloading the workspace starts every installed
+extension fresh, which is also how you pick up a new version after
+updating one.
 
+""" + shell_esc_step + shell_prompt_step_num + """. Press `""" + ck + """` to open the command prompt.
+""" + shell_run_step_num + """. Run `workspacereload`.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
+agent_open_md = """\
 Start a conversation with the agent using the `agent` command.
 
-1. Press `""" + ck + """` to open the command prompt.
-2. Run `agent`.
+""" + shell_esc_step + shell_prompt_step_num + """. Press `""" + ck + """` to open the command prompt.
+""" + shell_run_step_num + """. Run `agent`.
 
 `agent` takes two optional arguments: a conversation name and a model.
 Run `agent <name>` to name the conversation, or `agent <name> <model>`
@@ -108,9 +376,22 @@ conversation using your default provider.
 Press `<enter>` or `<space>` to continue.
 """
 
+wrap_up_md = """\
+That is the tour. A couple of things worth remembering:
+
+- If you find yourself wondering what commands you just typed, press
+  `<meta-r>` to open the command prompt in history mode and re-run any
+  previously dispatched command.
+- You can replay this tour any time by running the `tutorial start
+  basics` command.
+
+Press `<enter>` or `<space>` to finish.
+"""
+
 def teach_edit():
     floating_window(title = "Open a file", text = edit_md, dismiss_keys = [ck])
     edit = wait_command(
+        title    = "Open a file",
         command  = "edit",
         on_error = ("`<cmd>edit` needs a `<file>` argument. Use the " +
                     "auto-completer (Tab / arrow keys) to pick a " +
@@ -120,9 +401,154 @@ def teach_edit():
     notify(level = success, message = "You opened " + edit.args[0])
 
 
-def teach_provider(provider, action_tokens, run_md, success_msg):
-    floating_window(title = "Connect a provider", text = run_md)
+def teach_layout():
+    floating_window(title = "Layout management", text = layout_md,
+                    dismiss_keys = [ck])
+
+
+def teach_windows():
+    floating_window(title = "Manage windows", text = windows_md,
+                    dismiss_keys = dismiss_for("windownew"))
+    wait_command(
+        title    = "Manage windows",
+        command  = "windownew",
+        on_error = ("Split the active window into two. Add an optional " +
+                    "direction (`<cmd>windownew right` / `left` / `up` / " +
+                    "`down`) to choose where the new pane lands."),
+    )
+    notify(level = success, message = "You split the window.")
+
+
+def teach_focus_window():
+    floating_window(title = "Move between windows", text = focus_window_md,
+                    dismiss_keys = dismiss_for("windowfocus", "left"))
+    wait_command(
+        title    = "Move between windows",
+        command  = "windowfocus",
+        on_error = "Focus the window to the left.",
+    )
+    wait_command(
+        title    = "Move between windows",
+        command  = "windowfocus",
+        on_error = "Now focus the window to the right.",
+    )
+    notify(level = success, message = "You moved between windows.")
+
+
+def teach_move_window():
+    floating_window(title = "Move a window", text = move_window_md,
+                    dismiss_keys = dismiss_for("windowmove", "left"))
+    wait_command(
+        title    = "Move a window",
+        command  = "windowmove",
+        on_error = "Move the focused window to the left.",
+    )
+    wait_command(
+        title    = "Move a window",
+        command  = "windowmove",
+        on_error = "Now move it back to the right.",
+    )
+    notify(level = success, message = "You moved a window.")
+
+
+def teach_fullscreen_window():
+    floating_window(title = "Fullscreen a window", text = fullscreen_window_md,
+                    dismiss_keys = dismiss_for("windowtogglemaximize"))
+    wait_command(
+        title    = "Fullscreen a window",
+        command  = "windowtogglemaximize",
+        on_error = "Toggle the focused window to fullscreen and back.",
+    )
+    notify(level = success, message = "You toggled fullscreen.")
+
+
+def teach_close_window():
+    floating_window(title = "Close a window", text = close_window_md,
+                    dismiss_keys = dismiss_for("windowclose"))
+    wait_command(
+        title    = "Close a window",
+        command  = "windowclose",
+        on_error = ("Close the focused split. It will not close your last " +
+                    "window."),
+    )
+    notify(level = success, message = "You closed the window.")
+
+
+def teach_tabs():
+    floating_window(title = "Manage tabs", text = tabs_md,
+                    dismiss_keys = dismiss_for("tabnext"))
+    wait_command(
+        title    = "Manage tabs",
+        command  = "tabnext",
+        on_error = ("Move to the next tab in this window. If the window " +
+                    "only has one tab, open a second file first with " +
+                    "`<cmd>edit`."),
+    )
+    wait_command(
+        title    = "Manage tabs",
+        command  = "tabprevious",
+        on_error = "Now move back to the previous tab.",
+    )
+    notify(level = success, message = "You switched tabs.")
+
+
+def teach_close_tab():
+    floating_window(title = "Close a tab", text = close_tab_md,
+                    dismiss_keys = dismiss_for("tabclose"))
+    wait_command(
+        title    = "Close a tab",
+        command  = "tabclose",
+        on_error = "Close the focused tab.",
+    )
+    notify(level = success, message = "You closed the tab.")
+
+
+def teach_terminals():
+    floating_window(title = "Terminals", text = terminals_md,
+                    dismiss_keys = dismiss_for("!"))
+    wait_command(
+        title    = "Terminals",
+        command  = "!",
+        on_error = "Open the companion terminal (`<cmd>!` with no arguments).",
+    )
+    notify(level = success, message = "Companion terminal open.")
+
+    floating_window(title = "Hide the companion terminal", text = terminals_hide_md,
+                    dismiss_keys = dismiss_for("!"))
+    wait_command(
+        title    = "Hide the companion terminal",
+        command  = "!",
+        on_error = "Hide the companion terminal again (`<cmd>!`).",
+    )
+    notify(level = success, message = "Companion terminal hidden.")
+
+    floating_window(title = "Run a command", text = terminals_run_md,
+                    dismiss_keys = [ck])
+    wait_command(
+        title    = "Run a command",
+        command  = "!",
+        on_error = "At the command prompt, run `<cmd>! git log`.",
+    )
+    notify(level = success, message = "Program running in a window.")
+
+    floating_window(title = "Close the output window", text = terminals_close_md,
+                    dismiss_keys = dismiss_for("tabclose"))
+    wait_command(
+        title    = "Close the output window",
+        command  = "tabclose",
+        on_error = "Close the `git log` output window with `<cmd>tabclose`.",
+    )
+    notify(level = success, message = "Output window closed.")
+
+    floating_window(title = "That's the layout model", text = terminals_done_md,
+                    dismiss_keys = [ck])
+
+
+def teach_provider(provider, label, action_tokens, run_md, success_msg):
+    title = "Connect " + label
+    floating_window(title = title, text = run_md)
     wait_shell(
+        title    = title,
         args     = ["models", "providers", provider] + action_tokens,
         on_error = ("In the companion shell, run `models providers " +
                     provider + " " + " ".join(action_tokens) + "`."),
@@ -134,6 +560,7 @@ def teach_agent():
     floating_window(title = "Set up the Rune Agent", text = agent_install_md,
                     dismiss_keys = [ck])
     wait_command(
+        title    = "Set up the Rune Agent",
         command  = "shell",
         on_error = ("Open Rune's companion shell: run the `<cmd>shell` " +
                     "command."),
@@ -141,10 +568,21 @@ def teach_agent():
 
     floating_window(title = "Install the agent package", text = agent_pkg_install_md)
     wait_shell(
+        title    = "Install the agent package",
         args     = ["pkg", "install", "rune-agent"],
         on_error = "In the companion shell, run `pkg install rune-agent`.",
     )
     notify(level = success, message = "Rune Agent installed.")
+
+    floating_window(title = "Reload the workspace", text = agent_reload_md,
+                    dismiss_keys = dismiss_for("workspacereload"))
+    wait_command(
+        title    = "Reload the workspace",
+        command  = "workspacereload",
+        on_error = ("Run `<cmd>workspacereload` to restart the workspace " +
+                    "and load the agent extension."),
+    )
+    notify(level = success, message = "Workspace reloaded.")
 
     pick = choice(
         message = ("Which provider do you want to connect?\n\n" +
@@ -167,8 +605,6 @@ def teach_agent():
 
     if pick.value == "OpenAI":
         run_md = """\
-# Connect OpenAI
-
 Add your OpenAI credentials. The key is stored securely and never
 written to your config file.
 
@@ -177,12 +613,10 @@ written to your config file.
 
 Press `<enter>` or `<space>` to continue.
 """
-        teach_provider("openai", ["add", "default"], run_md,
+        teach_provider("openai", "OpenAI", ["add", "default"], run_md,
                        "OpenAI connected.")
     elif pick.value == "Anthropic":
         run_md = """\
-# Connect Anthropic
-
 Add your Anthropic credentials. The key is stored securely and never
 written to your config file.
 
@@ -191,12 +625,10 @@ written to your config file.
 
 Press `<enter>` or `<space>` to continue.
 """
-        teach_provider("anthropic", ["add", "default"], run_md,
+        teach_provider("anthropic", "Anthropic", ["add", "default"], run_md,
                        "Anthropic connected.")
     elif pick.value == "Gemini":
         run_md = """\
-# Connect Gemini
-
 Add your Gemini credentials. The key is stored securely and never
 written to your config file.
 
@@ -205,12 +637,10 @@ written to your config file.
 
 Press `<enter>` or `<space>` to continue.
 """
-        teach_provider("gemini", ["add", "default"], run_md,
+        teach_provider("gemini", "Gemini", ["add", "default"], run_md,
                        "Gemini connected.")
     elif pick.value == "Codex":
         run_md = """\
-# Connect Codex
-
 Codex authenticates through your browser — no API key to paste.
 
 1. In the companion shell, run `models providers codex login`.
@@ -218,11 +648,9 @@ Codex authenticates through your browser — no API key to paste.
 
 Press `<enter>` or `<space>` to continue.
 """
-        teach_provider("codex", ["login"], run_md, "Codex connected.")
+        teach_provider("codex", "Codex", ["login"], run_md, "Codex connected.")
     else:
         run_md = """\
-# Connect Claude
-
 Claude signs in through your browser with your Claude Pro or Max
 subscription. There is no API key to paste.
 
@@ -238,17 +666,23 @@ API key instead.
 
 Press `<enter>` or `<space>` to continue.
 """
-        teach_provider("claude", ["login"], run_md, "Claude connected.")
+        teach_provider("claude", "Claude", ["login"], run_md, "Claude connected.")
 
     floating_window(title = "Open the Rune Agent", text = agent_open_md,
                     dismiss_keys = [ck])
     wait_command(
+        title    = "Open the Rune Agent",
         command  = "agent",
         on_error = ("Run `<cmd>agent` to start a conversation. Add an " +
                     "optional conversation name and model: " +
                     "`<cmd>agent <name> <model>`."),
     )
     notify(level = success, message = "Rune Agent is ready.")
+
+
+def teach_wrap_up():
+    floating_window(title = "You're all set", text = wrap_up_md,
+                    dismiss_keys = [ck])
 
 
 def run():
@@ -265,22 +699,30 @@ def run():
     )
 
     ws = wait_command(
-        command  = "wopen",
-        on_error = ("`<cmd>wopen` needs a `<directory>` argument. " +
-                    "Use the auto-completer (Tab / arrow keys) to " +
-                    "pick a workspace, or type a directory path " +
-                    "(it will be created if it doesn't exist)."),
+        title    = "Welcome",
+        command  = "workspaceopen",
+        on_error = ("`<cmd>workspaceopen` needs a `<workspacepath>` " +
+                    "argument. Use the auto-completer (Tab / arrow " +
+                    "keys) to pick a workspace, or type a directory " +
+                    "path (it will be created if it doesn't exist)."),
     )
     notify(level = success, message = "Opened workspace: " + ws.args[0])
 
     teach_edit()
 
-    if not confirm("Want to set up the Rune Agent now?"):
-        notify(level = info,
-               message = "Run `<cmd>tutorial start basics` any time to continue.")
-        return
+    teach_layout()
+    teach_windows()
+    teach_focus_window()
+    teach_move_window()
+    teach_fullscreen_window()
+    teach_close_window()
+    teach_tabs()
+    teach_close_tab()
+    teach_terminals()
 
     teach_agent()
 
+    teach_wrap_up()
 
-tutorial(id = "basics", title = "Rune basics", version = "3", entry = run)
+
+tutorial(id = "basics", title = "Rune basics", version = "14", entry = run)

@@ -56,6 +56,11 @@ func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 	promptConfig := i.ideConfig.promptConfig()
 	scheduleNextTick := i.options.scheduleFn
 	commandKey := i.ideConfig.commandKey()
+	editorMode := i.ideConfig.pkgEditorMode()
+	rawKeyFor := i.ideConfig.commandKeyBindingLookup()
+	keyForCommand := func(cmd string, args []string) string {
+		return starlarktutorial.PrettyKeySpec(rawKeyFor(cmd, args))
+	}
 	manualLookup := buildTutorialCommandManualLookup(i.workspaceHandler)
 
 	tutorials := make(map[string]idetutorial.Tutorial,
@@ -66,7 +71,7 @@ func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 			br, ed, notifications, parser,
 			defaultAttr, frameCharSet, promptConfig,
 			scheduleNextTick, partition, commandKey,
-			manualLookup,
+			editorMode, keyForCommand, manualLookup,
 		)
 		if err != nil {
 			i.ideConfig.errors["tutorials."+name] = err
@@ -86,7 +91,7 @@ func buildTutorials(i *IDE) map[string]idetutorial.Tutorial {
 			br, ed, notifications, parser,
 			defaultAttr, frameCharSet, promptConfig,
 			scheduleNextTick, partition, commandKey,
-			manualLookup,
+			editorMode, keyForCommand, manualLookup,
 		)
 		if err != nil {
 			i.ideConfig.errors["tutorials."+name] = err

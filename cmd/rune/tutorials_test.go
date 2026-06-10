@@ -56,6 +56,8 @@ func TestBasicsTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
+		"modeless",
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -63,7 +65,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "3", tut.Version())
+	assert.Equal(t, "14", tut.Version())
 }
 
 // TestEmbeddedTutorialOptionsRegistersBasics asserts that the embedded

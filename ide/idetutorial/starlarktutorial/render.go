@@ -68,13 +68,27 @@ const hintBoxBodyPad = 2
 // (60% of the screen width, matching the floating_window heuristic).
 const hintBoxWidthRatio = 6
 
+// commandPromptTopFraction mirrors the command prompt's vertical
+// anchor: the IDE opens the prompt at Y = 0.2 * height (see
+// (*ex).newCommandPrompt). The wait hint window caps its height to end
+// above that row so the prompt the user is asked to open stays visible
+// beneath it.
+const commandPromptTopFraction = 0.2
+
+// hintBoxMinInnerH keeps the hint window tall enough to show its
+// wrapped instruction line even on short screens, where the
+// prompt-aware cap (0.2*height) would otherwise squeeze it below
+// readability.
+const hintBoxMinInnerH = 4
+
 // drawHintBox renders a framed, top-centered hint window whose body
 // is the markdown-parsed body string. attrs supplies the frame and
 // background attributes; the box is regular foreground/background,
-// not inverse video. Empty body or undersized geometry skips the
-// draw silently.
+// not inverse video. When title is non-empty a status-bar style title
+// row (matching floating_window) replaces the top frame edge. Empty
+// body or undersized geometry skips the draw silently.
 func drawHintBox(
-	w term.Writer, width, height int, body string,
+	w term.Writer, width, height int, title string, stepNum int, body string,
 	fcs component.FrameCharSet, attrs term.Attributes,
 ) {
 	if width <= 4 || height <= 4 || body == "" {
@@ -99,16 +113,29 @@ func drawHintBox(
 	mdContentW := max(0, contentW-hintBoxBodyPad)
 	md.Resize(mdContentW, height)
 	contentH := md.Height(mdContentW)
-	innerH := contentH + 2
+	hasTitle := title != ""
+	titleH := 0
+	if hasTitle {
+		titleH = 1
+	}
+	innerH := contentH + 2 + titleH
 	innerH = max(innerH, 3)
-	maxInnerH := height - hintBoxTopOffset - 1
-	maxInnerH = max(maxInnerH, 3)
+	// Keep the window above the command prompt (opened at
+	// 0.2*height) so the user can still see the prompt they are asked
+	// to use.
+	promptTopY := int(float64(height) * commandPromptTopFraction)
+	maxInnerH := promptTopY - hintBoxTopOffset
+	maxInnerH = max(maxInnerH, hintBoxMinInnerH)
 	innerH = min(innerH, maxInnerH)
 	x0 := (width - innerW) / 2
 	x0 = max(x0, 0)
 	y0 := hintBoxTopOffset
-	drawFrame(w, x0, y0, innerW, innerH, fcs, attrs)
-	bodyH := innerH - 2
+	drawFrameOutline(w, x0, y0, innerW, innerH, fcs, attrs, !hasTitle)
+	clearInside(w, x0, y0, innerW, innerH, attrs)
+	if hasTitle {
+		drawTitleBar(w, x0, y0, innerW, title, stepNum, attrs)
+	}
+	bodyH := innerH - 2 - titleH
 	if bodyH <= 0 || contentW <= 0 {
 		return
 	}
@@ -119,7 +146,7 @@ func drawHintBox(
 	bodySpan.Resize(contentW, bodyH)
 	bodySpan.Draw(&component.VirtualWriter{
 		Writer: w,
-		Offset: term.Coordinates{X: x0 + 1, Y: y0 + 1},
+		Offset: term.Coordinates{X: x0 + 1, Y: y0 + 1 + titleH},
 		Width:  contentW,
 		Height: bodyH,
 	})
@@ -134,7 +161,8 @@ func drawHintBox(
 // empty), that message wins and is rendered verbatim after the
 // prompt opener so the user sees the recovery hint.
 func buildWaitCommandHint(
-	r *request, cmdKey term.KeyComb, lookup CommandManualLookup,
+	r *request, cmdKey string, lookup CommandManualLookup,
+	keyForCommand func(cmd string, args []string) string,
 ) string {
 	if r == nil {
 		return ""
@@ -143,7 +171,11 @@ func buildWaitCommandHint(
 	var b strings.Builder
 	fmt.Fprintf(&b,
 		"Waiting for you to open the command prompt `%s` and try the `%s` command:\n\n",
-		cmdKey.String(), cmdName)
+		cmdKey, cmdName)
+	if boundKey := waitCommandBoundKey(cmdName, keyForCommand); boundKey != "" {
+		fmt.Fprintf(&b,
+			"Or you can press `%s` to run it.\n\n", boundKey)
+	}
 	if r.text != "" {
 		// on_error: append the (already expanded) recovery hint
 		// verbatim — it is markdown produced by the author and
@@ -161,11 +193,28 @@ func buildWaitCommandHint(
 	return b.String()
 }
 
+// waitCommandBoundKey resolves the pretty key spec bound to the
+// awaited command (the first token of cmd is the command name and the
+// rest are arguments). Returns "" when no resolver is wired or the
+// command has no binding.
+func waitCommandBoundKey(
+	cmd string, keyForCommand func(name string, args []string) string,
+) string {
+	if keyForCommand == nil {
+		return ""
+	}
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return ""
+	}
+	return keyForCommand(fields[0], fields[1:])
+}
+
 // buildWaitShellHint composes the markdown body for a wait_shell hint
 // window: it asks the user to run the expected command inside Rune's
 // companion shell. A swapped-in on_error message (request.text
 // non-empty) wins and is rendered verbatim after the prompt opener.
-func buildWaitShellHint(r *request, cmdKey term.KeyComb) string {
+func buildWaitShellHint(r *request, cmdKey string) string {
 	if r == nil {
 		return ""
 	}
@@ -247,6 +296,7 @@ func drawFloatingWindow(
 	if !hasTitle {
 		contentY = layout.y + 1
 	}
+	contentY += layout.topPad
 	if layout.mdH > 0 {
 		r.body.Resize(layout.contentW, layout.mdH)
 		r.body.Draw(&component.VirtualWriter{
@@ -261,6 +311,7 @@ func drawFloatingWindow(
 type floatingWindowLayoutResult struct {
 	x, y, innerW, innerH int
 	contentW, titleH     int
+	topPad               int
 	mdH                  int
 	hintX, hintY, hintW  int
 	fcs                  component.FrameCharSet
@@ -301,11 +352,18 @@ func floatingWindowLayout(
 		// No separate top edge when the title bar occupies row 0.
 		topEdge = 0
 	}
-	innerH := contentH + titleH + topEdge + 1
+	// A title bar butts directly against the body, so add one blank
+	// content row beneath it for breathing room. Untitled windows
+	// already get that gap from their top frame edge.
+	topPad := 0
+	if hasTitle {
+		topPad = 1
+	}
+	innerH := contentH + titleH + topEdge + topPad + 1
 	innerH = min(innerH, height-2)
 	innerH = max(innerH, 3)
 	x, y := floatingWindowAnchor(width, height, innerW, innerH, alignment, offset)
-	mdH := innerH - titleH - topEdge - 1
+	mdH := innerH - titleH - topEdge - topPad - 1
 	mdH = max(mdH, 0)
 	hintY := y + innerH - 3
 	hintInsetX := floatingWindowBodyPad / 2
@@ -316,6 +374,7 @@ func floatingWindowLayout(
 		innerH:   innerH,
 		contentW: contentW,
 		titleH:   titleH,
+		topPad:   topPad,
 		mdH:      mdH,
 		hintX:    x + 1 + hintInsetX,
 		hintY:    hintY,
@@ -574,7 +633,22 @@ func stageFloatingWindowShader(
 	}
 }
 
-// expandCmdTemplate replaces every <cmd> token in s with key.
-func expandCmdTemplate(s string, key term.KeyComb) string {
-	return strings.ReplaceAll(s, "<cmd>", key.String())
+// expandCmdTemplate replaces every <cmd> token in s with the
+// already-prettified command-key display string.
+func expandCmdTemplate(s, cmdKey string) string {
+	return strings.ReplaceAll(s, "<cmd>", cmdKey)
+}
+
+// prettyKeySpecs maps a rendered key spec to a friendlier form for
+// tutorial copy. It is display-only and never affects key matching.
+var prettyKeySpecs = map[string]string{"<shift-;>": ":"}
+
+// PrettyKeySpec rewrites a rendered key spec to its tutorial-friendly
+// form (e.g. "<shift-;>" becomes ":"). Unmapped specs pass through
+// unchanged. Used only for display in tutorial copy.
+func PrettyKeySpec(s string) string {
+	if p, ok := prettyKeySpecs[s]; ok {
+		return p
+	}
+	return s
 }

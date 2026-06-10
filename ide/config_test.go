@@ -1259,3 +1259,38 @@ editor:
 		"go":   text.IndentRuneTab,
 	}, cfg.editorIndents())
 }
+
+// TestCommandKeyBindingLookup asserts that commandKeyBindingLookup
+// inverts the configured key bindings: each command line resolves to
+// its key, multi-command sequences map every line to the same key, and
+// an args-qualified miss falls back to the bare command.
+func TestCommandKeyBindingLookup(t *testing.T) {
+	t.Parallel()
+	c := ideConfig{
+		cfg: map[string]any{
+			"command": map[string]any{
+				"key_bindings": map[string]any{
+					"<m-n>":      "windownew",
+					"<s-m-n>":    "windownew right",
+					"<c-x><c-h>": "windowfocus left",
+					"<m-d>":      []any{"openDoors 1", "large 2"},
+				},
+			},
+		},
+		errors: map[string]error{},
+	}
+	lookup := c.commandKeyBindingLookup()
+
+	assert.Equal(t, "<meta-n>", lookup("windownew", nil))
+	assert.Equal(t, "<shift-meta-n>", lookup("windownew", []string{"right"}))
+	assert.Equal(t, "<ctrl-x><ctrl-h>",
+		lookup("windowfocus", []string{"left"}))
+	// Multi-command sequence: every command line maps to the key.
+	assert.Equal(t, "<meta-d>", lookup("openDoors", []string{"1"}))
+	assert.Equal(t, "<meta-d>", lookup("large", []string{"2"}))
+	// Args-qualified miss falls back to the bare command binding.
+	assert.Equal(t, "<meta-n>", lookup("windownew", []string{"down"}))
+	// Unbound command yields "".
+	assert.Equal(t, "", lookup("tabclose", nil))
+	assert.Empty(t, c.errors)
+}

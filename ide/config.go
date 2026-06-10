@@ -471,6 +471,42 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 	return ret
 }
 
+// commandKeyBindingLookup returns a closure that resolves a command
+// name (and optional args) to the user's configured key spec, or ""
+// when no binding matches. It inverts commandKeyMappings once: each
+// command line in a binding maps to that binding's key, keyed by the
+// joined command+args. A multi-command sequence binding maps every
+// command line to the same key; the first writer wins so earlier,
+// more specific bindings stay stable. The closure falls back to the
+// bare command when an args-qualified lookup misses.
+func (c ideConfig) commandKeyBindingLookup() func(string, []string) string {
+	lookup := make(map[string]string)
+	for seq, cmds := range c.commandKeyMappings() {
+		key := seq.First.String()
+		if seq.Last != (term.KeyComb{}) {
+			key += seq.Last.String()
+		}
+		for _, cmdAndArgs := range cmds {
+			line := strings.Join(cmdAndArgs, " ")
+			if _, ok := lookup[line]; !ok {
+				lookup[line] = key
+			}
+		}
+	}
+	return func(cmd string, args []string) string {
+		line := strings.Join(append([]string{cmd}, args...), " ")
+		if key, ok := lookup[line]; ok {
+			return key
+		}
+		if len(args) > 0 {
+			if key, ok := lookup[cmd]; ok {
+				return key
+			}
+		}
+		return ""
+	}
+}
+
 func (c ideConfig) commandKey() (ret term.KeyComb) {
 	if c.editorMode() == editorModeModeless {
 		ret = defaultModelessCommandKey
