@@ -35,6 +35,24 @@ func TestFlagshipModelInCatalog(t *testing.T) {
 	assert.Equal(t, ClaudeFable5, FlagshipModel())
 }
 
+func TestMaxOutputTokens(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{ClaudeFable5, 128000},
+		{ClaudeSonnet4Dot5, 64000},
+		{ClaudeOpus4, 32000},
+		{ClaudeHaiku3, 4096},
+		{"unknown-model", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, MaxOutputTokens(tt.model))
+		})
+	}
+}
+
 func TestSupportsEffort(t *testing.T) {
 	tests := []struct {
 		model string

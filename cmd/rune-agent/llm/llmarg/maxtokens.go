@@ -21,37 +21,50 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package claude
+package llmarg
 
 import (
+	"fmt"
+
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/llm/anthropic"
+	"unstable.build/go-tui/llm/claude"
+	"unstable.build/go-tui/llm/codex"
+	"unstable.build/go-tui/llm/gemini"
+	"unstable.build/go-tui/llm/openai"
 )
 
-// LLMProvider identifies the Claude provider in the model registry. The
-// claude provider disambiguates Anthropic models authenticated with a
-// Claude Code subscription (OAuth) from the api-key `anthropic` provider,
-// exactly as `codex` disambiguates from `openai`.
-const LLMProvider = "claude"
-
-// ModelEntries returns the static catalog of Claude models. It re-stamps
-// the Anthropic catalog with Provider "claude" so callers can target the
-// subscription-authenticated path while keeping identical model slugs and
-// context windows.
-func ModelEntries() []llmapi.ModelEntry {
-	src := anthropic.ModelEntries()
-	out := make([]llmapi.ModelEntry, 0, len(src))
-	for _, entry := range src {
-		entry.Provider = LLMProvider
-		out = append(out, entry)
+// MaxOutputTokens returns entry's documented maximum output-token
+// (API max_tokens) ceiling, or 0 when the limit is unknown — which the
+// caller treats as "no client-side cap". It dispatches on the entry's
+// provider to the matching catalog. Local (llamacpp) and unrecognised
+// providers have no published per-model ceiling and return 0.
+func MaxOutputTokens(entry llmapi.ModelEntry) int {
+	switch entry.Provider {
+	case anthropic.LLMProvider:
+		return anthropic.MaxOutputTokens(entry.Name)
+	case claude.LLMProvider:
+		return claude.MaxOutputTokens(entry.Name)
+	case openai.LLMProvider:
+		return openai.MaxOutputTokens(entry.Name)
+	case codex.LLMProvider:
+		return codex.MaxOutputTokens(entry.Name)
+	case gemini.LLMProvider:
+		return gemini.MaxOutputTokens(entry.Name)
+	default:
+		return 0
 	}
-	return out
 }
 
-// FlagshipModel returns the provider's top model identifier. It mirrors
-// the Anthropic flagship since the catalog is re-stamped from there.
-func FlagshipModel() string { return anthropic.FlagshipModel() }
-
-// MaxOutputTokens returns the model's documented maximum output-token
-// ceiling. It mirrors the Anthropic catalog since the slugs are identical.
-func MaxOutputTokens(model string) int { return anthropic.MaxOutputTokens(model) }
+// ValidateMaxOutputTokens rejects n when it exceeds entry's documented
+// maximum output-token ceiling. When the ceiling is unknown (0) any value
+// passes, so a value is never wrongly rejected for an uncatalogued model.
+func ValidateMaxOutputTokens(entry llmapi.ModelEntry, n int) error {
+	limit := MaxOutputTokens(entry)
+	if limit > 0 && n > limit {
+		return fmt.Errorf(
+			"%s supports at most %d max output tokens; %d is too large",
+			entry.Name, limit, n)
+	}
+	return nil
+}

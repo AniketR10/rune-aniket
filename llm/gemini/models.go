@@ -98,6 +98,24 @@ func ModelEntries() []llmapi.ModelEntry {
 // map-random.
 func FlagshipModel() string { return Gemini_3_1_Pro_Preview }
 
+// maxOutputTokens maps each model to its documented maximum output-token
+// (API max_output_tokens) ceiling. Models absent from the map have an
+// unknown ceiling; MaxOutputTokens returns 0 for them.
+var maxOutputTokens = map[string]int{
+	Gemini_3_1_Pro_Preview:       65536,
+	Gemini_3_Flash_Preview:       65536,
+	Gemini_3_1_FlashLite_Preview: 65536,
+	Gemini_2_5_Pro:               65536,
+	Gemini_2_5_Flash:             65536,
+	Gemini_2_5_FlashLite:         65536,
+	Gemini_2_0_Flash:             8192,
+	Gemini_2_0_FlashLite:         8192,
+}
+
+// MaxOutputTokens returns the model's documented maximum output-token
+// ceiling, or 0 when the limit is unknown.
+func MaxOutputTokens(model string) int { return maxOutputTokens[model] }
+
 // supportedEfforts are the reasoning-effort levels that map onto a Gemini
 // thinking level. "none" and "xhigh"/"max" have no Gemini equivalent.
 var supportedEfforts = map[string]bool{

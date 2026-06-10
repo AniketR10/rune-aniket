@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package openai
 
 import (
@@ -300,3 +299,41 @@ func ModelEntries() []llmapi.ModelEntry {
 // deterministic, unlike iterating ModelEntries() whose order is
 // map-random.
 func FlagshipModel() string { return GPT5Dot5 }
+
+// maxOutputTokens maps each model to its documented maximum output-token
+// (API max_completion_tokens / max_tokens) ceiling. Models absent from the
+// map have an unknown ceiling; MaxOutputTokens returns 0 for them.
+var maxOutputTokens = map[string]int{
+	GPT5Dot5:         128000,
+	GPT5Dot4:         128000,
+	GPT5Dot4Pro:      128000,
+	GPT5Dot4Mini:     128000,
+	GPT5Dot4Nano:     128000,
+	GPT5Dot3Codex:    128000,
+	GPT5Dot3Instant:  128000,
+	GPT5Dot2:         128000,
+	GPT5Dot2Chat:     128000,
+	GPT5Dot2Pro:      128000,
+	GPT5Dot1:         128000,
+	GPT5:             128000,
+	GPT5Mini:         128000,
+	GPT5Nano:         128000,
+	O1:               100000,
+	O3:               100000,
+	O3Pro:            100000,
+	O4Mini:           100000,
+	O1Mini:           65536,
+	O3Mini:           65536,
+	GPT4Dot1:         32768,
+	GPT4Dot1Mini:     32768,
+	GPT4Dot1Nano:     32768,
+	GPT4o:            16384,
+	GPT4Turbo:        16384,
+	GPT4:             8192,
+	GPT3Dot5Turbo:    4096,
+	GPT3Dot5Turbo16K: 4096,
+}
+
+// MaxOutputTokens returns the model's documented maximum output-token
+// ceiling, or 0 when the limit is unknown.
+func MaxOutputTokens(model string) int { return maxOutputTokens[model] }

@@ -35,6 +35,12 @@ func TestFlagshipModelMirrorsAnthropic(t *testing.T) {
 	assert.Equal(t, anthropic.FlagshipModel(), FlagshipModel())
 }
 
+func TestMaxOutputTokensMirrorsAnthropic(t *testing.T) {
+	model := anthropic.ClaudeFable5
+	assert.Equal(t, anthropic.MaxOutputTokens(model), MaxOutputTokens(model))
+	assert.Equal(t, 0, MaxOutputTokens("unknown-model"))
+}
+
 func TestModelEntriesStampClaudeProvider(t *testing.T) {
 	entries := ModelEntries()
 	require.NotEmpty(t, entries)

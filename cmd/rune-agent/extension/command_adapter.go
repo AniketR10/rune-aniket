@@ -431,6 +431,10 @@ func (a *commandAdapter) handleMaxTokens(args []string) (dialoguetui.CommandResu
 			"invalid max_tokens value %q: must be a positive integer", args[0])
 	}
 
+	if err := llmarg.ValidateMaxOutputTokens(a.agent.ModelEntry(), n); err != nil {
+		return dialoguetui.CommandResult{}, err
+	}
+
 	a.agent.SetMaxOutputTokens(n)
 	md, err := markdown.New(fmt.Sprintf("Set max output tokens to **%d**.", n))
 	if err != nil {

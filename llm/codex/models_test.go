@@ -36,6 +36,24 @@ func TestFlagshipModelInCatalog(t *testing.T) {
 	assert.Equal(t, GPT5Dot5, FlagshipModel())
 }
 
+func TestMaxOutputTokens(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{GPT5Dot5, 128000},
+		{GPT5Dot4, 128000},
+		{GPT5Dot3Codex, 128000},
+		{CodexAutoReview, 0},
+		{"unknown-model", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, MaxOutputTokens(tt.model))
+		})
+	}
+}
+
 func TestModelEntries(t *testing.T) {
 	entries := ModelEntries()
 	byName := make(map[string]int, len(entries))

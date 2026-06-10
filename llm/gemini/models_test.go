@@ -34,3 +34,20 @@ func TestFlagshipModelInCatalog(t *testing.T) {
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
 	assert.Equal(t, Gemini_3_1_Pro_Preview, FlagshipModel())
 }
+
+func TestMaxOutputTokens(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{Gemini_3_1_Pro_Preview, 65536},
+		{Gemini_2_5_Flash, 65536},
+		{Gemini_2_0_Flash, 8192},
+		{"unknown-model", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, MaxOutputTokens(tt.model))
+		})
+	}
+}

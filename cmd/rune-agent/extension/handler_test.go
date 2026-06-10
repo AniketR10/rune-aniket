@@ -1427,3 +1427,85 @@ func subAgentSpawnE2EHandler(
 		settle:      150 * time.Millisecond,
 	}
 }
+
+// maxTokensE2EHandler wires the real floating chat handler with a
+// production commandAdapter as its CommandHandler, bound to a concrete
+// model whose documented output ceiling is known. It mirrors the
+// handleChat wiring (WithCommands(adapter)) so /max_tokens flows through
+// the same validation path the shipped "agent" command uses. The agent
+// is returned so the test can assert the override was not applied when
+// validation rejects the value.
+func maxTokensE2EHandler(t *testing.T, model llmapi.ModelEntry) (tui.Handler, *agent.Agent) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	interruptCh := make(chan struct{}, 64)
+	interrupter := term.FuncInterrupter(func(context.Context) error {
+		select {
+		case interruptCh <- struct{}{}:
+		default:
+		}
+		return nil
+	})
+
+	svc := llmtest.New([]llmapi.ModelEntry{model})
+	comp := dialoguetui.NewComponent(dialoguetui.ComponentConfig{})
+	mu := new(sync.Mutex)
+
+	registry := agent.NewRegistry()
+	skillReg := skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil)
+	store := newMemDialogueStore()
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{
+		SystemPrompt: "test",
+		Model:        model,
+	})
+
+	adapter := &commandAdapter{agent: ag, skillRegistry: skillReg}
+	dhandler, _, rx := dialoguetui.Handler(ctx, mu, comp, interrupter,
+		dialoguetui.WithCommands(adapter),
+	)
+
+	owner := &aiEditorHandler{n: stubNotifications{}}
+	syncComp := syncComponent{mu: mu, comp: comp, h: owner, hintSlot: &hintSlot{}}
+	wrapped, _ := owner.wrapDialogueHandler(ctx, syncComp, dhandler, rx)
+
+	t.Cleanup(cancel)
+
+	return &promptFlusher{
+		t:           t,
+		inner:       wrapped,
+		interruptCh: interruptCh,
+		settle:      100 * time.Millisecond,
+	}, ag
+}
+
+// TestE2EMaxTokensRejectedAboveModelCeiling drives the floating chat
+// handler end-to-end: the user types /max_tokens with a value above the
+// bound model's documented output ceiling. The command must not run —
+// the validation error renders inline and the agent's session override
+// stays unset. claude-sonnet-4-5 caps output at 64000, so 128000 is
+// rejected.
+func TestE2EMaxTokensRejectedAboveModelCeiling(t *testing.T) {
+	model := llmapi.ModelEntry{
+		Provider: "anthropic", Name: "claude-sonnet-4-5", ContextWindow: 200_000,
+	}
+	h, ag := maxTokensE2EHandler(t, model)
+
+	handlertest.RunHandlerSequence(t, h, frameWidth, frameHeight, []handlertest.SequenceTestCase{{
+		InputSequence: "/max_tokens<space>128000<enter>",
+		Expected: frame(
+			"/max_tokens 128000",
+			"! claude-sonnet-4-5 supports at most",
+			"64000 max output tokens; 128000 is too",
+			"large",
+			blanks(), blanks(), blanks(),
+			"   ┌───────────────────────────────┐    ",
+			"   │▐                              │    ",
+			"   └───────────────────────────────┘    ",
+		),
+	}})
+
+	assert.Equal(t, 0, ag.MaxOutputTokens(),
+		"rejected /max_tokens must not apply the session override")
+}

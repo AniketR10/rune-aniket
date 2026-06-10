@@ -100,6 +100,30 @@ func SupportsAdaptiveThinking(model string) bool {
 	}
 }
 
+// maxOutputTokens maps each model to its documented maximum output-token
+// (API max_tokens) ceiling. Models absent from the map have an unknown
+// ceiling; MaxOutputTokens returns 0 for them so callers apply no cap.
+var maxOutputTokens = map[string]int{
+	ClaudeFable5:      128000,
+	ClaudeOpus4Dot8:   128000,
+	ClaudeOpus4Dot7:   128000,
+	ClaudeOpus4Dot6:   128000,
+	ClaudeSonnet4Dot6: 64000,
+	ClaudeHaiku4Dot5:  64000,
+	ClaudeSonnet4Dot5: 64000,
+	ClaudeOpus4Dot5:   64000,
+	ClaudeSonnet4:     64000,
+	ClaudeOpus4Dot1:   32000,
+	ClaudeOpus4:       32000,
+	ClaudeOpus3:       4096,
+	ClaudeSonnet3:     4096,
+	ClaudeHaiku3:      4096,
+}
+
+// MaxOutputTokens returns the model's documented maximum output-token
+// (API max_tokens) ceiling, or 0 when the limit is unknown.
+func MaxOutputTokens(model string) int { return maxOutputTokens[model] }
+
 // SupportsEffort reports whether the given model supports the
 // OutputConfig.Effort parameter. Claude 4+ models support it;
 // Claude 3 models do not.

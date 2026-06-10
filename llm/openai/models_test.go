@@ -36,6 +36,25 @@ func TestFlagshipModelInCatalog(t *testing.T) {
 	assert.Equal(t, GPT5Dot5, FlagshipModel())
 }
 
+func TestMaxOutputTokens(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{GPT5Dot5, 128000},
+		{O1, 100000},
+		{O3Mini, 65536},
+		{GPT4o, 16384},
+		{GPT4, 8192},
+		{"unknown-model", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, MaxOutputTokens(tt.model))
+		})
+	}
+}
+
 func TestIsReasoningModel(t *testing.T) {
 	tests := []struct {
 		model string

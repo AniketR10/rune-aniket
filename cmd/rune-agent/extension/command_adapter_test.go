@@ -35,9 +35,47 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
+	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
+	"unstable.build/go-tui/llm/anthropic"
 )
+
+// newMaxTokensAdapter builds a commandAdapter whose agent is bound to a
+// concrete model so handleMaxTokens can validate against its documented
+// output ceiling.
+func newMaxTokensAdapter(t *testing.T, model llmapi.ModelEntry) *commandAdapter {
+	t.Helper()
+	svc := llmtest.New([]llmapi.ModelEntry{model})
+	registry := agent.NewRegistry()
+	skillReg := skills.NewRegistry(nopFileSystem{}, dirURI(""), nil, nil)
+	store := newMemDialogueStore()
+	ag := agent.NewAgent(svc, registry, skillReg, store, agent.NoMemory(), agent.Config{
+		SystemPrompt: "test",
+		Model:        model,
+	})
+	return &commandAdapter{agent: ag}
+}
+
+// /max_tokens above the bound model's documented ceiling is rejected and
+// leaves the agent override unchanged; a value at/under the ceiling sets it.
+func TestCommandAdapterMaxTokensValidatesAgainstModel(t *testing.T) {
+	model := llmapi.ModelEntry{
+		Provider: anthropic.LLMProvider, Name: anthropic.ClaudeFable5, ContextWindow: 1_000_000,
+	}
+
+	a := newMaxTokensAdapter(t, model)
+	_, err := a.handleMaxTokens([]string{"200000"})
+	require.Error(t, err)
+	assert.Equal(t,
+		"claude-fable-5 supports at most 128000 max output tokens; 200000 is too large",
+		err.Error())
+	assert.Equal(t, 0, a.agent.MaxOutputTokens(), "rejected value must not be applied")
+
+	_, err = a.handleMaxTokens([]string{"64000"})
+	require.NoError(t, err)
+	assert.Equal(t, 64000, a.agent.MaxOutputTokens())
+}
 
 // captureCommandHandler records the last repl.Command it received and
 // yields no output components.
