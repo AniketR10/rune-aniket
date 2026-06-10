@@ -100,7 +100,7 @@ var (
 		"Set the initial workspace to open in the format [scheme:][//[userinfo@]host][/]path")
 	flagFPS = flag.BoolP("fps", "f", false, "Render FPS on GUI mode")
 	flagGUI = flag.BoolP("gui", "G", false, "Run Rune in manual GUI mode")
-	flagTUI = flag.BoolP("tui", "T", false, "Run Rune in manual TUI mode")
+	flagTUI = flag.Bool("hardcore", false, "Run Rune in manual TUI mode")
 
 	// marked hidden
 	flagWorkspaceServer = flag.StringP("workspace-server", "x", "",
@@ -297,6 +297,9 @@ func main() {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-website-address"); err != nil {
+		panic(err)
+	}
+	if err := flag.CommandLine.MarkHidden("hardcore"); err != nil {
 		panic(err)
 	}
 
@@ -513,7 +516,7 @@ func run() int {
 	} else if *flagTUI {
 		return runTUI(filenames, runner, &mu)
 	} else {
-		fmt.Fprintf(os.Stderr, "Either --tui or --gui must be set if running on %s\n",
+		fmt.Fprintf(os.Stderr, "--gui must be set if running on %s\n",
 			runtime.GOOS)
 		return 1
 	}
