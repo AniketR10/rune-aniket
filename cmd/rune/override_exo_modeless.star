@@ -37,8 +37,6 @@ config = merge(config, {
             "<m-s>":       "write",
             "<a-m-s>":     "writeall",
             "<m-q>":       "quit",
-            "<m-s-n>":     "windownew",
-            "<m-s-w>":     "windowclose",
             "<a-g>":       "searchtext",
             "<m-r>":       "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>",
             "<s-m-r>":     "searchtype",
