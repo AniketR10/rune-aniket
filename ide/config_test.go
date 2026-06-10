@@ -1141,8 +1141,8 @@ func TestShellModalStartInsertDefaultsTrue(t *testing.T) {
 }
 
 // TestShellEditorModalFromEditorMode asserts shellCfg().modal mirrors the
-// editor backing the shell prompt: modal and exo (which builds the vi
-// prompt editor regardless of its fallback) are modal, modeless is not.
+// editor backing the shell prompt: modal is modal, modeless is not, and
+// exo follows its configured fallback.
 func TestShellEditorModalFromEditorMode(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -1159,7 +1159,7 @@ func TestShellEditorModalFromEditorMode(t *testing.T) {
 		{"exo fallback modeless", map[string]any{
 			"mode": "exo",
 			"exo":  map[string]any{"command": "vim {file}", "fallback": "modeless"},
-		}, true},
+		}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := map[string]any{}

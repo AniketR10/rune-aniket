@@ -575,15 +575,10 @@ func (c ideConfig) shellCfg() shellConfig {
 
 // shellEditorModal reports whether the companion shell's input line is
 // backed by a modal (vi) editor. It mirrors newPromptEditor's mode
-// switch: exo builds the vi prompt editor regardless of its fallback,
-// so only modeless is non-modal here.
+// switch: exo cannot host the in-memory prompt surface, so it follows
+// its configured fallback, leaving only resolved-modal as modal here.
 func (c ideConfig) shellEditorModal() bool {
-	switch c.editorMode() {
-	case editorModeModal, editorModeExo:
-		return true
-	default:
-		return false
-	}
+	return c.pkgEditorMode() == editorModeModal
 }
 
 func (c ideConfig) commandHistoryKey() (ret term.KeyComb) {

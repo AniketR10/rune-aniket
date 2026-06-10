@@ -350,7 +350,7 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 func (h *workspaceManagerHandler) newPromptEditor(
 	cfg ideConfig,
 ) command.Editor {
-	switch cfg.editorMode() {
+	switch cfg.pkgEditorMode() {
 	case editorModeModeless:
 		return modelessPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
@@ -359,7 +359,7 @@ func (h *workspaceManagerHandler) newPromptEditor(
 			clipboard:        h.clip,
 			autoPair:         cfg.editorAutoPair(),
 		}
-	case editorModeModal, editorModeExo:
+	case editorModeModal:
 		return viPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),

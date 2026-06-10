@@ -28,29 +28,44 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/handler/command"
 )
 
-// TestNewPromptEditorExo asserts that the prompt editor falls back to
-// a Rune-native prompt (vi) in exo mode rather than panicking. This
-// reproduces the crash reported when opening a workspace with
-// editor.mode = "exo".
+// TestNewPromptEditorExo asserts that the in-memory prompt editor, which
+// exo cannot host, follows the configured exo.fallback rather than
+// hardwiring vi. The default fallback is modeless.
 func TestNewPromptEditorExo(t *testing.T) {
-	h := &workspaceManagerHandler{}
-	cfg := ideConfig{
-		cfg: map[string]any{
-			"editor": map[string]any{
-				"mode": "exo",
-				"exo": map[string]any{
-					"command": "vim {file}",
+	for _, tc := range []struct {
+		name     string
+		fallback string
+		want     command.Editor
+	}{
+		{"default fallback is modeless", "", modelessPromptEditor{}},
+		{"explicit modeless fallback", "modeless", modelessPromptEditor{}},
+		{"explicit modal fallback", "modal", viPromptEditor{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &workspaceManagerHandler{}
+			exo := map[string]any{"command": "vim {file}"}
+			if tc.fallback != "" {
+				exo["fallback"] = tc.fallback
+			}
+			cfg := ideConfig{
+				cfg: map[string]any{
+					"editor": map[string]any{
+						"mode": "exo",
+						"exo":  exo,
+					},
 				},
-			},
-		},
-		errors: map[string]error{},
+				errors: map[string]error{},
+			}
+			var ed command.Editor
+			require.NotPanics(t, func() {
+				ed = h.newPromptEditor(cfg)
+			})
+			assert.IsType(t, tc.want, ed)
+		})
 	}
-	require.NotPanics(t, func() {
-		ed := h.newPromptEditor(cfg)
-		assert.NotNil(t, ed)
-	})
 }
 
 // TestExoModeAndAccessors covers editorMode/exoCommand/exoGoto on a
