@@ -651,7 +651,7 @@ config = {
                 '!! ROOT_NAME=${ROOT##*/}',
                 '!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1',
                 '!! git worktree add "$WORKTREE" -b $1',
-                'workspacenew $WORKTREE',
+                'workspaceopen $WORKTREE',
                 'workspaceready workspacerename $1',
             ],
             "worktreeopen": {
@@ -660,7 +660,7 @@ config = {
                     '!! ROOT_HASH=$(printf %s "$ROOT" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-4)',
                     '!! ROOT_NAME=${ROOT##*/}',
                     '!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1',
-                    "workspacenew $WORKTREE",
+                    "workspaceopen $WORKTREE",
                     "workspaceready workspacerename $1",
                     "workspaceready shaderrun shine 600ms",
                 ],
@@ -674,15 +674,15 @@ config = {
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
             "wopen": {
-                "command": "workspacenew $1",
+                "command": "workspaceopen $1",
                 "completer": [
                     "{history}",
                     "{dirs}",
                 ],
             },
-            "docs":           "workspacenew docs:///",
+            "docs":           "workspaceopen docs:///",
             "help": [
-                "workspacenew docs:///",
+                "workspaceopen docs:///",
                 "extensionready rune-agent ? I need help",
             ],
         },

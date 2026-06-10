@@ -912,12 +912,12 @@ func TestCommandHandlerCancelsCompletionBeforeDispatch(t *testing.T) {
 	b := NewPrompt(
 		storage, completer, dispatcher,
 		term.NopInterrupter(),
-		testNoManualCommands([]string{"workspacenew"}),
+		testNoManualCommands([]string{"workspaceopen"}),
 		cfg,
 	)
 	defer b.Close()
 
-	for _, ch := range "workspacenew /tmp" {
+	for _, ch := range "workspaceopen /tmp" {
 		b.Handle(term.Event{Type: term.EventKey, Ch: ch})
 	}
 	b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})

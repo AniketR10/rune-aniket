@@ -94,7 +94,7 @@ const (
 	cmdMoveWorkspace     = "workspacemove"
 	cmdCloseWorkspace    = "workspaceclose"
 	cmdReloadWorkspace   = "workspacereload"
-	cmdAddWorkspace      = "workspacenew"
+	cmdAddWorkspace      = "workspaceopen"
 	cmdRenameWorkspace   = "workspacerename"
 	cmdWorkspaceReady    = "workspaceready"
 	cmdExtensionReady    = "extensionready"
@@ -1805,7 +1805,7 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 func (h *workspaceManagerHandler) commandRenameWorkspace(args ...string) error {
 	if h.focusHandler() == h.empty {
 		return fmt.Errorf("there's no workspace to rename. " +
-			"First you must open one via `workspacenew`")
+			"First you must open one via `workspaceopen`")
 	}
 	if len(args) == 0 {
 		return fmt.Errorf("expected one argument with the new name")
@@ -2277,7 +2277,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 			handler: (*workspaceManagerHandler).commandWorkspaceReady,
 			man: textapi.CommandManual{
 				Summary: "Runs another workspace command once the most recently " +
-					"issued `workspacenew` has finished loading. If no workspace is " +
+					"issued `workspaceopen` has finished loading. If no workspace is " +
 					"currently being loaded, the command is dispatched immediately " +
 					"against the focused workspace.",
 				Synopsis: "<command> [<args>...]",
@@ -2288,7 +2288,7 @@ func (h *workspaceManagerHandler) subscribeActiveWorkspaceCommands(ex *ex) (ret 
 			man: textapi.CommandManual{
 				Summary: "Runs another command once the extension with the given " +
 					"id has finished initializing on the workspace. If a " +
-					"workspacenew is currently pending, the wait starts after " +
+					"workspaceopen is currently pending, the wait starts after " +
 					"that workspace finishes installing.",
 				Synopsis: "<extension-id> <command> [<args>...]",
 			},

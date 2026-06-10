@@ -9,7 +9,7 @@ aliases = {
         '!! ROOT_NAME=${ROOT##*/}',
         '!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1',
         '!! git worktree add "$WORKTREE" -b $1',
-        "workspacenew $WORKTREE",
+        "workspaceopen $WORKTREE",
         "workspaceready workspacerename $1",
     ],
 }

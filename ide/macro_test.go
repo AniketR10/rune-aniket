@@ -145,8 +145,8 @@ func TestMacroRecordAndEchoIntegration(t *testing.T) {
 				require.NoError(t, os.WriteFile(secondFile, nil, 0666))
 				secondURI, err := workspaceapi.CurrentUserHostURI(secondFile)
 				require.NoError(t, err)
-				handleKeys(t, tc, ":workspacenew<space>"+secondWorkspace+"<enter>")
-				// :workspacenew kicks off async addWorkspace; wait for
+				handleKeys(t, tc, ":workspaceopen<space>"+secondWorkspace+"<enter>")
+				// :workspaceopen kicks off async addWorkspace; wait for
 				// the new workspace to install before opening a file
 				// in it (otherwise Open lands on the home workspace).
 				deadline := time.Now().Add(5 * time.Second)

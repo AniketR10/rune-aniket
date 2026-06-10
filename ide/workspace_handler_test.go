@@ -2084,7 +2084,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>:noticloseall>", // prompt
+		{":woc>:wope memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wope  memory\\:///tmp2>:noticloseall>", // prompt
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -2097,7 +2097,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 └──────────────────┘`},
 		// prompt resets cache (use file scheme to avoid needing
 		// to use ':' to indicate memory scheme)
-		{":woc>:wonew memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>y:noticloseall>",
+		{":woc>:wope memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wope  memory\\:///tmp2>y:noticloseall>",
 			`┌━━━━━━━━━━────────┐
 │o 12345aZZ        │
 ├──────────────────┤
@@ -2108,7 +2108,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 └──────────────────┘`},
-		{":woc>:wonew memory\\:///tmp2>edit 12345aZZ>:w>:woc>:wonew  memory\\:///tmp2>n:woc>:wonew  memory\\:///tmp2>:noticloseall>", // prompt no: resets cache
+		{":woc>:wope memory\\:///tmp2>edit 12345aZZ>:w>:woc>:wope  memory\\:///tmp2>n:woc>:wope  memory\\:///tmp2>:noticloseall>", // prompt no: resets cache
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -2174,7 +2174,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 └──────────────────┘`},
-		{":addBlaBla>", // workspacenew should work on a workspace, use next avail
+		{":addBlaBla>", // workspaceopen should work on a workspace, use next avail
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -2196,7 +2196,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  9            │
 └─────━────────────┘`},
-		{"2:wonew>", // errors when no workspace path argument is given
+		{"2:wope>", // errors when no workspace path argument is given
 			`┌────┌─────────────┐
 │    │ expected    │
 ├────│ at least    │
@@ -2229,7 +2229,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  3 3          │
 └─────━━━──────────┘`},
-		{":wofo 4>:workspacenew memory\\:///>", // can give path as arg to workspacenew
+		{":wofo 4>:workspaceopen memory\\:///>", // can give path as arg to workspaceopen
 			`┌──────────────────┐
 │                  │
 ├──────────────────┤
@@ -2240,7 +2240,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 ├──────────────────┤
 │1 1  4 4          │
 └─────━━━──────────┘`},
-		{":wofo 4>:workspacenew memory\\:///tmp2>:edit memory\\:///tmp2/12>:workspacerelo>", // reloads non-primary workspace
+		{":wofo 4>:workspaceopen memory\\:///tmp2>:edit memory\\:///tmp2/12>:workspacerelo>", // reloads non-primary workspace
 			`┌━━━━──────────────┐
 │o 12              │
 ├──────────────────┤
@@ -3677,7 +3677,7 @@ func TestMoveWorkspace(t *testing.T) {
 │          workspaceWallpaper          │
 │                                      │
 └──────────────────────────────────────┘`},
-		{":wonew memory\\:///tmp2>",
+		{":wope memory\\:///tmp2>",
 			`┌──────────────────────────────────────┐
 │                                      │
 ├──────────────────────────────────────┤
@@ -3763,7 +3763,7 @@ func TestExternalCommands(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":workspacenew %s>:ramo w__", dir2), // new workspace
+			{fmt.Sprintf(":workspaceopen %s>:ramo w__", dir2), // new workspace
 				`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -3950,7 +3950,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":workspacenew file\\://%s>:edit b>", dir2), // new workspace
+			{fmt.Sprintf(":workspaceopen file\\://%s>:edit b>", dir2), // new workspace
 				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
@@ -4126,7 +4126,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                            │
 └────────────────────────────┘`},
-			{fmt.Sprintf(":workspacenew file\\://%s>:edit b>", dir2), // new workspace
+			{fmt.Sprintf(":workspaceopen file\\://%s>:edit b>", dir2), // new workspace
 				`┌━━━─────────────────────────┐
 │o b                         │
 ├────────────────────────────┤
@@ -4758,7 +4758,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 	}
 
 	cases := []handlertest.SequenceTestCase{
-		{fmt.Sprintf(":workspacenew file\\://%s>", tempDir),
+		{fmt.Sprintf(":workspaceopen file\\://%s>", tempDir),
 			`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -4800,7 +4800,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 ├────────────────────────────┤
 │1 1  2 2                    │
 └─────━━━────────────────────┘`},
-		{fmt.Sprintf(":workspacenew file\\://%s>", tempDir2),
+		{fmt.Sprintf(":workspaceopen file\\://%s>", tempDir2),
 			`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -4876,7 +4876,7 @@ func TestWorkspaceManagerCreateWorkspaceQuotedPath(t *testing.T) {
 	cases := []struct {
 		name string
 		// raw is the buffer the prompt should receive after the
-		// leading "workspacenew ". feedLiteral emits each rune as a
+		// leading "workspaceopen ". feedLiteral emits each rune as a
 		// literal key event; spaces are sent as KeySpace events to
 		// match the runtime keypress path.
 		raw  string
@@ -4911,7 +4911,7 @@ func TestWorkspaceManagerCreateWorkspaceQuotedPath(t *testing.T) {
 			// open the modal command prompt (Ctrl+\\, see defaultCfg).
 			h.Handle(term.Event{Type: term.EventKey,
 				Mod: term.ModCtrl, Ch: '\\'})
-			feedLiteral(t, h, "workspacenew ")
+			feedLiteral(t, h, "workspaceopen ")
 			feedLiteral(t, h, tc.raw)
 			h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 
@@ -5334,7 +5334,7 @@ func defaultCfg() ideConfig {
 				"0": "workspacefocus 10",
 			},
 			"aliases": map[string]any{
-				"addBlaBla": "workspacenew memory:///blabla",
+				"addBlaBla": "workspaceopen memory:///blabla",
 				"w":         "write!",
 			},
 		},
@@ -6104,7 +6104,7 @@ func inlineSchedule(fn func()) bool {
 	return true
 }
 
-// TestWorkspaceNewResolvesRelativeAgainstHome guards that `workspacenew`
+// TestWorkspaceNewResolvesRelativeAgainstHome guards that `workspaceopen`
 // resolves a bare relative path against the home workspace root rather
 // than the process working directory. On macOS the latter is the app
 // bundle (e.g. /Applications/Rune.app), so a relative path such as
@@ -6122,7 +6122,7 @@ func TestWorkspaceNewResolvesRelativeAgainstHome(t *testing.T) {
 	m.mu.Lock()
 	require.NoError(t, m.commandAddWorkspace("src/blue"))
 	require.NotNil(t, m.lastReservedPending,
-		"workspacenew must reserve a pending entry for the resolved URI")
+		"workspaceopen must reserve a pending entry for the resolved URI")
 	got := m.lastReservedPending.uri.String()
 	pending := m.lastReservedPending
 	m.mu.Unlock()

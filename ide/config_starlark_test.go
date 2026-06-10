@@ -129,7 +129,7 @@ config = {
         "aliases": {
             "worktreenew": [
                 "!! git worktree add",
-                "workspacenew",
+                "workspaceopen",
                 "workspaceready workspacerename",
             ],
         },
@@ -144,7 +144,7 @@ config = {
 	aliases := cmd["aliases"].(map[string]any)
 	assert.Equal(t, []any{
 		"!! git worktree add",
-		"workspacenew",
+		"workspaceopen",
 		"workspaceready workspacerename",
 	}, aliases["worktreenew"])
 	assert.Equal(t, []any{"dim", "bold"}, cfg["flags"])
@@ -241,7 +241,7 @@ func TestStarlarkSampleEndToEnd(t *testing.T) {
 		`!! ROOT_NAME=${ROOT##*/}`,
 		`!! WORKTREE=$RUNE_DATADIR/worktrees/$ROOT_NAME-$ROOT_HASH/$1`,
 		`!! git worktree add "$WORKTREE" -b $1`,
-		"workspacenew $WORKTREE",
+		"workspaceopen $WORKTREE",
 		"workspaceready workspacerename $1",
 	}, aliases["worktreenew"])
 }

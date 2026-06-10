@@ -552,7 +552,7 @@ func TestDirsCompleterFiltersHidden(t *testing.T) {
 	fix := newCompleterFixture(t)
 	c := DirsCompleter(fix.reader)
 
-	it, _, err := c.Complete(context.Background(), []string{"workspacenew"})
+	it, _, err := c.Complete(context.Background(), []string{"workspaceopen"})
 	require.NoError(t, err)
 	got := collectAll(t, it)
 	sort.Strings(got)
@@ -587,7 +587,7 @@ func TestDirsCompleterSkipsHiddenDirsTraversal(t *testing.T) {
 	tracking := &trackingReader{inner: fix.reader}
 	c := DirsCompleter(tracking)
 
-	it, _, err := c.Complete(context.Background(), []string{"workspacenew"})
+	it, _, err := c.Complete(context.Background(), []string{"workspaceopen"})
 	require.NoError(t, err)
 	_ = collectAll(t, it)
 
@@ -1121,7 +1121,7 @@ func TestMultiCompleterStreamingNoBuffering(t *testing.T) {
 //
 //	aliases:
 //	  won:
-//	    command: workspacenew
+//	    command: workspaceopen
 //	    completer:
 //	      - '{history}'
 //	      - '{file}'

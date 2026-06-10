@@ -41,8 +41,8 @@ func TestSplitCommandLine(t *testing.T) {
 		{"collapses extra spaces", "edit   foo", []string{"edit", "foo"}},
 		{
 			"escaped space stays in same arg",
-			`workspacenew ~/Unstable\ Build`,
-			[]string{"workspacenew", `~/Unstable\ Build`},
+			`workspaceopen ~/Unstable\ Build`,
+			[]string{"workspaceopen", `~/Unstable\ Build`},
 		},
 		{
 			"escaped backslash",

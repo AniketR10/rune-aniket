@@ -358,7 +358,7 @@ func TestOpen(t *testing.T) {
 //	command:
 //	  aliases:
 //	    won:
-//	      command: workspacenew
+//	      command: workspaceopen
 //	      completer:
 //	        - '{history}'
 //	        - '{file}'
@@ -386,7 +386,7 @@ command:
   key: ":"
   aliases:
     won:
-      command: workspacenew
+      command: workspaceopen
       completer:
         - '{history}'
         - '{file}'

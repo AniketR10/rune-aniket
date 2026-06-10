@@ -41,7 +41,7 @@
 #  aliases:
 #    w: write
 #    won:
-#      command: workspacenew
+#      command: workspaceopen
 #      completer:
 #        - {history}
 #        - {file}

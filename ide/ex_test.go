@@ -5613,14 +5613,14 @@ func envSourceForURI(uri workspaceapi.URI) cmdenv.Source {
 // runShellLineViaInterp; the chain env scope is plumbed through
 // text.Component.DispatchCommand. Together they let aliases like
 // worktreeopen feed `git worktree list`'s output into a subsequent
-// `workspacenew $WORKTREE` step.
+// `workspaceopen $WORKTREE` step.
 func TestPluginWaitAssignmentCapturesIntoAliasChain(t *testing.T) {
 	t.Run("literal assignment is visible to next step", func(t *testing.T) {
 		captured := newExForCapturingCommand(t, []string{
 			"!! WORKTREE=/tmp/foo",
-			"workspacenew $WORKTREE",
+			"workspaceopen $WORKTREE",
 		})
-		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, "workspaceopen", captured.Name)
 		assert.Equal(t, []string{"/tmp/foo"}, captured.Args,
 			"the literal assignment from the !! step must be "+
 				"visible to the next alias step via $VAR expansion")
@@ -5634,9 +5634,9 @@ func TestPluginWaitAssignmentCapturesIntoAliasChain(t *testing.T) {
 			// production worktreeopen alias; intentionally picked
 			// over $WORD which is a Rune-builtin name.
 			"!! WORKTREE=$(/bin/echo /tmp/foo)",
-			"workspacenew $WORKTREE",
+			"workspaceopen $WORKTREE",
 		})
-		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, "workspaceopen", captured.Name)
 		assert.Equal(t, []string{"/tmp/foo"}, captured.Args,
 			"command substitution inside a !! step must execute "+
 				"and the result must be published to the chain env")
@@ -5650,9 +5650,9 @@ func TestPluginWaitAssignmentCapturesIntoAliasChain(t *testing.T) {
 	t.Run("double-dollar escape defers $N to the shell", func(t *testing.T) {
 		captured := newExForCapturingCommand(t, []string{
 			`!! WORKTREE=$(/bin/echo a b | awk '$$2=="b" {print $$1}')`,
-			"workspacenew $WORKTREE",
+			"workspaceopen $WORKTREE",
 		})
-		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, "workspaceopen", captured.Name)
 		assert.Equal(t, []string{"a"}, captured.Args,
 			"$$N must be passed to the shell as a literal $N "+
 				"so awk (and other shell-internal $N consumers) "+
@@ -5663,9 +5663,9 @@ func TestPluginWaitAssignmentCapturesIntoAliasChain(t *testing.T) {
 		captured := newExForCapturingCommand(t, []string{
 			`!! ROOT=/Users/ernestrc/src/idelsp`,
 			`!! ROOT_NAME=${ROOT##*/}`,
-			"workspacenew $ROOT_NAME",
+			"workspaceopen $ROOT_NAME",
 		})
-		assert.Equal(t, "workspacenew", captured.Name)
+		assert.Equal(t, "workspaceopen", captured.Name)
 		assert.Equal(t, []string{"idelsp"}, captured.Args,
 			"a !! step's ${VAR##pattern} must expand against the "+
 				"chain var captured by an earlier !! step (the "+
@@ -5697,11 +5697,11 @@ func newExForCapturingCommand(t *testing.T, aliasCommands []string) textapi.Comm
 		nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer b.Close()
 
-	// Subscribe a sink command "workspacenew" so we can observe the
+	// Subscribe a sink command "workspaceopen" so we can observe the
 	// fully-expanded argv that the chain produced for the
 	// post-capture step.
 	err := b.comp.SubscribeCommand(textapi.CommandManual{
-		Name: "workspacenew",
+		Name: "workspaceopen",
 	}, text.FuncCommandHandler(
 		func(_ context.Context, cmd textapi.Command) error {
 			got = cmd
