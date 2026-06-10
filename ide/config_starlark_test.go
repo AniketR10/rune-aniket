@@ -42,6 +42,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -663,6 +664,89 @@ func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
 		strings.NewReader("log_level: warn\n"),
 		"config.star", cloneTestMap(base))
 	require.Error(t, err)
+}
+
+// TestModelessPresetsUseArrowLayoutBindings pins the modeless window/tab
+// layout shared by the modeless and exo-modeless presets, once overlaid
+// on the embedded rune.star defaults:
+//
+//   - windowfocus on <meta>+arrows
+//   - windowmove on <shift-meta>+arrows (the "shift means move" rule)
+//   - windowresize on <ctrl-shift-meta>+arrows (kept off the move chord)
+//   - tabmove on <alt-shift>+arrows
+//
+// It also guards the internal collision where windowmove <shift-meta-down>
+// and lspref must not land on the same key: lspref was moved onto <s-f12>.
+func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
+	runeStar, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+
+	wantBound := map[string]string{
+		"<m-left>":  "windowfocus left",
+		"<m-right>": "windowfocus right",
+		"<m-down>":  "windowfocus down",
+		"<m-up>":    "windowfocus up",
+
+		"<s-m-left>":  "windowmove left",
+		"<s-m-right>": "windowmove right",
+		"<s-m-down>":  "windowmove down",
+		"<s-m-up>":    "windowmove up",
+
+		"<c-s-m-left>":  "windowresize decrease width",
+		"<c-s-m-right>": "windowresize increase width",
+		"<c-s-m-down>":  "windowresize decrease height",
+		"<c-s-m-up>":    "windowresize increase height",
+
+		"<a-s-left>":  "tabmove left",
+		"<a-s-right>": "tabmove right",
+
+		"<s-f12>": "lspref",
+	}
+
+	for _, file := range []string{
+		"override_modeless.star",
+		"override_modeless.yaml",
+		"override_exo_modeless.star",
+		"override_exo_modeless.yaml",
+	} {
+		t.Run(file, func(t *testing.T) {
+			base, err := decodeDefaultConfig(defaultConfigSource{
+				src: string(runeStar), modal: true, tui: false,
+			})
+			require.NoError(t, err)
+
+			overlay, err := os.ReadFile(filepath.Join("../cmd/rune", file))
+			require.NoError(t, err)
+			cfg, err := decodeOverlayConfigFile(
+				bytes.NewReader(overlay), file, base)
+			require.NoError(t, err)
+
+			c := &ideConfig{cfg: cfg, errors: map[string]error{}}
+			mappings := c.commandKeyMappings()
+
+			for key, wantCmd := range wantBound {
+				seq := mustParseBindingKey(t, key)
+				got, ok := mappings[seq]
+				require.Truef(t, ok, "%s must be bound", key)
+				require.Equalf(t, [][]string{strings.Split(wantCmd, " ")},
+					got, "%s must run %q", key, wantCmd)
+			}
+		})
+	}
+}
+
+// mustParseBindingKey mirrors commandKeyMappings' own key parsing: it
+// first tries a two-key handler.Sequence, then falls back to a single
+// term key stored in Sequence.First. This keeps the test lookup keyed
+// the same way the resolved binding map is.
+func mustParseBindingKey(t *testing.T, key string) handler.Sequence {
+	t.Helper()
+	seq, err := handler.ParseSequence(key)
+	if err != nil {
+		seq.First, err = term.ParseKey(key)
+		require.NoErrorf(t, err, "parse binding key %q", key)
+	}
+	return seq
 }
 
 func mustLegacyModelessConfigFromGit(t *testing.T) map[string]any {
