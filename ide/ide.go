@@ -178,7 +178,7 @@ func (i *IDE) maybeStartTutorial() {
 		return
 	}
 	i.options.scheduleFn(func() {
-		i.workspaceHandler.focusEx().Dispatch("tutorial", "run", name)
+		i.workspaceHandler.focusEx().Dispatch("tutorial", "start", name)
 	})
 }
 

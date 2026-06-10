@@ -596,7 +596,7 @@ config = {
         },
     },
     "extensions": {},
-    # Interactive tutorials. Each entry maps a `:tutorial run <name>` to
+    # Interactive tutorials. Each entry maps a `:tutorial start <name>` to
     # the path of a Starlark file that calls `tutorial(...)` with a
     # list of `step(...)` entries. Empty by default — extensions and
     # user overlays add their own.

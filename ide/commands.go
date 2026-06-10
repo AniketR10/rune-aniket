@@ -744,9 +744,8 @@ var (
 
 	tutorialCmdManual = textapi.CommandManual{
 		Name:    "tutorial",
-		Summary: "Run, stop, dismiss, or reset interactive tutorials.",
-		Synopsis: "(run <name> | stop | dismiss <name> | " +
-			"reset [<name>])",
+		Summary: "Start or stop interactive tutorials.",
+		Synopsis: "(start <name> | stop)",
 	}
 )
 

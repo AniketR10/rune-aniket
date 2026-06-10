@@ -146,12 +146,12 @@ func (r *tutorialRunner) observeCommand(
 func (r *tutorialRunner) HandleCommand(_ context.Context, cmd textapi.Command) error {
 	if len(cmd.Args) == 0 {
 		return errors.New(
-			"usage: tutorial <run|stop|dismiss|reset> [<name>]")
+			"usage: tutorial <start|stop> [<name>]")
 	}
 	switch cmd.Args[0] {
-	case "run":
+	case "start":
 		if len(cmd.Args) != 2 {
-			return errors.New("usage: tutorial run <name>")
+			return errors.New("usage: tutorial start <name>")
 		}
 		name := cmd.Args[1]
 		tut, ok := r.tutorials[name]
@@ -170,11 +170,9 @@ func (r *tutorialRunner) HandleCommand(_ context.Context, cmd textapi.Command) e
 		}
 		r.clearActive()
 		return nil
-	case "dismiss", "reset":
-		return fmt.Errorf("%q is not yet implemented", cmd.Args[0])
 	}
 	return fmt.Errorf("unknown subcommand %q: "+
-		"want one of run, stop, dismiss, reset", cmd.Args[0])
+		"want one of start, stop", cmd.Args[0])
 }
 
 func (r *tutorialRunner) Complete(_ context.Context, cmd textapi.Command) (
@@ -183,13 +181,13 @@ func (r *tutorialRunner) Complete(_ context.Context, cmd textapi.Command) (
 	// First argument: list subcommands.
 	if len(cmd.Args) <= 1 {
 		return iterator.FromSlice([]string{
-			"run", "stop", "dismiss", "reset",
+			"start", "stop",
 		}), "", nil
 	}
-	// Second argument after `run`, `dismiss`, or `reset`: tutorial names.
+	// Second argument after `start`: tutorial names.
 	if len(cmd.Args) == 2 {
 		switch cmd.Args[0] {
-		case "run", "dismiss", "reset":
+		case "start":
 			names := make([]string, 0, len(r.tutorials))
 			for n := range r.tutorials {
 				names = append(names, n)

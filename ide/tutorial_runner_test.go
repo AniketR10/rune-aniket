@@ -102,7 +102,7 @@ func TestTutorialRunnerStartsAndStopsOnExit(t *testing.T) {
 	r, root := newTestRunner(map[string]idetutorial.Tutorial{"basics": tut})
 
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "basics"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
 	assert.NotNil(t, r.overlay, "expected overlay after start")
 	assert.Equal(t, "basics", r.activeName)
 	assert.Equal(t, 1, tut.resetCount,
@@ -123,7 +123,7 @@ func TestTutorialRunnerStartsAndStopsOnExit(t *testing.T) {
 	assert.Equal(t, 1, root.handled)
 
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "basics"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
 	// Each dispatch installs a fresh overlay and calls Reset once.
 	// The runner used to also call Reset during clearActive to
 	// release per-step resources; that's now Stop's job, so the
@@ -137,7 +137,7 @@ func TestTutorialRunnerUnknownTutorial(t *testing.T) {
 	t.Parallel()
 	r, _ := newTestRunner(nil)
 	err := r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "nope"}})
+		textapi.Command{Name: "tutorial", Args: []string{"start", "nope"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown tutorial "nope"`)
 }
@@ -153,7 +153,7 @@ func TestTutorialRunnerStop(t *testing.T) {
 	require.Error(t, err)
 
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "basics"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
 	require.NotNil(t, r.overlay)
 	require.NoError(t, r.HandleCommand(context.Background(),
 		textapi.Command{Name: "tutorial", Args: []string{"stop"}}))
@@ -184,18 +184,12 @@ func TestTutorialRunnerComplete(t *testing.T) {
 	it, _, err := r.Complete(ctx, textapi.Command{Name: "tutorial"})
 	require.NoError(t, err)
 	assert.Equal(t,
-		[]string{"run", "stop", "dismiss", "reset"},
+		[]string{"start", "stop"},
 		drain(it))
 
-	// `tutorial run <TAB>`: tutorial names.
+	// `tutorial start <TAB>`: tutorial names.
 	it, _, err = r.Complete(ctx,
-		textapi.Command{Name: "tutorial", Args: []string{"run", ""}})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"advanced", "basics"}, drain(it))
-
-	// `tutorial reset <TAB>`: tutorial names.
-	it, _, err = r.Complete(ctx,
-		textapi.Command{Name: "tutorial", Args: []string{"reset", ""}})
+		textapi.Command{Name: "tutorial", Args: []string{"start", ""}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"advanced", "basics"}, drain(it))
 
@@ -207,7 +201,7 @@ func TestTutorialRunnerComplete(t *testing.T) {
 
 	// Too many args: no completions.
 	it, _, err = r.Complete(ctx,
-		textapi.Command{Name: "tutorial", Args: []string{"run", "basics", "extra"}})
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics", "extra"}})
 	require.NoError(t, err)
 	assert.Empty(t, drain(it))
 }
@@ -246,7 +240,7 @@ tutorial(entry=run)
 		map[string]idetutorial.Tutorial{"basics": tut})
 
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "basics"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
 	require.NotNil(t, r.overlay)
 
 	enter := term.Event{Type: term.EventKey, Key: term.KeyEnter}
@@ -312,7 +306,7 @@ tutorial(entry=run)
 	r, _ := newTestRunner(
 		map[string]idetutorial.Tutorial{"argpanic": tut})
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "argpanic"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "argpanic"}}))
 	require.NotNil(t, r.overlay)
 
 	require.True(t, tut.WaitActive("wait_command", time.Second),
@@ -364,7 +358,7 @@ tutorial(entry=run)
 	r, _ := newTestRunner(
 		map[string]idetutorial.Tutorial{"observe": tut})
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "observe"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "observe"}}))
 	require.NotNil(t, r.overlay)
 
 	r.observeCommand("e", "edit", []string{"somefile.go"}, nil)
@@ -411,7 +405,7 @@ tutorial(entry=run)
 	r, _ := newTestRunner(
 		map[string]idetutorial.Tutorial{"on_error": tut})
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "on_error"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "on_error"}}))
 	require.NotNil(t, r.overlay)
 
 	r.observeCommand("wopen", "wopen", nil,
@@ -493,7 +487,7 @@ tutorial(entry=run)
 		map[string]idetutorial.Tutorial{"wrongkey": tut})
 
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "wrongkey"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "wrongkey"}}))
 	require.NotNil(t, r.overlay)
 
 	_, want := tut.Shader()
@@ -548,7 +542,7 @@ tutorial(entry=run)
 	r, _ := newTestRunner(
 		map[string]idetutorial.Tutorial{"survives": tut})
 	require.NoError(t, r.HandleCommand(context.Background(),
-		textapi.Command{Name: "tutorial", Args: []string{"run", "survives"}}))
+		textapi.Command{Name: "tutorial", Args: []string{"start", "survives"}}))
 	require.NotNil(t, r.overlay)
 
 	require.True(t, tut.WaitActive("confirm", time.Second),

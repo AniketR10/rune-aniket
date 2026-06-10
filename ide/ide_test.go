@@ -1136,7 +1136,7 @@ tutorial(entry=run)
 `
 
 // TestIDEStartingTutorialDispatchesOnReady verifies that
-// WithStartingTutorial schedules a `:tutorial run <name>` dispatch on
+// WithStartingTutorial schedules a `:tutorial start <name>` dispatch on
 // the event loop once the IDE is ready, and that an unknown name is a
 // no-op.
 func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {

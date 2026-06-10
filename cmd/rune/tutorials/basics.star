@@ -277,7 +277,7 @@ def run():
 
     if not confirm("Want to set up the Rune Agent now?"):
         notify(level = info,
-               message = "Run `<cmd>tutorial run basics` any time to continue.")
+               message = "Run `<cmd>tutorial start basics` any time to continue.")
         return
 
     teach_agent()
