@@ -674,9 +674,6 @@ func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
 //   - windowmove on <shift-meta>+arrows (the "shift means move" rule)
 //   - windowresize on <ctrl-shift-meta>+arrows (kept off the move chord)
 //   - tabmove on <alt-shift>+arrows
-//
-// It also guards the internal collision where windowmove <shift-meta-down>
-// and lspref must not land on the same key: lspref was moved onto <s-f12>.
 func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 	runeStar, err := os.ReadFile("../cmd/rune/rune.star")
 	require.NoError(t, err)
@@ -700,7 +697,8 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 		"<a-s-left>":  "tabmove left",
 		"<a-s-right>": "tabmove right",
 
-		"<s-f12>": "lspref",
+		"<f12>":   "lsp definition",
+		"<s-f12>": "lsp references",
 	}
 
 	for _, file := range []string{

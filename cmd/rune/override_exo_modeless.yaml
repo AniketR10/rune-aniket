@@ -54,9 +54,9 @@ command:
     "<s-m-[>": tabprevious
     "<c-g>": "echo <esc>:"
     "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    "<alt-meta-down>": lspgotodef
-    "<f12>": lspgotodef
-    "<s-f12>": lspref
+    "<alt-meta-down>": "lsp definition"
+    "<f12>": "lsp definition"
+    "<s-f12>": "lsp references"
     "<m-=>": "guifontsize increase"
     "<m-->": "guifontsize decrease"
     "<m-t>": tabnew
@@ -66,7 +66,6 @@ command:
     "<m-n>": windownew
     "<m-c>": clipboardcopy
     "<m-v>": clipboardpaste
-    "<m-y>": echolastcmd
     "<m-left>": "windowfocus left"
     "<m-right>": "windowfocus right"
     "<m-down>": "windowfocus down"
@@ -86,9 +85,9 @@ command:
     "<c-m-h>": "windowdefaultsplit h"
     "<c-m-v>": "windowdefaultsplit v"
     "<s-m-f>": windowtogglemaximize
-    "<m-o>": lsphover
-    "<m-b>": lspformat
-    "<m-m>": lspformatimports
+    "<m-o>": "lsp hover"
+    "<m-b>": "lsp format"
+    "<m-m>": "go organize-imports"
     "<a-j>": gitnextchange
     "<a-k>": gitprevchange
     "<m-p>": searchfile
