@@ -749,11 +749,30 @@ func (e *ex) closeFocusWindow(_ context.Context, args ...string) error {
 		return e.toggleCompanionTerminal()
 	}
 	// on focus dispatch to vte.Handler via Close
-	return win.Close()
+	// closing the last tiled window is a no-op so the command is idempotent.
+	if err := win.Close(); err != nil && !isNothingToCloseErr(err) {
+		return err
+	}
+	return nil
 }
 
 func (e *ex) windowcloseall(_ context.Context, args ...string) error {
-	return e.comp.Browser().CloseOtherWindows(e.invokeWindow())
+	// closing when there are no other windows is a no-op so the command is
+	// idempotent.
+	if err := e.comp.Browser().CloseOtherWindows(e.invokeWindow()); err != nil &&
+		!isNothingToCloseErr(err) {
+		return err
+	}
+	return nil
+}
+
+func isNothingToCloseErr(err error) bool {
+	switch err.Error() {
+	case "cannot close last tiled window", "no windows to close":
+		return true
+	default:
+		return false
+	}
 }
 
 func (e *ex) flushCloseIgnoreNonFlushed(_ context.Context, args ...string) error {

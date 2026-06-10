@@ -1740,13 +1740,14 @@ func TestPreviewCommands(t *testing.T) {
 
 func TestBrowserCloseLastWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
+		// closing the last tiled window is a no-op so the command is idempotent.
 		{":windowclose>",
-			`┌────┌─────────────┐
-│    │ cannot      │
-├────│ close last  │
-│    │ tiled       │
-│    │ window      │
-│    └─────────────┘
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
 │                  │
 │                  │
 │                  │
@@ -2555,6 +2556,54 @@ func TestNewWindow(t *testing.T) {
 │    └─────────────┘
 │                  │
 │                  │
+└──────────────────┘`},
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+	}
+	b := newExForTesting(t, texttest.NopEditor(), opts...)
+	defer b.Close()
+
+	handlertest.TestHandlerSequence(t, b, 20, 10, cases)
+}
+
+func TestCloseWindowIdempotent(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":edit hello.go>",
+			`┌━━━━━━━━━━────────┐
+│o hello.go        │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		// closing the only tiled window is a no-op (no error popup).
+		{":windowclose>",
+			`┌━━━━━━━━━━────────┐
+│o hello.go        │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		// closing all other windows when there are none is a no-op too.
+		{":windowcloseall>",
+			`┌━━━━━━━━━━────────┐
+│o hello.go        │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`},
 	}
 
