@@ -34,6 +34,9 @@ import (
 const LLMProvider = "anthropic"
 
 const (
+	// ClaudeFable5 is Anthropic's Claude Fable 5 model — its most capable
+	// widely released model.
+	ClaudeFable5 = "claude-fable-5"
 	// ClaudeOpus4Dot8 is Anthropic's Claude Opus 4.8 model.
 	ClaudeOpus4Dot8 = "claude-opus-4-8"
 	// ClaudeOpus4Dot7 is Anthropic's Claude Opus 4.7 model.
@@ -69,6 +72,7 @@ const (
 // provider at runtime for account- or region-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
+		ClaudeFable5:      1000000,
 		ClaudeOpus4Dot8:   1000000,
 		ClaudeOpus4Dot7:   1000000,
 		ClaudeOpus4Dot6:   1000000,
@@ -89,7 +93,7 @@ func AvailableModels() map[string]int {
 // extended thinking. Currently only 4.6 models support the adaptive mode.
 func SupportsAdaptiveThinking(model string) bool {
 	switch model {
-	case ClaudeOpus4Dot6, ClaudeSonnet4Dot6, ClaudeOpus4Dot7, ClaudeOpus4Dot8:
+	case ClaudeOpus4Dot6, ClaudeSonnet4Dot6, ClaudeOpus4Dot7, ClaudeOpus4Dot8, ClaudeFable5:
 		return true
 	default:
 		return false
@@ -168,4 +172,4 @@ func ModelEntries() []llmapi.ModelEntry {
 // FlagshipModel returns the provider's top model identifier. It is
 // deterministic, unlike iterating ModelEntries() whose order is
 // map-random.
-func FlagshipModel() string { return ClaudeOpus4Dot8 }
+func FlagshipModel() string { return ClaudeFable5 }

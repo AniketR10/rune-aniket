@@ -32,7 +32,7 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, ClaudeOpus4Dot8, FlagshipModel())
+	assert.Equal(t, ClaudeFable5, FlagshipModel())
 }
 
 func TestSupportsEffort(t *testing.T) {
@@ -129,6 +129,10 @@ func TestNormalizeEffort(t *testing.T) {
 		{"opus-4.8 max", ClaudeOpus4Dot8, "max", "max", false},
 		{"sonnet-4.6 max", ClaudeSonnet4Dot6, "max", "max", false},
 		{"sonnet-4.6 xhigh", ClaudeSonnet4Dot6, "xhigh", "xhigh", false},
+		{"fable-5 low", ClaudeFable5, "low", "low", false},
+		{"fable-5 high", ClaudeFable5, "high", "high", false},
+		{"fable-5 xhigh", ClaudeFable5, "xhigh", "xhigh", false},
+		{"fable-5 max", ClaudeFable5, "max", "max", false},
 
 		// Claude 4.6: unsupported levels are dropped with warning.
 		{"opus-4.6 none", ClaudeOpus4Dot6, "none", "", true},
