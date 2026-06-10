@@ -32,9 +32,9 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -44,6 +44,7 @@ type findFilesTool struct {
 	fs      workspaceapi.FileSystem
 	cwd     workspaceapi.URI
 	tracker *FileTracker
+	filter  walkdir.Filter
 }
 
 type findFilesArgs struct {
@@ -51,8 +52,8 @@ type findFilesArgs struct {
 	Path    string `json:"path"`
 }
 
-func newFindFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileTracker) agent.Tool {
-	return &findFilesTool{fs: wfs, cwd: cwd, tracker: tracker}
+func newFindFiles(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileTracker, filter walkdir.Filter) agent.Tool {
+	return &findFilesTool{fs: wfs, cwd: cwd, tracker: tracker, filter: filter}
 }
 
 func (t *findFilesTool) NeedsDeterministicOrder() bool { return false }
@@ -64,7 +65,8 @@ func (t *findFilesTool) Definition() llmapi.Tool {
 			Name: "find_files",
 			Description: `Find files by name or path using a regex pattern. Recursively walks
 the directory tree starting from path (defaults to workspace root),
-skipping .git, node_modules, and vendor directories.
+skipping .git, node_modules, and vendor directories as well as
+gitignored and editor swap files.
 
 Returns matching file paths relative to the workspace root, one per
 line, capped at 500 results. The pattern is matched against the full
@@ -118,7 +120,7 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 	if args.Path != "" {
 		root = resolvePath(t.cwd, args.Path)
 	}
-	walkCtx := boundedWalkdirContext(ctx)
+	walkCtx := walkdir.WithContextFilter(boundedWalkdirContext(ctx), t.filter)
 
 	paths, err := walkdir.ListFiles(walkCtx, t.fs, root)
 	if err != nil {

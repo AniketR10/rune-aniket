@@ -32,9 +32,9 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -44,6 +44,7 @@ type searchTool struct {
 	fs      workspaceapi.FileSystem
 	cwd     workspaceapi.URI
 	tracker *FileTracker
+	filter  walkdir.Filter
 }
 
 type searchArgs struct {
@@ -52,8 +53,8 @@ type searchArgs struct {
 	Include string `json:"include"`
 }
 
-func newSearch(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileTracker) agent.Tool {
-	return &searchTool{fs: wfs, cwd: cwd, tracker: tracker}
+func newSearch(wfs workspaceapi.FileSystem, cwd workspaceapi.URI, tracker *FileTracker, filter walkdir.Filter) agent.Tool {
+	return &searchTool{fs: wfs, cwd: cwd, tracker: tracker, filter: filter}
 }
 
 func (t *searchTool) NeedsDeterministicOrder() bool { return false }
@@ -65,8 +66,9 @@ func (t *searchTool) Definition() llmapi.Tool {
 			Name: "search_content",
 			Description: `Search for a regex pattern in file contents across the workspace.
 Recursively walks the directory tree starting from path (defaults to
-workspace root), skipping .git, node_modules, and vendor directories.
-Binary files are automatically excluded.
+workspace root), skipping .git, node_modules, and vendor directories as
+well as gitignored and editor swap files. Binary files are automatically
+excluded.
 
 Returns matching lines formatted as "filepath:line:content", one per
 line, capped at 200 matches. The filepath is relative to the workspace
@@ -135,7 +137,7 @@ func (t *searchTool) Execute(ctx context.Context, arguments string) agent.ToolRe
 	if args.Path != "" {
 		root = resolvePath(t.cwd, args.Path)
 	}
-	walkCtx := boundedWalkdirContext(ctx)
+	walkCtx := walkdir.WithContextFilter(boundedWalkdirContext(ctx), t.filter)
 
 	paths, err := walkdir.ListFiles(walkCtx, t.fs, root)
 	if err != nil {

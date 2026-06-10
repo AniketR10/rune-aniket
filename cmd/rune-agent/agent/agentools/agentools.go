@@ -24,12 +24,15 @@
 package agentools
 
 import (
+	"log/slog"
+
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguemanager"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -60,11 +63,20 @@ func DefaultTools(
 		panic("agentools.DefaultTools: cfg must not be nil; pass configedit.NopConfig() in tests")
 	}
 	tracker := NewFileTracker()
+	// Match the IDE fuzzy finder: skip .gitignore'd and swap files in the
+	// agent's file-walking tools. Degrade to no filter on schemes without a
+	// gitignore (e.g. in-memory docs:///).
+	var ignore walkdir.Filter
+	if m, err := vctrl.LoadGitignore(fs); err != nil {
+		slog.Warn("agentools: load gitignore matcher", "error", err)
+	} else {
+		ignore = m
+	}
 	return []agent.Tool{
 		newReadFile(fs, cwd, tracker, toolsCfg.MaxLineBytes),
 		newApplyPatch(fs, cwd, tracker, lsp),
-		newSearch(fs, cwd, tracker),
-		newFindFiles(fs, cwd, tracker),
+		newSearch(fs, cwd, tracker, ignore),
+		newFindFiles(fs, cwd, tracker, ignore),
 		newBash(exec, cwd, cfg),
 		newCompact(),
 	}, tracker

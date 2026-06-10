@@ -231,7 +231,7 @@ func TestReadFile_consumesDiscoveries(t *testing.T) {
 func TestFindFiles_tracksDiscovery(t *testing.T) {
 	dir := setupWorkspace(t)
 	tracker := NewFileTracker()
-	findTool := newFindFiles(localFS{root: dir}, dirURI(dir), tracker)
+	findTool := newFindFiles(localFS{root: dir}, dirURI(dir), tracker, nil)
 
 	ctx := agent.WithParentToolCallID(t.Context(), "find_1")
 	result := findTool.Execute(ctx, `{"pattern":"\\.go$"}`)
@@ -248,7 +248,7 @@ func TestFindFiles_tracksDiscovery(t *testing.T) {
 func TestSearchContent_tracksDiscovery(t *testing.T) {
 	dir := setupWorkspace(t)
 	tracker := NewFileTracker()
-	searchTool := newSearch(localFS{root: dir}, dirURI(dir), tracker)
+	searchTool := newSearch(localFS{root: dir}, dirURI(dir), tracker, nil)
 
 	ctx := agent.WithParentToolCallID(t.Context(), "search_1")
 	result := searchTool.Execute(ctx, `{"pattern":"hello"}`)

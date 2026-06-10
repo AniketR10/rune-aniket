@@ -47,6 +47,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/configedit"
+	"unstable.build/go-tui/ide/vctrl"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 // localFS implements workspaceapi.FileSystem using local OS calls for testing.
@@ -193,8 +195,8 @@ func TestDefinitions(t *testing.T) {
 	}{
 		{"read_file", newReadFile(fs, dirURI(dir), NewFileTracker(), 0), "read_file"},
 		{"apply_patch", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), "apply_patch"},
-		{"search_content", newSearch(fs, dirURI(dir), NewFileTracker()), "search_content"},
-		{"find_files", newFindFiles(fs, dirURI(dir), NewFileTracker()), "find_files"},
+		{"search_content", newSearch(fs, dirURI(dir), NewFileTracker(), nil), "search_content"},
+		{"find_files", newFindFiles(fs, dirURI(dir), NewFileTracker(), nil), "find_files"},
 		{"list_dir", NewListDir(fs, dirURI(dir)), "list_dir"},
 		{"bash", newBash(ex, dirURI(dir), configedit.NopConfig()), "bash"},
 		{"compact", newCompact(), "compact"},
@@ -228,7 +230,7 @@ func TestToolDescriptionsCrossReferenceSemanticSkills(t *testing.T) {
 		},
 		{
 			"search_content mentions search_symbols and find_definition tools",
-			newSearch(fs, dirURI(dir), NewFileTracker()),
+			newSearch(fs, dirURI(dir), NewFileTracker(), nil),
 			[]string{"search_symbols", "find_definition"},
 		},
 	}
@@ -264,13 +266,13 @@ func TestSummary(t *testing.T) {
 		{"apply_patch multi file", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), `{"patch":"*** Begin Patch\n*** Add File: a.go\n+pkg\n*** Delete File: b.go\n*** End Patch"}`, "a.go, b.go"},
 		{"apply_patch invalid json", newApplyPatch(fs, dirURI(dir), NewFileTracker(), &stubLSP{}), `bad`, ""},
 		// search_content
-		{"search pattern only", newSearch(fs, dirURI(dir), NewFileTracker()), `{"pattern":"TODO"}`, `"TODO"`},
-		{"search with path", newSearch(fs, dirURI(dir), NewFileTracker()), `{"pattern":"TODO","path":"src"}`, `"TODO" in src`},
-		{"search invalid json", newSearch(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
+		{"search pattern only", newSearch(fs, dirURI(dir), NewFileTracker(), nil), `{"pattern":"TODO"}`, `"TODO"`},
+		{"search with path", newSearch(fs, dirURI(dir), NewFileTracker(), nil), `{"pattern":"TODO","path":"src"}`, `"TODO" in src`},
+		{"search invalid json", newSearch(fs, dirURI(dir), NewFileTracker(), nil), `bad`, ""},
 		// find_files
-		{"find pattern only", newFindFiles(fs, dirURI(dir), NewFileTracker()), `{"pattern":"*.go"}`, `"*.go"`},
-		{"find with path", newFindFiles(fs, dirURI(dir), NewFileTracker()), `{"pattern":"*.go","path":"lib"}`, `"*.go" in lib`},
-		{"find invalid json", newFindFiles(fs, dirURI(dir), NewFileTracker()), `bad`, ""},
+		{"find pattern only", newFindFiles(fs, dirURI(dir), NewFileTracker(), nil), `{"pattern":"*.go"}`, `"*.go"`},
+		{"find with path", newFindFiles(fs, dirURI(dir), NewFileTracker(), nil), `{"pattern":"*.go","path":"lib"}`, `"*.go" in lib`},
+		{"find invalid json", newFindFiles(fs, dirURI(dir), NewFileTracker(), nil), `bad`, ""},
 		// bash — Summary always returns the command (not description).
 		{"bash with description returns command", newBash(ex, dirURI(dir), configedit.NopConfig()), `{"command":"go test ./...","description":"Run all tests"}`, "go test ./..."},
 		{"bash empty description returns command", newBash(ex, dirURI(dir), configedit.NopConfig()), `{"command":"go test ./...","description":""}`, "go test ./..."},
@@ -755,10 +757,11 @@ func TestReadFile_validUTF8PassesThroughVerbatim(t *testing.T) {
 
 func TestSearch(t *testing.T) {
 	tests := []struct {
-		name     string
-		args     string
-		setup    func(t *testing.T, dir string)
-		assertFn func(t *testing.T, result agent.ToolResult)
+		name      string
+		args      string
+		setup     func(t *testing.T, dir string)
+		assertFn  func(t *testing.T, result agent.ToolResult)
+		useIgnore bool
 	}{
 		{
 			name: "regex match returns file:line:content",
@@ -821,16 +824,47 @@ func TestSearch(t *testing.T) {
 				assert.Contains(t, result.Content, "no matches found")
 			},
 		},
+		{
+			name:      "skips editor swap files when ignore filter is set",
+			args:      `{"pattern": "swapcontent"}`,
+			useIgnore: true,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".hello.txt.rswp"),
+					[]byte("swapcontent"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.Contains(t, result.Content, "no matches found")
+			},
+		},
+		{
+			name:      "skips gitignored files when ignore filter is set",
+			args:      `{"pattern": "secretcontent"}`,
+			useIgnore: true,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"),
+					[]byte("ignored.txt\n"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "ignored.txt"),
+					[]byte("secretcontent"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.Contains(t, result.Content, "no matches found")
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := setupWorkspace(t)
-			tool := newSearch(localFS{root: dir}, dirURI(dir), NewFileTracker())
-
 			if tt.setup != nil {
 				tt.setup(t, dir)
 			}
+			var filter walkdir.Filter
+			if tt.useIgnore {
+				m, err := vctrl.LoadGitignore(localFS{root: dir})
+				require.NoError(t, err)
+				filter = m
+			}
+			tool := newSearch(localFS{root: dir}, dirURI(dir), NewFileTracker(), filter)
 
 			result := tool.Execute(context.Background(), tt.args)
 			tt.assertFn(t, result)
@@ -840,10 +874,11 @@ func TestSearch(t *testing.T) {
 
 func TestFindFiles(t *testing.T) {
 	tests := []struct {
-		name     string
-		args     string
-		setup    func(t *testing.T, dir string)
-		assertFn func(t *testing.T, result agent.ToolResult)
+		name      string
+		args      string
+		setup     func(t *testing.T, dir string)
+		assertFn  func(t *testing.T, result agent.ToolResult)
+		useIgnore bool
 	}{
 		{
 			name: "regex pattern matches files",
@@ -916,16 +951,49 @@ func TestFindFiles(t *testing.T) {
 				assert.NotContains(t, result.Content, "HEAD")
 			},
 		},
+		{
+			name:      "skips editor swap files when ignore filter is set",
+			args:      `{"pattern": ".*"}`,
+			useIgnore: true,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".hello.txt.rswp"),
+					[]byte("swap"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.NotContains(t, result.Content, ".rswp")
+			},
+		},
+		{
+			name:      "skips gitignored files when ignore filter is set",
+			args:      `{"pattern": ".*"}`,
+			useIgnore: true,
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"),
+					[]byte("ignored.txt\n"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "ignored.txt"),
+					[]byte("secret"), 0o644))
+			},
+			assertFn: func(t *testing.T, result agent.ToolResult) {
+				assert.False(t, result.IsError)
+				assert.NotContains(t, result.Content, "ignored.txt")
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := setupWorkspace(t)
-			tool := newFindFiles(localFS{root: dir}, dirURI(dir), NewFileTracker())
-
 			if tt.setup != nil {
 				tt.setup(t, dir)
 			}
+			var filter walkdir.Filter
+			if tt.useIgnore {
+				m, err := vctrl.LoadGitignore(localFS{root: dir})
+				require.NoError(t, err)
+				filter = m
+			}
+			tool := newFindFiles(localFS{root: dir}, dirURI(dir), NewFileTracker(), filter)
 
 			result := tool.Execute(context.Background(), tt.args)
 			tt.assertFn(t, result)
