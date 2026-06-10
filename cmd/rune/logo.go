@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,29 +21,32 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+
 package main
 
 import (
-	"bytes"
-	_ "embed"
-	"fmt"
 	"image"
-	"image/png"
 )
 
-var logo image.Image
+//go:generate go run ./logogen
 
-func init() {
-	logo = decodeLogo()
+// logo is the default Rune logo used by the single-logo wallpaper.
+var logo image.Image = logoImageBase
+
+const logoThemeDefault = "default"
+
+// logoVariants maps a GUI theme name to its logo art. Only themes with art
+// that differs from the base logo need an entry; every other theme falls back
+// to the shared base logo via logoForTheme.
+var logoVariants = map[string]image.Image{
+	"hopper": logoImageHopper,
 }
 
-//go:embed unstable_build_logo.png
-var logoBytes []byte
-
-func decodeLogo() image.Image {
-	img, err := png.Decode(bytes.NewReader(logoBytes))
-	if err != nil {
-		panic(fmt.Errorf("png decode: %v", err))
+// logoForTheme returns the logo art for the given theme name, falling back to
+// the base logo when the theme has no dedicated art.
+func logoForTheme(theme string) image.Image {
+	if img, ok := logoVariants[theme]; ok {
+		return img
 	}
-	return img
+	return logoImageBase
 }

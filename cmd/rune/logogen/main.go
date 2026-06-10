@@ -1,0 +1,179 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+// Command logogen generates the Rune logo art consumed by the wallpaper. It
+// emits cmd/rune/logo_base.gen.go and cmd/rune/logo_hopper.gen.go, each
+// holding a precomputed *image.NRGBA so the application needs no PNG decode,
+// embedded filesystem, or runtime image processing at startup.
+//
+// Every theme reuses the shared base logo except hopper, which is rendered as
+// a high-contrast grayscale variant.
+package main
+
+import (
+	"bufio"
+	"flag"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+)
+
+const (
+	dim    = 304
+	stride = dim * 4
+)
+
+const header = `// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.`
+
+func main() {
+	_, self, _, _ := runtime.Caller(0)
+	genDir := filepath.Dir(self)
+	defaultBase := filepath.Join(genDir, "assets", "base.png")
+	defaultOut := filepath.Dir(genDir)
+
+	base := flag.String("base", defaultBase, "path to the base logo PNG")
+	out := flag.String("out", defaultOut, "directory to write logo_<name>.gen.go files")
+	flag.Parse()
+
+	src := toNRGBA(loadPNG(*base))
+	emit(*out, "base", src)
+	emit(*out, "hopper", hopperAdjust(src))
+}
+
+func loadPNG(path string) image.Image {
+	f, err := os.Open(path)
+	must(err)
+	defer f.Close()
+	img, err := png.Decode(f)
+	must(err)
+	return img
+}
+
+func toNRGBA(src image.Image) *image.NRGBA {
+	b := src.Bounds()
+	dst := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	for y := 0; y < b.Dy(); y++ {
+		for x := 0; x < b.Dx(); x++ {
+			r, g, bb, a := src.At(b.Min.X+x, b.Min.Y+y).RGBA()
+			c := color.NRGBAModel.Convert(color.RGBA64{R: uint16(r), G: uint16(g), B: uint16(bb), A: uint16(a)}).(color.NRGBA)
+			dst.SetNRGBA(x, y, c)
+		}
+	}
+	return dst
+}
+
+// hopperAdjust renders a grayscale logo with significantly increased
+// contrast: each pixel is converted to its Rec. 601 luminance and pushed
+// away from mid-gray.
+func hopperAdjust(src *image.NRGBA) *image.NRGBA {
+	const contrast = 1.8
+	adj := func(v float64) uint8 {
+		f := (v-128)*contrast + 128
+		if f < 0 {
+			f = 0
+		}
+		if f > 255 {
+			f = 255
+		}
+		return uint8(f + 0.5)
+	}
+	b := src.Bounds()
+	dst := image.NewNRGBA(b)
+	for y := 0; y < b.Dy(); y++ {
+		for x := 0; x < b.Dx(); x++ {
+			c := src.NRGBAAt(x, y)
+			lum := 0.299*float64(c.R) + 0.587*float64(c.G) + 0.114*float64(c.B)
+			g := adj(lum)
+			dst.SetNRGBA(x, y, color.NRGBA{R: g, G: g, B: g, A: c.A})
+		}
+	}
+	return dst
+}
+
+func title(name string) string {
+	return strings.ToUpper(name[:1]) + name[1:]
+}
+
+func emit(outDir, name string, img *image.NRGBA) {
+	if img.Stride != stride || img.Bounds().Dx() != dim || img.Bounds().Dy() != dim {
+		panic(fmt.Sprintf("%s: bad dims %v stride=%d", name, img.Bounds(), img.Stride))
+	}
+	path := filepath.Join(outDir, fmt.Sprintf("logo_%s.gen.go", name))
+	f, err := os.Create(path)
+	must(err)
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	fmt.Fprintln(w, header)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "// Code generated by logogen; DO NOT EDIT.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "package main")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, `import "image"`)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "var logoImage%s = &image.NRGBA{\n", title(name))
+	fmt.Fprintf(w, "\tStride: %d,\n", stride)
+	fmt.Fprintf(w, "\tRect:   image.Rect(0, 0, %d, %d),\n", dim, dim)
+	fmt.Fprint(w, "\tPix: []uint8{")
+	for i, b := range img.Pix {
+		if i > 0 {
+			fmt.Fprint(w, ", ")
+		}
+		fmt.Fprintf(w, "%d", b)
+	}
+	fmt.Fprintln(w, "},")
+	fmt.Fprintln(w, "}")
+	must(w.Flush())
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}

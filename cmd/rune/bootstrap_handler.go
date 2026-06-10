@@ -188,7 +188,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		ide.WithStreamingOpen(true),
 		ide.WithLocker(b.mu),
 		ide.WithConfigFilename(workspaceConfigFilename),
-		ide.WithDefaultWallpaper(makeWallpaper()),
+		ide.WithDefaultWallpaper(makeThemedWallpaper(b.wallpaperTheme)),
 		ide.WithTabBarOffset(13),
 		ide.WithTabBarHeight(2),
 		ide.WithWorkspacesBarHeight(2),
@@ -255,6 +255,15 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.g = g
 	b.transparentWindow = transparentWindow
+}
+
+// wallpaperTheme reports the live GUI theme name for the themed wallpaper.
+// It returns "" before the GUI is attached, which selects the default logo.
+func (b *bootstrapHandler) wallpaperTheme() string {
+	if b.g == nil {
+		return ""
+	}
+	return b.g.Theme()
 }
 
 // applyInitialThemeAttr must run before Ready(): Ready() captures

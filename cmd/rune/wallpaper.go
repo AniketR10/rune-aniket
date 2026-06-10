@@ -24,9 +24,10 @@
 package main
 
 import (
-	_ "embed"
+	"image"
 
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/asciiart"
@@ -35,19 +36,75 @@ import (
 func makeWallpaper() browser.Wallpaper {
 	return browser.Wallpaper{
 		NewComponent: func() tui.Component {
-			cfg := asciiart.DefaultConfig()
-			cfg.Color = true
-			cfg.MaintainAspectRatio = true
-			cfg.DensityCharacters = "\u2009▓▓▓▓▓▓▓▓▓"
-			// Uncomment below when debugging glslshader.Burning with the
-			// DebugWallpaperBounds flag.
-			// cfg.DensityCharacters = "x▓▓▓▓▓▓▓▓▓"
-			image := asciiart.NewComponent(logo, cfg)
-			return component.NewSpan(image, component.SpanConfig{
-				PadHorizontalPerc: 0.4,
-				PadVerticalPerc:   0.2,
-				ContentAlignment:  component.AlignmentCentered,
-			})
+			return newLogoSpan(logo)
 		},
 	}
+}
+
+// newLogoSpan builds the centered ascii-art span used to render a logo as a
+// wallpaper. It is shared by the single-logo and themed wallpapers.
+func newLogoSpan(img image.Image) tui.Component {
+	cfg := asciiart.DefaultConfig()
+	cfg.Color = true
+	cfg.MaintainAspectRatio = true
+	cfg.DensityCharacters = "\u2009▓▓▓▓▓▓▓▓▓"
+	// Uncomment below when debugging glslshader.Burning with the
+	// DebugWallpaperBounds flag.
+	// cfg.DensityCharacters = "x▓▓▓▓▓▓▓▓▓"
+	art := asciiart.NewComponent(img, cfg)
+	return component.NewSpan(art, component.SpanConfig{
+		PadHorizontalPerc: 0.4,
+		PadVerticalPerc:   0.2,
+		ContentAlignment:  component.AlignmentCentered,
+	})
+}
+
+// makeThemedWallpaper builds a wallpaper whose logo art follows the live GUI
+// theme reported by themeName. When themeName is nil or returns an empty or
+// unknown theme, the default logo is used.
+func makeThemedWallpaper(themeName func() string) browser.Wallpaper {
+	return browser.Wallpaper{
+		NewComponent: func() tui.Component {
+			return &themedWallpaper{themeName: themeName}
+		},
+	}
+}
+
+// themedWallpaper renders the logo for the current GUI theme, rebuilding its
+// child span only when the resolved theme changes.
+type themedWallpaper struct {
+	themeName func() string
+	current   string
+	child     tui.Component
+	width     int
+	height    int
+	drawn     bool
+}
+
+func (w *themedWallpaper) resolveTheme() string {
+	if w.themeName == nil {
+		return logoThemeDefault
+	}
+	if name := w.themeName(); name != "" {
+		return name
+	}
+	return logoThemeDefault
+}
+
+func (w *themedWallpaper) Resize(width, height int) {
+	w.width, w.height = width, height
+	if w.child != nil {
+		w.child.Resize(width, height)
+	}
+}
+
+func (w *themedWallpaper) Draw(writer term.Writer) {
+	theme := w.resolveTheme()
+	if w.child == nil || !w.drawn || theme != w.current {
+		w.current = theme
+		w.child = newLogoSpan(logoForTheme(theme))
+		w.child.Resize(w.width, w.height)
+		w.drawn = true
+	}
+	w.child.Draw(writer)
 }
