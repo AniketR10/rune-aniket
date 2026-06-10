@@ -24,16 +24,22 @@
 package agentools
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"path/filepath"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	_ "golang.org/x/image/webp"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
 	"unstable.build/go-tui/cmd/rune-agent/agent/utf8validate"
 )
@@ -45,6 +51,11 @@ import (
 // encoded request comfortably under that ceiling once the rest of the
 // message envelope is accounted for.
 const maxImageBytes = 3 * 1024 * 1024
+
+// maxImageEdge is Anthropic's per-image dimension cap for many-image
+// requests. An image exceeding it on either axis causes the API to
+// reject the entire request with a 400, poisoning the conversation.
+const maxImageEdge = 2000
 
 type readFileTool struct {
 	fs           workspaceapi.FileSystem
@@ -243,6 +254,21 @@ func (t *readFileTool) executeImage(ctx context.Context, path string, data []byt
 				filepath.Base(path), len(data), maxImageBytes,
 				maxImageBytes/(1024*1024)),
 			IsError: true,
+		}
+	}
+
+	if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
+		if cfg.Width > maxImageEdge || cfg.Height > maxImageEdge {
+			return agent.ToolResult{
+				Content: fmt.Sprintf(
+					"error: image file %s dimensions are too large to send "+
+						"to the model (%dx%d px, max %dpx per dimension). "+
+						"Resize or crop the image so neither dimension "+
+						"exceeds %dpx and try again.",
+					filepath.Base(path), cfg.Width, cfg.Height,
+					maxImageEdge, maxImageEdge),
+				IsError: true,
+			}
 		}
 	}
 

@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"os/exec"
@@ -553,6 +554,53 @@ func TestReadFile_image(t *testing.T) {
 
 		assert.True(t, result.IsError)
 		assert.Contains(t, result.Content, "too large")
+	})
+
+	t.Run("dimensions too large", func(t *testing.T) {
+		dir := t.TempDir()
+		img := image.NewRGBA(image.Rect(0, 0, 3000, 1000))
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tall.png"), buf.Bytes(), 0o644))
+
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"tall.png"}`)
+
+		assert.True(t, result.IsError)
+		assert.Nil(t, result.MultiContent)
+		assert.Contains(t, result.Content, "3000x1000")
+		assert.Contains(t, result.Content, "2000px")
+		assert.Contains(t, result.Content, "Resize")
+	})
+
+	t.Run("within dimension limit", func(t *testing.T) {
+		dir := t.TempDir()
+		img := image.NewRGBA(image.Rect(0, 0, 2000, 2000))
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "cap.png"), buf.Bytes(), 0o644))
+
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"cap.png"}`)
+
+		assert.False(t, result.IsError)
+		require.Len(t, result.MultiContent, 2)
+		assert.Equal(t, llmapi.ContentPartTypeImageURL, result.MultiContent[1].Type)
+	})
+
+	t.Run("jpeg over dimension limit", func(t *testing.T) {
+		dir := t.TempDir()
+		img := image.NewRGBA(image.Rect(0, 0, 4000, 500))
+		var buf bytes.Buffer
+		require.NoError(t, jpeg.Encode(&buf, img, nil))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "wide.jpg"), buf.Bytes(), 0o644))
+
+		tool := newReadFile(localFS{}, dirURI(dir), NewFileTracker(), 0)
+		result := tool.Execute(context.Background(), `{"path":"wide.jpg"}`)
+
+		assert.True(t, result.IsError)
+		assert.Contains(t, result.Content, "4000x500")
+		assert.Contains(t, result.Content, "2000px")
 	})
 
 	t.Run("image ignores offset and limit", func(t *testing.T) {
