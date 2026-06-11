@@ -31,10 +31,12 @@ import (
 )
 
 type configChangePlan struct {
-	prompt      bool
-	missingYAML []byte
-	userDoc     *yaml.Node
-	pkgDoc      *yaml.Node
+	// prompt is true only when conflictCfg is non-empty.
+	prompt       bool
+	missingYAML  []byte
+	userDoc      *yaml.Node
+	pkgDoc       *yaml.Node
+	autoApplyDoc *yaml.Node
 }
 
 func planConfigChange(
@@ -75,31 +77,41 @@ func planConfigChange(
 	}
 	expandMapValues(pkgOverlayCfg, runeVarMapping)
 
-	missingCfg := idePkgMissingKeys(userCfg, pkgOverlayCfg, versionDependent)
-	if missingCfg == nil {
+	newCfg, conflictCfg := idePkgConfigDiff(userCfg, pkgOverlayCfg, versionDependent)
+	if newCfg == nil && conflictCfg == nil {
 		return configChangePlan{}, nil
 	}
 
-	pkgDoc, err := mapToYAMLDocument(missingCfg)
-	if err != nil {
-		return configChangePlan{}, fmt.Errorf("package config to yaml: %w", err)
-	}
 	userDoc, err := mapToYAMLDocument(userCfg)
 	if err != nil {
 		return configChangePlan{}, fmt.Errorf("user config to yaml: %w", err)
 	}
 
-	missingYAML, err := yaml.Marshal(missingCfg)
-	if err != nil {
-		return configChangePlan{}, fmt.Errorf("marshal missing keys: %w", err)
+	plan := configChangePlan{userDoc: userDoc}
+
+	if newCfg != nil {
+		autoApplyDoc, err := mapToYAMLDocument(newCfg)
+		if err != nil {
+			return configChangePlan{}, fmt.Errorf("auto-apply config to yaml: %w", err)
+		}
+		plan.autoApplyDoc = autoApplyDoc
 	}
 
-	return configChangePlan{
-		prompt:      true,
-		missingYAML: missingYAML,
-		userDoc:     userDoc,
-		pkgDoc:      pkgDoc,
-	}, nil
+	if conflictCfg != nil {
+		pkgDoc, err := mapToYAMLDocument(conflictCfg)
+		if err != nil {
+			return configChangePlan{}, fmt.Errorf("package config to yaml: %w", err)
+		}
+		missingYAML, err := yaml.Marshal(conflictCfg)
+		if err != nil {
+			return configChangePlan{}, fmt.Errorf("marshal conflicting keys: %w", err)
+		}
+		plan.prompt = true
+		plan.pkgDoc = pkgDoc
+		plan.missingYAML = missingYAML
+	}
+
+	return plan, nil
 }
 
 type mergedConfig struct {

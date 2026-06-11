@@ -42,13 +42,14 @@ func TestPlanConfigChange(t *testing.T) {
 	)
 
 	tests := []struct {
-		name       string
-		pkgConfig  string
-		userCfg    map[string]any
-		version    release.Version
-		wantPrompt bool
-		wantDiff   map[string]any
-		wantErr    bool
+		name          string
+		pkgConfig     string
+		userCfg       map[string]any
+		version       release.Version
+		wantPrompt    bool
+		wantConflict  map[string]any
+		wantAutoApply map[string]any
+		wantErr       bool
 	}{
 		{
 			name:       "empty overlay yields no prompt",
@@ -65,20 +66,20 @@ func TestPlanConfigChange(t *testing.T) {
 			wantPrompt: false,
 		},
 		{
-			name:       "new top-level key prompts with the new key",
-			pkgConfig:  "a: 1\nc: 3\n",
-			userCfg:    map[string]any{"a": 1},
-			version:    "1",
-			wantPrompt: true,
-			wantDiff:   map[string]any{"c": 3},
+			name:          "new top-level key auto-applies without prompt",
+			pkgConfig:     "a: 1\nc: 3\n",
+			userCfg:       map[string]any{"a": 1},
+			version:       "1",
+			wantPrompt:    false,
+			wantAutoApply: map[string]any{"c": 3},
 		},
 		{
-			name:       "new nested sub-key only prompts with nested diff",
-			pkgConfig:  "env:\n  A: 1\n  B: 2\n",
-			userCfg:    map[string]any{"env": map[string]any{"A": 1}},
-			version:    "1",
-			wantPrompt: true,
-			wantDiff:   map[string]any{"env": map[string]any{"B": 2}},
+			name:          "new nested sub-key auto-applies nested diff without prompt",
+			pkgConfig:     "env:\n  A: 1\n  B: 2\n",
+			userCfg:       map[string]any{"env": map[string]any{"A": 1}},
+			version:       "1",
+			wantPrompt:    false,
+			wantAutoApply: map[string]any{"env": map[string]any{"B": 2}},
 		},
 		{
 			name:       "static differing scalar present on both, no prompt (RUNE-187)",
@@ -88,12 +89,12 @@ func TestPlanConfigChange(t *testing.T) {
 			wantPrompt: false,
 		},
 		{
-			name:       "version-dependent scalar changed value prompts (RUNE-225)",
-			pkgConfig:  "goroot: /data/pkg/testpkg/$RUNE_PKG_VERSION/go\n",
-			userCfg:    map[string]any{"goroot": "/data/pkg/testpkg/1/go"},
-			version:    "2",
-			wantPrompt: true,
-			wantDiff:   map[string]any{"goroot": "/data/pkg/testpkg/2/go"},
+			name:         "version-dependent scalar changed value prompts (RUNE-225)",
+			pkgConfig:    "goroot: /data/pkg/testpkg/$RUNE_PKG_VERSION/go\n",
+			userCfg:      map[string]any{"goroot": "/data/pkg/testpkg/1/go"},
+			version:      "2",
+			wantPrompt:   true,
+			wantConflict: map[string]any{"goroot": "/data/pkg/testpkg/2/go"},
 		},
 		{
 			name:       "version-dependent scalar unchanged value, no prompt",
@@ -103,7 +104,7 @@ func TestPlanConfigChange(t *testing.T) {
 			wantPrompt: false,
 		},
 		{
-			name: "version-dependent and static nested mixed, only vdep and new keys in diff",
+			name: "version-dependent conflicts prompt, new keys auto-apply",
 			pkgConfig: "env:\n" +
 				"  GOROOT: /data/pkg/testpkg/$RUNE_PKG_VERSION/go\n" +
 				"  STATIC: package\n" +
@@ -114,18 +115,20 @@ func TestPlanConfigChange(t *testing.T) {
 			}},
 			version:    "2",
 			wantPrompt: true,
-			wantDiff: map[string]any{"env": map[string]any{
+			wantConflict: map[string]any{"env": map[string]any{
 				"GOROOT": "/data/pkg/testpkg/2/go",
-				"NEW":    "added",
+			}},
+			wantAutoApply: map[string]any{"env": map[string]any{
+				"NEW": "added",
 			}},
 		},
 		{
-			name:       "brace form of RUNE_PKG_VERSION detected",
-			pkgConfig:  "goroot: /data/pkg/testpkg/${RUNE_PKG_VERSION}/go\n",
-			userCfg:    map[string]any{"goroot": "/data/pkg/testpkg/1/go"},
-			version:    "2",
-			wantPrompt: true,
-			wantDiff:   map[string]any{"goroot": "/data/pkg/testpkg/2/go"},
+			name:         "brace form of RUNE_PKG_VERSION detected",
+			pkgConfig:    "goroot: /data/pkg/testpkg/${RUNE_PKG_VERSION}/go\n",
+			userCfg:      map[string]any{"goroot": "/data/pkg/testpkg/1/go"},
+			version:      "2",
+			wantPrompt:   true,
+			wantConflict: map[string]any{"goroot": "/data/pkg/testpkg/2/go"},
 		},
 		{
 			name:       "non-version var differing, no prompt",
@@ -163,15 +166,29 @@ func TestPlanConfigChange(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantPrompt, plan.prompt)
-			if !tt.wantPrompt {
+
+			if tt.wantConflict != nil {
+				require.True(t, plan.prompt)
+				require.NotNil(t, plan.pkgDoc)
+				require.NotNil(t, plan.userDoc)
+				require.NotEmpty(t, plan.missingYAML)
+				assert.Equal(t, normalizeYAML(t, tt.wantConflict), docToMap(t, plan.pkgDoc))
+			} else {
+				assert.False(t, plan.prompt)
 				assert.Nil(t, plan.pkgDoc)
-				assert.Nil(t, plan.userDoc)
-				return
 			}
-			require.NotNil(t, plan.pkgDoc)
-			require.NotNil(t, plan.userDoc)
-			require.NotEmpty(t, plan.missingYAML)
-			assert.Equal(t, normalizeYAML(t, tt.wantDiff), docToMap(t, plan.pkgDoc))
+
+			if tt.wantAutoApply != nil {
+				require.NotNil(t, plan.autoApplyDoc)
+				require.NotNil(t, plan.userDoc)
+				assert.Equal(t, normalizeYAML(t, tt.wantAutoApply), docToMap(t, plan.autoApplyDoc))
+			} else {
+				assert.Nil(t, plan.autoApplyDoc)
+			}
+
+			if tt.wantConflict == nil && tt.wantAutoApply == nil {
+				assert.Nil(t, plan.userDoc)
+			}
 		})
 	}
 }

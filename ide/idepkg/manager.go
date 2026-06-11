@@ -823,34 +823,6 @@ func (m *Manager) promptConfigChange(
 			"with the following settings:\n\n```yaml\n%s\n```\n\nDo you want to allow this?",
 		pkgID, pkgVersion, string(configYAML))
 
-	apply := func() error {
-		starConfig := strings.HasSuffix(strings.ToLower(m.configPath), ".star")
-		merged, err := buildMergedConfig(userDoc, pkgDoc, starConfig)
-		if err != nil {
-			return err
-		}
-
-		backup, err := backupUserConfig(m.configPath)
-		if err != nil {
-			return fmt.Errorf("backup user config: %w", err)
-		}
-
-		m.log(log.InfoLevel, "created config backup "+
-			"before applying package updates: %s", backup)
-
-		if starConfig {
-			if err := starlarkconfig.WriteManagedConfigFileAtomic(m.configPath, merged.starDiff); err != nil {
-				return fmt.Errorf("write starlark config: %w", err)
-			}
-		} else {
-			if err := writeYAMLAtomic(m.configPath, merged.yamlDoc, pkgDoc.Content[0]); err != nil {
-				return fmt.Errorf("write config: %w", err)
-			}
-		}
-
-		return nil
-	}
-
 	prompt := handler.NewPrompt(handler.PromptConfig{
 		HighlightAttr: term.Attributes{
 			Attrs: term.AttrBold,
@@ -871,7 +843,7 @@ func (m *Manager) promptConfigChange(
 			if !allowed {
 				return
 			}
-			if err := apply(); err != nil {
+			if err := m.applyConfigMerge(userDoc, pkgDoc); err != nil {
 				_, _ = m.n.Notify(browserapi.LevelError, "apply configuration: %s", err)
 			} else {
 				_, _ = m.n.Notify(browserapi.LevelSuccess, "applied %s "+
@@ -894,6 +866,37 @@ func (m *Manager) promptConfigChange(
 		return nil
 	}
 
+	return nil
+}
+
+// applyConfigMerge deep-merges addDoc into userDoc and writes the result to
+// the user config file atomically, after backing up the existing file. It is
+// shared by the auto-apply path (purely-new keys) and the prompt's Allow path
+// (version-dependent conflicts the user approved).
+func (m *Manager) applyConfigMerge(userDoc, addDoc *yaml.Node) error {
+	starConfig := strings.HasSuffix(strings.ToLower(m.configPath), ".star")
+	merged, err := buildMergedConfig(userDoc, addDoc, starConfig)
+	if err != nil {
+		return err
+	}
+
+	backup, err := backupUserConfig(m.configPath)
+	if err != nil {
+		return fmt.Errorf("backup user config: %w", err)
+	}
+
+	m.log(log.InfoLevel, "created config backup "+
+		"before applying package updates: %s", backup)
+
+	if starConfig {
+		if err := starlarkconfig.WriteManagedConfigFileAtomic(m.configPath, merged.starDiff); err != nil {
+			return fmt.Errorf("write starlark config: %w", err)
+		}
+		return nil
+	}
+	if err := writeYAMLAtomic(m.configPath, merged.yamlDoc, addDoc.Content[0]); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
 	return nil
 }
 
@@ -927,16 +930,25 @@ func (m *Manager) processConfig(
 	if err != nil {
 		return err
 	}
-	if !plan.prompt {
-		return nil
+
+	if plan.autoApplyDoc != nil {
+		if err := m.applyConfigMerge(plan.userDoc, plan.autoApplyDoc); err != nil {
+			return fmt.Errorf("auto-apply config change: %w", err)
+		}
+		_, _ = m.n.Notify(browserapi.LevelInfo, "applied %s "+
+			"configuration updates. Restart the program to load the changes.",
+			pkgID)
 	}
 
-	err = m.promptConfigChange(
-		pkgID, pkgVersion, plan.missingYAML, plan.userDoc, plan.pkgDoc,
-	)
-	if err != nil {
-		return fmt.Errorf("prompt config change: %w", err)
+	if plan.prompt {
+		err = m.promptConfigChange(
+			pkgID, pkgVersion, plan.missingYAML, plan.userDoc, plan.pkgDoc,
+		)
+		if err != nil {
+			return fmt.Errorf("prompt config change: %w", err)
+		}
 	}
+
 	return nil
 }
 
@@ -1118,33 +1130,36 @@ func normalizeIdePkgConfig(v any) any {
 	}
 }
 
-// idePkgMissingKeys returns the subset of overlay keys that should be
-// offered to the user: keys not present in user, plus version-dependent
-// scalars whose resolved value differs from the user value.
+// idePkgConfigDiff classifies overlay keys against the user config into two
+// disjoint subsets:
 //
-// For keys that are mappings on both sides, it recurses and includes only
-// the new (or version-dependent, changed) sub-keys. The returned map is nil
-// when there is nothing to offer; this signals that no prompt and no write
-// is needed.
+//   - newCfg: overlay key paths absent from the user config (safe additions,
+//     including additive leaves under an existing parent map). These can be
+//     auto-applied without prompting.
+//   - conflictCfg: overlay leaves whose path already exists in the user config
+//     with a different value, but only when the leaf is version-dependent — its
+//     raw template references $RUNE_PKG_VERSION, so the value is
+//     package-version-derived rather than a user customization, and a changed
+//     resolved value is safe to re-offer (RUNE-225). The user must approve
+//     these.
+//
+// For keys that are mappings on both sides it recurses, splitting sub-keys the
+// same way. Either returned map is nil when its subset is empty.
 //
 // Static present scalars are always skipped so user customizations are
-// preserved (RUNE-187). The exception is keys flagged in versionDependent:
-// because their raw template references $RUNE_PKG_VERSION, their value is
-// package-version-derived rather than a user customization, so a changed
-// resolved value is safe to re-offer (RUNE-225). versionDependent mirrors
-// the overlay's nesting: scalar leaves are bool, nested maps are
-// map[string]any.
-func idePkgMissingKeys(
+// preserved (RUNE-187). A key the user already has with the same value is
+// neither new nor conflicting. versionDependent mirrors the overlay's nesting:
+// scalar leaves are bool, nested maps are map[string]any.
+func idePkgConfigDiff(
 	user, overlay map[string]any, versionDependent map[string]any,
-) map[string]any {
-	var missing map[string]any
+) (newCfg, conflictCfg map[string]any) {
 	for key, overlayVal := range overlay {
 		userVal, ok := user[key]
 		if !ok {
-			if missing == nil {
-				missing = map[string]any{}
+			if newCfg == nil {
+				newCfg = map[string]any{}
 			}
-			missing[key] = overlayVal
+			newCfg[key] = overlayVal
 			continue
 		}
 		overlayMap, overlayIsMap := overlayVal.(map[string]any)
@@ -1152,24 +1167,29 @@ func idePkgMissingKeys(
 		if !overlayIsMap || !userIsMap {
 			if isVersionDependentScalar(versionDependent, key) &&
 				fmt.Sprint(overlayVal) != fmt.Sprint(userVal) {
-				if missing == nil {
-					missing = map[string]any{}
+				if conflictCfg == nil {
+					conflictCfg = map[string]any{}
 				}
-				missing[key] = overlayVal
+				conflictCfg[key] = overlayVal
 			}
 			continue
 		}
 		nestedVersionDependent, _ := versionDependent[key].(map[string]any)
-		nestedMissing := idePkgMissingKeys(userMap, overlayMap, nestedVersionDependent)
-		if nestedMissing == nil {
-			continue
+		nestedNew, nestedConflict := idePkgConfigDiff(userMap, overlayMap, nestedVersionDependent)
+		if nestedNew != nil {
+			if newCfg == nil {
+				newCfg = map[string]any{}
+			}
+			newCfg[key] = nestedNew
 		}
-		if missing == nil {
-			missing = map[string]any{}
+		if nestedConflict != nil {
+			if conflictCfg == nil {
+				conflictCfg = map[string]any{}
+			}
+			conflictCfg[key] = nestedConflict
 		}
-		missing[key] = nestedMissing
 	}
-	return missing
+	return newCfg, conflictCfg
 }
 
 func isVersionDependentScalar(versionDependent map[string]any, key string) bool {

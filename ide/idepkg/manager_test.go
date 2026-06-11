@@ -1687,9 +1687,10 @@ func TestInstallConfigPromptDeny(t *testing.T) {
 		require.NoError(t, err)
 		n.RequireNoErrorNotification()
 
-		// Capture config state after first install
-		origConfig, err := os.ReadFile(configPath)
-		require.NoError(t, err)
+		// Capture decoded config state after first install.
+		origCfg := readUserConfigMap(t, configPath)
+		origEnv := origCfg["env"].(map[string]any)
+		origGOROOT := fmt.Sprint(origEnv["GOROOT"])
 
 		// Override wm to simulate "Deny" (select index 1)
 		m.wm = &mockWindowManager{
@@ -1707,11 +1708,17 @@ func TestInstallConfigPromptDeny(t *testing.T) {
 		require.NoError(t, err)
 		n.RequireNoErrorNotification()
 
-		// Config should remain unchanged after deny
-		afterConfig, err := os.ReadFile(configPath)
-		require.NoError(t, err)
-		assert.Equal(t, string(origConfig), string(afterConfig),
-			"config.yaml should not change when prompt is denied")
+		// Denying the conflicting (version-dependent) GOROOT change must
+		// leave the user's existing value intact. Brand-new keys (newkey)
+		// are auto-applied regardless of the deny, since they do not
+		// override any existing user value.
+		afterCfg := readUserConfigMap(t, configPath)
+		afterEnv := afterCfg["env"].(map[string]any)
+		assert.Equal(t, origGOROOT, fmt.Sprint(afterEnv["GOROOT"]),
+			"denied version-dependent value must not change")
+		settings := afterCfg["settings"].(map[string]any)
+		assert.Equal(t, "added", fmt.Sprint(settings["newkey"]),
+			"brand-new key is auto-applied even when the conflict prompt is denied")
 	})
 }
 
@@ -1819,7 +1826,7 @@ func TestInstallConfigPreservesUserValues(t *testing.T) {
 		assert.Equal(t, "untouched", fmt.Sprint(cfg["other"]))
 	})
 
-	t.Run("new top-level key triggers prompt; deny leaves config alone", func(t *testing.T) {
+	t.Run("conflict prompt deny leaves conflict alone but auto-applies new key", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{
@@ -1847,12 +1854,18 @@ func TestInstallConfigPreservesUserValues(t *testing.T) {
 		require.NoError(t, err)
 		n.RequireNoErrorNotification()
 
-		assert.Equal(t, 1, promptCount, "prompt should fire for the genuinely new key")
+		assert.Equal(t, 1, promptCount,
+			"prompt should fire for the version-dependent GOROOT conflict")
 
-		data, err := os.ReadFile(configPath)
-		require.NoError(t, err)
-		assert.Equal(t, userYAML, string(data),
-			"config.yaml should be unchanged after deny")
+		cfg := readUserConfigMap(t, configPath)
+		env := cfg["env"].(map[string]any)
+		assert.Equal(t, "/custom/go", fmt.Sprint(env["GOROOT"]),
+			"denied version-dependent value must be preserved")
+		settings := cfg["settings"].(map[string]any)
+		assert.Equal(t, "light", fmt.Sprint(settings["theme"]), "static user value preserved")
+		assert.Equal(t, "8", fmt.Sprint(settings["indent"]), "static user value preserved")
+		assert.Equal(t, "added", fmt.Sprint(settings["newkey"]),
+			"brand-new key is auto-applied even when the conflict prompt is denied")
 	})
 }
 
@@ -2405,6 +2418,174 @@ func TestInstallAtomicOperations(t *testing.T) {
 	})
 }
 
+// TestProcessConfigAutoApply covers the auto-apply path: purely-new overlay
+// keys are written to disk without prompting, while keys that override an
+// existing user value still prompt for confirmation.
+func TestProcessConfigAutoApply(t *testing.T) {
+	t.Parallel()
+
+	hasInfoNotification := func(n *idepkgtest.Notifications) bool {
+		for _, noti := range n.Active() {
+			if noti.Level == browserapi.LevelInfo {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("all-new keys auto-apply without prompt and notify", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "vpkg", Version: "1"}})
+		m, n, _, _ := newTestManager(t, pkgs, versions)
+
+		require.NoError(t, os.WriteFile(m.configPath, []byte("existing: true\n"), 0o644))
+
+		m.wm = &mockWindowManager{
+			floatingFn: func(_ browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				t.Fatal("no prompt should be scheduled for purely-new config")
+				return nil, nil
+			},
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"settings:\n  theme: dark\n  indent: 4\n"), 0o644))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		n.RequireNoErrorNotification()
+		assert.True(t, hasInfoNotification(n),
+			"auto-apply must surface an info notification")
+
+		cfg := readUserConfigMap(t, m.configPath)
+		assert.Equal(t, true, cfg["existing"], "user key preserved")
+		settings := cfg["settings"].(map[string]any)
+		assert.Equal(t, "dark", fmt.Sprint(settings["theme"]))
+		assert.Equal(t, "4", fmt.Sprint(settings["indent"]))
+	})
+
+	t.Run("existing-key override prompts and leaves disk unchanged until allow", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+			{Package: "vpkg", Version: "2"},
+		})
+		m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+		v1GOROOT := filepath.Join(datadir, "pkg", "vpkg", "1", "go")
+		require.NoError(t, os.WriteFile(m.configPath, []byte(
+			"env:\n  GOROOT: "+v1GOROOT+"\n"), 0o644))
+
+		var prompted bool
+		var promptYAML []byte
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				prompted = true
+				// Deny so the disk stays unchanged.
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"), 0o644))
+
+		plan, err := planConfigChange(pkgConfig,
+			[]byte("env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"),
+			readUserConfigMap(t, m.configPath), "vpkg", release.Version("2"),
+			m.dataDir, m.editorMode)
+		require.NoError(t, err)
+		require.True(t, plan.prompt)
+		require.Nil(t, plan.autoApplyDoc, "no new keys to auto-apply")
+		promptYAML = plan.missingYAML
+		assert.Contains(t, string(promptYAML), "GOROOT",
+			"prompt covers only the conflicting key")
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
+		n.RequireNoErrorNotification()
+		assert.True(t, prompted, "conflicting key must prompt")
+
+		cfg := readUserConfigMap(t, m.configPath)
+		env := cfg["env"].(map[string]any)
+		assert.Equal(t, v1GOROOT, fmt.Sprint(env["GOROOT"]),
+			"disk unchanged after deny")
+	})
+
+	t.Run("mixed new and conflicting auto-applies new and prompts for conflict", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+			{Package: "vpkg", Version: "2"},
+		})
+		m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+		v1GOROOT := filepath.Join(datadir, "pkg", "vpkg", "1", "go")
+		require.NoError(t, os.WriteFile(m.configPath, []byte(
+			"env:\n  GOROOT: "+v1GOROOT+"\n"), 0o644))
+
+		var promptCount int
+		m.wm = &mockWindowManager{
+			floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				promptCount++
+				// Deny: only the conflicting key is gated by the prompt.
+				h.Resize(70, 20)
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+				h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+				return &mockWindow{}, nil
+			},
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"+
+				"  NEW: added\n"), 0o644))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
+		n.RequireNoErrorNotification()
+		assert.Equal(t, 1, promptCount, "conflicting key prompts")
+		assert.True(t, hasInfoNotification(n),
+			"auto-apply of the new key must notify")
+
+		cfg := readUserConfigMap(t, m.configPath)
+		env := cfg["env"].(map[string]any)
+		assert.Equal(t, "added", fmt.Sprint(env["NEW"]),
+			"new key auto-applied to disk immediately")
+		assert.Equal(t, v1GOROOT, fmt.Sprint(env["GOROOT"]),
+			"conflicting key unchanged after deny")
+	})
+
+	t.Run("same-value overlay is a no-op without prompt or notification", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "vpkg", Version: "1"}})
+		m, n, _, _ := newTestManager(t, pkgs, versions)
+
+		require.NoError(t, os.WriteFile(m.configPath, []byte(
+			"settings:\n  theme: dark\n"), 0o644))
+
+		m.wm = &mockWindowManager{
+			floatingFn: func(_ browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+				t.Fatal("no prompt for an already-equal overlay")
+				return nil, nil
+			},
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"settings:\n  theme: dark\n"), 0o644))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		n.RequireNoErrorNotification()
+		assert.False(t, hasInfoNotification(n),
+			"no notification when nothing changed")
+	})
+}
+
 func TestProcessConfigSkipsPromptWhenAlreadyMerged(t *testing.T) {
 	t.Parallel()
 	t.Run("no prompt shown when config is already merged", func(t *testing.T) {
@@ -2475,9 +2656,9 @@ func TestProcessConfigRepromptsOnVersionDependentChange(t *testing.T) {
 			},
 		}
 
-		// v1: new key, prompt fires and value is written.
+		// v1: new key auto-applies without a prompt and the value is written.
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
-		assert.Equal(t, 1, promptCount, "first install prompts for the new key")
+		assert.Equal(t, 0, promptCount, "first install auto-applies the new key without prompting")
 
 		v1Want := filepath.Join(datadir, "pkg", "vpkg", "1", "go")
 		cfg := readUserConfigMap(t, m.configPath)
@@ -2487,7 +2668,7 @@ func TestProcessConfigRepromptsOnVersionDependentChange(t *testing.T) {
 
 		// v2: same template, different resolved value -> must re-prompt and update.
 		require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
-		assert.Equal(t, 2, promptCount, "version bump re-prompts the version-dependent key")
+		assert.Equal(t, 1, promptCount, "version bump re-prompts the version-dependent key")
 
 		v2Want := filepath.Join(datadir, "pkg", "vpkg", "2", "go")
 		cfg = readUserConfigMap(t, m.configPath)
@@ -2523,11 +2704,11 @@ func TestProcessConfigRepromptsOnVersionDependentChange(t *testing.T) {
 		}
 
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
-		assert.Equal(t, 1, promptCount, "first install prompts for the new key")
+		assert.Equal(t, 0, promptCount, "first install auto-applies the new key without prompting")
 
 		// Same version again: resolved value matches disk, no re-prompt.
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
-		assert.Equal(t, 1, promptCount, "unchanged version-dependent value must not re-prompt")
+		assert.Equal(t, 0, promptCount, "unchanged version-dependent value must not re-prompt")
 	})
 
 	t.Run("static user-customized scalar is preserved and not re-prompted", func(t *testing.T) {
@@ -2760,7 +2941,11 @@ func TestInstallConfigPromptScheduledAfterSuccess(t *testing.T) {
 		t.Cleanup(func() { _ = os.RemoveAll(temp) })
 
 		configPath := filepath.Join(temp, "config.yaml")
-		require.NoError(t, os.WriteFile(configPath, []byte("{}\n"), 0644))
+		// Seed a stale version-dependent value so processConfig classifies
+		// it as a conflict and schedules the prompt; auto-apply only covers
+		// brand-new keys, which would not exercise the Floating path.
+		require.NoError(t, os.WriteFile(configPath, []byte(
+			"env:\n  GOROOT: /stale/go\n"), 0644))
 
 		n := idepkgtest.NewNotifications(t)
 		rel := idepkgtest.NewReleaseManager(pkgs, versions)
@@ -2993,7 +3178,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"editor": map[string]any{"mode": "exo"},
 					"env":    map[string]any{"GOROOT": "/go"},
@@ -3011,7 +3196,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
 				wantContains: []string{
 					starlarkconfig.ManagedBegin, "config = {}",
@@ -3025,7 +3210,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
 				wantContains: []string{
 					"# just a comment", starlarkconfig.ManagedBegin,
@@ -3039,7 +3224,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"settings\": {\"indent\": 4}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"settings": map[string]any{"theme": "light", "indent": 4},
 				},
@@ -3067,13 +3252,13 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 					wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
 				},
 				{
 					pkgConfig:  "config = {\"settings\": {\"indent\": 4}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 					wantConfig: map[string]any{
 						"env":      map[string]any{"GOROOT": "/go"},
 						"settings": map[string]any{"indent": 4},
@@ -3089,7 +3274,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 				},
 				{
 					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
@@ -3105,7 +3290,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "env:\n  GOROOT: /go\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"a": 1, "env": map[string]any{"GOROOT": "/go"}},
 			}},
 		},
@@ -3116,7 +3301,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "settings:\n  indent: 4\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"settings": map[string]any{"theme": "light", "indent": 4},
 				},
@@ -3141,7 +3326,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"plugins\": [\"a\", \"b\"]}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"plugins": []any{"a", "b"}},
 			}},
 		},
@@ -3152,7 +3337,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "plugins:\n  - a\n  - b\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"plugins": []any{"a", "b"}},
 			}},
 		},
@@ -3186,7 +3371,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:    "config = {\"feature\": None}\n",
 				version:      "1",
-				wantPrompt:   true,
+				wantPrompt:   false,
 				wantConfig:   map[string]any{"feature": nil},
 				wantContains: []string{"\"feature\": None"},
 			}},
@@ -3198,7 +3383,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "feature:\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"feature": nil},
 			}},
 		},
@@ -3255,7 +3440,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"b\": True, \"i\": 7, \"f\": 1.5, \"s\": \"hi\"}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"b": true, "i": 7, "f": 1.5, "s": "hi"},
 			}},
 		},
@@ -3266,7 +3451,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "b: true\ni: 7\nf: 1.5\ns: hi\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"b": true, "i": 7, "f": 1.5, "s": "hi"},
 			}},
 		},
@@ -3277,7 +3462,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"a\": {\"b\": {\"d\": 2}}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"a": map[string]any{"b": map[string]any{"c": 1, "d": 2}},
 				},
@@ -3290,7 +3475,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "a:\n  b:\n    d: 2\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"a": map[string]any{"b": map[string]any{"c": 1, "d": 2}},
 				},
@@ -3326,7 +3511,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"editor": map[string]any{"mode": "exo"},
 					"env":    map[string]any{"GOROOT": "/go"},
@@ -3345,7 +3530,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{
 					"editor": map[string]any{"mode": "modal"},
 					"env":    map[string]any{"GOROOT": "/go"},
@@ -3361,7 +3546,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "config = {\"env\": {\"GOROOT\": RUNE_DATADIR + \"/\" + RUNE_PKG_VERSION, \"STATIC\": \"x\"}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 				},
 				{
 					pkgConfig:  "config = {\"env\": {\"GOROOT\": RUNE_DATADIR + \"/\" + RUNE_PKG_VERSION, \"STATIC\": \"y\"}}\n",
@@ -3378,7 +3563,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "env:\n  GOROOT: $RUNE_DATADIR/$RUNE_PKG_VERSION\n  STATIC: x\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 				},
 				{
 					pkgConfig:  "env:\n  GOROOT: $RUNE_DATADIR/$RUNE_PKG_VERSION\n  STATIC: y\n",
@@ -3394,7 +3579,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:    "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 				version:      "1",
-				wantPrompt:   true,
+				wantPrompt:   false,
 				wantConfig:   map[string]any{"env": map[string]any{"GOROOT": "/go"}},
 				wantContains: []string{"config = {}", starlarkconfig.ManagedBegin},
 			}},
@@ -3406,7 +3591,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			steps: []mergeStep{{
 				pkgConfig:  "env:\n  GOROOT: /go\n",
 				version:    "1",
-				wantPrompt: true,
+				wantPrompt: false,
 				wantConfig: map[string]any{"env": map[string]any{"GOROOT": "/go"}},
 			}},
 		},
@@ -3419,14 +3604,14 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:    "config = {\"b\": 2}\n",
 					version:      "1",
-					wantPrompt:   true,
+					wantPrompt:   false,
 					wantConfig:   map[string]any{"a": 1, "b": 2},
 					wantContains: []string{"# trailing user note"},
 				},
 				{
 					pkgConfig:    "config = {\"c\": 3}\n",
 					version:      "1",
-					wantPrompt:   true,
+					wantPrompt:   false,
 					wantConfig:   map[string]any{"a": 1, "b": 2, "c": 3},
 					wantContains: []string{"# trailing user note"},
 				},
@@ -3440,7 +3625,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 					wantConfig: map[string]any{
 						"user": "keep",
 						"env":  map[string]any{"GOROOT": "/go"},
@@ -3449,7 +3634,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "config = {\"settings\": {\"indent\": 4}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 					wantConfig: map[string]any{
 						"user":     "keep",
 						"env":      map[string]any{"GOROOT": "/go"},
@@ -3459,7 +3644,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 				{
 					pkgConfig:  "config = {\"env\": {\"GOPATH\": \"/gp\"}}\n",
 					version:    "1",
-					wantPrompt: true,
+					wantPrompt: false,
 					wantConfig: map[string]any{
 						"user":     "keep",
 						"env":      map[string]any{"GOROOT": "/go", "GOPATH": "/gp"},
@@ -3565,13 +3750,13 @@ func TestConfigMergeIntegration(t *testing.T) {
 		require.NoError(t, os.WriteFile(pkgConfig, []byte(src), 0o644))
 
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
-		assert.Equal(t, 1, promptCount, "first install prompts for the new key")
+		assert.Equal(t, 0, promptCount, "first install auto-applies the new key without prompting")
 		cfg := readUserConfigMap(t, m.configPath)
 		env := cfg["env"].(map[string]any)
 		assert.Equal(t, filepath.Join(datadir, "pkg", "vpkg", "1", "go"), fmt.Sprint(env["GOROOT"]))
 
 		require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
-		assert.Equal(t, 2, promptCount, "version bump re-prompts the version-dependent key")
+		assert.Equal(t, 1, promptCount, "version bump re-prompts the version-dependent key")
 		cfg = readUserConfigMap(t, m.configPath)
 		env = cfg["env"].(map[string]any)
 		assert.Equal(t, filepath.Join(datadir, "pkg", "vpkg", "2", "go"), fmt.Sprint(env["GOROOT"]))
@@ -3608,6 +3793,6 @@ func TestConfigMergeIntegration(t *testing.T) {
 
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
-		assert.Equal(t, 1, promptCount, "unchanged version-dependent value must not re-prompt")
+		assert.Equal(t, 0, promptCount, "unchanged version-dependent value must not re-prompt")
 	})
 }
