@@ -415,14 +415,16 @@ func (uc *UpdateChecker) showUpdatePrompt(ctx context.Context, updates []Update)
 		PromptHandler: handler.FuncPromptHandler(func(idx int, _ string) {
 			switch idx {
 			case 0: // Update All
-				for _, u := range updates {
-					pw := text.NewNotifyProgressWriter(uc.m.n, uc.m.interrupter,
-						fmt.Sprintf("install %s@%s", u.Package, u.Latest),
-						uc.m.scheduleNextTick)
-					if err := uc.m.InstallPackageVersion(ctx, u.Package, u.Latest, pw); err != nil {
-						uc.m.log(log.WarnLevel, "install update %s %s: %v", u.Package, u.Latest, err)
+				go debug.CapturePanicReport(func() {
+					for _, u := range updates {
+						pw := text.NewNotifyProgressWriter(uc.m.n, uc.m.interrupter,
+							fmt.Sprintf("install %s@%s", u.Package, u.Latest),
+							uc.m.scheduleNextTick)
+						if err := uc.m.InstallPackageVersion(ctx, u.Package, u.Latest, pw); err != nil {
+							uc.m.log(log.WarnLevel, "install update %s %s: %v", u.Package, u.Latest, err)
+						}
 					}
-				}
+				})
 			case 2: // Skip These Versions
 				for _, u := range updates {
 					if err := uc.SkipVersion(ctx, u.Package, u.Latest); err != nil {

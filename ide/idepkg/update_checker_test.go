@@ -427,9 +427,11 @@ func TestUpdatePromptActions(t *testing.T) {
 		n.Reset()
 		uc.showUpdatePrompt(context.Background(), updates)
 
-		inUse, err := m.PackageVersionInUse(context.Background(), "go")
-		require.NoError(t, err)
-		assert.Equal(t, release.Version("2"), inUse,
+		// The install runs off the event loop, so wait for it to land.
+		require.Eventually(t, func() bool {
+			inUse, err := m.PackageVersionInUse(context.Background(), "go")
+			return err == nil && inUse == release.Version("2")
+		}, 10*time.Second, 10*time.Millisecond,
 			"Upgrade All should install and switch to the latest version")
 	})
 

@@ -43,6 +43,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/text"
 )
@@ -56,7 +57,7 @@ type pkgManager struct {
 	storage          storageapi.Service
 	scheduleNextTick func(func()) bool
 	interrupter      term.Interrupter
-	pending          sync.Map // map[string]*sync.Mutex
+	pending          sync.Map // map[string]*installGate
 	uc               *idepkg.UpdateChecker
 }
 
@@ -121,9 +122,8 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		return nil, fmt.Errorf("get latest version: %w", err)
 	}
 
-	ready, ok := m.pending.Load(pkgID)
-	if ok {
-		return newPendingIterator(m.pkg, pkgID, ready.(*sync.Mutex)), nil
+	if gate, ok := m.pending.Load(pkgID); ok {
+		return newPendingIterator(m.pkg, pkgID, gate.(*installGate)), nil
 	}
 
 	var val installStorageValue
@@ -201,19 +201,14 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 
 	msg := fmt.Sprintf("Do you want to install package **%q**?", pkgID)
 
-	ready := new(sync.Mutex)
-	it := newPendingIterator(m.pkg, pkgID, ready)
-
 	ctx := context.Background()
-	ready.Lock()
-	unlocked := false
+	gate := newInstallGate(func() { m.pending.Delete(pkgID) })
+
 	m.scheduleNextTick(func() {
 		m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no, noNever},
 			[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}},
 			handler.FuncPromptHandler(
 				func(i int, opt string) {
-					defer func() { unlocked = true; ready.Unlock() }()
-					var err error
 					switch opt {
 					case yesAlways:
 						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: true})
@@ -221,35 +216,27 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 					case yes:
 						pw := text.NewNotifyProgressWriter(m.n, m.interrupter,
 							fmt.Sprintf("install %s@%s", pkgID, version), m.scheduleNextTick)
-						err = m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
-						if err == nil {
-							it.it, err = m.pkg.LibDir(ctx, pkgID)
-						}
+						gate.install(func() error {
+							return m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
+						})
 					case noNever:
 						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: false})
 						fallthrough
 					case no:
-						err = storageapi.ErrNotFound
-					}
-					if err != nil {
-						it.err = err
+						gate.cancel()
 					}
 				},
 				func() error {
-					if it.it == nil && it.err == nil {
-						it.err = storageapi.ErrNotFound
-					}
-					if !unlocked {
-						unlocked = true
-						ready.Unlock()
-					}
-					m.pending.Delete(pkgID)
+					// Bare dismissal (e.g. ESC): a no-op if a selection
+					// already claimed the gate, including a yes that
+					// handed ownership to its install goroutine.
+					gate.cancel()
 					return nil
 				}))
 	})
 
-	m.pending.Store(pkgID, ready)
-	return it, nil
+	m.pending.Store(pkgID, gate)
+	return newPendingIterator(m.pkg, pkgID, gate), nil
 }
 
 func (m *pkgManager) Close() error {
@@ -262,34 +249,82 @@ func (m *pkgManager) Close() error {
 	return ret
 }
 
-type pkgManagerIterator struct {
-	pkgID string
-	ready *sync.Mutex
-	pkg   *idepkg.Manager
-
-	err error
-	it  iterator.Iterator[string]
+// installGate is a one-shot readiness signal shared by every LibDir
+// caller waiting on the same package install. install and cancel both
+// resolve the gate through the same sync.Once, so the first to run wins:
+// a "yes" selection claims the gate via install synchronously on the
+// event loop (then finishes the download off it), so the prompt's later
+// close callback calling cancel is a harmless no-op and cannot preempt
+// the install. done closes exactly once; writing err before close
+// establishes a happens-before with the receive, so no locking is
+// needed. Each waiter opens its own LibDir iterator after done closes,
+// so concurrent callers do not share a single underlying iterator.
+type installGate struct {
+	once      sync.Once
+	done      chan struct{}
+	err       error
+	onResolve func()
 }
 
-func newPendingIterator(
-	pkg *idepkg.Manager, pkgID string, ready *sync.Mutex,
-) *pkgManagerIterator {
-	return &pkgManagerIterator{
-		pkgID: pkgID,
-		ready: ready,
-		pkg:   pkg,
+// newInstallGate builds a gate whose onResolve runs exactly once, after
+// the outcome is known, so callers can release per-package bookkeeping
+// without duplicating it across resolution paths.
+func newInstallGate(onResolve func()) *installGate {
+	return &installGate{done: make(chan struct{}), onResolve: onResolve}
+}
+
+func (g *installGate) resolve(err error) {
+	g.err = err
+	g.onResolve()
+	close(g.done)
+}
+
+// install claims the gate and runs run off the event loop, resolving
+// with its result when it finishes. It must be called on the event loop
+// so the claim happens before the prompt's close callback can cancel.
+func (g *installGate) install(run func() error) {
+	g.once.Do(func() {
+		go debug.CapturePanicReport(func() {
+			g.resolve(run())
+		})
+	})
+}
+
+// cancel resolves the gate as declined, unless an install already
+// claimed it.
+func (g *installGate) cancel() {
+	g.once.Do(func() { g.resolve(storageapi.ErrNotFound) })
+}
+
+type pkgManagerIterator struct {
+	gate  *installGate
+	pkg   *idepkg.Manager
+	pkgID string
+
+	it  iterator.Iterator[string]
+	err error
+}
+
+func newPendingIterator(pkg *idepkg.Manager, pkgID string, gate *installGate) *pkgManagerIterator {
+	return &pkgManagerIterator{pkg: pkg, pkgID: pkgID, gate: gate}
+}
+
+// await blocks until the install resolves, then lazily opens this
+// iterator's own LibDir so each waiter iterates independently.
+func (l *pkgManagerIterator) await() {
+	<-l.gate.done
+	if l.err != nil || l.it != nil {
+		return
 	}
+	if l.gate.err != nil {
+		l.err = l.gate.err
+		return
+	}
+	l.it, l.err = l.pkg.LibDir(context.Background(), l.pkgID)
 }
 
 func (l *pkgManagerIterator) Next(ctx context.Context) (string, bool) {
-	l.ready.Lock()
-	defer l.ready.Unlock()
-	if l.err != nil {
-		return "", false
-	}
-	if l.it == nil {
-		l.it, l.err = l.pkg.LibDir(context.Background(), l.pkgID)
-	}
+	l.await()
 	if l.err != nil {
 		return "", false
 	}
@@ -297,14 +332,7 @@ func (l *pkgManagerIterator) Next(ctx context.Context) (string, bool) {
 }
 
 func (l *pkgManagerIterator) Err() error {
-	l.ready.Lock()
-	defer l.ready.Unlock()
-	if l.err != nil {
-		return l.err
-	}
-	if l.it == nil {
-		l.it, l.err = l.pkg.LibDir(context.Background(), l.pkgID)
-	}
+	l.await()
 	if l.err != nil {
 		return l.err
 	}
@@ -312,8 +340,9 @@ func (l *pkgManagerIterator) Err() error {
 }
 
 func (l *pkgManagerIterator) Close() error {
-	l.ready.Lock()
-	defer l.ready.Unlock()
+	// Close only releases an iterator this consumer actually opened.
+	// It must not block on the install decision or open a LibDir just
+	// to close it: a never-iterated iterator has nothing to release.
 	if l.it == nil {
 		return nil
 	}

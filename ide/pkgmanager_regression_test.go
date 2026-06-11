@@ -26,10 +26,13 @@ package ide
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
 )
 
@@ -48,4 +51,55 @@ func TestPackageManagerLibDirMissingPackageReturnsStorageNotFound(t *testing.T) 
 	it, err := m.pkgmanager.LibDir(context.Background(), "go")
 	require.Nil(t, it)
 	require.ErrorIs(t, err, storageapi.ErrNotFound)
+}
+
+// TestPackageManagerInstallPromptDoesNotBlockEventLoop is a regression
+// test: selecting "Yes" on the auto-install prompt used to run the
+// synchronous InstallPackageVersion download directly inside the prompt
+// handler, which executes on the event loop and froze the UI until the
+// package finished installing. The install must run off the event loop
+// so dispatching the selection key returns promptly while the download
+// is still in flight.
+func TestPackageManagerInstallPromptDoesNotBlockEventLoop(t *testing.T) {
+	t.Parallel()
+
+	rm := idepkgtest.NewReleaseManager(
+		idepkgtest.MakePackages(release.Package{Name: "go", Latest: "1"}),
+		idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}}),
+	)
+	m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+
+	it, err := m.pkgmanager.LibDir(context.Background(), "go")
+	require.NoError(t, err)
+
+	m.Resize(40, 15)
+
+	// Block the download so it cannot complete while the prompt
+	// selection is dispatched. The hook is installed only after
+	// LibDir's latest-version lookup, so it gates the install download
+	// rather than the version lookup.
+	releaseDownload := make(chan struct{})
+	rm.SetHook(func() { <-releaseDownload })
+
+	// Dispatching the "Yes" selection must return even though the
+	// download is blocked; otherwise the install ran on the event loop.
+	dispatched := make(chan struct{})
+	go func() {
+		m.Handle(term.Event{Ch: 'Y', Type: term.EventKey})
+		close(dispatched)
+	}()
+
+	select {
+	case <-dispatched:
+	case <-time.After(5 * time.Second):
+		close(releaseDownload)
+		t.Fatal("dispatching the install prompt selection blocked on the install download")
+	}
+
+	close(releaseDownload)
+	slice, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	require.NotEmpty(t, slice)
+
+	require.NoError(t, m.Close())
 }
