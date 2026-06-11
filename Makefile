@@ -67,6 +67,10 @@ RELEASE_FILES=$(wildcard release/*)
 	runectl-pkg runectl-sign runectl-notarize \
 	runectl-prod-dist runectl-staging-dist \
 	runectl-prod-dist-notarized runectl-staging-dist-notarized \
+	runectl-prod-dist-linux-amd64 runectl-staging-dist-linux-amd64 \
+	runectl-prod-dist-linux-arm64 runectl-staging-dist-linux-arm64 \
+	runectl-prod-dist-darwin-amd64 runectl-staging-dist-darwin-amd64 \
+	runectl-prod-dist-darwin-arm64 runectl-staging-dist-darwin-arm64 \
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
 	rune-prod-dist-linux-amd64 rune-prod-dist-linux-arm64 \
@@ -490,6 +494,30 @@ runectl-prod-dist-notarized: clean
 
 runectl-staging-dist-notarized: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,$(BLUECTL_HOST_OS)-$(BLUECTL_HOST_ARCH)) $(MAKE) -C cmd/runectl dist-notarized
+
+runectl-prod-dist-linux-amd64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-amd64) $(MAKE) -C cmd/runectl dist-linux-amd64
+
+runectl-staging-dist-linux-amd64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-amd64) $(MAKE) -C cmd/runectl dist-linux-amd64
+
+runectl-prod-dist-linux-arm64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-arm64) $(MAKE) -C cmd/runectl dist-linux-arm64
+
+runectl-staging-dist-linux-arm64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-arm64) $(MAKE) -C cmd/runectl dist-linux-arm64
+
+runectl-prod-dist-darwin-amd64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,darwin-amd64) $(MAKE) -C cmd/runectl dist-darwin-amd64
+
+runectl-staging-dist-darwin-amd64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,darwin-amd64) $(MAKE) -C cmd/runectl dist-darwin-amd64
+
+runectl-prod-dist-darwin-arm64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,darwin-arm64) $(MAKE) -C cmd/runectl dist-darwin-arm64
+
+runectl-staging-dist-darwin-arm64: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,darwin-arm64) $(MAKE) -C cmd/runectl dist-darwin-arm64
 
 notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
