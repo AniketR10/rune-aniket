@@ -9,7 +9,14 @@ RUNE_LINUX_TARGET_OS ?= linux
 RUNE_LINUX_TARGET_ARCH ?= amd64
 RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TARGET_ARCH)
 RUNE_LINUX_RELEASE_TAR ?= rune-release-$(RUNE_LINUX_TARGET_OS)-$(RUNE_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
-DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64" CGO_CFLAGS="-arch x86_64" CGO_CXXFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64"
+# DARWIN_AMD64_MIN_MACOS is the minimum macOS the Intel build supports. It
+# matches upstream llama.cpp's generic macOS CI floor (13.3) so the GGML Metal
+# backend and shader library are built against a tested deployment target. It is
+# threaded into the cgo toolchain (-mmacosx-version-min), the x86_64 llama.cpp
+# libs (CMAKE_OSX_DEPLOYMENT_TARGET / GGML_METAL_MACOSX_VERSION_MIN), and the
+# app bundle's LSMinimumSystemVersion (extra/osx/Info.amd64.plist).
+DARWIN_AMD64_MIN_MACOS ?= 13.3
+DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)" CGO_CFLAGS="-arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)" CGO_CXXFLAGS="-arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)" CGO_LDFLAGS="-arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)"
 
 # RUNE_DEBUG_BUILD mirrors the root Makefile flag. Set to "true" to
 # bake debug-only ex commands (:panic, :crash) into the binary. The
@@ -116,12 +123,12 @@ release-all:
 endif
 
 ifeq ($(UNAME),Darwin)
-release-amd64:
+release-amd64: llamacpp-libs-amd64
 	@rm -rf $(TARGET)/rune_darwin_amd64
 	@TARGET_OS=darwin TARGET_ARCH=amd64 TARGET_ARCH_FLAGS='$(DARWIN_AMD64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_amd64
 
-release-arm64:
+release-arm64: llamacpp-libs-arm64
 	@rm -rf $(TARGET)/rune_darwin_arm64
 	@TARGET_OS=darwin TARGET_ARCH=arm64 $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_arm64
@@ -140,7 +147,7 @@ release:
 # earlier configure for the other arch would be reused, poisoning the build.
 llamacpp-libs-amd64:
 	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp reconfigure
-	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp libs LLAMACPP_OSX_ARCH=x86_64
+	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp libs LLAMACPP_OSX_ARCH=x86_64 LLAMACPP_OSX_DEPLOYMENT_TARGET=$(DARWIN_AMD64_MIN_MACOS)
 
 llamacpp-libs-arm64:
 	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp reconfigure

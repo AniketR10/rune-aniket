@@ -50,6 +50,17 @@ ifneq ($(LLAMACPP_OSX_ARCH),)
 endif
 endif
 
+# LLAMACPP_OSX_DEPLOYMENT_TARGET pins the minimum macOS the static libraries
+# (and the embedded Metal shader library) are built for. GGML_METAL_MACOSX_VERSION_MIN
+# is set to the same value so the .metallib compiled into libggml-metal.a targets
+# the same floor as the surrounding C/C++ objects. Only meaningful on Darwin.
+ifeq ($(UNAME),Darwin)
+ifneq ($(LLAMACPP_OSX_DEPLOYMENT_TARGET),)
+  CMAKE_FLAGS += -DCMAKE_OSX_DEPLOYMENT_TARGET=$(LLAMACPP_OSX_DEPLOYMENT_TARGET)
+  CMAKE_FLAGS += -DGGML_METAL_MACOSX_VERSION_MIN=$(LLAMACPP_OSX_DEPLOYMENT_TARGET)
+endif
+endif
+
 ifeq ($(LLAMACPP_CUDA),1)
   CMAKE_FLAGS += -DGGML_CUDA=ON
   # NCCL is multi-GPU collective comms — useful for distributed inference,
