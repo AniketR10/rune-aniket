@@ -5,6 +5,7 @@
 # are consumed by the Go package via its cgo directives.
 
 UNAME := $(shell uname -s)
+UNAME_ARCH := $(shell uname -m)
 
 SRC_DIR := llama.cpp
 BUILD_DIR := $(SRC_DIR)/_build
@@ -29,6 +30,24 @@ CMAKE_FLAGS := \
 
 ifeq ($(UNAME),Darwin)
   CMAKE_FLAGS += -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_BLAS=ON
+endif
+
+# LLAMACPP_OSX_ARCH lets callers cross-build the static libraries for a
+# specific macOS architecture (x86_64 or arm64) from a host of the other
+# architecture. When unset the build follows the host arch (no behavior
+# change). Only meaningful on Darwin.
+ifeq ($(UNAME),Darwin)
+ifneq ($(LLAMACPP_OSX_ARCH),)
+  CMAKE_FLAGS += -DCMAKE_OSX_ARCHITECTURES=$(LLAMACPP_OSX_ARCH)
+  # When cross-building for a different architecture than the host, ggml's
+  # default GGML_NATIVE=ON would emit -march=native / -mcpu=<host-cpu>
+  # (e.g. apple-m4), which the cross compiler rejects for the target arch.
+  # Disable native tuning so ggml falls back to a portable baseline for the
+  # requested arch.
+  ifneq ($(LLAMACPP_OSX_ARCH),$(UNAME_ARCH))
+    CMAKE_FLAGS += -DGGML_NATIVE=OFF
+  endif
+endif
 endif
 
 ifeq ($(LLAMACPP_CUDA),1)

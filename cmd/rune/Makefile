@@ -73,6 +73,7 @@ SED_INPLACE = ''
 endif
 
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
+	llamacpp-libs-amd64 llamacpp-libs-arm64 \
 	docker-build docker-run linux-cross-compile \
 	release-linux-amd64 release-linux-arm64 \
 	dist-linux-amd64 dist-linux-arm64 dist-darwin-arm64 dist-darwin-amd64 \
@@ -131,7 +132,21 @@ release:
 	@TARGET_OS=darwin TARGET_ARCH=amd64 TARGET_ARCH_FLAGS='$(DARWIN_AMD64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_arm64 rune_darwin_amd64
 
-app-amd64:
+# llamacpp-libs-amd64 / llamacpp-libs-arm64 (re)build the llama.cpp static
+# libraries for a specific macOS architecture before the matching app is
+# linked. The cgo bindings hardcode `-L${SRCDIR}/libs`, so that directory
+# must hold archives of the target arch at link time. `reconfigure` wipes
+# the cmake cache because CMAKE_OSX_ARCHITECTURES is cached — without it an
+# earlier configure for the other arch would be reused, poisoning the build.
+llamacpp-libs-amd64:
+	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp reconfigure
+	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp libs LLAMACPP_OSX_ARCH=x86_64
+
+llamacpp-libs-arm64:
+	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp reconfigure
+	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp libs LLAMACPP_OSX_ARCH=arm64
+
+app-amd64: llamacpp-libs-amd64
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
 	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=amd64 $(DARWIN_AMD64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
@@ -149,7 +164,7 @@ app-amd64:
 	@codesign --force --deep --options runtime --sign "$(CODESIGN_IDENTITY)" "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 
-app-arm64:
+app-arm64: llamacpp-libs-arm64
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
 	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=arm64 GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
