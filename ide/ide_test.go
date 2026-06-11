@@ -1218,3 +1218,104 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 		})
 	}
 }
+
+// TestCloseDoesNotCloseBorrowedStorage verifies that closing an IDE does
+// not propagate Close to the storage service it borrowed from the caller.
+//
+// The storage handle is owned by the embedder (cmd/rune's bootstrap handler
+// and main, which create it via localstorage.New and close it once at
+// shutdown). It is shared: the bootstrap flow builds a pre-config IDE and a
+// configured IDE over the same storage, and the configured IDE's LLM router
+// keeps reading aliases from it. If IDE.Close closes the borrowed storage,
+// closing the pre-config IDE during the bootstrap swap tears the storage
+// down underneath the live configured IDE, so the next read fails with
+// "firstmover: Partition on closed Service" (observed on fresh installs as
+// the rune-agent extension failing to start after :workspacereload).
+func TestCloseDoesNotCloseBorrowedStorage(t *testing.T) {
+	t.Parallel()
+	_, config := makeTestFiles(t)
+	dataDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
+
+	store := &closeCountingService{Service: newTestStorage(t, dataDir)}
+	t.Cleanup(func() { _ = store.Service.Close() })
+
+	i, err := New("", config.Name(), dataDir, store,
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(new(sync.Mutex)))
+	require.NoError(t, err)
+	_ = i.Ready()
+	i.WaitWorkspaces()
+
+	require.NoError(t, i.Close())
+
+	assert.Equal(t, int32(0), store.closeCount.Load(),
+		"IDE.Close must not close the borrowed shared storage")
+
+	// The borrowed storage must remain usable after the IDE is closed:
+	// a partition must not error with "Partition on closed Service".
+	_, perr := store.Partition("after-close")
+	require.NoError(t, perr,
+		"borrowed storage must stay usable after IDE.Close")
+	require.NoError(t, store.Set(context.Background(), "probe",
+		map[string]any{"k": "v"}))
+}
+
+// closeCountingService wraps a storageapi.Service and counts Close calls so
+// the test can assert that a borrowed service is not closed by the IDE.
+type closeCountingService struct {
+	storageapi.Service
+	closeCount atomic.Int32
+}
+
+func (s *closeCountingService) Close() error {
+	s.closeCount.Add(1)
+	return s.Service.Close()
+}
+
+// TestSharedStorageSurvivesPreIDEClose reproduces the fresh-install bootstrap
+// swap: cmd/rune builds a pre-config IDE and a configured IDE over the same
+// borrowed storage, then closes the pre-config IDE. Closing the first IDE must
+// not tear down the storage that the second IDE still uses, otherwise the
+// configured IDE's next storage read fails with
+// "firstmover: Partition on closed Service".
+func TestSharedStorageSurvivesPreIDEClose(t *testing.T) {
+	t.Parallel()
+	_, config := makeTestFiles(t)
+	dataDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
+
+	shared := newTestStorage(t, dataDir)
+	t.Cleanup(func() { _ = shared.Close() })
+
+	opts := []Option{
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(new(sync.Mutex)),
+	}
+
+	preIDE, err := New("", config.Name(), dataDir, shared, opts...)
+	require.NoError(t, err)
+	_ = preIDE.Ready()
+	preIDE.WaitWorkspaces()
+
+	configuredIDE, err := New("", config.Name(), dataDir, shared, opts...)
+	require.NoError(t, err)
+	_ = configuredIDE.Ready()
+	configuredIDE.WaitWorkspaces()
+	t.Cleanup(func() { _ = configuredIDE.Close() })
+
+	require.NoError(t, preIDE.Close())
+
+	// The configured IDE (and the caller) must still be able to partition
+	// the shared storage after the pre-config IDE has been closed. Partition
+	// is the operation that fails with "firstmover: Partition on closed
+	// Service" when the shared root has been torn down; it is the path the
+	// host's storagerpc bridge and the LLM router's alias store exercise.
+	_, perr := shared.Partition("after-pre-ide-close")
+	require.NoError(t, perr,
+		"shared storage must stay partitionable after pre-config IDE.Close")
+}

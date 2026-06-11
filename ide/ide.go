@@ -76,6 +76,11 @@ type EventPublisher func(term.Event) bool
 // New allocates storage for a new IDE and initializes it with config
 // at cfgfilename and filename. Note that if filename is empty, a default inmutable
 // buffer will be loaded.
+//
+// storage is borrowed, not owned: the caller retains ownership and must
+// close it. IDE.Close does not close storage, so a single storage handle
+// may be shared across IDEs (as cmd/rune's bootstrap swap does) without one
+// IDE's shutdown tearing it down underneath another.
 func New(
 	cwd, cfgfilename, dataDir string, storage storageapi.Service, opts ...Option,
 ) (i *IDE, err error) {

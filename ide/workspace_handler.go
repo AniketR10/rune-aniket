@@ -2080,12 +2080,6 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
-	if err := h.ideStorage.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if err := h.storage.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
 	if merr, ok := ret.(*multierror.Error); ok {
 		return merr.ErrorOrNil()
 	}
