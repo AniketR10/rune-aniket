@@ -129,6 +129,43 @@ func TestParserIntegration(t *testing.T) {
 				assert.Equal(t, StandardCharsetSpecialCharacterAndLineDrawing, handler.charset)
 			},
 		},
+		{
+			// DECSCUSR 0 means "reset to the terminal default" and must
+			// not be conflated with the blinking-block shape (param 1).
+			"parse DECSCUSR 0 as default cursor shape",
+			[]byte{0x1b, '[', '0', ' ', 'q'},
+			func(t *testing.T, handler mockHandler) {
+				assert.Equal(t, CursorStyle{Shape: CursorShapeDefault, Blinking: false}, handler.cursorStyle)
+			},
+		},
+		{
+			"parse DECSCUSR with no param as default cursor shape",
+			[]byte{0x1b, '[', ' ', 'q'},
+			func(t *testing.T, handler mockHandler) {
+				assert.Equal(t, CursorStyle{Shape: CursorShapeDefault, Blinking: false}, handler.cursorStyle)
+			},
+		},
+		{
+			"parse DECSCUSR 1 as blinking block",
+			[]byte{0x1b, '[', '1', ' ', 'q'},
+			func(t *testing.T, handler mockHandler) {
+				assert.Equal(t, CursorStyle{Shape: CursorShapeBlock, Blinking: true}, handler.cursorStyle)
+			},
+		},
+		{
+			"parse DECSCUSR 2 as steady block",
+			[]byte{0x1b, '[', '2', ' ', 'q'},
+			func(t *testing.T, handler mockHandler) {
+				assert.Equal(t, CursorStyle{Shape: CursorShapeBlock, Blinking: false}, handler.cursorStyle)
+			},
+		},
+		{
+			"parse DECSCUSR 6 as steady beam",
+			[]byte{0x1b, '[', '6', ' ', 'q'},
+			func(t *testing.T, handler mockHandler) {
+				assert.Equal(t, CursorStyle{Shape: CursorShapeBeam, Blinking: false}, handler.cursorStyle)
+			},
+		},
 	}
 
 	for _, test := range suite {
@@ -169,6 +206,7 @@ type mockHandler struct {
 	attr             *Attr
 	attrs            []*Attr
 	identityReported bool
+	cursorStyle      CursorStyle
 }
 
 func (m *mockHandler) init() {
@@ -196,6 +234,10 @@ func (m *mockHandler) SetActiveCharset(index CharsetIndex) {
 
 func (m *mockHandler) IdentifyTerminal(identifySecondary bool) {
 	m.identityReported = true
+}
+
+func (m *mockHandler) SetCursorStyle(style CursorStyle) {
+	m.cursorStyle = style
 }
 
 func (m *mockHandler) resetState() {

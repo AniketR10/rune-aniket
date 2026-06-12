@@ -581,6 +581,35 @@ func TestIntegrationParserHandler(t *testing.T) {
 			},
 		},
 		{
+			// Regression: when a program sets a non-default cursor (e.g.
+			// an input box bar) and then resets it via DECSCUSR 0 on exit,
+			// the parser must restore CursorStyleDefault (rendered as a bar
+			// on the primary buffer) instead of leaving a block.
+			desc:      "DECSCUSR 0 resets steady bar to terminal default",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.SetCursorStyle(vteparser.CursorStyle{
+					Shape: vteparser.CursorShapeBeam, Blinking: false,
+				})
+				require.Equal(t, term.CursorStyleSteadyBar, p.cursorStyle)
+
+				p.SetCursorStyle(vteparser.CursorStyle{
+					Shape: vteparser.CursorShapeDefault, Blinking: false,
+				})
+				require.Equal(t, term.CursorStyleDefault, p.cursorStyle)
+			},
+		},
+		{
+			desc:      "DECSCUSR 2 sets steady block",
+			altBuffer: false,
+			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {
+				p.SetCursorStyle(vteparser.CursorStyle{
+					Shape: vteparser.CursorShapeBlock, Blinking: false,
+				})
+				require.Equal(t, term.CursorStyleSteadyBlock, p.cursorStyle)
+			},
+		},
+		{
 			desc:      "reverse index usage of git log on primary buffer with history",
 			altBuffer: false,
 			sut: func(t *testing.T, p *parserHandler, tm *mockTabManager, pty *workspacetest.File) {

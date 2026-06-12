@@ -429,7 +429,11 @@ func (p *driver) CSIDispatch(
 			i := nextParamOr(0)
 			var shape CursorShape
 			switch i {
-			case 0, 1, 2:
+			case 0:
+				// Reset to the terminal default shape. Distinct from
+				// the blinking-block shape (param 1).
+				shape = CursorShapeDefault
+			case 1, 2:
 				shape = CursorShapeBlock
 			case 3, 4:
 				shape = CursorShapeUnderline

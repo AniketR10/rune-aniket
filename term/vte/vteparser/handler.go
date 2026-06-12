@@ -297,6 +297,11 @@ const (
 	CursorShapeHollowBlock
 	// CursorShapeHidden renders no cursor.
 	CursorShapeHidden
+	// CursorShapeDefault resets the cursor to the terminal's default
+	// shape. It is emitted for DECSCUSR with parameter 0 (or no
+	// parameter), which per the spec means "reset to default" and must
+	// not be conflated with the blinking-block shape (parameter 1).
+	CursorShapeDefault
 )
 
 // CursorStyle represents the terminal cursor configuration.

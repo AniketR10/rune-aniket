@@ -230,6 +230,10 @@ func (t *parserHandler) SetCursorStyle(style vteparser.CursorStyle) {
 	case vteparser.CursorShapeHollowBlock:
 		/* unsupported by tcell */
 		t.cursorStyle = term.CursorStyleBlinkingBlock
+	case vteparser.CursorShapeDefault:
+		// DECSCUSR 0 with the (non-spec) blinking bit set: keep the
+		// terminal default so the host can render the configured shape.
+		t.cursorStyle = term.CursorStyleDefault
 	}
 }
 
@@ -1400,6 +1404,8 @@ func (t *parserHandler) setCursorShape(shape vteparser.CursorShape) {
 	case vteparser.CursorShapeHollowBlock:
 		/* unsupported by tcell */
 		t.cursorStyle = term.CursorStyleSteadyBlock
+	case vteparser.CursorShapeDefault:
+		t.cursorStyle = term.CursorStyleDefault
 	}
 }
 
