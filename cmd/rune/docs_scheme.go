@@ -82,9 +82,10 @@ var docsConfigYAML []byte
 const docsConfigPath = "/.rune/config.yaml"
 
 // docsDefaultsPath surfaces the shipped Starlark default config
-// (cmd/rune/rune.star, embedded as defaultStarlarkConfig) inside the
-// docs workspace so the agent can read Rune's effective defaults when
-// answering configuration questions.
+// (cmd/rune/rune.star, embedded as docsDefaultStarlarkConfig) inside
+// the docs workspace so the agent can read Rune's effective defaults
+// when answering configuration questions. The theme catalog lives in
+// themes.star and is omitted here to keep the reference concise.
 const docsDefaultsPath = "/defaults.star"
 
 func renderDocsAgentsMD(configPath string) ([]byte, error) {
@@ -170,7 +171,7 @@ func prefillDocsScheme(s schemeapi.Scheme, agentsMD, configYAML []byte) error {
 	if err := writeDocsFile(s, docsAgentsPath, agentsMD); err != nil {
 		return err
 	}
-	if err := writeDocsFile(s, docsDefaultsPath, []byte(defaultStarlarkConfig)); err != nil {
+	if err := writeDocsFile(s, docsDefaultsPath, []byte(docsDefaultStarlarkConfig)); err != nil {
 		return err
 	}
 	return writeDocsFile(s, docsConfigPath, configYAML)

@@ -37,7 +37,15 @@ import (
 )
 
 //go:embed rune.star
-var defaultStarlarkConfig string
+var docsDefaultStarlarkConfig string
+
+//go:embed themes.star
+var guiThemesStarlark string
+
+// defaultStarlarkConfig is the self-contained baseline config evaluated
+// at runtime. themes.star binds GUI_THEMES, which rune.star references,
+// so the two sources are joined into one script.
+var defaultStarlarkConfig = guiThemesStarlark + "\n" + docsDefaultStarlarkConfig
 
 func getGUIFontFamily(browser browser.Browser, cfg config.Config) (ret string) {
 	family, err := cfg.GetString("font_family")

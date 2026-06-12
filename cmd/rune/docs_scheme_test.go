@@ -208,7 +208,7 @@ func TestDocsSchemeDefaultsStar(t *testing.T) {
 
 	data, err := io.ReadAll(f)
 	require.NoError(t, err)
-	assert.Equal(t, defaultStarlarkConfig, string(data),
+	assert.Equal(t, docsDefaultStarlarkConfig, string(data),
 		"defaults.star must match the embedded rune.star verbatim")
 }
 
