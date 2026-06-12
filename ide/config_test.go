@@ -446,6 +446,36 @@ func TestConfigDefault(t *testing.T) {
 	assertDefaultConfig(t, ret)
 }
 
+func TestUpdatesAutoInstall(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		updates any
+		want    bool
+		wantErr bool
+	}{
+		{"absent updates defaults true", nil, true, false},
+		{"absent key defaults true", map[string]any{}, true, false},
+		{"explicit true", map[string]any{"auto_install": true}, true, false},
+		{"explicit false", map[string]any{"auto_install": false}, false, false},
+		{"invalid type defaults true", map[string]any{"auto_install": "yes"},
+			true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := map[string]any{}
+			if tc.updates != nil {
+				m["updates"] = tc.updates
+			}
+			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
+			assert.Equal(t, tc.want, cfg.updatesAutoInstall())
+			if tc.wantErr {
+				assert.Error(t, cfg.errors["updates.auto_install"])
+			} else {
+				assert.Empty(t, cfg.errors)
+			}
+		})
+	}
+}
+
 // TestTerminalModalDefaultFromEditorMode asserts that when terminal.modal
 // is not set its default follows editor.mode: modal editors default to
 // modal terminals, modeless to modeless, and exo follows its fallback.

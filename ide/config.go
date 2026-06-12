@@ -1832,6 +1832,28 @@ func (c ideConfig) editor() (config.Config, bool) {
 	return c.getConfig(config.MapConfig(c.cfg), "editor")
 }
 
+func (c ideConfig) updates() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(config.MapConfig(c.cfg), "updates")
+}
+
+func (c ideConfig) updatesAutoInstall() bool {
+	cfg, ok := c.updates()
+	if !ok {
+		return true
+	}
+	enabled, err := cfg.GetBool("auto_install")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["updates.auto_install"] = err
+		}
+		return true
+	}
+	return enabled
+}
+
 func (c ideConfig) modal() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false

@@ -2647,13 +2647,15 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	wm := currentWorkspaceWindowManager{root: h}
 	parser := &lazyParser{root: h}
 	editorMode := ""
+	autoInstall := true
 	if cfg, err := h.reloadConfig(); err == nil {
 		editorMode = cfg.pkgEditorMode()
+		autoInstall = cfg.updatesAutoInstall()
 	}
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser,
-		editorMode)
+		editorMode, autoInstall)
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

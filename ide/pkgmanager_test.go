@@ -467,6 +467,42 @@ func TestPackageManagerLibDir(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
+	t.Run("auto_install config installs without prompting", func(t *testing.T) {
+		t.Parallel()
+
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		rm.SetMissProgressComplete(true)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+		m.pkgmanager.autoInstall = true
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		slice, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.NotEmpty(t, slice)
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("auto_install config overrides stored never", func(t *testing.T) {
+		t.Parallel()
+
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		rm.SetMissProgressComplete(true)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+		require.NoError(t, m.pkgmanager.storage.Set(context.Background(),
+			installStorageKey, installStorageValue{Value: false}))
+		m.pkgmanager.autoInstall = true
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		slice, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.NotEmpty(t, slice)
+		require.NoError(t, m.Close())
+	})
+
 	t.Run("prompt, yes install, simultaneous calls to LibDir", func(t *testing.T) {
 		t.Parallel()
 

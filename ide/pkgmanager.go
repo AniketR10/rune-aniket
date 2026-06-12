@@ -59,6 +59,7 @@ type pkgManager struct {
 	interrupter      term.Interrupter
 	pending          sync.Map // map[string]*installGate
 	uc               *idepkg.UpdateChecker
+	autoInstall      bool
 }
 
 type installStorageValue struct {
@@ -75,6 +76,7 @@ func (m *pkgManager) init(
 	scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser,
 	editorMode string,
+	autoInstall bool,
 ) {
 	storage := storageapi.WithPartition(rootStorage, "idepkg")
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
@@ -96,6 +98,7 @@ func (m *pkgManager) init(
 	m.interrupter = interrupter
 	m.wh = wh
 	m.storage = storage
+	m.autoInstall = autoInstall
 	m.uc.Start(context.Background())
 }
 
@@ -126,6 +129,10 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		return newPendingIterator(m.pkg, pkgID, gate.(*installGate)), nil
 	}
 
+	if m.autoInstall {
+		return m.installLatest(ctx, pkgID, version)
+	}
+
 	var val installStorageValue
 	if err := m.storage.Get(ctx, installStorageKey, &val); err != nil {
 		return m.openInstallPrompt(pkgID, version)
@@ -135,6 +142,12 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		// should prevent further attempts or errors being logged.
 		return nil, storageapi.ErrNotFound
 	}
+	return m.installLatest(ctx, pkgID, version)
+}
+
+func (m *pkgManager) installLatest(
+	ctx context.Context, pkgID string, version release.Version,
+) (sdkiterator.Iterator[string], error) {
 	pw := text.NewNotifyProgressWriter(m.n, m.interrupter,
 		fmt.Sprintf("install %s@%s", pkgID, version), m.scheduleNextTick)
 	if err := m.pkg.InstallPackageVersion(ctx, pkgID, version, pw); err != nil {

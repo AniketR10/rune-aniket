@@ -442,7 +442,15 @@ config = {
             "icon_attr":   attr(fg = "gray"),
         },
     },
+    # This maps extension ID to extension configuration.
+    # New extensions are added when installed via the shell's
+    # command pkg install.
     "extensions": {},
+    "updates": {
+        # Automatically install language packages on demand. When False,
+        # Rune prompts before installing a missing package.
+        "auto_install": True,
+    },
     # Interactive tutorials. Each entry maps a `:tutorial start <name>` to
     # the path of a Starlark file that calls `tutorial(...)` with a
     # list of `step(...)` entries. Empty by default — extensions and

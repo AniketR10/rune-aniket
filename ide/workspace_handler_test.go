@@ -5317,6 +5317,9 @@ func (t *testWorkspaceManagerHandler) drainPendingWorkspaces() {
 func defaultCfg() ideConfig {
 	return ideConfig{cfg: map[string]any{
 		"clipboard": "memory",
+		// keep the package install prompt deterministic in tests;
+		// auto_install bypasses it entirely.
+		"updates": map[string]any{"auto_install": false},
 		"command": map[string]any{
 			"show_manual":        false,
 			"show_progress_hint": false,
