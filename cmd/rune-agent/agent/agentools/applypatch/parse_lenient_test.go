@@ -152,6 +152,143 @@ func TestParseLenient(t *testing.T) {
 			input:   "just some commentary\nnothing useful here",
 			wantErr: "empty patch",
 		},
+		{
+			// Reproduces a real failure from the "lucky-goshawk"
+			// conversation: the model emitted the terminator as a
+			// "+"-prefixed content line, which used to be written into
+			// the file verbatim instead of ending the add block.
+			name: "add block with plus-prefixed end marker errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Add File: setup-gcs-audit.sh",
+				"+#!/usr/bin/env bash",
+				"+echo done",
+				"+SQL",
+				"+*** End Patch",
+			}, "\n"),
+			wantErr: prefixEnd,
+		},
+		{
+			name: "update hunk with minus-prefixed end marker errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Update File: setup-downloads-rollup.sh",
+				"@@",
+				"   ORDER BY total DESC",
+				" SQL",
+				"-*** End Patch",
+				"*** End Patch",
+			}, "\n"),
+			wantErr: prefixEnd,
+		},
+		{
+			name: "update hunk with plus-prefixed end marker errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Update File: foo.txt",
+				"@@",
+				" keep",
+				"+*** End Patch",
+				"*** End Patch",
+			}, "\n"),
+			wantErr: prefixEnd,
+		},
+		{
+			name: "add block with plus-prefixed begin marker errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Add File: foo.txt",
+				"+real content",
+				"+*** Begin Patch",
+			}, "\n"),
+			wantErr: prefixBegin,
+		},
+		{
+			name: "add block with plus-prefixed file directive errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Add File: foo.txt",
+				"+real content",
+				"+*** Add File: bar.txt",
+			}, "\n"),
+			wantErr: "*** Add File:",
+		},
+		{
+			name: "marker with surrounding whitespace as content errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Add File: foo.txt",
+				"+content",
+				"+   *** End Patch   ",
+			}, "\n"),
+			wantErr: prefixEnd,
+		},
+		{
+			name: "marker as substring is content",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Add File: doc.md",
+				"+The *** End Patch *** marker terminates a patch.",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type: OpAdd,
+					Path: "doc.md",
+					Lines: []Line{
+						{Kind: LineAdd, Content: "The *** End Patch *** marker terminates a patch."},
+					},
+				},
+			}},
+		},
+		{
+			name: "blank lines inside add block preserved",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Add File: spaced.txt",
+				"+first",
+				"",
+				"+third",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type: OpAdd,
+					Path: "spaced.txt",
+					Lines: []Line{
+						{Kind: LineAdd, Content: "first"},
+						{Kind: LineAdd, Content: ""},
+						{Kind: LineAdd, Content: "third"},
+					},
+				},
+			}},
+		},
+		{
+			name: "implicit end with single add line tolerated",
+			input: join([]string{
+				"*** Add File: note.txt",
+				"+just one line",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type:  OpAdd,
+					Path:  "note.txt",
+					Lines: []Line{{Kind: LineAdd, Content: "just one line"}},
+				},
+			}},
+		},
+		{
+			name: "update missing hunk header errors",
+			input: join([]string{
+				"*** Begin Patch",
+				"*** Update File: main.go",
+				" package main",
+				"-old",
+				"+new",
+				"*** End Patch",
+			}, "\n"),
+			wantErr: "@@",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -200,7 +200,11 @@ func (p *parser) parseAdd() (FileOp, error) {
 		if line[0] != '+' {
 			return FileOp{}, fmt.Errorf("expected '+' prefix in add block, got %q at line %d", line, p.pos)
 		}
-		op.Lines = append(op.Lines, Line{Kind: LineAdd, Content: line[1:]})
+		content := line[1:]
+		if isEnvelopeMarker(content) {
+			return FileOp{}, misprefixedMarkerErr(content, p.pos)
+		}
+		op.Lines = append(op.Lines, Line{Kind: LineAdd, Content: content})
 	}
 	return op, nil
 }
@@ -259,8 +263,14 @@ func (p *parser) parseHunk() (Hunk, error) {
 		case ' ':
 			hunk.Lines = append(hunk.Lines, Line{Kind: LineContext, Content: line[1:]})
 		case '+':
+			if isEnvelopeMarker(line[1:]) {
+				return Hunk{}, misprefixedMarkerErr(line[1:], p.pos)
+			}
 			hunk.Lines = append(hunk.Lines, Line{Kind: LineAdd, Content: line[1:]})
 		case '-':
+			if isEnvelopeMarker(line[1:]) {
+				return Hunk{}, misprefixedMarkerErr(line[1:], p.pos)
+			}
 			hunk.Lines = append(hunk.Lines, Line{Kind: LineRemove, Content: line[1:]})
 		default:
 			return Hunk{}, fmt.Errorf("unexpected diff line prefix %q at line %d", line, p.pos)
@@ -280,4 +290,22 @@ func isFileDirective(trimmed string) bool {
 	return strings.HasPrefix(trimmed, prefixAdd) ||
 		strings.HasPrefix(trimmed, prefixDelete) ||
 		strings.HasPrefix(trimmed, prefixUpdate)
+}
+
+// isEnvelopeMarker reports whether content (a diff line with its +/-/space
+// prefix already stripped) is itself a patch envelope marker. Models
+// occasionally prefix the "*** End Patch" terminator or a file directive
+// with a diff marker, which would otherwise be written verbatim into the
+// file instead of ending the block.
+func isEnvelopeMarker(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	return trimmed == prefixEnd || trimmed == prefixBegin || isFileDirective(trimmed)
+}
+
+func misprefixedMarkerErr(content string, pos int) error {
+	return fmt.Errorf(
+		"patch envelope marker %q found as file content at line %d: "+
+			"the %q line must not be prefixed with a diff marker (+/-)",
+		strings.TrimSpace(content), pos, strings.TrimSpace(content),
+	)
 }

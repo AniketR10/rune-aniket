@@ -24,6 +24,7 @@
 package applypatch
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -206,6 +207,153 @@ func TestParse(t *testing.T) {
 			want: Patch{Ops: []FileOp{
 				{Type: OpDelete, Path: "x.txt"},
 			}},
+		},
+		{
+			name: "add empty file",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Add File: empty.txt",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{Type: OpAdd, Path: "empty.txt"},
+			}},
+		},
+		{
+			name: "path with spaces preserved",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Add File: my docs/notes file.txt",
+				"+hello",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type:  OpAdd,
+					Path:  "my docs/notes file.txt",
+					Lines: []Line{{Kind: LineAdd, Content: "hello"}},
+				},
+			}},
+		},
+		{
+			name: "update move with no hunks",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Update File: a.go",
+				"*** Move to: b.go",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{Type: OpUpdate, Path: "a.go", MoveTo: "b.go"},
+			}},
+		},
+		{
+			name: "content line containing triple star kept",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Add File: stars.txt",
+				"+*** not a directive",
+				"+normal",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type: OpAdd,
+					Path: "stars.txt",
+					Lines: []Line{
+						{Kind: LineAdd, Content: "*** not a directive"},
+						{Kind: LineAdd, Content: "normal"},
+					},
+				},
+			}},
+		},
+		{
+			name: "hunk with only additions",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Update File: add.go",
+				"@@ top",
+				" package main",
+				"+// new line",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "add.go",
+					Hunks: []Hunk{
+						{
+							ContextHint: "top",
+							Lines: []Line{
+								{Kind: LineContext, Content: "package main"},
+								{Kind: LineAdd, Content: "// new line"},
+							},
+						},
+					},
+				},
+			}},
+		},
+		{
+			name: "hunk with only removals",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Update File: del.go",
+				"@@",
+				" keep",
+				"-drop me",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "del.go",
+					Hunks: []Hunk{
+						{
+							Lines: []Line{
+								{Kind: LineContext, Content: "keep"},
+								{Kind: LineRemove, Content: "drop me"},
+							},
+						},
+					},
+				},
+			}},
+		},
+		{
+			name: "empty diff line treated as blank context",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Update File: blank.go",
+				"@@",
+				" first",
+				"",
+				" third",
+				"*** End Patch",
+			}, "\n"),
+			want: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "blank.go",
+					Hunks: []Hunk{
+						{
+							Lines: []Line{
+								{Kind: LineContext, Content: "first"},
+								{Kind: LineContext, Content: ""},
+								{Kind: LineContext, Content: "third"},
+							},
+						},
+					},
+				},
+			}},
+		},
+		{
+			name: "unexpected line in update errors",
+			input: strings.Join([]string{
+				"*** Begin Patch",
+				"*** Update File: bad.go",
+				"this is not a hunk header",
+				"*** End Patch",
+			}, "\n"),
+			wantErr: "@@",
 		},
 	}
 	for _, tt := range tests {

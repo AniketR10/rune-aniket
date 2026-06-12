@@ -99,6 +99,43 @@ func TestSeekSequence(t *testing.T) {
 			pattern:   []string{"two"},
 			want:      1,
 		},
+		{
+			name:      "empty file with empty pattern",
+			fileLines: []string{},
+			pattern:   []string{},
+			want:      0,
+		},
+		{
+			name:      "empty file nonempty pattern",
+			fileLines: []string{},
+			pattern:   []string{"alpha"},
+			want:      -1,
+		},
+		{
+			name:      "match at end of file",
+			fileLines: []string{"a", "b", "c"},
+			pattern:   []string{"c"},
+			want:      2,
+		},
+		{
+			name:      "exact preferred over fuzzy when both present",
+			fileLines: []string{"alpha ", "alpha", "beta"},
+			pattern:   []string{"alpha", "beta"},
+			want:      1,
+		},
+		{
+			name:      "start beyond file length",
+			fileLines: []string{"a", "b"},
+			pattern:   []string{"a"},
+			start:     5,
+			want:      -1,
+		},
+		{
+			name:      "blank line pattern matches blank file line",
+			fileLines: []string{"a", "", "b"},
+			pattern:   []string{""},
+			want:      1,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -121,6 +158,12 @@ func TestLinesEqual(t *testing.T) {
 		{"trimEnd mismatch leading", "  hello", "hello", matchTrimEnd, false},
 		{"trimAll match both", "  hello  ", "hello", matchTrimAll, true},
 		{"trimAll mismatch content", "  hello  ", "world", matchTrimAll, false},
+		{"exact empty strings", "", "", matchExact, true},
+		{"trimEnd keeps leading whitespace significant", "\thello", "hello", matchTrimEnd, false},
+		{"trimEnd carriage return stripped", "hello\r", "hello", matchTrimEnd, true},
+		{"trimAll whitespace only equals empty", "  \t ", "", matchTrimAll, true},
+		{"trimAll internal whitespace significant", "a b", "ab", matchTrimAll, false},
+		{"unknown level returns false", "hello", "hello", matchLevel(99), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -202,6 +245,34 @@ func TestBestPartialMatch(t *testing.T) {
 				Pos: 2, Matched: 1, Total: 2,
 				ExpectedLine: "beta",
 				ActualLine:   "WRONG",
+			},
+		},
+		{
+			name:      "single line pattern no match",
+			fileLines: []string{"alpha", "beta"},
+			pattern:   []string{"gamma"},
+			want: BestMatch{
+				Pos: 0, Matched: 0, Total: 1,
+				ExpectedLine: "gamma",
+				ActualLine:   "alpha",
+			},
+		},
+		{
+			name:      "empty file nonempty pattern past eof",
+			fileLines: []string{},
+			pattern:   []string{"alpha"},
+			want: BestMatch{
+				Pos: 0, Matched: 0, Total: 1,
+				ExpectedLine: "alpha",
+				PastEOF:      true,
+			},
+		},
+		{
+			name:      "later full-length partial preferred",
+			fileLines: []string{"alpha", "x", "alpha", "beta"},
+			pattern:   []string{"alpha", "beta"},
+			want: BestMatch{
+				Pos: 2, Matched: 2, Total: 2,
 			},
 		},
 	}

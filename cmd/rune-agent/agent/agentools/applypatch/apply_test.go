@@ -413,6 +413,155 @@ func TestApply(t *testing.T) {
 				assert.Contains(t, string(data), "line TWO")
 			},
 		},
+		{
+			name: "add empty file writes empty content",
+			patch: Patch{Ops: []FileOp{
+				{Type: OpAdd, Path: "empty.txt"},
+			}},
+			wantApply: 1,
+			verify: func(t *testing.T, dir string) {
+				data, err := os.ReadFile(filepath.Join(dir, "empty.txt"))
+				require.NoError(t, err)
+				assert.Equal(t, "", string(data))
+			},
+		},
+		{
+			name: "update preserves trailing newline",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "nl.txt"),
+					[]byte("alpha\nbeta\n"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "nl.txt",
+					Hunks: []Hunk{
+						{
+							Lines: []Line{
+								{Kind: LineRemove, Content: "alpha"},
+								{Kind: LineAdd, Content: "ALPHA"},
+							},
+						},
+					},
+				},
+			}},
+			wantApply: 1,
+			verify: func(t *testing.T, dir string) {
+				data, err := os.ReadFile(filepath.Join(dir, "nl.txt"))
+				require.NoError(t, err)
+				assert.Equal(t, "ALPHA\nbeta\n", string(data))
+			},
+		},
+		{
+			name: "update without trailing newline preserved",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "nonl.txt"),
+					[]byte("alpha\nbeta"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "nonl.txt",
+					Hunks: []Hunk{
+						{
+							Lines: []Line{
+								{Kind: LineContext, Content: "alpha"},
+								{Kind: LineRemove, Content: "beta"},
+								{Kind: LineAdd, Content: "BETA"},
+							},
+						},
+					},
+				},
+			}},
+			wantApply: 1,
+			verify: func(t *testing.T, dir string) {
+				data, err := os.ReadFile(filepath.Join(dir, "nonl.txt"))
+				require.NoError(t, err)
+				assert.Equal(t, "alpha\nBETA", string(data))
+			},
+		},
+		{
+			name: "move with no hunks relocates verbatim",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "src.txt"),
+					[]byte("unchanged body\n"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{Type: OpUpdate, Path: "src.txt", MoveTo: "moved/dst.txt"},
+			}},
+			wantApply: 1,
+			verify: func(t *testing.T, dir string) {
+				_, err := os.Stat(filepath.Join(dir, "src.txt"))
+				assert.True(t, os.IsNotExist(err))
+				data, err := os.ReadFile(filepath.Join(dir, "moved", "dst.txt"))
+				require.NoError(t, err)
+				assert.Equal(t, "unchanged body\n", string(data))
+			},
+		},
+		{
+			name: "update nonexistent file errors",
+			patch: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "ghost.txt",
+					Hunks: []Hunk{
+						{Lines: []Line{{Kind: LineRemove, Content: "x"}}},
+					},
+				},
+			}},
+			wantApply: 0,
+			wantErrs:  1,
+		},
+		{
+			name: "second op fails first still applied",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"),
+					[]byte("keep me\n"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{
+					Type:  OpAdd,
+					Path:  "good.txt",
+					Lines: []Line{{Kind: LineAdd, Content: "ok"}},
+				},
+				{Type: OpDelete, Path: "missing.txt"},
+			}},
+			wantApply: 1,
+			wantErrs:  1,
+			verify: func(t *testing.T, dir string) {
+				data, err := os.ReadFile(filepath.Join(dir, "good.txt"))
+				require.NoError(t, err)
+				assert.Equal(t, "ok", string(data))
+			},
+		},
+		{
+			name: "fuzzy match leading and trailing whitespace",
+			setup: func(t *testing.T, dir string) {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "indent.txt"),
+					[]byte("\t  alpha  \n  beta\n"), 0o644))
+			},
+			patch: Patch{Ops: []FileOp{
+				{
+					Type: OpUpdate,
+					Path: "indent.txt",
+					Hunks: []Hunk{
+						{
+							Lines: []Line{
+								{Kind: LineContext, Content: "alpha"},
+								{Kind: LineRemove, Content: "beta"},
+								{Kind: LineAdd, Content: "BETA"},
+							},
+						},
+					},
+				},
+			}},
+			wantApply: 1,
+			verify: func(t *testing.T, dir string) {
+				data, err := os.ReadFile(filepath.Join(dir, "indent.txt"))
+				require.NoError(t, err)
+				assert.Contains(t, string(data), "BETA")
+			},
+		},
 	}
 
 	for _, tt := range tests {
