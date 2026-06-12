@@ -82,7 +82,7 @@ config = {
     },
     # LLM models configuration. The router reads these keys directly to
     # construct provider clients. Each provider sub-key carries the bits
-    # specific to that backend (api_key, base_url, ...). Legacy top-level
+    # specific to that backend (base_url, ...). Legacy top-level
     # `openai`/`anthropic` blocks live in rune-agent's own settings tree
     # and are NOT consulted here.
     "models": {
@@ -99,21 +99,18 @@ config = {
         # When True, the router logs HTTP request/response details.
         "debug_http":            False,
         "openai": {
-            "api_key":             "",
             "base_url":            "",
             # "" lets the model decide; otherwise one of
             # none, minimal, low, medium, high, xhigh, max.
             "reasoning_effort":    "",
         },
         "anthropic": {
-            "api_key":          "",
             "base_url":         "",
             "reasoning_effort": "",
             # "ephemeral", "5m", "1h", or "" to disable prompt caching.
             "cache_control":    "",
         },
         "gemini": {
-            "api_key": "",
         },
         "codex": {
             # OpenAI models via a ChatGPT Codex subscription (browser
