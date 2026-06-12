@@ -81,6 +81,7 @@ RELEASE_FILES=$(wildcard release/*)
 	ox-api-init docs-init \
 	fuzz fuzz-list \
 	manual-ssh-test \
+	dist-tar-with-src dist-dmg-with-src \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 RUNE_LLAMACPP_STAMP=$(TARGET)/rune-llamacpp-libs.stamp
@@ -320,6 +321,17 @@ rune-staging-dist-darwin-arm64: clean
 
 rune-staging-dist-darwin-amd64: clean
 	@$(MAKE) -C cmd/rune staging-dist-darwin-amd64
+
+# dist-tar-with-src / dist-dmg-with-src exercise the .go-source publish
+# gate (cmd/verify-no-go-source.sh) by driving every component's dist.sh
+# against a stub artifact that intentionally embeds a .go file and
+# asserting each script aborts before publishing. dist-dmg-with-src is a
+# no-op skip off macOS (needs hdiutil).
+dist-tar-with-src:
+	@./cmd/dist-with-src-test.sh tar
+
+dist-dmg-with-src:
+	@./cmd/dist-with-src-test.sh dmg
 
 # manual-ssh-test runs a named manual SSH scenario script using the
 # real Linux release rune binary as the remote workspace server.

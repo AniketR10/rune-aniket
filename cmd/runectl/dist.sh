@@ -32,6 +32,9 @@ if [[ -z "${BLUE_PGP_KEYRING}" ]]; then
 	exit 1;
 fi
 
+# Final gate before publish: never ship .go source inside the artifact.
+"$(dirname "${BASH_SOURCE[0]}")/../verify-no-go-source.sh" "$BLUE_RELEASE_TAR"
+
 blue_release_dist() {
 	GIT_LOG=$(git log --pretty=format:"%h: %s" $GIT_LOG_RANGE)
 	printf "\n$GIT_LOG\n";
