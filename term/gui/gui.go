@@ -75,6 +75,7 @@ type GUI struct {
 	fgOpacity         float64
 	defaultWidth      int
 	defaultHeight     int
+	explicitSize      bool
 	startPositionX    int
 	startPositionY    int
 	printFPS          bool
@@ -172,7 +173,15 @@ func (g *GUI) Run(title string) error {
 	ebiten.SetTPS(tps)
 
 	ebiten.SetWindowPosition(g.startPositionX, g.startPositionY)
-	ebiten.SetWindowSize(g.defaultWidth, g.defaultHeight)
+	width, height := g.defaultWidth, g.defaultHeight
+	// On the first launch there is no stored size, so size the window to
+	// the screen instead of the small built-in default.
+	if !g.explicitSize {
+		if w, h := ebiten.Monitor().Size(); w > 0 && h > 0 {
+			width, height = w, h
+		}
+	}
+	ebiten.SetWindowSize(width, height)
 
 	if g.bgBlurRadius != 0 && g.enableTransparent {
 		ebiten.SetWindowBackgroundBlur(g.bgBlurRadius)

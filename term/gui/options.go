@@ -65,6 +65,7 @@ func WithSize(width, height int) Option {
 	return func(g *GUI) error {
 		g.defaultWidth = width
 		g.defaultHeight = height
+		g.explicitSize = true
 		return nil
 	}
 }
