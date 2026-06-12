@@ -83,6 +83,7 @@ endif
 	llamacpp-libs-amd64 llamacpp-libs-arm64 \
 	docker-build docker-run linux-cross-compile \
 	release-linux-amd64 release-linux-arm64 \
+	check-release-tag \
 	dist-linux-amd64 dist-linux-arm64 dist-darwin-arm64 dist-darwin-amd64 \
 	prod-dist-linux-amd64 prod-dist-linux-arm64 prod-dist-darwin-amd64 prod-dist-darwin-arm64 \
 	staging-dist-linux-amd64 staging-dist-linux-arm64 staging-dist-darwin-amd64 staging-dist-darwin-arm64 \
@@ -324,7 +325,12 @@ release-linux-arm64:
 # callers (prod-dist-* / staging-dist-*) set those via target-specific
 # variables which propagate to all prerequisites in the same make
 # invocation.
-dist-linux-amd64: release-linux-amd64
+#
+# check-release-tag is listed first so the tag is validated before any
+# expensive build/notarize work runs. Prerequisites are built
+# left-to-right (these targets are invoked serially, not with -j), so a
+# bad tag fails fast instead of after a full build+notarize cycle.
+dist-linux-amd64: check-release-tag release-linux-amd64
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_amd64/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
@@ -333,7 +339,7 @@ dist-linux-amd64: release-linux-amd64
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
-dist-linux-arm64: release-linux-arm64
+dist-linux-arm64: check-release-tag release-linux-arm64
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
@@ -342,7 +348,7 @@ dist-linux-arm64: release-linux-arm64
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
-dist-darwin-arm64: dmg-notarize
+dist-darwin-arm64: check-release-tag dmg-notarize
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME) \
 		BLUE_TARGET_OS=darwin \
@@ -351,7 +357,7 @@ dist-darwin-arm64: dmg-notarize
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
-dist-darwin-amd64: dmg-amd64-notarize
+dist-darwin-amd64: check-release-tag dmg-amd64-notarize
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME_AMD64) \
 		BLUE_TARGET_OS=darwin \
@@ -359,6 +365,12 @@ dist-darwin-amd64: dmg-amd64-notarize
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
+
+# check-release-tag aborts before any build runs when HEAD does not
+# carry a publishable release tag. Shares cmd/rune/check-release-tag.sh
+# with dist.sh so the rules cannot drift.
+check-release-tag:
+	@cd $(ROOT_DIR) && ./cmd/rune/check-release-tag.sh
 
 # prod-dist-*: build with prod ldflags (api.rune.build / rpc.rune.build:443)
 # and upload to $(PROD_DOWNLOADS_BUCKET).
