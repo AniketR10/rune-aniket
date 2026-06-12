@@ -1484,7 +1484,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 		}
 	}()
 	cmdAuthorizer, err := ideauthorizer.NewAuthorizer(
-		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications)
+		ed, promptOpener, promptStorage, cfg.scheduleNextTick, notifications,
+		cfg.authorizerAutoAuthorize())
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new command authorizer: %w", err)
 	}

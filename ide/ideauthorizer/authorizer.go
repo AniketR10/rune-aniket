@@ -110,20 +110,26 @@ type PromptOpener interface {
 // NewAuthorizer returns an Authorizer that satisfies both the workspace
 // CommandAuthorizer interface and the blue auth authorizer used by the
 // extension runner for gRPC middleware.
+//
+// When autoAuthorize is true, permission requests that would otherwise
+// prompt the user are granted automatically. Persisted decisions
+// (including denies) still apply.
 func NewAuthorizer(
 	editor text.Editor,
 	promptOpener PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 	notifications browserapi.Notifications,
+	autoAuthorize bool,
 ) (*Authorizer, error) {
 	if editor == nil {
 		return nil, errors.New("editor is required")
 	}
 	a := &Authorizer{
-		prompter: newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
-		storage:  storage,
-		once:     make(map[string]pluginPermissionOnceDecision),
-		pending:  make(map[string]*pendingPrompt),
+		prompter:      newPermissionPrompter(promptOpener, scheduleNextTick, notifications),
+		storage:       storage,
+		autoAuthorize: autoAuthorize,
+		once:          make(map[string]pluginPermissionOnceDecision),
+		pending:       make(map[string]*pendingPrompt),
 	}
 	if err := registerAuthorizerREPLCommand(editor, a); err != nil {
 		return nil, fmt.Errorf("register authorizer repl command: %w", err)
@@ -138,6 +144,11 @@ func NewAuthorizer(
 type Authorizer struct {
 	prompter *permissionPrompter
 	storage  storageapi.Service
+
+	// autoAuthorize grants permission requests without prompting the
+	// user. Persisted decisions are still honored, so previously denied
+	// permissions stay denied.
+	autoAuthorize bool
 
 	onceMu sync.Mutex
 	once   map[string]pluginPermissionOnceDecision
@@ -258,6 +269,10 @@ func (a *Authorizer) authorizePermission(
 		if len(missingKeys) == 0 {
 			return nil
 		}
+	}
+
+	if a.autoAuthorize {
+		return nil
 	}
 
 	if decision, ok := a.getOnceDecision(onceKey, time.Now()); ok {

@@ -443,6 +443,14 @@ config = {
     # New extensions are added when installed via the shell's
     # command pkg install.
     "extensions": {},
+    # Extension and plugin permission authorizer.
+    "authorizer": {
+        # When True, permission requests from extensions and plugins are
+        # granted automatically instead of prompting once per permission.
+        # Persisted decisions made while this was False still apply.
+        # Set to False to review each permission interactively.
+        "auto_authorize": True,
+    },
     "updates": {
         # Automatically install language packages on demand. When False,
         # Rune prompts before installing a missing package.

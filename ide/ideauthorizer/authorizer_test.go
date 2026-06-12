@@ -223,6 +223,110 @@ func TestAuthorizerUnknownResourceForbidden(t *testing.T) {
 	assert.ErrorIs(t, err, blueauth.ErrForbidden)
 }
 
+// mustNewAutoAuthorizer is like mustNewAuthorizer but enables
+// auto-authorization, so permission requests are granted without
+// prompting.
+func mustNewAutoAuthorizer(
+	t *testing.T, opener PromptOpener,
+	storage storageapi.Service, editor text.Editor,
+) *Authorizer {
+	t.Helper()
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, true)
+	require.NoError(t, err)
+	return a
+}
+
+func TestAuthorizerAutoAuthorizeGrantsWithoutPrompt(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		ext  Extension
+	}{
+		{name: "plugin", ext: testPluginExtension(nil)},
+		{name: "regular extension with claim",
+			ext: testRegularExtension(extensionapi.NewPermissions(
+				extensionapi.PermissionBrowserWindowManager))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			opener := &stubPromptOpener{decision: PermissionDenyOnce}
+			a := mustNewAutoAuthorizer(t, opener,
+				storagestub.NewInMemoryService(), texttest.NopEditor())
+
+			err := a.Authorize(context.Background(),
+				blueauth.UserClaims[Extension]{Extra: tc.ext},
+				testWindowManagerResource)
+			assert.NoError(t, err)
+			assert.Zero(t, opener.calls)
+		})
+	}
+}
+
+func TestAuthorizerAutoAuthorizeMissingClaimStillForbidden(t *testing.T) {
+	t.Parallel()
+
+	opener := &stubPromptOpener{decision: PermissionAllowOnce}
+	a := mustNewAutoAuthorizer(t, opener,
+		storagestub.NewInMemoryService(), texttest.NopEditor())
+	ext := testRegularExtension(extensionapi.NewPermissions(extensionapi.PermissionStorage))
+
+	err := a.Authorize(context.Background(), blueauth.UserClaims[Extension]{Extra: ext},
+		testWindowManagerResource)
+	assert.ErrorIs(t, err, blueauth.ErrForbidden)
+	assert.Zero(t, opener.calls)
+}
+
+func TestAuthorizerAutoAuthorizeStartCommandGrantsWithoutPrompt(t *testing.T) {
+	t.Parallel()
+
+	storage := storagestub.NewInMemoryService()
+	opener := &stubPromptOpener{decision: PermissionDenyOnce}
+	a := mustNewAutoAuthorizer(t, opener, storage, texttest.NopEditor())
+	ext := testPluginExtension(nil)
+	ctx := blueauth.ContextWithClaims(context.Background(),
+		blueauth.UserClaims[Extension]{Extra: ext})
+	cmd := workspaceapi.Cmd{Path: "/bin/grep", Args: []string{"foo"}, Dir: "/tmp"}
+
+	require.NoError(t, a.AuthorizeCommand(ctx, cmd))
+	assert.Zero(t, opener.calls)
+
+	// Auto-granted decisions are not persisted, so disabling
+	// auto_authorize later prompts again.
+	command := pluginPermissionCommandDetail{Path: cmd.Path, Args: cmd.Args, Dir: cmd.Dir}
+	keys := pluginPermissionCommandStorageKeys(ext.Path, ext.Args,
+		extensionapi.PermissionExecute, command)
+	require.Len(t, keys, 1)
+	var stored storedPermissionDecision
+	err := storage.Get(context.Background(), keys[0], &stored)
+	assert.ErrorIs(t, err, storageapi.ErrNotFound)
+}
+
+func TestAuthorizerAutoAuthorizeHonorsPersistedDeny(t *testing.T) {
+	t.Parallel()
+
+	storage := storagestub.NewInMemoryService()
+	ext := testPluginExtension(nil)
+
+	// Persist a deny-always decision through the prompting path.
+	denyOpener := &stubPromptOpener{decision: PermissionDenyAlways}
+	denying := mustNewAuthorizer(t, denyOpener, storage, texttest.NopEditor())
+	err := denying.Authorize(context.Background(),
+		blueauth.UserClaims[Extension]{Extra: ext}, testWindowManagerResource)
+	require.ErrorIs(t, err, blueauth.ErrForbidden)
+	require.Equal(t, 1, denyOpener.calls)
+
+	// Auto-authorize does not override the persisted deny.
+	opener := &stubPromptOpener{decision: PermissionAllowOnce}
+	a := mustNewAutoAuthorizer(t, opener, storage, texttest.NopEditor())
+	err = a.Authorize(context.Background(),
+		blueauth.UserClaims[Extension]{Extra: ext}, testWindowManagerResource)
+	assert.ErrorIs(t, err, blueauth.ErrForbidden)
+	assert.Zero(t, opener.calls)
+}
+
 func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
 	t.Parallel()
 
@@ -1106,7 +1210,7 @@ func mustNewAuthorizer(
 	storage storageapi.Service, editor text.Editor,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, nil, false)
 	require.NoError(t, err)
 	return a
 }
@@ -1120,7 +1224,7 @@ func mustNewAuthorizerWithNotifications(
 	noti browserapi.Notifications,
 ) *Authorizer {
 	t.Helper()
-	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti)
+	a, err := NewAuthorizer(editor, opener, storage, syncScheduleNextTick, noti, false)
 	require.NoError(t, err)
 	return a
 }

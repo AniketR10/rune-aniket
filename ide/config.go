@@ -1854,6 +1854,31 @@ func (c ideConfig) updatesAutoInstall() bool {
 	return enabled
 }
 
+func (c ideConfig) authorizer() (config.Config, bool) {
+	if c.cfg == nil {
+		return nil, false
+	}
+	return c.getConfig(config.MapConfig(c.cfg), "authorizer")
+}
+
+// authorizerAutoAuthorize reports whether extension and plugin
+// permission requests should be granted automatically instead of
+// prompting the user per permission. Defaults to true.
+func (c ideConfig) authorizerAutoAuthorize() bool {
+	cfg, ok := c.authorizer()
+	if !ok {
+		return true
+	}
+	enabled, err := cfg.GetBool("auto_authorize")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["authorizer.auto_authorize"] = err
+		}
+		return true
+	}
+	return enabled
+}
+
 func (c ideConfig) modal() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false

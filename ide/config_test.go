@@ -476,6 +476,36 @@ func TestUpdatesAutoInstall(t *testing.T) {
 	}
 }
 
+func TestAuthorizerAutoAuthorize(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		authorizer any
+		want       bool
+		wantErr    bool
+	}{
+		{"absent authorizer defaults true", nil, true, false},
+		{"absent key defaults true", map[string]any{}, true, false},
+		{"explicit true", map[string]any{"auto_authorize": true}, true, false},
+		{"explicit false", map[string]any{"auto_authorize": false}, false, false},
+		{"invalid type defaults true", map[string]any{"auto_authorize": "yes"},
+			true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := map[string]any{}
+			if tc.authorizer != nil {
+				m["authorizer"] = tc.authorizer
+			}
+			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
+			assert.Equal(t, tc.want, cfg.authorizerAutoAuthorize())
+			if tc.wantErr {
+				assert.Error(t, cfg.errors["authorizer.auto_authorize"])
+			} else {
+				assert.Empty(t, cfg.errors)
+			}
+		})
+	}
+}
+
 // TestTerminalModalDefaultFromEditorMode asserts that when terminal.modal
 // is not set its default follows editor.mode: modal editors default to
 // modal terminals, modeless to modeless, and exo follows its fallback.
