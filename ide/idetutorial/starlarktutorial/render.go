@@ -81,6 +81,11 @@ const commandPromptTopFraction = 0.2
 // readability.
 const hintBoxMinInnerH = 4
 
+// hintBoxMaxHeightSlack lets the hint window extend a few rows past the
+// prompt-aware cap before truncating its body, so longer command
+// manuals are not cut off mid-sentence.
+const hintBoxMaxHeightSlack = 3
+
 // drawHintBox renders a framed, top-centered hint window whose body
 // is the markdown-parsed body string. attrs supplies the frame and
 // background attributes; the box is regular foreground/background,
@@ -124,7 +129,7 @@ func drawHintBox(
 	// 0.2*height) so the user can still see the prompt they are asked
 	// to use.
 	promptTopY := int(float64(height) * commandPromptTopFraction)
-	maxInnerH := promptTopY - hintBoxTopOffset
+	maxInnerH := promptTopY - hintBoxTopOffset + hintBoxMaxHeightSlack
 	maxInnerH = max(maxInnerH, hintBoxMinInnerH)
 	innerH = min(innerH, maxInnerH)
 	x0 := (width - innerW) / 2

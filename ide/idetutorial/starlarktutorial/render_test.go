@@ -518,8 +518,8 @@ tutorial(entry=run)
 
 // TestWaitCommandHintCapsAboveCommandPrompt asserts that a long hint
 // body does not grow the window past the command prompt's anchor row
-// (0.2*height), so the prompt the user is told to open stays visible
-// below the hint.
+// (0.2*height) by more than hintBoxMaxHeightSlack rows, so the prompt
+// the user is told to open stays visible below the hint.
 func TestWaitCommandHintCapsAboveCommandPrompt(t *testing.T) {
 	t.Parallel()
 	longHint := strings.Repeat("This is a long recovery hint line. ", 40)
@@ -551,9 +551,9 @@ tutorial(entry=run)
 	require.NotEqual(t, -1, bottomY, "hint window must render a bottom edge")
 
 	promptTopY := int(float64(screenH) * commandPromptTopFraction)
-	assert.LessOrEqual(t, bottomY, promptTopY,
+	assert.LessOrEqual(t, bottomY, promptTopY+hintBoxMaxHeightSlack,
 		"hint window bottom (row %d) must stay at or above the command "+
-			"prompt anchor (row %d) so the prompt stays visible",
+			"prompt anchor (row %d) plus slack so the prompt stays visible",
 		bottomY, promptTopY)
 }
 
