@@ -1141,16 +1141,24 @@ tutorial(entry=run)
 // no-op.
 func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 	cases := []struct {
-		name          string
-		starting      string
-		wantScheduled bool
-		wantActive    string
+		name           string
+		starting       string
+		withInitShader bool
+		wantScheduled  bool
+		wantActive     string
 	}{
 		{
 			name:          "known tutorial runs",
 			starting:      "basics",
 			wantScheduled: true,
 			wantActive:    "basics",
+		},
+		{
+			name:           "known tutorial deferred until init shader finishes",
+			starting:       "basics",
+			withInitShader: true,
+			wantScheduled:  true,
+			wantActive:     "basics",
 		},
 		{
 			name:          "unknown tutorial is a no-op",
@@ -1186,11 +1194,29 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 			if tc.starting != "" {
 				opts = append(opts, WithStartingTutorial(tc.starting))
 			}
+			if tc.withInitShader {
+				opts = append(opts, WithInitShader(
+					func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
+						return new(mockShader)
+					},
+					30, 1*time.Second,
+				))
+			}
 
 			i, err := New("", configFile.Name(), dataDir,
 				newTestStorage(t, dataDir), opts...)
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = i.Close() })
+
+			// Capture the deferred init-shader timer so the test can
+			// fire it deterministically instead of waiting in real time.
+			var afterDuration time.Duration
+			var afterCb func()
+			i.options.afterFunc = func(d time.Duration, fn func()) *time.Timer {
+				afterDuration = d
+				afterCb = fn
+				return nil
+			}
 
 			root := i.Ready()
 			mu.Lock()
@@ -1204,6 +1230,16 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 				assert.Nil(t, i.tutorial.overlay,
 					"no tutorial overlay should be active")
 				return
+			}
+
+			if tc.withInitShader {
+				assert.Empty(t, scheduled,
+					"tutorial dispatch must be deferred until the init shader finishes")
+				require.NotNil(t, afterCb,
+					"a deferred timer should be registered for the init shader")
+				assert.Equal(t, 1*time.Second+tutorialInitShaderBuffer, afterDuration,
+					"tutorial delay must be the init shader duration plus the buffer")
+				afterCb()
 			}
 
 			require.Len(t, scheduled, 1,

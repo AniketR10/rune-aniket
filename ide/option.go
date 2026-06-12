@@ -417,6 +417,7 @@ type options struct {
 	defaultConfig       string
 	bell                func()
 	scheduleFn          func(func()) bool
+	afterFunc           func(time.Duration, func()) *time.Timer
 	debugCommands       bool
 	streamingOpen       bool
 
@@ -451,6 +452,7 @@ func defaultOptions() options {
 		defaultConfig:      "config = {}",
 		bell:               term.RingBell,
 		scheduleFn:         term.ScheduleNextTick,
+		afterFunc:          time.AfterFunc,
 		workspacesBarFrame: true,
 		workspacesIcon:     '1',
 		releaseManager:     docrelease.NewManager(document.NewInMemoryService()),

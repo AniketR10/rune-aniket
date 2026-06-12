@@ -32,6 +32,7 @@ import (
 	"os/user"
 	"path"
 	"sync"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -48,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -174,6 +176,11 @@ func (i *IDE) Ready() tui.Handler {
 	return i.planLockdown
 }
 
+// tutorialInitShaderBuffer is an extra delay added on top of the init
+// shader duration before the tutorial is dispatched, so the prompt
+// mounts only after the shader has fully settled.
+const tutorialInitShaderBuffer = 2 * time.Second
+
 func (i *IDE) maybeStartTutorial() {
 	name := i.options.startingTutorial
 	if name == "" {
@@ -182,9 +189,20 @@ func (i *IDE) maybeStartTutorial() {
 	if _, ok := i.tutorial.tutorials[name]; !ok {
 		return
 	}
-	i.options.scheduleFn(func() {
-		i.workspaceHandler.focusEx().Dispatch("tutorial", "start", name)
-	})
+	dispatch := func() {
+		i.options.scheduleFn(func() {
+			i.workspaceHandler.focusEx().Dispatch("tutorial", "start", name)
+		})
+	}
+	// Defer the tutorial until the init shader finishes so the shader
+	// does not animate on top of the freshly-mounted tutorial prompt.
+	if i.options.initShaderFn != nil && i.options.initShaderDuration > 0 {
+		i.options.afterFunc(i.options.initShaderDuration+tutorialInitShaderBuffer, func() {
+			debug.CapturePanicReport(dispatch)
+		})
+		return
+	}
+	dispatch()
 }
 
 // Browser returns the current browser in focus.
