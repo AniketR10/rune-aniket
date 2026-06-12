@@ -1621,7 +1621,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 		return nil, nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
 	browser := ex.Browser()
-	grantor := newExtensionPromptGrantor(promptOpener, promptStorage, cfg.scheduleNextTick)
+	// grant all permissions for now, until we actually have installable third
+	// party extensions.
+	grantor := extension.GrantAll()
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, cmdAuthorizer,
 		dataDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)

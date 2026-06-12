@@ -54,12 +54,14 @@ type permissionDecision struct {
 	Decision string
 }
 
+// this a one prompt per permission extension.Grantor.
 type permissionGrantor struct {
 	promptOpener     ideauthorizer.PromptOpener
 	storage          storageapi.Service
 	scheduleNextTick func(func()) bool
 }
 
+// nolint:unused
 func newExtensionPromptGrantor(
 	promptOpener ideauthorizer.PromptOpener,
 	storage storageapi.Service,
