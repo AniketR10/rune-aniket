@@ -965,7 +965,7 @@ func (c *Component) Prompt(
 	if win, ok := c.prompts[message]; ok {
 		return win
 	}
-	promptHandler = clearOnClosePromptHandler{
+	clearHandler := &clearOnClosePromptHandler{
 		root:    promptHandler,
 		c:       c,
 		message: message,
@@ -1002,7 +1002,7 @@ func (c *Component) Prompt(
 					messageResponsive, component.DefaultAspectRatio)
 			},
 		},
-		PromptHandler:  promptHandler,
+		PromptHandler:  clearHandler,
 		OptionBindings: bindings,
 		OptionAttr:     c.config.PromptConfig.TextAttr,
 		HighlightAttr:  c.config.PromptConfig.HighlightAttr,
@@ -1014,6 +1014,7 @@ func (c *Component) Prompt(
 	}
 
 	win := c.Floating(prompt, floatingConfig)
+	clearHandler.win = win
 	c.prompts[message] = win
 	return win
 }
@@ -1536,21 +1537,33 @@ func (c *Component) unwrapContent(content browserapi.Handler) browserapi.Handler
 	panic("extraneous content")
 }
 
+// clearOnClosePromptHandler drops the prompt-dedup entry before
+// running the root callbacks: a callback may reopen the same prompt,
+// and a stale entry would dedupe that reopen against the window
+// being closed. The entry is only dropped while it still points at
+// this handler's own window, so a dying window's OnClose cannot
+// evict an entry that an earlier OnSelect reopen just registered.
 type clearOnClosePromptHandler struct {
 	c       *Component
 	message string
 	root    handler.PromptHandler
+	win     Window
 }
 
-func (c clearOnClosePromptHandler) OnSelect(idx int, option string) {
+func (c *clearOnClosePromptHandler) clear() {
+	if cur, ok := c.c.prompts[c.message]; ok && cur == c.win {
+		delete(c.c.prompts, c.message)
+	}
+}
+
+func (c *clearOnClosePromptHandler) OnSelect(idx int, option string) {
+	c.clear()
 	c.root.OnSelect(idx, option)
-	delete(c.c.prompts, c.message)
 }
 
-func (c clearOnClosePromptHandler) OnClose() error {
-	err := c.root.OnClose()
-	delete(c.c.prompts, c.message)
-	return err
+func (c *clearOnClosePromptHandler) OnClose() error {
+	c.clear()
+	return c.root.OnClose()
 }
 
 // component.WindowManager sinchronously removes tui.Handlers

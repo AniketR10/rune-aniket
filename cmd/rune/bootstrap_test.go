@@ -158,11 +158,12 @@ func TestOptionToFormatAndPresetMapping(t *testing.T) {
 
 // TestGuardedPromptChainReopensOnUnadvancedClose proves that an Esc
 // (or any dismissal that does not call OnSelect) re-opens the same
-// prompt, while a normal OnSelect-then-Close sequence does not.
+// prompt, while a normal OnSelect-then-Close sequence does not, and
+// neither does a close fired by the pre-config IDE's own teardown.
 func TestGuardedPromptChainReopensOnUnadvancedClose(t *testing.T) {
 	t.Run("esc reopens", func(t *testing.T) {
 		var reopened int
-		g := &guardedPromptChain{}
+		g := &guardedPromptChain{closing: func() bool { return false }}
 		_ = g.onClose(func() { reopened++ })()
 		require.Equal(t, 1, reopened, "Esc-equivalent close must re-open")
 	})
@@ -170,7 +171,7 @@ func TestGuardedPromptChainReopensOnUnadvancedClose(t *testing.T) {
 	t.Run("select does not reopen", func(t *testing.T) {
 		var reopened int
 		var advanced int
-		g := &guardedPromptChain{}
+		g := &guardedPromptChain{closing: func() bool { return false }}
 		// Simulate the normal selection-then-close ordering: the
 		// SDK calls OnSelect first (inside Handle), which marks
 		// advanced, then Close → OnClose.
@@ -178,6 +179,14 @@ func TestGuardedPromptChainReopensOnUnadvancedClose(t *testing.T) {
 		_ = g.onClose(func() { reopened++ })()
 		require.Equal(t, 1, advanced)
 		require.Equal(t, 0, reopened, "selection must not re-open")
+	})
+
+	t.Run("closing pre-config IDE does not reopen", func(t *testing.T) {
+		var reopened int
+		g := &guardedPromptChain{closing: func() bool { return true }}
+		_ = g.onClose(func() { reopened++ })()
+		require.Equal(t, 0, reopened,
+			"teardown-driven close must not re-open the prompt")
 	})
 }
 

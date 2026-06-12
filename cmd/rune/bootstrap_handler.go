@@ -84,6 +84,7 @@ type bootstrapHandler struct {
 	chosenEditor      string
 	chosenFormat      string
 	chosenExoPreset   string
+	closingPreIDE     bool
 }
 
 func newBootstrapHandler(
@@ -404,6 +405,7 @@ func (b *bootstrapHandler) performSwap() error {
 
 	var closeErr error
 	if b.preIDE != nil {
+		b.closingPreIDE = true
 		if cerr := b.preIDE.Close(); cerr != nil {
 			closeErr = fmt.Errorf("close pre-config ide: %w", cerr)
 		}
@@ -425,6 +427,7 @@ func (b *bootstrapHandler) writeOverrideConfig() error {
 }
 
 func (b *bootstrapHandler) Close() error {
+	b.closingPreIDE = true
 	var errs []error
 	if b.upgradeMgr != nil {
 		if err := b.upgradeMgr.Close(); err != nil {
@@ -535,7 +538,7 @@ func (b *bootstrapHandler) openBootstrapFlow() {
 func (b *bootstrapHandler) openWelcomePrompt() {
 	msg := "## Welcome to Rune\n\n" +
 		"Glad you're here. Let's get everything set up."
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
 		[]string{optWelcomeGo},
@@ -563,7 +566,7 @@ func (b *bootstrapHandler) openEditorPrompt() {
 		"TUI editor (vim, nvim, helix, kak, emacs, etc.) owns the buffer and\n" +
 		"cursor. The fallback editor (modal or modeless) is used for in-memory buffers\n" +
 		"like Rune's file explorer."
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
 		[]string{optModal, optModeless, optExoModal, optExoModeless},
@@ -588,7 +591,7 @@ func (b *bootstrapHandler) openFormatPrompt() {
 		"Pick this if you want the simplest possible file.\n\n" +
 		"Either format lives at `~/.rune/config.<ext>` and can be\n" +
 		"changed later by editing or replacing the file."
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
 		[]string{optFormatStar, optFormatYAML},
@@ -613,7 +616,7 @@ func (b *bootstrapHandler) openPresetPrompt() {
 		"external editor owns the buffer and cursor. Pick which editor that should be.\n\n" +
 		"The binary must be on your `PATH`. You can edit the exact command and other\n" +
 		"configuration properties in the generated config later."
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
 		[]string{optPresetVim, optPresetNvim, optPresetHelix, optPresetKak, optPresetEmacs},
@@ -638,7 +641,7 @@ func (b *bootstrapHandler) openLoginPrompt() error {
 		"do it for them and hide the details.\n\n" +
 		"Your subscription is what keeps us user-supported, for the times to come.\n\n" +
 		"$19.90/month or $218.90/year. Cancel anytime."
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
 		[]string{optLoginSignIn, optLoginSignUp},
@@ -827,7 +830,7 @@ func (b *bootstrapHandler) mountLoginWaitPrompt(
 	msg := header +
 		"If your browser did not open automatically, copy this link:\n\n" +
 		"`" + oauthURL + "`"
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	return b.preIDE.Prompt(
 		msg,
 		[]string{optLoginCopy, optLoginCancel},
@@ -878,7 +881,7 @@ func (b *bootstrapHandler) openUpgradePrompt() error {
 		"Your account is signed in but has no paid plan. Click below\n" +
 		"to open the checkout page in your browser. Once you complete\n" +
 		"checkout, return here and click Sign in again."
-	guard := &guardedPromptChain{}
+	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
 		[]string{optUpgradePro},
@@ -939,6 +942,7 @@ func (b *bootstrapHandler) openBrowserURL(raw string) error {
 // reliably distinguishes the two paths.
 type guardedPromptChain struct {
 	advanced bool
+	closing  func() bool
 }
 
 func (g *guardedPromptChain) onSelect(next func(int, string)) func(int, string) {
@@ -950,11 +954,20 @@ func (g *guardedPromptChain) onSelect(next func(int, string)) func(int, string) 
 
 func (g *guardedPromptChain) onClose(reopen func()) func() error {
 	return func() error {
-		if !g.advanced {
+		if !g.advanced && !g.closing() {
 			reopen()
 		}
 		return nil
 	}
+}
+
+// promptGuard builds the chain guard for a bootstrap prompt. The
+// closing check stops the reopen-on-dismiss chain while the preIDE
+// is being torn down (shutdown or swap to the configured IDE), where
+// every window close fires OnClose and reopening would resurrect
+// prompt windows mid-Close forever.
+func (b *bootstrapHandler) promptGuard() *guardedPromptChain {
+	return &guardedPromptChain{closing: func() bool { return b.closingPreIDE }}
 }
 
 // shouldSwallowBootstrapEvent must NOT swallow Esc: the SDK prompt

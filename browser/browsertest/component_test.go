@@ -574,6 +574,60 @@ func TestComponentPrompt(t *testing.T) {
 		c.Close()
 		assert.True(t, closeCalled)
 	})
+	t.Run("close callback can reopen the same prompt", func(t *testing.T) {
+		c := browser.NewComponent(browser.DefaultConfig())
+		c.Resize(20, 12)
+		reopens := 0
+		var open func()
+		open = func() {
+			c.Prompt("Stay?", []string{"Ok"}, nil,
+				handler.FuncPromptHandler(
+					func(int, string) {},
+					func() error {
+						if reopens == 0 {
+							reopens++
+							open()
+						}
+						return nil
+					}))
+		}
+		open()
+		require.Equal(t, 1, c.FloatingWindows())
+		c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+		assert.Equal(t, 1, reopens, "Esc must run the close callback once")
+		assert.Equal(t, 1, c.FloatingWindows(),
+			"prompt reopened from its close callback must stay on screen")
+	})
+	t.Run("select callback can reopen the same prompt", func(t *testing.T) {
+		// Mirrors the stay-in-this-prompt pattern (e.g. a "copy URL"
+		// button): OnSelect reopens the same message and OnClose
+		// reopens unless the select advanced past the prompt. The
+		// reopen from OnSelect must survive the dying window's
+		// OnClose without stacking a duplicate.
+		c := browser.NewComponent(browser.DefaultConfig())
+		c.Resize(20, 12)
+		advanced := false
+		var open func()
+		open = func() {
+			c.Prompt("Stay?", []string{"Copy"}, nil,
+				handler.FuncPromptHandler(
+					func(int, string) {
+						advanced = false
+						open()
+					},
+					func() error {
+						if !advanced {
+							open()
+						}
+						return nil
+					}))
+		}
+		open()
+		require.Equal(t, 1, c.FloatingWindows())
+		c.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+		assert.Equal(t, 1, c.FloatingWindows(),
+			"exactly one prompt must remain after a stay-in-prompt select")
+	})
 	t.Run("Draw", func(t *testing.T) {
 		w := term.NewStringWriter(24, 12)
 

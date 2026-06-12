@@ -103,15 +103,7 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 	}
 
 	mu := new(sync.Mutex)
-	publishCh := make(chan term.Event, 256)
-	publishEvent := func(ev term.Event) bool {
-		select {
-		case publishCh <- ev:
-			return true
-		default:
-			return false
-		}
-	}
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
 
 	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
 	root, err := newBootstrapHandler(
@@ -123,22 +115,7 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
-
-	pumperDone := make(chan struct{})
-	go debug.CapturePanicReport(func() {
-		defer close(pumperDone)
-		for ev := range publishCh {
-			if ev.Type == term.EventInterrupt && ev.UserFunc != nil {
-				mu.Lock()
-				ev.UserFunc()
-				mu.Unlock()
-			}
-		}
-	})
-	t.Cleanup(func() {
-		close(publishCh)
-		<-pumperDone
-	})
+	t.Cleanup(stopPump)
 
 	const width, height = 80, 30
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
@@ -225,6 +202,56 @@ func containsAll(haystack string, needles ...string) bool {
 	return true
 }
 
+// newBootstrapPublishPump wires the publish-event hook the way runGUI
+// does: a pumper goroutine runs EventInterrupt UserFuncs under the
+// bootstrap locker. Register the returned stop func with t.Cleanup
+// after the handler's Close cleanup so it runs before it (LIFO),
+// matching the runtime's pump-then-handler teardown order.
+//
+// stop fences off further publishes before closing the pump channel:
+// the prompt-frame shader keeps interrupting at its own FPS well past
+// a fast test's lifetime, and a late publish into a closed channel
+// would panic the suite.
+func newBootstrapPublishPump(
+	mu *sync.Mutex,
+) (publish func(term.Event) bool, stop func()) {
+	publishCh := make(chan term.Event, 256)
+	var publishMu sync.Mutex
+	stopped := false
+	publish = func(ev term.Event) bool {
+		publishMu.Lock()
+		defer publishMu.Unlock()
+		if stopped {
+			return false
+		}
+		select {
+		case publishCh <- ev:
+			return true
+		default:
+			return false
+		}
+	}
+	pumperDone := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		defer close(pumperDone)
+		for ev := range publishCh {
+			if ev.Type == term.EventInterrupt && ev.UserFunc != nil {
+				mu.Lock()
+				ev.UserFunc()
+				mu.Unlock()
+			}
+		}
+	})
+	stop = func() {
+		publishMu.Lock()
+		stopped = true
+		publishMu.Unlock()
+		close(publishCh)
+		<-pumperDone
+	}
+	return publish, stop
+}
+
 // bootstrapE2ELocked serializes Handle/Draw/Resize on the bootstrap
 // handler's locker so the pumper goroutine's UserFunc execution
 // cannot race the test's Handle calls. Mirrors lockedHandler in
@@ -309,15 +336,7 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 	}
 
 	mu := new(sync.Mutex)
-	publishCh := make(chan term.Event, 256)
-	publishEvent := func(ev term.Event) bool {
-		select {
-		case publishCh <- ev:
-			return true
-		default:
-			return false
-		}
-	}
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
 
 	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
 	root, err := newBootstrapHandler(
@@ -329,22 +348,7 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
-
-	pumperDone := make(chan struct{})
-	go debug.CapturePanicReport(func() {
-		defer close(pumperDone)
-		for ev := range publishCh {
-			if ev.Type == term.EventInterrupt && ev.UserFunc != nil {
-				mu.Lock()
-				ev.UserFunc()
-				mu.Unlock()
-			}
-		}
-	})
-	t.Cleanup(func() {
-		close(publishCh)
-		<-pumperDone
-	})
+	t.Cleanup(stopPump)
 
 	const width, height = 80, 30
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
@@ -381,6 +385,83 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 		"after Sign up opens the browser, the login choice prompt must be re-mounted "+
 			"so the user can come back to Rune; otherwise the bootstrap is stuck "+
 			"with no visible UI")
+}
+
+// TestBootstrapE2EEscReopensBootstrapPrompt pins the fix for the
+// "Esc kills the bootstrap" bug: dismissing any bootstrap prompt
+// with Esc must reopen that prompt. Before the fix,
+// clearOnClosePromptHandler deleted the prompt-dedup entry only
+// after running the close callback, so the guardedPromptChain's
+// reopen was deduped against the dying window and the user was left
+// staring at an empty pre-config IDE with no way to continue.
+func TestBootstrapE2EEscReopensBootstrapPrompt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	dataDir := t.TempDir()
+	configPath := dataDir + "/config.yaml"
+
+	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{
+		httpAddress:    srv.URL,
+		dataPath:       dataDir,
+		configPath:     configPath,
+		websiteAddress: "https://rune.test",
+	})
+	t.Cleanup(restoreFlags)
+
+	mu := new(sync.Mutex)
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	root, err := newBootstrapHandler(
+		dataDir, configPath, "", "", nil,
+		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	t.Cleanup(stopPump)
+
+	const width, height = 80, 30
+	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
+	wrapped.Resize(width, height)
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return strings.Contains(frame, "Welcome to Rune")
+	}, 5*time.Second, 50*time.Millisecond,
+		"welcome prompt must be visible at bootstrap start")
+
+	wrapped.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return strings.Contains(frame, "Welcome to Rune")
+	}, 5*time.Second, 50*time.Millisecond,
+		"Esc on the welcome prompt must reopen it; an empty screen "+
+			"leaves the user with a dead installation")
+
+	// Advance to the editor prompt and make sure Esc reopens
+	// mid-chain prompts too.
+	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 'g'})
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return strings.Contains(frame, "Editor mode")
+	}, 5*time.Second, 50*time.Millisecond,
+		"editor prompt must be visible after the welcome prompt advances")
+
+	wrapped.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+
+	require.Eventually(t, func() bool {
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return strings.Contains(frame, "Editor mode")
+	}, 5*time.Second, 50*time.Millisecond,
+		"Esc on the editor prompt must reopen it")
 }
 
 func testE2EExtensionsRunner(
