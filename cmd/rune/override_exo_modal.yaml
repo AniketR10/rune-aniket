@@ -19,6 +19,11 @@ editor:
     goto: '<<.Goto>>'
     quit: '<<.Quit>>'
     fallback: modal
+# The exo editor (vim, nvim, helix, ...) owns `:` for its own command
+# line, so the Rune command prompt is remapped off `:` to a modifier
+# combination the external editor will not capture.
+command:
+  key: <s-m-p>
 
 # ---------------------------------------------------------------------------
 # Switch exo editor
@@ -158,9 +163,13 @@ editor:
 # list and history. Aliases layer on top of built-ins: a string value is
 # the substitution, a dict with `command` + `completer` adds completion.
 # Set a key_binding value to "" to unbind a built-in.
+#
+# The active block above already remaps `key` to <s-m-p> because the exo
+# editor consumes `:` for its own command line. Pick any combination the
+# external editor does not capture.
 # ---------------------------------------------------------------------------
 # command:
-#   key:         ":"
+#   key:         <s-m-p>
 #   history_key: <m-r>
 #   max_history: 20000
 #   aliases:

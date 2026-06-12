@@ -30,6 +30,12 @@ config = merge(config, {
             "fallback": "modal",
         },
     },
+    # The exo editor (vim, nvim, helix, ...) owns `:` for its own
+    # command line, so the Rune command prompt is remapped off `:` to a
+    # modifier combination the external editor will not capture.
+    "command": {
+        "key": "<s-m-p>",
+    },
 })
 
 # ---------------------------------------------------------------------------
@@ -146,8 +152,12 @@ config = merge(config, {
 
 # ---------------------------------------------------------------------------
 # Command prompt
+#
+# The active block above already remaps `command.key` to <s-m-p>
+# because the exo editor consumes `:` for its own command line. Pick
+# any combination the external editor does not capture.
 # ---------------------------------------------------------------------------
-# config["command"]["key"]         = ":"
+# config["command"]["key"]         = "<s-m-p>"
 # config["command"]["history_key"] = "<m-r>"
 # config["command"]["max_history"] = 20000
 # config["command"]["aliases"] = {
