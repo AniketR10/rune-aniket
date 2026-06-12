@@ -359,12 +359,12 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 		switch ev.Key {
 		case term.KeyTab:
 			if _, ok := h.cursor.SelectionMode(); ok {
-				h.cursor.ShiftSelectionLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
-				h.cursor.Unselect()
+				if handled = h.cursor.ShiftSelectionLeft(h.cfg.indentRune, h.cfg.indentTabspaces); handled {
+					h.cursor.Unselect()
+				}
 			} else {
-				h.cursor.ShiftLineLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
+				handled = h.cursor.ShiftLineLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
 			}
-			handled = true
 			return
 		}
 	}

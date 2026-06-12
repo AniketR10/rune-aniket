@@ -1126,6 +1126,47 @@ func TestModelessTabAtTargetInsertsFullIndentLevel(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 6, Y: 0}, h.CursorAtScroll())
 }
 
+// TestModelessShiftTabFallsThroughWhenNoDedent verifies that <shift-tab>
+// is reported as unhandled when there is no indentation to remove, so the
+// event can fall through to outer command keybindings (e.g. the file
+// explorer toggle) instead of being silently swallowed.
+func TestModelessShiftTabFallsThroughWhenNoDedent(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///dedent.txt")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.Init()
+	_, err = buf.ReadFrom(strings.NewReader("hello"))
+	require.NoError(t, err)
+
+	h := NewHandler(buf, uri, text.IndentRuneSpace, 2, WithTabspaces(2))
+	h.Resize(20, 10)
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModShift, Key: term.KeyTab})
+	assert.False(t, handled, "shift-tab with nothing to dedent must fall through")
+	assert.Equal(t, "hello", buf.String())
+}
+
+// TestModelessShiftTabDedentsWhenIndented verifies that <shift-tab> still
+// dedents an indented line and reports the event as handled.
+func TestModelessShiftTabDedentsWhenIndented(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///dedent.txt")
+	require.NoError(t, err)
+
+	buf := cell.NewBuffer()
+	buf.Init()
+	_, err = buf.ReadFrom(strings.NewReader("  hello"))
+	require.NoError(t, err)
+
+	h := NewHandler(buf, uri, text.IndentRuneSpace, 2, WithTabspaces(2))
+	h.Resize(20, 10)
+	require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2, Y: 0}))
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModShift, Key: term.KeyTab})
+	assert.True(t, handled, "shift-tab with indentation must be handled")
+	assert.Equal(t, "hello", buf.String())
+}
+
 // errorClipboard is a clipboard.Register that always returns an error on Paste.
 type errorClipboard struct{}
 
