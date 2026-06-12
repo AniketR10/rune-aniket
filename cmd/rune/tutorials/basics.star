@@ -76,9 +76,9 @@ def dismiss_for(cmd, *args):
 
 welcome_md = """\
 This is the **home workspace**: a scratch workspace rooted at `~/` that
-Rune shows when no project workspace is attached. Use it for files
-outside any project, quick terminals, or to keep notes between
-sessions.
+Rune shows when no project workspace is open at the current slot.
+Use it for files outside any project, quick terminals,
+or to keep notes between sessions.
 
 ## Switching workspaces
 
@@ -328,6 +328,44 @@ driven by the same commands.
 Press `<enter>` or `<space>` to continue.
 """
 
+fexplorer_md = """\
+Rune has a built-in **file explorer**: the workspace tree in a
+window docked on the left. The `fexplorer` command toggles
+it: it opens and focuses the explorer, or tucks it away again when
+the explorer is already focused.""" + keyhint("fexplorer") + """
+
+Open it now: """ + keypress("fexplorer") + """.
+"""
+
+fexplorer_tour_md = """\
+The explorer is focused. The tree is a regular text buffer, so you
+move through it the way you move in any editor, with """ + dir_phrase + """.
+
+## Opening things
+
+- `<enter>` on a directory expands or collapses it.
+- `<enter>` on a file opens it in the window you came from.
+
+## It is a live buffer
+
+You manage files by editing the tree like text:
+
+- Change a name to **rename** a file.
+- Add a line to **create** a file; end it with `/` to create a
+  directory.
+- Delete a line to **delete** a file.
+
+Nothing touches the disk until you save. Run `write` (the same
+command that saves a file) and Rune lists the pending operations
+(CREATE, MKDIR, RENAME, MOVE, DELETE) and asks for confirmation
+before applying them to the file system. Closing the explorer
+discards any edits you have not applied.
+
+Look around, expand a directory, open a file. When you're done,
+close the explorer the same way you opened it:
+""" + keypress("fexplorer") + """.
+"""
+
 agent_install_md = """\
 The **Rune Agent** is an in-editor AI coding assistant. It ships as a
 package you install on demand, so the first step is to add it.
@@ -544,6 +582,27 @@ def teach_terminals():
                     dismiss_keys = [ck])
 
 
+def teach_file_explorer():
+    floating_window(title = "The file explorer", text = fexplorer_md,
+                    dismiss_keys = dismiss_for("fexplorer"))
+    wait_command(
+        title    = "The file explorer",
+        command  = "fexplorer",
+        on_error = "Open the file explorer with `<cmd>fexplorer`.",
+    )
+    notify(level = success, message = "File explorer open.")
+
+    floating_window(title = "Explore the tree", text = fexplorer_tour_md,
+                    dismiss_keys = dismiss_for("fexplorer"))
+    wait_command(
+        title    = "Explore the tree",
+        command  = "fexplorer",
+        on_error = ("Close the file explorer: focus it, then run " +
+                    "`<cmd>fexplorer` again."),
+    )
+    notify(level = success, message = "File explorer closed.")
+
+
 def teach_provider(provider, label, action_tokens, run_md, success_msg):
     title = "Connect " + label
     floating_window(title = title, text = run_md)
@@ -720,9 +779,11 @@ def run():
     teach_close_tab()
     teach_terminals()
 
+    teach_file_explorer()
+
     teach_agent()
 
     teach_wrap_up()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "14", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "15", entry = run)
