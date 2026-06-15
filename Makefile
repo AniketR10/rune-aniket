@@ -38,7 +38,7 @@ EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean test coverage generate rune rune-agent ox-api claudeimport \
+.PHONY: debug clean purge test coverage generate rune rune-agent ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
@@ -202,6 +202,13 @@ clean:
 	@$(MAKE) -C cmd/extension_fuzzy_search clean
 	@$(MAKE) -C cmd/runectl clean
 	@$(MAKE) -C cmd/rune clean
+
+# purge does everything clean does and additionally wipes the llama.cpp build
+# tree (cmake _build with its .o objects) and the copied static libs, forcing
+# a full rebuild of the local-model backend on the next build.
+purge: clean
+	@$(MAKE) -C llm/llamacpp clean
+	@rm -f $(RUNE_LLAMACPP_STAMP)
 
 $(BIN):
 	@mkdir $(BIN)
