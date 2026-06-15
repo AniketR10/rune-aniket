@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 const (
@@ -39,6 +41,29 @@ const (
 	// at a UTF-8 character boundary with a "…" suffix.
 	DefaultMaxLineBytes = 500
 )
+
+// MaxToolResultBytes is the per-result ceiling enforced before a tool result
+// is appended to the conversation. It sits well under the 16 MiB host gRPC
+// cap so a single oversized result can never wedge the agent loop. Capping at
+// creation time is cache-safe: it never rewrites already-sent history.
+const MaxToolResultBytes = 8 * 1024 * 1024
+
+// capToolResult bounds the size of a tool result in place. Textual content is
+// middle-out truncated to maxOutput regardless of success or error, and any
+// oversized image part is replaced with a short text placeholder.
+func capToolResult(r *ToolResult, maxOutput int) {
+	r.Content = truncateMiddle(r.Content, maxOutput)
+	for i := range r.MultiContent {
+		p := &r.MultiContent[i]
+		if len(p.ImageURL) > MaxToolResultBytes {
+			n := len(p.ImageURL)
+			*p = llmapi.ContentPart{
+				Type: llmapi.ContentPartTypeText,
+				Text: fmt.Sprintf("[image omitted: %d bytes exceeds limit]", n),
+			}
+		}
+	}
+}
 
 // truncateMiddle truncates s using a middle-out strategy if len(s) > maxBytes.
 // It preserves the first and last portions of the string, replacing the middle

@@ -54,6 +54,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/llm/llmrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace/processctx"
@@ -133,6 +134,8 @@ func (r *Runner) WorkspaceExtensionsRunner(
 	opts := []grpc.ServerOption{
 		grpc.ChainStreamInterceptor(streamInterceptors...),
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.MaxRecvMsgSize(llmrpc.MaxRecvMsgSize),
+		grpc.MaxSendMsgSize(llmrpc.MaxSendMsgSize),
 	}
 	var cert, key []byte
 	if !r.cfg.insecureTransport {

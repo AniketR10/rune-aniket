@@ -547,7 +547,7 @@ func TestReadFile_image(t *testing.T) {
 
 	t.Run("image too large", func(t *testing.T) {
 		dir := t.TempDir()
-		// Write a file with .png extension but over 20 MB.
+		// Write a file with a .png extension that exceeds maxImageBytes.
 		bigData := make([]byte, maxImageBytes+1)
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "big.png"), bigData, 0o644))
 

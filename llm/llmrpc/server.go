@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
@@ -35,6 +36,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	// MaxRecvMsgSize caps inbound llmrpc messages at 16 MiB (4× the gRPC
+	// default). A large tool result already in the conversation can push a
+	// CreateCompletion request past the 4 MiB default and wedge the agent.
+	MaxRecvMsgSize = 16 * 1024 * 1024
+	// MaxSendMsgSize matches the gRPC default (effectively unbounded).
+	MaxSendMsgSize = math.MaxInt32
 )
 
 // Server adapts an llmapi.Service to the generated LLMServer interface.

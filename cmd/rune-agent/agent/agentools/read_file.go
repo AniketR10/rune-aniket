@@ -46,11 +46,12 @@ import (
 
 // maxImageBytes is the maximum raw file size for image reads. The image
 // is base64-encoded into the LLM request, which inflates payload size
-// by ~33%, and the extension host's gRPC server enforces the default
-// 4 MiB inbound message cap. Capping raw bytes at 3 MiB keeps the
-// encoded request comfortably under that ceiling once the rest of the
-// message envelope is accounted for.
-const maxImageBytes = 3 * 1024 * 1024
+// by ~33%. The extension host's gRPC server caps inbound messages at 16
+// MiB (llmrpc.MaxRecvMsgSize) and capToolResult drops any encoded image
+// part above 8 MiB (agent.MaxToolResultBytes). Capping raw bytes at 5
+// MiB keeps the ~6.7 MiB encoded payload under the 8 MiB per-result
+// ceiling with room for the surrounding message envelope.
+const maxImageBytes = 5 * 1024 * 1024
 
 // maxImageEdge is Anthropic's per-image dimension cap for many-image
 // requests. An image exceeding it on either axis causes the API to

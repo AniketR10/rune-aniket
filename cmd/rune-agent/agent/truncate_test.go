@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 func TestTruncateMiddle(t *testing.T) {
@@ -186,6 +187,89 @@ func TestTruncateLine(t *testing.T) {
 			result := TruncateLine(tt.input, tt.max)
 			assert.True(t, utf8.ValidString(result), "result must be valid UTF-8")
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCapToolResult(t *testing.T) {
+	const maxOutput = 1000
+
+	tests := []struct {
+		name  string
+		in    ToolResult
+		check func(t *testing.T, r ToolResult)
+	}{
+		{
+			name: "oversized success content is truncated",
+			in: ToolResult{
+				Content: strings.Repeat("x", maxOutput*4),
+				IsError: false,
+			},
+			check: func(t *testing.T, r ToolResult) {
+				assert.LessOrEqual(t, len(r.Content), maxOutput+100)
+				assert.Contains(t, r.Content, "bytes truncated")
+			},
+		},
+		{
+			name: "oversized error content is truncated",
+			in: ToolResult{
+				Content: strings.Repeat("e", maxOutput*4),
+				IsError: true,
+			},
+			check: func(t *testing.T, r ToolResult) {
+				assert.LessOrEqual(t, len(r.Content), maxOutput+100)
+				assert.Contains(t, r.Content, "bytes truncated")
+			},
+		},
+		{
+			name: "small content is untouched",
+			in: ToolResult{
+				Content: "ok",
+			},
+			check: func(t *testing.T, r ToolResult) {
+				assert.Equal(t, "ok", r.Content)
+			},
+		},
+		{
+			name: "oversized image part is replaced with placeholder",
+			in: ToolResult{
+				Content: "summary",
+				MultiContent: []llmapi.ContentPart{
+					{Type: llmapi.ContentPartTypeText, Text: "summary"},
+					{Type: llmapi.ContentPartTypeImageURL, ImageURL: strings.Repeat("d", MaxToolResultBytes+1)},
+				},
+			},
+			check: func(t *testing.T, r ToolResult) {
+				require.Len(t, r.MultiContent, 2)
+				assert.Equal(t, llmapi.ContentPartTypeText, r.MultiContent[0].Type)
+				assert.Equal(t, "summary", r.MultiContent[0].Text)
+				assert.Equal(t, llmapi.ContentPartTypeText, r.MultiContent[1].Type)
+				assert.Empty(t, r.MultiContent[1].ImageURL)
+				assert.Equal(t,
+					fmt.Sprintf("[image omitted: %d bytes exceeds limit]", MaxToolResultBytes+1),
+					r.MultiContent[1].Text)
+			},
+		},
+		{
+			name: "small image part is untouched",
+			in: ToolResult{
+				MultiContent: []llmapi.ContentPart{
+					{Type: llmapi.ContentPartTypeImageURL, ImageURL: "data:image/png;base64,AAAA"},
+				},
+			},
+			check: func(t *testing.T, r ToolResult) {
+				require.Len(t, r.MultiContent, 1)
+				assert.Equal(t, llmapi.ContentPartTypeImageURL, r.MultiContent[0].Type)
+				assert.Equal(t, "data:image/png;base64,AAAA", r.MultiContent[0].ImageURL)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.in
+			capToolResult(&r, maxOutput)
+			tt.check(t, r)
 		})
 	}
 }

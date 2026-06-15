@@ -1056,9 +1056,7 @@ func (a *Agent) run(
 								"duration", dur,
 							)
 						}
-						if !result.IsError {
-							result.Content = truncateMiddle(result.Content, maxOutput)
-						}
+						capToolResult(&result, maxOutput)
 						// Layer 1: belt-and-suspenders sanitisation so
 						// a stray invalid UTF-8 byte in any tool
 						// output (or in an error message that embeds

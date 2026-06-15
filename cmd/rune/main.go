@@ -63,6 +63,7 @@ import (
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideplan"
+	"unstable.build/go-tui/llm/llmrpc"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/term/gui"
 	"unstable.build/go-tui/text"
@@ -214,6 +215,8 @@ func startWorkspaceServer() int {
 		grpc.ChainStreamInterceptor(
 			rpc.StreamReportRecoveryInterceptor(),
 		),
+		grpc.MaxRecvMsgSize(llmrpc.MaxRecvMsgSize),
+		grpc.MaxSendMsgSize(llmrpc.MaxSendMsgSize),
 	)
 	signal.Notify(ch)
 
