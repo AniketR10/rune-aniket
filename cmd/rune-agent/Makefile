@@ -148,7 +148,8 @@ make-release-linux:
 	done; \
 	rm -f "$$LIB/.queue" "$$LIB/.next"
 	@cp config.yaml $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/config.yaml
-	@cp -r skills $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/skills
+	@mkdir -p $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/skills
+	@cp -r skills/code-* $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/skills/
 	@cd $(RUNE_AGENT_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_AGENT_LINUX_RELEASE_TAR) rune-agent
 
 # linux-cross-compile builds a stripped-down rune-agent bundle (no GUI deps)

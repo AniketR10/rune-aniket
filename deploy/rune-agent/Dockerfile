@@ -121,7 +121,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 RUN set -eux; \
 	cp /src/cmd/rune-agent/config.yaml /out/rune-agent/config.yaml; \
-	cp -r /src/cmd/rune-agent/skills /out/rune-agent/skills
+	mkdir -p /out/rune-agent/skills; \
+	cp -r /src/cmd/rune-agent/skills/code-* /out/rune-agent/skills/
 
 RUN set -eux; \
 	: "${RUNE_RELEASE_TAR:?RUNE_RELEASE_TAR build arg is required}"; \
