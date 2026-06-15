@@ -25,6 +25,7 @@ package text
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,36 @@ func TestSystemClipboardOpenErrorStillFunctionsViaMemory(t *testing.T) {
 		"a failed open must surface through Paste with a user-friendly message")
 	require.Equal(t, "x", data.Text,
 		"the in-memory fallback must still service copy/paste within Rune")
+}
+
+func TestSystemClipboardUnsupportedErrorSuggestsPackages(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("package-install hint is only appended on Linux")
+	}
+	clip := newSystemClipboard(nil, errors.New("system clipboard unsupported"))
+
+	want := "system clipboard: system clipboard unsupported; " +
+		"install one of the following clipboard utilities: " +
+		"xclip, xsel, or wl-clipboard (Wayland)"
+
+	err := clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: "x"})
+	require.EqualError(t, err, want,
+		"an unsupported clipboard must tell the user which packages to install")
+
+	_, err = clip.Paste(clipboard.DefaultRegisterID)
+	require.EqualError(t, err, want,
+		"an unsupported clipboard must tell the user which packages to install")
+}
+
+func TestSystemClipboardUnsupportedErrorNoHintOffLinux(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("hint is expected on Linux")
+	}
+	clip := newSystemClipboard(nil, errors.New("system clipboard unsupported"))
+
+	err := clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: "x"})
+	require.EqualError(t, err, "system clipboard: system clipboard unsupported",
+		"non-Linux platforms must not get Linux package advice")
 }
 
 func TestSystemClipboardCopyPasteErrorStillFunctionsViaMemory(t *testing.T) {

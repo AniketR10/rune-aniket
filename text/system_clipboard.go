@@ -25,6 +25,8 @@ package text
 
 import (
 	"fmt"
+	"runtime"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/clipboard/sysclip"
@@ -44,7 +46,12 @@ type systemClipboard struct {
 
 func newSystemClipboard(sys clipboard.Register, err error) clipboard.Register {
 	if err != nil {
-		err = fmt.Errorf("system clipboard: %s", err.Error())
+		msg := err.Error()
+		if runtime.GOOS == "linux" && strings.Contains(msg, "unsupported") {
+			msg += "; install one of the following clipboard utilities: " +
+				"xclip, xsel, or wl-clipboard (Wayland)"
+		}
+		err = fmt.Errorf("system clipboard: %s", msg)
 	}
 	return &systemClipboard{sys: sys, mem: clipboard.NewInMemory(), openErr: err}
 }
