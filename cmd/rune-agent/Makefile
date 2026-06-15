@@ -18,6 +18,10 @@ RUNE_AGENT_LINUX_TARGET_OS ?= linux
 RUNE_AGENT_LINUX_TARGET_ARCH ?= amd64
 RUNE_AGENT_LINUX_OUTPUT_DIR ?= $(TARGET)/rune-agent_$(RUNE_AGENT_LINUX_TARGET_OS)_$(RUNE_AGENT_LINUX_TARGET_ARCH)
 RUNE_AGENT_LINUX_RELEASE_TAR ?= rune-agent-release-$(RUNE_AGENT_LINUX_TARGET_OS)-$(RUNE_AGENT_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
+# HOST_ARCH is the host's Go arch. A native Linux release requires the host's
+# arch to match the requested target arch (no emulation); other combinations
+# must use the Docker cross-compile path via the *-cross targets.
+HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 
 # Build flags mirror the root Makefile's six package stamp.
 COMMON_LDFLAGS := -X unstable.build/go-tui/debug.Tag=$(VERSION) -X unstable.build/go-tui/debug.Commit=$(COMMIT) -X unstable.build/go-tui/debug.Package=six
@@ -27,8 +31,11 @@ COMMON_LDFLAGS := -X unstable.build/go-tui/debug.Tag=$(VERSION) -X unstable.buil
 DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64" CGO_CFLAGS="-arch x86_64" CGO_CXXFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64"
 
 .PHONY: clean build pkg sign notarize dist dist-notarized \
-	linux-cross-compile release-linux-amd64 release-linux-arm64 \
+	linux-cross-compile make-release-linux \
+	release-linux-amd64 release-linux-arm64 \
+	release-linux-amd64-cross release-linux-arm64-cross \
 	dist-linux-amd64 dist-linux-arm64 \
+	dist-linux-amd64-cross dist-linux-arm64-cross \
 	pkg-darwin-amd64 pkg-darwin-arm64 \
 	sign-darwin-amd64 sign-darwin-arm64 \
 	notarize-darwin-amd64 notarize-darwin-arm64 \
@@ -93,6 +100,57 @@ dist-notarized: dist
 	@echo "Skipping notarized dist (not on macOS)"
 endif
 
+# make-release-linux builds the rune-agent bundle with the host's own toolchain
+# (no Docker/QEMU), mirroring the layout produced by deploy/rune-agent/Dockerfile:
+#   rune-agent/bin/rune-agent
+#   rune-agent/lib/*.so.*       (transitive NEEDED libs, rpath=$ORIGIN/../lib)
+#   rune-agent/config.yaml
+#   rune-agent/skills/
+# CGO is required (tree-sitter), so the binary links the host's shared libs.
+# Native builds only support host-arch == target-arch; cross-arch must use the
+# *-cross (Docker) targets.
+make-release-linux:
+	@if [ "$(UNAME)" != "Linux" ] || [ "$(HOST_ARCH)" != "$(RUNE_AGENT_LINUX_TARGET_ARCH)" ]; then \
+		echo "make-release-linux requires a Linux host whose arch matches RUNE_AGENT_LINUX_TARGET_ARCH=$(RUNE_AGENT_LINUX_TARGET_ARCH) (host: $(UNAME)/$(HOST_ARCH))."; \
+		echo "Use the *-cross targets (e.g. release-linux-$(RUNE_AGENT_LINUX_TARGET_ARCH)-cross) for cross-arch builds via Docker."; \
+		exit 1; \
+	fi
+	@rm -rf $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent
+	@mkdir -p $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/bin $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/lib
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 CGO_LDFLAGS='-Wl,-rpath,$$ORIGIN/../lib' \
+		GOOS=linux GOARCH=$(RUNE_AGENT_LINUX_TARGET_ARCH) \
+		$(GO) build \
+		-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune" \
+		-o $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/bin/rune-agent ./cmd/rune-agent
+	@set -eu; \
+	BIN=$(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/bin/rune-agent; \
+	LIB=$(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/lib; \
+	TRIPLET=$$(gcc -dumpmachine); \
+	objdump -p "$$BIN" | awk '$$1 == "NEEDED" {print $$2}' > "$$LIB/.queue"; \
+	while [ -s "$$LIB/.queue" ]; do \
+		: > "$$LIB/.next"; \
+		while IFS= read -r soname; do \
+			case "$$soname" in \
+				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+				libcuda.so*) continue ;; \
+			esac; \
+			[ -f "$$LIB/$$soname" ] && continue; \
+			src=""; \
+			for d in /usr/lib/$$TRIPLET /lib/$$TRIPLET /usr/lib /lib; do \
+				if [ -e "$$d/$$soname" ]; then src="$$d/$$soname"; break; fi; \
+			done; \
+			if [ -z "$$src" ]; then echo "WARN: $$soname not found"; continue; fi; \
+			cp -L "$$src" "$$LIB/$$soname"; \
+			echo "  bundled: $$soname"; \
+			objdump -p "$$src" 2>/dev/null | awk '$$1 == "NEEDED" {print $$2}' >> "$$LIB/.next"; \
+		done < "$$LIB/.queue"; \
+		mv "$$LIB/.next" "$$LIB/.queue"; \
+	done; \
+	rm -f "$$LIB/.queue" "$$LIB/.next"
+	@cp config.yaml $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/config.yaml
+	@cp -r skills $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/skills
+	@cd $(RUNE_AGENT_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_AGENT_LINUX_RELEASE_TAR) rune-agent
+
 # linux-cross-compile builds a stripped-down rune-agent bundle (no GUI deps)
 # inside a Debian-based Docker image. The resulting tarball is dropped into
 # $(RUNE_AGENT_LINUX_OUTPUT_DIR) along with the unpacked rune-agent/ tree.
@@ -109,12 +167,24 @@ linux-cross-compile:
 		--output type=local,dest=$(RUNE_AGENT_LINUX_OUTPUT_DIR) \
 		.
 
+# release-linux-{amd64,arm64} build natively on a matching Linux host. Use the
+# *-cross variants for cross-arch builds via Docker.
 release-linux-amd64:
+	@RUNE_AGENT_LINUX_TARGET_ARCH=amd64 \
+		RUNE_AGENT_LINUX_RELEASE_TAR=rune-agent-release-linux-amd64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
+		$(MAKE) make-release-linux
+
+release-linux-arm64:
+	@RUNE_AGENT_LINUX_TARGET_ARCH=arm64 \
+		RUNE_AGENT_LINUX_RELEASE_TAR=rune-agent-release-linux-arm64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
+		$(MAKE) make-release-linux
+
+release-linux-amd64-cross:
 	@RUNE_AGENT_LINUX_TARGET_ARCH=amd64 \
 		RUNE_AGENT_LINUX_RELEASE_TAR=rune-agent-release-linux-amd64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
 		$(MAKE) linux-cross-compile
 
-release-linux-arm64:
+release-linux-arm64-cross:
 	@RUNE_AGENT_LINUX_TARGET_ARCH=arm64 \
 		RUNE_AGENT_LINUX_RELEASE_TAR=rune-agent-release-linux-arm64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
 		$(MAKE) linux-cross-compile
@@ -130,6 +200,27 @@ dist-linux-amd64: release-linux-amd64
 
 dist-linux-arm64: release-linux-arm64
 	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist-linux-arm64 or rune-agent-staging-dist-linux-arm64}
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_arm64/rune-agent-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=arm64 \
+		$(ROOT_DIST_SH)
+
+# dist-linux-*-cross mirror dist-linux-* but build the tarball through the
+# Docker cross-compile path (release-linux-*-cross). The tarball path is
+# identical.
+dist-linux-amd64-cross: release-linux-amd64-cross
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist-linux-amd64-cross or rune-agent-staging-dist-linux-amd64-cross}
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_amd64/rune-agent-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=amd64 \
+		$(ROOT_DIST_SH)
+
+dist-linux-arm64-cross: release-linux-arm64-cross
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist-linux-arm64-cross or rune-agent-staging-dist-linux-arm64-cross}
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_arm64/rune-agent-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \

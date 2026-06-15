@@ -9,6 +9,10 @@ RUNE_LINUX_TARGET_OS ?= linux
 RUNE_LINUX_TARGET_ARCH ?= amd64
 RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TARGET_ARCH)
 RUNE_LINUX_RELEASE_TAR ?= rune-release-$(RUNE_LINUX_TARGET_OS)-$(RUNE_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
+# HOST_ARCH is the host's Go arch. A native Linux release requires the host's
+# arch to match the requested target arch (no emulation); other combinations
+# must use the Docker cross-compile path via the *-cross targets.
+HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 # DARWIN_AMD64_MIN_MACOS is the minimum macOS the Intel build supports. It
 # matches upstream llama.cpp's generic macOS CI floor (13.3) so the GGML Metal
 # backend and shader library are built against a tested deployment target. It is
@@ -82,11 +86,16 @@ endif
 .PHONY: clean make-release release release-amd64 release-arm64 app-amd64 app-arm64 dmg dmg-amd64 dmg-notarize dmg-amd64-notarize release-all \
 	llamacpp-libs-amd64 llamacpp-libs-arm64 \
 	docker-build docker-run linux-cross-compile \
+	make-release-linux \
 	release-linux-amd64 release-linux-arm64 \
+	release-linux-amd64-cross release-linux-arm64-cross \
 	check-release-tag \
 	dist-linux-amd64 dist-linux-arm64 dist-darwin-arm64 dist-darwin-amd64 \
+	dist-linux-amd64-cross dist-linux-arm64-cross \
 	prod-dist-linux-amd64 prod-dist-linux-arm64 prod-dist-darwin-amd64 prod-dist-darwin-arm64 \
+	prod-dist-linux-amd64-cross prod-dist-linux-arm64-cross \
 	staging-dist-linux-amd64 staging-dist-linux-arm64 staging-dist-darwin-amd64 staging-dist-darwin-arm64 \
+	staging-dist-linux-amd64-cross staging-dist-linux-arm64-cross \
 	app-delve
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
@@ -313,10 +322,78 @@ linux-cross-compile:
 		--output type=local,dest=$(RUNE_LINUX_OUTPUT_DIR) \
 		.
 
+# make-release-linux builds the rune.app bundle with the host's own toolchain
+# (no Docker/QEMU), mirroring the layout produced by deploy/rune-linux/Dockerfile:
+#   rune.app/bin/rune
+#   rune.app/lib/*.so.*            (transitive NEEDED libs, rpath=$ORIGIN/../lib)
+#   rune.app/share/applications/rune.desktop
+#   rune.app/share/icons/hicolor/{512x512,1024x1024}/apps/rune.png
+#   rune.app/share/zdot/.z*
+# CGO is required (ebiten/GUI), so the binary links the host's shared libs; on a
+# glibc host those are ABI-stable enough to ship. Native builds only support
+# host-arch == target-arch; cross-arch must use the *-cross (Docker) targets.
+make-release-linux:
+	@if [ "$(UNAME)" != "Linux" ] || [ "$(HOST_ARCH)" != "$(RUNE_LINUX_TARGET_ARCH)" ]; then \
+		echo "make-release-linux requires a Linux host whose arch matches RUNE_LINUX_TARGET_ARCH=$(RUNE_LINUX_TARGET_ARCH) (host: $(UNAME)/$(HOST_ARCH))."; \
+		echo "Use the *-cross targets (e.g. release-linux-$(RUNE_LINUX_TARGET_ARCH)-cross) for cross-arch builds via Docker."; \
+		exit 1; \
+	fi
+	@rm -rf $(RUNE_LINUX_OUTPUT_DIR)/rune.app
+	@mkdir -p $(RUNE_LINUX_OUTPUT_DIR)/rune.app/bin $(RUNE_LINUX_OUTPUT_DIR)/rune.app/lib
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 CGO_LDFLAGS='-Wl,-rpath,$$ORIGIN/../lib' \
+		GOOS=linux GOARCH=$(RUNE_LINUX_TARGET_ARCH) \
+		$(GO) build $(RUNE_GOFLAGS) \
+		-o $(RUNE_LINUX_OUTPUT_DIR)/rune.app/bin/rune ./cmd/rune
+	@set -eu; \
+	BIN=$(RUNE_LINUX_OUTPUT_DIR)/rune.app/bin/rune; \
+	LIB=$(RUNE_LINUX_OUTPUT_DIR)/rune.app/lib; \
+	TRIPLET=$$(gcc -dumpmachine); \
+	objdump -p "$$BIN" | awk '$$1 == "NEEDED" {print $$2}' > "$$LIB/.queue"; \
+	: > "$$LIB/.next"; \
+	while [ -s "$$LIB/.queue" ]; do \
+		: > "$$LIB/.next"; \
+		while IFS= read -r soname; do \
+			case "$$soname" in \
+				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+			esac; \
+			[ -f "$$LIB/$$soname" ] && continue; \
+			src=""; \
+			for d in /usr/lib/$$TRIPLET /lib/$$TRIPLET /usr/lib /lib; do \
+				if [ -e "$$d/$$soname" ]; then src="$$d/$$soname"; break; fi; \
+			done; \
+			if [ -z "$$src" ]; then echo "WARN: $$soname not found"; continue; fi; \
+			cp -L "$$src" "$$LIB/$$soname"; \
+			echo "  bundled: $$soname"; \
+			objdump -p "$$src" 2>/dev/null | awk '$$1 == "NEEDED" {print $$2}' >> "$$LIB/.next"; \
+		done < "$$LIB/.queue"; \
+		mv "$$LIB/.next" "$$LIB/.queue"; \
+	done; \
+	rm -f "$$LIB/.queue" "$$LIB/.next"
+	@mkdir -p $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/applications \
+		$(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/icons/hicolor/512x512/apps \
+		$(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/icons/hicolor/1024x1024/apps \
+		$(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot
+	@cp $(ROOT_DIR)/deploy/rune-linux/rune.desktop $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/applications/rune.desktop
+	@cp $(ROOT_DIR)/extra/icon.iconset/icon_512x512.png $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/icons/hicolor/512x512/apps/rune.png
+	@cp $(ROOT_DIR)/extra/icon.iconset/icon_512x512@2x.png $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/icons/hicolor/1024x1024/apps/rune.png
+	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zlogin $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
+	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zprofile $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
+	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zshenv $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
+	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zshrc $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
+	@cd $(RUNE_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_LINUX_RELEASE_TAR) rune.app
+
+# release-linux-{amd64,arm64} build natively on a matching Linux host. Use the
+# *-cross variants for cross-arch builds via Docker.
 release-linux-amd64:
-	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
+	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) make-release-linux
 
 release-linux-arm64:
+	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) make-release-linux
+
+release-linux-amd64-cross:
+	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
+
+release-linux-arm64-cross:
 	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
 
 # dist-* are the underlying upload rules. They build the artifact via
@@ -340,6 +417,27 @@ dist-linux-amd64: check-release-tag release-linux-amd64
 		./cmd/rune/dist.sh
 
 dist-linux-arm64: check-release-tag release-linux-arm64
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=arm64 \
+		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		./cmd/rune/dist.sh
+
+# dist-linux-*-cross mirror dist-linux-* but build the tarball through the
+# Docker cross-compile path (release-linux-*-cross). The tarball path is
+# identical, so dist.sh is invoked the same way.
+dist-linux-amd64-cross: check-release-tag release-linux-amd64-cross
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_amd64/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=amd64 \
+		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
+		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		./cmd/rune/dist.sh
+
+dist-linux-arm64-cross: check-release-tag release-linux-arm64-cross
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
@@ -384,6 +482,16 @@ prod-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
 prod-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-arm64:  dist-linux-arm64
 
+prod-dist-linux-amd64-cross:  RUNE_ENV := prod
+prod-dist-linux-amd64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+prod-dist-linux-amd64-cross:  dist-linux-amd64-cross
+
+prod-dist-linux-arm64-cross:  RUNE_ENV := prod
+prod-dist-linux-arm64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+prod-dist-linux-arm64-cross:  dist-linux-arm64-cross
+
 prod-dist-darwin-amd64: RUNE_ENV := prod
 prod-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
 prod-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
@@ -406,6 +514,16 @@ staging-dist-linux-arm64:  RUNE_ENV := dev
 staging-dist-linux-arm64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
 staging-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64:  dist-linux-arm64
+
+staging-dist-linux-amd64-cross:  RUNE_ENV := dev
+staging-dist-linux-amd64-cross:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
+staging-dist-linux-amd64-cross:  dist-linux-amd64-cross
+
+staging-dist-linux-arm64-cross:  RUNE_ENV := dev
+staging-dist-linux-arm64-cross:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
+staging-dist-linux-arm64-cross:  dist-linux-arm64-cross
 
 staging-dist-darwin-amd64: RUNE_ENV := dev
 staging-dist-darwin-amd64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)

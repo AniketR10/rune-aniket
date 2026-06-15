@@ -31,8 +31,11 @@ COMMON_LDFLAGS := -X unstable.build/go-tui/debug.Tag=$(VERSION) -X unstable.buil
 DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64" CGO_CFLAGS="-arch x86_64" CGO_CXXFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64"
 
 .PHONY: clean build pkg dist \
-	linux-cross-compile release-linux-amd64 release-linux-arm64 \
-	native-release-linux dist-linux-amd64 dist-linux-arm64 \
+	linux-cross-compile make-release-linux \
+	release-linux-amd64 release-linux-arm64 \
+	release-linux-amd64-cross release-linux-arm64-cross \
+	dist-linux-amd64 dist-linux-arm64 \
+	dist-linux-amd64-cross dist-linux-arm64-cross \
 	pkg-darwin-amd64 pkg-darwin-arm64 \
 	sign-darwin-amd64 sign-darwin-arm64 \
 	notarize-darwin-amd64 notarize-darwin-arm64 \
@@ -63,16 +66,51 @@ dist: clean $(TAR)
 	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use fuzzy-search-prod-dist or fuzzy-search-staging-dist}
 	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 
-# native-release-linux builds the fuzzy-search bundle with the host's own
-# toolchain. Used when the dist arch matches the Linux host's native arch so
-# we skip Docker/QEMU. CGO is required (tree-sitter), so the binary links the
-# host's shared libs; on a glibc host those are ABI-stable enough to ship.
-native-release-linux:
+# make-release-linux builds the fuzzy-search bundle with the host's own
+# toolchain (no Docker/QEMU), mirroring the layout produced by
+# deploy/fuzzy-search/Dockerfile:
+#   fuzzy-search/bin/extension_fuzzy_search
+#   fuzzy-search/lib/*.so.*     (transitive NEEDED libs, rpath=$ORIGIN/../lib)
+#   fuzzy-search/config.star
+# CGO is required (tree-sitter), so the binary links the host's shared libs.
+# Native builds only support host-arch == target-arch; cross-arch must use the
+# *-cross (Docker) targets.
+make-release-linux:
+	@if [ "$(UNAME)" != "Linux" ] || [ "$(HOST_ARCH)" != "$(FUZZY_LINUX_TARGET_ARCH)" ]; then \
+		echo "make-release-linux requires a Linux host whose arch matches FUZZY_LINUX_TARGET_ARCH=$(FUZZY_LINUX_TARGET_ARCH) (host: $(UNAME)/$(HOST_ARCH))."; \
+		echo "Use the *-cross targets (e.g. release-linux-$(FUZZY_LINUX_TARGET_ARCH)-cross) for cross-arch builds via Docker."; \
+		exit 1; \
+	fi
 	@rm -rf $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search
-	@mkdir -p $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/bin
-	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOOS=linux GOARCH=$(FUZZY_LINUX_TARGET_ARCH) \
+	@mkdir -p $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/bin $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/lib
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 CGO_LDFLAGS='-Wl,-rpath,$$ORIGIN/../lib' \
+		GOOS=linux GOARCH=$(FUZZY_LINUX_TARGET_ARCH) \
 		$(GO) build -ldflags="$(COMMON_LDFLAGS)" \
 		-o $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/bin/extension_fuzzy_search ./cmd/extension_fuzzy_search
+	@set -eu; \
+	BIN=$(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/bin/extension_fuzzy_search; \
+	LIB=$(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/lib; \
+	TRIPLET=$$(gcc -dumpmachine); \
+	objdump -p "$$BIN" | awk '$$1 == "NEEDED" {print $$2}' > "$$LIB/.queue"; \
+	while [ -s "$$LIB/.queue" ]; do \
+		: > "$$LIB/.next"; \
+		while IFS= read -r soname; do \
+			case "$$soname" in \
+				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+			esac; \
+			[ -f "$$LIB/$$soname" ] && continue; \
+			src=""; \
+			for d in /usr/lib/$$TRIPLET /lib/$$TRIPLET /usr/lib /lib; do \
+				if [ -e "$$d/$$soname" ]; then src="$$d/$$soname"; break; fi; \
+			done; \
+			if [ -z "$$src" ]; then echo "WARN: $$soname not found"; continue; fi; \
+			cp -L "$$src" "$$LIB/$$soname"; \
+			echo "  bundled: $$soname"; \
+			objdump -p "$$src" 2>/dev/null | awk '$$1 == "NEEDED" {print $$2}' >> "$$LIB/.next"; \
+		done < "$$LIB/.queue"; \
+		mv "$$LIB/.next" "$$LIB/.queue"; \
+	done; \
+	rm -f "$$LIB/.queue" "$$LIB/.next"
 	@cp config.star $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/config.star
 	@cd $(FUZZY_LINUX_OUTPUT_DIR) && \
 		tar --format=ustar -czf $(FUZZY_LINUX_RELEASE_TAR) fuzzy-search
@@ -94,30 +132,27 @@ linux-cross-compile:
 		--output type=local,dest=$(FUZZY_LINUX_OUTPUT_DIR) \
 		.
 
-# release-linux-{amd64,arm64} produce a linux release tarball. On a Linux host
-# whose native arch matches the target, build directly; otherwise cross-compile
-# through Docker.
+# release-linux-{amd64,arm64} build natively on a matching Linux host. Use the
+# *-cross variants for cross-arch builds via Docker.
 release-linux-amd64:
-	@if [ "$(UNAME)" = "Linux" ] && [ "$(HOST_ARCH)" = "amd64" ]; then \
-		FUZZY_LINUX_TARGET_ARCH=amd64 \
+	@FUZZY_LINUX_TARGET_ARCH=amd64 \
 		FUZZY_LINUX_RELEASE_TAR=fuzzy-search-release-linux-amd64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
-		$(MAKE) native-release-linux; \
-	else \
-		FUZZY_LINUX_TARGET_ARCH=amd64 \
-		FUZZY_LINUX_RELEASE_TAR=fuzzy-search-release-linux-amd64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
-		$(MAKE) linux-cross-compile; \
-	fi
+		$(MAKE) make-release-linux
 
 release-linux-arm64:
-	@if [ "$(UNAME)" = "Linux" ] && [ "$(HOST_ARCH)" = "arm64" ]; then \
-		FUZZY_LINUX_TARGET_ARCH=arm64 \
+	@FUZZY_LINUX_TARGET_ARCH=arm64 \
 		FUZZY_LINUX_RELEASE_TAR=fuzzy-search-release-linux-arm64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
-		$(MAKE) native-release-linux; \
-	else \
-		FUZZY_LINUX_TARGET_ARCH=arm64 \
+		$(MAKE) make-release-linux
+
+release-linux-amd64-cross:
+	@FUZZY_LINUX_TARGET_ARCH=amd64 \
+		FUZZY_LINUX_RELEASE_TAR=fuzzy-search-release-linux-amd64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
+		$(MAKE) linux-cross-compile
+
+release-linux-arm64-cross:
+	@FUZZY_LINUX_TARGET_ARCH=arm64 \
 		FUZZY_LINUX_RELEASE_TAR=fuzzy-search-release-linux-arm64-$$(git -C $(ROOT_DIR) describe --tags --dirty).tar.gz \
-		$(MAKE) linux-cross-compile; \
-	fi
+		$(MAKE) linux-cross-compile
 
 dist-linux-amd64: release-linux-amd64
 	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use fuzzy-search-prod-dist-linux-amd64 or fuzzy-search-staging-dist-linux-amd64}
@@ -130,6 +165,27 @@ dist-linux-amd64: release-linux-amd64
 
 dist-linux-arm64: release-linux-arm64
 	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use fuzzy-search-prod-dist-linux-arm64 or fuzzy-search-staging-dist-linux-arm64}
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/fuzzy-search_linux_arm64/fuzzy-search-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=arm64 \
+		$(ROOT_DIST_SH)
+
+# dist-linux-*-cross mirror dist-linux-* but build the tarball through the
+# Docker cross-compile path (release-linux-*-cross). The tarball path is
+# identical.
+dist-linux-amd64-cross: release-linux-amd64-cross
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use fuzzy-search-prod-dist-linux-amd64-cross or fuzzy-search-staging-dist-linux-amd64-cross}
+	@cd $(ROOT_DIR) && \
+		BLUE_RELEASE_TAR=$(TARGET)/fuzzy-search_linux_amd64/fuzzy-search-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \
+		BLUE_TARGET_OS=linux \
+		BLUE_TARGET_ARCH=amd64 \
+		$(ROOT_DIST_SH)
+
+dist-linux-arm64-cross: release-linux-arm64-cross
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use fuzzy-search-prod-dist-linux-arm64-cross or fuzzy-search-staging-dist-linux-arm64-cross}
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/fuzzy-search_linux_arm64/fuzzy-search-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \

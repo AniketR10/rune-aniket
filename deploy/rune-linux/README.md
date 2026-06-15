@@ -1,8 +1,17 @@
-# Rune Linux cross-compilation
+# Rune Linux builds
 
-`deploy/rune-linux/Dockerfile` cross-compiles the Rune GUI binary for
-`linux/amd64` or `linux/arm64` inside Docker without forcing the Go
-toolchain itself to run under target-arch emulation.
+The Rune GUI binary is built for `linux/amd64` or `linux/arm64` in one of
+two ways:
+
+- **Native** (default): `make rune-release-linux-<arch>` /
+  `make rune-prod-dist-linux-<arch>` build with the host's own toolchain.
+  This requires a Linux host whose architecture matches the target
+  (`uname -m` mapped to `amd64`/`arm64`); cross-arch native builds are not
+  supported (no emulation).
+- **Cross** (`*-cross` targets): `deploy/rune-linux/Dockerfile`
+  cross-compiles inside Docker without forcing the Go toolchain itself to
+  run under target-arch emulation. Use these when the host arch does not
+  match the target arch.
 
 ## Supported targets
 
@@ -13,7 +22,27 @@ toolchain itself to run under target-arch emulation.
 
 ## How it works
 
-The `make rune-linux-cross-compile` rule works by:
+### Native build
+
+`make rune-release-linux-<arch>` runs `cmd/rune`'s `make-release-linux`
+recipe, which mirrors the Docker bundle layout using the host toolchain:
+
+1. building `./cmd/rune` with `CGO_ENABLED=1` and
+   `rpath=$ORIGIN/../lib`, applying the same `RUNE_ENV`-driven ldflags as
+   every other build
+2. copying each NEEDED shared library (and transitive deps) into
+   `rune.app/lib/` via `objdump`, skipping glibc core libraries
+3. copying the `.desktop` entry, icons, and zsh dot files into
+   `rune.app/share/`
+4. packaging `rune.app/` into a `ustar` `.tar.gz`
+
+It refuses to run unless the host is Linux and its arch matches the
+requested target arch; use the `*-cross` targets otherwise.
+
+### Cross-compile build (`*-cross`)
+
+The `make rune-linux-cross-compile` rule (and the `*-cross` targets that
+wrap it) works by:
 
 1. building `deploy/rune-linux/Dockerfile` with `docker buildx`
 2. running the Go toolchain on `$BUILDPLATFORM`
@@ -31,7 +60,7 @@ The `make rune-linux-cross-compile` rule works by:
 
 ## Build commands
 
-Build for `linux/amd64` (default):
+Cross-compile for `linux/amd64` (default):
 
 ```bash
 make rune-linux-cross-compile
@@ -39,7 +68,7 @@ make rune-linux-cross-compile
 make rune-linux-cross-compile RUNE_LINUX_TARGET_ARCH=amd64
 ```
 
-Build for `linux/arm64`:
+Cross-compile for `linux/arm64`:
 
 ```bash
 make rune-linux-cross-compile RUNE_LINUX_TARGET_ARCH=arm64
@@ -47,23 +76,37 @@ make rune-linux-cross-compile RUNE_LINUX_TARGET_ARCH=arm64
 
 ## Release tarballs
 
-To build and package a release tarball:
+To build and package a release tarball natively (host arch must match the
+target arch):
 
 ```bash
 make rune-release-linux-amd64   # -> target/rune_linux_amd64/rune-release-linux-amd64-<tag>.tar.gz
 make rune-release-linux-arm64   # -> target/rune_linux_arm64/rune-release-linux-arm64-<tag>.tar.gz
 ```
 
+To build the same tarball via the Docker cross-compile path (any host):
+
+```bash
+make rune-release-linux-amd64-cross
+make rune-release-linux-arm64-cross
+```
+
 To build, package, and upload to the public downloads bucket:
 
 ```bash
-# Production (gs://downloads.rune.build, prod API endpoints baked in)
+# Production (gs://downloads.rune.build, prod API endpoints baked in) — native
 make rune-prod-dist-linux-amd64
 make rune-prod-dist-linux-arm64
 
-# Staging (gs://downloads.unstable.build, dev API endpoints baked in)
+# Staging (gs://downloads.unstable.build, dev API endpoints baked in) — native
 make rune-staging-dist-linux-amd64
 make rune-staging-dist-linux-arm64
+
+# Docker cross-compile variants (any host arch)
+make rune-prod-dist-linux-amd64-cross
+make rune-prod-dist-linux-arm64-cross
+make rune-staging-dist-linux-amd64-cross
+make rune-staging-dist-linux-arm64-cross
 ```
 
 ## Release layout

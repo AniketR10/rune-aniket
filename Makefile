@@ -52,16 +52,22 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-agent-prod-dist-notarized rune-agent-staging-dist-notarized \
 	rune-agent-linux-cross-compile \
 	rune-agent-release-linux-amd64 rune-agent-release-linux-arm64 \
+	rune-agent-release-linux-amd64-cross rune-agent-release-linux-arm64-cross \
 	rune-agent-prod-dist-linux-amd64 rune-agent-staging-dist-linux-amd64 \
 	rune-agent-prod-dist-linux-arm64 rune-agent-staging-dist-linux-arm64 \
+	rune-agent-prod-dist-linux-amd64-cross rune-agent-staging-dist-linux-amd64-cross \
+	rune-agent-prod-dist-linux-arm64-cross rune-agent-staging-dist-linux-arm64-cross \
 	rune-agent-prod-dist-darwin-amd64 rune-agent-staging-dist-darwin-amd64 \
 	rune-agent-prod-dist-darwin-arm64 rune-agent-staging-dist-darwin-arm64 \
 	fuzzy-search fuzzy-search-pkg \
 	fuzzy-search-prod-dist fuzzy-search-staging-dist \
 	fuzzy-search-linux-cross-compile \
 	fuzzy-search-release-linux-amd64 fuzzy-search-release-linux-arm64 \
+	fuzzy-search-release-linux-amd64-cross fuzzy-search-release-linux-arm64-cross \
 	fuzzy-search-prod-dist-linux-amd64 fuzzy-search-staging-dist-linux-amd64 \
 	fuzzy-search-prod-dist-linux-arm64 fuzzy-search-staging-dist-linux-arm64 \
+	fuzzy-search-prod-dist-linux-amd64-cross fuzzy-search-staging-dist-linux-amd64-cross \
+	fuzzy-search-prod-dist-linux-arm64-cross fuzzy-search-staging-dist-linux-arm64-cross \
 	fuzzy-search-prod-dist-darwin-amd64 fuzzy-search-staging-dist-darwin-amd64 \
 	fuzzy-search-prod-dist-darwin-arm64 fuzzy-search-staging-dist-darwin-arm64 \
 	runectl-pkg runectl-sign runectl-notarize \
@@ -73,9 +79,12 @@ RELEASE_FILES=$(wildcard release/*)
 	runectl-prod-dist-darwin-arm64 runectl-staging-dist-darwin-arm64 \
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
+	rune-release-linux-amd64-cross rune-release-linux-arm64-cross \
 	rune-prod-dist-linux-amd64 rune-prod-dist-linux-arm64 \
+	rune-prod-dist-linux-amd64-cross rune-prod-dist-linux-arm64-cross \
 	rune-prod-dist-darwin-arm64 rune-prod-dist-darwin-amd64 \
 	rune-staging-dist-linux-amd64 rune-staging-dist-linux-arm64 \
+	rune-staging-dist-linux-amd64-cross rune-staging-dist-linux-arm64-cross \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps rune-llamacpp-libs rune-llamacpp-init \
 	ox-api-init docs-init \
@@ -300,6 +309,12 @@ rune-release-linux-amd64:
 rune-release-linux-arm64:
 	@$(MAKE) -C cmd/rune release-linux-arm64
 
+rune-release-linux-amd64-cross:
+	@$(MAKE) -C cmd/rune release-linux-amd64-cross
+
+rune-release-linux-arm64-cross:
+	@$(MAKE) -C cmd/rune release-linux-arm64-cross
+
 # rune-prod-dist-* / rune-staging-dist-*: build a release artifact and
 # upload it to the corresponding public download bucket.
 #
@@ -310,6 +325,12 @@ rune-prod-dist-linux-amd64: clean
 
 rune-prod-dist-linux-arm64: clean
 	@$(MAKE) -C cmd/rune prod-dist-linux-arm64
+
+rune-prod-dist-linux-amd64-cross: clean
+	@$(MAKE) -C cmd/rune prod-dist-linux-amd64-cross
+
+rune-prod-dist-linux-arm64-cross: clean
+	@$(MAKE) -C cmd/rune prod-dist-linux-arm64-cross
 
 rune-prod-dist-darwin-arm64: clean
 	@$(MAKE) -C cmd/rune prod-dist-darwin-arm64
@@ -322,6 +343,12 @@ rune-staging-dist-linux-amd64: clean
 
 rune-staging-dist-linux-arm64: clean
 	@$(MAKE) -C cmd/rune staging-dist-linux-arm64
+
+rune-staging-dist-linux-amd64-cross: clean
+	@$(MAKE) -C cmd/rune staging-dist-linux-amd64-cross
+
+rune-staging-dist-linux-arm64-cross: clean
+	@$(MAKE) -C cmd/rune staging-dist-linux-arm64-cross
 
 rune-staging-dist-darwin-arm64: clean
 	@$(MAKE) -C cmd/rune staging-dist-darwin-arm64
@@ -424,6 +451,12 @@ rune-agent-release-linux-amd64:
 rune-agent-release-linux-arm64:
 	@$(MAKE) -C cmd/rune-agent release-linux-arm64
 
+rune-agent-release-linux-amd64-cross:
+	@$(MAKE) -C cmd/rune-agent release-linux-amd64-cross
+
+rune-agent-release-linux-arm64-cross:
+	@$(MAKE) -C cmd/rune-agent release-linux-arm64-cross
+
 rune-agent-prod-dist-linux-amd64: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-amd64) $(MAKE) -C cmd/rune-agent dist-linux-amd64
 
@@ -435,6 +468,18 @@ rune-agent-prod-dist-linux-arm64: clean
 
 rune-agent-staging-dist-linux-arm64: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-arm64) $(MAKE) -C cmd/rune-agent dist-linux-arm64
+
+rune-agent-prod-dist-linux-amd64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-amd64) $(MAKE) -C cmd/rune-agent dist-linux-amd64-cross
+
+rune-agent-staging-dist-linux-amd64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-amd64) $(MAKE) -C cmd/rune-agent dist-linux-amd64-cross
+
+rune-agent-prod-dist-linux-arm64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-arm64) $(MAKE) -C cmd/rune-agent dist-linux-arm64-cross
+
+rune-agent-staging-dist-linux-arm64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-arm64) $(MAKE) -C cmd/rune-agent dist-linux-arm64-cross
 
 rune-agent-prod-dist-darwin-amd64: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,darwin-amd64) $(MAKE) -C cmd/rune-agent dist-darwin-amd64
@@ -469,6 +514,12 @@ fuzzy-search-release-linux-amd64:
 fuzzy-search-release-linux-arm64:
 	@$(MAKE) -C cmd/extension_fuzzy_search release-linux-arm64
 
+fuzzy-search-release-linux-amd64-cross:
+	@$(MAKE) -C cmd/extension_fuzzy_search release-linux-amd64-cross
+
+fuzzy-search-release-linux-arm64-cross:
+	@$(MAKE) -C cmd/extension_fuzzy_search release-linux-arm64-cross
+
 fuzzy-search-prod-dist-linux-amd64: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-amd64) $(MAKE) -C cmd/extension_fuzzy_search dist-linux-amd64
 
@@ -480,6 +531,18 @@ fuzzy-search-prod-dist-linux-arm64: clean
 
 fuzzy-search-staging-dist-linux-arm64: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-arm64) $(MAKE) -C cmd/extension_fuzzy_search dist-linux-arm64
+
+fuzzy-search-prod-dist-linux-amd64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-amd64) $(MAKE) -C cmd/extension_fuzzy_search dist-linux-amd64-cross
+
+fuzzy-search-staging-dist-linux-amd64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-amd64) $(MAKE) -C cmd/extension_fuzzy_search dist-linux-amd64-cross
+
+fuzzy-search-prod-dist-linux-arm64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,linux-arm64) $(MAKE) -C cmd/extension_fuzzy_search dist-linux-arm64-cross
+
+fuzzy-search-staging-dist-linux-arm64-cross: clean
+	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,staging,linux-arm64) $(MAKE) -C cmd/extension_fuzzy_search dist-linux-arm64-cross
 
 fuzzy-search-prod-dist-darwin-amd64: clean
 	@BLUECTL_CONFIG_DIR=$(call BLUECTL_CONFIG,prod,darwin-amd64) $(MAKE) -C cmd/extension_fuzzy_search dist-darwin-amd64
