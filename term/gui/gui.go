@@ -188,10 +188,23 @@ func (g *GUI) Run(title string) error {
 	}
 	ebiten.SetWindowDecorations(ebiten.DecorationsButtonsOnly)
 
-	var gameOpts ebiten.RunGameOptions
-	gameOpts.SingleThread = true
-	gameOpts.ScreenTransparent = g.enableTransparent
+	gameOpts := g.buildRunGameOptions()
 	return ebiten.RunGameWithOptions(g, &gameOpts)
+}
+
+// x11WMClass is the ICCCM WM_CLASS instance/class reported by the window.
+// It must match StartupWMClass in deploy/rune-linux/rune.desktop so X11
+// desktop environments (e.g. KDE Plasma) group the running window under the
+// pinned launcher instead of showing a second, generic-icon task.
+const x11WMClass = "rune"
+
+func (g *GUI) buildRunGameOptions() ebiten.RunGameOptions {
+	return ebiten.RunGameOptions{
+		SingleThread:      true,
+		ScreenTransparent: g.enableTransparent,
+		X11ClassName:      x11WMClass,
+		X11InstanceName:   x11WMClass,
+	}
 }
 
 // Draw satisfies ebiten.Game. It renders the terminal GUI to the ebtien window.
