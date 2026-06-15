@@ -30,6 +30,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -83,6 +84,41 @@ func TestServerClientIntegration(t *testing.T) {
 				require.Len(t, mock.lastCompletionReq.Messages, 1)
 				assert.Equal(t, llmapi.RoleUser, mock.lastCompletionReq.Messages[0].Role)
 				assert.Equal(t, "hi", mock.lastCompletionReq.Messages[0].Content)
+			},
+		},
+		{
+			// Regression for RUNE-251: an accumulated history whose unary
+			// protobuf encoding exceeds gRPC's 4 MiB per-message receive limit
+			// (which previously failed with ResourceExhausted) must now
+			// round-trip because each Message is streamed as its own small frame.
+			name: "many messages exceeding 4 MiB round-trip in order",
+			setup: func(m *mockService) {
+				m.events = []llmapi.Event{{Type: llmapi.EventTextDelta, Text: "ok"}}
+			},
+			action: func(t *testing.T, mock *mockService, client llmapi.Service) {
+				const (
+					perMsg  = 200 * 1024
+					numMsgs = 30 // ~6 MiB total, well over the 4 MiB unary cap
+				)
+				msgs := make([]llmapi.Message, numMsgs)
+				for i := range msgs {
+					msgs[i] = llmapi.Message{
+						Role:    llmapi.RoleUser,
+						Content: strings.Repeat(string(rune('a'+i%26)), perMsg),
+					}
+				}
+				req := llmapi.Request{Messages: msgs}
+				it, err := client.CreateCompletion(context.Background(), llmapi.ModelEntry{Name: "m"}, req)
+				require.NoError(t, err)
+				_ = drainEvents(t, it)
+
+				mock.mu.Lock()
+				defer mock.mu.Unlock()
+				require.Len(t, mock.lastCompletionReq.Messages, numMsgs)
+				for i := range msgs {
+					assert.Equal(t, msgs[i].Content, mock.lastCompletionReq.Messages[i].Content,
+						"message %d must arrive byte-identical and in order", i)
+				}
 			},
 		},
 		{
@@ -304,8 +340,8 @@ func TestServerClientIntegration(t *testing.T) {
 					_ = it.Close()
 				}
 				require.Error(t, err)
-				var cw *llmapi.ErrContextWindowExceeded
-				require.True(t, errors.As(err, &cw))
+				cw, ok := errors.AsType[*llmapi.ErrContextWindowExceeded](err)
+				require.True(t, ok)
 				assert.Equal(t, 200_000, cw.Count)
 				assert.Equal(t, 128_000, cw.Max)
 			},

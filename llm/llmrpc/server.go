@@ -27,11 +27,14 @@ package llmrpc
 import (
 	"context"
 	"errors"
+	"io"
 
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi/llmrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Server adapts an llmapi.Service to the generated LLMServer interface.
@@ -67,20 +70,21 @@ func (s *Server) Close() error {
 
 // CreateCompletion satisfies LLMServer.
 func (s *Server) CreateCompletion(
-	req *llmrpc.CreateCompletionRequest,
-	stream grpc.ServerStreamingServer[llmrpc.CreateCompletionResponse],
+	stream grpc.BidiStreamingServer[llmrpc.CreateCompletionRequestChunk, llmrpc.CreateCompletionResponseChunk],
 ) error {
-	apiReq, err := llmrpc.FromProtoRequest(req.GetRequest())
+	header, msgs, err := recvCompletionRequest(stream)
+	if err != nil {
+		return err
+	}
+	model, apiReq, err := llmrpc.RequestFromHeaderAndMessages(header, msgs)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
 	defer cancel()
-	model := llmrpc.FromProtoModelEntry(req.GetModel())
 	it, err := s.svc.CreateCompletion(ctx, model, apiReq)
 	if err != nil {
-		var cwErr *llmapi.ErrContextWindowExceeded
-		if errors.As(err, &cwErr) {
+		if cwErr, ok := errors.AsType[*llmapi.ErrContextWindowExceeded](err); ok {
 			return llmrpc.ContextWindowExceededStatus(cwErr)
 		}
 		return err
@@ -90,20 +94,59 @@ func (s *Server) CreateCompletion(
 		ev, ok := it.Next(ctx)
 		if !ok {
 			if iErr := it.Err(); iErr != nil {
-				var cwErr *llmapi.ErrContextWindowExceeded
-				if errors.As(iErr, &cwErr) {
+				if cwErr, ok := errors.AsType[*llmapi.ErrContextWindowExceeded](iErr); ok {
 					return llmrpc.ContextWindowExceededStatus(cwErr)
 				}
 				return iErr
 			}
 			return nil
 		}
-		if err := stream.Send(&llmrpc.CreateCompletionResponse{
+		rep := llmrpc.CreateCompletionResponseChunk{
 			Event: llmrpc.ToProtoEvent(ev),
-		}); err != nil {
+		}
+		err := stream.Send(&rep)
+		if err != nil {
 			return err
 		}
 	}
+}
+
+// recvCompletionRequest drains the client-streamed CreateCompletion chunks: the
+// first frame must carry the header, followed by zero or more message frames in
+// order. A missing or duplicate header, or a message before the header, is
+// rejected with codes.InvalidArgument.
+func recvCompletionRequest(
+	stream grpc.BidiStreamingServer[llmrpc.CreateCompletionRequestChunk, llmrpc.CreateCompletionResponseChunk],
+) (*llmrpc.CompletionHeader, []*llmrpc.Message, error) {
+	var header *llmrpc.CompletionHeader
+	var msgs []*llmrpc.Message
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		switch payload := chunk.GetPayload().(type) {
+		case *llmrpc.CreateCompletionRequestChunk_Header:
+			if header != nil {
+				return nil, nil, status.Error(codes.InvalidArgument, "llm: duplicate completion header")
+			}
+			header = payload.Header
+		case *llmrpc.CreateCompletionRequestChunk_Message:
+			if header == nil {
+				return nil, nil, status.Error(codes.InvalidArgument, "llm: message chunk before header")
+			}
+			msgs = append(msgs, payload.Message)
+		default:
+			return nil, nil, status.Error(codes.InvalidArgument, "llm: empty completion chunk")
+		}
+	}
+	if header == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "llm: missing completion header")
+	}
+	return header, msgs, nil
 }
 
 // CountTokens satisfies LLMServer.
