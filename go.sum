@@ -117,8 +117,8 @@ github.com/ernestrc/go-multierror v1.1.2 h1:9EYH71nYIsHEC9DSTtsT9GypDxmHAQ2gcOY6
 github.com/ernestrc/go-multierror v1.1.2/go.mod h1:DUlo5/81Y4/bn7/eCKZJaVXlDRc+RQmJnLw3tjg95Do=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJelEJwUE3LeUKkw/EosxDwZ7AT0yNDLI=
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504/go.mod h1:T9+4zGzWs0JFtwPMJWg9ww68XpBzRi4R8X/3Iz3ZXDw=
-github.com/ernestrc/sensible v0.3.1 h1:r/kFTGQ+ffjCymTDJRXz6hUWQwWmeaCTwD449h0PEcc=
-github.com/ernestrc/sensible v0.3.1/go.mod h1:DMXklvqxnduBxPT1DWryJe9lHUDWV/Nd7ZcrqAlTw4Q=
+github.com/ernestrc/sensible v0.4.0 h1:ivTHqPtBQL10luebdZzAJIFAwmSjiLUuX9BPGRoNEw8=
+github.com/ernestrc/sensible v0.4.0/go.mod h1:DMXklvqxnduBxPT1DWryJe9lHUDWV/Nd7ZcrqAlTw4Q=
 github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
 github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=

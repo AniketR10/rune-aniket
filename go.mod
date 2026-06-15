@@ -11,7 +11,7 @@ require (
 	github.com/dustinkirkland/golang-petname v0.0.0-20260215035315-f0c533e9ce9b
 	github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938
 	github.com/ernestrc/go-multierror v1.1.2
-	github.com/ernestrc/sensible v0.3.1
+	github.com/ernestrc/sensible v0.4.0
 	github.com/hajimehoshi/ebiten/v2 v2.7.4
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
@@ -27,8 +27,6 @@ require (
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/blue v1.81.2
-	github.com/unstablebuild/ox-api v0.0.0-00010101000000-000000000000
 	github.com/unstablebuild/rune-go-sdk v0.0.96
 	github.com/unstablebuild/tcell/v3 v3.6.5
 	go.uber.org/goleak v1.3.0
@@ -74,7 +72,9 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
 	github.com/tree-sitter/go-tree-sitter v0.25.0
+	github.com/unstablebuild/blue v1.81.2
 	github.com/unstablebuild/notify v0.10.2
+	github.com/unstablebuild/ox-api v0.0.0-00010101000000-000000000000
 	github.com/unstablebuild/pty v1.3.1
 	github.com/yuin/goldmark v1.7.1
 	go.starlark.net v0.0.0-20260326113308-fadfc96def35
