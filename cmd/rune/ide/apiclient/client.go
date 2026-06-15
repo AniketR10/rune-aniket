@@ -353,9 +353,11 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		}
 		urlCh <- u
 		if err := a.config.OpenBrowser(u); err != nil {
-			return fmt.Errorf("%v. "+
-				"Make sure that $BROWSER environment variable is set correctly",
-				err)
+			// Keep the OAuth flow alive instead of aborting: the URL was
+			// already published, so the user can copy it from the wait
+			// prompt and complete sign-in in any browser. The local
+			// callback server stays listening for the redirect.
+			log.Warnf("oauth2: open browser failed, falling back to manual URL: %v", err)
 		}
 
 		return nil

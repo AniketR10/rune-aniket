@@ -164,7 +164,8 @@ func TestClient_Login_AttemptsBrowserFlow(t *testing.T) {
 	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
 	defer client.Close()
 
-	session := client.Login(t.Context())
+	ctx, cancel := context.WithCancel(t.Context())
+	session := client.Login(ctx)
 
 	select {
 	case <-browserCalls:
@@ -172,11 +173,29 @@ func TestClient_Login_AttemptsBrowserFlow(t *testing.T) {
 		t.Fatal("expected browser to be opened by :login flow")
 	}
 
+	// The URL is still published so the wait prompt can show it.
+	select {
+	case u, ok := <-session.URL:
+		require.True(t, ok, "URL channel must emit before close")
+		require.NotNil(t, u, "URL channel must emit a non-nil URL")
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Login to publish the OAuth URL")
+	}
+
+	// A failed browser open must NOT abort the flow: Done stays open so
+	// the user can copy the URL and finish sign-in in any browser.
 	select {
 	case err := <-session.Done:
-		require.Error(t, err, "openBrowser returns an error so Login must publish it")
+		t.Fatalf("Login must stay alive after browser-open failure, got Done=%v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Cancelling the context tears the flow down and resolves Done.
+	cancel()
+	select {
+	case <-session.Done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("expected Login to publish completion on its channel")
+		t.Fatal("expected Login to resolve after context cancellation")
 	}
 }
 
@@ -223,7 +242,8 @@ func TestClient_Login_SecondAttemptAfterCancel(t *testing.T) {
 		return errors.New("test: browser not actually opened")
 	})
 
-	session2 := client.Login(t.Context())
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	session2 := client.Login(ctx2)
 
 	select {
 	case <-browserCalls:
@@ -231,10 +251,12 @@ func TestClient_Login_SecondAttemptAfterCancel(t *testing.T) {
 		t.Fatal("expected second Login to open browser after cancel of first")
 	}
 
+	// A failed browser open keeps the flow alive; cancelling resolves it.
+	cancel2()
 	select {
 	case <-session2.Done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("expected second Login to publish completion")
+		t.Fatal("expected second Login to publish completion after cancel")
 	}
 }
 
@@ -264,7 +286,8 @@ func TestClient_Login_PublishesOAuthURL(t *testing.T) {
 	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
 	defer client.Close()
 
-	session := client.Login(t.Context())
+	ctx, cancel := context.WithCancel(t.Context())
+	session := client.Login(ctx)
 
 	var published *url.URL
 	select {
@@ -289,10 +312,12 @@ func TestClient_Login_PublishesOAuthURL(t *testing.T) {
 		t.Fatal("expected openBrowser to be invoked with the same URL")
 	}
 
+	// A failed browser open must not abort the flow; cancelling resolves it.
+	cancel()
 	select {
 	case <-session.Done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("expected Login Done to resolve after openBrowser error")
+		t.Fatal("expected Login Done to resolve after context cancellation")
 	}
 
 	_, ok := <-session.URL
