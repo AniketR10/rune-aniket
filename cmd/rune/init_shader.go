@@ -33,7 +33,10 @@ import (
 	"unstable.build/go-tui/component/shader/glslshader"
 )
 
-const initShaderFPS = 30
+const (
+	initShaderFPS     = 30
+	shutdownShaderFPS = 30
+)
 
 const initShaderDuration = 3 * time.Second
 

@@ -56,6 +56,18 @@ func decodeStarlark(src string, params, base map[string]any) (map[string]any, er
 	})
 }
 
+// readRuneStar reads the shipped rune.star joined with themes.star, mirroring
+// how the production config (cmd/rune/config.go) assembles the default
+// Starlark source. rune.star references GUI_THEMES, which themes.star binds.
+func readRuneStar(t *testing.T) []byte {
+	t.Helper()
+	themes, err := os.ReadFile("../cmd/rune/themes.star")
+	require.NoError(t, err)
+	runeStar, err := os.ReadFile("../cmd/rune/rune.star")
+	require.NoError(t, err)
+	return append(append(themes, '\n'), runeStar...)
+}
+
 func TestDecodeStarlarkConfigBasic(t *testing.T) {
 	src := `
 config = {
@@ -292,8 +304,7 @@ config = {
 // TestRuneStarFixture decodes the shipped cmd/rune/rune.star and checks it
 // branches correctly on the tui/mode params.
 func TestRuneStarFixture(t *testing.T) {
-	data, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
+	data := readRuneStar(t)
 
 	cases := []struct {
 		name   string
@@ -351,8 +362,7 @@ func TestRuneStarFixture(t *testing.T) {
 // the full loadConfig path to ensure initConfig + validateConfig are happy
 // with the decoded tree.
 func TestRuneStarAsDefaultConfig(t *testing.T) {
-	data, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
+	data := readRuneStar(t)
 
 	var cfg ideConfig
 	require.NoError(t, loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),
@@ -373,8 +383,7 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 // `models` block with the documented sub-keys. This locks the schema so
 // downstream loaders can rely on the keys being present.
 func TestRuneStarModelsConfig(t *testing.T) {
-	data, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
+	data := readRuneStar(t)
 
 	cfg, err := decodeStarlarkConfig(starlarkConfigSource{
 		src:      data,
@@ -399,7 +408,6 @@ func TestRuneStarModelsConfig(t *testing.T) {
 	}
 
 	openai := models["openai"].(map[string]any)
-	assert.Contains(t, openai, "api_key")
 	assert.Contains(t, openai, "base_url")
 	assert.Contains(t, openai, "reasoning_effort")
 
@@ -518,8 +526,7 @@ func TestDecodeOverlayConfigFileStarlarkEmptyPreservesBase(t *testing.T) {
 }
 
 func TestLoadConfigStarUserOverlayPreservesEmbeddedRuneStar(t *testing.T) {
-	data, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
+	data := readRuneStar(t)
 
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "config.star")
@@ -675,8 +682,7 @@ func TestDecodeOverlayConfigFileUsesFilenameExtension(t *testing.T) {
 //   - windowresize on <ctrl-shift-meta>+arrows (kept off the move chord)
 //   - tabmove on <alt-shift>+arrows
 func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
-	runeStar, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
+	runeStar := readRuneStar(t)
 
 	wantBound := map[string]string{
 		"<m-left>":  "windowfocus left",

@@ -140,8 +140,7 @@ func TestLocationPickerAliasesFromRuneStar(t *testing.T) {
 
 func loadRuneStarAliases(t *testing.T) map[string][]string {
 	t.Helper()
-	data, err := os.ReadFile("../cmd/rune/rune.star")
-	require.NoError(t, err)
+	data := readRuneStar(t)
 	cfg, err := decodeStarlarkConfig(starlarkConfigSource{
 		src:      data,
 		filename: "rune.star",

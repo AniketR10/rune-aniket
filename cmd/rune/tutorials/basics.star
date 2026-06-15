@@ -423,7 +423,7 @@ That is the tour. A couple of things worth remembering:
 - You can replay this tour any time by running the `tutorial start
   basics` command.
 
-Press `<enter>` or `<space>` to finish.
+Press `<enter>` or `<space>` to finish. Happy hacking!
 """
 
 def teach_edit():

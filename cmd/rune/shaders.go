@@ -24,12 +24,10 @@
 package main
 
 import (
-	"math/rand/v2"
 	"time"
 
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/component/shader/glslshader"
 )
 
 const (
@@ -52,7 +50,7 @@ const (
 	// latency; the shader is cancelled cleanly when the load completes.
 	loadingShaderDuration = 10 * time.Second
 
-	shutdownShaderDuration = 10000 * time.Millisecond
+	shutdownShaderDuration = 30 * time.Second
 
 	// openShaderFPS is the cadence at which the shader played when a
 	// workspace finishes loading is animated.
@@ -167,18 +165,7 @@ func (s *openShaderShader) SetInitialDesaturation(amount float64) {
 }
 
 func shutdownShader(defaultAttr term.Attributes) shader.Shader {
-	params := glslshader.DefaultFlamesParams()
-	params.ColorGradient = []term.Color{
-		term.ColorRed,
-		term.ColorMaroon,
-	}
-
-	// randomize some of the parameters
-	randomizer := func() float64 { return min(1.1, float64(rand.Float32()+0.4)) }
-	params.Belly = -75.0 * randomizer()
-	params.Clumps = 2.5 * randomizer()
-	params.ClumpHeight = 1.8 * randomizer()
-	params.NoiseAmount = 0.8 * randomizer()
-	params.NoiseSize = 0.5 * randomizer()
-	return glslshader.Flames(params, defaultAttr, 60)
+	params := shader.DefaultGrayFadeParams()
+	params.FadeFrames = shutdownShaderFPS
+	return shader.GrayFade(params, defaultAttr)
 }

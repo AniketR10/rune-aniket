@@ -893,15 +893,25 @@ func mustURI(t *testing.T, filename string) workspaceapi.URI {
 	return uri
 }
 
-// triggerRerun emits a file event, waits for the resulting run to start,
-// and settles it successfully so the task returns to idle. It models one
+// triggerRerun emits a file event, settles the resulting run successfully,
+// and waits for the task to return to idle. It models one
 // build -> file-change -> rebuild cycle.
+//
+// It waits on the monotonic Runs counter rather than the transient Running
+// edge: when this rerun crosses the loop-detection threshold, the watcher
+// halts the task (clearing running) in the same iteration that started it,
+// so polling for Running races the halt and can miss it. Runs is only
+// incremented and is observable whether the run settles or halts.
 func triggerRerun(t *testing.T, m *Manager, exec *fakeScheme, taskname, filename string) {
 	t.Helper()
+	before := mustTaskInfo(t, m, taskname).Runs
 	sendEvent(t, m, exec, taskname, filename)
 	assertTaskWithin(t, m, 1*time.Second, taskname,
-		func(info TaskInfo) bool { return info.Running })
-	assertTaskRunsWithin(t, m, 1*time.Second, taskname, nil,
+		func(info TaskInfo) bool { return info.Runs > before })
+	taskIfc, ok := m.tasks.Load(taskname)
+	require.True(t, ok)
+	taskIfc.(*Task).donech <- nil
+	assertTaskWithin(t, m, 1*time.Second, taskname,
 		func(info TaskInfo) bool { return !info.Running })
 }
 

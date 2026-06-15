@@ -183,7 +183,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 	opts := []ide.Option{
 		ide.WithExtensionsRunner(b.runner),
 		ide.WithInitShader(initShader, initShaderFPS, initShaderDuration),
-		ide.WithShutdownShader(shutdownShader, 30, shutdownShaderDuration),
+		ide.WithShutdownShader(shutdownShader, shutdownShaderFPS, shutdownShaderDuration),
 		ide.WithLoadingShader(loadingShader, loadingShaderFPS, loadingShaderDuration),
 		ide.WithOpenShader(openShader, openShaderFPS, openShaderDuration),
 		ide.WithStreamingOpen(true),
