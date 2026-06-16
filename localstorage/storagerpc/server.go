@@ -26,6 +26,7 @@ package storagerpc
 import (
 	"context"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,6 +57,11 @@ type cachedPartition struct {
 	svc     storageapi.Service
 	created []storageapi.Service
 }
+
+// maxChunkBytes bounds a single streamed data chunk. It mirrors the client's
+// chunk size and stays below gRPC's default 4 MiB frame so the server can
+// stream a document of any size back to the client in Get.
+const maxChunkBytes = 1 << 20
 
 // NewServer allocates storage for a new Server and initializes it. The
 // supplied service must be safe for concurrent use; see the Server doc
@@ -135,130 +141,229 @@ func (s *Server) Close() (err error) {
 	return err
 }
 
-// Create satisfies proto.DocumentStoreServer
-func (s *Server) Create(
-	ctx context.Context, req *docpb.CreateDocumentRequest,
-) (res *docpb.CreateDocumentResponse, err error) {
-	id := req.GetId()
-	data := req.GetData()
+// Create satisfies proto.DocumentStoreServer. The request is streamed: the id
+// arrives on the first message and the document data is reassembled from the
+// data chunk on every message.
+func (s *Server) Create(stream docpb.DocumentStore_CreateServer) error {
+	id, data, err := recvCreateStream(stream)
+	if err != nil {
+		return err
+	}
 
 	var pr map[string]any
-	err = storageapi.SafeDecode(s.marshaler, &pr, data)
-	if err != nil {
-		return
+	if err := storageapi.SafeDecode(s.marshaler, &pr, data); err != nil {
+		return err
 	}
 
-	svc, err := s.serviceForContext(ctx)
+	svc, err := s.serviceForContext(stream.Context())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	err = svc.Create(ctx, id, pr)
+	err = svc.Create(stream.Context(), id, pr)
 	if err != nil {
 		if errors.Is(err, storageapi.ErrAlreadyExists) {
-			err = nil
-			res = &docpb.CreateDocumentResponse{
-				AlreadyExists: true,
-			}
+			return stream.SendAndClose(&docpb.CreateDocumentResponse{AlreadyExists: true})
 		}
 		if errors.Is(err, storageapi.ErrPermissionDenied) {
-			err = status.Error(codes.PermissionDenied, "")
+			return status.Error(codes.PermissionDenied, "")
 		}
-		return
+		return err
 	}
-
-	res = &docpb.CreateDocumentResponse{}
-	return
+	return stream.SendAndClose(&docpb.CreateDocumentResponse{})
 }
 
-// Set satisfies proto.DocumentStoreServer
-func (s *Server) Set(
-	ctx context.Context, req *docpb.SetDocumentRequest,
-) (res *docpb.DocumentResponse, err error) {
-	id := req.GetId()
-	data := req.GetData()
+// recvCreateStream reassembles the id and concatenated data from a Create
+// stream. The id is read from the first message only.
+func recvCreateStream(stream docpb.DocumentStore_CreateServer) (string, []byte, error) {
+	var id string
+	var data []byte
+	first := true
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return id, data, nil
+		}
+		if err != nil {
+			return "", nil, err
+		}
+		if first {
+			id = req.GetId()
+			first = false
+		}
+		data = append(data, req.GetData()...)
+	}
+}
+
+// Set satisfies proto.DocumentStoreServer. See Create for the stream framing.
+func (s *Server) Set(stream docpb.DocumentStore_SetServer) error {
+	id, data, err := recvSetStream(stream)
+	if err != nil {
+		return err
+	}
 
 	var pr map[string]any
-	err = storageapi.SafeDecode(s.marshaler, &pr, data)
-	if err != nil {
-		return
+	if err := storageapi.SafeDecode(s.marshaler, &pr, data); err != nil {
+		return err
 	}
 
-	svc, err := s.serviceForContext(ctx)
+	svc, err := s.serviceForContext(stream.Context())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	err = svc.Set(ctx, id, &pr)
+	err = svc.Set(stream.Context(), id, &pr)
 	if errors.Is(err, storageapi.ErrPermissionDenied) {
-		err = status.Error(codes.PermissionDenied, "")
+		return status.Error(codes.PermissionDenied, "")
 	}
-	res = new(docpb.DocumentResponse)
-	return
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(new(docpb.DocumentResponse))
 }
 
-// Update satisfies proto.DocumentStoreServer
-func (s *Server) Update(
-	ctx context.Context, req *docpb.UpdateDocumentRequest,
-) (res *docpb.UpdateDocumentResponse, err error) {
-	updates, err := makeModelUpdates(s.marshaler, req.GetUpdates())
-	if err != nil {
-		return nil, err
+func recvSetStream(stream docpb.DocumentStore_SetServer) (string, []byte, error) {
+	var id string
+	var data []byte
+	first := true
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return id, data, nil
+		}
+		if err != nil {
+			return "", nil, err
+		}
+		if first {
+			id = req.GetId()
+			first = false
+		}
+		data = append(data, req.GetData()...)
 	}
-	preconds, err := makeModelPreconds(s.marshaler, req.GetPreconditions())
+}
+
+// Update satisfies proto.DocumentStoreServer. The request is streamed: the id
+// arrives on the first message and the updates/preconditions are accumulated
+// across messages, reassembling a field's data from its chunks by field path.
+func (s *Server) Update(stream docpb.DocumentStore_UpdateServer) error {
+	id, updateFields, precondFields, err := recvUpdateStream(stream)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	updates, err := makeModelUpdates(s.marshaler, updateFields)
+	if err != nil {
+		return err
+	}
+	preconds, err := makeModelPreconds(s.marshaler, precondFields)
+	if err != nil {
+		return err
 	}
 	// client should panic if no updates are passed
 	// so the following is to avoid potential DOS from a malicious client.
 	if len(updates) == 0 {
-		err = errors.New("invalid request: no paths to update")
-		return nil, err
+		return errors.New("invalid request: no paths to update")
 	}
-	svc, err := s.serviceForContext(ctx)
+	svc, err := s.serviceForContext(stream.Context())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	err = svc.Update(ctx, req.GetId(), updates, preconds...)
+	err = svc.Update(stream.Context(), id, updates, preconds...)
 	if err != nil {
 		switch {
 		case errors.Is(err, storageapi.ErrNotFound):
-			return &docpb.UpdateDocumentResponse{NotFound: true}, nil
+			return stream.SendAndClose(&docpb.UpdateDocumentResponse{NotFound: true})
 		case errors.Is(err, storageapi.ErrPreconditionFailed):
-			return &docpb.UpdateDocumentResponse{PreconditionFailed: true}, nil
+			return stream.SendAndClose(&docpb.UpdateDocumentResponse{PreconditionFailed: true})
 		case errors.Is(err, storageapi.ErrPermissionDenied):
-			return nil, status.Error(codes.PermissionDenied, "")
+			return status.Error(codes.PermissionDenied, "")
 		}
-		return nil, err
+		return err
 	}
-	return new(docpb.UpdateDocumentResponse), nil
+	return stream.SendAndClose(new(docpb.UpdateDocumentResponse))
 }
 
-// Get satisfies proto.DocumentStoreServer
+// recvUpdateStream reassembles the id, updates and preconditions from an
+// Update stream. The id is read from the first message; each field's data is
+// concatenated across consecutive messages that share its field path.
+func recvUpdateStream(stream docpb.DocumentStore_UpdateServer) (
+	id string,
+	updates, preconds []*docpb.UpdateDocumentRequest_Field,
+	err error,
+) {
+	first := true
+	for {
+		req, recvErr := stream.Recv()
+		if recvErr == io.EOF {
+			return id, updates, preconds, nil
+		}
+		if recvErr != nil {
+			return "", nil, nil, recvErr
+		}
+		if first {
+			id = req.GetId()
+			first = false
+		}
+		updates = appendFieldChunks(updates, req.GetUpdates())
+		preconds = appendFieldChunks(preconds, req.GetPreconditions())
+	}
+}
+
+// appendFieldChunks merges streamed field entries into dst. A field whose
+// FieldPath is empty is a continuation chunk of the previous field's data;
+// otherwise it starts a new field.
+func appendFieldChunks(
+	dst, fields []*docpb.UpdateDocumentRequest_Field,
+) []*docpb.UpdateDocumentRequest_Field {
+	for _, field := range fields {
+		if len(field.GetFieldPath()) == 0 && len(dst) > 0 {
+			last := dst[len(dst)-1]
+			last.Data = append(last.Data, field.GetData()...)
+			continue
+		}
+		dst = append(dst, &docpb.UpdateDocumentRequest_Field{
+			FieldPath: field.GetFieldPath(),
+			Data:      append([]byte(nil), field.GetData()...),
+		})
+	}
+	return dst
+}
+
+// Get satisfies proto.DocumentStoreServer. The response is streamed: a single
+// message carries not_found when the document is missing, otherwise the
+// encoded document is split into data chunks across messages.
 func (s *Server) Get(
-	ctx context.Context, req *docpb.GetDocumentRequest,
-) (res *docpb.GetDocumentResponse, err error) {
+	req *docpb.GetDocumentRequest, stream docpb.DocumentStore_GetServer,
+) error {
 	id := req.GetId()
 
 	var pr map[string]any
-	svc, err := s.serviceForContext(ctx)
+	svc, err := s.serviceForContext(stream.Context())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	err = svc.Get(ctx, id, &pr)
+	err = svc.Get(stream.Context(), id, &pr)
 	if err != nil {
 		if errors.Is(err, storageapi.ErrNotFound) {
-			res = &docpb.GetDocumentResponse{NotFound: true}
-			err = nil
+			return stream.Send(&docpb.GetDocumentResponse{NotFound: true})
 		}
 		if errors.Is(err, storageapi.ErrPermissionDenied) {
-			err = status.Error(codes.PermissionDenied, "")
+			return status.Error(codes.PermissionDenied, "")
 		}
-		return
+		return err
 	}
 
-	res = &docpb.GetDocumentResponse{
-		Data: storageapi.Encode(s.marshaler, pr, false),
+	data := storageapi.Encode(s.marshaler, pr, false)
+	for {
+		chunk := data
+		if len(chunk) > maxChunkBytes {
+			chunk = chunk[:maxChunkBytes]
+		}
+		if err := stream.Send(&docpb.GetDocumentResponse{Data: chunk}); err != nil {
+			return err
+		}
+		data = data[len(chunk):]
+		if len(data) == 0 {
+			return nil
+		}
 	}
-	return
 }
 
 // Delete satisfies proto.DocumentStoreServer

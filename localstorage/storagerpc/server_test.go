@@ -32,8 +32,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
-	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // updateErrService returns a preconfigured (wrapped) error from Update so we
@@ -49,40 +51,39 @@ func (s updateErrService) Update(
 	return s.err
 }
 
-func updateFieldData(t *testing.T) []byte {
-	t.Helper()
-	return storageapi.Encode(docbson.Marshaler(),
-		map[string]any{protoFieldKey: "v"}, false)
-}
-
 func TestServerUpdateMapsWrappedSentinels(t *testing.T) {
 	marshaler := docbson.Marshaler()
-	req := &docpb.UpdateDocumentRequest{
-		Id: "id",
-		Updates: []*docpb.UpdateDocumentRequest_Field{
-			{FieldPath: []string{"x"}, Data: updateFieldData(t)},
+	updates := []storageapi.Update{{FieldPath: []string{"x"}, Value: "v"}}
+
+	cases := map[string]struct {
+		wrapped error
+		want    error
+	}{
+		"wrapped ErrNotFound": {
+			wrapped: fmt.Errorf("layer: %w", storageapi.ErrNotFound),
+			want:    storageapi.ErrNotFound,
+		},
+		"wrapped ErrPreconditionFailed": {
+			wrapped: fmt.Errorf("layer: %w", storageapi.ErrPreconditionFailed),
+			want:    storageapi.ErrPreconditionFailed,
 		},
 	}
 
-	t.Run("wrapped ErrNotFound -> NotFound flag", func(t *testing.T) {
-		srv := NewServer(updateErrService{
-			Service: storagestub.NewInMemoryService(),
-			err:     fmt.Errorf("layer: %w", storageapi.ErrNotFound),
-		}, marshaler)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			addr, teardown := runDatastoreServer(t, updateErrService{
+				Service: storagestub.NewInMemoryService(),
+				err:     tc.wrapped,
+			}, marshaler)
+			defer teardown()
 
-		res, err := srv.Update(context.Background(), req)
-		require.NoError(t, err)
-		assert.True(t, res.GetNotFound())
-	})
+			client, err := storagerpc.NewClient(addr, marshaler,
+				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			require.NoError(t, err)
+			defer client.Close()
 
-	t.Run("wrapped ErrPreconditionFailed -> PreconditionFailed flag", func(t *testing.T) {
-		srv := NewServer(updateErrService{
-			Service: storagestub.NewInMemoryService(),
-			err:     fmt.Errorf("layer: %w", storageapi.ErrPreconditionFailed),
-		}, marshaler)
-
-		res, err := srv.Update(context.Background(), req)
-		require.NoError(t, err)
-		assert.True(t, res.GetPreconditionFailed())
-	})
+			err = client.Update(context.Background(), "id", updates)
+			assert.ErrorIs(t, err, tc.want)
+		})
+	}
 }

@@ -25,8 +25,10 @@ package storagerpc
 
 import (
 	"context"
+	"bytes"
 	"net"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -553,4 +555,107 @@ func (s *countedPartitionService) Partition(name string) (storageapi.Service, er
 func (s *countedPartitionService) Close() error {
 	s.parent.partitionCloseCount.Add(1)
 	return s.Service.Close()
+}
+
+// oldMaxMessageSize is firstmover's historical gRPC frame cap. Before the
+// doc-carrying RPCs were converted to chunked streaming, a document whose
+// marshaled size exceeded this limit failed to load with
+// codes.ResourceExhausted. The tests below configure both ends with this cap
+// and round-trip a document well beyond it to prove the cap is no longer a
+// correctness boundary.
+const oldMaxMessageSize = 4 << 20
+
+// runDatastoreServerCapped starts a server whose gRPC send/recv frames are
+// bounded by oldMaxMessageSize, mirroring firstmover's leader configuration.
+func runDatastoreServerCapped(
+	t *testing.T, other storageapi.Service, marshaler docmarshal.Marshaler,
+) (net.Addr, func()) {
+	return runDatastoreServerOverListener(t, other, tcpListener, marshaler,
+		docpb.RegisterDocumentStoreServer,
+		grpc.MaxSendMsgSize(oldMaxMessageSize),
+		grpc.MaxRecvMsgSize(oldMaxMessageSize),
+	)
+}
+
+// cappedClient dials addr with frames bounded by oldMaxMessageSize, mirroring
+// firstmover's follower configuration.
+func cappedClient(
+	t *testing.T, addr net.Addr, marshaler docmarshal.Marshaler,
+) storageapi.Service {
+	store, err := storagerpc.NewClient(addr, marshaler,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallSendMsgSize(oldMaxMessageSize),
+			grpc.MaxCallRecvMsgSize(oldMaxMessageSize),
+		),
+	)
+	require.NoError(t, err)
+	return store
+}
+
+func TestStreamingRoundTripExceedsMessageCap(t *testing.T) {
+	for name, marshaler := range map[string]docmarshal.Marshaler{
+		"bson": docbson.Marshaler(),
+		"toml": doctoml.Marshaler(),
+		"json": docjson.Marshaler(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			cache := document.NewInMemoryServiceWithMarshaler(marshaler)
+			addr, teardown := runDatastoreServerCapped(t, bluestore.AdaptTo(cache), marshaler)
+			defer teardown()
+
+			store := cappedClient(t, addr, marshaler)
+			defer store.Close()
+
+			// ~10 MB payload, comfortably over the 4 MiB cap and matching the
+			// magnitude in the original ResourceExhausted report.
+			big := strings.Repeat("rune-245-", 10*1024*1024/len("rune-245-"))
+			require.Greater(t, len(big), oldMaxMessageSize)
+
+			ctx := context.Background()
+
+			require.NoError(t, store.Set(ctx, "doc", map[string]any{"blob": big}))
+			var afterSet map[string]any
+			require.NoError(t, store.Get(ctx, "doc", &afterSet))
+			assert.Equal(t, big, afterSet["blob"])
+
+			require.NoError(t, store.Create(ctx, "doc2", map[string]any{"blob": big}))
+			var afterCreate map[string]any
+			require.NoError(t, store.Get(ctx, "doc2", &afterCreate))
+			assert.Equal(t, big, afterCreate["blob"])
+
+			require.NoError(t, store.Update(ctx, "doc2", []storageapi.Update{
+				{FieldPath: []string{"blob"}, Value: big + "-updated"},
+			}))
+			var afterUpdate map[string]any
+			require.NoError(t, store.Get(ctx, "doc2", &afterUpdate))
+			assert.Equal(t, big+"-updated", afterUpdate["blob"])
+		})
+	}
+}
+
+func TestStreamingGetBinaryFidelity(t *testing.T) {
+	marshaler := docbson.Marshaler()
+	cache := document.NewInMemoryServiceWithMarshaler(marshaler)
+	addr, teardown := runDatastoreServerCapped(t, bluestore.AdaptTo(cache), marshaler)
+	defer teardown()
+
+	store := cappedClient(t, addr, marshaler)
+	defer store.Close()
+
+	// A multi-chunk binary blob exercises chunk reassembly on both ends and
+	// asserts the bytes survive byte-for-byte across the streamed frames.
+	blob := make([]byte, 9_970_883)
+	for i := range blob {
+		blob[i] = byte(i * 31)
+	}
+
+	ctx := context.Background()
+	require.NoError(t, store.Set(ctx, "doc", map[string]any{"blob": blob}))
+
+	var got map[string]any
+	require.NoError(t, store.Get(ctx, "doc", &got))
+	gotBlob, ok := got["blob"].([]byte)
+	require.True(t, ok, "blob should decode as []byte, got %T", got["blob"])
+	assert.True(t, bytes.Equal(blob, gotBlob))
 }

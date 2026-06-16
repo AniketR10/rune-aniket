@@ -7,6 +7,7 @@ package idehistory
 import (
 	"context"
 	"errors"
+	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,12 +15,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/document/docmarshal/docbson"
+	"github.com/unstablebuild/ox-api/bluestore"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	tcomponent "unstable.build/go-tui/component"
+	localstoragerpc "unstable.build/go-tui/localstorage/storagerpc"
+	"unstable.build/go-tui/term/vte"
 )
 
 func mustURI(t *testing.T, s string) workspaceapi.URI {
@@ -333,4 +343,103 @@ func TestTrackDropsSkippedURIEvents(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, state.Files,
 		"skip-listed URI must not enter persisted state")
+}
+
+// oldMaxMessageSize is firstmover's historical gRPC frame cap. A workspace
+// state document whose marshaled size exceeded it used to fail on load with
+// codes.ResourceExhausted — exactly the symptom RUNE-245 fixes by streaming
+// the payload in sub-cap chunks.
+const oldMaxMessageSize = 4 << 20
+
+// cappedGRPCStorage starts an in-process gRPC storage server and client whose
+// frames are bounded by oldMaxMessageSize, mirroring the firstmover
+// leader/follower wiring that surfaced the load failure.
+func cappedGRPCStorage(t *testing.T) storageapi.Service {
+	t.Helper()
+	marshaler := docbson.Marshaler()
+	backend := bluestore.AdaptTo(document.NewInMemoryServiceWithMarshaler(marshaler))
+
+	gsrv := grpc.NewServer(
+		grpc.MaxSendMsgSize(oldMaxMessageSize),
+		grpc.MaxRecvMsgSize(oldMaxMessageSize),
+	)
+	docpb.RegisterDocumentStoreServer(gsrv, localstoragerpc.NewServer(backend, marshaler))
+
+	lis, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	go func() { _ = gsrv.Serve(lis) }()
+
+	client, err := storagerpc.NewClient(lis.Addr(), marshaler,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallSendMsgSize(oldMaxMessageSize),
+			grpc.MaxCallRecvMsgSize(oldMaxMessageSize),
+		),
+	)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = client.Close()
+		gsrv.Stop()
+		_ = lis.Close()
+	})
+	return client
+}
+
+// largeTerminalSnapshot builds a terminal snapshot whose marshaled size
+// exceeds oldMaxMessageSize so the round-trip exercises the streamed path.
+func largeTerminalSnapshot() vte.Snapshot {
+	const rows, cols = 256, 1024
+	cells := make([][]term.Cell, rows)
+	for y := range cells {
+		row := make([]term.Cell, cols)
+		for x := range row {
+			row[x] = term.Cell{Ch: rune('A' + (x+y)%26), Width: 1, Bytes: 1}
+		}
+		cells[y] = row
+	}
+	return vte.Snapshot{
+		Title:  "big",
+		Width:  cols,
+		Height: rows,
+		Primary: vte.ScreenSnapshot{
+			Cursor: term.Coordinates{X: 1, Y: 2},
+			Cells:  cells,
+		},
+	}
+}
+
+func TestStoreLoadRoundTripOversizedTerminalSnapshot(t *testing.T) {
+	store := New(cappedGRPCStorage(t))
+	uri := mustURI(t, "memory:///oversized")
+
+	snap := largeTerminalSnapshot()
+	// Sanity-check the document is actually beyond the historical cap so the
+	// test would have reproduced the original load failure.
+	require.Greater(t,
+		len(storageapi.Encode(docbson.Marshaler(),
+			map[string]any{"snap": snap}, false)),
+		oldMaxMessageSize)
+
+	want := State{
+		Files: []File{{URI: uri, OpenAt: time.Unix(1, 0).UTC()}},
+		Terminals: []TerminalSession{{
+			Name:     "term-1",
+			Snapshot: snap,
+			Visible:  true,
+			Focus:    true,
+			WindowID: 7,
+		}},
+	}
+
+	require.NoError(t, store.StoreWorkspaceState(context.Background(), uri, want))
+
+	got, err := store.LoadWorkspaceState(context.Background(), uri)
+	require.NoError(t, err)
+	require.Len(t, got.Terminals, 1)
+	assert.Equal(t, want.Terminals[0].Name, got.Terminals[0].Name)
+	assert.Equal(t, want.Terminals[0].WindowID, got.Terminals[0].WindowID)
+	assert.Equal(t, snap.Width, got.Terminals[0].Snapshot.Width)
+	assert.Equal(t, snap.Height, got.Terminals[0].Snapshot.Height)
+	assert.Equal(t, snap.Primary.Cells, got.Terminals[0].Snapshot.Primary.Cells)
 }
