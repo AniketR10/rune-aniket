@@ -162,9 +162,9 @@ config = merge(config, {
 # classic Windows-Terminal palette.
 # ---------------------------------------------------------------------------
 # config["gui"]["default_theme"]       = "romero"
-# config["gui"]["font-size"]           = 13
-# config["gui"]["line-height-offset"]  = 0
-# config["gui"]["column-width-offset"] = -1
+# config["gui"]["font_size"]           = 13
+# config["gui"]["line_height_offset"]  = 0
+# config["gui"]["column_width_offset"] = -1
 # config["gui"]["window_opacity"]      = {"fg": 1, "bg": 1}
 # config["gui"]["window_blur_radius"]  = 100
 

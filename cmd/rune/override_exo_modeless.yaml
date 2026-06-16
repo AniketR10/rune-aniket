@@ -153,9 +153,9 @@ command:
 # ---------------------------------------------------------------------------
 # gui:
 #   default_theme: romero
-#   font-size: 13
-#   line-height-offset: 0
-#   column-width-offset: -1
+#   font_size: 13
+#   line_height_offset: 0
+#   column_width_offset: -1
 #   window_opacity: {fg: 1, bg: 1}
 #   window_blur_radius: 100
 
