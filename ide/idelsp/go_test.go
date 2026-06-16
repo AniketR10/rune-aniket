@@ -2757,6 +2757,8 @@ type testCallback struct {
 type fileDidChangeCall struct {
 	uri     string
 	version int32
+	open    bool
+	oob     bool
 }
 
 func (c *testCallback) ShowMessage(
@@ -2893,11 +2895,11 @@ func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
 
-func (c *testCallback) FileDidChange(uri string, version int32) {
+func (c *testCallback) FileDidChange(uri string, version int32, open, oob bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.fileDidChangeCalls = append(c.fileDidChangeCalls,
-		fileDidChangeCall{uri: uri, version: version})
+		fileDidChangeCall{uri: uri, version: version, open: open, oob: oob})
 }
 
 func (c *testCallback) InvalidateAllPending() {

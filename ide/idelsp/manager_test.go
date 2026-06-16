@@ -240,14 +240,16 @@ func TestDidChangeWatchedFiles_marksOpenFilePending(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	// The callback must have received a FileDidChange so a
-	// subsequent WaitFileProcessed will block.
+	// The callback must have received an out-of-band change marked
+	// as open so a subsequent WaitFileProcessed blocks for a newer
+	// version rather than releasing on a stale push.
 	callback.mu.Lock()
 	got := callback.fileDidChangeCalls
 	callback.mu.Unlock()
 	require.Len(t, got, 1)
 	assert.Equal(t, openURI.String(), got[0].uri)
-	assert.Equal(t, int32(0), got[0].version)
+	assert.True(t, got[0].open)
+	assert.True(t, got[0].oob)
 }
 
 // TestWatchServerRestartsOnConnLoss locks in the fix that watchServer

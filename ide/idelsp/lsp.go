@@ -191,7 +191,7 @@ func (m *Manager) DidChange(
 		ctx, "textDocument/didChange", params,
 	)
 	if err == nil {
-		m.callback.FileDidChange(params.TextDocument.URI, params.TextDocument.Version)
+		m.callback.FileDidChange(params.TextDocument.URI, params.TextDocument.Version, true, false)
 	}
 	return err
 }

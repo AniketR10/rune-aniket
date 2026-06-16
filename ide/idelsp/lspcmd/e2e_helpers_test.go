@@ -230,7 +230,7 @@ func (c *e2eCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
 
-func (c *e2eCallback) FileDidChange(_ string, _ int32) {}
+func (c *e2eCallback) FileDidChange(_ string, _ int32, _, _ bool) {}
 
 func (c *e2eCallback) InvalidateAllPending() {}
 

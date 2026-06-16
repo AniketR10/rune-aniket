@@ -145,6 +145,8 @@ type fileVersionState struct {
 	sent               int32
 	processed          int32
 	pendingUnversioned bool
+	awaitActive        bool
+	awaitAfter         int32
 }
 
 // DefaultIconSet returns the default LSP callback icons.
@@ -701,11 +703,9 @@ func (h *CallbackHandler) DiagnosticRefresh(
 	return h.refresher.RefreshDiagnostics(ctx)
 }
 
-// FileDidChange records that a new document version has been
-// sent to the LSP server for the given URI. A version of 0
-// indicates an unversioned change (e.g. file watcher event)
-// that requires waiting for the next publishDiagnostics push.
-func (h *CallbackHandler) FileDidChange(uri string, version int32) {
+// FileDidChange records that a file changed and how the next
+// WaitFileProcessed should wait for the LSP server to reconcile it.
+func (h *CallbackHandler) FileDidChange(uri string, version int32, open, oob bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -714,10 +714,16 @@ func (h *CallbackHandler) FileDidChange(uri string, version int32) {
 		state = &fileVersionState{}
 		h.fileVersions[uri] = state
 	}
-	if version == 0 {
+	switch {
+	case !oob:
+		if version > state.sent {
+			state.sent = version
+		}
+	case open:
+		state.awaitActive = true
+		state.awaitAfter = max(state.processed, state.sent, version)
+	default:
 		state.pendingUnversioned = true
-	} else if version > state.sent {
-		state.sent = version
 	}
 }
 
@@ -763,8 +769,13 @@ func (h *CallbackHandler) WaitFileProcessed(ctx context.Context, uri string) err
 	// Determine what we're waiting for: either a specific
 	// version or just the next diagnostics push.
 	waitUnversioned := state.pendingUnversioned
+	waitAfter := state.awaitActive
 	targetVersion := int32(0)
-	if !waitUnversioned {
+	if waitAfter {
+		if state.processed > state.awaitAfter {
+			return nil
+		}
+	} else if !waitUnversioned {
 		targetVersion = state.sent
 		if state.processed >= targetVersion {
 			return nil
@@ -784,7 +795,11 @@ func (h *CallbackHandler) WaitFileProcessed(ctx context.Context, uri string) err
 	defer close(done)
 
 	for {
-		if waitUnversioned {
+		if waitAfter {
+			if !state.awaitActive {
+				return nil
+			}
+		} else if waitUnversioned {
 			if !state.pendingUnversioned {
 				return nil
 			}
@@ -798,10 +813,6 @@ func (h *CallbackHandler) WaitFileProcessed(ctx context.Context, uri string) err
 	}
 }
 
-// fileDidProcess records that the LSP server has processed
-// the given document version for the URI. Any push clears
-// the pendingUnversioned flag since it proves the server
-// has processed at least one round of changes.
 func (h *CallbackHandler) fileDidProcess(uri string, version int32) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -810,10 +821,20 @@ func (h *CallbackHandler) fileDidProcess(uri string, version int32) {
 	if !ok {
 		return
 	}
-	// Any diagnostics push for this URI clears the unversioned flag.
-	state.pendingUnversioned = false
 	if version > 0 && version > state.processed {
 		state.processed = version
+	}
+	if state.awaitActive {
+		// A stale push at or below the awaited version must not
+		// release the wait; only a strictly newer processed version
+		// proves the server re-typechecked the out-of-band change.
+		if state.processed > state.awaitAfter {
+			state.awaitActive = false
+		}
+	} else {
+		// Any diagnostics push for an untracked pending URI clears
+		// the unversioned flag.
+		state.pendingUnversioned = false
 	}
 	h.versionCond.Broadcast()
 }

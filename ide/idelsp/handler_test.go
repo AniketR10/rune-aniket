@@ -532,7 +532,7 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
 		uri := "file:///tmp/test.go"
-		h.FileDidChange(uri, 2)
+		h.FileDidChange(uri, 2, true, false)
 
 		done := make(chan error, 1)
 		go func() {
@@ -563,7 +563,7 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
 		uri := "file:///tmp/test.go"
-		h.FileDidChange(uri, 2)
+		h.FileDidChange(uri, 2, true, false)
 
 		done := make(chan error, 1)
 		go func() {
@@ -600,7 +600,7 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
 		uri := "file:///tmp/test.go"
-		h.FileDidChange(uri, 2)
+		h.FileDidChange(uri, 2, true, false)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
@@ -622,7 +622,7 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
 		uri := "file:///tmp/test.go"
-		h.FileDidChange(uri, 0)
+		h.FileDidChange(uri, 0, false, true)
 
 		done := make(chan error, 1)
 		go func() {
@@ -654,7 +654,7 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
 		uri := "file:///tmp/test.go"
-		h.FileDidChange(uri, 0)
+		h.FileDidChange(uri, 0, false, true)
 
 		done := make(chan error, 1)
 		go func() {
@@ -686,7 +686,7 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
 		uri := "file:///tmp/test.go"
-		h.FileDidChange(uri, 0)
+		h.FileDidChange(uri, 0, false, true)
 
 		// Use a context without a deadline to exercise the fallback.
 		start := time.Now()
@@ -702,6 +702,154 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 		require.Less(t, elapsed, 500*time.Millisecond)
 	})
 
+	t.Run("tracked file OOB change blocks on stale push until newer version", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+
+		// Bring the file to a fully processed open state at version 1.
+		h.FileDidChange(uri, 1, true, false)
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 1,
+		}))
+		require.NoError(t, h.WaitFileProcessed(t.Context(), uri))
+
+		// Out-of-band (watched-file) change on the still-open file.
+		h.FileDidChange(uri, 1, true, true)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		// A stale push at the already-awaited version must not release.
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 1,
+		}))
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned on stale push: %v", err)
+		case <-time.After(30 * time.Millisecond):
+		}
+
+		// The IDE reload sends a strictly newer versioned didChange,
+		// and gopls re-publishes for it.
+		h.FileDidChange(uri, 2, true, false)
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 2,
+		}))
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for newer version after OOB change")
+		}
+	})
+
+	t.Run("untracked file OOB change releases on first push", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+
+		// No prior sent version: a watched-file change on a closed file.
+		h.FileDidChange(uri, 0, false, true)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned too early: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 0,
+		}))
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for first push on untracked OOB change")
+		}
+	})
+
+	t.Run("open file with no tracked version uses version floor", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+
+		// An open-but-unedited file: the editor open path never calls
+		// FileDidChange, so the handler has no entry, yet gopls has
+		// already published diagnostics for the open version (1).
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 1,
+		}))
+
+		// Out-of-band change reports the editor's current version (1)
+		// as the floor to surpass.
+		h.FileDidChange(uri, 1, true, true)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.WaitFileProcessed(context.Background(), uri)
+		}()
+
+		// A stale re-publish for the version gopls already holds must
+		// NOT release the wait.
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 1,
+		}))
+		select {
+		case err := <-done:
+			t.Fatalf("wait returned on stale push at version floor: %v", err)
+		case <-time.After(30 * time.Millisecond):
+		}
+
+		// The reload's versioned didChange + its diagnostics push
+		// surpasses the floor and releases the wait.
+		h.FileDidChange(uri, 2, true, false)
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 2,
+		}))
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for resync past version floor")
+		}
+	})
+
+	t.Run("tracked file OOB change returns on caller deadline without newer version", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler()
+		uri := "file:///tmp/test.go"
+
+		h.FileDidChange(uri, 1, true, false)
+		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
+			URI:     uri,
+			Version: 1,
+		}))
+		h.FileDidChange(uri, 1, true, true)
+
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := h.WaitFileProcessed(ctx, uri)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Less(t, time.Since(start), 500*time.Millisecond)
+	})
+
 	t.Run("InvalidateAllPending blocks wait for unrelated URI until next publish", func(t *testing.T) {
 		t.Parallel()
 		h := newHandler()
@@ -710,8 +858,8 @@ func TestCallbackHandler_WaitFileProcessed(t *testing.T) {
 
 		// Register both URIs and bring them to a fully processed state
 		// so a plain WaitFileProcessed would return immediately.
-		h.FileDidChange(uA, 1)
-		h.FileDidChange(uB, 1)
+		h.FileDidChange(uA, 1, true, false)
+		h.FileDidChange(uB, 1, true, false)
 		require.NoError(t, h.PublishDiagnostics(t.Context(), semanticapi.PublishDiagnosticsParams{
 			URI:     uA,
 			Version: 1,

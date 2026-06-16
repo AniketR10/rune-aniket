@@ -57,7 +57,17 @@ var ErrNoServer = errors.New("no language server")
 // a recently sent didChange before issuing the request.
 type Callback interface {
 	semanticapi.LSPCallback
-	FileDidChange(uri string, version int32)
+	// FileDidChange reports that a file changed and how the next
+	// WaitFileProcessed should wait for the server to reconcile it.
+	// version is the editor's document version, open reports whether
+	// the file is open in the editor, and oob reports whether the
+	// change is out-of-band (a file watcher event or a
+	// workspace/didChangeWatchedFiles triggered by a tool such as
+	// apply_patch) rather than a versioned editor edit. An
+	// out-of-band change to an open file makes the wait block for a
+	// strictly newer version (using version as the floor), while one
+	// to a closed file waits for the next diagnostics push.
+	FileDidChange(uri string, version int32, open, oob bool)
 	// InvalidateAllPending marks every URI tracked by the callback
 	// as having a pending unversioned change, so that the next
 	// WaitFileProcessed call for any of those URIs blocks until a
@@ -333,7 +343,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 				},
 			})
 		if err == nil {
-			m.callback.FileDidChange(uri, version)
+			m.callback.FileDidChange(uri, version, true, false)
 		}
 		return err
 
@@ -414,21 +424,13 @@ func (m *Manager) handle(ev textapi.Event) error {
 	}
 }
 
-// fileDidChangeOOB notifies the callback about an out-of-band file
-// change (file watcher event, or a workspace/didChangeWatchedFiles
-// triggered by a tool such as apply_patch). It is signaled as an
-// unversioned change so WaitFileProcessed blocks until the next
-// publishDiagnostics arrives.
-//
-// We mark the URI pending unconditionally, including when the file
-// is open in the editor: OOB events are delivered on a different
-// path than EventTypeEdit (which performs its own versioned
-// FileDidChange), and tools like apply_patch write to disk without
-// going through the editor at all. Skipping open files here used to
-// cause check_file_errors to return a stale snapshot from the LSP
-// cache after an apply_patch update.
 func (m *Manager) fileDidChangeOOB(uri string) {
-	m.callback.FileDidChange(uri, 0)
+	f, open := m.getFile(uri)
+	var version int32
+	if open {
+		version = f.version
+	}
+	m.callback.FileDidChange(uri, version, open, true)
 }
 
 func (m *Manager) getFile(uriStr string) (*file, bool) {
