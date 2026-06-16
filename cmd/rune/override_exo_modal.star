@@ -91,6 +91,10 @@ config = merge(config, {
 # config["gui"]["column_width_offset"] = -1
 # config["gui"]["window_opacity"]      = {"fg": 1, "bg": 1}
 # config["gui"]["window_blur_radius"]  = 100
+# Remap physical keys before they reach the editor (see the key-mapping docs).
+# Both sides use the command key-binding syntax. <capslock>, <numlock>,
+# <scrolllock> and <menu> only act when remapped here.
+# config["gui"]["key_mapping"]         = {"<capslock>": "<esc>"}
 
 # ---------------------------------------------------------------------------
 # Editor behavior (applies to the fallback editor only)

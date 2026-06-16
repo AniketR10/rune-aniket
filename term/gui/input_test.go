@@ -730,3 +730,113 @@ func (m *mockInputManager) AppendKeyEvents(buf []ebiten.KeyEvent) []ebiten.KeyEv
 func (m *mockInputManager) AppendInputChars(buf []rune) []rune {
 	return append(buf, m.chars...)
 }
+
+func TestInputKeyMapping(t *testing.T) {
+	suite := []struct {
+		description    string
+		mapping        map[term.KeyComb]term.KeyComb
+		keyEvents      []ebiten.KeyEvent
+		chars          []rune
+		expectedEvents []term.Event
+	}{
+		{
+			description: "remaps CapsLock to Esc",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyCapsLock}: {Key: term.KeyEsc},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyCapsLock)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
+			},
+		},
+		{
+			description: "unmapped CapsLock dispatches no event",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyNumLock}: {Key: term.KeyEsc},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyCapsLock)},
+		},
+		{
+			description:    "CapsLock with no mapping table dispatches no event",
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyCapsLock)},
+			expectedEvents: nil,
+		},
+		{
+			description: "remaps NumLock to a char target",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyNumLock}: {Ch: 'a'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyNumLock)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
+			},
+		},
+		{
+			description: "remaps ContextMenu (menu) to Esc",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyMenu}: {Key: term.KeyEsc},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyContextMenu)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
+			},
+		},
+		{
+			description: "remaps a char source to a named key",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Ch: 'a'}: {Key: term.KeyEsc},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
+			},
+		},
+		{
+			description: "remaps a named key source to a char",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyEsc}: {Ch: 'a'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyEscape)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
+			},
+		},
+		{
+			description: "passes through keys absent from a non-empty table",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyCapsLock}: {Key: term.KeyEsc},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte{0x0d, 0x0a}},
+			},
+		},
+		{
+			description: "remap matches modifier in source",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyArrowLeft, Mod: term.ModCtrl}: {Key: term.KeyHome},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyArrowLeft, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyHome, Raw: []byte("\x1b[H")},
+			},
+		},
+	}
+
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			mock, input := newTestInput(t)
+			input.setKeyMapping(test.mapping)
+			mock.keyEvents = test.keyEvents
+			mock.chars = test.chars
+
+			events := input.processEvents(nil)
+			if len(test.expectedEvents) == 0 {
+				assert.Empty(t, events)
+				return
+			}
+			require.Equal(t, len(test.expectedEvents), len(events))
+			assert.Equal(t, test.expectedEvents, events)
+		})
+	}
+}

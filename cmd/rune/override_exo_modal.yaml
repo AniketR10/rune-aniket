@@ -81,6 +81,11 @@ command:
 #   column_width_offset: -1
 #   window_opacity: {fg: 1, bg: 1}
 #   window_blur_radius: 100
+#   # Remap physical keys before they reach the editor (see the key-mapping
+#   # docs). Both sides use the command key-binding syntax. <capslock>,
+#   # <numlock>, <scrolllock> and <menu> only act when remapped here.
+#   key_mapping:
+#     "<capslock>": "<esc>"
 
 # ---------------------------------------------------------------------------
 # Editor behavior (applies to the fallback editor only)

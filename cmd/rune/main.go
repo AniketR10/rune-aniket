@@ -704,6 +704,7 @@ func runGUI(
 		gui.WithPublishChannel(publishChan),
 		gui.WithLocker(mu),
 		gui.WithPrintFPS(*flagFPS),
+		gui.WithKeyMapping(getGUIKeyMapping(browser, cfg)),
 	}
 
 	storage := root.storage

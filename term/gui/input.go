@@ -42,6 +42,7 @@ type input struct {
 	keyEvents   []ebiten.KeyEvent
 	chars       []rune
 	input       keysManager
+	keyMapping  map[ebiten.KeyEvent]ebiten.KeyEvent
 }
 
 func newInput(fontManager *font.Manager) *input {
@@ -49,6 +50,30 @@ func newInput(fontManager *font.Manager) *input {
 		fontManager: fontManager,
 		input:       ebitenInputManager{},
 	}
+}
+
+func (i *input) setKeyMapping(m map[term.KeyComb]term.KeyComb) {
+	if len(m) == 0 {
+		i.keyMapping = nil
+		return
+	}
+	resolved := make(map[ebiten.KeyEvent]ebiten.KeyEvent, len(m))
+	for from, to := range m {
+		src, ok := combToEvent[from]
+		if !ok {
+			continue
+		}
+		dst, ok := combToEvent[to]
+		if !ok {
+			continue
+		}
+		resolved[src] = dst
+	}
+	if len(resolved) == 0 {
+		i.keyMapping = nil
+		return
+	}
+	i.keyMapping = resolved
 }
 
 // processEvents collects discrete key events and fallback chars from Ebiten,
@@ -62,11 +87,13 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 	keyEventFired := false
 
 	for _, ke := range i.keyEvents {
-		// Skip releases — they don't produce terminal events.
 		if ke.Action == ebiten.KeyActionRelease {
 			continue
 		}
-		// Skip modifier-only keys.
+		rep, ok := i.keyMapping[ebiten.KeyEvent{Key: ke.Key, Mods: ke.Mods}]
+		if ok {
+			ke.Key, ke.Mods = rep.Key, rep.Mods
+		}
 		if isModifierKey(ke.Key) {
 			continue
 		}

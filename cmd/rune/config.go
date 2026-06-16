@@ -251,6 +251,47 @@ func getGUIBackgroundBlur(browser browser.Browser, cfg config.Config) (ret int) 
 	return
 }
 
+// getGUIKeyMapping reads the optional 'gui.key_mapping' table, parsing each
+// source and target with term.ParseKey into a term.KeyComb remapping. Invalid
+// entries are reported and skipped so a single bad mapping does not discard the
+// rest. Returns nil when no valid mappings are present.
+func getGUIKeyMapping(browser browser.Browser, cfg config.Config) map[term.KeyComb]term.KeyComb {
+	m, err := cfg.GetMap("key_mapping")
+	if err != nil {
+		if err != config.ErrNotFound {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"Could not load 'gui.key_mapping' from config: %v", err)
+		}
+		return nil
+	}
+	ret := make(map[term.KeyComb]term.KeyComb, len(m))
+	for src, v := range m {
+		dst, ok := v.(string)
+		if !ok {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"Invalid 'gui.key_mapping.%s': expected a string target key", src)
+			continue
+		}
+		from, err := term.ParseKey(src)
+		if err != nil {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"Invalid 'gui.key_mapping' source key '%s': %v", src, err)
+			continue
+		}
+		to, err := term.ParseKey(dst)
+		if err != nil {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"Invalid 'gui.key_mapping' target key '%s': %v", dst, err)
+			continue
+		}
+		ret[from] = to
+	}
+	if len(ret) == 0 {
+		return nil
+	}
+	return ret
+}
+
 func getGUIEnvVars(browser browser.Browser, cfg config.Config) (ret config.Config) {
 	ret = config.NopConfig()
 	env, err := cfg.GetConfig("env")

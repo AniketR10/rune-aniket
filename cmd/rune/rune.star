@@ -266,6 +266,16 @@ config = {
         "ligatures":            False,
         # Themes available to `default_theme` and the `guitheme` command.
         "themes":               GUI_THEMES,
+        # Remap physical keys before they reach the editor (GUI only). Both
+        # sides use the same syntax as command key bindings (see the
+        # `key-mapping` docs). This is useful for keys the OS swallows or that
+        # the input layer otherwise drops, such as CapsLock. Example: treat
+        # CapsLock as Escape. Keys like <capslock>, <numlock>, <scrolllock>
+        # and <menu> never act on their own — they only do something when
+        # remapped here.
+        "key_mapping": {
+        #     "<capslock>": "<esc>",
+        },
     },
     "editor": {
         # Editor mode and exo settings are not configured here. The
