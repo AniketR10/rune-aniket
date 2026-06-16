@@ -441,6 +441,7 @@ func newTestMouse(t *testing.T) (*mockMouseManager, *mouse) {
 	f.SetFontByFamilyName("")
 	f.SetDeviceScale(1)
 	f.SetDPI(72)
+	require.NoError(t, f.SetSize(16))
 	ret := newMouse(f)
 	ret.mouse = mock
 	ret.resize(f.CellsWidth(defaultWidth), f.CellsHeight(defaultHeight))

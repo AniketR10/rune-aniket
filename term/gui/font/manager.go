@@ -83,7 +83,7 @@ type CharSize struct {
 // with the default font and dpi.
 func NewManager(overlapX, overlapY int) (*Manager, error) {
 	ret := &Manager{
-		size: 16,
+		size: defaultSizeForScale(deviceScale()),
 		// cell pixels start/end overlap by exactly 1 pixel,
 		// so we can achieve pixel-perfect text based frame UI.
 		// This only works when rendered cell's frame is exactly 1 pixel:
@@ -162,7 +162,13 @@ func (m *Manager) SetDPI(dpi float64) error {
 // SetSize sets the size of the configured font.
 // It will reload the font with the new DPI and return
 // an error if there was a problem reloading the font.
+//
+// A size of 0 selects the DPI-aware default for the current device
+// scale (larger on low-DPI displays). See defaultSizeForScale.
 func (m *Manager) SetSize(size float64) error {
+	if size == 0 {
+		size = defaultSizeForScale(m.DeviceScale())
+	}
 	if m.size == size {
 		return nil
 	}
@@ -181,6 +187,23 @@ func (m *Manager) SetSize(size float64) error {
 		return fmt.Errorf("set font size %v: %w", size, err)
 	}
 	return nil
+}
+
+// defaultSizeForScale maps a device scale factor to a default point
+// size, interpolating linearly from 17pt on low-DPI displays
+// (scale <= 1) down to 13pt on hi-DPI displays (scale >= 2).
+func defaultSizeForScale(scale float64) float64 {
+	const (
+		lowScale, lowSize = 1.0, 17.0
+		hiScale, hiSize   = 2.0, 13.0
+	)
+	if scale <= lowScale {
+		return lowSize
+	}
+	if scale >= hiScale {
+		return hiSize
+	}
+	return lowSize + (scale-lowScale)*(hiSize-lowSize)/(hiScale-lowScale)
 }
 
 // SetOffset sets the x and y offset of the configured font.

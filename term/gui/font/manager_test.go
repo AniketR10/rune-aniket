@@ -208,3 +208,43 @@ func TestSymbolFallbackResolvesGapGlyphs(t *testing.T) {
 		assert.True(t, ok, "glyph %s must resolve through the font fallback chain", name)
 	}
 }
+
+func TestDefaultSizeForScale(t *testing.T) {
+	cases := []struct {
+		scale float64
+		want  float64
+	}{
+		{0.75, 17},
+		{1.0, 17},
+		{1.5, 15},
+		{1.75, 14},
+		{2.0, 13},
+		{3.0, 13},
+	}
+	for _, tc := range cases {
+		assert.InDelta(t, tc.want, defaultSizeForScale(tc.scale), 1e-9,
+			"scale %v", tc.scale)
+	}
+}
+
+func TestSetSizeZeroResolvesDefaultForDeviceScale(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+
+	m.SetDeviceScale(1)
+	require.NoError(t, m.SetSize(0))
+	assert.Equal(t, float64(17), m.size)
+
+	m.SetDeviceScale(2)
+	require.NoError(t, m.SetSize(0))
+	assert.Equal(t, float64(13), m.size)
+}
+
+func TestSetSizeExplicitIgnoresDeviceScale(t *testing.T) {
+	m, err := NewManager(0, 0)
+	require.NoError(t, err)
+
+	m.SetDeviceScale(1)
+	require.NoError(t, m.SetSize(13))
+	assert.Equal(t, float64(13), m.size)
+}

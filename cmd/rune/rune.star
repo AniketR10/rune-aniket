@@ -240,6 +240,10 @@ config = {
         "channel":            "stable",
     },
     "gui": {
+        # Font size in points. When unset, Rune picks a DPI-aware default
+        # (larger on low-DPI displays). The guifontsize command and the
+        # <m-=> / <m--> bindings adjust it at runtime.
+        # "font_size":          13,
         # Add or remove pixels from the font's default column width.
         "column_width_offset": -1,
         # Add or remove pixels from the font's default line height.

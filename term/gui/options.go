@@ -81,6 +81,10 @@ func WithPosition(x, y int) Option {
 
 // WithFontSize defines the size of the default font
 // or the font set via WithFontFamily.
+//
+// A size of 0 selects the DPI-aware automatic default, where the point
+// size is resolved from the display's device scale (larger on low-DPI
+// displays).
 func WithFontSize(size float64) Option {
 	return func(g *GUI) error {
 		return g.fontManager.SetSize(size)
