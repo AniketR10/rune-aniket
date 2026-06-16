@@ -106,6 +106,9 @@ endif
 #   rune-agent/lib/*.so.*       (transitive NEEDED libs, rpath=$ORIGIN/../lib)
 #   rune-agent/config.yaml
 #   rune-agent/skills/
+# The tarball is rooted at the bundle contents (bin/, lib/, config.yaml,
+# skills/), not the rune-agent/ wrapper, so config.yaml sits at the archive
+# root where the installer looks for it.
 # CGO is required (tree-sitter), so the binary links the host's shared libs.
 # Native builds only support host-arch == target-arch; cross-arch must use the
 # *-cross (Docker) targets.
@@ -150,7 +153,7 @@ make-release-linux:
 	@cp config.yaml $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/config.yaml
 	@mkdir -p $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/skills
 	@cp -r skills/code-* $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent/skills/
-	@cd $(RUNE_AGENT_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_AGENT_LINUX_RELEASE_TAR) rune-agent
+	@cd $(RUNE_AGENT_LINUX_OUTPUT_DIR)/rune-agent && tar --format=ustar -czf $(RUNE_AGENT_LINUX_OUTPUT_DIR)/$(RUNE_AGENT_LINUX_RELEASE_TAR) .
 
 # linux-cross-compile builds a stripped-down rune-agent bundle (no GUI deps)
 # inside a Debian-based Docker image. The resulting tarball is dropped into

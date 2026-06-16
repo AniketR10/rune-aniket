@@ -126,9 +126,9 @@ RUN set -eux; \
 
 RUN set -eux; \
 	: "${RUNE_RELEASE_TAR:?RUNE_RELEASE_TAR build arg is required}"; \
-	cd /out; \
-	tar --format=ustar --no-xattrs --no-acls -czf "$RUNE_RELEASE_TAR" rune-agent; \
-	tar -tzf "$RUNE_RELEASE_TAR" >/dev/null
+	cd /out/rune-agent; \
+	tar --format=ustar --no-xattrs --no-acls -czf "/out/$RUNE_RELEASE_TAR" .; \
+	tar -tzf "/out/$RUNE_RELEASE_TAR" >/dev/null
 
 FROM scratch AS artifact
 COPY --from=build /out/ /

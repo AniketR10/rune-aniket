@@ -1021,16 +1021,45 @@ func (m *Manager) configBaseTree() map[string]any {
 // Packages may ship either config.yaml (legacy) or config.star (mode-aware);
 // when both exist, config.yaml wins. The returned path may not exist on disk —
 // callers must stat it themselves.
+//
+// Some tarballs nest everything under a single top-level wrapper directory
+// rather than the bundle contents, so the config ends up at
+// <dir>/<wrapper>/config.{yaml,star}. When no top-level config is present,
+// descend into a lone subdirectory to find it.
 func pkgConfigFile(dir string) string {
+	if path, ok := configFileIn(dir); ok {
+		return path
+	}
+	if sub, ok := loneSubdir(dir); ok {
+		if path, ok := configFileIn(sub); ok {
+			return path
+		}
+	}
+	return filepath.Join(dir, "config.yaml")
+}
+
+// configFileIn reports the package config file directly inside dir, preferring
+// config.yaml over config.star, and whether one exists.
+func configFileIn(dir string) (string, bool) {
 	yamlPath := filepath.Join(dir, "config.yaml")
 	if _, err := os.Stat(yamlPath); err == nil {
-		return yamlPath
+		return yamlPath, true
 	}
 	starPath := filepath.Join(dir, "config.star")
 	if _, err := os.Stat(starPath); err == nil {
-		return starPath
+		return starPath, true
 	}
-	return yamlPath
+	return "", false
+}
+
+// loneSubdir returns the path of dir's single subdirectory when dir contains
+// exactly one entry and that entry is a directory.
+func loneSubdir(dir string) (string, bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 || !entries[0].IsDir() {
+		return "", false
+	}
+	return filepath.Join(dir, entries[0].Name()), true
 }
 
 func idePkgStarlarkParams(

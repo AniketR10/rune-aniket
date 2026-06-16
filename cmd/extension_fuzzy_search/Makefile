@@ -72,6 +72,9 @@ dist: clean $(TAR)
 #   fuzzy-search/bin/extension_fuzzy_search
 #   fuzzy-search/lib/*.so.*     (transitive NEEDED libs, rpath=$ORIGIN/../lib)
 #   fuzzy-search/config.star
+# The tarball is rooted at the bundle contents (bin/, lib/, config.star), not
+# the fuzzy-search/ wrapper, so config.star sits at the archive root where the
+# installer looks for it.
 # CGO is required (tree-sitter), so the binary links the host's shared libs.
 # Native builds only support host-arch == target-arch; cross-arch must use the
 # *-cross (Docker) targets.
@@ -112,8 +115,8 @@ make-release-linux:
 	done; \
 	rm -f "$$LIB/.queue" "$$LIB/.next"
 	@cp config.star $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/config.star
-	@cd $(FUZZY_LINUX_OUTPUT_DIR) && \
-		tar --format=ustar -czf $(FUZZY_LINUX_RELEASE_TAR) fuzzy-search
+	@cd $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search && \
+		tar --format=ustar -czf $(FUZZY_LINUX_OUTPUT_DIR)/$(FUZZY_LINUX_RELEASE_TAR) .
 
 # linux-cross-compile builds the fuzzy-search bundle inside a Debian-based
 # Docker image (used when the host cannot natively target the requested arch).

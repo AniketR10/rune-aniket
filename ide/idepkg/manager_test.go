@@ -3058,6 +3058,44 @@ func TestPkgConfigFileFallsBackToStar(t *testing.T) {
 	assert.Equal(t, filepath.Join(dir, "config.star"), pkgConfigFile(dir))
 }
 
+// TestPkgConfigFileNestedWrapperDir locks in discovery for tarballs that
+// nest everything under a single top-level wrapper directory (the Linux
+// rune-agent bundle tars `rune-agent/...` rather than `.`, so config.yaml
+// lands at <dir>/rune-agent/config.yaml). Without descending one level the
+// extension's shipped config is silently never merged.
+func TestPkgConfigFileNestedWrapperDir(t *testing.T) {
+	t.Parallel()
+	t.Run("yaml under single wrapper dir", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		wrapper := filepath.Join(dir, "rune-agent")
+		require.NoError(t, os.MkdirAll(filepath.Join(wrapper, "bin"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(wrapper, "config.yaml"), []byte("{}\n"), 0o644))
+		assert.Equal(t, filepath.Join(wrapper, "config.yaml"), pkgConfigFile(dir))
+	})
+	t.Run("star under single wrapper dir", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		wrapper := filepath.Join(dir, "pkg")
+		require.NoError(t, os.MkdirAll(wrapper, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(wrapper, "config.star"), []byte("config = {}\n"), 0o644))
+		assert.Equal(t, filepath.Join(wrapper, "config.star"), pkgConfigFile(dir))
+	})
+	t.Run("top level still wins over nested", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		wrapper := filepath.Join(dir, "rune-agent")
+		require.NoError(t, os.MkdirAll(wrapper, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(wrapper, "config.yaml"), []byte("{}\n"), 0o644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, "config.yaml"), []byte("{}\n"), 0o644))
+		assert.Equal(t, filepath.Join(dir, "config.yaml"), pkgConfigFile(dir))
+	})
+}
+
 // TestLoadUserConfigStarEmptyOrCommentsOnly verifies that a user-side
 // config.star that is empty or contains only comments loads as an empty
 // configuration instead of failing with "expected top-level config dict".
