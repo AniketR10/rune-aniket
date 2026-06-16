@@ -237,6 +237,19 @@ func runUpgradeLinux(ctx context.Context, opts upgradeOpts, archivePath string) 
 		return fmt.Errorf("extract tarball: %w", err)
 	}
 
+	// The release tarball's single top-level directory is the app
+	// dir itself (`tar ... rune.app`), so extraction yields
+	// `<staging>/rune.app/bin/rune`. Swapping the staging dir straight
+	// into place would bury the binary one level too deep
+	// (`<install>/rune.app/rune.app/bin/rune`), leaving the CLI
+	// symlink and the XDG .desktop Exec= path dangling. Unwrap the
+	// nested app dir so the swap source has the expected layout.
+	swapSrc, err := unwrapStagedApp(stagingDir, opts.appName)
+	if err != nil {
+		_ = opts.ops.RemoveAll(stagingDir)
+		return fmt.Errorf("locate extracted app: %w", err)
+	}
+
 	hasExisting := pathExists(dstApp)
 	if hasExisting {
 		if err := opts.ops.RenameAtomic(dstApp, backup); err != nil {
@@ -246,7 +259,7 @@ func runUpgradeLinux(ctx context.Context, opts upgradeOpts, archivePath string) 
 	}
 
 	symlinkOwned := shouldRefreshCLISymlink(opts.cliSymlinkPath, dstApp)
-	if err := opts.ops.RenameAtomic(stagingDir, dstApp); err != nil {
+	if err := opts.ops.RenameAtomic(swapSrc, dstApp); err != nil {
 		// Restore previous app bundle.
 		_ = opts.ops.RemoveAll(stagingDir)
 		if hasExisting {
@@ -255,6 +268,11 @@ func runUpgradeLinux(ctx context.Context, opts upgradeOpts, archivePath string) 
 			}
 		}
 		return fmt.Errorf("rename staging into place: %w", err)
+	}
+	// When swapSrc was the nested app dir, the now-empty staging
+	// wrapper is left behind; remove it.
+	if swapSrc != stagingDir {
+		_ = opts.ops.RemoveAll(stagingDir)
 	}
 
 	if err := refreshCLISymlink(opts, dstApp, symlinkOwned); err != nil {
@@ -341,6 +359,29 @@ func findAppBundle(root string) (string, error) {
 func pathExists(p string) bool {
 	_, err := os.Lstat(p)
 	return err == nil
+}
+
+// unwrapStagedApp returns the directory inside stagingDir that should
+// be swapped into place. The Linux release tarball wraps everything in
+// a single top-level directory equal to appName (e.g. `rune.app/`), so
+// after extraction the real bundle lives at `<staging>/<appName>`. When
+// that nested directory exists (and contains the expected `bin/`), it
+// is returned so the swap lands the bundle at `<install>/<appName>`
+// rather than `<install>/<appName>/<appName>`.
+//
+// If no such wrapper is present (an already-flat layout), stagingDir
+// itself is returned unchanged.
+func unwrapStagedApp(stagingDir, appName string) (string, error) {
+	nested := filepath.Join(stagingDir, appName)
+	if info, err := os.Stat(nested); err == nil && info.IsDir() {
+		if bin, err := os.Stat(filepath.Join(nested, "bin")); err == nil && bin.IsDir() {
+			return nested, nil
+		}
+	}
+	if info, err := os.Stat(filepath.Join(stagingDir, "bin")); err == nil && info.IsDir() {
+		return stagingDir, nil
+	}
+	return "", fmt.Errorf("no bin/ directory under %s or %s", stagingDir, nested)
 }
 
 // shouldRefreshCLISymlink decides whether refreshCLISymlink should

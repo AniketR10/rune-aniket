@@ -26,12 +26,8 @@
 package ideupgrade
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -92,71 +88,7 @@ func (linuxPlatformOps) Ditto(ctx context.Context, src, dst string) error {
 }
 
 func (linuxPlatformOps) ExtractTarGz(ctx context.Context, archivePath, destDir string) error {
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", destDir, err)
-	}
-	f, err := os.Open(archivePath)
-	if err != nil {
-		return fmt.Errorf("open archive: %w", err)
-	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return fmt.Errorf("gzip reader: %w", err)
-	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("read tar: %w", err)
-		}
-		// Reject path traversal attempts.
-		clean := filepath.Clean(hdr.Name)
-		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-			return fmt.Errorf("invalid tar entry %q", hdr.Name)
-		}
-		target := filepath.Join(destDir, clean)
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)|0o700); err != nil {
-				return fmt.Errorf("mkdir %s: %w", target, err)
-			}
-		case tar.TypeReg, tar.TypeRegA:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return fmt.Errorf("mkdir parent: %w", err)
-			}
-			out, err := os.OpenFile(target,
-				os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
-			if err != nil {
-				return fmt.Errorf("create %s: %w", target, err)
-			}
-			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
-				return fmt.Errorf("write %s: %w", target, err)
-			}
-			out.Close()
-		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return fmt.Errorf("mkdir parent: %w", err)
-			}
-			_ = os.Remove(target)
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
-				return fmt.Errorf("symlink %s: %w", target, err)
-			}
-		default:
-			// Skip unsupported entry types (devices, fifos, etc.).
-		}
-	}
-	return nil
+	return extractTarGz(ctx, archivePath, destDir)
 }
 
 func (linuxPlatformOps) Symlink(target, linkPath string) error {

@@ -146,6 +146,107 @@ func TestLinuxE2E_HappyPath(t *testing.T) {
 	require.Equal(t, filepath.Join(installRoot, "rune.app", "bin", "rune"), target)
 }
 
+// TestLinuxE2E_RealReleaseTarballLayout drives the full Linux upgrade
+// through the production linuxPlatformOps against a tarball whose single
+// top-level directory is rune.app/ — the exact layout shipped by
+// `tar --format=ustar -czf rune.app` in cmd/rune/Makefile.
+//
+// It is the highest-fidelity regression for the broken auto-upgrade
+// that buried the binary at rune.app/rune.app/bin/rune, dangling the CLI
+// symlink and the XDG .desktop Exec= path so KDE/GNOME could not find
+// the executable. TestLinuxE2E_HappyPath did not catch it because its
+// tarball used a flat (bin/rune) layout.
+func TestLinuxE2E_RealReleaseTarballLayout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping linux e2e in short mode")
+	}
+	const marker = "rune-linux-e2e-nested"
+	tarData := makeTarGz(t, map[string]string{
+		"rune.app/bin/rune":                        "#!/bin/sh\necho " + marker + "\n",
+		"rune.app/share/applications/rune.desktop": "[Desktop Entry]\nExec=rune\n",
+		"rune.app/share/rune/README":               "hello",
+	})
+	sum := sha256.Sum256(tarData)
+
+	manifestArch := runtime.GOOS + "-" + runtime.GOARCH
+	mux := http.NewServeMux()
+	srv := httptest.NewTLSServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/rune.tar.gz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(tarData)
+	})
+	mux.HandleFunc("/"+manifestArch+"/manifest.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(Manifest{
+			Version:  "v0.42.1",
+			OS:       runtime.GOOS,
+			Arch:     runtime.GOARCH,
+			Filename: "rune.tar.gz",
+			URL:      srv.URL + "/rune.tar.gz",
+			SHA256:   hex.EncodeToString(sum[:]),
+			Size:     int64(len(tarData)),
+		})
+	})
+
+	installRoot := t.TempDir()
+	cliRoot := t.TempDir()
+	cacheRoot := t.TempDir()
+
+	existingBinDir := filepath.Join(installRoot, "rune.app", "bin")
+	require.NoError(t, os.MkdirAll(existingBinDir, 0o755))
+	existingBinary := filepath.Join(existingBinDir, "rune")
+	require.NoError(t, os.WriteFile(existingBinary,
+		[]byte("#!/bin/sh\necho old\n"), 0o755))
+
+	cliSymlink := filepath.Join(cliRoot, "rune")
+	require.NoError(t, os.Symlink(existingBinary, cliSymlink))
+
+	mgr, err := newWithPlatformOps(Config{
+		CurrentVersion:   "v0.42.0",
+		Arch:             manifestArch,
+		ManifestURL:      srv.URL,
+		Storage:          storagestub.NewInMemoryService(),
+		HTTPClient:       srv.Client(),
+		Executable:       func() (string, error) { return existingBinary, nil },
+		InstallRoot:      installRoot,
+		AppName:          "rune.app",
+		CLISymlinkPath:   cliSymlink,
+		CLIBinaryRelPath: filepath.Join("bin", "rune"),
+		CacheDir:         cacheRoot,
+		BackupRetention:  1,
+		Notifications:    &recordingNotifications{},
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+	}, linuxPlatformOps{httpClient: srv.Client()})
+	require.NoError(t, err)
+
+	manifest, _, err := mgr.fetchManifest(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, mgr.runUpgrade(context.Background(), manifest))
+
+	// New binary lands at <install>/rune.app/bin/rune, never nested.
+	got, err := os.ReadFile(filepath.Join(installRoot, "rune.app", "bin", "rune"))
+	require.NoError(t, err)
+	require.Contains(t, string(got), marker)
+
+	_, err = os.Stat(filepath.Join(installRoot, "rune.app", "rune.app"))
+	require.True(t, os.IsNotExist(err),
+		"upgrade must not produce a nested rune.app/rune.app directory")
+
+	_, err = os.Stat(filepath.Join(installRoot, "rune.app.new"))
+	require.True(t, os.IsNotExist(err), "staging dir must be cleaned up")
+
+	// CLI symlink (== .desktop Exec= absolute path) resolves to the new
+	// binary on disk.
+	resolved, err := filepath.EvalSymlinks(cliSymlink)
+	require.NoError(t, err)
+	wantResolved, err := filepath.EvalSymlinks(filepath.Join(installRoot, "rune.app", "bin", "rune"))
+	require.NoError(t, err)
+	require.Equal(t, wantResolved, resolved)
+}
+
 func TestLinuxE2E_ChecksumMismatchRollsBack(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping linux e2e in short mode")
