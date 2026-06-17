@@ -286,6 +286,18 @@ func TestSampleGradient(t *testing.T) {
 			},
 			expect: term.NewRGBColor(0, 0, 255),
 		},
+		{
+			name:     "empty gradient",
+			factor:   0.5,
+			gradient: []term.Color{},
+			expect:   term.ColorDefault,
+		},
+		{
+			name:     "nil gradient",
+			factor:   0.5,
+			gradient: nil,
+			expect:   term.ColorDefault,
+		},
 	}
 
 	for _, tcase := range tsuite {

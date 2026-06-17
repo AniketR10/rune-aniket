@@ -86,6 +86,9 @@ func ColorBrightness(color, resolveColorDefault term.Color) float64 {
 // SampleGradient interpolates a color from a gradient at a given position
 // where factor=0 is the first color and factor=1 the last.
 func SampleGradient(factor float64, gradient []term.Color) term.Color {
+	if len(gradient) == 0 {
+		return term.ColorDefault
+	}
 	t := math.Min(1, math.Max(0, factor))
 	stops := float64(len(gradient) - 1)
 	tt := t * stops

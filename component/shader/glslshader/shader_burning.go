@@ -290,6 +290,14 @@ type burning struct {
 	heatRecords [][]heatRecord
 	// Stores wallpaper details after it has been detected.
 	wallpaperBounds wallpaperBounds
+	// marker is a wallpaper invisible-char cell near the screen center,
+	// captured once the bounds are found and re-read in O(1) every frame
+	// to detect when an overlay (e.g. the centered command prompt) is
+	// drawn over the wallpaper so the shader can stop occluding it. It is
+	// valid only for the matrix shape it was captured in.
+	markerSet              bool
+	markerX, markerY       int
+	markerRows, markerCols int
 }
 
 // DefaultBurningParams gives you a set of params that exhibits the
@@ -403,6 +411,14 @@ func BurningPresetGentleOnlyLogo(
 
 func (s *burning) Shade(frame, total int, in [][]term.Cell) {
 	if s.skipRenders || frame < 0 || frame >= total {
+		return
+	}
+	if len(in) == 0 || len(in[0]) == 0 {
+		return
+	}
+
+	if !s.HideLogo && s.markerSet && !s.markerStillPresent(in) {
+		s.skipRenders = true
 		return
 	}
 
@@ -1027,6 +1043,15 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 
 	s.wallpaperBounds = bounds
 
+	// The top-left corner is itself a marker cell. Cache it together with
+	// the matrix shape it was found in so later frames can detect, in
+	// O(1), when the wallpaper stops being behind the shader (see Shade).
+	// Anchor the probe near the screen center rather than at a bounds
+	// corner: overlays such as the centered command prompt cover the
+	// middle of the screen, so a corner marker would survive and the
+	// shader would keep occluding the prompt.
+	s.captureMarker(in)
+
 	wallpaperWidth := bounds.bottomRightX - bounds.topLeftX
 	wallpaperHeight := bounds.bottomRightY - bounds.topLeftY
 	if wallpaperWidth <= 0 || wallpaperHeight <= 0 {
@@ -1064,24 +1089,52 @@ func (s *burning) processLogoFromWallpaper(in [][]term.Cell) {
 }
 
 func (s *burning) isMaskeableWallpaper(in [][]term.Cell) bool {
-	return s.hasExpectedWallpaper(in) && !s.hasPrompt(in)
+	return s.hasExpectedWallpaper(in)
 }
 
-// this checks if there's a frame somewhere between the middle
-// and until a quarter of the available space. Is not perfect
-// but it works for most initial width/heights.
-func (s *burning) hasPrompt(in [][]term.Cell) bool {
-	w := float64(len(in[0]))
-	h := float64(len(in))
-	midx, midy := int(w/2), h/2
-	quartery := int(midy / 2)
-	for y := int(midy); y > quartery; y-- {
-		char := in[y][midx].Ch
-		if char == s.Logo.FrameCharSet.HorizontalTop {
-			return true
+// markerStillPresent reports whether the cached marker cell is still the
+// invisible char. It returns false when the matrix shape no longer
+// matches the shape the marker was captured in, both because the cached
+// coordinate would then be meaningless and because re-reading it could
+// index out of range. Callers must guard on markerSet first.
+func (s *burning) markerStillPresent(in [][]term.Cell) bool {
+	if len(in) != s.markerRows || len(in) == 0 || len(in[0]) != s.markerCols {
+		return false
+	}
+	if s.markerY >= len(in) || s.markerX >= len(in[s.markerY]) {
+		return false
+	}
+	return in[s.markerY][s.markerX].Ch == s.Logo.WallpaperInvisibleChar
+}
+
+// captureMarker records a single wallpaper marker cell to re-probe each
+// frame (see Shade). It walks the center column up from the vertical
+// middle to the first invisible char, i.e. the background just above the
+// centered logo. The command prompt opens centered with its full command
+// list, so it is always tall enough to cover that cell; overwriting it
+// cancels the shader. It falls back to the bounds' top-left corner if the
+// center column carries no marker.
+func (s *burning) captureMarker(in [][]term.Cell) {
+	rows := len(in)
+	cols := len(in[0])
+	midX := cols / 2
+	midY := rows / 2
+
+	s.markerRows = rows
+	s.markerCols = cols
+	s.markerSet = true
+
+	if midX < len(in[midY]) {
+		for y := midY; y >= 0; y-- {
+			if in[y][midX].Ch == s.Logo.WallpaperInvisibleChar {
+				s.markerX, s.markerY = midX, y
+				return
+			}
 		}
 	}
-	return false
+
+	s.markerX = s.wallpaperBounds.topLeftX
+	s.markerY = s.wallpaperBounds.topLeftY
 }
 
 // hasExpectedWallpaper will rely on the assumption that our asciiart density
