@@ -164,45 +164,58 @@ func (m *Manager) RunTask(t Task) error {
 	if _, loaded := m.tasks.LoadOrStore(t.Name, &t); loaded {
 		return ErrTaskExists
 	}
-	ch := make(chan schemeapi.EventInfo)
-	id, err := m.scheme.Watch("./...", ch, schemeapi.AllEvents()...)
-	if err != nil {
-		m.tasks.Delete(t.Name)
-		return fmt.Errorf("workspace watch: %w", err)
-	}
 	t.defaultFrameAttr = m.frameAttr
 	t.focusFrameAttr = m.focusFrameAttr
-	ctx, _, err := t.init(id, m.ctx, m.b, m.scheme,
+	ctx, _, err := t.init(m.ctx, m.b, m.scheme,
 		m.newPlugin, m.width, m.height, func() {
 			m.tasks.Delete(t.Name)
 		}, m.scheduleNextTick, m.pluginOpts...)
 	if err != nil {
-		_ = m.scheme.StopWatch(id)
 		m.tasks.Delete(t.Name)
 		return fmt.Errorf("init task: %w", err)
 	}
 
-	m.startWatch(&t, ctx, ch, id)
+	m.startWatch(&t, ctx)
 
 	return nil
 }
 
 // startWatch launches the goroutine that reruns t on matching workspace
-// changes. ch and id are the channel and handle returned by Watch; ctx is
-// the task lifetime context, so closing the task (which cancels ctx) also
-// stops the watcher. The watcher's own cancel is recorded on the task so
-// ReplaceTask can stop just this watch and start a fresh one without
-// disturbing the task window.
-func (m *Manager) startWatch(
-	t *Task, ctx context.Context, ch <-chan schemeapi.EventInfo, id int,
-) {
+// changes. ctx is the task lifetime context, so closing the task (which
+// cancels ctx) also stops the watcher. The watcher's own cancel is
+// recorded on the task so ReplaceTask can stop just this watch and start a
+// fresh one without disturbing the task window.
+//
+// The watch is established inside the goroutine rather than by the caller:
+// on Linux notify has no native recursive watcher and falls back to a
+// synchronous walk of the whole workspace, which would freeze the GUI
+// event loop if Watch ran on the caller. A watch that fails to arm only
+// disables auto-rerun: the task is torn down into the visible halted/error
+// state (see Task.watchFailed) so the user is told to recreate it, rather
+// than left as a silent zombie.
+func (m *Manager) startWatch(t *Task, ctx context.Context) {
 	watchCtx, watchCancel := context.WithCancel(ctx)
 	t.mu.Lock()
 	t.watchCancel = watchCancel
 	filter := t.Filter
 	t.mu.Unlock()
 	go debug.CapturePanicReport(func() {
+		ch := make(chan schemeapi.EventInfo)
+		id, err := m.scheme.Watch("./...", ch, schemeapi.AllEvents()...)
+		if err != nil {
+			m.log(log.ErrorLevel, "workspace watch: %v", err)
+			t.watchFailed(err)
+			return
+		}
 		defer m.scheme.StopWatch(id) //nolint:errcheck
+		// The task may have been closed (ctx cancelled) while Watch was
+		// arming; stop the freshly-armed watch instead of running it.
+		if watchCtx.Err() != nil {
+			return
+		}
+		t.mu.Lock()
+		t.watchID = id
+		t.mu.Unlock()
 		ignore, err := vctrl.LoadGitignore(m.scheme)
 		if err != nil {
 			m.log(log.ErrorLevel, "load gitignore: %v", err)
@@ -313,22 +326,16 @@ func (m *Manager) StopTask(name string) (err error) {
 // place and runs it, preserving the task's window or tab. The previous
 // watcher is stopped and a fresh one is started so the new filter takes
 // effect and a task that halted itself on an infinite loop is re-armed
-// (its old watcher had already exited).
+// (its old watcher had already exited). The new watch arms asynchronously,
+// so ReplaceTask returns before it is known to have armed; a watch that
+// fails to arm tears the task into the visible halted/error state (see
+// Task.watchFailed) rather than failing the replace.
 func (m *Manager) ReplaceTask(spec Task) error {
 	info, ok := m.tasks.Load(spec.Name)
 	if !ok {
 		return errors.New("task with this name does not exist")
 	}
 	task := info.(*Task)
-
-	// Arm the new watch before touching task state, so a failed Watch
-	// leaves the existing task and its live watcher untouched rather than
-	// stranding it without any watch.
-	ch := make(chan schemeapi.EventInfo)
-	id, err := m.scheme.Watch("./...", ch, schemeapi.AllEvents()...)
-	if err != nil {
-		return fmt.Errorf("workspace watch: %w", err)
-	}
 
 	task.mu.Lock()
 	task.Cmd = spec.Cmd
@@ -339,13 +346,15 @@ func (m *Manager) ReplaceTask(spec Task) error {
 	task.lastExit = nil
 	watchCancel := task.watchCancel
 	taskCtx := task.ctx
-	task.watchID = id
 	task.mu.Unlock()
 
 	if watchCancel != nil {
 		watchCancel()
 	}
-	m.startWatch(task, taskCtx, ch, id)
+	// Arm a fresh watch asynchronously so the new filter takes effect. A
+	// watch that fails to arm tears the task into the halted/error state so
+	// the user is told to recreate it rather than left with a silent zombie.
+	m.startWatch(task, taskCtx)
 
 	task.tryRunning(m.b, m.scheme, "  task")
 	return nil

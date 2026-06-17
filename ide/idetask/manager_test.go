@@ -36,6 +36,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode"
 	"unsafe"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/plugin"
 )
 
@@ -94,6 +96,45 @@ func TestManager(t *testing.T) {
 
 		ws := wm.Created()
 		require.Len(t, ws, 1)
+	})
+
+	t.Run("RunTask with a failed watch tears the task into the halted error state", func(t *testing.T) {
+		wm := newFakeBrowser()
+		exec := newFakeScheme()
+		exec.setWatchErr(errors.New("watch exploded"))
+		m := newTestManager(wm, exec)
+
+		// The window and command launch off the event loop, so RunTask still
+		// returns nil; the task cannot be failed synchronously. The watcher
+		// goroutine then tears it into the visible halted error state.
+		require.NoError(t, m.RunTask(Task{Name: "task", Cmd: "build"}))
+
+		taskIfc, ok := m.tasks.Load("task")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+		task.Resize(80, 24)
+
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool {
+				if !info.LoopHalted {
+					return false
+				}
+				assert.False(t, info.LastSuccess)
+				return true
+			})
+
+		w := term.NewStringWriter(80, 24)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		task.currentHandler().Draw(w)
+		require.NoError(t, w.Flush())
+		out := stripSpace(w.String())
+		assert.Contains(t, out, stripSpace("re-run automatically"),
+			"watch-failure error should explain auto-rerun is disabled")
+		assert.Contains(t, out, stripSpace("watch exploded"),
+			"watch-failure error should surface the underlying watch error")
+
+		assert.True(t, watchStopped(m, exec, "task"),
+			"failed watch must leave no live watch to retrigger the task")
 	})
 
 	t.Run("OnFocus task unminimizes it", func(t *testing.T) {
@@ -733,8 +774,7 @@ func TestManager(t *testing.T) {
 		info := mustTaskInfo(t, m, "task")
 		assert.False(t, info.LoopHalted, "recreated task must not stay halted")
 		assert.True(t, info.LastSuccess)
-		assert.False(t, watchStopped(m, exec, "task"),
-			"recreated task should hold a live watch")
+		assertWatchArmed(t, m, exec, "task")
 
 		// A subsequent matching change reruns the recovered task normally.
 		triggerRerun(t, m, exec, "task", "main.go")
@@ -768,8 +808,7 @@ func TestManager(t *testing.T) {
 		info := mustTaskInfo(t, m, "task")
 		assert.False(t, info.LoopHalted, "replaced task must not stay halted")
 		assert.Equal(t, "*.go", info.Filter, "replace must apply the new filter")
-		assert.False(t, watchStopped(m, exec, "task"),
-			"replaced task should hold a live watch")
+		assertWatchArmed(t, m, exec, "task")
 
 		// A subsequent matching change retriggers the replaced task.
 		runsBefore := info.Runs
@@ -876,13 +915,18 @@ func sendEventInfo(t *testing.T, m *Manager, exec *fakeScheme, taskname string, 
 	taskIfc, ok := m.tasks.Load(taskname)
 	require.True(t, ok)
 	task := taskIfc.(*Task)
-	task.mu.Lock()
-	id := task.watchID
-	task.mu.Unlock()
-	exec.mu.Lock()
-	ch := exec.tasks[id]
-	exec.mu.Unlock()
-	require.NotNil(t, ch)
+	// The watch arms asynchronously in startWatch, so poll until the
+	// task's channel is registered with the fake scheme.
+	var ch chan<- schemeapi.EventInfo
+	require.Eventually(t, func() bool {
+		task.mu.Lock()
+		id := task.watchID
+		task.mu.Unlock()
+		exec.mu.Lock()
+		ch = exec.tasks[id]
+		exec.mu.Unlock()
+		return ch != nil
+	}, time.Second, 5*time.Millisecond, "watch never armed for task %q", taskname)
 	ch <- ev
 }
 
@@ -891,6 +935,13 @@ func mustURI(t *testing.T, filename string) workspaceapi.URI {
 	uri, err := workspaceapi.ParseURI("memory:///" + strings.TrimPrefix(filename, "/"))
 	require.NoError(t, err)
 	return uri
+}
+
+// stripSpace removes all whitespace so assertions on rendered output are
+// immune to the renderer's column-boundary wrapping, which can break a
+// word anywhere by inserting spaces or newlines.
+func stripSpace(s string) string {
+	return strings.Join(strings.FieldsFunc(s, unicode.IsSpace), "")
 }
 
 // triggerRerun emits a file event, settles the resulting run successfully,
@@ -923,10 +974,25 @@ func watchStopped(m *Manager, exec *fakeScheme, taskname string) bool {
 		return true
 	}
 	task := taskIfc.(*Task)
+	task.mu.Lock()
+	id := task.watchID
+	task.mu.Unlock()
 	exec.mu.Lock()
 	defer exec.mu.Unlock()
-	_, ok = exec.tasks[task.watchID]
+	_, ok = exec.tasks[id]
 	return !ok
+}
+
+// assertWatchArmed waits for the task's watch to arm. The watch is
+// established asynchronously in startWatch, so a live-watch assertion
+// taken immediately after RunTask/ReplaceTask must poll rather than read
+// once.
+func assertWatchArmed(t *testing.T, m *Manager, exec *fakeScheme, taskname string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		return !watchStopped(m, exec, taskname)
+	}, time.Second, 5*time.Millisecond,
+		"watch never armed for task %q", taskname)
 }
 
 func mustTaskInfo(t *testing.T, m *Manager, taskname string) TaskInfo {
@@ -1022,6 +1088,7 @@ type fakeScheme struct {
 	startErr  error                      // if set, StartCommand will return this error
 	watchErr  error                      // if set, Watch will return this error
 	startHook func(cmd workspaceapi.Cmd) // optional test hook
+	watchGate chan struct{}              // if set, Watch blocks until it is closed/received
 	tasks     map[int]chan<- schemeapi.EventInfo
 	next      int
 }
@@ -1049,9 +1116,21 @@ func (f *fakeScheme) StopWatch(id int) error {
 	return nil
 }
 
+func (f *fakeScheme) setWatchErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.watchErr = err
+}
+
 func (f *fakeScheme) Watch(
 	path string, c chan<- schemeapi.EventInfo, events ...schemeapi.Event,
 ) (int, error) {
+	f.mu.Lock()
+	gate := f.watchGate
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.watchErr != nil {
@@ -1449,42 +1528,48 @@ func TestManagerReplaceTaskEdgeCases(t *testing.T) {
 			"replace must update CmdAndArgs even when a run was in flight")
 	})
 
-	t.Run("replace surfaces watch errors without leaving a dead task", func(t *testing.T) {
+	t.Run("replace with a failed watch tears the task into the halted error state", func(t *testing.T) {
 		wm := newFakeBrowser()
 		exec := newFakeScheme()
 		m := newTestManager(wm, exec)
 
 		runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
 
-		taskIfc, _ := m.tasks.Load("task")
-		oldID := func() int {
-			tk := taskIfc.(*Task)
-			tk.mu.Lock()
-			defer tk.mu.Unlock()
-			return tk.watchID
-		}()
+		taskIfc, ok := m.tasks.Load("task")
+		require.True(t, ok)
+		task := taskIfc.(*Task)
+		task.Resize(80, 24)
 
-		exec.watchErr = errors.New("watch exploded")
-		err := m.ReplaceTask(Task{Name: "task", Cmd: "build", Filter: "*.go"})
-		require.Error(t, err)
+		// A watch that cannot arm leaves a task that can never auto-rerun.
+		// ReplaceTask still returns nil (the window/command launched off the
+		// event loop), but the task is torn down into the visible halted
+		// error state so the user is told to recreate it.
+		exec.setWatchErr(errors.New("watch exploded"))
+		require.NoError(t, m.ReplaceTask(Task{Name: "task", Cmd: "rebuild", Filter: "*.go"}))
 
-		// A failed replace must leave the original watch untouched: it must
-		// never tear down the existing watch (which the watcher's deferred
-		// StopWatch would do asynchronously after a stray cancel).
-		assert.Never(t, func() bool {
-			exec.mu.Lock()
-			defer exec.mu.Unlock()
-			_, live := exec.tasks[oldID]
-			return !live
-		}, 300*time.Millisecond, 10*time.Millisecond,
-			"a failed replace must not strand the task without a watch")
+		assertTaskWithin(t, m, time.Second, "task",
+			func(info TaskInfo) bool {
+				if !info.LoopHalted {
+					return false
+				}
+				assert.False(t, info.LastSuccess)
+				return true
+			})
 
-		// And the task must still retrigger via that surviving watch.
-		exec.watchErr = nil
-		runsBefore := mustTaskInfo(t, m, "task").Runs
-		triggerRerun(t, m, exec, "task", "main.go")
-		assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
-			"task must still retrigger after a failed replace")
+		w := term.NewStringWriter(80, 24)
+		require.NoError(t, w.Clear(term.Attributes{}))
+		task.currentHandler().Draw(w)
+		require.NoError(t, w.Flush())
+		out := stripSpace(w.String())
+		assert.Contains(t, out, stripSpace("re-run automatically"),
+			"watch-failure error should explain auto-rerun is disabled")
+		assert.Contains(t, out, stripSpace("watch exploded"),
+			"watch-failure error should surface the underlying watch error")
+
+		// A failed watch never armed, so there is no live watch to retrigger
+		// the task: it stays dead until the user recreates it.
+		assert.True(t, watchStopped(m, exec, "task"),
+			"failed watch must leave no live watch to retrigger the task")
 	})
 
 	t.Run("rapid successive replaces leave exactly one live watch", func(t *testing.T) {
@@ -1546,6 +1631,76 @@ func TestManagerReplaceTaskEdgeCases(t *testing.T) {
 		assert.False(t, mustTaskInfo(t, m, "task").LoopHalted,
 			"replaced task must not inherit the prior loop window")
 	})
+}
+
+// TestRunTaskDoesNotBlockOnSlowWatch reproduces the Linux freeze where
+// RunTask blocked on a synchronous Watch (notify's recursive inotify
+// fallback walks the whole tree before returning). RunTask must return
+// promptly and arm the watch in the background once it completes.
+func TestRunTaskDoesNotBlockOnSlowWatch(t *testing.T) {
+	wm := newFakeBrowser()
+	exec := newFakeScheme()
+	gate := make(chan struct{})
+	exec.watchGate = gate
+	m := newTestManager(wm, exec)
+
+	done := make(chan error, 1)
+	go debug.CapturePanicReport(func() {
+		done <- m.RunTask(Task{Name: "task", Cmd: "build"})
+	})
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("RunTask blocked on a slow Watch")
+	}
+
+	// The task window and command launch must proceed without the watch.
+	assertTaskRunsWithin(t, m, time.Second, "task", nil,
+		func(info TaskInfo) bool { return !info.Running })
+
+	// Releasing the gate lets the watch arm; the task then retriggers.
+	close(gate)
+	runsBefore := mustTaskInfo(t, m, "task").Runs
+	triggerRerun(t, m, exec, "task", "main.go")
+	assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
+		"task must retrigger once the watch arms")
+}
+
+// TestReplaceTaskDoesNotBlockOnSlowWatch is the ReplaceTask analogue of
+// TestRunTaskDoesNotBlockOnSlowWatch.
+func TestReplaceTaskDoesNotBlockOnSlowWatch(t *testing.T) {
+	wm := newFakeBrowser()
+	exec := newFakeScheme()
+	m := newTestManager(wm, exec)
+
+	runAndSettle(t, m, Task{Name: "task", Cmd: "build"})
+
+	gate := make(chan struct{})
+	exec.mu.Lock()
+	exec.watchGate = gate
+	exec.mu.Unlock()
+
+	done := make(chan error, 1)
+	go debug.CapturePanicReport(func() {
+		done <- m.ReplaceTask(Task{Name: "task", Cmd: "rebuild", Filter: "*.go"})
+	})
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("ReplaceTask blocked on a slow Watch")
+	}
+	settleRun(t, m, "task")
+	assert.Equal(t, []string{"rebuild"}, mustTaskInfo(t, m, "task").CmdAndArgs)
+
+	close(gate)
+	runsBefore := mustTaskInfo(t, m, "task").Runs
+	triggerRerun(t, m, exec, "task", "main.go")
+	assert.Equal(t, runsBefore+1, mustTaskInfo(t, m, "task").Runs,
+		"task must retrigger once the replaced watch arms")
 }
 
 // TestManagerLoopDetection probes the build -> file-change -> rebuild

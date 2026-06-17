@@ -293,7 +293,7 @@ func (t *Task) doClose() (ret error) {
 }
 
 func (t *Task) init(
-	watchID int, ctx context.Context, b Browser,
+	ctx context.Context, b Browser,
 	scheme schemeapi.Scheme, newPlugin pluginBuilder,
 	maxWidth, maxHeight int, closeHook func(),
 	scheduleNextTick func(func()) bool,
@@ -302,7 +302,6 @@ func (t *Task) init(
 	t.closeHook = closeHook
 	t.b = b
 	t.scheme = scheme
-	t.watchID = watchID
 	t.maxWidth = maxWidth
 	t.minWidth, t.minHeight = calcMinSize(maxWidth, maxHeight)
 	t.mu = new(sync.Mutex)
@@ -472,13 +471,32 @@ func (t *Task) haltLoop(file string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.loopHalted = true
-	err := fmt.Errorf(
+	t.haltWith(fmt.Errorf(
 		"%q keeps retriggering this task, creating an infinite loop. "+
 			"The task filter is an inclusive, comma-separated list of glob "+
 			"patterns: only matching files retrigger the task. Recreate the "+
 			"task with a filter that matches your source files but not %q, "+
-			"e.g. filter \"*.go,src/**\"", file, file)
+			"e.g. filter \"*.go,src/**\"", file, file))
+}
+
+func (t *Task) watchFailed(watchErr error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.loopHalted {
+		return
+	}
+	t.haltWith(fmt.Errorf(
+		"the workspace file watch could not be started, so this task will no "+
+			"longer re-run automatically when files change. Recreate the task "+
+			"to restore it: %w", watchErr))
+}
+
+// haltWith marks the task as permanently halted and replaces its handler
+// with a centered message rendering err, so the task can no longer
+// auto-rerun and the user is shown why. Callers must hold t.mu.
+func (t *Task) haltWith(err error) {
+	t.loopHalted = true
 	h := browser.NopScrollableFloatingHandler(
 		handler.NopScrollableFloatingFromComponent(
 			component.NewResponsiveString(
