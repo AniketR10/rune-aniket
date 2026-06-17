@@ -72,7 +72,7 @@ require (
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
 	github.com/tree-sitter/go-tree-sitter v0.25.0
-	github.com/unstablebuild/blue v1.81.2
+	github.com/unstablebuild/blue v1.81.3
 	github.com/unstablebuild/notify v0.10.2
 	github.com/unstablebuild/ox-api v0.0.0-00010101000000-000000000000
 	github.com/unstablebuild/pty v1.3.1
