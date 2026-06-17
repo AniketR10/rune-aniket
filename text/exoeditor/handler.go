@@ -69,8 +69,7 @@ type editorHandler struct {
 	executor         schemeapi.Executor
 	probe            *vteprobe.Cursor
 	probeSlab        *vteprobe.Slab
-	watchID          int
-	watchActive      bool
+	watchActive      atomic.Bool
 	cancelCtx        context.CancelFunc
 	reloader         Reloader
 
@@ -197,20 +196,28 @@ func (h *editorHandler) startWatcher(ctx context.Context) {
 		dirWatch = true
 	}
 
-	ch := make(chan schemeapi.EventInfo, 8)
-	id, err := h.cwd.Watch(watchPath, ch,
-		schemeapi.Write, schemeapi.Rename,
-		schemeapi.Create, schemeapi.Remove)
-	if err != nil {
-		_, _ = h.notifications.Notify(
-			browserapi.LevelWarn,
-			"exoeditor: watch %s: %v", watchPath, err)
-		return
-	}
-	h.watchID = id
-	h.watchActive = true
 	resourceName := h.resource.Name()
+	// Arm the watch inside the goroutine: on Linux notify has no native
+	// recursive watcher and falls back to a synchronous walk of the whole
+	// workspace, which would freeze the GUI event loop if Watch ran on the
+	// caller (opening an editor in a large monorepo). ctx cancellation from
+	// Close stops the watch, so the goroutine owns StopWatch.
 	go debug.CapturePanicReport(func() {
+		ch := make(chan schemeapi.EventInfo, 8)
+		id, err := h.cwd.Watch(watchPath, ch,
+			schemeapi.Write, schemeapi.Rename,
+			schemeapi.Create, schemeapi.Remove)
+		if err != nil {
+			_, _ = h.notifications.Notify(
+				browserapi.LevelWarn,
+				"exoeditor: watch %s: %v", watchPath, err)
+			return
+		}
+		defer h.cwd.StopWatch(id) //nolint:errcheck
+		if ctx.Err() != nil {
+			return
+		}
+		h.watchActive.Store(true)
 		for {
 			select {
 			case <-ctx.Done():
@@ -563,10 +570,6 @@ func (h *editorHandler) Close() error {
 	if h.bufSub != nil {
 		h.buf.Unsubscribe(h.bufSub)
 		h.bufSub = nil
-	}
-	if h.watchActive {
-		_ = h.cwd.StopWatch(h.watchID)
-		h.watchActive = false
 	}
 	// Before the first probe the editor may not yet consume input, so a
 	// quit dispatched now could be dropped; defer it to the first probe.
