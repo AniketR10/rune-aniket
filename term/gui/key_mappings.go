@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package gui
 
 import (
@@ -1207,4 +1206,8 @@ var combToEvent = map[term.KeyComb]ebiten.KeyEvent{
 	{Mod: term.ModCtrl, Ch: '~'}:         {Key: ebiten.KeyBackquote, Mods: ebiten.KeyModControl | ebiten.KeyModShift},
 	{Mod: term.ModCtrlAlt, Ch: '~'}:      {Key: ebiten.KeyBackquote, Mods: ebiten.KeyModControl | ebiten.KeyModShift | ebiten.KeyModAlt},
 	{Mod: term.ModCtrlMeta, Ch: '~'}:     {Key: ebiten.KeyBackquote, Mods: ebiten.KeyModControl | ebiten.KeyModShift | ebiten.KeyModSuper},
+	{Mod: term.ModCtrl}:                  {Key: ebiten.KeyControl},
+	{Mod: term.ModShift}:                 {Key: ebiten.KeyShift},
+	{Mod: term.ModAlt}:                   {Key: ebiten.KeyAlt},
+	{Mod: term.ModMeta}:                  {Key: ebiten.KeyMeta},
 }

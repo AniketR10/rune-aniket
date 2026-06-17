@@ -821,6 +821,136 @@ func TestInputKeyMapping(t *testing.T) {
 				{Type: term.EventKey, Key: term.KeyHome, Raw: []byte("\x1b[H")},
 			},
 		},
+		{
+			description: "remaps ctrl-a to meta-a",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModMeta, Ch: 'a'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'a'},
+			},
+		},
+		{
+			description: "ctrl-b passes through when only ctrl-a is remapped",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModMeta, Ch: 'a'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b', Raw: []byte{0x02}},
+			},
+		},
+		{
+			description: "ctrl-a to meta-a leaves other modifier+char combos untouched",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModMeta, Ch: 'a'},
+			},
+			keyEvents: []ebiten.KeyEvent{
+				press(ebiten.KeyB, ebiten.KeyModControl),
+				press(ebiten.KeyB, ebiten.KeyModSuper),
+				press(ebiten.KeyB, ebiten.KeyModAlt),
+				press(ebiten.KeyB, ebiten.KeyModShift),
+			},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModCtrl)},
+				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModMeta)},
+				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModAlt)},
+				{Type: term.EventKey, Ch: 'B', Raw: getCharEscapeSequence('B', 0)},
+			},
+		},
+		{
+			description: "ctrl-a to alt-a with ctrl to meta remaps ctrl-a to alt-a and ctrl-b to meta-b",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModAlt, Ch: 'a'},
+				{Mod: term.ModCtrl}:          {Mod: term.ModMeta},
+			},
+			keyEvents: []ebiten.KeyEvent{
+				press(ebiten.KeyA, ebiten.KeyModControl),
+				press(ebiten.KeyB, ebiten.KeyModControl),
+			},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: getCharEscapeSequence('a', term.ModAlt)},
+				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModMeta)},
+			},
+		},
+		{
+			description: "remaps bare ctrl to meta and emits nothing",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl}: {Mod: term.ModMeta},
+			},
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyControl)},
+			expectedEvents: nil,
+		},
+		{
+			description: "remaps bare ctrl to meta with self-bit set and emits nothing",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl}: {Mod: term.ModMeta},
+			},
+			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyControl, ebiten.KeyModControl)},
+			expectedEvents: nil,
+		},
+		{
+			description: "remaps bare ctrl to esc",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl}: {Key: term.KeyEsc},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyControl, ebiten.KeyModControl)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
+			},
+		},
+		{
+			description: "remaps shift-ctrl-a to shift-meta-a",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModMeta, Ch: 'A'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'A', Raw: getCharEscapeSequence('A', term.ModMeta)},
+			},
+		},
+		{
+			description: "shift-ctrl-b passes through when only shift-ctrl-a is remapped",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModMeta, Ch: 'A'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift)},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModCtrl)},
+			},
+		},
+		{
+			description: "shift-ctrl-a to shift-meta-a leaves other shifted modifier+char combos untouched",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModMeta, Ch: 'A'},
+			},
+			keyEvents: []ebiten.KeyEvent{
+				press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift),
+				press(ebiten.KeyB, ebiten.KeyModSuper, ebiten.KeyModShift),
+				press(ebiten.KeyB, ebiten.KeyModAlt, ebiten.KeyModShift),
+			},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModCtrl)},
+				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModMeta)},
+				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModAlt)},
+			},
+		},
+		{
+			description: "shift-ctrl-a to shift-alt-a with ctrl to meta remaps shift-ctrl-a to shift-alt-a and shift-ctrl-b to shift-meta-b",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModAlt, Ch: 'A'},
+				{Mod: term.ModCtrl}:          {Mod: term.ModMeta},
+			},
+			keyEvents: []ebiten.KeyEvent{
+				press(ebiten.KeyA, ebiten.KeyModControl, ebiten.KeyModShift),
+				press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift),
+			},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'A', Raw: getCharEscapeSequence('A', term.ModAlt)},
+				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModMeta)},
+			},
+		},
 	}
 
 	for _, test := range suite {

@@ -53,10 +53,15 @@ var allTermMods = []struct {
 }
 
 func expectedComb(key ebiten.Key, m term.Modifier) (term.KeyComb, bool) {
-	if isModifierKey(key) {
-		return term.KeyComb{}, false
-	}
 	switch key {
+	case ebiten.KeyControl, ebiten.KeyControlLeft, ebiten.KeyControlRight:
+		return term.KeyComb{Mod: term.ModCtrl}, m == 0
+	case ebiten.KeyShift, ebiten.KeyShiftLeft, ebiten.KeyShiftRight:
+		return term.KeyComb{Mod: term.ModShift}, m == 0
+	case ebiten.KeyAlt, ebiten.KeyAltLeft, ebiten.KeyAltRight:
+		return term.KeyComb{Mod: term.ModAlt}, m == 0
+	case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight:
+		return term.KeyComb{Mod: term.ModMeta}, m == 0
 	case ebiten.KeyCapsLock:
 		return term.KeyComb{Mod: m, Key: term.KeyCapsLock}, true
 	case ebiten.KeyNumLock:
@@ -115,7 +120,6 @@ func TestCombToEventExcludesUnhandledKeys(t *testing.T) {
 		ebiten.KeyF13, ebiten.KeyF14, ebiten.KeyF15, ebiten.KeyF16, ebiten.KeyF17,
 		ebiten.KeyF18, ebiten.KeyF19, ebiten.KeyF20, ebiten.KeyF21, ebiten.KeyF22,
 		ebiten.KeyF23, ebiten.KeyF24, ebiten.KeyPause, ebiten.KeyPrintScreen,
-		ebiten.KeyControl, ebiten.KeyShift, ebiten.KeyAlt, ebiten.KeyMeta,
 	}
 	for _, key := range unhandled {
 		for _, m := range allTermMods {

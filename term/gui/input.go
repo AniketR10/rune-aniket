@@ -43,6 +43,7 @@ type input struct {
 	chars       []rune
 	input       keysManager
 	keyMapping  map[ebiten.KeyEvent]ebiten.KeyEvent
+	modMapping  map[ebiten.KeyModifier]ebiten.KeyModifier
 }
 
 func newInput(fontManager *font.Manager) *input {
@@ -55,9 +56,11 @@ func newInput(fontManager *font.Manager) *input {
 func (i *input) setKeyMapping(m map[term.KeyComb]term.KeyComb) {
 	if len(m) == 0 {
 		i.keyMapping = nil
+		i.modMapping = nil
 		return
 	}
 	resolved := make(map[ebiten.KeyEvent]ebiten.KeyEvent, len(m))
+	mods := make(map[ebiten.KeyModifier]ebiten.KeyModifier)
 	for from, to := range m {
 		src, ok := combToEvent[from]
 		if !ok {
@@ -68,12 +71,65 @@ func (i *input) setKeyMapping(m map[term.KeyComb]term.KeyComb) {
 			continue
 		}
 		resolved[src] = dst
+		if srcBit, ok := bareModBit(src); ok {
+			if dstBit, ok := bareModBit(dst); ok {
+				mods[srcBit] = dstBit
+			}
+		}
 	}
 	if len(resolved) == 0 {
 		i.keyMapping = nil
+		i.modMapping = nil
 		return
 	}
 	i.keyMapping = resolved
+	if len(mods) == 0 {
+		i.modMapping = nil
+	} else {
+		i.modMapping = mods
+	}
+}
+
+// bareModBit reports the modifier bit a pure-modifier key event represents.
+func bareModBit(ev ebiten.KeyEvent) (ebiten.KeyModifier, bool) {
+	if ev.Mods != 0 {
+		return 0, false
+	}
+	switch ev.Key {
+	case ebiten.KeyControl, ebiten.KeyControlLeft, ebiten.KeyControlRight:
+		return ebiten.KeyModControl, true
+	case ebiten.KeyShift, ebiten.KeyShiftLeft, ebiten.KeyShiftRight:
+		return ebiten.KeyModShift, true
+	case ebiten.KeyAlt, ebiten.KeyAltLeft, ebiten.KeyAltRight:
+		return ebiten.KeyModAlt, true
+	case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight:
+		return ebiten.KeyModSuper, true
+	}
+	return 0, false
+}
+
+// remapMods rewrites each modifier bit through the configured bare
+// modifier remap (e.g. ctrl->meta) so held modifiers on other keys
+// follow the same mapping as a standalone modifier press.
+func (i *input) remapMods(mods ebiten.KeyModifier) ebiten.KeyModifier {
+	if len(i.modMapping) == 0 || mods == 0 {
+		return mods
+	}
+	var out ebiten.KeyModifier
+	for _, bit := range []ebiten.KeyModifier{
+		ebiten.KeyModControl, ebiten.KeyModShift,
+		ebiten.KeyModAlt, ebiten.KeyModSuper,
+	} {
+		if mods&bit == 0 {
+			continue
+		}
+		if to, ok := i.modMapping[bit]; ok {
+			out |= to
+		} else {
+			out |= bit
+		}
+	}
+	return out
 }
 
 // processEvents collects discrete key events and fallback chars from Ebiten,
@@ -90,10 +146,22 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 		if ke.Action == ebiten.KeyActionRelease {
 			continue
 		}
-		rep, ok := i.keyMapping[ebiten.KeyEvent{Key: ke.Key, Mods: ke.Mods}]
+		lookupMods := ke.Mods
+		switch ke.Key {
+		case ebiten.KeyControl, ebiten.KeyControlLeft, ebiten.KeyControlRight:
+			lookupMods &^= ebiten.KeyModControl
+		case ebiten.KeyShift, ebiten.KeyShiftLeft, ebiten.KeyShiftRight:
+			lookupMods &^= ebiten.KeyModShift
+		case ebiten.KeyAlt, ebiten.KeyAltLeft, ebiten.KeyAltRight:
+			lookupMods &^= ebiten.KeyModAlt
+		case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight:
+			lookupMods &^= ebiten.KeyModSuper
+		}
+		rep, ok := i.keyMapping[ebiten.KeyEvent{Key: ke.Key, Mods: lookupMods}]
 		if ok {
 			ke.Key, ke.Mods = rep.Key, rep.Mods
 		}
+		ke.Mods = i.remapMods(ke.Mods)
 		if isModifierKey(ke.Key) {
 			continue
 		}
