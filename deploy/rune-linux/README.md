@@ -3,15 +3,20 @@
 The Rune GUI binary is built for `linux/amd64` or `linux/arm64` in one of
 two ways:
 
-- **Native** (default): `make rune-release-linux-<arch>` /
-  `make rune-prod-dist-linux-<arch>` build with the host's own toolchain.
-  This requires a Linux host whose architecture matches the target
-  (`uname -m` mapped to `amd64`/`arm64`); cross-arch native builds are not
-  supported (no emulation).
-- **Cross** (`*-cross` targets): `deploy/rune-linux/Dockerfile`
-  cross-compiles inside Docker without forcing the Go toolchain itself to
-  run under target-arch emulation. Use these when the host arch does not
-  match the target arch.
+- **Cross** (default): `make rune-release-linux-<arch>` /
+  `make rune-prod-dist-linux-<arch>` cross-compile inside Docker via
+  `deploy/rune-linux/Dockerfile` (pinned to `golang:1.26-bookworm`,
+  glibc 2.36). This is the published path: the artifact's glibc floor is
+  fixed at 2.36 regardless of the build machine, so it runs on any
+  glibc >= 2.36 host, and it works from any host arch without forcing the
+  Go toolchain under target-arch emulation. `*-cross` aliases are kept for
+  backward compatibility.
+- **Native** (`*-native` targets): `make rune-release-linux-<arch>-native`
+  / `make rune-prod-dist-linux-<arch>-native` build with the host's own
+  toolchain. This requires a Linux host whose architecture matches the
+  target (`uname -m` mapped to `amd64`/`arm64`); cross-arch native builds
+  are not supported (no emulation). The glibc floor becomes the build
+  host's glibc, so prefer the default cross build for anything you ship.
 
 ## Supported targets
 
@@ -22,10 +27,11 @@ two ways:
 
 ## How it works
 
-### Native build
+### Native build (`*-native`)
 
-`make rune-release-linux-<arch>` runs `cmd/rune`'s `make-release-linux`
-recipe, which mirrors the Docker bundle layout using the host toolchain:
+`make rune-release-linux-<arch>-native` runs `cmd/rune`'s
+`make-release-linux` recipe, which mirrors the Docker bundle layout using
+the host toolchain:
 
 1. building `./cmd/rune` with `CGO_ENABLED=1` and
    `rpath=$ORIGIN/../lib`, applying the same `RUNE_ENV`-driven ldflags as
@@ -37,9 +43,9 @@ recipe, which mirrors the Docker bundle layout using the host toolchain:
 4. packaging `rune.app/` into a `ustar` `.tar.gz`
 
 It refuses to run unless the host is Linux and its arch matches the
-requested target arch; use the `*-cross` targets otherwise.
+requested target arch; use the default cross build otherwise.
 
-### Cross-compile build (`*-cross`)
+### Cross-compile build (default)
 
 The `make rune-linux-cross-compile` rule (and the `*-cross` targets that
 wrap it) works by:
@@ -76,37 +82,40 @@ make rune-linux-cross-compile RUNE_LINUX_TARGET_ARCH=arm64
 
 ## Release tarballs
 
-To build and package a release tarball natively (host arch must match the
-target arch):
+To build and package a release tarball via the default Docker cross-compile
+path (any host, glibc 2.36 floor):
 
 ```bash
 make rune-release-linux-amd64   # -> target/rune_linux_amd64/rune-release-linux-amd64-<tag>.tar.gz
 make rune-release-linux-arm64   # -> target/rune_linux_arm64/rune-release-linux-arm64-<tag>.tar.gz
 ```
 
-To build the same tarball via the Docker cross-compile path (any host):
+To build the same tarball natively with the host toolchain (host arch must
+match the target arch; floor becomes the host's glibc):
 
 ```bash
-make rune-release-linux-amd64-cross
-make rune-release-linux-arm64-cross
+make rune-release-linux-amd64-native
+make rune-release-linux-arm64-native
 ```
 
 To build, package, and upload to the public downloads bucket:
 
 ```bash
-# Production (gs://downloads.rune.build, prod API endpoints baked in) — native
+# Production (gs://downloads.rune.build, prod API endpoints baked in)
+# — default cross-compile, glibc 2.36 floor
 make rune-prod-dist-linux-amd64
 make rune-prod-dist-linux-arm64
 
-# Staging (gs://downloads.unstable.build, dev API endpoints baked in) — native
+# Staging (gs://downloads.unstable.build, dev API endpoints baked in)
+# — default cross-compile, glibc 2.36 floor
 make rune-staging-dist-linux-amd64
 make rune-staging-dist-linux-arm64
 
-# Docker cross-compile variants (any host arch)
-make rune-prod-dist-linux-amd64-cross
-make rune-prod-dist-linux-arm64-cross
-make rune-staging-dist-linux-amd64-cross
-make rune-staging-dist-linux-arm64-cross
+# Native host-toolchain variants (host arch must match target arch)
+make rune-prod-dist-linux-amd64-native
+make rune-prod-dist-linux-arm64-native
+make rune-staging-dist-linux-amd64-native
+make rune-staging-dist-linux-arm64-native
 ```
 
 ## Release layout

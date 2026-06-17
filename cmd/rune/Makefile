@@ -9,9 +9,10 @@ RUNE_LINUX_TARGET_OS ?= linux
 RUNE_LINUX_TARGET_ARCH ?= amd64
 RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TARGET_ARCH)
 RUNE_LINUX_RELEASE_TAR ?= rune-release-$(RUNE_LINUX_TARGET_OS)-$(RUNE_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
-# HOST_ARCH is the host's Go arch. A native Linux release requires the host's
-# arch to match the requested target arch (no emulation); other combinations
-# must use the Docker cross-compile path via the *-cross targets.
+# HOST_ARCH is the host's Go arch. A native Linux release (the *-native
+# targets) requires the host's arch to match the requested target arch (no
+# emulation); other combinations must use the default Docker cross-compile
+# release targets.
 HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 # DARWIN_AMD64_MIN_MACOS is the minimum macOS the Intel build supports. It
 # matches upstream llama.cpp's generic macOS CI floor (13.3) so the GGML Metal
@@ -88,13 +89,17 @@ endif
 	docker-build docker-run linux-cross-compile \
 	make-release-linux \
 	release-linux-amd64 release-linux-arm64 \
+	release-linux-amd64-native release-linux-arm64-native \
 	release-linux-amd64-cross release-linux-arm64-cross \
 	check-release-tag \
 	dist-linux-amd64 dist-linux-arm64 dist-darwin-arm64 dist-darwin-amd64 \
+	dist-linux-amd64-native dist-linux-arm64-native \
 	dist-linux-amd64-cross dist-linux-arm64-cross \
 	prod-dist-linux-amd64 prod-dist-linux-arm64 prod-dist-darwin-amd64 prod-dist-darwin-arm64 \
+	prod-dist-linux-amd64-native prod-dist-linux-arm64-native \
 	prod-dist-linux-amd64-cross prod-dist-linux-arm64-cross \
 	staging-dist-linux-amd64 staging-dist-linux-arm64 staging-dist-darwin-amd64 staging-dist-darwin-arm64 \
+	staging-dist-linux-amd64-native staging-dist-linux-arm64-native \
 	staging-dist-linux-amd64-cross staging-dist-linux-arm64-cross \
 	app-delve
 
@@ -382,26 +387,33 @@ make-release-linux:
 	@cp $(ROOT_DIR)/extra/osx/Rune.app/Contents/Resources/zdot/.zshrc $(RUNE_LINUX_OUTPUT_DIR)/rune.app/share/zdot/
 	@cd $(RUNE_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_LINUX_RELEASE_TAR) rune.app
 
-# release-linux-{amd64,arm64} build natively on a matching Linux host. Use the
-# *-cross variants for cross-arch builds via Docker.
+# release-linux-{amd64,arm64} build the portable release tarball through the
+# Docker cross-compile path (golang:1.26-bookworm, glibc 2.36 floor) so the
+# artifact runs on any glibc >= 2.36 host regardless of the build machine.
+# Use the -native variants to build with the host's own toolchain instead
+# (host-arch must match target-arch; the floor becomes the build host's glibc).
 release-linux-amd64:
-	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) make-release-linux
-
-release-linux-arm64:
-	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) make-release-linux
-
-release-linux-amd64-cross:
 	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
 
-release-linux-arm64-cross:
+release-linux-arm64:
 	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) linux-cross-compile
 
+release-linux-amd64-native:
+	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) make-release-linux
+
+release-linux-arm64-native:
+	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz RUNE_ENV=$(RUNE_ENV) $(MAKE) make-release-linux
+
+# release-linux-*-cross are retained as aliases for the now-default cross build.
+release-linux-amd64-cross: release-linux-amd64
+release-linux-arm64-cross: release-linux-arm64
+
 # dist-* are the underlying upload rules. They build the artifact via
-# their prerequisite (cross-compile or DMG-notarize) and publish to
-# $(DIST_BUCKET). They do NOT pin RUNE_ENV or DIST_BUCKET themselves —
-# callers (prod-dist-* / staging-dist-*) set those via target-specific
-# variables which propagate to all prerequisites in the same make
-# invocation.
+# their prerequisite (release-linux-* cross build or DMG-notarize) and
+# publish to $(DIST_BUCKET). They do NOT pin RUNE_ENV or DIST_BUCKET
+# themselves — callers (prod-dist-* / staging-dist-*) set those via
+# target-specific variables which propagate to all prerequisites in the
+# same make invocation.
 #
 # check-release-tag is listed first so the tag is validated before any
 # expensive build/notarize work runs. Prerequisites are built
@@ -425,10 +437,10 @@ dist-linux-arm64: check-release-tag release-linux-arm64
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
-# dist-linux-*-cross mirror dist-linux-* but build the tarball through the
-# Docker cross-compile path (release-linux-*-cross). The tarball path is
-# identical, so dist.sh is invoked the same way.
-dist-linux-amd64-cross: check-release-tag release-linux-amd64-cross
+# dist-linux-*-native mirror dist-linux-* but build the tarball with the
+# host's own toolchain (make-release-linux) instead of the Docker cross
+# path. The tarball path is identical, so dist.sh is invoked the same way.
+dist-linux-amd64-native: check-release-tag release-linux-amd64-native
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_amd64/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
@@ -437,7 +449,7 @@ dist-linux-amd64-cross: check-release-tag release-linux-amd64-cross
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
 
-dist-linux-arm64-cross: check-release-tag release-linux-arm64-cross
+dist-linux-arm64-native: check-release-tag release-linux-arm64-native
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
@@ -445,6 +457,10 @@ dist-linux-arm64-cross: check-release-tag release-linux-arm64-cross
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
+
+# dist-linux-*-cross are retained as aliases for the now-default cross build.
+dist-linux-amd64-cross: dist-linux-amd64
+dist-linux-arm64-cross: dist-linux-arm64
 
 dist-darwin-arm64: check-release-tag dmg-notarize
 	@cd $(ROOT_DIR) && \
@@ -482,15 +498,26 @@ prod-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
 prod-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
 prod-dist-linux-arm64:  dist-linux-arm64
 
+prod-dist-linux-amd64-native:  RUNE_ENV := prod
+prod-dist-linux-amd64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+prod-dist-linux-amd64-native:  dist-linux-amd64-native
+
+prod-dist-linux-arm64-native:  RUNE_ENV := prod
+prod-dist-linux-arm64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+prod-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+prod-dist-linux-arm64-native:  dist-linux-arm64-native
+
+# prod-dist-linux-*-cross are retained as aliases for the now-default cross build.
 prod-dist-linux-amd64-cross:  RUNE_ENV := prod
 prod-dist-linux-amd64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
 prod-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-prod-dist-linux-amd64-cross:  dist-linux-amd64-cross
+prod-dist-linux-amd64-cross:  dist-linux-amd64
 
 prod-dist-linux-arm64-cross:  RUNE_ENV := prod
 prod-dist-linux-arm64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
 prod-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
-prod-dist-linux-arm64-cross:  dist-linux-arm64-cross
+prod-dist-linux-arm64-cross:  dist-linux-arm64
 
 prod-dist-darwin-amd64: RUNE_ENV := prod
 prod-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
@@ -515,15 +542,26 @@ staging-dist-linux-arm64:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
 staging-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-linux-arm64:  dist-linux-arm64
 
+staging-dist-linux-amd64-native:  RUNE_ENV := dev
+staging-dist-linux-amd64-native:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
+staging-dist-linux-amd64-native:  dist-linux-amd64-native
+
+staging-dist-linux-arm64-native:  RUNE_ENV := dev
+staging-dist-linux-arm64-native:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
+staging-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
+staging-dist-linux-arm64-native:  dist-linux-arm64-native
+
+# staging-dist-linux-*-cross are retained as aliases for the now-default cross build.
 staging-dist-linux-amd64-cross:  RUNE_ENV := dev
 staging-dist-linux-amd64-cross:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
 staging-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
-staging-dist-linux-amd64-cross:  dist-linux-amd64-cross
+staging-dist-linux-amd64-cross:  dist-linux-amd64
 
 staging-dist-linux-arm64-cross:  RUNE_ENV := dev
 staging-dist-linux-arm64-cross:  DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
 staging-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
-staging-dist-linux-arm64-cross:  dist-linux-arm64-cross
+staging-dist-linux-arm64-cross:  dist-linux-arm64
 
 staging-dist-darwin-amd64: RUNE_ENV := dev
 staging-dist-darwin-amd64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)

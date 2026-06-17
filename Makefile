@@ -79,11 +79,14 @@ RELEASE_FILES=$(wildcard release/*)
 	runectl-prod-dist-darwin-arm64 runectl-staging-dist-darwin-arm64 \
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
+	rune-release-linux-amd64-native rune-release-linux-arm64-native \
 	rune-release-linux-amd64-cross rune-release-linux-arm64-cross \
 	rune-prod-dist-linux-amd64 rune-prod-dist-linux-arm64 \
+	rune-prod-dist-linux-amd64-native rune-prod-dist-linux-arm64-native \
 	rune-prod-dist-linux-amd64-cross rune-prod-dist-linux-arm64-cross \
 	rune-prod-dist-darwin-arm64 rune-prod-dist-darwin-amd64 \
 	rune-staging-dist-linux-amd64 rune-staging-dist-linux-arm64 \
+	rune-staging-dist-linux-amd64-native rune-staging-dist-linux-arm64-native \
 	rune-staging-dist-linux-amd64-cross rune-staging-dist-linux-arm64-cross \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
 	deps rune-llamacpp-libs rune-llamacpp-init \
@@ -309,6 +312,12 @@ rune-release-linux-amd64:
 rune-release-linux-arm64:
 	@$(MAKE) -C cmd/rune release-linux-arm64
 
+rune-release-linux-amd64-native:
+	@$(MAKE) -C cmd/rune release-linux-amd64-native
+
+rune-release-linux-arm64-native:
+	@$(MAKE) -C cmd/rune release-linux-arm64-native
+
 rune-release-linux-amd64-cross:
 	@$(MAKE) -C cmd/rune release-linux-amd64-cross
 
@@ -325,6 +334,12 @@ rune-prod-dist-linux-amd64: clean
 
 rune-prod-dist-linux-arm64: clean
 	@$(MAKE) -C cmd/rune prod-dist-linux-arm64
+
+rune-prod-dist-linux-amd64-native: clean
+	@$(MAKE) -C cmd/rune prod-dist-linux-amd64-native
+
+rune-prod-dist-linux-arm64-native: clean
+	@$(MAKE) -C cmd/rune prod-dist-linux-arm64-native
 
 rune-prod-dist-linux-amd64-cross: clean
 	@$(MAKE) -C cmd/rune prod-dist-linux-amd64-cross
@@ -343,6 +358,12 @@ rune-staging-dist-linux-amd64: clean
 
 rune-staging-dist-linux-arm64: clean
 	@$(MAKE) -C cmd/rune staging-dist-linux-arm64
+
+rune-staging-dist-linux-amd64-native: clean
+	@$(MAKE) -C cmd/rune staging-dist-linux-amd64-native
+
+rune-staging-dist-linux-arm64-native: clean
+	@$(MAKE) -C cmd/rune staging-dist-linux-arm64-native
 
 rune-staging-dist-linux-amd64-cross: clean
 	@$(MAKE) -C cmd/rune staging-dist-linux-amd64-cross
