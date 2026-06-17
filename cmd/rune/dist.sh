@@ -49,6 +49,23 @@ fi
 # Final gate before publish: never ship .go source inside the artifact.
 "$(dirname "${BASH_SOURCE[0]}")/../verify-no-go-source.sh" "$BLUE_RELEASE_TAR"
 
+# Final gate before publish: never ship a macOS artifact whose minimum
+# OS exceeds the floor we advertise. macOS enforces the binary's minos
+# at launch, so a too-high floor (e.g. built on a newer SDK without
+# pinning -mmacosx-version-min) makes the DMG refuse to open for users
+# on supported releases. Fail-closed: a darwin publish without an
+# explicit RUNE_MIN_MACOS is a configuration bug, not a reason to skip
+# the check.
+if [[ "$BLUE_TARGET_OS" == "darwin" ]]; then
+    if [[ -z "${RUNE_MIN_MACOS}" ]]; then
+        echo "ERROR: RUNE_MIN_MACOS is not set for a darwin publish — refusing to publish unverified." >&2
+        echo "       The dist-darwin-* make rules set it from DARWIN_<arch>_MIN_MACOS." >&2
+        exit 1
+    fi
+    "$(dirname "${BASH_SOURCE[0]}")/../verify-min-macos.sh" \
+        "$BLUE_RELEASE_TAR" "$RUNE_MIN_MACOS"
+fi
+
 # Publish to public GCS bucket.
 gcs_arch="${BLUE_TARGET_OS}-${BLUE_TARGET_ARCH}"
 gcs_dir="${DOWNLOADS_BUCKET}/${gcs_arch}"

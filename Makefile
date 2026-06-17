@@ -93,7 +93,7 @@ RELEASE_FILES=$(wildcard release/*)
 	ox-api-init docs-init \
 	fuzz fuzz-list \
 	manual-ssh-test \
-	dist-tar-with-src dist-dmg-with-src \
+	dist-tar-with-src dist-dmg-with-src dist-min-macos \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 RUNE_LLAMACPP_STAMP=$(TARGET)/rune-llamacpp-libs.stamp
@@ -387,6 +387,14 @@ dist-tar-with-src:
 
 dist-dmg-with-src:
 	@./cmd/dist-with-src-test.sh dmg
+
+# dist-min-macos exercises the minimum-macOS publish gate
+# (cmd/verify-min-macos.sh + cmd/rune/dist.sh): it builds stub artifacts
+# with a known Mach-O minos and asserts the gate refuses to publish one
+# whose floor exceeds what we advertise, and fails closed when the floor
+# is unset. macOS only (needs clang + otool); a no-op skip elsewhere.
+dist-min-macos:
+	@./cmd/dist-min-macos-test.sh
 
 # manual-ssh-test runs a named manual SSH scenario script using the
 # real Linux release rune binary as the remote workspace server.

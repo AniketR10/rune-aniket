@@ -116,7 +116,7 @@ endif
 make-release: CGO_ENABLED=CGO_ENABLED=1
 make-release:
 	@mkdir -p $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)
-	@cd $(ROOT_DIR) && $(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune
+	@cd $(ROOT_DIR) && ./cmd/rune/cgo-build-guard.sh '$(CGO_ENABLED) GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(RUNE_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/rune ./cmd/rune'
 	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(OXAPI_GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/ox-api ./cmd/ox-api
 	@cd $(ROOT_DIR) && CGO_ENABLED=0 GOARCH=$(TARGET_ARCH) $(TARGET_ARCH_FLAGS) GOOS=$(TARGET_OS) $(GO) build $(GOFLAGS) -o $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH)/claudeimport ./cmd/claudeimport
 	@go_files=$$(find $(TARGET)/rune_$(TARGET_OS)_$(TARGET_ARCH) -name '*.go'); \
@@ -181,7 +181,7 @@ llamacpp-libs-arm64:
 app-amd64: llamacpp-libs-amd64
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
-	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=amd64 $(DARWIN_AMD64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
+	@cd $(ROOT_DIR) && ./cmd/rune/cgo-build-guard.sh 'CGO_ENABLED=1 GOARCH=amd64 $(DARWIN_AMD64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune'
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_PLIST_AMD64) $(APP_PLIST)
@@ -199,7 +199,7 @@ app-amd64: llamacpp-libs-amd64
 app-arm64: llamacpp-libs-arm64
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
-	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=arm64 $(DARWIN_ARM64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
+	@cd $(ROOT_DIR) && ./cmd/rune/cgo-build-guard.sh 'CGO_ENABLED=1 GOARCH=arm64 $(DARWIN_ARM64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune'
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
@@ -487,6 +487,7 @@ dist-darwin-arm64: check-release-tag dmg-notarize
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME) \
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=arm64 \
+		RUNE_MIN_MACOS=$(DARWIN_ARM64_MIN_MACOS) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
@@ -496,6 +497,7 @@ dist-darwin-amd64: check-release-tag dmg-amd64-notarize
 		BLUE_RELEASE_TAR=$(DMG_DIR)/$(DMG_NAME_AMD64) \
 		BLUE_TARGET_OS=darwin \
 		BLUE_TARGET_ARCH=amd64 \
+		RUNE_MIN_MACOS=$(DARWIN_AMD64_MIN_MACOS) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		./cmd/rune/dist.sh
