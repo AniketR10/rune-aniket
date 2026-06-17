@@ -334,6 +334,10 @@ linux-cross-compile:
 #   rune.app/share/applications/rune.desktop
 #   rune.app/share/icons/hicolor/{512x512,1024x1024}/apps/rune.png
 #   rune.app/share/zdot/.z*
+# The bundling loop intentionally skips the glibc core, the OpenGL/GLX/EGL
+# loader, and the X11/XCB client libs: those must come from the host so they
+# match the host's GPU driver and X server. Bundling libGL makes GLX FBConfig
+# negotiation fail on hosts with a different Mesa or a vendor (NVIDIA) driver.
 # CGO is required (ebiten/GUI), so the binary links the host's shared libs; on a
 # glibc host those are ABI-stable enough to ship. Native builds only support
 # host-arch == target-arch; cross-arch must use the *-cross (Docker) targets.
@@ -360,6 +364,8 @@ make-release-linux:
 		while IFS= read -r soname; do \
 			case "$$soname" in \
 				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+				libGL.so*|libGLX.so*|libGLdispatch.so*|libEGL.so*|libOpenGL.so*|libGLU.so*|libgbm.so*|libdrm.so*) continue ;; \
+				libX11.so*|libX11-xcb.so*|libxcb*.so*|libXext.so*|libXrandr.so*|libXrender.so*|libXcursor.so*|libXinerama.so*|libXi.so*|libXfixes.so*|libXdamage.so*|libXxf86vm.so*|libXau.so*|libXdmcp.so*|libxshmfence.so*) continue ;; \
 			esac; \
 			[ -f "$$LIB/$$soname" ] && continue; \
 			src=""; \
