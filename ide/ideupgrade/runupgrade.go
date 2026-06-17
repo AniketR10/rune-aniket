@@ -244,7 +244,7 @@ func runUpgradeLinux(ctx context.Context, opts upgradeOpts, archivePath string) 
 	// (`<install>/rune.app/rune.app/bin/rune`), leaving the CLI
 	// symlink and the XDG .desktop Exec= path dangling. Unwrap the
 	// nested app dir so the swap source has the expected layout.
-	swapSrc, err := unwrapStagedApp(stagingDir, opts.appName)
+	swapSrc, err := unwrapStagedApp(stagingDir)
 	if err != nil {
 		_ = opts.ops.RemoveAll(stagingDir)
 		return fmt.Errorf("locate extracted app: %w", err)
@@ -363,25 +363,37 @@ func pathExists(p string) bool {
 
 // unwrapStagedApp returns the directory inside stagingDir that should
 // be swapped into place. The Linux release tarball wraps everything in
-// a single top-level directory equal to appName (e.g. `rune.app/`), so
-// after extraction the real bundle lives at `<staging>/<appName>`. When
-// that nested directory exists (and contains the expected `bin/`), it
+// a single top-level directory (e.g. `rune.app/`), so after extraction
+// the real bundle lives at `<staging>/<dir>/bin/...`. That nested dir
 // is returned so the swap lands the bundle at `<install>/<appName>`
-// rather than `<install>/<appName>/<appName>`.
+// rather than `<install>/<appName>/<dir>`.
 //
-// If no such wrapper is present (an already-flat layout), stagingDir
-// itself is returned unchanged.
-func unwrapStagedApp(stagingDir, appName string) (string, error) {
-	nested := filepath.Join(stagingDir, appName)
-	if info, err := os.Stat(nested); err == nil && info.IsDir() {
+// The nested directory is located by its `bin/` layout, not by name:
+// when the running binary was launched from a leftover backup (e.g.
+// after a double upgrade without restarting), the detected appName is
+// the backup directory name (`rune.app.bak-...`) and will not match the
+// tarball's `rune.app` top-level dir.
+//
+// If no wrapper is present (an already-flat layout), stagingDir itself
+// is returned unchanged.
+func unwrapStagedApp(stagingDir string) (string, error) {
+	if info, err := os.Stat(filepath.Join(stagingDir, "bin")); err == nil && info.IsDir() {
+		return stagingDir, nil
+	}
+	entries, err := os.ReadDir(stagingDir)
+	if err != nil {
+		return "", fmt.Errorf("read staging dir %s: %w", stagingDir, err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		nested := filepath.Join(stagingDir, e.Name())
 		if bin, err := os.Stat(filepath.Join(nested, "bin")); err == nil && bin.IsDir() {
 			return nested, nil
 		}
 	}
-	if info, err := os.Stat(filepath.Join(stagingDir, "bin")); err == nil && info.IsDir() {
-		return stagingDir, nil
-	}
-	return "", fmt.Errorf("no bin/ directory under %s or %s", stagingDir, nested)
+	return "", fmt.Errorf("no bin/ directory under %s or any of its top-level subdirectories", stagingDir)
 }
 
 // shouldRefreshCLISymlink decides whether refreshCLISymlink should

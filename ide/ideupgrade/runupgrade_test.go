@@ -230,6 +230,58 @@ func TestRunUpgradeLinux_RealTarballTopDir(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestRunUpgradeLinux_StagedDirNameMismatch covers the case where the
+// running binary was launched from a leftover backup directory (e.g.
+// after a double upgrade without restarting), so detection reports an
+// appName like "rune.app.bak-v1.0.3" that does not match the tarball's
+// "rune.app" top-level dir. unwrapStagedApp must still locate the
+// extracted bundle by its bin/ layout rather than by matching appName.
+func TestRunUpgradeLinux_StagedDirNameMismatch(t *testing.T) {
+	root := t.TempDir()
+	cache := t.TempDir()
+
+	const newBinary = "#!/bin/sh\necho new\n"
+	tarball := filepath.Join(cache, "rune-v1.0.4.tar.gz")
+	writeReleaseTarGz(t, tarball, map[string]string{
+		"rune.app/bin/rune":          newBinary,
+		"rune.app/share/rune/README": "hello",
+	})
+
+	const appName = "rune.app.bak-v1.0.3"
+	opts := upgradeOpts{
+		manifest: Manifest{
+			Version:  "v1.0.4",
+			Filename: "rune-v1.0.4.tar.gz",
+			URL:      "https://example.invalid/rune-v1.0.4.tar.gz",
+		},
+		currentVersion:   "v1.0.3",
+		cacheDir:         cache,
+		installRoot:      root,
+		appName:          appName,
+		cliSymlinkPath:   filepath.Join(root, "bin-cli", "rune"),
+		cliBinaryRelPath: filepath.Join("bin", "rune"),
+		backupRetention:  1,
+		ops:              realLinuxOps{},
+	}
+
+	existing := filepath.Join(root, appName, "bin", "rune")
+	require.NoError(t, os.MkdirAll(filepath.Dir(existing), 0o755))
+	require.NoError(t, os.WriteFile(existing, []byte("#!/bin/sh\necho old\n"), 0o755))
+
+	require.NoError(t, runUpgradeLinux(context.Background(), opts, tarball))
+
+	got, err := os.ReadFile(filepath.Join(root, appName, "bin", "rune"))
+	require.NoError(t, err)
+	require.Equal(t, newBinary, string(got))
+
+	_, err = os.Stat(filepath.Join(root, appName, "rune.app"))
+	require.True(t, os.IsNotExist(err),
+		"upgrade must not bury the bundle under a nested rune.app directory")
+
+	_, err = os.Stat(filepath.Join(root, appName+".new"))
+	require.True(t, os.IsNotExist(err), "staging dir must be cleaned up")
+}
+
 func TestRunUpgradeLinux_RenameFailureRollsBack(t *testing.T) {
 	root := t.TempDir()
 	cache := t.TempDir()
