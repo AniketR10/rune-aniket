@@ -297,6 +297,24 @@ var (
 	}
 )
 
+// defaultProdNativeConfig returns the production oauth2 configuration used as a
+// fallback when the server is unreachable and FetchConfig fails. It starts from
+// auth.DefaultNativeConfig (to keep scopes and the ox-api token-proxy endpoint)
+// and overrides only the production-specific URLs and client id. auth's
+// package-level endpoints default to the development tenant unless overridden
+// via -ldflags at prod build time (see cmd/ox-api/Makefile), so the rune binary
+// must hardcode the production values here.
+func defaultProdNativeConfig(api *url.URL) auth.Config {
+	conf := auth.DefaultNativeConfig(api)
+	conf.APIURL = "https://rune-prod.us.auth0.com/api/v2/"
+	conf.JWKSURL = "https://auth.rune.build/.well-known/jwks.json"
+	conf.SignupURL = "https://rune.build/signup"
+	conf.MgmtTokenURL = "https://rune-prod.us.auth0.com/oauth/token"
+	conf.ClientID = "XHBpJIm3q6PYazpxZMAhcwxAuR5Ks9B7"
+	conf.Endpoint.AuthURL = "https://auth.rune.build/authorize"
+	return conf
+}
+
 func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, refreshOnly bool) (
 	oauth2.TokenSource, error,
 ) {
@@ -310,7 +328,7 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 	conf, err := auth.FetchConfig(a.httpEndpointURL)
 	if err != nil {
 		log.Warnf("could not fetch oauth2 configuration, fallback to builtin: %v", err)
-		conf = auth.DefaultNativeConfig(a.httpEndpointURL)
+		conf = defaultProdNativeConfig(a.httpEndpointURL)
 	}
 	log.Infof("acquiring new oauth2 token source: "+
 		"http=%v grpc=%v config_url=%v "+
