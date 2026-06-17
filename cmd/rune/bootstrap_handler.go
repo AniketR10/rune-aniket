@@ -561,9 +561,9 @@ func (b *bootstrapHandler) openEditorPrompt() {
 		"Pick this if you already think in modes.\n\n" +
 		"- **Modeless**: Rune's built-in standard editor.\n" +
 		"Pick this if you want a familiar IDE feel.\n\n" +
-		"- **Exoeditor**: External Editor.\n" +
+		"- **Exoeditor**: external editor that runs in a Rune buffer.\n" +
 		"Rune owns tabs, windows, commands and language features; your external\n" +
-		"TUI editor (vim, nvim, helix, kak, emacs, etc.) owns the buffer and\n" +
+		"terminal-based editor (vim, nvim, helix, kak, emacs, etc.) owns the buffer and\n" +
 		"cursor. The fallback editor (modal or modeless) is used for in-memory buffers\n" +
 		"like Rune's file explorer."
 	guard := b.promptGuard()
@@ -633,13 +633,14 @@ func (b *bootstrapHandler) openPresetPrompt() {
 
 func (b *bootstrapHandler) openLoginPrompt() error {
 	msg := "## Sign in or sign up\n" +
-		"Yes, there are free alternatives. Rune is built by a small, independent team that,\n" +
-		"while much of the industry is quietly betting that soon enough programmers\n" +
-		"won't really write code anymore, we're betting the opposite: that the people\n" +
-		"who love this craft, the technologists, the systems programmers, \n" +
-		"and the old-school hackers will want tools that make them faster and sharper, not tools that\n" +
-		"do it for them and hide the details.\n\n" +
-		"Your subscription is what keeps us user-supported, for the times to come.\n\n" +
+		"Much of the industry is betting that we won't be writing code for much longer.\n" +
+		"Unstable Build is betting that the technologists, the systems programmers, the\n" +
+		"hackers who love this craft, the ones who'd rather read the source than the\n" +
+		"docs, the ones who check out the branch and run it locally before they approve\n" +
+		"the PR, and the ones everyone wants on their on-call rotation when prod is on\n" +
+		"fire, will outlive every company betting against them.\n\n" +
+		"**Rune is how we stay irreplaceable**.\n\n" +
+		"Independent and user-supported. Your subscription keeps it that way.\n\n" +
 		"$19.90/month or $218.90/year. Cancel anytime."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
