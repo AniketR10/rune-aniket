@@ -24,26 +24,26 @@
 package idepkg
 
 import (
-	"fmt"
 	"os"
 	"strings"
+	"testing"
 )
 
-// SetPathEnv sets the PATH environment variable such that all executables
-// downloaded by a Manager are made available to the command line.
-func SetPathEnv(dataDir string) error {
-	const envPath = "PATH"
+// SetPathEnv must prepend the managed bin dir so Rune-managed toolchains
+// (e.g. the bundled go) win over same-named system executables such as a
+// distro /usr/bin/go. Appending would let the system binary shadow ours.
+func TestSetPathEnvPrependsBinDir(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("PATH", "/usr/bin:/usr/local/bin")
 
-	err := makePkgDirs(dataDir)
-	if err != nil {
-		return err
+	if err := SetPathEnv(dataDir); err != nil {
+		t.Fatalf("SetPathEnv: %v", err)
 	}
+
 	binDir := makeBinDirname(dataDir)
-	path := os.Getenv(envPath)
-	path = strings.Join([]string{binDir, path}, ":")
-	err = os.Setenv(envPath, path)
-	if err != nil {
-		return fmt.Errorf("set environment variable: %w", err)
+	path := os.Getenv("PATH")
+	entries := strings.Split(path, ":")
+	if len(entries) == 0 || entries[0] != binDir {
+		t.Fatalf("managed bin dir %q must be first in PATH, got %q", binDir, path)
 	}
-	return nil
 }

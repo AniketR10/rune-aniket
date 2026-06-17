@@ -60,7 +60,10 @@ func initPATH(dataDir string) {
 	if p == "" {
 		fmt.Fprintf(os.Stderr, "set env PATH: shell return empty PATH")
 	}
-	p = fmt.Sprintf("%s:%s/bin", p, dataDir)
+	// Prepend the managed bin dir so Rune-managed toolchains (e.g. the
+	// bundled go) take precedence over same-named system executables such
+	// as a distro /usr/bin/go; appending lets the system binary shadow ours.
+	p = fmt.Sprintf("%s/bin:%s", dataDir, p)
 	if err := os.Setenv("PATH", p); err != nil {
 		fmt.Fprintf(os.Stderr, "set env PATH: %v", err)
 	}
