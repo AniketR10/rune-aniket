@@ -134,6 +134,16 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 	if ev.Type == term.EventMouse {
 		mousePos := term.Coordinates{X: ev.MouseX, Y: ev.MouseY}
 		childAtMouse, ok := wm.comp.WindowAt(mousePos)
+		// A pinned drag target can be closed mid-drag (e.g. by a
+		// runner or by the inner handler), leaving prevMouseLeftChild
+		// referencing a removed window whose Position would deref a
+		// nil tile tree. Drop the stale pin and route by position.
+		if (wm.prevMouseScrollBarDrag || wm.prevMouseLeftDrag) &&
+			wm.prevMouseLeftChild.Closed() {
+			wm.resetScrollBarMouse()
+			wm.prevMouseLeftDrag = false
+			wm.prevMouseLeftChild = component.Window{}
+		}
 		if wm.prevMouseScrollBarDrag {
 			childAtMouse = wm.prevMouseLeftChild
 			ok = true

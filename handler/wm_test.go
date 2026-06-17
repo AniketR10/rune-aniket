@@ -658,6 +658,33 @@ func TestWindowManagerMouseDrag(t *testing.T) {
 	}
 }
 
+// TestWindowManagerMouseDragSurvivesPinnedWindowClose reproduces a nil
+// pointer dereference: a MouseLeft press pins the pressed window as the
+// drag target, that window is then closed (e.g. programmatically by a
+// runner), and a follow-up drag event re-routes to the now-removed
+// window. Calling Position on a removed tile dereferenced a nil tree.
+func TestWindowManagerMouseDragSurvivesPinnedWindowClose(t *testing.T) {
+	width, height := 24, 8
+	lh := handler.NewTestHandler()
+	rh := handler.NewTestHandler()
+	_, wm := prepareTest(width, height, true, lh)
+	lw := wm.Focus()
+	rw, ok := wm.SplitVertical(lw, rh)
+	require.True(t, ok)
+	wm.SetFocus(rw)
+
+	// Press inside the right pane to pin it as the drag target.
+	wm.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 15, MouseY: 2})
+
+	// Close the pinned window out from under the in-progress drag.
+	require.NoError(t, rw.Close())
+
+	// A follow-up drag must not panic on the stale, removed window.
+	require.NotPanics(t, func() {
+		wm.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseX: 3, MouseY: 2})
+	})
+}
+
 func TestWindowManagerInit(t *testing.T) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = false
