@@ -32,7 +32,7 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, ClaudeFable5, FlagshipModel())
+	assert.Equal(t, ClaudeOpus4Dot8, FlagshipModel())
 }
 
 func TestMaxOutputTokens(t *testing.T) {

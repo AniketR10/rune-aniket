@@ -31,8 +31,8 @@ import (
 	"unstable.build/go-tui/llm/anthropic"
 )
 
-func TestFlagshipModelMirrorsAnthropic(t *testing.T) {
-	assert.Equal(t, anthropic.FlagshipModel(), FlagshipModel())
+func TestFlagshipModelIsOpus48(t *testing.T) {
+	assert.Equal(t, anthropic.ClaudeOpus4Dot8, FlagshipModel())
 }
 
 func TestMaxOutputTokensMirrorsAnthropic(t *testing.T) {
