@@ -1044,7 +1044,12 @@ func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 		if w.ID() == win.WindowID() {
 			return
 		}
-		if err := w.Close(); err != nil {
+		// Close through the browser window-close path so the tab binding
+		// is released and c.windows is updated. Closing the raw handler
+		// window would leave the tab marked bound to a removed window; a
+		// later click on that stuck tab focuses a detached tile and
+		// panics in TilePosition.
+		if err := c.newWindow(w).Close(); err != nil {
 			retErr = multierror.Append(retErr, err)
 			return
 		}

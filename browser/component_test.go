@@ -582,6 +582,74 @@ func TestTabClickFreeTabLoadsIntoFocusedWindow(t *testing.T) {
 		"clicking a free tab must load it into the focused window")
 }
 
+// TestLayoutAliasSwitchingThenTabClick reproduces the user's crash: open
+// a file (a tab in the focused window), repeatedly switch window layouts
+// via aliases that run `windowcloseall` followed by one or more
+// `windownew right`, then click the tab. `windownew right` focuses the
+// new empty window, so `windowcloseall` closes the tab's original window.
+// CloseOtherWindows closed the raw handler window without going through
+// the browser's closeWindow path, so the tab's window binding was never
+// released: it stayed "stuck" pointing at a removed window. Clicking it
+// focused that detached tile and the next cursor pass panicked in
+// TileTree.TilePosition.
+func TestLayoutAliasSwitchingThenTabClick(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Frame = false
+	cfg.FrameUnion = false
+	cfg.Dim = false
+	cfg.TabBarHeight = 2
+
+	b := NewComponent(cfg)
+	width, height := 40, 10
+	b.Resize(width, height)
+
+	// Open a file: a tab in the initially focused window.
+	uri, err := workspaceapi.ParseURI("file:///main.go")
+	require.NoError(t, err)
+	tab := b.NewTab(uri, 'o', "main.go", newTestHandler(), nil)
+	require.NoError(t, b.Focus().SetContent(tab))
+
+	// windownew right: split focus to a new empty window and focus it.
+	newRight := func() {
+		_, ok := b.Split(browserapi.OrientationRight, b.Focus(), nil)
+		require.True(t, ok)
+	}
+	// windowcloseall: keep the focused window, close the rest.
+	closeAll := func() {
+		if err := b.CloseOtherWindows(b.Focus()); err != nil &&
+			err.Error() != "no windows to close" {
+			t.Fatalf("CloseOtherWindows: %v", err)
+		}
+	}
+	draw := func() {
+		require.NotPanics(t, func() {
+			_, _, _ = b.Cursor()
+			b.Draw(term.NewStringWriter(width, height))
+		})
+	}
+
+	auxScreen := func() { closeAll(); newRight(); newRight(); draw() }
+	laptop := func() { closeAll(); newRight(); draw() }
+
+	for range 4 {
+		auxScreen()
+		laptop()
+	}
+
+	// The first windowcloseall closed the tab's original window, so the
+	// tab must be released, not left bound to a removed window.
+	_, bound := tab.Window()
+	assert.False(t, bound,
+		"tab whose window was closed by windowcloseall must be free")
+
+	// The tab is still in the bar; click it the way the user did. This
+	// must not crash the next cursor/draw pass.
+	id, ok := b.findTabID(tab)
+	require.True(t, ok, "tab must still be present in the bar")
+	b.tabs.OnClick(id)
+	draw()
+}
+
 // TestNonFocusTabAttrRespectedWithFrameFg is a regression test for
 // non_focus_tab_attr being overridden by the window manager's frame_attr
 // foreground. The tabs Scroll background used to share frame_attr (gray

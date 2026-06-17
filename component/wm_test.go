@@ -2006,3 +2006,42 @@ func TestWindowManagerIterateCloseDuringIteration(t *testing.T) {
 	assert.Equal(t, 4, visited)
 	assert.Equal(t, 0, wm.SizeFloating())
 }
+
+// TestWindowManagerIterateCloseTilesDuringIteration covers closing tiles
+// from inside Iterate, as CloseOtherWindows does. Closing a sibling
+// mutates the parent's children slice that Iterate ranges over, so
+// without a snapshot some siblings were shifted past and never visited,
+// leaking open tiles that the caller intended to close.
+func TestWindowManagerIterateCloseTilesDuringIteration(t *testing.T) {
+	h := component.TestComponent{Ch: 'A'}
+	wm, keep := NewWindowManager(&h, testWindowManagerConfig())
+	wm.Resize(40, 8)
+
+	// Flat vertical layout of four sibling tiles, mirroring repeated
+	// `windownew right` over the focused window.
+	for i := range 3 {
+		_, ok := wm.SplitVertical(keep, &component.TestComponent{Ch: rune('B' + i)})
+		require.True(t, ok)
+	}
+	require.Equal(t, 4, wm.SizeTiles())
+
+	// Mimic CloseOtherWindows(keep): visit every tile and close all but
+	// the kept one.
+	var visited int
+	assert.NotPanics(t, func() {
+		wm.Iterate(func(w Window) {
+			visited++
+			if w.node == keep.node {
+				return
+			}
+			_ = w.Close()
+		})
+	})
+
+	assert.Equal(t, 4, visited, "every tile must be visited exactly once")
+	assert.Equal(t, 1, wm.SizeTiles(), "all sibling tiles except the kept one must be closed")
+
+	// The survivor must still be positionable; a detached tile here is
+	// what crashed the host on the next cursor calculation.
+	assert.NotPanics(t, func() { _ = keep.Position() })
+}

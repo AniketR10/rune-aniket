@@ -787,7 +787,12 @@ func (t *TileNode) iterate(op func(*TileNode)) {
 		return
 	}
 
-	for _, ti := range t.children {
+	// op may close a visited tile, and TileNode.Close mutates this
+	// node's children slice in place. Snapshot it so a close does not
+	// shift an unvisited sibling out from under the loop and skip it.
+	children := make([]*component.Virtual[*TileNode], len(t.children))
+	copy(children, t.children)
+	for _, ti := range children {
 		ti.C.iterate(op)
 	}
 }
