@@ -23,6 +23,16 @@ HOST_ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 DARWIN_AMD64_MIN_MACOS ?= 13.3
 DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)" CGO_CFLAGS="-arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)" CGO_CXXFLAGS="-arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)" CGO_LDFLAGS="-arch x86_64 -mmacosx-version-min=$(DARWIN_AMD64_MIN_MACOS)"
 
+# DARWIN_ARM64_MIN_MACOS is the minimum macOS the Apple-silicon build
+# supports. Without an explicit deployment target the cgo toolchain
+# records the build host's SDK as the floor, which made arm64 DMGs
+# refuse to launch on anything older than the build machine. Kept in
+# sync with the arm64 app bundle's LSMinimumSystemVersion
+# (extra/osx/Rune.app/Contents/Info.plist) and the arm64 llama.cpp libs
+# (LLAMACPP_OSX_DEPLOYMENT_TARGET).
+DARWIN_ARM64_MIN_MACOS ?= 13.3
+DARWIN_ARM64_TARGET_ARCH_FLAGS ?= CC="clang -arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)" CGO_CFLAGS="-arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)" CGO_CXXFLAGS="-arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)" CGO_LDFLAGS="-arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)"
+
 # RUNE_DEBUG_BUILD mirrors the root Makefile flag. Set to "true" to
 # bake debug-only ex commands (:panic, :crash) into the binary. The
 # root `debug` target propagates this; release builds leave it empty.
@@ -145,12 +155,12 @@ release-amd64: llamacpp-libs-amd64
 
 release-arm64: llamacpp-libs-arm64
 	@rm -rf $(TARGET)/rune_darwin_arm64
-	@TARGET_OS=darwin TARGET_ARCH=arm64 $(MAKE) make-release
+	@TARGET_OS=darwin TARGET_ARCH=arm64 TARGET_ARCH_FLAGS='$(DARWIN_ARM64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_arm64
 
 release:
 	@rm -rf $(TARGET)/rune_darwin_arm64 $(TARGET)/rune_darwin_amd64
-	@TARGET_OS=darwin TARGET_ARCH=arm64 $(MAKE) make-release
+	@TARGET_OS=darwin TARGET_ARCH=arm64 TARGET_ARCH_FLAGS='$(DARWIN_ARM64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@TARGET_OS=darwin TARGET_ARCH=amd64 TARGET_ARCH_FLAGS='$(DARWIN_AMD64_TARGET_ARCH_FLAGS)' $(MAKE) make-release
 	@cd $(TARGET) && tar -czvf rune-release-`git describe --tags --dirty`.tar.gz rune_darwin_arm64 rune_darwin_amd64
 
@@ -166,7 +176,7 @@ llamacpp-libs-amd64:
 
 llamacpp-libs-arm64:
 	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp reconfigure
-	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp libs LLAMACPP_OSX_ARCH=arm64
+	@$(MAKE) -C $(ROOT_DIR)/llm/llamacpp libs LLAMACPP_OSX_ARCH=arm64 LLAMACPP_OSX_DEPLOYMENT_TARGET=$(DARWIN_ARM64_MIN_MACOS)
 
 app-amd64: llamacpp-libs-amd64
 	@rm -rf $(RUNE_RELEASE_DIR)
@@ -189,7 +199,7 @@ app-amd64: llamacpp-libs-amd64
 app-arm64: llamacpp-libs-arm64
 	@rm -rf $(RUNE_RELEASE_DIR)
 	@mkdir -p $(RUNE_RELEASE_DIR)
-	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=arm64 GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
+	@cd $(ROOT_DIR) && CGO_ENABLED=1 GOARCH=arm64 $(DARWIN_ARM64_TARGET_ARCH_FLAGS) GOOS=darwin $(GO) build $(RUNE_GOFLAGS) -o $(APP_BINARY) ./cmd/rune
 	@mkdir -p $(APP_BINARY_DIR) $(APP_EXTRAS_DIR)
 	@cp -fRp $(APP_TEMPLATE) $(APP_DIR)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
