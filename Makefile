@@ -93,7 +93,7 @@ RELEASE_FILES=$(wildcard release/*)
 	ox-api-init docs-init \
 	fuzz fuzz-list \
 	manual-ssh-test \
-	dist-tar-with-src dist-dmg-with-src dist-min-macos \
+	dist-tar-with-src dist-dmg-with-src dist-min-macos dist-min-linux \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 RUNE_LLAMACPP_STAMP=$(TARGET)/rune-llamacpp-libs.stamp
@@ -395,6 +395,15 @@ dist-dmg-with-src:
 # is unset. macOS only (needs clang + otool); a no-op skip elsewhere.
 dist-min-macos:
 	@./cmd/dist-min-macos-test.sh
+
+# dist-min-linux exercises the minimum-Linux publish gate
+# (cmd/verify-min-linux.sh + cmd/rune/dist.sh): it packs a stub ELF
+# artifact and asserts the gate refuses to publish one that requires a
+# glibc/libstdc++/C++ ABI version above the floor we advertise, and fails
+# closed when the floors are unset. Linux only (needs a C compiler +
+# file); a no-op skip elsewhere.
+dist-min-linux:
+	@./cmd/dist-min-linux-test.sh
 
 # manual-ssh-test runs a named manual SSH scenario script using the
 # real Linux release rune binary as the remote workspace server.
