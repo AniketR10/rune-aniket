@@ -791,6 +791,118 @@ func TestE2ESubAgentInheritsQualifiedModel(t *testing.T) {
 	}
 }
 
+// TestPlanSkillSpawnInheritsQualifiedModel reproduces RUNE-258: invoking
+// an agent-type skill via a slash command (e.g. /plan) spawned the
+// sub-agent with the bare model name from ag.Model(), dropping the
+// provider. When the name is registered under multiple providers the
+// spawner's llmarg.Resolve then fails with an ambiguity error. The
+// agent is bound to a fully-qualified model, so the spawn must pass the
+// qualified provider/name to the service factory.
+func TestPlanSkillSpawnInheritsQualifiedModel(t *testing.T) {
+	const (
+		modelName = "claude-opus-4-8"
+		provider  = "claude"
+	)
+	catalog := []llmapi.ModelEntry{
+		{Provider: "anthropic", Name: modelName, ContextWindow: 128_000},
+		{Provider: "claude", Name: modelName, ContextWindow: 128_000},
+	}
+
+	// Register a "plan" agent-type skill on disk.
+	skillDir := t.TempDir()
+	planDir := filepath.Join(skillDir, "plan")
+	require.NoError(t, os.MkdirAll(planDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(planDir, "SKILL.md"), []byte(
+		"---\nname: plan\ndescription: Plan things\ntype: agent\n---\nYou are a planner.",
+	), 0o644))
+	skillReg := skills.NewRegistry(testLocalFS{root: "/"}, dirURI(""), []string{planDir}, nil)
+	planSkill, ok := skillReg.Get("plan")
+	require.True(t, ok, "plan skill must load")
+	require.Equal(t, "agent", planSkill.Type)
+
+	subSvc := &strictProviderService{
+		Service: llmtest.New(catalog, llmtest.Response{
+			Chunks:       []string{"sub done"},
+			FinishReason: llmapi.FinishReasonStop,
+		}),
+		models: catalog,
+	}
+	var (
+		factoryMu     sync.Mutex
+		factoryModels []string
+		factoryErr    error
+	)
+	serviceFactory := func(model string) (llmapi.Service, llmapi.ModelEntry, error) {
+		entry, err := llmarg.Resolve(context.Background(), subSvc, model)
+		factoryMu.Lock()
+		factoryModels = append(factoryModels, model)
+		if err != nil {
+			factoryErr = err
+		}
+		factoryMu.Unlock()
+		if err != nil {
+			return nil, llmapi.ModelEntry{}, err
+		}
+		return subSvc, entry, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	store := newMemDialogueStore()
+	const dialogueID = "test-dialogue"
+	cfg := agent.NewConfig([]agent.Definition{
+		{ID: "default", Name: "Default Agent", AllowAny: true},
+	})
+	spawner := agent.NewGoroutineSpawner(
+		store, serviceFactory, cfg, skillReg, agent.NoMemory(), "",
+		dialogueID, "default", dirURI(""), noopAgentPrompter{},
+	)
+	registry := agent.NewRegistry()
+	spawner.SetRegistry(registry)
+
+	parentSvc := llmtest.New(catalog)
+	ag := agent.NewAgent(parentSvc, registry, skillReg, store, agent.NoMemory(), agent.Config{
+		SystemPrompt: "test",
+		Model:        llmapi.ModelEntry{Provider: provider, Name: modelName, ContextWindow: 128_000},
+		SessionKey:   dialogueID,
+		AgentID:      "default",
+	})
+
+	tx := make(chan dialoguetui.MessageEvent, 64)
+	rx := make(chan completionRequest, 1)
+	childEvents := make(chan agent.ChildEvent, 64)
+	rx <- completionRequest{msg: "plan it", skillName: "plan", ctx: ctx}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		createAgentCompletions(ctx, cancel, tx, rx, ag, spawner,
+			childEvents, skillReg, dialogueID,
+			syncComponent{mu: new(sync.Mutex), comp: dialoguetui.NewComponent(dialoguetui.ComponentConfig{}), h: &aiEditorHandler{n: stubNotifications{}}, hintSlot: &hintSlot{}},
+			stubNotifications{}, nil, store)
+	}()
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		factoryMu.Lock()
+		defer factoryMu.Unlock()
+		require.NotEmpty(c, factoryModels,
+			"spawner service factory should have been invoked for the plan sub-agent")
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	<-done
+
+	factoryMu.Lock()
+	defer factoryMu.Unlock()
+	require.NoError(t, factoryErr,
+		"plan sub-agent model must resolve without an ambiguity error")
+	for _, m := range factoryModels {
+		assert.Equalf(t, provider+"/"+modelName, m,
+			"plan sub-agent must inherit the provider-qualified model, got %q", m)
+	}
+}
+
 // TestE2EMaxTokensRejectedAboveModelCeiling drives the floating chat
 // handler end-to-end: the user types /max_tokens with a value above the
 // bound model's documented output ceiling. The command must not run —

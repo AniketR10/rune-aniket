@@ -1898,7 +1898,7 @@ func createAgentCompletions(
 				}
 				handle, skillErr := spawner.Run(req.ctx, agent.RunRequest{
 					Label:           skill.Name,
-					Model:           ag.Model(),
+					Model:           llmarg.Qualify(ag.ModelEntry()),
 					Message:         req.msg,
 					AllowedTools:    allowedTools,
 					SystemPrompt:    skill.Body,
