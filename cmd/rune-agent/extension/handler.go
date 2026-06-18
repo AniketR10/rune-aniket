@@ -1010,6 +1010,19 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		cancel()
 		return err
 	}
+	if _, loaded := h.openChats.LoadOrStore(d.ID, struct{}{}); loaded {
+		cancel()
+		return fmt.Errorf("agent chat %q is already open", d.ID)
+	}
+	opened := false
+	defer func() {
+		if !opened {
+			cancel()
+			h.openChatAgents.Delete(d.ID)
+			h.openChatTx.Delete(d.ID)
+			h.openChats.Delete(d.ID)
+		}
+	}()
 
 	// Create per-session spawner for sub-agent support.
 	sessionKey := d.ID
@@ -1165,9 +1178,9 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 
 	bhandler := browserapi.FuncHandler(handler, func() error {
 		cancel()
-		h.openChats.Delete(d.ID)
 		h.openChatAgents.Delete(d.ID)
 		h.openChatTx.Delete(d.ID)
+		h.openChats.Delete(d.ID)
 		// SessionEnd hook (reason=tab_close): fire-and-forget.
 		// Purely observational; no result fields are honored.
 		h.hookRunner.Run(h.ctx, hooks.Payload{
@@ -1190,6 +1203,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 	if err := h.wm.SetWindowContent(cmd.Window, tab); err != nil {
 		return fmt.Errorf("window set content: %v", err)
 	}
+	opened = true
 	return nil
 }
 

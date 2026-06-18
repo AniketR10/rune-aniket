@@ -20,8 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 
+	"unstable.build/go-tui/cmd/rune-agent/agent"
+	"unstable.build/go-tui/cmd/rune-agent/agent/skills"
+	"unstable.build/go-tui/cmd/rune-agent/configedit"
 	"unstable.build/go-tui/cmd/rune-agent/dialogue/dialoguetui"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmarg"
 	"unstable.build/go-tui/cmd/rune-agent/llm/llmtest"
@@ -46,6 +50,43 @@ func TestOpenChatTabUsesDialogueIDAsLabel(t *testing.T) {
 	assert.False(t, strings.HasPrefix(wm.gotName, "rune-agent://"),
 		"tab label must not be the internal rune-agent:// URI")
 	assert.Equal(t, uri, wm.gotURI, "URI must still be passed unchanged as tab identity")
+}
+
+func TestHandleChatRejectsAlreadyOpenDialogue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	const dialogueID = "RUNE-256"
+	svc := llmtest.New([]llmapi.ModelEntry{{Provider: "test", Name: "test-model"}})
+	wm := &recordingWindowManager{}
+	fs := nopFileSystem{}
+	h := &aiEditorHandler{
+		ctx:            ctx,
+		llmSvc:         svc,
+		defaultModel:   "test-model",
+		dialogueStore:  newMemDialogueStore(),
+		wm:             wm,
+		n:              stubNotifications{},
+		config:         configedit.NopConfig(),
+		skillRegistry:  skills.NewRegistry(fs, dirURI(""), nil, nil),
+		toolRegistry:   agent.NewRegistry(),
+		agentsConfig:   agent.NewConfig([]agent.Definition{{ID: "default", AllowAny: true}}),
+		cwd:            dirURI(""),
+		fs:             fs,
+		memoryDataPath: t.TempDir(),
+	}
+
+	require.NoError(t, h.handleChat(textapi.Command{Args: []string{dialogueID}}))
+	require.NotNil(t, wm.gotHandler)
+	t.Cleanup(func() {
+		require.NoError(t, wm.gotHandler.Close())
+		wm.gotHandler = nil
+	})
+	assert.Equal(t, dialogueID, wm.gotName)
+
+	err := h.handleChat(textapi.Command{Args: []string{dialogueID}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `agent chat "RUNE-256" is already open`)
 }
 
 // TestE2ECtrlCDismissesSelectionPrompt drives the chat tab handler

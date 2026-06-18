@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package extension
 
 import (
@@ -56,9 +55,10 @@ import (
 // recordingWindowManager is a stub browserapi.WindowManager that records the
 // arguments passed to Tab so tests can verify the visible label.
 type recordingWindowManager struct {
-	gotURI  workspaceapi.URI
-	gotIcon rune
-	gotName string
+	gotURI     workspaceapi.URI
+	gotIcon    rune
+	gotName    string
+	gotHandler browserapi.Handler
 }
 
 func (m *recordingWindowManager) Focus() (browserapi.Window, error) { return nil, nil }
@@ -79,6 +79,7 @@ func (m *recordingWindowManager) Tab(
 	m.gotURI = uri
 	m.gotIcon = icon
 	m.gotName = name
+	m.gotHandler = h
 	return h, nil
 }
 func (m *recordingWindowManager) SetWindowContent(_ browserapi.Window, _ browserapi.Handler) error {
