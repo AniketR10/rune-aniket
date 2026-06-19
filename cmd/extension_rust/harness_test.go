@@ -1,0 +1,402 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	iofs "io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+)
+
+// assertErr is a sentinel error scripted into the fake executor to
+// simulate a failed command.
+var assertErr = errors.New("scripted failure")
+
+// stubConfig is a config.Config that resolves lsp_path from a string map
+// and reports ErrNotFound for everything else. It embeds the interface
+// so only GetString needs an override; the embedded nil panics if any
+// other method is called, which the tests never do.
+type stubConfig struct {
+	config.Config
+	values map[string]string
+}
+
+func newStubConfig(values map[string]string) stubConfig {
+	return stubConfig{values: values}
+}
+
+func (c stubConfig) GetString(k string) (string, error) {
+	if v, ok := c.values[k]; ok {
+		return v, nil
+	}
+	return "", config.ErrNotFound
+}
+
+// fakeFileInfo satisfies os.FileInfo for paths scripted into fakeFS.
+type fakeFileInfo struct {
+	name string
+	dir  bool
+}
+
+func (f fakeFileInfo) Name() string       { return f.name }
+func (f fakeFileInfo) Size() int64        { return 0 }
+func (f fakeFileInfo) Mode() os.FileMode  { return 0o755 }
+func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeFileInfo) IsDir() bool        { return f.dir }
+func (f fakeFileInfo) Sys() any           { return nil }
+
+type fakeDirEntry struct {
+	name string
+	dir  bool
+}
+
+func (e fakeDirEntry) Name() string               { return e.name }
+func (e fakeDirEntry) IsDir() bool                { return e.dir }
+func (e fakeDirEntry) Type() os.FileMode          { return 0 }
+func (e fakeDirEntry) Info() (os.FileInfo, error) { return fakeFileInfo{name: e.name, dir: e.dir}, nil }
+
+// fakeFS implements workspaceapi.FileSystem for resolver and detection
+// tests. ReadDir returns the scripted entries for any path, except for
+// directory keys registered via addReadDir.
+type fakeFS struct {
+	files    map[string]bool
+	dirs     map[string]bool
+	entries  []os.DirEntry
+	readDirs map[string][]os.DirEntry
+	mkdirAll []string
+	mkdirErr error
+}
+
+func newFakeFS() *fakeFS {
+	return &fakeFS{
+		files:    map[string]bool{},
+		dirs:     map[string]bool{},
+		readDirs: map[string][]os.DirEntry{},
+	}
+}
+
+func (f *fakeFS) addFile(p string) *fakeFS { f.files[p] = true; return f }
+func (f *fakeFS) addDir(p string) *fakeFS  { f.dirs[p] = true; return f }
+func (f *fakeFS) addEntry(name string, dir bool) *fakeFS {
+	f.entries = append(f.entries, fakeDirEntry{name: name, dir: dir})
+	return f
+}
+
+func (f *fakeFS) addReadDir(path string, entries ...os.DirEntry) *fakeFS {
+	f.readDirs[path] = entries
+	return f
+}
+
+func (f *fakeFS) URI(p string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file://" + p)
+}
+
+func (f *fakeFS) OpenFile(_ string, _ int, _ os.FileMode) (workspaceapi.File, error) {
+	return nil, errors.New("not supported")
+}
+
+func (f *fakeFS) Remove(_ string) error { return errors.New("not supported") }
+
+func (f *fakeFS) MkdirAll(p string, _ os.FileMode) error {
+	f.mkdirAll = append(f.mkdirAll, p)
+	return f.mkdirErr
+}
+
+func (f *fakeFS) Stat(name string) (os.FileInfo, error) {
+	if f.files[name] {
+		return fakeFileInfo{name: name, dir: false}, nil
+	}
+	if f.dirs[name] {
+		return fakeFileInfo{name: name, dir: true}, nil
+	}
+	return nil, &iofs.PathError{Op: "stat", Path: name, Err: os.ErrNotExist}
+}
+
+func (f *fakeFS) ReadDir(p string) ([]os.DirEntry, error) {
+	if entries, ok := f.readDirs[p]; ok {
+		return entries, nil
+	}
+	if p == "." {
+		return f.entries, nil
+	}
+	return nil, &iofs.PathError{Op: "readdir", Path: p, Err: os.ErrNotExist}
+}
+
+// scriptedCmd records the stdout/stderr payload and exit error returned
+// by the fake executor for a matching command key.
+type scriptedCmd struct {
+	stdout string
+	stderr string
+	err    error
+}
+
+// fakeExecutor implements workspaceapi.Executor. It dispatches on the
+// space-joined (cmd.Path, cmd.Args...) key. Unknown commands succeed
+// with empty output so the bootstrap path runs without scripting every
+// step.
+type fakeExecutor struct {
+	mu        sync.Mutex
+	responses map[string]scriptedCmd
+	calls     []string
+	nextPid   workspaceapi.Pid
+}
+
+func newFakeExecutor() *fakeExecutor {
+	return &fakeExecutor{responses: map[string]scriptedCmd{}, nextPid: 1}
+}
+
+func (e *fakeExecutor) respond(key string, r scriptedCmd) *fakeExecutor {
+	e.responses[key] = r
+	return e
+}
+
+func (e *fakeExecutor) callKey(cmd workspaceapi.Cmd) string {
+	return strings.Join(append([]string{cmd.Path}, cmd.Args...), " ")
+}
+
+func (e *fakeExecutor) Start(_ context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	e.mu.Lock()
+	key := e.callKey(cmd)
+	e.calls = append(e.calls, key)
+	resp := e.responses[key]
+	pid := e.nextPid
+	e.nextPid++
+	e.mu.Unlock()
+
+	if cmd.Stdout != nil && resp.stdout != "" {
+		_, _ = io.Copy(cmd.Stdout, bytes.NewBufferString(resp.stdout))
+	}
+	if cmd.Stderr != nil && resp.stderr != "" {
+		_, _ = io.Copy(cmd.Stderr, bytes.NewBufferString(resp.stderr))
+	}
+	if cmd.Watcher != nil {
+		ch := cmd.Watcher.WatchProcess()
+		go func(err error) {
+			if ch != nil {
+				ch <- err
+			}
+		}(resp.err)
+	}
+	return pid, nil
+}
+
+func (e *fakeExecutor) Signal(_ workspaceapi.Pid, _ syscall.Signal) error { return nil }
+func (e *fakeExecutor) Close() error                                      { return nil }
+
+func (e *fakeExecutor) callsSnapshot() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make([]string, len(e.calls))
+	copy(out, e.calls)
+	return out
+}
+
+// captureLSP records the InitializeParams it received and otherwise
+// no-ops every request, so tests assert against the captured params
+// without running a real server.
+type captureLSP struct {
+	noopLSP
+	mu         sync.Mutex
+	initParams *semanticapi.InitializeParams
+	initCount  int
+}
+
+func (l *captureLSP) Initialize(
+	_ context.Context, p semanticapi.InitializeParams,
+) (semanticapi.InitializeResult, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cp := p
+	l.initParams = &cp
+	l.initCount++
+	return semanticapi.InitializeResult{}, nil
+}
+
+func (l *captureLSP) captured() (semanticapi.InitializeParams, int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.initParams == nil {
+		return semanticapi.InitializeParams{}, l.initCount
+	}
+	return *l.initParams, l.initCount
+}
+
+type progressSample struct {
+	id       string
+	message  string
+	progress int64
+	total    int64
+}
+
+// fakeNotifications records notify and progress calls for assertions.
+type fakeNotifications struct {
+	mu       sync.Mutex
+	openID   string
+	notifs   []string
+	progress []progressSample
+}
+
+func newFakeNotifications() *fakeNotifications {
+	return &fakeNotifications{openID: "notif-1"}
+}
+
+func (n *fakeNotifications) Notify(_ browserapi.NotificationLevel, msg string, _ ...any) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.notifs = append(n.notifs, msg)
+	return n.openID, nil
+}
+
+func (n *fakeNotifications) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
+	return n.Notify(level, msg, args...)
+}
+
+func (n *fakeNotifications) UpdateNotificationProgress(id, message string, progress, total int64) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.progress = append(n.progress, progressSample{id, message, progress, total})
+	return nil
+}
+
+func (n *fakeNotifications) progressMessages() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := make([]string, len(n.progress))
+	for i, p := range n.progress {
+		out[i] = p.message
+	}
+	return out
+}
+
+func (n *fakeNotifications) notifMessages() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := make([]string, len(n.notifs))
+	copy(out, n.notifs)
+	return out
+}
+
+// assertMonotonicProgress checks the displayed fraction never decreases,
+// so the bar cannot move backward across steps with different totals.
+func assertMonotonicProgress(t *testing.T, n *fakeNotifications) {
+	t.Helper()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	prev := 0.0
+	for _, p := range n.progress {
+		require.NotZero(t, p.total)
+		frac := float64(p.progress) / float64(p.total)
+		assert.GreaterOrEqual(t, frac, prev,
+			"progress fraction regressed at %q (%d/%d)", p.message, p.progress, p.total)
+		prev = frac
+	}
+}
+
+// realFS is a minimal workspaceapi.FileSystem backed by the OS and
+// rooted at a workspace directory, used by the e2e tests.
+type realFS struct{ root string }
+
+func (f realFS) resolve(p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(f.root, p)
+}
+
+func (f realFS) URI(p string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file://" + f.resolve(p))
+}
+
+func (f realFS) Stat(p string) (os.FileInfo, error)      { return os.Stat(f.resolve(p)) }
+func (f realFS) ReadDir(p string) ([]os.DirEntry, error) { return os.ReadDir(f.resolve(p)) }
+func (f realFS) MkdirAll(p string, m os.FileMode) error  { return os.MkdirAll(f.resolve(p), m) }
+
+func (f realFS) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
+	return nil, errors.New("realFS: OpenFile not supported")
+}
+func (f realFS) Remove(string) error { return errors.New("realFS: Remove not supported") }
+
+// realExecutor spawns real subprocesses, used by the e2e tests against
+// an installed rustup/rustc. The watcher receives the process exit error.
+type realExecutor struct{ dir string }
+
+func newDirExecutor(dir string) realExecutor { return realExecutor{dir: dir} }
+
+func (e realExecutor) Start(ctx context.Context, c workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	cmd := exec.CommandContext(ctx, c.Path, c.Args...)
+	cmd.Dir = c.Dir
+	if cmd.Dir == "" {
+		cmd.Dir = e.dir
+	}
+	if c.Env != nil {
+		cmd.Env = c.Env
+	}
+	cmd.Stdout = c.Stdout
+	cmd.Stderr = c.Stderr
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := workspaceapi.Pid(cmd.Process.Pid)
+	go func() {
+		err := cmd.Wait()
+		if c.Watcher != nil {
+			c.Watcher.WatchProcess() <- err
+		}
+	}()
+	return pid, nil
+}
+
+func (realExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (realExecutor) Close() error                                  { return nil }
+
+func findRustup(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("rustup"); err != nil {
+		t.Skip("rustup not found, skipping rust e2e test")
+	}
+}
+
+func findRustc(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("rustc"); err != nil {
+		t.Skip("rustc not found, skipping rust e2e test")
+	}
+}

@@ -44,5 +44,6 @@ func TestSpecFor(t *testing.T) {
 
 	assert.Same(t, symbolresolve.Go, symbolresolve.SpecFor("go"))
 	assert.Same(t, symbolresolve.Python, symbolresolve.SpecFor("python"))
-	assert.Nil(t, symbolresolve.SpecFor("rust"))
+	assert.Same(t, symbolresolve.Rust, symbolresolve.SpecFor("rust"))
+	assert.Nil(t, symbolresolve.SpecFor("ruby"))
 }

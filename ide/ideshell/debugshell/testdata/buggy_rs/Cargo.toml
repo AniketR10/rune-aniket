@@ -1,0 +1,13 @@
+[package]
+name = "buggy-rs"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "buggy-rs"
+path = "main.rs"
+
+[profile.dev]
+debug = true
+
+[dependencies]

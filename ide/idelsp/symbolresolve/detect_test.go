@@ -58,6 +58,11 @@ func TestDetectSpecs(t *testing.T) {
 			want:  []*symbolresolve.Spec{symbolresolve.Python},
 		},
 		{
+			name:  "rust only",
+			files: []string{"main.rs", "src/lib.rs"},
+			want:  []*symbolresolve.Spec{symbolresolve.Rust},
+		},
+		{
 			name:  "mixed go and python",
 			files: []string{"main.go", "app.py"},
 			want:  []*symbolresolve.Spec{symbolresolve.Go, symbolresolve.Python},

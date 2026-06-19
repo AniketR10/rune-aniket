@@ -24,54 +24,59 @@
 package symbolresolve
 
 import (
-	"context"
+	"path"
+	"strings"
 
-	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"unstable.build/go-tui/workspace/walkdir"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
-// registry lists the language specs in resolution-preference order. Go
-// is tried first to preserve existing behavior.
-var registry = []*Spec{Go, Python, Rust}
-
-// SpecFor returns the spec for a tree-sitter language id, or nil when no
-// spec is registered for that language.
-func SpecFor(langID string) *Spec {
-	for _, s := range registry {
-		if s.LangID == langID {
-			return s
-		}
-	}
-	return nil
+// Rust is the symbol-resolution spec for the Rust language. Rust has no
+// per-file package clause, so qualifiers are derived from the module
+// file name (the final path segment of a `mod::Symbol` reference). The
+// definitions phase cannot observe `pub` visibility from tree-sitter
+// captures, so every name is treated as visible.
+var Rust = &Spec{
+	LangID: "rust",
+	RefQueries: []RefQuery{
+		{
+			Query: `(scoped_type_identifier ` +
+				`path: (identifier) @pkg name: (type_identifier) @type)`,
+			Captures: []string{"pkg", "type"},
+		},
+		{
+			Query: `(scoped_identifier ` +
+				`path: (identifier) @pkg name: (identifier) @symbol)`,
+			Captures: []string{"pkg", "symbol"},
+		},
+	},
+	IsExported:         nil,
+	Qualifier:          rustModuleFromURI,
+	DisplayPathFromURI: rustDirFromURI,
+	Extensions:         []string{".rs"},
 }
 
-// DetectSpecs walks the workspace lazily and yields each registered spec whose
-// extensions match at least one present file. A spec is emitted as soon as the
-// first matching file is seen, so a consumer can begin resolving against it
-// before the walk completes. This is the single language-detection point for
-// symbol resolution.
-func DetectSpecs(ctx context.Context, fs walkdir.Reader) iterator.Iterator[Spec] {
-	paths, err := walkdir.ListFiles(ctx, fs, ".")
+// rustModuleFromURI derives a Rust module name from a file URI: the base
+// file name without its extension, or the parent directory name for the
+// module entry files mod.rs, lib.rs, and main.rs.
+func rustModuleFromURI(uri string) string {
+	parsed, err := workspaceapi.ParseURI(uri)
 	if err != nil {
-		return iterator.Empty[Spec]()
+		return uri
 	}
-
-	pending := make([]*Spec, len(registry))
-	copy(pending, registry)
-
-	next := func(ctx context.Context) (Spec, bool, error) {
-		for {
-			file, ok := paths.Next(ctx)
-			if !ok {
-				return Spec{}, false, paths.Err()
-			}
-			for i, spec := range pending {
-				if spec.matchesFile(file) {
-					pending = append(pending[:i], pending[i+1:]...)
-					return *spec, true, nil
-				}
-			}
-		}
+	base := path.Base(parsed.Path())
+	stem := strings.TrimSuffix(base, path.Ext(base))
+	switch stem {
+	case "mod", "lib", "main":
+		return path.Base(path.Dir(parsed.Path()))
 	}
-	return iterator.FromFunc(next, paths.Close)
+	return stem
+}
+
+// rustDirFromURI returns the directory path of a file URI.
+func rustDirFromURI(uri string) string {
+	parsed, err := workspaceapi.ParseURI(uri)
+	if err != nil {
+		return uri
+	}
+	return path.Dir(parsed.Path())
 }

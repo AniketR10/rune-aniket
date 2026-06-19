@@ -1,0 +1,10 @@
+[package]
+name = "rune-rs-e2e"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "rune-rs-e2e"
+path = "src/main.rs"
+
+[dependencies]
