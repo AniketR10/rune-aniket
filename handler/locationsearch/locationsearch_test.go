@@ -797,6 +797,11 @@ type stubParser struct {
 func (p *stubParser) Search(string, []string, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil
 }
+func (p *stubParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.Empty[syntaxapi.Match](), nil
+}
 func (p *stubParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil
 }

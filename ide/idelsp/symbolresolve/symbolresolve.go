@@ -29,63 +29,63 @@ package symbolresolve
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path"
 	"strings"
 
-	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-// Match is a resolved symbol candidate. URI and Pos point at the
-// declaration; Display is a human-readable label; ImportPath, when
-// set, is the Go import path the symbol resolves through.
-type Match struct {
-	URI        string
-	Pos        semanticapi.Position
-	Display    string
-	ImportPath string
-}
-
-// ErrNoDot is returned by Resolve when name does not contain a "."
-// separating the package alias from the symbol name.
-var ErrNoDot = errors.New("name does not contain a package separator")
-
-// Progress receives resolution progress updates. A nil Progress is
-// accepted by Resolve and treated as a no-op.
-type Progress interface {
-	// Report is called once per phase. msg describes the phase,
-	// found is the running count of candidate matches, and step/total
-	// describe progress as a fraction of total work.
-	Report(msg string, found int, step, total int64)
-}
-
-// ProgressFunc adapts a function to the Progress interface.
-type ProgressFunc func(msg string, found int, step, total int64)
-
-// Report implements Progress by calling f.
-func (f ProgressFunc) Report(msg string, found int, step, total int64) {
-	f(msg, found, step, total)
-}
-
 // Resolve resolves a package-qualified symbol name (e.g.
-// "iterator.Iterator") to one or more declaration locations using the
-// given language spec. Results are deduplicated by file URI and
-// collapsed by import path; when multiple distinct packages remain,
-// each Match Display name is prefixed to disambiguate. progress, if
-// non-nil, receives per-phase updates. Returns ErrNoDot when name
+// "iterator.Iterator") to one or more declaration locations. It tries each
+// language spec yielded by specs in turn — beginning as soon as the first spec
+// arrives — and returns the first spec that produces matches. Results are
+// deduplicated by file URI and collapsed by import path; when multiple distinct
+// packages remain, each Match Display name is prefixed to disambiguate.
+// progress, if non-nil, receives per-phase updates. Returns ErrNoDot when name
 // contains no ".".
 func Resolve(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec, name string,
-	progress Progress,
-) ([]Match, error) {
-	pkg, sym, hasDot := strings.Cut(name, ".")
-	if !hasDot {
-		return nil, ErrNoDot
+	ctx context.Context, parser syntaxapi.Parser, specs iterator.Iterator[Spec],
+	name string, progress syntaxapi.Progress,
+) ([]syntaxapi.Match, error) {
+	if !strings.Contains(name, ".") {
+		return nil, syntaxapi.ErrNoDot
 	}
+	defer func() { _ = specs.Close() }()
+
+	var lastErr error
+	for {
+		spec, ok := specs.Next(ctx)
+		if !ok {
+			break
+		}
+		matches, err := resolveSpec(ctx, parser, &spec, name, progress)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(matches) > 0 {
+			return matches, nil
+		}
+	}
+	if err := specs.Err(); err != nil {
+		return nil, err
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no symbols found for %q", name)
+}
+
+// resolveSpec runs the resolution phases for a single language spec.
+func resolveSpec(
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec, name string,
+	progress syntaxapi.Progress,
+) ([]syntaxapi.Match, error) {
+	pkg, sym, _ := strings.Cut(name, ".")
 
 	report := func(msg string, found int, step, total int64) {
 		if progress != nil {
@@ -94,13 +94,13 @@ func Resolve(
 	}
 
 	seen := make(map[string]bool)
-	var matches []Match
-	add := func(uri string, pos semanticapi.Position) {
+	var matches []syntaxapi.Match
+	add := func(uri string, pos term.Coordinates) {
 		if seen[uri] {
 			return
 		}
 		seen[uri] = true
-		matches = append(matches, Match{URI: uri, Pos: pos, Display: name})
+		matches = append(matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
 	}
 
 	collect := func(query string, captures []string) error {
@@ -118,10 +118,7 @@ func Resolve(
 			if p[0].Text != pkg || p[1].Text != sym {
 				continue
 			}
-			add(p[0].File.String(), semanticapi.Position{
-				Line:      uint32(p[1].From.Y),
-				Character: uint32(p[1].From.X),
-			})
+			add(p[0].File.String(), p[1].From)
 		}
 	}
 
@@ -147,7 +144,7 @@ func Resolve(
 	}
 
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("no symbols found for %q", name)
+		return nil, nil
 	}
 	if len(matches) > 1 && spec.ImportPathQuery != "" {
 		report("Resolving imports…", len(matches), 3, 4)
@@ -165,7 +162,7 @@ func Resolve(
 func collectDefinitions(
 	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
 	packages map[workspaceapi.URI]string, pkg, sym string,
-	add func(uri string, pos semanticapi.Position),
+	add func(uri string, pos term.Coordinates),
 ) error {
 	files, err := definitionFiles(ctx, parser, spec, packages, pkg)
 	if err != nil {
@@ -186,10 +183,7 @@ func collectDefinitions(
 			if r.Text != sym || !spec.exported(r.Text) {
 				continue
 			}
-			add(fileURI.String(), semanticapi.Position{
-				Line:      uint32(r.From.Y),
-				Character: uint32(r.From.X),
-			})
+			add(fileURI.String(), r.From)
 		}
 		if err := it.Err(); err != nil {
 			_ = it.Close()
@@ -346,7 +340,7 @@ func ImportedAliases(
 	return result, nil
 }
 
-func disambiguateDisplayNames(spec *Spec, matches []Match, name string) {
+func disambiguateDisplayNames(spec *Spec, matches []syntaxapi.Match, name string) {
 	for i, m := range matches {
 		prefix := m.ImportPath
 		if prefix == "" {
@@ -432,8 +426,8 @@ func resolveImportPaths(
 
 func deduplicateByImport(
 	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
-	matches []Match, alias string,
-) []Match {
+	matches []syntaxapi.Match, alias string,
+) []syntaxapi.Match {
 	importPaths, err := resolveImportPaths(ctx, parser, spec)
 	if err != nil {
 		return matches

@@ -23,6 +23,13 @@
 
 package symbolresolve
 
+import (
+	"context"
+
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/workspace/walkdir"
+)
+
 // registry lists the language specs in resolution-preference order. Go
 // is tried first to preserve existing behavior.
 var registry = []*Spec{Go, Python}
@@ -41,4 +48,35 @@ func SpecFor(langID string) *Spec {
 // All returns the registered specs in resolution-preference order.
 func All() []*Spec {
 	return registry
+}
+
+// DetectSpecs walks the workspace lazily and yields each registered spec whose
+// extensions match at least one present file. A spec is emitted as soon as the
+// first matching file is seen, so a consumer can begin resolving against it
+// before the walk completes. This is the single language-detection point for
+// symbol resolution.
+func DetectSpecs(ctx context.Context, fs walkdir.Reader) iterator.Iterator[Spec] {
+	paths, err := walkdir.ListFiles(ctx, fs, ".")
+	if err != nil {
+		return iterator.Empty[Spec]()
+	}
+
+	pending := make([]*Spec, len(registry))
+	copy(pending, registry)
+
+	next := func(ctx context.Context) (Spec, bool, error) {
+		for {
+			file, ok := paths.Next(ctx)
+			if !ok {
+				return Spec{}, false, paths.Err()
+			}
+			for i, spec := range pending {
+				if spec.matchesFile(file) {
+					pending = append(pending[:i], pending[i+1:]...)
+					return *spec, true, nil
+				}
+			}
+		}
+	}
+	return iterator.FromFunc(next, paths.Close)
 }

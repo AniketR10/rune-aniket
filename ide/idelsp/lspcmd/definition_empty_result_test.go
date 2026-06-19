@@ -120,6 +120,14 @@ func TestLSPHandlersSurfaceEmptyResult(t *testing.T) {
 			}
 			return iterator.Empty[syntaxapi.Result](), nil
 		},
+		resolveFn: func(name string, _ syntaxapi.Progress) ([]syntaxapi.Match, error) {
+			if name == "mylib.MyType" {
+				return []syntaxapi.Match{
+					{URI: srcURI.String(), Pos: term.Coordinates{X: 7, Y: 10}},
+				}, nil
+			}
+			return nil, nil
+		},
 	}
 	cmd := textapi.Command{
 		URI:  srcURI,

@@ -121,7 +121,7 @@ func TestResolveCommandSymbolNoMatchesShowsError(t *testing.T) {
 		return true
 	}
 	proceed, err := resolveCommandSymbol(
-		t.Context(), cmd, nil, nil, notify, tick, parser, func(symbolMatch, func()) {},
+		t.Context(), cmd, nil, nil, notify, tick, parser, func(syntaxapi.Match, func()) {},
 	)
 	assert.False(t, proceed)
 	assert.NoError(t, err)

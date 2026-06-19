@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,6 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+
 package agentools
 
 import (
@@ -29,7 +30,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -293,6 +293,7 @@ type fakeParser struct {
 	searchFn     func(string, []string) (iterator.Iterator[syntaxapi.Result], error)
 	searchNodeFn func(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
 	queryNodeFn  func(workspaceapi.URI, syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
+	resolveFn    func(string) ([]syntaxapi.Match, error)
 }
 
 func (p *fakeParser) Search(q string, c []string, _ ...string) (iterator.Iterator[syntaxapi.Result], error) {
@@ -318,6 +319,18 @@ func (p *fakeParser) QueryNode(u workspaceapi.URI, n syntaxapi.NodeCaptureName) 
 }
 func (p *fakeParser) Highlight(_ workspaceapi.URI, _ string) (iterator.Iterator[textapi.Location], error) {
 	return iterator.Empty[textapi.Location](), nil
+}
+func (p *fakeParser) ResolveSymbol(
+	_ context.Context, name string, _ syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	if p.resolveFn != nil {
+		matches, err := p.resolveFn(name)
+		if err != nil {
+			return nil, err
+		}
+		return iterator.FromSlice(matches), nil
+	}
+	return iterator.Empty[syntaxapi.Match](), nil
 }
 
 var _ syntaxapi.Parser = (*fakeParser)(nil)
@@ -392,7 +405,7 @@ func TestFindDefinition(t *testing.T) {
 				}, nil
 			},
 		}
-		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.False(t, result.IsError)
@@ -405,7 +418,7 @@ func TestFindDefinition(t *testing.T) {
 				return nil, nil
 			},
 		}
-		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Nonexistent"}`)
 
 		assert.True(t, result.IsError)
@@ -418,7 +431,7 @@ func TestFindDefinition(t *testing.T) {
 				return nil, fmt.Errorf("connection reset")
 			},
 		}
-		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.True(t, result.IsError)
@@ -436,7 +449,7 @@ func TestFindDefinition(t *testing.T) {
 				return semanticapi.LocationResult{}, fmt.Errorf("timeout")
 			},
 		}
-		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findDefinitionTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.True(t, result.IsError)
@@ -444,7 +457,7 @@ func TestFindDefinition(t *testing.T) {
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
-		tool := &findDefinitionTool{lsp: &stubLSP{}, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findDefinitionTool{lsp: &stubLSP{}, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `bad`)
 
 		assert.True(t, result.IsError)
@@ -452,7 +465,7 @@ func TestFindDefinition(t *testing.T) {
 	})
 
 	t.Run("summary", func(t *testing.T) {
-		tool := &findDefinitionTool{lsp: &stubLSP{}, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findDefinitionTool{lsp: &stubLSP{}, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		assert.Equal(t, "Foo", tool.Summary(`{"symbol":"Foo"}`))
 		assert.Equal(t, "", tool.Summary(`bad`))
 	})
@@ -477,7 +490,7 @@ func TestFindImplementations(t *testing.T) {
 				}, nil
 			},
 		}
-		tool := &findImplementationsTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findImplementationsTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Reader"}`)
 
 		assert.False(t, result.IsError)
@@ -486,7 +499,7 @@ func TestFindImplementations(t *testing.T) {
 	})
 
 	t.Run("summary", func(t *testing.T) {
-		tool := &findImplementationsTool{lsp: &stubLSP{}, fs: localFS{}, cwd: dirURI(root)}
+		tool := &findImplementationsTool{lsp: &stubLSP{}, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		assert.Equal(t, "Reader", tool.Summary(`{"symbol":"Reader"}`))
 	})
 }
@@ -517,7 +530,7 @@ func TestFindReferences(t *testing.T) {
 				}, nil
 			},
 		}
-		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, cwd: dirURI(dir), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(dir), tracker: NewFileTracker()}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.False(t, result.IsError)
@@ -538,7 +551,7 @@ func TestFindReferences(t *testing.T) {
 				return nil, nil
 			},
 		}
-		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.False(t, result.IsError)
@@ -552,7 +565,7 @@ func TestFindReferences(t *testing.T) {
 				return nil, nil
 			},
 		}
-		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}
 		result := tool.Execute(context.Background(), `{"symbol":"Nonexistent"}`)
 
 		assert.True(t, result.IsError)
@@ -566,7 +579,7 @@ func TestFindReferences(t *testing.T) {
 				return nil, fmt.Errorf("connection reset")
 			},
 		}
-		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.True(t, result.IsError)
@@ -585,7 +598,7 @@ func TestFindReferences(t *testing.T) {
 				return nil, fmt.Errorf("timeout")
 			},
 		}
-		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, cwd: dirURI(root), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: lsp, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.True(t, result.IsError)
@@ -594,7 +607,7 @@ func TestFindReferences(t *testing.T) {
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		root := "/workspace"
-		tool := &findReferencesTool{lsp: &stubLSP{}, fs: localFS{}, cwd: dirURI(root), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: &stubLSP{}, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}
 		result := tool.Execute(context.Background(), `bad`)
 
 		assert.True(t, result.IsError)
@@ -603,7 +616,7 @@ func TestFindReferences(t *testing.T) {
 
 	t.Run("summary", func(t *testing.T) {
 		root := "/workspace"
-		tool := &findReferencesTool{lsp: &stubLSP{}, fs: localFS{}, cwd: dirURI(root), tracker: NewFileTracker()}
+		tool := &findReferencesTool{lsp: &stubLSP{}, fs: localFS{}, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}
 		assert.Equal(t, "Foo", tool.Summary(`{"symbol":"Foo"}`))
 		assert.Equal(t, "", tool.Summary(`bad`))
 	})
@@ -804,7 +817,7 @@ func TestDescribeSymbol(t *testing.T) {
 				}, nil
 			},
 		}
-		tool := &describeSymbolTool{lsp: lsp, cwd: dirURI(root)}
+		tool := &describeSymbolTool{lsp: lsp, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Foo"}`)
 
 		assert.False(t, result.IsError)
@@ -825,7 +838,7 @@ func TestDescribeSymbol(t *testing.T) {
 				}, nil
 			},
 		}
-		tool := &describeSymbolTool{lsp: lsp, cwd: dirURI(root)}
+		tool := &describeSymbolTool{lsp: lsp, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"Bar"}`)
 
 		assert.False(t, result.IsError)
@@ -843,7 +856,7 @@ func TestDescribeSymbol(t *testing.T) {
 				return nil, nil
 			},
 		}
-		tool := &describeSymbolTool{lsp: lsp, cwd: dirURI(root)}
+		tool := &describeSymbolTool{lsp: lsp, parser: &fakeParser{}, cwd: dirURI(root)}
 		result := tool.Execute(context.Background(), `{"symbol":"X"}`)
 
 		assert.False(t, result.IsError)
@@ -851,7 +864,7 @@ func TestDescribeSymbol(t *testing.T) {
 	})
 
 	t.Run("summary", func(t *testing.T) {
-		tool := &describeSymbolTool{lsp: &stubLSP{}, cwd: dirURI(root)}
+		tool := &describeSymbolTool{lsp: &stubLSP{}, parser: &fakeParser{}, cwd: dirURI(root)}
 		assert.Equal(t, "Foo", tool.Summary(`{"symbol":"Foo"}`))
 	})
 }
@@ -1158,14 +1171,14 @@ func TestLSPToolSummaries(t *testing.T) {
 		args     string
 		expected string
 	}{
-		{"find_definition", &findDefinitionTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"symbol":"Foo"}`, "Foo"},
-		{"find_definition invalid", &findDefinitionTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `bad`, ""},
-		{"find_implementations", &findImplementationsTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"symbol":"Reader"}`, "Reader"},
-		{"find_references", &findReferencesTool{lsp: lsp, fs: fs, cwd: dirURI(root), tracker: NewFileTracker()}, `{"symbol":"Foo"}`, "Foo"},
+		{"find_definition", &findDefinitionTool{lsp: lsp, fs: fs, parser: &fakeParser{}, cwd: dirURI(root)}, `{"symbol":"Foo"}`, "Foo"},
+		{"find_definition invalid", &findDefinitionTool{lsp: lsp, fs: fs, parser: &fakeParser{}, cwd: dirURI(root)}, `bad`, ""},
+		{"find_implementations", &findImplementationsTool{lsp: lsp, fs: fs, parser: &fakeParser{}, cwd: dirURI(root)}, `{"symbol":"Reader"}`, "Reader"},
+		{"find_references", &findReferencesTool{lsp: lsp, fs: fs, parser: &fakeParser{}, cwd: dirURI(root), tracker: NewFileTracker()}, `{"symbol":"Foo"}`, "Foo"},
 		{"outline_file", &outlineFileTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"path":"main.go"}`, "main.go"},
 		{"outline_file file_path fallback", &outlineFileTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"file_path":"main.go"}`, "main.go"},
 		{"search_symbols", &searchSymbolsTool{lsp: lsp, cwd: dirURI(root)}, `{"query":"Handle"}`, "Handle"},
-		{"describe_symbol", &describeSymbolTool{lsp: lsp, cwd: dirURI(root)}, `{"symbol":"Foo"}`, "Foo"},
+		{"describe_symbol", &describeSymbolTool{lsp: lsp, parser: &fakeParser{}, cwd: dirURI(root)}, `{"symbol":"Foo"}`, "Foo"},
 		{"check_file_errors", &checkFileErrorsTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"path":"main.go"}`, "main.go"},
 		{"check_file_errors file_path fallback", &checkFileErrorsTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"file_path":"main.go"}`, "main.go"},
 		{"format_file", &formatFileTool{lsp: lsp, fs: fs, cwd: dirURI(root)}, `{"path":"main.go"}`, "main.go"},
@@ -1179,10 +1192,6 @@ func TestLSPToolSummaries(t *testing.T) {
 }
 
 // --- Symbol resolver integration (RUNE-190) ---
-
-// stringsContains is a tiny inline strings.Contains so the new test
-// helpers stay close to the data they consume.
-func stringsContains(s, sub string) bool { return strings.Contains(s, sub) }
 
 func TestResolveSymbolDottedSkipsWorkspaceSymbol(t *testing.T) {
 	// (a) describe_symbol iterator.Iterator → ambiguous → returns
@@ -1215,27 +1224,11 @@ func TestResolveSymbolDottedSkipsWorkspaceSymbol(t *testing.T) {
 	blueURI := parsed("file:///workspace/blue/iterator/iterator.go")
 	sdkURI := parsed("file:///workspace/sdk/iterator/iterator.go")
 	parser := &fakeParser{
-		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-			if stringsContains(q, "package_clause") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: blueURI, Text: "iterator"},
-					{File: sdkURI, Text: "iterator"},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
-		},
-		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
-			switch u {
-			case blueURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: blueURI, Text: "Iterator", From: term.Coordinates{X: 5, Y: 9}},
-				}), nil
-			case sdkURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: sdkURI, Text: "Iterator", From: term.Coordinates{X: 5, Y: 14}},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
+		resolveFn: func(string) ([]syntaxapi.Match, error) {
+			return []syntaxapi.Match{
+				{URI: blueURI.String(), Pos: term.Coordinates{X: 5, Y: 9}},
+				{URI: sdkURI.String(), Pos: term.Coordinates{X: 5, Y: 14}},
+			}, nil
 		},
 	}
 	tool := &describeSymbolTool{lsp: lsp, parser: parser, cwd: dirURI("/workspace")}
@@ -1265,21 +1258,10 @@ func TestResolveSymbolDefinitionOnly(t *testing.T) {
 		},
 	}
 	parser := &fakeParser{
-		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-			if stringsContains(q, "package_clause") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: uri, Text: "iterator"},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
-		},
-		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
-			if u == uri {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: uri, Text: "Reduce", From: term.Coordinates{X: 5, Y: 41}},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
+		resolveFn: func(string) ([]syntaxapi.Match, error) {
+			return []syntaxapi.Match{
+				{URI: uri.String(), Pos: term.Coordinates{X: 5, Y: 41}},
+			}, nil
 		},
 	}
 	tool := &describeSymbolTool{lsp: lsp, parser: parser, cwd: dirURI("/workspace")}
@@ -1337,27 +1319,11 @@ func TestFindDefinitionTwoMatches(t *testing.T) {
 		},
 	}
 	parser := &fakeParser{
-		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-			if stringsContains(q, "package_clause") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: blueURI, Text: "iterator"},
-					{File: sdkURI, Text: "iterator"},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
-		},
-		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
-			switch u {
-			case blueURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: blueURI, Text: "Iterator", From: term.Coordinates{X: 0, Y: 9}},
-				}), nil
-			case sdkURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: sdkURI, Text: "Iterator", From: term.Coordinates{X: 0, Y: 14}},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
+		resolveFn: func(string) ([]syntaxapi.Match, error) {
+			return []syntaxapi.Match{
+				{URI: blueURI.String(), Pos: term.Coordinates{Y: 9}},
+				{URI: sdkURI.String(), Pos: term.Coordinates{Y: 14}},
+			}, nil
 		},
 	}
 	tool := &findDefinitionTool{
@@ -1385,27 +1351,11 @@ func TestFindReferencesTwoMatches(t *testing.T) {
 		},
 	}
 	parser := &fakeParser{
-		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-			if stringsContains(q, "package_clause") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: aURI, Text: "x"},
-					{File: bURI, Text: "x"},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
-		},
-		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
-			switch u {
-			case aURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: aURI, Text: "Foo", From: term.Coordinates{X: 0, Y: 1}},
-				}), nil
-			case bURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: bURI, Text: "Foo", From: term.Coordinates{X: 0, Y: 1}},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
+		resolveFn: func(string) ([]syntaxapi.Match, error) {
+			return []syntaxapi.Match{
+				{URI: aURI.String(), Pos: term.Coordinates{Y: 1}},
+				{URI: bURI.String(), Pos: term.Coordinates{Y: 1}},
+			}, nil
 		},
 	}
 	tool := &findReferencesTool{
@@ -1436,27 +1386,11 @@ func TestFindImplementationsTwoMatches(t *testing.T) {
 		},
 	}
 	parser := &fakeParser{
-		searchFn: func(q string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-			if stringsContains(q, "package_clause") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: aURI, Text: "x"},
-					{File: bURI, Text: "x"},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
-		},
-		queryNodeFn: func(u workspaceapi.URI, _ syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
-			switch u {
-			case aURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: aURI, Text: "Reader", From: term.Coordinates{X: 0, Y: 1}},
-				}), nil
-			case bURI:
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: bURI, Text: "Reader", From: term.Coordinates{X: 0, Y: 1}},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
+		resolveFn: func(string) ([]syntaxapi.Match, error) {
+			return []syntaxapi.Match{
+				{URI: aURI.String(), Pos: term.Coordinates{Y: 1}},
+				{URI: bURI.String(), Pos: term.Coordinates{Y: 1}},
+			}, nil
 		},
 	}
 	tool := &findImplementationsTool{

@@ -84,6 +84,14 @@ func TestHoverHandlerSymbolName(t *testing.T) {
 			}
 			return iterator.Empty[syntaxapi.Result](), nil
 		},
+		resolveFn: func(name string, _ syntaxapi.Progress) ([]syntaxapi.Match, error) {
+			if name == "mylib.MyType" {
+				return []syntaxapi.Match{
+					{URI: fileTypes.String(), Pos: term.Coordinates{X: 11, Y: 7}},
+				}, nil
+			}
+			return nil, nil
+		},
 	}
 
 	done := make(chan struct{}, 1)

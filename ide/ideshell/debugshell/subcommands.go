@@ -612,6 +612,12 @@ func (h *Handler) cmdLaunch(
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", usage, err)
 	}
+	// Resolve a relative program against the workspace root so the
+	// adapter receives an absolute path. debugpy derives the
+	// debuggee cwd from the program's directory and then re-resolves
+	// a still-relative program against it, doubling path segments
+	// (e.g. <root>/src/src/init.py).
+	program = h.resolveProgram(program)
 	sid, err := h.requireInitializedOnly()
 	if err != nil {
 		return nil, err
@@ -668,6 +674,24 @@ func (h *Handler) cmdLaunch(
 	out = append(out,
 		"Run `debugger configured` when configuration is complete.")
 	return newLaunchIterator(out, initCh), nil
+}
+
+// resolveProgram turns a workspace-relative program path into an
+// absolute path rooted at the workspace. Absolute paths and paths
+// that cannot be resolved are returned unchanged so the adapter
+// still receives a usable value.
+func (h *Handler) resolveProgram(program string) string {
+	if program == "" || strings.HasPrefix(program, "/") {
+		return program
+	}
+	uri, err := h.fs.URI(program)
+	if err != nil {
+		return program
+	}
+	if p := uri.Path(); p != "" {
+		return p
+	}
+	return program
 }
 
 // parseLaunchArgs parses the argv of `debugger launch` into a program
@@ -831,6 +855,11 @@ func (h *Handler) cmdTerminate(
 	// blocks subsequent `debugger initialize`.
 	termErr := h.dbg.Terminate(ctx, sid, &dap.TerminateArguments{})
 	if termErr == nil {
+		// Clear local session state even though the adapter may
+		// not fire OnClose (e.g. the debuggee already exited), so
+		// the next `debugger initialize` is not rejected as still
+		// active.
+		h.resetSession()
 		return lines("Terminated debug session."), nil
 	}
 	discErr := h.dbg.Disconnect(ctx, sid, &dap.DisconnectArguments{

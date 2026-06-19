@@ -536,6 +536,12 @@ func (testParser) Search(
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 
+func (testParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.Empty[syntaxapi.Match](), nil
+}
+
 func (testParser) SearchNode(syntaxapi.NodeCaptureName) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {

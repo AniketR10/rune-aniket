@@ -24,6 +24,7 @@
 package ide
 
 import (
+	"context"
 	"errors"
 
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
@@ -87,6 +88,14 @@ func (w *lazyParser) Highlight(uri workspaceapi.URI, content string) (
 	iterator.Iterator[textapi.Location], error,
 ) {
 	return w.parser().Highlight(uri, content)
+}
+
+// ResolveSymbol resolves a dotted symbol name to its declaration and
+// reference locations.
+func (w *lazyParser) ResolveSymbol(
+	ctx context.Context, name string, progress syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	return nil, errors.New("parser not supported on home workspace")
 }
 
 type currentParser struct {
@@ -156,4 +165,14 @@ func (c currentParser) Highlight(
 		return nil, errNoParser
 	}
 	return p.Highlight(uri, content)
+}
+
+func (c currentParser) ResolveSymbol(
+	ctx context.Context, name string, progress syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.ResolveSymbol(ctx, name, progress)
 }

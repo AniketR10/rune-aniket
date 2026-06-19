@@ -250,7 +250,7 @@ func TestResolveE2E(t *testing.T) {
 		{
 			name:      "empty string returns ErrNoDot",
 			symbol:    "",
-			wantErrIs: symbolresolve.ErrNoDot,
+			wantErrIs: syntaxapi.ErrNoDot,
 		},
 		{
 			// Wrong package, valid symbol: iter.Reduce exists but
@@ -273,7 +273,7 @@ func TestResolveE2E(t *testing.T) {
 		{
 			name:      "name without dot returns ErrNoDot",
 			symbol:    "JustAName",
-			wantErrIs: symbolresolve.ErrNoDot,
+			wantErrIs: syntaxapi.ErrNoDot,
 		},
 		{
 			name:            "missing symbol returns not-found error",
@@ -298,7 +298,7 @@ func TestResolveE2E(t *testing.T) {
 
 			rec := &recordingProgress{}
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, symbolresolve.Go, tt.symbol, rec,
+				context.Background(), env.parser, specIter(symbolresolve.Go), tt.symbol, rec,
 			)
 
 			if tt.wantErrIs != nil {
@@ -350,7 +350,7 @@ func TestResolveE2E(t *testing.T) {
 			if len(tt.wantDisplays) > 0 {
 				// Pair each Match by URI to its expected Display
 				// substring without relying on a specific order.
-				byURI := make(map[string]symbolresolve.Match, len(matches))
+				byURI := make(map[string]syntaxapi.Match, len(matches))
 				for _, m := range matches {
 					byURI[m.URI] = m
 				}
@@ -364,7 +364,7 @@ func TestResolveE2E(t *testing.T) {
 			}
 
 			if len(tt.wantImportPaths) > 0 {
-				byURI := make(map[string]symbolresolve.Match, len(matches))
+				byURI := make(map[string]syntaxapi.Match, len(matches))
 				for _, m := range matches {
 					byURI[m.URI] = m
 				}
@@ -490,7 +490,7 @@ func TestResolveCancelledContext(t *testing.T) {
 
 	// The exact error is implementation-defined; what matters is
 	// that the call returns rather than hanging on a closed channel.
-	_, _ = symbolresolve.Resolve(ctx, env.parser, symbolresolve.Go, "mylib.MyType", nil)
+	_, _ = symbolresolve.Resolve(ctx, env.parser, specIter(symbolresolve.Go), "mylib.MyType", nil)
 }
 
 func TestResolveConcurrent(t *testing.T) {
@@ -513,7 +513,7 @@ func TestResolveConcurrent(t *testing.T) {
 		go func(symbol string) {
 			defer wg.Done()
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, symbolresolve.Go, symbol, nil,
+				context.Background(), env.parser, specIter(symbolresolve.Go), symbol, nil,
 			)
 			assert.NoErrorf(t, err, "Resolve(%q)", symbol)
 			assert.NotEmptyf(t, matches, "Resolve(%q)", symbol)
@@ -606,7 +606,7 @@ func copyDirT(t *testing.T, src, dst string) {
 	}
 }
 
-func uriStrings(matches []symbolresolve.Match) []string {
+func uriStrings(matches []syntaxapi.Match) []string {
 	out := make([]string, len(matches))
 	for i, m := range matches {
 		out[i] = m.URI

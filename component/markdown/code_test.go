@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package markdown
 
 import (
@@ -55,6 +54,12 @@ func (m *mockParser) Highlight(_ workspaceapi.URI, _ string) (
 
 func (m *mockParser) Search(string, []string, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.FromSlice[syntaxapi.Result](nil), nil
+}
+
+func (m *mockParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.Empty[syntaxapi.Match](), nil
 }
 
 func (m *mockParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
@@ -631,6 +636,12 @@ func (p *blockingParser) Highlight(_ workspaceapi.URI, _ string) (
 
 func (p *blockingParser) Search(string, []string, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.FromSlice[syntaxapi.Result](nil), nil
+}
+
+func (p *blockingParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.Empty[syntaxapi.Match](), nil
 }
 
 func (p *blockingParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {

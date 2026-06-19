@@ -228,6 +228,45 @@ func TestServerClientIntegration(t *testing.T) {
 				assert.Equal(t, term.Coordinates{X: 50, Y: 100}, results[0].To)
 			},
 		},
+		{
+			name: "ResolveSymbol streams progress and matches",
+			setup: func(m *mockParser) {
+				m.resolveMatches = []syntaxapi.Match{
+					{
+						URI:        testURI.String(),
+						Pos:        term.Coordinates{X: 5, Y: 10},
+						Display:    "pkg.Sym",
+						ImportPath: "example/pkg",
+					},
+					{URI: testURI2.String(), Pos: term.Coordinates{X: 1, Y: 20}},
+				}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				var reports []string
+				prog := syntaxapi.ProgressFunc(func(msg string, _ int, _, _ int64) {
+					reports = append(reports, msg)
+				})
+				it, err := client.ResolveSymbol(context.Background(), "pkg.Sym", prog)
+				require.NoError(t, err)
+				matches, err := iterator.ToSlice(context.Background(), it)
+				require.NoError(t, err)
+				require.Len(t, matches, 2)
+				assert.Equal(t, testURI.String(), matches[0].URI)
+				assert.Equal(t, term.Coordinates{X: 5, Y: 10}, matches[0].Pos)
+				assert.Equal(t, "example/pkg", matches[0].ImportPath)
+				assert.Equal(t, []string{"Searching references…", "Searching definitions…"}, reports)
+			},
+		},
+		{
+			name:  "ResolveSymbol propagates ErrNoDot",
+			setup: func(m *mockParser) { m.resolveErr = syntaxapi.ErrNoDot },
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.ResolveSymbol(context.Background(), "Sym", nil)
+				require.NoError(t, err)
+				_, err = iterator.ToSlice(context.Background(), it)
+				assert.ErrorIs(t, err, syntaxapi.ErrNoDot)
+			},
+		},
 	}
 
 	for _, tcase := range tsuite {
@@ -378,6 +417,9 @@ type mockParser struct {
 	queryNodeErr      error
 	lastContent       string
 	lastURI           workspaceapi.URI
+	resolveMatches    []syntaxapi.Match
+	resolveErr        error
+	lastResolveName   string
 }
 
 func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (
@@ -425,6 +467,20 @@ func (m *mockParser) QueryNode(_ workspaceapi.URI, _ syntaxapi.NodeCaptureName) 
 		return nil, m.queryNodeErr
 	}
 	return iterator.FromSlice(m.queryNodeResults), nil
+}
+
+func (m *mockParser) ResolveSymbol(
+	_ context.Context, name string, progress syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	m.lastResolveName = name
+	if m.resolveErr != nil {
+		return nil, m.resolveErr
+	}
+	if progress != nil {
+		progress.Report("Searching references…", 0, 0, 4)
+		progress.Report("Searching definitions…", len(m.resolveMatches), 2, 4)
+	}
+	return iterator.FromSlice(m.resolveMatches), nil
 }
 
 func setupServerClient(t *testing.T, mock *mockParser) (*Server, *syntaxrpc.Client, func()) {

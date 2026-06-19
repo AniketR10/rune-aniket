@@ -268,6 +268,12 @@ func (passThroughParser) Search(string, []string, ...string) (
 	return iterator.FromSlice([]syntaxapi.Result(nil)), nil
 }
 
+func (passThroughParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.Empty[syntaxapi.Match](), nil
+}
+
 func (passThroughParser) SearchNode(syntaxapi.NodeCaptureName) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {

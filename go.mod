@@ -208,3 +208,7 @@ replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v
 replace github.com/tree-sitter/go-tree-sitter => github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1
 
 replace github.com/unstablebuild/ox-api => ./cmd/ox-api
+
+// TEMPORARY: local SDK for RUNE-256 ResolveSymbol development. Replace with a
+// published rune-go-sdk version bump before merging.
+replace github.com/unstablebuild/rune-go-sdk => /Users/ernestrc/src/rune-go-sdk

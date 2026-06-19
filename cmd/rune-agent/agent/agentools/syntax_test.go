@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,6 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+
 package agentools
 
 import (
@@ -30,13 +31,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 )
 
 // --- mock Parser ---
@@ -78,6 +79,12 @@ func (s *stubParser) Query(uri workspaceapi.URI, query string, captures []string
 
 func (s *stubParser) Highlight(workspaceapi.URI, string) (iterator.Iterator[textapi.Location], error) {
 	return iterator.FromSlice[textapi.Location](nil), nil
+}
+
+func (s *stubParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.FromSlice[syntaxapi.Match](nil), nil
 }
 
 var _ syntaxapi.Parser = (*stubParser)(nil)

@@ -28,8 +28,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 )
+
+// specIter wraps a single spec in an iterator for engine-level tests that
+// exercise one language directly.
+func specIter(spec *symbolresolve.Spec) iterator.Iterator[symbolresolve.Spec] {
+	return iterator.FromSlice([]symbolresolve.Spec{*spec})
+}
 
 func TestSpecFor(t *testing.T) {
 	t.Parallel()

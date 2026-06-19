@@ -101,6 +101,14 @@ func TestDefinitionHandler(t *testing.T) {
 					}
 					return iterator.Empty[syntaxapi.Result](), nil
 				},
+				resolveFn: func(name string, _ syntaxapi.Progress) ([]syntaxapi.Match, error) {
+					if name == "mylib.MyFunc" {
+						return []syntaxapi.Match{
+							{URI: fileB.String(), Pos: term.Coordinates{X: 7, Y: 42}},
+						}, nil
+					}
+					return nil, nil
+				},
 			},
 			result: semanticapi.LocationResult{
 				Location: &semanticapi.Location{

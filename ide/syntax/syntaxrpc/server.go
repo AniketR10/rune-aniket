@@ -25,6 +25,7 @@ package syntaxrpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/unstablebuild/blue/bluectx"
@@ -34,6 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Server adapts a syntaxapi.Parser to the generated SyntaxServer interface.
@@ -166,6 +169,69 @@ func (s *Server) Highlight(
 			return err
 		}
 	}
+}
+
+// errNoDotDetail is the gRPC status message the client uses to reconstruct
+// syntaxapi.ErrNoDot. It must match the constant in the SDK syntaxrpc client.
+const errNoDotDetail = "syntaxapi.ErrNoDot"
+
+// ResolveSymbol implements SyntaxServer.
+func (s *Server) ResolveSymbol(
+	req *syntaxrpc.ResolveSymbolRequest,
+	stream grpc.ServerStreamingServer[syntaxrpc.ResolveSymbolResponse],
+) error {
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
+
+	progress := syntaxapi.ProgressFunc(func(msg string, found int, step, total int64) {
+		_ = stream.Send(&syntaxrpc.ResolveSymbolResponse{
+			Payload: &syntaxrpc.ResolveSymbolResponse_Progress{
+				Progress: &syntaxrpc.ResolveSymbolProgress{
+					Message: msg,
+					Found:   int64(found),
+					Step:    step,
+					Total:   total,
+				},
+			},
+		})
+	})
+
+	it, err := s.parser.ResolveSymbol(ctx, req.GetName(), progress)
+	if err != nil {
+		if errors.Is(err, syntaxapi.ErrNoDot) {
+			return status.Error(codes.InvalidArgument, errNoDotDetail)
+		}
+		return fmt.Errorf("syntax resolve symbol: %w", err)
+	}
+	defer it.Close() //nolint:errcheck
+
+	for {
+		m, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		resp := &syntaxrpc.ResolveSymbolResponse{
+			Payload: &syntaxrpc.ResolveSymbolResponse_Match{
+				Match: &syntaxrpc.ResolveSymbolMatch{
+					Uri:        m.URI,
+					Line:       uint32(m.Pos.Y),
+					Character:  uint32(m.Pos.X),
+					Display:    m.Display,
+					ImportPath: m.ImportPath,
+				},
+			},
+		}
+		if err := stream.Send(resp); err != nil {
+			return err
+		}
+	}
+	if err := it.Err(); err != nil {
+		if errors.Is(err, syntaxapi.ErrNoDot) {
+			return status.Error(codes.InvalidArgument, errNoDotDetail)
+		}
+		return err
+	}
+	return nil
 }
 
 func streamResults(

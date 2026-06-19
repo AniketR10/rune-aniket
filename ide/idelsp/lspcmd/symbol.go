@@ -41,32 +41,37 @@ import (
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 )
 
-type symbolMatch = symbolresolve.Match
-
-type symbolProgress = symbolresolve.Progress
+// matchPosition converts a resolved symbol's term coordinates into an LSP
+// position (0-based line and character).
+func matchPosition(m syntaxapi.Match) semanticapi.Position {
+	return semanticapi.Position{
+		Line:      uint32(m.Pos.Y),
+		Character: uint32(m.Pos.X),
+	}
+}
 
 func resolveSymbol(
 	ctx context.Context, parser syntaxapi.Parser, name string,
-	progress symbolProgress,
-) ([]symbolMatch, error) {
-	var lastErr error
-	for _, spec := range symbolresolve.All() {
-		matches, err := symbolresolve.Resolve(ctx, parser, spec, name, progress)
-		if err != nil {
-			if errors.Is(err, symbolresolve.ErrNoDot) {
-				return nil, fmt.Errorf("no symbols found for %q", name)
-			}
-			lastErr = err
-			continue
+	progress syntaxapi.Progress,
+) ([]syntaxapi.Match, error) {
+	it, err := parser.ResolveSymbol(ctx, name, progress)
+	if err != nil {
+		if errors.Is(err, syntaxapi.ErrNoDot) {
+			return nil, fmt.Errorf("no symbols found for %q", name)
 		}
-		if len(matches) > 0 {
-			return matches, nil
+		return nil, err
+	}
+	matches, err := iterator.ToSlice(ctx, it)
+	if err != nil {
+		if errors.Is(err, syntaxapi.ErrNoDot) {
+			return nil, fmt.Errorf("no symbols found for %q", name)
 		}
+		return nil, err
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no symbols found for %q", name)
 	}
-	return nil, fmt.Errorf("no symbols found for %q", name)
+	return matches, nil
 }
 
 func resolveCommandSymbol(
@@ -76,7 +81,7 @@ func resolveCommandSymbol(
 	notify browserapi.Notifications,
 	scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser,
-	onResolve func(m symbolMatch, done func()),
+	onResolve func(m syntaxapi.Match, done func()),
 ) (proceed bool, err error) {
 	if len(cmd.Args) == 0 {
 		if cmd.Resource == nil {
@@ -93,7 +98,7 @@ func resolveCommandSymbol(
 	}
 
 	go debug.CapturePanicReport(func() {
-		progress := symbolresolve.ProgressFunc(func(msg string, found int, step, total int64) {
+		progress := syntaxapi.ProgressFunc(func(msg string, found int, step, total int64) {
 			if found > 0 {
 				msg = fmt.Sprintf("%s (%d found)", msg, found)
 			}
@@ -123,19 +128,19 @@ func resolveCommandSymbol(
 }
 
 func showSymbolPicker(
-	matches []symbolMatch,
+	matches []syntaxapi.Match,
 	wm browserapi.WindowManager,
 	fs workspaceapi.FileSystem,
 	scheduleNextTick func(func()) bool,
 	parser syntaxapi.Parser,
-	onPick func(m symbolMatch, done func()),
+	onPick func(m syntaxapi.Match, done func()),
 	done func(),
 ) error {
 	entries := make([]locationEntry, len(matches))
 	for i, m := range matches {
 		entries[i] = locationEntry{
 			uri:     m.URI,
-			rng:     semanticapi.Range{Start: m.Pos, End: m.Pos},
+			rng:     semanticapi.Range{Start: matchPosition(m), End: matchPosition(m)},
 			display: m.Display,
 		}
 	}

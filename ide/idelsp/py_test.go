@@ -313,20 +313,25 @@ func TestE2EPython(t *testing.T) {
 					semanticapi.WorkspaceSymbolParams{Query: "add"},
 				)
 				require.NoError(t, err)
-				require.Len(t, syms, 1)
 				// ty resolves workspace symbols against its own index
-				// root, so only assert the stable name/kind/range and
-				// that the location is the package main.py.
-				assert.Equal(t, "add", syms[0].Name)
-				assert.Equal(t, semanticapi.SymbolKindFunction, syms[0].Kind)
-				assert.True(t,
-					strings.HasSuffix(syms[0].Location.URI, "/main.py"),
-					"unexpected workspace symbol uri: %s",
-					syms[0].Location.URI)
+				// root, which can include other Python files in the
+				// repository tree, so select the main.py result and
+				// assert its stable name/kind/range.
+				var got *semanticapi.SymbolInformation
+				for i := range syms {
+					if strings.HasSuffix(syms[i].Location.URI, "/main.py") {
+						got = &syms[i]
+						break
+					}
+				}
+				require.NotNil(t, got,
+					"no workspace symbol resolved to main.py: %v", syms)
+				assert.Equal(t, "add", got.Name)
+				assert.Equal(t, semanticapi.SymbolKindFunction, got.Kind)
 				assert.Equal(t, semanticapi.Range{
 					Start: semanticapi.Position{Line: 31, Character: 0},
 					End:   semanticapi.Position{Line: 33, Character: 14},
-				}, syms[0].Location.Range)
+				}, got.Location.Range)
 			},
 		},
 		{

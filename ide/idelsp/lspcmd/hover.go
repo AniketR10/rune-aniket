@@ -86,7 +86,7 @@ type hoverHandler struct {
 }
 
 func (h *hoverHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m symbolMatch, done func()) {
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m syntaxapi.Match, done func()) {
 		h.scheduleNextTick(func() {
 			defer done()
 			wsURI, err := LspToURI(m.URI)
@@ -94,7 +94,7 @@ func (h *hoverHandler) HandleCommand(ctx context.Context, cmd textapi.Command) e
 				_, _ = h.notify.Notify(browserapi.LevelError, "hover: %s", err)
 				return
 			}
-			if err := h.execute(context.Background(), wsURI, m.Pos); err != nil {
+			if err := h.execute(context.Background(), wsURI, matchPosition(m)); err != nil {
 				_, _ = h.notify.Notify(browserapi.LevelError, "hover: %s", err)
 			}
 		})

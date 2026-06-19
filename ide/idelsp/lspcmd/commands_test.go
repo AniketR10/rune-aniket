@@ -371,6 +371,14 @@ func TestE2ECommands(t *testing.T) {
 			}
 			return iterator.Empty[syntaxapi.Result](), nil
 		},
+		resolveFn: func(name string, _ syntaxapi.Progress) ([]syntaxapi.Match, error) {
+			if name == "fmt.Println" {
+				return []syntaxapi.Match{
+					{URI: mainWSURI.String(), Pos: term.Coordinates{X: 5, Y: 44}},
+				}, nil
+			}
+			return nil, nil
+		},
 	}
 	router, err := AllHandler(mgr, editor, wm, opener, notify, fs, cfg.Parser, cfg)
 	require.NoError(t, err)

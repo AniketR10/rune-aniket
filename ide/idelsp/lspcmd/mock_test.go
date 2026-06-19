@@ -26,7 +26,6 @@ package lspcmd
 import (
 	"context"
 	"os"
-	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
@@ -99,6 +98,7 @@ type mockParser struct {
 	// searchNodeFn lets tests stub responses for SearchNode (used by the
 	// definitions phase in symbolresolve.Resolve / SearchDefinitions).
 	searchNodeFn func(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
+	resolveFn    func(string, syntaxapi.Progress) ([]syntaxapi.Match, error)
 }
 
 func (m *mockParser) Search(query string, captures []string, langs ...string) (iterator.Iterator[syntaxapi.Result], error) {
@@ -125,37 +125,17 @@ func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (iterator.I
 	}
 	return iterator.Empty[textapi.Location](), nil
 }
-
-// fileContent maps file paths to their text content for the mock FS.
-type fileContent map[string]string
-
-func testFS(content fileContent) *mockFileSystem {
-	return &mockFileSystem{
-		openFileFn: func(path string, _ int, _ os.FileMode) (workspaceapi.File, error) {
-			text, ok := content[path]
-			if !ok {
-				return nil, os.ErrNotExist
-			}
-			return newStringFile(text), nil
-		},
+func (m *mockParser) ResolveSymbol(
+	_ context.Context, name string, progress syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	if m.resolveFn != nil {
+		matches, err := m.resolveFn(name, progress)
+		if err != nil {
+			return nil, err
+		}
+		return iterator.FromSlice(matches), nil
 	}
-}
-
-// stringFile implements workspaceapi.File backed by an in-memory string.
-type stringFile struct{ *strings.Reader }
-
-func newStringFile(s string) *stringFile         { return &stringFile{strings.NewReader(s)} }
-func (f *stringFile) Close() error               { return nil }
-func (f *stringFile) Name() string               { return "" }
-func (f *stringFile) Stat() (os.FileInfo, error) { return nil, nil }
-func (f *stringFile) Sync() error                { return nil }
-func (f *stringFile) Truncate(_ int64) error     { return nil }
-func (f *stringFile) Fd() uintptr                { return 0 }
-func (f *stringFile) Write(_ []byte) (int, error) {
-	return 0, os.ErrPermission
-}
-func (f *stringFile) WriteAt(_ []byte, _ int64) (int, error) {
-	return 0, os.ErrPermission
+	return iterator.Empty[syntaxapi.Match](), nil
 }
 
 func (m *mockEditor) MoveToNextLocation(_ textapi.Handler, _ string) error {

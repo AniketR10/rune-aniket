@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
@@ -217,12 +218,12 @@ func TestResolvePythonE2E(t *testing.T) {
 		{
 			name:      "empty string returns ErrNoDot",
 			symbol:    "",
-			wantErrIs: symbolresolve.ErrNoDot,
+			wantErrIs: syntaxapi.ErrNoDot,
 		},
 		{
 			name:      "name without dot returns ErrNoDot",
 			symbol:    "JustAName",
-			wantErrIs: symbolresolve.ErrNoDot,
+			wantErrIs: syntaxapi.ErrNoDot,
 		},
 	}
 
@@ -232,7 +233,7 @@ func TestResolvePythonE2E(t *testing.T) {
 
 			rec := &recordingProgress{}
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, symbolresolve.Python,
+				context.Background(), env.parser, specIter(symbolresolve.Python),
 				tt.symbol, rec,
 			)
 
@@ -277,7 +278,7 @@ func TestResolvePythonSelfAttributeQuirk(t *testing.T) {
 	// precise resolution on follow-up.
 	env := setupPythonEnv(t)
 	matches, err := symbolresolve.Resolve(
-		context.Background(), env.parser, symbolresolve.Python,
+		context.Background(), env.parser, specIter(symbolresolve.Python),
 		"self.helper", nil,
 	)
 	require.NoError(t, err)
@@ -301,7 +302,7 @@ func TestResolvePythonConcurrent(t *testing.T) {
 		go func(symbol string) {
 			defer wg.Done()
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, symbolresolve.Python,
+				context.Background(), env.parser, specIter(symbolresolve.Python),
 				symbol, nil,
 			)
 			assert.NoErrorf(t, err, "Resolve(%q)", symbol)

@@ -38,8 +38,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
@@ -75,6 +75,11 @@ type nopParser struct{}
 
 func (nopParser) Search(string, []string, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil
+}
+func (nopParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
+	iterator.Iterator[syntaxapi.Match], error,
+) {
+	return iterator.Empty[syntaxapi.Match](), nil
 }
 func (nopParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil

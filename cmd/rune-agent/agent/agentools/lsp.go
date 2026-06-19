@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2024-2026 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,6 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
+
 package agentools
 
 import (
@@ -34,8 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/cmd/rune-agent/agent"
-	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 )
 
 // maxSymbolMatches bounds fan-out of follow-up LSP requests when a
@@ -67,17 +68,18 @@ func LSPTools(
 func resolveSymbol(
 	ctx context.Context, lsp semanticapi.LSP, parser syntaxapi.Parser, symbol string,
 ) ([]semanticapi.Location, bool, error) {
-	if strings.Contains(symbol, ".") {
-		for _, spec := range symbolresolve.All() {
-			matches, err := symbolresolve.Resolve(ctx, parser, spec, symbol, nil)
-			if err != nil || len(matches) == 0 {
-				continue
-			}
+	if it, err := parser.ResolveSymbol(ctx, symbol, nil); err == nil {
+		matches, err := iterator.ToSlice(ctx, it)
+		if err == nil && len(matches) > 0 {
 			locs := make([]semanticapi.Location, 0, len(matches))
 			for _, m := range matches {
+				pos := semanticapi.Position{
+					Line:      uint32(m.Pos.Y),
+					Character: uint32(m.Pos.X),
+				}
 				locs = append(locs, semanticapi.Location{
 					URI:   m.URI,
-					Range: semanticapi.Range{Start: m.Pos, End: m.Pos},
+					Range: semanticapi.Range{Start: pos, End: pos},
 				})
 			}
 			return capLocations(locs)

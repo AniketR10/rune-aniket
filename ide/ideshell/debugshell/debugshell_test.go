@@ -763,6 +763,47 @@ func TestHandler_Launch(t *testing.T) {
 	assert.Equal(t, []string{"--flag", "arg"}, dbg.launchCalls[0].Args)
 }
 
+// rootJoinFS resolves relative paths against a workspace root the
+// way a real workspace FileSystem does, so launch tests can observe
+// program-path resolution.
+type rootJoinFS struct {
+	passThroughFS
+	root string
+}
+
+func (f rootJoinFS) URI(path string) (workspaceapi.URI, error) {
+	if !strings.HasPrefix(path, "/") {
+		path = f.root + "/" + path
+	}
+	return workspaceapi.ParseURI("file://" + path)
+}
+
+// TestHandler_LaunchResolvesRelativeProgram asserts that a relative
+// program path is resolved to an absolute path against the workspace
+// root before being sent to the adapter. debugpy derives the
+// debuggee cwd from the program's directory and then re-resolves a
+// still-relative program against it, producing a doubled path such
+// as `<root>/src/src/init.py`. Sending an absolute program prevents
+// that second resolution.
+func TestHandler_LaunchResolvesRelativeProgram(t *testing.T) {
+	root := t.TempDir()
+	uri, err := workspaceapi.ParseURI("file://" + root)
+	require.NoError(t, err)
+
+	dbg := newFakeDebugger()
+	h := New(dbg, nil, nil, passThroughParser{}, rootJoinFS{root: root},
+		Config{WorkspaceURI: uri, ScheduleNextTick: syncScheduleNextTick})
+	ctx := context.Background()
+	initSession(t, h, dbg, "python")
+
+	_, err = h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subLaunch, "src/init.py"},
+	}, nil)
+	require.NoError(t, err)
+	require.Len(t, dbg.launchCalls, 1)
+	assert.Equal(t, root+"/src/init.py", dbg.launchCalls[0].Program)
+}
+
 func TestHandler_LaunchWithEnvFlags(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -1949,6 +1990,31 @@ func TestHandler_TerminateAndDisconnectFailStillResets(t *testing.T) {
 	// Recovery must still be possible.
 	dbg.terminateErr = nil
 	dbg.disconnectErr = nil
+	_, err = h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subInitialize, "go"},
+	}, nil)
+	require.NoError(t, err)
+}
+
+// TestHandler_TerminateSuccessClearsSession ensures that a
+// successful DAP terminate clears local session state so a
+// subsequent `debugger initialize` is not rejected with
+// errSessionActive. The adapter may not fire OnClose (e.g. the
+// debuggee already exited), so terminate itself must reset.
+func TestHandler_TerminateSuccessClearsSession(t *testing.T) {
+	h, dbg, _ := newTestHandler(t)
+	ctx := context.Background()
+	initSession(t, h, dbg, "go")
+
+	_, err := h.HandleCommand(ctx, repl.Command{
+		Name: CommandName, Args: []string{subTerminate},
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, dbg.terminateCalls)
+	require.Empty(t, dbg.disconnectCalls)
+
+	// The session must be cleared even though the adapter never
+	// fired OnClose, so a new initialize can proceed.
 	_, err = h.HandleCommand(ctx, repl.Command{
 		Name: CommandName, Args: []string{subInitialize, "go"},
 	}, nil)

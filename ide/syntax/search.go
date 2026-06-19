@@ -34,6 +34,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -48,6 +49,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/languages"
+	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -55,15 +57,36 @@ import (
 func NewParser(
 	w workspaceapi.FileSystem, pkg PkgManager, uri workspaceapi.URI,
 ) syntaxapi.Parser {
-	return parserSearcher{w: w, uri: uri, pkg: newCachingPkgManager(pkg)}
+	return parserSearcher{
+		w:     w,
+		uri:   uri,
+		pkg:   newCachingPkgManager(pkg),
+		specs: &specCache{fs: w},
+	}
 }
 
 var defaultWorkers = runtime.NumCPU()
 
 type parserSearcher struct {
-	w   workspaceapi.FileSystem
-	pkg PkgManager
-	uri workspaceapi.URI
+	w     workspaceapi.FileSystem
+	pkg   PkgManager
+	uri   workspaceapi.URI
+	specs *specCache
+}
+
+// specCache memoizes the workspace language detection so the file walk runs
+// once per parser. Subsequent ResolveSymbol calls reuse the detected specs.
+type specCache struct {
+	fs       walkdir.Reader
+	once     sync.Once
+	detected []symbolresolve.Spec
+}
+
+func (c *specCache) detect(ctx context.Context) iterator.Iterator[symbolresolve.Spec] {
+	c.once.Do(func() {
+		c.detected, _ = iterator.ToSlice(ctx, symbolresolve.DetectSpecs(ctx, c.fs))
+	})
+	return iterator.FromSlice(c.detected)
 }
 
 func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
@@ -158,6 +181,48 @@ func (p parserSearcher) Search(query string, captureNames []string, langs ...str
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	return p.search("", query, captureNames, langs...)
+}
+
+// ResolveSymbol resolves a dotted symbol name to its declaration and reference
+// locations. It detects which languages are present in the workspace and runs
+// only the relevant specs, returning the first spec that yields matches.
+func (p parserSearcher) ResolveSymbol(
+	ctx context.Context, name string, progress syntaxapi.Progress,
+) (iterator.Iterator[syntaxapi.Match], error) {
+	if !strings.Contains(name, ".") {
+		return nil, syntaxapi.ErrNoDot
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	results := make(chan syntaxapi.Match)
+	closeWaitCh := make(chan struct{})
+	it := &resolveSymbolIterator{
+		ctx:         runCtx,
+		ch:          results,
+		cancel:      cancel,
+		closeWaitCh: closeWaitCh,
+	}
+
+	go debug.CapturePanicReport(func() {
+		defer close(closeWaitCh)
+		defer close(results)
+
+		matches, err := symbolresolve.Resolve(runCtx, p, p.specs.detect(runCtx), name, progress)
+		if err != nil {
+			it.setErr(err)
+			return
+		}
+		for _, m := range matches {
+			select {
+			case results <- m:
+			case <-runCtx.Done():
+				it.setErr(runCtx.Err())
+				return
+			}
+		}
+	})
+
+	return it, nil
 }
 
 func (p parserSearcher) query(
@@ -528,6 +593,46 @@ func (l *locationsIterator) Err() error {
 func (l *locationsIterator) Close() error {
 	l.cancel()
 	<-l.closeWaitCh
+	return nil
+}
+
+type resolveSymbolIterator struct {
+	mu          sync.Mutex
+	err         error
+	ctx         context.Context
+	ch          chan syntaxapi.Match
+	cancel      func()
+	closeWaitCh chan struct{}
+}
+
+func (it *resolveSymbolIterator) setErr(err error) {
+	it.mu.Lock()
+	defer it.mu.Unlock()
+	it.err = errors.Join(it.err, err)
+}
+
+func (it *resolveSymbolIterator) Next(ctx context.Context) (syntaxapi.Match, bool) {
+	select {
+	case <-ctx.Done():
+		it.setErr(ctx.Err())
+		return syntaxapi.Match{}, false
+	case <-it.ctx.Done():
+		it.setErr(it.ctx.Err())
+		return syntaxapi.Match{}, false
+	case m, ok := <-it.ch:
+		return m, ok
+	}
+}
+
+func (it *resolveSymbolIterator) Err() error {
+	it.mu.Lock()
+	defer it.mu.Unlock()
+	return it.err
+}
+
+func (it *resolveSymbolIterator) Close() error {
+	it.cancel()
+	<-it.closeWaitCh
 	return nil
 }
 
