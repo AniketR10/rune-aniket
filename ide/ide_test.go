@@ -26,8 +26,10 @@ package ide
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,9 +59,11 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 func TestIDEInitializationIntegration(t *testing.T) {
