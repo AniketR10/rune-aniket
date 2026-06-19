@@ -34,6 +34,7 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"slices"
@@ -125,11 +126,13 @@ func (h *replSubcommand) HandleCommand(
 	}
 
 	moduleDir := h.resolveModuleDir(cmd)
-	session := newGoSession(&executorRunner{
-		executor:  h.executor,
-		fs:        h.fs,
-		moduleDir: moduleDir,
-	}, h.fs, h.lsp)
+	runner := &executorRunner{
+		executor:   h.executor,
+		fs:         h.fs,
+		moduleDir:  moduleDir,
+		programDir: replProgramDir(moduleDir),
+	}
+	session := newGoSession(runner, h.fs, h.lsp)
 
 	moduleURI, err := h.fs.URI(moduleDir)
 	if err != nil {
@@ -165,6 +168,7 @@ func (h *replSubcommand) HandleCommand(
 		h.mu.Lock()
 		h.handle = nil
 		h.mu.Unlock()
+		_ = os.RemoveAll(runner.programDir)
 		return shell.Close()
 	}))
 	if err != nil {
@@ -278,6 +282,18 @@ func nearestModuleDir(start string) (string, bool) {
 	}
 }
 
+// replProgramDir returns a unique directory under the module root that
+// holds the REPL's synthesized program. It is a subdirectory (its own
+// package) so it never conflicts with a package main at the module root,
+// yet stays inside the module so the dependency graph resolves. The same
+// directory backs both `go run` and gopls completion.
+func replProgramDir(moduleDir string) string {
+	return filepath.Join(
+		moduleDir, ".rune", "cache",
+		fmt.Sprintf("go-repl-%d", rand.Int63()),
+	)
+}
+
 // tickScheduler implements the scheduleNextTick contract repl.Handler
 // expects. Extensions are not handed the raw event-loop tick scheduler,
 // so we enqueue callbacks and wake the loop with an interrupt; the
@@ -339,13 +355,18 @@ type programRunner interface {
 	run(ctx context.Context, program string) (output string, err error)
 }
 
-// executorRunner runs a rendered program with `go run` in moduleDir via
-// the workspace Executor. The temp file must live inside the module so
-// the module graph is in scope; it is removed after the run.
+// executorRunner runs a rendered program with `go run` via the workspace
+// Executor. The program lives in its own directory under the module
+// (programDir) so it is a self-contained package: it never conflicts
+// with a package main at the module root, while still resolving the
+// module's dependencies because the nearest enclosing go.mod is the
+// project's. The same main.go is reused for completion (see
+// repl_complete.go) so gopls and the build share it on disk.
 type executorRunner struct {
-	executor  workspaceapi.Executor
-	fs        workspaceapi.FileSystem
-	moduleDir string
+	executor   workspaceapi.Executor
+	fs         workspaceapi.FileSystem
+	moduleDir  string
+	programDir string
 }
 
 var _ programRunner = (*executorRunner)(nil)
@@ -353,27 +374,16 @@ var _ programRunner = (*executorRunner)(nil)
 func (r *executorRunner) run(
 	ctx context.Context, program string,
 ) (string, error) {
-	tmp, err := os.CreateTemp(r.moduleDir, "rune-repl-*.go")
-	if err != nil {
-		return "", fmt.Errorf("create temp file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if _, err := tmp.WriteString(program); err != nil {
-		_ = tmp.Close()
-		return "", fmt.Errorf("write temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("close temp file: %w", err)
+	if err := r.writeProgram(program); err != nil {
+		return "", err
 	}
 
 	var stdout, stderr bytes.Buffer
 	doneCh := make(chan error, 1)
 	goCmd := workspaceapi.Cmd{
 		Path:    "go",
-		Args:    []string{"run", tmpPath},
-		Dir:     r.moduleDir,
+		Args:    []string{"run", "."},
+		Dir:     r.programDir,
 		Stdout:  &stdout,
 		Stderr:  &stderr,
 		Watcher: workspaceapi.ChanProcessWatcher(doneCh),
@@ -392,6 +402,31 @@ func (r *executorRunner) run(
 		return strings.TrimRight(stderr.String(), "\n"), runErr
 	}
 	return strings.TrimRight(stdout.String(), "\n"), nil
+}
+
+const programFile = "main.go"
+
+func (r *executorRunner) writeProgram(program string) error {
+	if err := os.MkdirAll(r.programDir, 0o755); err != nil {
+		return fmt.Errorf("create program dir: %w", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(r.programDir, programFile), []byte(program), 0o644,
+	); err != nil {
+		return fmt.Errorf("write program: %w", err)
+	}
+	return nil
+}
+
+var _ completionRunner = (*executorRunner)(nil)
+
+// programPath writes content to the shared program file and returns its
+// absolute path so the session can open it as a gopls overlay.
+func (r *executorRunner) programPath(content string) (string, error) {
+	if err := r.writeProgram(content); err != nil {
+		return "", err
+	}
+	return filepath.Join(r.programDir, programFile), nil
 }
 
 var _ docRunner = (*executorRunner)(nil)
@@ -932,10 +967,10 @@ func (s *goSession) importBody(trailing string) string {
 
 // renderImport renders one import spec, demoting it to a blank import
 // (`_ "path"`) when body does not reference its package identifier.
-// A blank import compiles even when unused, so accumulating imports via
-// :import never trips the "imported and not used" error, while an
-// invalid path still fails because the package must resolve. An import
-// that is actually used stays a normal import so its selector resolves.
+// A blank import compiles even when unused, so accumulating imports
+// never trips the "imported and not used" error, while an invalid path
+// still fails because the package must resolve. An import that is
+// actually used stays a normal import so its selector resolves.
 func renderImport(spec, body string) string {
 	if strings.HasPrefix(spec, "_ ") || strings.HasPrefix(spec, ". ") {
 		return spec
@@ -1015,11 +1050,6 @@ func (s *goSession) builtin(
 	name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
 	arg = strings.TrimSpace(arg)
 	switch name {
-	case "import":
-		if arg == "" {
-			return nil, errors.New(":import requires a package path")
-		}
-		return s.eval(ctx, fragment{kind: fragImport, imports: []string{importSpec(arg)}})
 	case "type":
 		if arg == "" {
 			return nil, errors.New(":type requires an expression")
@@ -1104,15 +1134,21 @@ func (s *goSession) Complete(
 		if len(args) == 0 {
 			return iterator.FromSlice(completeBuiltins(cmd)), nil
 		}
-		if cmd == ":import" && len(args) == 1 {
-			return s.completePackages(ctx)
-		}
+		return iterator.Empty[string](), nil
 	}
-	return iterator.Empty[string](), nil
+	line := rejoinArgs(cmd, args)
+	if prefix, ok := importPathPrefix(line); ok {
+		return s.completePackages(ctx, prefix)
+	}
+	return s.completeGo(ctx, line)
 }
 
+// completePackages lists importable package paths from gopls, keeping
+// only those that start with prefix. gopls returns the full known set
+// unfiltered, which is too large to surface raw, so the partial path the
+// user has typed inside the import quotes narrows it.
 func (s *goSession) completePackages(
-	ctx context.Context,
+	ctx context.Context, prefix string,
 ) (iterator.Iterator[string], error) {
 	if s.lsp == nil {
 		return iterator.Empty[string](), nil
@@ -1129,7 +1165,13 @@ func (s *goSession) completePackages(
 	if json.Unmarshal([]byte(result), &resp) != nil {
 		return iterator.Empty[string](), nil
 	}
-	return iterator.FromSlice(resp.Packages), nil
+	matches := make([]string, 0, len(resp.Packages))
+	for _, pkg := range resp.Packages {
+		if strings.HasPrefix(pkg, prefix) {
+			matches = append(matches, pkg)
+		}
+	}
+	return iterator.FromSlice(matches), nil
 }
 
 // docRunner is implemented by runners that can execute `go doc`.
@@ -1137,9 +1179,20 @@ type docRunner interface {
 	runDoc(ctx context.Context, arg string) (string, error)
 }
 
+// completionRunner is implemented by runners that back gopls completion.
+// It exposes the on-disk program file that the session overwrites with a
+// completion probe and opens as an LSP overlay; sharing the same file as
+// `go run` keeps gopls's package analysis warm across evaluations.
+type completionRunner interface {
+	// programPath returns the absolute path of the program file
+	// (programDir/main.go) and writes content to it so gopls can load
+	// the enclosing package from disk before the overlay is applied.
+	programPath(content string) (string, error)
+}
+
 func completeBuiltins(prefix string) []string {
 	all := []string{
-		":import", ":type", ":print", ":write",
+		":type", ":print", ":write",
 		":clear", ":doc", ":help", ":quit",
 	}
 	var out []string
@@ -1153,7 +1206,7 @@ func completeBuiltins(prefix string) []string {
 
 func replHelp() []string {
 	return []string{
-		":import <path>  add an import to the session",
+		`import "<path>" add an import (with path completion)`,
 		":type <expr>    print the type of an expression",
 		":print          show the accumulated program",
 		":write <file>   write the accumulated program to a file",
@@ -1161,27 +1214,6 @@ func replHelp() []string {
 		":doc <arg>      show go doc output",
 		":help           list commands",
 		":quit           close the REPL",
-	}
-}
-
-// importSpec normalizes a `:import` argument into a quoted import spec,
-// preserving an optional alias.
-func importSpec(arg string) string {
-	fields := strings.Fields(arg)
-	switch len(fields) {
-	case 1:
-		if strings.HasPrefix(fields[0], "\"") {
-			return fields[0]
-		}
-		return "\"" + fields[0] + "\""
-	case 2:
-		path := fields[1]
-		if !strings.HasPrefix(path, "\"") {
-			path = "\"" + path + "\""
-		}
-		return fields[0] + " " + path
-	default:
-		return "\"" + arg + "\""
 	}
 }
 

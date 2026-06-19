@@ -25,6 +25,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -34,6 +35,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -321,7 +323,7 @@ func TestGoREPLEval(t *testing.T) {
 			name:   "import then use",
 			runner: func() *scriptedRunner { return newScriptedRunner().reply(1, "3.14", nil) },
 			steps: []step{
-				{line: ":import math", wantOut: []string{}},
+				{line: `import "math"`, wantOut: []string{}},
 				{
 					line:     "math.Pi",
 					wantOut:  []string{"3.14"},
@@ -533,7 +535,7 @@ func TestGoREPLErrorRecovery(t *testing.T) {
 					reply(0, `cannot find package "nope/x"`, errors.New("exit status 1"))
 			},
 			steps: []step{
-				{line: ":import nope/x", wantErr: `cannot find package "nope/x"`},
+				{line: `import "nope/x"`, wantErr: `cannot find package "nope/x"`},
 			},
 			after: func(t *testing.T, s *goSession, _ *scriptedRunner) {
 				require.Empty(t, s.imports, "failed import must be rolled back")
@@ -599,8 +601,8 @@ func TestGoREPLPrint(t *testing.T) {
 	t.Parallel()
 	r := newScriptedRunner()
 	s := newTestSession(r)
-	require.NoError(t, mustSubmit(t, s, ":import fmt"))
-	require.NoError(t, mustSubmit(t, s, ":import strings"))
+	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
+	require.NoError(t, mustSubmit(t, s, `import "strings"`))
 
 	out, err := submit(t, s, ":print")
 	require.NoError(t, err)
@@ -844,7 +846,7 @@ func TestGoREPLClear(t *testing.T) {
 	t.Parallel()
 	r := newScriptedRunner()
 	s := newTestSession(r)
-	require.NoError(t, mustSubmit(t, s, ":import fmt"))
+	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
 	require.NoError(t, mustSubmit(t, s, "func f() {}"))
 	require.NoError(t, mustSubmit(t, s, "x := 1"))
 
@@ -932,7 +934,7 @@ func TestGoREPLBuiltinErrors(t *testing.T) {
 		line    string
 		wantErr string
 	}{
-		{":import", ":import requires a package path"},
+		{":import", "unknown command: :import"},
 		{":type", ":type requires an expression"},
 		{":doc", ":doc requires an argument"},
 		{":bogus", "unknown command: :bogus"},
@@ -953,7 +955,7 @@ func TestGoREPLWrite(t *testing.T) {
 	dir := t.TempDir()
 	fs := &writeFS{root: dir}
 	s := newGoSession(r, fs, nil)
-	require.NoError(t, mustSubmit(t, s, ":import fmt"))
+	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
 
 	out, err := submit(t, s, ":write out.go")
 	require.NoError(t, err)
@@ -975,34 +977,14 @@ func TestGoREPLWriteRequiresPath(t *testing.T) {
 
 // --- pure helpers -----------------------------------------------------
 
-func TestImportSpec(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		arg  string
-		want string
-	}{
-		{"math", `"math"`},
-		{`"math"`, `"math"`},
-		{"encoding/json", `"encoding/json"`},
-		{"j encoding/json", `j "encoding/json"`},
-		{`j "encoding/json"`, `j "encoding/json"`},
-	}
-	for _, tc := range tests {
-		t.Run(tc.arg, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.want, importSpec(tc.arg))
-		})
-	}
-}
-
 func TestCompleteBuiltins(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		prefix string
 		want   []string
 	}{
-		{":", []string{":import", ":type", ":print", ":write", ":clear", ":doc", ":help", ":quit"}},
-		{":i", []string{":import"}},
+		{":", []string{":type", ":print", ":write", ":clear", ":doc", ":help", ":quit"}},
+		{":t", []string{":type"}},
 		{":p", []string{":print"}},
 		{":q", []string{":quit"}},
 		{":zzz", nil},
@@ -1019,11 +1001,11 @@ func TestGoREPLComplete(t *testing.T) {
 	t.Parallel()
 	s := newTestSession(newScriptedRunner())
 
-	got, err := s.Complete(context.Background(), ":i", nil)
+	got, err := s.Complete(context.Background(), ":t", nil)
 	require.NoError(t, err)
 	items, err := iterator.ToSlice(context.Background(), got)
 	require.NoError(t, err)
-	require.Equal(t, []string{":import"}, items)
+	require.Equal(t, []string{":type"}, items)
 
 	// Non-builtin input yields no completions.
 	got, err = s.Complete(context.Background(), "math", nil)
@@ -1032,8 +1014,7 @@ func TestGoREPLComplete(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, items)
 
-	// :import with a nil LSP yields no package completions but no error.
-	got, err = s.Complete(context.Background(), ":import", []string{"ma"})
+	got, err = s.Complete(context.Background(), "import", []string{`"ma`})
 	require.NoError(t, err)
 	items, err = iterator.ToSlice(context.Background(), got)
 	require.NoError(t, err)
@@ -1060,13 +1041,292 @@ func TestNearestModuleDir(t *testing.T) {
 	require.False(t, ok)
 }
 
+// --- Go fragment completion -------------------------------------------
+
+// fakeCompletionLSP embeds semanticapi.LSP so unimplemented methods
+// panic, scoping the fake to the completion path completeGo exercises.
+type fakeCompletionLSP struct {
+	semanticapi.LSP
+
+	items []semanticapi.CompletionItem
+	err   error
+
+	packages []string
+
+	openedText string
+	openedURI  string
+	reqURI     string
+	reqPos     semanticapi.Position
+	closedURI  string
+}
+
+func (f *fakeCompletionLSP) DidOpen(
+	_ context.Context, p semanticapi.DidOpenTextDocumentParams,
+) error {
+	f.openedText = p.TextDocument.Text
+	f.openedURI = p.TextDocument.URI
+	return nil
+}
+
+func (f *fakeCompletionLSP) DidClose(
+	_ context.Context, p semanticapi.DidCloseTextDocumentParams,
+) error {
+	f.closedURI = p.TextDocument.URI
+	return nil
+}
+
+func (f *fakeCompletionLSP) Completion(
+	_ context.Context, p semanticapi.CompletionParams,
+) (semanticapi.CompletionResult, error) {
+	f.reqURI = p.TextDocument.URI
+	f.reqPos = p.Position
+	if f.err != nil {
+		return semanticapi.CompletionResult{}, f.err
+	}
+	return semanticapi.CompletionResult{Items: f.items}, nil
+}
+
+func (f *fakeCompletionLSP) ExecuteCommand(
+	_ context.Context, p semanticapi.ExecuteCommandParams,
+) (string, error) {
+	if p.Command != "gopls.list_known_packages" {
+		return "", nil
+	}
+	if f.err != nil {
+		return "", f.err
+	}
+	out, err := json.Marshal(struct{ Packages []string }{Packages: f.packages})
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+type dirRunner struct {
+	*scriptedRunner
+	dir string
+}
+
+var (
+	_ programRunner    = (*dirRunner)(nil)
+	_ completionRunner = (*dirRunner)(nil)
+)
+
+func newDirRunner(dir string) *dirRunner {
+	return &dirRunner{scriptedRunner: newScriptedRunner(), dir: dir}
+}
+
+func (r *dirRunner) programPath(content string) (string, error) {
+	path := filepath.Join(r.dir, programFile)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func TestGoSessionCompletionPrefix(t *testing.T) {
+	t.Parallel()
+	s := newTestSession(newScriptedRunner())
+	tests := []struct {
+		line string
+		want string
+	}{
+		{"fmt.Pri", "Pri"},
+		{"fmt.", ""},
+		{"buf.Wri", "Wri"},
+		{"x", "x"},
+		{"x + y", "y"},
+		{"strings.ToU", "ToU"},
+		{"", ""},
+		{"foo(bar.Baz", "Baz"},
+		{"a.b.c", "c"},
+		{`import "fm`, "fm"},
+		{`import "github.com/foo/`, "github.com/foo/"},
+		{`import w "io`, "io"},
+		{`import "`, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.line, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, s.CompletionPrefix(tc.line))
+		})
+	}
+}
+
+func TestImportPathPrefix(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		line   string
+		want   string
+		wantOK bool
+	}{
+		{`import "fm`, "fm", true},
+		{`import "`, "", true},
+		{`import "github.com/foo/`, "github.com/foo/", true},
+		{`import w "io`, "io", true},
+		{`	import "fm`, "fm", true},
+		{`import "fmt"`, "", false},
+		{"fmt.Pri", "", false},
+		{"important()", "", false},
+		{"x := 1", "", false},
+		{"import ", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.line, func(t *testing.T) {
+			t.Parallel()
+			got, ok := importPathPrefix(tc.line)
+			require.Equal(t, tc.wantOK, ok)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestGoSessionCompletePackages(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lsp := &fakeCompletionLSP{packages: []string{
+		"fmt",
+		"fmt/internal",
+		"github.com/unstablebuild/blue/document",
+		"strings",
+	}}
+	s := newGoSession(newDirRunner(dir), &writeFS{root: dir}, lsp)
+
+	got, err := s.Complete(context.Background(), "import", []string{`"fm`})
+	require.NoError(t, err)
+	items, err := iterator.ToSlice(context.Background(), got)
+	require.NoError(t, err)
+	require.Equal(t, []string{"fmt", "fmt/internal"}, items)
+	require.Empty(t, lsp.openedURI, "package completion must not open a probe doc")
+
+	got, err = s.Complete(context.Background(), "import", []string{`"github.com/`})
+	require.NoError(t, err)
+	items, err = iterator.ToSlice(context.Background(), got)
+	require.NoError(t, err)
+	require.Equal(t, []string{"github.com/unstablebuild/blue/document"}, items)
+}
+
+func TestRejoinArgs(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "fmt.Pri", rejoinArgs("fmt.Pri", nil))
+	require.Equal(t, "x + y", rejoinArgs("x", []string{"+", "y"}))
+}
+
+func TestRenderForCompletion(t *testing.T) {
+	t.Parallel()
+	s := newTestSession(newScriptedRunner())
+	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
+
+	src, offset := s.renderForCompletion("fmt.Pri")
+	require.Equal(t, "fmt.Pri", src[offset-len("fmt.Pri"):offset])
+	require.Contains(t, src, "\"fmt\"")
+	require.NotContains(t, src, "_ \"fmt\"")
+	require.Contains(t, src, "func main() {\n\tfmt.Pri\n}")
+}
+
+func TestByteOffsetToPosition(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		src    string
+		offset int
+		want   semanticapi.Position
+	}{
+		{"start", "abc", 0, semanticapi.Position{Line: 0, Character: 0}},
+		{"mid first line", "abc", 2, semanticapi.Position{Line: 0, Character: 2}},
+		{"second line", "ab\ncd", 4, semanticapi.Position{Line: 1, Character: 1}},
+		{"after newline", "ab\ncd", 3, semanticapi.Position{Line: 1, Character: 0}},
+		{"utf16 astral", "x\n😀f", 7, semanticapi.Position{Line: 1, Character: 3}},
+		{"offset past end clamps", "ab", 99, semanticapi.Position{Line: 0, Character: 2}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, byteOffsetToPosition(tc.src, tc.offset))
+		})
+	}
+}
+
+func TestInsertText(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "Println", insertText(semanticapi.CompletionItem{
+		Label:      "Println(a ...any)",
+		InsertText: "Println",
+	}))
+	require.Equal(t, "Printf", insertText(semanticapi.CompletionItem{
+		Label:    "Printf",
+		TextEdit: &semanticapi.TextEdit{NewText: "Printf"},
+	}))
+	require.Equal(t, "Sprint", insertText(semanticapi.CompletionItem{
+		Label: "Sprint",
+	}))
+}
+
+func TestCompletionInsertsDedupes(t *testing.T) {
+	t.Parallel()
+	items := []semanticapi.CompletionItem{
+		{Label: "Println", InsertText: "Println"},
+		{Label: "Print", InsertText: "Print"},
+		{Label: "Println dup", InsertText: "Println"},
+		{Label: "", InsertText: ""},
+	}
+	require.Equal(t, []string{"Println", "Print"}, completionInserts(items))
+}
+
+func TestGoSessionCompleteGo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lsp := &fakeCompletionLSP{items: []semanticapi.CompletionItem{
+		{Label: "Println(a ...any) (n int, err error)", InsertText: "Println"},
+		{Label: "Printf(format string, a ...any) (n int, err error)", InsertText: "Printf"},
+		{Label: "Print", InsertText: "Print"},
+	}}
+	s := newGoSession(newDirRunner(dir), &writeFS{root: dir}, lsp)
+	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
+
+	got, err := s.Complete(context.Background(), "fmt.Pri", nil)
+	require.NoError(t, err)
+	items, err := iterator.ToSlice(context.Background(), got)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Println", "Printf", "Print"}, items)
+
+	require.NotEmpty(t, lsp.openedURI)
+	require.Equal(t, lsp.openedURI, lsp.reqURI)
+	require.Equal(t, lsp.openedURI, lsp.closedURI)
+	require.True(t, strings.HasPrefix(lsp.openedURI, "file://"))
+	require.Contains(t, lsp.openedText, "fmt.Pri")
+	require.Equal(t, uint32(len("\tfmt.Pri")), lsp.reqPos.Character)
+}
+
+func TestGoSessionCompleteGoNoLSP(t *testing.T) {
+	t.Parallel()
+	s := newGoSession(newDirRunner(t.TempDir()), &writeFS{root: t.TempDir()}, nil)
+	got, err := s.Complete(context.Background(), "fmt.Pri", nil)
+	require.NoError(t, err)
+	items, err := iterator.ToSlice(context.Background(), got)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+func TestGoSessionCompleteGoLSPError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lsp := &fakeCompletionLSP{err: errors.New("boom")}
+	s := newGoSession(newDirRunner(dir), &writeFS{root: dir}, lsp)
+	got, err := s.Complete(context.Background(), "fmt.Pri", nil)
+	require.NoError(t, err)
+	items, err := iterator.ToSlice(context.Background(), got)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
 func TestRejoin(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "1+1", rejoin(repl.Command{Name: "1+1"}))
 	require.Equal(t, "x := 5",
 		rejoin(repl.Command{Name: "x", Args: []string{":=", "5"}}))
-	require.Equal(t, ":import math",
-		rejoin(repl.Command{Name: ":import", Args: []string{"math"}}))
+	require.Equal(t, ":doc fmt",
+		rejoin(repl.Command{Name: ":doc", Args: []string{"fmt"}}))
 }
 
 func TestOutputRows(t *testing.T) {

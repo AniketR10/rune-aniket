@@ -123,7 +123,7 @@ func (s *completionShim) Complete(
 		return iterator.FromSlice(candidates), nil
 	}
 	s.captured = capturedCompletion{
-		prefix:     completionPrefix(cmd, args),
+		prefix:     s.prefix(cmd, args),
 		candidates: candidates,
 	}
 	s.hasCap = true
@@ -169,4 +169,34 @@ func completionPrefix(cmd string, args []string) string {
 		return cmd[idx+1:]
 	}
 	return cmd
+}
+
+// PrefixCompleter lets a command handler override how the partial word
+// at the cursor is computed. A language REPL implements it so completion
+// candidates replace only the trailing identifier (e.g. "fmt.Pri" ->
+// "Pri") instead of the whole whitespace-delimited token, which would
+// otherwise be deleted wholesale on accept.
+type PrefixCompleter interface {
+	CompletionPrefix(line string) string
+}
+
+// prefix computes the partial word to be replaced on accept. When the
+// underlying handler is a PrefixCompleter it gets the final say over the
+// (reconstructed) input line; otherwise the whitespace-token default
+// applies.
+func (s *completionShim) prefix(cmd string, args []string) string {
+	if pc, ok := s.underlying.(PrefixCompleter); ok {
+		return pc.CompletionPrefix(reconstructLine(cmd, args))
+	}
+	return completionPrefix(cmd, args)
+}
+
+// reconstructLine rebuilds the input line the SDK split into cmd/args so
+// a PrefixCompleter can reason about identifier boundaries across the
+// whole line.
+func reconstructLine(cmd string, args []string) string {
+	if len(args) == 0 {
+		return cmd
+	}
+	return cmd + " " + strings.Join(args, " ")
 }

@@ -260,11 +260,38 @@ func (f *registryFallback) HandleCommand(
 func (f *registryFallback) Complete(
 	ctx context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
-	if args == nil {
-		return f.registry.Complete(ctx, cmd, args)
+	// A registered command's own argument completion always wins.
+	if args != nil {
+		if _, ok := f.registry.lookup(cmd); ok {
+			return f.registry.Complete(ctx, cmd, args)
+		}
+		return f.fallback.Complete(ctx, cmd, args)
 	}
-	if _, ok := f.registry.lookup(cmd); ok {
-		return f.registry.Complete(ctx, cmd, args)
+	// args == nil is command-name completion in a system shell, but in a
+	// language REPL the first token is itself a fragment of the hosted
+	// language (e.g. "fmt.Pri"). Offer the fallback's completions for
+	// the fragment, and only fall back to registered command names when
+	// the fallback has nothing to add.
+	fb, err := f.fallback.Complete(ctx, cmd, args)
+	if err != nil {
+		return nil, err
 	}
-	return f.fallback.Complete(ctx, cmd, args)
+	items, err := iterator.ToSlice(ctx, fb)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) > 0 {
+		return iterator.FromSlice(items), nil
+	}
+	return f.registry.Complete(ctx, cmd, args)
+}
+
+// CompletionPrefix forwards to the fallback handler when it is a
+// PrefixCompleter, so a language REPL's identifier-boundary prefix is
+// honored. Registry commands keep the default whitespace-token prefix.
+func (f *registryFallback) CompletionPrefix(line string) string {
+	if pc, ok := f.fallback.(PrefixCompleter); ok {
+		return pc.CompletionPrefix(line)
+	}
+	return completionPrefix(line, nil)
 }
