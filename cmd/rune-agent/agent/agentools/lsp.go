@@ -68,8 +68,11 @@ func resolveSymbol(
 	ctx context.Context, lsp semanticapi.LSP, parser syntaxapi.Parser, symbol string,
 ) ([]semanticapi.Location, bool, error) {
 	if strings.Contains(symbol, ".") {
-		matches, err := symbolresolve.Resolve(ctx, parser, symbol, nil)
-		if err == nil {
+		for _, spec := range symbolresolve.All() {
+			matches, err := symbolresolve.Resolve(ctx, parser, spec, symbol, nil)
+			if err != nil || len(matches) == 0 {
+				continue
+			}
 			locs := make([]semanticapi.Location, 0, len(matches))
 			for _, m := range matches {
 				locs = append(locs, semanticapi.Location{

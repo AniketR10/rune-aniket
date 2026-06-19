@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 )
 
 func TestNormalizeMethodName(t *testing.T) {
@@ -565,13 +566,13 @@ func benchmarkData() (parser *mockParser, nUnique int) {
 	seen := make(map[string]bool)
 	for i := 0; i < len(types); i += 2 {
 		s := types[i].Text + "." + types[i+1].Text
-		if isExported(types[i+1].Text) {
+		if symbolresolve.IsExported(types[i+1].Text) {
 			seen[s] = true
 		}
 	}
 	for i := 0; i < len(selectors); i += 2 {
 		pkg, sym := selectors[i].Text, selectors[i+1].Text
-		if isExported(sym) {
+		if symbolresolve.IsExported(sym) {
 			for _, p := range pkgs {
 				if pkg == p {
 					seen[pkg+"."+sym] = true
@@ -586,7 +587,7 @@ func benchmarkData() (parser *mockParser, nUnique int) {
 		pkgOf[p.File] = p.Text
 	}
 	for _, d := range defs {
-		if !isExported(d.Text) {
+		if !symbolresolve.IsExported(d.Text) {
 			continue
 		}
 		if name := pkgOf[d.File]; name != "" {

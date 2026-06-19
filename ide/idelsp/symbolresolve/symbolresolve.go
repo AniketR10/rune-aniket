@@ -21,9 +21,10 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-// Package symbolresolve resolves package-qualified Go symbol names
+// Package symbolresolve resolves package-qualified symbol names
 // (e.g. "iterator.Iterator") to their declaration locations using
-// tree-sitter queries against the workspace.
+// tree-sitter queries against the workspace. Language-specific
+// queries and rules live behind a per-language Spec.
 package symbolresolve
 
 import (
@@ -71,13 +72,14 @@ func (f ProgressFunc) Report(msg string, found int, step, total int64) {
 }
 
 // Resolve resolves a package-qualified symbol name (e.g.
-// "iterator.Iterator") to one or more declaration locations. Results
-// are deduplicated by file URI and collapsed by import path; when
-// multiple distinct packages remain, each Match Display name is
-// prefixed to disambiguate. progress, if non-nil, receives per-phase
-// updates. Returns ErrNoDot when name contains no ".".
+// "iterator.Iterator") to one or more declaration locations using the
+// given language spec. Results are deduplicated by file URI and
+// collapsed by import path; when multiple distinct packages remain,
+// each Match Display name is prefixed to disambiguate. progress, if
+// non-nil, receives per-phase updates. Returns ErrNoDot when name
+// contains no ".".
 func Resolve(
-	ctx context.Context, parser syntaxapi.Parser, name string,
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec, name string,
 	progress Progress,
 ) ([]Match, error) {
 	pkg, sym, hasDot := strings.Cut(name, ".")
@@ -102,7 +104,7 @@ func Resolve(
 	}
 
 	collect := func(query string, captures []string) error {
-		iter, err := parser.Search(query, captures, "go")
+		iter, err := parser.Search(query, captures, spec.LangID)
 		if err != nil {
 			return err
 		}
@@ -123,80 +125,132 @@ func Resolve(
 		}
 	}
 
-	report("Searching types…", 0, 0, 4)
-	if err := collect(
-		`(qualified_type package: (package_identifier) @pkg name: (type_identifier) @type)`,
-		[]string{"pkg", "type"},
-	); err != nil {
-		return nil, err
-	}
-	report("Searching expressions…", len(matches), 1, 4)
-	if err := collect(
-		`(selector_expression operand: (identifier) @pkg field: (field_identifier) @symbol)`,
-		[]string{"pkg", "symbol"},
-	); err != nil {
-		return nil, err
+	report("Searching references…", 0, 0, 4)
+	for i, rq := range spec.RefQueries {
+		if err := collect(rq.Query, rq.Captures); err != nil {
+			return nil, err
+		}
+		report("Searching references…", len(matches), int64(i+1), 4)
 	}
 
 	report("Searching definitions…", len(matches), 2, 4)
-	packages, err := FilePackages(ctx, parser)
+	packages, err := FilePackages(ctx, parser, spec)
 	if err != nil {
 		return nil, err
 	}
 	if len(matches) == 0 {
-		for fileURI, pkgName := range packages {
-			if pkgName != pkg {
-				continue
-			}
-			it, err := parser.QueryNode(fileURI,
-				syntaxapi.NodeCaptureDefinitionFunc|syntaxapi.NodeCaptureDefinitionType,
-			)
-			if err != nil {
-				return nil, err
-			}
-			for {
-				r, ok := it.Next(ctx)
-				if !ok {
-					break
-				}
-				if r.Text != sym || !isExported(r.Text) {
-					continue
-				}
-				add(fileURI.String(), semanticapi.Position{
-					Line:      uint32(r.From.Y),
-					Character: uint32(r.From.X),
-				})
-			}
-			if err := it.Err(); err != nil {
-				_ = it.Close()
-				return nil, err
-			}
-			_ = it.Close()
+		if err := collectDefinitions(
+			ctx, parser, spec, packages, pkg, sym, add,
+		); err != nil {
+			return nil, err
 		}
 	}
 
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("no symbols found for %q", name)
 	}
-	if len(matches) > 1 {
+	if len(matches) > 1 && spec.ImportPathQuery != "" {
 		report("Resolving imports…", len(matches), 3, 4)
-		matches = deduplicateByImport(ctx, parser, matches, pkg)
+		matches = deduplicateByImport(ctx, parser, spec, matches, pkg)
 	}
 	if len(matches) > 1 {
-		disambiguateDisplayNames(matches, name)
+		disambiguateDisplayNames(spec, matches, name)
 	}
 	return matches, nil
 }
 
-// FilePackages returns a map from file URI to the Go package name
-// declared by its package clause. Files without a parseable package
-// clause are omitted.
+// collectDefinitions streams workspace definitions matching sym in the
+// target package and feeds them to add. Files are qualified via their
+// package clause when the spec has one, otherwise via spec.Qualifier.
+func collectDefinitions(
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	packages map[workspaceapi.URI]string, pkg, sym string,
+	add func(uri string, pos semanticapi.Position),
+) error {
+	files, err := definitionFiles(ctx, parser, spec, packages, pkg)
+	if err != nil {
+		return err
+	}
+	for _, fileURI := range files {
+		it, err := parser.QueryNode(fileURI,
+			syntaxapi.NodeCaptureDefinitionFunc|syntaxapi.NodeCaptureDefinitionType,
+		)
+		if err != nil {
+			return err
+		}
+		for {
+			r, ok := it.Next(ctx)
+			if !ok {
+				break
+			}
+			if r.Text != sym || !spec.exported(r.Text) {
+				continue
+			}
+			add(fileURI.String(), semanticapi.Position{
+				Line:      uint32(r.From.Y),
+				Character: uint32(r.From.X),
+			})
+		}
+		if err := it.Err(); err != nil {
+			_ = it.Close()
+			return err
+		}
+		_ = it.Close()
+	}
+	return nil
+}
+
+// definitionFiles returns the file URIs whose qualifier equals pkg. When
+// the spec has a package clause it consults the packages map; otherwise
+// it derives the qualifier from each file's URI via spec.Qualifier.
+func definitionFiles(
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	packages map[workspaceapi.URI]string, pkg string,
+) ([]workspaceapi.URI, error) {
+	if spec.hasPackages() {
+		var files []workspaceapi.URI
+		for fileURI, pkgName := range packages {
+			if pkgName == pkg {
+				files = append(files, fileURI)
+			}
+		}
+		return files, nil
+	}
+	iter, err := parser.SearchNode(
+		syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = iter.Close() }()
+	seen := make(map[workspaceapi.URI]bool)
+	var files []workspaceapi.URI
+	for {
+		r, ok := iter.Next(ctx)
+		if !ok {
+			return files, iter.Err()
+		}
+		uri := r.File.String()
+		if seen[r.File] || !spec.matchesFile(uri) || spec.qualifier(uri) != pkg {
+			continue
+		}
+		seen[r.File] = true
+		files = append(files, r.File)
+	}
+}
+
+// FilePackages returns a map from file URI to the package name declared
+// by its package clause, according to spec. Files without a parseable
+// package clause are omitted. When the spec has no package clause it
+// returns nil.
 func FilePackages(
-	ctx context.Context, parser syntaxapi.Parser,
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
 ) (map[workspaceapi.URI]string, error) {
+	if !spec.hasPackages() {
+		return nil, nil
+	}
 	iter, err := parser.Search(
-		`(package_clause (package_identifier) @pkg)`,
-		[]string{"pkg"}, "go",
+		spec.PackageClauseQuery, spec.PackageClauseCaptures, spec.LangID,
 	)
 	if err != nil {
 		return nil, err
@@ -218,12 +272,14 @@ func FilePackages(
 }
 
 // SearchDefinitions streams package-qualified definition names
-// ("pkg.Name") for every function and type defined in the workspace.
-// packages provides the file→package mapping; entries whose file is
-// absent from packages or whose name is rejected by keep are skipped.
+// ("pkg.Name") for every function and type defined in the workspace,
+// according to spec. When the spec has a package clause, packages
+// provides the file→package mapping and files absent from it are
+// skipped; otherwise the qualifier is derived from each file's URI.
+// Names rejected by the spec's export predicate or by keep are skipped.
 // keep may be nil.
 func SearchDefinitions(
-	ctx context.Context, parser syntaxapi.Parser,
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
 	packages map[workspaceapi.URI]string,
 	ch chan<- string, keep func(string) bool,
 ) error {
@@ -239,8 +295,19 @@ func SearchDefinitions(
 		if !ok {
 			return iter.Err()
 		}
-		pkgName := packages[r.File]
+		if !spec.matchesFile(r.File.String()) {
+			continue
+		}
+		var pkgName string
+		if spec.hasPackages() {
+			pkgName = packages[r.File]
+		} else {
+			pkgName = spec.qualifier(r.File.String())
+		}
 		if pkgName == "" {
+			continue
+		}
+		if !spec.exported(r.Text) {
 			continue
 		}
 		if keep != nil && !keep(r.Text) {
@@ -254,48 +321,49 @@ func SearchDefinitions(
 	}
 }
 
-func disambiguateDisplayNames(matches []Match, name string) {
+// ImportedAliases returns, per file, the set of import aliases in scope
+// according to spec. The completer uses it to keep only references whose
+// package alias is actually imported. Returns an empty map when the spec
+// declares no import queries.
+func ImportedAliases(
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+) (map[workspaceapi.URI]map[string]bool, error) {
+	result := make(map[workspaceapi.URI]map[string]bool)
+	if spec.ImportPathQuery == "" {
+		return result, nil
+	}
+	importPaths, err := resolveImportPaths(ctx, parser, spec)
+	if err != nil {
+		return nil, err
+	}
+	for file, aliases := range importPaths {
+		set := make(map[string]bool, len(aliases))
+		for alias := range aliases {
+			set[alias] = true
+		}
+		result[file] = set
+	}
+	return result, nil
+}
+
+func disambiguateDisplayNames(spec *Spec, matches []Match, name string) {
 	for i, m := range matches {
 		prefix := m.ImportPath
 		if prefix == "" {
-			prefix = goPackagePathFromURI(m.URI)
+			prefix = spec.displayPath(m.URI)
 		}
 		matches[i].Display = prefix + ": " + name
 	}
 }
 
-// goPackagePathFromURI derives a Go-style display prefix from a file
-// URI. For Go module cache paths it recovers the import path by
-// stripping "@version" segments; otherwise it returns the file's
-// directory path. The URI scheme is ignored.
-func goPackagePathFromURI(uri string) string {
-	parsed, err := workspaceapi.ParseURI(uri)
-	if err != nil {
-		return uri
-	}
-	dir := path.Dir(parsed.Path())
-	if idx := strings.Index(dir, "/pkg/mod/"); idx != -1 {
-		modPath := dir[idx+len("/pkg/mod/"):]
-		parts := strings.Split(modPath, "/")
-		for i, part := range parts {
-			if atIdx := strings.Index(part, "@"); atIdx != -1 {
-				parts[i] = part[:atIdx]
-			}
-		}
-		return strings.Join(parts, "/")
-	}
-	return dir
-}
-
 func resolveImportPaths(
-	ctx context.Context, parser syntaxapi.Parser,
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
 ) (map[workspaceapi.URI]map[string]string, error) {
 	type fileImports = map[workspaceapi.URI][]string
 	type fileAliases = map[workspaceapi.URI]map[string]string
 
 	pathIter, err := parser.Search(
-		`(import_spec path: (interpreted_string_literal) @path)`,
-		[]string{"path"}, "go",
+		spec.ImportPathQuery, spec.ImportPathCaptures, spec.LangID,
 	)
 	if err != nil {
 		return nil, err
@@ -315,8 +383,7 @@ func resolveImportPaths(
 	}
 
 	aliasIter, err := parser.Search(
-		`(import_spec name: (package_identifier) @alias path: (interpreted_string_literal) @path)`,
-		[]string{"alias", "path"}, "go",
+		spec.ImportAliasQuery, spec.ImportAliasCaptures, spec.LangID,
 	)
 	if err != nil {
 		return nil, err
@@ -364,10 +431,10 @@ func resolveImportPaths(
 }
 
 func deduplicateByImport(
-	ctx context.Context, parser syntaxapi.Parser,
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
 	matches []Match, alias string,
 ) []Match {
-	importPaths, err := resolveImportPaths(ctx, parser)
+	importPaths, err := resolveImportPaths(ctx, parser, spec)
 	if err != nil {
 		return matches
 	}
@@ -417,11 +484,3 @@ func pairedResults(
 		}, it.Close,
 	)
 }
-
-func isExported(name string) bool {
-	return len(name) > 0 && name[0] >= 'A' && name[0] <= 'Z'
-}
-
-// IsExported reports whether name starts with an uppercase ASCII
-// letter, matching Go's export rules.
-func IsExported(name string) bool { return isExported(name) }

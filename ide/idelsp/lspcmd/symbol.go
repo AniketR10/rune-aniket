@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -50,14 +49,24 @@ func resolveSymbol(
 	ctx context.Context, parser syntaxapi.Parser, name string,
 	progress symbolProgress,
 ) ([]symbolMatch, error) {
-	matches, err := symbolresolve.Resolve(ctx, parser, name, progress)
-	if err != nil {
-		if errors.Is(err, symbolresolve.ErrNoDot) {
-			return nil, fmt.Errorf("no symbols found for %q", name)
+	var lastErr error
+	for _, spec := range symbolresolve.All() {
+		matches, err := symbolresolve.Resolve(ctx, parser, spec, name, progress)
+		if err != nil {
+			if errors.Is(err, symbolresolve.ErrNoDot) {
+				return nil, fmt.Errorf("no symbols found for %q", name)
+			}
+			lastErr = err
+			continue
 		}
-		return nil, err
+		if len(matches) > 0 {
+			return matches, nil
+		}
 	}
-	return matches, nil
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no symbols found for %q", name)
 }
 
 func resolveCommandSymbol(
@@ -209,40 +218,42 @@ func completeReferencedSymbol(
 func produceReferencedSymbols(
 	ctx context.Context, parser syntaxapi.Parser, ch chan<- string,
 ) error {
-	imports, err := reduceImports(ctx, parser)
+	for _, spec := range symbolresolve.All() {
+		if err := produceSpecSymbols(ctx, parser, spec, ch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func produceSpecSymbols(
+	ctx context.Context, parser syntaxapi.Parser,
+	spec *symbolresolve.Spec, ch chan<- string,
+) error {
+	imports, err := symbolresolve.ImportedAliases(ctx, parser, spec)
 	if err != nil {
 		return err
 	}
-
-	if err := searchPairs(ctx, parser,
-		`(qualified_type package: (package_identifier) @pkg name: (type_identifier) @type)`,
-		[]string{"pkg", "type"}, "go",
-		func(p [2]syntaxapi.Result) bool { return isExported(p[1].Text) },
-		ch,
-	); err != nil {
-		return err
-	}
-
-	if err := searchPairs(ctx, parser,
-		`(selector_expression operand: (identifier) @pkg field: (field_identifier) @symbol)`,
-		[]string{"pkg", "symbol"}, "go",
-		func(p [2]syntaxapi.Result) bool {
-			if !isExported(p[1].Text) {
+	for _, rq := range spec.RefQueries {
+		keep := func(p [2]syntaxapi.Result) bool {
+			if spec.IsExported != nil && !spec.IsExported(p[1].Text) {
 				return false
 			}
-			m := imports[p[0].File]
-			return m != nil && m[p[0].Text]
-		},
-		ch,
-	); err != nil {
-		return err
+			if rq.RequireImport {
+				m := imports[p[0].File]
+				return m != nil && m[p[0].Text]
+			}
+			return true
+		}
+		if err := searchPairs(ctx, parser, rq.Query, rq.Captures, spec.LangID, keep, ch); err != nil {
+			return err
+		}
 	}
-
-	packages, err := symbolresolve.FilePackages(ctx, parser)
+	packages, err := symbolresolve.FilePackages(ctx, parser, spec)
 	if err != nil {
 		return err
 	}
-	return symbolresolve.SearchDefinitions(ctx, parser, packages, ch, isExported)
+	return symbolresolve.SearchDefinitions(ctx, parser, spec, packages, ch, nil)
 }
 
 func searchPairs(
@@ -275,69 +286,6 @@ func searchPairs(
 	}
 }
 
-func reduceImports(
-	ctx context.Context, parser syntaxapi.Parser,
-) (map[workspaceapi.URI]map[string]bool, error) {
-	type fileImports = map[workspaceapi.URI]map[string]bool
-
-	pathIter, err := parser.Search(
-		`(import_spec path: (interpreted_string_literal) @path)`,
-		[]string{"path"}, "go",
-	)
-	if err != nil {
-		return nil, err
-	}
-	imports, err := iterator.Reduce(ctx, pathIter,
-		func(m fileImports, r syntaxapi.Result) (fileImports, error) {
-			p := strings.Trim(r.Text, `"`)
-			alias := path.Base(p)
-			if alias == "." || alias == "_" {
-				return m, nil
-			}
-			if m == nil {
-				m = make(fileImports)
-			}
-			if m[r.File] == nil {
-				m[r.File] = make(map[string]bool)
-			}
-			m[r.File][alias] = true
-			return m, nil
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	aliasIter, err := parser.Search(
-		`(import_spec name: (package_identifier) @alias path: (interpreted_string_literal) @path)`,
-		[]string{"alias", "path"}, "go",
-	)
-	if err != nil {
-		return nil, err
-	}
-	_, err = iterator.Reduce(ctx, pairedResults(aliasIter),
-		func(_ struct{}, p [2]syntaxapi.Result) (struct{}, error) {
-			alias := p[0].Text
-			if alias == "." || alias == "_" || imports == nil {
-				return struct{}{}, nil
-			}
-			defaultAlias := path.Base(strings.Trim(p[1].Text, `"`))
-			if fm := imports[p[0].File]; fm != nil {
-				delete(fm, defaultAlias)
-				fm[alias] = true
-			}
-			return struct{}{}, nil
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if imports == nil {
-		imports = make(fileImports)
-	}
-	return imports, nil
-}
-
 func pairedResults(
 	it iterator.Iterator[syntaxapi.Result],
 ) iterator.Iterator[[2]syntaxapi.Result] {
@@ -359,10 +307,6 @@ func pairedResults(
 			}
 		}, it.Close,
 	)
-}
-
-func isExported(name string) bool {
-	return len(name) > 0 && name[0] >= 'A' && name[0] <= 'Z'
 }
 
 func normalizeMethodName(name string) string {

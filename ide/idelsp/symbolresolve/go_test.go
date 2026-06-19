@@ -298,7 +298,7 @@ func TestResolveE2E(t *testing.T) {
 
 			rec := &recordingProgress{}
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, tt.symbol, rec,
+				context.Background(), env.parser, symbolresolve.Go, tt.symbol, rec,
 			)
 
 			if tt.wantErrIs != nil {
@@ -388,7 +388,7 @@ func TestFilePackagesE2E(t *testing.T) {
 	env := setupResolveEnv(t)
 
 	packages, err := symbolresolve.FilePackages(
-		context.Background(), env.parser,
+		context.Background(), env.parser, symbolresolve.Go,
 	)
 	require.NoError(t, err)
 
@@ -428,7 +428,7 @@ func TestSearchDefinitionsE2E(t *testing.T) {
 	env := setupResolveEnv(t)
 
 	packages, err := symbolresolve.FilePackages(
-		context.Background(), env.parser,
+		context.Background(), env.parser, symbolresolve.Go,
 	)
 	require.NoError(t, err)
 
@@ -437,7 +437,7 @@ func TestSearchDefinitionsE2E(t *testing.T) {
 	go func() {
 		defer close(ch)
 		done <- symbolresolve.SearchDefinitions(
-			context.Background(), env.parser, packages, ch,
+			context.Background(), env.parser, symbolresolve.Go, packages, ch,
 			symbolresolve.IsExported,
 		)
 	}()
@@ -490,7 +490,7 @@ func TestResolveCancelledContext(t *testing.T) {
 
 	// The exact error is implementation-defined; what matters is
 	// that the call returns rather than hanging on a closed channel.
-	_, _ = symbolresolve.Resolve(ctx, env.parser, "mylib.MyType", nil)
+	_, _ = symbolresolve.Resolve(ctx, env.parser, symbolresolve.Go, "mylib.MyType", nil)
 }
 
 func TestResolveConcurrent(t *testing.T) {
@@ -513,7 +513,7 @@ func TestResolveConcurrent(t *testing.T) {
 		go func(symbol string) {
 			defer wg.Done()
 			matches, err := symbolresolve.Resolve(
-				context.Background(), env.parser, symbol, nil,
+				context.Background(), env.parser, symbolresolve.Go, symbol, nil,
 			)
 			assert.NoErrorf(t, err, "Resolve(%q)", symbol)
 			assert.NotEmptyf(t, matches, "Resolve(%q)", symbol)
