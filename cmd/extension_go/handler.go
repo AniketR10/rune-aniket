@@ -29,11 +29,14 @@ import (
 	"sort"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
@@ -43,6 +46,8 @@ func newGoHandler(
 	lsp semanticapi.LSP, editor textapi.Editor,
 	wm browserapi.WindowManager, notify browserapi.Notifications,
 	parser syntaxapi.Parser, executor workspaceapi.Executor,
+	interrupter term.Interrupter, fs workspaceapi.FileSystem,
+	cfg config.Config, storage storageapi.Service,
 ) (textapi.CommandManual, textapi.CommandHandler, error) {
 	sel := lspcmd.NewSelectionTracker()
 	evs := []textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}
@@ -124,6 +129,9 @@ func newGoHandler(
 
 		// Imports.
 		"add-import": addImportHandler(lsp, notify),
+
+		// Interactive REPL.
+		"repl": newREPLSubcommand(wm, interrupter, fs, executor, lsp, cfg, storage),
 	}
 
 	manual := textapi.CommandManual{
@@ -167,6 +175,7 @@ func newGoHandler(
 			{Name: "upgrade-dependency", Summary: "Check for available upgrades of direct dependencies in go.mod"},
 			{Name: "vulncheck", Summary: "Run govulncheck to find known vulnerabilities in functions reachable by the application"},
 			{Name: "add-import", Summary: "Add a package import to the current file"},
+			{Name: "repl", Summary: "Open an interactive Go REPL that runs via go run in the project's module"},
 		},
 	}
 

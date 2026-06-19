@@ -839,7 +839,7 @@ func newTestHandler(
 	t.Helper()
 	me := newMockEditor()
 	mn := &mockNotifications{}
-	_, handler, err := newGoHandler(env.mgr, me, nil, mn, nil, executor)
+	_, handler, err := newGoHandler(env.mgr, me, nil, mn, nil, executor, nil, nil, nil, nil)
 	require.NoError(t, err)
 	return handler, me, mn
 }
@@ -867,7 +867,7 @@ func newTestHandlerWithEditorEvents(
 		})
 	}
 	mn := &mockNotifications{}
-	_, handler, err := newGoHandler(env.mgr, me, nil, mn, nil, nil)
+	_, handler, err := newGoHandler(env.mgr, me, nil, mn, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	return handler, me, mn
 }

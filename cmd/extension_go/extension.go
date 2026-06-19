@@ -59,6 +59,7 @@ func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 			extensionapi.PermissionFileSystem,
 			extensionapi.PermissionBrowserResourceOpener,
 			extensionapi.PermissionSyntaxTree,
+			extensionapi.PermissionStorage,
 		),
 	}
 	return ext, meta
@@ -102,7 +103,11 @@ func (e *goExtension) ExtendWorkspace(
 
 	parser := w.Parser(ctx)
 	executor := w.Executor(ctx)
-	manual, handler, err := newGoHandler(lsp, editor, wm, notify, parser, executor)
+	interrupter := w.Interrupter(ctx)
+	fs := w.FileSystem(ctx)
+	storage := w.Storage(ctx)
+	manual, handler, err := newGoHandler(
+		lsp, editor, wm, notify, parser, executor, interrupter, fs, cfg, storage)
 	if err != nil {
 		return fmt.Errorf("create handler: %w", err)
 	}

@@ -26,6 +26,7 @@ package ideshell
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -425,4 +426,88 @@ func TestShellHandlerForwardsProgressToRegisteredCommand(t *testing.T) {
 	assert.Equal(t, int64(100), last.progress)
 	assert.Equal(t, int64(100), last.total)
 	assert.Equal(t, "B", last.units)
+}
+
+// TestDisableShellInterpreterBypassesSh verifies that with a
+// DisableShellInterpreter fallback the inner repl dispatches through the
+// CommandRegistry first and routes unmatched lines to the fallback
+// handler rather than parsing them with mvdan/sh or looking them up on
+// PATH.
+func TestDisableShellInterpreterBypassesSh(t *testing.T) {
+	var fallbackLines []string
+	fallback := &mockCmdHandler{
+		handleFn: func(
+			_ context.Context, cmd repl.Command, _ repl.ProgressWriter,
+		) (iterator.Iterator[component.Responsive], error) {
+			line := cmd.Name
+			if len(cmd.Args) > 0 {
+				line += " " + strings.Join(cmd.Args, " ")
+			}
+			fallbackLines = append(fallbackLines, line)
+			return toLines("fellthrough"), nil
+		},
+	}
+	h, r := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{DisableShellInterpreter: fallback},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+
+	// The shim talks to the registry+fallback, not the sh layer.
+	_, ok := h.shim.underlying.(*registryFallback)
+	require.True(t, ok,
+		"DisableShellInterpreter must make the registry+fallback the underlying handler, got %T",
+		h.shim.underlying)
+
+	ran := false
+	r.Register("ping", "ping", &mockCmdHandler{
+		handleFn: func(
+			_ context.Context, _ repl.Command, _ repl.ProgressWriter,
+		) (iterator.Iterator[component.Responsive], error) {
+			ran = true
+			return toLines("pong"), nil
+		},
+	})
+
+	ctx := context.Background()
+
+	iter, err := h.shim.HandleCommand(
+		ctx, repl.Command{Name: "ping"}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	out := collectText(t, iter)
+	require.Len(t, out, 1)
+	require.Contains(t, out[0], "pong")
+	require.True(t, ran, "registered command must run")
+	require.Empty(t, fallbackLines, "registered command must not reach the fallback")
+
+	// An unregistered line is not shell-parsed nor PATH-resolved; it
+	// is routed to the fallback handler with the whole line intact.
+	iter, err = h.shim.HandleCommand(
+		ctx, repl.Command{Name: "x", Args: []string{":=", "5"}},
+		repl.NopProgressWriter())
+	require.NoError(t, err)
+	out = collectText(t, iter)
+	require.Len(t, out, 1)
+	require.Contains(t, out[0], "fellthrough")
+	require.Equal(t, []string{"x := 5"}, fallbackLines)
+}
+
+// TestDefaultShellInterpreterEnabled verifies the inverse: without the
+// flag the shell interpreter (sh) wraps the registry so shell syntax and
+// PATH fallback remain available.
+func TestDefaultShellInterpreterEnabled(t *testing.T) {
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+
+	_, ok := h.shim.underlying.(*CommandRegistry)
+	require.False(t, ok,
+		"default config must wrap the registry with the sh interpreter, got %T",
+		h.shim.underlying)
 }

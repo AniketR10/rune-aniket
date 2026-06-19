@@ -65,6 +65,15 @@ type Config struct {
 	// construction when Modal is true, sparing the user from pressing
 	// `i` before typing into a fresh shell prompt.
 	ModalStartInsert bool
+	// DisableShellInterpreter, when non-nil, runs the shell as a pure
+	// command registry with no mvdan/sh parsing and no PATH executable
+	// fallback. Lines whose first token does not match a registered
+	// command are dispatched to this handler instead of surfacing
+	// repl.ErrNotFound. Use it for REPL surfaces (e.g. a language REPL)
+	// where every input line is a fragment of the hosted language
+	// rather than a discrete command — the handler receives the whole
+	// line reconstructed from cmd.Name and cmd.Args.
+	DisableShellInterpreter repl.CommandHandler
 }
 
 // New creates an IDE shell Handler wired with a CommandRegistry, sh
@@ -100,7 +109,14 @@ func New(
 		opts = append(opts, repl.WithMaxHistory(cfg.MaxHistory))
 	}
 	opts = append(opts, repl.WithPrompt(prompt))
-	shim := &completionShim{underlying: sh.New(r, cfg.Workspace)}
+	var underlying repl.CommandHandler
+	switch {
+	case cfg.DisableShellInterpreter != nil:
+		underlying = &registryFallback{registry: r, fallback: cfg.DisableShellInterpreter}
+	default:
+		underlying = sh.New(r, cfg.Workspace)
+	}
+	shim := &completionShim{underlying: underlying}
 	inner := repl.New(shim, scheduleNextTick, interrupter, opts...)
 	list := search.NewList(search.ListConfig{
 		Algo:            search.FuzzyMatch,

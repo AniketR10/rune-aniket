@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 // Package ideshell provides an extensible REPL/shell for managing
 // IDE internal resources. Commands are registered via a
 // CommandRegistry and executed through an sh-aware repl.Handler.
@@ -158,6 +157,14 @@ func (r *CommandRegistry) Complete(
 	return iterator.FromSlice(names), nil
 }
 
+// lookup returns the entry registered under name, if any.
+func (r *CommandRegistry) lookup(name string) (entry, bool) {
+	r.mu.RLock()
+	e, ok := r.commands[name]
+	r.mu.RUnlock()
+	return e, ok
+}
+
 // Help returns help output. With no args it lists all
 // commands and their summaries. With args it looks up the
 // first arg and delegates to that handler's Help with the
@@ -226,4 +233,38 @@ type entry struct {
 	summary  string
 	synopsis string
 	handler  CommandHandler
+}
+
+// registryFallback dispatches first to a CommandRegistry and, when the
+// registry reports repl.ErrNotFound, falls back to a secondary handler.
+// It backs Config.DisableShellInterpreter for REPL surfaces where every
+// unmatched input line is a fragment of a hosted language rather than a
+// discrete command.
+type registryFallback struct {
+	registry *CommandRegistry
+	fallback repl.CommandHandler
+}
+
+var _ repl.CommandHandler = (*registryFallback)(nil)
+
+func (f *registryFallback) HandleCommand(
+	ctx context.Context, cmd repl.Command, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	iter, err := f.registry.HandleCommand(ctx, cmd, pw)
+	if errors.Is(err, repl.ErrNotFound) {
+		return f.fallback.HandleCommand(ctx, cmd, pw)
+	}
+	return iter, err
+}
+
+func (f *registryFallback) Complete(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	if args == nil {
+		return f.registry.Complete(ctx, cmd, args)
+	}
+	if _, ok := f.registry.lookup(cmd); ok {
+		return f.registry.Complete(ctx, cmd, args)
+	}
+	return f.fallback.Complete(ctx, cmd, args)
 }
