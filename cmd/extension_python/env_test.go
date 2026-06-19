@@ -166,10 +166,10 @@ func TestEnsureEnvironmentCommands(t *testing.T) {
 			setupFS: func(f *fakeFS) { f.addFile("requirements.txt") },
 			responses: map[string]scriptedCmd{
 				"uv python find":                     {},
-				"uv venv":                            {},
+				"uv venv --allow-existing":           {},
 				"uv pip install -r requirements.txt": {},
 			},
-			wantCalls: []string{"uv python find", "uv venv", "uv pip install -r requirements.txt"},
+			wantCalls: []string{"uv python find", "uv venv --allow-existing", "uv pip install -r requirements.txt"},
 			wantTotal: 3,
 			wantSync:  "Installing requirements",
 		},

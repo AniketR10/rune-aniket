@@ -163,7 +163,10 @@ func runSyncStep(
 		return runUV(ctx, uvBin, exec, "sync")
 	case kindRequirements:
 		_ = notify.UpdateNotificationProgress(notifID, "Installing requirements", step, total)
-		if err := runUV(ctx, uvBin, exec, "venv"); err != nil {
+		// `--allow-existing` keeps the venv creation idempotent: on a re-run
+		// it preserves the existing .venv instead of erroring on the present
+		// target directory.
+		if err := runUV(ctx, uvBin, exec, "venv", "--allow-existing"); err != nil {
 			return err
 		}
 		return runUV(ctx, uvBin, exec, "pip", "install", "-r", firstRequirementsFile(fs))
