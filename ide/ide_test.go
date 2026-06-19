@@ -474,6 +474,248 @@ command:
 			"got %q. full result: %v", got[0], got)
 }
 
+// TestE2EIssueImplementAliasChainOrdering reproduces the user-reported
+// `issue-implement` failure. The alias chains a nested alias (standing
+// in for `worktreenew`) followed by two `extensionready` steps:
+//
+//	issue-implement:
+//	  command:
+//	    - worktreelike $1
+//	    - extensionready dummy agent $1
+//	    - extensionready dummy chatskill issue-implement $1
+//
+// `worktreelike` is itself an alias whose body runs a single command
+// that records its execution (the stand-in for the real worktree
+// creation; we do not need a git worktree to exercise the ordering
+// bug). The three steps must run in submission order: the nested alias
+// first, then `agent`, then `chatskill`.
+//
+// The bug: ex.dispatchCommand dispatches each expanded alias step via
+// text.Component.DispatchCommand, which only resolves subscribed
+// commands — not alias names. So a step whose name is itself an alias
+// (`worktreelike`) is silently dropped: its body never runs. In the
+// real config that means the worktree workspace is never created and
+// the `extensionready` steps run against the wrong workspace.
+func TestE2EIssueImplementAliasChainOrdering(t *testing.T) {
+	dataDir := t.TempDir()
+	repo := t.TempDir()
+	seed := filepath.Join(repo, "seed.txt")
+	require.NoError(t, os.WriteFile(seed, nil, 0o666))
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  show_manual: false
+  key: ":"
+  aliases:
+    worktreelike:
+      command:
+        - recordfirst $1
+    issue-implement:
+      command:
+        - worktreelike $1
+        - extensionready dummy agent $1
+        - extensionready dummy chatskill issue-implement $1
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	// Mirror the production event loop: a single consumer runs
+	// scheduled callbacks in enqueue order (run.go reads one
+	// EventInterrupt at a time from a single channel). A goroutine
+	// per call would let two dispatches race for mu and reorder, which
+	// production never does.
+	scheduleNextTick, _ := newTestScheduler(mu)
+	runner := newPerIDReadyRunner("dummy")
+	runnerFn := func(
+		_ workspaceapi.URI,
+		_ map[extensionapi.Permission]extension.ResourceRegistrar,
+		_ string, _ browser.Notifications,
+		_, _ schemeapi.Executor, _ extension.Grantor, _ text.Editor,
+		_ ideauthorizer.PromptOpener, _ storageapi.Service,
+		_ func(func()) bool) (extension.Runner, error) {
+		return runner, nil
+	}
+
+	i, err := New(repo, configPath, dataDir, newTestStorage(t, dataDir),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(runnerFn)),
+		WithScheduleNextTick(scheduleNextTick),
+		WithLocker(mu),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	seedURI, err := workspaceapi.CurrentUserHostURI(seed)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(seedURI))
+	mu.Unlock()
+
+	// The dummy extension registers the follow-up commands the alias
+	// dispatches; each records its name (plus the nested-alias step).
+	var orderMu sync.Mutex
+	var order []string
+	record := func(name string) text.CommandHandler {
+		return text.FuncCommandHandler(
+			func(context.Context, textapi.Command) error {
+				orderMu.Lock()
+				order = append(order, name)
+				orderMu.Unlock()
+				return nil
+			}, nil)
+	}
+	require.NoError(t, i.workspaceHandler.subscribeCommand(
+		textapi.CommandManual{Name: "recordfirst"}, record("first")))
+	require.NoError(t, i.workspaceHandler.subscribeCommand(
+		textapi.CommandManual{Name: "agent"}, record("agent")))
+	require.NoError(t, i.workspaceHandler.subscribeCommand(
+		textapi.CommandManual{Name: "chatskill"}, record("chatskill")))
+
+	invocation := ":issue-implement<space>my-branch<enter>"
+	keys, err := term.ParseKeys(invocation)
+	require.NoError(t, err)
+	for _, k := range keys {
+		mu.Lock()
+		root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+		mu.Unlock()
+	}
+	i.workspaceHandler.focusEx().Wait()
+
+	// Let the extension become ready so the queued extensionready
+	// follow-up commands dispatch.
+	runner.release("dummy")
+
+	require.Eventually(t, func() bool {
+		orderMu.Lock()
+		defer orderMu.Unlock()
+		return len(order) == 3
+	}, 5*time.Second, 20*time.Millisecond,
+		"all three alias steps must run: the nested worktreelike alias, "+
+			"then agent, then chatskill")
+
+	orderMu.Lock()
+	defer orderMu.Unlock()
+	assert.Equal(t, []string{"first", "agent", "chatskill"}, order,
+		"alias steps must dispatch in submission order; a missing "+
+			"\"first\" means the nested worktreelike alias was dropped "+
+			"instead of expanded")
+}
+
+// TestE2EExtensionReadyChainOrderingNoWorktree is the same scenario
+// without the leading nested alias, isolating the extensionready
+// ordering on a single workspace:
+//
+//	issue-implement:
+//	  command:
+//	    - extensionready dummy agent $1
+//	    - extensionready dummy chatskill issue-implement $1
+//
+// With no pending workspace reservation, both steps run against the
+// focused workspace. `chatskill` must dispatch after `agent` — the
+// per-extension extensionready queue must preserve submission order
+// even when both follow-up commands wait on the same extension.
+func TestE2EExtensionReadyChainOrderingNoWorktree(t *testing.T) {
+	dataDir := t.TempDir()
+	repo := t.TempDir()
+	seed := filepath.Join(repo, "seed.txt")
+	require.NoError(t, os.WriteFile(seed, nil, 0o666))
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  show_manual: false
+  key: ":"
+  aliases:
+    issue-implement:
+      command:
+        - extensionready dummy agent $1
+        - extensionready dummy chatskill issue-implement $1
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick, _ := newTestScheduler(mu)
+	runner := newPerIDReadyRunner("dummy")
+	runnerFn := func(
+		_ workspaceapi.URI,
+		_ map[extensionapi.Permission]extension.ResourceRegistrar,
+		_ string, _ browser.Notifications,
+		_, _ schemeapi.Executor, _ extension.Grantor, _ text.Editor,
+		_ ideauthorizer.PromptOpener, _ storageapi.Service,
+		_ func(func()) bool) (extension.Runner, error) {
+		return runner, nil
+	}
+
+	i, err := New(repo, configPath, dataDir, newTestStorage(t, dataDir),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(runnerFn)),
+		WithScheduleNextTick(scheduleNextTick),
+		WithLocker(mu),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	seedURI, err := workspaceapi.CurrentUserHostURI(seed)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(seedURI))
+	mu.Unlock()
+
+	var orderMu sync.Mutex
+	var order []string
+	record := func(name string) text.CommandHandler {
+		return text.FuncCommandHandler(
+			func(context.Context, textapi.Command) error {
+				orderMu.Lock()
+				order = append(order, name)
+				orderMu.Unlock()
+				return nil
+			}, nil)
+	}
+	require.NoError(t, i.workspaceHandler.subscribeCommand(
+		textapi.CommandManual{Name: "agent"}, record("agent")))
+	require.NoError(t, i.workspaceHandler.subscribeCommand(
+		textapi.CommandManual{Name: "chatskill"}, record("chatskill")))
+
+	invocation := ":issue-implement<space>my-branch<enter>"
+	keys, err := term.ParseKeys(invocation)
+	require.NoError(t, err)
+	for _, k := range keys {
+		mu.Lock()
+		root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+		mu.Unlock()
+	}
+	i.workspaceHandler.focusEx().Wait()
+
+	runner.release("dummy")
+
+	require.Eventually(t, func() bool {
+		orderMu.Lock()
+		defer orderMu.Unlock()
+		return len(order) == 2
+	}, 5*time.Second, 20*time.Millisecond,
+		"both extensionready follow-up commands must run")
+
+	orderMu.Lock()
+	defer orderMu.Unlock()
+	assert.Equal(t, []string{"agent", "chatskill"}, order,
+		"chatskill must dispatch after agent; the per-extension "+
+			"extensionready queue must preserve submission order")
+}
+
 // TestE2EWorkspaceReloadRestoresLayoutAndTerminalOutput drives the
 // full real IDE — real config, real file scheme, real vte handler —
 // through the same flow that surfaced the original

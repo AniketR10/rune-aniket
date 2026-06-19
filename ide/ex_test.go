@@ -5570,6 +5570,49 @@ func TestSearchAstAliasesFromRuneStar(t *testing.T) {
 	}
 }
 
+// TestDispatchAliasCycle covers the runtime alias-recursion guard in
+// ex.dispatchExpanded. The config-load validator (text.ValidateCommandAliases)
+// only catches cycles whose whole target equals an alias name, so a
+// cyclic step that carries arguments slips past it and must be stopped
+// at dispatch time instead of recursing until the stack overflows.
+func TestDispatchAliasCycle(t *testing.T) {
+	cases := []struct {
+		name    string
+		aliases map[string]text.CommandAlias
+		invoke  string
+	}{
+		{
+			name:    "self cycle with arguments",
+			aliases: map[string]text.CommandAlias{"a": {Commands: []string{"a x"}}},
+			invoke:  "a",
+		},
+		{
+			name: "mutual cycle with arguments",
+			aliases: map[string]text.CommandAlias{
+				"a": {Commands: []string{"b x"}},
+				"b": {Commands: []string{"a y"}},
+			},
+			invoke: "a",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			publishEvent := func(ev term.Event) bool { return true }
+			e := newExForTestingWithWorkspace(t, &testLoader{},
+				texttest.NopEditor(), vte.DefaultConfig(),
+				publishEvent, clipboard.NewInMemory(),
+				text.WithCommandKey(testCommandKey),
+				text.WithCommandAliases(tc.aliases),
+			)
+			defer e.Close()
+
+			err := e.dispatchCommand(tc.invoke)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "alias cycle through")
+		})
+	}
+}
+
 // captureLoader is a testLoader that records the workspaceapi.Cmd values
 // passed to StartCommand so tests can assert what argv reaches the
 // VTE-bound `!!` plugin executor (post reshellQuoteArgs + shell.Fields).

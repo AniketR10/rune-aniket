@@ -172,6 +172,11 @@ type workspaceManagerHandler struct {
 	pending             map[string]*pendingWorkspace
 	lastReservedPending *pendingWorkspace
 	pendingWG           sync.WaitGroup
+
+	// Fields, not constants, so tests can shorten the extensionready
+	// readiness and command-registration timeouts.
+	extReadyWait   time.Duration
+	extCommandWait time.Duration
 }
 
 type openFileTarget struct {
@@ -477,6 +482,8 @@ func (h *workspaceManagerHandler) init(
 	h.streamingOpen = streamingOpen
 	h.commandObserver = commandObserver
 	h.pending = make(map[string]*pendingWorkspace)
+	h.extReadyWait = extensionReadyWait
+	h.extCommandWait = extensionCommandWait
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
@@ -1840,31 +1847,103 @@ func (h *workspaceManagerHandler) commandExtensionReady(args ...string) error {
 	if h.lastReservedPending != nil {
 		return h.commandWorkspaceReady(append([]string{cmdExtensionReady}, args...)...)
 	}
-	id := args[0]
-	rest := append([]string(nil), args[1:]...)
 	runner := h.focusRunner()
 	if runner == nil {
 		return fmt.Errorf("no extension runner on the focused workspace")
 	}
+	id := args[0]
+	job := extReadyJob{cmd: args[1], args: append([]string(nil), args[2:]...)}
 	ex := h.exHandler(h.focusHandler())
+	ch, ok := ex.extReady[id]
+	if !ok {
+		ch = make(chan extReadyJob, extReadyQueueLimit)
+		ex.extReady[id] = ch
+		ch <- job
+		h.startExtReadyWorker(ex.extReadyCtx, ex, id, runner, ch)
+		return nil
+	}
+	if len(ch) == extReadyQueueLimit {
+		return fmt.Errorf(
+			"too many extensionready commands queued for %q (max %d)",
+			id, extReadyQueueLimit)
+	}
+	ch <- job
+	return nil
+}
+
+// extReadyQueueLimit bounds the per-id extensionready follow-up queue.
+const extReadyQueueLimit = 20
+
+// extReadyJob is a queued extensionready follow-up command; the id and
+// runner are fixed per worker, so only the command and args vary.
+type extReadyJob struct {
+	cmd  string
+	args []string
+}
+
+// startExtReadyWorker drains ch for one extension id, dispatching queued
+// commands in submission order once the extension is ready. ctx cancel
+// (ex.Close) stops the worker mid-backlog.
+func (h *workspaceManagerHandler) startExtReadyWorker(
+	ctx context.Context, ex *ex, id string,
+	runner extension.Runner, ch chan extReadyJob,
+) {
+	readyErr := make(chan error, 1)
+
 	go debug.CapturePanicReport(func() {
-		err := runner.WaitReady(context.Background(), id)
-		if err == nil {
-			err = h.waitCommandRegistered(ex, rest[0])
+		readyCtx, cancel := context.WithTimeout(ctx, h.extReadyWait)
+		defer cancel()
+		err := runner.WaitReady(readyCtx, id)
+		// A cancelled parent ctx is ex.Close, handled by the worker; only
+		// a genuine deadline becomes a user-facing error.
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			err = fmt.Errorf("extension %q not ready within %s", id, h.extReadyWait)
 		}
-		h.scheduleNextTick(func() {
-			if err != nil {
-				_, _ = h.notifications.current().Notify(browserapi.LevelError,
-					"extensionready %s: %v", id, err)
+		readyErr <- err
+	})
+
+	go debug.CapturePanicReport(func() {
+		var err error
+		select {
+		case err = <-readyErr:
+		case <-ctx.Done():
+			return
+		}
+		for {
+			var job extReadyJob
+			select {
+			case job = <-ch:
+			case <-ctx.Done():
 				return
 			}
-			if dispErr := ex.dispatchCommand(rest[0], rest[1:]...); dispErr != nil {
-				_, _ = h.notifications.current().Notify(browserapi.LevelError,
-					"extensionready %s: %v", id, dispErr)
+			jobErr := err
+			if jobErr == nil {
+				jobErr = h.waitCommandRegistered(ctx, ex, job.cmd)
 			}
-		})
+			if ctx.Err() != nil {
+				return
+			}
+			scheduled := h.scheduleNextTick(func() {
+				if jobErr != nil {
+					_, _ = h.notifications.current().Notify(
+						browserapi.LevelError,
+						"extensionready %s: %v", id, jobErr)
+					return
+				}
+				dispErr := ex.dispatchCommand(job.cmd, job.args...)
+				if dispErr != nil {
+					_, _ = h.notifications.current().Notify(
+						browserapi.LevelError,
+						"extensionready %s: %v", id, dispErr)
+				}
+			})
+			if !scheduled {
+				_, _ = h.notifications.current().Notify(
+					browserapi.LevelError,
+					"extensionready could not schedule: %v", id)
+			}
+		}
 	})
-	return nil
 }
 
 // extensionCommandWait bounds how long extensionready blocks for the
@@ -1874,12 +1953,19 @@ func (h *workspaceManagerHandler) commandExtensionReady(args ...string) error {
 // WaitReady returns.
 const extensionCommandWait = 10 * time.Second
 
+// extensionReadyWait bounds the wait for an extension to become ready,
+// so a never-ready extension surfaces an error instead of parking its
+// follow-up commands until the workspace is torn down.
+const extensionReadyWait = 30 * time.Second
+
 // waitCommandRegistered blocks until cmd is registered on ex, the
 // timeout elapses, or scheduling fails. The registration check runs on
 // the event loop because the command registry is owned by the editor
 // component.
-func (h *workspaceManagerHandler) waitCommandRegistered(ex *ex, cmd string) error {
-	deadline := time.NewTimer(extensionCommandWait)
+func (h *workspaceManagerHandler) waitCommandRegistered(
+	ctx context.Context, ex *ex, cmd string,
+) error {
+	deadline := time.NewTimer(h.extCommandWait)
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -1891,14 +1977,21 @@ func (h *workspaceManagerHandler) waitCommandRegistered(ex *ex, cmd string) erro
 		if !scheduled {
 			return fmt.Errorf("command %q wait: event loop is closed", cmd)
 		}
-		if <-registered {
-			return nil
+		select {
+		case ok := <-registered:
+			if ok {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 		select {
 		case <-ticker.C:
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-deadline.C:
 			return fmt.Errorf("command %q was not registered within %s",
-				cmd, extensionCommandWait)
+				cmd, h.extCommandWait)
 		}
 	}
 }

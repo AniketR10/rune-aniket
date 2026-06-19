@@ -31,7 +31,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -63,6 +62,7 @@ import (
 	"unstable.build/go-tui/browser"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/handlertest"
 	handlermarkdown "unstable.build/go-tui/handler/markdown"
@@ -5063,50 +5063,53 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 func newTestScheduler(mu sync.Locker) (
 	sched func(func()) bool, drain func(),
 ) {
-	// Using a WaitGroup trips the race detector because Add can
-	// race with Wait; use an explicit count guarded by a Cond.
+	// A single consumer goroutine drains a FIFO queue, running each
+	// callback under mu in enqueue order. This mirrors the host event
+	// loop's UserFunc serialization (callbacks scheduled with
+	// ScheduleNextTick run later, one at a time, in order) so tests
+	// observe the same ordering production relies on. Enqueuing never
+	// touches mu, so a caller holding mu (event-loop handlers) does not
+	// deadlock against the consumer.
 	var schedMu sync.Mutex
 	schedCond := sync.NewCond(&schedMu)
-	var schedCount int
+	var queue []func()
+	running := false
+	go debug.CapturePanicReport(func() {
+		for {
+			schedMu.Lock()
+			for len(queue) == 0 {
+				schedCond.Wait()
+			}
+			fn := queue[0]
+			queue = queue[1:]
+			running = true
+			schedMu.Unlock()
+
+			mu.Lock()
+			fn()
+			mu.Unlock()
+
+			schedMu.Lock()
+			running = false
+			schedCond.Broadcast()
+			schedMu.Unlock()
+		}
+	})
 	sched = func(fn func()) bool {
 		schedMu.Lock()
-		schedCount++
+		queue = append(queue, fn)
+		schedCond.Broadcast()
 		schedMu.Unlock()
-		go func() {
-			defer func() {
-				schedMu.Lock()
-				schedCount--
-				if schedCount == 0 {
-					schedCond.Broadcast()
-				}
-				schedMu.Unlock()
-			}()
-			mu.Lock()
-			defer mu.Unlock()
-			fn()
-		}()
 		return true
 	}
+	// drain blocks until the queue is empty and no callback is running,
+	// including callbacks enqueued by previously-running callbacks.
 	drain = func() {
 		schedMu.Lock()
-		for schedCount > 0 {
+		for len(queue) > 0 || running {
 			schedCond.Wait()
 		}
 		schedMu.Unlock()
-		for i := 0; i < 4; i++ {
-			runtime.Gosched()
-			schedMu.Lock()
-			pending := schedCount > 0
-			schedMu.Unlock()
-			if pending {
-				schedMu.Lock()
-				for schedCount > 0 {
-					schedCond.Wait()
-				}
-				schedMu.Unlock()
-				i = -1
-			}
-		}
 	}
 	return sched, drain
 }
@@ -5883,6 +5886,52 @@ func (r *waitReadyRunner) WaitReady(ctx context.Context, id string) error {
 	}
 }
 
+// perIDReadyRunner is a fake extension.Runner that gates WaitReady on a
+// per-id channel so different extension ids can be released
+// independently. It lets tests prove that a never-ready extension only
+// blocks its own follow-up commands.
+type perIDReadyRunner struct {
+	mu    sync.Mutex
+	ready map[string]chan struct{}
+}
+
+func newPerIDReadyRunner(ids ...string) *perIDReadyRunner {
+	r := &perIDReadyRunner{ready: make(map[string]chan struct{}, len(ids))}
+	for _, id := range ids {
+		r.ready[id] = make(chan struct{})
+	}
+	return r
+}
+
+func (r *perIDReadyRunner) chanFor(id string) chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ch, ok := r.ready[id]
+	if !ok {
+		ch = make(chan struct{})
+		r.ready[id] = ch
+	}
+	return ch
+}
+
+func (r *perIDReadyRunner) release(id string) { close(r.chanFor(id)) }
+
+func (r *perIDReadyRunner) Run(extensionID, path string, config config.Config) error {
+	return nil
+}
+
+func (r *perIDReadyRunner) Close() error { return nil }
+
+func (r *perIDReadyRunner) WaitReady(ctx context.Context, id string) error {
+	ch := r.chanFor(id)
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // newTestWorkspaceManagerHandlerWithRunner builds a handler whose
 // workspaces install runner for their Extensions. Using a single
 // shared runner keeps the concrete type stored in the per-workspace
@@ -6065,6 +6114,79 @@ func TestExtensionReadyCommand(t *testing.T) {
 			"a WaitReady error must not dispatch the follow-up command")
 	})
 
+	t.Run("surfaces a notification when the extension never becomes ready", func(t *testing.T) {
+		// The extension id is never released, so WaitReady blocks until
+		// the readiness timeout fires.
+		runner := newPerIDReadyRunner("ext-id")
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		m.mu.Lock()
+		m.extReadyWait = 50 * time.Millisecond
+		focus := m.focus
+		notes := &recordingNotifications{inner: m.workspaces[focus].notifications}
+		m.workspaces[focus].notifications = notes
+		require.NoError(t,
+			m.commandExtensionReady("ext-id", cmdRenameWorkspace, "never"))
+		m.mu.Unlock()
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			for _, n := range notes.snapshot() {
+				if n.level == browserapi.LevelError &&
+					strings.Contains(n.msg, "not ready within") {
+					return true
+				}
+			}
+			return false
+		}, 2*time.Second, 10*time.Millisecond,
+			"a never-ready extension must surface a readiness-timeout "+
+				"error notification")
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		require.Equal(t, "", m.workspaces[focus].tabname,
+			"the follow-up command must not dispatch when the extension "+
+				"never becomes ready")
+	})
+
+	t.Run("surfaces a notification when the follow-up command never registers", func(t *testing.T) {
+		// The extension becomes ready immediately, but the follow-up
+		// command is never registered, so waitCommandRegistered times
+		// out.
+		runner := newWaitReadyRunner()
+		close(runner.ready)
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		m.mu.Lock()
+		m.extCommandWait = 50 * time.Millisecond
+		focus := m.focus
+		notes := &recordingNotifications{inner: m.workspaces[focus].notifications}
+		m.workspaces[focus].notifications = notes
+		require.NoError(t, m.commandExtensionReady("ext-id", "neverregistered"))
+		m.mu.Unlock()
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			for _, n := range notes.snapshot() {
+				if n.level == browserapi.LevelError &&
+					strings.Contains(n.msg, "was not registered within") {
+					return true
+				}
+			}
+			return false
+		}, 2*time.Second, 10*time.Millisecond,
+			"a follow-up command that never registers must surface a "+
+				"registration-timeout error notification")
+	})
+
 	t.Run("queue is dropped when pending is canceled", func(t *testing.T) {
 		dir1 := t.TempDir()
 		m := newTestWorkspaceManagerHandlerWithDir(t,
@@ -6095,6 +6217,190 @@ func TestExtensionReadyCommand(t *testing.T) {
 		m.focus = firstSlot
 		require.Equal(t, "", m.workspaces[firstSlot].tabname)
 		m.mu.Unlock()
+	})
+
+	t.Run("dispatches follow-up commands in submission order (same id)", func(t *testing.T) {
+		runner := newPerIDReadyRunner("ext-A")
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		var mu sync.Mutex
+		var order []string
+		record := func(name string) text.CommandHandler {
+			return text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					mu.Lock()
+					order = append(order, name)
+					mu.Unlock()
+					return nil
+				}, nil)
+		}
+		const cmdA1, cmdA2 = "ext-a-cmd-1", "ext-a-cmd-2"
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdA1}, record(cmdA1)))
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdA2}, record(cmdA2)))
+
+		m.mu.Lock()
+		require.NoError(t, m.commandExtensionReady("ext-A", cmdA1))
+		require.NoError(t, m.commandExtensionReady("ext-A", cmdA2))
+		m.mu.Unlock()
+
+		runner.release("ext-A")
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) == 2
+		}, 2*time.Second, 10*time.Millisecond,
+			"both follow-up commands must dispatch once the extension is ready")
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Equal(t, []string{cmdA1, cmdA2}, order,
+			"follow-up commands must dispatch in submission order even when "+
+				"their waiters unblock out of order")
+	})
+
+	t.Run("independent extensions do not block each other (per-id workers)", func(t *testing.T) {
+		runner := newPerIDReadyRunner("ext-slow", "ext-fast")
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		var mu sync.Mutex
+		var order []string
+		record := func(name string) text.CommandHandler {
+			return text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					mu.Lock()
+					order = append(order, name)
+					mu.Unlock()
+					return nil
+				}, nil)
+		}
+		const cmdSlow, cmdFast = "ext-slow-cmd", "ext-fast-cmd"
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdSlow}, record(cmdSlow)))
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdFast}, record(cmdFast)))
+
+		m.mu.Lock()
+		require.NoError(t, m.commandExtensionReady("ext-slow", cmdSlow))
+		require.NoError(t, m.commandExtensionReady("ext-fast", cmdFast))
+		m.mu.Unlock()
+
+		// Release only the fast extension; ext-slow stays unready.
+		runner.release("ext-fast")
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) == 1 && order[0] == cmdFast
+		}, 2*time.Second, 10*time.Millisecond,
+			"a follow-up command for a ready extension must dispatch while a "+
+				"different, never-ready extension is still blocked")
+
+		// Release the slow extension so its worker terminates cleanly.
+		runner.release("ext-slow")
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) == 2
+		}, 2*time.Second, 10*time.Millisecond,
+			"the slow extension's follow-up must dispatch once it becomes ready")
+	})
+
+	t.Run("rejects when queue is full", func(t *testing.T) {
+		runner := newPerIDReadyRunner("ext-full")
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		// Withhold readiness so the worker stays parked before it
+		// drains the queue. Fill the buffer to capacity, then assert
+		// the next submission is rejected.
+		m.mu.Lock()
+		for i := 0; i < extReadyQueueLimit; i++ {
+			require.NoError(t,
+				m.commandExtensionReady("ext-full", "ext-full-cmd"))
+		}
+		err := m.commandExtensionReady("ext-full", "ext-full-cmd")
+		m.mu.Unlock()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "too many extensionready commands queued")
+
+		// Release so the worker drains and exits for clean teardown.
+		runner.release("ext-full")
+		m.drainSched()
+	})
+
+	t.Run("close stops dispatching queued commands", func(t *testing.T) {
+		runner := newPerIDReadyRunner("ext-close")
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		var mu sync.Mutex
+		var order []string
+		record := func(name string) text.CommandHandler {
+			return text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					mu.Lock()
+					order = append(order, name)
+					mu.Unlock()
+					return nil
+				}, nil)
+		}
+		// cmd1 is registered so it dispatches; cmd2 is intentionally
+		// never registered so the worker parks in waitCommandRegistered
+		// holding cmd2 in flight when Close cancels it.
+		const cmd1, cmd2 = "ext-close-cmd-1", "ext-close-cmd-2"
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmd1}, record(cmd1)))
+
+		m.mu.Lock()
+		require.NoError(t, m.commandExtensionReady("ext-close", cmd1))
+		require.NoError(t, m.commandExtensionReady("ext-close", cmd2))
+		m.mu.Unlock()
+
+		runner.release("ext-close")
+
+		// Wait until cmd1 has dispatched: the worker has now consumed
+		// cmd2 from the buffer and is parked waiting for it to register.
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) == 1
+		}, 2*time.Second, 10*time.Millisecond,
+			"the registered follow-up command must dispatch")
+
+		require.NoError(t, m.Close())
+
+		// Registering cmd2 now must not dispatch it: Close cancelled the
+		// worker, so the in-flight command is dropped rather than run.
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmd2}, record(cmd2)))
+		require.Never(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) != 1
+		}, 200*time.Millisecond, 20*time.Millisecond,
+			"Close must stop the worker from dispatching queued commands")
 	})
 }
 

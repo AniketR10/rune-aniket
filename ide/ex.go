@@ -174,6 +174,9 @@ type ex struct {
 	debugCommands       bool
 	commandObserver     commandObserver
 	shellCfg            shellConfig
+	extReady            map[string]chan extReadyJob
+	extReadyCtx         context.Context
+	extReadyCancel      context.CancelFunc
 }
 
 type commandObserver interface {
@@ -246,6 +249,8 @@ func (e *ex) init(
 		panic("ide.ex requires a prompt editor")
 	}
 	e.promptEditor = promptEditor
+	e.extReady = make(map[string]chan extReadyJob)
+	e.extReadyCtx, e.extReadyCancel = context.WithCancel(context.Background())
 	err = e.doInit(m, storage, notifications, uri,
 		emulatorConfig, publishEvent, clip, opts...)
 	if err != nil {
@@ -918,46 +923,74 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	if isAlias && idecmd.ChainFromContext(ctx) == nil {
 		ctx = idecmd.WithChain(ctx, cmd, idecmd.NewChain())
 	}
-	it, err := e.aliasExpander.Expand(ctx, scmd)
+	handled, err := e.dispatchExpanded(ctx, cmd, scmd, isAlias, nil)
 	if err != nil {
 		return err
 	}
+	if handled {
+		return nil
+	}
+	if !ok {
+		return fmt.Errorf("unknown command or command alias %q", cmd)
+	}
+	return fmt.Errorf("%s is aliased to an unknown command %v", cmd, target.Commands)
+}
+
+// dispatchExpanded expands scmd through the alias table and dispatches
+// each resulting step in order. When a step's name is itself an alias
+// it is re-expanded recursively, sharing ctx (hence the same chain) so
+// captures flow across nesting levels, instead of being handed to the
+// leaf dispatcher which only resolves subscribed commands. stack holds
+// the alias names currently being expanded so a self- or
+// mutually-recursive alias is rejected instead of looping forever.
+func (e *ex) dispatchExpanded(
+	ctx context.Context, cmd string, scmd textapi.Command, isAlias bool,
+	stack map[string]bool,
+) (handled bool, err error) {
+	if isAlias {
+		if stack[cmd] {
+			return false, fmt.Errorf("alias cycle through %q", cmd)
+		}
+		if stack == nil {
+			stack = make(map[string]bool)
+		}
+		stack[cmd] = true
+		defer delete(stack, cmd)
+	}
+	it, err := e.aliasExpander.Expand(ctx, scmd)
+	if err != nil {
+		return false, err
+	}
 	defer func() { _ = it.Close() }()
-	var handled bool
 	for {
 		next, ok := it.Next(ctx)
 		if !ok {
 			break
 		}
-		h, derr := e.comp.DispatchCommand(ctx, next)
+		var (
+			h    bool
+			derr error
+		)
+		if _, isStepAlias := e.aliasExpander.ResolveAlias(next.Name); isStepAlias {
+			h, derr = e.dispatchExpanded(ctx, next.Name, next, true, stack)
+		} else {
+			h, derr = e.comp.DispatchCommand(ctx, next)
+		}
 		if e.commandObserver != nil {
 			e.commandObserver.observeCommand(cmd, next.Name, next.Args, derr)
 		}
 		if derr != nil {
 			if isAlias {
-				return fmt.Errorf("%s: %s", formatStep(next), derr)
+				return false, fmt.Errorf("%s: %s", formatStep(next), derr)
 			}
-			return derr
+			return false, derr
 		}
 		handled = handled || h
 	}
 	if iterErr := it.Err(); iterErr != nil {
-		return iterErr
+		return false, iterErr
 	}
-	if handled {
-		return nil
-	}
-	switch {
-	case !ok && e.workspace == nil:
-		return fmt.Errorf("unknown command or alias %q or cannot run on an empty workspace", cmd)
-	case !ok:
-		return fmt.Errorf("unknown command or command alias %q", cmd)
-	case e.workspace == nil:
-		return fmt.Errorf("cannot run %q (alias of %v) on an empty workspace",
-			cmd, target.Commands)
-	default:
-		return fmt.Errorf("%s is aliased to an unknown command %v", cmd, target.Commands)
-	}
+	return handled, nil
 }
 
 func formatStep(cmd textapi.Command) string {
@@ -2647,6 +2680,7 @@ func (e *ex) Close() (ret error) {
 		return nil
 	}
 	e.closed = true
+	e.extReadyCancel()
 	e.sequencer.Reset()
 	if err := e.comp.Close(); err != nil {
 		ret = multierror.Append(ret, err)
