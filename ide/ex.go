@@ -903,6 +903,15 @@ func (e *ex) waitInflight() {
 }
 
 func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
+	return e.dispatchCommandCtx(context.Background(), cmd, args...)
+}
+
+// dispatchCommandCtx is dispatchCommand with a caller-supplied base
+// context, letting the caller thread values (e.g. a textrpc.Waiter) down
+// to the leaf command handler so it can observe asynchronous completion.
+func (e *ex) dispatchCommandCtx(
+	ctx context.Context, cmd string, args ...string,
+) (err error) {
 	uri, h, ok := e.handlerInFocus()
 	scmd := textapi.Command{
 		Name:     cmd,
@@ -915,7 +924,6 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 		scmd.Cursor.Content = h.CursorAtScroll()
 		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
-	ctx := context.Background()
 	target, isAlias := e.aliasExpander.ResolveAlias(cmd)
 	if cmd == "!" || cmd == "!!" {
 		ctx = cmdenv.WithCommandSubstitution(ctx)

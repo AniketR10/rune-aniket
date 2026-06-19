@@ -44,6 +44,8 @@ type commandClientStream struct {
 	stream        serverStream
 	completers    sync.Map
 	counter       int64
+	pendingMu     sync.Mutex
+	pending       []chan error
 }
 
 // subset of Editor_SubscribeCommandServer
@@ -74,8 +76,32 @@ func (c *commandClientStream) receiveMessages() error {
 
 		switch msg.GetType() {
 		case textrpc.ClientCommandMessage_Handle:
+			errStr := msg.GetHandle().GetError()
+			c.pendingMu.Lock()
+			var waitCh chan error
+			if len(c.pending) > 0 {
+				waitCh = c.pending[0]
+				if len(c.pending) == 1 {
+					c.pending = c.pending[:0]
+				} else {
+					c.pending = c.pending[1:]
+				}
+			}
+			c.pendingMu.Unlock()
+			if waitCh != nil {
+				var err error
+				if errStr != "" {
+					err = errors.New(errStr)
+				}
+				select {
+				case waitCh <- err:
+				case <-c.ctx.Done():
+					return c.ctx.Err()
+				}
+				continue
+			}
 			select {
-			case c.handleCommand <- msg.GetHandle().GetError():
+			case c.handleCommand <- errStr:
 			case <-c.ctx.Done():
 				return c.ctx.Err()
 			}
@@ -140,6 +166,29 @@ func (c *commandClientStream) receiveMessages() error {
 func (c *commandClientStream) HandleCommand(
 	ctx context.Context, cmd textapi.Command,
 ) error {
+	// Every send reserves a slot in the reply FIFO (held across Send so
+	// the slot order matches the wire order). A caller that attaches a
+	// Waiter reserves its channel and is told, via Claimed, to wait for
+	// the result on it; otherwise the slot is nil and the reply takes the
+	// fire-and-forget log path. Claim must happen before this returns.
+	var replyCh chan error
+	if w, ok := WaiterFromContext(ctx); ok {
+		replyCh = w.Ch
+		w.Claimed = true
+	}
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	c.pending = append(c.pending, replyCh)
+	if err := c.stream.Send(c.buildHandleRequest(cmd)); err != nil {
+		c.pending = c.pending[:len(c.pending)-1]
+		return fmt.Errorf("send complete request: %w", err)
+	}
+	return nil
+}
+
+func (c *commandClientStream) buildHandleRequest(
+	cmd textapi.Command,
+) *textrpc.ServerCommandMessage {
 	var cursorContent, cursorWindow termrpc.Coordinates
 	cursorContent.FromModel(cmd.Cursor.Content)
 	cursorWindow.FromModel(cmd.Cursor.Window)
@@ -160,12 +209,7 @@ func (c *commandClientStream) HandleCommand(
 	var reqMsg textrpc.ServerCommandMessage
 	reqMsg.Type = textrpc.ServerCommandMessage_Handle
 	reqMsg.Handle = &req
-
-	if err := c.stream.Send(&reqMsg); err != nil {
-		return fmt.Errorf("send complete request: %w", err)
-	}
-
-	return nil
+	return &reqMsg
 }
 
 func (c *commandClientStream) Complete(ctx context.Context, cmd textapi.Command) (

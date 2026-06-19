@@ -85,6 +85,7 @@ import (
 	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/text/exofallback"
 	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/textrpc"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 )
@@ -177,6 +178,7 @@ type workspaceManagerHandler struct {
 	// readiness and command-registration timeouts.
 	extReadyWait   time.Duration
 	extCommandWait time.Duration
+	extHandleWait  time.Duration
 }
 
 type openFileTarget struct {
@@ -484,6 +486,7 @@ func (h *workspaceManagerHandler) init(
 	h.pending = make(map[string]*pendingWorkspace)
 	h.extReadyWait = extensionReadyWait
 	h.extCommandWait = extensionCommandWait
+	h.extHandleWait = extensionHandleWait
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
@@ -1923,27 +1926,67 @@ func (h *workspaceManagerHandler) startExtReadyWorker(
 			if ctx.Err() != nil {
 				return
 			}
-			scheduled := h.scheduleNextTick(func() {
-				if jobErr != nil {
-					_, _ = h.notifications.current().Notify(
-						browserapi.LevelError,
-						"extensionready %s: %v", id, jobErr)
-					return
-				}
-				dispErr := ex.dispatchCommand(job.cmd, job.args...)
-				if dispErr != nil {
-					_, _ = h.notifications.current().Notify(
-						browserapi.LevelError,
-						"extensionready %s: %v", id, dispErr)
-				}
-			})
-			if !scheduled {
+			if dispErr := h.runExtReadyJob(ctx, ex, id, job, jobErr); dispErr != nil {
 				_, _ = h.notifications.current().Notify(
 					browserapi.LevelError,
-					"extensionready could not schedule: %v", id)
+					"extensionready %s: %v", id, dispErr)
 			}
 		}
 	})
+}
+
+// runExtReadyJob dispatches a single follow-up command and blocks until
+// it completes, so the next job cannot overtake it. The dispatch carries
+// a textrpc.Waiter: an out-of-process extension command claims it and
+// reports completion on the channel after HandleCommand returns, so the
+// wait (bounded by extensionHandleWait) preserves ordering across the RPC
+// boundary. An in-process command leaves the waiter unclaimed and is
+// already done when dispatch returns. A non-nil jobErr from the
+// readiness/registration wait short-circuits dispatch.
+func (h *workspaceManagerHandler) runExtReadyJob(
+	ctx context.Context, ex *ex, _ string, job extReadyJob, jobErr error,
+) error {
+	if jobErr != nil {
+		return jobErr
+	}
+
+	type dispatched struct {
+		err     error
+		claimed bool
+	}
+	waiterCh := make(chan error, 1)
+	doneCh := make(chan dispatched, 1)
+	scheduled := h.scheduleNextTick(func() {
+		w := &textrpc.Waiter{Ch: waiterCh}
+		err := ex.dispatchCommandCtx(
+			textrpc.ContextWithWaiter(ctx, w), job.cmd, job.args...)
+		doneCh <- dispatched{err: err, claimed: w.Claimed}
+	})
+	if !scheduled {
+		return fmt.Errorf("could not schedule")
+	}
+
+	var d dispatched
+	select {
+	case d = <-doneCh:
+	case <-ctx.Done():
+		return nil
+	}
+	// An unclaimed waiter (in-process command) or a dispatch error (the
+	// extension command never reached the wire) means no completion will
+	// arrive on the channel; the dispatch result is final.
+	if !d.claimed || d.err != nil {
+		return d.err
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, h.extHandleWait)
+	defer cancel()
+	select {
+	case err := <-waiterCh:
+		return err
+	case <-waitCtx.Done():
+		return waitCtx.Err()
+	}
 }
 
 // extensionCommandWait bounds how long extensionready blocks for the
@@ -1957,6 +2000,12 @@ const extensionCommandWait = 10 * time.Second
 // so a never-ready extension surfaces an error instead of parking its
 // follow-up commands until the workspace is torn down.
 const extensionReadyWait = 30 * time.Second
+
+// extensionHandleWait bounds how long an extensionready follow-up waits
+// for an out-of-process extension command to finish handling, so a wedged
+// extension surfaces an error and the queue keeps draining instead of
+// blocking the next follow-up forever.
+const extensionHandleWait = 30 * time.Second
 
 // waitCommandRegistered blocks until cmd is registered on ex, the
 // timeout elapses, or scheduling fails. The registration check runs on

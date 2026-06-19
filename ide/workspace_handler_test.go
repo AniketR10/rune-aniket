@@ -73,6 +73,7 @@ import (
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/textrpc"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -5932,6 +5933,69 @@ func (r *perIDReadyRunner) WaitReady(ctx context.Context, id string) error {
 	}
 }
 
+// waitableCommandHandler models an out-of-process extension command: its
+// HandleCommand claims the caller's textrpc.Waiter, returns immediately
+// (fire-and-forget), and reports completion on the waiter channel only
+// after release is closed. This lets tests prove a follow-up command does
+// not start until the previous one has finished across the RPC boundary.
+type waitableCommandHandler struct {
+	name    string
+	release chan struct{}
+	mu      *sync.Mutex
+	order   *[]string
+}
+
+func (h *waitableCommandHandler) HandleCommand(
+	ctx context.Context, _ textapi.Command,
+) error {
+	w, ok := textrpc.WaiterFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	w.Claimed = true
+	h.mu.Lock()
+	*h.order = append(*h.order, h.name+":start")
+	h.mu.Unlock()
+	go debug.CapturePanicReport(func() {
+		select {
+		case <-h.release:
+		case <-ctx.Done():
+			w.Ch <- ctx.Err()
+			return
+		}
+		h.mu.Lock()
+		*h.order = append(*h.order, h.name+":done")
+		h.mu.Unlock()
+		w.Ch <- nil
+	})
+	return nil
+}
+
+func (h *waitableCommandHandler) Complete(
+	context.Context, textapi.Command,
+) (iterator.Iterator[string], string, error) {
+	return nil, "", nil
+}
+
+// silentExtHandler models an extension that claims the waiter but never
+// reports completion, as happens when the extension drops its reply while
+// the stream tears down. The follow-up worker must fall back to its wait
+// timeout instead of blocking forever.
+type silentExtHandler struct{}
+
+func (silentExtHandler) HandleCommand(ctx context.Context, _ textapi.Command) error {
+	if w, ok := textrpc.WaiterFromContext(ctx); ok {
+		w.Claimed = true
+	}
+	return nil
+}
+
+func (silentExtHandler) Complete(
+	context.Context, textapi.Command,
+) (iterator.Iterator[string], string, error) {
+	return nil, "", nil
+}
+
 // newTestWorkspaceManagerHandlerWithRunner builds a handler whose
 // workspaces install runner for their Extensions. Using a single
 // shared runner keeps the concrete type stored in the per-workspace
@@ -6401,6 +6465,178 @@ func TestExtensionReadyCommand(t *testing.T) {
 			return len(order) != 1
 		}, 200*time.Millisecond, 20*time.Millisecond,
 			"Close must stop the worker from dispatching queued commands")
+	})
+
+	t.Run("waits for an extension command to finish before the next", func(t *testing.T) {
+		runner := newWaitReadyRunner()
+		close(runner.ready)
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		var mu sync.Mutex
+		var order []string
+		const cmdFirst, cmdSecond = "ext-wait-first", "ext-wait-second"
+		releaseFirst := make(chan struct{})
+		releaseSecond := make(chan struct{})
+		close(releaseSecond)
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdFirst},
+			&waitableCommandHandler{
+				name: cmdFirst, release: releaseFirst, mu: &mu, order: &order}))
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdSecond},
+			&waitableCommandHandler{
+				name: cmdSecond, release: releaseSecond, mu: &mu, order: &order}))
+
+		m.mu.Lock()
+		require.NoError(t, m.commandExtensionReady("ext-id", cmdFirst))
+		require.NoError(t, m.commandExtensionReady("ext-id", cmdSecond))
+		m.mu.Unlock()
+
+		// cmdFirst is in flight (its waiter has not reported completion);
+		// cmdSecond must not start until cmdFirst finishes, even though
+		// both were submitted back to back.
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) >= 1 && order[0] == cmdFirst+":start"
+		}, 2*time.Second, 10*time.Millisecond,
+			"the first extension command must start handling")
+		require.Never(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			for _, e := range order {
+				if e == cmdSecond+":start" {
+					return true
+				}
+			}
+			return false
+		}, 200*time.Millisecond, 20*time.Millisecond,
+			"a follow-up extension command must not start before the "+
+				"previous one finishes")
+
+		close(releaseFirst)
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) == 4
+		}, 2*time.Second, 10*time.Millisecond,
+			"both extension commands must finish handling")
+		mu.Lock()
+		defer mu.Unlock()
+		require.Equal(t, []string{
+			cmdFirst + ":start", cmdFirst + ":done",
+			cmdSecond + ":start", cmdSecond + ":done",
+		}, order, "extension commands must be handled in submission order")
+	})
+
+	t.Run("in-process follow-ups dispatch in submission order", func(t *testing.T) {
+		runner := newWaitReadyRunner()
+		close(runner.ready)
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		var mu sync.Mutex
+		var order []string
+		record := func(name string) text.CommandHandler {
+			return text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					mu.Lock()
+					order = append(order, name)
+					mu.Unlock()
+					return nil
+				}, nil)
+		}
+		const cmd1, cmd2 = "ext-inproc-1", "ext-inproc-2"
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmd1}, record(cmd1)))
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmd2}, record(cmd2)))
+
+		m.mu.Lock()
+		require.NoError(t, m.commandExtensionReady("ext-id", cmd1))
+		require.NoError(t, m.commandExtensionReady("ext-id", cmd2))
+		m.mu.Unlock()
+
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return len(order) == 2
+		}, 2*time.Second, 10*time.Millisecond,
+			"both in-process follow-up commands must dispatch")
+		mu.Lock()
+		defer mu.Unlock()
+		require.Equal(t, []string{cmd1, cmd2}, order,
+			"in-process follow-ups must dispatch in submission order")
+	})
+
+	t.Run("a dropped extension reply times out and keeps draining", func(t *testing.T) {
+		runner := newWaitReadyRunner()
+		close(runner.ready)
+		dir := t.TempDir()
+		m := newTestWorkspaceManagerHandlerWithRunner(t,
+			defaultConfigWithWrap(false), dir, runner)
+		t.Cleanup(func() { _ = m.Close() })
+		m.drainPendingWorkspaces()
+
+		var mu sync.Mutex
+		var dispatched bool
+		const cmdSilent, cmdNext = "ext-drop-silent", "ext-drop-next"
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdSilent}, silentExtHandler{}))
+		require.NoError(t, m.subscribeCommand(
+			textapi.CommandManual{Name: cmdNext},
+			text.FuncCommandHandler(
+				func(context.Context, textapi.Command) error {
+					mu.Lock()
+					dispatched = true
+					mu.Unlock()
+					return nil
+				}, nil)))
+
+		m.mu.Lock()
+		m.extHandleWait = 50 * time.Millisecond
+		focus := m.focus
+		notes := &recordingNotifications{inner: m.workspaces[focus].notifications}
+		m.workspaces[focus].notifications = notes
+		require.NoError(t, m.commandExtensionReady("ext-id", cmdSilent))
+		require.NoError(t, m.commandExtensionReady("ext-id", cmdNext))
+		m.mu.Unlock()
+
+		// cmdSilent claims the waiter but never reports completion, so the
+		// worker must surface its wait timeout instead of blocking forever.
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			for _, n := range notes.snapshot() {
+				if n.level == browserapi.LevelError &&
+					strings.Contains(n.msg, "extensionready ext-id") &&
+					strings.Contains(n.msg, context.DeadlineExceeded.Error()) {
+					return true
+				}
+			}
+			return false
+		}, 2*time.Second, 10*time.Millisecond,
+			"a dropped extension reply must surface a wait-timeout error")
+
+		// The queue must keep draining: the next follow-up still dispatches.
+		require.Eventually(t, func() bool {
+			m.drainSched()
+			mu.Lock()
+			defer mu.Unlock()
+			return dispatched
+		}, 2*time.Second, 10*time.Millisecond,
+			"the next follow-up must dispatch after a dropped reply times out")
 	})
 }
 
