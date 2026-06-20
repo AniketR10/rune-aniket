@@ -46,6 +46,11 @@ func (s *goSession) CompletionPrefix(line string) string {
 	if prefix, ok := importPathPrefix(line); ok {
 		return prefix
 	}
+	// A builtin like /help is a single token; the candidate replaces it
+	// whole, so the leading sigil must be part of the prefix.
+	if strings.HasPrefix(line, builtinPrefix) && !strings.ContainsAny(line, " \t") {
+		return line
+	}
 	i := len(line)
 	for i > 0 {
 		r, size := utf8.DecodeLastRuneInString(line[:i])

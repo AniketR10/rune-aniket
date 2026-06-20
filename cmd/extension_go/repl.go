@@ -529,7 +529,7 @@ func (s *goSession) HandleCommand(
 	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	line := rejoin(cmd)
-	if strings.HasPrefix(line, ":") {
+	if strings.HasPrefix(line, builtinPrefix) {
 		s.pending = nil
 		return s.builtin(ctx, line)
 	}
@@ -558,7 +558,7 @@ func (s *goSession) HandleCommand(
 }
 
 // Help satisfies textapi.REPLHandler, returning the REPL's built-in
-// command reference (the same content as `:help`).
+// command reference (the same content as `/help`).
 func (s *goSession) Help(
 	_ context.Context, _ []string,
 ) (iterator.Iterator[component.Responsive], error) {
@@ -1039,20 +1039,25 @@ func (s *goSession) sortedImports() []string {
 }
 
 // renderProgram returns the current accumulated program (no trailing
-// expression) for `:print` / `:write`.
+// expression) for `/print` / `/write`.
 func (s *goSession) renderProgram() string {
 	return s.render("")
 }
 
+// builtinPrefix marks a REPL meta-command (e.g. /help). A Go statement
+// cannot start with it, so it unambiguously separates builtins from
+// evaluated source.
+const builtinPrefix = "/"
+
 func (s *goSession) builtin(
 	ctx context.Context, line string,
 ) (iterator.Iterator[component.Responsive], error) {
-	name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
+	name, arg, _ := strings.Cut(strings.TrimPrefix(line, builtinPrefix), " ")
 	arg = strings.TrimSpace(arg)
 	switch name {
 	case "type":
 		if arg == "" {
-			return nil, errors.New(":type requires an expression")
+			return nil, errors.New("/type requires an expression")
 		}
 		return s.evalType(ctx, arg)
 	case "print":
@@ -1068,7 +1073,7 @@ func (s *goSession) builtin(
 		return stringRows("session cleared"), nil
 	case "doc":
 		if arg == "" {
-			return nil, errors.New(":doc requires an argument")
+			return nil, errors.New("/doc requires an argument")
 		}
 		return s.doc(ctx, arg)
 	case "help":
@@ -1076,7 +1081,7 @@ func (s *goSession) builtin(
 	case "quit", "exit":
 		return stringRows("close the tab to exit the REPL"), nil
 	default:
-		return nil, fmt.Errorf("unknown command: :%s", name)
+		return nil, fmt.Errorf("unknown command: /%s", name)
 	}
 }
 
@@ -1098,7 +1103,7 @@ func (s *goSession) evalType(
 
 func (s *goSession) write(arg string) (iterator.Iterator[component.Responsive], error) {
 	if arg == "" {
-		return nil, errors.New(":write requires a file path")
+		return nil, errors.New("/write requires a file path")
 	}
 	f, err := s.fs.OpenFile(arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
@@ -1118,7 +1123,7 @@ func (s *goSession) doc(
 ) (iterator.Iterator[component.Responsive], error) {
 	dr, ok := s.runner.(docRunner)
 	if !ok {
-		return nil, errors.New(":doc is not supported in this session")
+		return nil, errors.New("/doc is not supported in this session")
 	}
 	out, err := dr.runDoc(ctx, arg)
 	if err != nil {
@@ -1130,7 +1135,7 @@ func (s *goSession) doc(
 func (s *goSession) Complete(
 	ctx context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
-	if strings.HasPrefix(cmd, ":") {
+	if strings.HasPrefix(cmd, builtinPrefix) {
 		if len(args) == 0 {
 			return iterator.FromSlice(completeBuiltins(cmd)), nil
 		}
@@ -1146,15 +1151,52 @@ func (s *goSession) Complete(
 // completePackages lists importable package paths from gopls, keeping
 // only those that start with prefix. gopls returns the full known set
 // unfiltered, which is too large to surface raw, so the partial path the
-// user has typed inside the import quotes narrows it.
+// user has typed inside the import quotes narrows it. gopls resolves the
+// known-package set relative to a file in the target module, so the
+// session's synthetic program file is written and passed as the URI
+// argument; without it gopls returns nothing.
 func (s *goSession) completePackages(
 	ctx context.Context, prefix string,
 ) (iterator.Iterator[string], error) {
 	if s.lsp == nil {
 		return iterator.Empty[string](), nil
 	}
+	cr, ok := s.runner.(completionRunner)
+	if !ok {
+		return iterator.Empty[string](), nil
+	}
+	src := s.renderProgram()
+	path, err := cr.programPath(src)
+	if err != nil {
+		return iterator.Empty[string](), nil
+	}
+	uri, err := s.fs.URI(path)
+	if err != nil {
+		return iterator.Empty[string](), nil
+	}
+	lspURI := "file://" + uri.Path()
+	if err := s.lsp.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{
+		TextDocument: semanticapi.TextDocumentItem{
+			URI:        lspURI,
+			LanguageID: completionLanguageID,
+			Version:    1,
+			Text:       src,
+		},
+	}); err != nil {
+		return iterator.Empty[string](), nil
+	}
+	defer func() {
+		_ = s.lsp.DidClose(ctx, semanticapi.DidCloseTextDocumentParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{URI: lspURI},
+		})
+	}()
+	arg, err := json.Marshal(map[string]string{"URI": lspURI})
+	if err != nil {
+		return iterator.Empty[string](), nil
+	}
 	result, err := s.lsp.ExecuteCommand(ctx, semanticapi.ExecuteCommandParams{
-		Command: "gopls.list_known_packages",
+		Command:   "gopls.list_known_packages",
+		Arguments: []json.RawMessage{arg},
 	})
 	if err != nil || result == "" {
 		return iterator.Empty[string](), nil
@@ -1192,8 +1234,8 @@ type completionRunner interface {
 
 func completeBuiltins(prefix string) []string {
 	all := []string{
-		":type", ":print", ":write",
-		":clear", ":doc", ":help", ":quit",
+		"/type", "/print", "/write",
+		"/clear", "/doc", "/help", "/quit",
 	}
 	var out []string
 	for _, c := range all {
@@ -1207,13 +1249,13 @@ func completeBuiltins(prefix string) []string {
 func replHelp() []string {
 	return []string{
 		`import "<path>" add an import (with path completion)`,
-		":type <expr>    print the type of an expression",
-		":print          show the accumulated program",
-		":write <file>   write the accumulated program to a file",
-		":clear          reset the session",
-		":doc <arg>      show go doc output",
-		":help           list commands",
-		":quit           close the REPL",
+		"/type <expr>    print the type of an expression",
+		"/print          show the accumulated program",
+		"/write <file>   write the accumulated program to a file",
+		"/clear          reset the session",
+		"/doc <arg>      show go doc output",
+		"/help           list commands",
+		"/quit           close the REPL",
 	}
 }
 

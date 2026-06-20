@@ -636,40 +636,62 @@ func (c *testCallback) WaitFileProcessed(_ context.Context, _ string) error {
 // localScheme implements schemeapi.FileSystem, schemeapi.Executor,
 // and workspaceapi.Executor using the local OS for e2e testing.
 type localScheme struct {
+	root    string
 	mu      sync.Mutex
 	procs   map[workspaceapi.Pid]*os.Process
 	nextPid workspaceapi.Pid
 }
 
 func newTestScheme() *localScheme {
+	return newTestSchemeRooted("")
+}
+
+// newTestSchemeRooted returns a scheme that resolves relative paths
+// against root, so a single scheme instance can back both gopls and the
+// workspace file system rooted at a real directory.
+func newTestSchemeRooted(root string) *localScheme {
 	return &localScheme{
+		root:    root,
 		procs:   make(map[workspaceapi.Pid]*os.Process),
 		nextPid: 1,
 	}
 }
 
+// resolve turns a workspace-relative path into an absolute OS path under
+// root; absolute paths pass through unchanged.
+func (s *localScheme) resolve(path string) string {
+	if s.root == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(s.root, path)
+}
+
+func (s *localScheme) URI(path string) (workspaceapi.URI, error) {
+	return workspaceapi.ParseURI("file://" + s.resolve(path))
+}
+
 func (s *localScheme) Create(filename string) (workspaceapi.File, error) {
-	return os.Create(filename)
+	return os.Create(s.resolve(filename))
 }
 
 func (s *localScheme) Open(filename string) (workspaceapi.File, error) {
-	return os.Open(filename)
+	return os.Open(s.resolve(filename))
 }
 
 func (s *localScheme) OpenFile(filename string, flag int, perm os.FileMode) (workspaceapi.File, error) {
-	return os.OpenFile(filename, flag, perm)
+	return os.OpenFile(s.resolve(filename), flag, perm)
 }
 
 func (s *localScheme) Stat(filename string) (os.FileInfo, error) {
-	return os.Stat(filename)
+	return os.Stat(s.resolve(filename))
 }
 
 func (s *localScheme) Rename(oldpath, newpath string) error {
-	return os.Rename(oldpath, newpath)
+	return os.Rename(s.resolve(oldpath), s.resolve(newpath))
 }
 
 func (s *localScheme) Remove(filename string) error {
-	return os.Remove(filename)
+	return os.Remove(s.resolve(filename))
 }
 
 func (s *localScheme) Join(elem ...string) string {
@@ -677,27 +699,27 @@ func (s *localScheme) Join(elem ...string) string {
 }
 
 func (s *localScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
-	return os.CreateTemp(dir, prefix)
+	return os.CreateTemp(s.resolve(dir), prefix)
 }
 
 func (s *localScheme) Lstat(filename string) (os.FileInfo, error) {
-	return os.Lstat(filename)
+	return os.Lstat(s.resolve(filename))
 }
 
 func (s *localScheme) Symlink(oldname, newname string) error {
-	return os.Symlink(oldname, newname)
+	return os.Symlink(s.resolve(oldname), s.resolve(newname))
 }
 
 func (s *localScheme) Readlink(link string) (string, error) {
-	return os.Readlink(link)
+	return os.Readlink(s.resolve(link))
 }
 
 func (s *localScheme) ReadDir(path string) ([]os.DirEntry, error) {
-	return os.ReadDir(path)
+	return os.ReadDir(s.resolve(path))
 }
 
 func (s *localScheme) MkdirAll(filename string, perm os.FileMode) error {
-	return os.MkdirAll(filename, perm)
+	return os.MkdirAll(s.resolve(filename), perm)
 }
 
 func (s *localScheme) Start(ctx context.Context, cmd workspaceapi.Cmd) (workspaceapi.Pid, error) {

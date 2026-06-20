@@ -465,7 +465,7 @@ func TestGoREPLBufferThenBuiltinResets(t *testing.T) {
 	require.Empty(t, out)
 	require.NotEmpty(t, s.pending)
 
-	out, err = submit(t, s, ":clear")
+	out, err = submit(t, s, "/clear")
 	require.NoError(t, err)
 	require.Equal(t, []string{"session cleared"}, out)
 	require.Empty(t, s.pending)
@@ -604,7 +604,7 @@ func TestGoREPLPrint(t *testing.T) {
 	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
 	require.NoError(t, mustSubmit(t, s, `import "strings"`))
 
-	out, err := submit(t, s, ":print")
+	out, err := submit(t, s, "/print")
 	require.NoError(t, err)
 	want := []string{
 		"package main",
@@ -624,7 +624,7 @@ func TestGoREPLPrint(t *testing.T) {
 func TestGoREPLPrintEmptySession(t *testing.T) {
 	t.Parallel()
 	s := newTestSession(newScriptedRunner())
-	out, err := submit(t, s, ":print")
+	out, err := submit(t, s, "/print")
 	require.NoError(t, err)
 	require.Equal(t,
 		[]string{"package main", "", "func main() {", "}", ""}, out)
@@ -850,7 +850,7 @@ func TestGoREPLClear(t *testing.T) {
 	require.NoError(t, mustSubmit(t, s, "func f() {}"))
 	require.NoError(t, mustSubmit(t, s, "x := 1"))
 
-	out, err := submit(t, s, ":clear")
+	out, err := submit(t, s, "/clear")
 	require.NoError(t, err)
 	require.Equal(t, []string{"session cleared"}, out)
 	require.Empty(t, s.imports)
@@ -864,7 +864,7 @@ func TestGoREPLType(t *testing.T) {
 	r := newScriptedRunner().reply(0, "int", nil)
 	s := newTestSession(r)
 
-	out, err := submit(t, s, ":type 5")
+	out, err := submit(t, s, "/type 5")
 	require.NoError(t, err)
 	require.Equal(t, []string{"int"}, out)
 	require.Contains(t, r.lastProgram(), printerName+"(reflect.TypeOf(5))")
@@ -879,7 +879,7 @@ func TestGoREPLTypeError(t *testing.T) {
 	t.Parallel()
 	r := newScriptedRunner().reply(0, "undefined: zzz", errors.New("exit status 1"))
 	s := newTestSession(r)
-	_, err := submit(t, s, ":type zzz")
+	_, err := submit(t, s, "/type zzz")
 	require.EqualError(t, err, "undefined: zzz")
 	// Even on failure the borrowed import must not leak.
 	_, ok := s.imports[`"reflect"`]
@@ -892,7 +892,7 @@ func TestGoREPLDoc(t *testing.T) {
 	r.docReply = scriptedReply{out: "package strings // import \"strings\"", err: nil}
 	s := newTestSession(r)
 
-	out, err := submit(t, s, ":doc strings")
+	out, err := submit(t, s, "/doc strings")
 	require.NoError(t, err)
 	require.Equal(t, []string{`package strings // import "strings"`}, out)
 	require.Equal(t, []string{"strings"}, r.docArgs)
@@ -903,21 +903,21 @@ func TestGoREPLDocError(t *testing.T) {
 	r := newScriptedRunner()
 	r.docReply = scriptedReply{out: "no such package", err: errors.New("exit status 1")}
 	s := newTestSession(r)
-	_, err := submit(t, s, ":doc nope")
+	_, err := submit(t, s, "/doc nope")
 	require.EqualError(t, err, "no such package")
 }
 
 func TestGoREPLHelp(t *testing.T) {
 	t.Parallel()
 	s := newTestSession(newScriptedRunner())
-	out, err := submit(t, s, ":help")
+	out, err := submit(t, s, "/help")
 	require.NoError(t, err)
 	require.Equal(t, replHelp(), out)
 }
 
 func TestGoREPLQuit(t *testing.T) {
 	t.Parallel()
-	for _, cmd := range []string{":quit", ":exit"} {
+	for _, cmd := range []string{"/quit", "/exit"} {
 		t.Run(cmd, func(t *testing.T) {
 			t.Parallel()
 			s := newTestSession(newScriptedRunner())
@@ -934,10 +934,10 @@ func TestGoREPLBuiltinErrors(t *testing.T) {
 		line    string
 		wantErr string
 	}{
-		{":import", "unknown command: :import"},
-		{":type", ":type requires an expression"},
-		{":doc", ":doc requires an argument"},
-		{":bogus", "unknown command: :bogus"},
+		{"/import", "unknown command: /import"},
+		{"/type", "/type requires an expression"},
+		{"/doc", "/doc requires an argument"},
+		{"/bogus", "unknown command: /bogus"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.line, func(t *testing.T) {
@@ -957,7 +957,7 @@ func TestGoREPLWrite(t *testing.T) {
 	s := newGoSession(r, fs, nil)
 	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
 
-	out, err := submit(t, s, ":write out.go")
+	out, err := submit(t, s, "/write out.go")
 	require.NoError(t, err)
 	require.Equal(t, []string{"wrote out.go"}, out)
 
@@ -971,8 +971,8 @@ func TestGoREPLWrite(t *testing.T) {
 func TestGoREPLWriteRequiresPath(t *testing.T) {
 	t.Parallel()
 	s := newGoSession(newScriptedRunner(), &writeFS{root: t.TempDir()}, nil)
-	_, err := submit(t, s, ":write")
-	require.EqualError(t, err, ":write requires a file path")
+	_, err := submit(t, s, "/write")
+	require.EqualError(t, err, "/write requires a file path")
 }
 
 // --- pure helpers -----------------------------------------------------
@@ -983,11 +983,11 @@ func TestCompleteBuiltins(t *testing.T) {
 		prefix string
 		want   []string
 	}{
-		{":", []string{":type", ":print", ":write", ":clear", ":doc", ":help", ":quit"}},
-		{":t", []string{":type"}},
-		{":p", []string{":print"}},
-		{":q", []string{":quit"}},
-		{":zzz", nil},
+		{"/", []string{"/type", "/print", "/write", "/clear", "/doc", "/help", "/quit"}},
+		{"/t", []string{"/type"}},
+		{"/p", []string{"/print"}},
+		{"/q", []string{"/quit"}},
+		{"/zzz", nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.prefix, func(t *testing.T) {
@@ -1001,11 +1001,11 @@ func TestGoREPLComplete(t *testing.T) {
 	t.Parallel()
 	s := newTestSession(newScriptedRunner())
 
-	got, err := s.Complete(context.Background(), ":t", nil)
+	got, err := s.Complete(context.Background(), "/t", nil)
 	require.NoError(t, err)
 	items, err := iterator.ToSlice(context.Background(), got)
 	require.NoError(t, err)
-	require.Equal(t, []string{":type"}, items)
+	require.Equal(t, []string{"/type"}, items)
 
 	// Non-builtin input yields no completions.
 	got, err = s.Complete(context.Background(), "math", nil)
@@ -1058,6 +1058,7 @@ type fakeCompletionLSP struct {
 	reqURI     string
 	reqPos     semanticapi.Position
 	closedURI  string
+	execArgs   []json.RawMessage
 }
 
 func (f *fakeCompletionLSP) DidOpen(
@@ -1092,6 +1093,7 @@ func (f *fakeCompletionLSP) ExecuteCommand(
 	if p.Command != "gopls.list_known_packages" {
 		return "", nil
 	}
+	f.execArgs = p.Arguments
 	if f.err != nil {
 		return "", f.err
 	}
@@ -1144,6 +1146,9 @@ func TestGoSessionCompletionPrefix(t *testing.T) {
 		{`import "github.com/foo/`, "github.com/foo/"},
 		{`import w "io`, "io"},
 		{`import "`, ""},
+		{"/typ", "/typ"},
+		{"/", "/"},
+		{"/help", "/help"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.line, func(t *testing.T) {
@@ -1197,7 +1202,14 @@ func TestGoSessionCompletePackages(t *testing.T) {
 	items, err := iterator.ToSlice(context.Background(), got)
 	require.NoError(t, err)
 	require.Equal(t, []string{"fmt", "fmt/internal"}, items)
-	require.Empty(t, lsp.openedURI, "package completion must not open a probe doc")
+	// gopls resolves known packages relative to a loaded file, so the
+	// synthetic program is opened as an overlay, queried, then closed,
+	// and its URI is forwarded as the command argument.
+	wantURI := "file://" + filepath.Join(dir, programFile)
+	require.Equal(t, wantURI, lsp.openedURI)
+	require.Equal(t, wantURI, lsp.closedURI)
+	require.Len(t, lsp.execArgs, 1)
+	require.JSONEq(t, `{"URI":"`+wantURI+`"}`, string(lsp.execArgs[0]))
 
 	got, err = s.Complete(context.Background(), "import", []string{`"github.com/`})
 	require.NoError(t, err)
@@ -1325,8 +1337,8 @@ func TestRejoin(t *testing.T) {
 	require.Equal(t, "1+1", rejoin(repl.Command{Name: "1+1"}))
 	require.Equal(t, "x := 5",
 		rejoin(repl.Command{Name: "x", Args: []string{":=", "5"}}))
-	require.Equal(t, ":doc fmt",
-		rejoin(repl.Command{Name: ":doc", Args: []string{"fmt"}}))
+	require.Equal(t, "/doc fmt",
+		rejoin(repl.Command{Name: "/doc", Args: []string{"fmt"}}))
 }
 
 func TestOutputRows(t *testing.T) {
@@ -1441,10 +1453,10 @@ func assertSlice(t *testing.T, want, got []string, step int, label string) {
 	require.Equal(t, want, got, "step %d %s", step, label)
 }
 
-// --- temp-dir FileSystem for :write -----------------------------------
+// --- temp-dir FileSystem for /write -----------------------------------
 
 // writeFS is a minimal workspaceapi.FileSystem backed by a real temp
-// directory; only OpenFile is exercised by :write, the rest are stubs.
+// directory; only OpenFile is exercised by /write, the rest are stubs.
 type writeFS struct {
 	root string
 }
@@ -1456,7 +1468,10 @@ func (w *writeFS) OpenFile(name string, flag int, mode os.FileMode) (workspaceap
 }
 
 func (w *writeFS) URI(p string) (workspaceapi.URI, error) {
-	return workspaceapi.ParseURI("file://" + filepath.Join(w.root, p))
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(w.root, p)
+	}
+	return workspaceapi.ParseURI("file://" + p)
 }
 
 func (w *writeFS) Remove(name string) error {
