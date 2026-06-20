@@ -75,19 +75,106 @@ type parserSearcher struct {
 }
 
 // specCache memoizes the workspace language detection so the file walk runs
-// once per parser. Subsequent ResolveSymbol calls reuse the detected specs.
+// once per parser. The walk is started lazily on the first detect call and
+// streamed: each detect iterator yields specs as the background walk discovers
+// them, so a consumer can begin resolving against the first detected language
+// before the walk completes. Later callers replay the same growing cache.
 type specCache struct {
-	fs       walkdir.Reader
-	once     sync.Once
+	fs walkdir.Reader
+	// source produces the spec stream to cache. It defaults to
+	// symbolresolve.DetectSpecs and exists so tests can drive detection
+	// without a real filesystem walk.
+	source func(context.Context, walkdir.Reader) iterator.Iterator[symbolresolve.Spec]
+
+	mu       sync.Mutex
+	started  bool
+	done     bool
 	detected []symbolresolve.Spec
+	// updated is closed (and replaced) whenever a spec is appended or the
+	// walk finishes, so blocked detect iterators wake without polling.
+	updated chan struct{}
 }
 
-func (c *specCache) detect(ctx context.Context) iterator.Iterator[symbolresolve.Spec] {
-	c.once.Do(func() {
-		c.detected, _ = iterator.ToSlice(ctx, symbolresolve.DetectSpecs(ctx, c.fs))
-	})
-	return iterator.FromSlice(c.detected)
+func (c *specCache) detect(context.Context) iterator.Iterator[symbolresolve.Spec] {
+	c.mu.Lock()
+	if !c.started {
+		c.started = true
+		c.updated = make(chan struct{})
+		go debug.CapturePanicReport(c.run)
+	}
+	c.mu.Unlock()
+	return &cachedSpecIterator{cache: c}
 }
+
+// run drains DetectSpecs once, appending each spec to the shared cache and
+// waking any blocked iterators. It uses a background context so the single
+// workspace walk is independent of whichever caller happened to start it.
+func (c *specCache) run() {
+	ctx := context.Background()
+	source := c.source
+	if source == nil {
+		source = symbolresolve.DetectSpecs
+	}
+	it := source(ctx, c.fs)
+	defer func() { _ = it.Close() }()
+	for {
+		spec, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		c.mu.Lock()
+		c.detected = append(c.detected, spec)
+		c.wakeLocked()
+		c.mu.Unlock()
+	}
+	c.mu.Lock()
+	c.done = true
+	c.wakeLocked()
+	c.mu.Unlock()
+}
+
+// wakeLocked signals all blocked iterators by closing the current update
+// channel and installing a fresh one. Callers must hold c.mu.
+func (c *specCache) wakeLocked() {
+	close(c.updated)
+	c.updated = make(chan struct{})
+}
+
+// cachedSpecIterator replays the specCache from its own index, blocking until
+// the next spec is available or the walk completes.
+type cachedSpecIterator struct {
+	cache *specCache
+	idx   int
+}
+
+func (it *cachedSpecIterator) Next(ctx context.Context) (symbolresolve.Spec, bool) {
+	c := it.cache
+	for {
+		c.mu.Lock()
+		if it.idx < len(c.detected) {
+			spec := c.detected[it.idx]
+			it.idx++
+			c.mu.Unlock()
+			return spec, true
+		}
+		if c.done {
+			c.mu.Unlock()
+			return symbolresolve.Spec{}, false
+		}
+		updated := c.updated
+		c.mu.Unlock()
+
+		select {
+		case <-updated:
+		case <-ctx.Done():
+			return symbolresolve.Spec{}, false
+		}
+	}
+}
+
+func (it *cachedSpecIterator) Err() error { return nil }
+
+func (it *cachedSpecIterator) Close() error { return nil }
 
 func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
 	iterator.Iterator[textapi.Location], error,
@@ -219,6 +306,37 @@ func (p parserSearcher) ResolveSymbol(
 				it.setErr(runCtx.Err())
 				return
 			}
+		}
+	})
+
+	return it, nil
+}
+
+// ListReferencedSymbols streams the package-qualified names of every symbol
+// referenced or defined across the workspace. It detects which languages are
+// present once via the cached spec detection and runs only the relevant specs.
+// Names may repeat across specs; callers deduplicate as needed.
+func (p parserSearcher) ListReferencedSymbols(
+	_ context.Context,
+) (iterator.Iterator[string], error) {
+	runCtx, cancel := context.WithCancel(context.Background())
+	results := make(chan string)
+	closeWaitCh := make(chan struct{})
+	it := &listReferencedSymbolsIterator{
+		ctx:         runCtx,
+		ch:          results,
+		cancel:      cancel,
+		closeWaitCh: closeWaitCh,
+	}
+
+	go debug.CapturePanicReport(func() {
+		defer close(closeWaitCh)
+		defer close(results)
+
+		if err := symbolresolve.ListReferences(
+			runCtx, p, p.specs.detect(runCtx), results,
+		); err != nil {
+			it.setErr(err)
 		}
 	})
 
@@ -631,6 +749,46 @@ func (it *resolveSymbolIterator) Err() error {
 }
 
 func (it *resolveSymbolIterator) Close() error {
+	it.cancel()
+	<-it.closeWaitCh
+	return nil
+}
+
+type listReferencedSymbolsIterator struct {
+	mu          sync.Mutex
+	err         error
+	ctx         context.Context
+	ch          chan string
+	cancel      func()
+	closeWaitCh chan struct{}
+}
+
+func (it *listReferencedSymbolsIterator) setErr(err error) {
+	it.mu.Lock()
+	defer it.mu.Unlock()
+	it.err = errors.Join(it.err, err)
+}
+
+func (it *listReferencedSymbolsIterator) Next(ctx context.Context) (string, bool) {
+	select {
+	case <-ctx.Done():
+		it.setErr(ctx.Err())
+		return "", false
+	case <-it.ctx.Done():
+		it.setErr(it.ctx.Err())
+		return "", false
+	case s, ok := <-it.ch:
+		return s, ok
+	}
+}
+
+func (it *listReferencedSymbolsIterator) Err() error {
+	it.mu.Lock()
+	defer it.mu.Unlock()
+	return it.err
+}
+
+func (it *listReferencedSymbolsIterator) Close() error {
 	it.cancel()
 	<-it.closeWaitCh
 	return nil

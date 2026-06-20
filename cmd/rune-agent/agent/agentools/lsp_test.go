@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package agentools
 
 import (
@@ -331,6 +330,10 @@ func (p *fakeParser) ResolveSymbol(
 		return iterator.FromSlice(matches), nil
 	}
 	return iterator.Empty[syntaxapi.Match](), nil
+}
+
+func (p *fakeParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
 }
 
 var _ syntaxapi.Parser = (*fakeParser)(nil)

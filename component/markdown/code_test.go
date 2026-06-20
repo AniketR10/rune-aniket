@@ -62,6 +62,10 @@ func (m *mockParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) 
 	return iterator.Empty[syntaxapi.Match](), nil
 }
 
+func (m *mockParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
+}
+
 func (m *mockParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.FromSlice[syntaxapi.Result](nil), nil
 }
@@ -642,6 +646,10 @@ func (p *blockingParser) ResolveSymbol(context.Context, string, syntaxapi.Progre
 	iterator.Iterator[syntaxapi.Match], error,
 ) {
 	return iterator.Empty[syntaxapi.Match](), nil
+}
+
+func (p *blockingParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
 }
 
 func (p *blockingParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {

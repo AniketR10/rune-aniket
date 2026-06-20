@@ -478,3 +478,83 @@ func pairedResults(
 		}, it.Close,
 	)
 }
+
+// ListReferences streams package-qualified symbol names ("pkg.Name")
+// referenced or defined across the workspace for every spec yielded by specs.
+// Names may repeat across specs; callers that need uniqueness deduplicate the
+// stream. Returns ErrNoDot is never produced here since no name is parsed.
+func ListReferences(
+	ctx context.Context, parser syntaxapi.Parser,
+	specs iterator.Iterator[Spec], ch chan<- string,
+) error {
+	defer func() { _ = specs.Close() }()
+	for {
+		spec, ok := specs.Next(ctx)
+		if !ok {
+			break
+		}
+		if err := listSpecReferences(ctx, parser, &spec, ch); err != nil {
+			return err
+		}
+	}
+	return specs.Err()
+}
+
+func listSpecReferences(
+	ctx context.Context, parser syntaxapi.Parser, spec *Spec, ch chan<- string,
+) error {
+	imports, err := ImportedAliases(ctx, parser, spec)
+	if err != nil {
+		return err
+	}
+	for _, rq := range spec.RefQueries {
+		keep := func(p [2]syntaxapi.Result) bool {
+			if !spec.exported(p[1].Text) {
+				return false
+			}
+			if rq.RequireImport {
+				m := imports[p[0].File]
+				return m != nil && m[p[0].Text]
+			}
+			return true
+		}
+		if err := listRefPairs(ctx, parser, rq.Query, rq.Captures, spec.LangID, keep, ch); err != nil {
+			return err
+		}
+	}
+	packages, err := FilePackages(ctx, parser, spec)
+	if err != nil {
+		return err
+	}
+	return SearchDefinitions(ctx, parser, spec, packages, ch, nil)
+}
+
+func listRefPairs(
+	ctx context.Context, parser syntaxapi.Parser,
+	query string, captures []string, lang string,
+	keep func([2]syntaxapi.Result) bool,
+	ch chan<- string,
+) error {
+	iter, err := parser.Search(query, captures, lang)
+	if err != nil {
+		return err
+	}
+	results := iterator.Map(
+		iterator.Filter(pairedResults(iter), keep),
+		func(p [2]syntaxapi.Result) string {
+			return p[0].Text + "." + p[1].Text
+		},
+	)
+	defer func() { _ = results.Close() }()
+	for {
+		s, ok := results.Next(ctx)
+		if !ok {
+			return results.Err()
+		}
+		select {
+		case ch <- s:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}

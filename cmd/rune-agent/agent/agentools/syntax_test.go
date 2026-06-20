@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package agentools
 
 import (
@@ -85,6 +84,10 @@ func (s *stubParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) 
 	iterator.Iterator[syntaxapi.Match], error,
 ) {
 	return iterator.FromSlice[syntaxapi.Match](nil), nil
+}
+
+func (s *stubParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
 }
 
 var _ syntaxapi.Parser = (*stubParser)(nil)

@@ -234,6 +234,32 @@ func (s *Server) ResolveSymbol(
 	return nil
 }
 
+// ListReferencedSymbols implements SyntaxServer.
+func (s *Server) ListReferencedSymbols(
+	_ *syntaxrpc.ListReferencedSymbolsRequest,
+	stream grpc.ServerStreamingServer[syntaxrpc.ListReferencedSymbolsResponse],
+) error {
+	ctx, cancel := bluectx.First(stream.Context(), s.ctx)
+	defer cancel()
+
+	it, err := s.parser.ListReferencedSymbols(ctx)
+	if err != nil {
+		return fmt.Errorf("syntax list referenced symbols: %w", err)
+	}
+	defer it.Close() //nolint:errcheck
+
+	for {
+		name, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		if err := stream.Send(&syntaxrpc.ListReferencedSymbolsResponse{Name: name}); err != nil {
+			return err
+		}
+	}
+	return it.Err()
+}
+
 func streamResults(
 	ctx context.Context,
 	stream grpc.ServerStreamingServer[syntaxrpc.SearchResponse],

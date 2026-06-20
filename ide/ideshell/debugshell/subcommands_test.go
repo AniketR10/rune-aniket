@@ -274,6 +274,10 @@ func (passThroughParser) ResolveSymbol(context.Context, string, syntaxapi.Progre
 	return iterator.Empty[syntaxapi.Match](), nil
 }
 
+func (passThroughParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
+}
+
 func (passThroughParser) SearchNode(syntaxapi.NodeCaptureName) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {

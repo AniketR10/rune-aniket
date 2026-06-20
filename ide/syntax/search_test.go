@@ -28,6 +28,7 @@ import (
 	"errors"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +37,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"unstable.build/go-tui/ide/idelsp/symbolresolve"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 type countingPkgManager struct {
@@ -443,4 +446,128 @@ func drainIterator(t *testing.T, it *listSymbolsIterator, ctx context.Context) i
 		}
 		count++
 	}
+}
+
+// blockingSpecSource yields the first spec immediately, then blocks on gate
+// before yielding the rest, letting a test observe that detect streams the
+// first spec before the underlying walk completes.
+type blockingSpecSource struct {
+	specs []symbolresolve.Spec
+	gate  chan struct{}
+	calls int32
+}
+
+func (s *blockingSpecSource) iterator(
+	context.Context, walkdir.Reader,
+) iterator.Iterator[symbolresolve.Spec] {
+	atomic.AddInt32(&s.calls, 1)
+	idx := 0
+	return iterator.FromFunc(func(context.Context) (symbolresolve.Spec, bool, error) {
+		if idx >= len(s.specs) {
+			return symbolresolve.Spec{}, false, nil
+		}
+		if idx == 1 {
+			<-s.gate
+		}
+		spec := s.specs[idx]
+		idx++
+		return spec, true, nil
+	}, func() error { return nil })
+}
+
+func TestSpecCacheStreamsFirstSpecBeforeWalkCompletes(t *testing.T) {
+	src := &blockingSpecSource{
+		specs: []symbolresolve.Spec{{LangID: "go"}, {LangID: "python"}},
+		gate:  make(chan struct{}),
+	}
+	cache := &specCache{source: src.iterator}
+
+	it := cache.detect(context.Background())
+	t.Cleanup(func() { _ = it.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	first, ok := it.Next(ctx)
+	require.True(t, ok, "first spec must stream before the walk finishes")
+	assert.Equal(t, "go", first.LangID)
+
+	// The second spec is still gated, so a short-deadline Next must not
+	// produce it yet.
+	blockedCtx, blockedCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	_, ok = it.Next(blockedCtx)
+	blockedCancel()
+	assert.False(t, ok, "second spec must not arrive while the walk is blocked")
+
+	close(src.gate)
+	second, ok := it.Next(ctx)
+	require.True(t, ok)
+	assert.Equal(t, "python", second.LangID)
+
+	_, ok = it.Next(ctx)
+	assert.False(t, ok, "iterator ends after the walk completes")
+}
+
+func TestSpecCacheRunsWalkOnceAndReplays(t *testing.T) {
+	src := &blockingSpecSource{
+		specs: []symbolresolve.Spec{{LangID: "go"}, {LangID: "python"}},
+		gate:  make(chan struct{}),
+	}
+	close(src.gate)
+	cache := &specCache{source: src.iterator}
+
+	ctx := context.Background()
+	collect := func() []string {
+		it := cache.detect(ctx)
+		defer func() { _ = it.Close() }()
+		var ids []string
+		for {
+			spec, ok := it.Next(ctx)
+			if !ok {
+				return ids
+			}
+			ids = append(ids, spec.LangID)
+		}
+	}
+
+	first := collect()
+	second := collect()
+	assert.Equal(t, []string{"go", "python"}, first)
+	assert.Equal(t, first, second, "later callers replay the cached specs")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&src.calls), "the walk must run once")
+}
+
+func TestSpecCacheConcurrentDetectRunsWalkOnce(t *testing.T) {
+	src := &blockingSpecSource{
+		specs: []symbolresolve.Spec{{LangID: "go"}, {LangID: "python"}},
+		gate:  make(chan struct{}),
+	}
+	close(src.gate)
+	cache := &specCache{source: src.iterator}
+
+	ctx := context.Background()
+	const callers = 8
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	results := make([][]string, callers)
+	for i := range callers {
+		go func() {
+			defer wg.Done()
+			it := cache.detect(ctx)
+			defer func() { _ = it.Close() }()
+			for {
+				spec, ok := it.Next(ctx)
+				if !ok {
+					return
+				}
+				results[i] = append(results[i], spec.LangID)
+			}
+		}()
+	}
+	wg.Wait()
+
+	for i := range callers {
+		assert.Equalf(t, []string{"go", "python"}, results[i], "caller %d", i)
+	}
+	assert.Equal(t, int32(1), atomic.LoadInt32(&src.calls), "the walk must run once across concurrent callers")
 }

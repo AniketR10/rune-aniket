@@ -38,7 +38,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/locationpicker"
-	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 )
 
 // matchPosition converts a resolved symbol's term coordinates into an LSP
@@ -179,146 +178,24 @@ func showSymbolPicker(
 func completeReferencedSymbol(
 	ctx context.Context, parser syntaxapi.Parser,
 ) (iterator.Iterator[string], error) {
-	ctx, cancel := context.WithCancel(ctx)
-	ch := make(chan string)
-	errc := make(chan error, 1)
-
-	go debug.CapturePanicReport(func() {
-
-		defer close(ch)
-		if err := produceReferencedSymbols(ctx, parser, ch); err != nil {
-			errc <- err
-		}
-
-	})
-
+	it, err := parser.ListReferencedSymbols(ctx)
+	if err != nil {
+		return nil, err
+	}
 	seen := make(map[string]bool)
 	return iterator.FromFunc(func(ctx context.Context) (string, bool, error) {
 		for {
-			select {
-			case s, ok := <-ch:
-				if !ok {
-					select {
-					case err := <-errc:
-						return "", false, err
-					default:
-						return "", false, nil
-					}
-				}
-				if seen[s] {
-					continue
-				}
-				seen[s] = true
-				return s, true, nil
-			case <-ctx.Done():
-				return "", false, ctx.Err()
+			s, ok := it.Next(ctx)
+			if !ok {
+				return "", false, it.Err()
 			}
-		}
-	}, func() error {
-		cancel()
-		for range ch {
-		}
-		select {
-		case err := <-errc:
-			return err
-		default:
-			return nil
-		}
-	}), nil
-}
-
-func produceReferencedSymbols(
-	ctx context.Context, parser syntaxapi.Parser, ch chan<- string,
-) error {
-	for _, spec := range symbolresolve.All() {
-		if err := produceSpecSymbols(ctx, parser, spec, ch); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func produceSpecSymbols(
-	ctx context.Context, parser syntaxapi.Parser,
-	spec *symbolresolve.Spec, ch chan<- string,
-) error {
-	imports, err := symbolresolve.ImportedAliases(ctx, parser, spec)
-	if err != nil {
-		return err
-	}
-	for _, rq := range spec.RefQueries {
-		keep := func(p [2]syntaxapi.Result) bool {
-			if spec.IsExported != nil && !spec.IsExported(p[1].Text) {
-				return false
+			if seen[s] {
+				continue
 			}
-			if rq.RequireImport {
-				m := imports[p[0].File]
-				return m != nil && m[p[0].Text]
-			}
-			return true
+			seen[s] = true
+			return s, true, nil
 		}
-		if err := searchPairs(ctx, parser, rq.Query, rq.Captures, spec.LangID, keep, ch); err != nil {
-			return err
-		}
-	}
-	packages, err := symbolresolve.FilePackages(ctx, parser, spec)
-	if err != nil {
-		return err
-	}
-	return symbolresolve.SearchDefinitions(ctx, parser, spec, packages, ch, nil)
-}
-
-func searchPairs(
-	ctx context.Context, parser syntaxapi.Parser,
-	query string, captures []string, lang string,
-	keep func([2]syntaxapi.Result) bool,
-	ch chan<- string,
-) error {
-	iter, err := parser.Search(query, captures, lang)
-	if err != nil {
-		return err
-	}
-	results := iterator.Map(
-		iterator.Filter(pairedResults(iter), keep),
-		func(p [2]syntaxapi.Result) string {
-			return p[0].Text + "." + p[1].Text
-		},
-	)
-	defer func() { _ = results.Close() }()
-	for {
-		s, ok := results.Next(ctx)
-		if !ok {
-			return results.Err()
-		}
-		select {
-		case ch <- s:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-func pairedResults(
-	it iterator.Iterator[syntaxapi.Result],
-) iterator.Iterator[[2]syntaxapi.Result] {
-	// Buffer per-file because the gRPC stream may interleave results
-	// from files processed concurrently.
-	pending := make(map[workspaceapi.URI]syntaxapi.Result)
-	return iterator.FromFunc(
-		func(ctx context.Context) ([2]syntaxapi.Result, bool, error) {
-			for {
-				r, ok := it.Next(ctx)
-				if !ok {
-					return [2]syntaxapi.Result{}, false, it.Err()
-				}
-				if first, exists := pending[r.File]; exists {
-					delete(pending, r.File)
-					return [2]syntaxapi.Result{first, r}, true, nil
-				}
-				pending[r.File] = r
-			}
-		}, it.Close,
-	)
+	}, it.Close), nil
 }
 
 func normalizeMethodName(name string) string {

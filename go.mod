@@ -27,7 +27,7 @@ require (
 	github.com/sourcegraph/go-diff v0.6.1
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
-	github.com/unstablebuild/rune-go-sdk v0.0.98
+	github.com/unstablebuild/rune-go-sdk v0.0.99
 	github.com/unstablebuild/tcell/v3 v3.6.5
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.52.0
@@ -208,7 +208,3 @@ replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v
 replace github.com/tree-sitter/go-tree-sitter => github.com/unstablebuild/go-tree-sitter v0.25.0-ub.1
 
 replace github.com/unstablebuild/ox-api => ./cmd/ox-api
-
-// TEMPORARY: local SDK for RUNE-256 ResolveSymbol development. Replace with a
-// published rune-go-sdk version bump before merging.
-replace github.com/unstablebuild/rune-go-sdk => /Users/ernestrc/src/rune-go-sdk

@@ -267,6 +267,41 @@ func TestServerClientIntegration(t *testing.T) {
 				assert.ErrorIs(t, err, syntaxapi.ErrNoDot)
 			},
 		},
+		{
+			name: "ListReferencedSymbols streams names",
+			setup: func(m *mockParser) {
+				m.referencedNames = []string{"pkg.Foo", "pkg.Bar", "other.Baz"}
+			},
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.ListReferencedSymbols(context.Background())
+				require.NoError(t, err)
+				names, err := iterator.ToSlice(context.Background(), it)
+				require.NoError(t, err)
+				require.NoError(t, it.Err())
+				assert.Equal(t, []string{"pkg.Foo", "pkg.Bar", "other.Baz"}, names)
+			},
+		},
+		{
+			name:  "ListReferencedSymbols streams empty",
+			setup: func(m *mockParser) { m.referencedNames = nil },
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.ListReferencedSymbols(context.Background())
+				require.NoError(t, err)
+				names, err := iterator.ToSlice(context.Background(), it)
+				require.NoError(t, err)
+				assert.Empty(t, names)
+			},
+		},
+		{
+			name:  "ListReferencedSymbols propagates server error",
+			setup: func(m *mockParser) { m.referencedErr = errors.New("boom") },
+			action: func(t *testing.T, client *syntaxrpc.Client) {
+				it, err := client.ListReferencedSymbols(context.Background())
+				require.NoError(t, err)
+				_, err = iterator.ToSlice(context.Background(), it)
+				require.Error(t, err)
+			},
+		},
 	}
 
 	for _, tcase := range tsuite {
@@ -420,6 +455,8 @@ type mockParser struct {
 	resolveMatches    []syntaxapi.Match
 	resolveErr        error
 	lastResolveName   string
+	referencedNames   []string
+	referencedErr     error
 }
 
 func (m *mockParser) Highlight(uri workspaceapi.URI, content string) (
@@ -481,6 +518,15 @@ func (m *mockParser) ResolveSymbol(
 		progress.Report("Searching definitions…", len(m.resolveMatches), 2, 4)
 	}
 	return iterator.FromSlice(m.resolveMatches), nil
+}
+
+func (m *mockParser) ListReferencedSymbols(
+	_ context.Context,
+) (iterator.Iterator[string], error) {
+	if m.referencedErr != nil {
+		return nil, m.referencedErr
+	}
+	return iterator.FromSlice(m.referencedNames), nil
 }
 
 func setupServerClient(t *testing.T, mock *mockParser) (*Server, *syntaxrpc.Client, func()) {

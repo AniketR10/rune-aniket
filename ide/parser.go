@@ -98,6 +98,14 @@ func (w *lazyParser) ResolveSymbol(
 	return nil, errors.New("parser not supported on home workspace")
 }
 
+// ListReferencedSymbols returns an empty iterator; the home workspace has no
+// symbol index.
+func (w *lazyParser) ListReferencedSymbols(
+	ctx context.Context,
+) (iterator.Iterator[string], error) {
+	return iterator.Empty[string](), nil
+}
+
 type currentParser struct {
 	root *workspaceManagerHandler
 }
@@ -175,4 +183,14 @@ func (c currentParser) ResolveSymbol(
 		return nil, errNoParser
 	}
 	return p.ResolveSymbol(ctx, name, progress)
+}
+
+func (c currentParser) ListReferencedSymbols(
+	ctx context.Context,
+) (iterator.Iterator[string], error) {
+	p := c.parser()
+	if p == nil {
+		return nil, errNoParser
+	}
+	return p.ListReferencedSymbols(ctx)
 }

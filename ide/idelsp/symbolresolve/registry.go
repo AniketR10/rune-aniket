@@ -45,11 +45,6 @@ func SpecFor(langID string) *Spec {
 	return nil
 }
 
-// All returns the registered specs in resolution-preference order.
-func All() []*Spec {
-	return registry
-}
-
 // DetectSpecs walks the workspace lazily and yields each registered spec whose
 // extensions match at least one present file. A spec is emitted as soon as the
 // first matching file is seen, so a consumer can begin resolving against it

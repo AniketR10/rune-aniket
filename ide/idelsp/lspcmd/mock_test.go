@@ -99,6 +99,9 @@ type mockParser struct {
 	// definitions phase in symbolresolve.Resolve / SearchDefinitions).
 	searchNodeFn func(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error)
 	resolveFn    func(string, syntaxapi.Progress) ([]syntaxapi.Match, error)
+	// listReferencedFn scripts the workspace-wide referenced-symbol stream
+	// consumed by completeReferencedSymbol.
+	listReferencedFn func() (iterator.Iterator[string], error)
 }
 
 func (m *mockParser) Search(query string, captures []string, langs ...string) (iterator.Iterator[syntaxapi.Result], error) {
@@ -136,6 +139,13 @@ func (m *mockParser) ResolveSymbol(
 		return iterator.FromSlice(matches), nil
 	}
 	return iterator.Empty[syntaxapi.Match](), nil
+}
+
+func (m *mockParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
+	if m.listReferencedFn != nil {
+		return m.listReferencedFn()
+	}
+	return iterator.Empty[string](), nil
 }
 
 func (m *mockEditor) MoveToNextLocation(_ textapi.Handler, _ string) error {

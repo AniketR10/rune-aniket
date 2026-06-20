@@ -169,3 +169,54 @@ func TestParserResolveSymbolLanguageDetection(t *testing.T) {
 		assert.False(t, errors.Is(err, syntaxapi.ErrNoDot))
 	})
 }
+
+func listReferencedAll(t *testing.T, parser syntaxapi.Parser) map[string]bool {
+	t.Helper()
+	it, err := parser.ListReferencedSymbols(context.Background())
+	require.NoError(t, err)
+	names, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	require.NoError(t, it.Err())
+	got := make(map[string]bool, len(names))
+	for _, n := range names {
+		got[n] = true
+	}
+	return got
+}
+
+func TestParserListReferencedSymbolsLanguageDetection(t *testing.T) {
+	t.Run("go only lists go refs and not python", func(t *testing.T) {
+		parser := newResolveParser(t, map[string]string{
+			"geometry/area.go": goGeometryDef,
+			"main.go":          goGeometryUse,
+		})
+
+		got := listReferencedAll(t, parser)
+		assert.True(t, got["geometry.Area"], "Go reference should be listed")
+		assert.False(t, got["shapes.perimeter"], "Python ref must not appear in a Go-only workspace")
+	})
+
+	t.Run("python only lists python refs and not go", func(t *testing.T) {
+		parser := newResolveParser(t, map[string]string{
+			"shapes.py": pyShapesDef,
+			"main.py":   pyShapesUse,
+		})
+
+		got := listReferencedAll(t, parser)
+		assert.True(t, got["shapes.perimeter"], "Python reference should be listed")
+		assert.False(t, got["geometry.Area"], "Go ref must not appear in a Python-only workspace")
+	})
+
+	t.Run("mixed workspace lists both languages", func(t *testing.T) {
+		parser := newResolveParser(t, map[string]string{
+			"geometry/area.go": goGeometryDef,
+			"main.go":          goGeometryUse,
+			"shapes.py":        pyShapesDef,
+			"app.py":           pyShapesUse,
+		})
+
+		got := listReferencedAll(t, parser)
+		assert.True(t, got["geometry.Area"], "Go reference should be listed")
+		assert.True(t, got["shapes.perimeter"], "Python reference should be listed")
+	})
+}

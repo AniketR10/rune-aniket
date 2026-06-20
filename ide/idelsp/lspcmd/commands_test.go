@@ -66,32 +66,9 @@ func TestRouterCompleteSymbol(t *testing.T) {
 	rootURI, err := workspaceapi.ParseURI("file:///project")
 	require.NoError(t, err)
 
-	fileURI, err := workspaceapi.ParseURI("file:///project/main.go")
-	require.NoError(t, err)
-
 	parser := &mockParser{
-		searchFn: func(query string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-			if strings.Contains(query, "import_spec") && !strings.Contains(query, "name:") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: fileURI, Text: `"fmt"`, CaptureName: "path"},
-				}), nil
-			}
-			if strings.Contains(query, "import_spec") && strings.Contains(query, "name:") {
-				return iterator.Empty[syntaxapi.Result](), nil
-			}
-			if strings.Contains(query, "qualified_type") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: fileURI, Text: "fmt", CaptureName: "pkg"},
-					{File: fileURI, Text: "Stringer", CaptureName: "type"},
-				}), nil
-			}
-			if strings.Contains(query, "selector_expression") {
-				return iterator.FromSlice([]syntaxapi.Result{
-					{File: fileURI, Text: "fmt", CaptureName: "pkg"},
-					{File: fileURI, Text: "Println", CaptureName: "symbol"},
-				}), nil
-			}
-			return iterator.Empty[syntaxapi.Result](), nil
+		listReferencedFn: func() (iterator.Iterator[string], error) {
+			return iterator.FromSlice([]string{"fmt.Stringer", "fmt.Println"}), nil
 		},
 	}
 
@@ -202,9 +179,6 @@ func TestRouterCompleteReferencedSymbolFallback(t *testing.T) {
 	rootURI, err := workspaceapi.ParseURI("file:///project")
 	require.NoError(t, err)
 
-	fileA, err := workspaceapi.ParseURI("file:///project/a.go")
-	require.NoError(t, err)
-
 	subcommands := []string{
 		"hover", "definition", "declaration",
 		"type-definition", "implementation", "references",
@@ -217,19 +191,8 @@ func TestRouterCompleteReferencedSymbolFallback(t *testing.T) {
 			t.Run("parser fallback returns referenced symbols", func(t *testing.T) {
 				t.Parallel()
 				parser := &mockParser{
-					searchFn: func(query string, _ []string) (iterator.Iterator[syntaxapi.Result], error) {
-						switch {
-						case strings.Contains(query, "import_spec") && !strings.Contains(query, "name:"):
-							return iterator.FromSlice([]syntaxapi.Result{
-								{File: fileA, Text: `"fmt"`, CaptureName: "path"},
-							}), nil
-						case strings.Contains(query, "selector_expression"):
-							return iterator.FromSlice([]syntaxapi.Result{
-								{File: fileA, Text: "fmt", CaptureName: "pkg"},
-								{File: fileA, Text: "Println", CaptureName: "symbol"},
-							}), nil
-						}
-						return iterator.Empty[syntaxapi.Result](), nil
+					listReferencedFn: func() (iterator.Iterator[string], error) {
+						return iterator.FromSlice([]string{"fmt.Println"}), nil
 					},
 				}
 				lsp := &mockLSP{

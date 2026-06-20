@@ -46,11 +46,3 @@ func TestSpecFor(t *testing.T) {
 	assert.Same(t, symbolresolve.Python, symbolresolve.SpecFor("python"))
 	assert.Nil(t, symbolresolve.SpecFor("rust"))
 }
-
-func TestAll(t *testing.T) {
-	t.Parallel()
-
-	all := symbolresolve.All()
-	assert.Contains(t, all, symbolresolve.Go)
-	assert.Contains(t, all, symbolresolve.Python)
-}
