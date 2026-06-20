@@ -107,13 +107,14 @@ type macroRecorder interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config        text.Config
-	comp          text.Component
-	clip          clipboard.Register
-	ed            text.Editor
-	parser        syntaxapi.Parser
-	wsExecutor    *workspaceshell.Executor
-	aliasExpander *idecmd.Expander
+	config         text.Config
+	comp           text.Component
+	clip           clipboard.Register
+	ed             text.Editor
+	editorObserver *commandRegisterObserver
+	parser         syntaxapi.Parser
+	wsExecutor     *workspaceshell.Executor
+	aliasExpander  *idecmd.Expander
 	// executor is a forwarding proxy: long-lived consumers (the
 	// CommandSubstResolver, plugin.New, the VTE) capture this value
 	// once and continue to route through whatever underlying
@@ -279,6 +280,7 @@ func (e *ex) init(
 	if err != nil {
 		return
 	}
+	e.editorObserver = newCommandRegisterObserver(&e.comp)
 	if tm == nil {
 		tm = e.Browser()
 	}
@@ -335,7 +337,7 @@ func (e *ex) subscribeCommands() error {
 	var ret error
 	subscribe := func(name string, man commandAll) {
 		man.man.Name = name
-		err := e.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
+		err := e.editorObserver.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {
 				return man.handler(e, ctx, cmd.Args...)
 			}, func(ctx context.Context, cmd textapi.Command) (
@@ -2674,7 +2676,7 @@ func (e *ex) stopPromptShader() {
 
 // Editor returns the underlying Editor implementation.
 func (e *ex) Editor() text.Editor {
-	return &e.comp
+	return e.editorObserver
 }
 
 // Browser returns the underlying browser.Browser implementaiton.

@@ -1573,10 +1573,10 @@ func (h *workspaceManagerHandler) buildExtensions(
 		})
 	})
 	dbgMan := debugshell.Manual()
-	if err := ex.comp.RegisterREPLCommand(dbgMan, dbgHandler); err != nil {
+	if err := ex.editorObserver.RegisterREPLCommand(dbgMan, dbgHandler); err != nil {
 		log.Errorf("register debugger repl command: %v", err)
 	}
-	if err := ex.comp.SubscribeCommand(dbgMan,
+	if err := ex.editorObserver.SubscribeCommand(dbgMan,
 		debugshell.NewPromptHandler(dbgHandler).
 			WithOpenShell(ex.shellnewtab)); err != nil {
 		log.Errorf("subscribe debugger command prompt: %v", err)
@@ -1594,7 +1594,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 			ret, err := apiHandler.Complete(ctx, cmd.Name, cmd.Args)
 			return ret, "", err
 		})
-	err = ex.comp.SubscribeCommand(lspcmd.Manual(), handler)
+	err = ex.editorObserver.SubscribeCommand(lspcmd.Manual(), handler)
 	if err != nil {
 		log.Errorf("subscribe LSP manager: %v", err)
 	}
@@ -1614,7 +1614,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		ScheduleNextTick: cfg.scheduleNextTick,
 		PromptOpener:     &ex.comp,
 	})
-	if err := ex.comp.RegisterREPLCommand(llmshell.Manual(), llmHandler); err != nil {
+	if err := ex.editorObserver.RegisterREPLCommand(llmshell.Manual(), llmHandler); err != nil {
 		log.Errorf("register llm repl command: %v", err)
 	}
 
@@ -1623,7 +1623,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 		Manager:       h.pkgmanager.pkg,
 		UpdateChecker: h.pkgmanager.uc,
 	})
-	if err := ex.comp.RegisterREPLCommand(pkgshell.Manual(), pkgHandler); err != nil {
+	if err := ex.editorObserver.RegisterREPLCommand(pkgshell.Manual(), pkgHandler); err != nil {
 		log.Errorf("register pkg repl command: %v", err)
 	}
 
@@ -2008,52 +2008,23 @@ const extensionReadyWait = 30 * time.Second
 const extensionHandleWait = 30 * time.Second
 
 // waitCommandRegistered blocks until cmd is registered on ex, the
-// timeout elapses, or scheduling fails. The registration check runs on
-// the event loop because the command registry is owned by the editor
-// component.
+// timeout elapses, or ctx is cancelled. Registrations are observed
+// directly through ex's editor (see commandRegisterObserver), so the
+// wait is signalled the moment the command is registered rather than
+// polling the registry.
 func (h *workspaceManagerHandler) waitCommandRegistered(
 	ctx context.Context, ex *ex, cmd string,
 ) error {
-	deadline := time.NewTimer(h.extCommandWait)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		registered := make(chan bool, 1)
-		scheduled := h.scheduleNextTick(func() {
-			registered <- commandRegistered(ex, cmd)
-		})
-		if !scheduled {
-			return fmt.Errorf("command %q wait: event loop is closed", cmd)
-		}
-		select {
-		case ok := <-registered:
-			if ok {
-				return nil
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-		select {
-		case <-ticker.C:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-deadline.C:
+	waitCtx, cancel := context.WithTimeout(ctx, h.extCommandWait)
+	defer cancel()
+	if err := ex.editorObserver.Wait(waitCtx, cmd); err != nil {
+		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("command %q was not registered within %s",
 				cmd, h.extCommandWait)
 		}
+		return err
 	}
-}
-
-// commandRegistered reports whether cmd is registered on ex's editor.
-// It must run on the event loop.
-func commandRegistered(ex *ex, cmd string) bool {
-	for _, man := range ex.comp.Commands() {
-		if man.Name == cmd {
-			return true
-		}
-	}
-	return false
+	return nil
 }
 
 func (h *workspaceManagerHandler) closeWorkspace() (
@@ -2341,7 +2312,7 @@ func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
 	if err != nil {
 		return fmt.Errorf("subscribe external repl commands: %w", err)
 	}
-	err = ex.comp.SubscribeCommand(textapi.CommandManual{
+	err = ex.editorObserver.SubscribeCommand(textapi.CommandManual{
 		Name: cmdMacroRecord,
 		Summary: "Toggle recording all user key events into the given clipboard register. " +
 			"Run `record a` to start capturing keys into register `a`, then run `record a` " +
@@ -2442,7 +2413,7 @@ func (h *workspaceManagerHandler) subscribeInternalCommands(
 ) (ret error) {
 	for cmd, man := range commands {
 		man.man.Name = cmd
-		err := ex.comp.SubscribeCommand(man.man, text.FuncCommandHandler(
+		err := ex.editorObserver.SubscribeCommand(man.man, text.FuncCommandHandler(
 			func(ctx context.Context, cmd textapi.Command) error {
 				return man.handler(h, cmd.Args...)
 			}, func(ctx context.Context, cmd textapi.Command) (
@@ -2502,7 +2473,7 @@ func (h *workspaceManagerHandler) subscribeExternalCommands(
 	ex *ex, commands ...externalCommand,
 ) (ret error) {
 	for _, cmd := range commands {
-		err := ex.comp.SubscribeCommand(cmd.cmd, cmd.handler)
+		err := ex.Editor().SubscribeCommand(cmd.cmd, cmd.handler)
 		if err != nil {
 			ret = multierror.Append(ret,
 				fmt.Errorf("subscribe command '%s': %v", cmd.cmd.Name, err))
@@ -2528,7 +2499,7 @@ func (h *workspaceManagerHandler) subscribeExternalREPLCommands(
 	ex *ex, commands ...externalREPLCommand,
 ) (ret error) {
 	for _, cmd := range commands {
-		err := ex.comp.RegisterREPLCommand(cmd.cmd, cmd.handler)
+		err := ex.Editor().RegisterREPLCommand(cmd.cmd, cmd.handler)
 		if err != nil {
 			ret = multierror.Append(ret,
 				fmt.Errorf("register repl command '%s': %v", cmd.cmd.Name, err))
