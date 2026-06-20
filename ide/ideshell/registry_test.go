@@ -82,6 +82,25 @@ func (m *mockCmdHandler) Help(
 	return toLines("mock help"), nil
 }
 
+// sigHelperCmd is a CommandHandler that also implements SignatureHelper,
+// used to verify registryFallback forwards signature-help requests to
+// the hosted language REPL.
+type sigHelperCmd struct {
+	mockCmdHandler
+	label   string
+	ok      bool
+	gotLine string
+	gotCol  int
+}
+
+func (s *sigHelperCmd) SignatureHelp(
+	_ context.Context, line string, col int,
+) (string, bool) {
+	s.gotLine = line
+	s.gotCol = col
+	return s.label, s.ok
+}
+
 func collectText(
 	t *testing.T,
 	iter iterator.Iterator[component.Responsive],
@@ -357,6 +376,62 @@ func TestHelpCommandComplete(t *testing.T) {
 	assert.Equal(t, []string{"far", "foo"}, got)
 }
 
+// TestHelpCommandUsesFallback verifies that in a pure language REPL the
+// top-level `help` (no args) shows the language's own command reference
+// instead of listing the registry's `go`/`help` entries.
+func TestHelpCommandUsesFallback(t *testing.T) {
+	fallback := &mockCmdHandler{
+		helpFn: func(_ context.Context, args []string) (
+			iterator.Iterator[component.Responsive], error,
+		) {
+			assert.Empty(t, args)
+			return toLines("import \"<path>\" add an import"), nil
+		},
+	}
+	r := NewRegistry()
+	registerBaseCommands(r)
+	r.SetHelpFallback(fallback)
+
+	ctx := context.Background()
+	iter, err := r.HandleCommand(ctx, repl.Command{Name: "help"}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out := collectText(t, iter)
+	require.Len(t, out, 1)
+	assert.Contains(t, out[0], "import")
+	assert.NotContains(t, out[0], "Show available commands")
+}
+
+// TestHelpCommandFallbackWiredByNew verifies New wires the
+// DisableShellInterpreter handler as the help fallback, so `help`
+// surfaces the language REPL's reference in the assembled shell.
+func TestHelpCommandFallbackWiredByNew(t *testing.T) {
+	fallback := &mockCmdHandler{
+		helpFn: func(_ context.Context, _ []string) (
+			iterator.Iterator[component.Responsive], error,
+		) {
+			return toLines("language repl help"), nil
+		},
+	}
+	h, r := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{DisableShellInterpreter: fallback},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+
+	iter, err := r.HandleCommand(
+		context.Background(), repl.Command{Name: "help"}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out := collectText(t, iter)
+	require.Len(t, out, 1)
+	assert.Contains(t, out[0], "language repl help")
+}
+
 type recordingProgressWriter struct {
 	mu      sync.Mutex
 	samples []progressSample
@@ -510,4 +585,22 @@ func TestDefaultShellInterpreterEnabled(t *testing.T) {
 	require.False(t, ok,
 		"default config must wrap the registry with the sh interpreter, got %T",
 		h.shim.underlying)
+}
+
+// TestRegistryFallbackForwardsSignatureHelp verifies registryFallback
+// routes signature-help requests to the hosted language REPL when it
+// implements SignatureHelper, and reports nothing otherwise.
+func TestRegistryFallbackForwardsSignatureHelp(t *testing.T) {
+	helper := &sigHelperCmd{label: "Println(a ...any)", ok: true}
+	f := &registryFallback{registry: NewRegistry(), fallback: helper}
+
+	label, ok := f.SignatureHelp(context.Background(), "fmt.Println(", 12)
+	require.True(t, ok)
+	require.Equal(t, "Println(a ...any)", label)
+	require.Equal(t, "fmt.Println(", helper.gotLine)
+	require.Equal(t, 12, helper.gotCol)
+
+	plain := &registryFallback{registry: NewRegistry(), fallback: &mockCmdHandler{}}
+	_, ok = plain.SignatureHelp(context.Background(), "fmt.Println(", 12)
+	require.False(t, ok, "non-SignatureHelper fallback yields no help")
 }

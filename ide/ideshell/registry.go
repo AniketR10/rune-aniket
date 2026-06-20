@@ -57,6 +57,19 @@ type CommandHandler interface {
 type CommandRegistry struct {
 	mu       sync.RWMutex
 	commands map[string]entry
+	// helpFallback, when set, provides the top-level `help` output
+	// instead of the registered-command list. A pure language REPL
+	// sets it so `help` shows the language's own reference rather than
+	// the synthetic `go`/`help` entries the user never types.
+	helpFallback helpProvider
+}
+
+// helpProvider is the subset of a handler the registry needs to render
+// top-level help on behalf of a hosted language REPL.
+type helpProvider interface {
+	Help(ctx context.Context, args []string) (
+		iterator.Iterator[component.Responsive], error,
+	)
 }
 
 // NewRegistry returns an empty CommandRegistry.
@@ -64,6 +77,15 @@ func NewRegistry() *CommandRegistry {
 	return &CommandRegistry{
 		commands: make(map[string]entry),
 	}
+}
+
+// SetHelpFallback designates a handler to answer the top-level `help`
+// command (no args). It is used for pure language REPLs so `help` shows
+// the language reference instead of the registry command list.
+func (r *CommandRegistry) SetHelpFallback(h helpProvider) {
+	r.mu.Lock()
+	r.helpFallback = h
+	r.mu.Unlock()
 }
 
 // Register adds a command with the given name, summary,
@@ -173,6 +195,12 @@ func (r *CommandRegistry) Help(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
 	if len(args) == 0 {
+		r.mu.RLock()
+		fb := r.helpFallback
+		r.mu.RUnlock()
+		if fb != nil {
+			return fb.Help(ctx, nil)
+		}
 		return r.listCommands(), nil
 	}
 	r.mu.RLock()
@@ -294,4 +322,16 @@ func (f *registryFallback) CompletionPrefix(line string) string {
 		return pc.CompletionPrefix(line)
 	}
 	return completionPrefix(line, nil)
+}
+
+// SignatureHelp forwards to the fallback handler when it is a
+// SignatureHelper, so a language REPL can answer the hint request.
+// Registry commands do not provide signature help.
+func (f *registryFallback) SignatureHelp(
+	ctx context.Context, line string, col int,
+) (string, bool) {
+	if sh, ok := f.fallback.(SignatureHelper); ok {
+		return sh.SignatureHelp(ctx, line, col)
+	}
+	return "", false
 }

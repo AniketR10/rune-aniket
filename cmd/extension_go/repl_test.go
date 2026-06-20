@@ -31,6 +31,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -1053,6 +1054,8 @@ type fakeCompletionLSP struct {
 
 	packages []string
 
+	sigHelp *semanticapi.SignatureHelp
+
 	openedText string
 	openedURI  string
 	reqURI     string
@@ -1102,6 +1105,17 @@ func (f *fakeCompletionLSP) ExecuteCommand(
 		return "", err
 	}
 	return string(out), nil
+}
+
+func (f *fakeCompletionLSP) SignatureHelp(
+	_ context.Context, p semanticapi.SignatureHelpParams,
+) (*semanticapi.SignatureHelp, error) {
+	f.reqURI = p.TextDocument.URI
+	f.reqPos = p.Position
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.sigHelp, nil
 }
 
 type dirRunner struct {
@@ -1332,6 +1346,122 @@ func TestGoSessionCompleteGoLSPError(t *testing.T) {
 	require.Empty(t, items)
 }
 
+func TestGoSessionSignatureHelp(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lsp := &fakeCompletionLSP{sigHelp: &semanticapi.SignatureHelp{
+		Signatures: []semanticapi.SignatureInformation{{
+			Label: "Println(a ...any) (n int, err error)",
+			Parameters: []semanticapi.ParameterInformation{
+				{Label: "a ...any"},
+			},
+		}},
+		ActiveParameter: 0,
+	}}
+	s := newGoSession(newDirRunner(dir), &writeFS{root: dir}, lsp)
+	require.NoError(t, mustSubmit(t, s, `import "fmt"`))
+
+	line := "fmt.Println("
+	label, ok := s.SignatureHelp(context.Background(), line, len([]rune(line)))
+	require.True(t, ok)
+	require.Equal(t, "Println([a ...any]) (n int, err error)", label)
+
+	require.NotEmpty(t, lsp.openedURI)
+	require.Equal(t, lsp.openedURI, lsp.reqURI)
+	require.Equal(t, lsp.openedURI, lsp.closedURI)
+	require.Contains(t, lsp.openedText, "fmt.Println(")
+	require.Equal(t, uint32(len("\tfmt.Println(")), lsp.reqPos.Character)
+}
+
+func TestGoSessionSignatureHelpNoLSP(t *testing.T) {
+	t.Parallel()
+	s := newGoSession(newDirRunner(t.TempDir()), &writeFS{root: t.TempDir()}, nil)
+	_, ok := s.SignatureHelp(context.Background(), "fmt.Println(", 12)
+	require.False(t, ok)
+}
+
+func TestGoSessionSignatureHelpNoSignatures(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lsp := &fakeCompletionLSP{sigHelp: &semanticapi.SignatureHelp{}}
+	s := newGoSession(newDirRunner(dir), &writeFS{root: dir}, lsp)
+	_, ok := s.SignatureHelp(context.Background(), "fmt.Println(", 12)
+	require.False(t, ok)
+}
+
+func TestSignatureLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		help *semanticapi.SignatureHelp
+		want string
+		ok   bool
+	}{
+		{name: "nil", help: nil, ok: false},
+		{name: "empty", help: &semanticapi.SignatureHelp{}, ok: false},
+		{
+			name: "active param by substring",
+			help: &semanticapi.SignatureHelp{
+				Signatures: []semanticapi.SignatureInformation{{
+					Label: "Printf(format string, a ...any) (n int, err error)",
+					Parameters: []semanticapi.ParameterInformation{
+						{Label: "format string"},
+						{Label: "a ...any"},
+					},
+				}},
+				ActiveParameter: 1,
+			},
+			want: "Printf(format string, [a ...any]) (n int, err error)",
+			ok:   true,
+		},
+		{
+			name: "active param by offsets",
+			help: &semanticapi.SignatureHelp{
+				Signatures: []semanticapi.SignatureInformation{{
+					Label: "f(a int, b int)",
+					Parameters: []semanticapi.ParameterInformation{
+						{LabelOffsets: &[2]uint32{2, 7}},
+						{LabelOffsets: &[2]uint32{9, 14}},
+					},
+				}},
+				ActiveParameter: 0,
+			},
+			want: "f([a int], b int)",
+			ok:   true,
+		},
+		{
+			name: "no params returns plain label",
+			help: &semanticapi.SignatureHelp{
+				Signatures: []semanticapi.SignatureInformation{{Label: "now() time.Time"}},
+			},
+			want: "now() time.Time",
+			ok:   true,
+		},
+		{
+			name: "active signature selection",
+			help: &semanticapi.SignatureHelp{
+				Signatures: []semanticapi.SignatureInformation{
+					{Label: "first()"},
+					{Label: "second()"},
+				},
+				ActiveSignature: 1,
+			},
+			want: "second()",
+			ok:   true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			label, ok := signatureLabel(tc.help)
+			require.Equal(t, tc.ok, ok)
+			if tc.ok {
+				require.Equal(t, tc.want, label)
+			}
+		})
+	}
+}
+
 func TestRejoin(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "1+1", rejoin(repl.Command{Name: "1+1"}))
@@ -1366,11 +1496,13 @@ func mustSubmit(t *testing.T, s *goSession, line string) error {
 // --- window wrapper / scheduler ---------------------------------------
 
 // nopInterrupter records Interrupt calls without touching a real event
-// loop.
-type nopInterrupter struct{ calls int }
+// loop. calls is atomic because the scheduler is woken from multiple
+// goroutines (the SDK command dispatch and the async signature-help
+// fetch), mirroring how the production scheduler is shared.
+type nopInterrupter struct{ calls atomic.Int64 }
 
 func (n *nopInterrupter) Interrupt(context.Context) error {
-	n.calls++
+	n.calls.Add(1)
 	return nil
 }
 
@@ -1382,7 +1514,7 @@ func TestTickSchedulerDrains(t *testing.T) {
 	var ran []int
 	sched.schedule(func() { ran = append(ran, 1) })
 	sched.schedule(func() { ran = append(ran, 2) })
-	require.Equal(t, 2, ti.calls, "each schedule must wake the loop")
+	require.Equal(t, int64(2), ti.calls.Load(), "each schedule must wake the loop")
 	require.Empty(t, ran, "callbacks run only on drain")
 
 	sched.drain()

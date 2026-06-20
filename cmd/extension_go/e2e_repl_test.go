@@ -148,6 +148,33 @@ func TestGoREPLEndToEndCompletion(t *testing.T) {
 	})
 }
 
+// TestGoREPLEndToEndSignatureHelp drives signature help through the
+// handler against real gopls: typing "(" after a callable shows the
+// function signature as a transient hint above the prompt.
+func TestGoREPLEndToEndSignatureHelp(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping toolchain+gopls e2e test in -short mode")
+	}
+	rig := newREPLRig(t)
+	rig.submitKeys(`import "fmt"`)
+	rig.submitKeys(`fmt.Println("warm")`) // warm gopls package metadata
+
+	rig.reset()
+	rig.typeText("fmt.Println(")
+
+	// gopls can return no signature on the first probe against a freshly
+	// opened synthetic file; <tab> with the cursor just after "("
+	// re-requests signature help, so retry until the hint appears.
+	var frame string
+	require.Eventually(t, func() bool {
+		rig.tab()
+		frame = rig.frame()
+		return strings.Contains(frame, "Println(")
+	}, 10*time.Second, 200*time.Millisecond,
+		"signature hint should appear, frame:\n%s", rig.frame())
+	require.Contains(t, frame, "Println(", "frame:\n%s", frame)
+}
+
 type evalStep struct {
 	line     string
 	wantTail []string

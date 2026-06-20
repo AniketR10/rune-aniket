@@ -180,6 +180,26 @@ type PrefixCompleter interface {
 	CompletionPrefix(line string) string
 }
 
+// SignatureHelper lets a command handler answer signature-help requests
+// for the line being typed. line is the full input line; col is the
+// 0-based rune column of the cursor. The returned label is rendered as a
+// transient hint; ok is false when no signature applies.
+type SignatureHelper interface {
+	SignatureHelp(ctx context.Context, line string, col int) (label string, ok bool)
+}
+
+// signatureHelp forwards to the underlying handler when it is a
+// SignatureHelper, so a language REPL can answer the hint request. It
+// returns ok=false when the handler does not support signature help.
+func (s *completionShim) signatureHelp(
+	ctx context.Context, line string, col int,
+) (string, bool) {
+	if sh, ok := s.underlying.(SignatureHelper); ok {
+		return sh.SignatureHelp(ctx, line, col)
+	}
+	return "", false
+}
+
 // prefix computes the partial word to be replaced on accept. When the
 // underlying handler is a PrefixCompleter it gets the final say over the
 // (reconstructed) input line; otherwise the whitespace-token default

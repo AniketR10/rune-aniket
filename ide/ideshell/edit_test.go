@@ -165,6 +165,106 @@ func feedRunes(h *Handler, seq string) {
 	}
 }
 
+// renderFrame draws the handler to a string buffer of its current size
+// and returns the rendered text, one row per line.
+func renderFrame(t *testing.T, h *Handler) string {
+	t.Helper()
+	w := term.NewStringWriter(h.width, h.height)
+	h.Draw(w)
+	require.NoError(t, w.Flush())
+	return w.String()
+}
+
+func TestSignatureHelpHintOnOpenParen(t *testing.T) {
+	helper := &sigHelperCmd{label: "Println(a ...any) (n int, err error)", ok: true}
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{MaxHistory: 100, DisableShellInterpreter: helper},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Resize(testWidthH, testHeight)
+
+	feedRunes(h, "fmt.Println(")
+	require.True(t, h.sigActive, "hint should activate after typing (")
+	require.Equal(t, "fmt.Println(", helper.gotLine)
+	require.Equal(t, len("fmt.Println("), helper.gotCol)
+	require.Contains(t, renderFrame(t, h), "Println(a ...any)")
+
+	// Typing ) dismisses the hint immediately.
+	h.Handle(term.Event{Type: term.EventKey, Ch: ')'})
+	require.False(t, h.sigActive)
+	require.NotContains(t, renderFrame(t, h), "Println(a ...any)")
+}
+
+func TestSignatureHelpHintNeverStealsKeys(t *testing.T) {
+	helper := &sigHelperCmd{label: "f(x int)", ok: true}
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{MaxHistory: 100, DisableShellInterpreter: helper},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Resize(testWidthH, testHeight)
+
+	feedRunes(h, "f(")
+	// The "(" was consumed by the editor as a normal rune, not stolen
+	// by the hint machinery, so it appears in the buffer.
+	require.Equal(t, "f(", h.editBuf.String())
+	require.False(t, h.searching, "signature help must not enter search/overlay mode")
+}
+
+// newSigHelpHandler returns a handler whose fallback answers signature
+// help, sized so the hint band renders.
+func newSigHelpHandler(t *testing.T) *Handler {
+	t.Helper()
+	helper := &sigHelperCmd{label: "Println(a ...any) (n int, err error)", ok: true}
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{MaxHistory: 100, DisableShellInterpreter: helper},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Resize(testWidthH, testHeight)
+	return h
+}
+
+func TestSignatureHelpHintClearsOnSubmit(t *testing.T) {
+	h := newSigHelpHandler(t)
+	feedRunes(h, "fmt.Println(")
+	require.True(t, h.sigActive)
+
+	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	require.False(t, h.sigActive, "submitting must clear the hint")
+	require.NotContains(t, renderFrame(t, h), "Println(a ...any)")
+}
+
+func TestSignatureHelpHintClearsOnCtrlC(t *testing.T) {
+	h := newSigHelpHandler(t)
+	feedRunes(h, "fmt.Println(")
+	require.True(t, h.sigActive)
+
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'c', Mod: term.ModCtrl})
+	require.False(t, h.sigActive, "<c-c> must clear the hint")
+	require.NotContains(t, renderFrame(t, h), "Println(a ...any)")
+}
+
+func TestSignatureHelpHintClearsWhenLineEmptied(t *testing.T) {
+	h := newSigHelpHandler(t)
+	feedRunes(h, "f(")
+	require.True(t, h.sigActive)
+
+	for range len("f(") {
+		h.Handle(term.Event{Type: term.EventKey, Key: term.KeyBackspace})
+	}
+	require.Empty(t, h.editBuf.String())
+	require.False(t, h.sigActive, "emptying the line must clear the hint")
+	require.NotContains(t, renderFrame(t, h), "Println(a ...any)")
+}
+
 func TestEditorReceivesTypedRunes(t *testing.T) {
 	var seen []term.Event
 	h := newEditTestHandler(t, stubEditor{seen: &seen})

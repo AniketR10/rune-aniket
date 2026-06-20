@@ -113,6 +113,12 @@ func New(
 	switch {
 	case cfg.DisableShellInterpreter != nil:
 		underlying = &registryFallback{registry: r, fallback: cfg.DisableShellInterpreter}
+		// A pure language REPL owns the whole prompt: surface its own
+		// command reference for top-level `help` instead of the
+		// synthetic `go`/`help` registry list.
+		if hp, ok := cfg.DisableShellInterpreter.(helpProvider); ok {
+			r.SetHelpFallback(hp)
+		}
 	default:
 		underlying = sh.New(r, cfg.Workspace)
 	}

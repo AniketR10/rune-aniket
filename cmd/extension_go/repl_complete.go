@@ -158,6 +158,117 @@ func (s *goSession) completeGo(
 	return iterator.FromSlice(completionInserts(result.Items)), nil
 }
 
+// SignatureHelp asks gopls for the signature of the call the cursor sits
+// inside. line is the full input line being typed; col is the 0-based
+// rune column of the cursor. It reuses the synthetic-program machinery
+// from completeGo: the text up to the cursor is rendered as the trailing
+// fragment, opened as an LSP overlay, and queried at the cursor. The
+// returned label is the active signature's text with the active
+// parameter emphasized; ok is false when no signature applies (no LSP,
+// no runner, or gopls returns nothing), so the caller hides the hint.
+func (s *goSession) SignatureHelp(
+	ctx context.Context, line string, col int,
+) (string, bool) {
+	if s.lsp == nil {
+		return "", false
+	}
+	cr, ok := s.runner.(completionRunner)
+	if !ok {
+		return "", false
+	}
+	fragment := runePrefix(line, col)
+	src, offset := s.renderForCompletion(fragment)
+	path, err := cr.programPath(src)
+	if err != nil {
+		return "", false
+	}
+	uri, err := s.fs.URI(path)
+	if err != nil {
+		return "", false
+	}
+	lspURI := "file://" + uri.Path()
+	pos := byteOffsetToPosition(src, offset)
+
+	if err := s.lsp.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{
+		TextDocument: semanticapi.TextDocumentItem{
+			URI:        lspURI,
+			LanguageID: completionLanguageID,
+			Version:    1,
+			Text:       src,
+		},
+	}); err != nil {
+		return "", false
+	}
+	defer func() {
+		_ = s.lsp.DidClose(ctx, semanticapi.DidCloseTextDocumentParams{
+			TextDocument: semanticapi.TextDocumentIdentifier{URI: lspURI},
+		})
+	}()
+
+	result, err := s.lsp.SignatureHelp(ctx, semanticapi.SignatureHelpParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: lspURI},
+		Position:     pos,
+	})
+	if err != nil || result == nil {
+		return "", false
+	}
+	return signatureLabel(result)
+}
+
+// runePrefix returns the first col runes of line, clamped to its length.
+func runePrefix(line string, col int) string {
+	runes := []rune(line)
+	if col < 0 {
+		col = 0
+	}
+	if col > len(runes) {
+		col = len(runes)
+	}
+	return string(runes[:col])
+}
+
+// signatureLabel formats the active signature into a hint, wrapping the
+// active parameter in brackets so the user can see which argument they
+// are typing. It returns ok=false when the help carries no signatures.
+func signatureLabel(help *semanticapi.SignatureHelp) (string, bool) {
+	if help == nil || len(help.Signatures) == 0 {
+		return "", false
+	}
+	idx := int(help.ActiveSignature)
+	if idx < 0 || idx >= len(help.Signatures) {
+		idx = 0
+	}
+	sig := help.Signatures[idx]
+	return emphasizeActiveParam(sig, int(help.ActiveParameter)), true
+}
+
+// emphasizeActiveParam returns the signature label with the active
+// parameter's substring wrapped in brackets. gopls reports each
+// parameter either as a substring of the label or as a byte-offset pair
+// into it; both are honored. When the active parameter cannot be located
+// the plain label is returned.
+func emphasizeActiveParam(sig semanticapi.SignatureInformation, active int) string {
+	if active < 0 || active >= len(sig.Parameters) {
+		return sig.Label
+	}
+	p := sig.Parameters[active]
+	if p.LabelOffsets != nil {
+		start, end := int(p.LabelOffsets[0]), int(p.LabelOffsets[1])
+		if start >= 0 && end <= len(sig.Label) && start < end {
+			return sig.Label[:start] + "[" + sig.Label[start:end] + "]" + sig.Label[end:]
+		}
+		return sig.Label
+	}
+	if p.Label == "" {
+		return sig.Label
+	}
+	i := strings.Index(sig.Label, p.Label)
+	if i < 0 {
+		return sig.Label
+	}
+	return sig.Label[:i] + "[" + p.Label + "]" + sig.Label[i+len(p.Label):]
+}
+
 // completionInserts maps gopls completion items to the bare text that
 // replaces the trailing identifier. gopls fills InsertText/TextEdit with
 // the member name; Label is the fallback. Duplicate and empty inserts are

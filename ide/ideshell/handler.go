@@ -25,6 +25,7 @@ package ideshell
 
 import (
 	"context"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -124,6 +125,13 @@ type Handler struct {
 	// the pointer crosses into the input band, so the selection does
 	// not see a missed release.
 	mouseDragInOutput bool
+
+	// sigHint is the signature-help label currently shown as a
+	// transient hint above the input band; empty when no hint is
+	// active. sigActive guards rendering so a stale empty label does
+	// not reserve a row.
+	sigHint   string
+	sigActive bool
 }
 
 // Wait forwards to the underlying repl.Handler so callers (including
@@ -231,6 +239,7 @@ func (h *Handler) drawShell(w term.Writer) {
 		sel = &s
 	}
 	h.grid.Dump(w, sel)
+	h.drawSignatureHint(w)
 	h.drawEdit(w)
 }
 
@@ -415,6 +424,7 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 		// Any edit ends an in-progress history cycle; the next up
 		// press should recall relative to the freshly edited line.
 		h.cycling = false
+		h.maybeSignatureHelp(ev)
 		return false, true
 	}
 	return false, false
@@ -642,6 +652,14 @@ func (h *Handler) drawCompletion(w term.Writer) {
 // afterwards. When the inner resolves the completion inline (0 or 1
 // candidate), the resulting text is synced back into the editor.
 func (h *Handler) handleTab(ev term.Event) (exit, handled bool) {
+	// A <tab> with the cursor immediately after an unclosed "(" asks
+	// for signature help rather than completion: there is no partial
+	// identifier to complete, so the user wants to see the call's
+	// parameters.
+	if h.cursorAfterOpenParen() {
+		h.triggerSignatureHelp()
+		return false, true
+	}
 	h.shim.reset()
 	h.replaceInputText(h.editBuf.String())
 	exit, handled = h.inner.Handle(ev)
@@ -657,6 +675,73 @@ func (h *Handler) handleTab(ev term.Event) (exit, handled bool) {
 	h.clearInner()
 	h.openCompletion(captured)
 	return false, true
+}
+
+// maybeSignatureHelp reacts to a printable rune the editor just
+// consumed: "(" requests a fresh hint for the call being opened, ")"
+// dismisses any active hint, and any other key leaves the current hint
+// in place so it can update as arguments are typed.
+func (h *Handler) maybeSignatureHelp(ev term.Event) {
+	if h.sigActive && h.editBuf.String() == "" {
+		h.clearSignatureHint()
+		return
+	}
+	if ev.Key != 0 || ev.Mod != 0 {
+		return
+	}
+	switch ev.Ch {
+	case '(':
+		h.triggerSignatureHelp()
+	case ')':
+		h.clearSignatureHint()
+	}
+}
+
+// cursorAfterOpenParen reports whether the rune immediately to the left
+// of the editor cursor is "(", marking the cursor as sitting just inside
+// an opening call where signature help applies.
+func (h *Handler) cursorAfterOpenParen() bool {
+	cur := h.editHandler.CursorAtScroll()
+	if cur.X <= 0 {
+		return false
+	}
+	c, ok := h.editBuf.Cell(term.Coordinates{X: cur.X - 1, Y: cur.Y})
+	return ok && c.Ch == '('
+}
+
+// signatureLine returns the text of the editor row the cursor sits on up
+// to the cursor, plus the cursor's rune column within it. Signature help
+// only needs the prefix of the line up to the cursor; a call rarely
+// spans editor rows, so the current row is enough.
+func (h *Handler) signatureLine() (string, int) {
+	cur := h.editHandler.CursorAtScroll()
+	line := h.editBuf.String()
+	rows := strings.Split(line, "\n")
+	if cur.Y < 0 || cur.Y >= len(rows) {
+		return "", 0
+	}
+	row := []rune(rows[cur.Y])
+	col := min(cur.X, len(row))
+	return string(row[:col]), col
+}
+
+// triggerSignatureHelp asks the underlying handler for the signature of
+// the call being typed and shows the result as a transient hint. It runs
+// synchronously on the event loop, mirroring tab completion (which also
+// queries gopls inline): both share the session's single program-file
+// overlay, so serializing them on the loop avoids racing that state.
+func (h *Handler) triggerSignatureHelp() {
+	line, col := h.signatureLine()
+	label, ok := h.shim.signatureHelp(context.Background(), line, col)
+	h.sigHint = label
+	h.sigActive = ok && label != ""
+}
+
+// clearSignatureHint hides any active hint so a later draw treats the
+// band as empty.
+func (h *Handler) clearSignatureHint() {
+	h.sigHint = ""
+	h.sigActive = false
 }
 
 func (h *Handler) handleSearch(ev term.Event) (exit, handled bool) {
@@ -1005,6 +1090,7 @@ func (h *Handler) clearEdit() {
 	h.editBuf.Replace("")
 	h.editHandler.SetCursorAtScroll(term.Coordinates{})
 	h.cycling = false
+	h.clearSignatureHint()
 }
 
 // editEditorH returns the number of rows reserved for the editor
@@ -1064,4 +1150,33 @@ func (h *Handler) editContent() component.Responsive {
 	buf := cell.NewBuffer()
 	buf.WriteString(h.prompt + h.editBuf.String())
 	return tcomponent.Buffer(buf, component.StringResponsiveConfig{})
+}
+
+// drawSignatureHint paints the transient signature-help label on the row
+// directly above the editor input band, dimmed so it reads as
+// decoration. It is a passive hint: it never moves the cursor and is
+// dismissed by editing past the call (see maybeSignatureHelp). The row
+// is blanked first so any stale output beneath it does not bleed
+// through.
+func (h *Handler) drawSignatureHint(w term.Writer) {
+	if !h.sigActive || h.sigHint == "" {
+		return
+	}
+	y := h.editInnerH() - 1
+	if y < 0 || h.width <= 0 {
+		return
+	}
+	for x := range h.width {
+		w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: ' '})
+	}
+	attr := term.Attributes{Attrs: term.AttrDim}
+	x := 0
+	for _, r := range h.sigHint {
+		if x >= h.width {
+			break
+		}
+		w.SetCell(term.Coordinates{X: x, Y: y},
+			term.Cell{Ch: r, Attributes: attr})
+		x++
+	}
 }
