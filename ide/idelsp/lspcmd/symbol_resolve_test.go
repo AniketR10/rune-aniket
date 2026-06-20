@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -140,4 +141,51 @@ func TestResolveCommandSymbolNoMatchesShowsError(t *testing.T) {
 		assert.Contains(t, strings.ToLower(errorMsgs[0]), "no symbols found",
 			"expected error notification to mention not-found; got %q", errorMsgs[0])
 	}
+}
+
+func TestResolveCommandSymbolUnqualifiedShowsHint(t *testing.T) {
+	t.Parallel()
+
+	notify := &recordingNotifications{}
+	resolved := make(chan struct{})
+	parser := &mockParser{
+		resolveFn: func(string, syntaxapi.Progress) ([]syntaxapi.Match, error) {
+			return nil, syntaxapi.ErrNoDot
+		},
+	}
+
+	cmd := &textapi.Command{Args: []string{"Println"}}
+	var resolvedOnce sync.Once
+	tick := func(fn func()) bool {
+		before, _ := notify.snapshot()
+		fn()
+		after, _ := notify.snapshot()
+		for _, n := range after[len(before):] {
+			if n.level == browserapi.LevelError {
+				resolvedOnce.Do(func() { close(resolved) })
+			}
+		}
+		return true
+	}
+	proceed, err := resolveCommandSymbol(
+		t.Context(), cmd, nil, nil, notify, tick, parser, func(syntaxapi.Match, func()) {},
+	)
+	assert.False(t, proceed)
+	assert.NoError(t, err)
+	<-resolved
+
+	notifies, _ := notify.snapshot()
+	var errorMsgs []string
+	for _, n := range notifies {
+		if n.level == browserapi.LevelError {
+			errorMsgs = append(errorMsgs, n.msg)
+		}
+	}
+	require.NotEmpty(t, errorMsgs)
+	// The hint must guide the user to qualify the symbol rather than
+	// the opaque "no symbols found".
+	msg := errorMsgs[0]
+	assert.Contains(t, msg, "Println")
+	assert.Contains(t, strings.ToLower(msg), "qualif")
+	assert.NotContains(t, strings.ToLower(msg), "no symbols found")
 }

@@ -57,14 +57,14 @@ func resolveSymbol(
 	it, err := parser.ResolveSymbol(ctx, name, progress)
 	if err != nil {
 		if errors.Is(err, syntaxapi.ErrNoDot) {
-			return nil, fmt.Errorf("no symbols found for %q", name)
+			return nil, errUnqualifiedSymbol(name)
 		}
 		return nil, err
 	}
 	matches, err := iterator.ToSlice(ctx, it)
 	if err != nil {
 		if errors.Is(err, syntaxapi.ErrNoDot) {
-			return nil, fmt.Errorf("no symbols found for %q", name)
+			return nil, errUnqualifiedSymbol(name)
 		}
 		return nil, err
 	}
@@ -72,6 +72,13 @@ func resolveSymbol(
 		return nil, fmt.Errorf("no symbols found for %q", name)
 	}
 	return matches, nil
+}
+
+// errUnqualifiedSymbol explains that a symbol name must be qualified with
+// its package or module, since resolution keys off the qualifier separator.
+func errUnqualifiedSymbol(name string) error {
+	return fmt.Errorf(
+		"%q is not qualified; prefix it with its package or module", name)
 }
 
 func resolveCommandSymbol(
