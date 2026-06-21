@@ -24,7 +24,6 @@
 package syntax
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -45,7 +44,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
-	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/languages"
@@ -73,6 +71,11 @@ type parserSearcher struct {
 	uri   workspaceapi.URI
 	specs *specCache
 }
+
+var (
+	_ syntaxapi.Parser       = parserSearcher{}
+	_ symbolresolve.Searcher = parserSearcher{}
+)
 
 // specCache memoizes the workspace language detection so the file walk runs
 // once per parser. The walk is started lazily on the first detect call and
@@ -223,6 +226,7 @@ func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
 			it.mu.Lock()
 			defer it.mu.Unlock()
 			it.err = perr
+			return
 		}
 		defer tree.Close()
 
@@ -497,17 +501,12 @@ func readFileSymbols(
 		}
 	}()
 
-	r := bufio.NewReader(file)
-	data, err := io.ReadAll(r)
+	content, err := io.ReadAll(file)
 	if err != nil {
 		return err
 	}
 
-	var buf cell.Buffer
-	buf.Init()
-	_, _ = buf.ReadFrom(bytes.NewReader(data))
-
-	tree := parser.parser.Parse(data, nil)
+	tree := parser.parser.Parse(content, nil)
 	if tree == nil {
 		return errors.New("failed to parse data")
 	}
@@ -518,7 +517,8 @@ func readFileSymbols(
 
 	root := tree.RootNode()
 	captureNames := parser.query.CaptureNames()
-	content := data
+	starts := lineStarts(content)
+	fileURI := workspaceapi.Join(uri, filename)
 	matches := cur.Matches(parser.query, root, content)
 	for {
 		m, ok := matches.Next()
@@ -526,19 +526,14 @@ func readFileSymbols(
 			break
 		}
 		for _, cap := range m.Captures {
-			rng := cap.Node.Range()
-			from, to, err := convertRangeToCoordinates(buf.RawCells(), rng)
-			if err != nil || int(cap.Index) >= len(captureNames) ||
+			if int(cap.Index) >= len(captureNames) ||
 				(len(captureNameFilters) != 0 &&
 					!slices.Contains(captureNameFilters, captureNames[cap.Index])) {
 				continue
 			}
-			fileURI := workspaceapi.Join(uri, filename)
-			result, err := makeSymbolItem(from, to, fileURI, &buf, captureNames[cap.Index])
-			if err != nil {
-				retErr = errors.Join(retErr, err)
-				continue
-			}
+			result := makeSymbolItem(
+				content, starts, cap.Node.Range(), fileURI, captureNames[cap.Index],
+			)
 			select {
 			case results <- result:
 			case <-ctx.Done():
@@ -551,18 +546,16 @@ func readFileSymbols(
 }
 
 func makeSymbolItem(
-	from, to term.Coordinates, filename workspaceapi.URI, buf *cell.Buffer,
-	captureName string,
-) (syntaxapi.Result, error) {
-	cells, _, _ := buf.Select(from, to)
-	textToDisplay := term.CellsToString(cells)
+	content []byte, starts []int, rng sitter.Range,
+	filename workspaceapi.URI, captureName string,
+) syntaxapi.Result {
 	return syntaxapi.Result{
 		CaptureName: captureName,
-		From:        from,
-		To:          to,
+		From:        pointToCoordinates(content, starts, rng.StartPoint),
+		To:          pointToCoordinates(content, starts, rng.EndPoint),
 		File:        filename,
-		Text:        textToDisplay,
-	}, nil
+		Text:        string(content[rng.StartByte:rng.EndByte]),
+	}
 }
 
 func readSymbolsWorker(
@@ -814,16 +807,57 @@ func newParser(
 	ctx context.Context, langID string,
 	pkg PkgManager, queryFile, query string,
 ) (ret *parser, err error) {
+	lang, queryText, err := loadLanguage(ctx, langID, pkg, queryFile, query)
+	if err != nil {
+		return nil, err
+	}
+	q, err := compileQuery(lang.lang, queryText)
+	if err != nil {
+		lang.close()
+		return nil, err
+	}
+	return &parser{
+		parser: lang.parser,
+		lang:   lang.lang,
+		query:  q,
+		lib:    lang.lib,
+	}, nil
+}
+
+// loadedLanguage bundles a dlopen'd tree-sitter language with its parser.
+// Multiple compiled queries can share one loadedLanguage so a multi-query
+// search dlopen's and parses each file only once per language.
+type loadedLanguage struct {
+	lib    uintptr
+	lang   *sitter.Language
+	parser *sitter.Parser
+}
+
+func (l *loadedLanguage) close() {
+	if l.parser != nil {
+		l.parser.Close()
+	}
+	if l.lib != 0 {
+		_ = purego.Dlclose(l.lib)
+	}
+}
+
+// loadLanguage dlopens the tree-sitter shared object for langID and builds a
+// parser bound to it. When queryFile is non-empty it also resolves that
+// query file from the package's lib dir and returns its contents; otherwise
+// it returns the inline query unchanged. The caller owns the returned
+// loadedLanguage and must close it.
+func loadLanguage(
+	ctx context.Context, langID string, pkg PkgManager, queryFile, query string,
+) (*loadedLanguage, string, error) {
 	it, err := pkg.LibDir(ctx, langID)
 	if err != nil {
-		err = errNotInstalled
-		return
+		return nil, "", errNotInstalled
 	}
 	files, err := iterator.ToSlice(ctx, it)
 	_ = it.Close()
 	if err != nil {
-		err = fmt.Errorf("list files: %w", err)
-		return
+		return nil, "", fmt.Errorf("list files: %w", err)
 	}
 	var langfile, queryFileAbsPath string
 	for _, path := range files {
@@ -834,73 +868,57 @@ func newParser(
 			queryFileAbsPath = path
 		}
 	}
-
 	if langfile == "" || (queryFile != "" && queryFileAbsPath == "") {
-		err = errNotInstalled
-		return
+		return nil, "", errNotInstalled
 	}
 	if cacheableIt, ok := it.(cacheablePkgFilesIterator); ok {
 		cacheableIt.cache(files)
 	}
 
 	if queryFileAbsPath != "" && queryFile != "" {
-		var f workspaceapi.File
-		f, err = os.OpenFile(queryFileAbsPath, os.O_RDONLY, 0666)
-		if err != nil {
-			err = fmt.Errorf("open lib query file %s: %v", queryFile, err)
-			return
+		f, ferr := os.OpenFile(queryFileAbsPath, os.O_RDONLY, 0666)
+		if ferr != nil {
+			return nil, "", fmt.Errorf("open lib query file %s: %v", queryFile, ferr)
 		}
-		var data []byte
-		data, err = io.ReadAll(f)
-		if err != nil {
-			err = fmt.Errorf("read lib query file %s: %v", queryFile, err)
-			return
+		data, rerr := io.ReadAll(f)
+		_ = f.Close()
+		if rerr != nil {
+			return nil, "", fmt.Errorf("read lib query file %s: %v", queryFile, rerr)
 		}
 		query = string(data)
 	}
 
-	ret = new(parser)
-	ret.lib, err = purego.Dlopen(langfile, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	lib, err := purego.Dlopen(langfile, purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
-		err = fmt.Errorf("dlopen %q: %w", langfile, err)
-		return
+		return nil, "", fmt.Errorf("dlopen %q: %w", langfile, err)
 	}
 
 	parserID := fmt.Sprintf("tree_sitter_%s", langID)
-
-	var lang func() uintptr
-	sym, err := purego.Dlsym(ret.lib, parserID)
+	sym, err := purego.Dlsym(lib, parserID)
 	if err != nil {
-		_ = purego.Dlclose(ret.lib)
-		err = fmt.Errorf("load symbol %q: %w", parserID, err)
-		return
+		_ = purego.Dlclose(lib)
+		return nil, "", fmt.Errorf("load symbol %q: %w", parserID, err)
 	}
-	purego.RegisterFunc(&lang, sym)
+	var langFn func() uintptr
+	purego.RegisterFunc(&langFn, sym)
 
-	language := sitter.NewLanguage(unsafe.Pointer(lang()))
-	parser := sitter.NewParser()
-	err = parser.SetLanguage(language)
-	if err != nil {
-		_ = purego.Dlclose(ret.lib)
-		parser.Close()
-		err = fmt.Errorf("set parser language: %v", err)
-		return
+	language := sitter.NewLanguage(unsafe.Pointer(langFn()))
+	sitterParser := sitter.NewParser()
+	if err = sitterParser.SetLanguage(language); err != nil {
+		_ = purego.Dlclose(lib)
+		sitterParser.Close()
+		return nil, "", fmt.Errorf("set parser language: %v", err)
 	}
-	ret.lang = language
-	ret.parser = parser
+	return &loadedLanguage{lib: lib, lang: language, parser: sitterParser}, query, nil
+}
 
-	var qerr *sitter.QueryError
-	ret.query, qerr = sitter.NewQuery(ret.lang, query)
+// compileQuery compiles a tree-sitter query against lang.
+func compileQuery(lang *sitter.Language, query string) (*sitter.Query, error) {
+	q, qerr := sitter.NewQuery(lang, query)
 	if qerr != nil {
-		err = qerr
+		return nil, fmt.Errorf("invalid query: %w", qerr)
 	}
-	if err != nil {
-		_ = purego.Dlclose(ret.lib)
-		parser.Close()
-		err = fmt.Errorf("invalid query: %w", err)
-		return
-	}
-	return
+	return q, nil
 }
 
 func (t *parser) Close() (ret error) {

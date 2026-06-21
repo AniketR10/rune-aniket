@@ -32,11 +32,13 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/debug"
 )
 
 // Resolve resolves a package-qualified symbol name (e.g.
@@ -48,7 +50,7 @@ import (
 // progress, if non-nil, receives per-phase updates. Returns ErrNoDot when name
 // contains no ".".
 func Resolve(
-	ctx context.Context, parser syntaxapi.Parser, specs iterator.Iterator[Spec],
+	ctx context.Context, parser Searcher, specs iterator.Iterator[Spec],
 	name string, progress syntaxapi.Progress,
 ) ([]syntaxapi.Match, error) {
 	if !strings.Contains(name, ".") {
@@ -82,7 +84,7 @@ func Resolve(
 
 // resolveSpec runs the resolution phases for a single language spec.
 func resolveSpec(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec, name string,
+	ctx context.Context, parser Searcher, spec *Spec, name string,
 	progress syntaxapi.Progress,
 ) ([]syntaxapi.Match, error) {
 	pkg, sym, _ := strings.Cut(name, ".")
@@ -93,51 +95,25 @@ func resolveSpec(
 		}
 	}
 
-	seen := make(map[string]bool)
-	var matches []syntaxapi.Match
-	add := func(uri string, pos term.Coordinates) {
-		if seen[uri] {
-			return
-		}
-		seen[uri] = true
-		matches = append(matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
-	}
-
-	collect := func(query string, captures []string) error {
-		iter, err := parser.Search(query, captures, spec.LangID)
-		if err != nil {
-			return err
-		}
-		pairs := pairedResults(iter)
-		defer func() { _ = pairs.Close() }()
-		for {
-			p, ok := pairs.Next(ctx)
-			if !ok {
-				return pairs.Err()
-			}
-			if p[0].Text != pkg || p[1].Text != sym {
-				continue
-			}
-			add(p[0].File.String(), p[1].From)
-		}
-	}
-
 	report("Searching references…", 0, 0, 4)
-	for i, rq := range spec.RefQueries {
-		if err := collect(rq.Query, rq.Captures); err != nil {
-			return nil, err
-		}
-		report("Searching references…", len(matches), int64(i+1), 4)
-	}
-
-	report("Searching definitions…", len(matches), 2, 4)
-	packages, err := FilePackages(ctx, parser, spec)
+	collected, err := runResolvePass(ctx, parser, spec, pkg, sym, name)
 	if err != nil {
 		return nil, err
 	}
+	matches := collected.matches
+
 	if len(matches) == 0 {
+		report("Searching definitions…", 0, 2, 4)
+		seen := make(map[string]bool)
+		add := func(uri string, pos term.Coordinates) {
+			if seen[uri] {
+				return
+			}
+			seen[uri] = true
+			matches = append(matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
+		}
 		if err := collectDefinitions(
-			ctx, parser, spec, packages, pkg, sym, add,
+			ctx, parser, spec, collected.packages, pkg, sym, add,
 		); err != nil {
 			return nil, err
 		}
@@ -148,7 +124,8 @@ func resolveSpec(
 	}
 	if len(matches) > 1 && spec.ImportPathQuery != "" {
 		report("Resolving imports…", len(matches), 3, 4)
-		matches = deduplicateByImport(ctx, parser, spec, matches, pkg)
+		importPaths := resolveAliases(collected.imports, collected.explicitAliases)
+		matches = deduplicateMatchesByImport(matches, pkg, importPaths)
 	}
 	if len(matches) > 1 {
 		disambiguateDisplayNames(spec, matches, name)
@@ -156,11 +133,156 @@ func resolveSpec(
 	return matches, nil
 }
 
+// passResult holds everything a single SearchMulti pass collects for a spec:
+// the deduplicated reference matches plus the file→package, file→imports and
+// file→path→alias maps consumed from the other queries in the same pass.
+type passResult struct {
+	matches         []syntaxapi.Match
+	packages        map[workspaceapi.URI]string
+	imports         map[workspaceapi.URI][]string
+	explicitAliases map[workspaceapi.URI]map[string]string
+}
+
+// runResolvePass runs every query a spec needs (references, and when present
+// the package clause and import path/alias queries) in a single SearchMulti
+// walk, then demultiplexes the shared stream and consumes each sub-stream
+// concurrently. Reference matches are filtered to pkg.sym; the remaining
+// sub-streams are reduced into the maps used by the definitions and import
+// dedup phases.
+func runResolvePass(
+	ctx context.Context, parser Searcher, spec *Spec, pkg, sym, name string,
+) (passResult, error) {
+	var queries []MultiQuery
+	id := 0
+	nextID := func() int { n := id; id++; return n }
+
+	refIDs := make([]int, len(spec.RefQueries))
+	for i, rq := range spec.RefQueries {
+		refIDs[i] = nextID()
+		queries = append(queries, MultiQuery{ID: refIDs[i], Query: rq.Query, Captures: rq.Captures})
+	}
+	pkgID := -1
+	if spec.hasPackages() {
+		pkgID = nextID()
+		queries = append(queries, MultiQuery{
+			ID: pkgID, Query: spec.PackageClauseQuery, Captures: spec.PackageClauseCaptures,
+		})
+	}
+	pathID, aliasID := -1, -1
+	if spec.ImportPathQuery != "" {
+		pathID = nextID()
+		queries = append(queries, MultiQuery{
+			ID: pathID, Query: spec.ImportPathQuery, Captures: spec.ImportPathCaptures,
+		})
+		aliasID = nextID()
+		queries = append(queries, MultiQuery{
+			ID: aliasID, Query: spec.ImportAliasQuery, Captures: spec.ImportAliasCaptures,
+		})
+	}
+
+	it, err := parser.SearchMulti(queries, spec.LangID)
+	if err != nil {
+		return passResult{}, err
+	}
+	ids := make([]int, 0, len(queries))
+	for _, q := range queries {
+		ids = append(ids, q.ID)
+	}
+	subs := splitByQuery(it, ids)
+
+	var (
+		mu   sync.Mutex
+		seen = make(map[string]bool)
+		res  passResult
+		wg   sync.WaitGroup
+		errs = make([]error, len(ids))
+	)
+	add := func(uri string, pos term.Coordinates) {
+		mu.Lock()
+		defer mu.Unlock()
+		if seen[uri] {
+			return
+		}
+		seen[uri] = true
+		res.matches = append(res.matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
+	}
+
+	// Each query ID is dense in [0, len(ids)) so it doubles as the index into
+	// errs, letting consumers record failures without shared bookkeeping.
+	consume := func(id int, fn func() error) {
+		wg.Add(1)
+		go debug.CapturePanicReport(func() {
+			defer wg.Done()
+			errs[id] = fn()
+		})
+	}
+
+	for _, refID := range refIDs {
+		sub := subs[refID]
+		consume(refID, func() error {
+			return collectRefPairs(ctx, sub, pkg, sym, add)
+		})
+	}
+	if pkgID >= 0 {
+		sub := subs[pkgID]
+		consume(pkgID, func() error {
+			packages, perr := iterator.Reduce(ctx, sub, reducePackages)
+			mu.Lock()
+			res.packages = packages
+			mu.Unlock()
+			return perr
+		})
+	}
+	if pathID >= 0 {
+		sub := subs[pathID]
+		consume(pathID, func() error {
+			imports, perr := iterator.Reduce(ctx, sub, reduceImportPaths)
+			mu.Lock()
+			res.imports = imports
+			mu.Unlock()
+			return perr
+		})
+	}
+	if aliasID >= 0 {
+		sub := subs[aliasID]
+		consume(aliasID, func() error {
+			aliases, perr := iterator.Reduce(ctx, pairedResults(sub), reduceImportAliases)
+			mu.Lock()
+			res.explicitAliases = aliases
+			mu.Unlock()
+			return perr
+		})
+	}
+	wg.Wait()
+
+	for _, e := range errs {
+		if e != nil {
+			return passResult{}, e
+		}
+	}
+	return res, nil
+}
+
+// collectRefPairs consumes one demultiplexed reference sub-stream, pairs its
+// captures per file and feeds matches for pkg.sym to add.
+func collectRefPairs(
+	ctx context.Context, sub iterator.Iterator[syntaxapi.Result],
+	pkg, sym string, add func(uri string, pos term.Coordinates),
+) error {
+	return iterator.ForEach(ctx, pairedResults(sub), func(p [2]syntaxapi.Result) error {
+		if p[0].Text != pkg || p[1].Text != sym {
+			return nil
+		}
+		add(p[0].File.String(), p[1].From)
+		return nil
+	})
+}
+
 // collectDefinitions streams workspace definitions matching sym in the
 // target package and feeds them to add. Files are qualified via their
 // package clause when the spec has one, otherwise via spec.Qualifier.
 func collectDefinitions(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec,
 	packages map[workspaceapi.URI]string, pkg, sym string,
 	add func(uri string, pos term.Coordinates),
 ) error {
@@ -198,7 +320,7 @@ func collectDefinitions(
 // the spec has a package clause it consults the packages map; otherwise
 // it derives the qualifier from each file's URI via spec.Qualifier.
 func definitionFiles(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec,
 	packages map[workspaceapi.URI]string, pkg string,
 ) ([]workspaceapi.URI, error) {
 	if spec.hasPackages() {
@@ -238,7 +360,7 @@ func definitionFiles(
 // package clause are omitted. When the spec has no package clause it
 // returns nil.
 func FilePackages(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec,
 ) (map[workspaceapi.URI]string, error) {
 	if !spec.hasPackages() {
 		return nil, nil
@@ -249,20 +371,21 @@ func FilePackages(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = iter.Close() }()
-	packages := make(map[workspaceapi.URI]string)
-	for {
-		r, ok := iter.Next(ctx)
-		if !ok {
-			if err := iter.Err(); err != nil {
-				return nil, err
-			}
-			return packages, nil
-		}
-		if _, exists := packages[r.File]; !exists {
-			packages[r.File] = r.Text
-		}
+	return iterator.Reduce(ctx, iter, reducePackages)
+}
+
+// reducePackages folds package-clause results into a file→package map,
+// keeping the first package name seen per file.
+func reducePackages(
+	m map[workspaceapi.URI]string, r syntaxapi.Result,
+) (map[workspaceapi.URI]string, error) {
+	if m == nil {
+		m = make(map[workspaceapi.URI]string)
 	}
+	if _, exists := m[r.File]; !exists {
+		m[r.File] = r.Text
+	}
+	return m, nil
 }
 
 // SearchDefinitions streams package-qualified definition names
@@ -273,7 +396,7 @@ func FilePackages(
 // Names rejected by the spec's export predicate or by keep are skipped.
 // keep may be nil.
 func SearchDefinitions(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec,
 	packages map[workspaceapi.URI]string,
 	ch chan<- string, keep func(string) bool,
 ) error {
@@ -320,7 +443,7 @@ func SearchDefinitions(
 // package alias is actually imported. Returns an empty map when the spec
 // declares no import queries.
 func ImportedAliases(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec,
 ) (map[workspaceapi.URI]map[string]bool, error) {
 	result := make(map[workspaceapi.URI]map[string]bool)
 	if spec.ImportPathQuery == "" {
@@ -351,27 +474,15 @@ func disambiguateDisplayNames(spec *Spec, matches []syntaxapi.Match, name string
 }
 
 func resolveImportPaths(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+	ctx context.Context, parser Searcher, spec *Spec,
 ) (map[workspaceapi.URI]map[string]string, error) {
-	type fileImports = map[workspaceapi.URI][]string
-	type fileAliases = map[workspaceapi.URI]map[string]string
-
 	pathIter, err := parser.Search(
 		spec.ImportPathQuery, spec.ImportPathCaptures, spec.LangID,
 	)
 	if err != nil {
 		return nil, err
 	}
-	imports, err := iterator.Reduce(ctx, pathIter,
-		func(m fileImports, r syntaxapi.Result) (fileImports, error) {
-			p := strings.Trim(r.Text, `"`)
-			if m == nil {
-				m = make(fileImports)
-			}
-			m[r.File] = append(m[r.File], p)
-			return m, nil
-		},
-	)
+	imports, err := iterator.Reduce(ctx, pathIter, reduceImportPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -382,26 +493,52 @@ func resolveImportPaths(
 	if err != nil {
 		return nil, err
 	}
-	explicitAliases, err := iterator.Reduce(ctx, pairedResults(aliasIter),
-		func(m fileAliases, p [2]syntaxapi.Result) (fileAliases, error) {
-			alias := p[0].Text
-			if alias == "." || alias == "_" {
-				return m, nil
-			}
-			importPath := strings.Trim(p[1].Text, `"`)
-			if m == nil {
-				m = make(fileAliases)
-			}
-			if m[p[0].File] == nil {
-				m[p[0].File] = make(map[string]string)
-			}
-			m[p[0].File][importPath] = alias
-			return m, nil
-		},
-	)
+	explicitAliases, err := iterator.Reduce(ctx, pairedResults(aliasIter), reduceImportAliases)
 	if err != nil {
 		return nil, err
 	}
+	return resolveAliases(imports, explicitAliases), nil
+}
+
+// reduceImportPaths folds import-path results into a file→import-paths map.
+func reduceImportPaths(
+	m map[workspaceapi.URI][]string, r syntaxapi.Result,
+) (map[workspaceapi.URI][]string, error) {
+	if m == nil {
+		m = make(map[workspaceapi.URI][]string)
+	}
+	m[r.File] = append(m[r.File], strings.Trim(r.Text, `"`))
+	return m, nil
+}
+
+// reduceImportAliases folds explicit import-alias pairs (alias, import path)
+// into a file→import-path→alias map, dropping blank ("." / "_") aliases.
+func reduceImportAliases(
+	m map[workspaceapi.URI]map[string]string, p [2]syntaxapi.Result,
+) (map[workspaceapi.URI]map[string]string, error) {
+	alias := p[0].Text
+	if alias == "." || alias == "_" {
+		return m, nil
+	}
+	importPath := strings.Trim(p[1].Text, `"`)
+	if m == nil {
+		m = make(map[workspaceapi.URI]map[string]string)
+	}
+	if m[p[0].File] == nil {
+		m[p[0].File] = make(map[string]string)
+	}
+	m[p[0].File][importPath] = alias
+	return m, nil
+}
+
+// resolveAliases combines the file→import-paths map with the explicit
+// file→import-path→alias overrides into a file→alias→import-path map. The
+// default alias is the import path's base segment; "." and "_" imports are
+// excluded.
+func resolveAliases(
+	imports map[workspaceapi.URI][]string,
+	explicitAliases map[workspaceapi.URI]map[string]string,
+) map[workspaceapi.URI]map[string]string {
 	resolved := make(map[workspaceapi.URI]map[string]string, len(imports))
 	for file, paths := range imports {
 		aliases := make(map[string]string)
@@ -421,17 +558,16 @@ func resolveImportPaths(
 			resolved[file] = aliases
 		}
 	}
-	return resolved, nil
+	return resolved
 }
 
-func deduplicateByImport(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec,
+// deduplicateMatchesByImport collapses matches that resolve to the same
+// import path for alias, annotating each surviving match with its import
+// path. Files absent from importPaths are keyed by their URI.
+func deduplicateMatchesByImport(
 	matches []syntaxapi.Match, alias string,
+	importPaths map[workspaceapi.URI]map[string]string,
 ) []syntaxapi.Match {
-	importPaths, err := resolveImportPaths(ctx, parser, spec)
-	if err != nil {
-		return matches
-	}
 	lookup := make(map[string]map[string]string, len(importPaths))
 	for uri, aliases := range importPaths {
 		lookup[uri.String()] = aliases
@@ -484,7 +620,7 @@ func pairedResults(
 // Names may repeat across specs; callers that need uniqueness deduplicate the
 // stream. Returns ErrNoDot is never produced here since no name is parsed.
 func ListReferences(
-	ctx context.Context, parser syntaxapi.Parser,
+	ctx context.Context, parser Searcher,
 	specs iterator.Iterator[Spec], ch chan<- string,
 ) error {
 	defer func() { _ = specs.Close() }()
@@ -501,7 +637,7 @@ func ListReferences(
 }
 
 func listSpecReferences(
-	ctx context.Context, parser syntaxapi.Parser, spec *Spec, ch chan<- string,
+	ctx context.Context, parser Searcher, spec *Spec, ch chan<- string,
 ) error {
 	imports, err := ImportedAliases(ctx, parser, spec)
 	if err != nil {
@@ -530,7 +666,7 @@ func listSpecReferences(
 }
 
 func listRefPairs(
-	ctx context.Context, parser syntaxapi.Parser,
+	ctx context.Context, parser Searcher,
 	query string, captures []string, lang string,
 	keep func([2]syntaxapi.Result) bool,
 	ch chan<- string,

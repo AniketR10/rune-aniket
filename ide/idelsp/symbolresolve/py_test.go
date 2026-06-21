@@ -398,7 +398,7 @@ func setupPythonEnv(t *testing.T) *resolveEnv {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = scheme.Close() })
 
-	parser := syntax.NewParser(scheme, pythonPkgManager(t), uri)
+	parser := syntax.NewParser(scheme, pythonPkgManager(t), uri).(symbolresolve.Searcher)
 	return &resolveEnv{root: root, parser: parser}
 }
 

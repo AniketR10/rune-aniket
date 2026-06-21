@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -870,6 +871,30 @@ func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
 		return
 	}
 	return
+}
+
+// lineStarts returns the byte offset of the first byte of each line in
+// content. starts[r] is the start of row r, so a tree-sitter Point's byte
+// Column can be resolved to an absolute offset without a cell.Buffer.
+func lineStarts(content []byte) []int {
+	starts := make([]int, 1, bytes.Count(content, []byte{'\n'})+2)
+	for i, b := range content {
+		if b == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return starts
+}
+
+// pointToCoordinates converts a tree-sitter Point (row + byte column) to
+// term.Coordinates whose X is the rune column, matching the cell-buffer
+// conversion for source text without multi-rune grapheme clusters.
+func pointToCoordinates(content []byte, starts []int, p tree_sitter.Point) term.Coordinates {
+	lineStart := starts[int(p.Row)]
+	return term.Coordinates{
+		Y: int(p.Row),
+		X: utf8.RuneCount(content[lineStart : lineStart+int(p.Column)]),
+	}
 }
 
 func editToTreesitterEdit(

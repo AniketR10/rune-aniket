@@ -1,0 +1,359 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package syntaxtest
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"go.uber.org/goleak"
+	"unstable.build/go-tui/ide/idelsp/symbolresolve"
+	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/workspace"
+)
+
+// countingFS wraps a workspace file system and counts OpenFile calls per
+// path so a test can assert how many times each file is read. It also wraps
+// returned files to count Close calls so a test can assert that every opened
+// file is closed (no descriptor leak in the read path).
+type countingFS struct {
+	workspaceapi.FileSystem
+	mu    sync.Mutex
+	opens map[string]int
+	open  int
+	close int
+}
+
+func (c *countingFS) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	f, err := c.FileSystem.OpenFile(path, flag, mode)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if c.opens == nil {
+		c.opens = make(map[string]int)
+	}
+	c.opens[path]++
+	c.open++
+	c.mu.Unlock()
+	return &countingFile{File: f, fs: c}, nil
+}
+
+type countingFile struct {
+	workspaceapi.File
+	fs   *countingFS
+	once sync.Once
+}
+
+func (f *countingFile) Close() error {
+	f.once.Do(func() {
+		f.fs.mu.Lock()
+		f.fs.close++
+		f.fs.mu.Unlock()
+	})
+	return f.File.Close()
+}
+
+func (c *countingFS) openCloseBalance() (open, close int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.open, c.close
+}
+
+func (c *countingFS) maxOpens() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	max := 0
+	for _, n := range c.opens {
+		if n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+func (c *countingFS) distinctFiles() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.opens)
+}
+
+const multiQueryFile = `package pkg
+
+func function() string {
+	return ""
+}
+
+type myType struct {
+	a string
+}
+`
+
+const (
+	funcQuery = `(function_declaration name: (identifier) @fn)`
+	typeQuery = `(type_declaration (type_spec name: (type_identifier) @ty))`
+	varQuery  = `(var_declaration (var_spec name: (identifier) @v))`
+)
+
+func setupMultiSearcher(t *testing.T, files int) (
+	symbolresolve.Searcher, *countingFS,
+) {
+	t.Helper()
+
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	for i := range files {
+		createFile(t, scheme, fileName(i), multiQueryFile)
+	}
+
+	fs := &countingFS{FileSystem: scheme}
+	parser := syntax.NewParser(fs, goPkgManager(t), uri)
+	searcher, ok := parser.(symbolresolve.Searcher)
+	require.True(t, ok, "parser must implement symbolresolve.Searcher")
+	return searcher, fs
+}
+
+func fileName(i int) string {
+	return "f" + string(rune('a'+i)) + ".go"
+}
+
+func goPkgManager(t *testing.T) syntax.PkgManager {
+	t.Helper()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	return goFixturePkgManager{files: []string{
+		filepath.Join(wd, "go", "tree-sitter.so"),
+		filepath.Join(wd, "go", "locals.scm"),
+		filepath.Join(wd, "go", "highlights.scm"),
+		filepath.Join(wd, "go", "indents.scm"),
+		filepath.Join(wd, "go", "folds.scm"),
+	}}
+}
+
+type goFixturePkgManager struct {
+	files []string
+}
+
+func (m goFixturePkgManager) LibDir(
+	context.Context, string,
+) (iterator.Iterator[string], error) {
+	return iterator.FromSlice(m.files), nil
+}
+
+func collectMulti(
+	t *testing.T, searcher symbolresolve.Searcher, queries []symbolresolve.MultiQuery,
+) []symbolresolve.MultiResult {
+	t.Helper()
+	it, err := searcher.SearchMulti(queries, "go")
+	require.NoError(t, err)
+	results, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	return results
+}
+
+func countByQuery(results []symbolresolve.MultiResult) map[int]int {
+	counts := make(map[int]int)
+	for _, r := range results {
+		counts[r.QueryID]++
+	}
+	return counts
+}
+
+func TestSearchMultiSharesParsePerFile(t *testing.T) {
+	const files = 3
+	searcher, fs := setupMultiSearcher(t, files)
+
+	queries := []symbolresolve.MultiQuery{
+		{ID: 7, Query: funcQuery, Captures: []string{"fn"}},
+		{ID: 9, Query: typeQuery, Captures: []string{"ty"}},
+	}
+	results := collectMulti(t, searcher, queries)
+
+	assert.Equal(t, files, fs.distinctFiles(), "every file should be opened")
+	assert.Equal(t, 1, fs.maxOpens(),
+		"each file must be opened (and parsed) exactly once for the whole batch")
+
+	counts := countByQuery(results)
+	assert.Equal(t, files, counts[7], "one function capture per file")
+	assert.Equal(t, files, counts[9], "one type capture per file")
+
+	for _, r := range results {
+		switch r.QueryID {
+		case 7:
+			assert.Equal(t, "function", r.Result.Text)
+			assert.Equal(t, "fn", r.Result.CaptureName)
+		case 9:
+			assert.Equal(t, "myType", r.Result.Text)
+			assert.Equal(t, "ty", r.Result.CaptureName)
+		default:
+			t.Fatalf("unexpected QueryID %d", r.QueryID)
+		}
+	}
+}
+
+func TestSearchMultiResultsMatchSeparateSearches(t *testing.T) {
+	searcher, _ := setupMultiSearcher(t, 2)
+
+	multi := collectMulti(t, searcher, []symbolresolve.MultiQuery{
+		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+		{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+	})
+
+	funcIt, err := searcher.Search(funcQuery, []string{"fn"}, "go")
+	require.NoError(t, err)
+	funcResults, err := iterator.ToSlice(context.Background(), funcIt)
+	require.NoError(t, err)
+	typeIt, err := searcher.Search(typeQuery, []string{"ty"}, "go")
+	require.NoError(t, err)
+	typeResults, err := iterator.ToSlice(context.Background(), typeIt)
+	require.NoError(t, err)
+
+	var gotFunc, gotType []syntaxapi.Result
+	for _, r := range multi {
+		switch r.QueryID {
+		case 0:
+			gotFunc = append(gotFunc, r.Result)
+		case 1:
+			gotType = append(gotType, r.Result)
+		}
+	}
+	assert.ElementsMatch(t, funcResults, gotFunc,
+		"SearchMulti function results must match a standalone Search")
+	assert.ElementsMatch(t, typeResults, gotType,
+		"SearchMulti type results must match a standalone Search")
+}
+
+func TestSearchMultiAddsQueryWithoutExtraWalk(t *testing.T) {
+	const files = 4
+
+	searcher2, fs2 := setupMultiSearcher(t, files)
+	collectMulti(t, searcher2, []symbolresolve.MultiQuery{
+		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+		{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+	})
+	assert.Equal(t, 1, fs2.maxOpens())
+	assert.Equal(t, files, fs2.distinctFiles())
+
+	searcher3, fs3 := setupMultiSearcher(t, files)
+	collectMulti(t, searcher3, []symbolresolve.MultiQuery{
+		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+		{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+		{ID: 2, Query: varQuery, Captures: []string{"v"}},
+	})
+	assert.Equal(t, 1, fs3.maxOpens(),
+		"adding a third query must not open/parse any file more than once")
+	assert.Equal(t, files, fs3.distinctFiles(),
+		"adding a third query must not walk extra files")
+}
+
+// TestSearchMultiRuneColumns asserts that when a multi-byte rune precedes a
+// captured symbol on the same line, the reported column is the rune column,
+// not the raw byte column. The field "bar" follows "å" (2 bytes, 1 rune), so
+// its rune column (22) is one less than its byte column (23).
+func TestSearchMultiRuneColumns(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	src := "package pkg\ntype T struct{ å int; bar int }\n"
+	createFile(t, scheme, "fields.go", src)
+
+	parser := syntax.NewParser(scheme, goPkgManager(t), uri).(symbolresolve.Searcher)
+	results := collectMulti(t, parser, []symbolresolve.MultiQuery{
+		{ID: 0, Query: `(field_declaration name: (field_identifier) @f)`, Captures: []string{"f"}},
+	})
+
+	got := make(map[string]syntaxapi.Result, len(results))
+	for _, r := range results {
+		got[r.Result.Text] = r.Result
+	}
+
+	bar, ok := got["bar"]
+	require.Truef(t, ok, "expected to capture field 'bar'; got %+v", results)
+	assert.Equal(t, 1, bar.From.Y, "row")
+	assert.Equalf(t, 22, bar.From.X,
+		"field column must be the rune column (22), not the byte column (23); got %d", bar.From.X)
+	assert.Equalf(t, 25, bar.To.X,
+		"end column must also be rune-based (25); got %d", bar.To.X)
+
+	// "å" itself has no multi-byte rune before it, so rune and byte columns
+	// coincide (15).
+	aField, ok := got["å"]
+	require.True(t, ok, "expected to capture field 'å'")
+	assert.Equal(t, 15, aField.From.X, "leading field column")
+}
+
+// TestSearchMultiClosesEveryFile asserts the read path closes every file it
+// opens, so repeated SearchMulti passes do not leak file descriptors.
+func TestSearchMultiClosesEveryFile(t *testing.T) {
+	const files = 6
+	searcher, fs := setupMultiSearcher(t, files)
+
+	for range 3 {
+		collectMulti(t, searcher, []symbolresolve.MultiQuery{
+			{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+			{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+		})
+	}
+
+	open, closed := fs.openCloseBalance()
+	assert.Positive(t, open, "expected files to be opened")
+	assert.Equalf(t, open, closed,
+		"every opened file must be closed: opened=%d closed=%d", open, closed)
+}
+
+// TestSearchMultiNoGoroutineLeak asserts that once a SearchMulti stream is
+// drained the worker goroutines exit, which is what runs their deferred
+// teardown (closing each language's tree-sitter parser, compiled queries and
+// dlopen handle). A stuck worker would both leak goroutines and skip that
+// native cleanup.
+func TestSearchMultiNoGoroutineLeak(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	searcher, _ := setupMultiSearcher(t, 5)
+	for range 4 {
+		it, err := searcher.SearchMulti([]symbolresolve.MultiQuery{
+			{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+			{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+		}, "go")
+		require.NoError(t, err)
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+	}
+}

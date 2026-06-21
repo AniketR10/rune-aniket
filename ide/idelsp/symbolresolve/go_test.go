@@ -524,7 +524,7 @@ func TestResolveConcurrent(t *testing.T) {
 
 type resolveEnv struct {
 	root   string
-	parser syntaxapi.Parser
+	parser symbolresolve.Searcher
 }
 
 func (e *resolveEnv) fileURI(rel string) string {
@@ -547,11 +547,11 @@ func setupResolveEnv(t *testing.T) *resolveEnv {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = scheme.Close() })
 
-	parser := syntax.NewParser(scheme, treeSitterPkgManager(t), uri)
+	parser := syntax.NewParser(scheme, treeSitterPkgManager(t), uri).(symbolresolve.Searcher)
 	return &resolveEnv{root: root, parser: parser}
 }
 
-func treeSitterPkgManager(t *testing.T) syntax.PkgManager {
+func treeSitterPkgManager(t testing.TB) syntax.PkgManager {
 	t.Helper()
 
 	wd, err := os.Getwd()

@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
@@ -37,7 +36,7 @@ import (
 
 // listReferences drains ListReferences for the given specs into a set.
 func listReferences(
-	t *testing.T, parser syntaxapi.Parser, specs iterator.Iterator[symbolresolve.Spec],
+	t *testing.T, parser symbolresolve.Searcher, specs iterator.Iterator[symbolresolve.Spec],
 ) map[string]bool {
 	t.Helper()
 	ch := make(chan string, 64)
