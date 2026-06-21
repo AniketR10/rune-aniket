@@ -1022,20 +1022,90 @@ func (h *Handler) Complete(
 	if cmd != CommandName {
 		return iterator.Empty[string](), nil
 	}
-	return iterator.FromSlice(h.completeArgs(args)), nil
+	return h.completeArgs(args), nil
 }
 
 // completeArgs dispatches argument completion to either
 // subcommand completion or, when the user is typing
-// `debugger initialize <prefix>`, the configured adapter list.
-func (h *Handler) completeArgs(args []string) []string {
+// `debugger initialize <prefix>`, the configured adapter list, or,
+// for `debugger launch <prefix>`, the streaming program completion.
+func (h *Handler) completeArgs(args []string) iterator.Iterator[string] {
 	if len(args) <= 1 {
-		return completeSubcommands(args)
+		return iterator.FromSlice(completeSubcommands(args))
 	}
 	if args[0] == subInitialize && len(args) == 2 {
-		return h.completeAdapters(args[1])
+		return iterator.FromSlice(h.completeAdapters(args[1]))
 	}
-	return nil
+	if args[0] == subLaunch {
+		if prefix, ok := launchProgramPrefix(args[1:]); ok {
+			return h.completeLaunchProgram(prefix)
+		}
+	}
+	return iterator.Empty[string]()
+}
+
+// launchProgramPrefix inspects the argv following `launch` and
+// reports the partial program token the user is currently typing.
+// ok is false once a complete program token is already present
+// (further tokens are program args, not the program). It mirrors
+// the minimal `-e KEY=VAL` / `--` flag-skip from parseLaunchArgs so
+// completion lands on the same token position parseLaunchArgs treats
+// as the program.
+func launchProgramPrefix(args []string) (prefix string, ok bool) {
+	i := 0
+	for ; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			i++
+			break
+		}
+		if a == "-e" {
+			// Skip the flag and, when present, its KEY=VAL value.
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(a, "-") && a != "-" {
+			continue
+		}
+		break
+	}
+	// A program token already exists before the final (current)
+	// token, so the user is past the program position.
+	if i < len(args)-1 {
+		return "", false
+	}
+	if i == len(args) {
+		return "", true
+	}
+	return args[i], true
+}
+
+// completeLaunchProgram returns an iterator over workspace-relative
+// program paths beginning with prefix, drawn from the tree-sitter
+// entrypoints of the languages configured under h.cfg.Debugger.Adapters.
+// It returns immediately: the workspace scan runs on a background
+// goroutine (see streamEntrypointPaths) so Complete never blocks the
+// event loop on parser I/O.
+func (h *Handler) completeLaunchProgram(prefix string) iterator.Iterator[string] {
+	if len(h.cfg.Debugger.Adapters) == 0 {
+		return iterator.Empty[string]()
+	}
+	root, err := h.fs.URI(".")
+	if err != nil {
+		return iterator.Empty[string]()
+	}
+	var langIDs []string
+	for lang := range h.cfg.Debugger.Adapters {
+		if _, ok := entrypointQueries[lang]; ok {
+			langIDs = append(langIDs, lang)
+		}
+	}
+	if len(langIDs) == 0 {
+		return iterator.Empty[string]()
+	}
+	return streamEntrypointPaths(h.parser, root, langIDs, prefix)
 }
 
 // completeAdapters returns the configured adapter language IDs
