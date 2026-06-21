@@ -124,7 +124,7 @@ func TestGoREPLEndToEndCompletion(t *testing.T) {
 		rig.reset()
 		rig.typeText("greeter.S")
 		rig.tab()
-		require.Equal(t, "go> Shout", lastPrompt(rig))
+		require.Equal(t, "go> greeter.Shout", lastPrompt(rig))
 	})
 
 	t.Run("import path completion lists package", func(t *testing.T) {
@@ -302,10 +302,14 @@ func (r *replRig) frame() string {
 	return handlertest.DrawHandler(r.drain, replWidth, replHeight)
 }
 
-// tab sends a <tab> to trigger completion at the cursor.
+// tab sends a <tab> to trigger completion at the cursor, then blocks
+// until the async completion feeder settles and runs any scheduled
+// single/zero-match resolution so the overlay view is deterministic.
 func (r *replRig) tab() {
 	r.t.Helper()
 	r.drain.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+	r.shell.WaitCompletion()
+	r.sched.drain()
 }
 
 // completeOverlay types prefix, presses <tab>, and returns the candidate
