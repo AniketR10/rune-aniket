@@ -46,3 +46,4 @@ __pycache__/
 # The cache subdirectory is populated by ociregistry when the
 # TestService_Testdata_* suite runs with RUNE_LLAMACPP_TESTDATA=1.
 cmd/rune-agent/llm/llamacpp/testdata/cache/
+python_modules
