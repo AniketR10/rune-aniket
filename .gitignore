@@ -35,6 +35,13 @@ six_crash_report_*
 # packages
 pkg/
 
+# Python local test/dev artifacts
+.venv/
+.venv-workers/
+.wrangler/
+__pycache__/
+*.pyc
+
 # llamacpp test data: GGUF models downloaded on demand for service_test.go.
 # The cache subdirectory is populated by ociregistry when the
 # TestService_Testdata_* suite runs with RUNE_LLAMACPP_TESTDATA=1.

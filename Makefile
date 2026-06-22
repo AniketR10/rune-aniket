@@ -18,6 +18,17 @@ COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X uns
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
 OXAPI_GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags --always --dirty) -X main.Commit=$$(git rev-parse --short HEAD)$$(git diff --quiet || echo -dirty)"
+OXPROBE_REGION ?= us-central1
+OXPROBE_REPO ?= docker
+OXPROBE_SERVICE ?= oxprobe
+OXPROBE_VPC_CONNECTOR ?= oxprobe-egress
+OXPROBE_DEV_GCP_PROJECT ?= unstable-build-blue-dev
+OXPROBE_PROD_GCP_PROJECT ?= rune-prod
+OXPROBE_IMAGE_TAG ?= $(shell git describe --tags --always --dirty)
+OXPROBE_DEV_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
+OXPROBE_DEV_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
+OXPROBE_PROD_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
+OXPROBE_PROD_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -45,6 +56,9 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-docker-build rune-docker-run \
 	ox-api-docker-build-gcp ox-api-docker-push-gcp-staging \
 	ox-api-docker-build-gcp-prod ox-api-docker-push-gcp-prod \
+	oxprobe-docker-build-gcp oxprobe-docker-push-gcp-staging \
+	oxprobe-docker-build-gcp-prod oxprobe-docker-push-gcp-prod \
+	oxprobe-deploy-staging oxprobe-deploy-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize \
@@ -302,6 +316,64 @@ ox-api-docker-build-gcp-prod:
 
 ox-api-docker-push-gcp-prod:
 	@$(MAKE) -C cmd/ox-api docker-push-gcp-prod
+
+oxprobe-docker-build-gcp:
+	@mkdir -p target/oxprobe
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o target/oxprobe/oxprobe ./cmd/oxprobe
+	@docker build -f deploy/oxprobe/Dockerfile --platform linux/amd64 \
+		-t $(OXPROBE_DEV_IMAGE) \
+		-t $(OXPROBE_DEV_LATEST_IMAGE) .
+
+oxprobe-docker-push-gcp-staging: oxprobe-docker-build-gcp
+	@gcloud auth configure-docker $(OXPROBE_REGION)-docker.pkg.dev --quiet
+	@docker push $(OXPROBE_DEV_IMAGE)
+	@docker push $(OXPROBE_DEV_LATEST_IMAGE)
+
+oxprobe-docker-build-gcp-prod:
+	@mkdir -p target/oxprobe
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o target/oxprobe/oxprobe ./cmd/oxprobe
+	@docker build -f deploy/oxprobe/Dockerfile --platform linux/amd64 \
+		-t $(OXPROBE_PROD_IMAGE) \
+		-t $(OXPROBE_PROD_LATEST_IMAGE) .
+
+oxprobe-docker-push-gcp-prod: oxprobe-docker-build-gcp-prod
+	@gcloud auth configure-docker $(OXPROBE_REGION)-docker.pkg.dev --quiet
+	@docker push $(OXPROBE_PROD_IMAGE)
+	@docker push $(OXPROBE_PROD_LATEST_IMAGE)
+
+oxprobe-deploy-staging: oxprobe-docker-push-gcp-staging
+	@gcloud run deploy $(OXPROBE_SERVICE) \
+		--project=$(OXPROBE_DEV_GCP_PROJECT) \
+		--image=$(OXPROBE_DEV_IMAGE) \
+		--region=$(OXPROBE_REGION) \
+		--platform=managed \
+		--no-allow-unauthenticated \
+		--port=8080 \
+		--min-instances=1 \
+		--max-instances=1 \
+		--cpu=1 \
+		--memory=512Mi \
+		--no-cpu-throttling \
+		--vpc-connector=$(OXPROBE_VPC_CONNECTOR) \
+		--vpc-egress=all-traffic \
+		--set-env-vars=OXPROBE_ENV=staging,GCP_PROJECT=$(OXPROBE_DEV_GCP_PROJECT) \
+		--quiet
+
+oxprobe-deploy-prod: oxprobe-docker-push-gcp-prod
+	@gcloud run deploy $(OXPROBE_SERVICE) \
+		--project=$(OXPROBE_PROD_GCP_PROJECT) \
+		--image=$(OXPROBE_PROD_IMAGE) \
+		--region=$(OXPROBE_REGION) \
+		--platform=managed \
+		--no-allow-unauthenticated \
+		--port=8080 \
+		--min-instances=1 \
+		--max-instances=1 \
+		--cpu=1 \
+		--memory=512Mi \
+		--no-cpu-throttling \
+		--set-env-vars=OXPROBE_ENV=prod,GCP_PROJECT=$(OXPROBE_PROD_GCP_PROJECT) \
+		--quiet
 
 rune-linux-cross-compile:
 	@$(MAKE) -C cmd/rune linux-cross-compile
