@@ -152,6 +152,7 @@ func TestReleaseInstallE2E(t *testing.T) {
 		"",  // billingMailFrom
 		nil, // contactHandler
 		nil, // newsletterHandler
+		oxapi.HealthConfig{ProbeSecret: "test-probe-secret"},
 	)
 	require.NoError(t, err)
 
