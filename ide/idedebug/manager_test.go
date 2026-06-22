@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	rdebug "unstable.build/go-tui/debug"
 )
 
 // fakeSubscriber is a no-op EventSubscriber for tests that do
@@ -194,6 +195,65 @@ func TestSubstituteAddr(t *testing.T) {
 			[]string{"-m", "debugpy.adapter", "--host", "127.0.0.1", "--port", "5555"},
 			got)
 	})
+}
+
+func TestDialWithRetryUsesContextDeadline(t *testing.T) {
+	t.Parallel()
+	addr, err := findFreeAddr()
+	require.NoError(t, err)
+
+	listenErr := make(chan error, 1)
+	go rdebug.CapturePanicReport(func() {
+		time.Sleep(300 * time.Millisecond)
+		listener, err := net.Listen("tcp", addr)
+		if err != nil {
+			listenErr <- err
+			return
+		}
+		defer func() { _ = listener.Close() }()
+		if tcp, ok := listener.(*net.TCPListener); ok {
+			_ = tcp.SetDeadline(time.Now().Add(time.Second))
+		}
+		conn, err := listener.Accept()
+		if err != nil {
+			listenErr <- err
+			return
+		}
+		_ = conn.Close()
+		listenErr <- nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	t.Cleanup(cancel)
+	conn, err := dialWithRetry(ctx, addr, 5*time.Millisecond, make(chan error))
+	require.NoError(t, err)
+	_ = conn.Close()
+	require.NoError(t, <-listenErr)
+}
+
+func TestDialWithRetryStopsWhenAdapterExits(t *testing.T) {
+	t.Parallel()
+	processExited := make(chan error, 1)
+	processExited <- errors.New("adapter crashed")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	t.Cleanup(cancel)
+
+	conn, err := dialWithRetry(ctx, "127.0.0.1:1", 5*time.Millisecond, processExited)
+	require.Nil(t, conn)
+	require.ErrorContains(t, err, "debug adapter exited before accepting connections")
+	require.ErrorContains(t, err, "adapter crashed")
+}
+
+func TestDialWithRetryReportsLastDialErrorOnTimeout(t *testing.T) {
+	t.Parallel()
+	addr, err := findFreeAddr()
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	t.Cleanup(cancel)
+
+	conn, err := dialWithRetry(ctx, addr, 5*time.Millisecond, make(chan error))
+	require.Nil(t, conn)
+	require.ErrorContains(t, err, "dial "+addr+" before timeout")
 }
 
 // captureRequestArgs injects a session whose cfg carries the given

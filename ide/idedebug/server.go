@@ -47,6 +47,8 @@ import (
 // has been torn down or it has not yet been started.
 var errNoServer = errors.New("no debug server")
 
+const defaultDialRetryDelay = 100 * time.Millisecond
+
 type debugServer struct {
 	mu         sync.Mutex
 	writeMu    sync.Mutex
@@ -72,6 +74,10 @@ type debugServer struct {
 	alive      bool
 	log        *slog.Logger
 	caps       *dap.Capabilities
+	// dialRetryDelay is the cadence between connection attempts
+	// while waiting for the adapter to bind its port. Tests shrink
+	// it to keep startup-timing assertions fast.
+	dialRetryDelay time.Duration
 	// launchErr stores the error from a failed DAP launch or
 	// attach response. These requests use writeRequest
 	// (fire-and-forget), so the response has no pending
@@ -96,16 +102,17 @@ func newDebugServer(
 ) *debugServer {
 	ctx, cancel := context.WithCancel(ctx)
 	return &debugServer{
-		ctx:      ctx,
-		cancel:   cancel,
-		cfg:      cfg,
-		binPath:  binPath,
-		executor: executor,
-		rootURI:  rootURI,
-		client:   client,
-		eventSub: eventSub,
-		pending:  make(map[int]chan dap.Message),
-		log:      slog.With("struct", "idedebug.debugServer", "lang", cfg.langID, "uri", rootURI),
+		ctx:            ctx,
+		cancel:         cancel,
+		cfg:            cfg,
+		binPath:        binPath,
+		executor:       executor,
+		rootURI:        rootURI,
+		client:         client,
+		eventSub:       eventSub,
+		pending:        make(map[int]chan dap.Message),
+		dialRetryDelay: defaultDialRetryDelay,
+		log:            slog.With("struct", "idedebug.debugServer", "lang", cfg.langID, "uri", rootURI),
 	}
 }
 
@@ -151,7 +158,7 @@ func (s *debugServer) start(ctx context.Context) error {
 	}
 
 	// Connect to the debug adapter as a client.
-	conn, err := dialWithRetry(ctx, addr)
+	conn, err := dialWithRetry(ctx, addr, s.dialRetryDelay, watchCh)
 	if err != nil {
 		s.cancel() // kill the spawned process
 		return fmt.Errorf("connect to %s: %w", addr, err)
@@ -200,26 +207,51 @@ func findFreeAddr() (string, error) {
 	return addr, nil
 }
 
-func dialWithRetry(ctx context.Context, addr string) (net.Conn, error) {
-	const (
-		maxAttempts = 50
-		retryDelay  = 100 * time.Millisecond
-	)
+// dialWithRetry connects to the debug adapter, retrying on the retry
+// cadence until ctx is cancelled or the adapter process exits. The
+// caller owns the deadline via ctx (idedebug applies
+// Config.InitializeTimeout), so dialWithRetry imposes no deadline of
+// its own.
+func dialWithRetry(
+	ctx context.Context,
+	addr string,
+	retryDelay time.Duration,
+	processExited <-chan error,
+) (net.Conn, error) {
+	dialer := net.Dialer{Timeout: retryDelay}
+	ticker := time.NewTicker(retryDelay)
+	defer ticker.Stop()
+
 	var lastErr error
-	for range maxAttempts {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-		conn, err := net.DialTimeout("tcp", addr, retryDelay)
+	for {
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
 		if err == nil {
 			return conn, nil
 		}
 		lastErr = err
-		time.Sleep(retryDelay)
+
+		select {
+		case <-ctx.Done():
+			return nil, dialTimeoutError(addr, lastErr, ctx.Err())
+		case err := <-processExited:
+			return nil, adapterExitError(err)
+		case <-ticker.C:
+		}
 	}
-	return nil, fmt.Errorf("dial %s after retries: %w", addr, lastErr)
+}
+
+func dialTimeoutError(addr string, lastErr, ctxErr error) error {
+	if lastErr == nil {
+		return ctxErr
+	}
+	return fmt.Errorf("dial %s before timeout: %w", addr, lastErr)
+}
+
+func adapterExitError(err error) error {
+	if err == nil {
+		return errors.New("debug adapter exited before accepting connections")
+	}
+	return fmt.Errorf("debug adapter exited before accepting connections: %w", err)
 }
 
 func (s *debugServer) initialize(ctx context.Context) (*dap.Capabilities, error) {
