@@ -59,6 +59,7 @@ var commonExcludes = []gitignore.Pattern{
 	gitignore.ParsePattern(".mypy_cache/", nil),
 	gitignore.ParsePattern(".pytest_cache/", nil),
 	gitignore.ParsePattern("__pycache__/", nil),
+	gitignore.ParsePattern("python_modules/", nil),
 
 	// JS/TS dependencies
 	gitignore.ParsePattern("node_modules/", nil),
