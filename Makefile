@@ -21,10 +21,9 @@ OXAPI_GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags --always --dirty) -X 
 OXPROBE_REGION ?= us-central1
 OXPROBE_REPO ?= docker
 OXPROBE_SERVICE ?= oxprobe
-OXPROBE_VPC_CONNECTOR ?= oxprobe-egress
 OXPROBE_DEV_GCP_PROJECT ?= unstable-build-blue-dev
 OXPROBE_PROD_GCP_PROJECT ?= rune-prod
-OXPROBE_IMAGE_TAG ?= $(shell git describe --tags --always --dirty)
+OXPROBE_IMAGE_TAG := $(or $(OXPROBE_IMAGE_TAG),$(shell git describe --tags --always --dirty))
 OXPROBE_DEV_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
 OXPROBE_DEV_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
 OXPROBE_PROD_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
@@ -349,13 +348,11 @@ oxprobe-deploy-staging: oxprobe-docker-push-gcp-staging
 		--platform=managed \
 		--no-allow-unauthenticated \
 		--port=8080 \
-		--min-instances=1 \
+		--min-instances=0 \
 		--max-instances=1 \
 		--cpu=1 \
 		--memory=512Mi \
-		--no-cpu-throttling \
-		--vpc-connector=$(OXPROBE_VPC_CONNECTOR) \
-		--vpc-egress=all-traffic \
+		--cpu-throttling \
 		--set-env-vars=OXPROBE_ENV=staging,GCP_PROJECT=$(OXPROBE_DEV_GCP_PROJECT) \
 		--quiet
 
