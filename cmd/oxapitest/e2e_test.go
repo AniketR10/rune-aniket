@@ -48,8 +48,8 @@ import (
 	"github.com/unstablebuild/blue/release/gcsrelease"
 	"github.com/unstablebuild/ox-api/api/oxapi"
 	"github.com/unstablebuild/ox-api/auth"
-	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/handler/handlertest"
 	goide "unstable.build/go-tui/ide"
@@ -152,7 +152,10 @@ func TestReleaseInstallE2E(t *testing.T) {
 		"",  // billingMailFrom
 		nil, // contactHandler
 		nil, // newsletterHandler
-		oxapi.HealthConfig{ProbeSecret: "test-probe-secret"},
+		oxapi.HealthConfig{
+			ProbeSecret:   "test-probe-secret",
+			ReleaseBucket: gcsClient.Bucket(bucketName),
+		},
 	)
 	require.NoError(t, err)
 
