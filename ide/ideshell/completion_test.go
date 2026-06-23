@@ -221,3 +221,75 @@ func TestOpenCompletionZeroMatchClosesOverlay(t *testing.T) {
 	assert.False(t, h.searching, "overlay must close with no candidates")
 	assert.Equal(t, "g zz", h.editBuf.String())
 }
+
+// slowScanIter models the debugger-launch program completer: its Next
+// blocks until either a result is produced or the context is
+// cancelled, mirroring streamEntrypointPaths' tree-sitter scan over a
+// large repo that yields nothing for a while. Close cancels the scan.
+type slowScanIter struct {
+	cancelled chan struct{}
+	once      sync.Once
+}
+
+func newSlowScanIter() *slowScanIter {
+	return &slowScanIter{cancelled: make(chan struct{})}
+}
+
+func (s *slowScanIter) Next(ctx context.Context) (string, bool) {
+	select {
+	case <-ctx.Done():
+		return "", false
+	case <-s.cancelled:
+		return "", false
+	}
+}
+
+func (s *slowScanIter) Err() error { return nil }
+
+func (s *slowScanIter) Close() error {
+	s.once.Do(func() { close(s.cancelled) })
+	return nil
+}
+
+// TestTabOnSlowScanDoesNotFreeze reproduces the debugger-launch freeze:
+// pressing <tab> while the program completer is still scanning must
+// return promptly (overlay opens, prompt stays responsive) rather than
+// blocking the event loop until the scan settles.
+func TestTabOnSlowScanDoesNotFreeze(t *testing.T) {
+	scan := newSlowScanIter()
+	h := newTestHandlerFull(t, nil, 100, func(r *CommandRegistry) {
+		r.Register("debugger", "", iterCmd{
+			iter: func() iterator.Iterator[string] { return scan },
+		})
+	})
+	h.Resize(testWidthH, testHeight)
+
+	feedRunes(h, "debugger launch ")
+
+	done := make(chan struct{})
+	go func() {
+		h.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("tab froze the event loop while the scan was in flight")
+	}
+
+	assert.True(t, h.searching, "overlay should open even while scanning")
+
+	// A subsequent key (here <esc> to cancel) must also return
+	// promptly, tearing the in-flight feeder down without deadlock.
+	cancelled := make(chan struct{})
+	go func() {
+		h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+		close(cancelled)
+	}()
+	select {
+	case <-cancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelling the overlay froze the event loop")
+	}
+	assert.False(t, h.searching)
+}
