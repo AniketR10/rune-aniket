@@ -679,7 +679,8 @@ func runGUI(
 	// risk running LSP servers or other workspace-wide processes without the
 	// right env vars. When gui.env sets its own PATH the value may expand
 	// $PATH, so we must wait for the login-shell PATH resolve first; when it
-	// does not, we apply gui.env immediately and let the resolve land async.
+	// does not, we still wait, because we run LSP servers or other tools
+	// which might need PATH to be set
 	if err := applyShellPATHAndGUIEnv(guiCfg, pathDone); err != nil {
 		envErr = multierr.Append(envErr, err)
 	}
@@ -799,24 +800,15 @@ func applyShellPATHAndGUIEnv(
 		return fmt.Errorf("load 'gui.env' from config: %v", err)
 	}
 
-	if guiEnvSetsPATH(env) {
-		ret = waitLoginShellPATH(pathDone)
-	}
+	// we must always wait for PATH, otherwise we might end up with
+	// tools like gopls running without PATH set, and having issues
+	// when trying to find "go" in their PATH.
+	ret = waitLoginShellPATH(pathDone)
 
 	if err := applyGUIEnvVars(env); err != nil {
 		ret = multierr.Append(ret, fmt.Errorf("apply gui.env: %v", err))
 	}
 	return ret
-}
-
-// guiEnvSetsPATH reports whether the gui.env config block defines a PATH key.
-func guiEnvSetsPATH(env config.Config) (found bool) {
-	env.Iterate(func(k string, _ any) {
-		if k == "PATH" {
-			found = true
-		}
-	})
-	return found
 }
 
 // waitLoginShellPATH blocks until the background login-shell PATH resolution

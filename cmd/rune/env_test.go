@@ -272,51 +272,6 @@ func TestApplyGUIEnvVarsWithLookup(t *testing.T) {
 	t.Cleanup(func() { _ = os.Unsetenv("OUT") })
 }
 
-func TestGUIEnvSetsPATH(t *testing.T) {
-	tests := []struct {
-		name string
-		env  map[string]any
-		want bool
-	}{
-		{"empty", map[string]any{}, false},
-		{"no path", map[string]any{"FOO": "bar"}, false},
-		{"sets path", map[string]any{"PATH": "/extra/bin:$PATH"}, true},
-		{"path among others", map[string]any{"FOO": "bar", "PATH": "/x"}, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := guiEnvSetsPATH(config.JSONFromMap(tt.env))
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-// TestApplyShellPATHAndGUIEnvNoPATHDoesNotBlock asserts that when gui.env does
-// not define PATH, gui.env is applied without waiting on the login-shell PATH
-// resolve, so a stuck resolve cannot delay startup.
-func TestApplyShellPATHAndGUIEnvNoPATHDoesNotBlock(t *testing.T) {
-	cfg := config.MapConfig(map[string]any{
-		"env": map[string]any{"RUNE_NO_PATH_TEST": "value"},
-	})
-	t.Cleanup(func() { _ = os.Unsetenv("RUNE_NO_PATH_TEST") })
-
-	// Never sends: blocking on it would deadlock the test.
-	pathDone := make(chan error)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- applyShellPATHAndGUIEnv(cfg, pathDone)
-	}()
-
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(2 * time.Second):
-		t.Fatal("applyShellPATHAndGUIEnv blocked on pathDone despite gui.env not setting PATH")
-	}
-	assert.Equal(t, "value", os.Getenv("RUNE_NO_PATH_TEST"))
-}
-
 // TestApplyShellPATHAndGUIEnvWithPATHWaits asserts that when gui.env defines
 // PATH, the resolve result is consumed before gui.env is applied so the value
 // expands against the resolved login PATH.
