@@ -27,6 +27,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -106,6 +107,19 @@ func (c *countingFS) distinctFiles() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.opens)
+}
+
+// openedUnder reports whether any opened path contains the given path
+// segment, used to assert that filtered directories are never read.
+func (c *countingFS) openedUnder(segment string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for p := range c.opens {
+		if strings.Contains(p, segment) {
+			return true
+		}
+	}
+	return false
 }
 
 const multiQueryFile = `package pkg
@@ -356,4 +370,35 @@ func TestSearchMultiNoGoroutineLeak(t *testing.T) {
 		_, err = iterator.ToSlice(context.Background(), it)
 		require.NoError(t, err)
 	}
+}
+
+// TestSearchMultiSkipsFilteredDirs asserts SearchMulti prunes the same
+// noise/dependency directories the single-query Search path prunes. A Go
+// file under node_modules (a built-in exclude) must never be opened or
+// parsed; without the gitignore/hidden-dir filter the one-pass walk would
+// descend into ignored trees and tree-sitter-parse arbitrarily large files,
+// freezing symbol resolution.
+func TestSearchMultiSkipsFilteredDirs(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	createFile(t, scheme, "a.go", multiQueryFile)
+	createFile(t, scheme, "b.go", multiQueryFile)
+	createFile(t, scheme, "node_modules/dep.go", multiQueryFile)
+
+	fs := &countingFS{FileSystem: scheme}
+	searcher := syntax.NewParser(fs, goPkgManager(t), uri).(symbolresolve.Searcher)
+
+	results := collectMulti(t, searcher, []symbolresolve.MultiQuery{
+		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+	})
+
+	assert.False(t, fs.openedUnder("node_modules"),
+		"SearchMulti must not open files under filtered dirs")
+	assert.Equal(t, 2, fs.distinctFiles(),
+		"only the two root files should be walked")
+	assert.Len(t, results, 2, "node_modules file must not contribute results")
 }

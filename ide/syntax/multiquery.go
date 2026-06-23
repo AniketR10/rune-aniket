@@ -52,6 +52,7 @@ func (p parserSearcher) SearchMulti(
 	queries []symbolresolve.MultiQuery, langs ...string,
 ) (iterator.Iterator[symbolresolve.MultiResult], error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = walkdir.WithContextFilter(ctx, p.filter.get())
 	paths, err := walkdir.ListFiles(ctx, p.w, ".")
 	if err != nil {
 		cancel()
