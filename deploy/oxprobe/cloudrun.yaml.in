@@ -1,0 +1,69 @@
+# Unstable Build LLC ("COMPANY") CONFIDENTIAL
+#
+# Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+#
+# NOTICE: All information contained herein is, and remains the property of COMPANY.
+# The intellectual and technical concepts contained herein are proprietary to
+# COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+# and are protected by trade secret or copyright law. Dissemination of this information
+# or reproduction of this material is strictly forbidden unless prior written permission
+# is obtained from COMPANY. Access to the source code contained herein is hereby
+# forbidden to anyone except current COMPANY employees, managers or contractors who
+# have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+#
+# The copyright notice above does not evidence any actual or intended publication or
+# disclosure of this source code, which includes information that is confidential and/or
+# proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+# DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+# WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+# VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+# THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+# REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+# ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: %SERVICE%
+  annotations:
+    run.googleapis.com/launch-stage: ALPHA
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '%MIN_INSTANCES%'
+        autoscaling.knative.dev/maxScale: '%MAX_INSTANCES%'
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/container-dependencies: '{"collector":["app"]}'
+        run.googleapis.com/cpu-throttling: '%CPU_THROTTLING%'
+        run.googleapis.com/startup-cpu-boost: 'true'
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+      - image: "%IMAGE%"
+        name: app
+        env:
+        - name: OXPROBE_ENV
+          value: "%ENV%"
+        - name: GCP_PROJECT
+          value: "%PROJECT%"
+        ports:
+        - name: http1
+          containerPort: 8080
+        resources:
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      - image: "%GMP_SIDECAR_IMAGE%"
+        name: collector
+  traffic:
+  - latestRevision: true
+    percent: 100

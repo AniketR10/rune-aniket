@@ -37,6 +37,10 @@ STATUS_OK = "ok"
 STATUS_DEGRADED = "degraded"
 STATUS_FAIL = "fail"
 
+# Attached to every page so on-call engineers reach the oxprobe
+# mitigation guide and metrics dashboard from the incident.
+RUNBOOK_URL = "https://x.unstable.build/docs/runbooks/oxprobe"
+
 ENVIRONMENTS = {
     "staging": {
         "api_host": "api.unstable.build",
@@ -351,6 +355,7 @@ async def page_failures(env: Any, report: dict[str, Any]) -> None:
                         "latency_ms": check.get("latency_ms", 0),
                     },
                 },
+                "links": [{"href": RUNBOOK_URL, "text": "oxprobe runbook"}],
             }
             resp = await client.post("https://events.pagerduty.com/v2/enqueue", json=payload)
             if resp.status_code < 200 or resp.status_code >= 300:

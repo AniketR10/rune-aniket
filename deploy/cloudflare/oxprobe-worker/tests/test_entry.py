@@ -71,6 +71,28 @@ class fake_client:
         return self.response
 
 
+class fake_paging_client:
+    def __init__(self, response):
+        self.response = response
+        self.post_calls = []
+
+    async def post(self, url, **kwargs):
+        self.post_calls.append((url, kwargs))
+        return self.response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class fake_env:
+    def __init__(self, **values):
+        for name, value in values.items():
+            setattr(self, name, value)
+
+
 class EntryTest(unittest.IsolatedAsyncioTestCase):
     async def test_scheduled_accepts_cloudflare_runtime_arguments(self):
         calls = []
@@ -206,6 +228,31 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(entry.CHECK_FAIL, res["status"])
         self.assertIn("403", res["detail"])
+
+    async def test_page_failures_includes_runbook_link(self):
+        client = fake_paging_client(fake_response(status_code=202))
+        old_async_client = entry.httpx.AsyncClient
+        entry.httpx.AsyncClient = lambda *args, **kwargs: client
+        try:
+            env = fake_env(PAGERDUTY_ROUTING_KEY="rk", ENV="prod")
+            report = {
+                "status": entry.STATUS_FAIL,
+                "checks": [
+                    entry.check_result("dns_api", entry.CHECK_FAIL, True, "nxdomain"),
+                ],
+            }
+
+            await entry.page_failures(env, report)
+        finally:
+            entry.httpx.AsyncClient = old_async_client
+
+        self.assertEqual(1, len(client.post_calls))
+        _, kwargs = client.post_calls[0]
+        payload = kwargs["json"]
+        self.assertEqual(
+            [{"href": entry.RUNBOOK_URL, "text": "oxprobe runbook"}],
+            payload["links"],
+        )
 
 
 if __name__ == "__main__":

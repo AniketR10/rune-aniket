@@ -87,6 +87,7 @@ func TestPageDedupKeysPerLayer(t *testing.T) {
 	for _, p := range cp.pages {
 		keys[p.DedupKey] = true
 		require.Equal(t, pager.SeverityCritical, p.Severity)
+		require.Equal(t, []pager.Link{{Href: runbookURL, Text: "oxprobe runbook"}}, p.Links)
 	}
 	require.True(t, keys["oxprobe-prod-dns_api"])
 	require.True(t, keys["oxprobe-prod-tls_api"])

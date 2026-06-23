@@ -1,0 +1,112 @@
+{
+  "displayName": "oxprobe — synthetic probes",
+  "dashboardFilters": [
+    {
+      "filterType": "METRIC_LABEL",
+      "labelKey": "env"
+    },
+    {
+      "filterType": "METRIC_LABEL",
+      "labelKey": "layer"
+    }
+  ],
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "width": 12,
+        "height": 4,
+        "widget": {
+          "title": "Layer up (1 = healthy)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "max by (env, layer) (oxprobe_layer_up)"
+                },
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "up",
+              "scale": "LINEAR"
+            },
+            "thresholds": [
+              {
+                "value": 1,
+                "color": "GREEN"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "yPos": 4,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "Probe latency p50 (s)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.5, sum by (env, layer, le) (rate(oxprobe_layer_latency_seconds_bucket[5m])))"
+                },
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 6,
+        "yPos": 4,
+        "width": 6,
+        "height": 4,
+        "widget": {
+          "title": "Probe latency p95 (s)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.95, sum by (env, layer, le) (rate(oxprobe_layer_latency_seconds_bucket[5m])))"
+                },
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "seconds",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "yPos": 8,
+        "width": 12,
+        "height": 4,
+        "widget": {
+          "title": "Probe rate (probes/s)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (env, layer) (rate(oxprobe_layer_latency_seconds_count[5m]))"
+                },
+                "plotType": "LINE"
+              }
+            ],
+            "yAxis": {
+              "label": "probes/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -28,6 +28,11 @@ OXPROBE_DEV_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/
 OXPROBE_DEV_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_DEV_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
 OXPROBE_PROD_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):$(OXPROBE_IMAGE_TAG)
 OXPROBE_PROD_LATEST_IMAGE = $(OXPROBE_REGION)-docker.pkg.dev/$(OXPROBE_PROD_GCP_PROJECT)/$(OXPROBE_REPO)/$(OXPROBE_SERVICE):latest
+OXPROBE_GMP_SIDECAR_IMAGE ?= us-docker.pkg.dev/cloud-ops-agents-artifacts/cloud-run-gmp-sidecar/cloud-run-gmp-sidecar:1.2.0
+OXPROBE_DEV_CLOUDRUN = target/oxprobe/cloudrun-staging.yaml
+OXPROBE_PROD_CLOUDRUN = target/oxprobe/cloudrun-prod.yaml
+OXPROBE_WORKER_DIR ?= deploy/cloudflare/oxprobe-worker
+OXPROBE_PYWRANGLER ?= uv run pywrangler
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -57,6 +62,10 @@ RELEASE_FILES=$(wildcard release/*)
 	ox-api-docker-build-gcp-prod ox-api-docker-push-gcp-prod \
 	oxprobe-docker-build-gcp oxprobe-docker-push-gcp-staging \
 	oxprobe-docker-build-gcp-prod oxprobe-docker-push-gcp-prod \
+	oxprobe-wait-image-staging oxprobe-wait-image-prod \
+	oxprobe-cloud-monitoring-iam-staging oxprobe-cloud-monitoring-iam-prod \
+	oxprobe-cloudrun-deploy-staging oxprobe-cloudrun-deploy-prod \
+	oxprobe-worker-deploy-staging oxprobe-worker-deploy-prod \
 	oxprobe-deploy-staging oxprobe-deploy-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
@@ -105,6 +114,7 @@ RELEASE_FILES=$(wildcard release/*)
 	deps rune-llamacpp-libs rune-llamacpp-init \
 	ox-api-init docs-init \
 	fuzz fuzz-list \
+	FORCE \
 	manual-ssh-test \
 	dist-tar-with-src dist-dmg-with-src dist-min-macos dist-min-linux \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
@@ -340,37 +350,87 @@ oxprobe-docker-push-gcp-prod: oxprobe-docker-build-gcp-prod
 	@docker push $(OXPROBE_PROD_IMAGE)
 	@docker push $(OXPROBE_PROD_LATEST_IMAGE)
 
-oxprobe-deploy-staging: oxprobe-docker-push-gcp-staging
-	@gcloud run deploy $(OXPROBE_SERVICE) \
-		--project=$(OXPROBE_DEV_GCP_PROJECT) \
-		--image=$(OXPROBE_DEV_IMAGE) \
-		--region=$(OXPROBE_REGION) \
-		--platform=managed \
-		--no-allow-unauthenticated \
-		--port=8080 \
-		--min-instances=0 \
-		--max-instances=1 \
-		--cpu=1 \
-		--memory=512Mi \
-		--cpu-throttling \
-		--set-env-vars=OXPROBE_ENV=staging,GCP_PROJECT=$(OXPROBE_DEV_GCP_PROJECT) \
-		--quiet
+oxprobe-wait-image-staging: oxprobe-docker-push-gcp-staging
+	@for i in $$(seq 1 12); do \
+		gcloud artifacts docker images describe $(OXPROBE_DEV_IMAGE) --project=$(OXPROBE_DEV_GCP_PROJECT) --format='value(image_summary.digest)' >/dev/null 2>&1 && exit 0; \
+		sleep 5; \
+	done; \
+	echo "timed out waiting for $(OXPROBE_DEV_IMAGE)" >&2; \
+	exit 1
 
-oxprobe-deploy-prod: oxprobe-docker-push-gcp-prod
-	@gcloud run deploy $(OXPROBE_SERVICE) \
-		--project=$(OXPROBE_PROD_GCP_PROJECT) \
-		--image=$(OXPROBE_PROD_IMAGE) \
+oxprobe-wait-image-prod: oxprobe-docker-push-gcp-prod
+	@for i in $$(seq 1 12); do \
+		gcloud artifacts docker images describe $(OXPROBE_PROD_IMAGE) --project=$(OXPROBE_PROD_GCP_PROJECT) --format='value(image_summary.digest)' >/dev/null 2>&1 && exit 0; \
+		sleep 5; \
+	done; \
+	echo "timed out waiting for $(OXPROBE_PROD_IMAGE)" >&2; \
+	exit 1
+
+$(OXPROBE_DEV_CLOUDRUN): deploy/oxprobe/cloudrun.yaml.in FORCE
+	@mkdir -p target/oxprobe
+	@sed \
+		-e 's@%SERVICE%@$(OXPROBE_SERVICE)@g' \
+		-e 's@%IMAGE%@$(OXPROBE_DEV_IMAGE)@g' \
+		-e 's@%GMP_SIDECAR_IMAGE%@$(OXPROBE_GMP_SIDECAR_IMAGE)@g' \
+		-e 's@%ENV%@staging@g' \
+		-e 's@%PROJECT%@$(OXPROBE_DEV_GCP_PROJECT)@g' \
+		-e 's@%MIN_INSTANCES%@0@g' \
+		-e 's@%MAX_INSTANCES%@1@g' \
+		-e 's@%CPU_THROTTLING%@true@g' \
+		deploy/oxprobe/cloudrun.yaml.in > $@
+
+$(OXPROBE_PROD_CLOUDRUN): deploy/oxprobe/cloudrun.yaml.in FORCE
+	@mkdir -p target/oxprobe
+	@sed \
+		-e 's@%SERVICE%@$(OXPROBE_SERVICE)@g' \
+		-e 's@%IMAGE%@$(OXPROBE_PROD_IMAGE)@g' \
+		-e 's@%GMP_SIDECAR_IMAGE%@$(OXPROBE_GMP_SIDECAR_IMAGE)@g' \
+		-e 's@%ENV%@prod@g' \
+		-e 's@%PROJECT%@$(OXPROBE_PROD_GCP_PROJECT)@g' \
+		-e 's@%MIN_INSTANCES%@1@g' \
+		-e 's@%MAX_INSTANCES%@1@g' \
+		-e 's@%CPU_THROTTLING%@false@g' \
+		deploy/oxprobe/cloudrun.yaml.in > $@
+
+oxprobe-cloud-monitoring-iam-staging:
+	@gcloud services enable monitoring.googleapis.com logging.googleapis.com --project=$(OXPROBE_DEV_GCP_PROJECT) --quiet
+	@project_number=$$(gcloud projects describe $(OXPROBE_DEV_GCP_PROJECT) --format='value(projectNumber)'); \
+	member="serviceAccount:$${project_number}-compute@developer.gserviceaccount.com"; \
+	gcloud projects add-iam-policy-binding $(OXPROBE_DEV_GCP_PROJECT) --member="$${member}" --role=roles/monitoring.metricWriter --condition=None --quiet >/dev/null; \
+	gcloud projects add-iam-policy-binding $(OXPROBE_DEV_GCP_PROJECT) --member="$${member}" --role=roles/logging.logWriter --condition=None --quiet >/dev/null
+
+oxprobe-cloud-monitoring-iam-prod:
+	@gcloud services enable monitoring.googleapis.com logging.googleapis.com --project=$(OXPROBE_PROD_GCP_PROJECT) --quiet
+	@project_number=$$(gcloud projects describe $(OXPROBE_PROD_GCP_PROJECT) --format='value(projectNumber)'); \
+	member="serviceAccount:$${project_number}-compute@developer.gserviceaccount.com"; \
+	gcloud projects add-iam-policy-binding $(OXPROBE_PROD_GCP_PROJECT) --member="$${member}" --role=roles/monitoring.metricWriter --condition=None --quiet >/dev/null; \
+	gcloud projects add-iam-policy-binding $(OXPROBE_PROD_GCP_PROJECT) --member="$${member}" --role=roles/logging.logWriter --condition=None --quiet >/dev/null
+
+oxprobe-cloudrun-deploy-staging: oxprobe-wait-image-staging oxprobe-cloud-monitoring-iam-staging $(OXPROBE_DEV_CLOUDRUN)
+	@gcloud run services replace $(OXPROBE_DEV_CLOUDRUN) \
+		--project=$(OXPROBE_DEV_GCP_PROJECT) \
 		--region=$(OXPROBE_REGION) \
-		--platform=managed \
-		--no-allow-unauthenticated \
-		--port=8080 \
-		--min-instances=1 \
-		--max-instances=1 \
-		--cpu=1 \
-		--memory=512Mi \
-		--no-cpu-throttling \
-		--set-env-vars=OXPROBE_ENV=prod,GCP_PROJECT=$(OXPROBE_PROD_GCP_PROJECT) \
 		--quiet
+	@gcloud run services remove-iam-policy-binding $(OXPROBE_SERVICE) --project=$(OXPROBE_DEV_GCP_PROJECT) --region=$(OXPROBE_REGION) --member=allUsers --role=roles/run.invoker --quiet >/dev/null 2>&1 || true
+
+oxprobe-cloudrun-deploy-prod: oxprobe-wait-image-prod oxprobe-cloud-monitoring-iam-prod $(OXPROBE_PROD_CLOUDRUN)
+	@gcloud run services replace $(OXPROBE_PROD_CLOUDRUN) \
+		--project=$(OXPROBE_PROD_GCP_PROJECT) \
+		--region=$(OXPROBE_REGION) \
+		--quiet
+	@gcloud run services remove-iam-policy-binding $(OXPROBE_SERVICE) --project=$(OXPROBE_PROD_GCP_PROJECT) --region=$(OXPROBE_REGION) --member=allUsers --role=roles/run.invoker --quiet >/dev/null 2>&1 || true
+
+oxprobe-worker-deploy-staging:
+	@cd $(OXPROBE_WORKER_DIR) && $(OXPROBE_PYWRANGLER) deploy --env staging
+
+oxprobe-worker-deploy-prod:
+	@cd $(OXPROBE_WORKER_DIR) && $(OXPROBE_PYWRANGLER) deploy --env prod
+
+oxprobe-deploy-staging: oxprobe-cloudrun-deploy-staging oxprobe-worker-deploy-staging
+
+oxprobe-deploy-prod: oxprobe-cloudrun-deploy-prod oxprobe-worker-deploy-prod
+
+FORCE:
 
 rune-linux-cross-compile:
 	@$(MAKE) -C cmd/rune linux-cross-compile

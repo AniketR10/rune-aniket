@@ -61,6 +61,21 @@ Deferred:
 
 ## Deploy
 
+The repository root Makefile deploys both probe implementations for an
+environment:
+
+```bash
+make oxprobe-deploy-staging
+make oxprobe-deploy-prod
+```
+
+To deploy only this Cloudflare Worker from the repository root:
+
+```bash
+make oxprobe-worker-deploy-staging
+make oxprobe-worker-deploy-prod
+```
+
 Install the Python Worker tooling once:
 
 ```bash

@@ -38,6 +38,10 @@ import (
 	"unstable.build/go-tui/debug"
 )
 
+// runbookURL is attached to every page so on-call engineers reach the
+// oxprobe mitigation guide and metrics dashboard from the incident.
+const runbookURL = "https://x.unstable.build/docs/runbooks/oxprobe"
+
 // runner executes a fixed probe set against one environment and folds
 // the results into a Report. It is reused across daemon iterations.
 type runner struct {
@@ -135,6 +139,7 @@ func page(ctx context.Context, p pager.Pager, env string, report oxapi.Report) e
 				"detail":     c.Detail,
 				"latency_ms": c.LatencyMS,
 			},
+			Links: []pager.Link{{Href: runbookURL, Text: "oxprobe runbook"}},
 		}
 		if err := p.Page(ctx, evt); err != nil && firstErr == nil {
 			firstErr = err
