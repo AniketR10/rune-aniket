@@ -27,9 +27,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // loadOrCreateUserConfig reads a YAML file at path into a yaml.Node document.
@@ -172,43 +174,82 @@ func configDiffTouchesPath(doc *yaml.Node, path ...string) bool {
 	return configDiffMappingAtPath(doc, path...) != nil
 }
 
+// expandRuneVars expands only the variables for which lookup returns
+// ok; every other $VAR / ${VAR} reference is left verbatim in the
+// result. It parses s as a single shell word with mvdan/sh so brace
+// forms (${VAR}) are handled faithfully, and copies any source span it
+// does not replace unchanged. If parsing fails (these are config
+// templates, not arbitrary shell), s is returned unchanged.
+func expandRuneVars(s string, lookup func(name string) (string, bool)) string {
+	word, err := syntax.NewParser().Document(strings.NewReader(s))
+	if err != nil || word == nil {
+		return s
+	}
+	var b strings.Builder
+	pos := 0
+	syntax.Walk(word, func(node syntax.Node) bool {
+		pe, ok := node.(*syntax.ParamExp)
+		if !ok || pe.Param == nil {
+			return true
+		}
+		val, ok := lookup(pe.Param.Value)
+		if !ok {
+			return true
+		}
+		start := int(pe.Pos().Offset())
+		end := int(pe.End().Offset())
+		if start < pos || end > len(s) {
+			return true
+		}
+		b.WriteString(s[pos:start])
+		b.WriteString(val)
+		pos = end
+		return true
+	})
+	b.WriteString(s[pos:])
+	return b.String()
+}
+
 // expandNodeValues walks all scalar nodes in the tree and applies
-// os.Expand with the given mapping function. Only string-tagged scalars
-// are expanded (int, float, bool, null are skipped).
-func expandNodeValues(n *yaml.Node, mapping func(string) string) {
+// expandRuneVars with the given lookup function. Only string-tagged
+// scalars are expanded (int, float, bool, null are skipped). Variables
+// the lookup does not recognize are left literal so they can be
+// expanded later at Rune startup.
+func expandNodeValues(n *yaml.Node, lookup func(string) (string, bool)) {
 	switch n.Kind {
 	case yaml.DocumentNode, yaml.SequenceNode, yaml.MappingNode:
 		for _, child := range n.Content {
-			expandNodeValues(child, mapping)
+			expandNodeValues(child, lookup)
 		}
 	case yaml.ScalarNode:
 		switch n.Tag {
 		case "!!int", "!!float", "!!bool", "!!null":
 			return
 		}
-		n.Value = os.Expand(n.Value, mapping)
+		n.Value = expandRuneVars(n.Value, lookup)
 	}
 }
 
-// expandMapValues walks cfg in place, applying os.Expand to every string
-// value using the given mapping function. Nested maps and slices are
-// traversed recursively; non-string scalars are left untouched.
-func expandMapValues(cfg map[string]any, mapping func(string) string) {
+// expandMapValues walks cfg in place, applying expandRuneVars to every
+// string value using the given lookup function. Nested maps and slices
+// are traversed recursively; non-string scalars are left untouched.
+// Variables the lookup does not recognize are left literal.
+func expandMapValues(cfg map[string]any, lookup func(string) (string, bool)) {
 	for k, v := range cfg {
-		cfg[k] = expandAnyValue(v, mapping)
+		cfg[k] = expandAnyValue(v, lookup)
 	}
 }
 
-func expandAnyValue(v any, mapping func(string) string) any {
+func expandAnyValue(v any, lookup func(string) (string, bool)) any {
 	switch t := v.(type) {
 	case string:
-		return os.Expand(t, mapping)
+		return expandRuneVars(t, lookup)
 	case map[string]any:
-		expandMapValues(t, mapping)
+		expandMapValues(t, lookup)
 		return t
 	case []any:
 		for i, elem := range t {
-			t[i] = expandAnyValue(elem, mapping)
+			t[i] = expandAnyValue(elem, lookup)
 		}
 		return t
 	default:

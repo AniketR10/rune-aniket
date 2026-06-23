@@ -45,16 +45,18 @@ func planConfigChange(
 	pkgID string, pkgVersion release.Version,
 	dataDir, editorMode string,
 ) (configChangePlan, error) {
-	runeVarMapping := func(key string) string {
+	runeVarMapping := func(key string) (string, bool) {
 		switch key {
 		case "RUNE_DATADIR":
-			return dataDir
+			return dataDir, true
 		case "RUNE_PKG_ID":
-			return pkgID
+			return pkgID, true
 		case "RUNE_PKG_VERSION":
-			return string(pkgVersion)
+			return string(pkgVersion), true
 		}
-		return ""
+		// Leave $key literal in the merged config so it is expanded
+		// later at Rune startup against the resolved environment.
+		return "", false
 	}
 
 	pkgOverlayCfg, err := loadIdePkgConfigOverlay(
