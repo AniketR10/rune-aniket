@@ -805,7 +805,7 @@ func (p *stubParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) 
 func (p *stubParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
 	return iterator.Empty[string](), nil
 }
-func (p *stubParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (p *stubParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 func (p *stubParser) Query(workspaceapi.URI, string, []string) (iterator.Iterator[syntaxapi.Result], error) {

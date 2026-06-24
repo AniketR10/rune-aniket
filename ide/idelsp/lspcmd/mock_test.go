@@ -110,7 +110,7 @@ func (m *mockParser) Search(query string, captures []string, langs ...string) (i
 	}
 	return iterator.Empty[syntaxapi.Result](), nil
 }
-func (m *mockParser) SearchNode(n syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (m *mockParser) SearchNode(n syntaxapi.NodeCaptureName, _ ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	if m.searchNodeFn != nil {
 		return m.searchNodeFn(n)
 	}

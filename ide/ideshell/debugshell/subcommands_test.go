@@ -278,7 +278,7 @@ func (passThroughParser) ListReferencedSymbols(context.Context) (iterator.Iterat
 	return iterator.Empty[string](), nil
 }
 
-func (passThroughParser) SearchNode(syntaxapi.NodeCaptureName) (
+func (passThroughParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	return iterator.FromSlice([]syntaxapi.Result(nil)), nil

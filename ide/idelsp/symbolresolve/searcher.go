@@ -59,8 +59,9 @@ type Searcher interface {
 	SearchMulti(queries []MultiQuery, languages ...string) (
 		iterator.Iterator[MultiResult], error,
 	)
-	// SearchNode runs the built-in node-capture query across the workspace.
-	SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
+	// SearchNode runs the built-in node-capture query across the workspace,
+	// optionally restricted to the given languages.
+	SearchNode(nodeTypes syntaxapi.NodeCaptureName, languages ...string) (
 		iterator.Iterator[syntaxapi.Result], error,
 	)
 	// QueryNode runs the built-in node-capture query against a single file.

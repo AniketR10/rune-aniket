@@ -59,9 +59,9 @@ func (w *lazyParser) Search(query string, captureNames []string, languages ...st
 // SearchNode is implemented with Search by using an internally provided
 // query that is able to capture a known set of tree nodes across programming
 // languages. Multiple node types can be combined using bitwise OR.
-func (w *lazyParser) SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
-	iterator.Iterator[syntaxapi.Result], error,
-) {
+func (w *lazyParser) SearchNode(
+	nodeTypes syntaxapi.NodeCaptureName, languages ...string,
+) (iterator.Iterator[syntaxapi.Result], error) {
 	return nil, errors.New("parser not supported on home workspace")
 }
 
@@ -136,13 +136,13 @@ func (c currentParser) Search(
 }
 
 func (c currentParser) SearchNode(
-	node syntaxapi.NodeCaptureName,
+	node syntaxapi.NodeCaptureName, languages ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	p := c.parser()
 	if p == nil {
 		return nil, errNoParser
 	}
-	return p.SearchNode(node)
+	return p.SearchNode(node, languages...)
 }
 
 func (c currentParser) Query(

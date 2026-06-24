@@ -316,14 +316,14 @@ func (p parserSearcher) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.Nod
 	return p.query(file, LocalsFilename, "", names)
 }
 
-func (p parserSearcher) SearchNode(nodeTypes syntaxapi.NodeCaptureName) (
-	iterator.Iterator[syntaxapi.Result], error,
-) {
+func (p parserSearcher) SearchNode(
+	nodeTypes syntaxapi.NodeCaptureName, languages ...string,
+) (iterator.Iterator[syntaxapi.Result], error) {
 	names, err := nodeTypesToCaptureNames(nodeTypes)
 	if err != nil {
 		return nil, err
 	}
-	return p.search(LocalsFilename, "", names)
+	return p.search(LocalsFilename, "", names, languages...)
 }
 
 func (p parserSearcher) Search(query string, captureNames []string, langs ...string) (

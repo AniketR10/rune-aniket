@@ -546,7 +546,7 @@ func (testParser) ListReferencedSymbols(context.Context) (iterator.Iterator[stri
 	return iterator.Empty[string](), nil
 }
 
-func (testParser) SearchNode(syntaxapi.NodeCaptureName) (
+func (testParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	return iterator.Empty[syntaxapi.Result](), nil

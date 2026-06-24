@@ -301,7 +301,7 @@ func (p *fakeParser) Search(q string, c []string, _ ...string) (iterator.Iterato
 	}
 	return iterator.Empty[syntaxapi.Result](), nil
 }
-func (p *fakeParser) SearchNode(n syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (p *fakeParser) SearchNode(n syntaxapi.NodeCaptureName, _ ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	if p.searchNodeFn != nil {
 		return p.searchNodeFn(n)
 	}

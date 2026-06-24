@@ -84,7 +84,7 @@ func (nopParser) ResolveSymbol(context.Context, string, syntaxapi.Progress) (
 func (nopParser) ListReferencedSymbols(context.Context) (iterator.Iterator[string], error) {
 	return iterator.Empty[string](), nil
 }
-func (nopParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (nopParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 func (nopParser) Query(workspaceapi.URI, string, []string) (iterator.Iterator[syntaxapi.Result], error) {

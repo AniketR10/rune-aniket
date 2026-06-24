@@ -334,6 +334,7 @@ func definitionFiles(
 	}
 	iter, err := parser.SearchNode(
 		syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionType,
+		spec.LangID,
 	)
 	if err != nil {
 		return nil, err
@@ -402,6 +403,7 @@ func SearchDefinitions(
 ) error {
 	iter, err := parser.SearchNode(
 		syntaxapi.NodeCaptureDefinitionFunc | syntaxapi.NodeCaptureDefinitionType,
+		spec.LangID,
 	)
 	if err != nil {
 		return err

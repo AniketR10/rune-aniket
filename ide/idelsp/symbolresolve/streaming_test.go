@@ -60,7 +60,7 @@ func (f fakeSearcher) Search(
 }
 
 func (f fakeSearcher) SearchNode(
-	syntaxapi.NodeCaptureName,
+	syntaxapi.NodeCaptureName, ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.Empty[syntaxapi.Result](), nil
 }

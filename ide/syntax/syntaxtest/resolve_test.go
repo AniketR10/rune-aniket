@@ -28,6 +28,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -103,6 +104,53 @@ func newResolveParser(t *testing.T, files map[string]string) syntaxapi.Parser {
 	return syntax.NewParser(scheme, langPkgManager{wd: wd}, uri)
 }
 
+// recordingPkgManager wraps a PkgManager and records every language for
+// which a grammar (LibDir) was requested, so tests can assert which
+// languages the workspace walk attempted to load parsers for.
+type recordingPkgManager struct {
+	inner syntax.PkgManager
+	mu    sync.Mutex
+	seen  map[string]bool
+}
+
+func (m *recordingPkgManager) LibDir(
+	ctx context.Context, langID string,
+) (iterator.Iterator[string], error) {
+	m.mu.Lock()
+	if m.seen == nil {
+		m.seen = make(map[string]bool)
+	}
+	m.seen[langID] = true
+	m.mu.Unlock()
+	return m.inner.LibDir(ctx, langID)
+}
+
+func (m *recordingPkgManager) requested(langID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.seen[langID]
+}
+
+func newRecordingResolveParser(
+	t *testing.T, files map[string]string,
+) (syntaxapi.Parser, *recordingPkgManager) {
+	t.Helper()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	for name, content := range files {
+		createFile(t, scheme, name, content)
+	}
+	pkg := &recordingPkgManager{inner: langPkgManager{wd: wd}}
+	return syntax.NewParser(scheme, pkg, uri), pkg
+}
+
 func resolveAll(t *testing.T, parser syntaxapi.Parser, name string) ([]syntaxapi.Match, error) {
 	t.Helper()
 	it, err := parser.ResolveSymbol(context.Background(), name, nil)
@@ -168,6 +216,30 @@ func TestParserResolveSymbolLanguageDetection(t *testing.T) {
 		require.Error(t, err)
 		assert.False(t, errors.Is(err, syntaxapi.ErrNoDot))
 	})
+}
+
+// TestParserResolveSymbolScopesDefinitionWalk reproduces the
+// definitions-phase hang: resolving an unresolvable method against a
+// non-Go spec (no package clause) must scope the workspace walk to the
+// spec's own language and never load grammars for unrelated languages
+// present in the workspace.
+func TestParserResolveSymbolScopesDefinitionWalk(t *testing.T) {
+	parser, pkg := newRecordingResolveParser(t, map[string]string{
+		"shapes.py":   pyShapesDef,
+		"app.py":      pyShapesUse,
+		"config.yaml": "name: value\n",
+	})
+
+	// A method on a Python module type resolves to nothing via references,
+	// forcing the Python spec's definitions phase to run.
+	matches, err := resolveAll(t, parser, "shapes.Shape.perimeter")
+	require.Error(t, err, "unresolvable method must not resolve")
+	assert.Empty(t, matches)
+
+	assert.True(t, pkg.requested("python"),
+		"resolving a python symbol must load the python grammar")
+	assert.False(t, pkg.requested("yaml"),
+		"definitions phase must not load grammars for unrelated languages")
 }
 
 func listReferencedAll(t *testing.T, parser syntaxapi.Parser) map[string]bool {

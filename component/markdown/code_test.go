@@ -66,7 +66,7 @@ func (m *mockParser) ListReferencedSymbols(context.Context) (iterator.Iterator[s
 	return iterator.Empty[string](), nil
 }
 
-func (m *mockParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (m *mockParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.FromSlice[syntaxapi.Result](nil), nil
 }
 
@@ -652,7 +652,7 @@ func (p *blockingParser) ListReferencedSymbols(context.Context) (iterator.Iterat
 	return iterator.Empty[string](), nil
 }
 
-func (p *blockingParser) SearchNode(syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (p *blockingParser) SearchNode(syntaxapi.NodeCaptureName, ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	return iterator.FromSlice[syntaxapi.Result](nil), nil
 }
 

@@ -480,7 +480,7 @@ func (m *mockParser) Search(_ string, _ []string, _ ...string) (
 }
 
 func (m *mockParser) SearchNode(
-	_ syntaxapi.NodeCaptureName,
+	_ syntaxapi.NodeCaptureName, _ ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	if m.searchNodeErr != nil {
 		return nil, m.searchNodeErr

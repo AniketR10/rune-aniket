@@ -48,7 +48,7 @@ type stubParser struct {
 	queryFn      func(workspaceapi.URI, string, []string) (iterator.Iterator[syntaxapi.Result], error)
 }
 
-func (s *stubParser) SearchNode(n syntaxapi.NodeCaptureName) (iterator.Iterator[syntaxapi.Result], error) {
+func (s *stubParser) SearchNode(n syntaxapi.NodeCaptureName, _ ...string) (iterator.Iterator[syntaxapi.Result], error) {
 	if s.searchNodeFn != nil {
 		return s.searchNodeFn(n)
 	}
