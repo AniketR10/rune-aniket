@@ -80,15 +80,14 @@ class Default(WorkerEntrypoint):
         env = env if env is not None else self.env
         report = await run_worker_probe(env)
         print(json.dumps(public_report(report), separators=(",", ":")))
-        if has_critical_failure(report):
-            await page_failures(env, report)
+        await reconcile_pages(env, report)
 
     async def fetch(self, request):
         parsed = urlparse(request.url)
         query = parse_qs(parsed.query)
         report = await run_worker_probe(self.env)
-        if query.get("page", ["0"])[0] == "1" and has_critical_failure(report):
-            await page_failures(self.env, report)
+        if query.get("page", ["0"])[0] == "1":
+            await reconcile_pages(self.env, report)
         status = 503 if report["status"] == STATUS_FAIL else 200
         return Response.json(public_report(report), status=status)
 
@@ -327,36 +326,44 @@ async def probe_pkg_download(
     )
 
 
-async def page_failures(env: Any, report: dict[str, Any]) -> None:
+async def reconcile_pages(env: Any, report: dict[str, Any]) -> None:
     routing_key = env_value(env, "PAGERDUTY_ROUTING_KEY", "").strip()
     if not routing_key:
         raise RuntimeError("missing PAGERDUTY_ROUTING_KEY")
     env_name = env_value(env, "ENV", "staging")
     async with httpx.AsyncClient(timeout=10) as client:
         for check in report["checks"]:
-            if check["status"] != CHECK_FAIL or not check.get("critical", False):
+            if not check.get("critical", False):
                 continue
-            detail = check.get("detail", "failed")
-            payload = {
-                "routing_key": routing_key,
-                "event_action": "trigger",
-                "dedup_key": f"oxprobe-cloudflare-{env_name}-{check['layer']}",
-                "payload": {
-                    "summary": f"oxprobe cloudflare {env_name}: {check['layer']} failing — {detail}",
-                    "source": "oxprobe-cloudflare",
-                    "severity": "critical",
-                    "component": check["layer"],
-                    "group": env_name,
-                    "class": "synthetic-probe",
-                    "custom_details": {
-                        "env": env_name,
-                        "layer": check["layer"],
-                        "detail": detail,
-                        "latency_ms": check.get("latency_ms", 0),
+            dedup_key = f"oxprobe-cloudflare-{env_name}-{check['layer']}"
+            if check["status"] == CHECK_FAIL:
+                detail = check.get("detail", "failed")
+                payload = {
+                    "routing_key": routing_key,
+                    "event_action": "trigger",
+                    "dedup_key": dedup_key,
+                    "payload": {
+                        "summary": f"oxprobe cloudflare {env_name}: {check['layer']} failing — {detail}",
+                        "source": "oxprobe-cloudflare",
+                        "severity": "critical",
+                        "component": check["layer"],
+                        "group": env_name,
+                        "class": "synthetic-probe",
+                        "custom_details": {
+                            "env": env_name,
+                            "layer": check["layer"],
+                            "detail": detail,
+                            "latency_ms": check.get("latency_ms", 0),
+                        },
                     },
-                },
-                "links": [{"href": RUNBOOK_URL, "text": "oxprobe runbook"}],
-            }
+                    "links": [{"href": RUNBOOK_URL, "text": "oxprobe runbook"}],
+                }
+            else:
+                payload = {
+                    "routing_key": routing_key,
+                    "event_action": "resolve",
+                    "dedup_key": dedup_key,
+                }
             resp = await client.post("https://events.pagerduty.com/v2/enqueue", json=payload)
             if resp.status_code < 200 or resp.status_code >= 300:
                 raise RuntimeError(f"pagerduty status {resp.status_code}: {resp.text[:200]}")

@@ -24,8 +24,9 @@
 // Command oxprobe runs layered synthetic health probes against a
 // deployed ox-api environment. In one-shot mode it prints a structured
 // report and exits non-zero when any critical layer fails. In daemon
-// mode it probes on an interval, exports Prometheus metrics, and pages
-// PagerDuty on critical-layer failures.
+// mode it probes on an interval, exports Prometheus metrics, and
+// reconciles PagerDuty each run — triggering an incident for every
+// failing critical layer and resolving it once the layer recovers.
 package main
 
 import (
@@ -172,10 +173,8 @@ func runDaemon(r *runner, interval, timeout time.Duration, metricsAddr, env stri
 	probeOnce := func() {
 		report := r.run(ctx, timeout)
 		m.observe(env, report.Checks)
-		if report.HasCriticalFailure() {
-			if err := page(ctx, pgr, env, report); err != nil {
-				fmt.Fprintf(os.Stderr, "page: %v\n", err)
-			}
+		if err := reconcile(ctx, pgr, env, report); err != nil {
+			fmt.Fprintf(os.Stderr, "reconcile: %v\n", err)
 		}
 	}
 

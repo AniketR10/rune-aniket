@@ -116,30 +116,41 @@ func (r *runner) run(ctx context.Context, perProbeTimeout time.Duration) oxapi.R
 	return oxapi.Aggregate(flat)
 }
 
-// page triggers a PagerDuty event for each failed critical layer, using
-// a per-env+layer dedup key so repeated failures coalesce into one
-// incident rather than storming.
-func page(ctx context.Context, p pager.Pager, env string, report oxapi.Report) error {
+// reconcile sends one PagerDuty event per critical layer: a trigger for
+// failing layers and a resolve for passing ones. The resolve is keyed by
+// the same per-env+layer dedup key as the trigger so a recovered layer
+// closes its own incident. Resolves are idempotent, so reconciling a
+// never-paged layer is a no-op on PagerDuty's side.
+func reconcile(ctx context.Context, p pager.Pager, env string, report oxapi.Report) error {
 	var firstErr error
 	for _, c := range report.Checks {
-		if c.Status != oxapi.CheckFail || !c.Critical {
+		if !c.Critical {
 			continue
 		}
-		evt := pager.Page{
-			Summary:   fmt.Sprintf("oxprobe %s: %s failing — %s", env, c.Layer, c.Detail),
-			Source:    "oxprobe",
-			Severity:  pager.SeverityCritical,
-			Component: c.Layer,
-			Group:     env,
-			Class:     "synthetic-probe",
-			DedupKey:  fmt.Sprintf("oxprobe-%s-%s", env, c.Layer),
-			Details: map[string]any{
-				"env":        env,
-				"layer":      c.Layer,
-				"detail":     c.Detail,
-				"latency_ms": c.LatencyMS,
-			},
-			Links: []pager.Link{{Href: runbookURL, Text: "oxprobe runbook"}},
+		dedupKey := fmt.Sprintf("oxprobe-%s-%s", env, c.Layer)
+		var evt pager.Page
+		if c.Status == oxapi.CheckFail {
+			evt = pager.Page{
+				Summary:   fmt.Sprintf("oxprobe %s: %s failing — %s", env, c.Layer, c.Detail),
+				Source:    "oxprobe",
+				Severity:  pager.SeverityCritical,
+				Component: c.Layer,
+				Group:     env,
+				Class:     "synthetic-probe",
+				DedupKey:  dedupKey,
+				Details: map[string]any{
+					"env":        env,
+					"layer":      c.Layer,
+					"detail":     c.Detail,
+					"latency_ms": c.LatencyMS,
+				},
+				Links: []pager.Link{{Href: runbookURL, Text: "oxprobe runbook"}},
+			}
+		} else {
+			evt = pager.Page{
+				Action:   pager.ActionResolve,
+				DedupKey: dedupKey,
+			}
 		}
 		if err := p.Page(ctx, evt); err != nil && firstErr == nil {
 			firstErr = err

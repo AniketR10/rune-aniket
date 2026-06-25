@@ -97,14 +97,17 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
     async def test_scheduled_accepts_cloudflare_runtime_arguments(self):
         calls = []
         old_run_worker_probe = entry.run_worker_probe
-        old_has_critical_failure = entry.has_critical_failure
+        old_reconcile_pages = entry.reconcile_pages
         try:
             async def fake_run_worker_probe(env):
                 calls.append(env)
                 return {"status": entry.STATUS_OK, "checks": []}
 
+            async def fake_reconcile_pages(env, report):
+                return None
+
             entry.run_worker_probe = fake_run_worker_probe
-            entry.has_critical_failure = lambda report: False
+            entry.reconcile_pages = fake_reconcile_pages
             env = object()
 
             await entry.Default().scheduled(object(), env, object())
@@ -112,7 +115,7 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([env], calls)
         finally:
             entry.run_worker_probe = old_run_worker_probe
-            entry.has_critical_failure = old_has_critical_failure
+            entry.reconcile_pages = old_reconcile_pages
 
     def test_aggregate_degrades_on_noncritical_failure(self):
         report = entry.aggregate(
@@ -229,7 +232,7 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entry.CHECK_FAIL, res["status"])
         self.assertIn("403", res["detail"])
 
-    async def test_page_failures_includes_runbook_link(self):
+    async def test_reconcile_triggers_failing_critical_with_runbook_link(self):
         client = fake_paging_client(fake_response(status_code=202))
         old_async_client = entry.httpx.AsyncClient
         entry.httpx.AsyncClient = lambda *args, **kwargs: client
@@ -242,17 +245,63 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
                 ],
             }
 
-            await entry.page_failures(env, report)
+            await entry.reconcile_pages(env, report)
         finally:
             entry.httpx.AsyncClient = old_async_client
 
         self.assertEqual(1, len(client.post_calls))
         _, kwargs = client.post_calls[0]
         payload = kwargs["json"]
+        self.assertEqual("trigger", payload["event_action"])
+        self.assertEqual("oxprobe-cloudflare-prod-dns_api", payload["dedup_key"])
         self.assertEqual(
             [{"href": entry.RUNBOOK_URL, "text": "oxprobe runbook"}],
             payload["links"],
         )
+
+    async def test_reconcile_resolves_passing_critical(self):
+        client = fake_paging_client(fake_response(status_code=202))
+        old_async_client = entry.httpx.AsyncClient
+        entry.httpx.AsyncClient = lambda *args, **kwargs: client
+        try:
+            env = fake_env(PAGERDUTY_ROUTING_KEY="rk", ENV="prod")
+            report = {
+                "status": entry.STATUS_OK,
+                "checks": [
+                    entry.check_result("dns_api", entry.CHECK_OK, True),
+                ],
+            }
+
+            await entry.reconcile_pages(env, report)
+        finally:
+            entry.httpx.AsyncClient = old_async_client
+
+        self.assertEqual(1, len(client.post_calls))
+        _, kwargs = client.post_calls[0]
+        payload = kwargs["json"]
+        self.assertEqual("resolve", payload["event_action"])
+        self.assertEqual("oxprobe-cloudflare-prod-dns_api", payload["dedup_key"])
+        self.assertNotIn("payload", payload)
+
+    async def test_reconcile_skips_noncritical_layers(self):
+        client = fake_paging_client(fake_response(status_code=202))
+        old_async_client = entry.httpx.AsyncClient
+        entry.httpx.AsyncClient = lambda *args, **kwargs: client
+        try:
+            env = fake_env(PAGERDUTY_ROUTING_KEY="rk", ENV="prod")
+            report = {
+                "status": entry.STATUS_DEGRADED,
+                "checks": [
+                    entry.check_result("auth0", entry.CHECK_FAIL, False, "down"),
+                    entry.check_result("downloads_cdn", entry.CHECK_OK, False),
+                ],
+            }
+
+            await entry.reconcile_pages(env, report)
+        finally:
+            entry.httpx.AsyncClient = old_async_client
+
+        self.assertEqual(0, len(client.post_calls))
 
 
 if __name__ == "__main__":

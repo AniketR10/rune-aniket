@@ -70,7 +70,7 @@ func TestNewRunnerCanSkipDownloadsCDN(t *testing.T) {
 	}
 }
 
-func TestPageDedupKeysPerLayer(t *testing.T) {
+func TestReconcileTriggersAndResolvesPerLayer(t *testing.T) {
 	cp := &capturePager{}
 	report := oxapi.Report{
 		Status: oxapi.StatusFail,
@@ -81,16 +81,41 @@ func TestPageDedupKeysPerLayer(t *testing.T) {
 			{Layer: "keys", Status: oxapi.CheckOK, Critical: true},
 		},
 	}
-	require.NoError(t, page(context.Background(), cp, "prod", report))
-	require.Len(t, cp.pages, 2) // only failing critical layers
-	keys := map[string]bool{}
+	require.NoError(t, reconcile(context.Background(), cp, "prod", report))
+
+	byKey := map[string]pager.Page{}
 	for _, p := range cp.pages {
-		keys[p.DedupKey] = true
-		require.Equal(t, pager.SeverityCritical, p.Severity)
-		require.Equal(t, []pager.Link{{Href: runbookURL, Text: "oxprobe runbook"}}, p.Links)
+		byKey[p.DedupKey] = p
 	}
-	require.True(t, keys["oxprobe-prod-dns_api"])
-	require.True(t, keys["oxprobe-prod-tls_api"])
+	require.Len(t, cp.pages, 3) // every critical layer, not the non-critical auth0
+
+	for _, key := range []string{"oxprobe-prod-dns_api", "oxprobe-prod-tls_api"} {
+		trig := byKey[key]
+		require.Empty(t, trig.Action) // empty Action defaults to trigger
+		require.Equal(t, pager.SeverityCritical, trig.Severity)
+		require.Equal(t, []pager.Link{{Href: runbookURL, Text: "oxprobe runbook"}}, trig.Links)
+	}
+
+	resolved := byKey["oxprobe-prod-keys"]
+	require.Equal(t, pager.ActionResolve, resolved.Action)
+
+	_, hasAuth0 := byKey["oxprobe-prod-auth0"]
+	require.False(t, hasAuth0)
+}
+
+func TestReconcileResolvesWhenReportOK(t *testing.T) {
+	cp := &capturePager{}
+	report := oxapi.Report{
+		Status: oxapi.StatusOK,
+		Checks: []oxapi.CheckResult{
+			{Layer: "dns_api", Status: oxapi.CheckOK, Critical: true},
+			{Layer: "auth0", Status: oxapi.CheckOK, Critical: false},
+		},
+	}
+	require.NoError(t, reconcile(context.Background(), cp, "prod", report))
+	require.Len(t, cp.pages, 1) // only the critical layer is resolved
+	require.Equal(t, pager.ActionResolve, cp.pages[0].Action)
+	require.Equal(t, "oxprobe-prod-dns_api", cp.pages[0].DedupKey)
 }
 
 func TestRunnerFansDeepIntoAggregate(t *testing.T) {

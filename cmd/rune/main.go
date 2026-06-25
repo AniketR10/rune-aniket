@@ -717,7 +717,7 @@ func runGUI(
 	transparentWindow := getGUITransparentWindow(browser, cfg)
 
 	if envErr != nil {
-		browser.Notify(browserapi.LevelError, "%s", envErr)
+		_, _ = browser.Notify(browserapi.LevelError, "%s", envErr)
 	}
 
 	options := []gui.Option{
