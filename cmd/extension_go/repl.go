@@ -223,6 +223,7 @@ func (h *replSubcommand) shellConfig(
 		Storage:                 h.storage,
 		HistoryDocumentID:       replHistoryDocumentID,
 		MaxHistory:              replMaxHistory,
+		ClearHook:               session.reset,
 	}
 }
 
@@ -565,6 +566,17 @@ func (s *goSession) Help(
 	return stringRows(replHelp()...), nil
 }
 
+// reset discards all accumulated session state so the next input starts
+// a fresh program. It backs both the /clear builtin and the shell's
+// screen-clear (<c-l>) hook wired via ideshell.Config.ClearHook.
+func (s *goSession) reset() {
+	s.imports = map[string]struct{}{}
+	s.decls = nil
+	s.stmts = nil
+	s.declared = nil
+	s.pending = nil
+}
+
 // rejoin reconstructs the raw input line from the repl.Command, which
 // pre-splits on spaces.
 func rejoin(cmd repl.Command) string {
@@ -779,6 +791,13 @@ func (s *goSession) eval(
 	default: // fragExpr
 		out, err := s.runner.run(ctx, s.render(frag.text))
 		if err == nil {
+			// A call may mutate state (e.g. buf.WriteString), so it must
+			// be folded into the program to persist its side effects for
+			// later evaluations. A non-call expression has no side effect
+			// and stays ephemeral so it is not needlessly replayed.
+			if frag.call {
+				s.stmts = append(s.stmts, frag.text)
+			}
 			return outputRows(out), nil
 		}
 		if frag.call {
@@ -787,6 +806,7 @@ func (s *goSession) eval(
 			// statement so its side effects still execute (e.g. a
 			// function that only prints).
 			if stmtOut, stmtErr := s.runner.run(ctx, s.renderStmt(frag.text)); stmtErr == nil {
+				s.stmts = append(s.stmts, frag.text)
 				return outputRows(stmtOut), nil
 			}
 		}
@@ -1065,11 +1085,7 @@ func (s *goSession) builtin(
 	case "write":
 		return s.write(arg)
 	case "clear":
-		s.imports = map[string]struct{}{}
-		s.decls = nil
-		s.stmts = nil
-		s.declared = nil
-		s.pending = nil
+		s.reset()
 		return stringRows("session cleared"), nil
 	case "doc":
 		if arg == "" {

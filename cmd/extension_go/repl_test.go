@@ -1812,6 +1812,25 @@ func TestNewREPLSubcommandOpensShell(t *testing.T) {
 // TestREPLShellConfigPersistsHistory is a regression test for reverse
 // search (<c-r>) showing nothing: the Go REPL must wire storage so
 // submitted commands persist and become searchable.
+// TestREPLShellConfigWiresClearHook verifies that <c-l> (the shell's
+// screen clear, surfaced as Config.ClearHook) resets the accumulated
+// session so a redeclared variable does not collide with a definition
+// that scrolled off-screen.
+func TestREPLShellConfigWiresClearHook(t *testing.T) {
+	t.Parallel()
+	sub := &replSubcommand{}
+	session := newTestSession(newScriptedRunner())
+	require.NoError(t, mustSubmit(t, session, "x := 1"))
+	require.NotEmpty(t, session.stmts)
+
+	cfg := sub.shellConfig(session, workspaceapi.URI{}, false)
+	require.NotNil(t, cfg.ClearHook, "the screen-clear hook must be wired")
+	cfg.ClearHook()
+	require.Empty(t, session.stmts,
+		"clearing the screen must reset the accumulated program")
+	require.Empty(t, session.declared)
+}
+
 func TestREPLShellConfigPersistsHistory(t *testing.T) {
 	t.Parallel()
 	store := storagestub.NewInMemoryService()

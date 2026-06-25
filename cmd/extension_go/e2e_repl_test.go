@@ -33,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
@@ -67,6 +68,12 @@ func TestGoREPLEndToEndEval(t *testing.T) {
 		{"statement then expression accumulate", []evalStep{
 			{`x := 21`, []string{"go> x := 21", "21"}},
 			{`x * 2`, []string{"go> x * 2", "42"}},
+		}},
+		{"side-effecting call persists across lines", []evalStep{
+			{`import "strings"`, []string{`go> import "strings"`}},
+			{`b := strings.Builder{}`, nil},
+			{`b.WriteString("abc")`, nil},
+			{`b.String()`, []string{`go> b.String()`, `"abc"`}},
 		}},
 		{"local package import and use", []evalStep{
 			{`import "example.com/replmod/greeter"`,
@@ -180,6 +187,29 @@ type evalStep struct {
 	wantTail []string
 }
 
+// TestGoREPLEndToEndClearScreenResetsProgram is a regression test for
+// <c-l> clearing only the screen while the accumulated program kept the
+// prior declaration, so redeclaring the same variable failed with "no
+// new variables on left side of :=". After <c-l> the session must be
+// reset so the redeclaration compiles.
+func TestGoREPLEndToEndClearScreenResetsProgram(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping toolchain+gopls e2e test in -short mode")
+	}
+	rig := newREPLRig(t)
+	rig.submitKeys(`import "strings"`)
+	rig.submitKeys(`a := strings.Builder{}`)
+	rig.clearScreen()
+	rig.submitKeys(`a := strings.Builder{}`)
+
+	got := rig.lines()
+	for _, ln := range got {
+		require.NotContains(t, ln, "no new variables",
+			"redeclaring after <c-l> must not collide with a cleared decl:\n%s",
+			rig.frame())
+	}
+}
+
 // --- e2e harness ------------------------------------------------------
 
 const (
@@ -223,14 +253,12 @@ func newREPLRig(t *testing.T) *replRig {
 
 	ti := &nopInterrupter{}
 	sched := newTickScheduler(ti)
+	cfg := (&replSubcommand{}).shellConfig(session, workspaceapi.URI{}, false)
 	shell, registry := ideshell.New(
 		sched.schedule,
 		ti,
 		commandEditor{te: modeless.Editor()},
-		ideshell.Config{
-			DisableShellInterpreter: session,
-			Prompt:                  "go> ",
-		},
+		cfg,
 	)
 	require.NoError(t, registry.RegisterREPLCommand(
 		textapi.CommandManual{Name: "go", Summary: "Evaluate Go"}, session,
@@ -253,6 +281,15 @@ func (r *replRig) submitKeys(line string) {
 	r.t.Helper()
 	r.typeText(line)
 	r.drain.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	r.shell.Wait()
+	r.sched.drain()
+}
+
+// clearScreen sends <c-l>, mirroring the user pressing it to wipe the
+// screen, and drains so the language session's reset hook runs.
+func (r *replRig) clearScreen() {
+	r.t.Helper()
+	r.drain.Handle(term.Event{Type: term.EventKey, Ch: 'l', Mod: term.ModCtrl})
 	r.shell.Wait()
 	r.sched.drain()
 }

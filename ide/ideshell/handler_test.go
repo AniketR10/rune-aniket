@@ -1688,6 +1688,24 @@ func TestHandlerCtrlLPreservesHistory(t *testing.T) {
 	assert.Equal(t, "middle", h.editBuf.String())
 }
 
+// TestHandlerCtrlLRunsClearHook verifies that <c-l> runs the
+// Config.ClearHook so a host can reset state it mirrors on the screen.
+func TestHandlerCtrlLRunsClearHook(t *testing.T) {
+	var cleared int
+	h, _ := New(
+		func(func()) bool { return false },
+		term.NopInterrupter(),
+		stubEditor{},
+		Config{MaxHistory: 100, ClearHook: func() { cleared++ }},
+	)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Resize(testWidthH, testHeight)
+
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'l', Mod: term.ModCtrl})
+	require.True(t, handled, "<c-l> must be handled")
+	require.Equal(t, 1, cleared, "<c-l> must run the configured ClearHook")
+}
+
 // blockingCmd emits one line then blocks in Next until release is
 // closed, so a command can be held in-flight for the duration of a
 // test. Close (invoked by the inner repl once the iterator is drained)

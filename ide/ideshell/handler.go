@@ -39,6 +39,7 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
 	tterm "unstable.build/go-tui/term"
+	"unstable.build/go-tui/term/sh"
 )
 
 // Handler is the IDE companion shell handler. It wraps the SDK
@@ -107,6 +108,9 @@ type Handler struct {
 	scheduleNextTick func(func()) bool
 	interrupter      term.Interrupter
 	replOpts         []repl.Option
+	// clearHook, when set, runs after the screen is cleared (<c-l>) so a
+	// host can reset state it mirrors on the screen. See Config.ClearHook.
+	clearHook func()
 
 	// editor spawns the EditHandler that owns the shell input
 	// line. It is the only input mode: there is no inputbox
@@ -148,6 +152,92 @@ type Handler struct {
 	// not reserve a row.
 	sigHint   string
 	sigActive bool
+}
+
+// New creates an IDE shell Handler wired with a CommandRegistry, sh
+// layer, and the built-in help command. The returned Handler wraps an
+// SDK repl.Handler and adds an interactive reverse-history search
+// overlay. The shell input line is edited with editor, which is the
+// only input mode: every key first goes to the spawned EditHandler
+// and only events the editor leaves unhandled fall through to the
+// history-search / completion overlays. editor is required. The
+// returned registry can be used to register additional commands.
+func New(
+	scheduleNextTick func(func()) bool,
+	interrupter term.Interrupter,
+	editor command.Editor,
+	cfg Config,
+	opts ...repl.Option,
+) (*Handler, *CommandRegistry) {
+	if editor == nil {
+		panic("ideshell.New requires an Editor")
+	}
+	r := NewRegistry()
+	registerBaseCommands(r)
+	prompt := cfg.Prompt
+	if prompt == "" {
+		prompt = defaultPrompt
+	}
+	if cfg.Storage != nil && cfg.HistoryDocumentID != "" {
+		opts = append(opts,
+			repl.WithStorage(cfg.HistoryDocumentID, cfg.Storage),
+		)
+	}
+	if cfg.MaxHistory > 0 {
+		opts = append(opts, repl.WithMaxHistory(cfg.MaxHistory))
+	}
+	opts = append(opts, repl.WithPrompt(prompt))
+	var underlying repl.CommandHandler
+	switch {
+	case cfg.DisableShellInterpreter != nil:
+		underlying = &registryFallback{registry: r, fallback: cfg.DisableShellInterpreter}
+		// A pure language REPL owns the whole prompt: surface its own
+		// command reference for top-level `help` instead of the
+		// synthetic `go`/`help` registry list.
+		if hp, ok := cfg.DisableShellInterpreter.(helpProvider); ok {
+			r.SetHelpFallback(hp)
+		}
+	default:
+		underlying = sh.New(r, cfg.Workspace)
+	}
+	shim := &completionShim{underlying: underlying}
+	inner := repl.New(shim, scheduleNextTick, interrupter, opts...)
+	list := search.NewList(search.ListConfig{
+		Algo:            search.FuzzyMatch,
+		Interrupter:     interrupter,
+		SyncSearch:      true,
+		BottomSearchBar: true,
+	})
+	h := &Handler{
+		inner:      inner,
+		storage:    cfg.Storage,
+		historyKey: cfg.HistoryDocumentID,
+		maxHistory: cfg.MaxHistory,
+		list:       list,
+		shim:       shim,
+		prompt:     prompt,
+		editor:     editor,
+
+		scheduleNextTick: scheduleNextTick,
+		interrupter:      interrupter,
+		replOpts:         opts,
+		clearHook:        cfg.ClearHook,
+	}
+	h.mouseDelegate = newMouseDelegate(&h.grid, func(ev term.Event) {
+		_, _ = h.inner.Handle(ev)
+	})
+	h.mouse = mouse.New(h.mouseDelegate)
+	h.editBuf = cell.NewBuffer()
+	h.editHandler = editor.Edit(h.editBuf)
+	// Seed a non-zero size so the editor's cursor math works for
+	// input that arrives before the first Resize (e.g. headless
+	// command submission in tests). Resize overrides this with the
+	// real input-band geometry before the editor is ever drawn.
+	h.editHandler.Resize(1, 1)
+	if cfg.Modal && cfg.ModalStartInsert {
+		h.editHandler.Handle(term.Event{Type: term.EventKey, Ch: 'i'})
+	}
+	return h, r
 }
 
 // Wait forwards to the underlying repl.Handler so callers (including
@@ -207,6 +297,9 @@ func (h *Handler) clearScreen() {
 	}
 	_ = old.Close()
 	h.mouseDelegate.ClearSelection()
+	if h.clearHook != nil {
+		h.clearHook()
+	}
 }
 
 // Resize satisfies tui.Component. While the search overlay is open
