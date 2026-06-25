@@ -26,6 +26,7 @@ package syntax
 import (
 	"context"
 	"errors"
+	"math"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -73,6 +74,228 @@ func TestCachingPkgManagerReturnsCachedFiles(t *testing.T) {
 
 	assert.Equal(t, []string{"tree-sitter.so", "highlights.scm"}, files)
 	assert.Equal(t, 0, root.Calls())
+}
+
+type recordingProgress struct {
+	mu     sync.Mutex
+	events []progressEvent
+}
+
+type progressEvent struct {
+	msg         string
+	found       int
+	step, total int64
+}
+
+func (r *recordingProgress) Report(msg string, found int, step, total int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, progressEvent{msg: msg, found: found, step: step, total: total})
+}
+
+func (r *recordingProgress) snapshot() []progressEvent {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]progressEvent(nil), r.events...)
+}
+
+// TestAggregateProgressMonotonicAcrossSpecs feeds the aggregator the exact
+// per-phase reports three specs emit — each restarting at step 0 against a
+// fixed total of 4 — and asserts the forwarded stream is monotonic, never
+// exceeds the total, grows the denominator per spec, and passes messages
+// through unchanged.
+func TestAggregateProgressMonotonicAcrossSpecs(t *testing.T) {
+	sink := &recordingProgress{}
+	agg := newAggregateProgress(sink)
+
+	raw := []progressEvent{
+		{msg: "Searching references…", step: 0, total: 4},
+		{msg: "Searching definitions…", step: 2, total: 4},
+		{msg: "Searching references…", step: 0, total: 4},
+		{msg: "Searching definitions…", step: 2, total: 4},
+		{msg: "Searching references…", step: 0, total: 4},
+		{msg: "Searching definitions…", step: 2, total: 4},
+	}
+	for _, e := range raw {
+		agg.Report(e.msg, e.found, e.step, e.total)
+	}
+
+	got := sink.snapshot()
+	require.Len(t, got, len(raw))
+
+	var prevStep, prevTotal int64 = -1, 0
+	for i, e := range got {
+		assert.Equalf(t, raw[i].msg, e.msg, "message passes through at %d", i)
+		assert.GreaterOrEqualf(t, e.step, prevStep, "step non-decreasing at %d", i)
+		assert.LessOrEqualf(t, e.step, e.total, "step <= total at %d", i)
+		assert.GreaterOrEqualf(t, e.total, prevTotal, "total non-decreasing at %d", i)
+		prevStep, prevTotal = e.step, e.total
+	}
+	assert.Equal(t, int64(12), got[len(got)-1].total, "denominator grows 4→8→12")
+}
+
+// assertMonotonic verifies the aggregator's core contract on a forwarded
+// stream: step never decreases, total never decreases, and step never
+// exceeds total. UpdateNotificationProgress rejects any violation, so these
+// invariants must hold regardless of what a misbehaving spec reports.
+func assertMonotonic(t *testing.T, got []progressEvent) {
+	t.Helper()
+	var prevStep, prevTotal int64 = -1, 0
+	for i, e := range got {
+		assert.GreaterOrEqualf(t, e.step, prevStep, "step non-decreasing at %d: %+v", i, got)
+		assert.GreaterOrEqualf(t, e.total, prevTotal, "total non-decreasing at %d: %+v", i, got)
+		assert.LessOrEqualf(t, e.step, e.total, "step <= total at %d: %+v", i, got)
+		assert.GreaterOrEqualf(t, e.step, int64(0), "step non-negative at %d: %+v", i, got)
+		prevStep, prevTotal = e.step, e.total
+	}
+}
+
+// TestAggregateProgressMisbehavingReports exercises the aggregator against
+// specs that report nonsensical progress — out-of-range steps, negative
+// values, varying or zero totals, and stalled or repeated steps. The forwarded
+// stream must stay monotonic and within bounds in every case so a buggy query
+// can never break UpdateNotificationProgress.
+func TestAggregateProgressMisbehavingReports(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  []progressEvent
+	}{
+		{
+			name: "rawStep exceeds per-spec total",
+			raw: []progressEvent{
+				{step: 0, total: 4},
+				{step: 9, total: 4},
+				{step: 0, total: 4},
+				{step: 7, total: 4},
+			},
+		},
+		{
+			name: "negative rawStep",
+			raw: []progressEvent{
+				{step: -5, total: 4},
+				{step: 2, total: 4},
+				{step: -1, total: 4},
+			},
+		},
+		{
+			name: "stalled repeated rawStep",
+			raw: []progressEvent{
+				{step: 2, total: 4},
+				{step: 2, total: 4},
+				{step: 2, total: 4},
+			},
+		},
+		{
+			name: "decreasing then increasing within a spec",
+			raw: []progressEvent{
+				{step: 3, total: 4},
+				{step: 1, total: 4},
+				{step: 2, total: 4},
+			},
+		},
+		{
+			name: "varying and zero rawTotal is ignored",
+			raw: []progressEvent{
+				{step: 0, total: 0},
+				{step: 2, total: 99},
+				{step: 0, total: -3},
+				{step: 2, total: 1},
+			},
+		},
+		{
+			name: "monotonically increasing rawStep never restarts",
+			raw: []progressEvent{
+				{step: 0, total: 4},
+				{step: 1, total: 4},
+				{step: 2, total: 4},
+				{step: 3, total: 4},
+			},
+		},
+		{
+			name: "single report",
+			raw: []progressEvent{
+				{step: 0, total: 4},
+			},
+		},
+		{
+			name: "near-overflow rawStep is clamped",
+			raw: []progressEvent{
+				{step: 0, total: 4},
+				{step: math.MaxInt64, total: 4},
+				{step: 0, total: 4},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sink := &recordingProgress{}
+			agg := newAggregateProgress(sink)
+			for _, e := range tt.raw {
+				agg.Report(e.msg, e.found, e.step, e.total)
+			}
+			got := sink.snapshot()
+			require.Len(t, got, len(tt.raw))
+			assertMonotonic(t, got)
+		})
+	}
+}
+
+// TestAggregateProgressMessagePassthrough confirms the aggregator only
+// renormalizes step and total: the message and found count are forwarded
+// verbatim even when the step values are nonsensical.
+func TestAggregateProgressMessagePassthrough(t *testing.T) {
+	sink := &recordingProgress{}
+	agg := newAggregateProgress(sink)
+
+	raw := []progressEvent{
+		{msg: "phase one", found: 3, step: 9, total: 4},
+		{msg: "phase two", found: 7, step: 0, total: 4},
+	}
+	for _, e := range raw {
+		agg.Report(e.msg, e.found, e.step, e.total)
+	}
+
+	got := sink.snapshot()
+	require.Len(t, got, len(raw))
+	for i, e := range got {
+		assert.Equal(t, raw[i].msg, e.msg)
+		assert.Equal(t, raw[i].found, e.found)
+	}
+	assertMonotonic(t, got)
+}
+
+// TestAggregateProgressConcurrentReports drives the aggregator from many
+// goroutines to prove the mutex keeps every forwarded event individually
+// valid (step within bounds) under the race detector, since Report may be
+// invoked concurrently in principle.
+func TestAggregateProgressConcurrentReports(t *testing.T) {
+	sink := &recordingProgress{}
+	agg := newAggregateProgress(sink)
+
+	const goroutines = 16
+	const perGoroutine = 64
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for i := range perGoroutine {
+				agg.Report("phase", 0, int64(i%resolveStepsPerSpec), resolveStepsPerSpec)
+			}
+		}()
+	}
+	wg.Wait()
+
+	got := sink.snapshot()
+	require.Len(t, got, goroutines*perGoroutine)
+	// Concurrent callers interleave arbitrarily, so per-event monotonicity is
+	// not guaranteed across goroutines; assert the invariant that must hold
+	// for every individual event regardless of ordering.
+	for i, e := range got {
+		assert.LessOrEqualf(t, e.step, e.total, "step <= total at %d", i)
+		assert.GreaterOrEqualf(t, e.step, int64(0), "step non-negative at %d", i)
+	}
 }
 
 func TestNewParserCachesPackageFilesOnlyAfterRequiredFilesFound(t *testing.T) {

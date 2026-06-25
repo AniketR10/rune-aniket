@@ -342,6 +342,10 @@ func (p parserSearcher) ResolveSymbol(
 		return nil, syntaxapi.ErrNoDot
 	}
 
+	if progress != nil {
+		progress = newAggregateProgress(progress)
+	}
+
 	runCtx, cancel := context.WithCancel(context.Background())
 	results := make(chan syntaxapi.Match)
 	closeWaitCh := make(chan struct{})
@@ -773,6 +777,44 @@ type resolveSymbolIterator struct {
 	ch          chan syntaxapi.Match
 	cancel      func()
 	closeWaitCh chan struct{}
+}
+
+// resolveStepsPerSpec is the fixed denominator each language spec reports its
+// per-phase progress against (references, definitions, imports).
+const resolveStepsPerSpec = 4
+
+type aggregateProgress struct {
+	mu             sync.Mutex
+	next           syntaxapi.Progress
+	base           int64
+	lastRawStep    int64
+	total          int64
+	lastGlobalStep int64
+}
+
+func newAggregateProgress(next syntaxapi.Progress) *aggregateProgress {
+	return &aggregateProgress{
+		next:        next,
+		lastRawStep: -1,
+		total:       resolveStepsPerSpec,
+	}
+}
+
+func (a *aggregateProgress) Report(msg string, found int, rawStep, _ int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.lastRawStep >= 0 && rawStep <= a.lastRawStep {
+		a.base += resolveStepsPerSpec
+	}
+	a.lastRawStep = rawStep
+
+	a.total = max(a.total, a.base+resolveStepsPerSpec)
+	globalStep := max(a.base+rawStep, a.lastGlobalStep)
+	globalStep = min(globalStep, a.total)
+	a.lastGlobalStep = globalStep
+
+	a.next.Report(msg, found, globalStep, a.total)
 }
 
 func (it *resolveSymbolIterator) setErr(err error) {

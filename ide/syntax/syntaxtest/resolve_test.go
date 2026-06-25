@@ -167,6 +167,57 @@ func resolveAll(t *testing.T, parser syntaxapi.Parser, name string) ([]syntaxapi
 	return iterator.ToSlice(context.Background(), it)
 }
 
+type recordingProgress struct {
+	mu     sync.Mutex
+	events []progressEvent
+}
+
+type progressEvent struct {
+	step, total int64
+}
+
+func (r *recordingProgress) Report(_ string, _ int, step, total int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, progressEvent{step: step, total: total})
+}
+
+// TestParserResolveSymbolProgressMonotonic resolves an unresolvable name in a
+// mixed-language workspace so symbolresolve.Resolve runs every detected spec.
+// The aggregated progress forwarded to the caller must be monotonic — step and
+// total never decrease and step never exceeds total — even though each spec
+// restarts its own per-phase reporting.
+func TestParserResolveSymbolProgressMonotonic(t *testing.T) {
+	parser := newResolveParser(t, map[string]string{
+		"geometry/area.go": goGeometryDef,
+		"main.go":          goGeometryUse,
+		"shapes.py":        pyShapesDef,
+		"app.py":           pyShapesUse,
+	})
+
+	rec := &recordingProgress{}
+	it, err := parser.ResolveSymbol(
+		context.Background(), "missingpkg.DoesNotExistAnywhere", rec,
+	)
+	require.NoError(t, err)
+	_, err = iterator.ToSlice(context.Background(), it)
+	require.Error(t, err)
+
+	rec.mu.Lock()
+	events := append([]progressEvent(nil), rec.events...)
+	rec.mu.Unlock()
+	require.GreaterOrEqual(t, len(events), 2,
+		"multiple specs should each report progress")
+
+	var prevStep, prevTotal int64
+	for i, e := range events {
+		assert.GreaterOrEqualf(t, e.step, prevStep, "step non-decreasing at %d: %+v", i, events)
+		assert.LessOrEqualf(t, e.step, e.total, "step <= total at %d: %+v", i, events)
+		assert.GreaterOrEqualf(t, e.total, prevTotal, "total non-decreasing at %d: %+v", i, events)
+		prevStep, prevTotal = e.step, e.total
+	}
+}
+
 func TestParserResolveSymbolLanguageDetection(t *testing.T) {
 	t.Run("go only resolves go and skips python", func(t *testing.T) {
 		parser := newResolveParser(t, map[string]string{
