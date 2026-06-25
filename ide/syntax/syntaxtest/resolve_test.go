@@ -67,6 +67,15 @@ const goGeometryDef = `package geometry
 func Area() int {
 	return 0
 }
+
+type Point struct {
+	X int
+	Y int
+}
+
+func (p Point) Norm() int {
+	return p.X*p.X + p.Y*p.Y
+}
 `
 
 const goGeometryUse = `package main
@@ -240,6 +249,33 @@ func TestParserResolveSymbolScopesDefinitionWalk(t *testing.T) {
 		"resolving a python symbol must load the python grammar")
 	assert.False(t, pkg.requested("yaml"),
 		"definitions phase must not load grammars for unrelated languages")
+}
+
+// TestParserResolveSymbolMethod resolves a pkg.Type.Method name through
+// the real spec engine and asserts it lands on the method declaration
+// without loading grammars for unrelated languages in the workspace.
+func TestParserResolveSymbolMethod(t *testing.T) {
+	parser, pkg := newRecordingResolveParser(t, map[string]string{
+		"geometry/area.go": goGeometryDef,
+		"main.go":          goGeometryUse,
+		"config.yaml":      "name: value\n",
+	})
+
+	matches, err := resolveAll(t, parser, "geometry.Point.Norm")
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+
+	m := matches[0]
+	assert.Contains(t, m.URI, "geometry/area.go")
+	// goGeometryDef declares Norm on line 12 (1-based); the capture
+	// lands on the method name, which begins after "func (p Point) ".
+	assert.Equal(t, 11, m.Pos.Y, "method name should be on the Norm line")
+	assert.Equal(t, len("func (p Point) "), m.Pos.X)
+
+	assert.True(t, pkg.requested("go"),
+		"resolving a go method must load the go grammar")
+	assert.False(t, pkg.requested("yaml"),
+		"method definitions phase must not load grammars for unrelated languages")
 }
 
 func listReferencedAll(t *testing.T, parser syntaxapi.Parser) map[string]bool {

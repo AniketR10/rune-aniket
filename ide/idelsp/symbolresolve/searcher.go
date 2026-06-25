@@ -68,4 +68,8 @@ type Searcher interface {
 	QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
 		iterator.Iterator[syntaxapi.Result], error,
 	)
+	// Query runs a tree-sitter query against a single file.
+	Query(file workspaceapi.URI, query string, captureNames []string) (
+		iterator.Iterator[syntaxapi.Result], error,
+	)
 }

@@ -71,6 +71,12 @@ func (f fakeSearcher) QueryNode(
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 
+func (f fakeSearcher) Query(
+	workspaceapi.URI, string, []string,
+) (iterator.Iterator[syntaxapi.Result], error) {
+	return iterator.Empty[syntaxapi.Result](), nil
+}
+
 // streamSpec is a minimal reference-only spec: one ref query, no package
 // clause and no import queries, so Resolve issues a single SearchMulti pass
 // with exactly one sub-stream.

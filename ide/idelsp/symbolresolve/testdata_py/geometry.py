@@ -15,6 +15,9 @@ class Shape:
     def __init__(self, size):
         self.size = size
 
+    def area(self):
+        return self.size * self.size
+
 
 class _Internal:
     # Leading-underscore name: Python has no enforced visibility, so

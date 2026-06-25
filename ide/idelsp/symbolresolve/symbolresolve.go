@@ -87,12 +87,18 @@ func resolveSpec(
 	ctx context.Context, parser Searcher, spec *Spec, name string,
 	progress syntaxapi.Progress,
 ) ([]syntaxapi.Match, error) {
-	pkg, sym, _ := strings.Cut(name, ".")
-
 	report := func(msg string, found int, step, total int64) {
 		if progress != nil {
 			progress.Report(msg, found, step, total)
 		}
+	}
+
+	pkg, typeName, sym, isMethod, ok := splitQualifiedName(name)
+	if !ok {
+		return nil, nil
+	}
+	if isMethod {
+		return resolveMethod(ctx, parser, spec, pkg, typeName, sym, name, report)
 	}
 
 	report("Searching references…", 0, 0, 4)
@@ -126,6 +132,65 @@ func resolveSpec(
 		report("Resolving imports…", len(matches), 3, 4)
 		importPaths := resolveAliases(collected.imports, collected.explicitAliases)
 		matches = deduplicateMatchesByImport(matches, pkg, importPaths)
+	}
+	if len(matches) > 1 {
+		disambiguateDisplayNames(spec, matches, name)
+	}
+	return matches, nil
+}
+
+// splitQualifiedName splits a dotted name into its segments. A 2-part
+// name (pkg.sym) is a plain symbol; a 3-part name (pkg.Type.method) is a
+// method. Names with more than three segments are not resolvable and
+// report ok=false.
+func splitQualifiedName(
+	name string,
+) (pkg, typeName, sym string, isMethod, ok bool) {
+	parts := strings.Split(name, ".")
+	switch len(parts) {
+	case 2:
+		return parts[0], "", parts[1], false, true
+	case 3:
+		return parts[0], parts[1], parts[2], true, true
+	default:
+		return "", "", "", false, false
+	}
+}
+
+// resolveMethod resolves a pkg.Type.method name through the definitions
+// phase alone: call-site references are out of scope. It yields nothing
+// when the spec cannot resolve methods.
+func resolveMethod(
+	ctx context.Context, parser Searcher, spec *Spec,
+	pkg, typeName, method, name string,
+	report func(msg string, found int, step, total int64),
+) ([]syntaxapi.Match, error) {
+	if !spec.hasMethods() {
+		return nil, nil
+	}
+	report("Searching definitions…", 0, 0, 1)
+
+	packages, err := FilePackages(ctx, parser, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var matches []syntaxapi.Match
+	add := func(uri string, pos term.Coordinates) {
+		if seen[uri] {
+			return
+		}
+		seen[uri] = true
+		matches = append(matches, syntaxapi.Match{URI: uri, Pos: pos, Display: name})
+	}
+	if err := collectMethodDefinitions(
+		ctx, parser, spec, packages, pkg, typeName, method, add,
+	); err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, nil
 	}
 	if len(matches) > 1 {
 		disambiguateDisplayNames(spec, matches, name)
@@ -314,6 +379,67 @@ func collectDefinitions(
 		_ = it.Close()
 	}
 	return nil
+}
+
+// collectMethodDefinitions streams method definitions in the target
+// package whose receiver type equals typeName and whose name equals
+// method, feeding their locations to add. It runs the spec's
+// MethodDefQuery per candidate file so receiver/method captures pair
+// within a single file's match stream.
+func collectMethodDefinitions(
+	ctx context.Context, parser Searcher, spec *Spec,
+	packages map[workspaceapi.URI]string, pkg, typeName, method string,
+	add func(uri string, pos term.Coordinates),
+) error {
+	if !spec.exported(method) {
+		return nil
+	}
+	files, err := definitionFiles(ctx, parser, spec, packages, pkg)
+	if err != nil {
+		return err
+	}
+	for _, fileURI := range files {
+		if err := collectFileMethods(
+			ctx, parser, spec, fileURI, typeName, method, add,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// collectFileMethods runs the method-definition query against one file
+// and feeds matches whose receiver type equals typeName and method name
+// equals method to add. Captures stream in match order as
+// (receiver, method) pairs, so a pending receiver is paired with the
+// next method capture.
+func collectFileMethods(
+	ctx context.Context, parser Searcher, spec *Spec,
+	fileURI workspaceapi.URI, typeName, method string,
+	add func(uri string, pos term.Coordinates),
+) error {
+	it, err := parser.Query(fileURI, spec.MethodDefQuery, spec.MethodDefCaptures)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = it.Close() }()
+	recvCap, methodCap := spec.MethodDefCaptures[0], spec.MethodDefCaptures[1]
+	var pendingRecv string
+	for {
+		r, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		switch r.CaptureName {
+		case recvCap:
+			pendingRecv = r.Text
+		case methodCap:
+			if pendingRecv == typeName && r.Text == method {
+				add(fileURI.String(), r.From)
+			}
+		}
+	}
+	return it.Err()
 }
 
 // definitionFiles returns the file URIs whose qualifier equals pkg. When

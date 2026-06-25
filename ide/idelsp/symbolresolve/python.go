@@ -47,6 +47,9 @@ var Python = &Spec{
 	Qualifier:          pythonModuleFromURI,
 	DisplayPathFromURI: pythonDirFromURI,
 	Extensions:         []string{".py", ".pyi"},
+	MethodDefQuery: `(class_definition name: (identifier) @recv ` +
+		`body: (block (function_definition name: (identifier) @method)))`,
+	MethodDefCaptures: []string{"recv", "method"},
 }
 
 // pythonModuleFromURI derives a Python module name from a file URI: the

@@ -57,6 +57,12 @@ var Go = &Spec{
 	IsExported:          isExported,
 	DisplayPathFromURI:  goPackagePathFromURI,
 	Extensions:          []string{".go"},
+	MethodDefQuery: `(method_declaration ` +
+		`receiver: (parameter_list (parameter_declaration ` +
+		`type: [(type_identifier) @recv ` +
+		`(pointer_type (type_identifier) @recv)])) ` +
+		`name: (field_identifier) @method)`,
+	MethodDefCaptures: []string{"recv", "method"},
 }
 
 // goPackagePathFromURI derives a Go-style display prefix from a file

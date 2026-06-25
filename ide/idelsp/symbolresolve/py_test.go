@@ -209,10 +209,21 @@ func TestResolvePythonE2E(t *testing.T) {
 			wantErrContains: "no symbols found",
 		},
 		{
-			// strings.Cut splits on the first dot, so "geometry.area.foo"
-			// searches sym="area.foo", which no definition can match.
-			name:            "multi-segment dotted name returns not-found",
-			symbol:          "geometry.area.foo",
+			// pkg.Class.method resolves to the class method definition.
+			name:     "class method resolves to definition",
+			symbol:   "geometry.Shape.area",
+			wantURIs: []string{geometryURI},
+		},
+		{
+			// A method on an unknown class returns not-found.
+			name:            "method on unknown class returns not-found",
+			symbol:          "geometry.Other.area",
+			wantErrContains: "no symbols found",
+		},
+		{
+			// A missing method on an existing class returns not-found.
+			name:            "missing class method returns not-found",
+			symbol:          "geometry.Shape.missing",
 			wantErrContains: "no symbols found",
 		},
 		{

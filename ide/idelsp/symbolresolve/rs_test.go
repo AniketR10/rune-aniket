@@ -162,6 +162,24 @@ func TestResolveRustE2E(t *testing.T) {
 			wantErrContains: "no symbols found",
 		},
 		{
+			// pkg.Type.method resolves to the inherent impl method.
+			name:     "impl method resolves to definition",
+			symbol:   "geometry.Shape.new",
+			wantURIs: []string{geometryURI},
+		},
+		{
+			// A method on an unknown type returns not-found.
+			name:            "method on unknown type returns not-found",
+			symbol:          "geometry.Other.new",
+			wantErrContains: "no symbols found",
+		},
+		{
+			// A missing method on an existing type returns not-found.
+			name:            "missing impl method returns not-found",
+			symbol:          "geometry.Shape.missing",
+			wantErrContains: "no symbols found",
+		},
+		{
 			name:            "valid symbol in wrong module returns not-found",
 			symbol:          "text.helper",
 			wantErrContains: "no symbols found",

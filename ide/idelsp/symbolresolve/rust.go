@@ -53,6 +53,9 @@ var Rust = &Spec{
 	Qualifier:          rustModuleFromURI,
 	DisplayPathFromURI: rustDirFromURI,
 	Extensions:         []string{".rs"},
+	MethodDefQuery: `(impl_item type: (type_identifier) @recv ` +
+		`body: (declaration_list (function_item name: (identifier) @method)))`,
+	MethodDefCaptures: []string{"recv", "method"},
 }
 
 // rustModuleFromURI derives a Rust module name from a file URI: the base

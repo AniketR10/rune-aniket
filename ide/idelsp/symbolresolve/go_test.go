@@ -224,14 +224,36 @@ func TestResolveE2E(t *testing.T) {
 			},
 		},
 		{
-			// strings.Cut splits on the first dot, so "Foo.Bar.Baz"
-			// is searched as pkg="Foo", sym="Bar.Baz". No such
-			// qualified_type/selector/definition can ever exist
-			// because tree-sitter would have parsed those captures
-			// as separate selectors. The resolver must surface this
-			// as a clean not-found rather than match a partial.
-			name:            "multi-segment dotted name returns not-found",
-			symbol:          "mylib.MyType.String",
+			// pkg.Type.method resolves to the value-receiver method
+			// declaration in mylib.go.
+			name:     "value-receiver method resolves to declaration",
+			symbol:   "mylib.MyType.String",
+			wantURIs: []string{mylibFileURI},
+		},
+		{
+			// Pointer-receiver methods resolve identically.
+			name:     "pointer-receiver method resolves to declaration",
+			symbol:   "mylib.MyType.Set",
+			wantURIs: []string{mylibFileURI},
+		},
+		{
+			// A method on a type that does not exist returns
+			// not-found rather than matching another type's method.
+			name:            "method on unknown type returns not-found",
+			symbol:          "mylib.Other.String",
+			wantErrContains: "no symbols found",
+		},
+		{
+			// A missing method on an existing type returns not-found.
+			name:            "missing method returns not-found",
+			symbol:          "mylib.MyType.Missing",
+			wantErrContains: "no symbols found",
+		},
+		{
+			// Names with more than three dotted segments are not
+			// resolvable.
+			name:            "four-segment dotted name returns not-found",
+			symbol:          "mylib.MyType.String.Extra",
 			wantErrContains: "no symbols found",
 		},
 		{

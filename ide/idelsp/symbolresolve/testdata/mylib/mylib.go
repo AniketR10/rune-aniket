@@ -30,6 +30,8 @@ type MyType struct {
 
 func (m MyType) String() string { return m.Value }
 
+func (m *MyType) Set(v string) { m.Value = v }
+
 func MyFunc(s string) string { return "mylib:" + s }
 
 func unexportedHelper() string { return "secret" }

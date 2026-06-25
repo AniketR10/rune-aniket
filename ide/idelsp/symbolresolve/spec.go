@@ -70,6 +70,13 @@ type Spec struct {
 	// outside its package. A nil predicate means every name is visible.
 	IsExported func(string) bool
 
+	// MethodDefQuery captures method definitions as (receiverType,
+	// methodName) pairs for resolving pkg.Type.Method names. Captures[0]
+	// is the receiver type, Captures[1] the method name. Empty disables
+	// method resolution for this language.
+	MethodDefQuery    string
+	MethodDefCaptures []string
+
 	// Qualifier returns the prefix applied to bare definition names
 	// during the definitions phase when the language has no package
 	// clause (e.g. a Python module name derived from the file path).
@@ -99,6 +106,11 @@ func (s *Spec) exported(name string) bool {
 // clause rather than from the file path.
 func (s *Spec) hasPackages() bool {
 	return s.PackageClauseQuery != ""
+}
+
+// hasMethods reports whether the spec can resolve pkg.Type.Method names.
+func (s *Spec) hasMethods() bool {
+	return s.MethodDefQuery != ""
 }
 
 // qualifier returns the bare-definition prefix for a file URI when the
