@@ -60,6 +60,9 @@ config = {
             },
         },
     },
+    "tutorials": {
+        "fuzzy_search": "$RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/fuzzy_search.star",
+    },
     "command": {
         "aliases": {
             "searchfunc":      "echo {prompt}searchast<space>locals.scm<space>local.definition.method|local.definition.function<enter>",

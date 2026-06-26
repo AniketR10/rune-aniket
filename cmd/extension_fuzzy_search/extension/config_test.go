@@ -87,6 +87,15 @@ func TestBundledConfigStar(t *testing.T) {
 			assert.Equal(t, "fuzzy", fileCfg["algo"])
 			assert.Equal(t, "<m-p>", fileCfg["history_key"])
 			assert.Equal(t, true, fileCfg["case_sensitive"])
+
+			// The bundled onboarding tutorial is registered so Rune offers
+			// to run it right after install (RUNE-268). The $RUNE_* refs are
+			// expanded later by the package-merge path, so decode keeps them
+			// literal, mirroring the extension path value above.
+			tutorials := cfg["tutorials"].(map[string]any)
+			assert.Equal(t,
+				"$RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/fuzzy_search.star",
+				tutorials["fuzzy_search"])
 		})
 	}
 }

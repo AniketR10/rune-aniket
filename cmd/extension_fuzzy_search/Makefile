@@ -53,6 +53,7 @@ pkg: $(BIN)/extension_fuzzy_search
 	@mkdir -p $(PKG)/bin
 	@cp $(BIN)/extension_fuzzy_search $(PKG)/bin/
 	@cp config.star $(PKG)/
+	@cp fuzzy_search.star $(PKG)/
 	@go_files=$$(find $(PKG) -name '*.go'); \
 		if [ -n "$$go_files" ]; then \
 			echo "error: .go files found in package:" >&2; \
@@ -115,6 +116,7 @@ make-release-linux:
 	done; \
 	rm -f "$$LIB/.queue" "$$LIB/.next"
 	@cp config.star $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/config.star
+	@cp fuzzy_search.star $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search/fuzzy_search.star
 	@cd $(FUZZY_LINUX_OUTPUT_DIR)/fuzzy-search && \
 		tar --format=ustar -czf $(FUZZY_LINUX_OUTPUT_DIR)/$(FUZZY_LINUX_RELEASE_TAR) .
 
@@ -206,6 +208,7 @@ define fuzzy_pkg_darwin
 		$(GO) build -ldflags="$(COMMON_LDFLAGS)" \
 		-o $(TARGET)/fuzzy-search_darwin_$(1)/bin/extension_fuzzy_search ./cmd/extension_fuzzy_search
 	@cp config.star $(TARGET)/fuzzy-search_darwin_$(1)/
+	@cp fuzzy_search.star $(TARGET)/fuzzy-search_darwin_$(1)/
 	@go_files=$$(find $(TARGET)/fuzzy-search_darwin_$(1) -name '*.go'); \
 		if [ -n "$$go_files" ]; then \
 			echo "error: .go files found in package:" >&2; \
