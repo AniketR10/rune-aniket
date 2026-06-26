@@ -174,6 +174,21 @@ func configDiffTouchesPath(doc *yaml.Node, path ...string) bool {
 	return configDiffMappingAtPath(doc, path...) != nil
 }
 
+// addedExtensionIDs returns the keys added under the top-level "extensions"
+// mapping of an applied config diff. It returns nil when the diff does not
+// touch "extensions" or that key is not a (non-empty) mapping.
+func addedExtensionIDs(doc *yaml.Node) []string {
+	node := configDiffMappingAtPath(doc, "extensions")
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	var ids []string
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		ids = append(ids, node.Content[i].Value)
+	}
+	return ids
+}
+
 // expandRuneVars expands only the variables for which lookup returns
 // ok; every other $VAR / ${VAR} reference is left verbatim in the
 // result. It parses s as a single shell word with mvdan/sh so brace
