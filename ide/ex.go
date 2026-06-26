@@ -124,6 +124,7 @@ type ex struct {
 	storage                  storageapi.Service
 	workspaceURI             workspaceapi.URI
 	closed                   bool
+	home                     bool
 	reservoir                *vtereservoir.Facility
 	initialReservoirCapacity int
 	container                *notifications.Container
