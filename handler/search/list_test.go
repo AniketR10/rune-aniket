@@ -947,3 +947,50 @@ func benchmarkHandleSearch(b *testing.B, n int, bottomSearchBar bool) {
 		l.Draw(w)
 	}
 }
+
+// benchmarkScroll measures the steady-state cost of scrolling an
+// already-populated list: the list of n rows is built once, then the
+// timed loop only moves the focus down one row and redraws the visible
+// viewport. This isolates the scroll/draw hot path from the one-time
+// ingest+search cost, and is where the "scrolling allocates nothing on
+// the heap" claim is verified via -benchmem.
+func benchmarkScroll(b *testing.B, n int) {
+	const sample = `2022-06-17 15:45:24.985	DEBUG	[-]	-	msg: starting extension
+2022-06-17 15:45:24.986	DEBUG	[-]	-	msg: extension started
+2022-06-17 15:45:24.986	DEBUG	[-]	-	msg: waiting for RPC address
+2022-06-17 15:45:25.003	DEBUG	[-]	extension_fuzzy_file	msg: extension address
+2022-06-17 15:45:25.004	TRACE	[-]	stdio	msg: waiting for stdio data`
+	lines := bytes.Split([]byte(sample), []byte{'\n'})
+	data := make([][]byte, 0, n)
+	for i := 0; i < n; i++ {
+		data = append(data, lines[i%len(lines)])
+	}
+
+	l := NewList(ListConfig{})
+	l.Resize(300, 200)
+	l.cancelSearch = func() {}
+
+	// Build the list once, outside the timed loop.
+	ctx := context.Background()
+	ch := l.Push(ctx)
+	for _, line := range data {
+		ch <- line
+	}
+	close(ch)
+	l.Wait()
+
+	w := term.NoopWriter{}
+	l.Draw(w) // warm the first draw (LazyBytes is lazy until first Draw)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if !l.FocusDown() {
+			l.FocusUp() // bounce at the bottom so we keep scrolling
+		}
+		l.Draw(w)
+	}
+}
+
+func BenchmarkScroll1000(b *testing.B)    { benchmarkScroll(b, 1000) }
+func BenchmarkScroll1000000(b *testing.B) { benchmarkScroll(b, 1000000) }
