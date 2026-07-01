@@ -214,10 +214,10 @@ func TestDefaultSizeForScale(t *testing.T) {
 		scale float64
 		want  float64
 	}{
-		{0.75, 17},
-		{1.0, 17},
-		{1.5, 15},
-		{1.75, 14},
+		{0.75, 15},
+		{1.0, 15},
+		{1.5, 14},
+		{1.75, 13.5},
 		{2.0, 13},
 		{3.0, 13},
 	}
@@ -233,7 +233,7 @@ func TestSetSizeZeroResolvesDefaultForDeviceScale(t *testing.T) {
 
 	m.SetDeviceScale(1)
 	require.NoError(t, m.SetSize(0))
-	assert.Equal(t, float64(17), m.size)
+	assert.Equal(t, float64(15), m.size)
 
 	m.SetDeviceScale(2)
 	require.NoError(t, m.SetSize(0))

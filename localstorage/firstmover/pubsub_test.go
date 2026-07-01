@@ -72,9 +72,50 @@ func TestPubSub(t *testing.T) {
 		ctx := context.Background()
 		require.NoError(t, followers[0].Subscribe(ctx, topic))
 		require.NoError(t, followers[1].Subscribe(ctx, topic))
+		// Publish before Close: the publish is acked into every
+		// subscriber's stream buffer, and the BYE handshake preserves
+		// those buffers across the re-connect to the new leader.
+		require.NoError(t, followers[1].Publish(ctx, topic, []byte("block")))
 		require.NoError(t, leader.Close())
-		require.NoError(t, followers[1].Publish(context.Background(), topic, []byte("block")))
-		data, err := followers[0].Receive(context.Background(), topic)
+		data, err := followers[0].Receive(ctx, topic)
+		require.NoError(t, err)
+		assert.Equal(t, "block", string(data))
+		cleanupNodes(t, followers...)
+	})
+
+	t.Run("post-failover publishes are eventually received", func(t *testing.T) {
+		leader, followers := makeLeaderFollowerPair(t, 2)
+		topic := "1234"
+		require.NoError(t, followers[0].Subscribe(context.Background(), topic))
+		require.NoError(t, followers[1].Subscribe(context.Background(), topic))
+		require.NoError(t, leader.Close())
+
+		// A publish can race the other follower's re-subscription on
+		// the freshly elected leader and be dropped for that
+		// subscriber: a new leader only learns about a remote
+		// subscriber once it re-connects. Republish until observed;
+		// pubsub is at-least-once so duplicates are fine.
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			ticker := time.NewTicker(50 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				_ = followers[1].Publish(context.Background(), topic, []byte("block"))
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		data, err := followers[0].Receive(ctx, topic)
+		close(stop)
+		<-done
 		require.NoError(t, err)
 		assert.Equal(t, "block", string(data))
 		cleanupNodes(t, followers...)

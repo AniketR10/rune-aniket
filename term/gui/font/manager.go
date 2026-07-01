@@ -190,7 +190,7 @@ func (m *Manager) SetSize(size float64) error {
 }
 
 // defaultSizeForScale maps a device scale factor to a default point
-// size, interpolating linearly from 17pt on low-DPI displays
+// size, interpolating linearly from 15pt on low-DPI displays
 // (scale <= 1) down to 13pt on hi-DPI displays (scale >= 2).
 func defaultSizeForScale(scale float64) float64 {
 	const (

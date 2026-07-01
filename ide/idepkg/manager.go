@@ -957,8 +957,7 @@ func (m *Manager) runAfterConfigMerge(
 }
 
 // notifyConfigApplied reports a successful config merge. When the post-merge
-// hook live-applied changes, it tells the user that new local processes will
-// pick them up and that already-running tools need a workspace reload;
+// hook live-applied changes, no further action is requested from the user;
 // otherwise it keeps the restart-oriented wording.
 func (m *Manager) notifyConfigApplied(
 	level browserapi.NotificationLevel, pkgID string, result ConfigMergeResult,

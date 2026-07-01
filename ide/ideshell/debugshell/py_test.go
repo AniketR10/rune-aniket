@@ -765,11 +765,13 @@ func newPyIDEHarness(t *testing.T, pythonBin, dir string) *ideHarness {
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
 
+	hh := &ideHarness{t: t}
 	scheme, err := workspace.NewFileScheme(
 		context.Background(), config.NopConfig(), uri,
 	)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
+	// See newIDEHarness: reload buffer mutations must hold uiMu.
+	ws := workspace.NewSchemeWorkspace(uri, scheme, hh.uiSchedule)
 
 	ed := vi.Editor(vi.WithStatusBarConfig(false, text.StatusBarConfig{
 		Publisher:        texttest.NopEditor(),
@@ -786,26 +788,18 @@ func newPyIDEHarness(t *testing.T, pythonBin, dir string) *ideHarness {
 	dapCfg := pythonAdapterConfig(pythonBin)
 	mgr := idedebug.New(uri, procExec, pkg, dapCfg)
 
-	hh := &ideHarness{
-		t:        t,
-		scheme:   scheme,
-		ws:       ws,
-		comp:     comp,
-		mgr:      mgr,
-		procExec: procExec,
-	}
+	hh.scheme = scheme
+	hh.ws = ws
+	hh.comp = comp
+	hh.mgr = mgr
+	hh.procExec = procExec
 	hh.cond = sync.NewCond(&hh.mu)
 
 	apiEd := newCompEditorAdapter(comp)
 	h := New(mgr, comp, apiEd, passThroughParser{}, passThroughFS{}, Config{
-		WorkspaceURI: uri,
-		Debugger:     dapCfg,
-		ScheduleNextTick: func(fn func()) bool {
-			hh.uiMu.Lock()
-			defer hh.uiMu.Unlock()
-			fn()
-			return true
-		},
+		WorkspaceURI:     uri,
+		Debugger:         dapCfg,
+		ScheduleNextTick: hh.uiSchedule,
 	}).WithNotify(hh.notify)
 	hh.h = h
 

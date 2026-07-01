@@ -50,21 +50,18 @@ import (
 // `listen://[host]:port` or `accept:///path` (per lldb-dap's Options.td)
 // — there is no `connect://` scheme. Because idedebug binds a TCP
 // listener and dials the adapter (server.go dialWithRetry), lldb-dap
-// must LISTEN on the bound {addr}, so the URI is `listen://{addr}`. The
-// launch/attach keys (program/args/env/cwd/stopOnEntry and
-// program/pid/waitFor) match lldb-dap's documented configuration keys.
+// must LISTEN on the bound {addr}, so the URI is `listen://{addr}`.
+// The launch template holds only static keys: Manager.Launch injects
+// program/args/env/cwd/stopOnEntry with their proper JSON types, and
+// dangling {placeholder} strings would make lldb-dap reject the
+// launch without ever emitting the initialized event.
 func rustAdapterConfig(lldbDapBin string) idedebug.AdapterConfig {
 	return idedebug.AdapterConfig{
 		Command:   []string{lldbDapBin, "--connection", "listen://{addr}"},
 		AdapterID: "lldb-dap",
 		LaunchArgs: map[string]string{
-			"request":     "launch",
-			"type":        "lldb-dap",
-			"program":     "{program}",
-			"args":        "{args}",
-			"env":         "{env}",
-			"cwd":         "{cwd}",
-			"stopOnEntry": "{stopOnEntry}",
+			"request": "launch",
+			"type":    "lldb-dap",
 		},
 		AttachArgs: map[string]string{
 			"request": "attach",
@@ -100,11 +97,27 @@ func (p *rustPkgManager) LibDir(
 }
 
 // findLldbDap returns the path to the lldb-dap binary, probing the
-// common names, or skips the test when none is installed. lldb-dap is
-// the M3 deferred dependency, so without it the suite self-skips and CI
-// stays green while the config above still documents the contract.
+// rust language package first and then the common names on PATH, or
+// skips the test when none is installed. The bundled adapter is
+// preferred because production resolves it by package path and its
+// @rpath dylibs live next to it; stale copies on PATH may not have
+// them. lldb-dap is the M3 deferred dependency, so without it the
+// suite self-skips and CI stays green while the config above still
+// documents the contract.
 func findLldbDap(t *testing.T) string {
 	t.Helper()
+	base := filepath.Join(os.Getenv("HOME"), ".rune", "pkg", "rust")
+	if versions, err := os.ReadDir(base); err == nil {
+		for _, v := range versions {
+			if !v.IsDir() {
+				continue
+			}
+			bin := filepath.Join(base, v.Name(), "bin", "lldb-dap")
+			if _, err := os.Stat(bin); err == nil {
+				return bin
+			}
+		}
+	}
 	for _, name := range []string{"lldb-dap", "lldb-vscode"} {
 		if bin, err := exec.LookPath(name); err == nil {
 			return bin

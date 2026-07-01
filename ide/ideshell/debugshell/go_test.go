@@ -1262,16 +1262,31 @@ type ideHarness struct {
 	cond       *sync.Cond
 }
 
+// uiSchedule is the harness's stand-in for the host event loop's
+// ScheduleNextTick: callbacks run inline but serialized behind uiMu
+// so buffer mutations from async workers cannot race the test's
+// IDE-resource reads.
+func (h *ideHarness) uiSchedule(fn func()) bool {
+	h.uiMu.Lock()
+	defer h.uiMu.Unlock()
+	fn()
+	return true
+}
+
 func newIDEHarness(t *testing.T, dlvBin, dir string) *ideHarness {
 	t.Helper()
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
 
+	hh := &ideHarness{t: t}
 	scheme, err := workspace.NewFileScheme(
 		context.Background(), config.NopConfig(), uri,
 	)
 	require.NoError(t, err)
-	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
+	// The reload worker mutates the editor buffer through this
+	// scheduler; it must hold uiMu like every other IDE-resource
+	// access or bufferContent races with in-flight reloads.
+	ws := workspace.NewSchemeWorkspace(uri, scheme, hh.uiSchedule)
 
 	ed := vi.Editor(vi.WithStatusBarConfig(false, text.StatusBarConfig{
 		Publisher:        texttest.NopEditor(),
@@ -1292,27 +1307,19 @@ func newIDEHarness(t *testing.T, dlvBin, dir string) *ideHarness {
 	}
 	mgr := idedebug.New(uri, procExec, pkg, dapCfg)
 
-	hh := &ideHarness{
-		t:        t,
-		scheme:   scheme,
-		ws:       ws,
-		comp:     comp,
-		mgr:      mgr,
-		procExec: procExec,
-	}
+	hh.scheme = scheme
+	hh.ws = ws
+	hh.comp = comp
+	hh.mgr = mgr
+	hh.procExec = procExec
 	hh.cond = sync.NewCond(&hh.mu)
 
 	hh.h = nil
 	apiEd := newCompEditorAdapter(comp)
 	h := New(mgr, comp, apiEd, passThroughParser{}, passThroughFS{}, Config{
-		WorkspaceURI: uri,
-		Debugger:     dapCfg,
-		ScheduleNextTick: func(fn func()) bool {
-			hh.uiMu.Lock()
-			defer hh.uiMu.Unlock()
-			fn()
-			return true
-		},
+		WorkspaceURI:     uri,
+		Debugger:         dapCfg,
+		ScheduleNextTick: hh.uiSchedule,
 	}).WithNotify(hh.notify)
 	hh.h = h
 
@@ -1747,13 +1754,4 @@ func TestE2E_CtrlCDoesNotStopEventStream(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("drain goroutine did not exit after terminate")
 	}
-}
-
-// inlineSchedule is a synchronous workspace.ScheduleNextTick stub
-// that runs fn on the calling goroutine. Test-only: production code
-// must use the host event-loop scheduler so reload's buffer
-// mutations do not run on a worker goroutine.
-func inlineSchedule(fn func()) bool {
-	fn()
-	return true
 }

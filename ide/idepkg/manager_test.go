@@ -3884,7 +3884,7 @@ func TestAfterConfigMergeHook(t *testing.T) {
 			"gui:\n  env:\n    FOO: bar\n"), 0o644))
 		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
 
-		require.True(t, hasNotificationContaining(n, "reload the workspace"))
+		require.True(t, hasNotificationContaining(n, "applied vpkg configuration updates"))
 		assert.False(t, hasNotificationContaining(n, "Restart the program"))
 	})
 
