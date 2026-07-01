@@ -328,7 +328,7 @@ func (b *bootstrapHandler) guiEnvLiveApplyHook(
 	if !event.TouchesPath("gui", "env") {
 		return idepkg.ConfigMergeResult{}, nil
 	}
-	rootCfg, err := ide.Config(b.configPath)
+	rootCfg, err := ide.Config(b.configPath, runeDefaultConfig())
 	if err != nil {
 		return idepkg.ConfigMergeResult{}, fmt.Errorf("reload config for gui.env: %w", err)
 	}

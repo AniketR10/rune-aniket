@@ -219,6 +219,30 @@ func WithDefaultConfigStarlark(src string, modal bool, tui bool) Option {
 	}
 }
 
+// DefaultConfig is the baseline config the loader overlays user and package
+// configs onto. It is a required input to Config so every caller decodes
+// against the same tree the running IDE uses; loading a user overlay against
+// a different (for example empty) baseline would make subscript overrides
+// such as `config["terminal"]["initial_reservoir"] = 2` fail with
+// `key "terminal" not in dict`.
+type DefaultConfig struct {
+	src   string
+	modal bool
+	tui   bool
+}
+
+// StarlarkDefaultConfig builds a DefaultConfig from a Starlark source. The
+// script must bind a top-level `config` dict and receives the predeclared
+// `mode` and `tui` globals, matching WithDefaultConfigStarlark.
+func StarlarkDefaultConfig(src string, modal bool, tui bool) DefaultConfig {
+	return DefaultConfig{src: src, modal: modal, tui: tui}
+}
+
+// option returns the Option that installs this default into the loader.
+func (d DefaultConfig) option() Option {
+	return WithDefaultConfigStarlark(d.src, d.modal, d.tui)
+}
+
 // WithBell sets the default mechanism to ring the system bell.
 func WithBell(bell func()) Option {
 	return func(opts *options) {

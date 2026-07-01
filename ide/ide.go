@@ -93,8 +93,12 @@ func New(
 }
 
 // Config loads and returns the IDE configuration without starting workspaces.
-func Config(cfgfilename string, opts ...Option) (config.Config, error) {
-	op := newOptions(opts...)
+//
+// def is required: it is the baseline the user config is overlaid onto and
+// must match the default the running IDE uses, so subscript overrides in the
+// user config (config["terminal"][...] = ...) resolve against the full tree.
+func Config(cfgfilename string, def DefaultConfig, opts ...Option) (config.Config, error) {
+	op := newOptions(append([]Option{def.option()}, opts...)...)
 	cfg, err := loadIDEConfig(cfgfilename, op)
 	return config.MapConfig(cfg.cfg), err
 }
@@ -434,7 +438,7 @@ func (i *IDE) init(
 	op := newOptions(opts...)
 	i.options = op
 
-	defaultCfg := newDefaultConfigSource(op)
+	defaultCfg := newDefaultConfig(op)
 	var configErr error
 	i.ideConfig, configErr = loadIDEConfig(cfgfilename, op)
 
@@ -659,8 +663,8 @@ func newOptions(opts ...Option) options {
 	return op
 }
 
-func newDefaultConfigSource(op options) defaultConfigSource {
-	return defaultConfigSource{
+func newDefaultConfig(op options) DefaultConfig {
+	return DefaultConfig{
 		src:   op.defaultConfig,
 		modal: op.defaultConfigModeModal,
 		tui:   op.defaultConfigTUI,
@@ -670,7 +674,7 @@ func newDefaultConfigSource(op options) defaultConfigSource {
 func loadIDEConfig(cfgfilename string, op options) (ideConfig, error) {
 	var cfg ideConfig
 	err := loadConfig(&cfg, cfgfilename,
-		op.defaultWallpaper, newDefaultConfigSource(op), op.bell,
+		op.defaultWallpaper, newDefaultConfig(op), op.bell,
 		op.scheduleFn, op.zdotDir)
 	return cfg, err
 }

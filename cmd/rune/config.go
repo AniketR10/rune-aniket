@@ -33,6 +33,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/term/gui"
 )
 
@@ -361,6 +362,15 @@ func getGUIConfig(cfg config.Config) (config.Config, bool, error) {
 		return nil, false, fmt.Errorf("get 'gui' section from config: %w", err)
 	}
 	return cfg, true, nil
+}
+
+// runeDefaultConfig is the baseline every ide.Config call in this binary must
+// use so user overlay configs decode against the same tree the running IDE
+// uses. Without it, subscript overrides such as
+// `config["terminal"]["initial_reservoir"] = 2` fail with
+// `key "terminal" not in dict`.
+func runeDefaultConfig() ide.DefaultConfig {
+	return ide.StarlarkDefaultConfig(defaultStarlarkConfig, true, true)
 }
 
 func resolveInitialThemeAttr(b browser.Browser, rootCfg config.Config) term.Attributes {

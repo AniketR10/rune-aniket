@@ -43,6 +43,7 @@ import (
 
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/idepkg"
+	"unstable.build/go-tui/ide/starlarkconfig"
 )
 
 // TestGUIEnvLiveApplyHookAppliesNewlyMergedVar is the black-box regression for
@@ -68,7 +69,7 @@ func TestGUIEnvLiveApplyHookAppliesNewlyMergedVar(t *testing.T) {
 
 	// IDE starts from a config that has no gui.env at all, mirroring a fresh
 	// install before the go package merges its env block.
-	b := newConfiguredBootstrapForEnvTest(t, "editor:\n  mode: modal\n")
+	b := newConfiguredBootstrapForEnvTest(t, configFilename, "editor:\n  mode: modal\n")
 
 	// The package manager merges gui.env into the user config on disk before
 	// invoking the post-merge hook. Reproduce that on-disk state.
@@ -100,11 +101,48 @@ func TestGUIEnvLiveApplyHookAppliesVarPresentAtStartup(t *testing.T) {
 	require.NoError(t, os.Unsetenv(envKey))
 
 	configBody := "editor:\n  mode: modal\ngui:\n  env:\n    " + envKey + ": " + envVal + "\n"
-	b := newConfiguredBootstrapForEnvTest(t, configBody)
+	b := newConfiguredBootstrapForEnvTest(t, configFilename, configBody)
 
 	event := mergeEvent(t, "gui:\n  env:\n    "+envKey+": "+envVal+"\n")
 	result, err := b.guiEnvLiveApplyHook(event)
 	require.NoError(t, err)
+	assert.True(t, result.LiveApplied)
+	assert.Equal(t, envVal, os.Getenv(envKey))
+}
+
+// TestGUIEnvLiveApplyHookStarlarkOverlayConfig is the black-box regression for
+// the `key "terminal" not in dict` bug: a Starlark user config that mutates a
+// nested key of the default tree (config["terminal"]["initial_reservoir"] = 2)
+// broke the gui.env reload after a package install merged its env block. The
+// hook reloaded the config through ide.Config without the rune.star baseline,
+// so the overlay subscript hit an empty `config` dict and the whole gui.env
+// live-apply failed. The reload must use the same baseline the IDE uses.
+func TestGUIEnvLiveApplyHookStarlarkOverlayConfig(t *testing.T) {
+	const (
+		envKey = "RUNE_TEST_LIVE_APPLY_STAR_OVERLAY"
+		envVal = "/from/starlark/config"
+	)
+	t.Setenv(envKey, "")
+	require.NoError(t, os.Unsetenv(envKey))
+
+	b := newConfiguredBootstrapForEnvTest(t, configStarFilename,
+		"config[\"terminal\"][\"initial_reservoir\"] = 2\n")
+
+	// Reproduce the on-disk state after a package install: the manager
+	// appends its managed gui.env block to the user's config.star before
+	// invoking the post-merge hook.
+	require.NoError(t, starlarkconfig.WriteManagedConfigFileAtomic(
+		b.configPath, map[string]any{
+			"gui": map[string]any{"env": map[string]any{envKey: envVal}},
+		}))
+
+	event := mergeEvent(t, "gui:\n  env:\n    "+envKey+": "+envVal+"\n")
+	require.True(t, event.TouchesPath("gui", "env"))
+
+	result, err := b.guiEnvLiveApplyHook(event)
+	require.NoError(t, err,
+		"gui.env reload must decode the Starlark overlay config against the "+
+			"full default tree")
 	assert.True(t, result.LiveApplied)
 	assert.Equal(t, envVal, os.Getenv(envKey))
 }
@@ -363,13 +401,16 @@ func TestApplyShellPATHAndGUIEnvWithPATHWaits(t *testing.T) {
 }
 
 // newConfiguredBootstrapForEnvTest builds a real, already-bootstrapped
-// bootstrapHandler against the given on-disk config. Writing a config.yaml into
-// dataDir makes isBootstrapped true, so newBootstrapHandler builds the real
+// bootstrapHandler against the given on-disk config, written to dataDir as
+// filename (config.yaml or config.star, selecting the decoder). A config file
+// in dataDir makes isBootstrapped true, so newBootstrapHandler builds the real
 // configured IDE (with the production guiEnvLiveApplyHook wired via
 // WithPackageConfigMergeHook) instead of opening the OAuth bootstrap flow. The
 // apiclient is pointed at a 404 server so construction never touches the
 // network.
-func newConfiguredBootstrapForEnvTest(t *testing.T, configBody string) *bootstrapHandler {
+func newConfiguredBootstrapForEnvTest(
+	t *testing.T, filename, configBody string,
+) *bootstrapHandler {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -378,7 +419,7 @@ func newConfiguredBootstrapForEnvTest(t *testing.T, configBody string) *bootstra
 	t.Cleanup(srv.Close)
 
 	dataDir := t.TempDir()
-	configPath := filepath.Join(dataDir, configFilename)
+	configPath := filepath.Join(dataDir, filename)
 	require.NoError(t, os.WriteFile(configPath, []byte(configBody), 0o644))
 
 	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{

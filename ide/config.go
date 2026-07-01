@@ -3458,7 +3458,7 @@ func decodeOverlayConfigFile(
 
 func reloadConfig(
 	configFilePath string, defaultWallpaper browser.Wallpaper,
-	defaultConfig defaultConfigSource,
+	defaultConfig DefaultConfig,
 	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) (ret ideConfig, err error) {
@@ -3502,7 +3502,7 @@ func loadWorkspaceConfig(
 func loadConfig(
 	c *ideConfig, configPath string,
 	defaultWallpaper browser.Wallpaper,
-	defaultConfig defaultConfigSource,
+	defaultConfig DefaultConfig,
 	ringBell func(), scheduleNextTick func(func()) bool,
 	zdotDir string,
 ) (err error) {
@@ -3528,16 +3528,7 @@ func loadConfig(
 	return nil
 }
 
-// defaultConfigSource is the built-in config shipped with the binary.
-// The embedded default is always Starlark and receives the predeclared
-// globals `mode` ("modal" | "modeless") and `tui` (bool).
-type defaultConfigSource struct {
-	src   string
-	modal bool
-	tui   bool
-}
-
-func decodeDefaultConfig(d defaultConfigSource) (map[string]any, error) {
+func decodeDefaultConfig(d DefaultConfig) (map[string]any, error) {
 	src := []byte(d.src)
 	return decodeStarlarkConfig(starlarkConfigSource{
 		src:      src,

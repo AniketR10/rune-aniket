@@ -659,10 +659,9 @@ func runGUI(
 		}
 	}
 
-	// don't pass any options; we just need gui env
-	// we're loading config twice, but it's better than
-	// the race conditions cause by env var resolution order
-	rootCfg, envErr := ide.Config(*flagConfigPath)
+	// We load config twice, but it's better than the race conditions caused
+	// by env var resolution order.
+	rootCfg, envErr := ide.Config(*flagConfigPath, runeDefaultConfig())
 	if envErr != nil {
 		envErr = fmt.Errorf("load config for gui.env: %w", envErr)
 		rootCfg = config.NopConfig()

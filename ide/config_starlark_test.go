@@ -366,7 +366,7 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 
 	var cfg ideConfig
 	require.NoError(t, loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),
-		defaultConfigSource{
+		DefaultConfig{
 			src:   string(data),
 			modal: true,
 			tui:   false,
@@ -535,7 +535,7 @@ func TestLoadConfigStarUserOverlayPreservesEmbeddedRuneStar(t *testing.T) {
 
 	var cfg ideConfig
 	require.NoError(t, loadConfig(&cfg, userPath, browser.NopWallpaper(),
-		defaultConfigSource{
+		DefaultConfig{
 			src:   string(data),
 			modal: true,
 			tui:   false,
@@ -708,7 +708,7 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 		"override_modeless.yaml",
 	} {
 		t.Run(file, func(t *testing.T) {
-			base, err := decodeDefaultConfig(defaultConfigSource{
+			base, err := decodeDefaultConfig(DefaultConfig{
 				src: string(runeStar), modal: true, tui: false,
 			})
 			require.NoError(t, err)
@@ -743,7 +743,7 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 func TestModelessPresetUnbindsStaleModalChords(t *testing.T) {
 	runeStar := readRuneStar(t)
 
-	base, err := decodeDefaultConfig(defaultConfigSource{
+	base, err := decodeDefaultConfig(DefaultConfig{
 		src: string(runeStar), modal: true, tui: false,
 	})
 	require.NoError(t, err)

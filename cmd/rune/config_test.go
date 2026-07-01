@@ -24,15 +24,42 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/mock/gomock"
 
 	"unstable.build/go-tui/browser/browsertest"
+	"unstable.build/go-tui/ide"
 )
+
+// TestIDEConfigOverlaySubscriptResolvesDefaultTree is a regression test for
+// ide.Config decoding user configs against a bare `config = {}` default
+// instead of the full rune.star tree. An overlay-style user config that
+// mutates a nested default key (config["terminal"]["initial_reservoir"] = 2)
+// used to fail with `key "terminal" not in dict` on the gui.env load paths.
+// Requiring the DefaultConfig argument keeps every ide.Config caller on the
+// same baseline the running IDE uses.
+func TestIDEConfigOverlaySubscriptResolvesDefaultTree(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.star")
+	require.NoError(t, os.WriteFile(path,
+		[]byte("config[\"terminal\"][\"initial_reservoir\"] = 2\n"), 0o644))
+
+	cfg, err := ide.Config(path, runeDefaultConfig())
+	require.NoError(t, err)
+
+	term, err := cfg.GetConfig("terminal")
+	require.NoError(t, err)
+	got, err := term.GetInt("initial_reservoir")
+	require.NoError(t, err)
+	assert.Equal(t, 2, got)
+}
 
 func TestGetGUIKeyMapping(t *testing.T) {
 	t.Run("parses valid mappings", func(t *testing.T) {
