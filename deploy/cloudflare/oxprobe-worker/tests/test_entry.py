@@ -232,6 +232,28 @@ class EntryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entry.CHECK_FAIL, res["status"])
         self.assertIn("403", res["detail"])
 
+    async def test_deep_emits_ok_critical_check_when_healthy(self):
+        cfg = {"api_host": "api.example.com", "pkg_download_arch": "darwin-arm64"}
+        health = {
+            "status": entry.STATUS_OK,
+            "checks": [{"layer": "stripe", "status": entry.CHECK_OK}],
+            "signed_downloads": {"darwin-arm64": "https://signed.example/ada"},
+        }
+        client = fake_client(
+            fake_response(
+                body=health,
+                headers={"content-type": "application/json"},
+                content=b"ada-bytes",
+            )
+        )
+
+        checks = await entry.probe_deep(client, cfg, "secret")
+
+        deep = [c for c in checks if c["layer"] == "deep"]
+        self.assertEqual(1, len(deep), "healthy deep probe must emit a deep check")
+        self.assertEqual(entry.CHECK_OK, deep[0]["status"])
+        self.assertTrue(deep[0]["critical"])
+
     async def test_reconcile_triggers_failing_critical_with_runbook_link(self):
         client = fake_paging_client(fake_response(status_code=202))
         old_async_client = entry.httpx.AsyncClient

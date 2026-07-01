@@ -33,6 +33,7 @@ OXPROBE_DEV_CLOUDRUN = target/oxprobe/cloudrun-staging.yaml
 OXPROBE_PROD_CLOUDRUN = target/oxprobe/cloudrun-prod.yaml
 OXPROBE_WORKER_DIR ?= deploy/cloudflare/oxprobe-worker
 OXPROBE_PYWRANGLER ?= uv run pywrangler
+OXPROBE_WORKER_PYTHON ?= python3
 UNAME := $(shell uname)
 VERSION=$(shell git describe --tags)
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -66,6 +67,7 @@ RELEASE_FILES=$(wildcard release/*)
 	oxprobe-cloud-monitoring-iam-staging oxprobe-cloud-monitoring-iam-prod \
 	oxprobe-cloudrun-deploy-staging oxprobe-cloudrun-deploy-prod \
 	oxprobe-worker-deploy-staging oxprobe-worker-deploy-prod \
+	oxprobe-worker-test \
 	oxprobe-deploy-staging oxprobe-deploy-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-prod-app-arm64 \
@@ -165,8 +167,14 @@ claudeimport: $(CLAUDEIMPORT)
 	@ pre-commit install
 
 test: CI=$(CI)
-test: docs-init $(RUNE_LLAMACPP_STAMP)
+test: docs-init $(RUNE_LLAMACPP_STAMP) oxprobe-worker-test
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
+
+# oxprobe-worker-test runs the Cloudflare oxprobe worker's Python unit
+# tests. Its dependencies are vendored under python_modules (committed),
+# so the suite runs hermetically without a network install.
+oxprobe-worker-test:
+	@ cd $(OXPROBE_WORKER_DIR) && PYTHONPATH=python_modules $(OXPROBE_WORKER_PYTHON) -m unittest discover -s tests -v
 
 test: CI=$(CI)
 test-no-race: docs-init $(RUNE_LLAMACPP_STAMP)

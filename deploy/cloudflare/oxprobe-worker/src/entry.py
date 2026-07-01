@@ -290,10 +290,14 @@ async def probe_deep(
             fanned["detail"] = check["detail"]
         checks.append(fanned)
 
-    if report.get("status") == STATUS_FAIL:
-        checks.append(check_result("deep", CHECK_FAIL, True, "server status fail", started))
-    elif report.get("status") == STATUS_DEGRADED:
+    server_status = report.get("status", STATUS_OK)
+    if server_status == STATUS_DEGRADED:
         checks.append(check_result("deep", CHECK_FAIL, False, "server status degraded", started))
+    else:
+        deep_status = CHECK_FAIL if server_status == STATUS_FAIL else CHECK_OK
+        checks.append(
+            check_result("deep", deep_status, True, f"server status {server_status}", started)
+        )
 
     checks.append(await probe_pkg_download(client, cfg, report))
     return checks
