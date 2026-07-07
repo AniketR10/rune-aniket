@@ -99,8 +99,9 @@ func New(
 				return ret.tokenSourceRefresh(ctx, t, true)
 			})
 		ret.telemetryTokenSource = auth.NewCachedTokenSource(refreshOnlySourcer, authStorage)
+		telemetryStorage := storageapi.WithPartition(storage, "telemetry")
 		ret.telemetry = newTelemetry(ret.telemetryTokenSource,
-			ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag)
+			ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag, telemetryStorage)
 		ret.telemetry.start()
 	}
 

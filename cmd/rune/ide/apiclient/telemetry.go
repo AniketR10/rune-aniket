@@ -35,6 +35,7 @@ import (
 
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"golang.org/x/oauth2"
 	"unstable.build/go-tui/debug"
@@ -64,10 +65,12 @@ type telemetry struct {
 	quitCtx   context.Context
 	cancelCtx func()
 
-	macAddr   string
-	sessionID string
-	sysinfo   sysinfo
-	version   string
+	installID  string
+	tampered   bool
+	installErr string
+	sessionID  string
+	sysinfo    sysinfo
+	version    string
 
 	opened  atomic.Int32
 	closed  atomic.Int32
@@ -80,6 +83,7 @@ func newTelemetry(
 	url *url.URL,
 	period time.Duration,
 	version string,
+	store storageapi.Service,
 ) *telemetry {
 	if period <= 0 {
 		panic(fmt.Sprintf("apiclient: TelemetryPeriod must be positive, got %v", period))
@@ -88,13 +92,14 @@ func newTelemetry(
 	ret.auth = auth
 
 	ret.url = url.JoinPath(telemetryPath).String()
-	ret.macAddr, _ = getHashedMacAddr()
 	ret.sessionID = uuid.New().String()
 	ret.sysinfo, _ = uname()
 	ret.version = version
 	ret.period = period
 
 	ret.quitCtx, ret.cancelCtx = context.WithCancel(context.Background())
+
+	ret.installID, ret.tampered, ret.installErr = getInstallID(ret.quitCtx, store)
 
 	return ret
 }
@@ -151,7 +156,9 @@ func (t *telemetry) getUsage() telemetryUsagePayload {
 
 func (t *telemetry) getSystemData() telemetrySystemPayload {
 	var data telemetrySystemPayload
-	data.MAC = t.macAddr
+	data.InstallID = t.installID
+	data.Tampered = t.tampered
+	data.InstallIDErr = t.installErr
 	data.SID = t.sessionID
 	data.Type = "ClientSystem"
 	data.SystemArquitecture = t.sysinfo.Machine
@@ -242,7 +249,9 @@ type telemetryUsagePayload struct {
 
 type telemetrySystemPayload struct {
 	Type               string
-	MAC                string
+	InstallID          string
+	Tampered           bool
+	InstallIDErr       string
 	SID                string
 	Version            string
 	SystemArquitecture string

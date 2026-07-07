@@ -67,6 +67,7 @@ func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {
 }
 
 func TestNewStartsTelemetryWhenEnabled(t *testing.T) {
+	redirectInstallIDTempPath(t)
 	requests := make(chan string, 8)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.URL.Path
