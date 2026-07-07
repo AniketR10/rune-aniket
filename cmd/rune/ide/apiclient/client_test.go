@@ -324,62 +324,6 @@ func TestClient_Login_PublishesOAuthURL(t *testing.T) {
 	assert.False(t, ok, "URL channel must be closed after Login completes")
 }
 
-// TestRenderCallbackHTMLSubstitutesCheckoutURL verifies that the
-// embedded OAuth callback page redirects to the configured website's
-// /checkout endpoint, so post-OAuth the browser lands on a single
-// page that decides between Stripe Checkout and /account based on
-// the user's live subscription status.
-func TestRenderCallbackHTMLSubstitutesCheckoutURL(t *testing.T) {
-	cases := []struct {
-		name           string
-		website        string
-		wantContains   []string
-		wantNoContains []string
-	}{
-		{
-			name:    "production website",
-			website: "https://rune.build",
-			wantContains: []string{
-				`window.location.replace("https://rune.build/checkout?source=rune")`,
-				`url=https://rune.build/checkout?source=rune`,
-				`href="https://rune.build/checkout?source=rune"`,
-			},
-			wantNoContains: []string{"{{CHECKOUT_URL}}"},
-		},
-		{
-			name:    "trailing slash trimmed",
-			website: "https://rune.build/",
-			wantContains: []string{
-				`window.location.replace("https://rune.build/checkout?source=rune")`,
-			},
-			wantNoContains: []string{
-				`rune.build//checkout`,
-				"{{CHECKOUT_URL}}",
-			},
-		},
-		{
-			name:    "empty website falls back to about:blank",
-			website: "",
-			wantContains: []string{
-				`window.location.replace("about:blank")`,
-			},
-			wantNoContains: []string{"{{CHECKOUT_URL}}"},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := &Client{config: Config{WebsiteAddress: tc.website}}
-			got := c.renderCallbackHTML()
-			for _, want := range tc.wantContains {
-				assert.Contains(t, got, want)
-			}
-			for _, unwant := range tc.wantNoContains {
-				assert.NotContains(t, got, unwant)
-			}
-		})
-	}
-}
-
 func TestParseAccountClaims(t *testing.T) {
 	planEnds := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	token := makeAccountJWT(t, auth.RPCUser{

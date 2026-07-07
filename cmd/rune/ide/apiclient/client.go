@@ -30,7 +30,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/url"
 	"strings"
 
@@ -54,9 +53,6 @@ import (
 
 //go:embed callback_page.html
 var callbackPageHTML string
-
-var callbackPageTmpl = template.Must(
-	template.New("callback_page.html").Parse(callbackPageHTML))
 
 // Client implements a client to an instance of ox-api.
 // This client should be subscribed to events as a text.EventHandler,
@@ -379,31 +375,10 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 		}
 
 		return nil
-	}, tryPorts, blueauth.WithSuccessHTML(a.renderCallbackHTML()))
+	}, tryPorts, blueauth.WithSuccessHTML(callbackPageHTML))
 	if err != nil {
 		return nil, fmt.Errorf("new oauth2 client: %w", err)
 	}
 	log.Debugf("oauth2: successfully generated token source")
 	return source, nil
-}
-
-// renderCallbackHTML renders the embedded callback page with the
-// configured website's /checkout?source=rune link, so post-OAuth the
-// browser lands on a single page that decides whether to send the
-// user to Stripe Checkout or /account based on their live
-// subscription status. Empty WebsiteAddress falls back to
-// `about:blank` so the static "You're in" page stays in place.
-func (a *Client) renderCallbackHTML() string {
-	checkout := "about:blank"
-	if base := a.config.WebsiteAddress; base != "" {
-		checkout = strings.TrimRight(base, "/") + "/checkout?source=rune"
-	}
-	var buf strings.Builder
-	if err := callbackPageTmpl.Execute(&buf, struct {
-		CheckoutURL string
-	}{CheckoutURL: checkout}); err != nil {
-		log.Errorf("render callback page: %v", err)
-		return ""
-	}
-	return buf.String()
 }

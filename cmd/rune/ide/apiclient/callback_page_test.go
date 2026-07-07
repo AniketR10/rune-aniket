@@ -36,11 +36,20 @@ func TestCallbackPageHTML(t *testing.T) {
 	}
 	for _, needle := range []string{
 		"You're in",
-		"Checking your subscription",
-		"{{.CheckoutURL}}",
+		"return to Rune",
 	} {
 		if !strings.Contains(callbackPageHTML, needle) {
 			t.Errorf("callbackPageHTML missing %q", needle)
+		}
+	}
+	for _, absent := range []string{
+		"{{.CheckoutURL}}",
+		"/checkout",
+		"window.location",
+		"http-equiv=\"refresh\"",
+	} {
+		if strings.Contains(callbackPageHTML, absent) {
+			t.Errorf("callbackPageHTML must not redirect, found %q", absent)
 		}
 	}
 }
