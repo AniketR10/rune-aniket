@@ -513,6 +513,14 @@ func (t *Tutorial) Handle(ev term.Event) (bool, bool) {
 }
 
 func (t *Tutorial) handleFloatingWindow(r *request, ev term.Event) (bool, bool) {
+	// allow_keys takes precedence over the default Enter/Esc/Space
+	// dismissal so an author can reclaim one of those keys for
+	// pass-through. The modal-surfaces step needs <esc> to reach a
+	// focused terminal or console (switching it to NORMAL mode)
+	// instead of dismissing the overlay.
+	if ev.Type == term.EventKey && slices.Contains(r.allowKeys, ev.KeyComb()) {
+		return false, false
+	}
 	if ev.Mod == 0 && (ev.Key == term.KeyEnter || ev.Key == term.KeyEsc ||
 		ev.Key == term.KeySpace || ev.Ch == ' ') {
 		t.resolve(r, response{})
@@ -528,13 +536,6 @@ func (t *Tutorial) handleFloatingWindow(r *request, ev term.Event) (bool, bool) 
 		if slices.Contains(r.dismissKeys, kc) {
 			t.resolve(r, response{})
 			return t.exitState(), false
-		}
-		// allow_keys: let the author explicitly pass specific keys
-		// through to the IDE root so the user can act on the very
-		// bindings they are reading about (e.g. <meta-1>..<meta-9>)
-		// without advancing the tutorial.
-		if slices.Contains(r.allowKeys, kc) {
-			return false, false
 		}
 	}
 	// Swallow stray keys so the IDE root never sees a stray ':' that

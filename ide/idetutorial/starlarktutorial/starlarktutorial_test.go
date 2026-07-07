@@ -532,6 +532,32 @@ tutorial(entry=run)
 		"stray keys outside allow_keys must remain swallowed")
 }
 
+// TestFloatingWindowAllowKeysReclaimsEsc asserts that <esc> listed in
+// allow_keys falls through to the IDE root WITHOUT dismissing the
+// overlay, overriding the default Enter/Esc/Space dismissal. The
+// modal-surfaces step relies on this so <esc> reaches a focused
+// terminal or console (switching it to NORMAL mode) instead of
+// closing the tutorial window.
+func TestFloatingWindowAllowKeysReclaimsEsc(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="press esc", allow_keys=["<esc>"])
+    wait_command(command="wopen")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "floating_window", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"<esc> in allow_keys must fall through to the IDE root")
+	assert.Equal(t, "floating_window", activeKindFor(tut),
+		"<esc> in allow_keys must NOT dismiss the overlay")
+}
+
 // TestFloatingWindowAllowKeysInvalidErrors asserts that bad key
 // strings surface as a Starlark error at load time so authors find
 // typos before users hit them.

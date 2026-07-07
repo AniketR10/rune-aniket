@@ -22,9 +22,11 @@ mode = editor_mode()
 if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
     focus_example = "`<meta-h>`"
+    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
 else:
     dir_phrase = "the arrow keys"
     focus_example = "`<meta-left>`"
+    completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
 
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
@@ -44,14 +46,21 @@ def keypress(cmd, *args):
 # command prompt. The user must press <esc> to enter modal mode first.
 # These snippets are spliced into the agent steps that open the command
 # prompt while the companion console is focused.
+#
+# esc_allow_keys lets that <esc> fall through to the focused terminal or
+# console (switching it to NORMAL mode) instead of dismissing the
+# floating window. Empty in modeless mode, where <esc> is not part of
+# the instructions.
 if mode == "modal":
     shell_esc_step = "1. Press `<esc>` to enter modal mode.\n"
     shell_prompt_step_num = "2"
     shell_run_step_num = "3"
+    esc_allow_keys = ["<esc>"]
 else:
     shell_esc_step = ""
     shell_prompt_step_num = "1"
     shell_run_step_num = "2"
+    esc_allow_keys = []
 
 def dismiss_for(cmd, *args):
     # Keys that dismiss a teaching window. Always include the command
@@ -289,6 +298,40 @@ The console is used to **set up** Rune, the prompt is used to **drive** it.
 Press `<enter>` or `<space>` to continue.
 """
 
+guicommands_md = """\
+You have run a lot of commands by now: `windownew`, `terminalneworsplit`, `tabnext`,
+`fexplorer`. They are all lowercase, no spaces, and read like `<category><action>`: the
+category first (`window`, `terminal`, `tab`), then what you do to it (`new`, `close`,
+`next`).
+
+This is the Rune way: **form earns its place by serving function**. The naming
+is what makes the fuzzy finder predictable and optimized for recall: every command in a
+category shares a prefix, you can guess the sequence and let the finder rank it first.
+`workspaceopen` resolves from typing `woso`, and `woso` fires in four keystrokes
+instead of thirteen.
+
+Let's try it with themes. Themes control every color Rune draws with, and the `guitheme`
+command switches the active one.
+
+1. Press `""" + ck + """` to open the command prompt.
+2. Type `guith` and press `<space>` to complete to `guitheme`.
+3. Type a space, then use """ + completer_pick_phrase + """ to pick a
+   different theme from the completer, and press `<enter>`.
+"""
+
+guitheme_persist_md = """\
+Nice, the whole interface just re-themed at once, terminal colors and
+all.
+
+`guitheme` changes the theme for this session only. To make a theme
+stick across restarts, set `gui.default_theme` in your config to the
+theme name. Keep `guitheme` handy for a quick switch when the lighting
+or screen brightness changes, and set `gui.default_theme` for the look
+you want by default.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
 agent_install_md = """\
 The **Rune Agent** is Rune's builtin AI coding assistant. It ships as a
 package you install on demand, so the first step is to install it.
@@ -389,6 +432,7 @@ def teach_modal_surfaces():
     if mode != "modal":
         return
     floating_window(title = "Modal everywhere", text = modal_surfaces_md,
+                    allow_keys = esc_allow_keys,
                     dismiss_keys = [ck])
 
 
@@ -668,6 +712,7 @@ Press `<enter>` or `<space>` to continue.
         teach_provider("claude", "Claude", ["login"], run_md, "Claude connected.")
 
     floating_window(title = "Open the Rune Agent", text = agent_open_md,
+                    allow_keys = esc_allow_keys,
                     dismiss_keys = [ck])
     wait_command(
         title    = "Open the Rune Agent",
@@ -689,6 +734,22 @@ def teach_cheatsheet():
         on_error = "Run the `<cmd>cheatsheet` command to open your cheatsheet.",
     )
     notify(level = success, message = "That is your cheatsheet.")
+
+
+def teach_guicommands():
+    floating_window(title = "Why commands look like that", text = guicommands_md,
+                    dismiss_keys = [ck])
+    wait_command(
+        title    = "Switch the theme",
+        command  = "guitheme",
+        on_error = ("Run `<cmd>guitheme` and pass a theme name. Type " +
+                    "`guith`, press `<tab>` to complete, then use " +
+                    completer_pick_phrase + " to pick a theme from the " +
+                    "completer."),
+    )
+    notify(level = success, message = "You switched the theme.")
+    floating_window(title = "Make it stick", text = guitheme_persist_md,
+                    dismiss_keys = [ck])
 
 
 def teach_help():
@@ -743,6 +804,8 @@ def run():
     teach_close_tab()
     teach_terminals()
 
+    teach_guicommands()
+
     teach_agent()
 
     teach_cheatsheet()
@@ -750,4 +813,4 @@ def run():
     teach_help()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "27", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "31", entry = run)
