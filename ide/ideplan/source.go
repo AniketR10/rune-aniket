@@ -107,7 +107,8 @@ func (s *JWTSource) Refresh(ctx context.Context) (Decision, error) {
 		// prompt still works.
 		tok = s.cache.Cached(ctx)
 		if tok == nil {
-			return Decision{Status: StatusExpired}, fmt.Errorf("refresh token: %w", err)
+			return Decision{Status: StatusExpired, SignedIn: SignedOut},
+				fmt.Errorf("refresh token: %w", err)
 		}
 	}
 	return s.decideFromToken(tok), nil
@@ -115,14 +116,11 @@ func (s *JWTSource) Refresh(ctx context.Context) (Decision, error) {
 
 func (s *JWTSource) decideFromToken(tok *oauth2.Token) Decision {
 	if tok == nil || tok.AccessToken == "" {
-		return Decision{Status: StatusExpired}
+		return Decision{Status: StatusExpired, SignedIn: SignedOut}
 	}
 	role, planEnds, err := parseClaims(tok.AccessToken)
 	if err != nil {
-		// Treat a malformed JWT like no token. Not logged because a
-		// legitimate logout-then-relogin race can briefly produce
-		// one.
-		return Decision{Status: StatusExpired}
+		return Decision{Status: StatusExpired, SignedIn: ParseClaimsError}
 	}
 	return decide(role, planEnds, s.now())
 }

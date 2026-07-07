@@ -55,12 +55,14 @@ import (
 )
 
 // TestBootstrapE2ESurfacesOAuthURLInWaitPrompt is the black-box e2e
-// test for the bootstrap login flow: it constructs the bootstrap
-// handler the way runGUI does, drives it through the Welcome →
-// Vim-mode → Sign-in prompts with real term.Events, and
-// asserts that once the apiclient publishes the OAuth URL on its
-// LoginSession.URL channel, that URL ends up rendered inside the
-// "Follow the instructions in your browser" wait prompt.
+// test for the bootstrap login machinery: it constructs the
+// bootstrap handler the way runGUI does, mounts the login choice
+// prompt directly (the first-run flow no longer gates on login, but
+// the prompt remains reachable through the lockdown/nag prompts),
+// drives Sign-in with a real term.Event, and asserts that once the
+// apiclient publishes the OAuth URL on its LoginSession.URL channel,
+// that URL ends up rendered inside the "Follow the instructions in
+// your browser" wait prompt.
 //
 // The contract under test is the full plumbing:
 //
@@ -122,15 +124,15 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
 	wrapped.Resize(width, height)
 
-	// Welcome → Vim-mode → Sign-in. Each key matches the per-prompt
-	// binding tables in bootstrap_handler.go. The brief pauses give
-	// the publish-channel pumper a chance to drain the scheduled-tick
-	// callbacks that mount each successor prompt before the next key
-	// arrives.
-	for _, ch := range []rune{'g', 'v', 'l'} {
-		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
-		time.Sleep(50 * time.Millisecond)
-	}
+	// Mount the login choice prompt directly: the first-run flow
+	// bypasses it, but the machinery stays live for the lockdown
+	// and nag prompts' Sign in buttons.
+	mu.Lock()
+	require.NoError(t, root.openLoginPrompt())
+	mu.Unlock()
+
+	// 'l' selects Sign in per bootstrapLoginChoiceKeys.
+	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
 
 	var oauthURL *url.URL
 	select {
@@ -370,8 +372,9 @@ func (h *bootstrapE2ELocked) Selection() (string, bool) {
 //
 // The fix is to schedule the re-mount via scheduleNextTick so it
 // runs on a later event-loop iteration, after the original prompt
-// has fully closed. This test drives Welcome → Vim-mode →
-// Sign-up via real keystrokes, observes the signup URL on the
+// has fully closed. This test mounts the login choice prompt
+// directly (the first-run flow no longer gates on login), drives
+// Sign-up via a real keystroke, observes the signup URL on the
 // OpenBrowser hook, and asserts the choice prompt is visible again
 // in the rendered frame.
 func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
@@ -419,18 +422,15 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
 	wrapped.Resize(width, height)
 
-	// Welcome → Vim-mode. 'v' enables vim mode; control then
-	// advances to the login choice prompt.
-	for _, ch := range []rune{'g', 'v'} {
-		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
-		time.Sleep(50 * time.Millisecond)
-	}
+	mu.Lock()
+	require.NoError(t, root.openLoginPrompt())
+	mu.Unlock()
 
 	require.Eventually(t, func() bool {
 		frame := handlertest.DrawHandler(wrapped, width, height)
 		return containsAll(frame, "Sign in", "Sign up")
 	}, 5*time.Second, 50*time.Millisecond,
-		"login choice prompt must be visible after the vim-mode prompt advances")
+		"login choice prompt must be visible once mounted")
 
 	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 's'})
 
@@ -450,6 +450,70 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 		"after Sign up opens the browser, the login choice prompt must be re-mounted "+
 			"so the user can come back to Rune; otherwise the bootstrap is stuck "+
 			"with no visible UI")
+}
+
+// TestBootstrapE2EVimChoiceSwapsToConfiguredIDE covers the first-run
+// flow after the login gate was removed for the usage-based paywall:
+// Welcome → key-bindings choice → immediate swap to the configured
+// IDE. No sign-in prompt gates the flow anymore; enforcement is owned
+// by the ide/idelockdown usage policies after the swap.
+func TestBootstrapE2EVimChoiceSwapsToConfiguredIDE(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	dataDir := t.TempDir()
+	configPath := dataDir + "/config.yaml"
+
+	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{
+		httpAddress:    srv.URL,
+		dataPath:       dataDir,
+		configPath:     configPath,
+		websiteAddress: "https://rune.test",
+	})
+	t.Cleanup(restoreFlags)
+
+	mu := new(sync.Mutex)
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	root, err := newBootstrapHandler(
+		dataDir, configPath, "", "", nil,
+		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	t.Cleanup(stopPump)
+	require.NotNil(t, root.preIDE, "fresh data dir must start on the pre-config IDE")
+
+	const width, height = 80, 30
+	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
+	wrapped.Resize(width, height)
+
+	// Welcome → key-bindings choice. 'v' picks vim and must advance
+	// straight to the configured IDE without a login prompt.
+	for _, ch := range []rune{'g', 'v'} {
+		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return root.realIDE != nil && root.preIDE == nil
+	}, 30*time.Second, 100*time.Millisecond,
+		"choosing key bindings must swap to the configured IDE without "+
+			"a sign-in gate")
+
+	assert.True(t, isBootstrapped(dataDir),
+		"the swap must persist the bootstrap override config")
+	mu.Lock()
+	assert.Equal(t, editorModal, root.chosenEditor)
+	mu.Unlock()
 }
 
 // TestBootstrapE2EEscReopensBootstrapPrompt pins the fix for the

@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -20,6 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
 
 package idepkgtest
 
@@ -246,6 +247,13 @@ func (t *ReleaseManager) Delete(context.Context, string, release.Version) error 
 
 // Create is not implemented.
 func (t *ReleaseManager) Create(context.Context, release.Package) error {
+	panic("unimplemented")
+}
+
+// UpdatePackageMetadata is not implemented.
+func (t *ReleaseManager) UpdatePackageMetadata(
+	context.Context, string, map[string]string,
+) error {
 	panic("unimplemented")
 }
 

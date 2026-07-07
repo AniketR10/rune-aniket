@@ -153,7 +153,6 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 		ide.WithExtensionsRunner(b.runner),
 		ide.WithLocker(b.mu),
 		ide.WithDefaultConfigStarlark(defaultStarlarkConfig, true, false),
-		ide.WithDefaultWallpaper(makeWallpaper()),
 		ide.WithTabBarOffset(13),
 		ide.WithTabBarHeight(2),
 		ide.WithWorkspacesBarHeight(2),
@@ -240,9 +239,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		ide.WithPlanSource(ide.PlanSourceConfig{
 			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
 			CheckoutURL: b.checkoutURL,
-			OnReSignIn: func() {
-				lockdownReSignIn(client, b.realIDE, b.scheduleNextTick)
-			},
+			SignIn:      planSignIn(client),
 		}),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
@@ -588,7 +585,15 @@ func (b *bootstrapHandler) openVimPrompt() {
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
 				b.chosenEditor = optionToChoice(option)
-				_ = b.openLoginPrompt()
+				// The login gate is bypassed: usage-based paywall
+				// policies (ide/idelockdown) own enforcement now.
+				// Login stays reachable through the lockdown/nag
+				// prompts and the login command.
+				b.scheduleNextTick(func() {
+					if err := b.performSwap(); err != nil {
+						b.notifyError("finish bootstrap", err)
+					}
+				})
 			}),
 			guard.onClose(b.openVimPrompt),
 		),

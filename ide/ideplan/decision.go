@@ -60,6 +60,13 @@ const (
 	// never been paid (PlanEnds is zero) or the grace window has
 	// elapsed.
 	StatusExpired
+
+	// StatusNeverSubscribed blocks IDE interaction like StatusExpired
+	// but distinguishes a user who has never held a paid plan
+	// (PlanEnds is zero) from one whose paid plan lapsed. Enforcement
+	// is identical to StatusExpired; the distinction only drives the
+	// lockdown prompt copy.
+	StatusNeverSubscribed
 )
 
 func (s Status) String() string {
@@ -70,6 +77,40 @@ func (s Status) String() string {
 		return "grace_period"
 	case StatusExpired:
 		return "expired"
+	case StatusNeverSubscribed:
+		return "never_subscribed"
+	default:
+		return "unknown"
+	}
+}
+
+// SignInStatus is the authentication axis of a Decision, orthogonal
+// to Status. It distinguishes a signed-in user from one whose token
+// is missing or unparseable, so the lockdown prompt can offer the
+// right sign-in copy without conflating auth failures with plan
+// state.
+type SignInStatus int
+
+const (
+	// SignedIn means a token was present and its claims parsed. This
+	// is the zero value so every Decision literal that omits the
+	// field reads as signed in.
+	SignedIn SignInStatus = iota
+	// SignedOut means no token was cached.
+	SignedOut
+	// ParseClaimsError means a token was present but its claims could
+	// not be decoded.
+	ParseClaimsError
+)
+
+func (s SignInStatus) String() string {
+	switch s {
+	case SignedIn:
+		return "signed_in"
+	case SignedOut:
+		return "signed_out"
+	case ParseClaimsError:
+		return "parse_claims_error"
 	default:
 		return "unknown"
 	}
@@ -81,6 +122,7 @@ func (s Status) String() string {
 // inspect PlanEnds instead).
 type Decision struct {
 	Status     Status
+	SignedIn   SignInStatus
 	PlanEnds   time.Time
 	GraceUntil time.Time
 }
@@ -89,13 +131,16 @@ type Decision struct {
 // the given moment. Admins and super-admins are always StatusActive
 // regardless of PlanEnds. Paid users are always StatusActive. Anyone
 // else falls into StatusGracePeriod when PlanEnds is non-zero and
-// PlanEnds+grace is still in the future, and StatusExpired otherwise.
+// PlanEnds+grace is still in the future, StatusNeverSubscribed when
+// PlanEnds is zero (never held a paid plan), and StatusExpired
+// otherwise. Every branch reports SignedIn: a decode of the claims
+// implies a token was present and parsed.
 func decide(role auth.Role, planEnds time.Time, now time.Time) Decision {
 	if role >= auth.RolePaid {
 		return Decision{Status: StatusActive, PlanEnds: planEnds}
 	}
 	if planEnds.IsZero() {
-		return Decision{Status: StatusExpired}
+		return Decision{Status: StatusNeverSubscribed}
 	}
 	graceUntil := planEnds.Add(GracePeriod)
 	if now.Before(graceUntil) {

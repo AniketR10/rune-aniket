@@ -38,15 +38,14 @@ import (
 // monitor re-evaluates gating against the JWT.
 const DefaultMonitorInterval = 24 * time.Hour
 
-// Locker is the surface MonitorConfig needs from the IDE lockdown
-// wrapper. *PlanLockdownRunner satisfies it.
+// Locker abstracts the ability to lock the IDE.
 type Locker interface {
 	SetLocked(locked bool)
 }
 
-// MonitorConfig collects the dependencies of Monitor. Interval
-// defaults to DefaultMonitorInterval; tests should pass a short value
-// and a controllable Now.
+// MonitorConfig collects the dependencies of Monitor. All fields
+// except Interval and Now are required; NewMonitor panics on missing
+// dependencies.
 type MonitorConfig struct {
 	Source        Source
 	Notifications browserapi.Notifications
@@ -73,8 +72,18 @@ type Monitor struct {
 }
 
 // NewMonitor constructs a Monitor with the given configuration,
-// applying defaults for unset Interval and Now fields.
+// applying defaults for unset Interval and Now fields. Panics when a
+// required dependency is missing.
 func NewMonitor(cfg MonitorConfig) *Monitor {
+	if cfg.Source == nil {
+		panic("ideplan: MonitorConfig.Source is required")
+	}
+	if cfg.Notifications == nil {
+		panic("ideplan: MonitorConfig.Notifications is required")
+	}
+	if cfg.Locker == nil {
+		panic("ideplan: MonitorConfig.Locker is required")
+	}
 	if cfg.Interval <= 0 {
 		cfg.Interval = DefaultMonitorInterval
 	}
@@ -133,6 +142,7 @@ func (m *Monitor) Reevaluate(ctx context.Context) {
 func (m *Monitor) react(dec Decision, err error) {
 	log.WithFields(log.Fields{
 		"status":      dec.Status.String(),
+		"signed_in":   dec.SignedIn.String(),
 		"plan_ends":   dec.PlanEnds.Format(time.RFC3339),
 		"grace_until": dec.GraceUntil.Format(time.RFC3339),
 		"err":         err,
@@ -143,23 +153,17 @@ func (m *Monitor) react(dec Decision, err error) {
 		warningID := m.warningID
 		m.warningID = ""
 		m.mu.Unlock()
-		if warningID != "" && m.cfg.Notifications != nil {
+		if warningID != "" {
 			if err := m.cfg.Notifications.UpdateNotificationProgress(warningID, "", 100, 100); err != nil {
 				log.WithError(err).Debug("ideplan monitor: clear warning")
 			}
 		}
-		if m.cfg.Locker != nil {
-			m.cfg.Locker.SetLocked(false)
-		}
+		m.cfg.Locker.SetLocked(false)
 	case StatusGracePeriod:
-		if m.cfg.Locker != nil {
-			m.cfg.Locker.SetLocked(false)
-		}
+		m.cfg.Locker.SetLocked(false)
 		m.maybeNotifyGrace(dec)
-	case StatusExpired:
-		if m.cfg.Locker != nil {
-			m.cfg.Locker.SetLocked(true)
-		}
+	case StatusExpired, StatusNeverSubscribed:
+		m.cfg.Locker.SetLocked(true)
 	}
 }
 

@@ -130,9 +130,10 @@ func TestMonitorReevaluateUsesDecisionNotRefresh(t *testing.T) {
 	src := &stubSource{decisions: []Decision{{Status: StatusActive}}}
 	lock := &recordingLocker{locked: true}
 	m := NewMonitor(MonitorConfig{
-		Source: src,
-		Locker: lock,
-		Now:    func() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) },
+		Source:        src,
+		Notifications: &recordingNotifier{},
+		Locker:        lock,
+		Now:           func() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) },
 	})
 	m.Reevaluate(context.Background())
 	assert.False(t, lock.locked)
@@ -190,9 +191,52 @@ func TestMonitorExpiredLocks(t *testing.T) {
 	src := &stubSource{decisions: []Decision{{Status: StatusExpired}}}
 	lock := &recordingLocker{}
 	m := NewMonitor(MonitorConfig{
-		Source: src,
-		Locker: lock,
+		Source:        src,
+		Notifications: &recordingNotifier{},
+		Locker:        lock,
 	})
 	m.Tick(context.Background())
 	assert.True(t, lock.locked)
+}
+
+func TestMonitorNeverSubscribedLocks(t *testing.T) {
+	src := &stubSource{decisions: []Decision{
+		{Status: StatusNeverSubscribed, SignedIn: SignedIn},
+	}}
+	lock := &recordingLocker{}
+	m := NewMonitor(MonitorConfig{
+		Source:        src,
+		Notifications: &recordingNotifier{},
+		Locker:        lock,
+	})
+	m.Tick(context.Background())
+	assert.True(t, lock.locked,
+		"never-subscribed must request enforcement like expired")
+}
+
+func TestNewMonitorPanicsOnMissingDependencies(t *testing.T) {
+	valid := func() MonitorConfig {
+		return MonitorConfig{
+			Source:        &stubSource{},
+			Notifications: &recordingNotifier{},
+			Locker:        &recordingLocker{},
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*MonitorConfig)
+	}{
+		{name: "nil source", mutate: func(c *MonitorConfig) { c.Source = nil }},
+		{name: "nil notifications", mutate: func(c *MonitorConfig) { c.Notifications = nil }},
+		{name: "nil locker", mutate: func(c *MonitorConfig) { c.Locker = nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := valid()
+			tc.mutate(&cfg)
+			assert.Panics(t, func() { NewMonitor(cfg) })
+		})
+	}
+	t.Run("interval and now are defaulted", func(t *testing.T) {
+		assert.NotPanics(t, func() { NewMonitor(valid()) })
+	})
 }

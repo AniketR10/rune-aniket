@@ -41,6 +41,7 @@ func TestDecide(t *testing.T) {
 		want         Status
 		wantPlanEnds time.Time
 		wantGrace    time.Time
+		wantSignedIn SignInStatus
 	}{
 		{
 			name:         "paid role is always active",
@@ -65,7 +66,7 @@ func TestDecide(t *testing.T) {
 			name:     "user without plan ends is expired",
 			role:     auth.RoleUser,
 			planEnds: time.Time{},
-			want:     StatusExpired,
+			want:     StatusNeverSubscribed,
 		},
 		{
 			name:         "user inside grace window",
@@ -87,7 +88,7 @@ func TestDecide(t *testing.T) {
 			name:     "basic role is expired without plan",
 			role:     auth.RoleBasic,
 			planEnds: time.Time{},
-			want:     StatusExpired,
+			want:     StatusNeverSubscribed,
 		},
 	}
 	for _, tc := range cases {
@@ -96,6 +97,8 @@ func TestDecide(t *testing.T) {
 			assert.Equal(t, tc.want, got.Status, "status")
 			assert.Equal(t, tc.wantPlanEnds, got.PlanEnds, "plan ends")
 			assert.Equal(t, tc.wantGrace, got.GraceUntil, "grace until")
+			assert.Equal(t, tc.wantSignedIn, got.SignedIn,
+				"decide must always report the signed-in axis")
 		})
 	}
 }

@@ -83,6 +83,8 @@ func TestJWTSourceDecision(t *testing.T) {
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusExpired, d.Status)
+		assert.Equal(t, SignedOut, d.SignedIn,
+			"no cached token must report signed out")
 	})
 
 	t.Run("paid token yields active", func(t *testing.T) {
@@ -107,13 +109,18 @@ func TestJWTSourceDecision(t *testing.T) {
 		d, err := src.Decision(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusExpired, d.Status)
+		assert.Equal(t, ParseClaimsError, d.SignedIn,
+			"an unparseable token must report a parse-claims error")
 	})
 
 	t.Run("refresh propagates source error", func(t *testing.T) {
 		cache := &stubCache{err: errors.New("network down")}
 		src := NewJWTSource(cache, func() time.Time { return now })
-		_, err := src.Refresh(context.Background())
+		d, err := src.Refresh(context.Background())
 		require.Error(t, err)
+		assert.Equal(t, StatusExpired, d.Status)
+		assert.Equal(t, SignedOut, d.SignedIn,
+			"a refresh with no fallback token must report signed out")
 	})
 
 	t.Run("refresh re-evaluates with new token", func(t *testing.T) {

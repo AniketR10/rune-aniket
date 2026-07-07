@@ -33,9 +33,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/ide/idelockdown"
 	"unstable.build/go-tui/ide/ideplan"
 )
 
@@ -49,6 +51,16 @@ type staticPlanSource struct {
 
 func (s staticPlanSource) Decision(context.Context) (ideplan.Decision, error) { return s.dec, nil }
 func (s staticPlanSource) Refresh(context.Context) (ideplan.Decision, error)  { return s.dec, nil }
+
+// seedLockdownUsage writes a usage history that satisfies the
+// lockdown policy under the currently-compiled enforcement knobs, so
+// the seeded IDE locks whether the knobs are production-scale or
+// compressed for manual testing.
+func seedLockdownUsage(t *testing.T, storage storageapi.Service) {
+	t.Helper()
+	require.NoError(t,
+		idelockdown.SeedQualifyingUsage(context.Background(), storage, time.Now()))
+}
 
 func (c *countingInner) Handle(term.Event) (bool, bool) {
 	c.handles.Add(1)
@@ -126,12 +138,43 @@ func (r *recordingWriter) UnionAttributes(_ term.Coordinates, _ term.Attributes)
 
 func TestPlanLockdownRunnerUnlockedForwards(t *testing.T) {
 	inner := &countingInner{}
-	r := newPlanLockdownRunner(inner, nil)
+	r := newPlanLockdownRunner(inner)
 	r.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
 	assert.Equal(t, int32(1), inner.handles.Load())
 }
 
-func TestIDEWithPlanSourceLocksReturnedRoot(t *testing.T) {
+// WithPlanSource requires a complete config: a PlanSourceConfig
+// without a real Source and SignIn is a programmer error, not a
+// silently-nopped default. Callers wanting no gating omit the option.
+func TestWithPlanSourceRequiresSourceAndSignIn(t *testing.T) {
+	assert.PanicsWithValue(t, "ide.WithPlanSource: nil Source", func() {
+		WithPlanSource(PlanSourceConfig{SignIn: NopSignIn})
+	})
+	assert.PanicsWithValue(t, "ide.WithPlanSource: nil SignIn", func() {
+		WithPlanSource(PlanSourceConfig{
+			Source: staticPlanSource{dec: ideplan.Decision{Status: ideplan.StatusActive}},
+		})
+	})
+}
+
+// lockWith locks the runner and installs prompt, mirroring how the
+// IDE's planLocker (and the sign-in flow) drive overlay content: the
+// runner no longer builds prompts, callers set them per phase.
+func lockWith(r *planLockdownRunner, prompt tui.Handler) {
+	r.SetLocked(true)
+	r.setPrompt(prompt)
+}
+
+func defaultLockdownPrompt() tui.Handler {
+	return newPlanLockdownPrompt(
+		planLockdownPromptDeps{checkoutURL: ""}, idelockdown.LockExpired)
+}
+
+// TestIDEWithPlanSourceExpiredAloneDoesNotLock proves the deliberate
+// behavior change of the usage-based paywall: StatusExpired no longer
+// locks the IDE at startup. Enforcement arrives only once the usage
+// history satisfies the lockdown policy.
+func TestIDEWithPlanSourceExpiredAloneDoesNotLock(t *testing.T) {
 	configFile, _ := makeTestFiles(t)
 	dataDir := t.TempDir()
 	i, err := New(t.TempDir(), configFile.Name(), dataDir,
@@ -139,6 +182,7 @@ func TestIDEWithPlanSourceLocksReturnedRoot(t *testing.T) {
 		WithLocker(new(sync.Mutex)),
 		WithPlanSource(PlanSourceConfig{
 			Source: staticPlanSource{dec: ideplan.Decision{Status: ideplan.StatusExpired}},
+			SignIn: NopSignIn,
 		}),
 	)
 	require.NoError(t, err)
@@ -151,7 +195,40 @@ func TestIDEWithPlanSourceLocksReturnedRoot(t *testing.T) {
 	i.TickPlan(context.Background())
 
 	assert.Same(t, runner, i.planLockdown)
-	assert.True(t, runner.Locked())
+	assert.False(t, runner.Locked(),
+		"expired without qualifying usage history must not lock")
+}
+
+// TestIDEWithPlanSourceLocksAfterQualifyingUsage seeds six
+// consecutive qualifying weeks of usage days, so the lockdown policy
+// fires when the monitor reports StatusExpired.
+func TestIDEWithPlanSourceLocksAfterQualifyingUsage(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+	storage := newTestStorage(t, dataDir)
+	seedLockdownUsage(t, storage)
+	i, err := New(t.TempDir(), configFile.Name(), dataDir, storage,
+		WithLocker(new(sync.Mutex)),
+		WithPlanSource(PlanSourceConfig{
+			Source: staticPlanSource{dec: ideplan.Decision{Status: ideplan.StatusExpired}},
+			SignIn: NopSignIn,
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, i.Close()) })
+
+	root := i.Ready()
+	runner, ok := root.(*planLockdownRunner)
+	require.True(t, ok)
+
+	assert.Same(t, runner, i.planLockdown)
+	// The usage planner loads its history asynchronously, so poll
+	// TickPlan until the lockdown policy has the data to fire.
+	require.Eventually(t, func() bool {
+		i.TickPlan(context.Background())
+		return runner.Locked()
+	}, 10*time.Second, 10*time.Millisecond,
+		"six qualifying weeks of usage while expired must lock")
 	_, handled := root.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 	assert.True(t, handled)
 }
@@ -159,7 +236,9 @@ func TestIDEWithPlanSourceLocksReturnedRoot(t *testing.T) {
 // TestIDELockdownE2ERendersOverlayAndSwallowsInput is the black-box
 // e2e for the paid-plan lockdown feature: it builds a full IDE via
 // the public ide.New constructor with a plan source that returns
-// StatusExpired, drives it through handlertest.RunHandlerSequence
+// StatusExpired and a seeded qualifying usage history (six
+// consecutive qualifying weeks), drives it through
+// handlertest.RunHandlerSequence
 // the same way tui.Run would, and asserts that
 //
 //  1. the rendered frame contains the lockdown copy users see,
@@ -175,28 +254,38 @@ func TestIDELockdownE2ERendersOverlayAndSwallowsInput(t *testing.T) {
 	configFile, _ := makeTestFiles(t)
 	dataDir := t.TempDir()
 	mu := new(sync.Mutex)
-	i, err := New(t.TempDir(), configFile.Name(), dataDir,
-		newTestStorage(t, dataDir),
+	storage := newTestStorage(t, dataDir)
+	seedLockdownUsage(t, storage)
+	i, err := New(t.TempDir(), configFile.Name(), dataDir, storage,
 		WithLocker(mu),
 		WithPlanSource(PlanSourceConfig{
 			Source: staticPlanSource{dec: ideplan.Decision{Status: ideplan.StatusExpired}},
+			SignIn: NopSignIn,
 		}),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, i.Close()) })
 
 	root := i.Ready()
-	i.TickPlan(context.Background())
+	runner, ok := root.(*planLockdownRunner)
+	require.True(t, ok)
+	// The usage planner loads its history asynchronously, so poll
+	// TickPlan until the lockdown policy has the data to fire.
+	require.Eventually(t, func() bool {
+		i.TickPlan(context.Background())
+		return runner.Locked()
+	}, 10*time.Second, 10*time.Millisecond,
+		"seeded usage history while expired must lock")
 
 	wrapped := &lockedHandler{Handler: root, mu: mu}
 	wrapped.Resize(80, 24)
 	frame := handlertest.DrawHandler(wrapped, 80, 24)
-	assert.Contains(t, frame, "subscription is not",
-		"locked IDE must render the lockdown copy")
+	assert.Contains(t, frame, "subscription has lapsed",
+		"locked IDE must render the expired lockdown copy")
 	assert.Contains(t, frame, "Upgrade to Pro",
 		"locked IDE must render the Upgrade button")
-	assert.Contains(t, frame, "Sign in",
-		"locked IDE must render the Sign in button")
+	assert.Contains(t, frame, "Re-sign in",
+		"locked IDE must render the Re-sign in button")
 
 	_, handled := root.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
 	assert.True(t, handled,
@@ -204,15 +293,79 @@ func TestIDELockdownE2ERendersOverlayAndSwallowsInput(t *testing.T) {
 			"to the inner workspace")
 }
 
-func TestPlanLockdownRunnerLockedRoutesToPrompt(t *testing.T) {
-	inner := &countingInner{}
-	makePrompt := func() tui.Handler {
-		return newPlanLockdownPrompt(planLockdownPromptDeps{
-			checkoutURL: "",
+// TestIDELockdownE2EReasonAwareCopy proves the full wiring carries the
+// lock reason from the plan source through the planner and planLocker
+// into the overlay prompt: a never-subscribed account and a
+// signed-out session render distinct copy and button sets even though
+// enforcement (seeded qualifying usage) is identical.
+func TestIDELockdownE2EReasonAwareCopy(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		dec          ideplan.Decision
+		wantCopy     string
+		wantButton   string
+		absentButton string
+	}{
+		{
+			name:       "never subscribed",
+			dec:        ideplan.Decision{Status: ideplan.StatusNeverSubscribed},
+			wantCopy:   "requires a Pro subscription",
+			wantButton: "Upgrade to Pro",
+		},
+		{
+			name: "signed out",
+			dec: ideplan.Decision{
+				Status: ideplan.StatusExpired, SignedIn: ideplan.SignedOut,
+			},
+			wantCopy:     "signed out",
+			wantButton:   "Sign in",
+			absentButton: "Upgrade to Pro",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, _ := makeTestFiles(t)
+			dataDir := t.TempDir()
+			mu := new(sync.Mutex)
+			storage := newTestStorage(t, dataDir)
+			seedLockdownUsage(t, storage)
+			i, err := New(t.TempDir(), configFile.Name(), dataDir, storage,
+				WithLocker(mu),
+				WithPlanSource(PlanSourceConfig{
+					Source: staticPlanSource{dec: tc.dec},
+					SignIn: NopSignIn,
+				}),
+			)
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, i.Close()) })
+
+			root := i.Ready()
+			runner, ok := root.(*planLockdownRunner)
+			require.True(t, ok)
+			require.Eventually(t, func() bool {
+				i.TickPlan(context.Background())
+				return runner.Locked()
+			}, 10*time.Second, 10*time.Millisecond,
+				"seeded usage while gated must lock")
+
+			wrapped := &lockedHandler{Handler: root, mu: mu}
+			wrapped.Resize(80, 24)
+			frame := handlertest.DrawHandler(wrapped, 80, 24)
+			assert.Contains(t, frame, tc.wantCopy,
+				"locked IDE must render the reason-specific copy")
+			assert.Contains(t, frame, tc.wantButton,
+				"locked IDE must render the reason-specific button")
+			if tc.absentButton != "" {
+				assert.NotContains(t, frame, tc.absentButton,
+					"a sign-in problem must not offer Upgrade")
+			}
 		})
 	}
-	r := newPlanLockdownRunner(inner, makePrompt)
-	r.SetLocked(true)
+}
+
+func TestPlanLockdownRunnerLockedRoutesToPrompt(t *testing.T) {
+	inner := &countingInner{}
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, defaultLockdownPrompt())
 	defer r.SetLocked(false)
 
 	r.Handle(term.Event{Type: term.EventKey, Ch: 'a'})
@@ -221,16 +374,34 @@ func TestPlanLockdownRunnerLockedRoutesToPrompt(t *testing.T) {
 
 func TestPlanLockdownRunnerSetLockedFalseTearsDown(t *testing.T) {
 	inner := &countingInner{}
-	makePrompt := func() tui.Handler {
-		return newPlanLockdownPrompt(planLockdownPromptDeps{
-			checkoutURL: "",
-		})
-	}
-	r := newPlanLockdownRunner(inner, makePrompt)
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, defaultLockdownPrompt())
 	r.SetLocked(false)
 	r.Handle(term.Event{Type: term.EventKey, Ch: 'b'})
 	assert.Equal(t, int32(1), inner.handles.Load())
+}
+
+// setPrompt sets what is drawn on the overlay; it is a no-op while
+// unlocked and resizes the prompt to the overlay box while locked.
+func TestPlanLockdownRunnerSetPrompt(t *testing.T) {
+	inner := &countingInner{}
+	r := newPlanLockdownRunner(inner)
+	r.Resize(80, 24)
+
+	unlocked := &recordingPrompt{}
+	r.setPrompt(unlocked)
+	assert.Zero(t, unlocked.resizedW, "unlocked setPrompt must be a no-op")
+
+	r.SetLocked(true)
+	defer r.SetLocked(false)
+
+	prompt := &recordingPrompt{}
+	r.setPrompt(prompt)
+	assert.Positive(t, prompt.resizedW,
+		"locked setPrompt must resize the prompt to the overlay box")
+	w := newRecordingWriter(80, 24)
+	r.Draw(w)
+	assert.True(t, prompt.drawn, "draws must route to the set prompt")
 }
 
 // While locked, the runner must claim every event it receives so that
@@ -238,13 +409,8 @@ func TestPlanLockdownRunnerSetLockedFalseTearsDown(t *testing.T) {
 // fall through to the inner IDE.
 func TestPlanLockdownRunnerLockedSwallowsUnhandled(t *testing.T) {
 	inner := &countingInner{}
-	makePrompt := func() tui.Handler {
-		return newPlanLockdownPrompt(planLockdownPromptDeps{
-			checkoutURL: "",
-		})
-	}
-	r := newPlanLockdownRunner(inner, makePrompt)
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, defaultLockdownPrompt())
 	defer r.SetLocked(false)
 
 	_, handled := r.Handle(term.Event{
@@ -261,15 +427,10 @@ func TestPlanLockdownRunnerLockedSwallowsUnhandled(t *testing.T) {
 // onActive, not by a prompt exit.
 func TestPlanLockdownRunnerLockedSwallowsPromptExit(t *testing.T) {
 	inner := &countingInner{}
-	makePrompt := func() tui.Handler {
-		return newPlanLockdownPrompt(planLockdownPromptDeps{
-			checkoutURL: "",
-		})
-	}
-	r := newPlanLockdownRunner(inner, makePrompt)
-	r.SetLocked(true)
-	defer r.SetLocked(false)
+	r := newPlanLockdownRunner(inner)
 	r.Resize(80, 24)
+	lockWith(r, defaultLockdownPrompt())
+	defer r.SetLocked(false)
 
 	exit, handled := r.Handle(term.Event{Type: term.EventKey, Ch: 'o'})
 	assert.True(t, handled, "locked runner must claim every event")
@@ -288,21 +449,16 @@ func TestPlanLockdownRunnerLockedSwallowsPromptExit(t *testing.T) {
 // inner handler.
 func TestPlanLockdownRunnerLockedSequence(t *testing.T) {
 	inner := &countingInner{}
-	makePrompt := func() tui.Handler {
-		return newPlanLockdownPrompt(planLockdownPromptDeps{
-			checkoutURL: "",
-		})
-	}
-	r := newPlanLockdownRunner(inner, makePrompt)
-	r.SetLocked(true)
-	defer r.SetLocked(false)
+	r := newPlanLockdownRunner(inner)
 	r.Resize(80, 24)
+	lockWith(r, defaultLockdownPrompt())
+	defer r.SetLocked(false)
 
 	// Draw the lockdown overlay and assert the lockdown copy
 	// appears. We do not match the entire frame because the
 	// overlay padding depends on Prompt's internal layout.
 	frame := handlertest.DrawHandler(r, 80, 24)
-	assert.Contains(t, frame, "subscription is not")
+	assert.Contains(t, frame, "subscription has lapsed")
 	assert.Contains(t, frame, "Upgrade to Pro")
 
 	// Pressing the bound key 'u' must not reach the inner handler.
@@ -343,7 +499,7 @@ func (r *recordingNotifier) UpdateNotificationProgress(string, string, int64, in
 }
 
 // TestPlanLockdownReSignInInvokesCallback proves that pressing the
-// Sign in button fires the onReSignIn callback. The callback owns
+// Re-sign in button fires the onReSignIn callback. The callback owns
 // the purge + re-login + monitor-tick sequence; the prompt itself
 // just routes the click.
 func TestPlanLockdownReSignInInvokesCallback(t *testing.T) {
@@ -353,7 +509,7 @@ func TestPlanLockdownReSignInInvokesCallback(t *testing.T) {
 		onReSignIn:    func() { reSignCalled.Add(1) },
 		notifications: &recordingNotifier{},
 	}
-	p := newPlanLockdownPrompt(deps)
+	p := newPlanLockdownPrompt(deps, idelockdown.LockExpired)
 	p.Resize(80, 24)
 	p.Handle(term.Event{Type: term.EventKey, Ch: 's'})
 
@@ -365,22 +521,83 @@ func TestPlanLockdownReSignInInvokesCallback(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	assert.Equal(t, int32(1), reSignCalled.Load(),
-		"Sign in button must invoke the onReSignIn callback")
+		"Re-sign in button must invoke the onReSignIn callback")
 }
 
 // TestPlanLockdownPromptRendersUpgradeAndReSignin documents the
-// final button copy so a future rename trips the test.
+// expired-reason button copy so a future rename trips the test.
 func TestPlanLockdownPromptRendersUpgradeAndReSignin(t *testing.T) {
 	deps := planLockdownPromptDeps{
 		checkoutURL:   "",
 		onReSignIn:    func() {},
 		notifications: &recordingNotifier{},
 	}
-	p := newPlanLockdownPrompt(deps)
+	p := newPlanLockdownPrompt(deps, idelockdown.LockExpired)
 	p.Resize(80, 24)
 	frame := handlertest.DrawHandler(p, 80, 24)
 	assert.Contains(t, frame, "Upgrade to Pro")
-	assert.Contains(t, frame, "Sign in")
+	assert.Contains(t, frame, "Re-sign in")
+}
+
+// TestPlanLockdownPromptCopyPerReason pins the reason-aware button set
+// and copy: an auth problem offers only sign-in, a plan problem
+// offers Upgrade alongside a (re-)sign-in escape hatch, and the verb
+// distinguishes a signed-out user ("Sign in") from an already
+// authenticated one ("Re-sign in").
+func TestPlanLockdownPromptCopyPerReason(t *testing.T) {
+	deps := planLockdownPromptDeps{
+		checkoutURL:   "",
+		onReSignIn:    func() {},
+		notifications: &recordingNotifier{},
+	}
+	for _, tc := range []struct {
+		name         string
+		reason       idelockdown.LockReason
+		wantCopy     string
+		wantButtons  []string
+		absentButton string
+	}{
+		{
+			name:         "signed out",
+			reason:       idelockdown.LockSignedOut,
+			wantCopy:     "signed out",
+			wantButtons:  []string{"Sign in"},
+			absentButton: "Upgrade to Pro",
+		},
+		{
+			name:         "parse error",
+			reason:       idelockdown.LockParseError,
+			wantCopy:     "verify your session",
+			wantButtons:  []string{"Sign in"},
+			absentButton: "Upgrade to Pro",
+		},
+		{
+			name:        "never subscribed",
+			reason:      idelockdown.LockNeverSubscribed,
+			wantCopy:    "requires a Pro subscription",
+			wantButtons: []string{"Upgrade to Pro", "Sign in"},
+		},
+		{
+			name:        "expired",
+			reason:      idelockdown.LockExpired,
+			wantCopy:    "subscription has lapsed",
+			wantButtons: []string{"Upgrade to Pro", "Re-sign in"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newPlanLockdownPrompt(deps, tc.reason)
+			p.Resize(80, 24)
+			frame := handlertest.DrawHandler(p, 80, 24)
+			assert.Contains(t, frame, tc.wantCopy, "copy")
+			for _, b := range tc.wantButtons {
+				assert.Contains(t, frame, b, "button")
+			}
+			if tc.absentButton != "" {
+				assert.NotContains(t, frame, tc.absentButton,
+					"auth-only prompt must not offer Upgrade")
+			}
+		})
+	}
 }
 
 // TestPlanLockdownRunnerResizeClampsPromptBox proves the lockdown
@@ -390,8 +607,8 @@ func TestPlanLockdownPromptRendersUpgradeAndReSignin(t *testing.T) {
 func TestPlanLockdownRunnerResizeClampsPromptBox(t *testing.T) {
 	inner := &countingInner{}
 	prompt := &recordingPrompt{}
-	r := newPlanLockdownRunner(inner, func() tui.Handler { return prompt })
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, prompt)
 	defer r.SetLocked(false)
 
 	r.Resize(200, 60)
@@ -408,8 +625,8 @@ func TestPlanLockdownRunnerResizeClampsPromptBox(t *testing.T) {
 func TestPlanLockdownRunnerResizeFitsTinyWindow(t *testing.T) {
 	inner := &countingInner{}
 	prompt := &recordingPrompt{}
-	r := newPlanLockdownRunner(inner, func() tui.Handler { return prompt })
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, prompt)
 	defer r.SetLocked(false)
 
 	r.Resize(40, 10)
@@ -425,8 +642,8 @@ func TestPlanLockdownRunnerResizeFitsTinyWindow(t *testing.T) {
 func TestPlanLockdownRunnerDrawCentersPrompt(t *testing.T) {
 	inner := &coloredInner{fg: term.NewRGBColor(255, 0, 0)}
 	prompt := &recordingPrompt{}
-	r := newPlanLockdownRunner(inner, func() tui.Handler { return prompt })
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, prompt)
 	defer r.SetLocked(false)
 
 	const W, H = 200, 60
@@ -449,8 +666,8 @@ func TestPlanLockdownRunnerDrawCentersPrompt(t *testing.T) {
 func TestPlanLockdownRunnerDrawDesaturatesInner(t *testing.T) {
 	red := term.NewRGBColor(255, 0, 0)
 	inner := &coloredInner{fg: red}
-	r := newPlanLockdownRunner(inner, func() tui.Handler { return &recordingPrompt{} })
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, &recordingPrompt{})
 	defer r.SetLocked(false)
 
 	const W, H = 200, 60
@@ -478,8 +695,8 @@ func TestPlanLockdownRunnerHandleTranslatesMouse(t *testing.T) {
 	inner := &countingInner{}
 	var got term.Event
 	prompt := &mouseRecordingPrompt{out: &got}
-	r := newPlanLockdownRunner(inner, func() tui.Handler { return prompt })
-	r.SetLocked(true)
+	r := newPlanLockdownRunner(inner)
+	lockWith(r, prompt)
 	defer r.SetLocked(false)
 
 	const W, H = 200, 60

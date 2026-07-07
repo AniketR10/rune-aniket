@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
+	"unstable.build/go-tui/ide/idelockdown"
 )
 
 // Lockdown prompt size caps. Prevent the overlay from consuming the
@@ -52,11 +53,10 @@ const (
 type planLockdownRunner struct {
 	tui.Handler
 
-	mu            sync.Mutex
-	locked        atomic.Bool
-	prompt        tui.Handler
-	makePrompt    func() tui.Handler
-	width, height int
+	mu               sync.Mutex
+	locked           atomic.Bool
+	prompt           tui.Handler
+	width, height    int
 	promptW, promptH int
 	offsetX, offsetY int
 	// defaultAttr resolves term.ColorDefault for the gray-fade
@@ -64,8 +64,8 @@ type planLockdownRunner struct {
 	defaultAttr func() term.Attributes
 }
 
-func newPlanLockdownRunner(inner tui.Handler, makePrompt func() tui.Handler) *planLockdownRunner {
-	return &planLockdownRunner{Handler: inner, makePrompt: makePrompt}
+func newPlanLockdownRunner(inner tui.Handler) *planLockdownRunner {
+	return &planLockdownRunner{Handler: inner}
 }
 
 // setDefaultAttr lets the overlay desaturation match the IDE's
@@ -77,38 +77,38 @@ func (r *planLockdownRunner) setDefaultAttr(get func() term.Attributes) {
 	r.mu.Unlock()
 }
 
-// SetLocked toggles the lockdown overlay. The prompt is allocated
-// lazily so no UI resources are held when the IDE is not locked.
+// SetLocked toggles the gray-fade overlay and input swallowing.
+// Callers own what is shown on top via setPrompt; unlocking clears
+// the prompt so no UI resources are held while unlocked.
 func (r *planLockdownRunner) SetLocked(locked bool) {
 	if r.locked.Load() == locked {
 		return
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if locked {
-		if r.prompt == nil && r.makePrompt != nil {
-			r.prompt = r.makePrompt()
-			r.recomputePromptBoxLocked()
-			if r.promptW > 0 && r.promptH > 0 {
-				r.prompt.Resize(r.promptW, r.promptH)
-			}
-		}
-	} else {
+	if !locked {
 		r.prompt = nil
 	}
 	r.locked.Store(locked)
-}
-
-// setPromptFactory exists so installPlanSource can swap in a closure
-// that captures the runner's own SetLocked(false) without a
-// chicken-and-egg cycle at construction time.
-func (r *planLockdownRunner) setPromptFactory(make func() tui.Handler) {
-	r.mu.Lock()
-	r.makePrompt = make
 	r.mu.Unlock()
 }
 
 func (r *planLockdownRunner) Locked() bool { return r.locked.Load() }
+
+// setPrompt sets the handler drawn on top of the overlay. Callers
+// decide what to show for the current phase (default lockdown prompt,
+// sign-in wait prompt, etc.). No-op when unlocked.
+func (r *planLockdownRunner) setPrompt(p tui.Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.locked.Load() {
+		return
+	}
+	r.prompt = p
+	r.recomputePromptBoxLocked()
+	if p != nil && r.promptW > 0 && r.promptH > 0 {
+		p.Resize(r.promptW, r.promptH)
+	}
+}
 
 func (r *planLockdownRunner) Resize(width, height int) {
 	r.mu.Lock()
@@ -294,38 +294,31 @@ type planLockdownPromptDeps struct {
 	backgroundBg  term.Attributes
 }
 
-func newPlanLockdownPrompt(deps planLockdownPromptDeps) tui.Handler {
-	const message = "**You are a Pro but your subscription is not.**\n\n" +
-		"Upgrade to Pro or sign in if you already have an account."
-	const (
-		optUpgrade = " Upgrade to Pro "
-		optReSign  = " Sign in "
-	)
-	// Frame omitted from PromptConfig on purpose: the SDK wraps
-	// each option in its own NewFrame when Frame is set, producing
-	// 3-line buttons. Mirror the workspace prompts by leaving Frame
-	// empty and wrapping the whole prompt in handler.NewFrame below.
+type lockdownPromptSpec struct {
+	message  string
+	options  []string
+	bindings []term.KeyComb
+	onSelect func(idx int, opt string)
+}
+
+// newLockdownPrompt builds a framed prompt styled for the lockdown
+// overlay. Frame is omitted from PromptConfig on purpose: the SDK
+// wraps each option in its own NewFrame when Frame is set, producing
+// 3-line buttons. Mirror the workspace prompts by leaving Frame empty
+// and wrapping the whole prompt in handler.NewFrame.
+func newLockdownPrompt(deps planLockdownPromptDeps, spec lockdownPromptSpec) tui.Handler {
 	cfg := handler.PromptConfig{
-		OptionBindings: []term.KeyComb{{Ch: 'u'}, {Ch: 's'}},
+		OptionBindings: spec.bindings,
 		PromptConfig: component.PromptConfig{
-			Message:              message,
-			Options:              []string{optUpgrade, optReSign},
+			Message:              spec.message,
+			Options:              spec.options,
 			BackgroundAttributes: deps.backgroundBg,
 			NewMessage:           newPromptMarkdownMessage,
 		},
 		OptionAttr:    deps.textAttr,
 		HighlightAttr: deps.highlightAttr,
 		PromptHandler: handler.FuncPromptHandler(
-			func(_ int, opt string) {
-				switch opt {
-				case optUpgrade:
-					openCheckoutURL(deps.checkoutURL)
-				case optReSign:
-					if deps.onReSignIn != nil {
-						go debug.CapturePanicReport(deps.onReSignIn)
-					}
-				}
-			},
+			spec.onSelect,
 			func() error { return nil },
 		),
 	}
@@ -336,6 +329,83 @@ func newPlanLockdownPrompt(deps planLockdownPromptDeps) tui.Handler {
 	}
 	frame.Attributes = term.Attributes{Bg: deps.backgroundBg.Bg}
 	return frame
+}
+
+// Lockdown prompt button labels. The verb differs by reason: a
+// signed-out or unverifiable session says "Sign in", while an
+// already-authenticated lapsed/never-paid account says "Re-sign in".
+const (
+	optLockUpgrade  = " Upgrade to Pro "
+	optLockSignIn   = " Sign in "
+	optLockReSignIn = " Re-sign in "
+)
+
+// newPlanLockdownPrompt builds the default lockdown overlay prompt for
+// the given lock reason. The button set and copy match the user's
+// actual situation: an auth problem offers only sign-in, while a
+// plan problem offers Upgrade alongside a (re-)sign-in escape hatch.
+func newPlanLockdownPrompt(
+	deps planLockdownPromptDeps, reason idelockdown.LockReason,
+) tui.Handler {
+	message, options, bindings := planLockdownPromptSpec(reason)
+	return newLockdownPrompt(deps, lockdownPromptSpec{
+		message:  message,
+		options:  options,
+		bindings: bindings,
+		onSelect: func(_ int, opt string) {
+			switch opt {
+			case optLockUpgrade:
+				openCheckoutURL(deps.checkoutURL)
+			case optLockSignIn, optLockReSignIn:
+				if deps.onReSignIn != nil {
+					go debug.CapturePanicReport(deps.onReSignIn)
+				}
+			}
+		},
+	})
+}
+
+// planLockdownPromptSpec returns the message, button labels, and key
+// bindings for the given lock reason. Copy avoids em dashes per house
+// style.
+func planLockdownPromptSpec(reason idelockdown.LockReason) (
+	message string, options []string, bindings []term.KeyComb,
+) {
+	switch reason {
+	case idelockdown.LockSignedOut:
+		return "**You're signed out.** Sign in to keep using Rune.",
+			[]string{optLockSignIn}, []term.KeyComb{{Ch: 's'}}
+	case idelockdown.LockParseError:
+		return "**We couldn't verify your session.** " +
+				"Please sign in again to continue.",
+			[]string{optLockSignIn}, []term.KeyComb{{Ch: 's'}}
+	case idelockdown.LockNeverSubscribed:
+		return "**Rune requires a Pro subscription.** " +
+				"Upgrade to Pro, or sign in with a different account.",
+			[]string{optLockUpgrade, optLockSignIn},
+			[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}}
+	default:
+		return "**Your Pro subscription has lapsed.** " +
+				"Upgrade to Pro, or re-sign in if you've already renewed.",
+			[]string{optLockUpgrade, optLockReSignIn},
+			[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}}
+	}
+}
+
+// planLocker adapts the lockdown runner to idelockdown.Locker so the
+// IDE owns overlay content: locking installs the reason-appropriate
+// lockdown prompt, unlocking clears it. Transient prompts (sign-in)
+// are swapped in via planLockdownRunner.setPrompt and restored to the
+// default for the last reason here and in the sign-in flow.
+type planLocker struct{ ide *IDE }
+
+func (l planLocker) SetLocked(locked bool, reason idelockdown.LockReason) {
+	l.ide.planLockdown.SetLocked(locked)
+	if !locked {
+		return
+	}
+	l.ide.planLockReason.Store(int32(reason))
+	l.ide.planLockdown.setPrompt(newPlanLockdownPrompt(l.ide.planPromptDeps, reason))
 }
 
 func newPromptMarkdownMessage(str string) component.Floating {

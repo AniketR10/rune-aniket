@@ -52,6 +52,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide/ideauthorizer"
@@ -417,6 +418,47 @@ func TestPkgInstallStartsExtensionWithPackageEnv(t *testing.T) {
 			"inherits the package environment")
 }
 
+// newDeferredScheduler queues ScheduleNextTick callbacks during IDE
+// construction and only starts running them — FIFO, one at a time,
+// under mu — once start() is called. This mirrors production, where
+// scheduled callbacks run on the event loop that starts only after
+// ide.New has returned, so IDE.init's unsynchronized wiring can never
+// race the async workspace-install callbacks.
+func newDeferredScheduler(mu sync.Locker) (sched func(func()) bool, start func()) {
+	var qmu sync.Mutex
+	cond := sync.NewCond(&qmu)
+	var queue []func()
+	started := false
+	go debug.CapturePanicReport(func() {
+		for {
+			qmu.Lock()
+			for !started || len(queue) == 0 {
+				cond.Wait()
+			}
+			fn := queue[0]
+			queue = queue[1:]
+			qmu.Unlock()
+			mu.Lock()
+			fn()
+			mu.Unlock()
+		}
+	})
+	sched = func(fn func()) bool {
+		qmu.Lock()
+		queue = append(queue, fn)
+		cond.Broadcast()
+		qmu.Unlock()
+		return true
+	}
+	start = func() {
+		qmu.Lock()
+		started = true
+		cond.Broadcast()
+		qmu.Unlock()
+	}
+	return sched, start
+}
+
 // TestPkgInstallRegistersTutorialLive is the black-box regression for the
 // install-time tutorial registration contract, mirroring
 // TestPkgInstallStartsExtensionWithPackageEnv for the extensions path. It
@@ -451,22 +493,23 @@ func TestPkgInstallRegistersTutorialLive(t *testing.T) {
 	rm.SetTarball(pkgID, makeTutorialPkgTarball(t, map[string]string{tutName: tutPath}))
 
 	mu := new(sync.Mutex)
-	i, err := New(dir, configPath, dir, newTestStorage(t, dir),
+	// dataDir/storage live outside the workspace (like production's
+	// ~/.rune) so background storage writes don't feed the
+	// workspace FS watcher while the install is in flight.
+	dataDir := t.TempDir()
+	sched, startSched := newDeferredScheduler(mu)
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
 		WithReleaseManager(rm),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(mu),
-		// A synchronous scheduler runs onTutorialsInstalled's registration
-		// and prompt closure inline on the install goroutine's scheduleFn
-		// call, so the test observes the live registration deterministically.
-		WithScheduleNextTick(func(fn func()) bool {
-			fn()
-			return true
-		}),
+		WithScheduleNextTick(sched),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = i.Close() })
 	_ = i.Ready()
+	startSched()
+	i.WaitWorkspaces()
 
 	uri, err := workspaceapi.CurrentUserHostURI(wsFile)
 	require.NoError(t, err)
@@ -532,19 +575,22 @@ func TestPkgInstallMultipleTutorialsPromptsOnce(t *testing.T) {
 	rm.SetTarball(pkgID, makeTutorialPkgTarball(t, tutorials))
 
 	mu := new(sync.Mutex)
-	i, err := New(dir, configPath, dir, newTestStorage(t, dir),
+	// See TestPkgInstallRegistersTutorialLive: keep dataDir/storage
+	// outside the watched workspace.
+	dataDir := t.TempDir()
+	sched, startSched := newDeferredScheduler(mu)
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
 		WithReleaseManager(rm),
 		WithPublishEvent(nopPublishEvent),
 		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
 		WithLocker(mu),
-		WithScheduleNextTick(func(fn func()) bool {
-			fn()
-			return true
-		}),
+		WithScheduleNextTick(sched),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = i.Close() })
 	_ = i.Ready()
+	startSched()
+	i.WaitWorkspaces()
 
 	uri, err := workspaceapi.CurrentUserHostURI(wsFile)
 	require.NoError(t, err)

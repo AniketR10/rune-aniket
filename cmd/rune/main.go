@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -52,7 +53,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"golang.org/x/oauth2"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"unstable.build/go-tui/cmd/rune/crashreport"
@@ -563,15 +563,12 @@ func runTUI(
 	defer client.Close()
 
 	checkoutURL, _ := mustResolveBootstrapURLs(*flagWebsiteAddress)
-	var ideRef *ide.IDE
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		ide.WithPlanSource(ide.PlanSourceConfig{
 			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
 			CheckoutURL: checkoutURL,
-			OnReSignIn: func() {
-				lockdownReSignIn(client, ideRef, scheduleNextTick)
-			},
+			SignIn:      planSignIn(client),
 		}),
 	)
 
@@ -581,7 +578,6 @@ func runTUI(
 		fmt.Printf("%s", err)
 		return 1
 	}
-	ideRef = i
 
 	err = subscribeOtherCommands(i, client, *flagConfigPath)
 	if err != nil {
@@ -845,7 +841,11 @@ func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manage
 	apicfg.EnableTelemetry = true
 	apicfg.TelemetryPeriod = telemetryPeriod
 	client := apiclient.New(storage, apicfg, *flagDataPath)
-	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
+	// Release downloads are unauthenticated: the oauth transport
+	// fails client-side with auth.ErrNotAuthenticated when no token
+	// is cached, which would break package installs for logged-out
+	// users under the usage-based paywall.
+	httpClient := &http.Client{}
 	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
 	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
 	return client, releaseManager

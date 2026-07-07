@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -20,6 +20,7 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
 
 package ide
 
@@ -119,8 +120,17 @@ func WithPackageConfigMergeHook(
 
 // WithPlanSource installs an ideplan.Source on the IDE: the lockdown
 // overlay reacts to its decisions and the daily monitor uses it as
-// its evaluation source.
+// its evaluation source. Both Source and SignIn are required; a
+// config missing either is a programmer error. Callers that want no
+// gating must omit this option, which leaves the always-allowed
+// default in place.
 func WithPlanSource(cfg PlanSourceConfig) Option {
+	if cfg.Source == nil {
+		panic("ide.WithPlanSource: nil Source")
+	}
+	if cfg.SignIn == nil {
+		panic("ide.WithPlanSource: nil SignIn")
+	}
 	return func(opts *options) {
 		opts.planSource = cfg
 	}
@@ -507,7 +517,7 @@ func defaultOptions() options {
 		workspacesBarFrame: true,
 		workspacesIcon:     '1',
 		releaseManager:     docrelease.NewManager(document.NewInMemoryService()),
-		planSource:         PlanSourceConfig{Source: ideplan.NopSource{}},
+		planSource:         PlanSourceConfig{Source: ideplan.NopSource{}, SignIn: NopSignIn},
 	}
 }
 

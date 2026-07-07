@@ -21,29 +21,28 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package main
+package idelockdown
 
 import (
 	"context"
+	"time"
 
-	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/cmd/rune/ide/apiclient"
-	"unstable.build/go-tui/ide"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 )
 
-// planSignIn adapts the apiclient OAuth flow to the IDE's plan
-// sign-in hook. It purges the cached token so a stale paid session
-// cannot resurrect, then drives a fresh browser login; the IDE owns
-// the UX around the returned session (URL copy fallback, cancel,
-// plan re-evaluation).
-func planSignIn(client *apiclient.Client) func(context.Context) ide.SignInSession {
-	return func(ctx context.Context) ide.SignInSession {
-		if ts := client.CachedTokenSource(); ts != nil {
-			if err := ts.Purge(); err != nil {
-				log.WithError(err).Warn("plan sign-in: purge cached token")
-			}
-		}
-		session := client.Login(ctx)
-		return ide.SignInSession{URL: session.URL, Done: session.Done}
+// SeedQualifyingUsage writes a usage history that satisfies the
+// lockdown policy under the currently-compiled enforcement knobs: one
+// sample per usage bucket across enough windows to exceed lockdownRun,
+// so tests lock regardless of whether the knobs are production-scale
+// or compressed for manual testing. Intended for tests only.
+func SeedQualifyingUsage(ctx context.Context, storage storageapi.Service, now time.Time) error {
+	span := lockdownRun + qualifyWindow
+	end := bucketStart(now, usageBucket)
+	var samples []string
+	for t := end.Add(-span); !t.After(end); t = t.Add(usageBucket) {
+		samples = append(samples, t.UTC().Format(sampleLayout))
 	}
+	doc := usageDoc{Kind: usageDocKind, Version: 1, Usage: samples}
+	store := storageapi.WithPartition(storage, Partition)
+	return store.Create(ctx, usageDocID, &doc)
 }

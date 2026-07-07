@@ -292,6 +292,10 @@ tutorial(entry=run)
 	require.True(t, tut.WaitFinished(time.Second),
 		"tutorial did not finish after edit dispatch")
 
+	// The script's finish publishes an interrupt in production; the
+	// overlay is cleared when the event loop delivers that wakeup,
+	// not by the observer call itself.
+	_, _ = r.Handle(term.Event{Type: term.EventInterrupt})
 	assert.Nil(t, r.overlay,
 		"runner overlay should be cleared once basics flow completes")
 	_ = root
@@ -352,6 +356,10 @@ tutorial(entry=run)
 
 	require.True(t, tut.WaitFinished(time.Second),
 		"tutorial did not finish after observer fired with args")
+	// The script's finish publishes an interrupt in production; the
+	// overlay is cleared when the event loop delivers that wakeup,
+	// not by the observer call itself.
+	_, _ = r.Handle(term.Event{Type: term.EventInterrupt})
 	assert.Nil(t, r.overlay)
 }
 
