@@ -57,8 +57,12 @@ var DefaultDownloadsHost = "https://downloads.unstable.build"
 
 // DefaultWebsiteAddress is the public www-rune origin used by the
 // OAuth callback page to redirect users to /checkout after sign-in.
-// Overridable via `-ldflags -X` for staging builds.
-var DefaultWebsiteAddress = "https://rune.build"
+//
+// Defaults to the staging website. Production release builds override
+// it via `-ldflags -X` to point at the prod website (see
+// cmd/rune/Makefile PROD_LDFLAGS). Not a constant so the linker can
+// replace it; do not assign to it at runtime.
+var DefaultWebsiteAddress = "https://rune.unstable.build"
 
 // defaultReleaseCollection returns the Firestore collection name for
 // the current platform, e.g. "rune-release-darwin-arm64". The prefix

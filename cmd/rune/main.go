@@ -73,12 +73,6 @@ import (
 
 const doubleClickTimeout = 500 * time.Millisecond
 
-// defaultWebsiteAddress is the production base URL of the Rune
-// website. The upgrade prompt opens "<base>/checkout?source=rune" on
-// click; the website honors the source query parameter to stash a
-// "return to Rune" intent during the OAuth + Stripe round trip.
-const defaultWebsiteAddress = "https://rune.build"
-
 var (
 	apicfg = apiclient.DefaultConfig()
 	// Version is a combination of Tag and Commit, representing
@@ -120,7 +114,7 @@ var (
 		"Collection name for the release manager.")
 	flagZdotDir = flag.String("rune-zdotdir", "", "Initial ZDOTDIR directory when using default OS shell via $SHELL.")
 
-	flagWebsiteAddress = flag.String("rune-website-address", defaultWebsiteAddress,
+	flagWebsiteAddress = flag.String("rune-website-address", apiclient.DefaultWebsiteAddress,
 		"Base URL of the Rune website. Used to build the checkout URL "+
 			"opened by the upgrade prompt during bootstrap and lockdown.")
 )

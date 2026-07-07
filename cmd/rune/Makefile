@@ -65,7 +65,7 @@ OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package
 # Distribution / release rules below set RUNE_ENV=prod so user-facing builds
 # always target production. Local `make rune` keeps the dev defaults.
 RUNE_ENV ?= dev
-PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(PROD_DOWNLOAD_HOST)
+PROD_LDFLAGS=-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultDownloadsHost=$(PROD_DOWNLOAD_HOST) -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultWebsiteAddress=$(PROD_WEBSITE_ADDRESS)
 # Use `=` (recursive) so $(RUNE_ENV) is re-evaluated when RUNE_GOFLAGS is expanded
 # in a recipe — this lets target-specific overrides such as
 # `dist-darwin-arm64: RUNE_ENV := prod` flip the ldflags for transitive
@@ -80,6 +80,12 @@ STAGING_DOWNLOADS_BUCKET ?= gs://downloads.unstable.build
 
 PROD_DOWNLOAD_HOST       ?= https://downloads.rune.build
 STAGING_DOWNLOAD_HOST    ?= https://downloads.unstable.build
+
+# Public www-rune origin baked into the binary for the OAuth callback
+# redirect. Prod builds use the user-facing website; the default var in
+# apiclient.DefaultWebsiteAddress already points at the staging site.
+PROD_WEBSITE_ADDRESS     ?= https://rune.build
+STAGING_WEBSITE_ADDRESS  ?= https://rune.unstable.build
 
 # DIST_BUCKET / DIST_DOWNLOAD_HOST are set per-target by prod-dist-* /
 # staging-dist-* and threaded into dist.sh via DOWNLOADS_BUCKET and

@@ -140,7 +140,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	mkdir -p /out/rune.app/bin /out/rune.app/lib; \
 	PROD_LDFLAGS=""; \
 	if [ "$RUNE_ENV" = "prod" ]; then \
-		PROD_LDFLAGS="-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultDownloadsHost=https://downloads.rune.build"; \
+		PROD_LDFLAGS="-X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultHTTPEndpointAddress=https://api.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultGRPCEndpointAddress=rpc.rune.build:443 -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultDownloadsHost=https://downloads.rune.build -X unstable.build/go-tui/cmd/rune/ide/apiclient.DefaultWebsiteAddress=https://rune.build"; \
 	fi; \
 	CGO_LDFLAGS='-Wl,-rpath,$ORIGIN/../lib' \
 	GOOS=$TARGETOS \
