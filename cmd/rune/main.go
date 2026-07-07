@@ -71,7 +71,10 @@ import (
 	"unstable.build/go-tui/workspace/workspacessh"
 )
 
-const doubleClickTimeout = 500 * time.Millisecond
+const (
+	doubleClickTimeout = 500 * time.Millisecond
+	telemetryPeriod    = 1 * time.Hour
+)
 
 var (
 	apicfg = apiclient.DefaultConfig()
@@ -107,8 +110,6 @@ var (
 		"Rune GRPC API endpoint host/port pair")
 	flagGRPCInsecure = flag.Bool("rune-grpc-insecure", apicfg.InsecureTransport,
 		"If set to false, does not use GRPC over TLS or oauth2 credentials.")
-	flagTelemetryPeriod = flag.Duration("rune-telemetry-period", apicfg.TelemetryPeriod,
-		"How often to send aggregated usage data (requires --rune-enable-telemetry).")
 	flagReleaseCollection = flag.String("rune-release-collection",
 		apicfg.ReleaseCollection,
 		"Collection name for the release manager.")
@@ -281,9 +282,6 @@ func main() {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("workspace-server-log"); err != nil {
-		panic(err)
-	}
-	if err := flag.CommandLine.MarkHidden("rune-telemetry-period"); err != nil {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-release-collection"); err != nil {
@@ -590,6 +588,12 @@ func runTUI(
 		log.Errorf("subscribe to commands: %v", err)
 	}
 
+	if client.TelemetryEnabled() {
+		if err := i.SubscribeEvents(apiclient.TelemetryEvents(), client); err != nil {
+			log.Errorf("subscribe telemetry events: %v", err)
+		}
+	}
+
 	openFiles(i, filenames)
 
 	scheduleCrashReportCheck(i, client, *flagDataPath, scheduleNextTick)
@@ -836,9 +840,10 @@ func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manage
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
 	apicfg.InsecureTransport = *flagGRPCInsecure
-	apicfg.TelemetryPeriod = *flagTelemetryPeriod
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	apicfg.WebsiteAddress = *flagWebsiteAddress
+	apicfg.EnableTelemetry = true
+	apicfg.TelemetryPeriod = telemetryPeriod
 	client := apiclient.New(storage, apicfg, *flagDataPath)
 	httpClient := oauth2.NewClient(context.Background(), client.OAuthTokenSource())
 	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
@@ -858,10 +863,10 @@ func newBootstrapAPIClient(storage storageapi.Service, openBrowser func(*url.URL
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
 	apicfg.InsecureTransport = *flagGRPCInsecure
-	apicfg.TelemetryPeriod = *flagTelemetryPeriod
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	apicfg.WebsiteAddress = *flagWebsiteAddress
-	apicfg.EnableTelemetry = false
+	apicfg.EnableTelemetry = true
+	apicfg.TelemetryPeriod = telemetryPeriod
 	apicfg.OpenBrowser = openBrowser
 	return apiclient.New(storage, apicfg, *flagDataPath)
 }

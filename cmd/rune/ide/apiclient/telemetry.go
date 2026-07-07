@@ -42,6 +42,10 @@ import (
 
 const telemetryPath = "/telemetry"
 
+// flushTimeout bounds the final usage post performed on Close so that
+// shutting down Rune while offline is not delayed by a hanging request.
+const flushTimeout = 300 * time.Millisecond
+
 // TelemetryEvents returns the events that telemetry's text.EventHandler needs
 // to collects user statistics.
 func TelemetryEvents() []textapi.EventType {
@@ -168,14 +172,17 @@ func (t *telemetry) resetUsage(data telemetryUsagePayload) {
 }
 
 func (t *telemetry) postData(buf *bytes.Buffer, period time.Duration, data any) error {
+	ctx, cancel := context.WithTimeout(t.quitCtx, period)
+	defer cancel()
+	return t.postDataCtx(ctx, buf, data)
+}
+
+func (t *telemetry) postDataCtx(ctx context.Context, buf *bytes.Buffer, data any) error {
 	buf.Reset()
 	err := json.NewEncoder(buf).Encode(data)
 	if err != nil {
 		return fmt.Errorf("json encode: %v", err)
 	}
-
-	ctx, cancel := context.WithTimeout(t.quitCtx, period)
-	defer cancel()
 
 	r, err := http.NewRequestWithContext(ctx, "POST", t.url, buf)
 	if err != nil {
@@ -212,8 +219,16 @@ func (t *telemetry) Handle(ctx context.Context, ev textapi.Event) bool {
 }
 
 func (t *telemetry) Close() error {
+	t.flushFinalUsage()
 	t.cancelCtx()
 	return nil
+}
+
+func (t *telemetry) flushFinalUsage() {
+	data := t.getUsage()
+	ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
+	defer cancel()
+	_ = t.postDataCtx(ctx, new(bytes.Buffer), data)
 }
 
 type telemetryUsagePayload struct {
