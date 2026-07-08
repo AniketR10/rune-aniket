@@ -333,8 +333,15 @@ func TestHandleNonMouseEvent(t *testing.T) {
 // unhandled so the host can dispatch its bound command (e.g. <meta-n>
 // opening a new window) instead of being swallowed as a scroll.
 func TestHandleModifiedCharKeysFallThrough(t *testing.T) {
+	// Ctrl paging shortcuts (Ctrl-F/B/D/U/E/Y) are handled by the
+	// viewer itself, so they are excluded from the Ctrl fall-through
+	// set below and covered by TestCtrlPageScrolling instead.
+	ctrlPaging := map[rune]bool{'f': true, 'b': true, 'd': true, 'u': true, 'e': true, 'y': true}
 	for _, mod := range []term.Modifier{term.ModCtrl, term.ModAlt, term.ModMeta} {
-		for _, ch := range []rune{'q', 'n', 'N', 'j', 'k', 'g', 'G', 'b', 'f', 'd', 'u', '/'} {
+		for _, ch := range []rune{'q', 'n', 'N', 'j', 'k', 'g', 'G', 'b', 'f', 'd', 'u', 'e', 'y', '/'} {
+			if mod == term.ModCtrl && ctrlPaging[ch] {
+				continue
+			}
 			comp, err := markdown.New("Hello World")
 			require.NoError(t, err)
 			h := New(comp)
@@ -550,6 +557,255 @@ func TestKeyboardPageScrolling(t *testing.T) {
 
 		assert.Greater(t, offsetAfter, offsetBefore)
 	})
+}
+
+// TestCtrlPageScrolling verifies the vim-style Ctrl paging shortcuts:
+// Ctrl-F/Ctrl-B page down/up, Ctrl-D/Ctrl-U half-page down/up, and
+// Ctrl-E/Ctrl-Y scroll a single line down/up.
+// pagingContent is a document tall enough (many blank-line-separated
+// paragraphs) to scroll past several viewports at the small heights
+// used by the paging tests.
+const pagingContent = "L1\n\nL2\n\nL3\n\nL4\n\nL5\n\nL6\n\nL7\n\nL8\n\nL9\n\nL10\n\nL11\n\nL12"
+
+// startPos selects where the viewport is parked before a key is sent.
+type startPos int
+
+const (
+	startTop    startPos = iota // top of the document (offset 0)
+	startBottom                 // bottom of the document (offset == max)
+	startMiddle                 // roughly the middle of the document
+)
+
+// newPagingHandler builds a handler over content, resizes it, and parks
+// the viewport at the requested start position.
+func newPagingHandler(t *testing.T, content string, width, height int, pos startPos) *Handler {
+	t.Helper()
+	comp, err := markdown.New(content)
+	require.NoError(t, err)
+	h := New(comp)
+	h.Resize(width, height)
+	switch pos {
+	case startBottom:
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'G'})
+	case startMiddle:
+		target := h.MaxSeekOffset() / 2
+		for h.SeekOffset() < target {
+			if !h.SeekDown() {
+				break
+			}
+		}
+	}
+	return h
+}
+
+// TestCtrlPageScrolling verifies the vim-style Ctrl paging shortcuts:
+// Ctrl-F/Ctrl-B page down/up, Ctrl-D/Ctrl-U half-page down/up, and
+// Ctrl-E/Ctrl-Y scroll a single line down/up. The table exercises each
+// key from the top, middle, and bottom of the document so that both the
+// active-scroll and the clamped-at-boundary paths are covered.
+func TestCtrlPageScrolling(t *testing.T) {
+	const width, height = 5, 3
+
+	// dir reports the expected sign of (afterOffset - beforeOffset):
+	// +1 down, -1 up.
+	tests := []struct {
+		name string
+		ch   rune
+		dir  int
+		// maxStep bounds how far a single keypress may move when it is
+		// not clamped by a boundary. 0 means "unbounded (full page)".
+		maxStep int
+	}{
+		{name: "ctrl-f page down", ch: 'f', dir: 1, maxStep: height},
+		{name: "ctrl-b page up", ch: 'b', dir: -1, maxStep: height},
+		{name: "ctrl-d half page down", ch: 'd', dir: 1, maxStep: max(1, height/2)},
+		{name: "ctrl-u half page up", ch: 'u', dir: -1, maxStep: max(1, height/2)},
+		{name: "ctrl-e line down", ch: 'e', dir: 1, maxStep: 1},
+		{name: "ctrl-y line up", ch: 'y', dir: -1, maxStep: 1},
+	}
+
+	for _, tt := range tests {
+		for _, start := range []struct {
+			name string
+			pos  startPos
+			// clamped is true when a keypress in tt.dir cannot move from
+			// this start position (already at the relevant boundary).
+			clamped bool
+		}{
+			{name: "from top", pos: startTop, clamped: tt.dir < 0},
+			{name: "from middle", pos: startMiddle, clamped: false},
+			{name: "from bottom", pos: startBottom, clamped: tt.dir > 0},
+		} {
+			t.Run(tt.name+" "+start.name, func(t *testing.T) {
+				h := newPagingHandler(t, pagingContent, width, height, start.pos)
+				before := h.SeekOffset()
+
+				exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: tt.ch, Mod: term.ModCtrl})
+				after := h.SeekOffset()
+
+				assert.False(t, exit, "scroll key must not request exit")
+				assert.True(t, handled, "ctrl scroll key must be handled")
+				assert.GreaterOrEqual(t, after, 0, "offset must never go negative")
+				assert.LessOrEqual(t, after, h.MaxSeekOffset(), "offset must never exceed max")
+
+				if start.clamped {
+					assert.Equal(t, before, after, "at boundary the offset must not change")
+					return
+				}
+
+				delta := after - before
+				switch tt.dir {
+				case 1:
+					assert.Greater(t, delta, 0, "down key must increase offset")
+					assert.LessOrEqual(t, delta, tt.maxStep, "must not overshoot one step")
+				case -1:
+					assert.Less(t, delta, 0, "up key must decrease offset")
+					assert.GreaterOrEqual(t, -delta, 1)
+					assert.LessOrEqual(t, -delta, tt.maxStep, "must not overshoot one step")
+				}
+			})
+		}
+	}
+}
+
+// TestCtrlPageScrollingBoundaryIdempotent verifies that repeatedly
+// pressing a scroll key at the boundary it moves toward never panics,
+// never moves past the boundary, and leaves the offset pinned.
+func TestCtrlPageScrollingBoundaryIdempotent(t *testing.T) {
+	const width, height = 5, 3
+
+	tests := []struct {
+		name  string
+		ch    rune
+		start startPos
+		want  func(h *Handler) int // expected pinned offset
+	}{
+		{name: "ctrl-f at bottom stays at max", ch: 'f', start: startBottom, want: func(h *Handler) int { return h.MaxSeekOffset() }},
+		{name: "ctrl-d at bottom stays at max", ch: 'd', start: startBottom, want: func(h *Handler) int { return h.MaxSeekOffset() }},
+		{name: "ctrl-e at bottom stays at max", ch: 'e', start: startBottom, want: func(h *Handler) int { return h.MaxSeekOffset() }},
+		{name: "ctrl-b at top stays at zero", ch: 'b', start: startTop, want: func(*Handler) int { return 0 }},
+		{name: "ctrl-u at top stays at zero", ch: 'u', start: startTop, want: func(*Handler) int { return 0 }},
+		{name: "ctrl-y at top stays at zero", ch: 'y', start: startTop, want: func(*Handler) int { return 0 }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newPagingHandler(t, pagingContent, width, height, tt.start)
+			want := tt.want(h)
+			for range 5 {
+				exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: tt.ch, Mod: term.ModCtrl})
+				assert.False(t, exit)
+				assert.True(t, handled)
+				assert.Equal(t, want, h.SeekOffset())
+			}
+		})
+	}
+}
+
+// TestCtrlPageScrollingNonScrollableContent verifies that when the
+// document fits within (or is smaller than) the viewport, every scroll
+// key is still handled, never panics, and never moves the offset off
+// zero (there is nowhere to scroll).
+func TestCtrlPageScrollingNonScrollableContent(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{name: "empty document", content: ""},
+		{name: "single word", content: "Short"},
+		{name: "single line fits", content: "one line only"},
+		{name: "exactly viewport height", content: "L1\n\nL2"},
+	}
+
+	for _, tc := range tests {
+		for _, ch := range []rune{'f', 'b', 'd', 'u', 'e', 'y'} {
+			t.Run(tc.name+" ctrl-"+string(ch), func(t *testing.T) {
+				comp, err := markdown.New(tc.content)
+				require.NoError(t, err)
+				h := New(comp)
+				h.Resize(20, 5)
+
+				require.Equal(t, 0, h.MaxSeekOffset(), "content must fit viewport")
+
+				exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: ch, Mod: term.ModCtrl})
+				assert.False(t, exit)
+				assert.True(t, handled)
+				assert.Equal(t, 0, h.SeekOffset(), "no scrolling possible")
+			})
+		}
+	}
+}
+
+// TestCtrlPageScrollingBeforeResize verifies scroll keys are safe on a
+// freshly constructed handler that has not been resized yet (height 0),
+// exercising the max(1, height) guard in scrollPage/scrollHalfPage.
+func TestCtrlPageScrollingBeforeResize(t *testing.T) {
+	for _, ch := range []rune{'f', 'b', 'd', 'u', 'e', 'y'} {
+		t.Run("ctrl-"+string(ch), func(t *testing.T) {
+			comp, err := markdown.New(pagingContent)
+			require.NoError(t, err)
+			h := New(comp) // no Resize call
+
+			exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: ch, Mod: term.ModCtrl})
+			assert.False(t, exit)
+			assert.True(t, handled)
+			assert.GreaterOrEqual(t, h.SeekOffset(), 0)
+			assert.LessOrEqual(t, h.SeekOffset(), h.MaxSeekOffset())
+		})
+	}
+}
+
+// TestCtrlPageScrollingContentChange verifies that when the underlying
+// component is swapped via SetComponent while scrolled, the offset is
+// reset and subsequent scroll keys operate correctly on the new content
+// without panicking or reading a stale offset.
+func TestCtrlPageScrollingContentChange(t *testing.T) {
+	const width, height = 5, 3
+
+	tests := []struct {
+		name       string
+		newContent string
+		ch         rune
+		// wantScroll is true when the key is expected to move the offset
+		// on the new content from the top.
+		wantScroll bool
+	}{
+		{name: "swap to tall content then page down", newContent: pagingContent, ch: 'f', wantScroll: true},
+		{name: "swap to tall content then half page down", newContent: pagingContent, ch: 'd', wantScroll: true},
+		{name: "swap to tall content then line down", newContent: pagingContent, ch: 'e', wantScroll: true},
+		{name: "swap to short content then page down", newContent: "tiny", ch: 'f', wantScroll: false},
+		{name: "swap to short content then line down", newContent: "tiny", ch: 'e', wantScroll: false},
+		{name: "swap to empty content then page down", newContent: "", ch: 'f', wantScroll: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Start scrolled to the bottom of a tall document.
+			h := newPagingHandler(t, pagingContent, width, height, startBottom)
+			require.Positive(t, h.SeekOffset(), "precondition: scrolled away from top")
+
+			// Swap the underlying content under the hood.
+			comp, err := markdown.New(tt.newContent)
+			require.NoError(t, err)
+			h.SetComponent(comp)
+
+			assert.Equal(t, 0, h.SeekOffset(), "SetComponent must reset the offset")
+			before := h.SeekOffset()
+
+			exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: tt.ch, Mod: term.ModCtrl})
+			after := h.SeekOffset()
+
+			assert.False(t, exit)
+			assert.True(t, handled)
+			assert.GreaterOrEqual(t, after, 0)
+			assert.LessOrEqual(t, after, h.MaxSeekOffset())
+			if tt.wantScroll {
+				assert.Greater(t, after, before, "should scroll on new tall content")
+			} else {
+				assert.Equal(t, before, after, "nothing to scroll on new content")
+			}
+		})
+	}
 }
 
 func TestWrappedCodeBlockRendering(t *testing.T) {

@@ -39,13 +39,15 @@ import (
 // Keyboard controls:
 //   - Up/k:        Scroll up one line
 //   - Down/j:      Scroll down one line
-//   - Page Up/b:   Scroll up one page
-//   - Page Down/f: Scroll down one page
+//   - Ctrl-y:      Scroll up one line
+//   - Ctrl-e:      Scroll down one line
+//   - Page Up/b/Ctrl-b:   Scroll up one page
+//   - Page Down/f/Ctrl-f: Scroll down one page
 //   - Space:       Scroll down one page
 //   - Home/g:      Go to top
 //   - End/G:       Go to bottom
-//   - d:           Scroll down half page
-//   - u:           Scroll up half page
+//   - d/Ctrl-d:    Scroll down half page
+//   - u/Ctrl-u:    Scroll up half page
 //   - /:           Open search prompt
 //   - n:           Jump to next search result
 //   - N:           Jump to previous search result
@@ -199,9 +201,35 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 	}
 
 	// The less-style character shortcuts below are bare keypresses.
-	// A Ctrl/Alt/Meta modifier means the user is invoking a host
-	// keybinding (e.g. <meta-n>); let it fall through unhandled so the
-	// IDE can dispatch the bound command instead of scrolling.
+	// Vim-style Ctrl paging shortcuts. These are handled before the
+	// modifier fall-through below so they scroll rather than being
+	// dispatched by the host.
+	if ev.Mod == term.ModCtrl {
+		switch ev.Ch {
+		case 'f': // page down
+			h.scrollPage(1)
+			return false, true
+		case 'b': // page up
+			h.scrollPage(-1)
+			return false, true
+		case 'd': // half page down
+			h.scrollHalfPage(1)
+			return false, true
+		case 'u': // half page up
+			h.scrollHalfPage(-1)
+			return false, true
+		case 'e': // one line down
+			h.comp.SeekDown()
+			return false, true
+		case 'y': // one line up
+			h.comp.SeekUp()
+			return false, true
+		}
+	}
+
+	// A remaining Ctrl/Alt/Meta modifier means the user is invoking a
+	// host keybinding (e.g. <meta-n>); let it fall through unhandled so
+	// the IDE can dispatch the bound command instead of scrolling.
 	if ev.Mod&(term.ModCtrl|term.ModAlt|term.ModMeta) != 0 {
 		return false, false
 	}
