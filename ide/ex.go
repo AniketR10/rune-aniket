@@ -2578,6 +2578,9 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 	commandCfg.ShowProgressHint = e.config.CommandOverlay.ShowProgressHint
 	commandCfg.Sync = e.syncCommandPrompt
 	commandCfg.Editor = e.promptEditor
+	commandCfg.KeyBindingHint = e.commandPromptCfg.keyBindingHint
+	commandCfg.KeyBindingHintAttr = e.commandPromptCfg.keyBindingHintAttr
+	commandCfg.KeyBindingHintFocusAttr = e.commandPromptCfg.keyBindingHintFocusAttr
 	cmd := command.NewPrompt(e.storage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := newCommandPromptHandler(cmd, e, func() error {

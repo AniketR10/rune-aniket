@@ -74,6 +74,12 @@ func defaultCommandPromptSeparatorCharset() commandPromptSeparatorCharset {
 type commandPromptConfig struct {
 	shader    commandPromptShaderConfig
 	separator commandPromptSeparatorCharset
+	// keyBindingHint returns the long-form key label bound to a full
+	// command line, or "" when unbound. nil disables the hints.
+	keyBindingHint     func(commandLine string) string
+	keyBindingHintAttr term.Attributes
+	// keyBindingHintFocusAttr styles the key hint on the focused row.
+	keyBindingHintFocusAttr term.Attributes
 }
 
 func newCommandPromptHandler(

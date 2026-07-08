@@ -86,6 +86,10 @@ const (
 	keyCommandAliases      = "aliases"
 	keyCommandKey          = "key"
 	keyCommandHistoryKey   = "history_key"
+
+	keyCommandKeyBindingHintColor = "key_binding_hint_color"
+
+	keyCommandKeyBindingHintFocusColor = "key_binding_hint_focus_color"
 )
 
 var (
@@ -832,10 +836,133 @@ func (c ideConfig) commandPromptSeparatorCharset() commandPromptSeparatorCharset
 }
 
 func (c ideConfig) commandPromptCfg() commandPromptConfig {
+	hintLookup := c.commandKeyBindingHintLookup()
 	return commandPromptConfig{
 		shader:    c.commandPromptShaderCfg(),
 		separator: c.commandPromptSeparatorCharset(),
+		keyBindingHint: func(line string) string {
+			return hintLookup[line]
+		},
+		keyBindingHintAttr: term.Attributes{Fg: c.commandKeyBindingHintColor()},
+		keyBindingHintFocusAttr: term.Attributes{
+			Fg: c.commandKeyBindingHintFocusColor(),
+		},
 	}
+}
+
+// commandKeyBindingHintColor returns the color of the right-aligned
+// key hint shown in command-prompt results. It defaults to gray and
+// accepts named or hex colors under command.key_binding_hint_color.
+func (c ideConfig) commandKeyBindingHintColor() term.Color {
+	cfg, ok := c.command()
+	if !ok {
+		return term.ColorGray
+	}
+	col, err := cfg.GetColor(keyCommandKeyBindingHintColor)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["command."+keyCommandKeyBindingHintColor] = err
+		}
+		return term.ColorGray
+	}
+	return col
+}
+
+// commandKeyBindingHintFocusColor returns the color of the key hint on
+// the focused command-prompt row. It defaults to silver and accepts
+// named or hex colors under command.key_binding_hint_focus_color.
+func (c ideConfig) commandKeyBindingHintFocusColor() term.Color {
+	cfg, ok := c.command()
+	if !ok {
+		return term.ColorSilver
+	}
+	col, err := cfg.GetColor(keyCommandKeyBindingHintFocusColor)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["command."+keyCommandKeyBindingHintFocusColor] = err
+		}
+		return term.ColorSilver
+	}
+	return col
+}
+
+// commandKeyBindingHintLookup inverts the resolved key bindings into a
+// full-command-line to long-form-key map used to annotate prompt rows.
+// Direct single-command bindings are seeded first; echo-prefill
+// bindings of the exact shape `echo {prompt}<cmd><space>` fill only the
+// top-level command entries a direct binding did not already claim, so
+// a direct binding always wins over an echo-prefill for the same line.
+func (c ideConfig) commandKeyBindingHintLookup() map[string]string {
+	lookup := make(map[string]string)
+	mappings := c.commandKeyMappings()
+
+	seqKey := func(seq handler.Sequence) string {
+		key := seq.First.String()
+		if seq.Last != (term.KeyComb{}) {
+			key += seq.Last.String()
+		}
+		return key
+	}
+
+	for seq, cmds := range mappings {
+		if len(cmds) != 1 {
+			continue
+		}
+		line := strings.Join(cmds[0], " ")
+		if _, ok := lookup[line]; !ok {
+			lookup[line] = seqKey(seq)
+		}
+	}
+
+	for seq, cmds := range mappings {
+		if len(cmds) != 1 || len(cmds[0]) != 2 || cmds[0][0] != "echo" {
+			continue
+		}
+		cmd, ok := echoPromptSingleCommand(cmds[0][1])
+		if !ok {
+			continue
+		}
+		if _, exists := lookup[cmd]; !exists {
+			lookup[cmd] = seqKey(seq)
+		}
+	}
+
+	return lookup
+}
+
+// echoPromptSingleCommand reports whether body is exactly
+// `{prompt}<cmd><space>` — the prompt instruction followed by a single
+// literal command word and one trailing space — and returns that word.
+// Bodies that type more than one word (e.g. `{prompt}lsp<space>hover<space>`)
+// or carry additional instructions are rejected so only top-level
+// command prefills produce a hint.
+func echoPromptSingleCommand(body string) (string, bool) {
+	keys, err := parseEchoKeys(body)
+	if err != nil || len(keys) < 3 {
+		return "", false
+	}
+	if !keys[0].instructPrompt {
+		return "", false
+	}
+	var word []rune
+	for i := 1; i < len(keys); i++ {
+		k := keys[i]
+		if k.instructPrompt || k.instructWait || k.instructReg != "" {
+			return "", false
+		}
+		if k.Key == term.KeySpace {
+			// the trailing space must terminate a single non-empty word
+			if len(word) == 0 || i != len(keys)-1 {
+				return "", false
+			}
+			return string(word), true
+		}
+		if k.Key != 0 || k.Mod != 0 || k.Ch == 0 {
+			return "", false
+		}
+		word = append(word, k.Ch)
+	}
+	return "", false
 }
 
 func (c ideConfig) animationsBool(key string) bool {

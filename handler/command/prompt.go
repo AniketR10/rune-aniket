@@ -303,9 +303,12 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 	// multiple lines
 	h.list.SetMinInputHeight(bufHeight)
 
+	listHeight := h.listRegionHeight()
+
 	leftWidgetWidth := h.width - animationWidth
 	if leftWidgetWidth <= 0 {
 		h.list.Draw(w)
+		h.drawKeyBindingHints(w, listHeight)
 		h.responsive.Resize(h.width, bufHeight)
 		h.responsive.Draw(w)
 		return
@@ -322,6 +325,7 @@ func (h *Prompt) drawPrompt(w term.Writer) {
 
 	h.list.Draw(w)
 	union.Draw(w)
+	h.drawKeyBindingHints(w, listHeight)
 
 	// Overlay the active edit-session selection highlight in the
 	// prompt's wrap geometry. The responsive renderer above does not
@@ -1275,6 +1279,103 @@ func (h *Prompt) drawSelectionOverlay(w term.Writer, wrapWidth, visibleHeight in
 			}
 		}
 	}
+}
+
+// listRegionHeight returns the height of the result-list region in the
+// prompt's local writer space, i.e. the area h.list.Draw occupies. When
+// the manual side panel is shown it is the split list height; otherwise
+// the full prompt height.
+func (h *Prompt) listRegionHeight() int {
+	if !h.config.ShowManual || h.manualComponent == nil {
+		return h.height
+	}
+	_, _, listHeight := h.calculateSplitHeights(h.width, h.height)
+	return listHeight
+}
+
+// commandLinePrefix returns the already-committed command words the
+// visible rows are completing (all whole tokens before the in-progress
+// last token), mirroring buildManualComponent's trimming rule.
+func (h *Prompt) commandLinePrefix() []string {
+	cmdAndArgs := SplitCommandLine(strings.TrimSpace(h.inputString.Load().(string)))
+	if len(cmdAndArgs) > 0 && int(h.mode) < len(cmdAndArgs) {
+		cmdAndArgs = cmdAndArgs[:len(cmdAndArgs)-1]
+	}
+	return cmdAndArgs
+}
+
+// isKnownCommandLine reports whether every token in the line names a
+// command or nested subcommand in the command tree. Dynamic completer
+// arguments (file paths, workspace indices, etc.) do not name commands,
+// so their rows are excluded from key hints even when the raw line
+// happens to match a user binding like `<c-x>2 -> workspacefocus 2`.
+func (h *Prompt) isKnownCommandLine(tokens []string) bool {
+	if len(tokens) == 0 {
+		return false
+	}
+	man, ok := h.getManualForCommand(tokens[0])
+	if !ok {
+		return false
+	}
+	if len(tokens) == 1 {
+		return true
+	}
+	_, ok = getSubcommandManual(man, tokens[1:])
+	return ok
+}
+
+// drawKeyBindingHints overlays a right-aligned key label onto each
+// visible result row whose full command line has a bound key. It runs
+// on the single-threaded draw path right after h.list.Draw and uses
+// only public search.List accessors. History rows and rows whose line
+// is unbound draw nothing.
+func (h *Prompt) drawKeyBindingHints(w term.Writer, listHeight int) {
+	if h.config.KeyBindingHint == nil || h.showingHistory {
+		return
+	}
+	elemHeight := h.list.ElementHeight()
+	if elemHeight <= 0 {
+		return
+	}
+	inputHeight := h.list.InputHeight()
+	prefix := h.commandLinePrefix()
+	focusOffset := h.list.FocusOffset()
+	scrollOffset := h.list.Offset()
+	row := 0
+	h.list.IterateVisible(func(m search.Match) {
+		defer func() { row++ }()
+		y := inputHeight + row*elemHeight
+		if y >= listHeight {
+			return
+		}
+		tokens := append(append([]string{}, prefix...), string(m.Data()))
+		if !h.isKnownCommandLine(tokens) {
+			return
+		}
+		label := h.config.KeyBindingHint(strings.Join(tokens, " "))
+		if label == "" {
+			return
+		}
+		runes := []rune(label)
+		labelW := len(runes)
+		dataW := len(m.Data())
+		startX := h.width - labelW
+		// require at least one blank cell between the row text and the hint
+		if labelW >= h.width || startX <= dataW {
+			return
+		}
+		attr := h.config.KeyBindingHintAttr
+		if scrollOffset+row == focusOffset {
+			attr = h.config.KeyBindingHintFocusAttr
+		}
+		for i, ch := range runes {
+			w.SetCell(term.Coordinates{X: startX + i, Y: y}, term.Cell{
+				Ch:         ch,
+				Attributes: attr,
+				Width:      1,
+			})
+		}
+	})
 }
 
 // wrappedRows returns the number of visual rows a buffer row of the

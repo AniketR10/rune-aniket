@@ -2673,3 +2673,80 @@ func (i protectedDirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o755 }
 func (i protectedDirInfo) ModTime() time.Time { return time.Time{} }
 func (i protectedDirInfo) IsDir() bool        { return true }
 func (i protectedDirInfo) Sys() any           { return nil }
+
+// TestCommandPromptKeyBindingHintsIntegration renders the command
+// prompt with key hints resolved from a shipped rune.star default
+// binding. The <alt-enter> echo prefill must surface as a right-aligned
+// hint on the windowconverttab row.
+func TestCommandPromptKeyBindingHintsIntegration(t *testing.T) {
+	const echoKey = "<alt-enter>"
+
+	// pin the test to the shipped default: rune.star must keep binding
+	// <alt-enter> to the windowconverttab prompt prefill.
+	starCfg, err := decodeStarlarkConfig(starlarkConfigSource{
+		src:      readRuneStar(t),
+		filename: "rune.star",
+		params:   map[string]any{"mode": "modal", "tui": false},
+	})
+	require.NoError(t, err)
+	starCmd, ok := starCfg["command"].(map[string]any)
+	require.True(t, ok, "rune.star: missing `command` section")
+	starBindings, ok := starCmd["key_bindings"].(map[string]any)
+	require.True(t, ok, "rune.star: missing `command.key_bindings`")
+	echoBody, ok := starBindings[echoKey].(string)
+	require.Truef(t, ok, "rune.star: missing %q key binding", echoKey)
+	require.Equal(t, "echo {prompt}windowconverttab<space>", echoBody)
+
+	cfg := defaultConfigWithWrap(false)
+	cfg.cfg["command"].(map[string]any)["key_bindings"].(map[string]any)[echoKey] = echoBody
+
+	m := newTestWorkspaceManagerHandlerWithDirs(t, cfg, "/tmp", "",
+		nopShutdownShaderConfig())
+
+	cases := []handlertest.SequenceTestCase{
+		{InputSequence: ":", Expected: `┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│ ▐                                    │
+│ !                                    │
+│ !!                                   │
+│ addBlaBla                            │
+│ cheatsheet                           │
+│ clipboardcopy                        │
+│ clipboardpaste                       │
+│ console                              │
+│ cursorhistory                        │
+│ debugger                             │
+└──────────────────────────────────────┘`},
+		{InputSequence: "windowconverttab", Expected: `┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+┌──────────────────────────────────────┐
+│ windowconverttab▐                    │
+│ windowconverttab         <alt-enter> │
+│                                      │
+└──────────────────────────────────────┘
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+└──────────────────────────────────────┘`},
+	}
+	h := newSafeHandler(m)
+	handlertest.TestHandlerSequence(t, h, 40, 20, cases)
+
+	require.NoError(t, m.Close())
+}

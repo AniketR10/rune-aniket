@@ -4998,8 +4998,14 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
-	// ensure that command manual is never shown
-	cfg.cfg["command"] = defaultCfg().cfg["command"]
+	// ensure that command manual is never shown while preserving any
+	// command customizations the caller seeded (e.g. key bindings)
+	if cmd, ok := cfg.cfg["command"].(map[string]any); ok {
+		cmd["show_manual"] = false
+		cmd["show_progress_hint"] = false
+	} else {
+		cfg.cfg["command"] = defaultCfg().cfg["command"]
+	}
 
 	shRunner := new(shaderRunner)
 	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},

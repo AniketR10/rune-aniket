@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // TestCommandPromptSeparatorCharsetDefaults ensures the four stitch
@@ -38,6 +39,154 @@ func TestCommandPromptSeparatorCharsetDefaults(t *testing.T) {
 	got := c.commandPromptSeparatorCharset()
 	assert.Equal(t, defaultCommandPromptSeparatorCharset(), got)
 	assert.Empty(t, c.errors)
+}
+
+// hintConfig builds an ideConfig with the given command.key_bindings
+// map so the key-hint lookup can be exercised directly.
+func hintConfig(bindings map[string]any, extra map[string]any) ideConfig {
+	command := map[string]any{"key_bindings": bindings}
+	for k, v := range extra {
+		command[k] = v
+	}
+	return ideConfig{
+		cfg:    map[string]any{"command": command},
+		errors: map[string]error{},
+	}
+}
+
+// TestCommandKeyBindingHintColorDefault returns gray when the config
+// omits command.key_binding_hint_color and records no error.
+func TestCommandKeyBindingHintColorDefault(t *testing.T) {
+	c := newAnimConfig(t, `config = {}`)
+	assert.Equal(t, term.ColorGray, c.commandKeyBindingHintColor())
+	assert.Empty(t, c.errors)
+}
+
+// TestCommandKeyBindingHintColorNamedAndHex parses both named colors
+// and hex values through the standard term color path.
+func TestCommandKeyBindingHintColorNamedAndHex(t *testing.T) {
+	named := newAnimConfig(t, `
+config = {"command": {"key_binding_hint_color": "silver"}}
+`)
+	assert.Equal(t, term.GetColor("silver"), named.commandKeyBindingHintColor())
+	assert.Empty(t, named.errors)
+
+	hex := newAnimConfig(t, `
+config = {"command": {"key_binding_hint_color": "#8a8a8a"}}
+`)
+	assert.Equal(t, term.GetColor("#8a8a8a"), hex.commandKeyBindingHintColor())
+	assert.Empty(t, hex.errors)
+}
+
+// TestCommandKeyBindingHintColorWrongType keeps the gray default and
+// records the error so a typo never breaks the prompt.
+func TestCommandKeyBindingHintColorWrongType(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {"command": {"key_binding_hint_color": ["nope"]}}
+`)
+	assert.Equal(t, term.ColorGray, c.commandKeyBindingHintColor())
+	require.Contains(t, c.errors, "command.key_binding_hint_color")
+}
+
+// TestCommandKeyBindingHintFocusColorDefault returns silver when the
+// config omits command.key_binding_hint_focus_color.
+func TestCommandKeyBindingHintFocusColorDefault(t *testing.T) {
+	c := newAnimConfig(t, `config = {}`)
+	assert.Equal(t, term.ColorSilver, c.commandKeyBindingHintFocusColor())
+	assert.Empty(t, c.errors)
+}
+
+// TestCommandKeyBindingHintFocusColorNamedAndHex parses both named
+// colors and hex values through the standard term color path.
+func TestCommandKeyBindingHintFocusColorNamedAndHex(t *testing.T) {
+	named := newAnimConfig(t, `
+config = {"command": {"key_binding_hint_focus_color": "gray"}}
+`)
+	assert.Equal(t, term.GetColor("gray"), named.commandKeyBindingHintFocusColor())
+	assert.Empty(t, named.errors)
+
+	hex := newAnimConfig(t, `
+config = {"command": {"key_binding_hint_focus_color": "#c0c0c0"}}
+`)
+	assert.Equal(t, term.GetColor("#c0c0c0"), hex.commandKeyBindingHintFocusColor())
+	assert.Empty(t, hex.errors)
+}
+
+// TestCommandKeyBindingHintFocusColorWrongType keeps the silver default
+// and records the error so a typo never breaks the prompt.
+func TestCommandKeyBindingHintFocusColorWrongType(t *testing.T) {
+	c := newAnimConfig(t, `
+config = {"command": {"key_binding_hint_focus_color": ["nope"]}}
+`)
+	assert.Equal(t, term.ColorSilver, c.commandKeyBindingHintFocusColor())
+	require.Contains(t, c.errors, "command.key_binding_hint_focus_color")
+}
+
+// TestCommandKeyBindingHintLookupDirect resolves a full command line —
+// top-level or subcommand — to its long-form key.
+func TestCommandKeyBindingHintLookupDirect(t *testing.T) {
+	c := hintConfig(map[string]any{
+		"<m-n>":   "windownew",
+		"<a-s-e>": "lsp diagnostics",
+	}, nil)
+	lookup := c.commandKeyBindingHintLookup()
+	assert.Equal(t, "<meta-n>", lookup["windownew"])
+	assert.Equal(t, "<alt-shift-e>", lookup["lsp diagnostics"])
+	assert.Empty(t, lookup["tabclose"])
+	assert.Empty(t, c.errors)
+}
+
+// TestCommandKeyBindingHintLookupEchoTopLevel maps an
+// `echo {prompt}<cmd><space>` prefill to a hint on the top-level
+// command word, but not to multi-word command lines.
+func TestCommandKeyBindingHintLookupEchoTopLevel(t *testing.T) {
+	c := hintConfig(map[string]any{
+		"<m-t>": "echo {prompt}edit<space>",
+	}, nil)
+	lookup := c.commandKeyBindingHintLookup()
+	assert.Equal(t, "<meta-t>", lookup["edit"])
+	assert.Empty(t, lookup["edit hello.go"])
+	assert.Empty(t, c.errors)
+}
+
+// TestCommandKeyBindingHintLookupDirectWinsOverEcho keeps the direct
+// binding when both a direct and an echo-prefill target the same line,
+// and does not create a top-level entry from a multi-word echo body.
+func TestCommandKeyBindingHintLookupDirectWinsOverEcho(t *testing.T) {
+	c := hintConfig(map[string]any{
+		"<a-t>":   "lsp hover",
+		"<a-s-t>": "echo {prompt}lsp<space>hover<space>",
+	}, nil)
+	lookup := c.commandKeyBindingHintLookup()
+	assert.Equal(t, "<alt-t>", lookup["lsp hover"])
+	// the multi-word echo body must not register a bare `lsp` hint
+	assert.Empty(t, lookup["lsp"])
+	assert.Empty(t, c.errors)
+}
+
+// TestEchoPromptSingleCommand covers the exact `{prompt}<cmd><space>`
+// shape recognition and its rejections.
+func TestEchoPromptSingleCommand(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+		ok   bool
+	}{
+		{"single word", "{prompt}edit<space>", "edit", true},
+		{"multi word", "{prompt}lsp<space>hover<space>", "", false},
+		{"no trailing space", "{prompt}edit", "", false},
+		{"no prompt instruction", "windowconverttab<space>", "", false},
+		{"empty word", "{prompt}<space>", "", false},
+		{"trailing key after space", "{prompt}edit<space>x", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := echoPromptSingleCommand(tc.body)
+			assert.Equal(t, tc.ok, ok)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }
 
 // TestCommandPromptSeparatorCharsetOverrides verifies that each key

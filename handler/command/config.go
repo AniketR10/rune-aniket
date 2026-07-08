@@ -129,21 +129,32 @@ type Config struct {
 	// FrameAttr if a frame is to be used to separate manual from search list.
 	FrameAttr  term.Attributes
 	NoMarkdown bool
+
+	// KeyBindingHint returns the long-form display label for the key
+	// bound to the given full command line (e.g. "lsp diagnostics"), or
+	// "" if none/unbound. When nil, no hints are shown.
+	KeyBindingHint func(commandLine string) string
+	// KeyBindingHintAttr styles the right-aligned key hint.
+	KeyBindingHintAttr term.Attributes
+	// KeyBindingHintFocusAttr styles the key hint on the focused row.
+	KeyBindingHintFocusAttr term.Attributes
 }
 
 // DefaultConfig returns a sane configuration for initializing a Handler.
 func DefaultConfig() Config {
 	return Config{
-		NoMarkdown:       true,
-		MaxHistory:       100,
-		HistoryCycleKey:  term.KeyComb{Ch: ':'},
-		HistoryToggleKey: term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
-		EditModeKey:      term.KeyComb{Mod: term.ModShift, Key: term.KeyEsc},
-		MatchedTextAttr:  term.Attributes{Fg: term.ColorRed},
-		FocusElementAttr: term.Attributes{Attrs: term.AttrBold | term.AttrUnderline, Fg: term.ColorRed},
-		ElementAttr:      term.Attributes{},
-		DocumentID:       "command-history",
-		ShowManual:       true,
-		ShowProgressHint: true,
+		NoMarkdown:              true,
+		MaxHistory:              100,
+		HistoryCycleKey:         term.KeyComb{Ch: ':'},
+		HistoryToggleKey:        term.KeyComb{Mod: term.ModMeta, Ch: 'r'},
+		EditModeKey:             term.KeyComb{Mod: term.ModShift, Key: term.KeyEsc},
+		MatchedTextAttr:         term.Attributes{Fg: term.ColorRed},
+		FocusElementAttr:        term.Attributes{Attrs: term.AttrBold | term.AttrUnderline, Fg: term.ColorRed},
+		ElementAttr:             term.Attributes{},
+		DocumentID:              "command-history",
+		ShowManual:              true,
+		ShowProgressHint:        true,
+		KeyBindingHintAttr:      term.Attributes{Fg: term.ColorGray},
+		KeyBindingHintFocusAttr: term.Attributes{Fg: term.ColorSilver},
 	}
 }

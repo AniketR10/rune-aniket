@@ -2623,3 +2623,297 @@ func testNoManualCommands(cmds []string) (ret []Manual) {
 	}
 	return
 }
+
+var keybindingTestCommands = []Manual{
+	{Name: "edit", Summary: "Open a file.", Synopsis: "<file>"},
+	{Name: "quit", Summary: "Close the editor."},
+	{Name: "lsp", Summary: "Language server ops.", Synopsis: "<cmd>",
+		Commands: []Manual{
+			{Name: "diagnostics", Summary: "Show diagnostics."},
+			{Name: "hover", Summary: "Show hover info."},
+		},
+	},
+}
+
+func keybindingTestConfig() Config {
+	cfg := testDefaultConfig()
+	cfg.Sync = true
+	cfg.ShowManual = false
+	return cfg
+}
+
+// TestCommandHandlerKeyBindingHintsDraw exercises the right-aligned key
+// hint overlay geometry across the horizontal-space corner cases: the
+// hint requires at least one blank cell after the row text and is
+// dropped entirely when the command plus gap plus label do not fit.
+func TestCommandHandlerKeyBindingHintsDraw(t *testing.T) {
+	tsuite := []struct {
+		desc      string
+		sequence  string
+		commands  []Manual
+		hint      func(string) string
+		completer func(context.Context, []string) (
+			iterator.Iterator[string], string, error)
+		width, height int
+		expectedDraw  string
+	}{
+		{
+			desc:     "bound rows right-aligned, unbound rows bare",
+			commands: keybindingTestCommands,
+			hint: func(line string) string {
+				switch line {
+				case "edit":
+					return "<c-e>"
+				case "lsp":
+					return "<m-l>"
+				}
+				return ""
+			},
+			width: 20, height: 6,
+			expectedDraw: `
+▐                   
+edit           <c-e>
+quit                
+lsp            <m-l>
+                    
+                    `,
+		},
+		{
+			desc:     "hint keeps a single gap cell at minimum width",
+			commands: []Manual{{Name: "edit"}},
+			hint:     func(string) string { return "<c-e>" },
+			width:    10, height: 4,
+			expectedDraw: `
+▐         
+edit <c-e>
+          
+          `,
+		},
+		{
+			desc:     "hint dropped when the gap cell vanishes",
+			commands: []Manual{{Name: "edit"}},
+			hint:     func(string) string { return "<c-e>" },
+			width:    9, height: 4,
+			expectedDraw: `
+▐        
+edit     
+         
+         `,
+		},
+		{
+			desc:     "hint dropped when label spans the full width",
+			commands: []Manual{{Name: "a"}},
+			hint:     func(string) string { return "<ctrl-e>" },
+			width:    8, height: 4,
+			expectedDraw: `
+▐       
+a       
+        
+        `,
+		},
+		{
+			desc:     "hint dropped when the command overflows the row",
+			commands: []Manual{{Name: "windowconvert"}},
+			hint:     func(string) string { return "<c-w>" },
+			width:    12, height: 4,
+			expectedDraw: `
+▐           
+windowconver
+            
+            `,
+		},
+		{
+			desc:     "subcommand rows resolve through the committed prefix",
+			sequence: "lsp<space>",
+			commands: keybindingTestCommands,
+			hint: func(line string) string {
+				if line == "lsp diagnostics" {
+					return "<alt-shift-e>"
+				}
+				return ""
+			},
+			width: 30, height: 5,
+			expectedDraw: `
+lsp ▐                         
+diagnostics      <alt-shift-e>
+hover                         
+                              
+                              `,
+		},
+		{
+			desc:     "dynamic argument rows are never hinted",
+			sequence: "edit<space>",
+			commands: keybindingTestCommands,
+			hint: func(line string) string {
+				if line == "edit arg1" {
+					return "<c-1>"
+				}
+				return ""
+			},
+			completer: func(_ context.Context, cmdAndArgs []string) (
+				iterator.Iterator[string], string, error,
+			) {
+				if len(cmdAndArgs) > 0 && cmdAndArgs[0] == "edit" {
+					return iterator.FromSlice([]string{"arg1", "arg2"}), "", nil
+				}
+				return iterator.FromSlice[string](nil), "", nil
+			},
+			width: 20, height: 5,
+			expectedDraw: `
+edit ▐              
+arg1                
+arg2                
+                    
+                    `,
+		},
+		{
+			desc:     "nil resolver draws no hints",
+			commands: keybindingTestCommands,
+			hint:     nil,
+			width:    20, height: 5,
+			expectedDraw: `
+▐                   
+edit                
+quit                
+lsp                 
+                    `,
+		},
+		{
+			desc:     "fuzzy filtered rows keep their hints",
+			sequence: "q",
+			commands: keybindingTestCommands,
+			hint: func(line string) string {
+				if line == "quit" {
+					return "<c-q>"
+				}
+				return ""
+			},
+			width: 20, height: 4,
+			expectedDraw: `
+q▐                  
+quit           <c-q>
+                    
+                    `,
+		},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			t.Parallel()
+			cfg := keybindingTestConfig()
+			cfg.KeyBindingHint = tcase.hint
+
+			dispatchFn, cleanup := nopDispatch()
+			defer cleanup(t)
+
+			completeFn := tcase.completer
+			if completeFn == nil {
+				var cleanupComplete func(*testing.T)
+				completeFn, cleanupComplete = nopComplete()
+				defer cleanupComplete(t)
+			}
+
+			b := NewPrompt(
+				storagestub.NewInMemoryService(), FuncCompleter(completeFn),
+				FuncDispatcher(dispatchFn), term.NopInterrupter(),
+				tcase.commands, cfg,
+			)
+			defer b.Close()
+			cases := []handlertest.SequenceTestCase{
+				{InputSequence: tcase.sequence, Expected: tcase.expectedDraw[1:]},
+			}
+			handlertest.RunHandlerSequence(t, testCommandHandler{b},
+				tcase.width, tcase.height, cases)
+		})
+	}
+}
+
+// hintFgAt returns the foreground color of the rightmost non-space cell
+// on the row identified by prefix, i.e. the last rune of the key hint.
+func hintFgAt(t *testing.T, w *term.StringWriter, width int, prefix string) term.Color {
+	t.Helper()
+	lines := strings.Split(w.String(), "\n")
+	cells := w.Cells()
+	for y, l := range lines {
+		if !strings.HasPrefix(strings.TrimLeft(l, " "), prefix) {
+			continue
+		}
+		for x := width - 1; x >= 0; x-- {
+			c := cells[y*width+x]
+			if c.Ch != 0 && c.Ch != ' ' {
+				return c.Attributes.Fg
+			}
+		}
+	}
+	t.Fatalf("no hinted row found for prefix %q", prefix)
+	return 0
+}
+
+// TestKeyBindingHintFocusColor draws the focused row's hint with the
+// focus color and other rows' hints with the default color.
+func TestKeyBindingHintFocusColor(t *testing.T) {
+	cfg := keybindingTestConfig()
+	cfg.KeyBindingHintAttr = term.Attributes{Fg: term.ColorGray}
+	cfg.KeyBindingHintFocusAttr = term.Attributes{Fg: term.ColorSilver}
+	cfg.KeyBindingHint = func(line string) string {
+		switch line {
+		case "edit":
+			return "<ctrl-e>"
+		case "quit":
+			return "<ctrl-q>"
+		}
+		return ""
+	}
+
+	dispatchFn, cleanup := nopDispatch()
+	defer cleanup(t)
+	completeFn, cleanupComplete := nopComplete()
+	defer cleanupComplete(t)
+	p := NewPrompt(
+		storagestub.NewInMemoryService(), FuncCompleter(completeFn),
+		FuncDispatcher(dispatchFn), term.NopInterrupter(),
+		keybindingTestCommands, cfg,
+	)
+	defer p.Close()
+
+	// empty input keeps focus on the first row (edit)
+	w := term.NewStringWriter(40, 8)
+	p.Resize(40, 8)
+	p.Wait()
+	p.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.Equal(t, term.ColorSilver, hintFgAt(t, w, 40, "edit"),
+		"focused row hint must use the focus color")
+	assert.Equal(t, term.ColorGray, hintFgAt(t, w, 40, "quit"),
+		"non-focused row hint must use the default color")
+}
+
+// TestKeyBindingHintHistoryMode draws no hints while the prompt shows
+// the command history list.
+func TestKeyBindingHintHistoryMode(t *testing.T) {
+	cfg := keybindingTestConfig()
+	called := false
+	cfg.KeyBindingHint = func(string) string {
+		called = true
+		return "<ctrl-e>"
+	}
+
+	dispatchFn, cleanup := nopDispatch()
+	defer cleanup(t)
+	completeFn, cleanupComplete := nopComplete()
+	defer cleanupComplete(t)
+	p := NewPrompt(
+		storagestub.NewInMemoryService(), FuncCompleter(completeFn),
+		FuncDispatcher(dispatchFn), term.NopInterrupter(),
+		keybindingTestCommands, cfg,
+	)
+	defer p.Close()
+	p.ResetHistory()
+
+	w := term.NewStringWriter(40, 8)
+	p.Resize(40, 8)
+	p.Wait()
+	p.Draw(w)
+	require.NoError(t, w.Flush())
+	assert.False(t, called, "history mode must not query key hints")
+}
