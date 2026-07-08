@@ -49,7 +49,7 @@ func Manual() textapi.CommandManual {
 		Commands: []textapi.CommandManual{
 			{
 				Name:    "format",
-				Summary: "Formats the file or the selection if the cursor is currently selecting text",
+				Summary: "Formats the file",
 			},
 			{
 				Name:     "hover",

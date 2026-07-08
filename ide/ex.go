@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	rtdebug "runtime/debug"
 	"slices"
 	"sort"
@@ -55,11 +56,13 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	fileexplorercomp "unstable.build/go-tui/component/fileexplorer"
+	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	hmarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/idecmd"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
@@ -3071,4 +3074,58 @@ func (c companionTerminalHandler) ClearPrimaryBuffer() bool {
 
 func (c companionTerminalHandler) Close() error {
 	return nil
+}
+
+// openMarkdownFloating renders md as a read-only markdown view in a
+// centered floating window pinned to a fixed width. It is shared by the
+// cheatsheet and keybindings commands so both views line up.
+func (e *ex) openMarkdownFloating(md, title string, width int) error {
+	mdCfg := e.config.Markdown
+	mdCfg.HeaderPrefix = false
+	mdComp, err := markdown.NewWithConfig(md, mdCfg)
+	if err != nil {
+		return fmt.Errorf("new markdown component: %w", err)
+	}
+	mdh := hmarkdown.New(mdComp, hmarkdown.WithOnLinkClick(openCheatsheetLink))
+	span := handler.NewSpan(mdh, component.SpanConfig{
+		PadHorizontal:    2,
+		ContentAlignment: component.AlignmentCentered,
+	})
+
+	var win browser.Window
+	floating := browser.FuncFloatingHandler(span, func() error {
+		defer win.Close() //nolint:errcheck
+		return mdh.Close()
+	})
+	staticWidth := browser.FuncFloating(floating, func() (int, int) {
+		_, h := floating.Dimensions()
+		return width, h
+	})
+	win, err = e.comp.Floating(staticWidth, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+		Title:     title,
+	})
+	return err
+}
+
+// cheatsheet renders a keys-first cheatsheet from the user's resolved key
+// bindings and editor mode and opens it as a read-only markdown view in a
+// centered floating window.
+func (e *ex) cheatsheet(_ context.Context, _ ...string) error {
+	md, err := renderCheatsheet(e.config, e.editorModeModal, e.editorMode, e.editorAutoSave)
+	if err != nil {
+		return err
+	}
+	return e.openMarkdownFloating(md, "Cheatsheet", cheatsheetWidth)
+}
+
+// keybindings renders the user's currently configured key bindings as a
+// Markdown table and opens it in a centered floating window, mirroring
+// the cheatsheet view.
+func (e *ex) keybindings(_ context.Context, _ ...string) error {
+	md, err := renderKeyBindings(e.config, e.comp.Commands(), e.editorMode, runtime.GOOS)
+	if err != nil {
+		return err
+	}
+	return e.openMarkdownFloating(md, "Key bindings", keybindingsWidth)
 }

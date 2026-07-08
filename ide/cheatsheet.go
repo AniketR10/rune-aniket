@@ -24,7 +24,6 @@
 package ide
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"net/url"
@@ -33,13 +32,7 @@ import (
 
 	sensiblebrowser "github.com/ernestrc/sensible/browser"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/markdown"
-	hmarkdown "unstable.build/go-tui/handler/markdown"
 	"unstable.build/go-tui/ide/idetutorial/starlarktutorial"
 	"unstable.build/go-tui/text"
 )
@@ -131,41 +124,6 @@ func commandKeyLookup(bindings map[term.KeyComb][][]string) map[string]string {
 		}
 	}
 	return lookup
-}
-
-// cheatsheet renders a keys-first cheatsheet from the user's resolved key
-// bindings and editor mode and opens it as a read-only markdown view in a
-// centered floating window.
-func (e *ex) cheatsheet(_ context.Context, _ ...string) error {
-	md, err := renderCheatsheet(e.config, e.editorModeModal, e.editorMode, e.editorAutoSave)
-	if err != nil {
-		return err
-	}
-	mdCfg := e.config.Markdown
-	mdCfg.HeaderPrefix = false
-	mdComp, err := markdown.NewWithConfig(md, mdCfg)
-	if err != nil {
-		return fmt.Errorf("new markdown component: %w", err)
-	}
-	mdh := hmarkdown.New(mdComp, hmarkdown.WithOnLinkClick(openCheatsheetLink))
-	span := handler.NewSpan(mdh, component.SpanConfig{
-		PadHorizontal:    2,
-		ContentAlignment: component.AlignmentCentered,
-	})
-
-	var win browser.Window
-	floating := browser.FuncFloatingHandler(span, func() error {
-		defer win.Close() //nolint:errcheck
-		return mdh.Close()
-	})
-	staticWidth := browser.FuncFloating(floating, func() (int, int) {
-		_, h := floating.Dimensions()
-		return cheatsheetWidth, h
-	})
-	win, err = e.comp.Floating(staticWidth, browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
-	})
-	return err
 }
 
 // browseURL opens a URL in the system browser. It is a package var so

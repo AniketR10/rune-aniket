@@ -62,6 +62,12 @@ var (
 			},
 			handler: (*ex).cheatsheet,
 		},
+		"keybindings": {
+			man: textapi.CommandManual{
+				Summary: "List your currently configured key bindings and the commands they run.",
+			},
+			handler: (*ex).keybindings,
+		},
 		"history": {
 			man: textapi.CommandManual{
 				Summary: "Open the command prompt showing previously executed commands.",
