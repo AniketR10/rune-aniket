@@ -660,6 +660,25 @@ func (wm *WindowManager) closeFloatingWindow(w *floatingNode) {
 	}
 }
 
+// ForegroundFloating moves win to the top of the floating window z-order so
+// it is drawn last (above other floating windows). It is a no-op for tiled
+// windows or windows not managed here.
+func (wm *WindowManager) ForegroundFloating(win Window) {
+	fn, ok := win.node.(*floatingNode)
+	if !ok {
+		return
+	}
+	for i, f := range wm.float {
+		if f == fn {
+			if i == len(wm.float)-1 {
+				return
+			}
+			wm.float = append(slices.Delete(wm.float, i, i+1), fn)
+			return
+		}
+	}
+}
+
 func (wm *WindowManager) nodeToWindow(node windowNode) Window {
 	return Window{node: node, wm: wm}
 }

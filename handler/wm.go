@@ -555,6 +555,7 @@ func (wm *WindowManager) SetFocus(tile Window) (
 	}
 	prev = wm.focus
 	wm.focus = tile
+	wm.comp.ForegroundFloating(tile.Window)
 	if prev != tile {
 		wm.dispatchOnFocus(prev, wm.focus)
 		wm.prevFocus = prev

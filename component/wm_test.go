@@ -2453,3 +2453,43 @@ func TestFloatingWindowUserResizeShrinks(t *testing.T) {
 		})
 	}
 }
+
+// TestForegroundFloating asserts that ForegroundFloating moves a floating
+// window to the top of the z-order (drawn last) and is idempotent when the
+// window is already on top, and a no-op for tiled windows.
+func TestForegroundFloating(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	cfg.NoMaxSize = true
+	wm, tiled := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+	wm.Resize(20, 10)
+
+	a := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'A'}, 2, 2),
+		FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}},
+	)
+	b := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2),
+		FloatingConfig{Offset: term.Coordinates{X: 4, Y: 1}},
+	)
+
+	floatOrder := func() []uint64 {
+		var ids []uint64
+		wm.Iterate(func(win Window) {
+			if _, ok := win.node.(*floatingNode); ok {
+				ids = append(ids, win.ID())
+			}
+		})
+		return ids
+	}
+
+	assert.Equal(t, []uint64{a.ID(), b.ID()}, floatOrder())
+
+	wm.ForegroundFloating(a)
+	assert.Equal(t, []uint64{b.ID(), a.ID()}, floatOrder())
+
+	wm.ForegroundFloating(a)
+	assert.Equal(t, []uint64{b.ID(), a.ID()}, floatOrder())
+
+	wm.ForegroundFloating(tiled)
+	assert.Equal(t, []uint64{b.ID(), a.ID()}, floatOrder())
+}
