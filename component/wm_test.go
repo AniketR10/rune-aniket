@@ -2048,22 +2048,9 @@ func TestWindowManagerIterateCloseTilesDuringIteration(t *testing.T) {
 	assert.NotPanics(t, func() { _ = keep.Position() })
 }
 
-type noBarFloating struct {
-	component.Floating
-}
-
-func (noBarFloating) NoWindowBar() {}
-
-type titledFloating struct {
-	component.Floating
-	title string
-}
-
-func (f titledFloating) WindowTitle() string { return f.title }
-
 // TestWindowBarDraw covers window bar rendering: floating windows get
 // the solid bar plus the close icon, tiles keep the plain top frame,
-// and NoBar/opt-out floats keep the plain frame.
+// and NoBar floats keep the plain frame.
 func TestWindowBarDraw(t *testing.T) {
 	newFloating := func() component.Floating {
 		return component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2)
@@ -2096,23 +2083,6 @@ func TestWindowBarDraw(t *testing.T) {
 				wm.FloatingWindow(newFloating(), FloatingConfig{
 					Offset: term.Coordinates{X: 1, Y: 1},
 					NoBar:  true,
-				})
-			},
-			expected: `
-┌──────────────────┐
-│┌──┐CCCCCCCCCCCCCC│
-││BB│CCCCCCCCCCCCCC│
-││BB│CCCCCCCCCCCCCC│
-│└──┘CCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-└──────────────────┘`,
-		},
-		{
-			name: "WindowBarOptOut content keeps plain frame",
-			open: func(wm *WindowManager) {
-				wm.FloatingWindow(noBarFloating{newFloating()}, FloatingConfig{
-					Offset: term.Coordinates{X: 1, Y: 1},
 				})
 			},
 			expected: `
@@ -2174,9 +2144,9 @@ func TestWindowBarSetFrameCharSet(t *testing.T) {
 }
 
 // TestWindowBarTitleDraw covers title rendering on the window bar:
-// titles come from FloatingConfig.Title or a WindowTitler content,
-// are centered after the close icon, truncated to the available bar
-// cells, and dropped entirely on bar-less windows.
+// titles come from FloatingConfig.Title, are centered after the close
+// icon, truncated to the available bar cells, and dropped entirely on
+// bar-less windows.
 func TestWindowBarTitleDraw(t *testing.T) {
 	newFloating := func() component.Floating {
 		return component.StaticFloating(&component.TestComponent{Ch: 'B'}, 10, 2)
@@ -2193,41 +2163,6 @@ func TestWindowBarTitleDraw(t *testing.T) {
 					Offset: term.Coordinates{X: 1, Y: 1},
 					Title:  "cmd",
 				})
-			},
-			expected: `
-┌──────────────────┐
-│█●██ cmd ███CCCCCC│
-││BBBBBBBBBB│CCCCCC│
-││BBBBBBBBBB│CCCCCC│
-│└──────────┘CCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-└──────────────────┘`,
-		},
-		{
-			name: "WindowTitler content provides the title",
-			open: func(wm *WindowManager) {
-				wm.FloatingWindow(titledFloating{newFloating(), "hi"},
-					FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
-			},
-			expected: `
-┌──────────────────┐
-│█●███ hi ███CCCCCC│
-││BBBBBBBBBB│CCCCCC│
-││BBBBBBBBBB│CCCCCC│
-│└──────────┘CCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-└──────────────────┘`,
-		},
-		{
-			name: "config title takes precedence over WindowTitler",
-			open: func(wm *WindowManager) {
-				wm.FloatingWindow(titledFloating{newFloating(), "hi"},
-					FloatingConfig{
-						Offset: term.Coordinates{X: 1, Y: 1},
-						Title:  "cmd",
-					})
 			},
 			expected: `
 ┌──────────────────┐
@@ -2443,6 +2378,46 @@ func TestWindowManagerMoveWindow(t *testing.T) {
 	restoredWin, ok := restored[layout.Floating[0].WindowID]
 	require.True(t, ok)
 	assert.Equal(t, term.Coordinates{X: 5, Y: 3}, restoredWin.Position())
+}
+
+// TestFloatingLayoutBarRoundTrip covers that NoBar and Title persist
+// through TileLayout/RestoreTileLayout so restored floats keep their
+// bar configuration without re-deriving it from content.
+func TestFloatingLayoutBarRoundTrip(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	cfg.NoMaxSize = true
+	wm, _ := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+	wm.Resize(20, 8)
+	titled := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2),
+		FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}, Title: "cmd"},
+	)
+	noBar := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2),
+		FloatingConfig{Offset: term.Coordinates{X: 8, Y: 1}, NoBar: true},
+	)
+
+	layout := wm.TileLayout()
+	require.Len(t, layout.Floating, 2)
+
+	restored := wm.RestoreTileLayout(layout, func(windowID uint64) tui.Component {
+		for _, fl := range layout.Floating {
+			if windowID == fl.WindowID {
+				return component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2)
+			}
+		}
+		return &component.TestComponent{Ch: 'C'}
+	})
+
+	restoredTitled, ok := restored[titled.ID()]
+	require.True(t, ok)
+	assert.True(t, restoredTitled.HasWindowBar())
+	assert.Equal(t, "cmd", restoredTitled.Title())
+
+	restoredNoBar, ok := restored[noBar.ID()]
+	require.True(t, ok)
+	assert.False(t, restoredNoBar.HasWindowBar())
+	assert.Empty(t, restoredNoBar.Title())
 }
 
 // TestFloatingWindowUserResizeShrinks asserts that a user-set size

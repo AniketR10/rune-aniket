@@ -180,6 +180,8 @@ func (w *floatingNode) layout() FloatingLayout {
 		Offset:             w.desiredOffset,
 		MinimizedAlignment: w.minimized,
 		MinimizedPadding:   w.minimizedPadding,
+		NoBar:              w.noBar,
+		Title:              w.title,
 	}
 }
 

@@ -343,7 +343,12 @@ func (s *Server) Floating(srv browserrpc.WindowManager_FloatingServer) error {
 
 	at := req.GetOffset().ToModel()
 	alignment := component.Alignment(req.GetAlignment())
-	cfg := browserapi.FloatingConfig{Offset: at, Alignment: alignment}
+	cfg := browserapi.FloatingConfig{
+		Offset:      at,
+		Alignment:   alignment,
+		NoWindowBar: req.GetNoWindowBar(),
+		Title:       req.GetTitle(),
+	}
 
 	// NOTE: intercept the first calls to Dimensions and Resize
 	// so send install response before stream starts exchanging

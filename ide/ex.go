@@ -1613,6 +1613,7 @@ func (e *ex) executePlugin(_ context.Context, args ...string) error {
 	}
 	cfg := browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,
+		Title:     h.Title(),
 	}
 	// there can be multiple floating windows open
 	// so instead of matching windows on tabclose,
@@ -2842,12 +2843,6 @@ func (e *ex) focusHandler() tui.Handler {
 type pluginAdapter struct {
 	pluginHandler
 	win browser.Window
-}
-
-// WindowTitle satisfies component.WindowTitler so the floating
-// window's bar displays the plugin's title.
-func (h *pluginAdapter) WindowTitle() string {
-	return h.pluginHandler.Title()
 }
 
 type workspaceExecutorAdapter struct {

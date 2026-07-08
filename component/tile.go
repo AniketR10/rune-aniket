@@ -75,6 +75,8 @@ type FloatingLayout struct {
 	Offset             term.Coordinates
 	MinimizedAlignment component.Alignment
 	MinimizedPadding   int
+	NoBar              bool
+	Title              string
 }
 
 // SplitOrientation identifies how a TileLayout stem splits its children.

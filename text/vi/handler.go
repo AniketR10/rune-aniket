@@ -1244,8 +1244,9 @@ func (vi *viHandlerImpl) openInsertCompletionWindow(candidates []string, focusId
 	winCoords, _ := vi.cursor.WindowCoordinates(pos)
 
 	win, err := wm.Floating(floating, browserapi.FloatingConfig{
-		Alignment: sdkcomp.AlignmentLeft | sdkcomp.AlignmentTop,
-		Offset:    term.Coordinates{X: winCoords.X + 1, Y: winCoords.Y + 2},
+		Alignment:   sdkcomp.AlignmentLeft | sdkcomp.AlignmentTop,
+		Offset:      term.Coordinates{X: winCoords.X + 1, Y: winCoords.Y + 2},
+		NoWindowBar: true,
 	})
 	if err != nil {
 		vi.logError(err)

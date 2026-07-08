@@ -28,7 +28,6 @@ import (
 
 	sdkcomp "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	tcomponent "unstable.build/go-tui/component"
 )
 
 const (
@@ -45,12 +44,6 @@ type insertCompletionFloating struct {
 	selected bool
 	apply    func(string)
 }
-
-var _ tcomponent.WindowBarOptOut = (*insertCompletionFloating)(nil)
-
-// NoWindowBar keeps the completion popup rendered with a plain frame
-// instead of the floating window bar.
-func (f *insertCompletionFloating) NoWindowBar() {}
 
 func newInsertCompletionFloating(
 	candidates []string,

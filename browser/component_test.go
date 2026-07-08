@@ -980,42 +980,32 @@ func TestWindowBarCloseIconClick(t *testing.T) {
 	assert.True(t, h.closed, "handler must be released")
 }
 
-type noBarNopHandler struct {
-	*nopHandler
-}
-
-func (noBarNopHandler) NoWindowBar() {}
-
-type titledNopHandler struct {
-	*nopHandler
-	title string
-}
-
-func (h titledNopHandler) WindowTitle() string { return h.title }
-
-// TestFloatingWindowBarOptOut covers that handlers implementing
-// component.WindowBarOptOut open bar-less floating windows even though
-// the browser wraps them in browserContent adapters.
+// TestFloatingWindowBarOptOut covers that FloatingConfig.NoWindowBar
+// opens bar-less floating windows even though the browser wraps
+// handlers in browserContent adapters.
 func TestFloatingWindowBarOptOut(t *testing.T) {
 	b := NewComponent(DefaultConfig())
 	b.Resize(30, 14)
 
-	optOut := b.Floating(noBarNopHandler{newTestHandler()}, browserapi.FloatingConfig{})
+	optOut := b.Floating(newTestHandler(), browserapi.FloatingConfig{
+		NoWindowBar: true,
+	})
 	assert.False(t, optOut.(*browserWindow).win.HasWindowBar())
 
 	regular := b.Floating(newTestHandler(), browserapi.FloatingConfig{})
 	assert.True(t, regular.(*browserWindow).win.HasWindowBar())
 }
 
-// TestFloatingWindowTitle covers that handlers implementing
-// component.WindowTitler open floating windows with a bar title even
-// though the browser wraps them in browserContent adapters.
+// TestFloatingWindowTitle covers that FloatingConfig.Title sets the
+// floating window's bar title even though the browser wraps handlers
+// in browserContent adapters.
 func TestFloatingWindowTitle(t *testing.T) {
 	b := NewComponent(DefaultConfig())
 	b.Resize(30, 14)
 
-	titled := b.Floating(titledNopHandler{newTestHandler(), "hi"},
-		browserapi.FloatingConfig{})
+	titled := b.Floating(newTestHandler(), browserapi.FloatingConfig{
+		Title: "hi",
+	})
 	assert.Equal(t, "hi", titled.(*browserWindow).win.Title())
 
 	regular := b.Floating(newTestHandler(), browserapi.FloatingConfig{})

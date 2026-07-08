@@ -60,14 +60,6 @@ type WindowBarCharSet struct {
 // icon is rendered on a floating window's bar.
 const WindowBarCloseIconX = 1
 
-// WindowBarOptOut can be implemented by floating window content to
-// keep the plain window frame instead of the window bar.
-type WindowBarOptOut interface{ NoWindowBar() }
-
-// WindowTitler can be implemented by floating window content to
-// provide a title rendered on the window bar.
-type WindowTitler interface{ WindowTitle() string }
-
 // WindowManager wraps a TileTree to provide an easier API.
 type WindowManager struct {
 	tree          TileTree
@@ -161,8 +153,8 @@ func (wm *WindowManager) RestoreTileLayout(
 		win := newFloatingNode(wm, floating, FloatingConfig{
 			Alignment: floatingLayout.Alignment,
 			Offset:    floatingLayout.Offset,
-			NoBar:     windowBarOptOut(c),
-			Title:     windowTitle(c),
+			NoBar:     floatingLayout.NoBar,
+			Title:     floatingLayout.Title,
 		}, wm.minimizedWidth, wm.minimizedHeight)
 		wm.applyWindowBar(win)
 		wm.float = append(wm.float, win)
@@ -488,8 +480,7 @@ type FloatingConfig struct {
 	// NoBar keeps the plain window frame instead of the window bar
 	// when the WindowManager is configured with WindowBar.
 	NoBar bool
-	// Title is rendered centered on the window bar. When empty, the
-	// content is queried for a WindowTitler implementation.
+	// Title is rendered centered on the window bar.
 	Title string
 }
 
@@ -499,12 +490,6 @@ func (wm *WindowManager) FloatingWindow(
 ) Window {
 	if wm.config.Frame {
 		content = wm.withFrame(content)
-	}
-	if !cfg.NoBar {
-		cfg.NoBar = windowBarOptOut(content)
-	}
-	if cfg.Title == "" {
-		cfg.Title = windowTitle(content)
 	}
 	f := newFloatingNode(wm, content, cfg, wm.minimizedWidth, wm.minimizedHeight)
 	wm.applyWindowBar(f)
@@ -655,24 +640,6 @@ func (wm *WindowManager) ToggleMaximize(win Window) bool {
 	fn.updateDesiredDimensions()
 	fn.resize()
 	return true
-}
-
-func windowBarOptOut(c tui.Component) bool {
-	if f, ok := c.(*component.Frame); ok {
-		c = f.Content()
-	}
-	_, ok := c.(WindowBarOptOut)
-	return ok
-}
-
-func windowTitle(c tui.Component) string {
-	if f, ok := c.(*component.Frame); ok {
-		c = f.Content()
-	}
-	if t, ok := c.(WindowTitler); ok {
-		return t.WindowTitle()
-	}
-	return ""
 }
 
 func (wm *WindowManager) withFrame(handler tui.Component) *component.Frame {

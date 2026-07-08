@@ -660,17 +660,12 @@ func (c *Component) Floating(
 	if h == nil {
 		panic("nil Floating handler")
 	}
-	_, noBar := any(h).(tcomponent.WindowBarOptOut)
-	var title string
-	if t, ok := any(h).(tcomponent.WindowTitler); ok {
-		title = t.WindowTitle()
-	}
 	h = c.newBrowserContent(h).(Floating)
 	win := c.newWindow(c.wm.FloatingWindow(h, tcomponent.FloatingConfig{
 		Alignment: cfg.Alignment,
 		Offset:    cfg.Offset,
-		NoBar:     noBar,
-		Title:     title,
+		NoBar:     cfg.NoWindowBar,
+		Title:     cfg.Title,
 	}))
 	c.wm.SetFocus(win.win)
 	return win
