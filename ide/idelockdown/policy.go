@@ -43,6 +43,9 @@ const (
 	ActionNone Action = iota
 	// ActionPrompt requests a closable pay/sign-in prompt.
 	ActionPrompt
+	// ActionAskMoreTime requests a closable prompt that also offers
+	// the user a way to ask for more time before lockdown.
+	ActionAskMoreTime
 	// ActionLockdown requests locking the IDE behind the lockdown
 	// overlay.
 	ActionLockdown

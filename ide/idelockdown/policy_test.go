@@ -231,67 +231,85 @@ func TestPoliciesEvaluate(t *testing.T) {
 	parseError := ideplan.Decision{Status: ideplan.StatusExpired, SignedIn: ideplan.ParseClaimsError}
 	nagWindows := int(nagRun / qualifyWindow)
 	lockdownWindows := int(lockdownRun / qualifyWindow)
+	askMoreTimeWindows := int(askMoreTimeRun / qualifyWindow)
 	for _, tc := range []struct {
-		name         string
-		usage        []time.Time
-		plan         ideplan.Decision
-		wantNag      Action
-		wantLockdown Action
+		name            string
+		usage           []time.Time
+		plan            ideplan.Decision
+		wantNag         Action
+		wantAskMoreTime Action
+		wantLockdown    Action
 	}{
 		{
-			name:         "expired with no usage",
-			plan:         expired,
-			wantNag:      ActionNone,
-			wantLockdown: ActionNone,
+			name:            "expired with no usage",
+			plan:            expired,
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
 		},
 		{
-			name:         "expired below the nag run",
-			usage:        qualifyingWindows(0, nagWindows-1),
-			plan:         expired,
-			wantNag:      ActionNone,
-			wantLockdown: ActionNone,
+			name:            "expired below the nag run",
+			usage:           qualifyingWindows(0, nagWindows-1),
+			plan:            expired,
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
 		},
 		{
-			name:         "expired at the nag run nags",
-			usage:        qualifyingWindows(0, nagWindows),
-			plan:         expired,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionNone,
+			name:            "expired at the nag run nags",
+			usage:           qualifyingWindows(0, nagWindows),
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
 		},
 		{
-			name:         "expired below the lockdown run nags only",
-			usage:        qualifyingWindows(0, lockdownWindows-1),
-			plan:         expired,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionNone,
+			name:            "expired below the ask-more-time run nags only",
+			usage:           qualifyingWindows(0, askMoreTimeWindows-1),
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
 		},
 		{
-			name:         "expired at the lockdown run locks",
-			usage:        qualifyingWindows(0, lockdownWindows),
-			plan:         expired,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionLockdown,
+			name:            "expired at the ask-more-time run asks for more time",
+			usage:           qualifyingWindows(0, askMoreTimeWindows),
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionNone,
 		},
 		{
-			name:         "never-subscribed at the lockdown run locks",
-			usage:        qualifyingWindows(0, lockdownWindows),
-			plan:         neverSubscribed,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionLockdown,
+			name:            "expired at the lockdown run locks",
+			usage:           qualifyingWindows(0, lockdownWindows),
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionLockdown,
 		},
 		{
-			name:         "signed-out at the lockdown run locks",
-			usage:        qualifyingWindows(0, lockdownWindows),
-			plan:         signedOut,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionLockdown,
+			name:            "never-subscribed at the lockdown run locks",
+			usage:           qualifyingWindows(0, lockdownWindows),
+			plan:            neverSubscribed,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionLockdown,
 		},
 		{
-			name:         "parse-error at the lockdown run locks",
-			usage:        qualifyingWindows(0, lockdownWindows),
-			plan:         parseError,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionLockdown,
+			name:            "signed-out at the lockdown run locks",
+			usage:           qualifyingWindows(0, lockdownWindows),
+			plan:            signedOut,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionLockdown,
+		},
+		{
+			name:            "parse-error at the lockdown run locks",
+			usage:           qualifyingWindows(0, lockdownWindows),
+			plan:            parseError,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionLockdown,
 		},
 		{
 			name: "partial current window counts once it qualifies",
@@ -299,23 +317,26 @@ func TestPoliciesEvaluate(t *testing.T) {
 				windowSamples(
 					windowBase.Add(time.Duration(lockdownWindows-1)*qualifyWindow),
 					qualifyingBuckets)...),
-			plan:         expired,
-			wantNag:      ActionPrompt,
-			wantLockdown: ActionLockdown,
+			plan:            expired,
+			wantNag:         ActionPrompt,
+			wantAskMoreTime: ActionAskMoreTime,
+			wantLockdown:    ActionLockdown,
 		},
 		{
-			name:         "active user is never nagged or locked",
-			usage:        qualifyingWindows(0, lockdownWindows+4),
-			plan:         ideplan.Decision{Status: ideplan.StatusActive},
-			wantNag:      ActionNone,
-			wantLockdown: ActionNone,
+			name:            "active user is never nagged or locked",
+			usage:           qualifyingWindows(0, lockdownWindows+4),
+			plan:            ideplan.Decision{Status: ideplan.StatusActive},
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
 		},
 		{
-			name:         "grace-period user is never nagged or locked",
-			usage:        qualifyingWindows(0, lockdownWindows+4),
-			plan:         ideplan.Decision{Status: ideplan.StatusGracePeriod},
-			wantNag:      ActionNone,
-			wantLockdown: ActionNone,
+			name:            "grace-period user is never nagged or locked",
+			usage:           qualifyingWindows(0, lockdownWindows+4),
+			plan:            ideplan.Decision{Status: ideplan.StatusGracePeriod},
+			wantNag:         ActionNone,
+			wantAskMoreTime: ActionNone,
+			wantLockdown:    ActionNone,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -328,6 +349,10 @@ func TestPoliciesEvaluate(t *testing.T) {
 			assert.Equal(t, tc.wantNag, nag, "nag policy")
 			assert.Equal(t, s.Now.Add(evaluateInterval), nagNext,
 				"nag policy must re-evaluate one interval later")
+			askNext, ask := AskMoreTimePolicy{}.Evaluate(s)
+			assert.Equal(t, tc.wantAskMoreTime, ask, "ask-more-time policy")
+			assert.Equal(t, s.Now.Add(evaluateInterval), askNext,
+				"ask-more-time policy must re-evaluate one interval later")
 			lockNext, lock := LockdownPolicy{}.Evaluate(s)
 			assert.Equal(t, tc.wantLockdown, lock, "lockdown policy")
 			assert.Equal(t, s.Now.Add(evaluateInterval), lockNext,
@@ -341,7 +366,7 @@ func TestDefaultPolicies(t *testing.T) {
 	for _, p := range DefaultPolicies() {
 		names = append(names, p.Name())
 	}
-	assert.Equal(t, []string{"nag", "lockdown"}, names)
+	assert.Equal(t, []string{"nag", "ask-more-time", "lockdown"}, names)
 }
 
 func TestGated(t *testing.T) {

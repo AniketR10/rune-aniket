@@ -355,7 +355,7 @@ func newPlanLockdownPrompt(
 		onSelect: func(_ int, opt string) {
 			switch opt {
 			case optLockUpgrade:
-				openCheckoutURL(deps.checkoutURL)
+				openBrowser(deps.checkoutURL)
 			case optLockSignIn, optLockReSignIn:
 				if deps.onReSignIn != nil {
 					go debug.CapturePanicReport(deps.onReSignIn)
@@ -432,10 +432,7 @@ func newPromptMarkdownMessage(str string) component.Floating {
 		component.NewResponsiveString(str, cfg), component.DefaultAspectRatio)
 }
 
-func openCheckoutURL(raw string) {
-	if raw == "" {
-		return
-	}
+func openBrowser(raw string) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		log.WithError(err).Warnf("ideplan: parse checkout url %q", raw)

@@ -116,12 +116,13 @@ func newTestPlanner(
 ) *Planner {
 	t.Helper()
 	p := New(Config{
-		Storage:    store,
-		Source:     src,
-		Policies:   DefaultPolicies(),
-		Locker:     locker,
-		ShowPrompt: showPrompt,
-		Now:        now,
+		Storage:               store,
+		Source:                src,
+		Policies:              DefaultPolicies(),
+		Locker:                locker,
+		ShowNagPrompt:         showPrompt,
+		ShowAskMoreTimePrompt: func() {},
+		Now:                   now,
 	})
 	require.NoError(t, p.Start(context.Background()))
 	t.Cleanup(p.Stop)
@@ -135,11 +136,12 @@ func newTestPlanner(
 func TestNewPanicsOnMissingDependencies(t *testing.T) {
 	valid := func() Config {
 		return Config{
-			Storage:    storagestub.NewInMemoryService(),
-			Source:     expiredSource(),
-			Policies:   DefaultPolicies(),
-			Locker:     &recordingLocker{},
-			ShowPrompt: func() {},
+			Storage:               storagestub.NewInMemoryService(),
+			Source:                expiredSource(),
+			Policies:              DefaultPolicies(),
+			Locker:                &recordingLocker{},
+			ShowNagPrompt:         func() {},
+			ShowAskMoreTimePrompt: func() {},
 		}
 	}
 	for _, tc := range []struct {
@@ -150,7 +152,9 @@ func TestNewPanicsOnMissingDependencies(t *testing.T) {
 		{name: "nil source", mutate: func(c *Config) { c.Source = nil }},
 		{name: "empty policies", mutate: func(c *Config) { c.Policies = nil }},
 		{name: "nil locker", mutate: func(c *Config) { c.Locker = nil }},
-		{name: "nil show prompt", mutate: func(c *Config) { c.ShowPrompt = nil }},
+		{name: "nil show nag prompt", mutate: func(c *Config) { c.ShowNagPrompt = nil }},
+		{name: "nil show ask-more-time prompt",
+			mutate: func(c *Config) { c.ShowAskMoreTimePrompt = nil }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := valid()
@@ -197,12 +201,13 @@ func TestPlannerScheduledEvaluationRecordsNewSample(t *testing.T) {
 		return s.Now.Add(20 * time.Millisecond)
 	}}
 	p := New(Config{
-		Storage:    store,
-		Source:     expiredSource(),
-		Policies:   []Policy{pol},
-		Locker:     &recordingLocker{},
-		ShowPrompt: func() {},
-		Now:        clock.Now,
+		Storage:               store,
+		Source:                expiredSource(),
+		Policies:              []Policy{pol},
+		Locker:                &recordingLocker{},
+		ShowNagPrompt:         func() {},
+		ShowAskMoreTimePrompt: func() {},
+		Now:                   clock.Now,
 	})
 	require.NoError(t, p.Start(context.Background()))
 	t.Cleanup(p.Stop)
@@ -227,12 +232,13 @@ func TestPlannerSchedulesEarliestPolicyTime(t *testing.T) {
 		return s.Now.Add(5 * time.Millisecond)
 	}}
 	p := New(Config{
-		Storage:    storagestub.NewInMemoryService(),
-		Source:     expiredSource(),
-		Policies:   []Policy{slow, fast},
-		Locker:     &recordingLocker{},
-		ShowPrompt: func() {},
-		Now:        time.Now,
+		Storage:               storagestub.NewInMemoryService(),
+		Source:                expiredSource(),
+		Policies:              []Policy{slow, fast},
+		Locker:                &recordingLocker{},
+		ShowNagPrompt:         func() {},
+		ShowAskMoreTimePrompt: func() {},
+		Now:                   time.Now,
 	})
 	require.NoError(t, p.Start(context.Background()))
 	t.Cleanup(p.Stop)
@@ -247,12 +253,13 @@ func TestPlannerSchedulesEarliestPolicyTime(t *testing.T) {
 func TestPlannerZeroNextTimeEndsChain(t *testing.T) {
 	pol := &stubPolicy{next: func(Snapshot) time.Time { return time.Time{} }}
 	p := New(Config{
-		Storage:    storagestub.NewInMemoryService(),
-		Source:     expiredSource(),
-		Policies:   []Policy{pol},
-		Locker:     &recordingLocker{},
-		ShowPrompt: func() {},
-		Now:        time.Now,
+		Storage:               storagestub.NewInMemoryService(),
+		Source:                expiredSource(),
+		Policies:              []Policy{pol},
+		Locker:                &recordingLocker{},
+		ShowNagPrompt:         func() {},
+		ShowAskMoreTimePrompt: func() {},
+		Now:                   time.Now,
 	})
 	require.NoError(t, p.Start(context.Background()))
 	t.Cleanup(p.Stop)
@@ -390,6 +397,50 @@ func TestPlannerNagsOncePerCooldownAcrossRestarts(t *testing.T) {
 		func() { prompts++ }, now)
 	assert.Equal(t, 1, prompts,
 		"restart within the cooldown must not nag again")
+}
+
+// TestPlannerAskMoreTimeReplacesLastNag pins that during the final
+// qualifying window before lockdown the ask-more-time prompt fires in
+// place of the nag, on the shared nag cooldown.
+func TestPlannerAskMoreTimeReplacesLastNag(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	seedUsage(t, store, qualifyingWindows(0, int(askMoreTimeRun/qualifyWindow)))
+	var nags, asks int
+	var mu sync.Mutex
+	now := windowBase.Add(askMoreTimeRun)
+	getNow := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	locker := &recordingLocker{}
+	p := New(Config{
+		Storage:               store,
+		Source:                expiredSource(),
+		Policies:              DefaultPolicies(),
+		Locker:                locker,
+		ShowNagPrompt:         func() { nags++ },
+		ShowAskMoreTimePrompt: func() { asks++ },
+		Now:                   getNow,
+	})
+	require.NoError(t, p.Start(context.Background()))
+	t.Cleanup(p.Stop)
+	assert.Equal(t, 1, asks,
+		"startup evaluation must show the ask-more-time prompt once")
+	assert.Equal(t, 0, nags,
+		"the ask-more-time prompt must replace the nag")
+
+	p.SetLocked(true)
+	assert.Equal(t, 1, asks,
+		"repeat evaluations within the cooldown must not re-prompt")
+
+	mu.Lock()
+	now = now.Add(nagCooldown)
+	mu.Unlock()
+	p.SetLocked(true)
+	assert.Equal(t, 2, asks, "an elapsed cooldown must prompt again")
+	assert.Equal(t, 0, nags,
+		"the nag must stay replaced past the ask-more-time threshold")
 }
 
 // TestPlannerSnapshotReflectsPersistedUsage pins that open-IDE time

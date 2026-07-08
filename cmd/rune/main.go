@@ -568,6 +568,7 @@ func runTUI(
 		ide.WithPlanSource(ide.PlanSourceConfig{
 			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
 			CheckoutURL: checkoutURL,
+			SupportURL:  mustResolveSupportURL(*flagWebsiteAddress),
 			SignIn:      planSignIn(client),
 		}),
 	)

@@ -861,17 +861,30 @@ func (b *bootstrapHandler) openUpgradePrompt() error {
 	return nil
 }
 
-// mustResolveBootstrapURLs panics on parse failure because in
+// mustParseWebsiteBase panics on parse failure because in
 // practice nobody sets -rune-website-address; the default points at
 // production and a parse failure means the build itself is broken.
-func mustResolveBootstrapURLs(raw string) (checkout, signup string) {
+func mustParseWebsiteBase(raw string) *url.URL {
 	base, err := url.Parse(raw)
 	if err != nil {
 		panic(fmt.Sprintf("parse -rune-website-address %q: %v", raw, err))
 	}
+	return base
+}
+
+func mustResolveBootstrapURLs(raw string) (checkout, signup string) {
+	base := mustParseWebsiteBase(raw)
 	signupBase := *base
 	signupBase.Path = "/signup"
 	return checkoutURL(base).String(), signupBase.String()
+}
+
+// mustResolveSupportURL resolves the support page the ask-more-time
+// prompt opens against the configured website address.
+func mustResolveSupportURL(raw string) string {
+	u := *mustParseWebsiteBase(raw)
+	u.Path = "/support"
+	return u.String()
 }
 
 func checkoutURL(base *url.URL) *url.URL {

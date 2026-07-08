@@ -40,6 +40,7 @@ import (
 //	nagRun            = 2 * qualifyWindow
 //	lockdownRun       = 6 * qualifyWindow
 //	nagCooldown       = 24 * time.Hour
+//	askMoreTimeRun    = lockdownRun - qualifyWindow
 const (
 	// evaluateInterval is how far ahead the policies schedule their
 	// next evaluation.
@@ -62,6 +63,12 @@ const (
 	lockdownRun = 6 * qualifyWindow
 	// nagCooldown is the minimum interval between upgrade prompts.
 	nagCooldown = 30 * time.Second
+	// askMoreTimeRun is the consecutive qualifying usage run after
+	// which the nag prompt is replaced by the ask-more-time prompt.
+	// It covers the last qualifying window before lockdownRun so the
+	// final prompt(s) before lockdown offer a way to ask for more
+	// time.
+	askMoreTimeRun = lockdownRun - qualifyWindow
 )
 
 // usageRun is the longest consecutive qualifying usage run in s.
@@ -92,6 +99,29 @@ func (NagPolicy) Evaluate(s Snapshot) (time.Time, Action) {
 	return next, ActionNone
 }
 
+// AskMoreTimePolicy replaces the nag prompt with the ask-more-time
+// prompt for the last qualifying window before lockdown. Its action
+// outranks ActionPrompt, so while both policies fire the planner
+// shows the ask-more-time copy instead of the nag.
+type AskMoreTimePolicy struct{}
+
+// Name identifies the policy in logs.
+func (AskMoreTimePolicy) Name() string { return "ask-more-time" }
+
+// Evaluate returns ActionAskMoreTime once the usage run reaches the
+// ask-more-time threshold. Only gated users (expired,
+// never-subscribed, or a sign-in problem) are prompted.
+func (AskMoreTimePolicy) Evaluate(s Snapshot) (time.Time, Action) {
+	next := s.Now.Add(evaluateInterval)
+	if g, _ := gated(s.Plan); !g {
+		return next, ActionNone
+	}
+	if usageRun(s) >= askMoreTimeRun {
+		return next, ActionAskMoreTime
+	}
+	return next, ActionNone
+}
+
 // LockdownPolicy locks the IDE for expired users after a lockdownRun
 // of qualifying usage.
 type LockdownPolicy struct{}
@@ -115,5 +145,5 @@ func (LockdownPolicy) Evaluate(s Snapshot) (time.Time, Action) {
 
 // DefaultPolicies returns the enforcement policies Rune ships with.
 func DefaultPolicies() []Policy {
-	return []Policy{NagPolicy{}, LockdownPolicy{}}
+	return []Policy{NagPolicy{}, AskMoreTimePolicy{}, LockdownPolicy{}}
 }

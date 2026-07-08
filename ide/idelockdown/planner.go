@@ -57,9 +57,13 @@ type Config struct {
 	Policies []Policy
 	// Locker is the lockdown overlay the planner locks and unlocks.
 	Locker Locker
-	// ShowPrompt opens the nag prompt. The caller is responsible
+	// ShowNagPrompt opens the nag prompt. The caller is responsible
 	// for scheduling onto the event loop.
-	ShowPrompt func()
+	ShowNagPrompt func()
+	// ShowAskMoreTimePrompt opens the ask-more-time prompt shown in
+	// place of the last nag before lockdown. The caller is
+	// responsible for scheduling onto the event loop.
+	ShowAskMoreTimePrompt func()
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -95,8 +99,11 @@ func New(cfg Config) *Planner {
 	if cfg.Locker == nil {
 		panic("idelockdown: Config.Locker is required")
 	}
-	if cfg.ShowPrompt == nil {
-		panic("idelockdown: Config.ShowPrompt is required")
+	if cfg.ShowNagPrompt == nil {
+		panic("idelockdown: Config.ShowNagPrompt is required")
+	}
+	if cfg.ShowAskMoreTimePrompt == nil {
+		panic("idelockdown: Config.ShowAskMoreTimePrompt is required")
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -211,8 +218,10 @@ func (p *Planner) evaluate(ctx context.Context) {
 	switch action {
 	case ActionLockdown:
 		p.cfg.Locker.SetLocked(true, reason)
+	case ActionAskMoreTime:
+		p.maybePrompt(ctx, s.Now, p.cfg.ShowAskMoreTimePrompt)
 	case ActionPrompt:
-		p.maybeNag(ctx, s.Now)
+		p.maybePrompt(ctx, s.Now, p.cfg.ShowNagPrompt)
 	case ActionNone:
 		p.cfg.Locker.SetLocked(false, LockNone)
 	}
@@ -252,10 +261,12 @@ func (p *Planner) scheduleEvaluate(ctx context.Context, at time.Time) {
 	})
 }
 
-// maybeNag shows the nag prompt at most once per nagCooldown,
-// persisted across restarts. The CAS mark happens before the prompt
-// so a concurrent session cannot double-nag.
-func (p *Planner) maybeNag(ctx context.Context, now time.Time) {
+// maybePrompt shows a prompt at most once per nagCooldown, persisted
+// across restarts. The nag and ask-more-time prompts share the mark,
+// so the ask-more-time prompt fires on the cadence the nag would
+// have, replacing it. The CAS mark happens before the prompt so a
+// concurrent session cannot double-prompt.
+func (p *Planner) maybePrompt(ctx context.Context, now time.Time, show func()) {
 	marked, err := p.tracker.markNagged(ctx, now, nagCooldown)
 	if err != nil {
 		log.WithError(err).Debug("idelockdown: mark nagged")
@@ -264,5 +275,5 @@ func (p *Planner) maybeNag(ctx context.Context, now time.Time) {
 	if !marked {
 		return
 	}
-	p.cfg.ShowPrompt()
+	show()
 }

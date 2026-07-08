@@ -342,7 +342,9 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 
 // PlanSourceConfig collects the dependencies WithPlanSource needs to
 // wire the lockdown overlay and monitor. CheckoutURL is the checkout
-// URL the Upgrade button opens; SignIn starts a fresh browser login
+// URL the Upgrade button opens; SupportURL is the page the
+// ask-more-time prompt's "Get more time" button opens (defaults to
+// defaultSupportURL when empty); SignIn starts a fresh browser login
 // (purging any cached token first) so the user can re-auth (possibly
 // as a paid account or a different user). The IDE owns the UX around
 // the returned session: it surfaces the OAuth URL with a clipboard
@@ -350,8 +352,13 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 type PlanSourceConfig struct {
 	Source      ideplan.Source
 	CheckoutURL string
+	SupportURL  string
 	SignIn      func(context.Context) SignInSession
 }
+
+// defaultSupportURL is where the ask-more-time prompt sends users
+// when PlanSourceConfig.SupportURL is not set.
+const defaultSupportURL = "https://rune.build/support"
 
 // initPlanSource starts the usage planner and the daily plan monitor
 // against the configured plan source.
@@ -367,8 +374,8 @@ func (i *IDE) initPlanSource(cfg PlanSourceConfig) {
 	i.planMonitor.Start(context.Background())
 }
 
-// nagPromptOpener returns the ShowPrompt callback the usage planner
-// invokes when the nag policy fires.
+// nagPromptOpener returns the ShowNagPrompt callback the usage
+// planner invokes when the nag policy fires.
 func (i *IDE) nagPromptOpener(cfg PlanSourceConfig) func() {
 	const message = "**Rune seems to be working out for you.**\n\n" +
 		"Rune is built by a small team and your subscription keep it going. " +
@@ -389,11 +396,53 @@ func (i *IDE) nagPromptOpener(cfg PlanSourceConfig) func() {
 					}
 					switch opt {
 					case optUpgrade:
-						openCheckoutURL(cfg.CheckoutURL)
+						openBrowser(cfg.CheckoutURL)
 					case optSignIn:
 						go debug.CapturePanicReport(func() {
 							i.startPlanSignIn(cfg)
 						})
+					}
+				}, func() error { return nil }),
+			)
+		})
+	}
+}
+
+// askMoreTimePromptOpener returns the ShowAskMoreTimePrompt callback
+// the usage planner invokes when the ask-more-time policy replaces
+// the last nag before lockdown.
+func (i *IDE) askMoreTimePromptOpener(cfg PlanSourceConfig) func() {
+	const message = "**Rune seems to be working out for you.**\n\n" +
+		"We've put a lot of work into Rune and your subscription allows us to keep making it better. " +
+		"If you need more time, that's ok."
+	const (
+		optUpgrade  = " Upgrade to Pro "
+		optSignIn   = " Sign in "
+		optMoreTime = " Get more time "
+	)
+	supportURL := cfg.SupportURL
+	if supportURL == "" {
+		supportURL = defaultSupportURL
+	}
+	return func() {
+		i.ideConfig.scheduleNextTick(func() {
+			var win browser.Window
+			win = i.Prompt(message,
+				[]string{optUpgrade, optSignIn, optMoreTime},
+				[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}, {Ch: 'g'}},
+				handler.FuncPromptHandler(func(_ int, opt string) {
+					if win != nil {
+						_ = win.Close()
+					}
+					switch opt {
+					case optUpgrade:
+						openBrowser(cfg.CheckoutURL)
+					case optSignIn:
+						go debug.CapturePanicReport(func() {
+							i.startPlanSignIn(cfg)
+						})
+					case optMoreTime:
+						openBrowser(supportURL)
 					}
 				}, func() error { return nil }),
 			)
@@ -671,12 +720,13 @@ func (i *IDE) init(
 	// Load before workspaceHandler.init: the usage doc shares the
 	// storage backend with the async workspace installs.
 	i.usagePlanner = idelockdown.New(idelockdown.Config{
-		Storage:    storageapi.WithPartition(i.storage, idelockdown.Partition),
-		Source:     op.planSource.Source,
-		Policies:   idelockdown.DefaultPolicies(),
-		Locker:     planLocker{ide: i},
-		ShowPrompt: i.nagPromptOpener(op.planSource),
-		Now:        time.Now,
+		Storage:               storageapi.WithPartition(i.storage, idelockdown.Partition),
+		Source:                op.planSource.Source,
+		Policies:              idelockdown.DefaultPolicies(),
+		Locker:                planLocker{ide: i},
+		ShowNagPrompt:         i.nagPromptOpener(op.planSource),
+		ShowAskMoreTimePrompt: i.askMoreTimePromptOpener(op.planSource),
+		Now:                   time.Now,
 	})
 	if err := i.usagePlanner.Load(context.Background()); err != nil {
 		log.WithError(err).Warn("idelockdown: load usage history")
