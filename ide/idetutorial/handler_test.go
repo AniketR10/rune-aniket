@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/ide/idetutorial"
@@ -74,8 +75,9 @@ type fakeTutorial struct {
 	shader  idetutorial.Shader
 	hasShdr bool
 
-	cursor    bool
-	selection string
+	cursor      bool
+	selection   string
+	componentAt func(term.Coordinates) (tui.Handler, bool)
 
 	resetCount int
 	stopCount  int
@@ -98,6 +100,13 @@ func (t *fakeTutorial) Handle(_ term.Event) (bool, bool) {
 
 func (t *fakeTutorial) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{X: 9, Y: 9}, term.CursorStyleDefault, t.cursor
+}
+
+func (t *fakeTutorial) ComponentAt(pos term.Coordinates) (tui.Handler, bool) {
+	if t.componentAt == nil {
+		return nil, false
+	}
+	return t.componentAt(pos)
 }
 
 func (t *fakeTutorial) Selection() (string, bool) {
@@ -221,16 +230,66 @@ func TestHandlerHandlePropagatesExit(t *testing.T) {
 	assert.True(t, handled)
 }
 
-func TestHandlerCursorAlwaysFromRoot(t *testing.T) {
+func TestHandlerCursor(t *testing.T) {
 	t.Parallel()
-	root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
-	tut := &fakeTutorial{cursor: true}
-	h := idetutorial.New(root, tut, nil)
+	// coversRow1 mimics an overlay box spanning X 0..9 on row Y=1.
+	// coversRow1 mimics an overlay box spanning X 0..9 on row Y=1.
+	coversRow1 := func(tut *fakeTutorial) func(term.Coordinates) (tui.Handler, bool) {
+		return func(pos term.Coordinates) (tui.Handler, bool) {
+			if pos.Y == 1 && pos.X < 10 {
+				return tut, true
+			}
+			return nil, false
+		}
+	}
 
-	c, _, show := h.Cursor()
-	assert.True(t, show)
-	assert.Equal(t, term.Coordinates{X: 3, Y: 1}, c,
-		"cursor must come from root regardless of tutorial state")
+	t.Run("falls through to root when tutorial is passive", func(t *testing.T) {
+		t.Parallel()
+		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
+		tut := &fakeTutorial{}
+		h := idetutorial.New(root, tut, nil)
+
+		c, _, show := h.Cursor()
+		assert.True(t, show)
+		assert.Equal(t, term.Coordinates{X: 3, Y: 1}, c)
+	})
+
+	t.Run("hides root cursor covered by the overlay", func(t *testing.T) {
+		t.Parallel()
+		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
+		tut := &fakeTutorial{}
+		tut.componentAt = coversRow1(tut)
+		h := idetutorial.New(root, tut, nil)
+
+		_, _, show := h.Cursor()
+		assert.False(t, show,
+			"root cursor must not bleed through an occluding tutorial overlay")
+	})
+
+	t.Run("shows root cursor outside the overlay", func(t *testing.T) {
+		t.Parallel()
+		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 5}}
+		tut := &fakeTutorial{}
+		tut.componentAt = coversRow1(tut)
+		h := idetutorial.New(root, tut, nil)
+
+		c, _, show := h.Cursor()
+		assert.True(t, show,
+			"root cursor outside the overlay must stay visible")
+		assert.Equal(t, term.Coordinates{X: 3, Y: 5}, c)
+	})
+
+	t.Run("prefers the tutorial's own cursor", func(t *testing.T) {
+		t.Parallel()
+		root := &fakeRoot{cursorOn: true, cursorAt: term.Coordinates{X: 3, Y: 1}}
+		tut := &fakeTutorial{cursor: true}
+		tut.componentAt = coversRow1(tut)
+		h := idetutorial.New(root, tut, nil)
+
+		c, _, show := h.Cursor()
+		assert.True(t, show)
+		assert.Equal(t, term.Coordinates{X: 9, Y: 9}, c)
+	})
 }
 
 func TestHandlerSelectionAlwaysFromRoot(t *testing.T) {

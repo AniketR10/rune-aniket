@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/ide/idetutorial"
@@ -88,6 +89,9 @@ func (t *tutStub) Shader() (idetutorial.Shader, bool) {
 	return idetutorial.Shader{}, false
 }
 func (t *tutStub) SetDefaultAttributes(_ term.Attributes) {}
+func (t *tutStub) ComponentAt(_ term.Coordinates) (tui.Handler, bool) {
+	return nil, false
+}
 
 func newTestRunner(tutorials map[string]idetutorial.Tutorial) (
 	*tutorialRunner, *rootStub,

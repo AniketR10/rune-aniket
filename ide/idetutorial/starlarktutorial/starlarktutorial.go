@@ -50,6 +50,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/markdown"
@@ -144,6 +145,12 @@ type Tutorial struct {
 	// stable state — and so a test that drives input immediately
 	// after Reset never races with the run goroutine.
 	firstSignal func()
+
+	// overlay positions the active step's box on screen and renders
+	// it in local coordinates. ComponentAt hit-tests against the
+	// same geometry the last Draw painted so the host can tell what
+	// the overlay covers. Only the TUI loop touches it.
+	overlay component.Virtual[*overlayComponent]
 }
 
 var _ idetutorial.Tutorial = (*Tutorial)(nil)
@@ -189,6 +196,7 @@ func New(
 		keyForCommand:       keyForCommand,
 		commandManualLookup: commandManualLookup,
 	}
+	t.overlay.C = &overlayComponent{}
 
 	if err := t.parse(src); err != nil {
 		return nil, fmt.Errorf("starlarktutorial %q: %w", name, err)
@@ -439,7 +447,8 @@ func (t *Tutorial) Resize(width, height int) {
 
 // Draw paints the current step's overlay on top of whatever was
 // previously drawn into w. Out-of-range writes are silently dropped.
-// Draw performs no state mutation.
+// The only state Draw mutates is the overlay virtual geometry that
+// backs ComponentAt.
 func (t *Tutorial) Draw(w term.Writer) {
 	t.mu.Lock()
 	active := t.active
@@ -451,29 +460,33 @@ func (t *Tutorial) Draw(w term.Writer) {
 	lookup := t.commandManualLookup
 	keyForCmd := t.keyForCommand
 	t.mu.Unlock()
+	// Cover nothing unless the per-kind draw claims geometry.
+	t.overlay.Resize(0, 0)
 	if finished || active == nil {
 		return
 	}
 	switch active.kind {
 	case reqFloatingWindow:
-		drawFloatingWindow(w, width, height, active, fcs, attr)
+		drawFloatingWindow(&t.overlay, w, width, height, active, fcs, attr)
 	case reqMarkdown:
-		drawBanner(w, width, height, []string{active.text})
+		drawBanner(&t.overlay, w, width, height, []string{active.text})
 	case reqWaitKey:
-		drawHintBox(w, width, height, active.title, active.stepNum,
-			"Press "+active.waitKey+" to continue.",
+		drawHintBox(&t.overlay, w, width, height, active.title,
+			active.stepNum, "Press "+active.waitKey+" to continue.",
 			fcs, attr)
 	case reqWaitCommand:
 		body := buildWaitCommandHint(active, cmdKey, lookup, keyForCmd)
-		drawHintBox(w, width, height, active.title, active.stepNum, body, fcs, attr)
+		drawHintBox(&t.overlay, w, width, height, active.title,
+			active.stepNum, body, fcs, attr)
 	case reqWaitShell:
 		body := buildWaitShellHint(active, cmdKey)
-		drawHintBox(w, width, height, active.title, active.stepNum, body, fcs, attr)
+		drawHintBox(&t.overlay, w, width, height, active.title,
+			active.stepNum, body, fcs, attr)
 	case reqWaitEvent:
-		drawHintBox(w, width, height, active.title, active.stepNum,
-			active.text, fcs, attr)
+		drawHintBox(&t.overlay, w, width, height, active.title,
+			active.stepNum, active.text, fcs, attr)
 	case reqChoice, reqConfirm:
-		drawPromptOverlay(w, width, height, active, fcs, attr)
+		drawPromptOverlay(&t.overlay, w, width, height, active, fcs, attr)
 	}
 }
 
@@ -624,6 +637,30 @@ func (t *Tutorial) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 // Selection returns no selection.
 func (t *Tutorial) Selection() (string, bool) { return "", false }
+
+// ComponentAt returns the handler behind the overlay cell at pos: the
+// active prompt for confirm/choice overlays, the tutorial itself for
+// every other overlay kind. ok=false when the last Draw painted
+// nothing at pos.
+func (t *Tutorial) ComponentAt(pos term.Coordinates) (tui.Handler, bool) {
+	t.mu.Lock()
+	active := t.active
+	finished := t.finished
+	t.mu.Unlock()
+	if finished || active == nil {
+		return nil, false
+	}
+	vpos := t.overlay.Position()
+	if pos.X < vpos.X || pos.Y < vpos.Y ||
+		pos.X >= vpos.X+t.overlay.Width() ||
+		pos.Y >= vpos.Y+t.overlay.Height() {
+		return nil, false
+	}
+	if active.promptVirtual != nil {
+		return active.promptVirtual, true
+	}
+	return t, true
+}
 
 // ObserveCommand advances the state machine when the current step is
 // wait_command, the dispatched command matches typed or resolved, and

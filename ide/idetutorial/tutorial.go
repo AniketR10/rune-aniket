@@ -72,4 +72,11 @@ type Tutorial interface {
 	// colors. Implementations must restage any active step's shader spec
 	// so the next Draw rebuilds it with the new attributes.
 	SetDefaultAttributes(defAttr term.Attributes)
+
+	// ComponentAt returns the tutorial handler drawn at pos, ok=false
+	// when the tutorial's overlay does not cover pos. The composing
+	// [Handler] hides the root's terminal cursor when the overlay
+	// covers it so the cursor does not bleed through; a cursor outside
+	// the overlay stays visible.
+	ComponentAt(pos term.Coordinates) (tui.Handler, bool)
 }

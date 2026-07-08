@@ -56,8 +56,9 @@ type Shader struct {
 // and owns the lifecycle of any [shader.Component] the tutorial
 // requests. Draw paints root then tutorial; when a shader is active
 // both are drawn through it. Handle dispatches to the tutorial first
-// and falls through to the root when unhandled. Cursor and Selection
-// always come from the root.
+// and falls through to the root when unhandled. Selection always comes
+// from the root; the root's cursor is hidden while it sits under the
+// tutorial's overlay so it does not bleed through.
 type Handler struct {
 	root        tui.Handler
 	tut         Tutorial
@@ -126,9 +127,20 @@ func (h *Handler) Handle(ev term.Event) (bool, bool) {
 	return exit, handled
 }
 
-// Cursor returns the root's cursor.
+// Cursor prefers the tutorial's own cursor; the root's cursor is
+// hidden when a tutorial overlay component covers it so it does not
+// bleed through, and shown unchanged otherwise.
 func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
-	return h.root.Cursor()
+	if c, style, show := h.tut.Cursor(); show {
+		return c, style, true
+	}
+	c, style, show := h.root.Cursor()
+	if show {
+		if _, covered := h.tut.ComponentAt(c); covered {
+			return term.Coordinates{}, term.CursorStyleDefault, false
+		}
+	}
+	return c, style, show
 }
 
 // Selection returns the root's selection.

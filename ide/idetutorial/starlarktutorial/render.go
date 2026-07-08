@@ -37,23 +37,51 @@ import (
 
 const floatingWindowBodyPad = 2
 
-// drawBanner paints lines top-left into w within (width, height).
+// overlayComponent draws the active step's overlay in local
+// coordinates so a single [component.Virtual] both positions the box
+// on screen and answers ComponentAt hit-tests against the same
+// geometry the last Draw painted.
+type overlayComponent struct {
+	width, height int
+	draw          func(w term.Writer)
+}
+
+// Resize satisfies tui.Component.
+func (c *overlayComponent) Resize(width, height int) {
+	c.width, c.height = width, height
+}
+
+// Draw satisfies tui.Component.
+func (c *overlayComponent) Draw(w term.Writer) {
+	if c.draw == nil {
+		return
+	}
+	c.draw(w)
+}
+
+// drawBanner paints lines top-left into v within (width, height).
 // Out-of-range writes are dropped silently.
-func drawBanner(w term.Writer, width, height int, lines []string) {
+func drawBanner(
+	v *component.Virtual[*overlayComponent], w term.Writer,
+	width, height int, lines []string,
+) {
 	if width <= 0 || height <= 0 {
 		return
 	}
-	for y, line := range lines {
-		if y >= height {
-			return
-		}
-		for x, r := range line {
-			if x >= width {
-				break
+	maxW := 0
+	for _, line := range lines {
+		maxW = max(maxW, min(len(line), width))
+	}
+	v.Move(term.Coordinates{})
+	v.Resize(maxW, min(len(lines), height))
+	v.C.draw = func(lw term.Writer) {
+		for y, line := range lines {
+			for x, r := range line {
+				lw.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: r})
 			}
-			w.SetCell(term.Coordinates{X: x, Y: y}, term.Cell{Ch: r})
 		}
 	}
+	v.Draw(w)
 }
 
 // hintBoxTopOffset is the row offset from the top of the screen
@@ -93,7 +121,8 @@ const hintBoxMaxHeightSlack = 3
 // row (matching floating_window) replaces the top frame edge. Empty
 // body or undersized geometry skips the draw silently.
 func drawHintBox(
-	w term.Writer, width, height int, title string, stepNum int, body string,
+	v *component.Virtual[*overlayComponent], w term.Writer,
+	width, height int, title string, stepNum int, body string,
 	fcs component.FrameCharSet, attrs term.Attributes,
 ) {
 	if width <= 4 || height <= 4 || body == "" {
@@ -135,26 +164,28 @@ func drawHintBox(
 	x0 := (width - innerW) / 2
 	x0 = max(x0, 0)
 	y0 := hintBoxTopOffset
-	drawFrameOutline(w, x0, y0, innerW, innerH, fcs, attrs, !hasTitle)
-	clearInside(w, x0, y0, innerW, innerH, attrs)
-	if hasTitle {
-		drawTitleBar(w, x0, y0, innerW, title, stepNum, attrs)
-	}
 	bodyH := innerH - 2 - titleH
-	if bodyH <= 0 || contentW <= 0 {
-		return
+	v.Move(term.Coordinates{X: x0, Y: y0})
+	v.Resize(innerW, innerH)
+	v.C.draw = func(lw term.Writer) {
+		drawFrameOutline(lw, 0, 0, innerW, innerH, fcs, attrs, !hasTitle)
+		clearInside(lw, 0, 0, innerW, innerH, attrs)
+		if hasTitle {
+			drawTitleBar(lw, 0, 0, innerW, title, stepNum, attrs)
+		}
+		if bodyH <= 0 || contentW <= 0 {
+			return
+		}
+		bodySpan := component.NewSpan(md, component.SpanConfig{
+			PadHorizontal:    hintBoxBodyPad,
+			ContentAlignment: component.AlignmentHorizontallyCentered,
+		})
+		bodyV := component.Virtual[*component.Span]{C: bodySpan}
+		bodyV.Move(term.Coordinates{X: 1, Y: 1 + titleH})
+		bodyV.Resize(contentW, bodyH)
+		bodyV.Draw(lw)
 	}
-	bodySpan := component.NewSpan(md, component.SpanConfig{
-		PadHorizontal:    hintBoxBodyPad,
-		ContentAlignment: component.AlignmentHorizontallyCentered,
-	})
-	bodySpan.Resize(contentW, bodyH)
-	bodySpan.Draw(&component.VirtualWriter{
-		Writer: w,
-		Offset: term.Coordinates{X: x0 + 1, Y: y0 + 1 + titleH},
-		Width:  contentW,
-		Height: bodyH,
-	})
+	v.Draw(w)
 }
 
 // buildWaitCommandHint composes the markdown body for the
@@ -278,7 +309,8 @@ func renderCommandManual(man command.Manual) string {
 // the cached markdown component and body span. Out-of-range writes
 // are dropped silently.
 func drawFloatingWindow(
-	w term.Writer, width, height int, r *request,
+	v *component.Virtual[*overlayComponent], w term.Writer,
+	width, height int, r *request,
 	fcs component.FrameCharSet, attrs term.Attributes,
 ) {
 	if r == nil || r.md == nil || r.body == nil {
@@ -290,27 +322,28 @@ func drawFloatingWindow(
 		return
 	}
 	hasTitle := r.title != ""
-	drawFrameOutline(w, layout.x, layout.y, layout.innerW, layout.innerH,
-		layout.fcs, attrs, !hasTitle)
-	clearInside(w, layout.x, layout.y, layout.innerW, layout.innerH, attrs)
-	if hasTitle {
-		drawTitleBar(w, layout.x, layout.y, layout.innerW,
-			r.title, r.stepNum, attrs)
-	}
-	contentY := layout.y + layout.titleH
+	contentY := layout.titleH
 	if !hasTitle {
-		contentY = layout.y + 1
+		contentY = 1
 	}
 	contentY += layout.topPad
-	if layout.mdH > 0 {
-		r.body.Resize(layout.contentW, layout.mdH)
-		r.body.Draw(&component.VirtualWriter{
-			Writer: w,
-			Offset: term.Coordinates{X: layout.x + 1, Y: contentY},
-			Width:  layout.contentW,
-			Height: layout.mdH,
-		})
+	v.Move(term.Coordinates{X: layout.x, Y: layout.y})
+	v.Resize(layout.innerW, layout.innerH)
+	v.C.draw = func(lw term.Writer) {
+		drawFrameOutline(lw, 0, 0, layout.innerW, layout.innerH,
+			layout.fcs, attrs, !hasTitle)
+		clearInside(lw, 0, 0, layout.innerW, layout.innerH, attrs)
+		if hasTitle {
+			drawTitleBar(lw, 0, 0, layout.innerW, r.title, r.stepNum, attrs)
+		}
+		if layout.mdH > 0 {
+			bodyV := component.Virtual[*component.Span]{C: r.body}
+			bodyV.Move(term.Coordinates{X: 1, Y: contentY})
+			bodyV.Resize(layout.contentW, layout.mdH)
+			bodyV.Draw(lw)
+		}
 	}
+	v.Draw(w)
 }
 
 type floatingWindowLayoutResult struct {
@@ -579,7 +612,8 @@ const (
 // message does not produce a cramped overlay. The host supplies
 // the frame and centered positioning.
 func drawPromptOverlay(
-	w term.Writer, width, height int, r *request,
+	v *component.Virtual[*overlayComponent], w term.Writer,
+	width, height int, r *request,
 	fcs component.FrameCharSet, attrs term.Attributes,
 ) {
 	if r == nil || r.prompt == nil || r.promptVirtual == nil {
@@ -602,12 +636,19 @@ func drawPromptOverlay(
 	innerH = max(innerH, 3)
 	x, y := floatingWindowAnchor(width, height, innerW, innerH,
 		component.AlignmentCentered, term.Coordinates{})
-	drawFrame(w, x, y, innerW, innerH, fcs, attrs)
+	v.Move(term.Coordinates{X: x, Y: y})
+	v.Resize(innerW, innerH)
+	v.C.draw = func(lw term.Writer) {
+		drawFrame(lw, 0, 0, innerW, innerH, fcs, attrs)
+	}
+	v.Draw(w)
 	contentW := innerW - 4
 	contentH := innerH - 2
 	if contentW <= 0 || contentH <= 0 {
 		return
 	}
+	// promptVirtual stays in screen coordinates: Handle and Cursor
+	// translate by its Position while events arrive untranslated.
 	r.promptVirtual.Move(term.Coordinates{X: x + 2, Y: y + 1})
 	r.promptVirtual.Resize(contentW, contentH)
 	r.promptVirtual.Draw(w)

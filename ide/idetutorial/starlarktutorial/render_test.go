@@ -127,6 +127,64 @@ func findFrameSideX(g *attrGridWriter) (int, int) {
 	return -1, -1
 }
 
+// TestComponentAtMatchesDrawnOverlay asserts that ComponentAt reports
+// a component exactly for coordinates covered by the drawn overlay
+// box, so the host hides the root cursor only when the overlay
+// actually covers it, and reports nothing once the tutorial finishes.
+func TestComponentAtMatchesDrawnOverlay(t *testing.T) {
+	t.Parallel()
+	tut, g := drawProbe(t, "Welcome", "body line", 80, 24)
+	defer tut.Stop()
+
+	sideX, sideY := findFrameSideX(g)
+	require.NotEqual(t, -1, sideX,
+		"expected a left frame edge somewhere in the rendered grid")
+	c, ok := tut.ComponentAt(term.Coordinates{X: sideX, Y: sideY})
+	assert.True(t, ok, "frame edge must report the overlay component")
+	assert.Same(t, tut, c,
+		"a floating window is handled by the tutorial itself")
+	_, ok = tut.ComponentAt(term.Coordinates{X: sideX + 5, Y: sideY})
+	assert.True(t, ok, "overlay interior must report the overlay component")
+	_, ok = tut.ComponentAt(term.Coordinates{X: sideX - 1, Y: sideY})
+	assert.False(t, ok,
+		"cell left of the overlay must report no component")
+	_, ok = tut.ComponentAt(term.Coordinates{X: 0, Y: 23})
+	assert.False(t, ok,
+		"cell below the overlay must report no component")
+
+	inside := term.Coordinates{X: sideX + 5, Y: sideY}
+	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	waitFinished(t, tut, time.Second)
+	_, ok = tut.ComponentAt(inside)
+	assert.False(t, ok,
+		"a finished tutorial must not report any component")
+}
+
+// TestComponentAtReturnsPromptForChoiceOverlay asserts that the
+// handler reported under a confirm/choice overlay is the prompt
+// itself, not the tutorial.
+func TestComponentAtReturnsPromptForChoiceOverlay(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    pick = choice(message="pick one", options=["A", "B"])
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	tut.Resize(80, 24)
+	resetAndWait(t, tut, time.Second)
+	defer tut.Stop()
+	require.Equal(t, "choice", activeKindFor(tut))
+	g := newAttrGridWriter(80, 24)
+	tut.Draw(g)
+
+	// The prompt overlay is centered on the screen.
+	c, ok := tut.ComponentAt(term.Coordinates{X: 40, Y: 12})
+	require.True(t, ok, "the centered prompt overlay must cover 40x12")
+	assert.Same(t, tut.active.promptVirtual, c,
+		"a choice overlay is handled by its prompt")
+}
+
 // TestFloatingWindowTitleBarPresent asserts the title bar replaces
 // the top frame edge: row y0 has the title left-aligned and "Step 1"
 // right-aligned, both with AttrReverse.
