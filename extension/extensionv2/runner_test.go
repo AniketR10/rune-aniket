@@ -25,6 +25,7 @@
 package extensionv2
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,8 +35,35 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"google.golang.org/grpc"
 	"unstable.build/go-tui/debug"
 )
+
+func TestWithServerInterceptorsAppendsToConfig(t *testing.T) {
+	t.Parallel()
+
+	stream := func(
+		srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		return handler(srv, ss)
+	}
+	unary := func(
+		ctx context.Context, req any, info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		return handler(ctx, req)
+	}
+
+	var cfg runnerConfig
+	WithServerInterceptors(stream, unary)(&cfg)
+	WithServerInterceptors(nil, unary)(&cfg)
+	WithServerInterceptors(stream, nil)(&cfg)
+	WithServerInterceptors(nil, nil)(&cfg)
+
+	assert.Len(t, cfg.extraStreamInterceptors, 2)
+	assert.Len(t, cfg.extraUnaryInterceptors, 2)
+}
 
 func TestRunnerSocketPath(t *testing.T) {
 	t.Parallel()

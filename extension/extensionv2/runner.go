@@ -123,6 +123,8 @@ func (r *Runner) WorkspaceExtensionsRunner(
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		rpc.UnaryReportRecoveryInterceptor(),
 	}
+	streamInterceptors = append(streamInterceptors, r.cfg.extraStreamInterceptors...)
+	unaryInterceptors = append(unaryInterceptors, r.cfg.extraUnaryInterceptors...)
 	if log.IsLevelEnabled(log.DebugLevel) {
 		fields := []logging.Field{
 			{Key: logging.KeyClass, Value: "grpc.Server"},

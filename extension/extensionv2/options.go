@@ -23,6 +23,8 @@
 
 package extensionv2
 
+import "google.golang.org/grpc"
+
 // WithInsecureAuth returns an option that configures
 // host resources to be exposed without authentication or authorization.
 func WithInsecureAuth() Option {
@@ -76,14 +78,34 @@ func WithAuthCertEnv(env string) Option {
 	}
 }
 
+// WithServerInterceptors returns an option that appends the given
+// interceptors to the gRPC server's interceptor chains. Nil entries
+// are allowed and skipped. This exists so out-of-tree harnesses (e.g.
+// cmd/xsandbox) can observe every extension RPC without forking the
+// runner; production callers do not need it.
+func WithServerInterceptors(
+	stream grpc.StreamServerInterceptor, unary grpc.UnaryServerInterceptor,
+) Option {
+	return func(cfg *runnerConfig) {
+		if stream != nil {
+			cfg.extraStreamInterceptors = append(cfg.extraStreamInterceptors, stream)
+		}
+		if unary != nil {
+			cfg.extraUnaryInterceptors = append(cfg.extraUnaryInterceptors, unary)
+		}
+	}
+}
+
 // Option is a configuration option for a runner.
 type Option func(cfg *runnerConfig)
 
 type runnerConfig struct {
-	insecureAuth      bool
-	insecureTransport bool
-	authCertEnv       string
-	authTokenEnv      string
-	socketEnv         string
-	dataDirEnv        string
+	insecureAuth            bool
+	insecureTransport       bool
+	authCertEnv             string
+	authTokenEnv            string
+	socketEnv               string
+	dataDirEnv              string
+	extraStreamInterceptors []grpc.StreamServerInterceptor
+	extraUnaryInterceptors  []grpc.UnaryServerInterceptor
 }
