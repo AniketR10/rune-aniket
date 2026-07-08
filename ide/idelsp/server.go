@@ -56,6 +56,7 @@ type server interface {
 	stop(ctx context.Context) error
 	start(ctx context.Context) error
 	config() langConfig
+	key() serverKey
 	initResult() semanticapi.InitializeResult
 	isAlive() bool
 }
@@ -162,6 +163,7 @@ func (s *langServer) start(ctx context.Context) error {
 
 	cmd := workspaceapi.Cmd{
 		Path:    s.binPath,
+		Dir:     uriToPath(s.rootURI),
 		Args:    s.cfg.args,
 		Stdin:   lspFile,
 		Stdout:  lspFile,
@@ -320,6 +322,10 @@ func (s *langServer) notify(
 
 func (s *langServer) config() langConfig {
 	return s.cfg
+}
+
+func (s *langServer) key() serverKey {
+	return serverKey{languageID: s.cfg.id, rootURI: s.rootURI}
 }
 
 func (s *langServer) initResult() semanticapi.InitializeResult {

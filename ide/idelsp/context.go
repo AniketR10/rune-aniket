@@ -31,6 +31,7 @@ type contextKey struct{}
 // context.
 type Metadata struct {
 	ServerName string
+	RootURI    string
 }
 
 // ContextWithMetadata returns a context carrying m.

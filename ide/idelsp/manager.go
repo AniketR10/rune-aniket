@@ -52,6 +52,30 @@ import (
 // available for the requested file.
 var ErrNoServer = errors.New("no language server")
 
+// serverKey identifies an initialized language server by both its
+// language id and the root URI it is rooted at. Keying servers by
+// {languageID, rootURI} lets several servers of the same language
+// coexist for distinct project roots inside one workspace (e.g. a
+// workspace-root Python project plus a nested one).
+type serverKey struct {
+	languageID string
+	rootURI    string
+}
+
+// rootContains reports whether the file URI fileURI lives inside the
+// root URI rootURI. Both are file:// URIs as produced by convertURI.
+// A root contains itself.
+func rootContains(rootURI, fileURI string) bool {
+	if rootURI == fileURI {
+		return true
+	}
+	prefix := rootURI
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	return strings.HasPrefix(fileURI, prefix)
+}
+
 // Callback extends the SDK's LSPCallback with methods for tracking
 // document version changes and waiting for the server to process them.
 // This allows pull-diagnostics to wait until the server has processed
@@ -110,7 +134,7 @@ type Manager struct {
 	pkgManager    PkgManager
 	callback      Callback
 	maxRetries    uint
-	servers       map[string]server
+	servers       map[serverKey]server
 	files         map[string]*file
 	pendingOpens  map[string]textapi.Event
 	ctx           context.Context
@@ -170,7 +194,7 @@ func New(
 		notifications: notifications,
 		callback:      cfg.Callback,
 		maxRetries:    cfg.MaxRetries,
-		servers:       make(map[string]server),
+		servers:       make(map[serverKey]server),
 		files:         make(map[string]*file),
 		pendingOpens:  make(map[string]textapi.Event),
 		ctx:           ctx,
@@ -266,7 +290,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 		openCtx, openCancel := context.WithTimeout(
 			context.Background(), m.cfg.EventHandleTimeout)
 		defer openCancel()
-		f, err := m.ensureFile(ev.URI, ev.Content, srv.config().id)
+		f, err := m.ensureFile(ev.URI, ev.Content, srv.key())
 		if err != nil {
 			return err
 		}
@@ -353,7 +377,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 		if err != nil {
 			return err
 		}
-		f, err := m.ensureFile(ev.URI, ev.Content, srv.config().id)
+		f, err := m.ensureFile(ev.URI, ev.Content, srv.key())
 		if err != nil {
 			return err
 		}
@@ -443,10 +467,10 @@ func (m *Manager) getFile(uriStr string) (*file, bool) {
 
 func (m *Manager) ensureFile(
 	uri workspaceapi.URI,
-	content string, languageID string,
+	content string, key serverKey,
 ) (*file, error) {
 	uriStr := convertURI(uri)
-	if languageID == "" || uri == (workspaceapi.URI{}) {
+	if key.languageID == "" || uri == (workspaceapi.URI{}) {
 		panic("empty params for ensuring available file")
 	}
 	f, ok := m.getFile(uriStr)
@@ -472,7 +496,7 @@ func (m *Manager) ensureFile(
 		// editor trims last EOL but LSP servers expect it
 		content += "\n"
 	}
-	f = newFile(uri, content, languageID)
+	f = newFile(uri, content, key.languageID, key)
 	m.mu.Lock()
 	m.files[uriStr] = f
 	m.mu.Unlock()
@@ -488,12 +512,9 @@ func (m *Manager) ensureServer(
 		return nil, err
 	}
 
-	m.mu.Lock()
-	if srv, ok := m.servers[lang.id]; ok {
-		m.mu.Unlock()
+	if srv, err := m.serverForURI(convertURI(filename)); err == nil {
 		return srv, nil
 	}
-	m.mu.Unlock()
 
 	if m.cfg.NoInitializeServer {
 		return nil, fmt.Errorf("server not initialized and auto-initialize config is false")
@@ -501,25 +522,27 @@ func (m *Manager) ensureServer(
 
 	ctx, cancel := context.WithTimeout(m.ctx, m.cfg.InitializeTimeout)
 	defer cancel()
-	return m.initializeServer(ctx, lang, autoInitParams(m.rootURI))
+	key := serverKey{languageID: lang.id, rootURI: m.rootURI}
+	return m.initializeServer(ctx, lang, key, autoInitParams(m.rootURI))
 }
 
 func (m *Manager) initializeServer(
-	ctx context.Context, lang langConfig, params semanticapi.InitializeParams,
+	ctx context.Context, lang langConfig, key serverKey,
+	params semanticapi.InitializeParams,
 ) (*langServer, error) {
 	if lang.command == "" {
 		return nil, errors.New("language configuration with empty command")
 	}
-	srv := m.buildChild(ctx, lang, lang.id, params)
+	srv := m.buildChild(ctx, lang, lang.id, key.rootURI, params)
 	if err := srv.start(ctx); err != nil {
 		return nil, err
 	}
 
 	m.mu.Lock()
-	m.servers[lang.id] = srv
+	m.servers[key] = srv
 	m.mu.Unlock()
 
-	m.sendPendingOpens(lang.id, srv)
+	m.sendPendingOpens(key, srv)
 
 	go debug.CapturePanicReport(func() {
 		m.watchServer(&lang, srv)
@@ -534,7 +557,7 @@ func (m *Manager) initializeServer(
 // child it is the child's command so each backend's diagnostics
 // accumulate independently.
 func (m *Manager) buildChild(
-	ctx context.Context, lang langConfig, serverName string,
+	ctx context.Context, lang langConfig, serverName string, rootURI string,
 	params semanticapi.InitializeParams,
 ) *langServer {
 	var binPath string
@@ -552,8 +575,8 @@ func (m *Manager) buildChild(
 		}
 	}
 	srv := newLangServer(
-		m.ctx, lang, binPath, m.executor, m.rootURI,
-		newCallbackAdapter(m.callback, serverName, m.rootURI),
+		m.ctx, lang, binPath, m.executor, rootURI,
+		newCallbackAdapter(m.callback, serverName, rootURI),
 		params,
 	)
 	srv.serverName = serverName
@@ -578,14 +601,14 @@ func childName(command string) string {
 // supervised independently so a single crash does not tear down the
 // others.
 func (m *Manager) initializeMultiServer(
-	ctx context.Context, lang langConfig,
+	ctx context.Context, lang langConfig, key serverKey,
 	alternates map[string]string, params semanticapi.InitializeParams,
 ) (*multiLangServer, error) {
 	if lang.command == "" {
 		return nil, errors.New("language configuration with empty command")
 	}
 
-	defaultChild := m.buildChild(ctx, lang, childName(lang.command), params)
+	defaultChild := m.buildChild(ctx, lang, childName(lang.command), key.rootURI, params)
 	children := []*langServer{defaultChild}
 	routes := make(map[string]int)
 
@@ -600,7 +623,7 @@ func (m *Manager) initializeMultiServer(
 		if !ok {
 			argv := strings.Split(cmd, " ")
 			childCfg := langConfig{id: lang.id, command: argv[0], args: argv[1:]}
-			child := m.buildChild(ctx, childCfg, childName(cmd), params)
+			child := m.buildChild(ctx, childCfg, childName(cmd), key.rootURI, params)
 			children = append(children, child)
 			idx = len(children) - 1
 			cmdIndex[cmd] = idx
@@ -620,11 +643,11 @@ func (m *Manager) initializeMultiServer(
 	}
 
 	m.mu.Lock()
-	m.servers[lang.id] = mls
+	m.servers[key] = mls
 	m.mu.Unlock()
 
 	for _, child := range children {
-		m.sendPendingOpens(lang.id, child)
+		m.sendPendingOpens(key, child)
 		watched := child
 		go debug.CapturePanicReport(func() {
 			m.watchServer(&lang, watched)
@@ -634,29 +657,33 @@ func (m *Manager) initializeMultiServer(
 }
 
 // installRestarted swaps a freshly restarted child into the
-// manager's routing for lang. When the language is backed by a
+// manager's routing for key. When the root is backed by a
 // multiLangServer, only the crashed child is replaced (by pointer
 // identity) so the other children keep running; otherwise the
 // single registered server is replaced wholesale.
-func (m *Manager) installRestarted(lang langConfig, old, restarted *langServer) {
+func (m *Manager) installRestarted(key serverKey, old, restarted *langServer) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if mls, ok := m.servers[lang.id].(*multiLangServer); ok {
+	if mls, ok := m.servers[key].(*multiLangServer); ok {
 		mls.replaceChild(old, restarted)
 		return
 	}
-	m.servers[lang.id] = restarted
+	m.servers[key] = restarted
 }
 
 // sendPendingOpens sends didOpen for files that were opened before this
-// server existed. Only files whose language matches langID are sent;
-// the rest stay in pendingOpens for a future server init.
-func (m *Manager) sendPendingOpens(langID string, srv *langServer) {
+// server existed. Only files whose language matches key.languageID and
+// whose URI is contained in key.rootURI are sent; the rest stay in
+// pendingOpens for a future server init.
+func (m *Manager) sendPendingOpens(key serverKey, srv *langServer) {
 	m.mu.Lock()
 	var opens []textapi.Event
 	for uri, ev := range m.pendingOpens {
 		cfg, err := languageForFilename(uri)
-		if err != nil || cfg.id != langID {
+		if err != nil || cfg.id != key.languageID {
+			continue
+		}
+		if !rootContains(key.rootURI, uri) {
 			continue
 		}
 		opens = append(opens, ev)
@@ -671,7 +698,7 @@ func (m *Manager) sendPendingOpens(langID string, srv *langServer) {
 
 	for _, ev := range opens {
 		uri := convertURI(ev.URI)
-		f, err := m.ensureFile(ev.URI, ev.Content, langID)
+		f, err := m.ensureFile(ev.URI, ev.Content, key)
 		if err != nil {
 			m.log.Error("send pending open", "error", err, "file", uri)
 			continue
@@ -782,8 +809,8 @@ func (m *Manager) watchServer(
 
 			m.log.Debug("restarting lsp server", "language", lang.id)
 			newSrv := newLangServer(
-				m.ctx, srv.cfg, srv.binPath, m.executor, m.rootURI,
-				newCallbackAdapter(m.callback, srv.serverName, m.rootURI),
+				m.ctx, srv.cfg, srv.binPath, m.executor, srv.rootURI,
+				newCallbackAdapter(m.callback, srv.serverName, srv.rootURI),
 				srv.params,
 			)
 			newSrv.serverName = srv.serverName
@@ -791,9 +818,9 @@ func (m *Manager) watchServer(
 			if err := newSrv.start(ctx); err != nil {
 				return true, err
 			}
-			m.installRestarted(*lang, srv, newSrv)
+			m.installRestarted(srv.key(), srv, newSrv)
 
-			m.reopenFiles(ctx, lang.id, newSrv)
+			m.reopenFiles(ctx, newSrv.key(), newSrv)
 			go debug.CapturePanicReport(func() {
 				m.watchServer(lang, newSrv)
 			})
@@ -812,13 +839,13 @@ func (m *Manager) watchServer(
 }
 
 func (m *Manager) reopenFiles(
-	ctx context.Context, langID string,
+	ctx context.Context, key serverKey,
 	srv *langServer,
 ) {
 	m.mu.Lock()
 	var files []*file
 	for _, file := range m.files {
-		if file.languageID == langID {
+		if file.serverKey == key {
 			files = append(files, file)
 		}
 	}
@@ -829,7 +856,7 @@ func (m *Manager) reopenFiles(
 			semanticapi.DidOpenTextDocumentParams{
 				TextDocument: semanticapi.TextDocumentItem{
 					URI:        f.docID.URI,
-					LanguageID: langID,
+					LanguageID: key.languageID,
 					Version:    f.version,
 					Text:       f.content,
 				},
@@ -839,17 +866,29 @@ func (m *Manager) reopenFiles(
 
 func (m *Manager) serverForURI(uri string) (server, error) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	cfg, err := languageForFilename(uri)
 	if err != nil {
-		m.mu.Unlock()
 		return nil, err
 	}
-	srv, ok := m.servers[cfg.id]
-	m.mu.Unlock()
-	if !ok {
+	var best server
+	var bestLen int
+	for key, srv := range m.servers {
+		if key.languageID != cfg.id {
+			continue
+		}
+		if !rootContains(key.rootURI, uri) {
+			continue
+		}
+		if best == nil || len(key.rootURI) > bestLen {
+			best = srv
+			bestLen = len(key.rootURI)
+		}
+	}
+	if best == nil {
 		return nil, fmt.Errorf("%w: server %s not running", ErrNoServer, cfg.id)
 	}
-	return srv, nil
+	return best, nil
 }
 
 func (m *Manager) allServers() []server {
@@ -881,18 +920,12 @@ func (m *Manager) broadcastNotify(
 	// Tier 1: watcher-based routing — servers that registered
 	// file watchers matching this URI. This is not supported for now.
 
-	// Tier 2: language-based routing — match file extension to a known language.
-	cfg, err := languageForFile(uri)
-	if err == nil {
-		for _, srv := range m.allServers() {
-			if srv.config().id != cfg.id {
-				continue
-			}
-			if err := srv.notify(ctx, method, params); err != nil {
-				ret = errors.Join(ret, err)
-			}
-		}
-		return ret
+	// Tier 2: root-aware routing — deliver to the single
+	// most-specific initialized root that contains this file so a
+	// file event is not fanned out to unrelated roots of the same
+	// language.
+	if srv, err := m.serverForURI(uriStr); err == nil {
+		return srv.notify(ctx, method, params)
 	}
 
 	// Tier 3: broadcast to all running servers.

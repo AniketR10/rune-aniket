@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/extension/langext"
 )
 
 // NewExtension returns the Python extension and its metadata.
@@ -70,19 +71,71 @@ func (e *pyExtension) ExtendWorkspace(
 		w.Executor(ctx),
 		w.Notifications(ctx),
 		w.LSP(ctx),
+		w.Editor(ctx),
 		w.DataDir(ctx),
 		cfg,
 		w.RegisterREPLCommand,
 	)
 }
 
-// extendWorkspaceWith performs the workspace bring-up against an explicit
-// set of dependencies. ExtendWorkspace supplies them from a real
-// *extensionapi.Workspace; the e2e harness supplies real FileSystem and
-// Executor with fake Notifications and LSP so the full path runs without
-// a live host. The dependencies are passed positionally so the compiler
-// flags a missing one at every call site.
+// extendWorkspaceWith wires Python project discovery to per-root language
+// server bring-up. It registers the REPL command once for the workspace,
+// subscribes for opened .py files so a server is initialized rooted at
+// each file's nearest project, and eagerly initializes the workspace-root
+// project when one is present. The dependencies are passed positionally
+// so the compiler flags a missing one at every call site.
 func (e *pyExtension) extendWorkspaceWith(
+	ctx context.Context,
+	fs workspaceapi.FileSystem,
+	exec workspaceapi.Executor,
+	notify browserapi.Notifications,
+	lsp semanticapi.LSP,
+	editor textapi.Editor,
+	dataDir string,
+	cfg config.Config,
+	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
+) error {
+	// The REPL command's cwd is always the workspace root, independent of
+	// any nested project, so register it once up front regardless of
+	// whether a project root is ever discovered.
+	cwd, err := fs.URI(".")
+	if err != nil {
+		return fmt.Errorf("resolve cwd uri: %w", err)
+	}
+	manual, handler := newPyHandler(exec, notify, cwd.Path())
+	if err := registerREPL(manual, handler); err != nil {
+		return fmt.Errorf("register python command: %w", err)
+	}
+
+	init := langext.NewInitializer(ctx, fs, editor, langext.ProjectConfig{
+		LanguageID: "python",
+		Markers:    pyMarkers,
+		FileMatch:  isPythonFile,
+		InitRoot: func(ctx context.Context, root langext.Root) error {
+			return initializeProjectRoot(ctx, fs, exec, notify, lsp, dataDir, cfg, root)
+		},
+	})
+	if err := init.Start(); err != nil {
+		return fmt.Errorf("subscribe python open events: %w", err)
+	}
+
+	// Preserve the eager workspace-root behavior: if the workspace root
+	// is itself a Python project, bring it up immediately rather than
+	// waiting for the first open. Discovery still drives nested projects.
+	if detectProjectAt(ctx, fs, ".") != kindNone {
+		root := langext.Root{Dir: cwd.Path(), URI: fmt.Sprintf("file://%s", cwd.Path())}
+		if err := init.InitializeAt(ctx, root); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// initializeProjectRoot performs the language-specific bring-up for a
+// discovered project root: it bootstraps the uv environment rooted there
+// (best-effort), resolves ty/ruff, applies config overrides, and
+// initializes the language server with the nested root URI.
+func initializeProjectRoot(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
@@ -90,27 +143,15 @@ func (e *pyExtension) extendWorkspaceWith(
 	lsp semanticapi.LSP,
 	dataDir string,
 	cfg config.Config,
-	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
+	root langext.Root,
 ) error {
-	kind := detectProject(ctx, fs)
-	if kind == kindNone {
-		return nil
-	}
-
-	cwd, err := fs.URI(".")
-	if err != nil {
-		return fmt.Errorf("resolve cwd uri: %w", err)
-	}
-	// ty/ruff run on the same host as the workspace files (locally for a
-	// local workspace, or on the remote host for a remote one), so rewrite
-	// the URI to the file:// scheme expected by the language server.
-	rootURI := fmt.Sprintf("file://%s", cwd.Path())
+	kind := detectProjectAt(ctx, fs, root.Dir)
 
 	uvBin := resolvePyTool(ctx, fs, exec, dataDir, "uv")
-	if err := ensureEnvironment(ctx, uvBin, exec, notify, kind, fs); err != nil {
+	if err := ensureEnvironment(ctx, uvBin, exec, notify, kind, fs, root.Dir); err != nil {
 		_, _ = notify.Notify(browserapi.LevelWarn,
 			"Python environment setup failed, continuing without a synced env: %v", err)
-		slog.Warn("python env setup failed", "error", err)
+		slog.Warn("python env setup failed", "root", root.Dir, "error", err)
 	}
 
 	tyBin := resolvePyTool(ctx, fs, exec, dataDir, "ty")
@@ -122,19 +163,14 @@ func (e *pyExtension) extendWorkspaceWith(
 	}
 	command, alternates = applyPyConfig(cfg, notify, command, alternates)
 
-	params, err := pyInitializeParams(rootURI, command, alternates)
+	params, err := pyInitializeParams(root.URI, command, alternates)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
 	if _, err := lsp.Initialize(ctx, params); err != nil {
 		return fmt.Errorf("initialize python lsp: %w", err)
 	}
-	slog.Info("python lsp initialized", "command", command)
-
-	manual, handler := newPyHandler(exec, notify, cwd.Path())
-	if err := registerREPL(manual, handler); err != nil {
-		return fmt.Errorf("register python command: %w", err)
-	}
+	slog.Info("python lsp initialized", "root", root.Dir, "command", command)
 	return nil
 }
 

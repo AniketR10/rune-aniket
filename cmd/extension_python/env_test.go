@@ -134,7 +134,82 @@ func TestDetectProject(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fs := newFakeFS()
 			tc.setup(fs)
-			assert.Equal(t, tc.want, detectProject(context.Background(), fs))
+			assert.Equal(t, tc.want, detectProjectAt(context.Background(), fs, "."))
+		})
+	}
+}
+
+// TestDetectProjectAtNested checks that markers are probed within the
+// given directory, so a nested project is classified the same way the
+// workspace-root project is.
+func TestDetectProjectAtNested(t *testing.T) {
+	const dir = "deploy/cloudflare/oxprobe-worker"
+	cases := []struct {
+		name  string
+		setup func(*fakeFS)
+		want  projectKind
+	}{
+		{
+			"nested pyproject",
+			func(f *fakeFS) { f.addFile(dir + "/pyproject.toml") },
+			kindProject,
+		},
+		{
+			"nested requirements",
+			func(f *fakeFS) { f.addFile(dir + "/requirements.txt") },
+			kindRequirements,
+		},
+		{
+			"nested venv",
+			func(f *fakeFS) { f.addDir(dir + "/.venv") },
+			kindVenvOnly,
+		},
+		{
+			"root marker does not satisfy nested dir",
+			func(f *fakeFS) { f.addFile("pyproject.toml") },
+			kindNone,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newFakeFS()
+			tc.setup(fs)
+			assert.Equal(t, tc.want, detectProjectAt(context.Background(), fs, dir))
+		})
+	}
+}
+
+// TestEnsureEnvironmentRunsInProjectDir asserts that every uv invocation
+// for a nested project carries Cmd.Dir set to that project directory, so
+// uv operates on the nested project's environment rather than the
+// workspace root.
+func TestEnsureEnvironmentRunsInProjectDir(t *testing.T) {
+	const dir = "deploy/cloudflare/oxprobe-worker"
+	fs := newFakeFS().addFile(dir + "/requirements.txt")
+	ex := newFakeExecutor()
+	ex.respond("uv python find", scriptedCmd{})
+	ex.respond("uv venv --allow-existing", scriptedCmd{})
+	ex.respond("uv pip install -r requirements.txt", scriptedCmd{})
+	notify := newFakeNotifications()
+
+	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindRequirements, fs, dir)
+	require.NoError(t, err)
+
+	for _, key := range ex.callsSnapshot() {
+		assert.Equal(t, dir, ex.dirFor(key), "uv %q must run in the project dir", key)
+	}
+}
+
+// TestRunUVWorkspaceRootLeavesDirEmpty asserts a workspace-root project
+// (dir "" or ".") leaves Cmd.Dir empty so the executor falls back to its
+// own resolved workspace path instead of a redundant or doubled path.
+func TestRunUVWorkspaceRootLeavesDirEmpty(t *testing.T) {
+	for _, dir := range []string{"", "."} {
+		t.Run("dir="+dir, func(t *testing.T) {
+			ex := newFakeExecutor()
+			ex.respond("uv sync", scriptedCmd{})
+			require.NoError(t, runUV(context.Background(), "uv", ex, dir, "sync"))
+			assert.Empty(t, ex.dirFor("uv sync"))
 		})
 	}
 }
@@ -204,7 +279,7 @@ func TestEnsureEnvironmentCommands(t *testing.T) {
 				ex.respond(k, v)
 			}
 			notify := newFakeNotifications()
-			err := ensureEnvironment(context.Background(), "uv", ex, notify, tc.kind, fs)
+			err := ensureEnvironment(context.Background(), "uv", ex, notify, tc.kind, fs, "")
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantCalls, ex.callsSnapshot())
 
@@ -231,7 +306,7 @@ func TestEnsureEnvironmentInstallsInterpreterOnFirstRun(t *testing.T) {
 	ex.respond("uv python install --default", scriptedCmd{})
 	ex.respond("uv sync", scriptedCmd{})
 	notify := newFakeNotifications()
-	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindProject, fs)
+	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindProject, fs, "")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"uv python find", "uv python install --default", "uv sync"}, ex.callsSnapshot())
 

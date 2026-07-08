@@ -93,6 +93,10 @@ func (f *fakeChild) config() langConfig {
 	return langConfig{id: f.name, command: f.name}
 }
 
+func (f *fakeChild) key() serverKey {
+	return serverKey{languageID: f.name}
+}
+
 func (f *fakeChild) initResult() semanticapi.InitializeResult {
 	return semanticapi.InitializeResult{}
 }

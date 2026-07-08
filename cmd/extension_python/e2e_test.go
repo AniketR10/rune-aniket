@@ -79,8 +79,10 @@ func findUV(t *testing.T) {
 	}
 }
 
-// TestE2E_UV_ProjectSync drives ensureEnvironment against a real uv in a
-// fresh pyproject workspace and asserts the .venv is created.
+// TestE2E_UV_ProjectSync drives the full extension bring-up against a
+// real uv in a fresh pyproject workspace and asserts the .venv is created
+// by the eager workspace-root sync and that the language server is
+// initialized exactly once rooted there.
 func TestE2E_UV_ProjectSync(t *testing.T) {
 	findUV(t)
 
@@ -94,17 +96,15 @@ dependencies = []
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte(pyproject), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.py"), []byte("print('hi')\n"), 0o644))
 
-	fs := newFakeFS().addFile("pyproject.toml")
-	kind := detectProject(context.Background(), fs)
-	require.Equal(t, kindProject, kind)
-
-	ex := newDirExecutor(dir)
-	err := ensureEnvironment(context.Background(), "uv", ex, newFakeNotifications(), kind, fs)
-	require.NoError(t, err)
+	env := runExtensionOnDir(t, dir)
 
 	info, err := os.Stat(filepath.Join(dir, ".venv"))
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "uv sync should create a .venv directory")
+
+	params, count := env.lsp.captured()
+	require.Equal(t, 1, count, "the workspace-root project must initialize exactly once")
+	assert.Equal(t, "file://"+dir, params.RootURI)
 }
 
 // TestE2E_PyHandler_PythonList runs the `python list` REPL subcommand

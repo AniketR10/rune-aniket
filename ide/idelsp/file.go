@@ -25,6 +25,7 @@ package idelsp
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -36,13 +37,14 @@ type file struct {
 	docID      semanticapi.TextDocumentIdentifier
 	content    string
 	version    int32
+	serverKey  serverKey
 }
 
 const firstFileVersion = 1
 
 func newFile(
 	uri workspaceapi.URI, content string,
-	languageID string,
+	languageID string, key serverKey,
 ) *file {
 	f := &file{
 		version: firstFileVersion,
@@ -52,6 +54,7 @@ func newFile(
 		uri:        uri,
 		content:    content,
 		languageID: languageID,
+		serverKey:  key,
 	}
 
 	return f
@@ -62,4 +65,12 @@ func convertURI(u workspaceapi.URI) string {
 	// if URI is a remote uri, then the language server is executed
 	// in the remote host as well.
 	return fmt.Sprintf("file://%s", u.Path())
+}
+
+// uriToPath converts a file:// URI produced by convertURI back into a
+// filesystem path suitable for workspaceapi.Cmd.Dir. A non-file or
+// empty URI yields an empty string, which leaves the command's working
+// directory unset.
+func uriToPath(uri string) string {
+	return strings.TrimPrefix(uri, "file://")
 }

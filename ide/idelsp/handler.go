@@ -264,9 +264,12 @@ func (h *CallbackHandler) PublishDiagnostics(
 		return fmt.Errorf("parse URI: %w", err)
 	}
 
-	serverName := ""
+	// serverID combines the publishing server name with its root URI
+	// so two servers sharing a name (e.g. "ty") rooted at different
+	// project roots cannot overwrite each other's diagnostics.
+	serverID := ""
 	if md, ok := metadataFromContext(ctx); ok {
-		serverName = md.ServerName
+		serverID = md.ServerName + "\x00" + md.RootURI
 	}
 
 	// Centrally cache the latest diagnostics for this URI so the
@@ -277,7 +280,7 @@ func (h *CallbackHandler) PublishDiagnostics(
 	h.mu.Lock()
 	if len(params.Diagnostics) == 0 {
 		if byServer, ok := h.diagnostics[params.URI]; ok {
-			delete(byServer, serverName)
+			delete(byServer, serverID)
 			if len(byServer) == 0 {
 				delete(h.diagnostics, params.URI)
 			}
@@ -290,7 +293,7 @@ func (h *CallbackHandler) PublishDiagnostics(
 			byServer = make(map[string][]semanticapi.Diagnostic)
 			h.diagnostics[params.URI] = byServer
 		}
-		byServer[serverName] = stored
+		byServer[serverID] = stored
 	}
 	// Merge every server's diagnostics for this URI into a single
 	// location list. Keying the cache by server keeps each server's

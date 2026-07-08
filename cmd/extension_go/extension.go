@@ -36,7 +36,17 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/extension/langext"
 )
+
+// goMarkers are the project-root markers that drive nested discovery: an
+// opened .go file initializes a server rooted at its nearest module.
+var goMarkers = []string{"go.mod", "go.sum", "go.work"}
 
 // NewExtension returns the Go extension and its metadata.
 func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
@@ -70,51 +80,121 @@ type goExtension struct{}
 func (e *goExtension) ExtendWorkspace(
 	ctx context.Context, w *extensionapi.Workspace, cfg config.Config,
 ) error {
-	lsp := w.LSP(ctx)
-	editor := w.Editor(ctx)
-	wm := w.WindowManager(ctx)
-	notify := w.Notifications(ctx)
+	return e.extendWorkspaceWith(ctx,
+		w.FileSystem(ctx),
+		w.Executor(ctx),
+		w.Notifications(ctx),
+		w.LSP(ctx),
+		w.Editor(ctx),
+		w.WindowManager(ctx),
+		w.Parser(ctx),
+		w.Interrupter(ctx),
+		w.Storage(ctx),
+		w.DataDir(ctx),
+		cfg,
+		w.RegisterCommand,
+	)
+}
 
-	cwd, err := w.FileSystem(ctx).URI(".")
+// extendWorkspaceWith wires Go project discovery to per-root gopls
+// bring-up. It registers the `go` command once for the workspace
+// (independent of any project root), subscribes for opened .go files so
+// a server is initialized rooted at each file's nearest module, and
+// eagerly initializes the workspace-root module when one is present. The
+// dependencies are passed positionally so the compiler flags a missing
+// one at every call site.
+func (e *goExtension) extendWorkspaceWith(
+	ctx context.Context,
+	fs workspaceapi.FileSystem,
+	exec workspaceapi.Executor,
+	notify browserapi.Notifications,
+	lsp semanticapi.LSP,
+	editor textapi.Editor,
+	wm browserapi.WindowManager,
+	parser syntaxapi.Parser,
+	interrupter term.Interrupter,
+	storage storageapi.Service,
+	dataDir string,
+	cfg config.Config,
+	registerCommand func(textapi.CommandManual, textapi.CommandHandler) error,
+) error {
+	cwd, err := fs.URI(".")
 	if err != nil {
 		return fmt.Errorf("resolve cwd uri: %w", err)
 	}
-	// gopls runs on the same host as the workspace files (locally for a
-	// local workspace, or on the remote host for a remote one), so rewrite
-	// the URI to the file:// scheme expected by the language server.
-	rootURI := fmt.Sprintf("file://%s", cwd.Path())
+	scheme := cwd.Scheme()
 
+	// The `go` command's selection/cursor subscriptions and cwd are
+	// workspace-scoped, not project-scoped, so register it once up front
+	// regardless of whether a module is ever discovered.
+	manual, handler, err := newGoHandler(
+		lsp, editor, wm, notify, parser, exec, interrupter, fs, cfg, storage)
+	if err != nil {
+		return fmt.Errorf("create handler: %w", err)
+	}
+	if err := registerCommand(manual, handler); err != nil {
+		return fmt.Errorf("register command: %w", err)
+	}
+
+	init := langext.NewInitializer(ctx, fs, editor, langext.ProjectConfig{
+		LanguageID: "go",
+		Markers:    goMarkers,
+		FileMatch:  isGoFile,
+		InitRoot: func(ctx context.Context, root langext.Root) error {
+			return initializeGoRoot(ctx, fs, exec, notify, lsp, dataDir, scheme, cfg, root)
+		},
+	})
+	if err := init.Start(); err != nil {
+		return fmt.Errorf("subscribe go open events: %w", err)
+	}
+
+	// Preserve today's startup behavior: if the workspace root is itself
+	// a Go module, bring it up immediately rather than waiting for the
+	// first open. Discovery still drives nested modules.
+	if hasGoProjectFiles(ctx, fs) {
+		root := langext.Root{Dir: cwd.Path(), URI: fmt.Sprintf("file://%s", cwd.Path())}
+		if err := init.InitializeAt(ctx, root); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// initializeGoRoot performs the gopls bring-up for a discovered module
+// root: it resolves the gopls binary for the host and initializes the
+// language server with the nested root URI.
+func initializeGoRoot(
+	ctx context.Context,
+	fs workspaceapi.FileSystem,
+	exec workspaceapi.Executor,
+	notify browserapi.Notifications,
+	lsp semanticapi.LSP,
+	dataDir, scheme string,
+	cfg config.Config,
+	root langext.Root,
+) error {
 	dbg := readGoplsDebugOptions(cfg)
-	goplsBin := resolveGoplsForWorkspace(ctx, w, cfg, notify, cwd.Scheme())
-	params, err := goplsInitializeParams(rootURI, dbg, goplsBin)
+	goplsBin := resolveGoplsForRoot(ctx, fs, exec, dataDir, cfg, notify, scheme)
+	params, err := goplsInitializeParams(root.URI, dbg, goplsBin)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
-	_, err = lsp.Initialize(ctx, params)
-	if err != nil {
+	if _, err := lsp.Initialize(ctx, params); err != nil {
 		return fmt.Errorf("initialize gopls: %w", err)
 	}
 	slog.Info("gopls initialized",
+		"root", root.Dir,
 		"rpc_trace", dbg.RPCTrace,
 		"logfile", dbg.LogFile,
 		"debug_addr", dbg.DebugAddr,
 		"trace", string(dbg.Trace),
 	)
-
-	parser := w.Parser(ctx)
-	executor := w.Executor(ctx)
-	interrupter := w.Interrupter(ctx)
-	fs := w.FileSystem(ctx)
-	storage := w.Storage(ctx)
-	manual, handler, err := newGoHandler(
-		lsp, editor, wm, notify, parser, executor, interrupter, fs, cfg, storage)
-	if err != nil {
-		return fmt.Errorf("create handler: %w", err)
-	}
-	if err := w.RegisterCommand(manual, handler); err != nil {
-		return fmt.Errorf("register command: %w", err)
-	}
 	return nil
+}
+
+// isGoFile reports whether uri names a Go source file.
+func isGoFile(uri workspaceapi.URI) bool {
+	return strings.HasSuffix(uri.Path(), ".go")
 }
 
 func readGoplsDebugOptions(cfg config.Config) goplsDebugOptions {
@@ -170,6 +250,9 @@ func resolveLogFile(path string) (string, error) {
 }
 
 func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) (string, bool) {
+	if cfg == nil {
+		return "", false
+	}
 	v, err := cfg.GetString("lsp_path")
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
@@ -182,36 +265,4 @@ func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) (strin
 		return "", false
 	}
 	return v, v != ""
-}
-
-func resolveGoplsForWorkspace(
-	ctx context.Context,
-	w *extensionapi.Workspace,
-	cfg config.Config,
-	notify browserapi.Notifications,
-	scheme string,
-) string {
-	fs := w.FileSystem(ctx)
-	if !hasGoProjectFiles(ctx, fs) {
-		return ""
-	}
-	if lspPath, ok := readGoplsLspPath(cfg, notify); ok {
-		return lspPath
-	}
-	bin, err := resolveGoplsBinary(
-		ctx, fs, w.Executor(ctx), w.DataDir(ctx))
-	if err == nil {
-		return bin
-	}
-	msg := "We could not locate the gopls executable, please set the " +
-		"extensions.go.config.lsp_path property in your config and " +
-		"reload the workspace"
-	if scheme == "file" {
-		msg = "We could not locate the gopls executable, please " +
-			"reinstall the go extension"
-	}
-	if notify != nil {
-		_, _ = notify.Notify(browserapi.LevelWarn, msg)
-	}
-	return ""
 }

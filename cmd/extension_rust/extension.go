@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -36,7 +37,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/extension/langext"
 )
+
+// rustMarkers are the project-root markers that drive nested discovery.
+// A stray .rs file with no enclosing Cargo.toml does not spawn a server;
+// the bare-.rs fallback stays a workspace-root concern (see
+// detectRustProject).
+var rustMarkers = []string{"Cargo.toml"}
 
 // NewExtension returns the Rust extension and its metadata.
 func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
@@ -72,6 +80,7 @@ func (e *rustExtension) ExtendWorkspace(
 		w.Executor(ctx),
 		w.Notifications(ctx),
 		w.LSP(ctx),
+		w.Editor(ctx),
 		w.DataDir(ctx),
 		os.Getenv("RUSTUP_HOME"),
 		os.Getenv("CARGO_HOME"),
@@ -80,71 +89,112 @@ func (e *rustExtension) ExtendWorkspace(
 	)
 }
 
-// extendWorkspaceWith performs the workspace bring-up against an explicit
-// set of dependencies. ExtendWorkspace supplies them from a real
-// *extensionapi.Workspace; the e2e harness supplies real FileSystem and
-// Executor with fake Notifications and LSP so the full path runs without
-// a live host. The dependencies are passed positionally so the compiler
-// flags a missing one at every call site.
+// extendWorkspaceWith wires Rust project discovery to per-root language
+// server bring-up. It registers the REPL command once for the workspace,
+// subscribes for opened .rs files so a server is initialized rooted at
+// each file's nearest Cargo.toml project, and eagerly initializes the
+// workspace-root project when one is present. ExtendWorkspace supplies
+// the dependencies from a real *extensionapi.Workspace; the e2e harness
+// supplies real FileSystem and Executor with fake Notifications, LSP and
+// Editor so the full path runs without a live host. The dependencies are
+// passed positionally so the compiler flags a missing one at every call
+// site.
 func (e *rustExtension) extendWorkspaceWith(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
+	editor textapi.Editor,
 	dataDir, rustupHome, cargoHome string,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
 ) error {
-	if !detectRustProject(ctx, fs) {
-		return nil
-	}
-
 	cwd, err := fs.URI(".")
 	if err != nil {
 		return fmt.Errorf("resolve cwd uri: %w", err)
 	}
-	rootURI := fmt.Sprintf("file://%s", cwd.Path())
-
 	rustupBin := resolveRustup(ctx, fs, dataDir)
 
-	initLSP := func(ctx context.Context) error {
-		command := resolveRustAnalyzer(cfg, notify, dataDir)
-		sysroot := resolveSysroot(ctx, exec)
-		params, err := rustInitializeParams(rootURI, command, sysroot)
-		if err != nil {
-			return fmt.Errorf("build init params: %w", err)
-		}
-		if _, err := lsp.Initialize(ctx, params); err != nil {
-			return fmt.Errorf("initialize rust lsp: %w", err)
-		}
-		slog.Info("rust lsp initialized", "command", command)
-		return nil
+	init := langext.NewInitializer(ctx, fs, editor, langext.ProjectConfig{
+		LanguageID: "rust",
+		Markers:    rustMarkers,
+		FileMatch:  isRustFile,
+		InitRoot: func(ctx context.Context, root langext.Root) error {
+			return initializeRustRoot(ctx,
+				fs, exec, notify, lsp, dataDir, rustupHome, cargoHome, rustupBin, cfg, root)
+		},
+	})
+	if err := init.Start(); err != nil {
+		return fmt.Errorf("subscribe rust open events: %w", err)
 	}
 
-	if err := bootstrapRustup(
-		ctx, rustupBin, exec, notify, fs, rustupHome, cargoHome, dataDir,
-	); err != nil {
-		_, _ = notify.Notify(browserapi.LevelWarn,
-			"Rust toolchain setup failed, continuing without a managed toolchain: %v", err)
-		slog.Warn("rust toolchain setup failed", "error", err)
-	}
-	if err := initLSP(ctx); err != nil {
-		_, _ = notify.Notify(browserapi.LevelWarn, "Rust language server setup failed: %v", err)
-		slog.Warn("rust lsp setup failed", "error", err)
-	}
-
+	// The REPL command's cwd is always the workspace root, independent of
+	// any nested project, so register it once up front. A reload (or a
+	// toolchain-mutating subcommand) must rebuild every server brought up
+	// so far, which Reinitialize does across all discovered roots.
 	reload := func(ctx context.Context) error {
-		if err := refreshSymlinks(ctx, exec, fs, cargoHome, dataDir); err != nil {
+		if err := refreshSymlinks(ctx, exec, fs, cargoHome, dataDir, cwd.Path()); err != nil {
 			return err
 		}
-		return initLSP(ctx)
+		return init.Reinitialize(ctx)
 	}
 	manual, handler := newRustHandler(exec, notify, cwd.Path(), rustupBin, reload)
 	if err := registerREPL(manual, handler); err != nil {
 		return fmt.Errorf("register rust command: %w", err)
 	}
+
+	// Preserve the eager workspace-root behavior: if the workspace root
+	// is itself a Rust project (including the bare-.rs fallback), bring
+	// it up immediately rather than waiting for the first open. Nested
+	// discovery still requires a Cargo.toml.
+	if detectRustProject(ctx, fs) {
+		root := langext.Root{Dir: cwd.Path(), URI: fmt.Sprintf("file://%s", cwd.Path())}
+		if err := init.InitializeAt(ctx, root); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// initializeRustRoot performs the language-specific bring-up for a
+// discovered project root: it bootstraps the rustup toolchain rooted
+// there (best-effort), resolves rust-analyzer and the sysroot, and
+// initializes the language server with the nested root URI.
+func initializeRustRoot(
+	ctx context.Context,
+	fs workspaceapi.FileSystem,
+	exec workspaceapi.Executor,
+	notify browserapi.Notifications,
+	lsp semanticapi.LSP,
+	dataDir, rustupHome, cargoHome, rustupBin string,
+	cfg config.Config,
+	root langext.Root,
+) error {
+	if err := bootstrapRustup(
+		ctx, rustupBin, exec, notify, fs, rustupHome, cargoHome, dataDir, root.Dir,
+	); err != nil {
+		_, _ = notify.Notify(browserapi.LevelWarn,
+			"Rust toolchain setup failed, continuing without a managed toolchain: %v", err)
+		slog.Warn("rust toolchain setup failed", "root", root.Dir, "error", err)
+	}
+
+	command := resolveRustAnalyzer(cfg, notify, dataDir)
+	sysroot := resolveSysroot(ctx, exec)
+	params, err := rustInitializeParams(root.URI, command, sysroot)
+	if err != nil {
+		return fmt.Errorf("build init params: %w", err)
+	}
+	if _, err := lsp.Initialize(ctx, params); err != nil {
+		return fmt.Errorf("initialize rust lsp: %w", err)
+	}
+	slog.Info("rust lsp initialized", "root", root.Dir, "command", command)
+	return nil
+}
+
+// isRustFile reports whether uri names a Rust source file.
+func isRustFile(uri workspaceapi.URI) bool {
+	return strings.HasSuffix(uri.Path(), ".rs")
 }
 
 // resolveRustup locates the bundled rustup at <dataDir>/bin/rustup,

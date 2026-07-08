@@ -65,9 +65,9 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 	ret semanticapi.InitializeResult, err error,
 ) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	if params.RootURI != m.rootURI {
-		err = errors.New("initializing LSP server for the wrong workspace: " +
-			"uris don't match")
+	if !rootContains(m.rootURI, params.RootURI) {
+		err = errors.New("initializing LSP server outside the workspace: " +
+			"root uri is not contained in the workspace root")
 		return
 	}
 	var initialOptions map[string]any
@@ -117,12 +117,13 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 		err = fmt.Errorf("decode initialize options: %w", err)
 		return
 	}
+	key := serverKey{languageID: id, rootURI: params.RootURI}
 	m.mu.Lock()
-	_, ok = m.servers[id]
+	_, ok = m.servers[key]
 	m.mu.Unlock()
 	if ok {
 		err = errors.New("language server for " +
-			"this language already initialized")
+			"this language and root already initialized")
 		return
 	}
 
@@ -139,7 +140,7 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 	cfg := langConfig{id: id, command: argv[0], args: argv[1:]}
 	if len(alternates) == 0 {
 		var srv *langServer
-		srv, err = m.initializeServer(ctx, cfg, params)
+		srv, err = m.initializeServer(ctx, cfg, key, params)
 		if err != nil {
 			err = fmt.Errorf("initialize server: %w", err)
 			return
@@ -147,7 +148,7 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 		return srv.initResult(), nil
 	}
 	var srv server
-	srv, err = m.initializeMultiServer(ctx, cfg, alternates, params)
+	srv, err = m.initializeMultiServer(ctx, cfg, key, alternates, params)
 	if err != nil {
 		err = fmt.Errorf("initialize multi server: %w", err)
 		return

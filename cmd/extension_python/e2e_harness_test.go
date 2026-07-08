@@ -30,11 +30,13 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // realFS is a minimal workspaceapi.FileSystem backed by the OS and
@@ -67,6 +69,54 @@ func (f realFS) MkdirAll(string, os.FileMode) error {
 	return errors.New("realFS: MkdirAll not supported")
 }
 
+// fakeEditor is a textapi.Editor that records the open-event
+// subscription so tests can deliver synthetic open events to the
+// extension's langext.Initializer. Every other method is an unused stub.
+type fakeEditor struct {
+	mu      sync.Mutex
+	handler textapi.EventHandler
+}
+
+var _ textapi.Editor = (*fakeEditor)(nil)
+
+func (e *fakeEditor) SubscribeEvents(_ []textapi.EventType, h textapi.EventHandler) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.handler = h
+	return nil
+}
+
+// open delivers an EventTypeOpen for the file at path to the subscribed
+// handler, returning false if no handler has subscribed yet.
+func (e *fakeEditor) open(t *testing.T, path string) {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file://" + path)
+	require.NoError(t, err)
+	e.mu.Lock()
+	h := e.handler
+	e.mu.Unlock()
+	require.NotNil(t, h, "no event handler subscribed")
+	h.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+}
+
+func (e *fakeEditor) Editor(workspaceapi.URI) (textapi.Handler, error) { return nil, nil }
+func (e *fakeEditor) SetLocationList(
+	textapi.Handler, textapi.LocationPriority, string, textapi.LocationList,
+) error {
+	return nil
+}
+func (e *fakeEditor) MoveToNextLocation(textapi.Handler, string) error { return nil }
+func (e *fakeEditor) MoveToPrevLocation(textapi.Handler, string) error { return nil }
+func (e *fakeEditor) Cursor(textapi.Handler) (term.Coordinates, error) {
+	return term.Coordinates{}, nil
+}
+func (e *fakeEditor) SetCursor(textapi.Handler, term.Coordinates) error { return nil }
+func (e *fakeEditor) CellView(textapi.Handler) textapi.CellView         { return nil }
+func (e *fakeEditor) CellEditor(textapi.Handler) textapi.CellEditor     { return nil }
+func (e *fakeEditor) SetDefaultAttributes(textapi.Handler, term.Attributes) error {
+	return nil
+}
+
 // captureLSP is a fake semanticapi.LSP that records the InitializeParams
 // it received and otherwise no-ops every request. The env+LSP suite
 // asserts against the captured params instead of running a real server.
@@ -75,16 +125,21 @@ type captureLSP struct {
 	mu         sync.Mutex
 	initParams *semanticapi.InitializeParams
 	initCount  int
+	inits      chan struct{}
 }
 
 func (l *captureLSP) Initialize(
 	_ context.Context, p semanticapi.InitializeParams,
 ) (semanticapi.InitializeResult, error) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	cp := p
 	l.initParams = &cp
 	l.initCount++
+	signal := l.inits
+	l.mu.Unlock()
+	if signal != nil {
+		signal <- struct{}{}
+	}
 	return semanticapi.InitializeResult{}, nil
 }
 
@@ -97,6 +152,24 @@ func (l *captureLSP) captured() (semanticapi.InitializeParams, int) {
 	return *l.initParams, l.initCount
 }
 
+// waitForInit blocks until the next Initialize call completes or the
+// timeout elapses, so tests can synchronize on the asynchronous,
+// event-driven bring-up before asserting on captured params.
+func (l *captureLSP) waitForInit(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	l.mu.Lock()
+	if l.inits == nil {
+		l.inits = make(chan struct{}, 1)
+	}
+	signal := l.inits
+	l.mu.Unlock()
+	select {
+	case <-signal:
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for lsp.Initialize")
+	}
+}
+
 // scenarioEnv is the result of running the extension against a scenario:
 // the workspace directory, the executor rooted there, and the captured
 // LSP/notifications for assertions.
@@ -105,6 +178,7 @@ type scenarioEnv struct {
 	exec    realExecutor
 	lsp     *captureLSP
 	notify  *fakeNotifications
+	editor  *fakeEditor
 	manuals []textapi.CommandManual
 }
 
@@ -153,10 +227,10 @@ func seedVenv(t *testing.T, dir, requirements string) {
 	t.Helper()
 	ctx := context.Background()
 	ex := newDirExecutor(dir)
-	require.NoError(t, runUV(ctx, "uv", ex, "venv"))
+	require.NoError(t, runUV(ctx, "uv", ex, "", "venv"))
 	reqFile := filepath.Join(dir, ".venv-seed-requirements.txt")
 	require.NoError(t, os.WriteFile(reqFile, []byte(requirements), 0o644))
-	require.NoError(t, runUV(ctx, "uv", ex, "pip", "install", "-r", reqFile))
+	require.NoError(t, runUV(ctx, "uv", ex, "", "pip", "install", "-r", reqFile))
 	require.NoError(t, os.Remove(reqFile))
 }
 
@@ -167,10 +241,20 @@ func seedVenv(t *testing.T, dir, requirements string) {
 func runExtensionOnScenario(t *testing.T, name string) scenarioEnv {
 	t.Helper()
 	dir := loadScenario(t, name)
+	return runExtensionOnDir(t, dir)
+}
+
+// runExtensionOnDir runs the extension's full bring-up against the
+// already-prepared workspace directory dir, using a real FileSystem and
+// Executor with a fake LSP and Notifications, and returns the resulting
+// environment for assertions.
+func runExtensionOnDir(t *testing.T, dir string) scenarioEnv {
+	t.Helper()
 	ex := newDirExecutor(dir)
 	lsp := &captureLSP{}
 	notify := newFakeNotifications()
-	env := scenarioEnv{dir: dir, exec: ex, lsp: lsp, notify: notify}
+	editor := &fakeEditor{}
+	env := scenarioEnv{dir: dir, exec: ex, lsp: lsp, notify: notify, editor: editor}
 
 	ext := &pyExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
@@ -178,6 +262,7 @@ func runExtensionOnScenario(t *testing.T, name string) scenarioEnv {
 		ex,
 		notify,
 		lsp,
+		editor,
 		"",
 		nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {

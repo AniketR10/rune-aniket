@@ -37,13 +37,14 @@ import (
 type callbackAdapter struct {
 	cb         semanticapi.LSPCallback
 	serverName string
+	rootURI    string
 	log        *slog.Logger
 }
 
 // Compile-time assertion that callbackAdapter implements jsonrpc2.Handler.
 var _ jsonrpc2.Handler = (*callbackAdapter)(nil)
 
-func newCallbackAdapter(cb semanticapi.LSPCallback, serverName string, workspace string) jsonrpc2.Handler {
+func newCallbackAdapter(cb semanticapi.LSPCallback, serverName string, rootURI string) jsonrpc2.Handler {
 	if cb == nil {
 		return jsonrpc2.HandlerFunc(
 			func(ctx context.Context, req *jsonrpc2.Request) (any, error) {
@@ -53,8 +54,9 @@ func newCallbackAdapter(cb semanticapi.LSPCallback, serverName string, workspace
 	return &callbackAdapter{
 		cb:         cb,
 		serverName: serverName,
+		rootURI:    rootURI,
 		log: slog.With("struct", "idelsp.callbackAdapter",
-			"server", serverName, "workspace", workspace),
+			"server", serverName, "workspace", rootURI),
 	}
 }
 
@@ -62,7 +64,10 @@ func newCallbackAdapter(cb semanticapi.LSPCallback, serverName string, workspace
 func (a *callbackAdapter) Handle(
 	ctx context.Context, req *jsonrpc2.Request,
 ) (any, error) {
-	ctx = ContextWithMetadata(ctx, Metadata{ServerName: a.serverName})
+	ctx = ContextWithMetadata(ctx, Metadata{
+		ServerName: a.serverName,
+		RootURI:    a.rootURI,
+	})
 	// Notifications have no ID; handle and return nil.
 	if !req.IsCall() {
 		a.handleNotification(ctx, req.Method, req.Params)

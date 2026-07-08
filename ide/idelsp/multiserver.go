@@ -159,6 +159,10 @@ func (m *multiLangServer) config() langConfig {
 	return m.cfg
 }
 
+func (m *multiLangServer) key() serverKey {
+	return m.children[0].key()
+}
+
 func (m *multiLangServer) initResult() semanticapi.InitializeResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()

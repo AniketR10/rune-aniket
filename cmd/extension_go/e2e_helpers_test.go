@@ -1076,6 +1076,15 @@ func (e *mockEditor) fireEvent(ctx context.Context, ev textapi.Event) {
 	}
 }
 
+// open delivers an EventTypeOpen for the file at path to all subscribed
+// handlers, so tests can drive the langext.Initializer's discovery path.
+func (e *mockEditor) open(t *testing.T, path string) {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file://" + path)
+	require.NoError(t, err)
+	e.fireEvent(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+}
+
 func (e *mockEditor) Editor(uri workspaceapi.URI) (textapi.Handler, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

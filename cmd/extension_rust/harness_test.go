@@ -43,7 +43,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // assertErr is a sentinel error scripted into the fake executor to
@@ -237,16 +239,21 @@ type captureLSP struct {
 	mu         sync.Mutex
 	initParams *semanticapi.InitializeParams
 	initCount  int
+	inits      chan struct{}
 }
 
 func (l *captureLSP) Initialize(
 	_ context.Context, p semanticapi.InitializeParams,
 ) (semanticapi.InitializeResult, error) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	cp := p
 	l.initParams = &cp
 	l.initCount++
+	signal := l.inits
+	l.mu.Unlock()
+	if signal != nil {
+		signal <- struct{}{}
+	}
 	return semanticapi.InitializeResult{}, nil
 }
 
@@ -257,6 +264,72 @@ func (l *captureLSP) captured() (semanticapi.InitializeParams, int) {
 		return semanticapi.InitializeParams{}, l.initCount
 	}
 	return *l.initParams, l.initCount
+}
+
+// waitForInit blocks until the next Initialize call completes or the
+// timeout elapses, so tests can synchronize on the asynchronous,
+// event-driven bring-up before asserting on captured params.
+func (l *captureLSP) waitForInit(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	l.mu.Lock()
+	if l.inits == nil {
+		l.inits = make(chan struct{}, 1)
+	}
+	signal := l.inits
+	l.mu.Unlock()
+	select {
+	case <-signal:
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for lsp.Initialize")
+	}
+}
+
+// fakeEditor is a textapi.Editor that records the open-event
+// subscription so tests can deliver synthetic open events to the
+// extension's langext.Initializer. Every other method is an unused stub.
+type fakeEditor struct {
+	mu      sync.Mutex
+	handler textapi.EventHandler
+}
+
+var _ textapi.Editor = (*fakeEditor)(nil)
+
+func (e *fakeEditor) SubscribeEvents(_ []textapi.EventType, h textapi.EventHandler) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.handler = h
+	return nil
+}
+
+// open delivers an EventTypeOpen for the file at path to the subscribed
+// handler, failing if no handler has subscribed yet.
+func (e *fakeEditor) open(t *testing.T, path string) {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file://" + path)
+	require.NoError(t, err)
+	e.mu.Lock()
+	h := e.handler
+	e.mu.Unlock()
+	require.NotNil(t, h, "no event handler subscribed")
+	h.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+}
+
+func (e *fakeEditor) Editor(workspaceapi.URI) (textapi.Handler, error) { return nil, nil }
+func (e *fakeEditor) SetLocationList(
+	textapi.Handler, textapi.LocationPriority, string, textapi.LocationList,
+) error {
+	return nil
+}
+func (e *fakeEditor) MoveToNextLocation(textapi.Handler, string) error { return nil }
+func (e *fakeEditor) MoveToPrevLocation(textapi.Handler, string) error { return nil }
+func (e *fakeEditor) Cursor(textapi.Handler) (term.Coordinates, error) {
+	return term.Coordinates{}, nil
+}
+func (e *fakeEditor) SetCursor(textapi.Handler, term.Coordinates) error { return nil }
+func (e *fakeEditor) CellView(textapi.Handler) textapi.CellView         { return nil }
+func (e *fakeEditor) CellEditor(textapi.Handler) textapi.CellEditor     { return nil }
+func (e *fakeEditor) SetDefaultAttributes(textapi.Handler, term.Attributes) error {
+	return nil
 }
 
 type progressSample struct {
@@ -399,4 +472,44 @@ func findRustc(t *testing.T) {
 	if _, err := exec.LookPath("rustc"); err != nil {
 		t.Skip("rustc not found, skipping rust e2e test")
 	}
+}
+
+// rustEnv is the result of running the extension's full bring-up against
+// a real workspace directory: the captured LSP and notifications, plus
+// the manuals registered for the `rust` command.
+type rustEnv struct {
+	dir     string
+	lsp     *captureLSP
+	notify  *fakeNotifications
+	editor  *fakeEditor
+	manuals []textapi.CommandManual
+}
+
+// runRustExtensionOnDir runs the extension's full bring-up against the
+// prepared workspace directory dir, using a real FileSystem and Executor
+// rooted there with a fake LSP and Notifications, and returns the
+// resulting environment for assertions. rustupHome/cargoHome/dataDir are
+// passed through so e2e tests can exercise the toolchain/symlink path.
+func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir string) rustEnv {
+	t.Helper()
+	lsp := &captureLSP{}
+	notify := newFakeNotifications()
+	editor := &fakeEditor{}
+	env := rustEnv{dir: dir, lsp: lsp, notify: notify, editor: editor}
+
+	ext := &rustExtension{}
+	err := ext.extendWorkspaceWith(context.Background(),
+		realFS{root: dir},
+		newDirExecutor(dir),
+		notify,
+		lsp,
+		editor,
+		dataDir, rustupHome, cargoHome, nil,
+		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
+			env.manuals = append(env.manuals, m)
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	return env
 }

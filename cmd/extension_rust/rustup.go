@@ -90,28 +90,28 @@ func bootstrapRustup(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	fs workspaceapi.FileSystem,
-	rustupHome, cargoHome, dataDir string,
+	rustupHome, cargoHome, dataDir, dir string,
 ) error {
 	if toolchainInstalled(fs, rustupHome) {
-		return refreshSymlinks(ctx, exec, fs, cargoHome, dataDir)
+		return refreshSymlinks(ctx, exec, fs, cargoHome, dataDir, dir)
 	}
 
 	notifID, _ := notify.Notify(browserapi.LevelInfo, "Preparing Rust toolchain")
 
 	total := int64(3)
 	_ = notify.UpdateNotificationProgress(notifID, "Installing Rust toolchain", 1, total)
-	if err := runRustup(ctx, rustupBin, exec,
+	if err := runRustup(ctx, rustupBin, exec, dir,
 		"toolchain", "install", "stable", "--profile", "minimal"); err != nil {
 		return fmt.Errorf("install toolchain: %w", err)
 	}
 
 	_ = notify.UpdateNotificationProgress(notifID, "Adding Rust components", 2, total)
-	if err := runRustup(ctx, rustupBin, exec,
+	if err := runRustup(ctx, rustupBin, exec, dir,
 		"component", "add", "rust-src", "clippy", "rustfmt"); err != nil {
 		return fmt.Errorf("add components: %w", err)
 	}
 
-	if err := refreshSymlinks(ctx, exec, fs, cargoHome, dataDir); err != nil {
+	if err := refreshSymlinks(ctx, exec, fs, cargoHome, dataDir, dir); err != nil {
 		return err
 	}
 	return notify.UpdateNotificationProgress(notifID, "Rust toolchain ready", total, total)
@@ -125,7 +125,7 @@ func refreshSymlinks(
 	ctx context.Context,
 	exec workspaceapi.Executor,
 	fs workspaceapi.FileSystem,
-	cargoHome, dataDir string,
+	cargoHome, dataDir, dir string,
 ) error {
 	if cargoHome == "" || dataDir == "" {
 		return nil
@@ -138,7 +138,7 @@ func refreshSymlinks(
 	for _, name := range userBinaries {
 		src := path.Join(srcBin, name)
 		dst := path.Join(binDir, name)
-		if err := runCommand(ctx, exec, "ln", "-sf", src, dst); err != nil {
+		if err := runCommand(ctx, exec, dir, "ln", "-sf", src, dst); err != nil {
 			return fmt.Errorf("symlink %s: %w", name, err)
 		}
 	}
@@ -153,13 +153,14 @@ func runRustup(
 	ctx context.Context,
 	rustupBin string,
 	exec workspaceapi.Executor,
+	dir string,
 	args ...string,
 ) error {
 	bin := rustupBin
 	if bin == "" {
 		bin = "rustup"
 	}
-	return runCommand(ctx, exec, bin, args...)
+	return runCommand(ctx, exec, dir, bin, args...)
 }
 
 // runCommand starts bin with args through the executor and waits for it
@@ -167,6 +168,7 @@ func runRustup(
 func runCommand(
 	ctx context.Context,
 	exec workspaceapi.Executor,
+	dir string,
 	bin string,
 	args ...string,
 ) error {
@@ -174,6 +176,7 @@ func runCommand(
 	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
 		Path:    bin,
+		Dir:     dir,
 		Args:    args,
 		Stderr:  stderrW,
 		Watcher: workspaceapi.ChanProcessWatcher(ch),

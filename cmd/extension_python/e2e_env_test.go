@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,4 +79,41 @@ func trimTrailing(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// TestE2E_NestedProjectDiscovery covers a workspace with no root Python
+// project but a nested one at deploy/cloudflare/oxprobe-worker. The
+// extension must not initialize a language server on startup; only after
+// a nested .py is opened should it initialize exactly once, rooted at the
+// nested project. Opening a .py with no enclosing marker must not
+// initialize.
+func TestE2E_NestedProjectDiscovery(t *testing.T) {
+	findUV(t)
+
+	env := runExtensionOnScenario(t, "nested")
+
+	_, count := env.lsp.captured()
+	assert.Equal(t, 0, count, "no project at the workspace root must not initialize on startup")
+	require.Len(t, env.manuals, 1, "the python REPL command must be registered once")
+	assert.Equal(t, pyCommandName, env.manuals[0].Name)
+
+	workerRoot := filepath.Join(env.dir, "deploy", "cloudflare", "oxprobe-worker")
+	env.editor.open(t, filepath.Join(workerRoot, "worker.py"))
+	env.lsp.waitForInit(t, 90*time.Second)
+
+	params, count := env.lsp.captured()
+	assert.Equal(t, 1, count, "opening the nested .py must initialize exactly once")
+	assert.Equal(t, "file://"+workerRoot, params.RootURI)
+
+	var initOpts map[string]any
+	require.NoError(t, json.Unmarshal(params.InitializeOptions, &initOpts))
+	assert.Equal(t, "python", initOpts["langID"])
+
+	// A second open inside the same root must not re-initialize, and a
+	// .py with no enclosing marker must not initialize a server.
+	env.editor.open(t, filepath.Join(workerRoot, "worker.py"))
+	env.editor.open(t, filepath.Join(env.dir, "scripts", "stray.py"))
+
+	_, count = env.lsp.captured()
+	assert.Equal(t, 1, count, "dedupe and stray opens must not add initializations")
 }

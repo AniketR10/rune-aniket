@@ -52,7 +52,8 @@ func TestEventTypeClose_evictsFilesCache(t *testing.T) {
 
 	openURI := makeURI(t, "file:///workspace/open.go")
 	m.mu.Lock()
-	m.files[openURI.String()] = newFile(openURI, "package open\n", "go")
+	m.files[openURI.String()] = newFile(openURI, "package open\n", "go",
+		serverKey{languageID: "go", rootURI: "file:///workspace"})
 	m.mu.Unlock()
 
 	require.Len(t, m.files, 1)
@@ -96,7 +97,8 @@ func TestManagerConcurrentStateAccess(t *testing.T) {
 				_ = m.handle(textapi.Event{Type: textapi.EventTypeOpen, URI: uri,
 					Content: "package a\n"})
 				m.mu.Lock()
-				m.files[uri.String()] = newFile(uri, "package a\n", "go")
+				m.files[uri.String()] = newFile(uri, "package a\n", "go",
+					serverKey{languageID: "go", rootURI: "file:///workspace"})
 				m.mu.Unlock()
 				_, _ = m.getFile(uri.String())
 				_ = m.allServers()
@@ -228,7 +230,8 @@ func TestDidChangeWatchedFiles_marksOpenFilePending(t *testing.T) {
 	// Simulate the file being open in the editor.
 	openURI := makeURI(t, "file:///workspace/open.go")
 	m.mu.Lock()
-	m.files[openURI.String()] = newFile(openURI, "package open\n", "go")
+	m.files[openURI.String()] = newFile(openURI, "package open\n", "go",
+		serverKey{languageID: "go", rootURI: "file:///workspace"})
 	m.mu.Unlock()
 
 	// An apply_patch-style Changed event arrives for the open file.
@@ -295,7 +298,7 @@ func TestWatchServerRestartsOnConnLoss(t *testing.T) {
 	wg.Wait()
 
 	mgr.mu.Lock()
-	origSrv := mgr.servers["go"].(*langServer)
+	origSrv := mgr.servers[serverKey{languageID: "go", rootURI: uri.String()}].(*langServer)
 	mgr.mu.Unlock()
 	require.NotNil(t, origSrv)
 	origPid := origSrv.pid
@@ -321,7 +324,7 @@ func TestWatchServerRestartsOnConnLoss(t *testing.T) {
 	var newSrv *langServer
 	require.Eventually(t, func() bool {
 		mgr.mu.Lock()
-		s, _ := mgr.servers["go"].(*langServer)
+		s, _ := mgr.servers[serverKey{languageID: "go", rootURI: uri.String()}].(*langServer)
 		mgr.mu.Unlock()
 		if s != nil && s != origSrv {
 			newSrv = s
@@ -385,7 +388,7 @@ func TestManagerCloseTerminatesGopls(t *testing.T) {
 	wg.Wait()
 
 	mgr.mu.Lock()
-	srv := mgr.servers["go"].(*langServer)
+	srv := mgr.servers[serverKey{languageID: "go", rootURI: uri.String()}].(*langServer)
 	mgr.mu.Unlock()
 	require.NotNil(t, srv)
 	require.NotNil(t, srv.watcher,

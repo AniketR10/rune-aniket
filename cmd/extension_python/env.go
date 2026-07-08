@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -55,19 +56,34 @@ var requirementsFiles = []string{
 	"requirements.in",
 }
 
-func detectProject(_ context.Context, fs workspaceapi.FileSystem) projectKind {
-	if info, err := fs.Stat("pyproject.toml"); err == nil && info != nil && !info.IsDir() {
+// pyMarkers are the project-root marker files and directories used to
+// discover the nearest Python project enclosing an opened file. A stray
+// `.py` with no enclosing marker does not spin up a server, so the
+// `.py`-only kindScript fallback stays a root-level concern handled by
+// the eager workspace-root path rather than nested discovery.
+var pyMarkers = append([]string{"pyproject.toml"}, append(requirementsFiles, ".venv")...)
+
+// isPythonFile reports whether uri names a Python source file.
+func isPythonFile(uri workspaceapi.URI) bool {
+	return strings.HasSuffix(uri.Path(), ".py")
+}
+
+// detectProjectAt classifies the Python project layout rooted at dir
+// (relative to the workspace root) so a nested project's environment is
+// bootstrapped the same way the workspace-root project is.
+func detectProjectAt(_ context.Context, fs workspaceapi.FileSystem, dir string) projectKind {
+	if info, err := fs.Stat(filepath.Join(dir, "pyproject.toml")); err == nil && info != nil && !info.IsDir() {
 		return kindProject
 	}
 	for _, name := range requirementsFiles {
-		if info, err := fs.Stat(name); err == nil && info != nil && !info.IsDir() {
+		if info, err := fs.Stat(filepath.Join(dir, name)); err == nil && info != nil && !info.IsDir() {
 			return kindRequirements
 		}
 	}
-	if info, err := fs.Stat(".venv"); err == nil && info != nil && info.IsDir() {
+	if info, err := fs.Stat(filepath.Join(dir, ".venv")); err == nil && info != nil && info.IsDir() {
 		return kindVenvOnly
 	}
-	if entries, err := fs.ReadDir("."); err == nil {
+	if entries, err := fs.ReadDir(dir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() && strings.HasSuffix(e.Name(), ".py") {
 				return kindScript
@@ -77,9 +93,13 @@ func detectProject(_ context.Context, fs workspaceapi.FileSystem) projectKind {
 	return kindNone
 }
 
-func firstRequirementsFile(fs workspaceapi.FileSystem) string {
+// firstRequirementsFile returns the highest-priority requirements
+// manifest present in dir, falling back to the default name when none
+// exists. The returned path is relative to dir so `uv pip install -r`
+// resolves it inside the project root the command runs in.
+func firstRequirementsFile(fs workspaceapi.FileSystem, dir string) string {
 	for _, name := range requirementsFiles {
-		if info, err := fs.Stat(name); err == nil && info != nil && !info.IsDir() {
+		if info, err := fs.Stat(filepath.Join(dir, name)); err == nil && info != nil && !info.IsDir() {
 			return name
 		}
 	}
@@ -98,11 +118,12 @@ func ensureEnvironment(
 	notify browserapi.Notifications,
 	kind projectKind,
 	fs workspaceapi.FileSystem,
+	dir string,
 ) error {
 	notifID, _ := notify.Notify(browserapi.LevelInfo, "Preparing Python environment")
 
 	total, step := int64(4), int64(3)
-	installed, err := ensureInterpreter(ctx, uvBin, exec, notify, notifID)
+	installed, err := ensureInterpreter(ctx, uvBin, exec, notify, notifID, dir)
 	if err != nil {
 		return err
 	}
@@ -111,7 +132,7 @@ func ensureEnvironment(
 		step--
 	}
 
-	err = runSyncStep(ctx, uvBin, exec, notify, notifID, kind, fs, step, total)
+	err = runSyncStep(ctx, uvBin, exec, notify, notifID, kind, fs, dir, step, total)
 	if err != nil {
 		return err
 	}
@@ -133,13 +154,14 @@ func ensureInterpreter(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	notifID string,
+	dir string,
 ) (bool, error) {
 	_ = notify.UpdateNotificationProgress(notifID, "Finding Python interpreter", 1, 4)
-	if err := runUV(ctx, uvBin, exec, "python", "find"); err == nil {
+	if err := runUV(ctx, uvBin, exec, dir, "python", "find"); err == nil {
 		return false, nil
 	}
 	_ = notify.UpdateNotificationProgress(notifID, "Installing Python interpreter", 2, 4)
-	if err := runUV(ctx, uvBin, exec, "python", "install", "--default"); err != nil {
+	if err := runUV(ctx, uvBin, exec, dir, "python", "install", "--default"); err != nil {
 		return true, err
 	}
 	return true, nil
@@ -155,35 +177,40 @@ func runSyncStep(
 	notifID string,
 	kind projectKind,
 	fs workspaceapi.FileSystem,
+	dir string,
 	step, total int64,
 ) error {
 	switch kind {
 	case kindProject:
 		_ = notify.UpdateNotificationProgress(notifID, "Syncing project dependencies", step, total)
-		return runUV(ctx, uvBin, exec, "sync")
+		return runUV(ctx, uvBin, exec, dir, "sync")
 	case kindRequirements:
 		_ = notify.UpdateNotificationProgress(notifID, "Installing requirements", step, total)
 		// `--allow-existing` keeps the venv creation idempotent: on a re-run
 		// it preserves the existing .venv instead of erroring on the present
 		// target directory.
-		if err := runUV(ctx, uvBin, exec, "venv", "--allow-existing"); err != nil {
+		if err := runUV(ctx, uvBin, exec, dir, "venv", "--allow-existing"); err != nil {
 			return err
 		}
-		return runUV(ctx, uvBin, exec, "pip", "install", "-r", firstRequirementsFile(fs))
+		return runUV(ctx, uvBin, exec, dir, "pip", "install", "-r", firstRequirementsFile(fs, dir))
 	case kindVenvOnly:
 		_ = notify.UpdateNotificationProgress(notifID, "Verifying virtual environment", step, total)
-		return runUV(ctx, uvBin, exec, "python", "find")
+		return runUV(ctx, uvBin, exec, dir, "python", "find")
 	default:
 		return nil
 	}
 }
 
-// runUV runs `uv <args>` through the workspace executor, draining stderr
-// so the process never blocks on a full pipe.
+// runUV runs `uv <args>` through the workspace executor in workdir,
+// draining stderr so the process never blocks on a full pipe. A workdir
+// of "" or "." leaves the executor's default (the workspace root) in
+// place; a nested project root is passed so uv operates on that
+// project's environment.
 func runUV(
 	ctx context.Context,
 	uvBin string,
 	exec workspaceapi.Executor,
+	workdir string,
 	args ...string,
 ) error {
 	bin := uvBin
@@ -195,6 +222,7 @@ func runUV(
 	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
 		Path:    bin,
+		Dir:     uvWorkdir(workdir),
 		Args:    args,
 		Stderr:  stderrW,
 		Watcher: workspaceapi.ChanProcessWatcher(ch),
@@ -226,4 +254,13 @@ func runUV(
 		return fmt.Errorf("uv %s: %w", strings.Join(args, " "), runErr)
 	}
 	return nil
+}
+
+// uvWorkdir normalizes a project-root directory into a Cmd.Dir value,
+// treating "" and "." as "use the executor's default working directory".
+func uvWorkdir(dir string) string {
+	if dir == "" || dir == "." {
+		return ""
+	}
+	return dir
 }

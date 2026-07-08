@@ -125,11 +125,12 @@ type fakeExecutor struct {
 	mu        sync.Mutex
 	responses map[string]scriptedCmd
 	calls     []string
+	dirs      map[string]string
 	nextPid   workspaceapi.Pid
 }
 
 func newFakeExecutor() *fakeExecutor {
-	return &fakeExecutor{responses: map[string]scriptedCmd{}, nextPid: 1}
+	return &fakeExecutor{responses: map[string]scriptedCmd{}, dirs: map[string]string{}, nextPid: 1}
 }
 
 func (e *fakeExecutor) respond(key string, r scriptedCmd) *fakeExecutor {
@@ -145,6 +146,7 @@ func (e *fakeExecutor) Start(_ context.Context, cmd workspaceapi.Cmd) (workspace
 	e.mu.Lock()
 	key := e.callKey(cmd)
 	e.calls = append(e.calls, key)
+	e.dirs[key] = cmd.Dir
 	resp, ok := e.responses[key]
 	pid := e.nextPid
 	e.nextPid++
@@ -179,6 +181,14 @@ func (e *fakeExecutor) callsSnapshot() []string {
 	out := make([]string, len(e.calls))
 	copy(out, e.calls)
 	return out
+}
+
+// dirFor returns the Cmd.Dir the executor saw for the command matching
+// key (the space-joined path and args).
+func (e *fakeExecutor) dirFor(key string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.dirs[key]
 }
 
 func TestResolvePyTool(t *testing.T) {

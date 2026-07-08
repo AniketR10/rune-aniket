@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -51,6 +53,40 @@ func hasGoProjectFiles(_ context.Context, fs workspaceapi.FileSystem) bool {
 		}
 	}
 	return false
+}
+
+// resolveGoplsForRoot locates the gopls binary for a Go project root. The
+// caller only invokes it once a module has been discovered, so it no
+// longer gates on hasGoProjectFiles: an lsp_path override wins, otherwise
+// the host is probed and a failure warns. gopls probes are host-global,
+// so the result is correct for every root on the same host.
+func resolveGoplsForRoot(
+	ctx context.Context,
+	fs workspaceapi.FileSystem,
+	exec workspaceapi.Executor,
+	dataDir string,
+	cfg config.Config,
+	notify browserapi.Notifications,
+	scheme string,
+) string {
+	if lspPath, ok := readGoplsLspPath(cfg, notify); ok {
+		return lspPath
+	}
+	bin, err := resolveGoplsBinary(ctx, fs, exec, dataDir)
+	if err == nil {
+		return bin
+	}
+	msg := "We could not locate the gopls executable, please set the " +
+		"extensions.go.config.lsp_path property in your config and " +
+		"reload the workspace"
+	if scheme == "file" {
+		msg = "We could not locate the gopls executable, please " +
+			"reinstall the go extension"
+	}
+	if notify != nil {
+		_, _ = notify.Notify(browserapi.LevelWarn, msg)
+	}
+	return ""
 }
 
 func resolveGoplsBinary(
