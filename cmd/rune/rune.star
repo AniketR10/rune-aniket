@@ -751,6 +751,8 @@ config = {
         # Automatically restore the previous session's files, terminals, and
         # window layout.
         "auto_restore": True,
+        # Index workspace symbols for faster lookups.
+        "symboldb":     True,
         # Attributes for custom ASCII or image wallpapers.
         "wallpaper_attr":            attr(fg = "blue", bg = "default"),
         "wallpaper_background_attr": attr(bg = "default"),

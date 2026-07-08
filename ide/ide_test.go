@@ -47,10 +47,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
@@ -61,6 +63,7 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/syntax/symboldb"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
@@ -1297,6 +1300,170 @@ command:
 		return ok && strings.Contains(text, "RESULT:s3cr3t")
 	}, 10*time.Second, 50*time.Millisecond,
 		"terminal did not receive pasted secret; screen was:\n%s", resultText)
+}
+
+// stageTreeSitterGo installs the committed Go tree-sitter artifacts
+// into the idepkg layout (<dataDir>/lib/go) so the syntax parser can
+// load the language without a package download.
+func stageTreeSitterGo(t *testing.T, dataDir string) {
+	t.Helper()
+	src := filepath.Join("idelsp", "symbolresolve", "go")
+	dst := filepath.Join(dataDir, "lib", "go")
+	require.NoError(t, os.MkdirAll(dst, 0o755))
+	for _, name := range []string{
+		"tree-sitter.so", "locals.scm", "highlights.scm",
+		"indents.scm", "folds.scm",
+	} {
+		data, err := os.ReadFile(filepath.Join(src, name))
+		require.NoErrorf(t, err, "missing tree-sitter fixture %s", name)
+		require.NoError(t, os.WriteFile(filepath.Join(dst, name), data, 0o644))
+	}
+}
+
+// TestE2EWorkspaceSymbolDBIndexing exercises the workspace.symboldb
+// flag end-to-end, like production does through rune.star: opening a
+// workspace with the flag enabled wraps the syntax parser with the
+// persistent symbol database, indexes the workspace's Go files with
+// the real tree-sitter artifacts, and serves symbol queries from the
+// index.
+func TestE2EWorkspaceSymbolDBIndexing(t *testing.T) {
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "mylib"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "mylib", "mylib.go"),
+		[]byte("package mylib\n\nfunc MyFunc(s string) string { return s }\n"),
+		0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "main.go"),
+		[]byte("package main\n\nimport \"example.com/e2e/mylib\"\n\n"+
+			"func main() { _ = mylib.MyFunc(\"x\") }\n"),
+		0o644))
+
+	dataDir := t.TempDir()
+	stageTreeSitterGo(t, dataDir)
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+workspace:
+  symboldb: true
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	mu.Lock()
+	wh := i.workspaceHandler.workspaces[i.workspaceHandler.focus]
+	mu.Unlock()
+	require.NotNil(t, wh)
+	sdb, ok := wh.symbolDBCloser.(*symboldb.Parser)
+	require.True(t, ok,
+		"workspace parser must be wrapped with the symbol database")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	require.NoError(t, sdb.Wait(ctx))
+
+	it, err := sdb.ListReferencedSymbols(ctx)
+	require.NoError(t, err)
+	names, err := sdkiterator.ToSlice(ctx, it)
+	require.NoError(t, err)
+	// The index emits each qualified name exactly once, unlike the
+	// backing parser which streams one entry per occurrence
+	// (mylib.MyFunc has both a reference and a definition), so a
+	// single occurrence proves the listing was served from the index.
+	occurrences := 0
+	for _, name := range names {
+		if name == "mylib.MyFunc" {
+			occurrences++
+		}
+	}
+	require.Equalf(t, 1, occurrences,
+		"mylib.MyFunc must be listed exactly once from the index; got %v", names)
+
+	matches, err := sdkiterator.ToSlice(ctx, mustResolve(t, ctx, sdb, "mylib.MyFunc"))
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.True(t, strings.HasSuffix(matches[0].URI, "/main.go"),
+		"mylib.MyFunc must resolve to its reference site; got %q", matches[0].URI)
+}
+
+func mustResolve(
+	t *testing.T, ctx context.Context, p *symboldb.Parser, name string,
+) sdkiterator.Iterator[syntaxapi.Match] {
+	t.Helper()
+	it, err := p.ResolveSymbol(ctx, name, nil)
+	require.NoError(t, err)
+	return it
+}
+
+// TestWorkspaceSymbolDBDisabledByDefault pins that workspaces do not
+// pay for symbol indexing unless workspace.symboldb is enabled.
+func TestWorkspaceSymbolDBDisabledByDefault(t *testing.T) {
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "alpha.go"), []byte("package a\n"), 0o644))
+
+	dataDir := t.TempDir()
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	mu.Lock()
+	wh := i.workspaceHandler.workspaces[i.workspaceHandler.focus]
+	mu.Unlock()
+	require.NotNil(t, wh)
+	assert.Nil(t, wh.symbolDBCloser,
+		"symbol database must not be built when workspace.symboldb is unset")
 }
 
 // TestE2EFileExplorerRefreshDoesNotClobberClipboard reproduces the bug

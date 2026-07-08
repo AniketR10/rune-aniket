@@ -834,6 +834,12 @@ func (t *Tree) parseTree(prev *tree_sitter.Tree, errorMsg string) {
 		}
 		return []byte{}
 	}, prev, &opts)
+	// Tree-sitter returns a new tree; the previous tree fed into the
+	// incremental parse is a native allocation with no finalizer and
+	// must be deleted or it leaks on every edit.
+	if prev != nil {
+		prev.Close()
+	}
 	if hasError || (t.tree != nil &&
 		t.tree.RootNode().HasError() && t.config.StrictErrors) {
 		t.currState.ParserError = errorMsg
@@ -876,8 +882,13 @@ func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
 // lineStarts returns the byte offset of the first byte of each line in
 // content. starts[r] is the start of row r, so a tree-sitter Point's byte
 // Column can be resolved to an absolute offset without a cell.Buffer.
-func lineStarts(content []byte) []int {
-	starts := make([]int, 1, bytes.Count(content, []byte{'\n'})+2)
+// buf's capacity is recycled when provided; per-file callers that keep no
+// buffer pass nil and get one exact-sized allocation.
+func lineStarts(buf []int, content []byte) []int {
+	if cap(buf) == 0 {
+		buf = make([]int, 0, bytes.Count(content, []byte{'\n'})+2)
+	}
+	starts := append(buf[:0], 0)
 	for i, b := range content {
 		if b == '\n' {
 			starts = append(starts, i+1)

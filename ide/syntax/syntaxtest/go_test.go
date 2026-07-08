@@ -1749,6 +1749,41 @@ func TestTreeStateIntegration(t *testing.T) {
 	})
 }
 
+// TestTreeIncrementalParseReleasesPreviousTree drives many incremental
+// parses in sequence: each reparse must delete the previous native tree
+// (a hard leak otherwise, since tree-sitter objects have no finalizer)
+// while the swapped-in tree stays fully usable. A use-after-free or
+// double-free in the swap crashes this test.
+func TestTreeIncrementalParseReleasesPreviousTree(t *testing.T) {
+	pkgs := newInstalledPkgManagerWithFiles(t,
+		"go/tree-sitter.so",
+		"go/highlights.scm",
+		"go/indents.scm",
+		"go/folds.scm",
+	)
+	buffer, _, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+	it := tree.State()
+	_, ok := it.Next(context.Background())
+	require.True(t, ok)
+
+	for range 50 {
+		buffer.InsertString(term.Coordinates{}, "// edit\n")
+		state, ok := it.Next(context.Background())
+		require.True(t, ok)
+		require.Empty(t, state.ParserError)
+	}
+
+	folds, ok := tree.Folds()
+	require.True(t, ok)
+	ranges, err := iterator.ToSlice(context.Background(), folds)
+	require.NoError(t, err)
+	assert.NotEmpty(t, ranges)
+
+	require.NoError(t, tree.Close())
+	cleanup()
+}
+
 func TestTreeQueryIntegration(t *testing.T) {
 	t.Run("if locals.scm file is not found and tree is ready Query returns error", func(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,

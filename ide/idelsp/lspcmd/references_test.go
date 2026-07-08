@@ -26,6 +26,7 @@ package lspcmd
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,16 @@ import (
 )
 
 var _ textapi.CommandHandler = (*referencesHandler)(nil)
+
+// waitFloating waits for the async cursor path to float a picker.
+func waitFloating(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the async LSP result")
+	}
+}
 
 func TestReferencesEnrichedDisplay(t *testing.T) {
 	rootURI, err := workspaceapi.ParseURI("file:///project")
@@ -70,9 +81,14 @@ func TestReferencesEnrichedDisplay(t *testing.T) {
 		},
 	}
 	var fh browserapi.Floating
+	done := make(chan struct{}, 1)
 	wm := &mockWindowManager{
 		floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
 			fh = h
+			select {
+			case done <- struct{}{}:
+			default:
+			}
 			return nil, nil
 		},
 	}
@@ -87,6 +103,7 @@ func TestReferencesEnrichedDisplay(t *testing.T) {
 
 	err = h.HandleCommand(context.Background(), cmd)
 	require.NoError(t, err)
+	waitFloating(t, done)
 	require.NotNil(t, fh)
 
 	lh := fh.(*locationpicker.Picker)
@@ -131,9 +148,14 @@ func TestReferencesRelativePaths(t *testing.T) {
 		},
 	}
 	var fh browserapi.Floating
+	done := make(chan struct{}, 1)
 	wm := &mockWindowManager{
 		floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
 			fh = h
+			select {
+			case done <- struct{}{}:
+			default:
+			}
 			return nil, nil
 		},
 	}
@@ -148,6 +170,7 @@ func TestReferencesRelativePaths(t *testing.T) {
 
 	err = h.HandleCommand(context.Background(), cmd)
 	require.NoError(t, err)
+	waitFloating(t, done)
 	require.NotNil(t, fh)
 
 	lh := fh.(*locationpicker.Picker)
@@ -185,9 +208,14 @@ func TestReferencesZeroRootURI(t *testing.T) {
 		},
 	}
 	var fh browserapi.Floating
+	done := make(chan struct{}, 1)
 	wm := &mockWindowManager{
 		floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
 			fh = h
+			select {
+			case done <- struct{}{}:
+			default:
+			}
 			return nil, nil
 		},
 	}
@@ -203,6 +231,7 @@ func TestReferencesZeroRootURI(t *testing.T) {
 
 	err := h.HandleCommand(context.Background(), cmd)
 	require.NoError(t, err)
+	waitFloating(t, done)
 	require.NotNil(t, fh)
 
 	lh := fh.(*locationpicker.Picker)
@@ -268,6 +297,13 @@ func TestReferencesHandler(t *testing.T) {
 					return tt.locs, nil
 				},
 			}
+			done := make(chan struct{}, 1)
+			signal := func() {
+				select {
+				case done <- struct{}{}:
+				default:
+				}
+			}
 			var navigated bool
 			editor := &mockEditor{
 				editorFn: func(u workspaceapi.URI) (textapi.Handler, error) {
@@ -275,6 +311,7 @@ func TestReferencesHandler(t *testing.T) {
 				},
 				setCursorFn: func(_ textapi.Handler, _ term.Coordinates) error {
 					navigated = true
+					signal()
 					return nil
 				},
 			}
@@ -282,11 +319,13 @@ func TestReferencesHandler(t *testing.T) {
 			wm := &mockWindowManager{
 				floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
 					fh = h
+					signal()
 					return nil, nil
 				},
 			}
+			notify := &recordingNotifications{}
 			h := ReferencesHandler(
-				lsp, editor, wm, &mockResourceOpener{}, &mockNotifications{}, &mockFileSystem{},
+				lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
 				rootURI, syncTick, nil, DefaultReferencesConfig(), nil,
 			)
 
@@ -303,6 +342,22 @@ func TestReferencesHandler(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			if tt.wantFloat || tt.wantNavigate {
+				waitFloating(t, done)
+			} else {
+				// Zero references complete silently; synchronise on the
+				// cursor-path progress notification finishing.
+				require.Eventually(t, func() bool {
+					_, updates := notify.snapshot()
+					for _, u := range updates {
+						if u.step == 1 && u.total == 1 {
+							return true
+						}
+					}
+					return false
+				}, 5*time.Second, 5*time.Millisecond,
+					"cursor path must complete its progress notification")
+			}
 			assert.Equal(t, tt.wantFloat, fh != nil)
 			assert.Equal(t, tt.wantNavigate, navigated)
 			if tt.wantEntries > 0 {

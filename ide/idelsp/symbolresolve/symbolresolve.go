@@ -291,7 +291,7 @@ func runResolvePass(
 	if pkgID >= 0 {
 		sub := subs[pkgID]
 		consume(pkgID, func() error {
-			packages, perr := iterator.Reduce(ctx, sub, reducePackages)
+			packages, perr := iterator.Reduce(ctx, firsts(sub), reducePackages)
 			mu.Lock()
 			res.packages = packages
 			mu.Unlock()
@@ -301,7 +301,7 @@ func runResolvePass(
 	if pathID >= 0 {
 		sub := subs[pathID]
 		consume(pathID, func() error {
-			imports, perr := iterator.Reduce(ctx, sub, reduceImportPaths)
+			imports, perr := iterator.Reduce(ctx, firsts(sub), reduceImportPaths)
 			mu.Lock()
 			res.imports = imports
 			mu.Unlock()
@@ -311,7 +311,7 @@ func runResolvePass(
 	if aliasID >= 0 {
 		sub := subs[aliasID]
 		consume(aliasID, func() error {
-			aliases, perr := iterator.Reduce(ctx, pairedResults(sub), reduceImportAliases)
+			aliases, perr := iterator.Reduce(ctx, pairs(sub), reduceImportAliases)
 			mu.Lock()
 			res.explicitAliases = aliases
 			mu.Unlock()
@@ -328,13 +328,13 @@ func runResolvePass(
 	return res, nil
 }
 
-// collectRefPairs consumes one demultiplexed reference sub-stream, pairs its
-// captures per file and feeds matches for pkg.sym to add.
+// collectRefPairs consumes one demultiplexed reference sub-stream and
+// feeds matches for pkg.sym to add.
 func collectRefPairs(
-	ctx context.Context, sub iterator.Iterator[syntaxapi.Result],
+	ctx context.Context, sub iterator.Iterator[[]syntaxapi.Result],
 	pkg, sym string, add func(uri string, pos term.Coordinates),
 ) error {
-	return iterator.ForEach(ctx, pairedResults(sub), func(p [2]syntaxapi.Result) error {
+	return iterator.ForEach(ctx, pairs(sub), func(p [2]syntaxapi.Result) error {
 		if p[0].Text != pkg || p[1].Text != sym {
 			return nil
 		}
@@ -410,33 +410,25 @@ func collectMethodDefinitions(
 
 // collectFileMethods runs the method-definition query against one file
 // and feeds matches whose receiver type equals typeName and method name
-// equals method to add. Captures stream in match order as
-// (receiver, method) pairs, so a pending receiver is paired with the
-// next method capture.
+// equals method to add.
 func collectFileMethods(
 	ctx context.Context, parser Searcher, spec *Spec,
 	fileURI workspaceapi.URI, typeName, method string,
 	add func(uri string, pos term.Coordinates),
 ) error {
-	it, err := parser.Query(fileURI, spec.MethodDefQuery, spec.MethodDefCaptures)
+	it, err := parser.Query2(
+		fileURI, spec.MethodDefQuery, captures2(spec.MethodDefCaptures))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = it.Close() }()
-	recvCap, methodCap := spec.MethodDefCaptures[0], spec.MethodDefCaptures[1]
-	var pendingRecv string
 	for {
-		r, ok := it.Next(ctx)
+		p, ok := it.Next(ctx)
 		if !ok {
 			break
 		}
-		switch r.CaptureName {
-		case recvCap:
-			pendingRecv = r.Text
-		case methodCap:
-			if pendingRecv == typeName && r.Text == method {
-				add(fileURI.String(), r.From)
-			}
+		if p[0].Text == typeName && p[1].Text == method {
+			add(fileURI.String(), p[1].From)
 		}
 	}
 	return it.Err()
@@ -615,13 +607,13 @@ func resolveImportPaths(
 		return nil, err
 	}
 
-	aliasIter, err := parser.Search(
-		spec.ImportAliasQuery, spec.ImportAliasCaptures, spec.LangID,
+	aliasIter, err := parser.Search2(
+		spec.ImportAliasQuery, captures2(spec.ImportAliasCaptures), spec.LangID,
 	)
 	if err != nil {
 		return nil, err
 	}
-	explicitAliases, err := iterator.Reduce(ctx, pairedResults(aliasIter), reduceImportAliases)
+	explicitAliases, err := iterator.Reduce(ctx, aliasIter, reduceImportAliases)
 	if err != nil {
 		return nil, err
 	}
@@ -719,28 +711,38 @@ func deduplicateMatchesByImport(
 	return result
 }
 
-func pairedResults(
-	it iterator.Iterator[syntaxapi.Result],
-) iterator.Iterator[[2]syntaxapi.Result] {
-	// Buffer per-file because the gRPC stream may interleave results
-	// from files processed concurrently, so consecutive results are
-	// not guaranteed to belong to the same match.
-	pending := make(map[workspaceapi.URI]syntaxapi.Result)
-	return iterator.FromFunc(
-		func(ctx context.Context) ([2]syntaxapi.Result, bool, error) {
-			for {
-				r, ok := it.Next(ctx)
-				if !ok {
-					return [2]syntaxapi.Result{}, false, it.Err()
-				}
-				if first, exists := pending[r.File]; exists {
-					delete(pending, r.File)
-					return [2]syntaxapi.Result{first, r}, true, nil
-				}
-				pending[r.File] = r
-			}
-		}, it.Close,
+// firsts adapts a demultiplexed single-capture sub-stream to its sole
+// capture.
+func firsts(
+	it iterator.Iterator[[]syntaxapi.Result],
+) iterator.Iterator[syntaxapi.Result] {
+	return iterator.Map(
+		iterator.Filter(it, func(m []syntaxapi.Result) bool {
+			return len(m) > 0
+		}),
+		func(m []syntaxapi.Result) syntaxapi.Result { return m[0] },
 	)
+}
+
+// pairs adapts a demultiplexed two-capture sub-stream to its capture
+// pairs.
+func pairs(
+	it iterator.Iterator[[]syntaxapi.Result],
+) iterator.Iterator[[2]syntaxapi.Result] {
+	return iterator.Map(
+		iterator.Filter(it, func(m []syntaxapi.Result) bool {
+			return len(m) == 2
+		}),
+		func(m []syntaxapi.Result) [2]syntaxapi.Result {
+			return [2]syntaxapi.Result{m[0], m[1]}
+		},
+	)
+}
+
+// captures2 narrows a spec's two-element capture list to the fixed-size
+// form the paired query entry points take.
+func captures2(captures []string) [2]string {
+	return [2]string{captures[0], captures[1]}
 }
 
 // ListReferences streams package-qualified symbol names ("pkg.Name")
@@ -799,12 +801,12 @@ func listRefPairs(
 	keep func([2]syntaxapi.Result) bool,
 	ch chan<- string,
 ) error {
-	iter, err := parser.Search(query, captures, lang)
+	iter, err := parser.Search2(query, captures2(captures), lang)
 	if err != nil {
 		return err
 	}
 	results := iterator.Map(
-		iterator.Filter(pairedResults(iter), keep),
+		iterator.Filter(iter, keep),
 		func(p [2]syntaxapi.Result) string {
 			return p[0].Text + "." + p[1].Text
 		},

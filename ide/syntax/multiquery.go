@@ -34,6 +34,7 @@ import (
 	"sync"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/debug"
@@ -48,7 +49,7 @@ import (
 // many queries are supplied, so resolution that previously issued one
 // workspace walk per query now issues one walk total. The optional langs
 // restrict the walk to files of those languages.
-func (p parserSearcher) SearchMulti(
+func (p Parser) SearchMulti(
 	queries []symbolresolve.MultiQuery, langs ...string,
 ) (iterator.Iterator[symbolresolve.MultiResult], error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -78,7 +79,7 @@ func (p parserSearcher) SearchMulti(
 		})
 	}
 
-	it := &multiResultIterator{
+	it := &chanIterator[symbolresolve.MultiResult]{
 		ctx:         ctx,
 		ch:          results,
 		cancel:      cancel,
@@ -132,6 +133,10 @@ type compiledQuery struct {
 	id       int
 	query    *sitter.Query
 	captures []string
+	// perCapture emits each captured node as its own single-capture
+	// match (node-capture queries) instead of grouping the declared
+	// captures into one tuple per match.
+	perCapture bool
 }
 
 func (c *compiledQueries) close() {
@@ -157,6 +162,7 @@ func readSymbolsWorkerMulti(
 			c.close()
 		}
 	}()
+	var scratch fileScratch
 	for {
 		select {
 		case <-ctx.Done():
@@ -190,11 +196,96 @@ func readSymbolsWorkerMulti(
 				}
 				compiled[langID] = c
 			}
-			if readErr := readFileSymbolsMulti(ctx, c, uri, fs, path, results); readErr != nil {
+			emit := func(r symbolresolve.MultiResult) error {
+				select {
+				case results <- r:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			if readErr := readFileSymbolsMulti(ctx, c, uri, fs, path, &scratch, emit); readErr != nil {
 				*err = errors.Join(*err, readErr)
 			}
 		}
 	}
+}
+
+// NewQuerySession returns a batched per-file query session: each QueryMulti
+// call parses the file once and runs every query on that single tree,
+// caching the loaded language and compiled batch across calls. Not safe
+// for concurrent use; create one per goroutine and Close it to release
+// the cached languages.
+func (p Parser) NewQuerySession() symbolresolve.QuerySession {
+	return &querySession{
+		w:        p.w,
+		pkg:      p.pkg,
+		uri:      p.uri,
+		compiled: make(map[string]*langBatch),
+	}
+}
+
+// langBatch caches one language's compiled query batch together with
+// the queries it was compiled from, so a changed batch recompiles.
+type langBatch struct {
+	queries []symbolresolve.MultiQuery
+	c       *compiledQueries
+}
+
+type querySession struct {
+	w        workspaceapi.FileSystem
+	pkg      PkgManager
+	uri      workspaceapi.URI
+	compiled map[string]*langBatch
+	// scratch is the recycled file-content buffer; safe because the
+	// session is single-goroutine and emitted results copy text out.
+	scratch fileScratch
+}
+
+func (f *querySession) QueryMulti(
+	ctx context.Context, file workspaceapi.URI,
+	queries []symbolresolve.MultiQuery,
+) ([]symbolresolve.MultiResult, error) {
+	path := file.Path()
+	langID, err := languages.LanguageForFile(path)
+	if err != nil {
+		return nil, err
+	}
+	b := f.compiled[langID]
+	if b == nil || !slices.EqualFunc(b.queries, queries, sameMultiQuery) {
+		c, cerr := compileQueriesForLang(ctx, f.pkg, langID, queries)
+		if cerr != nil {
+			return nil, cerr
+		}
+		if b != nil {
+			b.c.close()
+		}
+		b = &langBatch{queries: slices.Clone(queries), c: c}
+		f.compiled[langID] = b
+	}
+	var out []symbolresolve.MultiResult
+	err = readFileSymbolsMulti(ctx, b.c, f.uri, f.w, path, &f.scratch,
+		func(r symbolresolve.MultiResult) error {
+			out = append(out, r)
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (f *querySession) Close() error {
+	for _, b := range f.compiled {
+		b.c.close()
+	}
+	clear(f.compiled)
+	return nil
+}
+
+func sameMultiQuery(a, b symbolresolve.MultiQuery) bool {
+	return a.ID == b.ID && a.Query == b.Query && a.Nodes == b.Nodes &&
+		slices.Equal(a.Captures, b.Captures)
 }
 
 // compileQueriesForLang loads langID once and compiles every query against
@@ -204,29 +295,94 @@ func compileQueriesForLang(
 	ctx context.Context, pkg PkgManager, langID string,
 	queries []symbolresolve.MultiQuery,
 ) (*compiledQueries, error) {
-	lang, _, err := loadLanguage(ctx, langID, pkg, "", "")
+	queryFile := ""
+	for _, q := range queries {
+		if q.Nodes != 0 {
+			queryFile = LocalsFilename
+			break
+		}
+	}
+	lang, localsText, err := loadLanguage(ctx, langID, pkg, queryFile, "")
 	if err != nil {
 		return nil, err
 	}
 	c := &compiledQueries{lang: lang, queries: make([]compiledQuery, 0, len(queries))}
 	for _, q := range queries {
-		compiledQ, qerr := compileQuery(lang.lang, q.Query)
+		text, captures, perCapture := q.Query, q.Captures, false
+		if q.Nodes != 0 {
+			var nerr error
+			if captures, nerr = nodeTypesToCaptureNames(q.Nodes); nerr != nil {
+				c.close()
+				return nil, nerr
+			}
+			text, perCapture = localsText, true
+		}
+		compiledQ, qerr := compileQuery(lang.lang, text)
 		if qerr != nil {
 			c.close()
 			return nil, fmt.Errorf("new parser for language %q: %v", langID, qerr)
 		}
 		c.queries = append(c.queries, compiledQuery{
-			id: q.ID, query: compiledQ, captures: q.Captures,
+			id: q.ID, query: compiledQ, captures: captures,
+			perCapture: perCapture,
 		})
 	}
 	return c, nil
 }
 
+// fileScratch holds buffers a single worker or session recycles across
+// sequential file reads. Safe only because emitted results copy data out
+// of them (makeSymbolItem converts to string).
+type fileScratch struct {
+	content []byte
+	starts  []int
+}
+
+// Scratch buffers above these caps are dropped after each file instead of
+// recycled: a single pathological file (generated code, minified bundles)
+// must not pin its size for the lifetime of a long-lived session or
+// worker.
+const (
+	maxScratchContent = 4 << 20
+	maxScratchStarts  = 256 << 10
+)
+
+func (s *fileScratch) trim() {
+	if cap(s.content) > maxScratchContent {
+		s.content = nil
+	}
+	if cap(s.starts) > maxScratchStarts {
+		s.starts = nil
+	}
+}
+
+// readAllInto reads r to EOF into buf's spare capacity, growing it as
+// needed, and returns the filled slice. Recycling buf across files avoids
+// io.ReadAll's per-file append-doubling garbage, which dominated heap
+// churn (madvise + GC) while indexing large workspaces.
+func readAllInto(buf []byte, r io.Reader) ([]byte, error) {
+	buf = buf[:0]
+	for {
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)]
+		}
+		n, err := r.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return buf, nil
+			}
+			return buf, err
+		}
+	}
+}
+
 func readFileSymbolsMulti(
 	ctx context.Context, c *compiledQueries, uri workspaceapi.URI,
-	w workspaceapi.FileSystem, filename string,
-	results chan symbolresolve.MultiResult,
+	w workspaceapi.FileSystem, filename string, scratch *fileScratch,
+	emit func(symbolresolve.MultiResult) error,
 ) (retErr error) {
+	defer scratch.trim()
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		return fmt.Errorf("open file: %v", err)
@@ -237,7 +393,8 @@ func readFileSymbolsMulti(
 		}
 	}()
 
-	content, err := io.ReadAll(file)
+	content, err := readAllInto(scratch.content, file)
+	scratch.content = content
 	if err != nil {
 		return err
 	}
@@ -248,11 +405,12 @@ func readFileSymbolsMulti(
 	}
 	defer tree.Close()
 	root := tree.RootNode()
-	starts := lineStarts(content)
+	starts := lineStarts(scratch.starts, content)
+	scratch.starts = starts
 	fileURI := workspaceapi.Join(uri, filename)
 
 	for _, q := range c.queries {
-		if err := runQueryOnTree(ctx, q, root, content, starts, fileURI, results); err != nil {
+		if err := runQueryOnTree(ctx, q, root, content, starts, fileURI, emit); err != nil {
 			retErr = errors.Join(retErr, err)
 		}
 	}
@@ -262,7 +420,7 @@ func readFileSymbolsMulti(
 func runQueryOnTree(
 	ctx context.Context, q compiledQuery, root *sitter.Node, content []byte,
 	starts []int, fileURI workspaceapi.URI,
-	results chan symbolresolve.MultiResult,
+	emit func(symbolresolve.MultiResult) error,
 ) (retErr error) {
 	cur := sitter.NewQueryCursor()
 	defer cur.Close()
@@ -274,66 +432,72 @@ func runQueryOnTree(
 		if !ok {
 			break
 		}
-		for _, cap := range m.Captures {
-			if int(cap.Index) >= len(captureNames) ||
-				(len(q.captures) != 0 &&
-					!slices.Contains(q.captures, captureNames[cap.Index])) {
-				continue
+		if err := ctx.Err(); err != nil {
+			return retErr
+		}
+		if q.perCapture {
+			for _, cap := range m.Captures {
+				if int(cap.Index) >= len(captureNames) ||
+					!slices.Contains(q.captures, captureNames[cap.Index]) {
+					continue
+				}
+				r := makeSymbolItem(content, starts, cap.Node.Range(),
+					fileURI, captureNames[cap.Index])
+				if err := emit(symbolresolve.MultiResult{
+					QueryID: q.id, Match: []syntaxapi.Result{r},
+				}); err != nil {
+					return retErr
+				}
 			}
-			result := makeSymbolItem(
-				content, starts, cap.Node.Range(), fileURI, captureNames[cap.Index],
-			)
-			select {
-			case results <- symbolresolve.MultiResult{QueryID: q.id, Result: result}:
-			case <-ctx.Done():
-				return retErr
-			}
+			continue
+		}
+		match := groupMatchCaptures(
+			content, starts, m, captureNames, fileURI, q.captures)
+		if match == nil {
+			continue
+		}
+		if err := emit(symbolresolve.MultiResult{QueryID: q.id, Match: match}); err != nil {
+			return retErr
 		}
 	}
 	return retErr
 }
 
-type multiResultIterator struct {
-	mu          sync.Mutex
-	err         error
-	ctx         context.Context
-	ch          chan symbolresolve.MultiResult
-	cancel      func()
-	closeWaitCh chan struct{}
-}
-
-func (l *multiResultIterator) Next(ctx context.Context) (symbolresolve.MultiResult, bool) {
-	select {
-	case <-ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = errors.Join(l.err, ctx.Err())
-		return symbolresolve.MultiResult{}, false
-	case <-l.ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = errors.Join(l.err, l.ctx.Err())
-		return symbolresolve.MultiResult{}, false
-	case r, ok := <-l.ch:
-		return r, ok
+// groupMatchCaptures builds one match's captures in the declared capture
+// order, so consumers receive them pre-paired instead of re-associating a
+// flattened stream. Matches missing a declared capture are dropped (nil):
+// they cannot form the tuple the query's consumer expects. With no
+// declared captures every capture is kept in match order.
+func groupMatchCaptures(
+	content []byte, starts []int, m sitter.QueryMatch,
+	captureNames []string, fileURI workspaceapi.URI, declared []string,
+) []syntaxapi.Result {
+	if len(declared) == 0 {
+		out := make([]syntaxapi.Result, 0, len(m.Captures))
+		for _, cap := range m.Captures {
+			if int(cap.Index) >= len(captureNames) {
+				continue
+			}
+			out = append(out, makeSymbolItem(
+				content, starts, cap.Node.Range(), fileURI, captureNames[cap.Index],
+			))
+		}
+		return out
 	}
-}
-
-func (l *multiResultIterator) Err() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.err == nil {
-		return l.ctx.Err()
+	out := make([]syntaxapi.Result, len(declared))
+	for slot, name := range declared {
+		found := false
+		for _, cap := range m.Captures {
+			if int(cap.Index) < len(captureNames) && captureNames[cap.Index] == name {
+				out[slot] = makeSymbolItem(
+					content, starts, cap.Node.Range(), fileURI, name)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
 	}
-	err := errors.Join(nil, l.err)
-	if l.ctx.Err() == nil {
-		return err
-	}
-	return errors.Join(err, l.ctx.Err())
-}
-
-func (l *multiResultIterator) Close() error {
-	l.cancel()
-	<-l.closeWaitCh
-	return nil
+	return out
 }

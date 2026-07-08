@@ -26,12 +26,15 @@ package lspcmd
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"unstable.build/go-tui/handler/locationpicker"
 )
 
@@ -131,6 +134,38 @@ func locationFromLoc(loc semanticapi.Location) locationEntry {
 		rng:     loc.Range,
 		display: fmt.Sprintf("%s:%d", trimFilePrefix(loc.URI), loc.Range.Start.Line+1),
 	}
+}
+
+// presentLocations navigates directly when a single entry remains and
+// otherwise floats a location picker. It may be called from any goroutine:
+// all UI work is scheduled onto the event loop.
+func presentLocations(
+	name string, entries []locationEntry,
+	opener browserapi.ResourceOpener, wm browserapi.WindowManager,
+	editor textapi.Editor, notify browserapi.Notifications,
+	fs workspaceapi.FileSystem, scheduleNextTick func(func()) bool,
+	parser syntaxapi.Parser, cfg locationpicker.Config, log *slog.Logger,
+) {
+	if len(entries) == 1 {
+		navigateTo(entries[0], opener, wm, editor, notify, scheduleNextTick)
+		return
+	}
+	scheduleNextTick(func() {
+		picker := locationpicker.New(
+			pickerEntries(entries), wm, fs, scheduleNextTick, parser, cfg, log,
+		)
+		picker.SetOnSelect(func(idx int) {
+			navigateTo(entries[idx], opener, wm, editor, notify, scheduleNextTick)
+		})
+		win, err := wm.Floating(picker, browserapi.FloatingConfig{
+			Alignment: component.AlignmentCentered,
+		})
+		if err != nil {
+			_, _ = notify.Notify(browserapi.LevelError, "%s: %s", name, err)
+			return
+		}
+		picker.SetWindow(win)
+	})
 }
 
 func trimFilePrefix(uri string) string {

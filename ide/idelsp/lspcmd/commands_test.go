@@ -359,12 +359,17 @@ func TestE2ECommands(t *testing.T) {
 	}
 
 	t.Run("references", func(t *testing.T) {
+		done := make(chan struct{}, 1)
 		var floatingHandler browserapi.Floating
 		wm.floatingFn = func(
 			h browserapi.Floating,
 			_ browserapi.FloatingConfig,
 		) (browserapi.Window, error) {
 			floatingHandler = h
+			select {
+			case done <- struct{}{}:
+			default:
+			}
 			return nil, nil
 		}
 		defer func() {
@@ -375,6 +380,11 @@ func TestE2ECommands(t *testing.T) {
 		cmd := makeCmd("references", nil, 38, 5)
 		err := router.HandleCommand(ctx, cmd)
 		require.NoError(t, err)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for async references result")
+		}
 		require.NotNil(t, floatingHandler)
 
 		lh, ok := floatingHandler.(*locationpicker.Picker)
@@ -388,9 +398,14 @@ func TestE2ECommands(t *testing.T) {
 	t.Run("implementation", func(t *testing.T) {
 		// Speaker has a single implementation (Robot), so the
 		// handler navigates directly instead of showing a picker.
+		done := make(chan struct{}, 1)
 		var navigated bool
 		editor.setCursorFn = func(_ textapi.Handler, _ term.Coordinates) error {
 			navigated = true
+			select {
+			case done <- struct{}{}:
+			default:
+			}
 			return nil
 		}
 		defer func() {
@@ -401,6 +416,11 @@ func TestE2ECommands(t *testing.T) {
 		cmd := makeCmd("implementation", nil, 50, 5)
 		err := router.HandleCommand(ctx, cmd)
 		require.NoError(t, err)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for async implementation result")
+		}
 		assert.True(t, navigated, "expected direct navigation to single implementation")
 	})
 
@@ -454,12 +474,17 @@ func TestE2ECommands(t *testing.T) {
 	// only checks offset positioning.
 	t.Run("hover", func(t *testing.T) {
 		t.Run("above cursor", func(t *testing.T) {
+			done := make(chan struct{}, 1)
 			var gotFloating browserapi.Floating
 
 			wm.floatingFn = func(h browserapi.Floating, cfg browserapi.FloatingConfig) (
 				browserapi.Window, error,
 			) {
 				gotFloating = h
+				select {
+				case done <- struct{}{}:
+				default:
+				}
 				return nil, nil
 			}
 			defer func() { wm.floatingFn = nil }()
@@ -467,6 +492,11 @@ func TestE2ECommands(t *testing.T) {
 			cmd := makeCmd("hover", nil, 33, 20)
 			err := router.HandleCommand(ctx, cmd)
 			require.NoError(t, err)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("timed out waiting for async hover result")
+			}
 			require.NotNil(t, gotFloating, "Floating must be called")
 
 			w, h := gotFloating.Dimensions()
@@ -480,9 +510,14 @@ func TestE2ECommands(t *testing.T) {
 		})
 
 		t.Run("below cursor", func(t *testing.T) {
+			done := make(chan struct{}, 1)
 			wm.floatingFn = func(_ browserapi.Floating, cfg browserapi.FloatingConfig) (
 				browserapi.Window, error,
 			) {
+				select {
+				case done <- struct{}{}:
+				default:
+				}
 				return nil, nil
 			}
 			defer func() { wm.floatingFn = nil }()
@@ -491,6 +526,11 @@ func TestE2ECommands(t *testing.T) {
 			cmd.Cursor.Window.Y = 0
 			err := router.HandleCommand(ctx, cmd)
 			require.NoError(t, err)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("timed out waiting for async hover result")
+			}
 		})
 
 		t.Run("by qualified symbol name", func(t *testing.T) {

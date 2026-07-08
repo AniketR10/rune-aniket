@@ -469,7 +469,7 @@ func TestListSymbolsIteratorErr(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			it := &listSymbolsIterator{
+			it := &chanIterator[syntaxapi.Result]{
 				ctx:    ctx,
 				err:    tt.setErr,
 				cancel: cancel,
@@ -497,7 +497,7 @@ func TestListSymbolsIteratorErrMultierrorUnwrap(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	it := &listSymbolsIterator{
+	it := &chanIterator[syntaxapi.Result]{
 		ctx:    ctx,
 		err:    multierror.Append(nil, sentinel),
 		cancel: cancel,
@@ -524,7 +524,7 @@ func TestListSymbolsIteratorErrNilErrReturnsCtxErr(t *testing.T) {
 	defer cancel()
 	<-ctx.Done() // ensure it's expired
 
-	it := &listSymbolsIterator{ctx: ctx, cancel: cancel}
+	it := &chanIterator[syntaxapi.Result]{ctx: ctx, cancel: cancel}
 
 	err := it.Err()
 	require.Error(t, err)
@@ -545,7 +545,7 @@ func TestListSymbolsIteratorClose(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			closeWaitCh := make(chan struct{})
 
-			it := &listSymbolsIterator{
+			it := &chanIterator[syntaxapi.Result]{
 				ctx:         ctx,
 				ch:          make(chan syntaxapi.Result),
 				cancel:      cancel,
@@ -579,7 +579,7 @@ func TestListSymbolsIteratorClose_CancelsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	closeWaitCh := make(chan struct{})
 
-	it := &listSymbolsIterator{
+	it := &chanIterator[syntaxapi.Result]{
 		ctx:         ctx,
 		ch:          make(chan syntaxapi.Result),
 		cancel:      cancel,
@@ -602,7 +602,7 @@ func TestListSymbolsIteratorConcurrentAccess(t *testing.T) {
 	ch := make(chan syntaxapi.Result, numResults)
 	closeWaitCh := make(chan struct{})
 
-	it := &listSymbolsIterator{
+	it := &chanIterator[syntaxapi.Result]{
 		ctx:         ctx,
 		ch:          ch,
 		cancel:      cancel,
@@ -649,9 +649,9 @@ func TestListSymbolsIteratorConcurrentAccess(t *testing.T) {
 	errWg.Wait()
 }
 
-func newTestIterator(bufSize int) *listSymbolsIterator {
+func newTestIterator(bufSize int) *chanIterator[syntaxapi.Result] {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &listSymbolsIterator{
+	return &chanIterator[syntaxapi.Result]{
 		ctx:         ctx,
 		ch:          make(chan syntaxapi.Result, bufSize),
 		cancel:      cancel,
@@ -659,7 +659,7 @@ func newTestIterator(bufSize int) *listSymbolsIterator {
 	}
 }
 
-func drainIterator(t *testing.T, it *listSymbolsIterator, ctx context.Context) int {
+func drainIterator(t *testing.T, it *chanIterator[syntaxapi.Result], ctx context.Context) int {
 	t.Helper()
 	count := 0
 	for {

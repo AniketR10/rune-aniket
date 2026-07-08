@@ -32,7 +32,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/handler/locationpicker"
 )
@@ -83,25 +82,17 @@ type referencesHandler struct {
 }
 
 func (h *referencesHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m syntaxapi.Match, done func()) {
-		h.scheduleNextTick(func() {
-			defer done()
-			wsURI, err := LspToURI(m.URI)
-			if err != nil {
-				_, _ = h.notify.Notify(browserapi.LevelError, "references: %s", err)
-				return
-			}
-			if err := h.execute(context.Background(), wsURI, matchPosition(m)); err != nil {
-				_, _ = h.notify.Notify(browserapi.LevelError, "references: %s", err)
-			}
-		})
-	})
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
+		executeResolved("references", h.notify, h.scheduleNextTick, h.execute))
 	if !proceed || err != nil {
 		return err
 	}
-	return h.execute(ctx, cmd.URI, CoordToPos(cmd.Cursor.Content))
+	executeAtCursor("references", h.notify, h.scheduleNextTick, cmd, h.execute)
+	return nil
 }
 
+// execute performs the blocking LSP round trip. It is called off the event
+// loop and schedules UI work onto it.
 func (h *referencesHandler) execute(
 	ctx context.Context, uri workspaceapi.URI, pos semanticapi.Position,
 ) error {
@@ -122,23 +113,10 @@ func (h *referencesHandler) execute(
 		entries[i] = locationFromLoc(loc)
 	}
 	entries = enrichEntries(entries, h.rootURI)
-	if len(entries) == 1 {
-		navigateTo(entries[0], h.opener, h.wm, h.editor, h.notify, h.scheduleNextTick)
-		return nil
-	}
-	picker := locationpicker.New(
-		pickerEntries(entries), h.wm, h.fs,
-		h.scheduleNextTick, h.parser,
-		h.cfg.ListConfig, h.log,
+	presentLocations(
+		"references", entries, h.opener, h.wm, h.editor, h.notify,
+		h.fs, h.scheduleNextTick, h.parser, h.cfg.ListConfig, h.log,
 	)
-	picker.SetOnSelect(func(idx int) {
-		navigateTo(entries[idx], h.opener, h.wm, h.editor, h.notify, h.scheduleNextTick)
-	})
-	win, err := h.wm.Floating(picker, browserapi.FloatingConfig{Alignment: component.AlignmentCentered})
-	if err != nil {
-		return err
-	}
-	picker.SetWindow(win)
 	return nil
 }
 

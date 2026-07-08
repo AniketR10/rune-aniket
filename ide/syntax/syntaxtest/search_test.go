@@ -274,7 +274,7 @@ func TestQueryNode(t *testing.T) {
 	})
 }
 
-func createFile(t *testing.T, scheme schemeapi.Scheme, name string, content string) workspaceapi.URI {
+func createFile(t testing.TB, scheme schemeapi.Scheme, name string, content string) workspaceapi.URI {
 	f, err := scheme.Create(name)
 	require.NoError(t, err)
 

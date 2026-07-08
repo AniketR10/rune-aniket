@@ -33,10 +33,10 @@ import (
 )
 
 // splitByQuery fans a single MultiResult stream into one
-// iterator.Iterator[syntaxapi.Result] per query ID in ids. A single router
-// goroutine pulls the shared stream once and routes each result to the
+// iterator.Iterator[[]syntaxapi.Result] per query ID in ids. A single router
+// goroutine pulls the shared stream once and routes each match to the
 // channel for its QueryID, so the underlying workspace walk runs once while
-// every sub-stream is consumed concurrently. Results whose QueryID is not in
+// every sub-stream is consumed concurrently. Matches whose QueryID is not in
 // ids are dropped.
 //
 // All returned sub-iterators must be consumed concurrently (each on its own
@@ -47,34 +47,34 @@ import (
 // reference counted) tears down the router and closes the shared stream.
 func splitByQuery(
 	it iterator.Iterator[MultiResult], ids []int,
-) map[int]iterator.Iterator[syntaxapi.Result] {
+) map[int]iterator.Iterator[[]syntaxapi.Result] {
 	d := &demux{
 		it:       it,
-		chans:    make(map[int]chan syntaxapi.Result, len(ids)),
+		chans:    make(map[int]chan []syntaxapi.Result, len(ids)),
 		stopOnce: sync.Once{},
 	}
 	d.stop = make(chan struct{})
 	d.refs = len(ids)
 	for _, id := range ids {
-		d.chans[id] = make(chan syntaxapi.Result)
+		d.chans[id] = make(chan []syntaxapi.Result)
 	}
 
 	go debug.CapturePanicReport(d.route)
 
-	out := make(map[int]iterator.Iterator[syntaxapi.Result], len(ids))
+	out := make(map[int]iterator.Iterator[[]syntaxapi.Result], len(ids))
 	for _, id := range ids {
 		ch := d.chans[id]
 		out[id] = iterator.FromFunc(
-			func(ctx context.Context) (syntaxapi.Result, bool, error) {
+			func(ctx context.Context) ([]syntaxapi.Result, bool, error) {
 				select {
 				case <-ctx.Done():
-					return syntaxapi.Result{}, false, ctx.Err()
+					return nil, false, ctx.Err()
 				case <-d.stop:
 					r, ok := <-ch
 					return r, ok, d.routeErr()
 				case r, ok := <-ch:
 					if !ok {
-						return syntaxapi.Result{}, false, d.routeErr()
+						return nil, false, d.routeErr()
 					}
 					return r, true, nil
 				}
@@ -87,7 +87,7 @@ func splitByQuery(
 
 type demux struct {
 	it    iterator.Iterator[MultiResult]
-	chans map[int]chan syntaxapi.Result
+	chans map[int]chan []syntaxapi.Result
 	stop  chan struct{}
 
 	mu       sync.Mutex
@@ -96,7 +96,7 @@ type demux struct {
 	stopOnce sync.Once
 }
 
-// route pulls the shared stream once and forwards each result to the channel
+// route pulls the shared stream once and forwards each match to the channel
 // registered for its QueryID until the stream ends or teardown is requested.
 func (d *demux) route() {
 	ctx := context.Background()
@@ -118,7 +118,7 @@ func (d *demux) route() {
 			continue
 		}
 		select {
-		case ch <- r.Result:
+		case ch <- r.Match:
 		case <-d.stop:
 			return
 		}

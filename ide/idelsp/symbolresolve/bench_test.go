@@ -43,7 +43,7 @@ import (
 // setupBenchWorkspace writes a definition package plus n consumer files that
 // all import and reference mylib.MyType, so resolving the symbol exercises the
 // reference, package-clause and import (dedup) queries together.
-func setupBenchWorkspace(b *testing.B, n int) symbolresolve.Searcher {
+func setupBenchWorkspace(b *testing.B, n int) syntax.Parser {
 	b.Helper()
 
 	root := b.TempDir()
@@ -71,7 +71,7 @@ func setupBenchWorkspace(b *testing.B, n int) symbolresolve.Searcher {
 	require.NoError(b, err)
 	b.Cleanup(func() { _ = scheme.Close() })
 
-	return syntax.NewParser(scheme, treeSitterPkgManager(b), uri).(symbolresolve.Searcher)
+	return syntax.NewParser(scheme, treeSitterPkgManager(b), uri)
 }
 
 func BenchmarkResolve(b *testing.B) {

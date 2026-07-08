@@ -80,6 +80,65 @@ func errUnqualifiedSymbol(name string) error {
 		"%q is not qualified; prefix it with its package or module", name)
 }
 
+// executeFunc is the blocking fetch behind an LSP location command. It is
+// called off the event loop and must schedule any UI work onto the loop
+// itself via the handler's scheduleNextTick.
+type executeFunc func(
+	ctx context.Context, uri workspaceapi.URI, pos semanticapi.Position,
+) error
+
+// executeResolved adapts a handler's blocking execute func to the
+// resolveCommandSymbol onResolve contract: it runs the fetch inline on the
+// resolver goroutine and reports failures as error notifications.
+func executeResolved(
+	name string,
+	notify browserapi.Notifications,
+	scheduleNextTick func(func()) bool,
+	execute executeFunc,
+) func(m syntaxapi.Match, done func()) {
+	return func(m syntaxapi.Match, done func()) {
+		defer done()
+		wsURI, err := LspToURI(m.URI)
+		if err == nil {
+			err = execute(context.Background(), wsURI, matchPosition(m))
+		}
+		if err != nil {
+			scheduleNextTick(func() {
+				_, _ = notify.Notify(browserapi.LevelError, "%s: %s", name, err)
+			})
+		}
+	}
+}
+
+// executeAtCursor runs the blocking fetch for the cursor position off the
+// event loop, tracking completion and failures through notifications. It
+// must be called on the event loop and returns immediately.
+func executeAtCursor(
+	name string,
+	notify browserapi.Notifications,
+	scheduleNextTick func(func()) bool,
+	cmd textapi.Command,
+	execute executeFunc,
+) {
+	id, _ := notify.Notify(browserapi.LevelInfo, "%s…", name)
+	_ = notify.UpdateNotificationProgress(id, "", 0, 1)
+	go debug.CapturePanicReport(func() {
+		err := execute(context.Background(), cmd.URI, CoordToPos(cmd.Cursor.Content))
+		scheduleNextTick(func() {
+			_ = notify.UpdateNotificationProgress(id, "", 1, 1)
+			if err != nil {
+				_, _ = notify.Notify(browserapi.LevelError, "%s: %s", name, err)
+			}
+		})
+	})
+}
+
+// resolveCommandSymbol resolves the symbol named by cmd.Args and hands the
+// match to onResolve. onResolve is invoked off the event loop and may block
+// on I/O; it must schedule any UI work onto the loop itself and call done
+// exactly once. done is safe to call from any goroutine. When cmd carries
+// no args, resolveCommandSymbol reports (true, nil) and the caller executes
+// its cursor-position path instead.
 func resolveCommandSymbol(
 	_ context.Context, cmd *textapi.Command,
 	wm browserapi.WindowManager,
@@ -100,7 +159,9 @@ func resolveCommandSymbol(
 	id, _ := notify.Notify(browserapi.LevelInfo, "Resolving %s…", name)
 	_ = notify.UpdateNotificationProgress(id, "", 0, 4)
 	done := func() {
-		_ = notify.UpdateNotificationProgress(id, "", 4, 4)
+		scheduleNextTick(func() {
+			_ = notify.UpdateNotificationProgress(id, "", 4, 4)
+		})
 	}
 
 	go debug.CapturePanicReport(func() {
@@ -113,17 +174,20 @@ func resolveCommandSymbol(
 			})
 		})
 		matches, err := resolveSymbol(context.Background(), parser, name, progress)
-		scheduleNextTick(func() {
-			if err != nil {
-				done()
+		if err != nil {
+			done()
+			scheduleNextTick(func() {
 				_, _ = notify.Notify(browserapi.LevelError, "%s", err)
-				return
-			}
-			if len(matches) == 1 {
-				onResolve(matches[0], done)
-				return
-			}
-			if err := showSymbolPicker(matches, wm, fs, scheduleNextTick, parser, onResolve, done); err != nil {
+			})
+			return
+		}
+		if len(matches) == 1 {
+			onResolve(matches[0], done)
+			return
+		}
+		scheduleNextTick(func() {
+			err := showSymbolPicker(matches, wm, fs, scheduleNextTick, parser, onResolve, done)
+			if err != nil {
 				done()
 				_, _ = notify.Notify(browserapi.LevelError, "%s", err)
 			}
@@ -133,6 +197,9 @@ func resolveCommandSymbol(
 	return false, nil
 }
 
+// showSymbolPicker floats a picker over the resolved matches. It runs on
+// the event loop; the selection handoff spawns a goroutine because onPick
+// follows the onResolve contract and may block.
 func showSymbolPicker(
 	matches []syntaxapi.Match,
 	wm browserapi.WindowManager,
@@ -163,7 +230,9 @@ func showSymbolPicker(
 		locationpicker.DefaultConfig(), nil,
 	)
 	picker.SetOnSelect(func(idx int) {
-		onPick(matches[idx], done)
+		go debug.CapturePanicReport(func() {
+			onPick(matches[idx], done)
+		})
 	})
 	win, err := wm.Floating(picker, browserapi.FloatingConfig{
 		Alignment: component.AlignmentCentered,

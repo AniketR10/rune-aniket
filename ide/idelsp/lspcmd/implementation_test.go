@@ -26,6 +26,7 @@ package lspcmd
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,13 +45,14 @@ func TestImplementationHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name         string
-		result       semanticapi.LocationResult
-		nilResource  bool
-		wantErr      bool
-		wantFloat    bool
-		wantNavigate bool
-		wantEntries  int
+		name          string
+		result        semanticapi.LocationResult
+		nilResource   bool
+		wantErr       bool
+		wantNotifyErr bool
+		wantFloat     bool
+		wantNavigate  bool
+		wantEntries   int
 	}{
 		{
 			name: "single implementation navigates directly",
@@ -76,7 +78,7 @@ func TestImplementationHandler(t *testing.T) {
 			wantFloat:   true,
 			wantEntries: 2,
 		},
-		{name: "no implementations", wantErr: true},
+		{name: "no implementations", wantNotifyErr: true},
 		{name: "nil resource", nilResource: true, wantErr: true},
 	}
 	for _, tt := range tests {
@@ -86,6 +88,13 @@ func TestImplementationHandler(t *testing.T) {
 					return tt.result, nil
 				},
 			}
+			done := make(chan struct{}, 1)
+			signal := func() {
+				select {
+				case done <- struct{}{}:
+				default:
+				}
+			}
 			var navigated bool
 			editor := &mockEditor{
 				editorFn: func(u workspaceapi.URI) (textapi.Handler, error) {
@@ -93,6 +102,7 @@ func TestImplementationHandler(t *testing.T) {
 				},
 				setCursorFn: func(_ textapi.Handler, _ term.Coordinates) error {
 					navigated = true
+					signal()
 					return nil
 				},
 			}
@@ -100,11 +110,13 @@ func TestImplementationHandler(t *testing.T) {
 			wm := &mockWindowManager{
 				floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
 					fh = h
+					signal()
 					return nil, nil
 				},
 			}
+			notify := &recordingNotifications{}
 			h := ImplementationHandler(
-				lsp, editor, wm, &mockResourceOpener{}, &mockNotifications{}, &mockFileSystem{},
+				lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
 				rootURI, syncTick, nil, DefaultImplementationConfig(), nil,
 			)
 
@@ -121,6 +133,26 @@ func TestImplementationHandler(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			if tt.wantNotifyErr {
+				require.Eventually(t, func() bool {
+					notifies, _ := notify.snapshot()
+					for _, n := range notifies {
+						if n.level == browserapi.LevelError {
+							return true
+						}
+					}
+					return false
+				}, 5*time.Second, 5*time.Millisecond,
+					"empty results must surface an error notification")
+				assert.Nil(t, fh)
+				assert.False(t, navigated)
+				return
+			}
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("timed out waiting for the async LSP result")
+			}
 			assert.Equal(t, tt.wantFloat, fh != nil)
 			assert.Equal(t, tt.wantNavigate, navigated)
 			if tt.wantEntries > 0 {

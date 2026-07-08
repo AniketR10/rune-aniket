@@ -86,25 +86,17 @@ type hoverHandler struct {
 }
 
 func (h *hoverHandler) HandleCommand(ctx context.Context, cmd textapi.Command) error {
-	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser, func(m syntaxapi.Match, done func()) {
-		h.scheduleNextTick(func() {
-			defer done()
-			wsURI, err := LspToURI(m.URI)
-			if err != nil {
-				_, _ = h.notify.Notify(browserapi.LevelError, "hover: %s", err)
-				return
-			}
-			if err := h.execute(context.Background(), wsURI, matchPosition(m)); err != nil {
-				_, _ = h.notify.Notify(browserapi.LevelError, "hover: %s", err)
-			}
-		})
-	})
+	proceed, err := resolveCommandSymbol(ctx, &cmd, h.wm, h.fs, h.notify, h.scheduleNextTick, h.parser,
+		executeResolved("hover", h.notify, h.scheduleNextTick, h.execute))
 	if !proceed || err != nil {
 		return err
 	}
-	return h.execute(ctx, cmd.URI, CoordToPos(cmd.Cursor.Content))
+	executeAtCursor("hover", h.notify, h.scheduleNextTick, cmd, h.execute)
+	return nil
 }
 
+// execute performs the blocking LSP round trip. It is called off the event
+// loop; floating-window creation is scheduled onto it.
 func (h *hoverHandler) execute(
 	ctx context.Context, uri workspaceapi.URI, pos semanticapi.Position,
 ) error {
@@ -129,24 +121,34 @@ func (h *hoverHandler) execute(
 			PadHorizontal:    2,
 			ContentAlignment: component.AlignmentCentered,
 		})
-		var win browserapi.Window
-		floating := browserapi.FuncFloatingHandler(span, func() error {
-			defer h.wm.CloseWindow(win) //nolint:errcheck
-			return mdh.Close()
+		h.scheduleNextTick(func() {
+			var win browserapi.Window
+			floating := browserapi.FuncFloatingHandler(span, func() error {
+				defer h.wm.CloseWindow(win) //nolint:errcheck
+				return mdh.Close()
+			})
+			w, err := h.wm.Floating(floating, browserapi.FloatingConfig{
+				Alignment: component.AlignmentCentered,
+			})
+			if err != nil {
+				_, _ = h.notify.Notify(browserapi.LevelError, "hover: %s", err)
+				return
+			}
+			win = w
 		})
-		win, err = h.wm.Floating(floating, browserapi.FloatingConfig{
-			Alignment: component.AlignmentCentered,
-		})
-		return err
+		return nil
 	}
 	f := newHoverFloating(component.NewString(result.Contents.Value), h.wm)
-	win, err := h.wm.Floating(f, browserapi.FloatingConfig{
-		Alignment: component.AlignmentCentered,
+	h.scheduleNextTick(func() {
+		win, err := h.wm.Floating(f, browserapi.FloatingConfig{
+			Alignment: component.AlignmentCentered,
+		})
+		if err != nil {
+			_, _ = h.notify.Notify(browserapi.LevelError, "hover: %s", err)
+			return
+		}
+		f.win = win
 	})
-	if err != nil {
-		return err
-	}
-	f.win = win
 	return nil
 }
 

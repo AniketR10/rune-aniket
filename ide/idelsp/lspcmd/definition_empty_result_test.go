@@ -25,6 +25,7 @@ package lspcmd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -57,7 +58,7 @@ func (n *captureNotify) Notify(
 	n.notifies = append(n.notifies, struct {
 		level browserapi.NotificationLevel
 		msg   string
-	}{level: level, msg: msg})
+	}{level: level, msg: fmt.Sprintf(msg, args...)})
 	return "", nil
 }
 

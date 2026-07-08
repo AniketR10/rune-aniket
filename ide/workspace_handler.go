@@ -81,6 +81,7 @@ import (
 	"unstable.build/go-tui/ide/llmshell"
 	"unstable.build/go-tui/ide/pkgshell"
 	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/ide/syntax/symboldb"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/llm/llmrouter"
@@ -569,7 +570,7 @@ func (h *workspaceManagerHandler) init(
 		return nil
 	}
 	runner, lspManager, dapManager, _, err := h.buildExtensions(
-		cfg, homeDirUri, trackedCwd, h.empty, extExec)
+		cfg, homeDirUri, trackedCwd, h.empty, extExec, homeParser)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -1327,6 +1328,7 @@ type builtWorkspace struct {
 	ex                  *ex
 	runner              extension.Runner
 	cursorHistoryCloser io.Closer
+	symbolDBCloser      io.Closer
 	notice              *idenotice.Crier
 	lspManager          *idelsp.Manager
 	dapManager          *idedebug.Manager
@@ -1348,7 +1350,23 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	}
 
 	parser := syntax.NewParser(cwd, h.pkgmanager, uri)
-	textOpts := h.textOpts(cfg, parser, uri)
+	var wsParser syntaxapi.Parser = parser
+	var symbolDB *symboldb.Parser
+	var symbolDBCloser io.Closer
+	if cfg.workspaceSymbolDB() {
+		sdb, sdbErr := symboldb.New(parser, cwd, uri, storageapi.WithPartition(
+			storageapi.WithPartition(h.ideStorage, "symboldb"), uri.String()),
+			h.notifications.current(), h.scheduleNextTick)
+		if sdbErr != nil {
+			h.empty.log(log.ErrorLevel, "symbol database for workspace %q: %v",
+				uri.Path(), sdbErr)
+		} else {
+			symbolDB = sdb
+			wsParser = sdb
+			symbolDBCloser = sdb
+		}
+	}
+	textOpts := h.textOpts(cfg, wsParser, uri)
 	vctrlService, err := gogit.NewService(uri, cwd)
 	if err != nil {
 		h.empty.log(log.ErrorLevel, "new git service for workspace %q: %v",
@@ -1369,7 +1387,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		multicwd, h.ideStorage, h.notifications, uri,
 		cfg.terminalConfig(), cfg.pluginBarConfig(), h.events.newPublisher(uri),
 		h.initialVTECapacity, h.clip, h.macro, h.dispatchOnPreview,
-		tm, parser,
+		tm, wsParser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
 		cfg.pkgEditorMode() == editorModeModal,
@@ -1378,15 +1396,29 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		cfg.consoleCfg(),
 		textOpts...)
 	if err != nil {
+		if symbolDBCloser != nil {
+			_ = symbolDBCloser.Close()
+		}
 		return nil, fmt.Errorf("new ex: %w", err)
+	}
+	if symbolDB != nil {
+		if serr := ex.comp.SubscribeEvents(
+			symboldb.EditorEvents(), symbolDB,
+		); serr != nil {
+			log.Errorf("subscribe symbol database events for %s: %v",
+				uri.String(), serr)
+		}
 	}
 	apibrowser := newBrowserAdapter(ex.Browser())
 	cursorHistoryCloser, err := idecursor.WithHistory(
 		ex.Editor(), h.ideStorage, apibrowser, apibrowser, ex.workspace,
-		syntax.NewParser(ex.workspace, h.pkgmanager, uri), visibleManager, uri,
+		wsParser, visibleManager, uri,
 		h.scheduleNextTick,
 	)
 	if err != nil {
+		if symbolDBCloser != nil {
+			_ = symbolDBCloser.Close()
+		}
 		return nil, fmt.Errorf("install cursor history: %w", err)
 	}
 	tm.tm = ex.Browser()
@@ -1394,6 +1426,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	wh := &workspaceHandler{
 		vctrlService:        vctrlService,
 		cursorHistoryCloser: cursorHistoryCloser,
+		symbolDBCloser:      symbolDBCloser,
 		cancelCtx:           pending.cancelCtx,
 		uri:                 uri,
 		ex:                  ex,
@@ -1407,6 +1440,9 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 	extExec, err := newExtensionsExecutor()
 	if err != nil {
 		_ = cursorHistoryCloser.Close()
+		if symbolDBCloser != nil {
+			_ = symbolDBCloser.Close()
+		}
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building extensions executor: %v", err)
 		log.Errorf("build extensions executor for workspace %s: %v",
@@ -1414,7 +1450,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		return nil, fmt.Errorf("new extensions executor: %w", err)
 	}
 	runner, lspManager, dapManager, promptStorage, err := h.buildExtensions(
-		cfg, uri, trackedCwd, ex, extExec)
+		cfg, uri, trackedCwd, ex, extExec, wsParser)
 	if err != nil {
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"Error building channel for extensions and plugins: %v", err)
@@ -1438,13 +1474,14 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		ex:                  ex,
 		runner:              runner,
 		cursorHistoryCloser: cursorHistoryCloser,
+		symbolDBCloser:      symbolDBCloser,
 		lspManager:          lspManager,
 		dapManager:          dapManager,
 		promptStorage:       promptStorage,
 	}
 	if noticeCfg, ok := newNoticeConfig(cfg, h.ideStorage, uri); ok {
 		built.notice = idenotice.New(
-			cwd, apibrowser, parser, h.scheduleNextTick,
+			cwd, apibrowser, wsParser, h.scheduleNextTick,
 			noticeLinkCopier(h.clip, apibrowser), noticeCfg)
 	}
 	return built, nil
@@ -1485,6 +1522,9 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 
 	if err := h.subscribeAllCommands(built.ex); err != nil {
 		_ = built.cursorHistoryCloser.Close()
+		if built.symbolDBCloser != nil {
+			_ = built.symbolDBCloser.Close()
+		}
 		cancel()
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"subscribe workspace commands: %v", err)
@@ -1492,6 +1532,9 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	}
 	if err := h.subscribeAllEvents(built.cfg, built.ex); err != nil {
 		_ = built.cursorHistoryCloser.Close()
+		if built.symbolDBCloser != nil {
+			_ = built.symbolDBCloser.Close()
+		}
 		cancel()
 		_, _ = h.notifications.current().Notify(browserapi.LevelError,
 			"subscribe workspace events: %v", err)
@@ -1608,6 +1651,9 @@ func (h *workspaceManagerHandler) discardBuiltWorkspace(built *builtWorkspace) {
 	if built.cursorHistoryCloser != nil {
 		_ = built.cursorHistoryCloser.Close()
 	}
+	if built.symbolDBCloser != nil {
+		_ = built.symbolDBCloser.Close()
+	}
 	if built.runner != nil {
 		if c, ok := built.runner.(io.Closer); ok {
 			_ = c.Close()
@@ -1646,6 +1692,7 @@ func lspConfig(cfg ideConfig) config.Config {
 func (h *workspaceManagerHandler) buildExtensions(
 	cfg ideConfig, uri workspaceapi.URI,
 	cwd workspace.Workspace, ex *ex, extExecutor *extensionsExecutor,
+	parser syntaxapi.Parser,
 ) (
 	extension.Runner, *idelsp.Manager, *idedebug.Manager,
 	storageapi.Service, error,
@@ -1675,7 +1722,6 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.StorageResources(h.sixDir))
 	res = extension.MergeResourceMap(res,
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
-	parser := syntax.NewParser(ex.workspace, h.pkgmanager, uri)
 	res = extension.MergeResourceMap(res,
 		extension.SyntaxResources(parser))
 	apibrowser := newBrowserAdapter(ex.Browser())
@@ -2375,6 +2421,7 @@ type workspaceHandler struct {
 	attentionAttr       term.Attributes
 	vctrlService        vctrl.Service
 	cursorHistoryCloser io.Closer
+	symbolDBCloser      io.Closer
 	cancelCtx           func()
 	uri                 workspaceapi.URI
 	Extensions          atomic.Value
@@ -2405,6 +2452,11 @@ func (hm *workspaceHandler) Close() error {
 		}
 		if hm.cursorHistoryCloser != nil {
 			if err := hm.cursorHistoryCloser.Close(); err != nil {
+				ret = multierror.Append(ret, err)
+			}
+		}
+		if hm.symbolDBCloser != nil {
+			if err := hm.symbolDBCloser.Close(); err != nil {
 				ret = multierror.Append(ret, err)
 			}
 		}

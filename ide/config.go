@@ -3225,6 +3225,20 @@ func (c ideConfig) workspaceHome() string {
 	return home
 }
 
+// workspaceSymbolDB reports whether the persistent per-workspace
+// symbol database is enabled. Defaults to false when unset.
+func (c ideConfig) workspaceSymbolDB() bool {
+	ws := c.workspace()
+	enabled, err := ws.GetBool("symboldb")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["workspace.symboldb"] = err
+		}
+		return false
+	}
+	return enabled
+}
+
 func (c ideConfig) workspaceWallpaperBackgroundAttr() term.Attributes {
 	return c.getConfigAttr("workspace", "wallpaper_background_attr",
 		term.Attributes{})

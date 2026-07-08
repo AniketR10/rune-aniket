@@ -51,15 +51,16 @@ func TestDefinitionHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name         string
-		result       semanticapi.LocationResult
-		nilResource  bool
-		args         []string
-		parser       *mockParser
-		wantErr      bool
-		wantFloat    bool
-		wantNavigate bool
-		wantEntries  int
+		name          string
+		result        semanticapi.LocationResult
+		nilResource   bool
+		args          []string
+		parser        *mockParser
+		wantErr       bool
+		wantNotifyErr bool
+		wantFloat     bool
+		wantNavigate  bool
+		wantEntries   int
 	}{
 		{
 			name: "single definition navigates directly",
@@ -85,7 +86,7 @@ func TestDefinitionHandler(t *testing.T) {
 			wantFloat:   true,
 			wantEntries: 2,
 		},
-		{name: "no definitions", wantErr: true},
+		{name: "no definitions", wantNotifyErr: true},
 		{name: "nil resource", nilResource: true, wantErr: true},
 		{
 			name:        "definition via symbol name",
@@ -155,8 +156,9 @@ func TestDefinitionHandler(t *testing.T) {
 					return nil, nil
 				},
 			}
+			notify := &recordingNotifications{}
 			h := DefinitionHandler(
-				lsp, editor, wm, &mockResourceOpener{}, &mockNotifications{}, &mockFileSystem{},
+				lsp, editor, wm, &mockResourceOpener{}, notify, &mockFileSystem{},
 				syncTick, tt.parser, DefinitionConfig{RootURI: rootURI}, nil,
 			)
 
@@ -173,7 +175,22 @@ func TestDefinitionHandler(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if len(tt.args) > 0 && (tt.wantNavigate || tt.wantFloat) {
+			if tt.wantNotifyErr {
+				require.Eventually(t, func() bool {
+					notifies, _ := notify.snapshot()
+					for _, n := range notifies {
+						if n.level == browserapi.LevelError {
+							return true
+						}
+					}
+					return false
+				}, 5*time.Second, 5*time.Millisecond,
+					"empty results must surface an error notification")
+				assert.Nil(t, fh)
+				assert.False(t, navigated)
+				return
+			}
+			if tt.wantNavigate || tt.wantFloat {
 				select {
 				case <-done:
 				case <-time.After(5 * time.Second):

@@ -75,6 +75,7 @@ func (t *Tree) getFoldsFrom(from term.Coordinates) []term.Range {
 		return nil
 	}
 	cur := tree_sitter.NewQueryCursor()
+	defer cur.Close()
 	matches := cur.Matches(t.folds, t.tree.RootNode(), t.content)
 	cur.SetByteRange(uint(byteOffset), uint(len(t.content)))
 	for {

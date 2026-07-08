@@ -279,7 +279,7 @@ func setupRustEnv(t *testing.T) *resolveEnv {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = scheme.Close() })
 
-	parser := syntax.NewParser(scheme, rustPkgManager(t), uri).(symbolresolve.Searcher)
+	parser := syntax.NewParser(scheme, rustPkgManager(t), uri)
 	return &resolveEnv{root: root, parser: parser}
 }
 

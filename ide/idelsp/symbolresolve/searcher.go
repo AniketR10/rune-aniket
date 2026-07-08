@@ -36,13 +36,20 @@ type MultiQuery struct {
 	ID       int
 	Query    string
 	Captures []string
+	// Nodes selects the built-in node-capture query instead of Query.
+	// Node patterns capture independent definitions, so each captured
+	// node is emitted as its own single-capture match rather than being
+	// grouped into a tuple.
+	Nodes syntaxapi.NodeCaptureName
 }
 
-// MultiResult is a single SearchMulti capture tagged with the ID of the
-// MultiQuery that produced it.
+// MultiResult is a single SearchMulti match tagged with the ID of the
+// MultiQuery that produced it. Match holds the match's captures in the
+// query's declared capture order, so consumers never re-pair captures
+// downstream.
 type MultiResult struct {
 	QueryID int
-	Result  syntaxapi.Result
+	Match   []syntaxapi.Result
 }
 
 // Searcher is the subset of the workspace parser that symbol resolution
@@ -54,8 +61,13 @@ type Searcher interface {
 	Search(query string, captureNames []string, languages ...string) (
 		iterator.Iterator[syntaxapi.Result], error,
 	)
+	// Search2 runs a two-capture tree-sitter query across the workspace
+	// and streams each match's captures as a pair in captureNames order.
+	Search2(query string, captureNames [2]string, languages ...string) (
+		iterator.Iterator[[2]syntaxapi.Result], error,
+	)
 	// SearchMulti runs every query against one shared parse per file and
-	// streams tagged results, optionally restricted to the given languages.
+	// streams tagged matches, optionally restricted to the given languages.
 	SearchMulti(queries []MultiQuery, languages ...string) (
 		iterator.Iterator[MultiResult], error,
 	)
@@ -68,8 +80,9 @@ type Searcher interface {
 	QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
 		iterator.Iterator[syntaxapi.Result], error,
 	)
-	// Query runs a tree-sitter query against a single file.
-	Query(file workspaceapi.URI, query string, captureNames []string) (
-		iterator.Iterator[syntaxapi.Result], error,
+	// Query2 runs a two-capture tree-sitter query against a single file
+	// and streams each match's captures as a pair in captureNames order.
+	Query2(file workspaceapi.URI, query string, captureNames [2]string) (
+		iterator.Iterator[[2]syntaxapi.Result], error,
 	)
 }

@@ -59,6 +59,12 @@ func (f fakeSearcher) Search(
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 
+func (f fakeSearcher) Search2(
+	string, [2]string, ...string,
+) (iterator.Iterator[[2]syntaxapi.Result], error) {
+	return iterator.Empty[[2]syntaxapi.Result](), nil
+}
+
 func (f fakeSearcher) SearchNode(
 	syntaxapi.NodeCaptureName, ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
@@ -71,10 +77,10 @@ func (f fakeSearcher) QueryNode(
 	return iterator.Empty[syntaxapi.Result](), nil
 }
 
-func (f fakeSearcher) Query(
-	workspaceapi.URI, string, []string,
-) (iterator.Iterator[syntaxapi.Result], error) {
-	return iterator.Empty[syntaxapi.Result](), nil
+func (f fakeSearcher) Query2(
+	workspaceapi.URI, string, [2]string,
+) (iterator.Iterator[[2]syntaxapi.Result], error) {
+	return iterator.Empty[[2]syntaxapi.Result](), nil
 }
 
 // streamSpec is a minimal reference-only spec: one ref query, no package
@@ -87,19 +93,18 @@ var streamSpec = &symbolresolve.Spec{
 	},
 }
 
-// trackingMultiIter yields count reference matches (two capture results each)
-// for pkg.sym, tracking the peak number of produced-but-unconsumed elements
+// trackingMultiIter yields count reference matches for pkg.sym, tracking
+// the peak number of produced-but-unconsumed elements
 // so the test can prove Resolve consumes the stream incrementally rather than
 // buffering it whole. ToSlice is deliberately never used by Resolve.
 type trackingMultiIter struct {
 	pkg, sym string
 	count    int
 
-	emitted   int
-	pendingC1 bool
-	live      int64
-	peakLive  int64
-	closed    atomic.Bool
+	emitted  int
+	live     int64
+	peakLive int64
+	closed   atomic.Bool
 }
 
 func (it *trackingMultiIter) Next(ctx context.Context) (symbolresolve.MultiResult, bool) {
@@ -108,21 +113,16 @@ func (it *trackingMultiIter) Next(ctx context.Context) (symbolresolve.MultiResul
 		return symbolresolve.MultiResult{}, false
 	default:
 	}
-	// Each match emits two capture results for the same file: the package
-	// alias (capture 0) then the symbol (capture 1). pairedResults joins them.
-	if it.pendingC1 {
-		it.pendingC1 = false
-		return it.result(1), true
-	}
 	if it.emitted >= it.count {
 		return symbolresolve.MultiResult{}, false
 	}
 	it.emitted++
-	it.pendingC1 = true
-	return it.result(0), true
+	return it.result(), true
 }
 
-func (it *trackingMultiIter) result(capture int) symbolresolve.MultiResult {
+// result builds one grouped reference match: the package alias capture
+// followed by the symbol capture.
+func (it *trackingMultiIter) result() symbolresolve.MultiResult {
 	live := atomic.AddInt64(&it.live, 1)
 	for {
 		peak := atomic.LoadInt64(&it.peakLive)
@@ -131,28 +131,17 @@ func (it *trackingMultiIter) result(capture int) symbolresolve.MultiResult {
 		}
 	}
 	uri, _ := workspaceapi.ParseURI(fmt.Sprintf("file:///f%d.go", it.emitted))
-	text := it.pkg
-	var coords term.Coordinates
-	if capture == 1 {
-		text = it.sym
-		coords = term.Coordinates{X: 1, Y: it.emitted}
-	}
 	return symbolresolve.MultiResult{
 		QueryID: 0,
-		Result: syntaxapi.Result{
-			File:        uri,
-			Text:        text,
-			From:        coords,
-			CaptureName: captureName(capture),
+		Match: []syntaxapi.Result{
+			{File: uri, Text: it.pkg, CaptureName: "pkg"},
+			{
+				File: uri, Text: it.sym,
+				From:        term.Coordinates{X: 1, Y: it.emitted},
+				CaptureName: "sym",
+			},
 		},
 	}
-}
-
-func captureName(capture int) string {
-	if capture == 0 {
-		return "pkg"
-	}
-	return "sym"
 }
 
 // consumed is called by the test's wrapper iterator each time Resolve pulls

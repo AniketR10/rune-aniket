@@ -45,6 +45,25 @@ func SpecFor(langID string) *Spec {
 	return nil
 }
 
+// SpecForFile returns the spec whose extensions match the given path or
+// URI, or nil when no registered language claims it.
+func SpecForFile(path string) *Spec {
+	for _, s := range registry {
+		if len(s.Extensions) > 0 && s.matchesFile(path) {
+			return s
+		}
+	}
+	return nil
+}
+
+// AllSpecs returns the registered language specs in
+// resolution-preference order.
+func AllSpecs() []*Spec {
+	specs := make([]*Spec, len(registry))
+	copy(specs, registry)
+	return specs
+}
+
 // DetectSpecs walks the workspace lazily and yields each registered spec whose
 // extensions match at least one present file. A spec is emitted as soon as the
 // first matching file is seen, so a consumer can begin resolving against it

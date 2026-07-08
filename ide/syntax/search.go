@@ -52,12 +52,15 @@ import (
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
-// NewParser returns a workspace-wide syntaxapi.Parser.
+// NewParser returns the workspace-wide parser. The concrete type is
+// exported so host-side consumers can use the paired query entry points
+// (Query2, Search2) that are not part of the public syntaxapi.Parser
+// surface.
 func NewParser(
 	w workspaceapi.FileSystem, pkg PkgManager, uri workspaceapi.URI,
-) syntaxapi.Parser {
+) Parser {
 	filter := &queryFilter{w: w}
-	return parserSearcher{
+	return Parser{
 		w:      w,
 		uri:    uri,
 		pkg:    newCachingPkgManager(pkg),
@@ -68,7 +71,8 @@ func NewParser(
 
 var defaultWorkers = runtime.NumCPU()
 
-type parserSearcher struct {
+// Parser is the workspace-wide tree-sitter parser and searcher.
+type Parser struct {
 	w     workspaceapi.FileSystem
 	pkg   PkgManager
 	uri   workspaceapi.URI
@@ -124,8 +128,8 @@ func (h hiddenDirMatcher) MatchRelPath(relpath string, isDir bool) bool {
 }
 
 var (
-	_ syntaxapi.Parser       = parserSearcher{}
-	_ symbolresolve.Searcher = parserSearcher{}
+	_ syntaxapi.Parser       = Parser{}
+	_ symbolresolve.Searcher = Parser{}
 )
 
 // specCache memoizes the workspace language detection so the file walk runs
@@ -136,7 +140,7 @@ var (
 type specCache struct {
 	fs walkdir.Reader
 	// filter prunes noise/dependency directories from the detection walk.
-	// Shared with the owning parserSearcher so the gitignore matcher is
+	// Shared with the owning Parser so the gitignore matcher is
 	// built once.
 	filter *queryFilter
 	// source produces the spec stream to cache. It defaults to
@@ -237,7 +241,9 @@ func (it *cachedSpecIterator) Err() error { return nil }
 
 func (it *cachedSpecIterator) Close() error { return nil }
 
-func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
+// Highlight tokenizes content as file's language and streams syntax
+// highlight locations.
+func (p Parser) Highlight(file workspaceapi.URI, content string) (
 	iterator.Iterator[textapi.Location], error,
 ) {
 	const qfile = "highlights.scm"
@@ -251,7 +257,7 @@ func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
 	ctx, cancel := context.WithCancel(context.Background())
 	results := make(chan textapi.Location)
 	closeWaitCh := make(chan struct{})
-	it := &locationsIterator{
+	it := &chanIterator[textapi.Location]{
 		ctx:         ctx,
 		ch:          results,
 		cancel:      cancel,
@@ -300,13 +306,81 @@ func (p parserSearcher) Highlight(file workspaceapi.URI, content string) (
 	return it, nil
 }
 
-func (p parserSearcher) Query(file workspaceapi.URI, query string, captureNames []string) (
+// Query runs a tree-sitter query against a single file and streams one
+// result per capture.
+func (p Parser) Query(file workspaceapi.URI, query string, captureNames []string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	return p.query(file, "", query, captureNames)
 }
 
-func (p parserSearcher) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
+// Query2 runs a two-capture tree-sitter query against a single file and
+// streams each match's captures as a pair in captureNames order, so
+// consumers never re-associate a flattened capture stream.
+func (p Parser) Query2(
+	file workspaceapi.URI, query string, captureNames [2]string,
+) (iterator.Iterator[[2]syntaxapi.Result], error) {
+	path := file.Path()
+	langID, lerr := languages.LanguageForFile(path)
+	if lerr != nil {
+		return nil, lerr
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	results := make(chan [2]syntaxapi.Result)
+	closeWaitCh := make(chan struct{})
+	it := &chanIterator[[2]syntaxapi.Result]{
+		ctx:         ctx,
+		ch:          results,
+		cancel:      cancel,
+		closeWaitCh: closeWaitCh,
+	}
+
+	go debug.CapturePanicReport(func() {
+		defer close(closeWaitCh)
+		defer close(results)
+		parser, perr := newParser(ctx, langID, p.pkg, "", query)
+		if perr != nil {
+			perr = fmt.Errorf("new parser for language %q: %v", langID, perr)
+			it.mu.Lock()
+			defer it.mu.Unlock()
+			it.err = perr
+			return
+		}
+		defer parser.Close()
+
+		readErr := readFilePairs(ctx, parser, p.uri, p.w,
+			path, results, captureNames)
+		if readErr != nil {
+			it.mu.Lock()
+			defer it.mu.Unlock()
+			it.err = readErr
+		}
+	})
+
+	return it, nil
+}
+
+// Search2 runs a two-capture tree-sitter query across the workspace and
+// streams each match's captures as a pair in captureNames order.
+func (p Parser) Search2(
+	query string, captureNames [2]string, langs ...string,
+) (iterator.Iterator[[2]syntaxapi.Result], error) {
+	it, err := p.SearchMulti([]symbolresolve.MultiQuery{
+		{ID: 0, Query: query, Captures: captureNames[:]},
+	}, langs...)
+	if err != nil {
+		return nil, err
+	}
+	// SearchMulti drops matches missing a declared capture, so every
+	// delivered match holds exactly two results.
+	return iterator.Map(it, func(r symbolresolve.MultiResult) [2]syntaxapi.Result {
+		return [2]syntaxapi.Result{r.Match[0], r.Match[1]}
+	}), nil
+}
+
+// QueryNode runs the built-in node-capture query against a single file.
+func (p Parser) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.NodeCaptureName) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	names, err := nodeTypesToCaptureNames(nodeTypes)
@@ -316,7 +390,9 @@ func (p parserSearcher) QueryNode(file workspaceapi.URI, nodeTypes syntaxapi.Nod
 	return p.query(file, LocalsFilename, "", names)
 }
 
-func (p parserSearcher) SearchNode(
+// SearchNode runs the built-in node-capture query across the workspace,
+// optionally restricted to the given languages.
+func (p Parser) SearchNode(
 	nodeTypes syntaxapi.NodeCaptureName, languages ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	names, err := nodeTypesToCaptureNames(nodeTypes)
@@ -326,7 +402,10 @@ func (p parserSearcher) SearchNode(
 	return p.search(LocalsFilename, "", names, languages...)
 }
 
-func (p parserSearcher) Search(query string, captureNames []string, langs ...string) (
+// Search runs a single tree-sitter query across the workspace and
+// streams one result per capture, optionally restricted to the given
+// languages.
+func (p Parser) Search(query string, captureNames []string, langs ...string) (
 	iterator.Iterator[syntaxapi.Result], error,
 ) {
 	return p.search("", query, captureNames, langs...)
@@ -335,7 +414,7 @@ func (p parserSearcher) Search(query string, captureNames []string, langs ...str
 // ResolveSymbol resolves a dotted symbol name to its declaration and reference
 // locations. It detects which languages are present in the workspace and runs
 // only the relevant specs, returning the first spec that yields matches.
-func (p parserSearcher) ResolveSymbol(
+func (p Parser) ResolveSymbol(
 	ctx context.Context, name string, progress syntaxapi.Progress,
 ) (iterator.Iterator[syntaxapi.Match], error) {
 	if !strings.Contains(name, ".") {
@@ -382,7 +461,7 @@ func (p parserSearcher) ResolveSymbol(
 // referenced or defined across the workspace. It detects which languages are
 // present once via the cached spec detection and runs only the relevant specs.
 // Names may repeat across specs; callers deduplicate as needed.
-func (p parserSearcher) ListReferencedSymbols(
+func (p Parser) ListReferencedSymbols(
 	_ context.Context,
 ) (iterator.Iterator[string], error) {
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -409,7 +488,7 @@ func (p parserSearcher) ListReferencedSymbols(
 	return it, nil
 }
 
-func (p parserSearcher) query(
+func (p Parser) query(
 	file workspaceapi.URI, queryFile, query string, captureNameFilters []string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	path := file.Path()
@@ -421,7 +500,7 @@ func (p parserSearcher) query(
 	ctx, cancel := context.WithCancel(context.Background())
 	results := make(chan syntaxapi.Result)
 	closeWaitCh := make(chan struct{})
-	it := &listSymbolsIterator{
+	it := &chanIterator[syntaxapi.Result]{
 		ctx:         ctx,
 		ch:          results,
 		cancel:      cancel,
@@ -441,8 +520,9 @@ func (p parserSearcher) query(
 		}
 		defer parser.Close()
 
+		var scratch fileScratch
 		readErr := readFileSymbols(ctx, parser, p.uri, p.w,
-			path, results, captureNameFilters)
+			path, &scratch, results, captureNameFilters)
 		if readErr != nil {
 			it.mu.Lock()
 			defer it.mu.Unlock()
@@ -453,7 +533,7 @@ func (p parserSearcher) query(
 	return it, nil
 }
 
-func (p parserSearcher) search(
+func (p Parser) search(
 	queryFile, query string, captureNames []string, langs ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -483,7 +563,7 @@ func (p parserSearcher) search(
 		})
 	}
 
-	it := &listSymbolsIterator{
+	it := &chanIterator[syntaxapi.Result]{
 		ctx:         ctx,
 		ch:          results,
 		cancel:      cancel,
@@ -551,9 +631,10 @@ func mergeValidErrorsMap(m []map[string]*expectedError) (
 
 func readFileSymbols(
 	ctx context.Context, parser *parser, uri workspaceapi.URI,
-	w workspaceapi.FileSystem, filename string,
+	w workspaceapi.FileSystem, filename string, scratch *fileScratch,
 	results chan syntaxapi.Result, captureNameFilters []string,
 ) (retErr error) {
+	defer scratch.trim()
 	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {
 		return fmt.Errorf("open file: %v", err)
@@ -564,7 +645,8 @@ func readFileSymbols(
 		}
 	}()
 
-	content, err := io.ReadAll(file)
+	content, err := readAllInto(scratch.content, file)
+	scratch.content = content
 	if err != nil {
 		return err
 	}
@@ -580,7 +662,8 @@ func readFileSymbols(
 
 	root := tree.RootNode()
 	captureNames := parser.query.CaptureNames()
-	starts := lineStarts(content)
+	starts := lineStarts(scratch.starts, content)
+	scratch.starts = starts
 	fileURI := workspaceapi.Join(uri, filename)
 	matches := cur.Matches(parser.query, root, content)
 	for {
@@ -621,6 +704,63 @@ func makeSymbolItem(
 	}
 }
 
+// readFilePairs parses one file and streams each query match's two
+// captures as a pair in captureNames order. Matches missing a declared
+// capture are dropped: they cannot form the tuple the consumer expects.
+func readFilePairs(
+	ctx context.Context, parser *parser, uri workspaceapi.URI,
+	w workspaceapi.FileSystem, filename string,
+	results chan [2]syntaxapi.Result, captureNames [2]string,
+) (retErr error) {
+	file, err := w.OpenFile(filename, os.O_RDONLY, 0)
+	if err != nil {
+		return fmt.Errorf("open file: %v", err)
+	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("close file: %v", cerr))
+		}
+	}()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	tree := parser.parser.Parse(content, nil)
+	if tree == nil {
+		return errors.New("failed to parse data")
+	}
+	defer tree.Close()
+
+	cur := sitter.NewQueryCursor()
+	defer cur.Close()
+
+	root := tree.RootNode()
+	names := parser.query.CaptureNames()
+	starts := lineStarts(nil, content)
+	fileURI := workspaceapi.Join(uri, filename)
+	matches := cur.Matches(parser.query, root, content)
+	for {
+		m, ok := matches.Next()
+		if !ok {
+			break
+		}
+		match := groupMatchCaptures(
+			content, starts, m, names, fileURI, captureNames[:])
+		if match == nil {
+			continue
+		}
+		select {
+		case results <- [2]syntaxapi.Result{match[0], match[1]}:
+		case <-ctx.Done():
+			return retErr
+		}
+	}
+
+	return retErr
+}
+
 func readSymbolsWorker(
 	ctx context.Context, fs workspaceapi.FileSystem, pkg PkgManager,
 	uri workspaceapi.URI, queryFile, query string, results chan syntaxapi.Result,
@@ -629,6 +769,7 @@ func readSymbolsWorker(
 	captureNameFilters, langs []string,
 ) {
 	parsers := make(map[string]*parser)
+	var scratch fileScratch
 	for {
 		select {
 		case <-ctx.Done():
@@ -666,7 +807,7 @@ func readSymbolsWorker(
 			}
 
 			readErr := readFileSymbols(ctx, parser, uri, fs,
-				path, results, captureNameFilters)
+				path, &scratch, results, captureNameFilters)
 			if readErr != nil {
 				*err = errors.Join(*err, readErr)
 			}
@@ -674,33 +815,36 @@ func readSymbolsWorker(
 	}
 }
 
-type listSymbolsIterator struct {
+// chanIterator adapts a producer channel to an iterator, joining
+// producer errors with cancellation from either context.
+type chanIterator[T any] struct {
 	mu          sync.Mutex
 	err         error
 	ctx         context.Context
-	ch          chan syntaxapi.Result
+	ch          chan T
 	cancel      func()
 	closeWaitCh chan struct{}
 }
 
-func (l *listSymbolsIterator) Next(ctx context.Context) (syntaxapi.Result, bool) {
+func (l *chanIterator[T]) Next(ctx context.Context) (T, bool) {
+	var zero T
 	select {
 	case <-ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.err = errors.Join(l.err, ctx.Err())
-		return syntaxapi.Result{}, false
+		return zero, false
 	case <-l.ctx.Done():
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.err = errors.Join(l.err, l.ctx.Err())
-		return syntaxapi.Result{}, false
-	case path, ok := <-l.ch:
-		return path, ok
+		return zero, false
+	case v, ok := <-l.ch:
+		return v, ok
 	}
 }
 
-func (l *listSymbolsIterator) Err() error {
+func (l *chanIterator[T]) Err() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -716,55 +860,7 @@ func (l *listSymbolsIterator) Err() error {
 	return errors.Join(err, l.ctx.Err())
 }
 
-func (l *listSymbolsIterator) Close() error {
-	l.cancel()
-	<-l.closeWaitCh
-	return nil
-}
-
-type locationsIterator struct {
-	mu          sync.Mutex
-	err         error
-	ctx         context.Context
-	ch          chan textapi.Location
-	cancel      func()
-	closeWaitCh chan struct{}
-}
-
-func (l *locationsIterator) Next(ctx context.Context) (textapi.Location, bool) {
-	select {
-	case <-ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = errors.Join(l.err, ctx.Err())
-		return textapi.Location{}, false
-	case <-l.ctx.Done():
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.err = errors.Join(l.err, l.ctx.Err())
-		return textapi.Location{}, false
-	case path, ok := <-l.ch:
-		return path, ok
-	}
-}
-
-func (l *locationsIterator) Err() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.err == nil {
-		return l.ctx.Err()
-	}
-	// avoid data races onto l.err which is an instance of
-	// *multierr.Error by creating a new multierr.Error
-	err := errors.Join(nil, l.err)
-	if l.ctx.Err() == nil {
-		return err
-	}
-	return errors.Join(err, l.ctx.Err())
-}
-
-func (l *locationsIterator) Close() error {
+func (l *chanIterator[T]) Close() error {
 	l.cancel()
 	<-l.closeWaitCh
 	return nil

@@ -25,6 +25,7 @@ package syntaxtest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,16 +157,14 @@ func setupMultiSearcher(t *testing.T, files int) (
 
 	fs := &countingFS{FileSystem: scheme}
 	parser := syntax.NewParser(fs, goPkgManager(t), uri)
-	searcher, ok := parser.(symbolresolve.Searcher)
-	require.True(t, ok, "parser must implement symbolresolve.Searcher")
-	return searcher, fs
+	return parser, fs
 }
 
 func fileName(i int) string {
 	return "f" + string(rune('a'+i)) + ".go"
 }
 
-func goPkgManager(t *testing.T) syntax.PkgManager {
+func goPkgManager(t testing.TB) syntax.PkgManager {
 	t.Helper()
 	wd, err := os.Getwd()
 	require.NoError(t, err)
@@ -228,11 +227,11 @@ func TestSearchMultiSharesParsePerFile(t *testing.T) {
 	for _, r := range results {
 		switch r.QueryID {
 		case 7:
-			assert.Equal(t, "function", r.Result.Text)
-			assert.Equal(t, "fn", r.Result.CaptureName)
+			assert.Equal(t, "function", r.Match[0].Text)
+			assert.Equal(t, "fn", r.Match[0].CaptureName)
 		case 9:
-			assert.Equal(t, "myType", r.Result.Text)
-			assert.Equal(t, "ty", r.Result.CaptureName)
+			assert.Equal(t, "myType", r.Match[0].Text)
+			assert.Equal(t, "ty", r.Match[0].CaptureName)
 		default:
 			t.Fatalf("unexpected QueryID %d", r.QueryID)
 		}
@@ -260,9 +259,9 @@ func TestSearchMultiResultsMatchSeparateSearches(t *testing.T) {
 	for _, r := range multi {
 		switch r.QueryID {
 		case 0:
-			gotFunc = append(gotFunc, r.Result)
+			gotFunc = append(gotFunc, r.Match[0])
 		case 1:
-			gotType = append(gotType, r.Result)
+			gotType = append(gotType, r.Match[0])
 		}
 	}
 	assert.ElementsMatch(t, funcResults, gotFunc,
@@ -308,14 +307,14 @@ func TestSearchMultiRuneColumns(t *testing.T) {
 	src := "package pkg\ntype T struct{ å int; bar int }\n"
 	createFile(t, scheme, "fields.go", src)
 
-	parser := syntax.NewParser(scheme, goPkgManager(t), uri).(symbolresolve.Searcher)
+	parser := syntax.NewParser(scheme, goPkgManager(t), uri)
 	results := collectMulti(t, parser, []symbolresolve.MultiQuery{
 		{ID: 0, Query: `(field_declaration name: (field_identifier) @f)`, Captures: []string{"f"}},
 	})
 
 	got := make(map[string]syntaxapi.Result, len(results))
 	for _, r := range results {
-		got[r.Result.Text] = r.Result
+		got[r.Match[0].Text] = r.Match[0]
 	}
 
 	bar, ok := got["bar"]
@@ -390,7 +389,7 @@ func TestSearchMultiSkipsFilteredDirs(t *testing.T) {
 	createFile(t, scheme, "node_modules/dep.go", multiQueryFile)
 
 	fs := &countingFS{FileSystem: scheme}
-	searcher := syntax.NewParser(fs, goPkgManager(t), uri).(symbolresolve.Searcher)
+	searcher := syntax.NewParser(fs, goPkgManager(t), uri)
 
 	results := collectMulti(t, searcher, []symbolresolve.MultiQuery{
 		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
@@ -401,4 +400,90 @@ func TestSearchMultiSkipsFilteredDirs(t *testing.T) {
 	assert.Equal(t, 2, fs.distinctFiles(),
 		"only the two root files should be walked")
 	assert.Len(t, results, 2, "node_modules file must not contribute results")
+}
+
+// TestQuerySessionScratchDoesNotAliasResults guards the recycled read
+// buffer in querySession: results emitted for one file must remain intact
+// after the session reads another file into the same buffer.
+func TestQuerySessionScratchDoesNotAliasResults(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scheme.Close() })
+
+	fileA := createFile(t, scheme, "a.go", `package pkg
+
+func alphaFunc() string {
+	return ""
+}
+
+type alphaType struct{}
+`)
+	fileB := createFile(t, scheme, "b.go", `package pkg
+
+// Longer than a.go so a reused buffer is fully overwritten.
+func betaFuncWithMuchLongerName() string {
+	return "`+strings.Repeat("padding ", 64)+`"
+}
+
+type betaTypeWithMuchLongerName struct{}
+`)
+
+	parser := syntax.NewParser(scheme, goPkgManager(t), uri)
+	session := parser.NewQuerySession()
+	t.Cleanup(func() { _ = session.Close() })
+
+	queries := []symbolresolve.MultiQuery{
+		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+		{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+	}
+	resA, err := session.QueryMulti(context.Background(), fileA, queries)
+	require.NoError(t, err)
+
+	resB, err := session.QueryMulti(context.Background(), fileB, queries)
+	require.NoError(t, err)
+	require.NotEmpty(t, resB)
+
+	gotA := make(map[int]string, len(resA))
+	for _, r := range resA {
+		gotA[r.QueryID] = r.Match[0].Text
+	}
+	assert.Equal(t, "alphaFunc", gotA[0],
+		"file A results must survive file B reusing the session buffer")
+	assert.Equal(t, "alphaType", gotA[1],
+		"file A results must survive file B reusing the session buffer")
+}
+
+// BenchmarkQuerySessionQueryMulti measures the per-file extraction cost the
+// symboldb index scan pays: one session, one large file, batched queries.
+func BenchmarkQuerySessionQueryMulti(b *testing.B) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(b, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(b, err)
+	b.Cleanup(func() { _ = scheme.Close() })
+
+	var src strings.Builder
+	src.WriteString("package pkg\n\n")
+	for i := range 2000 {
+		fmt.Fprintf(&src, "func fn%04d() string {\n\treturn \"body %04d\"\n}\n\n", i, i)
+	}
+	file := createFile(b, scheme, "big.go", src.String())
+	b.Logf("file size: %d bytes", src.Len())
+
+	parser := syntax.NewParser(scheme, goPkgManager(b), uri)
+	session := parser.NewQuerySession()
+	b.Cleanup(func() { _ = session.Close() })
+
+	queries := []symbolresolve.MultiQuery{
+		{ID: 0, Query: funcQuery, Captures: []string{"fn"}},
+		{ID: 1, Query: typeQuery, Captures: []string{"ty"}},
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := session.QueryMulti(context.Background(), file, queries); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
