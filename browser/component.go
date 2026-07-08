@@ -106,6 +106,7 @@ func NewComponent(config Config) *Component {
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
+	c.config.WindowManagerConfig.OnBarCloseClick = c.onBarCloseClick
 	c.windows = make(map[uint64]*browserWindow)
 
 	c.nextSplit = browserapi.OrientationRight
@@ -138,7 +139,7 @@ func (c *Component) Init(config Config) {
 		return true
 	}
 
-	c.wm.Init(c.wallpaper(), config.WindowManagerConfig)
+	c.wm.Init(c.wallpaper(), c.config.WindowManagerConfig)
 	c.focusWindow = c.wm.Focus()
 	_ = c.newWindow(c.focusWindow) // init handler with initial window
 	c.union.Init(&c.wm)
@@ -659,10 +660,17 @@ func (c *Component) Floating(
 	if h == nil {
 		panic("nil Floating handler")
 	}
+	_, noBar := any(h).(tcomponent.WindowBarOptOut)
+	var title string
+	if t, ok := any(h).(tcomponent.WindowTitler); ok {
+		title = t.WindowTitle()
+	}
 	h = c.newBrowserContent(h).(Floating)
 	win := c.newWindow(c.wm.FloatingWindow(h, tcomponent.FloatingConfig{
 		Alignment: cfg.Alignment,
 		Offset:    cfg.Offset,
+		NoBar:     noBar,
+		Title:     title,
 	}))
 	c.wm.SetFocus(win.win)
 	return win
@@ -1434,6 +1442,21 @@ func (c *Component) closeWindow(win *browserWindow) error {
 func (c *Component) findWindow(winID uint64) (*browserWindow, bool) {
 	w, ok := c.windows[winID]
 	return w, ok
+}
+
+// onBarCloseClick routes window-bar close icon clicks through
+// closeWindow so tab and handler release bookkeeping runs, mirroring
+// tab close and :close. Returning false for unknown windows lets the
+// window manager fall back to closing the window directly.
+func (c *Component) onBarCloseClick(win thandler.Window) bool {
+	bw, ok := c.findWindow(win.ID())
+	if !ok {
+		return false
+	}
+	if err := c.closeWindow(bw); err != nil {
+		c.setError(err)
+	}
+	return true
 }
 
 func (c *Component) overwriteFocusWindowUnion(w term.Writer) {

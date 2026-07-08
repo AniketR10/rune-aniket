@@ -2089,7 +2089,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 		{":woc>:wope memory\\:///tmp2>:edit 12345aZZ>:w>:woc>:wope  memory\\:///tmp2>:noticloseall>", // prompt
 			`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Do you want to  │
 │  restore the     │
@@ -2276,7 +2276,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Are you sure    │
 │  you want to     │
@@ -2304,7 +2304,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Are you sure    │
 │  you want to     │
@@ -2315,7 +2315,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Are you sure    │
 │  you want to     │
@@ -2338,7 +2338,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Are you sure    │
 │  you want to     │
@@ -2360,7 +2360,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Are you sure    │
 │  you want to     │
@@ -2399,7 +2399,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │o 1234*  o 4567   │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  There are open  │
 │  files with      │
@@ -2446,7 +2446,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 			{":quit>",
 				`┌──────────────────┐
 │o 1234*  o 4567   │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  There are open  │
 │  files with      │
@@ -2553,7 +2553,7 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 				{":quit>",
 					`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Are you sure    │
 │  you want to     │
@@ -2607,11 +2607,19 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m.openFile("1234", true))
 				require.NoError(t, m.openFile("4567", false))
 
+				// the wrap=false run persists session state into the
+				// shared dir, so the wrap=true run opens an unanswered
+				// restore prompt that floats behind the editor: its
+				// window bar shows in the frame row.
+				sep := "├──────────────────┤"
+				if wrap {
+					sep = "├●█████████████████┤"
+				}
 				cases := []handlertest.SequenceTestCase{
 					{"",
 						`┌━━━━━━────────────┐
 │o 1234  o 4567    │
-├──────────────────┤
+` + sep + `
 │▐                 │
 │                  │
 │                  │
@@ -2634,7 +2642,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 					{"",
 						`┌──────────────────┐
 │                  │
-├──────────────────┤
+├●█████████████████┤
 │                  │
 │  Do you want to  │
 │  restore the     │
@@ -3028,7 +3036,7 @@ func TestWorkspaceManagerRestoresOpenTerminalSessions(t *testing.T) {
 │o nested.txt  o middle.txt                                                    │
 ├────────────────────────┐┌─────────────────────────┐┌─────────────────────────┤
 │                        ││                         ││                         │
-┌──────────────────────────────┐                    ││                         │
+█●██████████████████████████████                    ││                         │
 │ ▀        sleep 1000        0s│                    ││                         │
 │                              │                    ││                         │
 │                              │                    ││                         │
@@ -4518,8 +4526,9 @@ func TestComponentOnTabsClickIntegration(t *testing.T) {
 	assert.True(t, handled)
 	assert.Equal(t, 1, called)
 
+	// the bottom row is a window resize grip: handled, but no tab click
 	_, handled = m.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseY: 7})
-	assert.False(t, handled)
+	assert.True(t, handled)
 	assert.Equal(t, 1, called)
 
 	m.mu.Unlock()
@@ -4766,7 +4775,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 ├────────────────────────────┤
 │                            │
 │                            │
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  workspace with URI        │
 │  file:///tmp/TestWorkspac  │
@@ -4807,7 +4816,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 │                            │
 ├────────────────────────────┤
 │                            │
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  workspace with URI        │
 │  file:///tmp/TestWorkspac  │

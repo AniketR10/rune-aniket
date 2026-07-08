@@ -194,6 +194,9 @@ func (w Window) SetContentResize(content tui.Component, resize bool) (
 	} else if w.wm.config.Frame {
 		content = w.wm.withFrame(content)
 	}
+	if f, ok := content.(*component.Frame); ok && w.HasWindowBar() {
+		f.FrameCharSet = w.wm.barCharSet(f.FrameCharSet)
+	}
 	prev = w.node.SetContentResize(content, resize)
 
 	if w.wm.config.Frame {
@@ -227,8 +230,33 @@ func (w Window) SetFrameCharSet(b component.FrameCharSet) bool {
 	if !w.wm.config.Frame {
 		return false
 	}
+	if w.HasWindowBar() {
+		b = w.wm.barCharSet(b)
+	}
 	w.node.Content().(*component.Frame).FrameCharSet = b
 	return true
+}
+
+// HasWindowBar returns true if this is a floating window rendered
+// with the window bar over its top frame line.
+func (w Window) HasWindowBar() bool {
+	if w.wm == nil {
+		panic(errCalledZeroValuedWin)
+	}
+	fn, ok := w.node.(*floatingNode)
+	return ok && w.wm.hasWindowBar(fn)
+}
+
+// Title returns the title rendered on a floating window's bar, or an
+// empty string for tiles and untitled windows.
+func (w Window) Title() string {
+	if w.wm == nil {
+		panic(errCalledZeroValuedWin)
+	}
+	if fn, ok := w.node.(*floatingNode); ok {
+		return fn.title
+	}
+	return ""
 }
 
 // FrameAttr return this Window's default FrameCharSet attributes or false

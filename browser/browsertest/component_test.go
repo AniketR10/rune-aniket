@@ -664,7 +664,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Virgen Maria?   │    
 │                  │    
@@ -701,7 +701,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Rosalia?        │    
 │                  │    
@@ -715,7 +715,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, `
 ┌────────┐              
 │x musi  │              
-├────────┤              
+├●███████┤              
 │  Rosa  │              
 │ YayNay │              
 └────────┘              
@@ -730,7 +730,7 @@ func TestComponentPrompt(t *testing.T) {
 			}, `
 ┌──────────────────────┐
 │x music               │
-├──────────────────────┤
+├●█████████████████████┤
 │                      │
 │  Rosalia?            │
 │                      │
@@ -746,7 +746,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Rosalia?        │    
 │                  │    
@@ -761,7 +761,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Tokischa?       │    
 │                  │    
@@ -776,7 +776,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Robert Love     │    
 │                  │    
@@ -847,7 +847,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Twitch          │    
 │  Streaming?      │    
@@ -879,7 +879,7 @@ func TestComponentPrompt(t *testing.T) {
 ┌──────────────────┐    
 │x music           │    
 ├──────────────────┤    
-┌──────────────────┐    
+█●██████████████████    
 │                  │    
 │  Twitch          │    
 │  Streaming?      │    

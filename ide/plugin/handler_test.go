@@ -68,6 +68,34 @@ func TestPluginHandlerCursor(t *testing.T) {
 	})
 }
 
+func TestPluginHandlerTitle(t *testing.T) {
+	t.Run("defaults to the command and args", func(t *testing.T) {
+		h := new(Handler)
+		h.initState(nopBrowser{}, []string{"echo", "hi"}, 100, defaultConfig())
+		assert.Equal(t, "echo hi", h.Title())
+	})
+	t.Run("WithTitle overrides", func(t *testing.T) {
+		cfg := defaultConfig()
+		WithTitle("custom")(&cfg)
+		h := new(Handler)
+		h.initState(nopBrowser{}, []string{"echo", "hi"}, 100, cfg)
+		assert.Equal(t, "custom", h.Title())
+	})
+}
+
+// TestWithoutBarCommand covers that the option drops the command from
+// the plugin's own bar while the status and elapsed components stay.
+func TestWithoutBarCommand(t *testing.T) {
+	cfg := defaultConfig()
+	WithoutBarCommand()(&cfg)
+	h := new(Handler)
+	h.initState(nopBrowser{}, []string{"echo", "hi"}, 100, cfg)
+	assert.Nil(t, h.bar.command, "command component must not be built")
+	assert.NotNil(t, h.bar.status)
+	assert.NotNil(t, h.bar.elapsed)
+	assert.Equal(t, "echo hi", h.Title(), "title is unaffected")
+}
+
 func TestPluginHandler(t *testing.T) {
 	if ci := os.Getenv("CI"); ci == "true" {
 		// it's inherently impossible to know when sh will actually

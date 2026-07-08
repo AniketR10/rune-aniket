@@ -25,6 +25,7 @@ package handler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,7 @@ func prepareTest(width, height int, frame bool, root tui.Handler) (
 	cfg.Frame = frame
 	cfg.ScrollBarChar = '|'
 	cfg.ScrollBarHoverChar = 'X'
+	cfg.WindowBar = false
 	handler := NewWindowManager(root, cfg)
 	handler.Resize(width, height)
 
@@ -1266,7 +1268,9 @@ func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
 	h1 := handler.TestHandler{TestComponent: compapi.TestComponent{Ch: 'A'}}
-	wm := NewWindowManager(&h1, DefaultWindowManagerConfig())
+	wmCfg := DefaultWindowManagerConfig()
+	wmCfg.WindowBar = false
+	wm := NewWindowManager(&h1, wmCfg)
 	w1 := wm.Focus()
 	wm.Resize(20, 8)
 
@@ -1781,4 +1785,327 @@ func TestWindowManagerScrollBar(t *testing.T) {
 	}
 
 	handlertest.TestHandler(t, wm, cases, writer)
+}
+
+func mouseEv(key term.Key, x, y int) term.Event {
+	return term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y}
+}
+
+// prepareWindowBarTest builds a 30x12 framed manager with a focused
+// floating window of 6x3 content (8x5 framed) at the top-left corner.
+func prepareWindowBarTest(t *testing.T) (
+	wm *WindowManager, root, float *handler.TestHandler, rootWin, floatWin Window,
+) {
+	t.Helper()
+	root = handler.NewTestHandler()
+	wm = NewWindowManager(root, DefaultWindowManagerConfig())
+	wm.Resize(30, 12)
+	rootWin = wm.Focus()
+	float = handler.NewTestHandler()
+	floatWin = wm.FloatingWindow(
+		handler.StaticFloating(float, 6, 3), component.FloatingConfig{},
+	)
+	wm.SetFocus(floatWin)
+	require.Equal(t, term.Coordinates{}, floatWin.Position())
+	require.Equal(t, 8, floatWin.Width())
+	require.Equal(t, 5, floatWin.Height())
+	return
+}
+
+func TestWindowBarCloseClick(t *testing.T) {
+	t.Run("default path closes the floating window", func(t *testing.T) {
+		wm, _, float, _, floatWin := prepareWindowBarTest(t)
+		var contentEvents int
+		float.HandleOverride = func(ev term.Event) (bool, bool) {
+			if ev.Type == term.EventMouse {
+				contentEvents++
+			}
+			return false, false
+		}
+		require.Equal(t, 1, wm.SizeFloating())
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, component.WindowBarCloseIconX, 0))
+		assert.True(t, handled)
+		assert.Equal(t, 0, wm.SizeFloating())
+		assert.True(t, floatWin.Closed())
+		assert.Zero(t, contentEvents, "close press must not reach content")
+	})
+	t.Run("OnBarCloseClick short-circuits the default close", func(t *testing.T) {
+		root := handler.NewTestHandler()
+		cfg := DefaultWindowManagerConfig()
+		var got Window
+		cfg.OnBarCloseClick = func(win Window) bool {
+			got = win
+			return true
+		}
+		wm := NewWindowManager(root, cfg)
+		wm.Resize(30, 12)
+		floatWin := wm.FloatingWindow(
+			handler.StaticFloating(handler.NewTestHandler(), 6, 3),
+			component.FloatingConfig{},
+		)
+		wm.SetFocus(floatWin)
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, component.WindowBarCloseIconX, 0))
+		assert.True(t, handled)
+		require.NotEqual(t, Window{}, got)
+		assert.Equal(t, floatWin.ID(), got.ID())
+		assert.Equal(t, 1, wm.SizeFloating(), "callback handled the close")
+		assert.False(t, floatWin.Closed())
+	})
+	t.Run("minimized floats are unaffected", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		require.True(t, floatWin.MinimizeDown(0))
+		pos := floatWin.Position()
+		wm.Handle(mouseEv(term.MouseLeft, pos.X+component.WindowBarCloseIconX, pos.Y))
+		assert.False(t, floatWin.Closed())
+		assert.Equal(t, 1, wm.SizeFloating())
+	})
+}
+
+func TestWindowBarMoveDrag(t *testing.T) {
+	wm, root, float, _, floatWin := prepareWindowBarTest(t)
+	var contentEvents, rootEvents int
+	float.HandleOverride = func(ev term.Event) (bool, bool) {
+		if ev.Type == term.EventMouse {
+			contentEvents++
+		}
+		return false, false
+	}
+	root.HandleOverride = func(ev term.Event) (bool, bool) {
+		if ev.Type == term.EventMouse {
+			rootEvents++
+		}
+		return false, false
+	}
+
+	// press on the bar, away from the close icon
+	_, handled := wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+	assert.True(t, handled)
+	// drag: the window follows, keeping the grab offset
+	_, handled = wm.Handle(mouseEv(term.MouseLeft, 10, 3))
+	assert.True(t, handled)
+	assert.Equal(t, term.Coordinates{X: 6, Y: 3}, floatWin.Position())
+	// drag across the root tile: the pin must survive crossing windows
+	// and the position is clamped to keep the window fully visible
+	_, handled = wm.Handle(mouseEv(term.MouseLeft, 20, 8))
+	assert.True(t, handled)
+	assert.Equal(t, term.Coordinates{X: 16, Y: 7}, floatWin.Position())
+	_, handled = wm.Handle(mouseEv(term.MouseRelease, 20, 8))
+	assert.True(t, handled)
+	assert.Equal(t, term.Coordinates{X: 16, Y: 7}, floatWin.Position())
+
+	assert.Zero(t, contentEvents, "drag events must not leak into float content")
+	assert.Zero(t, rootEvents, "drag events must not leak into tile content")
+
+	// after release, a fresh press inside content dispatches normally
+	wm.Handle(mouseEv(term.MouseLeft, 17, 8))
+	assert.Equal(t, 1, contentEvents)
+}
+
+func TestWindowBarPressFocusesFloat(t *testing.T) {
+	wm, _, _, rootWin, floatWin := prepareWindowBarTest(t)
+	wm.SetFocus(rootWin)
+	require.Equal(t, rootWin.ID(), wm.Focus().ID())
+	_, handled := wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+	assert.True(t, handled)
+	assert.Equal(t, floatWin.ID(), wm.Focus().ID())
+	wm.Handle(mouseEv(term.MouseRelease, 4, 0))
+}
+
+func TestWindowEdgeResizeDrag(t *testing.T) {
+	t.Run("right edge grows the float", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 7, 2))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 12, 2))
+		assert.Equal(t, 13, floatWin.Width())
+		wm.Handle(mouseEv(term.MouseRelease, 12, 2))
+	})
+	t.Run("bottom edge grows the float", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 3, 4))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 3, 8))
+		assert.Equal(t, 9, floatWin.Height())
+		wm.Handle(mouseEv(term.MouseRelease, 3, 8))
+	})
+	t.Run("bottom-right corner grows both dimensions", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 7, 4))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 12, 8))
+		assert.Equal(t, 13, floatWin.Width())
+		assert.Equal(t, 9, floatWin.Height())
+		wm.Handle(mouseEv(term.MouseRelease, 12, 8))
+	})
+	t.Run("left edge keeps the right edge fixed", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		require.True(t, wm.comp.MoveWindow(floatWin.Window, term.Coordinates{X: 10, Y: 2}))
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 10, 4))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 6, 4))
+		assert.Equal(t, 12, floatWin.Width())
+		assert.Equal(t, term.Coordinates{X: 6, Y: 2}, floatWin.Position())
+		wm.Handle(mouseEv(term.MouseRelease, 6, 4))
+	})
+	t.Run("resize below the minimum size is ignored", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 7, 2))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 0, 2))
+		assert.Equal(t, 8, floatWin.Width())
+		wm.Handle(mouseEv(term.MouseRelease, 0, 2))
+	})
+}
+
+// TestWindowBarCornerResizeDrag covers the diagonal resize drags
+// started from the bar's corner cells: both dimensions change and the
+// opposite edges stay pinned.
+func TestWindowBarCornerResizeDrag(t *testing.T) {
+	t.Run("top-right corner grows both dimensions", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		require.True(t, wm.comp.MoveWindow(floatWin.Window, term.Coordinates{X: 10, Y: 4}))
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 17, 4))
+		assert.True(t, handled)
+		assert.Equal(t, winDragTop|winDragRight, wm.winDrag)
+		wm.Handle(mouseEv(term.MouseLeft, 19, 2))
+		assert.Equal(t, 10, floatWin.Width())
+		assert.Equal(t, 7, floatWin.Height())
+		assert.Equal(t, term.Coordinates{X: 10, Y: 2}, floatWin.Position(),
+			"left and bottom edges stay pinned")
+		wm.Handle(mouseEv(term.MouseRelease, 19, 2))
+	})
+	t.Run("top-left corner grows both dimensions", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		require.True(t, wm.comp.MoveWindow(floatWin.Window, term.Coordinates{X: 10, Y: 4}))
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 10, 4))
+		assert.True(t, handled)
+		assert.Equal(t, winDragTop|winDragLeft, wm.winDrag)
+		wm.Handle(mouseEv(term.MouseLeft, 8, 2))
+		assert.Equal(t, 10, floatWin.Width())
+		assert.Equal(t, 7, floatWin.Height())
+		assert.Equal(t, term.Coordinates{X: 8, Y: 2}, floatWin.Position(),
+			"right and bottom edges stay pinned")
+		wm.Handle(mouseEv(term.MouseRelease, 8, 2))
+	})
+	t.Run("bar-less float resizes from the top edge", func(t *testing.T) {
+		cfg := DefaultWindowManagerConfig()
+		cfg.WindowBar = false
+		wm := NewWindowManager(handler.NewTestHandler(), cfg)
+		wm.Resize(30, 12)
+		floatWin := wm.FloatingWindow(handler.StaticFloating(
+			handler.NewTestHandler(), 6, 3), component.FloatingConfig{})
+		require.True(t, wm.comp.MoveWindow(floatWin.Window, term.Coordinates{X: 10, Y: 4}))
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 13, 4))
+		assert.True(t, handled)
+		assert.Equal(t, winDragTop, wm.winDrag)
+		wm.Handle(mouseEv(term.MouseLeft, 13, 2))
+		assert.Equal(t, 7, floatWin.Height())
+		assert.Equal(t, term.Coordinates{X: 10, Y: 2}, floatWin.Position())
+		wm.Handle(mouseEv(term.MouseRelease, 13, 2))
+	})
+}
+
+// TestWindowBarDoubleClickMaximize covers the bar double click
+// toggling a float between maximized and its previous geometry.
+func TestWindowBarDoubleClickMaximize(t *testing.T) {
+	click := func(wm *WindowManager, x, y int) {
+		wm.Handle(mouseEv(term.MouseLeft, x, y))
+		wm.Handle(mouseEv(term.MouseRelease, x, y))
+	}
+	t.Run("double click maximizes and restores", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		click(wm, 4, 0)
+		click(wm, 4, 0)
+		assert.Equal(t, term.Coordinates{}, floatWin.Position())
+		assert.Equal(t, 30, floatWin.Width())
+		assert.Equal(t, 12, floatWin.Height())
+
+		// double click the maximized bar again: restored
+		click(wm, 4, 0)
+		click(wm, 4, 0)
+		assert.Equal(t, 8, floatWin.Width())
+		assert.Equal(t, 5, floatWin.Height())
+	})
+	t.Run("slow clicks start a move drag instead", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		click(wm, 4, 0)
+		wm.winBarPressTime = time.Now().Add(-time.Second)
+		wm.Handle(mouseEv(term.MouseLeft, 4, 0))
+		assert.Equal(t, winDragMove, wm.winDrag)
+		assert.Equal(t, 8, floatWin.Width())
+		wm.Handle(mouseEv(term.MouseRelease, 4, 0))
+	})
+	t.Run("close icon clicks do not maximize", func(t *testing.T) {
+		wm, _, _, _, floatWin := prepareWindowBarTest(t)
+		click(wm, component.WindowBarCloseIconX, 0)
+		assert.True(t, floatWin.Closed())
+	})
+}
+
+func TestTileEdgeResizeDrag(t *testing.T) {
+	t.Run("right edge sets a fixed tile width", func(t *testing.T) {
+		lh, rh := handler.NewTestHandler(), handler.NewTestHandler()
+		wm := NewWindowManager(lh, DefaultWindowManagerConfig())
+		wm.Resize(30, 12)
+		lw := wm.Focus()
+		_, ok := wm.SplitVertical(lw, rh)
+		require.True(t, ok)
+		require.Equal(t, 15, lw.Width())
+
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 14, 5))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 19, 5))
+		wm.Handle(mouseEv(term.MouseRelease, 19, 5))
+		// tiles relayout on draw
+		wm.Draw(term.NewStringWriter(30, 12))
+		assert.Equal(t, 20, lw.Width())
+	})
+	t.Run("bottom edge sets a fixed tile height", func(t *testing.T) {
+		th, bh := handler.NewTestHandler(), handler.NewTestHandler()
+		wm := NewWindowManager(th, DefaultWindowManagerConfig())
+		wm.Resize(30, 12)
+		tw := wm.Focus()
+		_, ok := wm.SplitHorizontal(tw, bh)
+		require.True(t, ok)
+		require.Equal(t, 6, tw.Height())
+
+		_, handled := wm.Handle(mouseEv(term.MouseLeft, 5, 5))
+		assert.True(t, handled)
+		wm.Handle(mouseEv(term.MouseLeft, 5, 8))
+		wm.Handle(mouseEv(term.MouseRelease, 5, 8))
+		wm.Draw(term.NewStringWriter(30, 12))
+		assert.Equal(t, 9, tw.Height())
+	})
+}
+
+// TestWindowBarScrollBarPrecedence pins that pressing the scroll bar
+// thumb on a window's right edge starts a scroll drag rather than an
+// edge resize.
+func TestWindowBarScrollBarPrecedence(t *testing.T) {
+	buf := cell.NewBuffer()
+	buf.WriteString("a\nb\nc\nd\ne\nf\n")
+	sh := scrollableHandler{Scrollable: component.NewScroll(buf)}
+	cfg := DefaultWindowManagerConfig()
+	cfg.ScrollBarChar = '|'
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(12, 4)
+	lw := wm.Focus()
+	rw, ok := wm.SplitVertical(lw, sh)
+	require.True(t, ok)
+	wm.SetFocus(rw)
+	// the writer materializes the scroll bar on the frame
+	writer := term.NewStringWriter(12, 4)
+	wm.Draw(writer)
+
+	frame, ok := rw.Frame()
+	require.True(t, ok)
+	barPos, _, ok := frame.ScrollBar()
+	require.True(t, ok)
+
+	// press on the thumb: window-local coordinates of the right tile
+	pos := rw.Position()
+	wm.Handle(mouseEv(term.MouseLeft, pos.X+barPos.X, pos.Y+barPos.Y))
+	assert.Equal(t, 0, int(wm.winDrag), "scroll bar press must not start a resize drag")
+	assert.True(t, wm.prevMouseScrollBarDrag)
+	wm.Handle(mouseEv(term.MouseRelease, pos.X+barPos.X, pos.Y+barPos.Y))
 }

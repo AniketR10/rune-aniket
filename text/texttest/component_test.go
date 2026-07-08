@@ -422,7 +422,7 @@ func TestComponentOpen(t *testing.T) {
 │                            │
 │                            │
 │                            │
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  File file:///tmp/busy is  │
 │  already open by another   │
@@ -484,7 +484,7 @@ func TestComponentOpen(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  File file:///tmp/more is  │
 │  already open by another   │
@@ -510,7 +510,7 @@ func TestComponentOpen(t *testing.T) {
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAAAAAAAAAAAA│
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  File file:///tmp/m is     │
 │  already open by another   │
@@ -673,7 +673,7 @@ func TestComponentOpen(t *testing.T) {
 │                            │
 │                            │
 │                            │
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  File file:///tmp/busy is  │
 │  already open by another   │

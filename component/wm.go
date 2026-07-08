@@ -40,7 +40,33 @@ type WindowManagerConfig struct {
 	ScrollBarChar rune
 	component.FrameCharSet
 	NoMaxSize bool
+
+	// WindowBar replaces the top frame line of floating windows with a
+	// solid bar drawn with WindowBarCharSet, and displays CloseIcon at
+	// the top-left of the bar. It has no effect when Frame is false.
+	WindowBar        bool
+	WindowBarCharSet WindowBarCharSet
+	CloseIcon        rune
+	CloseIconAttr    term.Attributes
 }
+
+// WindowBarCharSet is the set of characters used to draw the window
+// bar over a floating window's top frame line.
+type WindowBarCharSet struct {
+	Left, Horizontal, Right rune
+}
+
+// WindowBarCloseIconX is the bar-local X offset at which the close
+// icon is rendered on a floating window's bar.
+const WindowBarCloseIconX = 1
+
+// WindowBarOptOut can be implemented by floating window content to
+// keep the plain window frame instead of the window bar.
+type WindowBarOptOut interface{ NoWindowBar() }
+
+// WindowTitler can be implemented by floating window content to
+// provide a title rendered on the window bar.
+type WindowTitler interface{ WindowTitle() string }
 
 // WindowManager wraps a TileTree to provide an easier API.
 type WindowManager struct {
@@ -135,7 +161,10 @@ func (wm *WindowManager) RestoreTileLayout(
 		win := newFloatingNode(wm, floating, FloatingConfig{
 			Alignment: floatingLayout.Alignment,
 			Offset:    floatingLayout.Offset,
+			NoBar:     windowBarOptOut(c),
+			Title:     windowTitle(c),
 		}, wm.minimizedWidth, wm.minimizedHeight)
+		wm.applyWindowBar(win)
 		wm.float = append(wm.float, win)
 		ret[floatingLayout.WindowID] = wm.nodeToWindow(win)
 		if floatingLayout.MinimizedAlignment != 0 {
@@ -191,6 +220,7 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 
 	if f.minimized == 0 {
 		f.Draw(&nonMinimizedW)
+		wm.drawWindowBar(f, &nonMinimizedW)
 		return
 	}
 
@@ -430,7 +460,7 @@ func (wm *WindowManager) SetFrameCharSet(b component.FrameCharSet) {
 
 	wm.config.FrameCharSet = b
 	wm.Iterate(func(w Window) {
-		w.node.Content().(*component.Frame).FrameCharSet = b
+		w.SetFrameCharSet(b)
 	})
 }
 
@@ -455,6 +485,12 @@ type FloatingConfig struct {
 	// Offset is to be applied to the position of the window
 	// after alignment has been determined.
 	Offset term.Coordinates
+	// NoBar keeps the plain window frame instead of the window bar
+	// when the WindowManager is configured with WindowBar.
+	NoBar bool
+	// Title is rendered centered on the window bar. When empty, the
+	// content is queried for a WindowTitler implementation.
+	Title string
 }
 
 // FloatingWindow creates a floating window.
@@ -464,7 +500,14 @@ func (wm *WindowManager) FloatingWindow(
 	if wm.config.Frame {
 		content = wm.withFrame(content)
 	}
+	if !cfg.NoBar {
+		cfg.NoBar = windowBarOptOut(content)
+	}
+	if cfg.Title == "" {
+		cfg.Title = windowTitle(content)
+	}
 	f := newFloatingNode(wm, content, cfg, wm.minimizedWidth, wm.minimizedHeight)
+	wm.applyWindowBar(f)
 	wm.float = append(wm.float, f)
 	wm.minimizedDirty = true
 	return wm.nodeToWindow(f)
@@ -479,7 +522,157 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 		FrameCharSet:  charset,
 		NoMaxSize:     true,
 		ScrollBarAttr: term.Attributes{Attrs: term.AttrBold},
+		WindowBar:     true,
+		WindowBarCharSet: WindowBarCharSet{
+			Left:       '█',
+			Horizontal: '█',
+			Right:      '█',
+		},
+		CloseIcon:     '●',
+		CloseIconAttr: term.Attributes{Fg: term.ColorRed},
 	}
+}
+
+// barCharSet overrides the top frame characters of cs with the
+// configured window bar characters.
+func (wm *WindowManager) barCharSet(cs component.FrameCharSet) component.FrameCharSet {
+	cs.TopLeft = wm.config.WindowBarCharSet.Left
+	cs.HorizontalTop = wm.config.WindowBarCharSet.Horizontal
+	cs.TopRight = wm.config.WindowBarCharSet.Right
+	return cs
+}
+
+// applyWindowBar overrides the top frame chars of a floating node's
+// frame with the window bar charset when the bar is enabled.
+func (wm *WindowManager) applyWindowBar(f *floatingNode) {
+	if !wm.hasWindowBar(f) {
+		return
+	}
+	frame := f.Content().(*component.Frame)
+	frame.FrameCharSet = wm.barCharSet(frame.FrameCharSet)
+}
+
+func (wm *WindowManager) hasWindowBar(f *floatingNode) bool {
+	return wm.config.Frame && wm.config.WindowBar && !f.noBar
+}
+
+// drawWindowBar draws the close icon and the window title over a
+// floating window's bar. The icon and title cells take the bar's
+// foreground as their background so they read as part of the bar.
+func (wm *WindowManager) drawWindowBar(f *floatingNode, w term.Writer) {
+	if !wm.hasWindowBar(f) || f.realWidth < 3 || f.realHeight < 3 {
+		return
+	}
+	barAttr := f.Content().(*component.Frame).Attributes
+	if wm.config.CloseIcon != 0 {
+		attr := wm.config.CloseIconAttr
+		attr.Bg = barAttr.Fg
+		pos := f.realOffset
+		pos.X += WindowBarCloseIconX
+		w.SetCell(pos, term.Cell{
+			Width:      1,
+			Ch:         wm.config.CloseIcon,
+			Attributes: attr,
+		})
+	}
+	wm.drawWindowTitle(f, barAttr, w)
+}
+
+func (wm *WindowManager) drawWindowTitle(
+	f *floatingNode, barAttr term.Attributes, w term.Writer,
+) {
+	if f.title == "" {
+		return
+	}
+	// interior bar cells span [1, realWidth-2]; keep one bar cell
+	// after the close icon so the icon stays distinguishable.
+	minX := WindowBarCloseIconX + 2
+	maxX := f.realWidth - 2
+	avail := maxX - minX + 1
+	if avail < 3 {
+		return
+	}
+	title := []rune(" " + f.title + " ")
+	if len(title) > avail {
+		title = title[:avail]
+	}
+	attr := term.Attributes{Fg: barAttr.Bg, Bg: barAttr.Fg}
+	start := f.realOffset.X + minX + (avail-len(title))/2
+	for i, r := range title {
+		w.SetCell(term.Coordinates{X: start + i, Y: f.realOffset.Y},
+			term.Cell{Width: 1, Ch: r, Attributes: attr})
+	}
+}
+
+// MoveWindow moves a floating window so its top-left corner sits at
+// pos, given in the same coordinate space as Window.Position. The
+// position is clamped so the window remains fully visible. It returns
+// false if win is not a floating window or is minimized.
+func (wm *WindowManager) MoveWindow(win Window, pos term.Coordinates) bool {
+	fn, ok := win.node.(*floatingNode)
+	if !ok || fn.minimized != 0 {
+		return false
+	}
+	if wm.minimizedDirty {
+		wm.Resize(wm.width, wm.height)
+	}
+	pos.X -= wm.minimizedOffset.X
+	pos.Y -= wm.minimizedOffset.Y
+	fn.maximized = false
+	fn.alignment = 0
+	fn.updateDesiredDimensions()
+	pos.X = max(0, min(pos.X, fn.maxWidth-fn.desiredWidth))
+	pos.Y = max(0, min(pos.Y, fn.maxHeight-fn.desiredHeight))
+	fn.desiredOffset = pos
+	fn.resize()
+	return true
+}
+
+// ToggleMaximize grows a floating window to cover the whole window
+// manager area, or restores its previous geometry when it is already
+// maximized. It returns false if win is not a floating window or is
+// minimized. Any later move or resize of the window drops the
+// maximized state and keeps the new geometry.
+func (wm *WindowManager) ToggleMaximize(win Window) bool {
+	fn, ok := win.node.(*floatingNode)
+	if !ok || fn.minimized != 0 {
+		return false
+	}
+	if wm.minimizedDirty {
+		wm.Resize(wm.width, wm.height)
+	}
+	if fn.maximized {
+		fn.maximized = false
+		fn.alignment = fn.restoreAlignment
+		fn.desiredOffset = fn.restoreOffset
+	} else {
+		fn.restoreAlignment = fn.alignment
+		fn.restoreOffset = fn.desiredOffset
+		fn.maximized = true
+		fn.alignment = 0
+		fn.desiredOffset = term.Coordinates{}
+	}
+	fn.updateDesiredDimensions()
+	fn.resize()
+	return true
+}
+
+func windowBarOptOut(c tui.Component) bool {
+	if f, ok := c.(*component.Frame); ok {
+		c = f.Content()
+	}
+	_, ok := c.(WindowBarOptOut)
+	return ok
+}
+
+func windowTitle(c tui.Component) string {
+	if f, ok := c.(*component.Frame); ok {
+		c = f.Content()
+	}
+	if t, ok := c.(WindowTitler); ok {
+		return t.WindowTitle()
+	}
+	return ""
 }
 
 func (wm *WindowManager) withFrame(handler tui.Component) *component.Frame {

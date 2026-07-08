@@ -25,6 +25,7 @@ package handler
 
 import (
 	"fmt"
+	"time"
 
 	compapi "github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -43,7 +44,27 @@ type WindowManagerConfig struct {
 	FocusFrameAttr     term.Attributes
 	FocusFrameCharSet  compapi.FrameCharSet
 	ScrollBarHoverChar rune
+	// OnBarCloseClick is invoked when the close icon on a floating
+	// window's bar is clicked. Returning true marks the click as
+	// handled; otherwise the window is closed via Window.Close.
+	OnBarCloseClick func(win Window) bool
 }
+
+// winDragMode is a bitmask describing an in-progress window drag
+// started from a floating window's bar or a window's frame edge.
+type winDragMode uint8
+
+const (
+	winDragMove winDragMode = 1 << iota
+	winDragLeft
+	winDragRight
+	winDragBottom
+	winDragTop
+)
+
+// windowBarDoubleClickTimeout is the maximum delay between two bar
+// presses for them to count as a maximize/restore double click.
+const windowBarDoubleClickTimeout = 500 * time.Millisecond
 
 // WindowManager implements Handler as a tiled window manager.
 type WindowManager struct {
@@ -57,6 +78,11 @@ type WindowManager struct {
 	prevMouseLeftChild       component.Window
 	prevMouseScrollBarOffset int
 	prevMouseLeftDrag        bool
+	winDrag                  winDragMode
+	winDragWin               component.Window
+	winDragGrab              term.Coordinates
+	winBarPressID            uint64
+	winBarPressTime          time.Time
 }
 
 // WindowSubscriber wraps the OnFocus callback used
@@ -144,6 +170,12 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			wm.prevMouseLeftDrag = false
 			wm.prevMouseLeftChild = component.Window{}
 		}
+		if wm.winDrag != 0 && wm.winDragWin.Closed() {
+			wm.resetWindowDrag()
+		}
+		if wm.winDrag != 0 {
+			return wm.handleWindowDrag(mousePos, ev)
+		}
 		if wm.prevMouseScrollBarDrag {
 			childAtMouse = wm.prevMouseLeftChild
 			ok = true
@@ -188,6 +220,12 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			} else {
 				// lost scroll bar; content could have changed
 				wm.resetScrollBarMouse()
+			}
+		}
+
+		if ev.Key == term.MouseLeft && !wm.prevMouseLeftDrag && wm.config.Frame {
+			if exit, handled, done := wm.handleWindowFramePress(childAtMouse, ev); done {
+				return exit, handled
 			}
 		}
 
@@ -563,6 +601,7 @@ func (wm *WindowManager) RestoreTileLayout(
 	})
 	wm.prevMouseScrollBarDrag = false
 	wm.prevMouseLeftChild = component.Window{}
+	wm.resetWindowDrag()
 	ret := make(map[uint64]Window, len(components))
 	for id, win := range components {
 		ret[id] = wm.newNode(win)
@@ -616,6 +655,179 @@ func (wm *WindowManager) UnsubscribeAll() {
 
 func (wm *WindowManager) resetScrollBarMouse() {
 	wm.prevMouseScrollBarDrag = false
+}
+
+func (wm *WindowManager) resetWindowDrag() {
+	wm.winDrag = 0
+	wm.winDragWin = component.Window{}
+}
+
+// handleWindowDrag routes mouse events while a window move/resize drag
+// is in progress. mouse is in root coordinates.
+func (wm *WindowManager) handleWindowDrag(
+	mouse term.Coordinates, ev term.Event,
+) (exit, handled bool) {
+	switch ev.Key {
+	case term.MouseLeft:
+		wm.applyWindowDrag(mouse)
+		return false, true
+	case term.MouseRelease:
+		wm.resetWindowDrag()
+		return false, true
+	default:
+		wm.resetWindowDrag()
+		return false, false
+	}
+}
+
+// windows smaller than this cannot fit a frame plus content.
+const minWindowDragSize = 3
+
+func (wm *WindowManager) applyWindowDrag(mouse term.Coordinates) {
+	win := wm.winDragWin
+	if wm.winDrag&winDragMove != 0 {
+		wm.comp.MoveWindow(win, term.Coordinates{
+			X: mouse.X - wm.winDragGrab.X,
+			Y: mouse.Y - wm.winDragGrab.Y,
+		})
+		return
+	}
+	pos := win.Position()
+	if wm.winDrag&winDragRight != 0 {
+		if width := mouse.X - pos.X + 1; width >= minWindowDragSize {
+			_ = wm.comp.SetWidth(win, width)
+		}
+	}
+	if wm.winDrag&winDragBottom != 0 {
+		if height := mouse.Y - pos.Y + 1; height >= minWindowDragSize {
+			_ = wm.comp.SetHeight(win, height)
+		}
+	}
+	newX := pos.X
+	if wm.winDrag&winDragLeft != 0 {
+		right := pos.X + win.Width()
+		if width := right - mouse.X; width >= minWindowDragSize &&
+			wm.comp.SetWidth(win, width) {
+			// relayout so Width reflects the effective width (floats
+			// grow to their content's desired size), then pin the
+			// right edge in place.
+			wm.comp.MoveWindow(win, pos)
+			newX = right - win.Width()
+		}
+	}
+	newY := pos.Y
+	if wm.winDrag&winDragTop != 0 {
+		bottom := pos.Y + win.Height()
+		if height := bottom - mouse.Y; height >= minWindowDragSize &&
+			wm.comp.SetHeight(win, height) {
+			// same as the left edge: relayout, then pin the bottom
+			// edge in place.
+			wm.comp.MoveWindow(win, pos)
+			newY = bottom - win.Height()
+		}
+	}
+	// Pin the floating window's top-left corner so resizes keep the
+	// window in place regardless of its alignment; this also forces a
+	// relayout so Width/Height reflect the new size immediately.
+	// MoveWindow is a no-op for tiles, which relayout on draw.
+	wm.comp.MoveWindow(win, term.Coordinates{X: newX, Y: newY})
+}
+
+// handleWindowFramePress detects presses on a floating window's bar
+// (close icon or start of a move drag) and on frame edges (start of a
+// resize drag). Event coordinates are window-local. done reports
+// whether the press was consumed.
+func (wm *WindowManager) handleWindowFramePress(
+	win component.Window, ev term.Event,
+) (exit, handled, done bool) {
+	if _, minimized := win.IsMinimized(); minimized {
+		return
+	}
+	wx, wy := ev.MouseX, ev.MouseY
+	w, h := win.Width(), win.Height()
+	if !win.IsFloating() {
+		var mode winDragMode
+		if wx == w-1 {
+			mode |= winDragRight
+		}
+		if wy == h-1 {
+			mode |= winDragBottom
+		}
+		if mode == 0 {
+			return
+		}
+		wm.winDrag = mode
+		wm.winDragWin = win
+		return false, true, true
+	}
+	if win.HasWindowBar() && wy == 0 {
+		return wm.handleWindowBarPress(win, wx, w)
+	}
+	var mode winDragMode
+	if wx == 0 {
+		mode |= winDragLeft
+	}
+	if wx == w-1 {
+		mode |= winDragRight
+	}
+	if wy == h-1 {
+		mode |= winDragBottom
+	}
+	if wy == 0 {
+		mode |= winDragTop
+	}
+	if mode == 0 {
+		return
+	}
+	wm.SetFocus(wm.newNode(win))
+	wm.winDrag = mode
+	wm.winDragWin = win
+	return false, true, true
+}
+
+// handleWindowBarPress routes a press on a floating window's bar: the
+// close icon closes the window, the corner cells start a diagonal
+// resize drag, a double press toggles maximize, and any other cell
+// starts a move drag.
+func (wm *WindowManager) handleWindowBarPress(
+	win component.Window, wx, w int,
+) (exit, handled, done bool) {
+	switch wx {
+	case component.WindowBarCloseIconX:
+		return wm.closeFromBar(win)
+	case 0, w - 1:
+		wm.SetFocus(wm.newNode(win))
+		wm.winDrag = winDragTop | winDragLeft
+		if wx == w-1 {
+			wm.winDrag = winDragTop | winDragRight
+		}
+		wm.winDragWin = win
+		return false, true, true
+	}
+	wm.SetFocus(wm.newNode(win))
+	if win.ID() == wm.winBarPressID &&
+		time.Since(wm.winBarPressTime) < windowBarDoubleClickTimeout {
+		wm.winBarPressID = 0
+		wm.comp.ToggleMaximize(win)
+		return false, true, true
+	}
+	wm.winBarPressID = win.ID()
+	wm.winBarPressTime = time.Now()
+	wm.winDrag = winDragMove
+	wm.winDragWin = win
+	wm.winDragGrab = term.Coordinates{X: wx, Y: 0}
+	return false, true, true
+}
+
+func (wm *WindowManager) closeFromBar(win component.Window) (
+	exit, handled, done bool,
+) {
+	bw := wm.newNode(win)
+	if cb := wm.config.OnBarCloseClick; cb != nil && cb(bw) {
+		return false, true, true
+	}
+	_ = bw.Close()
+	return false, true, true
 }
 
 // contentBounds returns the maximum local (X, Y) inside win's content

@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	tcomponent "unstable.build/go-tui/component"
 	thandler "unstable.build/go-tui/handler"
 )
 
@@ -952,6 +953,73 @@ func TestComponentCloseFloatingReentrantWindowClose(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = b.Close()
 	})
+}
+
+// TestWindowBarCloseIconClick covers the window-bar close routing: a
+// press on the close icon must run through Component.closeWindow so
+// the windows map is cleaned and the handler is released.
+func TestWindowBarCloseIconClick(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+	b.Resize(30, 14)
+	h := newTestHandler()
+	win := b.Floating(h, browserapi.FloatingConfig{})
+	require.Equal(t, 1, b.FloatingWindows())
+	require.Len(t, b.windows, 2)
+
+	pos := win.(*browserWindow).win.Position()
+	wmPos := b.WindowManagerPosition()
+	_, handled := b.Handle(term.Event{
+		Type:   term.EventMouse,
+		Key:    term.MouseLeft,
+		MouseX: wmPos.X + pos.X + tcomponent.WindowBarCloseIconX,
+		MouseY: wmPos.Y + pos.Y,
+	})
+	assert.True(t, handled)
+	assert.Equal(t, 0, b.FloatingWindows())
+	assert.Len(t, b.windows, 1, "windows map must be cleaned")
+	assert.True(t, h.closed, "handler must be released")
+}
+
+type noBarNopHandler struct {
+	*nopHandler
+}
+
+func (noBarNopHandler) NoWindowBar() {}
+
+type titledNopHandler struct {
+	*nopHandler
+	title string
+}
+
+func (h titledNopHandler) WindowTitle() string { return h.title }
+
+// TestFloatingWindowBarOptOut covers that handlers implementing
+// component.WindowBarOptOut open bar-less floating windows even though
+// the browser wraps them in browserContent adapters.
+func TestFloatingWindowBarOptOut(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+	b.Resize(30, 14)
+
+	optOut := b.Floating(noBarNopHandler{newTestHandler()}, browserapi.FloatingConfig{})
+	assert.False(t, optOut.(*browserWindow).win.HasWindowBar())
+
+	regular := b.Floating(newTestHandler(), browserapi.FloatingConfig{})
+	assert.True(t, regular.(*browserWindow).win.HasWindowBar())
+}
+
+// TestFloatingWindowTitle covers that handlers implementing
+// component.WindowTitler open floating windows with a bar title even
+// though the browser wraps them in browserContent adapters.
+func TestFloatingWindowTitle(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+	b.Resize(30, 14)
+
+	titled := b.Floating(titledNopHandler{newTestHandler(), "hi"},
+		browserapi.FloatingConfig{})
+	assert.Equal(t, "hi", titled.(*browserWindow).win.Title())
+
+	regular := b.Floating(newTestHandler(), browserapi.FloatingConfig{})
+	assert.Empty(t, regular.(*browserWindow).win.Title())
 }
 
 func TestComponentCloseOtherWindows(t *testing.T) {

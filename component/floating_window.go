@@ -39,6 +39,14 @@ type floatingNode struct {
 	userWidth, userHeight       int
 	minimized                   component.Alignment
 	minimizedPadding            int
+	noBar                       bool
+	title                       string
+
+	// maximized covers the whole window manager area; the restore
+	// fields hold the pre-maximize geometry for ToggleMaximize.
+	maximized        bool
+	restoreAlignment component.Alignment
+	restoreOffset    term.Coordinates
 
 	realWidth, realHeight int              // calculated upon Resize, considering trimming
 	realOffset            term.Coordinates // calculated offset with alignment
@@ -58,6 +66,8 @@ func newFloatingNode(
 	ret := new(floatingNode)
 	ret.desiredOffset = cfg.Offset
 	ret.alignment = cfg.Alignment
+	ret.noBar = cfg.NoBar
+	ret.title = cfg.Title
 	ret.maxWidth = maxWidth
 	ret.maxHeight = maxHeight
 	ret.wm = wm
@@ -189,6 +199,7 @@ func (w *floatingNode) setWidth(width int) bool {
 	if w.minimized != 0 && width < compWidth && width != 0 { // width 0 resets
 		return false
 	}
+	w.maximized = false
 	w.userWidth = width
 	return true
 }
@@ -198,18 +209,28 @@ func (w *floatingNode) setHeight(height int) bool {
 	if w.minimized != 0 && height < compHeight && height != 0 { // height 0 resets
 		return false
 	}
+	w.maximized = false
 	w.userHeight = height
 	return true
 }
 
 func (w *floatingNode) updateDesiredDimensions() {
+	if w.maximized {
+		w.desiredWidth, w.desiredHeight = w.maxWidth, w.maxHeight
+		return
+	}
 	w.desiredWidth, w.desiredHeight = w.compDimensions()
+	// a user-set size overrides the content's desired size in both
+	// directions, so windows can also be resized below it
+	if w.userHeight != 0 {
+		w.desiredHeight = w.userHeight
+	}
+	if w.userWidth != 0 {
+		w.desiredWidth = w.userWidth
+	}
 	if w.wm.config.NoMaxSize {
-		w.desiredHeight = min(w.maxHeight-2, max(w.userHeight, w.desiredHeight))
-		w.desiredWidth = min(w.maxWidth-2, max(w.userWidth, w.desiredWidth))
-	} else {
-		w.desiredHeight = max(w.userHeight, w.desiredHeight)
-		w.desiredWidth = max(w.userWidth, w.desiredWidth)
+		w.desiredHeight = min(w.maxHeight-2, w.desiredHeight)
+		w.desiredWidth = min(w.maxWidth-2, w.desiredWidth)
 	}
 }
 

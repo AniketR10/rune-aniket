@@ -276,6 +276,14 @@ browser:
             fg: "#f0f0f0"
         scroll_bar_char: '|'
         scroll_bar_hover_char: 'X'
+        window_bar: true
+        window_bar_charset:
+            left: '▓'
+            horizontal: '▒'
+            right: '░'
+        close_icon: 'x'
+        close_icon_attr:
+            fg: yellow
     frameunion_charset:
         left: '┣'
         right: '┫'
@@ -762,6 +770,14 @@ func TestConfigSetting(t *testing.T) {
 			ScrollBarAttr: term.Attributes{Fg: term.GetColor("#f0f0f0")},
 			ScrollBarChar: '|',
 			NoMaxSize:     true,
+			WindowBar:     true,
+			WindowBarCharSet: tcomponent.WindowBarCharSet{
+				Left:       '▓',
+				Horizontal: '▒',
+				Right:      '░',
+			},
+			CloseIcon:     'x',
+			CloseIconAttr: term.Attributes{Fg: term.ColorYellow},
 		},
 		Dim:                false,
 		ScrollBarHoverChar: 'X',

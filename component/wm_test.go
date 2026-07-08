@@ -1975,6 +1975,8 @@ func assertEqualTile(t *testing.T, win Window, expected rune) {
 func testWindowManagerConfig() WindowManagerConfig {
 	ret := DefaultWindowManagerConfig()
 	ret.NoMaxSize = true
+	// bar rendering is covered by the TestWindowBar* tests
+	ret.WindowBar = false
 	return ret
 }
 
@@ -2044,4 +2046,435 @@ func TestWindowManagerIterateCloseTilesDuringIteration(t *testing.T) {
 	// The survivor must still be positionable; a detached tile here is
 	// what crashed the host on the next cursor calculation.
 	assert.NotPanics(t, func() { _ = keep.Position() })
+}
+
+type noBarFloating struct {
+	component.Floating
+}
+
+func (noBarFloating) NoWindowBar() {}
+
+type titledFloating struct {
+	component.Floating
+	title string
+}
+
+func (f titledFloating) WindowTitle() string { return f.title }
+
+// TestWindowBarDraw covers window bar rendering: floating windows get
+// the solid bar plus the close icon, tiles keep the plain top frame,
+// and NoBar/opt-out floats keep the plain frame.
+func TestWindowBarDraw(t *testing.T) {
+	newFloating := func() component.Floating {
+		return component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2)
+	}
+	tests := []struct {
+		name     string
+		open     func(wm *WindowManager)
+		expected string
+	}{
+		{
+			name: "floating window draws bar and close icon",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(newFloating(), FloatingConfig{
+					Offset: term.Coordinates{X: 1, Y: 1},
+				})
+			},
+			expected: `
+┌──────────────────┐
+│█●██CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+│└──┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+		{
+			name: "NoBar floating window keeps plain frame",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(newFloating(), FloatingConfig{
+					Offset: term.Coordinates{X: 1, Y: 1},
+					NoBar:  true,
+				})
+			},
+			expected: `
+┌──────────────────┐
+│┌──┐CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+│└──┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+		{
+			name: "WindowBarOptOut content keeps plain frame",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(noBarFloating{newFloating()}, FloatingConfig{
+					Offset: term.Coordinates{X: 1, Y: 1},
+				})
+			},
+			expected: `
+┌──────────────────┐
+│┌──┐CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+││BB│CCCCCCCCCCCCCC│
+│└──┘CCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := term.NewStringWriter(20, 8)
+			cfg := DefaultWindowManagerConfig()
+			cfg.NoMaxSize = true
+			wm, _ := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+			wm.Resize(20, 8)
+			comptest.TestComponent(t, wm, w, []comptest.TestCase{
+				{Action: func() { tt.open(wm) }, Expected: tt.expected},
+			})
+		})
+	}
+}
+
+// TestWindowBarSetFrameCharSet pins the bar override through frame
+// charset swaps (as the handler does on focus changes): the bar chars
+// must survive SetFrameCharSet on both the manager and the window.
+func TestWindowBarSetFrameCharSet(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	cfg.NoMaxSize = true
+	wm, _ := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+	wm.Resize(20, 8)
+	win := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2),
+		FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}},
+	)
+
+	win.SetFrameCharSet(component.FrameCharSetDefault())
+	cs, ok := win.FrameCharSet()
+	require.True(t, ok)
+	assert.Equal(t, '█', cs.TopLeft)
+	assert.Equal(t, '█', cs.HorizontalTop)
+	assert.Equal(t, '█', cs.TopRight)
+	assert.Equal(t, '─', cs.HorizontalBottom)
+
+	wm.SetFrameCharSet(component.FrameCharSetDefault())
+	cs, ok = win.FrameCharSet()
+	require.True(t, ok)
+	assert.Equal(t, '█', cs.TopLeft)
+
+	// the tile keeps the plain charset
+	wm.tree.Iterate(func(node *TileNode) {
+		tileCS := node.Content().(*component.Frame).FrameCharSet
+		assert.Equal(t, '┌', tileCS.TopLeft)
+	})
+}
+
+// TestWindowBarTitleDraw covers title rendering on the window bar:
+// titles come from FloatingConfig.Title or a WindowTitler content,
+// are centered after the close icon, truncated to the available bar
+// cells, and dropped entirely on bar-less windows.
+func TestWindowBarTitleDraw(t *testing.T) {
+	newFloating := func() component.Floating {
+		return component.StaticFloating(&component.TestComponent{Ch: 'B'}, 10, 2)
+	}
+	tests := []struct {
+		name     string
+		open     func(wm *WindowManager)
+		expected string
+	}{
+		{
+			name: "config title is centered on the bar",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(newFloating(), FloatingConfig{
+					Offset: term.Coordinates{X: 1, Y: 1},
+					Title:  "cmd",
+				})
+			},
+			expected: `
+┌──────────────────┐
+│█●██ cmd ███CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+│└──────────┘CCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+		{
+			name: "WindowTitler content provides the title",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(titledFloating{newFloating(), "hi"},
+					FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
+			},
+			expected: `
+┌──────────────────┐
+│█●███ hi ███CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+│└──────────┘CCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+		{
+			name: "config title takes precedence over WindowTitler",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(titledFloating{newFloating(), "hi"},
+					FloatingConfig{
+						Offset: term.Coordinates{X: 1, Y: 1},
+						Title:  "cmd",
+					})
+			},
+			expected: `
+┌──────────────────┐
+│█●██ cmd ███CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+│└──────────┘CCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+		{
+			name: "long titles are truncated to the bar",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(newFloating(), FloatingConfig{
+					Offset: term.Coordinates{X: 1, Y: 1},
+					Title:  "aVeryLongTitleThatOverflows",
+				})
+			},
+			expected: `
+┌──────────────────┐
+│█●█ aVeryLo█CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+│└──────────┘CCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+		{
+			name: "NoBar windows draw no title",
+			open: func(wm *WindowManager) {
+				wm.FloatingWindow(newFloating(), FloatingConfig{
+					Offset: term.Coordinates{X: 1, Y: 1},
+					Title:  "cmd",
+					NoBar:  true,
+				})
+			},
+			expected: `
+┌──────────────────┐
+│┌──────────┐CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+││BBBBBBBBBB│CCCCCC│
+│└──────────┘CCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := term.NewStringWriter(20, 8)
+			cfg := DefaultWindowManagerConfig()
+			cfg.NoMaxSize = true
+			wm, _ := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+			wm.Resize(20, 8)
+			comptest.TestComponent(t, wm, w, []comptest.TestCase{
+				{Action: func() { tt.open(wm) }, Expected: tt.expected},
+			})
+		})
+	}
+}
+
+// cellRecorder captures the last cell written at each coordinate so
+// tests can assert cell attributes, which string writers drop.
+type cellRecorder struct {
+	term.Writer
+	cells map[term.Coordinates]term.Cell
+}
+
+func (r *cellRecorder) SetCell(pos term.Coordinates, c term.Cell) {
+	r.cells[pos] = c
+	r.Writer.SetCell(pos, c)
+}
+
+// TestWindowBarAttrs pins the bar continuity attributes: the close
+// icon and title cells use the frame foreground as their background,
+// with the configured icon foreground and the frame background as the
+// title foreground.
+func TestWindowBarAttrs(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	cfg.NoMaxSize = true
+	cfg.FrameAttr = term.Attributes{Fg: term.ColorBlue, Bg: term.ColorBlack}
+	wm, _ := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+	wm.Resize(20, 8)
+	wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 10, 2),
+		FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}, Title: "cmd"},
+	)
+
+	rec := &cellRecorder{
+		Writer: term.NewStringWriter(20, 8),
+		cells:  make(map[term.Coordinates]term.Cell),
+	}
+	wm.Draw(rec)
+
+	icon := rec.cells[term.Coordinates{X: 1 + WindowBarCloseIconX, Y: 1}]
+	assert.Equal(t, '●', icon.Ch)
+	assert.Equal(t, term.ColorRed, icon.Attributes.Fg,
+		"icon keeps the configured foreground")
+	assert.Equal(t, term.ColorBlue, icon.Attributes.Bg,
+		"icon background is the bar foreground")
+
+	title := rec.cells[term.Coordinates{X: 6, Y: 1}]
+	assert.Equal(t, 'c', title.Ch)
+	assert.Equal(t, term.ColorBlack, title.Attributes.Fg,
+		"title foreground is the frame background")
+	assert.Equal(t, term.ColorBlue, title.Attributes.Bg,
+		"title background is the bar foreground")
+}
+
+// TestWindowManagerToggleMaximize covers maximize/restore geometry,
+// tracking window manager resizes while maximized, and that moves or
+// resizes drop the maximized state.
+func TestWindowManagerToggleMaximize(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	cfg.NoMaxSize = true
+	wm, tile := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+	wm.Resize(20, 8)
+	win := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2),
+		FloatingConfig{Alignment: component.AlignmentCentered},
+	)
+	require.Equal(t, term.Coordinates{X: 8, Y: 2}, win.Position())
+
+	assert.False(t, wm.ToggleMaximize(tile), "tiles cannot be maximized")
+
+	require.True(t, wm.ToggleMaximize(win))
+	assert.Equal(t, term.Coordinates{}, win.Position())
+	assert.Equal(t, 20, win.Width())
+	assert.Equal(t, 8, win.Height())
+
+	// a maximized window tracks manager resizes
+	wm.Resize(30, 10)
+	assert.Equal(t, 30, win.Width())
+	assert.Equal(t, 10, win.Height())
+
+	// restore returns to the pre-maximize geometry
+	require.True(t, wm.ToggleMaximize(win))
+	assert.Equal(t, term.Coordinates{X: 13, Y: 3}, win.Position())
+	assert.Equal(t, 4, win.Width())
+	assert.Equal(t, 4, win.Height())
+
+	// moving a maximized window drops the maximized state
+	require.True(t, wm.ToggleMaximize(win))
+	require.True(t, wm.MoveWindow(win, term.Coordinates{X: 2, Y: 2}))
+	assert.Equal(t, term.Coordinates{X: 2, Y: 2}, win.Position())
+	assert.Equal(t, 4, win.Width())
+	assert.Equal(t, 4, win.Height())
+
+	// resizing a maximized window drops the maximized state
+	require.True(t, wm.ToggleMaximize(win))
+	require.True(t, wm.SetWidth(win, 6))
+	require.True(t, wm.MoveWindow(win, term.Coordinates{X: 0, Y: 0}))
+	assert.Equal(t, 6, win.Width())
+	assert.Equal(t, 4, win.Height())
+
+	// minimized windows cannot be maximized
+	require.True(t, win.MinimizeDown(0))
+	assert.False(t, wm.ToggleMaximize(win))
+}
+
+// TestWindowManagerMoveWindow covers MoveWindow positioning, clamping
+// to full visibility, WindowAt lookups after a move, and layout
+// round-trips through RestoreTileLayout.
+func TestWindowManagerMoveWindow(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	cfg.NoMaxSize = true
+	wm, tile := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+	wm.Resize(20, 8)
+	// 2x2 content + frame = 4x4 window
+	win := wm.FloatingWindow(
+		component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2),
+		FloatingConfig{Alignment: component.AlignmentCentered},
+	)
+
+	assert.False(t, wm.MoveWindow(tile, term.Coordinates{X: 1, Y: 1}),
+		"tiles cannot be moved")
+
+	require.True(t, wm.MoveWindow(win, term.Coordinates{X: 3, Y: 2}))
+	assert.Equal(t, term.Coordinates{X: 3, Y: 2}, win.Position())
+
+	at, ok := wm.WindowAt(term.Coordinates{X: 4, Y: 3})
+	require.True(t, ok)
+	assert.Equal(t, win.ID(), at.ID())
+	at, ok = wm.WindowAt(term.Coordinates{X: 1, Y: 1})
+	require.True(t, ok)
+	assert.Equal(t, tile.ID(), at.ID())
+
+	// clamp to full visibility: window is 4x4 in a 20x8 manager
+	require.True(t, wm.MoveWindow(win, term.Coordinates{X: 100, Y: 100}))
+	assert.Equal(t, term.Coordinates{X: 16, Y: 4}, win.Position())
+	require.True(t, wm.MoveWindow(win, term.Coordinates{X: -3, Y: -3}))
+	assert.Equal(t, term.Coordinates{X: 0, Y: 0}, win.Position())
+
+	// a minimized floating window cannot be moved
+	require.True(t, win.MinimizeDown(0))
+	assert.False(t, wm.MoveWindow(win, term.Coordinates{X: 1, Y: 1}))
+	require.True(t, win.Unminimize())
+
+	// moved position round-trips through TileLayout/RestoreTileLayout
+	require.True(t, wm.MoveWindow(win, term.Coordinates{X: 5, Y: 3}))
+	layout := wm.TileLayout()
+	require.Len(t, layout.Floating, 1)
+	assert.Equal(t, term.Coordinates{X: 5, Y: 3}, layout.Floating[0].Offset)
+
+	restored := wm.RestoreTileLayout(layout, func(windowID uint64) tui.Component {
+		if windowID == layout.Floating[0].WindowID {
+			return component.StaticFloating(&component.TestComponent{Ch: 'B'}, 2, 2)
+		}
+		return &component.TestComponent{Ch: 'C'}
+	})
+	restoredWin, ok := restored[layout.Floating[0].WindowID]
+	require.True(t, ok)
+	assert.Equal(t, term.Coordinates{X: 5, Y: 3}, restoredWin.Position())
+}
+
+// TestFloatingWindowUserResizeShrinks asserts that a user-set size
+// resizes a floating window below its content's desired size — the
+// regression that made edge drags on content-sized floats no-ops —
+// and that a zero size resets back to the content-driven size.
+func TestFloatingWindowUserResizeShrinks(t *testing.T) {
+	for _, noMaxSize := range []bool{false, true} {
+		t.Run(fmt.Sprintf("NoMaxSize=%v", noMaxSize), func(t *testing.T) {
+			cfg := DefaultWindowManagerConfig()
+			cfg.NoMaxSize = noMaxSize
+			wm, _ := NewWindowManager(&component.TestComponent{Ch: 'C'}, cfg)
+			wm.Resize(20, 10)
+			// 6x4 content + frame = 8x6 desired
+			win := wm.FloatingWindow(
+				component.StaticFloating(&component.TestComponent{Ch: 'B'}, 6, 4),
+				FloatingConfig{},
+			)
+			require.Equal(t, 8, win.Width())
+			require.Equal(t, 6, win.Height())
+
+			require.True(t, wm.SetWidth(win, 5))
+			require.True(t, wm.SetHeight(win, 4))
+			require.True(t, wm.MoveWindow(win, term.Coordinates{}))
+			assert.Equal(t, 5, win.Width())
+			assert.Equal(t, 4, win.Height())
+
+			require.True(t, wm.SetWidth(win, 0))
+			require.True(t, wm.SetHeight(win, 0))
+			require.True(t, wm.MoveWindow(win, term.Coordinates{}))
+			assert.Equal(t, 8, win.Width())
+			assert.Equal(t, 6, win.Height())
+		})
+	}
 }

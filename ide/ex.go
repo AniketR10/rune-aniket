@@ -97,6 +97,7 @@ var ErrFlushPendingQuit = errors.New(
 type pluginHandler interface {
 	browserapi.Floating
 	OnFocusChange(bool)
+	Title() string
 }
 
 type macroRecorder interface {
@@ -340,9 +341,18 @@ func (e *ex) init(
 		plugin.WithCommandExpander(cmdenv.NewCommandSubstResolver(
 			e.executor, e.config.EnvSource)),
 	}
+	// "!" plugins float with a window bar that shows the command as
+	// its title, so drop the command from the plugin's own bar. Task
+	// windows keep it: they can be tiled, where there is no bar.
+	floatPluginOpts := pluginOpts
+	if e.config.WindowManagerConfig.Frame &&
+		e.config.WindowManagerConfig.WindowBar {
+		floatPluginOpts = append(slices.Clip(pluginOpts),
+			plugin.WithoutBarCommand())
+	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return plugin.New(e.Browser(), e.Browser(), e.executor, e.workspace,
-			e.tm, args, e.width, pluginOpts...)
+			e.tm, args, e.width, floatPluginOpts...)
 	}
 	e.dispatchOnPreview = dispatchOnPreview
 	e.macro = macro
@@ -2832,6 +2842,12 @@ func (e *ex) focusHandler() tui.Handler {
 type pluginAdapter struct {
 	pluginHandler
 	win browser.Window
+}
+
+// WindowTitle satisfies component.WindowTitler so the floating
+// window's bar displays the plugin's title.
+func (h *pluginAdapter) WindowTitle() string {
+	return h.pluginHandler.Title()
 }
 
 type workspaceExecutorAdapter struct {

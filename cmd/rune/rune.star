@@ -687,6 +687,19 @@ config = {
             "scroll_bar_attr":       attr(fg = "blue", bg = "default"),
             "scroll_bar_char":       "▐",
             "scroll_bar_hover_char": "█",
+            # Solid bar drawn over floating windows' top frame line.
+            # Dragging the bar moves the window, dragging edges resizes
+            # it, double-clicking it maximizes the window, and the close
+            # icon closes it. The icon and title backgrounds follow the
+            # frame foreground.
+            "window_bar":            True,
+            "window_bar_charset":    {
+                "left":       "█",
+                "horizontal": "█",
+                "right":      "█",
+            },
+            "close_icon":            "",
+            "close_icon_attr":       attr(fg = "red"),
         },
         "union_frames":       False,
         "frameunion_charset": {
@@ -798,7 +811,7 @@ config = {
             "animation": "⠃⠅⠆⠘⠨⠰⠉⠒⠤⠑⠡⠢⠊⠌⠔⠇⠸⠎⠱⠣⠜⠪⠕⠋⠙⠓⠚⠍⠩⠥⠬⠖⠲⠦⠴⠏⠹⠧⠼⠫⠝⠮⠵⠺⠗⠞⠳⠛⠭⠶⠟⠻⠷⠾⠯⠽⠿",
             "bar_background_attr": attr(bg = "default"),
             # Whether the plugin bar is rendered at the bottom instead of top.
-            "bar_align_bottom":    False,
+            "bar_align_bottom":    True,
         },
     },
 }
@@ -945,6 +958,7 @@ if tui:
                 "scroll_bar_attr":       attr(fg = "#c6c6c6", bg = "#1e1e1e"),
                 "scroll_bar_char":       "┃",
                 "scroll_bar_hover_char": "║",
+                "window_bar":            False,
             },
             "tab_name_separator":  "  ",
             "frameunion_charset":  {
@@ -980,5 +994,8 @@ if tui:
             "attr":                  attr(fg = "default", bg = "#1e1e1e"),
             "selection_attr":        attr(flags = "reverse"),
             "needs_attention_attr":  attr(fg = "red", flags = "blink"),
+            "plugin": {
+                "bar_align_bottom":    False,
+            },
         },
     })

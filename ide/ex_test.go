@@ -1090,7 +1090,7 @@ IIII`},
 			`┌────┌─────────────┐
 │o o.│ wasup: Z    │
 ├────└─────────────┘
-│┌────┐BBBBBBBBBBBB│
+│█●████BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
 ││AAAA│BBBBBBBBBBBB│
 │└────┘BBBBBBBBBBBB│
@@ -1101,7 +1101,7 @@ IIII`},
 			`┌────┌─────────────┐
 │o o.│ cannot      │
 ├────│ reload      │
-│┌───│ this        │
+│█●██│ this        │
 ││AAA│ content     │
 ││AAA└─────────────┘
 │└───┌─────────────┐
@@ -2937,6 +2937,31 @@ func TestCommandPromptUsesSharedStoragePartition(t *testing.T) {
 	assert.Equal(t, int32(0), store.partitionCloseCount.Load())
 }
 
+// TestCommandPromptHasNoWindowBar pins that the command prompt keeps
+// its plain hand-drawn frame with the window bar feature enabled by
+// default: the bar override applies only to floating windows of framed
+// window managers, and the prompt overlay browser runs frameless.
+func TestCommandPromptHasNoWindowBar(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor(), text.WithCommandKey(testCommandKey))
+	defer b.Close()
+	b.Resize(40, 20)
+
+	b.ex.openCommandPrompt()
+	require.NotNil(t, b.ex.cmd)
+
+	w := term.NewStringWriter(40, 20)
+	b.Draw(w)
+	require.NoError(t, w.Flush())
+	out := w.String()
+	assert.NotContains(t, out, "█",
+		"the command prompt must not render the window bar")
+	assert.NotContains(t, out, "●",
+		"the command prompt must not render the close icon")
+	assert.Contains(t, out, "─",
+		"the prompt keeps the configured frame charset")
+	require.NoError(t, b.ex.cmdWin.Close())
+}
+
 // TestCommandPromptShaderGating verifies that the prompt shader is
 // created only when commandPromptCfg.shader.enabled is set, and is
 // torn down whenever the prompt closes.
@@ -3312,8 +3337,8 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		{":! sleep 20>",
 			`┌──────────────────────────────────────┐
 │                                      │
-├──┌────────────────────────────────┐──┤
-│  │ ▀          sleep 20          0s│  │
+├──█●███████████ sleep 20 ███████████──┤
+│  │ ▀                            0s│  │
 │  │▐                               │  │
 │  │                                │  │
 │  │                                │  │
@@ -3336,8 +3361,8 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		{":! sleep 20>",
 			`┌──────────────────────────────────────┐
 │                                      │
-├──┌────────────────────────────────┐──┤
-│  │ ▀          sleep 20          0s│  │
+├──█●███████████ sleep 20 ███████████──┤
+│  │ ▀                            0s│  │
 │  │▐                               │  │
 │  │                                │  │
 │  │                                │  │
@@ -3360,8 +3385,8 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		{":! sleep 20>",
 			`┌──────────────────────────────────────┐
 │                                      │
-├──┌────────────────────────────────┐──┤
-│  │ ▀          sleep 20          0s│  │
+├──█●███████████ sleep 20 ███████████──┤
+│  │ ▀                            0s│  │
 │  │▐                               │  │
 │  │                                │  │
 │  │                                │  │
@@ -3372,8 +3397,8 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		{":windowcloseall>",
 			`┌────────────────────────┌─────────────┐
 │                        │ cannot      │
-├──┌─────────────────────│ close all   │
-│  │ ▐          sleep 20 │ tiled       │
+├──█●███████████ sleep 20│ close all   │
+│  │ ▐                   │ tiled       │
 │  │▐                    │ windows     │
 │  │                     └─────────────┘
 │  │                                │  │
@@ -3384,7 +3409,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		{":noticloseall>:! sh -c 'sleep 20 && echo $FILE'>",
 			`┌──────────────────────────────────────┐
 │                                      │
-├──┌────────────────────────────────┐──┤
+├──█●█ sh -c 'sh -c sleep 20 && echo█──┤
 │  │ ▀                            0s│  │
 │  │▐                               │  │
 │  │                                │  │
@@ -3396,7 +3421,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 		{":windowclose>:windowclose>:edit a>:! sh -c 'sleep 20 && echo $FILE'>",
 			`┌──────────────────────────────────────┐
 │o a                                   │
-├──┌────────────────────────────────┐──┤
+├──█●█ sh -c 'sh -c sleep 20 && echo█──┤
 │  │ ▀                            0s│  │
 │  │▐                               │  │
 │  │                                │  │
@@ -3435,13 +3460,106 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 	handlertest.TestHandlerSequence(t, b, 40, 10, cases)
 }
 
+// TestWindowMouseResizeIntegration asserts that dragging a floating
+// window's bar and edges through the full ex stack (browser frame
+// union included) moves and resizes the window.
+func TestWindowMouseResizeIntegration(t *testing.T) {
+	newFloatEx := func(t *testing.T) testEx {
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+			text.WithEventPublisher(nopPublishEvent),
+			text.WithFloatingNoMaxSize(false),
+		}
+		tempDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+		uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+		require.NoError(t, err)
+		fileScheme, err := workspace.NewFileScheme(
+			context.Background(), config.NopConfig(), uri)
+		require.NoError(t, err)
+		t.Cleanup(func() { fileScheme.Close() })
+		ws := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
+		b := newExForTestingTerminal(t, ws, modeless.Editor(),
+			vte.DefaultConfig(), nopPublishEvent, plugin.DefaultBarConfig(), opts...)
+		t.Cleanup(func() { _ = b.Close() })
+
+		b.Resize(40, 10)
+		handleTaskInputSequence(b, ":! sleep 20>")
+		b.Draw(term.NewStringWriter(40, 10))
+		return b
+	}
+	// the main window manager's row 0 sits below the two tab bar rows
+	const wmTop = 2
+	mouse := func(b testEx, key term.Key, x, y int) {
+		b.Handle(term.Event{Type: term.EventMouse, Key: key, MouseX: x, MouseY: y})
+	}
+	floatWin := func(t *testing.T, b testEx) browser.Window {
+		win := b.ex.comp.Browser().Focus()
+		require.True(t, win.IsFloating())
+		require.Equal(t, 34, win.Width())
+		require.Equal(t, 8, win.Height())
+		require.Equal(t, term.Coordinates{X: 3, Y: 0}, win.Position())
+		return win
+	}
+
+	t.Run("right edge drag grows the float", func(t *testing.T) {
+		b := newFloatEx(t)
+		win := floatWin(t, b)
+		mouse(b, term.MouseLeft, 36, wmTop+3)
+		mouse(b, term.MouseLeft, 38, wmTop+3)
+		mouse(b, term.MouseRelease, 38, wmTop+3)
+		assert.Equal(t, 36, win.Width())
+	})
+	t.Run("bottom edge drag shrinks the float", func(t *testing.T) {
+		b := newFloatEx(t)
+		win := floatWin(t, b)
+		mouse(b, term.MouseLeft, 20, wmTop+7)
+		mouse(b, term.MouseLeft, 20, wmTop+5)
+		mouse(b, term.MouseRelease, 20, wmTop+5)
+		assert.Equal(t, 6, win.Height())
+	})
+	t.Run("right edge drag shrinks the float", func(t *testing.T) {
+		b := newFloatEx(t)
+		win := floatWin(t, b)
+		mouse(b, term.MouseLeft, 36, wmTop+3)
+		mouse(b, term.MouseLeft, 30, wmTop+3)
+		mouse(b, term.MouseRelease, 30, wmTop+3)
+		assert.Equal(t, 28, win.Width())
+	})
+	t.Run("left edge drag keeps the right edge fixed", func(t *testing.T) {
+		b := newFloatEx(t)
+		win := floatWin(t, b)
+		mouse(b, term.MouseLeft, 3, wmTop+3)
+		mouse(b, term.MouseLeft, 1, wmTop+3)
+		mouse(b, term.MouseRelease, 1, wmTop+3)
+		assert.Equal(t, 36, win.Width())
+		assert.Equal(t, term.Coordinates{X: 1, Y: 0}, win.Position())
+	})
+	t.Run("bar drag moves the float", func(t *testing.T) {
+		b := newFloatEx(t)
+		win := floatWin(t, b)
+		// the float spans the full manager height; shrink it first so
+		// there is room to move vertically
+		mouse(b, term.MouseLeft, 20, wmTop+7)
+		mouse(b, term.MouseLeft, 20, wmTop+5)
+		mouse(b, term.MouseRelease, 20, wmTop+5)
+		require.Equal(t, 6, win.Height())
+		mouse(b, term.MouseLeft, 20, wmTop)
+		mouse(b, term.MouseLeft, 19, wmTop+1)
+		mouse(b, term.MouseRelease, 19, wmTop+1)
+		assert.Equal(t, term.Coordinates{X: 2, Y: 1}, win.Position())
+	})
+}
+
 func TestIntegrationCompanionTerminal(t *testing.T) {
 
 	cases := []handlertest.SequenceTestCase{
 		{":!>_______",
 			`┌──────────────────┐
 │                  │
-├┌────────────────┐┤
+├█●████████████████┤
 ││sh ▐            ││
 ││                ││
 ││                ││
@@ -3465,7 +3583,7 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 		{":!>", // no need to wait now, it should pick previous session
 			`┌──────────────────┐
 │                  │
-├┌────────────────┐┤
+├█●████████████████┤
 ││sh ▐            ││
 ││                ││
 ││                ││
@@ -4070,7 +4188,7 @@ func TestMoveWindowContent(t *testing.T) {
 		{":terminalnew>:! sh>:windowmove left>:windowmove right>",
 			`┌────┌─────────────┐
 │o aa│ cannot      │
-├───┌│ move        │
+├───█│ move        │
 │   ││ ▐indow in   │
 │   ││ this        │
 │   ││ direction   │
@@ -5093,7 +5211,7 @@ func TestRunStopTasks(t *testing.T) {
 			{"<:windowfocus right>",
 				`┌────────────────────────────┐
 │                            │
-├┌──┌────────────────────────┤
+├┌──█●███████████████████████┤
 ││  │ ▀       echo b         │
 ││  │start command: context c│
 ││  │anceled▐                │
@@ -5126,7 +5244,7 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────────────────┐
 │                            │
 ├┌──────────────────────────┐┤
-│┌──────────────────────────┐│
+│█●██████████████████████████│
 ││                          ││
 ││  A task with the name    ││
 ││  "validateAssets"        ││
@@ -5141,7 +5259,7 @@ func TestRunStopTasks(t *testing.T) {
 			{"y:windowfocus right>",
 				`┌────────────────────────────┐
 │                            │
-├┌──┌────────────────────────┤
+├┌──█●███████████████████████┤
 ││  │ ▀    task   echo b   │
 ││  │start command: context c│
 ││  │anceled▐                │
@@ -5318,7 +5436,7 @@ func TestRunStopTasks(t *testing.T) {
 				`┌────────────────────────────┐
 │o abc  8 tests  8 build     │
 ├─────────────┐┌─────────────┤
-┌────────────────────────────┐
+█●████████████████████████████
 │                            │
 │  A task with the name      │
 │  "build" already exists.   │
@@ -5415,7 +5533,7 @@ func runTaskSequenceSettled(
 // frame and focus highlight (what these cases exercise) are. Frame glyphs and
 // the top tab-bar rows are preserved; everything else is replaced with spaces.
 func maskTaskInterior(frame string) string {
-	const frameGlyphs = "│┌┐└┘├┤┬┴─━╮╭╰╯"
+	const frameGlyphs = "│┌┐└┘├┤┬┴─━╮╭╰╯█●"
 	lines := strings.Split(frame, "\n")
 	for i, line := range lines {
 		if i < 2 {

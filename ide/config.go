@@ -1860,6 +1860,69 @@ func (c ideConfig) windowNoMaxSize() (ret bool) {
 	return
 }
 
+func (c ideConfig) windowBar() bool {
+	return c.windowManagerBool("window_bar", defaultWindowManagerConfig.WindowBar)
+}
+
+func (c ideConfig) windowBarCharset() (cs tcomponent.WindowBarCharSet) {
+	cs = defaultWindowManagerConfig.WindowBarCharSet
+	cfg, ok := c.windowManager()
+	if !ok {
+		return
+	}
+	sub, err := cfg.GetConfig("window_bar_charset")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["window_manager.window_bar_charset"] = err
+		}
+		return
+	}
+	fields := []struct {
+		key string
+		dst *rune
+	}{
+		{"left", &cs.Left},
+		{"horizontal", &cs.Horizontal},
+		{"right", &cs.Right},
+	}
+	for _, f := range fields {
+		r, err := sub.GetRune(f.key)
+		if err != nil {
+			if err != config.ErrNotFound {
+				c.errors[fmt.Sprintf("window_manager.window_bar_charset.%s", f.key)] = err
+			}
+			continue
+		}
+		*f.dst = r
+	}
+	return
+}
+
+// windowCloseIcon reads window_manager.close_icon and returns the
+// first rune of the configured string. An empty string disables the
+// close icon.
+func (c ideConfig) windowCloseIcon() rune {
+	cfg, ok := c.windowManager()
+	if !ok {
+		return defaultWindowManagerConfig.CloseIcon
+	}
+	s, err := cfg.GetString("close_icon")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["window_manager.close_icon"] = err
+		}
+		return defaultWindowManagerConfig.CloseIcon
+	}
+	for _, r := range s {
+		return r
+	}
+	return 0
+}
+
+func (c ideConfig) windowCloseIconAttr() term.Attributes {
+	return c.windowAttr("close_icon_attr", defaultWindowManagerConfig.CloseIconAttr)
+}
+
 func (c ideConfig) windowFocusFrameCharset() (cs component.FrameCharSet) {
 	return c.windowCharset("focus_frame_charset",
 		defaultWindowManagerConfig.FocusFrameCharSet)
@@ -1989,12 +2052,16 @@ func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 		FocusFrameCharSet:  c.windowFocusFrameCharset(),
 		ScrollBarHoverChar: c.windowScrollBarHoverChar(),
 		WindowManagerConfig: tcomponent.WindowManagerConfig{
-			NoMaxSize:     c.windowNoMaxSize(),
-			Frame:         c.frame(),
-			FrameAttr:     c.windowFrameAttr(),
-			FrameCharSet:  c.windowFrameCharset(),
-			ScrollBarAttr: c.windowScrollBarAttr(),
-			ScrollBarChar: c.windowScrollBarChar(),
+			NoMaxSize:        c.windowNoMaxSize(),
+			Frame:            c.frame(),
+			FrameAttr:        c.windowFrameAttr(),
+			FrameCharSet:     c.windowFrameCharset(),
+			ScrollBarAttr:    c.windowScrollBarAttr(),
+			ScrollBarChar:    c.windowScrollBarChar(),
+			WindowBar:        c.windowBar(),
+			WindowBarCharSet: c.windowBarCharset(),
+			CloseIcon:        c.windowCloseIcon(),
+			CloseIconAttr:    c.windowCloseIconAttr(),
 		},
 	}
 }

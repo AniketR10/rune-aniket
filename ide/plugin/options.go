@@ -107,6 +107,15 @@ func WithBarConfig(barConfig BarConfig) Option {
 	}
 }
 
+// WithoutBarCommand returns an option that removes the command and
+// args from the top bar layout. Useful when the command is displayed
+// elsewhere, such as on a floating window's bar.
+func WithoutBarCommand() Option {
+	return func(cfg *handlerConfig) {
+		cfg.noBarCommand = true
+	}
+}
+
 // WithCommandExpander returns an option that installs a
 // vte.CommandExpander into the underlying vte.Config. The expander
 // runs in a background goroutine after the pty is created but
@@ -126,6 +135,7 @@ type handlerConfig struct {
 	frameCharSet component.FrameCharSet
 	frameAttr    term.Attributes
 	title        string
+	noBarCommand bool
 }
 
 func defaultConfig() handlerConfig {

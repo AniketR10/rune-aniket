@@ -64,6 +64,8 @@ type Handler struct {
 	nonInteractiveMinWidth  int
 	nonInteractiveMinHeight int
 
+	title string
+
 	// interactive mode state
 	interactiveHeight int
 	interactiveWidth  int
@@ -137,6 +139,12 @@ func (p *Handler) Dimensions() (int, int) {
 		return width, height
 	}
 	return p.interactiveWidth, p.interactiveHeight
+}
+
+// Title returns the bar title: the command and args unless
+// overridden via WithTitle.
+func (p *Handler) Title() string {
+	return p.title
 }
 
 // Handle satisfies browser.Floating.
@@ -251,6 +259,17 @@ func (h *Handler) initState(
 	title := config.title
 	if config.title == "" {
 		title = strings.Join(cmdAndArgs, " ")
+	}
+	h.title = title
+	if config.noBarCommand {
+		layout := make([]BarComponent, 0, len(config.bar.Layout))
+		for _, c := range config.bar.Layout {
+			if c.Type == BarCommand {
+				continue
+			}
+			layout = append(layout, c)
+		}
+		config.bar.Layout = layout
 	}
 
 	interrupter := browser.EventPublisherInterrupter(publisher)
