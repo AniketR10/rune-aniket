@@ -28,30 +28,19 @@ import (
 )
 
 // Enforcement tuning knobs. Everything is expressed as a duration so
-// a manual test build can shrink the whole timeline (e.g. minutes
-// instead of days) by editing only these constants.
-//
-// MANUAL TEST VALUES — DO NOT COMMIT. Production values:
-//
-//	evaluateInterval  = 24 * time.Hour
-//	usageBucket       = 24 * time.Hour
-//	qualifyWindow     = 7 * usageBucket
-//	qualifyingBuckets = 3
-//	nagRun            = 2 * qualifyWindow
-//	lockdownRun       = 6 * qualifyWindow
-//	nagCooldown       = 24 * time.Hour
-//	askMoreTimeRun    = lockdownRun - qualifyWindow
+// the whole timeline can be shrunk (e.g. minutes instead of days) by
+// editing only these constants.
 const (
 	// evaluateInterval is how far ahead the policies schedule their
 	// next evaluation.
-	evaluateInterval = 5 * time.Second
+	evaluateInterval = 24 * time.Hour
 	// usageBucket is the resolution at which samples count as
 	// distinct usage evidence; the planner persists at most one
 	// usage sample per bucket.
-	usageBucket = 10 * time.Second
+	usageBucket = 24 * time.Hour
 	// qualifyWindow counts toward an enforcement run when it
 	// contains at least qualifyingBuckets distinct usage buckets.
-	qualifyWindow = 3 * usageBucket
+	qualifyWindow = 7 * usageBucket
 	// qualifyingBuckets is the minimum distinct usage buckets a
 	// window needs to qualify.
 	qualifyingBuckets = 3
@@ -62,7 +51,7 @@ const (
 	// which expired users are locked out.
 	lockdownRun = 6 * qualifyWindow
 	// nagCooldown is the minimum interval between upgrade prompts.
-	nagCooldown = 30 * time.Second
+	nagCooldown = 24 * time.Hour
 	// askMoreTimeRun is the consecutive qualifying usage run after
 	// which the nag prompt is replaced by the ask-more-time prompt.
 	// It covers the last qualifying window before lockdownRun so the
