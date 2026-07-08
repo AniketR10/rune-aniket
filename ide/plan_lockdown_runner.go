@@ -381,7 +381,7 @@ func planLockdownPromptSpec(reason idelockdown.LockReason) (
 			[]string{optLockSignIn}, []term.KeyComb{{Ch: 's'}}
 	case idelockdown.LockNeverSubscribed:
 		return "**Rune requires a Pro subscription.** " +
-				"Upgrade to Pro, or sign in with a different account.",
+				"Upgrade to Pro, or re-sign in if you've already upgraded your account.",
 			[]string{optLockUpgrade, optLockSignIn},
 			[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}}
 	default:
