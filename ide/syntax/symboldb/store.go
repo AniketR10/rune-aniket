@@ -37,7 +37,7 @@ const (
 	// its derived tables (such as the names partition) may not exist,
 	// and per-file records alone cannot rebuild them because unchanged
 	// files are normally skipped.
-	schemaVersion = 1
+	schemaVersion = 2
 )
 
 // Kinds of stored symbol locations. Refs and defs answer 2-part
@@ -73,9 +73,22 @@ type symbolLoc struct {
 
 // symbolDoc aggregates every known location of one qualified symbol
 // name. Stored in the symbols partition under the name itself.
+//
+// Version is a compare-and-swap counter: concurrent indexer workers
+// merge their per-file contributions through Update calls
+// preconditioned on it. Docs written before the counter existed carry
+// no Version field; writers match that absence with a nil
+// precondition, so a decoded Version of 0 always means "not yet
+// stamped" — no writer ever stores 0.
+//
+// A doc whose Locs are empty is a tombstone: the symbol vanished from
+// every file that contributed it. Deleting the doc instead would race
+// a concurrent worker's location add, because Delete takes no
+// preconditions. Readers treat an empty doc as a miss.
 type symbolDoc struct {
-	Name string
-	Locs []symbolLoc
+	Name    string
+	Locs    []symbolLoc
+	Version int64
 }
 
 // nameDoc marks one symbol name as listed. Stored in the names

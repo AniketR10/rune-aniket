@@ -630,6 +630,67 @@ func TestStaleServingWhileReindexInFlight(t *testing.T) {
 	require.NoError(t, p.Wait(context.Background()))
 }
 
+// TestCloseAbandonsDirtyQueue asserts Close does not drain the dirty
+// queue: it runs on the editor event loop during workspace close, so
+// the worker must abandon queued entries as soon as the lifecycle
+// context is canceled instead of processing each one against a
+// canceled context.
+func TestCloseAbandonsDirtyQueue(t *testing.T) {
+	e := newEnv(t)
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{pkg: "mypkg", defs: []string{"Widget"}})
+	p := e.start(t)
+	require.NoError(t, p.Wait(context.Background()))
+
+	gate := newQueryGate()
+	e.fake.setGate(uri, gate)
+	e.touch(t, "a.go")
+	p.Handle(context.Background(), textapi.Event{
+		Type: textapi.EventTypeFlush, URI: uri,
+	})
+	<-gate.reached
+
+	// The worker is blocked mid-extraction: queued entries accumulate.
+	for i := range 20 {
+		u, err := e.fs.URI(fmt.Sprintf("b%d.go", i))
+		require.NoError(t, err)
+		p.Handle(context.Background(), textapi.Event{
+			Type: textapi.EventTypeCreate, URI: u,
+		})
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- p.Close() }()
+	<-p.ctx.Done()
+	close(gate.release)
+	require.NoError(t, <-closed)
+
+	p.mu.Lock()
+	remaining := len(p.dirty)
+	p.mu.Unlock()
+	assert.NotZero(t, remaining,
+		"Close must abandon the dirty queue, not drain it")
+}
+
+// TestCloseDuringInitialScanJoinsWorkers asserts Close abandons the
+// scan's queued results without leaving its extraction and walk
+// goroutines behind: goleak (TestMain) flags any that outlive Close.
+func TestCloseDuringInitialScanJoinsWorkers(t *testing.T) {
+	e := newEnv(t)
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{pkg: "mypkg", defs: []string{"Widget"}})
+	gate := newQueryGate()
+	e.fake.setGate(uri, gate)
+	p := e.start(t)
+	<-gate.reached
+
+	closed := make(chan error, 1)
+	go func() { closed <- p.Close() }()
+	<-p.ctx.Done()
+	close(gate.release)
+	require.NoError(t, <-closed)
+}
+
 func TestFlushReindexesFile(t *testing.T) {
 	e := newEnv(t)
 	uri := e.writeFile(t, "a.go")
@@ -682,6 +743,89 @@ func TestRemoveDropsContributions(t *testing.T) {
 	resolve(t, p, "iterator.Iterator")
 	assert.Equal(t, before+1, e.fake.totalResolveCalls())
 	assert.Empty(t, listReferenced(t, p))
+}
+
+// TestConcurrentScanMergesSharedSymbols floods the scan workers with
+// files that all contribute locations to the same symbol names: every
+// contribution must survive the concurrent compare-and-swap merges on
+// the shared docs.
+func TestConcurrentScanMergesSharedSymbols(t *testing.T) {
+	e := newEnv(t)
+	const files = 32
+	uris := make([]string, files)
+	for i := range files {
+		uri := e.writeFile(t, fmt.Sprintf("f%d.go", i))
+		e.fake.setGoFile(uri, goFile{
+			pkg:  "mypkg",
+			refs: [][2]string{{"iterator", "Iterator"}},
+			defs: []string{"Widget"},
+		})
+		uris[i] = uri.String()
+	}
+	p := e.start(t)
+	require.NoError(t, p.Wait(context.Background()))
+
+	symbols, err := e.db.Partition(symbolsPartition)
+	require.NoError(t, err)
+	for _, name := range []string{"iterator.Iterator", "mypkg.Widget"} {
+		var doc symbolDoc
+		require.NoError(t, symbols.Get(context.Background(), name, &doc))
+		got := make([]string, 0, len(doc.Locs))
+		for _, l := range doc.Locs {
+			got = append(got, l.URI)
+		}
+		assert.ElementsMatchf(t, uris, got,
+			"doc %q must hold every file's contribution", name)
+	}
+	assert.Equal(t, []string{"iterator.Iterator", "mypkg.Widget"},
+		listReferenced(t, p))
+}
+
+// TestRemovalTombstonesSymbolDoc asserts that dropping a symbol's last
+// contributing file empties the doc instead of deleting it — Delete
+// takes no preconditions, so it could race a concurrent location add —
+// and that the tombstone reads as a miss and is resurrected in place
+// when the file returns.
+func TestRemovalTombstonesSymbolDoc(t *testing.T) {
+	e := newEnv(t)
+	uri := e.writeFile(t, "a.go")
+	gf := goFile{pkg: "mypkg", refs: [][2]string{{"iterator", "Iterator"}}}
+	e.fake.setGoFile(uri, gf)
+	p := e.start(t)
+	require.NoError(t, p.Wait(context.Background()))
+
+	require.NoError(t, os.Remove(filepath.Join(e.dir, "a.go")))
+	p.Handle(context.Background(), textapi.Event{
+		Type: textapi.EventTypeRemove, URI: uri,
+	})
+	require.NoError(t, p.Wait(context.Background()))
+
+	ctx := context.Background()
+	symbols, err := e.db.Partition(symbolsPartition)
+	require.NoError(t, err)
+	var doc symbolDoc
+	require.NoError(t, symbols.Get(ctx, "iterator.Iterator", &doc),
+		"the emptied doc must remain as a tombstone")
+	assert.Empty(t, doc.Locs)
+
+	before := e.fake.totalResolveCalls()
+	resolve(t, p, "iterator.Iterator")
+	assert.Equal(t, before+1, e.fake.totalResolveCalls(),
+		"a tombstone must read as a miss")
+	assert.Empty(t, listReferenced(t, p), "the names marker must be gone")
+
+	// The returning file resurrects the tombstone in place.
+	e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, gf)
+	p.Handle(context.Background(), textapi.Event{
+		Type: textapi.EventTypeCreate, URI: uri,
+	})
+	require.NoError(t, p.Wait(context.Background()))
+
+	matches := resolve(t, p, "iterator.Iterator")
+	require.Len(t, matches, 1)
+	assert.Equal(t, uri.String(), matches[0].URI)
+	assert.Equal(t, []string{"iterator.Iterator"}, listReferenced(t, p))
 }
 
 func TestEditEventsIgnored(t *testing.T) {
@@ -887,6 +1031,44 @@ func TestMigrationRestampAvoidsRedundantWrites(t *testing.T) {
 
 	assert.Equal(t, []string{"iterator.Iterator", "mypkg.Widget"},
 		listReferenced(t, p2))
+}
+
+// A symbol doc written before the Version counter existed stores no
+// Version field, and a 0-valued precondition would not match its
+// absence. The merge must stamp the counter through a nil precondition
+// so pre-CAS databases stay writable without a rebuild.
+func TestUpsertMergesIntoVersionlessDoc(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	files, err := e.db.Partition(filesPartition)
+	require.NoError(t, err)
+	symbols, err := e.db.Partition(symbolsPartition)
+	require.NoError(t, err)
+	names, err := e.db.Partition(namesPartition)
+	require.NoError(t, err)
+
+	legacy := struct {
+		Name string
+		Locs []symbolLoc
+	}{
+		Name: "iterator.Iterator",
+		Locs: []symbolLoc{{URI: "file:///ws/a.go", Y: 1, Kind: kindRef}},
+	}
+	require.NoError(t, symbols.Set(ctx, legacy.Name, legacy))
+
+	p := &Parser{files: files, symbols: symbols, names: names,
+		meta: e.db, ctx: ctx}
+	p.upsertSymbol(ctx, legacy.Name, "file:///ws/b.go",
+		[]symbolLoc{{URI: "file:///ws/b.go", Y: 2, Kind: kindRef}}, false)
+
+	var doc symbolDoc
+	require.NoError(t, symbols.Get(ctx, legacy.Name, &doc))
+	assert.Equal(t, int64(1), doc.Version, "the merge must stamp the counter")
+	got := make([]string, 0, len(doc.Locs))
+	for _, l := range doc.Locs {
+		got = append(got, l.URI)
+	}
+	assert.ElementsMatch(t, []string{"file:///ws/a.go", "file:///ws/b.go"}, got)
 }
 
 // durabilityOp is one write observed by durabilityRecordingStorage.

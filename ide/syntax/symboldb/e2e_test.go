@@ -34,11 +34,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/localstorage/boltdoc"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -359,16 +361,17 @@ const (
 	rsFixtures = "../syntaxtest/rust"
 )
 
-// BenchmarkInitialScan measures a cold index build over generated Go
-// files with a real tree-sitter backing parser.
-func BenchmarkInitialScan(b *testing.B) {
-	for _, files := range []int{64, 256} {
-		b.Run(fmt.Sprintf("files=%d", files), func(b *testing.B) {
-			root := b.TempDir()
-			for i := range files {
-				dir := filepath.Join(root, fmt.Sprintf("pkg%d", i%8))
-				require.NoError(b, os.MkdirAll(dir, 0o755))
-				src := fmt.Sprintf(`package pkg%d
+// benchWorkspace generates a workspace of Go files whose shared-name
+// reference ratios mirror a real repository: hot symbols such as
+// require.NoError appear 6-16 times per referencing file, so every
+// generated file mentions mylib.MyType well beyond once.
+func benchWorkspace(b *testing.B, files int) (workspaceapi.URI, workspaceapi.FileSystem) {
+	b.Helper()
+	root := b.TempDir()
+	for i := range files {
+		dir := filepath.Join(root, fmt.Sprintf("pkg%d", i%8))
+		require.NoError(b, os.MkdirAll(dir, 0o755))
+		src := fmt.Sprintf(`package pkg%d
 
 import (
 	"fmt"
@@ -383,35 +386,81 @@ func (w Widget%d) String() string { return fmt.Sprint(w.v) }
 func (w *Widget%d) Set(v mylib.MyType) { w.v = v }
 
 func New%d(v mylib.MyType) Widget%d { return Widget%d{v: v} }
-`, i%8, i, i, i, i, i, i)
-				require.NoError(b, os.WriteFile(
-					filepath.Join(dir, fmt.Sprintf("f%d.go", i)),
-					[]byte(src), 0o644))
-			}
 
-			rootURI, err := workspaceapi.ParseURI("file://" + root)
-			require.NoError(b, err)
-			scheme, err := workspace.NewFileScheme(
-				context.Background(), config.NopConfig(), rootURI)
-			require.NoError(b, err)
-			b.Cleanup(func() { _ = scheme.Close() })
+func Combine%d(a mylib.MyType, b mylib.MyType, c mylib.MyType) []mylib.MyType {
+	items := []mylib.MyType{a, b, c}
+	var out []mylib.MyType
+	for _, item := range items {
+		var tmp mylib.MyType = item
+		out = append(out, tmp)
+	}
+	var last mylib.MyType = out[0]
+	other := map[string]mylib.MyType{"last": last}
+	_ = other
+	return out
+}
+`, i%8, i, i, i, i, i, i, i)
+		require.NoError(b, os.WriteFile(
+			filepath.Join(dir, fmt.Sprintf("f%d.go", i)),
+			[]byte(src), 0o644))
+	}
+
+	rootURI, err := workspaceapi.ParseURI("file://" + root)
+	require.NoError(b, err)
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), rootURI)
+	require.NoError(b, err)
+	b.Cleanup(func() { _ = scheme.Close() })
+	return rootURI, scheme
+}
+
+// BenchmarkInitialScan measures a cold index build over generated Go
+// files with a real tree-sitter backing parser, against both the
+// in-memory stub and the production bolt backend. Bolt reuses one
+// database file with a fresh partition namespace per iteration so
+// every iteration is a cold scan without accumulating open handles.
+func BenchmarkInitialScan(b *testing.B) {
+	for _, files := range []int{64, 256} {
+		b.Run(fmt.Sprintf("files=%d", files), func(b *testing.B) {
+			rootURI, scheme := benchWorkspace(b, files)
 			backing := syntax.NewParser(scheme, pkgManagerFor(b, goFixtures), rootURI)
 
-			b.ResetTimer()
-			for range b.N {
-				p, err := New(backing, scheme, rootURI,
-					storagestub.NewInMemoryService(), &recordingNotifications{}, syncTick)
+			b.Run("db=stub", func(b *testing.B) {
+				b.ResetTimer()
+				for range b.N {
+					p, err := New(backing, scheme, rootURI,
+						storagestub.NewInMemoryService(),
+						&recordingNotifications{}, syncTick)
+					require.NoError(b, err)
+					require.NoError(b, p.Wait(context.Background()))
+					require.NoError(b, p.Close())
+				}
+			})
+
+			b.Run("db=bolt", func(b *testing.B) {
+				db, err := boltdoc.New(
+					filepath.Join(b.TempDir(), "db.data"), docbson.Marshaler())
 				require.NoError(b, err)
-				require.NoError(b, p.Wait(context.Background()))
-				require.NoError(b, p.Close())
-			}
+				b.Cleanup(func() { _ = db.Close() })
+				b.ResetTimer()
+				for i := range b.N {
+					iter, err := db.Partition(fmt.Sprintf("iter%d", i))
+					require.NoError(b, err)
+					p, err := New(backing, scheme, rootURI, iter,
+						&recordingNotifications{}, syncTick)
+					require.NoError(b, err)
+					require.NoError(b, p.Wait(context.Background()))
+					require.NoError(b, p.Close())
+					require.NoError(b, iter.Close())
+				}
+			})
 		})
 	}
 }
 
 // queryParser builds a Parser over db without starting the indexer so
 // benchmarks can populate the database directly through the real write
-// path (updateSymbol) and measure the query side in isolation.
+// path (upsertSymbol) and measure the query side in isolation.
 func queryParser(b *testing.B, db storageapi.Service) *Parser {
 	b.Helper()
 	files, err := db.Partition(filesPartition)
@@ -475,7 +524,7 @@ func BenchmarkListReferencedSymbols(b *testing.B) {
 						Kind: kind,
 					}
 				}
-				p.updateSymbol(ctx, name, "", locs, false)
+				p.upsertSymbol(ctx, name, "", locs, false)
 			}
 			b.ResetTimer()
 			for range b.N {

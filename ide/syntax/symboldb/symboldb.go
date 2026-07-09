@@ -44,12 +44,19 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/retry"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace/walkdir"
 )
+
+// retryStrategy bounds the compare-and-swap retries of upsertSymbol.
+// All of this process's writes flow through one goroutine at a time,
+// so retries only fire when another process indexes the same
+// workspace through the shared store.
+var retryStrategy = retry.DefaultStrategy
 
 // EditorEvents returns the editor event types the Parser must be
 // subscribed to in order to keep the index fresh: in-editor saves and
@@ -129,9 +136,7 @@ var _ syntaxapi.Parser = (*Parser)(nil)
 // New returns an index-backed Parser over the given backing parser and
 // workspace filesystem, persisting its database in db. Indexing starts
 // immediately in the background; queries are served from whatever
-// state the database is in. Indexing progress is reported through
-// notify, always from closures run by schedule on the editor event
-// loop.
+// state the database is in.
 func New(
 	backing Backing, fs workspaceapi.FileSystem,
 	root workspaceapi.URI, db storageapi.Service,
@@ -331,8 +336,6 @@ func (p *Parser) ResolveSymbol(
 	return iterator.FromSlice(matches), nil
 }
 
-// resolveFromIndex builds matches for name from its symbol doc. It
-// reports ok=false on any miss so the caller can pass through.
 func (p *Parser) resolveFromIndex(
 	ctx context.Context, name string, progress syntaxapi.Progress,
 ) ([]syntaxapi.Match, bool) {
@@ -368,10 +371,6 @@ func (p *Parser) resolveFromIndex(
 	return nil, false
 }
 
-// matchesForSpec converts the locations belonging to spec's language
-// into matches, one per file. Two-part names prefer reference
-// locations and fall back to definitions; three-part names use method
-// definitions only.
 func matchesForSpec(
 	spec *symbolresolve.Spec, locs []symbolLoc, isMethod bool, name string,
 ) []syntaxapi.Match {
@@ -401,10 +400,6 @@ func matchesForSpec(
 	return pick(kindDef)
 }
 
-// dedupByImport collapses matches that resolve pkg to the same import
-// path according to each match file's stored alias map, annotating the
-// surviving match with its import path. Files without a stored alias
-// for pkg are keyed by their URI.
 func (p *Parser) dedupByImport(
 	ctx context.Context, matches []syntaxapi.Match, pkg string,
 ) []syntaxapi.Match {
@@ -428,9 +423,6 @@ func (p *Parser) dedupByImport(
 	return result
 }
 
-// disambiguate prefixes each match's Display name with its import path
-// or display path, replicating the backing resolver's behavior when
-// multiple matches survive.
 func disambiguate(spec *symbolresolve.Spec, matches []syntaxapi.Match, name string) {
 	for i, m := range matches {
 		prefix := m.ImportPath
@@ -447,14 +439,7 @@ func disambiguate(spec *symbolresolve.Spec, matches []syntaxapi.Match, name stri
 // ListReferencedSymbols streams the indexed symbol names once a full
 // scan has ever completed, passing through to the backing parser until
 // then. Method-definition-only names are excluded, matching the
-// backing parser's output. Names are served from their own partition
-// of tiny marker docs: listing the symbols partition would decode
-// every stored location of every symbol just to emit names.
-//
-// The iterator is a pure setup: the source — a partition scan the
-// storage backend materializes in full, or the backing walk — is only
-// opened on the first Next. Command completion constructs this
-// iterator on the UI thread and pulls it from a background goroutine.
+// backing parser's output.
 func (p *Parser) ListReferencedSymbols(
 	_ context.Context,
 ) (iterator.Iterator[string], error) {
@@ -480,9 +465,6 @@ func (p *Parser) ListReferencedSymbols(
 	}), nil
 }
 
-// openNameSource picks the symbol-name source: the names partition
-// once a scan has ever completed, the backing parser's walk otherwise
-// or when the partition cannot be listed.
 func (p *Parser) openNameSource(
 	ctx context.Context,
 ) (iterator.Iterator[string], error) {
@@ -505,9 +487,6 @@ func (p *Parser) openNameSource(
 	}, it.Close), nil
 }
 
-// run is the single writer goroutine: it performs the initial
-// workspace scan and then drains the dirty set fed by Handle until the
-// parser is closed.
 func (p *Parser) run() {
 	defer close(p.done)
 	p.scan()
@@ -515,9 +494,14 @@ func (p *Parser) run() {
 	q := p.backing.NewQuerySession()
 	defer func() { _ = q.Close() }()
 	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		default:
+		}
 		uri, ok := p.nextDirty()
 		if ok {
-			p.processURI(q, uri)
+			p.indexFile(p.ctx, q, uri)
 			continue
 		}
 		select {
@@ -528,103 +512,87 @@ func (p *Parser) run() {
 	}
 }
 
-// scanJob is one file whose contributions must be rebuilt.
-type scanJob struct {
-	uri      workspaceapi.URI
-	rel      string
-	modTime  int64
-	spec     *symbolresolve.Spec
-	oldNames []string
-	// force marks a record written by another schema version: its
-	// derived records must be rewritten even where no state transition
-	// is observed.
-	force bool
-}
-
-type scanResult struct {
-	scanJob
-	ext symbolresolve.FileExtraction
-	err error
-}
-
-type walkOutcome struct {
-	scanned int
-	err     error
-}
-
-// scan walks the workspace once, re-indexing only the files whose
-// modification time differs from the persisted record, then drops
-// records for files no longer on disk and persists the scan-complete
-// marker. A restart over persisted state is stat-only. Extraction fans
-// out across half the available cores — indexing is a background task
-// and must not starve the editor — while every database write stays on
-// this goroutine. Memory stays bounded per file: records are read and
-// written one at a time, never accumulated into workspace-wide
-// structures.
 func (p *Parser) scan() {
 	prog := p.newScanProgress()
 	prog.start()
-	scanned := 0
-	defer func() { prog.done(scanned) }()
+	defer prog.done()
 
-	jobs := make(chan scanJob)
-	results := make(chan scanResult)
-	var wg sync.WaitGroup
+	wctx := walkdir.WithContextFilter(p.ctx, p.walkFilter())
+	it, err := walkdir.ListFiles(wctx, p.fs, ".")
+	if err != nil {
+		log.Errorf("symboldb: scan %q: %v", p.root.String(), err)
+		return
+	}
+	// Close joins the walk's traversal goroutines.
+	defer func() { _ = it.Close() }()
+
+	// Bulk-loaded records are rebuildable, so their writes ask the bolt
+	// backend to skip per-commit fsync; the completion marker below is
+	// written synced, restoring durability for everything before it.
+	nctx := bluebolt.ContextWithNoSync(p.ctx)
 	workers := max(runtime.NumCPU()/2, 1)
+	updates := make(chan fileUpdate, workers)
+	writerDone := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		defer close(writerDone)
+		for {
+			select {
+			case u, ok := <-updates:
+				if !ok {
+					return
+				}
+				p.applyFile(nctx, u)
+			case <-p.ctx.Done():
+				return
+			}
+		}
+	})
+	var wg sync.WaitGroup
 	wg.Add(workers)
 	for range workers {
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			q := p.backing.NewQuerySession()
 			defer func() { _ = q.Close() }()
-			for j := range jobs {
-				ext, err := symbolresolve.ExtractFile(p.ctx, q, j.spec, j.uri)
+			for {
+				rel, ok := it.Next(wctx)
+				if !ok {
+					return
+				}
+				if symbolresolve.SpecForFile(rel) == nil {
+					continue
+				}
+				prog.file(rel)
+				uri, err := p.fs.URI(rel)
+				if err != nil {
+					continue
+				}
+				u, ok := p.stageFile(p.ctx, q, uri.String())
+				if !ok {
+					continue
+				}
 				select {
-				case results <- scanResult{scanJob: j, ext: ext, err: err}:
+				case updates <- u:
 				case <-p.ctx.Done():
 					return
 				}
 			}
 		})
 	}
-	walk := make(chan walkOutcome, 1)
-	go debug.CapturePanicReport(func() {
-		defer close(jobs)
-		n, err := p.walkChanged(prog, jobs)
-		walk <- walkOutcome{scanned: n, err: err}
-	})
-	go debug.CapturePanicReport(func() {
-		wg.Wait()
-		close(results)
-	})
+	wg.Wait()
+	close(updates)
+	<-writerDone
 
-	// Bulk-loaded records are rebuildable, so their writes ask the bolt
-	// backend to skip per-commit fsync; the completion marker below is
-	// written synced, restoring durability for everything before it.
-	wctx := bluebolt.ContextWithNoSync(p.ctx)
-	for r := range results {
-		if r.err != nil {
-			if p.ctx.Err() != nil {
-				continue
-			}
-			log.Errorf("symboldb: extract %q: %v", r.uri.String(), r.err)
-			r.ext = symbolresolve.FileExtraction{}
-		}
-		p.applyExtraction(wctx, r.uri.String(), r.rel, r.modTime, r.ext, r.oldNames, r.force)
-	}
-
-	outcome := <-walk
-	scanned = outcome.scanned
-	if outcome.err != nil {
-		// An incomplete walk must not wipe records for files it never
-		// reached, nor claim the scan completed.
-		log.Errorf("symboldb: scan %q: %v", p.root.String(), outcome.err)
-		return
-	}
 	if p.ctx.Err() != nil {
 		return
 	}
-	p.removeMissingFiles(wctx)
+	if err := it.Err(); err != nil {
+		// An incomplete walk must not wipe records for files it never
+		// reached, nor claim the scan completed.
+		log.Errorf("symboldb: scan %q: %v", p.root.String(), err)
+		return
+	}
+	p.removeMissingFiles(nctx)
 	if p.ctx.Err() != nil {
 		return
 	}
@@ -636,68 +604,6 @@ func (p *Parser) scan() {
 	}
 }
 
-// walkChanged walks the workspace, reports per-directory progress and
-// emits one job for every file whose stored record is stale. It reads
-// file records concurrently with the scan goroutine's writes, which is
-// safe because each file's record is only written after its job — the
-// one this walk emits — has been applied.
-func (p *Parser) walkChanged(prog *scanProgress, jobs chan<- scanJob) (int, error) {
-	ctx := walkdir.WithContextFilter(p.ctx, p.walkFilter())
-	it, err := walkdir.ListFiles(ctx, p.fs, ".")
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = it.Close() }()
-
-	scanned := 0
-	// The walk runs on concurrent directory workers, so the stream hops
-	// between directories; report each directory once.
-	seenDirs := make(map[string]struct{})
-	for {
-		rel, ok := it.Next(ctx)
-		if !ok {
-			break
-		}
-		spec := symbolresolve.SpecForFile(rel)
-		if spec == nil {
-			continue
-		}
-		if dir := filepath.Dir(rel); !seen(seenDirs, dir) {
-			prog.dir(dir, scanned)
-		}
-		scanned++
-		uri, uerr := p.fs.URI(rel)
-		if uerr != nil {
-			continue
-		}
-		us := uri.String()
-		finfo, serr := p.fs.Stat(rel)
-		if serr != nil {
-			continue
-		}
-		modTime := finfo.ModTime().UnixNano()
-		var old fileDoc
-		known := p.files.Get(p.ctx, us, &old) == nil
-		if known && old.ModTime == modTime && old.Version == schemaVersion {
-			continue
-		}
-		select {
-		case jobs <- scanJob{
-			uri: uri, rel: rel, modTime: modTime,
-			spec: spec, oldNames: old.Names,
-			force: known && old.Version != schemaVersion,
-		}:
-		case <-p.ctx.Done():
-			return scanned, p.ctx.Err()
-		}
-	}
-	return scanned, it.Err()
-}
-
-// removeMissingFiles streams the persisted file records and drops the
-// contributions of every file that no longer exists on disk. Records
-// are processed one at a time so a huge workspace's file table is
-// never held in memory.
 func (p *Parser) removeMissingFiles(ctx context.Context) {
 	it, err := p.files.List(p.ctx, nil)
 	if err != nil {
@@ -715,7 +621,9 @@ func (p *Parser) removeMissingFiles(ctx context.Context) {
 			return
 		}
 		if _, serr := p.fs.Stat(doc.Path); errors.Is(serr, fs.ErrNotExist) {
-			p.removeFile(ctx, doc.URI, doc)
+			p.applyFile(ctx, fileUpdate{
+				us: doc.URI, oldNames: doc.Names, removed: true,
+			})
 		}
 	}
 }
@@ -729,21 +637,32 @@ func seen(set map[string]struct{}, key string) bool {
 	return false
 }
 
-// scanProgress reports indexing progress. Notifications route through
-// focus state and UI components that only the event loop may touch
-// (see notisRouter.focusNotifications), so indexer goroutines enqueue
-// closures through schedule instead of calling notify directly; id is
-// accessed exclusively inside those closures, which the loop
-// serializes. A dropped or failed start leaves id empty and the
-// follow-up updates degrade to no-ops.
+// hasKind reports whether locs already carry a location of kind.
+func hasKind(locs []symbolLoc, kind int) bool {
+	for _, l := range locs {
+		if l.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
 type scanProgress struct {
 	notify   browserapi.Notifications
 	schedule func(func()) bool
 	id       string
+
+	mu       sync.Mutex
+	seenDirs map[string]struct{}
+	scanned  int
 }
 
 func (p *Parser) newScanProgress() *scanProgress {
-	return &scanProgress{notify: p.notify, schedule: p.schedule}
+	return &scanProgress{
+		notify:   p.notify,
+		schedule: p.schedule,
+		seenDirs: make(map[string]struct{}),
+	}
 }
 
 func (s *scanProgress) start() {
@@ -755,9 +674,18 @@ func (s *scanProgress) start() {
 	})
 }
 
-// dir reports the directory currently being scanned. The total is
-// unknown while the walk runs, so progress advances against a moving
-// total that stays one ahead.
+func (s *scanProgress) file(rel string) {
+	s.mu.Lock()
+	dir := filepath.Dir(rel)
+	first := !seen(s.seenDirs, dir)
+	scanned := s.scanned
+	s.scanned++
+	s.mu.Unlock()
+	if first {
+		s.dir(dir, scanned)
+	}
+}
+
 func (s *scanProgress) dir(dir string, scanned int) {
 	s.schedule(func() {
 		if s.id == "" {
@@ -768,9 +696,10 @@ func (s *scanProgress) dir(dir string, scanned int) {
 	})
 }
 
-// done completes the indexing notification; progress must reach total
-// for the notification to settle.
-func (s *scanProgress) done(scanned int) {
+func (s *scanProgress) done() {
+	s.mu.Lock()
+	scanned := s.scanned
+	s.mu.Unlock()
 	s.schedule(func() {
 		if s.id == "" {
 			return
@@ -781,137 +710,197 @@ func (s *scanProgress) done(scanned int) {
 	})
 }
 
-// processURI handles one dirty entry: a missing file drops its
-// contributions, a changed one is re-indexed, an unchanged one is a
-// no-op.
-func (p *Parser) processURI(q symbolresolve.FileQueryer, us string) {
+type fileUpdate struct {
+	us       string
+	rel      string
+	modTime  int64
+	ext      symbolresolve.FileExtraction
+	oldNames []string
+	force    bool
+	removed  bool
+}
+
+func (p *Parser) stageFile(
+	ctx context.Context, q symbolresolve.FileQueryer, us string,
+) (fileUpdate, bool) {
+	if ctx.Err() != nil {
+		return fileUpdate{}, false
+	}
 	uri, err := workspaceapi.ParseURI(us)
 	if err != nil {
-		return
+		return fileUpdate{}, false
 	}
 	rel := workspaceapi.RelPath(p.root, uri)
 	spec := symbolresolve.SpecForFile(rel)
 	if spec == nil {
-		return
+		return fileUpdate{}, false
 	}
 	var old fileDoc
-	known := p.files.Get(p.ctx, us, &old) == nil
+	known := p.files.Get(ctx, us, &old) == nil
 	finfo, err := p.fs.Stat(rel)
 	if err != nil {
 		if known {
-			p.removeFile(p.ctx, us, old)
+			return fileUpdate{us: us, oldNames: old.Names, removed: true}, true
 		}
-		return
+		return fileUpdate{}, false
 	}
 	modTime := finfo.ModTime().UnixNano()
 	if known && old.ModTime == modTime && old.Version == schemaVersion {
-		return
+		return fileUpdate{}, false
 	}
-	ext, err := symbolresolve.ExtractFile(p.ctx, q, spec, uri)
+	ext, err := symbolresolve.ExtractFile(ctx, q, spec, uri)
 	if err != nil {
-		if p.ctx.Err() != nil {
-			return
+		if ctx.Err() != nil {
+			return fileUpdate{}, false
 		}
 		log.Errorf("symboldb: extract %q: %v", us, err)
+		// An empty extraction still replaces the file's contributions
+		// so an unparseable file does not retain stale entries.
 		ext = symbolresolve.FileExtraction{}
 	}
-	p.applyExtraction(p.ctx, us, rel, modTime, ext, old.Names,
-		known && old.Version != schemaVersion)
+	return fileUpdate{
+		us: us, rel: rel, modTime: modTime, ext: ext,
+		oldNames: old.Names,
+		force:    known && old.Version != schemaVersion,
+	}, true
 }
 
-// applyExtraction replaces one file's contributions in the database.
-// Callers pass an empty extraction for unparseable files so they do
-// not retain stale entries. ctx carries the writes' durability mode:
-// the initial scan relaxes it, event-driven updates stay synced.
-func (p *Parser) applyExtraction(
-	ctx context.Context, us, rel string, modTime int64,
-	ext symbolresolve.FileExtraction, oldNames []string, force bool,
-) {
+func (p *Parser) applyFile(ctx context.Context, u fileUpdate) {
+	if ctx.Err() != nil {
+		return
+	}
+	if u.removed {
+		for _, name := range u.oldNames {
+			p.upsertSymbol(ctx, name, u.us, nil, false)
+		}
+		if err := p.files.Delete(ctx, u.us); err != nil {
+			log.Errorf("symboldb: delete file record %q: %v", u.us, err)
+		}
+		return
+	}
 	symbols := make(map[string][]symbolLoc)
-	for _, s := range ext.Symbols {
+	for _, s := range u.ext.Symbols {
+		kind := storedKind(s.Kind)
+		// Store only the file's first occurrence per kind: resolution
+		// surfaces at most one location per (file, kind) — see
+		// matchesForSpec — and hot symbols appear dozens of times per
+		// file, so repeat occurrences only bloat docs that the writer
+		// re-encodes once per contributing file.
+		if hasKind(symbols[s.Name], kind) {
+			continue
+		}
 		symbols[s.Name] = append(symbols[s.Name], symbolLoc{
-			URI: us, X: s.Pos.X, Y: s.Pos.Y, Kind: storedKind(s.Kind),
+			URI: u.us, X: s.Pos.X, Y: s.Pos.Y, Kind: kind,
 		})
 	}
-	for _, name := range oldNames {
+	for _, name := range u.oldNames {
 		if _, ok := symbols[name]; ok {
 			continue
 		}
-		p.updateSymbol(ctx, name, us, nil, force)
+		p.upsertSymbol(ctx, name, u.us, nil, u.force)
 	}
 	for name, locs := range symbols {
-		p.updateSymbol(ctx, name, us, locs, force)
+		p.upsertSymbol(ctx, name, u.us, locs, u.force)
 	}
 	doc := fileDoc{
-		URI:     us,
-		Path:    rel,
-		ModTime: modTime,
+		URI:     u.us,
+		Path:    u.rel,
+		ModTime: u.modTime,
 		Version: schemaVersion,
 		Names:   slices.Sorted(maps.Keys(symbols)),
-		Imports: ext.Imports,
+		Imports: u.ext.Imports,
 	}
-	if err := p.files.Set(ctx, us, doc); err != nil {
-		log.Errorf("symboldb: persist file record %q: %v", us, err)
-	}
-}
-
-// removeFile drops every contribution recorded for a file and deletes
-// its record.
-func (p *Parser) removeFile(ctx context.Context, us string, old fileDoc) {
-	for _, name := range old.Names {
-		p.updateSymbol(ctx, name, us, nil, false)
-	}
-	if err := p.files.Delete(ctx, us); err != nil {
-		log.Errorf("symboldb: delete file record %q: %v", us, err)
+	if err := p.files.Set(ctx, u.us, doc); err != nil {
+		log.Errorf("symboldb: persist file record %q: %v", u.us, err)
 	}
 }
 
-// updateSymbol replaces the locations one file contributes to a symbol
-// doc, deleting the doc when no locations remain. The names partition
-// is kept in step: a marker is written or removed when the symbol's
-// listed state transitions, and rewritten unconditionally under force,
-// when the caller is reprocessing a record from another schema version
-// whose derived state cannot be trusted. Writes whose outcome is
-// already stored are skipped: on the production backend every write is
-// an fsync'd transaction costing milliseconds, while reads are memory
-// lookups.
-func (p *Parser) updateSymbol(
+// indexFile stages and applies one file inline; it serves the dirty
+// drain, where staging and writing share the event goroutine.
+func (p *Parser) indexFile(
+	ctx context.Context, q symbolresolve.FileQueryer, us string,
+) {
+	if u, ok := p.stageFile(ctx, q, us); ok {
+		p.applyFile(ctx, u)
+	}
+}
+
+func (p *Parser) upsertSymbol(
 	ctx context.Context, name, us string, locs []symbolLoc, force bool,
 ) {
-	var doc symbolDoc
-	err := p.symbols.Get(ctx, name, &doc)
-	if err != nil && !errors.Is(err, storageapi.ErrNotFound) {
-		log.Errorf("symboldb: read symbol %q: %v", name, err)
+	if ctx.Err() != nil {
 		return
 	}
-	known := err == nil
-	wasListed := listed(doc.Locs)
-	kept := make([]symbolLoc, 0, len(doc.Locs)+len(locs))
-	for _, l := range doc.Locs {
-		if l.URI != us {
-			kept = append(kept, l)
+	var doc symbolDoc
+	var merged []symbolLoc
+	wrote, wasListed := false, false
+	callback := func() ([]storageapi.Update, []storageapi.Precondition) {
+		wrote = false
+		wasListed = listed(doc.Locs)
+		kept := make([]symbolLoc, 0, len(doc.Locs)+len(locs))
+		for _, l := range doc.Locs {
+			if l.URI != us {
+				kept = append(kept, l)
+			}
 		}
+		kept = append(kept, locs...)
+		merged = kept
+		if sameLocs(doc.Locs, kept) {
+			return nil, nil
+		}
+		// A doc written before the counter existed stores no Version
+		// field; nil matches its absence where 0 would not.
+		var current any
+		if doc.Version != 0 {
+			current = doc.Version
+		}
+		wrote = true
+		return []storageapi.Update{
+				{FieldPath: []string{"Locs"}, Value: kept},
+				{FieldPath: []string{"Version"}, Value: doc.Version + 1},
+			}, []storageapi.Precondition{
+				{FieldPath: []string{"Version"}, Value: current},
+			}
 	}
-	kept = append(kept, locs...)
-	if len(kept) == 0 {
-		if !known {
+	// Try the one-operation Create first: a cold scan over an empty
+	// database — the longest scan there is — mostly inserts brand-new
+	// symbols. Dropping locations never creates: a tombstone for a
+	// symbol that was never stored would be noise.
+	created := false
+	if len(locs) > 0 {
+		err := p.symbols.Create(ctx, name,
+			symbolDoc{Name: name, Locs: locs, Version: 1})
+		switch {
+		case err == nil:
+			created = true
+			merged, wrote, wasListed = locs, true, false
+		case !errors.Is(err, storageapi.ErrAlreadyExists):
+			if ctx.Err() == nil {
+				log.Errorf("symboldb: persist symbol %q: %v", name, err)
+			}
 			return
 		}
-		if err := p.symbols.Delete(ctx, name); err != nil {
-			log.Errorf("symboldb: delete symbol %q: %v", name, err)
+	}
+	if !created {
+		err := storageapi.ConsistentUpdate(
+			ctx, p.symbols, name, &doc, retryStrategy, callback)
+		if errors.Is(err, storageapi.ErrNotFound) && len(locs) == 0 {
+			// Nothing stored and nothing to store.
+			return
 		}
-		if wasListed || (force && p.hasName(ctx, name)) {
-			p.deleteName(ctx, name)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Errorf("symboldb: persist symbol %q: %v", name, err)
+			}
+			return
 		}
+	}
+	if !wrote || force {
+		p.syncName(ctx, name, merged)
 		return
 	}
-	if !sameLocs(doc.Locs, kept) {
-		if err := p.symbols.Set(ctx, name, symbolDoc{Name: name, Locs: kept}); err != nil {
-			log.Errorf("symboldb: persist symbol %q: %v", name, err)
-		}
-	}
-	switch isListed := listed(kept); {
-	case isListed && (!wasListed || (force && !p.hasName(ctx, name))):
+	switch isListed := listed(merged); {
+	case isListed && !wasListed:
 		if err := p.names.Set(ctx, name, nameDoc{Name: name}); err != nil {
 			log.Errorf("symboldb: persist name %q: %v", name, err)
 		}
@@ -920,9 +909,24 @@ func (p *Parser) updateSymbol(
 	}
 }
 
-// sameLocs reports whether two location slices hold the same multiset
-// of locations: rebuilding a file's contribution moves its locations
-// to the tail of the merged slice without changing the contents.
+func (p *Parser) syncName(ctx context.Context, name string, locs []symbolLoc) {
+	if ctx.Err() != nil {
+		return
+	}
+	if !listed(locs) {
+		if p.hasName(ctx, name) {
+			p.deleteName(ctx, name)
+		}
+		return
+	}
+	if p.hasName(ctx, name) {
+		return
+	}
+	if err := p.names.Set(ctx, name, nameDoc{Name: name}); err != nil {
+		log.Errorf("symboldb: persist name %q: %v", name, err)
+	}
+}
+
 func sameLocs(a, b []symbolLoc) bool {
 	if len(a) != len(b) {
 		return false
@@ -940,14 +944,11 @@ func sameLocs(a, b []symbolLoc) bool {
 	return true
 }
 
-// hasName reports whether a symbol's listed marker is already stored.
 func (p *Parser) hasName(ctx context.Context, name string) bool {
 	var doc nameDoc
 	return p.names.Get(ctx, name, &doc) == nil
 }
 
-// deleteName removes a symbol's listed marker, tolerating markers that
-// never existed.
 func (p *Parser) deleteName(ctx context.Context, name string) {
 	if err := p.names.Delete(ctx, name); err != nil &&
 		!errors.Is(err, storageapi.ErrNotFound) {
@@ -955,9 +956,6 @@ func (p *Parser) deleteName(ctx context.Context, name string) {
 	}
 }
 
-// walkFilter prunes gitignored entries and hidden directories from the
-// workspace walk, matching the backing parser's walk behavior. Failure
-// to load the gitignore matcher degrades to hidden-directory pruning.
 func (p *Parser) walkFilter() walkdir.Filter {
 	hidden := hiddenDirMatcher{vctrl.HiddenBaseMatcher()}
 	m, err := vctrl.LoadGitignore(p.fs)
@@ -967,9 +965,6 @@ func (p *Parser) walkFilter() walkdir.Filter {
 	return vctrl.AnyMatcher(m, hidden)
 }
 
-// hiddenDirMatcher restricts a basename-hidden matcher to directories
-// so hidden source files at visible paths are still scanned while
-// hidden directories like .git or .venv are pruned.
 type hiddenDirMatcher struct{ m vctrl.Matcher }
 
 func (h hiddenDirMatcher) Match(uri workspaceapi.URI, isDir bool) bool {
