@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package openai
 
 import (
@@ -33,7 +32,7 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, GPT5Dot5, FlagshipModel())
+	assert.Equal(t, GPT5Dot6Sol, FlagshipModel())
 }
 
 func TestMaxOutputTokens(t *testing.T) {
@@ -41,6 +40,10 @@ func TestMaxOutputTokens(t *testing.T) {
 		model string
 		want  int
 	}{
+		{GPT5Dot6, 128000},
+		{GPT5Dot6Sol, 128000},
+		{GPT5Dot6Terra, 128000},
+		{GPT5Dot6Luna, 128000},
 		{GPT5Dot5, 128000},
 		{O1, 100000},
 		{O3Mini, 65536},
@@ -105,6 +108,10 @@ func TestSupportsReasoning(t *testing.T) {
 		{"gpt-5.4-pro", true},
 		{"gpt-5.4-mini", true},
 		{"gpt-5.4-nano", true},
+		{"gpt-5.6", true},
+		{"gpt-5.6-sol", true},
+		{"gpt-5.6-terra", true},
+		{"gpt-5.6-luna", true},
 		// Older models do not support reasoning.
 		{"gpt-4", false},
 		{"gpt-4-turbo", false},
@@ -161,6 +168,14 @@ func TestNormalizeEffort(t *testing.T) {
 		// GPT-5.4: unsupported levels are dropped with warning.
 		{"gpt-5.4 max", "gpt-5.4", "max", "", true},
 		{"gpt-5.4 minimal", "gpt-5.4", "minimal", "", true},
+
+		// GPT-5.6: none/low/medium/high/xhigh/max are supported.
+		{"gpt-5.6 none", "gpt-5.6", "none", "none", false},
+		{"gpt-5.6 max", "gpt-5.6", "max", "max", false},
+		{"gpt-5.6-sol xhigh", "gpt-5.6-sol", "xhigh", "xhigh", false},
+		{"gpt-5.6-sol max", "gpt-5.6-sol", "max", "max", false},
+		{"gpt-5.6-terra high", "gpt-5.6-terra", "high", "high", false},
+		{"gpt-5.6-luna minimal", "gpt-5.6-luna", "minimal", "", true},
 
 		// GPT-5.4-mini: none/low/medium/high/xhigh (same as gpt-5.4).
 		{"gpt-5.4-mini none", "gpt-5.4-mini", "none", "none", false},

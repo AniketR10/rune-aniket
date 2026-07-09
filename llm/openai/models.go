@@ -34,6 +34,14 @@ import (
 const LLMProvider = "openai"
 
 const (
+	// GPT5Dot6 is the GPT-5.6 Sol alias.
+	GPT5Dot6 = "gpt-5.6"
+	// GPT5Dot6Sol is the GPT-5.6 Sol model.
+	GPT5Dot6Sol = "gpt-5.6-sol"
+	// GPT5Dot6Terra is the GPT-5.6 Terra model.
+	GPT5Dot6Terra = "gpt-5.6-terra"
+	// GPT5Dot6Luna is the GPT-5.6 Luna model.
+	GPT5Dot6Luna = "gpt-5.6-luna"
 	// GPT5Dot5 is the GPT-5.5 model.
 	GPT5Dot5 = "gpt-5.5"
 	// GPT5Dot4 is the GPT-5.4 model.
@@ -172,6 +180,17 @@ var gpt5Dot4Efforts = map[string]bool{
 	"xhigh":  true,
 }
 
+// gpt5Dot6Efforts covers GPT-5.6 Sol/Terra/Luna.
+// Per OpenAI docs: none, low, medium, high, xhigh, max.
+var gpt5Dot6Efforts = map[string]bool{
+	"none":   true,
+	"low":    true,
+	"medium": true,
+	"high":   true,
+	"xhigh":  true,
+	"max":    true,
+}
+
 // gpt5Dot4ProEfforts covers GPT-5.4-pro.
 // Per OpenAI docs: medium, high, xhigh.
 var gpt5Dot4ProEfforts = map[string]bool{
@@ -187,6 +206,8 @@ func supportedEfforts(model string) map[string]bool {
 	switch {
 	case model == GPT5Dot4Pro:
 		return gpt5Dot4ProEfforts
+	case strings.HasPrefix(model, "gpt-5.6"):
+		return gpt5Dot6Efforts
 	case model == GPT5Dot5 || strings.HasPrefix(model, "gpt-5.4"):
 		return gpt5Dot4Efforts
 	case model == GPT5Dot3Codex || strings.HasPrefix(model, "gpt-5.3-codex"):
@@ -247,6 +268,10 @@ func NormalizeEffort(model, effort string) (normalized string, warning string) {
 // provider at runtime for account- or region-specific limits.
 func AvailableModels() map[string]int {
 	return map[string]int{
+		GPT5Dot6:         1050000,
+		GPT5Dot6Sol:      1050000,
+		GPT5Dot6Terra:    1050000,
+		GPT5Dot6Luna:     1050000,
 		GPT5Dot5:         1050000,
 		GPT5Dot4:         1050000,
 		GPT5Dot4Pro:      1050000,
@@ -298,12 +323,16 @@ func ModelEntries() []llmapi.ModelEntry {
 // FlagshipModel returns the provider's top model identifier. It is
 // deterministic, unlike iterating ModelEntries() whose order is
 // map-random.
-func FlagshipModel() string { return GPT5Dot5 }
+func FlagshipModel() string { return GPT5Dot6Sol }
 
 // maxOutputTokens maps each model to its documented maximum output-token
 // (API max_completion_tokens / max_tokens) ceiling. Models absent from the
 // map have an unknown ceiling; MaxOutputTokens returns 0 for them.
 var maxOutputTokens = map[string]int{
+	GPT5Dot6:         128000,
+	GPT5Dot6Sol:      128000,
+	GPT5Dot6Terra:    128000,
+	GPT5Dot6Luna:     128000,
 	GPT5Dot5:         128000,
 	GPT5Dot4:         128000,
 	GPT5Dot4Pro:      128000,

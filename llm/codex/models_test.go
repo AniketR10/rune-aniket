@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package codex
 
 import (
@@ -33,7 +32,7 @@ import (
 func TestFlagshipModelInCatalog(t *testing.T) {
 	_, ok := AvailableModels()[FlagshipModel()]
 	assert.True(t, ok, "flagship %q must be in the catalog", FlagshipModel())
-	assert.Equal(t, GPT5Dot5, FlagshipModel())
+	assert.Equal(t, GPT5Dot6Sol, FlagshipModel())
 }
 
 func TestMaxOutputTokens(t *testing.T) {
@@ -41,6 +40,9 @@ func TestMaxOutputTokens(t *testing.T) {
 		model string
 		want  int
 	}{
+		{GPT5Dot6Sol, 128000},
+		{GPT5Dot6Terra, 128000},
+		{GPT5Dot6Luna, 128000},
 		{GPT5Dot5, 128000},
 		{GPT5Dot4, 128000},
 		{GPT5Dot3Codex, 128000},
@@ -65,6 +67,11 @@ func TestModelEntries(t *testing.T) {
 	// Catalog names are bare upstream slugs; the router disambiguates
 	// duplicates between providers via ModelEntry.Provider.
 	assert.Equal(t, "gpt-5.4", GPT5Dot4)
+	_, hasBareGPT56 := byName["gpt-5.6"]
+	assert.False(t, hasBareGPT56)
+	assert.Equal(t, 372000, byName["gpt-5.6-sol"])
+	assert.Equal(t, 372000, byName["gpt-5.6-terra"])
+	assert.Equal(t, 372000, byName["gpt-5.6-luna"])
 	assert.Equal(t, 1000000, byName["gpt-5.4"])
 	assert.Equal(t, 272000, byName["gpt-5.5"])
 	assert.Equal(t, 1000000, byName["codex-auto-review"])

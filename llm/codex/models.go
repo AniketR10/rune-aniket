@@ -32,6 +32,12 @@ import (
 const LLMProvider = "codex"
 
 const (
+	// GPT5Dot6Sol is the GPT-5.6 Sol Codex model.
+	GPT5Dot6Sol = "gpt-5.6-sol"
+	// GPT5Dot6Terra is the GPT-5.6 Terra Codex model.
+	GPT5Dot6Terra = "gpt-5.6-terra"
+	// GPT5Dot6Luna is the GPT-5.6 Luna Codex model.
+	GPT5Dot6Luna = "gpt-5.6-luna"
 	// GPT5Dot5 is the frontier Codex model.
 	GPT5Dot5 = "gpt-5.5"
 	// GPT5Dot4 is the strong everyday Codex coding model.
@@ -53,9 +59,12 @@ const (
 func AvailableModels() map[string]int {
 	// Context windows mirror codex-rs/models-manager/models.json. For
 	// `gpt-5.4` and `codex-auto-review` the bundled `max_context_window`
-	// is 1M (with a 272k default plan budget); the other Codex slugs
-	// have a 272k upstream ceiling.
+	// is 1M (with a 272k default plan budget); GPT-5.6 models have a
+	// 372k upstream ceiling.
 	return map[string]int{
+		GPT5Dot6Sol:     372000,
+		GPT5Dot6Terra:   372000,
+		GPT5Dot6Luna:    372000,
 		GPT5Dot5:        272000,
 		GPT5Dot4:        1000000,
 		GPT5Dot4Mini:    272000,
@@ -85,7 +94,7 @@ func ModelEntries() []llmapi.ModelEntry {
 // FlagshipModel returns the provider's top model identifier. It is
 // deterministic, unlike iterating ModelEntries() whose order is
 // map-random.
-func FlagshipModel() string { return GPT5Dot5 }
+func FlagshipModel() string { return GPT5Dot6Sol }
 
 // UpstreamModelName returns the Codex backend model slug for a given
 // catalog name. The rune-side codex catalog stores the upstream slug
