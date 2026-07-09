@@ -34,10 +34,14 @@ import (
 func TestDecide(t *testing.T) {
 	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
 	planEnds := now.Add(-24 * time.Hour)
+	// buildDate defaults to the zero time (development build) unless a
+	// case sets it; the zero time is never After any real planEnds, so
+	// one-off cases that must lock set buildDate explicitly.
 	cases := []struct {
 		name         string
 		role         auth.Role
 		planEnds     time.Time
+		buildDate    time.Time
 		want         Status
 		wantPlanEnds time.Time
 		wantGrace    time.Time
@@ -49,6 +53,37 @@ func TestDecide(t *testing.T) {
 			planEnds:     planEnds,
 			want:         StatusActive,
 			wantPlanEnds: planEnds,
+		},
+		{
+			name:         "paid role stays active even with a newer build",
+			role:         auth.RolePaid,
+			planEnds:     planEnds,
+			buildDate:    now.Add(365 * 24 * time.Hour),
+			want:         StatusActive,
+			wantPlanEnds: planEnds,
+		},
+		{
+			name:         "one-off build covered by entitlement is active",
+			role:         auth.RoleOneOff,
+			planEnds:     now.Add(30 * 24 * time.Hour),
+			buildDate:    now,
+			want:         StatusActive,
+			wantPlanEnds: now.Add(30 * 24 * time.Hour),
+		},
+		{
+			name:         "one-off build after entitlement is upgrade-expired",
+			role:         auth.RoleOneOff,
+			planEnds:     planEnds,
+			buildDate:    now,
+			want:         StatusUpgradeExpired,
+			wantPlanEnds: planEnds,
+		},
+		{
+			name:      "one-off with zero plan ends is expired",
+			role:      auth.RoleOneOff,
+			planEnds:  time.Time{},
+			buildDate: now,
+			want:      StatusExpired,
 		},
 		{
 			name:     "admin is active regardless of plan",
@@ -93,7 +128,7 @@ func TestDecide(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := decide(tc.role, tc.planEnds, now)
+			got := decide(tc.role, tc.planEnds, now, tc.buildDate)
 			assert.Equal(t, tc.want, got.Status, "status")
 			assert.Equal(t, tc.wantPlanEnds, got.PlanEnds, "plan ends")
 			assert.Equal(t, tc.wantGrace, got.GraceUntil, "grace until")

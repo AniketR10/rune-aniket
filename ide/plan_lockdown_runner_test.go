@@ -392,6 +392,55 @@ func TestIDELockdownE2EReasonAwareCopy(t *testing.T) {
 	}
 }
 
+// TestIDEUpgradeExpiredLocksImmediatelyE2E pins the one-off build-date
+// paywall end to end: a plan source reporting StatusUpgradeExpired
+// flows through the usage planner's UpgradeExpiredPolicy and locks a
+// gated IDE at startup with no usage runway (the entitlement boundary
+// is deterministic, not usage-accrued), rendering the downgrade/renew
+// copy and swallowing ordinary input.
+func TestIDEUpgradeExpiredLocksImmediatelyE2E(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+	mu := new(sync.Mutex)
+	i, err := New(t.TempDir(), configFile.Name(), dataDir,
+		newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithPlanSource(PlanSourceConfig{
+			Source: staticPlanSource{
+				dec: ideplan.Decision{Status: ideplan.StatusUpgradeExpired},
+			},
+			SignIn: NopSignIn,
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, i.Close()) })
+
+	root := i.Ready()
+	runner, ok := root.(*planLockdownRunner)
+	require.True(t, ok)
+	require.Eventually(t, func() bool {
+		i.TickPlan(context.Background())
+		return runner.Locked()
+	}, 10*time.Second, 10*time.Millisecond,
+		"an upgrade-expired one-off build must lock without any usage runway")
+
+	wrapped := &lockedHandler{Handler: root, mu: mu}
+	wrapped.Resize(80, 24)
+	frame := handlertest.DrawHandler(wrapped, 80, 24)
+	assert.Contains(t, frame, "covered by",
+		"locked IDE must render the upgrade-expired copy")
+	assert.Contains(t, frame, "Downgrade Rune",
+		"locked IDE must render the Downgrade button")
+	assert.Contains(t, frame, "Renew license",
+		"locked IDE must render the Renew button")
+	assert.NotContains(t, frame, "Upgrade to Pro",
+		"an upgrade-expired one-off must not offer subscription upgrade")
+
+	_, handled := root.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	assert.True(t, handled,
+		"locked IDE must claim ordinary keys so they do not fall through")
+}
+
 func TestPlanLockdownRunnerLockedRoutesToPrompt(t *testing.T) {
 	inner := &countingInner{}
 	r := newPlanLockdownRunner(inner)
@@ -613,6 +662,13 @@ func TestPlanLockdownPromptCopyPerReason(t *testing.T) {
 			wantCopy:    "subscription has lapsed",
 			wantButtons: []string{"Upgrade to Pro", "Re-sign in"},
 		},
+		{
+			name:         "upgrade expired",
+			reason:       idelockdown.LockUpgradeExpired,
+			wantCopy:     "covered by",
+			wantButtons:  []string{"Downgrade Rune", "Renew license"},
+			absentButton: "Upgrade to Pro",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newPlanLockdownPrompt(deps, tc.reason)
@@ -624,10 +680,20 @@ func TestPlanLockdownPromptCopyPerReason(t *testing.T) {
 			}
 			if tc.absentButton != "" {
 				assert.NotContains(t, frame, tc.absentButton,
-					"auth-only prompt must not offer Upgrade")
+					"prompt must not offer the absent button")
 			}
 		})
 	}
+}
+
+// TestPlanLockdownPromptSpecUpgradeExpired pins the one-off
+// upgrade-expired spec: Downgrade and Renew buttons bound to 'd' and
+// 'r', with copy that avoids subscription-upgrade wording.
+func TestPlanLockdownPromptSpecUpgradeExpired(t *testing.T) {
+	msg, opts, bindings := planLockdownPromptSpec(idelockdown.LockUpgradeExpired)
+	assert.Contains(t, msg, "isn't covered by your license")
+	assert.Equal(t, []string{optLockDowngrade, optLockRenew}, opts)
+	assert.Equal(t, []term.KeyComb{{Ch: 'd'}, {Ch: 'r'}}, bindings)
 }
 
 // TestPlanLockdownRunnerResizeClampsPromptBox proves the lockdown

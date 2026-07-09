@@ -286,6 +286,7 @@ func (r *planLockdownRunner) Selection() (string, bool) {
 
 type planLockdownPromptDeps struct {
 	checkoutURL   string
+	downgradeURL  string
 	onReSignIn    func()
 	notifications browserapi.Notifications
 	frameCharSet  component.FrameCharSet
@@ -335,9 +336,11 @@ func newLockdownPrompt(deps planLockdownPromptDeps, spec lockdownPromptSpec) tui
 // signed-out or unverifiable session says "Sign in", while an
 // already-authenticated lapsed/never-paid account says "Re-sign in".
 const (
-	optLockUpgrade  = " Upgrade to Pro "
-	optLockSignIn   = " Sign in "
-	optLockReSignIn = " Re-sign in "
+	optLockUpgrade   = " Upgrade to Pro "
+	optLockSignIn    = " Sign in "
+	optLockReSignIn  = " Re-sign in "
+	optLockDowngrade = " Downgrade Rune "
+	optLockRenew     = " Renew license "
 )
 
 // newPlanLockdownPrompt builds the default lockdown overlay prompt for
@@ -356,6 +359,10 @@ func newPlanLockdownPrompt(
 			switch opt {
 			case optLockUpgrade:
 				openBrowser(deps.checkoutURL)
+			case optLockRenew:
+				openBrowser(deps.checkoutURL)
+			case optLockDowngrade:
+				openBrowser(deps.downgradeURL)
 			case optLockSignIn, optLockReSignIn:
 				if deps.onReSignIn != nil {
 					go debug.CapturePanicReport(deps.onReSignIn)
@@ -384,6 +391,13 @@ func planLockdownPromptSpec(reason idelockdown.LockReason) (
 				"Upgrade to Pro, or re-sign in if you've already upgraded your account.",
 			[]string{optLockUpgrade, optLockSignIn},
 			[]term.KeyComb{{Ch: 'u'}, {Ch: 's'}}
+	case idelockdown.LockUpgradeExpired:
+		return "**This Rune update isn't covered by your license.** " +
+				"Your one-off purchase covers updates released on or before " +
+				"your entitlement date. Downgrade to a covered version, or " +
+				"renew to unlock the latest updates.",
+			[]string{optLockDowngrade, optLockRenew},
+			[]term.KeyComb{{Ch: 'd'}, {Ch: 'r'}}
 	default:
 		return "**Your Pro subscription has lapsed.** " +
 				"Upgrade to Pro, or re-sign in if you've already renewed.",

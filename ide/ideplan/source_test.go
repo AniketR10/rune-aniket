@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/ox-api/auth"
 	"golang.org/x/oauth2"
+	"unstable.build/go-tui/debug"
 )
 
 type stubCache struct {
@@ -129,5 +130,55 @@ func TestJWTSourceDecision(t *testing.T) {
 		d, err := src.Refresh(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, StatusActive, d.Status)
+	})
+
+	t.Run("one-off token with build past entitlement is upgrade-expired", func(t *testing.T) {
+		entitlement := now.Add(-24 * time.Hour)
+		cache := &stubCache{cached: &oauth2.Token{AccessToken: makeJWT(t, auth.RoleOneOff, entitlement)}}
+		src := NewJWTSource(cache, func() time.Time { return now })
+		src.buildDate = now
+		d, err := src.Decision(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, StatusUpgradeExpired, d.Status)
+		assert.Equal(t, entitlement, d.PlanEnds)
+	})
+
+	t.Run("one-off token with build within entitlement is active", func(t *testing.T) {
+		entitlement := now.Add(30 * 24 * time.Hour)
+		cache := &stubCache{cached: &oauth2.Token{AccessToken: makeJWT(t, auth.RoleOneOff, entitlement)}}
+		src := NewJWTSource(cache, func() time.Time { return now })
+		src.buildDate = now
+		d, err := src.Decision(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, StatusActive, d.Status)
+	})
+}
+
+// TestBuildDateParsesInjectedStamp pins the ldflag -> parser contract:
+// a value in the exact form cmd/buildstamp emits (debug.BuildDateLayout,
+// UTC) must parse to the corresponding instant, and any empty or
+// malformed injection must fall back to the zero time so a broken build
+// stamp fails open (never locks) rather than mis-gating.
+func TestBuildDateParsesInjectedStamp(t *testing.T) {
+	orig := debug.BuildDate
+	t.Cleanup(func() { debug.BuildDate = orig })
+
+	t.Run("canonical utc stamp parses to the instant", func(t *testing.T) {
+		debug.BuildDate = "2026-07-09T09:23:56Z"
+		got := buildDate()
+		assert.True(t, got.Equal(time.Date(2026, 7, 9, 9, 23, 56, 0, time.UTC)),
+			"a buildstamp-format value must parse to its instant, got %s", got)
+	})
+
+	t.Run("empty stamp yields zero time", func(t *testing.T) {
+		debug.BuildDate = ""
+		assert.True(t, buildDate().IsZero(),
+			"a development build (empty stamp) must never gate on build date")
+	})
+
+	t.Run("malformed stamp yields zero time", func(t *testing.T) {
+		debug.BuildDate = "not-a-date"
+		assert.True(t, buildDate().IsZero(),
+			"an unparseable stamp must fail open, not lock every user")
 	})
 }

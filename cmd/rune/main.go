@@ -566,11 +566,12 @@ func runTUI(
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		ide.WithPlanSource(ide.PlanSourceConfig{
-			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
-			CheckoutURL: checkoutURL,
-			SupportURL:  mustResolveSupportURL(*flagWebsiteAddress),
-			SignIn:      planSignIn(client),
-			Tampered:    client.InstallTampered(),
+			Source:       ideplan.NewJWTSource(client.CachedTokenSource(), nil),
+			CheckoutURL:  checkoutURL,
+			DowngradeURL: apiclient.DefaultDownloadsHost,
+			SupportURL:   mustResolveSupportURL(*flagWebsiteAddress),
+			SignIn:       planSignIn(client),
+			Tampered:     client.InstallTampered(),
 		}),
 	)
 

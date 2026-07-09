@@ -31,6 +31,8 @@ import (
 	"strings"
 	"time"
 
+	"unstable.build/go-tui/debug"
+
 	"github.com/unstablebuild/ox-api/auth"
 	"golang.org/x/oauth2"
 )
@@ -59,12 +61,14 @@ type CachedSource interface {
 
 // NewJWTSource wraps an oauth2 token cache as a plan Source. now is
 // indirected so tests can drive the grace-window computation
-// deterministically; pass time.Now in production.
+// deterministically; pass time.Now in production. The one-off
+// upgrade-entitlement check compares PlanEnds against the compile-time
+// build date resolved by buildDate().
 func NewJWTSource(cache CachedSource, now func() time.Time) *JWTSource {
 	if now == nil {
 		now = time.Now
 	}
-	return &JWTSource{cache: cache, now: now}
+	return &JWTSource{cache: cache, now: now, buildDate: buildDate()}
 }
 
 // JWTSource is the production Source. Signatures are not verified
@@ -72,6 +76,27 @@ func NewJWTSource(cache CachedSource, now func() time.Time) *JWTSource {
 type JWTSource struct {
 	cache CachedSource
 	now   func() time.Time
+	// buildDate is the compile-time date of the running binary,
+	// compared against a one-off buyer's PlanEnds to detect a build
+	// newer than their upgrade entitlement. Zero in development
+	// builds so local runs are never locked out.
+	buildDate time.Time
+}
+
+// buildDate parses debug.BuildDate (injected via ldflags by the
+// buildstamp tool using debug.BuildDateLayout) into a time.Time.
+// Development builds leave it empty, which yields the zero time so
+// buildDate.After(planEnds) is always false and local development is
+// never gated on the one-off entitlement.
+func buildDate() time.Time {
+	if debug.BuildDate == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(debug.BuildDateLayout, debug.BuildDate)
+	if err != nil {
+		return time.Time{}
+	}
+	return t.UTC()
 }
 
 // NopSource is the default Source used when no plan gating is
@@ -122,7 +147,7 @@ func (s *JWTSource) decideFromToken(tok *oauth2.Token) Decision {
 	if err != nil {
 		return Decision{Status: StatusExpired, SignedIn: ParseClaimsError}
 	}
-	return decide(role, planEnds, s.now())
+	return decide(role, planEnds, s.now(), s.buildDate)
 }
 
 type jwtPayload struct {

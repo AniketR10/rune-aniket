@@ -172,10 +172,13 @@ func formatAccountStatus(u auth.RPCUser) string {
 		fmt.Fprintf(&b, "- **Account**: `%s`\n", u.Email)
 	}
 	fmt.Fprintf(&b, "- **Plan**: %s\n", planLabel(u.Role))
-	if u.Role >= auth.RolePaid && !u.PlanEnds.IsZero() {
+	if u.Role == auth.RoleOneOff && !u.PlanEnds.IsZero() {
+		fmt.Fprintf(&b, "- **Upgrades covered through**: %s\n",
+			u.PlanEnds.Format("2006-01-02"))
+	} else if u.Role >= auth.RolePaid && !u.PlanEnds.IsZero() {
 		fmt.Fprintf(&b, "- **Renews**: %s\n", u.PlanEnds.Format("2006-01-02"))
 	}
-	if u.Role < auth.RolePaid {
+	if u.Role != auth.RoleOneOff && u.Role < auth.RolePaid {
 		b.WriteString("\nUpgrade to a paid plan to unlock Rune.\n")
 	}
 	return b.String()
@@ -183,6 +186,8 @@ func formatAccountStatus(u auth.RPCUser) string {
 
 func planLabel(role auth.Role) string {
 	switch {
+	case role == auth.RoleOneOff:
+		return "One-off"
 	case role >= auth.RolePaid:
 		return "Paid"
 	default:

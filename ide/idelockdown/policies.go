@@ -155,7 +155,30 @@ func (TamperPolicy) Evaluate(s Snapshot) (time.Time, Action) {
 	return next, ActionNone
 }
 
+// UpgradeExpiredPolicy locks a one-off buyer immediately when the
+// running build is newer than their upgrade entitlement. Unlike a
+// lapsed subscription, this is a deterministic entitlement boundary
+// (not usage-accrued), so it locks at once like TamperPolicy rather
+// than granting a usage runway.
+type UpgradeExpiredPolicy struct{}
+
+// Name identifies the policy in logs.
+func (UpgradeExpiredPolicy) Name() string { return "upgrade_expired" }
+
+// Evaluate returns ActionLockdown when the plan is gated specifically
+// for an expired upgrade entitlement.
+func (UpgradeExpiredPolicy) Evaluate(s Snapshot) (time.Time, Action) {
+	next := s.Now.Add(evaluateInterval)
+	if g, reason := gated(s.Plan); g && reason == LockUpgradeExpired {
+		return next, ActionLockdown
+	}
+	return next, ActionNone
+}
+
 // DefaultPolicies returns the enforcement policies Rune ships with.
 func DefaultPolicies() []Policy {
-	return []Policy{NagPolicy{}, AskMoreTimePolicy{}, LockdownPolicy{}, TamperPolicy{}}
+	return []Policy{
+		NagPolicy{}, AskMoreTimePolicy{}, LockdownPolicy{},
+		TamperPolicy{}, UpgradeExpiredPolicy{},
+	}
 }

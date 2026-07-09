@@ -55,7 +55,18 @@ DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/go-tui/d
 # do not run through the root Makefile's GOFLAGS) still get -race when
 # the caller opts into a debug build.
 RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
-COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(DEBUG_LDFLAGS)
+# BUILD_DATE mirrors the root Makefile: cmd/buildstamp renders the build
+# time as RFC3339 UTC (Go, not date(1), formats it so it is portable),
+# resolved once at parse time from ROOT_DIR so go run finds the module
+# root. The `out=$(...) && printf` guard emits the stamp only when
+# buildstamp exits zero, so any failure leaves BUILD_DATE empty (the
+# error still reaches stderr). BUILD_DATE_LDFLAG $(error)s on an empty
+# stamp so a broken buildstamp aborts the build instead of baking in a
+# missing debug.BuildDate that would silently disable the one-off
+# upgrade-entitlement lockdown.
+BUILD_DATE := $(shell out=$$(cd $(ROOT_DIR) && $(GO) run ./cmd/buildstamp) && printf '%s' "$$out")
+BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/go-tui/debug.BuildDate=$(strip $(BUILD_DATE))
+COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 OXAPI_GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
 

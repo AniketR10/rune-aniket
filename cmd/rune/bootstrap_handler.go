@@ -240,10 +240,11 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 	opts = append(opts,
 		ide.WithReleaseManager(releaseManager),
 		ide.WithPlanSource(ide.PlanSourceConfig{
-			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
-			CheckoutURL: b.checkoutURL,
-			SignIn:      planSignIn(client),
-			Tampered:    client.InstallTampered() || b.bootstrapTampered(),
+			Source:       ideplan.NewJWTSource(client.CachedTokenSource(), nil),
+			CheckoutURL:  b.checkoutURL,
+			DowngradeURL: apiclient.DefaultDownloadsHost,
+			SignIn:       planSignIn(client),
+			Tampered:     client.InstallTampered() || b.bootstrapTampered(),
 		}),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,

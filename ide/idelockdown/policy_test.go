@@ -366,7 +366,9 @@ func TestDefaultPolicies(t *testing.T) {
 	for _, p := range DefaultPolicies() {
 		names = append(names, p.Name())
 	}
-	assert.Equal(t, []string{"nag", "ask-more-time", "lockdown", "tamper"}, names)
+	assert.Equal(t, []string{
+		"nag", "ask-more-time", "lockdown", "tamper", "upgrade_expired",
+	}, names)
 }
 
 // TestTamperPolicyEvaluate pins the ~/.rune wipe defense: a tampered
@@ -428,6 +430,46 @@ func TestTamperPolicyEvaluate(t *testing.T) {
 	}
 }
 
+// TestUpgradeExpiredPolicyEvaluate pins the one-off build-date defense:
+// an upgrade-expired plan locks immediately, while any other gating
+// reason or an entitled plan leaves the policy inert.
+func TestUpgradeExpiredPolicyEvaluate(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		plan ideplan.Decision
+		want Action
+	}{
+		{
+			name: "upgrade expired locks without usage",
+			plan: ideplan.Decision{Status: ideplan.StatusUpgradeExpired},
+			want: ActionLockdown,
+		},
+		{
+			name: "expired subscription does nothing here",
+			plan: ideplan.Decision{Status: ideplan.StatusExpired},
+			want: ActionNone,
+		},
+		{
+			name: "never subscribed does nothing here",
+			plan: ideplan.Decision{Status: ideplan.StatusNeverSubscribed},
+			want: ActionNone,
+		},
+		{
+			name: "active does nothing",
+			plan: ideplan.Decision{Status: ideplan.StatusActive},
+			want: ActionNone,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Snapshot{Now: monday, Plan: tc.plan}
+			next, a := UpgradeExpiredPolicy{}.Evaluate(s)
+			assert.Equal(t, tc.want, a)
+			assert.Equal(t, s.Now.Add(evaluateInterval), next,
+				"upgrade-expired policy must re-evaluate one interval later")
+		})
+	}
+}
+
 func TestGated(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -458,6 +500,12 @@ func TestGated(t *testing.T) {
 			dec:        ideplan.Decision{Status: ideplan.StatusNeverSubscribed},
 			wantGated:  true,
 			wantReason: LockNeverSubscribed,
+		},
+		{
+			name:       "upgrade expired is gated as upgrade expired",
+			dec:        ideplan.Decision{Status: ideplan.StatusUpgradeExpired},
+			wantGated:  true,
+			wantReason: LockUpgradeExpired,
 		},
 		{
 			name: "signed out takes precedence over status",

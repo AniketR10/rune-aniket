@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,29 +21,25 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package debug
+// Command buildstamp prints the current time formatted for the
+// debug.BuildDate ldflag. Go, not the host's date(1), renders the
+// string, so it is identical across platforms and always parses with
+// the exact layout the plan-gating parser uses.
+//
+// Usage:
+//
+//	go run ./cmd/buildstamp
+package main
 
-// BuildDateLayout is the canonical time layout for the BuildDate
-// compile-time variable.
-const BuildDateLayout = "2006-01-02T15:04:05Z07:00"
+import (
+	"time"
 
-var (
-	// Tag is a compile-time variable
-	Tag = "development"
-	// Package is a compile-time variable
-	Package = "gotui"
-	// Commit is a compile-time variable
-	Commit = "HEAD"
-	// ReportsDir is a compile-time variable.
-	// If left empty, debug helpers will use the return
-	// of os.TempDir.
-	ReportsDir = ""
-	// DebugBuild is a compile-time variable set to "true" by
-	// the Makefile's debug target. When set, the IDE wires up
-	// debug-only ex commands (`panic`, `crash`) that would be
-	// unsafe to ship in release builds.
-	DebugBuild = ""
-	// BuildDate is a compile-time variable holding the RFC3339 UTC
-	// date this binary was built (see BuildDateLayout).
-	BuildDate = ""
+	"unstable.build/go-tui/debug"
 )
+
+// formatStamp renders t as the debug.BuildDate string: RFC3339 in UTC,
+// using the same layout the plan-gating parser consumes so the round
+// trip is exact.
+func formatStamp(t time.Time) string {
+	return t.UTC().Format(debug.BuildDateLayout)
+}

@@ -68,6 +68,9 @@ const (
 	LockNeverSubscribed
 	// LockExpired means a previously paid plan has lapsed.
 	LockExpired
+	// LockUpgradeExpired means a one-off buyer is running a build
+	// newer than their upgrade entitlement.
+	LockUpgradeExpired
 )
 
 func (r LockReason) String() string {
@@ -82,6 +85,8 @@ func (r LockReason) String() string {
 		return "never_subscribed"
 	case LockExpired:
 		return "expired"
+	case LockUpgradeExpired:
+		return "upgrade_expired"
 	default:
 		return "unknown"
 	}
@@ -103,6 +108,8 @@ func gated(d ideplan.Decision) (bool, LockReason) {
 		return true, LockNeverSubscribed
 	case ideplan.StatusExpired:
 		return true, LockExpired
+	case ideplan.StatusUpgradeExpired:
+		return true, LockUpgradeExpired
 	default:
 		return false, LockNone
 	}

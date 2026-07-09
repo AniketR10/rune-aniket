@@ -67,6 +67,14 @@ const (
 	// is identical to StatusExpired; the distinction only drives the
 	// lockdown prompt copy.
 	StatusNeverSubscribed
+
+	// StatusUpgradeExpired blocks IDE interaction like StatusExpired
+	// but marks a one-off buyer running a build newer than their
+	// upgrade entitlement (the compile-time build date is after
+	// PlanEnds). Enforcement is identical to StatusExpired; the
+	// distinction only drives the lockdown prompt copy, which offers
+	// downgrade or renewal instead of subscription upgrade.
+	StatusUpgradeExpired
 )
 
 func (s Status) String() string {
@@ -79,6 +87,8 @@ func (s Status) String() string {
 		return "expired"
 	case StatusNeverSubscribed:
 		return "never_subscribed"
+	case StatusUpgradeExpired:
+		return "upgrade_expired"
 	default:
 		return "unknown"
 	}
@@ -127,15 +137,16 @@ type Decision struct {
 	GraceUntil time.Time
 }
 
-// decide returns the gating decision for the given role and PlanEnds at
-// the given moment. Admins and super-admins are always StatusActive
-// regardless of PlanEnds. Paid users are always StatusActive. Anyone
-// else falls into StatusGracePeriod when PlanEnds is non-zero and
-// PlanEnds+grace is still in the future, StatusNeverSubscribed when
-// PlanEnds is zero (never held a paid plan), and StatusExpired
-// otherwise. Every branch reports SignedIn: a decode of the claims
-// implies a token was present and parsed.
-func decide(role auth.Role, planEnds time.Time, now time.Time) Decision {
+func decide(role auth.Role, planEnds, now, buildDate time.Time) Decision {
+	if role == auth.RoleOneOff {
+		if planEnds.IsZero() {
+			return Decision{Status: StatusExpired}
+		}
+		if buildDate.After(planEnds) {
+			return Decision{Status: StatusUpgradeExpired, PlanEnds: planEnds}
+		}
+		return Decision{Status: StatusActive, PlanEnds: planEnds}
+	}
 	if role >= auth.RolePaid {
 		return Decision{Status: StatusActive, PlanEnds: planEnds}
 	}

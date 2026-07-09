@@ -14,7 +14,26 @@ DEBUG_LDFLAGS=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-X unstable.build/go-tui/d
 # binary (which builds with RUNE_GOFLAGS rather than GOFLAGS). This is
 # what makes :datarace actually crash the debug build.
 RACE_FLAG=$(if $(filter true,$(RUNE_DEBUG_BUILD)),-race)
-COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(DEBUG_LDFLAGS)
+# REPO_ROOT anchors the buildstamp invocation to the module root so it
+# resolves no matter what cwd a recipe runs from (build recipes cd into
+# cmd/rune before expanding these flags, so a bare ./cmd/buildstamp
+# would look under cmd/rune and fail).
+REPO_ROOT := $(shell git rev-parse --show-toplevel)
+# BUILD_DATE renders the build time as RFC3339 UTC via cmd/buildstamp so
+# Go, not the host's date(1), formats it and the debug.BuildDate ldflag
+# is identical across platforms. The `out=$(...) && printf` guard emits
+# the stamp only when buildstamp exits zero, so any failure (compile
+# error, panic, non-zero exit even after printing a partial line) leaves
+# BUILD_DATE empty; buildstamp's error still reaches stderr. BUILD_DATE_LDFLAG
+# then $(error)s on an empty stamp so a broken buildstamp aborts the build
+# instead of baking in a missing date that would silently disable the
+# one-off upgrade-entitlement lockdown. The guard lives in the ldflag (not
+# at parse time) so non-build targets like `clean` are unaffected; an
+# inline $$(...) substitution could not enforce this because its non-zero
+# exit would not fail the surrounding go build.
+BUILD_DATE := $(shell out=$$($(GO) run $(REPO_ROOT)/cmd/buildstamp) && printf '%s' "$$out")
+BUILD_DATE_LDFLAG = $(if $(strip $(BUILD_DATE)),,$(error buildstamp produced no build date; refusing to build a binary with an empty debug.BuildDate))-X unstable.build/go-tui/debug.BuildDate=$(strip $(BUILD_DATE))
+COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD) $(BUILD_DATE_LDFLAG) $(DEBUG_LDFLAGS)
 GOFLAGS=$(RACE_FLAG) -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
 RUNE_GOFLAGS=$(RACE_FLAG) -tags=ebitensinglethread -ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=rune"
 OXAPI_GOFLAGS=-ldflags="-X main.Tag=$$(git describe --tags --always --dirty) -X main.Commit=$$(git rev-parse --short HEAD)$$(git diff --quiet || echo -dirty)"

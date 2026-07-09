@@ -355,9 +355,14 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 type PlanSourceConfig struct {
 	Source      ideplan.Source
 	CheckoutURL string
-	SupportURL  string
-	SignIn      func(context.Context) SignInSession
-	Tampered    bool
+	// DowngradeURL is the page the upgrade-expired lockdown prompt's
+	// "Downgrade Rune" button opens so a one-off buyer can install a
+	// build covered by their entitlement (typically the downloads
+	// host).
+	DowngradeURL string
+	SupportURL   string
+	SignIn       func(context.Context) SignInSession
+	Tampered     bool
 }
 
 // defaultSupportURL is where the ask-more-time prompt sends users
@@ -712,6 +717,7 @@ func (i *IDE) init(
 	pcfg := i.ideConfig.promptConfig()
 	i.planPromptDeps = planLockdownPromptDeps{
 		checkoutURL:   op.planSource.CheckoutURL,
+		downgradeURL:  op.planSource.DowngradeURL,
 		onReSignIn:    func() { i.startPlanSignIn(op.planSource) },
 		notifications: &notisRouter{parent: i.workspaceHandler},
 		frameCharSet:  i.ideConfig.windowFrameCharset(),
