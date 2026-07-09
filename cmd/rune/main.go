@@ -559,7 +559,7 @@ func runTUI(
 	}
 
 	storage := newRuneStorage(*flagDataPath)
-	client, releaseManager := newAPIClient(storage)
+	client, releaseManager := newAPIClient(storage, os.TempDir())
 	defer client.Close()
 
 	checkoutURL, _ := mustResolveBootstrapURLs(*flagWebsiteAddress)
@@ -570,6 +570,7 @@ func runTUI(
 			CheckoutURL: checkoutURL,
 			SupportURL:  mustResolveSupportURL(*flagWebsiteAddress),
 			SignIn:      planSignIn(client),
+			Tampered:    client.InstallTampered(),
 		}),
 	)
 
@@ -686,7 +687,7 @@ func runGUI(
 		launchCmd, runner, mu, publishEvent,
 		checkoutURL, signupURL,
 		func(u *url.URL) error { return extbrowser.Browse(u) },
-		text.NewSystemClipboard(),
+		text.NewSystemClipboard(), os.TempDir(),
 	)
 	if err != nil {
 		fmt.Printf("ide: %s", err)
@@ -831,8 +832,11 @@ func waitLoginShellPATH(pathDone <-chan error) error {
 // newAPIClient constructs the production apiclient.Client and its
 // release.Manager from a shared storage. Both can be passed to
 // ide.New via WithReleaseManager / WithPlanSource without creating an
-// IDE → apiclient → IDE cycle.
-func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manager) {
+// IDE → apiclient → IDE cycle. installBackupDir hosts the install-ID
+// tamper-detection backup (the OS temp dir in production).
+func newAPIClient(
+	storage storageapi.Service, installBackupDir string,
+) (*apiclient.Client, release.Manager) {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
@@ -841,6 +845,7 @@ func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manage
 	apicfg.WebsiteAddress = *flagWebsiteAddress
 	apicfg.EnableTelemetry = true
 	apicfg.TelemetryPeriod = telemetryPeriod
+	apicfg.InstallBackupDir = installBackupDir
 	client := apiclient.New(storage, apicfg, *flagDataPath)
 	// Release downloads are unauthenticated: the oauth transport
 	// fails client-side with auth.ErrNotAuthenticated when no token
@@ -859,7 +864,10 @@ func newAPIClient(storage storageapi.Service) (*apiclient.Client, release.Manage
 // configured IDE only. Tokens acquired by this client are written to
 // the shared on-disk auth partition keyed by dataDir, so the real
 // client constructed after the swap reads them back transparently.
-func newBootstrapAPIClient(storage storageapi.Service, openBrowser func(*url.URL) error) *apiclient.Client {
+func newBootstrapAPIClient(
+	storage storageapi.Service, openBrowser func(*url.URL) error,
+	installBackupDir string,
+) *apiclient.Client {
 	apicfg := apiclient.DefaultConfig()
 	apicfg.HTTPEndpointAddress = *flagHTTPAddress
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
@@ -868,6 +876,7 @@ func newBootstrapAPIClient(storage storageapi.Service, openBrowser func(*url.URL
 	apicfg.WebsiteAddress = *flagWebsiteAddress
 	apicfg.EnableTelemetry = true
 	apicfg.TelemetryPeriod = telemetryPeriod
+	apicfg.InstallBackupDir = installBackupDir
 	apicfg.OpenBrowser = openBrowser
 	return apiclient.New(storage, apicfg, *flagDataPath)
 }

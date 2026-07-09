@@ -62,15 +62,9 @@ func installIDTempFileName() string {
 	return "." + hex.EncodeToString(sum[:8])
 }
 
-// installIDTempPath allows tests to redirect the backup file away from the
-// real OS temp directory.
-var installIDTempPath = func() string {
-	return filepath.Join(os.TempDir(), installIDTempFileName())
-}
-
 // getInstallID resolves a stable, self-generated install identifier from two
 // independent locations: the authoritative storage partition and an obscure
-// backup file in the OS temp directory.
+// backup file in backupDir.
 //
 // It returns the identifier, a tampered flag, and a diagnostic error string.
 // tampered is true only when the authoritative store was missing while the
@@ -82,21 +76,24 @@ var installIDTempPath = func() string {
 // identifier it could recover (possibly empty). The returned string is empty
 // on success and otherwise carries the persistence/self-heal failures so they
 // are reported through telemetry instead of being silently dropped.
-func getInstallID(ctx context.Context, store storageapi.Service) (id string, tampered bool, errStr string) {
+func getInstallID(
+	ctx context.Context, store storageapi.Service, backupDir string,
+) (id string, tampered bool, errStr string) {
 	var errs []error
+	backupPath := filepath.Join(backupDir, installIDTempFileName())
 
 	stored, hasStored, readErr := readStoredInstallID(ctx, store)
 	if readErr != nil {
 		errs = append(errs, fmt.Errorf("read store: %w", readErr))
 	}
-	backup, hasBackup := readTempInstallID()
+	backup, hasBackup := readTempInstallID(backupPath)
 
 	switch {
 	case hasStored && hasBackup:
 		// Both present. Trust the authoritative store; realign the backup if
 		// they diverged (e.g. a stale copy from a previous install).
 		if stored != backup {
-			if err := writeTempInstallID(stored); err != nil {
+			if err := writeTempInstallID(backupPath, stored); err != nil {
 				errs = append(errs, fmt.Errorf("write temp: %w", err))
 			}
 		}
@@ -112,7 +109,7 @@ func getInstallID(ctx context.Context, store storageapi.Service) (id string, tam
 
 	case hasStored && !hasBackup:
 		// Backup vanished (routine temp reaping). Recover it silently.
-		if err := writeTempInstallID(stored); err != nil {
+		if err := writeTempInstallID(backupPath, stored); err != nil {
 			errs = append(errs, fmt.Errorf("write temp: %w", err))
 		}
 		id = stored
@@ -123,7 +120,7 @@ func getInstallID(ctx context.Context, store storageapi.Service) (id string, tam
 		if err := writeStoredInstallID(ctx, store, newID); err != nil {
 			errs = append(errs, fmt.Errorf("write store: %w", err))
 		}
-		if err := writeTempInstallID(newID); err != nil {
+		if err := writeTempInstallID(backupPath, newID); err != nil {
 			errs = append(errs, fmt.Errorf("write temp: %w", err))
 		}
 		id = newID
@@ -161,8 +158,8 @@ func writeStoredInstallID(ctx context.Context, store storageapi.Service, id stri
 	return store.Set(ctx, installIDDocID, installIDDoc{ID: id})
 }
 
-func readTempInstallID() (string, bool) {
-	raw, err := os.ReadFile(installIDTempPath())
+func readTempInstallID(path string) (string, bool) {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return "", false
 	}
@@ -173,6 +170,6 @@ func readTempInstallID() (string, bool) {
 	return id, true
 }
 
-func writeTempInstallID(id string) error {
-	return os.WriteFile(installIDTempPath(), []byte(id), 0o600)
+func writeTempInstallID(path, id string) error {
+	return os.WriteFile(path, []byte(id), 0o600)
 }

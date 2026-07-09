@@ -211,3 +211,29 @@ func TestTrackerRecordSampleRetriesOnVersionConflict(t *testing.T) {
 		time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC), monday,
 	}, tr.usage())
 }
+
+// TestTrackerSetTampered pins that the tamper mark round-trips
+// through the store in both directions, so a wiped-and-restored
+// install stays flagged across restarts and an entitled sign-in
+// durably clears it.
+func TestTrackerSetTampered(t *testing.T) {
+	ctx := context.Background()
+	store := storagestub.NewInMemoryService()
+	tr := newTracker(store)
+	require.NoError(t, tr.load(ctx))
+	assert.False(t, tr.tampered(), "a fresh doc must not carry the tamper mark")
+
+	require.NoError(t, tr.setTampered(ctx, true))
+	assert.True(t, tr.tampered())
+
+	reloaded := newTracker(store)
+	require.NoError(t, reloaded.load(ctx))
+	assert.True(t, reloaded.tampered(), "the tamper mark must persist")
+
+	require.NoError(t, reloaded.setTampered(ctx, false))
+	assert.False(t, reloaded.tampered())
+
+	cleared := newTracker(store)
+	require.NoError(t, cleared.load(ctx))
+	assert.False(t, cleared.tampered(), "the cleared mark must persist")
+}

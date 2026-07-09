@@ -132,7 +132,30 @@ func (LockdownPolicy) Evaluate(s Snapshot) (time.Time, Action) {
 	return next, ActionNone
 }
 
+// TamperPolicy locks gated users immediately when the usage ledger
+// carries the tamper mark: wiping the data directory to reset the
+// usage runway forfeits the runway entirely, forcing a sign-in. An
+// entitled session clears the mark (see Planner.evaluate), restoring
+// the normal runway for a later lapse.
+type TamperPolicy struct{}
+
+// Name identifies the policy in logs.
+func (TamperPolicy) Name() string { return "tamper" }
+
+// Evaluate returns ActionLockdown for gated users on a tampered
+// install, regardless of accrued usage.
+func (TamperPolicy) Evaluate(s Snapshot) (time.Time, Action) {
+	next := s.Now.Add(evaluateInterval)
+	if g, _ := gated(s.Plan); !g {
+		return next, ActionNone
+	}
+	if s.Tampered {
+		return next, ActionLockdown
+	}
+	return next, ActionNone
+}
+
 // DefaultPolicies returns the enforcement policies Rune ships with.
 func DefaultPolicies() []Policy {
-	return []Policy{NagPolicy{}, AskMoreTimePolicy{}, LockdownPolicy{}}
+	return []Policy{NagPolicy{}, AskMoreTimePolicy{}, LockdownPolicy{}, TamperPolicy{}}
 }

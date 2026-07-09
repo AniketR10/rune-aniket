@@ -69,7 +69,8 @@ func TestGUIEnvLiveApplyHookAppliesNewlyMergedVar(t *testing.T) {
 
 	// IDE starts from a config that has no gui.env at all, mirroring a fresh
 	// install before the go package merges its env block.
-	b := newConfiguredBootstrapForEnvTest(t, configFilename, "editor:\n  mode: modal\n")
+	b := newConfiguredBootstrapForEnvTest(t, configFilename,
+		"editor:\n  mode: modal\n", t.TempDir())
 
 	// The package manager merges gui.env into the user config on disk before
 	// invoking the post-merge hook. Reproduce that on-disk state.
@@ -101,7 +102,7 @@ func TestGUIEnvLiveApplyHookAppliesVarPresentAtStartup(t *testing.T) {
 	require.NoError(t, os.Unsetenv(envKey))
 
 	configBody := "editor:\n  mode: modal\ngui:\n  env:\n    " + envKey + ": " + envVal + "\n"
-	b := newConfiguredBootstrapForEnvTest(t, configFilename, configBody)
+	b := newConfiguredBootstrapForEnvTest(t, configFilename, configBody, t.TempDir())
 
 	event := mergeEvent(t, "gui:\n  env:\n    "+envKey+": "+envVal+"\n")
 	result, err := b.guiEnvLiveApplyHook(event)
@@ -126,7 +127,7 @@ func TestGUIEnvLiveApplyHookStarlarkOverlayConfig(t *testing.T) {
 	require.NoError(t, os.Unsetenv(envKey))
 
 	b := newConfiguredBootstrapForEnvTest(t, configStarFilename,
-		"config[\"terminal\"][\"initial_reservoir\"] = 2\n")
+		"config[\"terminal\"][\"initial_reservoir\"] = 2\n", t.TempDir())
 
 	// Reproduce the on-disk state after a package install: the manager
 	// appends its managed gui.env block to the user's config.star before
@@ -407,9 +408,10 @@ func TestApplyShellPATHAndGUIEnvWithPATHWaits(t *testing.T) {
 // configured IDE (with the production guiEnvLiveApplyHook wired via
 // WithPackageConfigMergeHook) instead of opening the OAuth bootstrap flow. The
 // apiclient is pointed at a 404 server so construction never touches the
-// network.
+// network, and installBackupDir keeps install-ID tamper detection off the
+// machine-global temp dir.
 func newConfiguredBootstrapForEnvTest(
-	t *testing.T, filename, configBody string,
+	t *testing.T, filename, configBody, installBackupDir string,
 ) *bootstrapHandler {
 	t.Helper()
 
@@ -441,6 +443,7 @@ func newConfiguredBootstrapForEnvTest(
 		mu, publishEvent,
 		checkoutURL, signupURL,
 		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+		installBackupDir,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, b.realIDE, "config.yaml in dataDir must build the configured IDE directly")

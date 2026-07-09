@@ -457,3 +457,77 @@ func TestPlannerSnapshotReflectsPersistedUsage(t *testing.T) {
 		"the launch sample must be bucket-aligned")
 	assert.Equal(t, ideplan.StatusExpired, s.Plan.Status)
 }
+
+func newTamperTestPlanner(
+	t *testing.T, store storageapi.Service, src ideplan.Source,
+	locker Locker, tampered bool,
+) *Planner {
+	t.Helper()
+	p := New(Config{
+		Storage:               store,
+		Source:                src,
+		Policies:              DefaultPolicies(),
+		Locker:                locker,
+		ShowNagPrompt:         func() {},
+		ShowAskMoreTimePrompt: func() {},
+		Now:                   func() time.Time { return monday },
+		Tampered:              tampered,
+	})
+	require.NoError(t, p.Start(context.Background()))
+	t.Cleanup(p.Stop)
+	return p
+}
+
+// TestPlannerTamperedLocksImmediately pins the ~/.rune wipe defense:
+// when install-ID resolution flags a tampered install, a gated user
+// is locked at startup with no usage runway at all.
+func TestPlannerTamperedLocksImmediately(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	locker := &recordingLocker{}
+	newTamperTestPlanner(t, store, expiredSource(), locker, true)
+
+	last, ok := locker.last()
+	require.True(t, ok)
+	assert.True(t, last, "a tampered gated install must lock immediately")
+	reason, ok := locker.lastReason()
+	require.True(t, ok)
+	assert.Equal(t, LockExpired, reason,
+		"the tamper lock must reuse the plan-derived reason")
+}
+
+// TestPlannerTamperMarkPersistsAcrossRestarts pins that the tamper
+// mark lives in the usage doc: once persisted, later sessions lock
+// even though their install-ID resolution reports no tampering (the
+// backup self-heals on first detection).
+func TestPlannerTamperMarkPersistsAcrossRestarts(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	newTamperTestPlanner(t, store, expiredSource(), &recordingLocker{}, true)
+
+	locker := &recordingLocker{}
+	newTamperTestPlanner(t, store, expiredSource(), locker, false)
+	last, ok := locker.last()
+	require.True(t, ok)
+	assert.True(t, last, "the persisted tamper mark must keep locking")
+}
+
+// TestPlannerEntitledClearsTamperMark pins the recovery path: an
+// entitled session stays unlocked and durably clears the tamper mark,
+// so a later lapse gets the normal usage runway instead of an
+// immediate lock.
+func TestPlannerEntitledClearsTamperMark(t *testing.T) {
+	store := storagestub.NewInMemoryService()
+	active := staticSource{dec: ideplan.Decision{Status: ideplan.StatusActive}}
+	locker := &recordingLocker{}
+	newTamperTestPlanner(t, store, active, locker, true)
+	last, ok := locker.last()
+	require.True(t, ok)
+	assert.False(t, last, "an entitled tampered install must stay unlocked")
+
+	relocker := &recordingLocker{}
+	newTamperTestPlanner(t, store, expiredSource(), relocker, false)
+	last, ok = relocker.last()
+	require.True(t, ok)
+	assert.False(t, last,
+		"after an entitled session cleared the mark, a lapse without "+
+			"qualifying usage must not lock")
+}

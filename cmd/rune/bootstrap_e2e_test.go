@@ -25,9 +25,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -53,6 +57,18 @@ import (
 	"unstable.build/go-tui/term/gui"
 	"unstable.build/go-tui/text"
 )
+
+// seedInstallIDBackup plants a surviving install-ID backup in dir, so
+// an API client with that InstallBackupDir sees a wiped store with a
+// surviving backup: the tamper signal. The filename derivation pins
+// apiclient's on-disk contract (installIDTempFileName).
+func seedInstallIDBackup(t *testing.T, dir string) {
+	t.Helper()
+	sum := sha256.Sum256([]byte("lsd-cache-v1"))
+	name := "." + hex.EncodeToString(sum[:8])
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, name), []byte("prior-install-id"), 0o600))
+}
 
 // TestBootstrapE2ESurfacesOAuthURLInWaitPrompt is the black-box e2e
 // test for the bootstrap login machinery: it constructs the
@@ -114,7 +130,7 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
-		openBrowser, clipboard.NewInMemory(),
+		openBrowser, clipboard.NewInMemory(), t.TempDir(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -205,7 +221,7 @@ func TestBootstrapE2EFontSizeKeybindingDuringBootstrap(t *testing.T) {
 		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
-		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(), t.TempDir(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -412,7 +428,7 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
-		openBrowser, clipboard.NewInMemory(),
+		openBrowser, clipboard.NewInMemory(), t.TempDir(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -483,7 +499,7 @@ func TestBootstrapE2EVimChoiceSwapsToConfiguredIDE(t *testing.T) {
 		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
-		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(), t.TempDir(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -549,7 +565,7 @@ func TestBootstrapE2EEscReopensBootstrapPrompt(t *testing.T) {
 		nil, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
 		mu, publishEvent,
 		checkoutURL, signupURL,
-		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(), t.TempDir(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
@@ -591,6 +607,31 @@ func TestBootstrapE2EEscReopensBootstrapPrompt(t *testing.T) {
 		return strings.Contains(frame, "Choose your key bindings")
 	}, 5*time.Second, 50*time.Millisecond,
 		"Esc on the vim-mode prompt must reopen it")
+}
+
+// TestBootstrapE2ETamperedInstallLocksConfiguredIDE is the black-box
+// e2e for the ~/.rune wipe defense: a surviving install-ID backup
+// with a wiped data directory must flow from apiclient's tamper
+// detection through PlanSourceConfig into the usage planner and lock
+// the configured IDE at startup, with the signed-out prompt (no
+// cached token) rendered above the overlay.
+func TestBootstrapE2ETamperedInstallLocksConfiguredIDE(t *testing.T) {
+	installBackupDir := t.TempDir()
+	seedInstallIDBackup(t, installBackupDir)
+	b := newConfiguredBootstrapForEnvTest(t, configFilename,
+		"editor:\n  mode: modal\n", installBackupDir)
+
+	const width, height = 80, 30
+	wrapped := &bootstrapE2ELocked{Handler: b, mu: b.mu}
+	wrapped.Resize(width, height)
+
+	require.Eventually(t, func() bool {
+		b.realIDE.TickPlan(context.Background())
+		frame := handlertest.DrawHandler(wrapped, width, height)
+		return containsAll(frame, "signed out", "Sign in")
+	}, 10*time.Second, 50*time.Millisecond,
+		"a tampered install must lock the configured IDE at startup "+
+			"and render the signed-out lockdown prompt")
 }
 
 func testE2EExtensionsRunner(

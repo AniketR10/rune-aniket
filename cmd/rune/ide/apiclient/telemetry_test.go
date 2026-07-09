@@ -45,7 +45,7 @@ import (
 // counts accumulated since the last periodic flush, so the final window
 // of usage is not lost on shutdown.
 func TestCloseFlushesFinalUsage(t *testing.T) {
-	redirectInstallIDTempPath(t)
+	backupDir := t.TempDir()
 	usage := make(chan telemetryUsagePayload, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var p telemetryUsagePayload
@@ -65,7 +65,7 @@ func TestCloseFlushesFinalUsage(t *testing.T) {
 	// A long period keeps the periodic flush from firing so the only
 	// ClientUsage post we observe is the one Close emits.
 	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test",
-		storagestub.NewInMemoryService())
+		storagestub.NewInMemoryService(), backupDir)
 
 	tel.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeEdit})
 	tel.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeEdit})
@@ -89,7 +89,7 @@ func TestCloseFlushesFinalUsage(t *testing.T) {
 // event when no editor events were recorded (e.g. the user opened no
 // files), so a session is not dropped just because its counters are zero.
 func TestCloseFlushesWithNoEvents(t *testing.T) {
-	redirectInstallIDTempPath(t)
+	backupDir := t.TempDir()
 	usage := make(chan telemetryUsagePayload, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var p telemetryUsagePayload
@@ -107,7 +107,7 @@ func TestCloseFlushesWithNoEvents(t *testing.T) {
 	}
 
 	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test",
-		storagestub.NewInMemoryService())
+		storagestub.NewInMemoryService(), backupDir)
 
 	if err := tel.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -127,7 +127,7 @@ func TestCloseFlushesWithNoEvents(t *testing.T) {
 // multiple of the flush timeout even when the server never responds, so
 // an offline user is not blocked on shutdown.
 func TestCloseFlushBoundedWhenOffline(t *testing.T) {
-	redirectInstallIDTempPath(t)
+	backupDir := t.TempDir()
 	block := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-block
@@ -141,7 +141,7 @@ func TestCloseFlushBoundedWhenOffline(t *testing.T) {
 	}
 
 	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test",
-		storagestub.NewInMemoryService())
+		storagestub.NewInMemoryService(), backupDir)
 	tel.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeEdit})
 
 	done := make(chan error, 1)
@@ -157,7 +157,7 @@ func TestCloseFlushBoundedWhenOffline(t *testing.T) {
 // captureSystemPayload starts telemetry against a test server and returns the
 // first ClientSystem payload it posts. The system event is emitted eagerly on
 // start, so a long period keeps any usage post from racing the assertion.
-func captureSystemPayload(t *testing.T, store storageapi.Service) telemetrySystemPayload {
+func captureSystemPayload(t *testing.T, store storageapi.Service, backupDir string) telemetrySystemPayload {
 	t.Helper()
 
 	system := make(chan telemetrySystemPayload, 1)
@@ -177,7 +177,7 @@ func captureSystemPayload(t *testing.T, store storageapi.Service) telemetrySyste
 	u, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 
-	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", store)
+	tel := newTelemetry(oauth2.StaticTokenSource(&oauth2.Token{}), u, time.Hour, "test", store, backupDir)
 	tel.start()
 	defer func() { _ = tel.Close() }()
 
@@ -195,23 +195,23 @@ func captureSystemPayload(t *testing.T, store storageapi.Service) telemetrySyste
 // fields the server receives for every persistence scenario.
 func TestTelemetrySystemPayloadInstallID(t *testing.T) {
 	t.Run("both present and equal", func(t *testing.T) {
-		tempPath := redirectInstallIDTempPath(t)
+		dir, tempPath := testInstallIDBackup(t)
 		store := storagestub.NewInMemoryService()
 		require.NoError(t, store.Set(context.Background(), installIDDocID, installIDDoc{ID: "shared-id"}))
 		require.NoError(t, os.WriteFile(tempPath, []byte("shared-id"), 0o600))
 
-		p := captureSystemPayload(t, store)
+		p := captureSystemPayload(t, store, dir)
 
 		assert.Equal(t, "shared-id", p.InstallID)
 		assert.False(t, p.Tampered)
 	})
 
 	t.Run("storage absent temp present flags tampered", func(t *testing.T) {
-		tempPath := redirectInstallIDTempPath(t)
+		dir, tempPath := testInstallIDBackup(t)
 		store := storagestub.NewInMemoryService()
 		require.NoError(t, os.WriteFile(tempPath, []byte("backup-id"), 0o600))
 
-		p := captureSystemPayload(t, store)
+		p := captureSystemPayload(t, store, dir)
 
 		assert.Equal(t, "backup-id", p.InstallID)
 		assert.True(t, p.Tampered, "wiped store with surviving backup must post tampered=true")
@@ -222,11 +222,11 @@ func TestTelemetrySystemPayloadInstallID(t *testing.T) {
 	})
 
 	t.Run("storage present temp absent no flag", func(t *testing.T) {
-		tempPath := redirectInstallIDTempPath(t)
+		dir, tempPath := testInstallIDBackup(t)
 		store := storagestub.NewInMemoryService()
 		require.NoError(t, store.Set(context.Background(), installIDDocID, installIDDoc{ID: "stored-id"}))
 
-		p := captureSystemPayload(t, store)
+		p := captureSystemPayload(t, store, dir)
 
 		assert.Equal(t, "stored-id", p.InstallID)
 		assert.False(t, p.Tampered, "missing backup (routine temp reaping) must not flag tampering")
@@ -237,10 +237,10 @@ func TestTelemetrySystemPayloadInstallID(t *testing.T) {
 	})
 
 	t.Run("both absent generates new", func(t *testing.T) {
-		tempPath := redirectInstallIDTempPath(t)
+		dir, tempPath := testInstallIDBackup(t)
 		store := storagestub.NewInMemoryService()
 
-		p := captureSystemPayload(t, store)
+		p := captureSystemPayload(t, store, dir)
 
 		require.NotEmpty(t, p.InstallID, "fresh install must post a generated identifier")
 		assert.False(t, p.Tampered)
@@ -255,10 +255,10 @@ func TestTelemetrySystemPayloadInstallID(t *testing.T) {
 	})
 
 	t.Run("store write failure reported in payload", func(t *testing.T) {
-		redirectInstallIDTempPath(t)
+		dir, _ := testInstallIDBackup(t)
 		store := setFailingStore{Service: storagestub.NewInMemoryService()}
 
-		p := captureSystemPayload(t, store)
+		p := captureSystemPayload(t, store, dir)
 
 		require.NotEmpty(t, p.InstallID, "a store write failure must not stop id generation")
 		assert.False(t, p.Tampered)

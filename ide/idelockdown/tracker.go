@@ -57,6 +57,11 @@ type usageDoc struct {
 	Usage []string
 	// LastNag is the UTC time the nag prompt was last shown.
 	LastNag string
+	// Tampered marks the install as having wiped the data directory
+	// while gated: install-ID resolution found the obscure backup but
+	// no authoritative store. The mark persists here because the
+	// detection signal self-heals after its first observation.
+	Tampered bool
 }
 
 // tracker persists the usage-sample history through a
@@ -150,6 +155,35 @@ func (t *tracker) markNagged(
 		return false, err
 	}
 	return marked, nil
+}
+
+// setTampered persists the tamper mark. It is a no-op when the mark
+// already has the requested value.
+func (t *tracker) setTampered(ctx context.Context, tampered bool) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.doc.Tampered == tampered {
+		return nil
+	}
+	return storageapi.ConsistentUpdate(ctx, t.store, usageDocID, &t.doc, retryStrategy,
+		func() ([]storageapi.Update, []storageapi.Precondition) {
+			if t.doc.Tampered == tampered {
+				return nil, nil
+			}
+			return []storageapi.Update{
+					{FieldPath: []string{"Tampered"}, Value: tampered},
+					{FieldPath: []string{"Version"}, Value: t.doc.Version + 1},
+				}, []storageapi.Precondition{
+					{FieldPath: []string{"Version"}, Value: t.doc.Version},
+				}
+		})
+}
+
+// tampered reports whether the tamper mark is set.
+func (t *tracker) tampered() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.doc.Tampered
 }
 
 // nagDue reports whether the persisted last-nag mark is at least

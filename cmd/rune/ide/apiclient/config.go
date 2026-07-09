@@ -108,6 +108,12 @@ type Config struct {
 	// EnableTelemetry controls whether telemetry is active. When false,
 	// no telemetry data is collected or sent.
 	EnableTelemetry bool
+	// InstallBackupDir is the directory holding the obscure install-ID
+	// backup file used for tamper detection. Must be non-empty when
+	// EnableTelemetry is true; empty panics. Production passes the OS
+	// temp dir; tests inject a per-test directory so they never touch
+	// machine-global state.
+	InstallBackupDir string
 	// OpenBrowser, when non-nil, overrides the default browser launch
 	// during the OAuth flow. Tests inject a recording function here;
 	// in production it is left nil and the client falls back to

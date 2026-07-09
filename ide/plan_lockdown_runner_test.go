@@ -233,6 +233,36 @@ func TestIDEWithPlanSourceLocksAfterQualifyingUsage(t *testing.T) {
 	assert.True(t, handled)
 }
 
+// TestIDEWithPlanSourceTamperedLocksImmediately pins the ~/.rune wipe
+// defense end to end: PlanSourceConfig.Tampered flows through the
+// usage planner's TamperPolicy and locks a gated IDE at startup with
+// no usage history at all.
+func TestIDEWithPlanSourceTamperedLocksImmediately(t *testing.T) {
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+	i, err := New(t.TempDir(), configFile.Name(), dataDir,
+		newTestStorage(t, dataDir),
+		WithLocker(new(sync.Mutex)),
+		WithPlanSource(PlanSourceConfig{
+			Source:   staticPlanSource{dec: ideplan.Decision{Status: ideplan.StatusExpired}},
+			SignIn:   NopSignIn,
+			Tampered: true,
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, i.Close()) })
+
+	root := i.Ready()
+	runner, ok := root.(*planLockdownRunner)
+	require.True(t, ok)
+
+	require.Eventually(t, func() bool {
+		i.TickPlan(context.Background())
+		return runner.Locked()
+	}, 10*time.Second, 10*time.Millisecond,
+		"a tampered install while expired must lock without any usage runway")
+}
+
 // TestIDELockdownE2ERendersOverlayAndSwallowsInput is the black-box
 // e2e for the paid-plan lockdown feature: it builds a full IDE via
 // the public ide.New constructor with a plan source that returns

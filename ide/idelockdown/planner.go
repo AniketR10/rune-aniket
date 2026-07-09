@@ -64,6 +64,11 @@ type Config struct {
 	// place of the last nag before lockdown. The caller is
 	// responsible for scheduling onto the event loop.
 	ShowAskMoreTimePrompt func()
+	// Tampered reports that install-ID resolution detected a wiped
+	// data directory. Load persists it into the usage ledger, where
+	// it outlives the self-healing detection signal until an entitled
+	// session clears it.
+	Tampered bool
 	// Now defaults to time.Now.
 	Now func() time.Time
 }
@@ -127,6 +132,11 @@ func (p *Planner) Load(ctx context.Context) error {
 	if err := p.tracker.load(ctx); err != nil {
 		return err
 	}
+	if p.cfg.Tampered {
+		if err := p.tracker.setTampered(ctx, true); err != nil {
+			return err
+		}
+	}
 	return p.tracker.recordUsage(ctx, bucketStart(p.cfg.Now(), usageBucket))
 }
 
@@ -180,9 +190,10 @@ func (p *Planner) snapshot(ctx context.Context) Snapshot {
 		log.WithError(err).Debug("idelockdown: plan decision")
 	}
 	return Snapshot{
-		Now:   p.cfg.Now().UTC(),
-		Usage: p.tracker.usage(),
-		Plan:  dec,
+		Now:      p.cfg.Now().UTC(),
+		Usage:    p.tracker.usage(),
+		Plan:     dec,
+		Tampered: p.tracker.tampered(),
 	}
 }
 
@@ -214,7 +225,14 @@ func (p *Planner) evaluate(ctx context.Context) {
 		"usage":  len(s.Usage),
 		"next":   next.Format(time.RFC3339),
 	}).Debug("idelockdown: evaluate")
-	_, reason := gated(s.Plan)
+	isGated, reason := gated(s.Plan)
+	// An entitled session forgives a past tamper so a later lapse
+	// gets the normal usage runway instead of an immediate lock.
+	if !isGated && s.Tampered {
+		if err := p.tracker.setTampered(ctx, false); err != nil {
+			log.WithError(err).Debug("idelockdown: clear tamper mark")
+		}
+	}
 	switch action {
 	case ActionLockdown:
 		p.cfg.Locker.SetLocked(true, reason)

@@ -84,9 +84,13 @@ func newTelemetry(
 	period time.Duration,
 	version string,
 	store storageapi.Service,
+	installBackupDir string,
 ) *telemetry {
 	if period <= 0 {
 		panic(fmt.Sprintf("apiclient: TelemetryPeriod must be positive, got %v", period))
+	}
+	if installBackupDir == "" {
+		panic("apiclient: InstallBackupDir is required")
 	}
 	ret := new(telemetry)
 	ret.auth = auth
@@ -99,7 +103,7 @@ func newTelemetry(
 
 	ret.quitCtx, ret.cancelCtx = context.WithCancel(context.Background())
 
-	ret.installID, ret.tampered, ret.installErr = getInstallID(ret.quitCtx, store)
+	ret.installID, ret.tampered, ret.installErr = getInstallID(ret.quitCtx, store, installBackupDir)
 
 	return ret
 }

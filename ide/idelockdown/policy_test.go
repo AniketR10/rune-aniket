@@ -366,7 +366,66 @@ func TestDefaultPolicies(t *testing.T) {
 	for _, p := range DefaultPolicies() {
 		names = append(names, p.Name())
 	}
-	assert.Equal(t, []string{"nag", "ask-more-time", "lockdown"}, names)
+	assert.Equal(t, []string{"nag", "ask-more-time", "lockdown", "tamper"}, names)
+}
+
+// TestTamperPolicyEvaluate pins the ~/.rune wipe defense: a tampered
+// install locks gated users immediately, regardless of accrued
+// usage, while entitled users are never affected.
+func TestTamperPolicyEvaluate(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		tampered bool
+		plan     ideplan.Decision
+		want     Action
+	}{
+		{
+			name:     "expired and tampered locks without usage",
+			tampered: true,
+			plan:     ideplan.Decision{Status: ideplan.StatusExpired},
+			want:     ActionLockdown,
+		},
+		{
+			name:     "never-subscribed and tampered locks",
+			tampered: true,
+			plan:     ideplan.Decision{Status: ideplan.StatusNeverSubscribed},
+			want:     ActionLockdown,
+		},
+		{
+			name:     "signed-out and tampered locks",
+			tampered: true,
+			plan: ideplan.Decision{
+				Status: ideplan.StatusExpired, SignedIn: ideplan.SignedOut,
+			},
+			want: ActionLockdown,
+		},
+		{
+			name:     "expired without the tamper mark does nothing",
+			tampered: false,
+			plan:     ideplan.Decision{Status: ideplan.StatusExpired},
+			want:     ActionNone,
+		},
+		{
+			name:     "active and tampered does nothing",
+			tampered: true,
+			plan:     ideplan.Decision{Status: ideplan.StatusActive},
+			want:     ActionNone,
+		},
+		{
+			name:     "grace period and tampered does nothing",
+			tampered: true,
+			plan:     ideplan.Decision{Status: ideplan.StatusGracePeriod},
+			want:     ActionNone,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Snapshot{Now: monday, Plan: tc.plan, Tampered: tc.tampered}
+			next, a := TamperPolicy{}.Evaluate(s)
+			assert.Equal(t, tc.want, a)
+			assert.Equal(t, s.Now.Add(evaluateInterval), next,
+				"tamper policy must re-evaluate one interval later")
+		})
+	}
 }
 
 func TestGated(t *testing.T) {

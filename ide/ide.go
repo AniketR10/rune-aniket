@@ -349,11 +349,15 @@ func (i *IDE) SetReleaseManager(m release.Manager) {
 // as a paid account or a different user). The IDE owns the UX around
 // the returned session: it surfaces the OAuth URL with a clipboard
 // fallback and re-evaluates plan gating when the flow finishes.
+// Tampered reports that install-ID resolution detected a wiped data
+// directory; the usage planner persists it and locks gated users
+// immediately instead of granting a fresh usage runway.
 type PlanSourceConfig struct {
 	Source      ideplan.Source
 	CheckoutURL string
 	SupportURL  string
 	SignIn      func(context.Context) SignInSession
+	Tampered    bool
 }
 
 // defaultSupportURL is where the ask-more-time prompt sends users
@@ -726,6 +730,7 @@ func (i *IDE) init(
 		Locker:                planLocker{ide: i},
 		ShowNagPrompt:         i.nagPromptOpener(op.planSource),
 		ShowAskMoreTimePrompt: i.askMoreTimePromptOpener(op.planSource),
+		Tampered:              op.planSource.Tampered,
 		Now:                   time.Now,
 	})
 	if err := i.usagePlanner.Load(context.Background()); err != nil {

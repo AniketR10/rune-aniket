@@ -116,6 +116,10 @@ type Snapshot struct {
 	Usage []time.Time
 	// Plan is the login/plan state from ideplan.
 	Plan ideplan.Decision
+	// Tampered reports whether the usage ledger carries the tamper
+	// mark: the data directory was wiped while the obscure install-ID
+	// backup survived.
+	Tampered bool
 }
 
 // Policy decides an enforcement Action from a usage Snapshot.

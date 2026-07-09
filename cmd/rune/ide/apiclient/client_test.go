@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -67,7 +68,6 @@ func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {
 }
 
 func TestNewStartsTelemetryWhenEnabled(t *testing.T) {
-	redirectInstallIDTempPath(t)
 	requests := make(chan string, 8)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.URL.Path
@@ -78,6 +78,7 @@ func TestNewStartsTelemetryWhenEnabled(t *testing.T) {
 	config := DefaultConfig()
 	config.HTTPEndpointAddress = srv.URL
 	config.EnableTelemetry = true
+	config.InstallBackupDir = t.TempDir()
 
 	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
 	defer func() {
@@ -111,7 +112,50 @@ func TestNewPanicsOnZeroPeriodWithTelemetryEnabled(t *testing.T) {
 	config.EnableTelemetry = true
 	config.TelemetryPeriod = 0
 	config.HTTPEndpointAddress = "http://localhost"
+	config.InstallBackupDir = t.TempDir()
 	_ = New(storagestub.NewInMemoryService(), config, t.TempDir())
+}
+
+func TestNewPanicsOnEmptyInstallBackupDirWithTelemetryEnabled(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for empty InstallBackupDir with EnableTelemetry=true")
+		}
+	}()
+	config := DefaultConfig()
+	config.EnableTelemetry = true
+	config.HTTPEndpointAddress = "http://localhost"
+	_ = New(storagestub.NewInMemoryService(), config, t.TempDir())
+}
+
+func TestInstallTampered(t *testing.T) {
+	newClient := func(t *testing.T, enableTelemetry bool, backupDir string) *Client {
+		t.Helper()
+		config := DefaultConfig()
+		config.HTTPEndpointAddress = "http://localhost"
+		config.EnableTelemetry = enableTelemetry
+		config.InstallBackupDir = backupDir
+		client := New(storagestub.NewInMemoryService(), config, t.TempDir())
+		t.Cleanup(func() { require.NoError(t, client.Close()) })
+		return client
+	}
+
+	t.Run("fresh install is not tampered", func(t *testing.T) {
+		dir, _ := testInstallIDBackup(t)
+		assert.False(t, newClient(t, true, dir).InstallTampered())
+	})
+
+	t.Run("wiped store with surviving backup is tampered", func(t *testing.T) {
+		dir, tempPath := testInstallIDBackup(t)
+		require.NoError(t, os.WriteFile(tempPath, []byte("backup-id"), 0o600))
+		assert.True(t, newClient(t, true, dir).InstallTampered())
+	})
+
+	t.Run("disabled telemetry never reports tampering", func(t *testing.T) {
+		dir, tempPath := testInstallIDBackup(t)
+		require.NoError(t, os.WriteFile(tempPath, []byte("backup-id"), 0o600))
+		assert.False(t, newClient(t, false, dir).InstallTampered())
+	})
 }
 
 // fakeOAuthServer responds with a minimal /config endpoint and a 400

@@ -36,15 +36,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 )
 
-// redirectInstallIDTempPath points the backup file at a per-test path so tests
-// never touch the real OS temp directory, and restores the original after.
-func redirectInstallIDTempPath(t *testing.T) string {
+// testInstallIDBackup returns a per-test backup directory and the path
+// of the backup file inside it, so tests never touch the real OS temp
+// directory.
+func testInstallIDBackup(t *testing.T) (dir, path string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), installIDTempFileName())
-	prev := installIDTempPath
-	installIDTempPath = func() string { return path }
-	t.Cleanup(func() { installIDTempPath = prev })
-	return path
+	dir = t.TempDir()
+	return dir, filepath.Join(dir, installIDTempFileName())
 }
 
 func readInstallIDDoc(t *testing.T, store storageapi.Service) (installIDDoc, bool) {
@@ -72,12 +70,12 @@ func (setFailingStore) Set(context.Context, string, any) error {
 }
 
 func TestGetInstallIDBothPresent(t *testing.T) {
-	tempPath := redirectInstallIDTempPath(t)
+	dir, tempPath := testInstallIDBackup(t)
 	store := storagestub.NewInMemoryService()
 	require.NoError(t, store.Set(context.Background(), installIDDocID, installIDDoc{ID: "shared-id"}))
 	require.NoError(t, os.WriteFile(tempPath, []byte("shared-id"), 0o600))
 
-	id, tampered, errStr := getInstallID(context.Background(), store)
+	id, tampered, errStr := getInstallID(context.Background(), store, dir)
 
 	assert.Equal(t, "shared-id", id)
 	assert.False(t, tampered, "identical present copies must not flag tampering")
@@ -85,11 +83,11 @@ func TestGetInstallIDBothPresent(t *testing.T) {
 }
 
 func TestGetInstallIDStorageAbsentTempPresentFlagsTampered(t *testing.T) {
-	tempPath := redirectInstallIDTempPath(t)
+	dir, tempPath := testInstallIDBackup(t)
 	store := storagestub.NewInMemoryService()
 	require.NoError(t, os.WriteFile(tempPath, []byte("backup-id"), 0o600))
 
-	id, tampered, errStr := getInstallID(context.Background(), store)
+	id, tampered, errStr := getInstallID(context.Background(), store, dir)
 
 	assert.Equal(t, "backup-id", id)
 	assert.True(t, tampered, "wiped store with surviving backup must flag tampering")
@@ -101,11 +99,11 @@ func TestGetInstallIDStorageAbsentTempPresentFlagsTampered(t *testing.T) {
 }
 
 func TestGetInstallIDStoragePresentTempAbsentNoFlag(t *testing.T) {
-	tempPath := redirectInstallIDTempPath(t)
+	dir, tempPath := testInstallIDBackup(t)
 	store := storagestub.NewInMemoryService()
 	require.NoError(t, store.Set(context.Background(), installIDDocID, installIDDoc{ID: "stored-id"}))
 
-	id, tampered, errStr := getInstallID(context.Background(), store)
+	id, tampered, errStr := getInstallID(context.Background(), store, dir)
 
 	assert.Equal(t, "stored-id", id)
 	assert.False(t, tampered, "missing backup (routine temp reaping) must not flag tampering")
@@ -117,10 +115,10 @@ func TestGetInstallIDStoragePresentTempAbsentNoFlag(t *testing.T) {
 }
 
 func TestGetInstallIDBothAbsentGeneratesNew(t *testing.T) {
-	tempPath := redirectInstallIDTempPath(t)
+	dir, tempPath := testInstallIDBackup(t)
 	store := storagestub.NewInMemoryService()
 
-	id, tampered, errStr := getInstallID(context.Background(), store)
+	id, tampered, errStr := getInstallID(context.Background(), store, dir)
 
 	require.NotEmpty(t, id, "fresh install must generate an identifier")
 	assert.False(t, tampered, "fresh install must not flag tampering")
@@ -136,25 +134,25 @@ func TestGetInstallIDBothAbsentGeneratesNew(t *testing.T) {
 }
 
 func TestGetInstallIDStableAcrossCalls(t *testing.T) {
-	redirectInstallIDTempPath(t)
+	dir, _ := testInstallIDBackup(t)
 	store := storagestub.NewInMemoryService()
 
-	first, tampered, errStr := getInstallID(context.Background(), store)
+	first, tampered, errStr := getInstallID(context.Background(), store, dir)
 	require.NotEmpty(t, first)
 	require.False(t, tampered)
 	require.Empty(t, errStr)
 
-	second, tampered, errStr := getInstallID(context.Background(), store)
+	second, tampered, errStr := getInstallID(context.Background(), store, dir)
 	assert.Equal(t, first, second, "identifier must be stable once persisted")
 	assert.False(t, tampered)
 	assert.Empty(t, errStr)
 }
 
 func TestGetInstallIDReportsStoreWriteError(t *testing.T) {
-	redirectInstallIDTempPath(t)
+	dir, _ := testInstallIDBackup(t)
 	store := setFailingStore{Service: storagestub.NewInMemoryService()}
 
-	id, tampered, errStr := getInstallID(context.Background(), store)
+	id, tampered, errStr := getInstallID(context.Background(), store, dir)
 
 	require.NotEmpty(t, id, "a store write failure must not stop id generation")
 	assert.False(t, tampered)

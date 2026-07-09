@@ -101,7 +101,8 @@ func New(
 		ret.telemetryTokenSource = auth.NewCachedTokenSource(refreshOnlySourcer, authStorage)
 		telemetryStorage := storageapi.WithPartition(storage, "telemetry")
 		ret.telemetry = newTelemetry(ret.telemetryTokenSource,
-			ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag, telemetryStorage)
+			ret.httpEndpointURL, ret.config.TelemetryPeriod, debug.Tag,
+			telemetryStorage, ret.config.InstallBackupDir)
 		ret.telemetry.start()
 	}
 
@@ -119,6 +120,16 @@ func (t *Client) Handle(ctx context.Context, ev textapi.Event) bool {
 // TelemetryEnabled returns whether telemetry is active for this client.
 func (a *Client) TelemetryEnabled() bool {
 	return a.telemetry != nil
+}
+
+// InstallTampered reports whether install-ID resolution found a wiped
+// data directory with a surviving backup identifier — the signal of
+// an attempt to reset local state. Detection runs only when telemetry
+// is enabled, and it self-heals: the first client to observe the
+// signal consumes it, so callers must persist the flag if they need
+// it beyond this process.
+func (a *Client) InstallTampered() bool {
+	return a.telemetry != nil && a.telemetry.tampered
 }
 
 // TokenSource satisfies auth.TokenSourcer.

@@ -69,6 +69,7 @@ type bootstrapHandler struct {
 	signupURL         string
 	openBrowser       func(*url.URL) error
 	clip              clipboard.Register
+	installBackupDir  string
 	preIDE            *ide.IDE
 	realIDE           *ide.IDE
 	g                 *gui.GUI
@@ -95,26 +96,28 @@ func newBootstrapHandler(
 	checkoutURL, signupURL string,
 	openBrowser func(*url.URL) error,
 	clip clipboard.Register,
+	installBackupDir string,
 ) (*bootstrapHandler, error) {
 	bh := &bootstrapHandler{
-		dataDir:      dataDir,
-		storage:      newRuneStorage(dataDir),
-		configPath:   configPath,
-		workspace:    workspace,
-		zdotDir:      zdotDir,
-		filenames:    filenames,
-		launchCmd:    launchCmd,
-		runner:       runner,
-		mu:           mu,
-		publishEvent: publishEvent,
-		checkoutURL:  checkoutURL,
-		signupURL:    signupURL,
-		openBrowser:  openBrowser,
-		clip:         clip,
+		dataDir:          dataDir,
+		storage:          newRuneStorage(dataDir),
+		configPath:       configPath,
+		workspace:        workspace,
+		zdotDir:          zdotDir,
+		filenames:        filenames,
+		launchCmd:        launchCmd,
+		runner:           runner,
+		mu:               mu,
+		publishEvent:     publishEvent,
+		checkoutURL:      checkoutURL,
+		signupURL:        signupURL,
+		openBrowser:      openBrowser,
+		clip:             clip,
+		installBackupDir: installBackupDir,
 	}
 
 	if isBootstrapped(dataDir) {
-		client, releaseManager := newAPIClient(bh.storage)
+		client, releaseManager := newAPIClient(bh.storage, installBackupDir)
 		realIDE, err := bh.buildConfiguredIDE(client, releaseManager, false)
 		if err != nil {
 			_ = client.Close()
@@ -132,7 +135,7 @@ func newBootstrapHandler(
 	}
 	bh.preIDE = preIDE
 	bh.inner = preIDE.Ready()
-	client := newBootstrapAPIClient(preIDE.Storage(), openBrowser)
+	client := newBootstrapAPIClient(preIDE.Storage(), openBrowser, installBackupDir)
 	bh.bootstrapClient = client
 	bh.openBootstrapFlow()
 	return bh, nil
@@ -240,6 +243,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 			Source:      ideplan.NewJWTSource(client.CachedTokenSource(), nil),
 			CheckoutURL: b.checkoutURL,
 			SignIn:      planSignIn(client),
+			Tampered:    client.InstallTampered() || b.bootstrapTampered(),
 		}),
 	)
 	realIDE, err := ide.New(b.workspace, b.configPath, b.dataDir,
@@ -254,6 +258,15 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.g = g
 	b.transparentWindow = transparentWindow
+}
+
+// bootstrapTampered reports whether the pre-swap bootstrap client
+// observed the install-ID tamper signal. The signal self-heals on
+// first observation, so during a first-run bootstrap the configured
+// IDE's own client never sees it — only the bootstrap client, which
+// ran install-ID resolution first, does.
+func (b *bootstrapHandler) bootstrapTampered() bool {
+	return b.bootstrapClient != nil && b.bootstrapClient.InstallTampered()
 }
 
 // setupPreIDE registers the GUI command family on the pre-config IDE
@@ -425,7 +438,7 @@ func (b *bootstrapHandler) performSwap() error {
 	b.mu.Unlock()
 	defer b.mu.Lock()
 
-	client, releaseManager := newAPIClient(b.storage)
+	client, releaseManager := newAPIClient(b.storage, b.installBackupDir)
 	realIDE, err := b.buildConfiguredIDE(client, releaseManager, true)
 	if err != nil {
 		_ = client.Close()
