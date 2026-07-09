@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
+	bluebolt "github.com/unstablebuild/blue/document/bolt"
 	"github.com/unstablebuild/blue/document/docmarshal/docbson"
 	"github.com/unstablebuild/blue/document/docmarshal/docjson"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
@@ -658,4 +659,70 @@ func TestStreamingGetBinaryFidelity(t *testing.T) {
 	gotBlob, ok := got["blob"].([]byte)
 	require.True(t, ok, "blob should decode as []byte, got %T", got["blob"])
 	assert.True(t, bytes.Equal(blob, gotBlob))
+}
+
+// noSyncSpyService records whether each write arrived with the bluebolt
+// no-sync request restored on its context.
+type noSyncSpyService struct {
+	storageapi.Service
+	noSync map[string]bool
+}
+
+func (s *noSyncSpyService) Create(ctx context.Context, ID string, doc any) error {
+	s.noSync["create"] = bluebolt.NoSyncRequested(ctx)
+	return s.Service.Create(ctx, ID, doc)
+}
+
+func (s *noSyncSpyService) Set(ctx context.Context, ID string, doc any) error {
+	s.noSync["set"] = bluebolt.NoSyncRequested(ctx)
+	return s.Service.Set(ctx, ID, doc)
+}
+
+func (s *noSyncSpyService) Update(
+	ctx context.Context, ID string,
+	updates []storageapi.Update, preconds ...storageapi.Precondition,
+) error {
+	s.noSync["update"] = bluebolt.NoSyncRequested(ctx)
+	return s.Service.Update(ctx, ID, updates, preconds...)
+}
+
+func (s *noSyncSpyService) Delete(ctx context.Context, ID string) error {
+	s.noSync["delete"] = bluebolt.NoSyncRequested(ctx)
+	return s.Service.Delete(ctx, ID)
+}
+
+func TestNoSyncRequestPropagatesOverRPC(t *testing.T) {
+	marshaler := doctoml.Marshaler()
+	spy := &noSyncSpyService{
+		Service: storagestub.NewInMemoryServiceWithMarshaler(marshaler),
+		noSync:  make(map[string]bool),
+	}
+	addr, teardown := runDatastoreServer(t, spy, marshaler)
+	defer teardown()
+
+	opts := append(NoSyncDialOptions(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	store, err := storagerpc.NewClient(addr, marshaler, opts...)
+	require.NoError(t, err)
+	defer store.Close()
+
+	writeAll := func(ctx context.Context, id string) {
+		t.Helper()
+		require.NoError(t, store.Create(ctx, id, map[string]any{"name": "Ada"}))
+		require.NoError(t, store.Set(ctx, id, map[string]any{"name": "Grace"}))
+		require.NoError(t, store.Update(ctx, id, []storageapi.Update{
+			{FieldPath: []string{"name"}, Value: "Katherine"},
+		}))
+		require.NoError(t, store.Delete(ctx, id))
+	}
+
+	writeAll(context.Background(), "doc-plain")
+	for op, noSync := range spy.noSync {
+		assert.False(t, noSync, "op %s should not carry no-sync", op)
+	}
+
+	writeAll(bluebolt.ContextWithNoSync(context.Background()), "doc-nosync")
+	for _, op := range []string{"create", "set", "update", "delete"} {
+		assert.True(t, spy.noSync[op], "op %s should carry no-sync", op)
+	}
 }

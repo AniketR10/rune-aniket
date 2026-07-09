@@ -435,6 +435,7 @@ func (s *Service) follow(ctx context.Context, addr net.Addr) (bool, error) {
 			grpc.MaxCallRecvMsgSize(s.cfg.MaxMessageSize),
 		),
 	}
+	opts = append(opts, storagerpc.NoSyncDialOptions()...)
 	opts = append(opts,
 		grpc.WithBlock(), //nolint:staticcheck // WithBlock is needed for dial-timeout behavior
 		grpc.WithContextDialer(

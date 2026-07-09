@@ -155,11 +155,12 @@ func (s *Server) Create(stream docpb.DocumentStore_CreateServer) error {
 		return err
 	}
 
-	svc, err := s.serviceForContext(stream.Context())
+	ctx := noSyncIncomingContext(stream.Context())
+	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return err
 	}
-	err = svc.Create(stream.Context(), id, pr)
+	err = svc.Create(ctx, id, pr)
 	if err != nil {
 		if errors.Is(err, storageapi.ErrAlreadyExists) {
 			return stream.SendAndClose(&docpb.CreateDocumentResponse{AlreadyExists: true})
@@ -206,11 +207,12 @@ func (s *Server) Set(stream docpb.DocumentStore_SetServer) error {
 		return err
 	}
 
-	svc, err := s.serviceForContext(stream.Context())
+	ctx := noSyncIncomingContext(stream.Context())
+	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return err
 	}
-	err = svc.Set(stream.Context(), id, &pr)
+	err = svc.Set(ctx, id, &pr)
 	if errors.Is(err, storageapi.ErrPermissionDenied) {
 		return status.Error(codes.PermissionDenied, "")
 	}
@@ -261,11 +263,12 @@ func (s *Server) Update(stream docpb.DocumentStore_UpdateServer) error {
 	if len(updates) == 0 {
 		return errors.New("invalid request: no paths to update")
 	}
-	svc, err := s.serviceForContext(stream.Context())
+	ctx := noSyncIncomingContext(stream.Context())
+	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return err
 	}
-	err = svc.Update(stream.Context(), id, updates, preconds...)
+	err = svc.Update(ctx, id, updates, preconds...)
 	if err != nil {
 		switch {
 		case errors.Is(err, storageapi.ErrNotFound):
@@ -372,6 +375,7 @@ func (s *Server) Delete(
 ) (res *docpb.DocumentResponse, err error) {
 	id := req.GetId()
 
+	ctx = noSyncIncomingContext(ctx)
 	svc, err := s.serviceForContext(ctx)
 	if err != nil {
 		return nil, err
