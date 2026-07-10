@@ -2005,6 +2005,47 @@ func neverEndingComplete() (func(context.Context, []string) (iterator.Iterator[s
 	}, func(*testing.T) {}
 }
 
+type closeTrackingCompletionIterator struct {
+	closed bool
+}
+
+func (c *closeTrackingCompletionIterator) Next(context.Context) (string, bool) {
+	return "", false
+}
+
+func (c *closeTrackingCompletionIterator) Err() error { return nil }
+
+func (c *closeTrackingCompletionIterator) Close() error {
+	c.closed = true
+	return nil
+}
+
+// A completer may return a non-nil iterator alongside an error; the
+// prompt must close it instead of dropping it.
+func TestCommandHandlerClosesCompletionIteratorOnError(t *testing.T) {
+	dispatchFn, cleanup := nopDispatch()
+	defer cleanup(t)
+
+	it := &closeTrackingCompletionIterator{}
+	completeFn := func(context.Context, []string) (iterator.Iterator[string], string, error) {
+		return it, "", errors.New("completer failed")
+	}
+
+	b := NewPrompt(
+		storagestub.NewInMemoryService(), FuncCompleter(completeFn),
+		FuncDispatcher(dispatchFn), term.NopInterrupter(), nil,
+		testDefaultConfig(),
+	)
+	defer b.Close()
+
+	for _, runeValue := range "hello " {
+		_, handled := b.handle(term.Event{Type: term.EventKey, Ch: runeValue}, false)
+		require.True(t, handled)
+	}
+
+	assert.True(t, it.closed)
+}
+
 func TestCommandHandlerCancel(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	t.Run("ctrl-c once cancels search; twice closes window", func(t *testing.T) {

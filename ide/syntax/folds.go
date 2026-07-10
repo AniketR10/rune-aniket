@@ -141,7 +141,12 @@ func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 			f.err = ctx.Err()
 			return term.Range{}, false
 		}
-		if f.tree.tree == nil || f.tree.folds == nil {
+		// the Tree may have been closed between the ready signal and
+		// this first Next; its native tree-sitter objects are freed
+		// under mu, so re-check closed before touching them.
+		f.tree.mu.Lock()
+		if f.tree.closed || f.tree.tree == nil || f.tree.folds == nil {
+			f.tree.mu.Unlock()
 			return term.Range{}, false
 		}
 		if f.from == (term.Coordinates{}) {
@@ -149,6 +154,7 @@ func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 		} else {
 			f.slice = iterator.FromSlice(f.tree.getFoldsFrom(f.from))
 		}
+		f.tree.mu.Unlock()
 	}
 	return f.slice.Next(ctx)
 }

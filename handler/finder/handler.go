@@ -395,7 +395,7 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 
 func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 	ctx context.Context, datachan chan<- []byte,
-) error {
+) (err error) {
 	defer close(datachan)
 	log.Debugf("using workspace API to get resource iterator")
 
@@ -406,6 +406,9 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 	if err != nil {
 		return fmt.Errorf("workspace API fallback: %v", err)
 	}
+	defer func() {
+		err = errors.Join(err, it.Close())
+	}()
 
 	for {
 		resource, ok := it.Next(ctx)
@@ -418,10 +421,7 @@ func (h *fuzzyFinderHandler) doScanDataViaWorkspaceAPI(
 			return ctx.Err()
 		}
 	}
-	if err := it.Err(); err != nil {
-		return err
-	}
-	return it.Close()
+	return it.Err()
 }
 
 func (h *fuzzyFinderHandler) scanDataViaWorkspaceAPI(

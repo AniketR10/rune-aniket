@@ -6,6 +6,7 @@ package finder
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -28,6 +29,52 @@ import (
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
+
+type closeTrackingIterator struct {
+	next   func(context.Context) (string, bool)
+	err    error
+	closed bool
+}
+
+func (it *closeTrackingIterator) Next(ctx context.Context) (string, bool) { return it.next(ctx) }
+func (it *closeTrackingIterator) Err() error                              { return it.err }
+func (it *closeTrackingIterator) Close() error                            { it.closed = true; return nil }
+
+// The workspace-API scan iterator owns walkdir traversal goroutines;
+// every doScanDataViaWorkspaceAPI return path must close it.
+func TestDoScanDataViaWorkspaceAPIClosesIterator(t *testing.T) {
+	newHandler := func(stub *closeTrackingIterator) *fuzzyFinderHandler {
+		return &fuzzyFinderHandler{
+			workspaceFallback: func(workspaceapi.FileSystem, context.Context) (
+				iterator.Iterator[string], error,
+			) {
+				return stub, nil
+			},
+		}
+	}
+
+	t.Run("iterator error", func(t *testing.T) {
+		stub := &closeTrackingIterator{
+			next: func(context.Context) (string, bool) { return "", false },
+			err:  errors.New("walk failed"),
+		}
+		err := newHandler(stub).doScanDataViaWorkspaceAPI(
+			context.Background(), make(chan []byte, 1))
+		require.Error(t, err)
+		assert.True(t, stub.closed)
+	})
+
+	t.Run("context canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		stub := &closeTrackingIterator{
+			next: func(context.Context) (string, bool) { return "resource", true },
+		}
+		err := newHandler(stub).doScanDataViaWorkspaceAPI(ctx, make(chan []byte))
+		require.ErrorIs(t, err, context.Canceled)
+		assert.True(t, stub.closed)
+	})
+}
 
 // TestNativeBackend_GitignoreFiltersResults exercises the native fuzzy-search
 // backend end-to-end. It builds the handler with a real workspace.FileScheme

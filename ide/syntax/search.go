@@ -830,6 +830,10 @@ func (l *chanIterator[T]) Next(ctx context.Context) (T, bool) {
 	var zero T
 	select {
 	case <-ctx.Done():
+		// the iterator is finished once the consumer's context is
+		// canceled; stop the producer so it does not block forever on
+		// the results channel holding tree-sitter natives.
+		l.cancel()
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.err = errors.Join(l.err, ctx.Err())
@@ -922,6 +926,7 @@ func (it *resolveSymbolIterator) setErr(err error) {
 func (it *resolveSymbolIterator) Next(ctx context.Context) (syntaxapi.Match, bool) {
 	select {
 	case <-ctx.Done():
+		it.cancel()
 		it.setErr(ctx.Err())
 		return syntaxapi.Match{}, false
 	case <-it.ctx.Done():
@@ -962,6 +967,7 @@ func (it *listReferencedSymbolsIterator) setErr(err error) {
 func (it *listReferencedSymbolsIterator) Next(ctx context.Context) (string, bool) {
 	select {
 	case <-ctx.Done():
+		it.cancel()
 		it.setErr(ctx.Err())
 		return "", false
 	case <-it.ctx.Done():

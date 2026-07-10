@@ -659,6 +659,83 @@ func newTestIterator(bufSize int) *chanIterator[syntaxapi.Result] {
 	}
 }
 
+// The producer goroutines behind the streaming iterators derive their
+// context from context.Background. If a consumer's context is
+// canceled and the iterator is abandoned without Close, the producer
+// must still be canceled or it blocks forever on its unbuffered
+// results channel, pinning tree-sitter natives.
+func TestIteratorNextCancelsProducerOnConsumerCtxDone(t *testing.T) {
+	canceledCtx := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+
+	tests := []struct {
+		name string
+		make func() (next func(context.Context) bool, producerCtx context.Context)
+	}{
+		{
+			name: "chanIterator",
+			make: func() (func(context.Context) bool, context.Context) {
+				ctx, cancel := context.WithCancel(context.Background())
+				it := &chanIterator[syntaxapi.Result]{
+					ctx:         ctx,
+					ch:          make(chan syntaxapi.Result),
+					cancel:      cancel,
+					closeWaitCh: make(chan struct{}),
+				}
+				return func(ctx context.Context) bool {
+					_, ok := it.Next(ctx)
+					return ok
+				}, ctx
+			},
+		},
+		{
+			name: "resolveSymbolIterator",
+			make: func() (func(context.Context) bool, context.Context) {
+				ctx, cancel := context.WithCancel(context.Background())
+				it := &resolveSymbolIterator{
+					ctx:         ctx,
+					ch:          make(chan syntaxapi.Match),
+					cancel:      cancel,
+					closeWaitCh: make(chan struct{}),
+				}
+				return func(ctx context.Context) bool {
+					_, ok := it.Next(ctx)
+					return ok
+				}, ctx
+			},
+		},
+		{
+			name: "listReferencedSymbolsIterator",
+			make: func() (func(context.Context) bool, context.Context) {
+				ctx, cancel := context.WithCancel(context.Background())
+				it := &listReferencedSymbolsIterator{
+					ctx:         ctx,
+					ch:          make(chan string),
+					cancel:      cancel,
+					closeWaitCh: make(chan struct{}),
+				}
+				return func(ctx context.Context) bool {
+					_, ok := it.Next(ctx)
+					return ok
+				}, ctx
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			next, producerCtx := tt.make()
+			ok := next(canceledCtx())
+			require.False(t, ok)
+			assert.Error(t, producerCtx.Err(),
+				"producer context should be canceled after consumer ctx cancellation")
+		})
+	}
+}
+
 func drainIterator(t *testing.T, it *chanIterator[syntaxapi.Result], ctx context.Context) int {
 	t.Helper()
 	count := 0

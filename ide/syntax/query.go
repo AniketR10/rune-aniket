@@ -181,25 +181,39 @@ func newNodesIterator(
 }
 
 func (f *nodesIterator) Next(ctx context.Context) (Match, bool) {
-	if f.slice == nil {
-		select {
-		case <-f.ready:
-		case <-ctx.Done():
-			f.err = ctx.Err()
-			return Match{}, false
-		}
-		if f.tree.tree == nil {
-			f.err = errors.New("could not parse tree: could not find " +
-				"parser in language package or there was a critical parser error")
-			return Match{}, false
-		}
-		data, err := f.tree.runQuery(f.queryFile, f.expectedQueryNames)
-		if err != nil {
-			f.err = err
-			return Match{}, false
-		}
-		f.slice = iterator.FromSlice(data)
+	if f.slice != nil {
+		return f.slice.Next(ctx)
 	}
+
+	select {
+	case <-f.ready:
+	case <-ctx.Done():
+		f.err = ctx.Err()
+		return Match{}, false
+	}
+	// the Tree may have been closed between the ready signal and
+	// this first Next; its native tree-sitter objects are freed
+	// under mu, so re-check closed before touching them.
+	f.tree.mu.Lock()
+	if f.tree.closed {
+		f.tree.mu.Unlock()
+		f.err = errors.New("tree is closed")
+		return Match{}, false
+	}
+	if f.tree.tree == nil {
+		f.tree.mu.Unlock()
+		f.err = errors.New("could not parse tree: could not find " +
+			"parser in language package or there was a critical parser error")
+		return Match{}, false
+	}
+	data, err := f.tree.runQuery(f.queryFile, f.expectedQueryNames)
+	f.tree.mu.Unlock()
+	if err != nil {
+		f.err = err
+		return Match{}, false
+	}
+	f.slice = iterator.FromSlice(data)
+
 	return f.slice.Next(ctx)
 }
 

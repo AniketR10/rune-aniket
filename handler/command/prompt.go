@@ -919,6 +919,9 @@ func (h *Prompt) setCompletionList(
 
 	it, newLastArg, err := h.completer.Complete(ctx, finalExternalCmdAndArgs)
 	if err != nil {
+		if it != nil {
+			_ = it.Close()
+		}
 		it = iterator.Empty[string]()
 	}
 	if newLastArg != "" {
