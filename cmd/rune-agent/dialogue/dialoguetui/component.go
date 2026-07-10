@@ -70,6 +70,9 @@ type Component struct {
 	// streamed reasoning
 	reasoningMsg  strings.Builder
 	reasoningTail *component.ListNode
+	// reusable markdown component/handler for the current reasoning stream
+	reasoningTailMd      *markdown.Component
+	reasoningTailHandler *mdhandler.Handler
 	// streamed receives
 	msg         strings.Builder
 	tail        *component.ListNode
@@ -134,6 +137,10 @@ func (c *Component) Init(cfg ComponentConfig) {
 		d := markdown.DefaultConfig()
 		d.HeaderPrefix = false
 		cfg.MarkdownConfig = new(d)
+	}
+	if cfg.ReasoningMarkdownConfig == nil {
+		cfg.ReasoningMarkdownConfig = reasoningMarkdownConfig(
+			*cfg.MarkdownConfig, cfg.ReasoningStringConfig)
 	}
 	if cfg.InputRowColumns > component.MaxCols {
 		panic(fmt.Sprintf("InputRowColumns must be > 0 and <= %d", component.MaxCols))
@@ -366,34 +373,87 @@ func (c *Component) AddSendMessageMarkdown(msg string) {
 }
 
 // AddReasoningChunk adds a reasoning text chunk. Reasoning is rendered
-// with ReasoningStringConfig (typically gray). When text streaming
-// begins via AddReceiveMessageChunk, any active reasoning stream is
-// finalized automatically.
+// as markdown styled with ReasoningMarkdownConfig (typically dim gray),
+// falling back to plain text on parse errors. When text streaming begins
+// via AddReceiveMessageChunk, any active reasoning stream is finalized
+// automatically.
 func (c *Component) AddReasoningChunk(chunk string) {
 	maxOff, scrolled := c.scrollState()
 	defer c.restoreScroll(maxOff, scrolled)
 	c.reasoningMsg.WriteString(chunk)
+
+	// Fast path: re-parse in-place on the existing markdown component.
+	// Only valid while reasoning is visible; when hidden the tail node
+	// holds a NopResponsive and must be re-attached below.
+	if c.reasoningVisible && c.reasoningTailMd != nil {
+		if err := c.reasoningTailMd.Init(c.reasoningMsg.String()); err == nil {
+			c.moveHintToBack()
+			return
+		}
+		// Parse error on previously-working content: fall through to recreate.
+	}
+
 	if c.reasoningTail != nil {
 		c.messages.Remove(c.reasoningTail)
 	} else {
 		c.reasoningTail = new(component.ListNode)
 	}
-	var strComp component.Responsive
-	strComp = component.NewResponsiveString(c.reasoningMsg.String(),
-		component.StringResponsiveConfig{
-			NoSplitWords: true,
-			StringConfig: c.cfg.ReasoningStringConfig,
-		})
-	strComp = component.NewSpan(strComp, c.cfg.ReasoningSpanConfig)
-	c.reasoningStreamComp = strComp
+
+	var resp component.Responsive
+	md, err := markdown.NewWithConfig(
+		c.reasoningMsg.String(), *c.cfg.ReasoningMarkdownConfig)
+	if err != nil {
+		c.reasoningTailMd = nil
+		c.reasoningTailHandler = nil
+		resp = component.NewResponsiveString(c.reasoningMsg.String(),
+			component.StringResponsiveConfig{
+				NoSplitWords: true,
+				StringConfig: c.cfg.ReasoningStringConfig,
+			})
+	} else {
+		c.reasoningTailMd = md
+		c.reasoningTailHandler = mdhandler.New(md)
+		resp = c.reasoningTailHandler
+	}
+	resp = component.NewSpan(resp, c.cfg.ReasoningSpanConfig)
+	c.reasoningStreamComp = resp
 
 	if c.reasoningVisible {
-		*c.reasoningTail = c.messages.PushBack(strComp)
+		*c.reasoningTail = c.messages.PushBack(resp)
 	} else {
 		*c.reasoningTail = c.messages.PushBack(component.NopResponsive())
 	}
 	c.ensureReasoningAnnotation()
 	c.moveHintToBack()
+}
+
+// reasoningMarkdownConfig derives a markdown config for reasoning text
+// from the base config, restyling every element with the reasoning
+// string config's attributes so the whole block reads as dim meta-text
+// while still honoring markdown structure.
+func reasoningMarkdownConfig(
+	base markdown.Config, style component.StringConfig,
+) *markdown.Config {
+	attr := style.Attributes
+	base.H1 = attr
+	base.H2 = attr
+	base.H3 = attr
+	base.H4 = attr
+	base.H5 = attr
+	base.H6 = attr
+	base.Paragraph = attr
+	base.Bold = attr
+	base.Italic = attr
+	base.Strikethrough = attr
+	base.CodeBlock = attr
+	base.InlineCode = attr
+	base.Link = attr
+	base.LinkURL = attr
+	base.Blockquote = attr
+	base.HorizontalRuleAttr = attr
+	base.ParagraphSpacing = 0
+	base.Parser = nil
+	return &base
 }
 
 // breakReasoning finalizes an active reasoning stream so subsequent
@@ -408,6 +468,8 @@ func (c *Component) breakReasoning() {
 	c.reasoningTail = nil
 	c.reasoningMsg.Reset()
 	c.reasoningStreamComp = nil
+	c.reasoningTailMd = nil
+	c.reasoningTailHandler = nil
 }
 
 // ensureReasoningAnnotation adds or replaces the reasoning toggle

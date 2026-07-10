@@ -991,9 +991,9 @@ func TestComponentHintPersistsThroughReasoning(t *testing.T) {
 				comp.AddReasoningChunk("Hmm")
 			},
 			Expected: "Hmm                  \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"$                    \n" +
-				"                     \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1141,8 +1141,8 @@ func TestComponentReasoningChunks(t *testing.T) {
 				comp.AddReasoningChunk("Think")
 			},
 			Expected: "Think                \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1157,8 +1157,55 @@ func TestComponentReasoningChunks(t *testing.T) {
 				comp.AddReasoningChunk("ing hard")
 			},
 			Expected: "Thinking hard        \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"                     \n" +
+				"                     \n" +
+				"                     \n" +
+				" ┌──────────────┐    \n" +
+				" │              │    \n" +
+				" └──────────────┘    \n" +
+				"                     ",
+		},
+	}
+	comptest.TestComponent(t, comp, w, tests)
+}
+
+// TestComponentReasoningMarkdown verifies reasoning text is rendered as
+// markdown: bold markers are stripped once closed rather than shown
+// literally.
+func TestComponentReasoningMarkdown(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(20, 10)
+
+	w := term.NewStringWriter(21, 11)
+	tests := []comptest.TestCase{
+		{
+			// Partial bold — markers not yet closed.
+			Action: func() {
+				comp.AddReasoningChunk("Plan **st")
+			},
+			Expected: "Plan **st            \n" +
+				"                     \n" +
+				"ctrl-o to collapse   \n" +
+				"                     \n" +
+				"                     \n" +
+				"                     \n" +
+				"                     \n" +
+				" ┌──────────────┐    \n" +
+				" │              │    \n" +
+				" └──────────────┘    \n" +
+				"                     ",
+		},
+		{
+			// Complete bold — markers stripped.
+			Action: func() {
+				comp.AddReasoningChunk("eps** now")
+			},
+			Expected: "Plan steps now       \n" +
+				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1183,8 +1230,8 @@ func TestComponentReasoningThenText(t *testing.T) {
 				comp.AddReasoningChunk("Let me think...")
 			},
 			Expected: "Let me think...      \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1200,9 +1247,9 @@ func TestComponentReasoningThenText(t *testing.T) {
 				comp.AddReceiveMessageChunk("Hello!")
 			},
 			Expected: "Let me think...      \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"Hello!               \n" +
-				"                     \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1217,9 +1264,9 @@ func TestComponentReasoningThenText(t *testing.T) {
 				comp.AddReceiveMessageChunk(" World")
 			},
 			Expected: "Let me think...      \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"Hello! World         \n" +
-				"                     \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1248,8 +1295,8 @@ func TestComponentReasoningToolCallReasoning(t *testing.T) {
 			},
 			Expected: "I should read the    \n" +
 				"file                 \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1265,9 +1312,9 @@ func TestComponentReasoningToolCallReasoning(t *testing.T) {
 			},
 			Expected: "I should read the    \n" +
 				"file                 \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"⚙ read_file          \n" +
-				"                     \n" +
 				"                     \n" +
 				"                     \n" +
 				" ┌──────────────┐    \n" +
@@ -1281,10 +1328,10 @@ func TestComponentReasoningToolCallReasoning(t *testing.T) {
 			},
 			Expected: "I should read the    \n" +
 				"file                 \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"✓ read_file          \n" +
 				"data                 \n" +
-				"                     \n" +
 				"                     \n" +
 				" ┌──────────────┐    \n" +
 				" │              │    \n" +
@@ -1296,13 +1343,13 @@ func TestComponentReasoningToolCallReasoning(t *testing.T) {
 			Action: func() {
 				comp.AddReasoningChunk("Now I know")
 			},
-			Expected: "I should read the    \n" +
-				"file                 \n" +
+			Expected: "file                 \n" +
+				"                     \n" +
 				"✓ read_file          \n" +
 				"data                 \n" +
 				"Now I know           \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				" ┌──────────────┐    \n" +
 				" │              │    \n" +
 				" └──────────────┘    \n" +
@@ -1313,10 +1360,10 @@ func TestComponentReasoningToolCallReasoning(t *testing.T) {
 			Action: func() {
 				comp.AddReceiveMessageChunk("The answer is 42.")
 			},
-			Expected: "file                 \n" +
-				"✓ read_file          \n" +
+			Expected: "✓ read_file          \n" +
 				"data                 \n" +
 				"Now I know           \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
 				"The answer is 42.    \n" +
 				"                     \n" +
@@ -1342,8 +1389,8 @@ func TestComponentReasoningOnlyThenBreak(t *testing.T) {
 				comp.AddReceiveMessageBreak()
 			},
 			Expected: "Deep thought         \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1359,10 +1406,10 @@ func TestComponentReasoningOnlyThenBreak(t *testing.T) {
 				comp.AddReasoningChunk("New thought")
 			},
 			Expected: "Deep thought         \n" +
+				"                     \n" +
 				"New thought          \n" +
+				"                     \n" +
 				"ctrl-o to collapse   \n" +
-				"                     \n" +
-				"                     \n" +
 				"                     \n" +
 				"                     \n" +
 				" ┌──────────────┐    \n" +
@@ -1385,8 +1432,8 @@ func TestComponentResetDuringReasoning(t *testing.T) {
 				comp.AddReasoningChunk("thinking")
 			},
 			Expected: "thinking             \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1418,8 +1465,8 @@ func TestComponentResetDuringReasoning(t *testing.T) {
 				comp.AddReasoningChunk("fresh")
 			},
 			Expected: "fresh                \n" +
-				"ctrl-o to collapse   \n" +
 				"                     \n" +
+				"ctrl-o to collapse   \n" +
 				"                     \n" +
 				"                     \n" +
 				"                     \n" +
@@ -1444,8 +1491,8 @@ func TestComponentReasoningToggle(t *testing.T) {
 				comp.AddReasoningChunk("Thinking hard")
 			},
 			Expected: "Thinking hard             \n" +
-				"ctrl-o to collapse        \n" +
 				"                          \n" +
+				"ctrl-o to collapse        \n" +
 				"                          \n" +
 				"                          \n" +
 				"                          \n" +
@@ -1461,9 +1508,9 @@ func TestComponentReasoningToggle(t *testing.T) {
 				comp.AddReceiveMessageChunk("Hello!")
 			},
 			Expected: "Thinking hard             \n" +
+				"                          \n" +
 				"ctrl-o to collapse        \n" +
 				"Hello!                    \n" +
-				"                          \n" +
 				"                          \n" +
 				"                          \n" +
 				"                          \n" +
@@ -1495,10 +1542,10 @@ func TestComponentReasoningToggle(t *testing.T) {
 				comp.ToggleContracted()
 			},
 			Expected: "Thinking hard             \n" +
+				"                          \n" +
 				"Hello!                    \n" +
 				"                          \n" +
 				"ctrl-o to collapse        \n" +
-				"                          \n" +
 				"                          \n" +
 				"                          \n" +
 				"  ┌──────────────────┐    \n" +
@@ -1521,8 +1568,8 @@ func TestComponentReasoningToggleDuringStream(t *testing.T) {
 				comp.AddReasoningChunk("Think")
 			},
 			Expected: "Think                     \n" +
-				"ctrl-o to collapse        \n" +
 				"                          \n" +
+				"ctrl-o to collapse        \n" +
 				"                          \n" +
 				"                          \n" +
 				"                          \n" +
@@ -1572,8 +1619,8 @@ func TestComponentReasoningToggleDuringStream(t *testing.T) {
 				comp.ToggleContracted()
 			},
 			Expected: "Thinking more             \n" +
-				"ctrl-o to collapse        \n" +
 				"                          \n" +
+				"ctrl-o to collapse        \n" +
 				"                          \n" +
 				"                          \n" +
 				"                          \n" +
@@ -1605,10 +1652,10 @@ func TestComponentReasoningToggleWithMixedContent(t *testing.T) {
 				comp.AddReceiveMessageChunk("Response 2")
 				comp.AddReceiveMessageBreak()
 			},
-			Expected: "                          \n" +
-				"✓ read_file               \n" +
+			Expected: "✓ read_file               \n" +
 				"ok                        \n" +
 				"Second thought            \n" +
+				"                          \n" +
 				"ctrl-o to collapse        \n" +
 				"Response 2                \n" +
 				"                          \n" +
@@ -1639,10 +1686,10 @@ func TestComponentReasoningToggleWithMixedContent(t *testing.T) {
 			Action: func() {
 				comp.ToggleContracted()
 			},
-			Expected: "                          \n" +
-				"✓ read_file               \n" +
+			Expected: "✓ read_file               \n" +
 				"ok                        \n" +
 				"Second thought            \n" +
+				"                          \n" +
 				"Response 2                \n" +
 				"                          \n" +
 				"ctrl-o to collapse        \n" +
@@ -1685,8 +1732,8 @@ func TestComponentReasoningAnnotationAppearsOnFirstChunk(t *testing.T) {
 			},
 			Expected: "Hello                     \n" +
 				"Hmm                       \n" +
-				"ctrl-o to collapse        \n" +
 				"                          \n" +
+				"ctrl-o to collapse        \n" +
 				"                          \n" +
 				"                          \n" +
 				"                          \n" +

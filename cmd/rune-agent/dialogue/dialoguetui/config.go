@@ -168,6 +168,11 @@ type ComponentConfig struct {
 	// used for received messages. A nil value uses markdown.DefaultConfig().
 	MarkdownConfig *markdown.Config
 
+	// ReasoningMarkdownConfig, when non-nil, configures the markdown
+	// renderer used for reasoning text. A nil value derives a config from
+	// MarkdownConfig styled with ReasoningStringConfig's attributes.
+	ReasoningMarkdownConfig *markdown.Config
+
 	// DurationPrecision, when positive, truncates tool call durations
 	// to this precision (e.g. time.Second shows "1s" instead of "1.234s").
 	// Zero uses the default adaptive rounding.
