@@ -187,8 +187,9 @@ func TestConnectSchemeUsesRune(t *testing.T) {
 
 	// First command is `which <bin>` — that's the canonical signal.
 	first := rec.commands[0]
-	assert.Equal(t, "which", first.Path,
-		"first command should be `which <remote bin>`; got %+v", first)
+	assert.Equal(t, remotePathEnv+" which", first.Path,
+		"first command should be `which <remote bin>` with the "+
+			"~/.local/bin PATH injection; got %+v", first)
 	require.NotEmpty(t, first.Args)
 	assert.Equal(t, "rune", first.Args[0],
 		"connectScheme must look for the `rune` binary on the remote "+
@@ -198,7 +199,7 @@ func TestConnectSchemeUsesRune(t *testing.T) {
 	// The actual workspace-server invocation should also use `rune`.
 	var sawServer bool
 	for _, c := range rec.commands {
-		if c.Path == "rune" {
+		if c.Path == remotePathEnv+" rune" {
 			sawServer = true
 			assert.Contains(t, c.Args, "-x",
 				"rune workspace server should be started with -x; got %+v", c)
@@ -206,7 +207,8 @@ func TestConnectSchemeUsesRune(t *testing.T) {
 		}
 	}
 	assert.True(t, sawServer,
-		"expected at least one command to invoke `rune`; saw %+v", rec.commands)
+		"expected at least one command to invoke `rune` with the "+
+			"~/.local/bin PATH injection; saw %+v", rec.commands)
 }
 
 // TestConnectSchemeSkipPreflight asserts that when
@@ -247,8 +249,10 @@ func TestConnectSchemeSkipPreflight(t *testing.T) {
 		"skip_preflight must avoid the `which` and `ls` probes; only "+
 			"the rune workspace-server invocation should be issued. "+
 			"Got %+v", rec.commands)
-	assert.Equal(t, "rune", rec.commands[0].Path,
-		"the only command issued must be the rune workspace server")
+	assert.Equal(t, remotePathEnv+" rune", rec.commands[0].Path,
+		"the only command issued must be the rune workspace server, "+
+			"launched with the ~/.local/bin PATH injection so the "+
+			"supported install location works even without preflight")
 	assert.Contains(t, rec.commands[0].Args, "-x",
 		"rune workspace server should be started with -x; got %+v",
 		rec.commands[0])

@@ -53,6 +53,14 @@ type SSHDScenario struct {
 	// against a real Linux binary without building the full `rune`
 	// package, which depends on CGO/GUI libraries.
 	InstallRuneBinary bool
+
+	// InstallRuneBinaryUserLocal, when true, installs the runesvc
+	// helper at the ssh user's ~/.local/bin/rune — the location Rune's
+	// install.sh uses — WITHOUT putting it on the sshd session PATH.
+	// This exercises connectScheme's PATH injection, which is what
+	// makes the supported install location work for non-interactive
+	// SSH sessions.
+	InstallRuneBinaryUserLocal bool
 }
 
 // Container is a running test container's external handle.
@@ -117,6 +125,12 @@ func StartContainer(t *testing.T, scenario SSHDScenario) *Container {
 			"-v", bin+":/usr/local/bin/rune:ro",
 		)
 	}
+	if scenario.InstallRuneBinaryUserLocal {
+		bin := buildRuneTestBinary(t)
+		args = append(args,
+			"-v", bin+":/runesvc:ro",
+		)
+	}
 	if scenario.PasswordAccess {
 		args = append(args, "-e", "PASSWORD_ACCESS=true")
 	}
@@ -163,7 +177,27 @@ func StartContainer(t *testing.T, scenario SSHDScenario) *Container {
 			t.Fatalf("sshd did not come back up after applying ExtraSSHDConfig: %v", err)
 		}
 	}
+	if scenario.InstallRuneBinaryUserLocal {
+		installUserLocalRune(t, id)
+	}
 	return &Container{ID: id, HostPort: addr}
+}
+
+// installUserLocalRune links the bind-mounted runesvc helper into the
+// ssh user's ~/.local/bin/rune. The home directory is resolved from
+// /etc/passwd because the linuxserver/openssh-server image homes its
+// user at /config, not /home/<user>. Run after waitForSSH so the
+// image's cont-init has finished creating the user.
+func installUserLocalRune(t *testing.T, id string) {
+	t.Helper()
+	const script = `home="$(getent passwd test | cut -d: -f6)" &&
+mkdir -p "$home/.local/bin" &&
+ln -sf /runesvc "$home/.local/bin/rune" &&
+chown -R test "$home/.local"`
+	out, err := exec.Command("docker", "exec", id, "sh", "-c", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("install user-local rune: %v: %s", err, out)
+	}
 }
 
 // runeBinaryCache memoises the path to the cross-compiled runesvc test

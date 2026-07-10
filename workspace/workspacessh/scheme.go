@@ -52,6 +52,14 @@ const (
 	// Scheme represents the URL scheme that this package implements
 	Scheme = "ssh"
 
+	// remotePathEnv is prepended to every remote exec string so the
+	// supported install location (install.sh symlinks the binary to
+	// ~/.local/bin/rune) is found even when the remote's PATH lacks
+	// ~/.local/bin — the norm for sshd exec sessions, which run
+	// non-login shells that skip the profile files where
+	// distributions add ~/.local/bin.
+	remotePathEnv = `PATH="$HOME/.local/bin:$PATH"`
+
 	debugPathError = "You can run %q to troubleshoot this. Also, double check your workspace.ssh.command " +
 		"and workspace.ssh.shell configuration, if you have any."
 )
@@ -190,6 +198,11 @@ func (s *scheme) runAndWait(
 		args = append([]string{"-c", cmdStr}, args...)
 		cmdStr = s.cfg.shell
 	}
+	// The env assignment is applied to the outermost command word so
+	// it survives the optional shell wrap above: the remote shell
+	// that parses the exec string expands $HOME and the child
+	// process inherits the amended PATH.
+	cmdStr = remotePathEnv + " " + cmdStr
 	var stderr, stdout bytes.Buffer
 	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
@@ -235,7 +248,8 @@ func (s *scheme) whichCommand(ctx context.Context, remote remote, cmd string) er
 	}
 	if !avail {
 		errStr := "%q executable was not found on remote. " +
-			"Make sure it's installed and available via $PATH to a non-interactive shell. "
+			"Make sure it's installed at ~/.local/bin/rune or available " +
+			"via $PATH to a non-interactive shell. "
 		if err != nil {
 			errStr = fmt.Sprintf("%s %v. ", errStr, err)
 		}
@@ -314,6 +328,7 @@ func (s *scheme) connectScheme(
 		args = append([]string{"-c", cmdStr}, args...)
 		cmdStr = s.cfg.shell
 	}
+	cmdStr = remotePathEnv + " " + cmdStr
 	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
 		Path:    cmdStr,

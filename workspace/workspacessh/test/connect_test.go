@@ -123,3 +123,52 @@ func TestConnectSchemeMultiKeyRedialBootstrap(t *testing.T) {
 			"the bootstrap then can't find `rune` on the remote")
 	assert.NotNil(t, fi)
 }
+
+// TestConnectSchemeUserLocalBin exercises the supported install
+// location: install.sh symlinks the binary to ~/.local/bin/rune, a
+// directory that is NOT on PATH in non-interactive SSH exec sessions
+// (sshd runs a non-login shell, skipping the profile files where
+// distributions add ~/.local/bin). The bootstrap must still find the
+// binary via connectScheme's PATH injection — both in the `which`
+// preflight and in the workspace-server launch itself.
+func TestConnectSchemeUserLocalBin(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+
+	c := StartContainer(t, SSHDScenario{
+		PublicKeyFile:              "/id_ed25519.pub",
+		InstallRuneBinaryUserLocal: true,
+	})
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+
+	uri, err := workspaceapi.ParseURI(
+		fmt.Sprintf("ssh://test@%s/tmp", c.HostPort))
+	require.NoError(t, err)
+
+	cfg := config.MapConfig(map[string]any{
+		"private_keys": []any{keyPath},
+		"timeout":      "20s",
+		"insecure":     true,
+	})
+
+	schemeFn := workspacessh.New(&errorUI{})
+	scheme, err := schemeFn(context.Background(), cfg, uri)
+	require.NoError(t, err)
+	defer scheme.Close()
+
+	deadline := time.Now().Add(20 * time.Second)
+	var fi any
+	for time.Now().Before(deadline) {
+		fi, err = scheme.Stat("/tmp")
+		if err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.NoError(t, err,
+		"the bootstrap must find `rune` installed only at "+
+			"~/.local/bin/rune (install.sh's location) even though "+
+			"that directory is not on the sshd session PATH")
+	assert.NotNil(t, fi)
+}
