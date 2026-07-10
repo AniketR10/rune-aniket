@@ -49,6 +49,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/html"
+	"unstable.build/go-tui/text"
 )
 
 var errCouldNotSchedule = errors.New(
@@ -342,7 +343,13 @@ func (h *CallbackHandler) PublishDiagnostics(
 	ok := h.scheduleNextTick(func() {
 		eh, err := h.editor.Editor(uri)
 		if err != nil {
-			h.log.Warn("editor for diagnostics", "uri", uri.Name(), "err", err)
+			// Servers publish diagnostics for files that are not
+			// open in any editor; the central cache above already
+			// serves those, so a missing handler is expected and
+			// not worth logging.
+			if !errors.Is(err, text.ErrHandlerNotFound) {
+				h.log.Warn("editor for diagnostics", "uri", uri.Name(), "err", err)
+			}
 			return
 		}
 		err = h.editor.SetLocationList(eh, highest, "lsp-diagnostics", ll)

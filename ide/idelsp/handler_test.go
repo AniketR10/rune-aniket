@@ -24,9 +24,12 @@
 package idelsp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -42,6 +45,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/text"
 )
 
 func TestCallbackHandler_ShowMessage(t *testing.T) {
@@ -482,6 +486,67 @@ func TestCallbackHandler_PublishDiagnostics_BySource(t *testing.T) {
 	mergedAfterClear := ed.locationsByID["lsp-diagnostics"]
 	ed.mu.Unlock()
 	assert.Equal(t, []textapi.Location{wantRuffLoc}, mergedAfterClear)
+}
+
+// TestCallbackHandler_PublishDiagnostics_FileNotOpen asserts that
+// diagnostics published for a file with no open editor tab are cached
+// silently: LSP servers routinely publish workspace-wide diagnostics
+// for files that are not open, so a missing handler is expected and
+// must not spam the log with warnings.
+func TestCallbackHandler_PublishDiagnostics_FileNotOpen(t *testing.T) {
+	t.Parallel()
+	diag := semanticapi.Diagnostic{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 1, Character: 0},
+			End:   semanticapi.Position{Line: 1, Character: 4},
+		},
+		Severity: semanticapi.DiagnosticSeverityError,
+		Message:  "type error",
+	}
+	tests := []struct {
+		name       string
+		editorErr  error
+		expectWarn bool
+	}{
+		{
+			name:      "handler not found is silent",
+			editorErr: text.ErrHandlerNotFound,
+		},
+		{
+			name:      "wrapped handler not found is silent",
+			editorErr: fmt.Errorf("route: %w", text.ErrHandlerNotFound),
+		},
+		{
+			name:       "other errors still warn",
+			editorErr:  errors.New("boom"),
+			expectWarn: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ed := &mockEditor{editorErr: tt.editorErr}
+			h := NewCallbackHandler(
+				nil, nil, nil, ed, nil, "", CallbackHandlerConfig{},
+			)
+			var buf bytes.Buffer
+			h.log = slog.New(slog.NewTextHandler(&buf, nil))
+			require.NoError(t, h.PublishDiagnostics(t.Context(),
+				semanticapi.PublishDiagnosticsParams{
+					URI:         "file:///tmp/notopen.go",
+					Diagnostics: []semanticapi.Diagnostic{diag},
+				}))
+			// The central cache serves `lsp diagnostics` regardless
+			// of whether the file is open in an editor.
+			got := h.Diagnostics()
+			require.Len(t, got["file:///tmp/notopen.go"], 1)
+			if tt.expectWarn {
+				assert.Contains(t, buf.String(), "editor for diagnostics")
+			} else {
+				assert.Empty(t, buf.String())
+			}
+		})
+	}
 }
 
 func TestCallbackHandler_PublishDiagnostics_IconConfig(t *testing.T) {

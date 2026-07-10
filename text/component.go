@@ -740,6 +740,10 @@ func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 	return nil
 }
 
+// ErrHandlerNotFound is returned by Editor when no open editor
+// handler exists for the requested resource.
+var ErrHandlerNotFound = errors.New("handler not found")
+
 // Editor satisfies Editor interface.
 func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {
 	for _, tab := range c.comp.Tabs() {
@@ -758,7 +762,7 @@ func (c *Component) Editor(resource workspaceapi.URI) (Handler, error) {
 			return ed, nil
 		}
 	}
-	return nil, errors.New("handler not found")
+	return nil, ErrHandlerNotFound
 }
 
 // CommandKeyBinding returns a command that was mapped to the given key
