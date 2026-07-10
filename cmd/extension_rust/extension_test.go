@@ -148,6 +148,17 @@ func TestRustInitializeParams(t *testing.T) {
 	require.NoError(t, json.Unmarshal(noSysroot.InitializeOptions, &opts2))
 	_, hasSysroot := opts2["sysroot"]
 	assert.False(t, hasSysroot)
+
+	// Experimental client capabilities enable rust-analyzer's LSP
+	// extensions the host can service.
+	var caps map[string]any
+	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
+	experimental, ok := caps["experimental"].(map[string]any)
+	require.True(t, ok, "capabilities should advertise experimental support")
+	assert.Equal(t, true, experimental["snippetTextEdit"])
+	assert.Equal(t, true, experimental["codeActionGroup"])
+	assert.Equal(t, true, experimental["serverStatusNotification"])
+	assert.Equal(t, true, experimental["colorDiagnosticOutput"])
 }
 
 // rustInitializeCommandHasNoSpaces guards the idelsp command tokenizer,

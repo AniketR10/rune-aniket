@@ -25,6 +25,7 @@ package lspcmd
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -419,6 +420,12 @@ func (stubLSP) WorkspaceSymbol(_ context.Context, _ semanticapi.WorkspaceSymbolP
 }
 func (stubLSP) ExecuteCommand(_ context.Context, _ semanticapi.ExecuteCommandParams) (string, error) {
 	return "", nil
+}
+func (stubLSP) ExecuteRequest(_ context.Context, _ semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	return nil, nil
+}
+func (stubLSP) SendNotification(_ context.Context, _ semanticapi.NotificationParams) error {
+	return nil
 }
 func (stubLSP) PrepareCallHierarchy(_ context.Context, _ semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
 	return nil, nil

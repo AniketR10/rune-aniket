@@ -6,6 +6,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,6 +186,12 @@ func (stubLSP) WorkspaceDiagnostic(context.Context, semanticapi.WorkspaceDiagnos
 }
 func (stubLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
 	return "", nil
+}
+func (stubLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	return nil, nil
+}
+func (stubLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
+	return nil
 }
 func (stubLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
 	return nil, nil

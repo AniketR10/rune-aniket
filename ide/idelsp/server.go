@@ -57,6 +57,7 @@ type server interface {
 	start(ctx context.Context) error
 	config() langConfig
 	key() serverKey
+	name() string
 	initResult() semanticapi.InitializeResult
 	isAlive() bool
 }
@@ -326,6 +327,14 @@ func (s *langServer) config() langConfig {
 
 func (s *langServer) key() serverKey {
 	return serverKey{languageID: s.cfg.id, rootURI: s.rootURI}
+}
+
+// name returns the child server's name, derived from its command's base
+// name. It identifies a specific backing server when a language is
+// served by several (see the alternate-commands feature) and is the
+// value matched against ExecuteRequestParams.ServerID.
+func (s *langServer) name() string {
+	return s.serverName
 }
 
 func (s *langServer) initResult() semanticapi.InitializeResult {

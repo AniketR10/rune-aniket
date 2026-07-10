@@ -520,7 +520,11 @@ func (s *Server) WorkspaceDiagnostic(
 func (s *Server) WorkspaceSymbol(ctx context.Context, req *semanticrpc.WorkspaceSymbolRequest) (*semanticrpc.WorkspaceSymbolResponse, error) {
 	ctx, cancel := joincontext.New(ctx, s.ctx)
 	defer cancel()
-	params := semanticapi.WorkspaceSymbolParams{Query: req.GetQuery()}
+	params := semanticapi.WorkspaceSymbolParams{
+		Query:       req.GetQuery(),
+		SearchScope: semanticapi.WorkspaceSymbolSearchScope(req.GetSearchScope()),
+		SearchKind:  semanticapi.WorkspaceSymbolSearchKind(req.GetSearchKind()),
+	}
 	result, err := s.impl.WorkspaceSymbol(ctx, params)
 	if err != nil {
 		return nil, err
@@ -544,6 +548,35 @@ func (s *Server) ExecuteCommand(ctx context.Context, req *semanticrpc.ExecuteCom
 		return nil, err
 	}
 	return &semanticrpc.ExecuteCommandResponse{Result: result}, nil
+}
+
+func (s *Server) ExecuteRequest(ctx context.Context, req *semanticrpc.ExecuteRequestRequest) (*semanticrpc.ExecuteRequestResponse, error) {
+	ctx, cancel := joincontext.New(ctx, s.ctx)
+	defer cancel()
+	params := semanticapi.ExecuteRequestParams{
+		Method:   req.GetMethod(),
+		Params:   json.RawMessage(req.GetParams()),
+		ServerID: req.GetServerId(),
+	}
+	result, err := s.impl.ExecuteRequest(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &semanticrpc.ExecuteRequestResponse{Result: result}, nil
+}
+
+func (s *Server) SendNotification(ctx context.Context, req *semanticrpc.SendNotificationRequest) (*semanticrpc.SendNotificationResponse, error) {
+	ctx, cancel := joincontext.New(ctx, s.ctx)
+	defer cancel()
+	params := semanticapi.NotificationParams{
+		Method:   req.GetMethod(),
+		Params:   json.RawMessage(req.GetParams()),
+		ServerID: req.GetServerId(),
+	}
+	if err := s.impl.SendNotification(ctx, params); err != nil {
+		return nil, err
+	}
+	return &semanticrpc.SendNotificationResponse{}, nil
 }
 
 func (s *Server) PrepareCallHierarchy(ctx context.Context, req *semanticrpc.PrepareCallHierarchyRequest) (*semanticrpc.PrepareCallHierarchyResponse, error) {

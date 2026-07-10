@@ -37,7 +37,7 @@ import (
 // it via call and notify. It lets multiLangServer routing be tested
 // without spawning real language-server processes.
 type fakeChild struct {
-	name string
+	childName string
 
 	mu      sync.Mutex
 	calls   []string
@@ -90,11 +90,15 @@ func (f *fakeChild) Close() error {
 }
 
 func (f *fakeChild) config() langConfig {
-	return langConfig{id: f.name, command: f.name}
+	return langConfig{id: f.childName, command: f.childName}
 }
 
 func (f *fakeChild) key() serverKey {
-	return serverKey{languageID: f.name}
+	return serverKey{languageID: f.childName}
+}
+
+func (f *fakeChild) name() string {
+	return f.childName
 }
 
 func (f *fakeChild) initResult() semanticapi.InitializeResult {
@@ -130,7 +134,7 @@ func TestServerConformance(t *testing.T) {
 
 func newTestMultiServer(def, alt *fakeChild, routes map[string]int) *multiLangServer {
 	return &multiLangServer{
-		cfg:      langConfig{id: "python", command: def.name},
+		cfg:      langConfig{id: "python", command: def.childName},
 		children: []server{def, alt},
 		routes:   routes,
 	}
@@ -144,8 +148,8 @@ func TestMultiServerRouting(t *testing.T) {
 
 	t.Run("call routes to mapped child and default otherwise", func(t *testing.T) {
 		t.Parallel()
-		def := &fakeChild{name: "ty"}
-		alt := &fakeChild{name: "ruff"}
+		def := &fakeChild{childName: "ty"}
+		alt := &fakeChild{childName: "ruff"}
 		mls := newTestMultiServer(def, alt, map[string]int{
 			"textDocument/formatting": 1,
 		})
@@ -159,8 +163,8 @@ func TestMultiServerRouting(t *testing.T) {
 
 	t.Run("notifications always fan out to all children", func(t *testing.T) {
 		t.Parallel()
-		def := &fakeChild{name: "ty"}
-		alt := &fakeChild{name: "ruff"}
+		def := &fakeChild{childName: "ty"}
+		alt := &fakeChild{childName: "ruff"}
 		// A routed request method (formatting) must not narrow
 		// notification fan-out: notifications have no response, so
 		// every child must observe them to keep a consistent view.
@@ -192,8 +196,8 @@ func TestMultiServerRouting(t *testing.T) {
 // out to every child and that isAlive reflects any live child.
 func TestMultiServerLifecycle(t *testing.T) {
 	t.Parallel()
-	def := &fakeChild{name: "ty"}
-	alt := &fakeChild{name: "ruff"}
+	def := &fakeChild{childName: "ty"}
+	alt := &fakeChild{childName: "ruff"}
 	mls := newTestMultiServer(def, alt, nil)
 
 	require.NoError(t, mls.start(t.Context()))
@@ -215,13 +219,13 @@ func TestMultiServerLifecycle(t *testing.T) {
 // by interface identity, leaving the others untouched.
 func TestMultiServerReplaceChild(t *testing.T) {
 	t.Parallel()
-	def := &fakeChild{name: "ty"}
-	alt := &fakeChild{name: "ruff"}
+	def := &fakeChild{childName: "ty"}
+	alt := &fakeChild{childName: "ruff"}
 	mls := newTestMultiServer(def, alt, map[string]int{
 		"textDocument/formatting": 1,
 	})
 
-	replacement := &fakeChild{name: "ruff-restarted"}
+	replacement := &fakeChild{childName: "ruff-restarted"}
 	mls.replaceChild(alt, replacement)
 
 	require.NoError(t, mls.call(t.Context(), "textDocument/formatting", nil, nil))

@@ -25,6 +25,7 @@ package dream
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -959,6 +960,12 @@ func (s *stubDreamLSP) WorkspaceSymbol(context.Context, semanticapi.WorkspaceSym
 }
 func (s *stubDreamLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
 	return "", nil
+}
+func (s *stubDreamLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	return nil, nil
+}
+func (s *stubDreamLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
+	return nil
 }
 func (s *stubDreamLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
 	return nil, nil

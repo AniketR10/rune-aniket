@@ -472,6 +472,19 @@ func (h *CallbackHandler) LogTrace(ctx context.Context, params semanticapi.LogTr
 	return nil
 }
 
+// HandleNotification receives server→client JSON-RPC notifications
+// that are not modeled by a dedicated callback method, such as
+// rust-analyzer's experimental/serverStatus and experimental test
+// notifications. The default host has no behavior for these; it logs
+// them at debug and returns nil so unrecognized methods do not error.
+func (h *CallbackHandler) HandleNotification(
+	ctx context.Context, method string, params json.RawMessage,
+) error {
+	h.log.Log(ctx, slog.LevelDebug, "unhandled lsp notification",
+		"method", method, "params", string(params))
+	return nil
+}
+
 // ShowDocument requests the client to display a document.
 func (h *CallbackHandler) ShowDocument(
 	ctx context.Context, params semanticapi.ShowDocumentParams,

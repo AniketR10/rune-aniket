@@ -2894,6 +2894,9 @@ func (c *testCallback) InlayHintRefresh(_ context.Context) error {
 func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
+func (c *testCallback) HandleNotification(_ context.Context, _ string, _ json.RawMessage) error {
+	return nil
+}
 
 func (c *testCallback) FileDidChange(uri string, version int32, open, oob bool) {
 	c.mu.Lock()

@@ -181,6 +181,19 @@ func rustInitializeParams(
 				"support": true,
 			},
 		},
+		// experimental advertises support for rust-analyzer's LSP
+		// extensions that the host can service:
+		//   - snippetTextEdit: snippet edits are applied with tab stops.
+		//   - codeActionGroup: the "group" field is carried through and
+		//     used to collapse related actions.
+		//   - serverStatusNotification: routed to HandleNotification.
+		//   - colorDiagnosticOutput: ANSI-rendered compiler diagnostics.
+		"experimental": map[string]any{
+			"snippetTextEdit":          true,
+			"codeActionGroup":          true,
+			"serverStatusNotification": true,
+			"colorDiagnosticOutput":    true,
+		},
 	}
 
 	capabilitiesData, err := json.Marshal(capabilities)

@@ -99,6 +99,10 @@ type lspCodeAction struct {
 	Kind    string            `json:"kind,omitempty"`
 	Edit    *lspWorkspaceEdit `json:"edit,omitempty"`
 	Command *lspCommand       `json:"command,omitempty"`
+	// Group is rust-analyzer's codeActionGroup extension field. Actions
+	// sharing a group are collapsed under one lightbulb entry. Absent for
+	// servers that do not implement the extension.
+	Group string `json:"group,omitempty"`
 }
 
 type lspCommand struct {
@@ -166,6 +170,26 @@ func lspWorkspaceEditToSemantic(
 		}
 	}
 	return ret
+}
+
+// lspCodeActionToSemantic converts a decoded LSP code action, including
+// rust-analyzer's codeActionGroup "group" field, into the SDK type.
+func lspCodeActionToSemantic(a lspCodeAction) semanticapi.CodeAction {
+	action := semanticapi.CodeAction{
+		Title: a.Title,
+		Kind:  semanticapi.CodeActionKind(a.Kind),
+		Edit:  lspWorkspaceEditToSemantic(a.Edit),
+		Group: a.Group,
+	}
+	if a.Command != nil {
+		cmd := &semanticapi.Command{
+			Title:   a.Command.Title,
+			Command: a.Command.Command,
+		}
+		cmd.Arguments = append(cmd.Arguments, a.Command.Arguments...)
+		action.Command = cmd
+	}
+	return action
 }
 
 func lspCompletionItemToSemantic(

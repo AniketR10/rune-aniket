@@ -83,6 +83,8 @@ type stubLSP struct {
 	onWorkspaceDiagnostic        func(context.Context, semanticapi.WorkspaceDiagnosticParams) (semanticapi.WorkspaceDiagnosticReport, error)
 	onWorkspaceSymbol            func(context.Context, semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error)
 	onExecuteCommand             func(context.Context, semanticapi.ExecuteCommandParams) (string, error)
+	onExecuteRequest          func(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error)
+	onSendNotification        func(context.Context, semanticapi.NotificationParams) error
 	onPrepareCallHierarchy       func(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error)
 	onCallHierarchyIncomingCalls func(context.Context, semanticapi.CallHierarchyIncomingCallsParams) ([]semanticapi.CallHierarchyIncomingCall, error)
 	onCallHierarchyOutgoingCalls func(context.Context, semanticapi.CallHierarchyOutgoingCallsParams) ([]semanticapi.CallHierarchyOutgoingCall, error)
@@ -308,6 +310,18 @@ func (s *stubLSP) ExecuteCommand(ctx context.Context, p semanticapi.ExecuteComma
 		return s.onExecuteCommand(ctx, p)
 	}
 	return "", nil
+}
+func (s *stubLSP) ExecuteRequest(ctx context.Context, p semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	if s.onExecuteRequest != nil {
+		return s.onExecuteRequest(ctx, p)
+	}
+	return nil, nil
+}
+func (s *stubLSP) SendNotification(ctx context.Context, p semanticapi.NotificationParams) error {
+	if s.onSendNotification != nil {
+		return s.onSendNotification(ctx, p)
+	}
+	return nil
 }
 func (s *stubLSP) PrepareCallHierarchy(ctx context.Context, p semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
 	if s.onPrepareCallHierarchy != nil {
@@ -558,6 +572,7 @@ func TestInitialize(t *testing.T) {
 						DefinitionProvider:    true,
 						ReferencesProvider:    true,
 						CallHierarchyProvider: true,
+						Experimental:          json.RawMessage(`{"ssr":true,"joinLines":true}`),
 					},
 				}, nil
 			},
@@ -573,6 +588,7 @@ func TestInitialize(t *testing.T) {
 		assert.True(t, result.Capabilities.ReferencesProvider)
 		assert.True(t, result.Capabilities.CallHierarchyProvider)
 		assert.Nil(t, result.Capabilities.CodeActionProvider)
+		assert.JSONEq(t, `{"ssr":true,"joinLines":true}`, string(result.Capabilities.Experimental))
 	})
 
 	t.Run("error path", func(t *testing.T) {
@@ -1110,6 +1126,7 @@ func TestCodeAction(t *testing.T) {
 					CodeAction: &semanticapi.CodeAction{
 						Title: "Organize Imports",
 						Kind:  semanticapi.CodeActionKindSourceOrganizeImports,
+						Group: "imports",
 						Edit: &semanticapi.WorkspaceEdit{
 							Changes: map[string][]semanticapi.TextEdit{
 								"file:///main.go": {{
@@ -1138,6 +1155,7 @@ func TestCodeAction(t *testing.T) {
 	require.NotNil(t, actions[0].CodeAction)
 	assert.Equal(t, "Organize Imports", actions[0].CodeAction.Title)
 	assert.Equal(t, semanticapi.CodeActionKindSourceOrganizeImports, actions[0].CodeAction.Kind)
+	assert.Equal(t, "imports", actions[0].CodeAction.Group)
 	require.NotNil(t, actions[0].CodeAction.Edit)
 	edits, ok := actions[0].CodeAction.Edit.Changes["file:///main.go"]
 	require.True(t, ok)
@@ -1521,6 +1539,8 @@ func TestWorkspaceSymbol(t *testing.T) {
 	stub := &stubLSP{
 		onWorkspaceSymbol: func(_ context.Context, p semanticapi.WorkspaceSymbolParams) ([]semanticapi.SymbolInformation, error) {
 			assert.Equal(t, "Foo", p.Query)
+			assert.Equal(t, semanticapi.WorkspaceSymbolSearchScopeWorkspaceAndDependencies, p.SearchScope)
+			assert.Equal(t, semanticapi.WorkspaceSymbolSearchKindOnlyTypes, p.SearchKind)
 			return []semanticapi.SymbolInformation{
 				{
 					Name:     "FooBar",
@@ -1531,7 +1551,11 @@ func TestWorkspaceSymbol(t *testing.T) {
 		},
 	}
 	env := newTestEnv(t, stub)
-	syms, err := env.client.WorkspaceSymbol(context.Background(), semanticapi.WorkspaceSymbolParams{Query: "Foo"})
+	syms, err := env.client.WorkspaceSymbol(context.Background(), semanticapi.WorkspaceSymbolParams{
+		Query:       "Foo",
+		SearchScope: semanticapi.WorkspaceSymbolSearchScopeWorkspaceAndDependencies,
+		SearchKind:  semanticapi.WorkspaceSymbolSearchKindOnlyTypes,
+	})
 	require.NoError(t, err)
 	require.Len(t, syms, 1)
 	assert.Equal(t, "FooBar", syms[0].Name)
@@ -1567,6 +1591,90 @@ func TestExecuteCommand(t *testing.T) {
 		_, err := env.client.ExecuteCommand(context.Background(), semanticapi.ExecuteCommandParams{Command: "x"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cmd err")
+	})
+}
+
+func TestExecuteRequest(t *testing.T) {
+	t.Run("happy path round trips method, params and result", func(t *testing.T) {
+		stub := &stubLSP{
+			onExecuteRequest: func(_ context.Context, p semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+				assert.Equal(t, "experimental/ssr", p.Method)
+				assert.Equal(t, "rust-analyzer", p.ServerID)
+				assert.JSONEq(t, `{"query":"foo($a) ==>> bar($a)"}`, string(p.Params))
+				return json.RawMessage(`{"changes":{}}`), nil
+			},
+		}
+		env := newTestEnv(t, stub)
+		result, err := env.client.ExecuteRequest(context.Background(), semanticapi.ExecuteRequestParams{
+			Method:   "experimental/ssr",
+			Params:   json.RawMessage(`{"query":"foo($a) ==>> bar($a)"}`),
+			ServerID: "rust-analyzer",
+		})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"changes":{}}`, string(result))
+	})
+
+	t.Run("nil params and empty result normalize to JSON null", func(t *testing.T) {
+		stub := &stubLSP{
+			onExecuteRequest: func(_ context.Context, p semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+				assert.Nil(t, p.Params)
+				return nil, nil
+			},
+		}
+		env := newTestEnv(t, stub)
+		result, err := env.client.ExecuteRequest(context.Background(), semanticapi.ExecuteRequestParams{
+			Method: "rust-analyzer/reloadWorkspace",
+		})
+		require.NoError(t, err)
+		// A successful call always yields a non-nil RawMessage; an empty
+		// server result is normalized to the literal JSON null.
+		assert.Equal(t, json.RawMessage("null"), result)
+	})
+
+	t.Run("error path", func(t *testing.T) {
+		stub := &stubLSP{
+			onExecuteRequest: func(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+				return nil, errors.New("ext err")
+			},
+		}
+		env := newTestEnv(t, stub)
+		_, err := env.client.ExecuteRequest(context.Background(), semanticapi.ExecuteRequestParams{Method: "experimental/ssr"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ext err")
+	})
+}
+
+func TestSendNotification(t *testing.T) {
+	t.Run("happy path round trips method and params", func(t *testing.T) {
+		var got semanticapi.NotificationParams
+		stub := &stubLSP{
+			onSendNotification: func(_ context.Context, p semanticapi.NotificationParams) error {
+				got = p
+				return nil
+			},
+		}
+		env := newTestEnv(t, stub)
+		err := env.client.SendNotification(context.Background(), semanticapi.NotificationParams{
+			Method:   "rust-analyzer/runFlycheck",
+			Params:   json.RawMessage(`{"textDocument":null}`),
+			ServerID: "rust-analyzer",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "rust-analyzer/runFlycheck", got.Method)
+		assert.Equal(t, "rust-analyzer", got.ServerID)
+		assert.JSONEq(t, `{"textDocument":null}`, string(got.Params))
+	})
+
+	t.Run("error path", func(t *testing.T) {
+		stub := &stubLSP{
+			onSendNotification: func(context.Context, semanticapi.NotificationParams) error {
+				return errors.New("notify err")
+			},
+		}
+		env := newTestEnv(t, stub)
+		err := env.client.SendNotification(context.Background(), semanticapi.NotificationParams{Method: "rust-analyzer/runFlycheck"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "notify err")
 	})
 }
 

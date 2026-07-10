@@ -500,22 +500,7 @@ func (m *Manager) CodeAction(
 	}
 	ret := make([]semanticapi.CodeActionResult, len(result))
 	for i, a := range result {
-		action := semanticapi.CodeAction{
-			Title: a.Title,
-			Kind:  semanticapi.CodeActionKind(a.Kind),
-			Edit:  lspWorkspaceEditToSemantic(a.Edit),
-		}
-		if a.Command != nil {
-			cmd := &semanticapi.Command{
-				Title:   a.Command.Title,
-				Command: a.Command.Command,
-			}
-			cmd.Arguments = append(
-				cmd.Arguments,
-				a.Command.Arguments...,
-			)
-			action.Command = cmd
-		}
+		action := lspCodeActionToSemantic(a)
 		ret[i] = semanticapi.CodeActionResult{
 			CodeAction: &action,
 		}
@@ -1229,6 +1214,93 @@ func (m *Manager) ExecuteCommand(
 		}
 	}
 	return "", errors.Join(errs...)
+}
+
+// serversForID returns the running servers targeted by an escape-hatch
+// request. When id is empty, all servers are returned. Otherwise only
+// servers whose name matches id are returned (there may be more than
+// one when the same backend is rooted at several project roots).
+func (m *Manager) serversForID(id string) []server {
+	all := m.allServers()
+	if id == "" {
+		return all
+	}
+	var matched []server
+	for _, srv := range all {
+		if srv.name() == id {
+			matched = append(matched, srv)
+		}
+	}
+	return matched
+}
+
+// ExecuteRequest forwards an arbitrary JSON-RPC request to the
+// targeted server(s) and returns the first non-null raw result, or the
+// literal JSON null when every server answers with null. A successful
+// call always returns a non-nil RawMessage. It is the escape hatch for
+// LSP extensions such as rust-analyzer's experimental/* and
+// rust-analyzer/* requests.
+func (m *Manager) ExecuteRequest(
+	ctx context.Context,
+	params semanticapi.ExecuteRequestParams,
+) (json.RawMessage, error) {
+	servers := m.serversForID(params.ServerID)
+	if len(servers) == 0 {
+		if params.ServerID != "" {
+			return nil, fmt.Errorf("%w: server %q not running", ErrNoServer, params.ServerID)
+		}
+		return nil, ErrNoServer
+	}
+	var errs []error
+	for _, srv := range servers {
+		var raw json.RawMessage
+		if err := srv.call(ctx, params.Method, rawParamsOrNil(params.Params), &raw); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if !isNull(raw) {
+			return raw, nil
+		}
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	// All servers answered with null. Return the literal JSON null so
+	// callers get a valid, non-nil result they can distinguish from the
+	// nil returned on the error paths above.
+	return json.RawMessage("null"), nil
+}
+
+// SendNotification forwards an arbitrary JSON-RPC notification to the
+// targeted server(s). An empty ServerID broadcasts to all servers. Used
+// for extensions such as rust-analyzer/runFlycheck.
+func (m *Manager) SendNotification(
+	ctx context.Context,
+	params semanticapi.NotificationParams,
+) error {
+	servers := m.serversForID(params.ServerID)
+	if len(servers) == 0 {
+		if params.ServerID != "" {
+			return fmt.Errorf("%w: server %q not running", ErrNoServer, params.ServerID)
+		}
+		return ErrNoServer
+	}
+	var errs []error
+	for _, srv := range servers {
+		if err := srv.notify(ctx, params.Method, rawParamsOrNil(params.Params)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// rawParamsOrNil returns nil for an empty payload so a null JSON-RPC
+// params field is sent rather than an empty byte slice.
+func rawParamsOrNil(p json.RawMessage) any {
+	if len(p) == 0 {
+		return nil
+	}
+	return p
 }
 
 // DidChangeConfiguration broadcasts to all servers.

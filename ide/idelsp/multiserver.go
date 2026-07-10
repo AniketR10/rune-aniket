@@ -163,6 +163,12 @@ func (m *multiLangServer) key() serverKey {
 	return m.children[0].key()
 }
 
+// name returns the default child's name so a multi-server is
+// addressable by ServerID via its primary backend.
+func (m *multiLangServer) name() string {
+	return m.children[0].name()
+}
+
 func (m *multiLangServer) initResult() semanticapi.InitializeResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()

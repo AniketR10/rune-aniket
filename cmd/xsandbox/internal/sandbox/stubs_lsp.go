@@ -25,6 +25,7 @@ package sandbox
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 )
@@ -122,6 +123,12 @@ func (stubLSP) WorkspaceSymbol(context.Context, semanticapi.WorkspaceSymbolParam
 }
 func (stubLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
 	return "", nil
+}
+func (stubLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	return nil, nil
+}
+func (stubLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
+	return nil
 }
 
 func (stubLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {

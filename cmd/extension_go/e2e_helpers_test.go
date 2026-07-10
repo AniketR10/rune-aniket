@@ -624,6 +624,9 @@ func (c *testCallback) InlayHintRefresh(_ context.Context) error {
 func (c *testCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
+func (c *testCallback) HandleNotification(_ context.Context, _ string, _ json.RawMessage) error {
+	return nil
+}
 
 func (c *testCallback) FileDidChange(_ string, _ int32, _, _ bool) {}
 

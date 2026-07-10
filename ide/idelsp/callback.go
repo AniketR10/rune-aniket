@@ -114,7 +114,10 @@ func (a *callbackAdapter) handleNotification(
 			err = a.cb.LogTrace(ctx, p)
 		}
 	default:
-		a.log.Debug("idelsp: unknown notification", "method", method)
+		// Route unrecognized notifications (e.g. rust-analyzer's
+		// experimental/* extensions) to the generic inbound hook so
+		// extensions can observe them.
+		err = a.cb.HandleNotification(ctx, method, params)
 	}
 	if err != nil {
 		a.log.Warn("idelsp: callback error", "method", method, "error", err)

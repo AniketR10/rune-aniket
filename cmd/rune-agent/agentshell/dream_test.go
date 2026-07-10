@@ -25,6 +25,7 @@ package agentshell
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -344,6 +345,12 @@ func (noopLSP) WorkspaceSymbol(context.Context, semanticapi.WorkspaceSymbolParam
 }
 func (noopLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
 	return "", nil
+}
+func (noopLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	return nil, nil
+}
+func (noopLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
+	return nil
 }
 func (noopLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
 	return nil, nil

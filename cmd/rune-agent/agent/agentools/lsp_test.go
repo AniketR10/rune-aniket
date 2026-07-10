@@ -183,6 +183,12 @@ func (s *stubLSP) WorkspaceDiagnostic(context.Context, semanticapi.WorkspaceDiag
 func (s *stubLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams) (string, error) {
 	return "", nil
 }
+func (s *stubLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
+	return nil, nil
+}
+func (s *stubLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
+	return nil
+}
 func (s *stubLSP) PrepareCallHierarchy(context.Context, semanticapi.CallHierarchyPrepareParams) ([]semanticapi.CallHierarchyItem, error) {
 	return nil, nil
 }

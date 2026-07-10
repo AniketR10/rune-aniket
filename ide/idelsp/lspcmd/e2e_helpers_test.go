@@ -229,6 +229,9 @@ func (c *e2eCallback) InlayHintRefresh(_ context.Context) error {
 func (c *e2eCallback) DiagnosticRefresh(_ context.Context) error {
 	return nil
 }
+func (c *e2eCallback) HandleNotification(_ context.Context, _ string, _ json.RawMessage) error {
+	return nil
+}
 
 func (c *e2eCallback) FileDidChange(_ string, _ int32, _, _ bool) {}
 

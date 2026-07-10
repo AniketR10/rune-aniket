@@ -67,8 +67,8 @@ func TestServerForURILongestRoot(t *testing.T) {
 	m := New(uri, nil, nil, nil, nil, nil, Config{NoInitializeServer: true})
 	t.Cleanup(func() { _ = m.Close() })
 
-	rootSrv := &fakeChild{name: "python"}
-	nestedSrv := &fakeChild{name: "python"}
+	rootSrv := &fakeChild{childName: "python"}
+	nestedSrv := &fakeChild{childName: "python"}
 	m.mu.Lock()
 	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace"}] = rootSrv
 	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace/sub"}] = nestedSrv
@@ -102,8 +102,8 @@ func TestServerForURIBroadestFallback(t *testing.T) {
 	m := New(uri, nil, nil, nil, nil, nil, Config{NoInitializeServer: true})
 	t.Cleanup(func() { _ = m.Close() })
 
-	aaSrv := &fakeChild{name: "python"}
-	abSrv := &fakeChild{name: "python"}
+	aaSrv := &fakeChild{childName: "python"}
+	abSrv := &fakeChild{childName: "python"}
 	m.mu.Lock()
 	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace/ab"}] = abSrv
 	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace/aa"}] = aaSrv
@@ -114,7 +114,7 @@ func TestServerForURIBroadestFallback(t *testing.T) {
 	assert.Same(t, aaSrv, srv,
 		"equal-length roots must tie-break lexicographically")
 
-	rootSrv := &fakeChild{name: "python"}
+	rootSrv := &fakeChild{childName: "python"}
 	m.mu.Lock()
 	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace"}] = rootSrv
 	m.mu.Unlock()
