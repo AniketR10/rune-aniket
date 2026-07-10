@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 )
 
 func TestApplyPyConfig(t *testing.T) {
@@ -92,6 +93,34 @@ func TestApplyPyConfig(t *testing.T) {
 		cmd, alt := applyPyConfig(cfg, notify, defCommand, defAlternates)
 		assert.Equal(t, defCommand, cmd)
 		assert.Equal(t, defAlternates, alt)
+		assert.NotEmpty(t, notify.notifs)
+	})
+}
+
+func TestPyWatchEvents(t *testing.T) {
+	onChange := []textapi.EventType{
+		textapi.EventTypeOpen, textapi.EventTypeChange, textapi.EventTypeCreate,
+	}
+	openOnly := []textapi.EventType{textapi.EventTypeOpen}
+
+	t.Run("absent key enables change/create", func(t *testing.T) {
+		assert.Equal(t, onChange, pyWatchEvents(config.NopConfig(), newFakeNotifications()))
+	})
+
+	t.Run("true enables change/create", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"watch_events": true})
+		assert.Equal(t, onChange, pyWatchEvents(cfg, newFakeNotifications()))
+	})
+
+	t.Run("false restores open-only", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"watch_events": false})
+		assert.Equal(t, openOnly, pyWatchEvents(cfg, newFakeNotifications()))
+	})
+
+	t.Run("non-bool warns and defaults to change/create", func(t *testing.T) {
+		cfg := config.JSONFromMap(map[string]any{"watch_events": "yes"})
+		notify := newFakeNotifications()
+		assert.Equal(t, onChange, pyWatchEvents(cfg, notify))
 		assert.NotEmpty(t, notify.notifs)
 	})
 }

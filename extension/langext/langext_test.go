@@ -28,6 +28,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -140,7 +141,9 @@ func TestInitializerOpenTriggersOneInitRoot(t *testing.T) {
 	ed := &fakeEditor{}
 	i := NewInitializer(context.Background(), mfs, ed, cfg)
 	require.NoError(t, i.Start())
-	require.Equal(t, []textapi.EventType{textapi.EventTypeOpen}, ed.subscribedTo)
+	require.Equal(t, []textapi.EventType{
+		textapi.EventTypeOpen, textapi.EventTypeChange, textapi.EventTypeCreate,
+	}, ed.subscribedTo)
 
 	ed.fire(t, openEvent("/ws/svc/main.py"))
 	got := <-roots
@@ -149,6 +152,304 @@ func TestInitializerOpenTriggersOneInitRoot(t *testing.T) {
 	// A second open of the same root must not re-run InitRoot.
 	ed.fire(t, openEvent("/ws/svc/other.py"))
 	assertNoMoreRoots(t, roots)
+	assert.Equal(t, int32(1), calls.Load())
+}
+
+// TestInitializerChangeTriggersInitRoot covers the core fix: an
+// out-of-band write (agent apply_patch) surfaces as EventTypeChange with
+// no preceding editor open, and must still bring up the nested root.
+func TestInitializerChangeTriggersInitRoot(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+	mfs.addFile("/ws/svc/pyproject.toml")
+
+	roots := make(chan Root, 4)
+	cfg := pyConfig(func(_ context.Context, r Root) error {
+		roots <- r
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	ed.fire(t, changeEvent("/ws/svc/main.py"))
+	got := <-roots
+	assert.Equal(t, "svc", got.RelPath)
+}
+
+// TestInitializerCreateTriggersInitRoot covers a newly-created .py under a
+// nested project bringing the root up without an open.
+func TestInitializerCreateTriggersInitRoot(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+	mfs.addFile("/ws/svc/pyproject.toml")
+
+	roots := make(chan Root, 4)
+	cfg := pyConfig(func(_ context.Context, r Root) error {
+		roots <- r
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	ed.fire(t, createEvent("/ws/svc/new.py"))
+	got := <-roots
+	assert.Equal(t, "svc", got.RelPath)
+}
+
+// TestInitializerClaimedRootSkipsWalk asserts that once a root is
+// initialized, a later change under it walks no filesystem and does not
+// re-run InitRoot. Steady-state editing inside an active project must be
+// O(1).
+func TestInitializerClaimedRootSkipsWalk(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+	mfs.addFile("/ws/svc/pyproject.toml")
+
+	var calls atomic.Int32
+	roots := make(chan Root, 4)
+	cfg := pyConfig(func(_ context.Context, r Root) error {
+		calls.Add(1)
+		roots <- r
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	ed.fire(t, changeEvent("/ws/svc/main.py"))
+	<-roots
+
+	statsAfterInit := mfs.stats.Load()
+	ed.fire(t, changeEvent("/ws/svc/pkg/other.py"))
+	assertNoMoreRoots(t, roots)
+	assert.Equal(t, int32(1), calls.Load())
+	assert.Equal(t, statsAfterInit, mfs.stats.Load(),
+		"a change under an initialized root must not walk the filesystem")
+}
+
+// TestInitializerNegativeCacheBoundsWalks asserts a source file with no
+// enclosing marker is walked once per distinct parent dir, not once per
+// event, so a storm of writes to marker-less files cannot trigger mass
+// walks.
+func TestInitializerNegativeCacheBoundsWalks(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws) // no markers anywhere
+
+	var calls atomic.Int32
+	cfg := pyConfig(func(_ context.Context, _ Root) error {
+		calls.Add(1)
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	ed.fire(t, changeEvent("/ws/stray/a.py"))
+	statsAfterFirst := mfs.stats.Load()
+	require.Positive(t, statsAfterFirst, "first change must walk once")
+
+	for range 50 {
+		ed.fire(t, changeEvent("/ws/stray/a.py"))
+		ed.fire(t, changeEvent("/ws/stray/b.py"))
+	}
+	assert.Equal(t, statsAfterFirst, mfs.stats.Load(),
+		"repeat changes in a walked-unresolved dir must not re-walk")
+	assert.Equal(t, int32(0), calls.Load())
+}
+
+// TestInitializerScaffoldAfterChangeNeedsNoReload covers the exact
+// pitfall the negative cache must not create: a source file is written in
+// a marker-less dir (cached unresolved via change), the user then
+// scaffolds a project there, and discovery must succeed from the ensuing
+// create events alone — no editor open, no workspace reload. Only later
+// changes are cache-gated; creates always re-walk.
+func TestInitializerScaffoldAfterChangeNeedsNoReload(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws) // no markers yet
+
+	roots := make(chan Root, 4)
+	cfg := pyConfig(func(_ context.Context, r Root) error {
+		roots <- r
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	// A change with no enclosing marker caches svc as unresolved.
+	ed.fire(t, changeEvent("/ws/svc/main.py"))
+	assertNoMoreRoots(t, roots)
+
+	// The project appears. Even if the marker's own create is never
+	// observed, creating a source file re-walks and discovers the root.
+	mfs.addFile("/ws/svc/pyproject.toml")
+	ed.fire(t, createEvent("/ws/svc/app.py"))
+
+	got := <-roots
+	assert.Equal(t, "svc", got.RelPath)
+}
+
+// TestInitializerCreateAlwaysRewalks asserts a create in a change-cached
+// dir re-walks (rather than trusting the negative cache), so the cache
+// can never wedge discovery for a project that materializes there.
+func TestInitializerCreateAlwaysRewalks(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+
+	roots := make(chan Root, 4)
+	cfg := pyConfig(func(_ context.Context, r Root) error {
+		roots <- r
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	ed.fire(t, changeEvent("/ws/svc/main.py")) // caches svc unresolved
+	assertNoMoreRoots(t, roots)
+
+	mfs.addFile("/ws/svc/pyproject.toml")
+	ed.fire(t, createEvent("/ws/svc/pyproject.toml")) // marker create heals cache
+	ed.fire(t, changeEvent("/ws/svc/main.py"))        // now resolves
+
+	got := <-roots
+	assert.Equal(t, "svc", got.RelPath)
+}
+
+// TestInitializerOpenAlwaysRewalks asserts an open in a change-cached dir
+// re-walks, so simply opening a file heals a stale negative-cache entry.
+func TestInitializerOpenAlwaysRewalks(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+
+	roots := make(chan Root, 4)
+	cfg := pyConfig(func(_ context.Context, r Root) error {
+		roots <- r
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	ed.fire(t, changeEvent("/ws/svc/main.py")) // caches svc unresolved
+	assertNoMoreRoots(t, roots)
+
+	mfs.addFile("/ws/svc/pyproject.toml")
+	ed.fire(t, openEvent("/ws/svc/main.py")) // open ignores the cache
+
+	got := <-roots
+	assert.Equal(t, "svc", got.RelPath)
+}
+
+// TestInitializerStormBound asserts that a flood of changes across a few
+// roots runs InitRoot at most once per distinct root, and that Handle
+// returns promptly (never blocks on bring-up).
+func TestInitializerStormBound(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+	mfs.addFile("/ws/a/pyproject.toml")
+	mfs.addFile("/ws/b/pyproject.toml")
+	mfs.addFile("/ws/c/pyproject.toml")
+
+	var calls atomic.Int32
+	release := make(chan struct{})
+	cfg := pyConfig(func(_ context.Context, _ Root) error {
+		calls.Add(1)
+		<-release // hold bring-up open; Handle must not block on it
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	dirs := []string{"a", "b", "c"}
+	done := make(chan struct{})
+	go func() {
+		for n := range 300 {
+			d := dirs[n%len(dirs)]
+			ed.fire(t, changeEvent(filepath.Join(ws, d, "f"+strconv.Itoa(n)+".py")))
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Handle blocked on bring-up during storm")
+	}
+	close(release)
+
+	assert.LessOrEqual(t, calls.Load(), int32(len(dirs)),
+		"InitRoot must run at most once per distinct root")
+}
+
+// TestInitializerKillSwitchOpenOnly asserts that with WatchEvents limited
+// to Open, a change triggers nothing (the pathological-monorepo escape
+// hatch).
+func TestInitializerKillSwitchOpenOnly(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+	mfs.addFile("/ws/svc/pyproject.toml")
+
+	var calls atomic.Int32
+	cfg := pyConfig(func(_ context.Context, _ Root) error {
+		calls.Add(1)
+		return nil
+	})
+	cfg.WatchEvents = []textapi.EventType{textapi.EventTypeOpen}
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+	require.Equal(t, []textapi.EventType{textapi.EventTypeOpen}, ed.subscribedTo)
+
+	ed.fire(t, changeEvent("/ws/svc/main.py"))
+	assert.Equal(t, int32(0), calls.Load())
+}
+
+// TestInitializerMixedOpenChangeDedupe asserts that a racing Open and
+// Change for the same new root bring it up exactly once.
+func TestInitializerMixedOpenChangeDedupe(t *testing.T) {
+	const ws = "/ws"
+	mfs := newMemFS(ws)
+	mfs.addFile("/ws/svc/pyproject.toml")
+
+	var calls atomic.Int32
+	release := make(chan struct{})
+	started := make(chan struct{}, 16)
+	cfg := pyConfig(func(_ context.Context, _ Root) error {
+		calls.Add(1)
+		started <- struct{}{}
+		<-release
+		return nil
+	})
+
+	ed := &fakeEditor{}
+	i := NewInitializer(context.Background(), mfs, ed, cfg)
+	require.NoError(t, i.Start())
+
+	var wg sync.WaitGroup
+	for n := range 8 {
+		ev := openEvent("/ws/svc/main.py")
+		if n%2 == 0 {
+			ev = changeEvent("/ws/svc/main.py")
+		}
+		wg.Go(func() { ed.fire(t, ev) })
+	}
+	<-started
+	close(release)
+	wg.Wait()
+
+	assertNoExtraStart(t, started)
 	assert.Equal(t, int32(1), calls.Load())
 }
 
@@ -402,6 +703,9 @@ func pyConfig(initRoot func(context.Context, Root) error) ProjectConfig {
 		FileMatch: func(uri workspaceapi.URI) bool {
 			return strings.HasSuffix(uri.Path(), ".py")
 		},
+		WatchEvents: []textapi.EventType{
+			textapi.EventTypeOpen, textapi.EventTypeChange, textapi.EventTypeCreate,
+		},
 		InitRoot: initRoot,
 	}
 }
@@ -409,6 +713,16 @@ func pyConfig(initRoot func(context.Context, Root) error) ProjectConfig {
 func openEvent(path string) textapi.Event {
 	uri, _ := workspaceapi.ParseURI("file://" + path)
 	return textapi.Event{Type: textapi.EventTypeOpen, URI: uri}
+}
+
+func changeEvent(path string) textapi.Event {
+	uri, _ := workspaceapi.ParseURI("file://" + path)
+	return textapi.Event{Type: textapi.EventTypeChange, URI: uri}
+}
+
+func createEvent(path string) textapi.Event {
+	uri, _ := workspaceapi.ParseURI("file://" + path)
+	return textapi.Event{Type: textapi.EventTypeCreate, URI: uri}
 }
 
 func assertNoMoreRoots(t *testing.T, roots <-chan Root) {
@@ -484,6 +798,7 @@ type memFS struct {
 	root  string
 	files map[string]bool
 	dirs  map[string]bool
+	stats atomic.Int32
 }
 
 func newMemFS(root string) *memFS {
@@ -505,6 +820,7 @@ func (m *memFS) URI(p string) (workspaceapi.URI, error) {
 }
 
 func (m *memFS) Stat(p string) (os.FileInfo, error) {
+	m.stats.Add(1)
 	name := m.resolve(p)
 	if m.files[name] {
 		return memFileInfo{name: filepath.Base(name)}, nil

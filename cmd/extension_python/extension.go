@@ -108,9 +108,10 @@ func (e *pyExtension) extendWorkspaceWith(
 	}
 
 	init := langext.NewInitializer(ctx, fs, editor, langext.ProjectConfig{
-		LanguageID: "python",
-		Markers:    pyMarkers,
-		FileMatch:  isPythonFile,
+		LanguageID:  "python",
+		Markers:     pyMarkers,
+		FileMatch:   isPythonFile,
+		WatchEvents: pyWatchEvents(cfg, notify),
 		InitRoot: func(ctx context.Context, root langext.Root) error {
 			return initializeProjectRoot(ctx, fs, exec, notify, lsp, dataDir, cfg, root)
 		},
@@ -220,4 +221,28 @@ func applyPyConfig(
 		alternates = parsed
 	}
 	return command, alternates
+}
+
+// pyWatchEvents returns the editor events that drive project discovery,
+// defaulting to opens plus out-of-band changes and creates. Setting the
+// optional `watch_events` config key to false restores open-only
+// behavior, an escape hatch for pathological monorepos.
+func pyWatchEvents(cfg config.Config, notify browserapi.Notifications) []textapi.EventType {
+	openOnly := []textapi.EventType{textapi.EventTypeOpen}
+	onChange := []textapi.EventType{
+		textapi.EventTypeOpen, textapi.EventTypeChange, textapi.EventTypeCreate,
+	}
+	enabled, err := cfg.GetBool("watch_events")
+	switch {
+	case errors.Is(err, config.ErrNotFound):
+		return onChange
+	case err != nil:
+		_, _ = notify.Notify(browserapi.LevelWarn,
+			"extensions.python.config.watch_events must be a bool: %v", err)
+		return onChange
+	case !enabled:
+		return openOnly
+	default:
+		return onChange
+	}
 }

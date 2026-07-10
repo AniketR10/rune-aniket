@@ -27,6 +27,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -46,6 +48,11 @@ type Initializer struct {
 	mu           sync.Mutex
 	initialized  map[string]Root
 	initializing map[string]struct{}
+	// unresolved caches parent dirs whose upward walk found no marker,
+	// consulted and populated for change events only. Opens and creates
+	// bypass it and re-walk, so a stale entry cannot wedge discovery when
+	// a project is later scaffolded there.
+	unresolved map[string]struct{}
 }
 
 // NewInitializer returns an Initializer for cfg that discovers roots
@@ -63,26 +70,46 @@ func NewInitializer(
 		cfg:          cfg,
 		initialized:  make(map[string]Root),
 		initializing: make(map[string]struct{}),
+		unresolved:   make(map[string]struct{}),
 	}
 }
 
-// Start subscribes the Initializer to editor open events. Call it once
-// per workspace. It returns the subscription error, if any.
+// Start subscribes the Initializer to the editor events in
+// cfg.WatchEvents (defaulting to open only). Call it once per workspace.
+// It returns the subscription error, if any.
 func (i *Initializer) Start() error {
-	return i.editor.SubscribeEvents([]textapi.EventType{textapi.EventTypeOpen}, i)
+	return i.editor.SubscribeEvents(i.watchEvents(), i)
 }
 
 // Handle implements textapi.EventHandler. It discovers the project root
-// for an opened, language-matching file and kicks off a deduped
-// background bring-up. It always returns false so the subscription stays
-// active for later opens; the work happens off the calling goroutine
-// under the Initializer's base context, so the editor is never blocked
-// and the bring-up survives the per-event context being canceled.
+// for a language-matching file surfaced by an open, change, or create
+// event and kicks off a deduped background bring-up. It always returns
+// false so the subscription stays active; the bring-up happens off the
+// calling goroutine under the Initializer's base context, so the editor
+// is never blocked and the bring-up survives the per-event context being
+// canceled.
 func (i *Initializer) Handle(_ context.Context, ev textapi.Event) bool {
-	if ev.Type != textapi.EventTypeOpen {
+	if !i.watches(ev.Type) {
 		return false
 	}
+
+	dir := filepath.Dir(ev.URI.Path())
+
+	// A create may scaffold a project, so it drops any stale cache entry
+	// before the walk. A created marker is not itself a source file;
+	// discovery rides the source-file event that follows.
+	if ev.Type == textapi.EventTypeCreate {
+		i.forget(dir)
+		if i.isMarker(ev.URI) {
+			return false
+		}
+	}
+
 	if i.cfg.FileMatch == nil || !i.cfg.FileMatch(ev.URI) {
+		return false
+	}
+
+	if i.skip(ev.Type, dir) {
 		return false
 	}
 
@@ -94,10 +121,76 @@ func (i *Initializer) Handle(_ context.Context, ev textapi.Event) bool {
 
 	root, found := FindProjectRoot(i.fs, wsRoot, ev.URI, i.cfg.Markers)
 	if !found {
+		i.markUnresolved(ev.Type, dir)
 		return false
 	}
 	i.initializeAsync(i.baseCtx, root)
 	return false
+}
+
+// watchEvents defaults to open-only when cfg.WatchEvents is empty.
+func (i *Initializer) watchEvents() []textapi.EventType {
+	if len(i.cfg.WatchEvents) == 0 {
+		return []textapi.EventType{textapi.EventTypeOpen}
+	}
+	return i.cfg.WatchEvents
+}
+
+func (i *Initializer) watches(t textapi.EventType) bool {
+	return slices.Contains(i.watchEvents(), t)
+}
+
+func (i *Initializer) isMarker(uri workspaceapi.URI) bool {
+	return slices.Contains(i.cfg.Markers, filepath.Base(uri.Path()))
+}
+
+// skip reports whether dir needs no walk. The negative cache is honored
+// for changes only; opens and creates always re-walk so a stale entry
+// cannot wedge discovery.
+func (i *Initializer) skip(t textapi.EventType, dir string) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if t == textapi.EventTypeChange {
+		if _, ok := i.unresolved[dir]; ok {
+			return true
+		}
+	}
+	for root := range i.initialized {
+		if underDir(dir, root) {
+			return true
+		}
+	}
+	return false
+}
+
+// markUnresolved caches dir as marker-less. Only changes are cached, so
+// opens and creates keep re-walking and can heal the entry.
+func (i *Initializer) markUnresolved(t textapi.EventType, dir string) {
+	if t != textapi.EventTypeChange {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.unresolved[dir] = struct{}{}
+}
+
+// forget drops cached entries at or under dir.
+func (i *Initializer) forget(dir string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	for cached := range i.unresolved {
+		if underDir(cached, dir) {
+			delete(i.unresolved, cached)
+		}
+	}
+}
+
+func underDir(path, dir string) bool {
+	if path == dir {
+		return true
+	}
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !hasParentPrefix(rel)
 }
 
 // InitializeAt eagerly brings up a specific root and returns the

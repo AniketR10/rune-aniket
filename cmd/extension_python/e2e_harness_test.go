@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -264,7 +265,7 @@ func runExtensionOnDir(t *testing.T, dir string) scenarioEnv {
 		lsp,
 		editor,
 		"",
-		nil,
+		config.NopConfig(),
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
 			return nil

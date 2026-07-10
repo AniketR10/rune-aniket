@@ -37,6 +37,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
@@ -62,6 +63,12 @@ type ProjectConfig struct {
 	// lsp.Initialize with the nested root URI. It runs in a background
 	// goroutine; Initializer guarantees exactly one call per root.
 	InitRoot func(ctx context.Context, root Root) error
+
+	// WatchEvents lists the editor event types that drive discovery,
+	// defaulting to {EventTypeOpen} when empty. Include EventTypeChange
+	// and EventTypeCreate for a language whose files are written
+	// out-of-band, so nested projects come up without an editor buffer.
+	WatchEvents []textapi.EventType
 }
 
 // Root describes a discovered project root.
