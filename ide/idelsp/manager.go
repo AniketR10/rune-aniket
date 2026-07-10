@@ -672,8 +672,10 @@ func (m *Manager) installRestarted(key serverKey, old, restarted *langServer) {
 }
 
 // sendPendingOpens sends didOpen for files that were opened before this
-// server existed. Only files whose language matches key.languageID and
-// whose URI is contained in key.rootURI are sent; the rest stay in
+// server existed. Files whose language matches key.languageID are sent
+// when their URI is contained in key.rootURI, or when they live outside
+// the workspace root entirely (no root can ever contain them, so the
+// first same-language server claims them); the rest stay in
 // pendingOpens for a future server init.
 func (m *Manager) sendPendingOpens(key serverKey, srv *langServer) {
 	m.mu.Lock()
@@ -683,7 +685,7 @@ func (m *Manager) sendPendingOpens(key serverKey, srv *langServer) {
 		if err != nil || cfg.id != key.languageID {
 			continue
 		}
-		if !rootContains(key.rootURI, uri) {
+		if rootContains(m.rootURI, uri) && !rootContains(key.rootURI, uri) {
 			continue
 		}
 		opens = append(opens, ev)
@@ -864,6 +866,18 @@ func (m *Manager) reopenFiles(
 	}
 }
 
+// serverForURI routes uri to a language server among the already
+// initialized servers of its language, in order of preference:
+//  1. the server of the most specific initialized root containing the
+//     file;
+//  2. the same-language server with the broadest root, for files
+//     outside every root (dependency sources, GOROOT, module caches),
+//     shortest rootURI with a lexicographic tie-break;
+//  3. ErrNoServer when no server of the language exists at all.
+//
+// serverForURI never brings a server up: a file whose owning project
+// root has no server stays unrouted until the owning extension
+// initializes it (its pending open flushes through sendPendingOpens).
 func (m *Manager) serverForURI(uri string) (server, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -885,10 +899,25 @@ func (m *Manager) serverForURI(uri string) (server, error) {
 			bestLen = len(key.rootURI)
 		}
 	}
-	if best == nil {
+	if best != nil {
+		return best, nil
+	}
+	var broadest server
+	var broadestRoot string
+	for key, srv := range m.servers {
+		if key.languageID != cfg.id {
+			continue
+		}
+		if broadest == nil || len(key.rootURI) < len(broadestRoot) ||
+			(len(key.rootURI) == len(broadestRoot) && key.rootURI < broadestRoot) {
+			broadest = srv
+			broadestRoot = key.rootURI
+		}
+	}
+	if broadest == nil {
 		return nil, fmt.Errorf("%w: server %s not running", ErrNoServer, cfg.id)
 	}
-	return best, nil
+	return broadest, nil
 }
 
 func (m *Manager) allServers() []server {

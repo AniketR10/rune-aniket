@@ -3059,3 +3059,78 @@ func makeURI(t *testing.T, uri string) workspaceapi.URI {
 	require.NoError(t, err)
 	return ret
 }
+
+// TestE2EOutOfRootHover asserts that a Hover at a location outside any
+// initialized root (e.g. a GOROOT file returned by Definition on a
+// stdlib symbol) falls back to the same-language server with the
+// broadest root instead of failing with ErrNoServer.
+func TestE2EOutOfRootHover(t *testing.T) {
+	t.Parallel()
+	goplsBin := findGopls(t)
+	tmpDir := setupTestWorkspace(t, "testdata")
+
+	mainPath := filepath.Join(tmpDir, "main.go")
+	mainContent, err := os.ReadFile(mainPath)
+	require.NoError(t, err)
+	mainURI := "file://" + mainPath
+
+	uri := makeURI(t, "file://"+tmpDir)
+	scheme := newTestScheme()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	mgr := New(
+		uri, scheme, scheme,
+		&stubPkgManager{bin: goplsBin},
+		nil, nil,
+		Config{
+			Callback:           &testCallback{},
+			MaxRetries:         1,
+			NoInitializeServer: true,
+			InitializeTimeout:  30 * time.Second,
+		},
+	)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	params := autoInitParams(uri.String())
+	initOpts, err := json.Marshal(map[string]any{
+		"langID":  "go",
+		"command": "gopls serve",
+	})
+	require.NoError(t, err)
+	params.InitializeOptions = initOpts
+	_, err = mgr.Initialize(ctx, params)
+	require.NoError(t, err)
+
+	require.NoError(t, mgr.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{
+		TextDocument: semanticapi.TextDocumentItem{
+			URI:        mainURI,
+			LanguageID: "go",
+			Version:    0,
+			Text:       string(mainContent),
+		},
+	}))
+
+	// Definition of fmt.Sprintf resolves into GOROOT, outside the
+	// workspace and outside any initialized root.
+	result, err := mgr.Definition(ctx, semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
+		Position:     semanticapi.Position{Line: 34, Character: 13},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Locations)
+	loc := result.Locations[0]
+	require.False(t, rootContains(uri.String(), loc.URI),
+		"expected a stdlib definition outside the workspace, got %s", loc.URI)
+
+	hover, err := mgr.Hover(ctx, semanticapi.HoverParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: loc.URI},
+		Position:     loc.Range.Start,
+	})
+	require.NoError(t, err,
+		"hover at an out-of-root location must route to the broadest "+
+			"same-language server")
+	require.NotNil(t, hover)
+	assert.Contains(t, hover.Contents.Value, "Sprintf")
+}

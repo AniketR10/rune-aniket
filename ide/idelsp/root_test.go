@@ -82,9 +82,78 @@ func TestServerForURILongestRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Same(t, rootSrv, root, "top-level file must route to workspace-root server")
 
-	_, err = m.serverForURI("file:///elsewhere/x.py")
+	outside, err := m.serverForURI("file:///elsewhere/x.py")
+	require.NoError(t, err)
+	assert.Same(t, rootSrv, outside,
+		"file outside any initialized root must fall back to the "+
+			"broadest same-language server")
+
+	_, err = m.serverForURI("file:///elsewhere/x.go")
 	require.ErrorIs(t, err, ErrNoServer,
-		"file outside any initialized root has no server")
+		"a language with no running server has no fallback")
+}
+
+// TestServerForURIBroadestFallback asserts out-of-root files route to
+// the same-language server with the broadest root: shortest rootURI,
+// with a lexicographic tie-break for equal lengths.
+func TestServerForURIBroadestFallback(t *testing.T) {
+	t.Parallel()
+	uri := makeURI(t, "file:///workspace")
+	m := New(uri, nil, nil, nil, nil, nil, Config{NoInitializeServer: true})
+	t.Cleanup(func() { _ = m.Close() })
+
+	aaSrv := &fakeChild{name: "python"}
+	abSrv := &fakeChild{name: "python"}
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace/ab"}] = abSrv
+	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace/aa"}] = aaSrv
+	m.mu.Unlock()
+
+	srv, err := m.serverForURI("file:///home/u/go/pkg/mod/dep/x.py")
+	require.NoError(t, err)
+	assert.Same(t, aaSrv, srv,
+		"equal-length roots must tie-break lexicographically")
+
+	rootSrv := &fakeChild{name: "python"}
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: "file:///workspace"}] = rootSrv
+	m.mu.Unlock()
+
+	srv, err = m.serverForURI("file:///home/u/go/pkg/mod/dep/x.py")
+	require.NoError(t, err)
+	assert.Same(t, rootSrv, srv,
+		"the shortest root must win once available")
+}
+
+// TestSendPendingOpensOutOfWorkspaceFallback asserts a pending open
+// for a file outside the workspace root flushes to the first
+// same-language server, since no root can ever contain it.
+func TestSendPendingOpensOutOfWorkspaceFallback(t *testing.T) {
+	t.Parallel()
+	uri := makeURI(t, "file:///workspace")
+	m := New(uri, nil, nil, nil, nil, nil, Config{NoInitializeServer: true})
+	t.Cleanup(func() { _ = m.Close() })
+
+	outsideURI := makeURI(t, "file:///goroot/lib/dep.py")
+	m.mu.Lock()
+	m.pendingOpens[outsideURI.String()] = textapi.Event{
+		Type: textapi.EventTypeOpen, URI: outsideURI, Content: "x = 1\n"}
+	m.mu.Unlock()
+
+	srv := &langServer{
+		cfg:     langConfig{id: "python"},
+		rootURI: "file:///workspace",
+		log:     slog.Default(),
+	}
+	m.sendPendingOpens(
+		serverKey{languageID: "python", rootURI: "file:///workspace"}, srv)
+
+	m.mu.Lock()
+	_, stillPending := m.pendingOpens[outsideURI.String()]
+	m.mu.Unlock()
+	assert.False(t, stillPending,
+		"out-of-workspace pending open must flush to the first "+
+			"same-language server")
 }
 
 // TestInitializeRejectsRootOutsideWorkspace asserts Initialize refuses
