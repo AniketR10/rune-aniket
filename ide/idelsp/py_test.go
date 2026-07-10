@@ -112,6 +112,39 @@ func setupPythonManager(
 	t.Cleanup(func() { _ = mgr.Close() })
 
 	params := autoInitParams(uri.String())
+	var capabilities map[string]any
+	require.NoError(t, json.Unmarshal(params.Capabilities, &capabilities))
+	textDocument := capabilities["textDocument"].(map[string]any)
+	textDocument["hover"] = map[string]any{
+		"contentFormat": []string{"markdown", "plaintext"},
+	}
+	textDocument["declaration"] = map[string]any{
+		"linkSupport": true,
+	}
+	textDocument["definition"] = map[string]any{
+		"linkSupport": true,
+	}
+	textDocument["typeDefinition"] = map[string]any{
+		"linkSupport": true,
+	}
+	textDocument["completion"] = map[string]any{
+		"completionItem": map[string]any{
+			"documentationFormat": []string{"markdown", "plaintext"},
+		},
+	}
+	textDocument["signatureHelp"] = map[string]any{
+		"signatureInformation": map[string]any{
+			"activeParameterSupport": true,
+			"parameterInformation": map[string]any{
+				"labelOffsetSupport": true,
+			},
+		},
+	}
+	textDocument["publishDiagnostics"] = map[string]any{
+		"relatedInformation": true,
+	}
+	params.Capabilities, err = json.Marshal(capabilities)
+	require.NoError(t, err)
 	initOpts, err := json.Marshal(map[string]any{
 		"langID":  "python",
 		"command": "ty server",
@@ -200,12 +233,11 @@ func TestE2EPython(t *testing.T) {
 				})
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				assert.Equal(t, semanticapi.MarkupKindPlainText,
+				assert.Equal(t, semanticapi.MarkupKindMarkdown,
 					result.Contents.Kind)
 				assert.Equal(t,
-					"def add(\n    a: int,\n    b: int\n) -> int\n"+
-						"---------------------------------------------\n"+
-						"add adds two integers.\n",
+					"```python\ndef add(\n    a: int,\n    b: int\n) -> int\n```\n"+
+						"---\nadd adds two integers.",
 					result.Contents.Value)
 				require.NotNil(t, result.Range)
 				assert.Equal(t, semanticapi.Range{
@@ -215,7 +247,38 @@ func TestE2EPython(t *testing.T) {
 			},
 		},
 		{
-			name: "Definition routes to ty",
+			name: "Declaration links route to ty",
+			fn: func(t *testing.T, mgr *Manager) {
+				result, err := mgr.Declaration(ctx,
+					semanticapi.DeclarationParams{
+						TextDocument: semanticapi.TextDocumentIdentifier{
+							URI: mainURI,
+						},
+						Position: semanticapi.Position{
+							Line: 39, Character: 13,
+						},
+					},
+				)
+				require.NoError(t, err)
+				require.Equal(t, []semanticapi.LocationLink{{
+					OriginSelectionRange: &semanticapi.Range{
+						Start: semanticapi.Position{Line: 39, Character: 13},
+						End:   semanticapi.Position{Line: 39, Character: 16},
+					},
+					TargetURI: mainURI,
+					TargetRange: semanticapi.Range{
+						Start: semanticapi.Position{Line: 31, Character: 0},
+						End:   semanticapi.Position{Line: 33, Character: 14},
+					},
+					TargetSelectionRange: semanticapi.Range{
+						Start: semanticapi.Position{Line: 31, Character: 4},
+						End:   semanticapi.Position{Line: 31, Character: 7},
+					},
+				}}, result.LocationLinks)
+			},
+		},
+		{
+			name: "Definition links route to ty",
 			fn: func(t *testing.T, mgr *Manager) {
 				result, err := mgr.Definition(ctx,
 					semanticapi.DefinitionParams{
@@ -228,13 +291,21 @@ func TestE2EPython(t *testing.T) {
 					},
 				)
 				require.NoError(t, err)
-				require.Equal(t, []semanticapi.Location{{
-					URI: mainURI,
-					Range: semanticapi.Range{
+				require.Equal(t, []semanticapi.LocationLink{{
+					OriginSelectionRange: &semanticapi.Range{
+						Start: semanticapi.Position{Line: 39, Character: 13},
+						End:   semanticapi.Position{Line: 39, Character: 16},
+					},
+					TargetURI: mainURI,
+					TargetRange: semanticapi.Range{
+						Start: semanticapi.Position{Line: 31, Character: 0},
+						End:   semanticapi.Position{Line: 33, Character: 14},
+					},
+					TargetSelectionRange: semanticapi.Range{
 						Start: semanticapi.Position{Line: 31, Character: 4},
 						End:   semanticapi.Position{Line: 31, Character: 7},
 					},
-				}}, result.Locations)
+				}}, result.LocationLinks)
 			},
 		},
 		{
@@ -379,6 +450,17 @@ func TestE2EPython(t *testing.T) {
 					"__reduce_ex__", "__repr__", "__setattr__",
 					"__sizeof__", "__str__", "__subclasshook__",
 				}, labels)
+				var greet *semanticapi.CompletionItem
+				for i := range result.Items {
+					if result.Items[i].Label == "greet" {
+						greet = &result.Items[i]
+						break
+					}
+				}
+				require.NotNil(t, greet)
+				require.NotNil(t, greet.Documentation)
+				assert.Equal(t, semanticapi.MarkupKindMarkdown,
+					greet.Documentation.Kind)
 				// restore original content for any later cases
 				require.NoError(t, mgr.DidChange(ctx,
 					semanticapi.DidChangeTextDocumentParams{
@@ -448,8 +530,9 @@ func TestE2EPython(t *testing.T) {
 			},
 		},
 		{
-			// ty does not implement textDocument/prepareRename.
-			name: "PrepareRename unsupported by ty",
+			// ty 0.0.51 advertises prepareRename but returns null for this
+			// function symbol. Keep rename negotiation enabled for direct rename.
+			name: "PrepareRename returns no range for function",
 			fn: func(t *testing.T, mgr *Manager) {
 				result, err := mgr.PrepareRename(ctx,
 					semanticapi.PrepareRenameParams{
@@ -532,6 +615,8 @@ func TestE2EPython(t *testing.T) {
 					},
 				)
 				require.NoError(t, err)
+				assert.Equal(t, uint32(0), result.ActiveSignature)
+				assert.Equal(t, uint32(0), result.ActiveParameter)
 				assert.Equal(t, []semanticapi.SignatureInformation{
 					{
 						Label: "(a: int, b: int) -> int",
@@ -547,7 +632,7 @@ func TestE2EPython(t *testing.T) {
 			// ty resolves int to the vendored typeshed builtins stub;
 			// the exact path is environment-specific so only its shape
 			// is asserted.
-			name: "TypeDefinition routes to ty",
+			name: "TypeDefinition links route to ty",
 			fn: func(t *testing.T, mgr *Manager) {
 				result, err := mgr.TypeDefinition(ctx,
 					semanticapi.TypeDefinitionParams{
@@ -560,11 +645,15 @@ func TestE2EPython(t *testing.T) {
 					},
 				)
 				require.NoError(t, err)
-				require.Len(t, result.Locations, 1)
+				require.Len(t, result.LocationLinks, 1)
 				assert.True(t,
-					strings.HasSuffix(result.Locations[0].URI, "builtins.pyi"),
+					strings.HasSuffix(result.LocationLinks[0].TargetURI, "builtins.pyi"),
 					"unexpected type definition uri: %s",
-					result.Locations[0].URI)
+					result.LocationLinks[0].TargetURI)
+				assert.Equal(t, &semanticapi.Range{
+					Start: semanticapi.Position{Line: 38, Character: 4},
+					End:   semanticapi.Position{Line: 38, Character: 9},
+				}, result.LocationLinks[0].OriginSelectionRange)
 			},
 		},
 	}

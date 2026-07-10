@@ -53,6 +53,47 @@ func TestPyCommand(t *testing.T) {
 }
 
 func TestPyInitializeParams(t *testing.T) {
+	t.Run("advertises supported response shapes", func(t *testing.T) {
+		params, err := pyInitializeParams("file:///tmp/repo", "ty server", nil)
+		require.NoError(t, err)
+
+		var capabilities map[string]any
+		require.NoError(t, json.Unmarshal(params.Capabilities, &capabilities))
+		textDocument := capabilities["textDocument"].(map[string]any)
+
+		assert.Equal(t, map[string]any{
+			"contentFormat": []any{"markdown", "plaintext"},
+		}, textDocument["hover"])
+		assert.Equal(t, map[string]any{
+			"linkSupport": true,
+		}, textDocument["declaration"])
+		assert.Equal(t, map[string]any{
+			"linkSupport": true,
+		}, textDocument["definition"])
+		assert.Equal(t, map[string]any{
+			"linkSupport": true,
+		}, textDocument["typeDefinition"])
+		assert.Equal(t, map[string]any{
+			"prepareSupport": true,
+		}, textDocument["rename"])
+		assert.Equal(t, map[string]any{
+			"completionItem": map[string]any{
+				"documentationFormat": []any{"markdown", "plaintext"},
+			},
+		}, textDocument["completion"])
+		assert.Equal(t, map[string]any{
+			"signatureInformation": map[string]any{
+				"activeParameterSupport": true,
+				"parameterInformation": map[string]any{
+					"labelOffsetSupport": true,
+				},
+			},
+		}, textDocument["signatureHelp"])
+		assert.Equal(t, map[string]any{
+			"relatedInformation": true,
+		}, textDocument["publishDiagnostics"])
+	})
+
 	t.Run("with alternates", func(t *testing.T) {
 		params, err := pyInitializeParams("file:///tmp/repo", "ty server", map[string]string{
 			"textDocument/formatting":      "ruff server",

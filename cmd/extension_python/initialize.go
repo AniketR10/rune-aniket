@@ -62,15 +62,41 @@ func pyInitializeParams(
 
 	capabilities := map[string]any{
 		"textDocument": map[string]any{
-			"hover":           map[string]any{},
-			"definition":      map[string]any{},
-			"typeDefinition":  map[string]any{},
-			"references":      map[string]any{},
-			"documentSymbol":  map[string]any{},
-			"completion":      map[string]any{},
-			"signatureHelp":   map[string]any{},
+			"hover": map[string]any{
+				"contentFormat": []string{"markdown", "plaintext"},
+			},
+			"declaration": map[string]any{
+				"linkSupport": true,
+			},
+			"definition": map[string]any{
+				"linkSupport": true,
+			},
+			"typeDefinition": map[string]any{
+				"linkSupport": true,
+			},
+			"references":     map[string]any{},
+			"documentSymbol": map[string]any{},
+			"completion": map[string]any{
+				"completionItem": map[string]any{
+					"documentationFormat": []string{"markdown", "plaintext"},
+				},
+			},
+			"signatureHelp": map[string]any{
+				"signatureInformation": map[string]any{
+					"activeParameterSupport": true,
+					"parameterInformation": map[string]any{
+						"labelOffsetSupport": true,
+					},
+				},
+			},
 			"formatting":      map[string]any{},
 			"rangeFormatting": map[string]any{},
+			"rename": map[string]any{
+				"prepareSupport": true,
+			},
+			"publishDiagnostics": map[string]any{
+				"relatedInformation": true,
+			},
 			"codeAction": map[string]any{
 				"codeActionLiteralSupport": map[string]any{
 					"codeActionKind": map[string]any{
