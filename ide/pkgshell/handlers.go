@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ernestrc/go-multierror"
 	blueiterator "github.com/unstablebuild/blue/iterator"
@@ -354,38 +353,12 @@ func (h *Handler) completePkgInstalled(
 func (h *Handler) getLatestVersion(
 	ctx context.Context, pack string,
 ) (release.Version, error) {
-	p, err := h.mgr.DescribePackage(ctx, pack)
+	version, err := h.mgr.LatestVersion(ctx, pack)
 	if err != nil {
-		if err.Error() == "not found" {
+		if errors.Is(err, idepkg.ErrPackageNotFound) {
 			return "", storageapi.ErrNotFound
 		}
 		return "", err
-	}
-	if p.Latest != "" {
-		return p.Latest, nil
-	}
-	iter, err := h.mgr.ListPackageVersions(ctx, pack, nil)
-	if err != nil {
-		return "", fmt.Errorf("list %q versions: %w", pack, err)
-	}
-	defer iter.Close()
-	var latest time.Time
-	var version release.Version
-	for {
-		bundle, ok := iter.Next(ctx)
-		if !ok {
-			break
-		}
-		if bundle.CreatedAt.After(latest) {
-			latest = bundle.CreatedAt
-			version = bundle.Version
-		}
-	}
-	if err := iter.Err(); err != nil {
-		return "", fmt.Errorf("iterate over versions of %q: %w", pack, err)
-	}
-	if version == "" {
-		return "", fmt.Errorf("package %q has no releases", pack)
 	}
 	return version, nil
 }

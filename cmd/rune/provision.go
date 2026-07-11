@@ -25,6 +25,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -105,32 +106,67 @@ func installRemotePackagesTo(scheme schemeapi.Scheme, progress io.Writer) {
 	}
 	total := len(entries)
 	for i, e := range entries {
-		index := i + 1
-		version := release.Version(e.Version)
-		emitProvisionProgress(progress, workspacessh.ProvisionProgress{
-			Index: index, Total: total, Package: e.ID, Version: e.Version,
-			Phase: workspacessh.ProvisionPhaseInstalling,
-		})
-		if err := mgr.InstallPackageVersion(ctx, e.ID, version,
-			repl.NopProgressWriter()); err != nil {
-			log.Warnf("provision: install %s@%s: %v", e.ID, e.Version, err)
-			emitProvisionProgress(progress, workspacessh.ProvisionProgress{
-				Index: index, Total: total, Package: e.ID, Version: e.Version,
-				Phase: workspacessh.ProvisionPhaseFailed, Detail: err.Error(),
-			})
-			continue
-		}
-		if err := mgr.UsePackageVersion(ctx, e.ID, version); err != nil {
-			log.Warnf("provision: use %s@%s: %v", e.ID, e.Version, err)
-		}
-		emitProvisionProgress(progress, workspacessh.ProvisionProgress{
-			Index: index, Total: total, Package: e.ID, Version: e.Version,
-			Phase: workspacessh.ProvisionPhaseActivating,
-		})
+		installOnePackage(ctx, mgr, progress, e, i+1, total)
 	}
 	emitProvisionProgress(progress, workspacessh.ProvisionProgress{
 		Index: total, Total: total, Phase: workspacessh.ProvisionPhaseDone,
 	})
+}
+
+// remoteInstaller is the slice of the provisioning manager installOnePackage
+// needs, kept small so the version-fallback logic can be tested without
+// network or storage.
+type remoteInstaller interface {
+	InstallPackageVersion(ctx context.Context, id string, version release.Version, pw repl.ProgressWriter) error
+	UsePackageVersion(ctx context.Context, id string, version release.Version) error
+	LatestVersion(ctx context.Context, id string) (release.Version, error)
+}
+
+// installOnePackage installs and activates a single manifest entry, emitting
+// progress. When the pinned version is not published for the remote's platform
+// (ErrVersionNotFound), it degrades to the latest available version so the
+// remote toolchain still comes up rather than failing on an arch-specific
+// version gap. Returns whether the package was installed.
+func installOnePackage(
+	ctx context.Context, inst remoteInstaller, progress io.Writer,
+	e idepkg.ProvisionEntry, index, total int,
+) bool {
+	emitProvisionProgress(progress, workspacessh.ProvisionProgress{
+		Index: index, Total: total, Package: e.ID, Version: e.Version,
+		Phase: workspacessh.ProvisionPhaseInstalling,
+	})
+
+	version := release.Version(e.Version)
+	err := inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
+	if err != nil && errors.Is(err, idepkg.ErrVersionNotFound) {
+		// The exact local version may not be published for the remote's
+		// platform; fall back to the latest available version.
+		latest, lerr := inst.LatestVersion(ctx, e.ID)
+		if lerr != nil {
+			log.Warnf("provision: resolve latest %s (pinned %s missing): %v", e.ID, e.Version, lerr)
+		} else {
+			log.Warnf("provision: %s@%s not available for this platform; installing latest %s",
+				e.ID, e.Version, latest)
+			version = latest
+			err = inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
+		}
+	}
+	if err != nil {
+		log.Warnf("provision: install %s@%s: %v", e.ID, version, err)
+		emitProvisionProgress(progress, workspacessh.ProvisionProgress{
+			Index: index, Total: total, Package: e.ID, Version: string(version),
+			Phase: workspacessh.ProvisionPhaseFailed, Detail: err.Error(),
+		})
+		return false
+	}
+	if err := inst.UsePackageVersion(ctx, e.ID, version); err != nil {
+		log.Warnf("provision: use %s@%s: %v", e.ID, version, err)
+	}
+	emitProvisionProgress(progress, workspacessh.ProvisionProgress{
+		Index: index, Total: total, Package: e.ID, Version: string(version),
+		Phase: workspacessh.ProvisionPhaseActivating,
+	})
+	return true
 }
 
 // emitProvisionProgress writes one JSON-Lines progress record. Emission is

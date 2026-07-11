@@ -36,6 +36,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
 	"archive/tar"
 	"bytes"
@@ -408,6 +409,53 @@ func TestListPackageVersions(t *testing.T) {
 		r.ExpectReturnErr(errors.New("boom"))
 		_, err := m.ListPackageVersions(context.Background(), "go", nil)
 		assert.EqualError(t, err, "boom")
+	})
+}
+
+func TestLatestVersion(t *testing.T) {
+	t.Parallel()
+	t.Run("prefers the package Latest pointer", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go", Latest: "1.2.3"})
+		versions := idepkgtest.MakeBundles()
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		v, err := m.LatestVersion(context.Background(), "go")
+		require.NoError(t, err)
+		assert.Equal(t, release.Version("1.2.3"), v)
+	})
+	t.Run("falls back to newest bundle by creation time", func(t *testing.T) {
+		t.Parallel()
+		base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "go", Version: "1", CreatedAt: base},
+			{Package: "go", Version: "3", CreatedAt: base.Add(48 * time.Hour)},
+			{Package: "go", Version: "2", CreatedAt: base.Add(24 * time.Hour)},
+		})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		v, err := m.LatestVersion(context.Background(), "go")
+		require.NoError(t, err)
+		assert.Equal(t, release.Version("3"), v)
+	})
+	t.Run("returns ErrNoReleases when the package has no bundles", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages(release.Package{Name: "go"})
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go"}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		_, err := m.LatestVersion(context.Background(), "go")
+		assert.ErrorIs(t, err, ErrNoReleases)
+	})
+	t.Run("bubbles up describe error", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles()
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+
+		_, err := m.LatestVersion(context.Background(), "go")
+		assert.ErrorIs(t, err, ErrPackageNotFound)
 	})
 }
 

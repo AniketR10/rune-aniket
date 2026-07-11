@@ -37,6 +37,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
@@ -78,6 +79,9 @@ var (
 	// The wrapped message is rendered directly to the user.
 	ErrForbidden = errors.New("login first via `login` command and " +
 		"ensure you have a valid subscription to download packages")
+	// ErrNoReleases is returned by LatestVersion when a package exists
+	// but has no published bundles to resolve a latest version from.
+	ErrNoReleases = errors.New("package has no releases")
 )
 
 // translatePackageErr maps a *cdnrelease.StatusError on a
@@ -286,6 +290,50 @@ func (m *Manager) ListPackageVersions(ctx context.Context, pkgID string, filters
 		return nil, translateListErr(err, pkgID)
 	}
 	return it, nil
+}
+
+// LatestVersion resolves the newest published version of a package,
+// preferring the server's Latest pointer and falling back to the newest
+// bundle by creation time. It returns ErrPackageNotFound when the package
+// does not exist and ErrNoReleases when it exists but has no bundles.
+func (m *Manager) LatestVersion(ctx context.Context, pkgID string) (release.Version, error) {
+	pkg, err := m.DescribePackage(ctx, pkgID)
+	if err != nil {
+		// The release manager may report a missing package as a bare
+		// "not found" rather than a translated StatusError; normalise so
+		// callers can branch on ErrPackageNotFound alone.
+		if !errors.Is(err, ErrPackageNotFound) && err.Error() == "not found" {
+			return "", fmt.Errorf("package %q does not exist: %w", pkgID, ErrPackageNotFound)
+		}
+		return "", err
+	}
+	if pkg.Latest != "" {
+		return pkg.Latest, nil
+	}
+	it, err := m.ListPackageVersions(ctx, pkgID, nil)
+	if err != nil {
+		return "", err
+	}
+	defer it.Close()
+	var newest time.Time
+	var version release.Version
+	for {
+		b, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		if b.CreatedAt.After(newest) {
+			newest = b.CreatedAt
+			version = b.Version
+		}
+	}
+	if err := it.Err(); err != nil {
+		return "", err
+	}
+	if version == "" {
+		return "", fmt.Errorf("%q: %w", pkgID, ErrNoReleases)
+	}
+	return version, nil
 }
 
 // InstallPackageVersion downloads and installs a package bundle by name

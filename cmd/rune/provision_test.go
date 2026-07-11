@@ -26,6 +26,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,8 +35,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
@@ -184,4 +189,118 @@ func TestInstallRemotePackagesEmitsOrderedProgress(t *testing.T) {
 		{Rune: "provision", Index: 2, Total: 2, Phase: workspacessh.ProvisionPhaseDone},
 	}
 	assert.Equal(t, want, got)
+}
+
+// fakeInstaller stands in for the provisioning manager so the version-fallback
+// logic can be tested without network or storage.
+type fakeInstaller struct {
+	// installErr[version] is returned by InstallPackageVersion for that version.
+	installErr map[string]error
+	latest     map[string]release.Version
+	latestErr  map[string]error
+
+	installed []string // versions passed to InstallPackageVersion, in order
+	used      []string // versions passed to UsePackageVersion, in order
+}
+
+func (f *fakeInstaller) InstallPackageVersion(
+	_ context.Context, _ string, version release.Version, _ repl.ProgressWriter,
+) error {
+	f.installed = append(f.installed, string(version))
+	return f.installErr[string(version)]
+}
+
+func (f *fakeInstaller) UsePackageVersion(
+	_ context.Context, _ string, version release.Version,
+) error {
+	f.used = append(f.used, string(version))
+	return nil
+}
+
+func (f *fakeInstaller) LatestVersion(
+	_ context.Context, id string,
+) (release.Version, error) {
+	if err := f.latestErr[id]; err != nil {
+		return "", err
+	}
+	return f.latest[id], nil
+}
+
+// TestInstallOnePackageFallsBackToLatest asserts that when the pinned version is
+// not published for the remote platform (ErrVersionNotFound), the install
+// degrades to the latest available version and reports it via progress.
+func TestInstallOnePackageFallsBackToLatest(t *testing.T) {
+	inst := &fakeInstaller{
+		installErr: map[string]error{
+			"v1.2.3": fmt.Errorf("nope: %w", idepkg.ErrVersionNotFound),
+			"v9.9.9": nil,
+		},
+		latest: map[string]release.Version{"go": "v9.9.9"},
+	}
+	var sink strings.Builder
+	ok := installOnePackage(context.Background(), inst, &sink,
+		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
+	require.True(t, ok, "fallback install must succeed")
+
+	assert.Equal(t, []string{"v1.2.3", "v9.9.9"}, inst.installed,
+		"must try the pinned version, then the latest")
+	assert.Equal(t, []string{"v9.9.9"}, inst.used,
+		"must activate the fallback version")
+
+	var got []workspacessh.ProvisionProgress
+	scanner := bufio.NewScanner(strings.NewReader(sink.String()))
+	for scanner.Scan() {
+		p, ok := workspacessh.ParseProvisionProgressLine(scanner.Bytes())
+		require.True(t, ok)
+		got = append(got, p)
+	}
+	// installing(pinned) then activating(fallback) — the activating line must
+	// reflect the version actually installed, not the pinned one.
+	require.Len(t, got, 2)
+	assert.Equal(t, workspacessh.ProvisionPhaseInstalling, got[0].Phase)
+	assert.Equal(t, workspacessh.ProvisionPhaseActivating, got[1].Phase)
+	assert.Equal(t, "v9.9.9", got[1].Version,
+		"activating progress must show the fallback version")
+}
+
+// TestInstallOnePackagePinnedSucceeds asserts the happy path: when the pinned
+// version installs, no fallback is attempted.
+func TestInstallOnePackagePinnedSucceeds(t *testing.T) {
+	inst := &fakeInstaller{installErr: map[string]error{"v1.2.3": nil}}
+	var sink strings.Builder
+	ok := installOnePackage(context.Background(), inst, &sink,
+		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
+	require.True(t, ok)
+	assert.Equal(t, []string{"v1.2.3"}, inst.installed)
+	assert.Equal(t, []string{"v1.2.3"}, inst.used)
+}
+
+// TestInstallOnePackageFailsWhenNoFallback asserts that a non-version-not-found
+// error is not retried, and a failed progress line is emitted.
+func TestInstallOnePackageFailsWhenNoFallback(t *testing.T) {
+	inst := &fakeInstaller{
+		installErr: map[string]error{"v1.2.3": errors.New("network down")},
+	}
+	var sink strings.Builder
+	ok := installOnePackage(context.Background(), inst, &sink,
+		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
+	require.False(t, ok)
+	assert.Equal(t, []string{"v1.2.3"}, inst.installed, "must not retry on a non-404 error")
+	assert.Contains(t, sink.String(), "failed")
+}
+
+// TestInstallOnePackageFallbackAlsoMissing asserts that if both the pinned and
+// the latest versions are unavailable, the package fails cleanly.
+func TestInstallOnePackageFallbackAlsoMissing(t *testing.T) {
+	inst := &fakeInstaller{
+		installErr: map[string]error{
+			"v1.2.3": fmt.Errorf("x: %w", idepkg.ErrVersionNotFound),
+		},
+		latestErr: map[string]error{"go": errors.New("no releases")},
+	}
+	var sink strings.Builder
+	ok := installOnePackage(context.Background(), inst, &sink,
+		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
+	require.False(t, ok)
+	assert.Contains(t, sink.String(), "failed")
 }
