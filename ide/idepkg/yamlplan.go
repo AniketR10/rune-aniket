@@ -79,7 +79,7 @@ func planConfigChange(
 	}
 	expandMapValues(pkgOverlayCfg, runeVarMapping)
 
-	newCfg, conflictCfg := idePkgConfigDiff(userCfg, pkgOverlayCfg, versionDependent)
+	newCfg, conflictCfg := idePkgConfigDiff(userCfg, pkgOverlayCfg, versionDependent, nil)
 	if newCfg == nil && conflictCfg == nil {
 		return configChangePlan{}, nil
 	}

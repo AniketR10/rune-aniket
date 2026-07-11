@@ -104,7 +104,7 @@ func TestPlanConfigChange(t *testing.T) {
 			wantPrompt: false,
 		},
 		{
-			name: "version-dependent conflicts prompt, new keys auto-apply",
+			name: "version-dependent conflicts prompt, static preserved, new keys auto-apply",
 			pkgConfig: "env:\n" +
 				"  GOROOT: /data/pkg/testpkg/$RUNE_PKG_VERSION/go\n" +
 				"  STATIC: package\n" +
@@ -141,6 +141,57 @@ func TestPlanConfigChange(t *testing.T) {
 			name:       "int/bool coercions compared via fmt.Sprint, no prompt",
 			pkgConfig:  "count: 5\nenabled: true\n",
 			userCfg:    map[string]any{"count": int64(5), "enabled": true},
+			version:    "1",
+			wantPrompt: false,
+		},
+		{
+			name:      "gui.env.PATH surfaces merged value, prepending package chunk",
+			pkgConfig: "gui:\n  env:\n    PATH: /pkg/bin:/shared/bin:$PATH\n",
+			userCfg: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"PATH": "/user/bin:/shared/bin:$PATH",
+			}}},
+			version:    "1",
+			wantPrompt: true,
+			wantConflict: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"PATH": "/pkg/bin:/user/bin:/shared/bin:$PATH",
+			}}},
+		},
+		{
+			name:      "gui.env.PATH fully contained produces no prompt",
+			pkgConfig: "gui:\n  env:\n    PATH: /shared/bin:$PATH\n",
+			userCfg: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"PATH": "/user/bin:/shared/bin:$PATH",
+			}}},
+			version:    "1",
+			wantPrompt: false,
+		},
+		{
+			name:      "differing gui.env non-PATH scalar prompts with override",
+			pkgConfig: "gui:\n  env:\n    RUSTUP_HOME: /pkg/rustup\n",
+			userCfg: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"RUSTUP_HOME": "/user/rustup",
+			}}},
+			version:    "1",
+			wantPrompt: true,
+			wantConflict: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"RUSTUP_HOME": "/pkg/rustup",
+			}}},
+		},
+		{
+			name:      "equal gui.env scalar produces no prompt",
+			pkgConfig: "gui:\n  env:\n    RUSTUP_HOME: /same/rustup\n",
+			userCfg: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"RUSTUP_HOME": "/same/rustup",
+			}}},
+			version:    "1",
+			wantPrompt: false,
+		},
+		{
+			name:      "differing non-gui.env scalar under env, no prompt (RUNE-187)",
+			pkgConfig: "env:\n  RUSTUP_HOME: /pkg/rustup\n",
+			userCfg: map[string]any{"env": map[string]any{
+				"RUSTUP_HOME": "/user/rustup",
+			}},
 			version:    "1",
 			wantPrompt: false,
 		},
@@ -231,6 +282,17 @@ func TestBuildMergedConfig(t *testing.T) {
 			want:     map[string]any{"env": map[string]any{"A": 1, "B": 2}},
 			wantDiff: map[string]any{"env": map[string]any{"B": 2}},
 		},
+		{
+			name: "merged gui.env.PATH overwrites single key in place",
+			user: "gui:\n  env:\n    PATH: /user/bin:/shared/bin:$PATH\n",
+			pkg:  "gui:\n  env:\n    PATH: /pkg/bin:/user/bin:/shared/bin:$PATH\n",
+			want: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"PATH": "/pkg/bin:/user/bin:/shared/bin:$PATH",
+			}}},
+			wantDiff: map[string]any{"gui": map[string]any{"env": map[string]any{
+				"PATH": "/pkg/bin:/user/bin:/shared/bin:$PATH",
+			}}},
+		},
 	}
 
 	for _, tt := range tests {
@@ -261,6 +323,63 @@ func docToMap(t *testing.T, doc *yaml.Node) map[string]any {
 	cfg, err := loadIdePkgConfigFromYAMLDoc(doc)
 	require.NoError(t, err)
 	return cfg
+}
+
+func TestMergePathValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		userPath    string
+		pkgPath     string
+		want        string
+		wantChanged bool
+	}{
+		{
+			name:        "new chunk prepended before user value",
+			userPath:    "A:B:$PATH",
+			pkgPath:     "C:B:$PATH",
+			want:        "C:A:B:$PATH",
+			wantChanged: true,
+		},
+		{
+			name:        "fully contained yields no change",
+			userPath:    "A:B:$PATH",
+			pkgPath:     "B:$PATH",
+			want:        "A:B:$PATH",
+			wantChanged: false,
+		},
+		{
+			name:        "multiple new chunks preserve package order",
+			userPath:    "B:$PATH",
+			pkgPath:     "C:D:B:$PATH",
+			want:        "C:D:B:$PATH",
+			wantChanged: true,
+		},
+		{
+			name:        "empty user value takes package chunks",
+			userPath:    "",
+			pkgPath:     "C:$PATH",
+			want:        "C:$PATH",
+			wantChanged: true,
+		},
+		{
+			name:        "empty package value yields no change",
+			userPath:    "A:$PATH",
+			pkgPath:     "",
+			want:        "A:$PATH",
+			wantChanged: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, changed := mergePathValue(tt.userPath, tt.pkgPath)
+			assert.Equal(t, tt.wantChanged, changed)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 // normalizeYAML round-trips want through YAML so int/string scalar types

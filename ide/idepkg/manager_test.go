@@ -1722,9 +1722,6 @@ func TestInstallConfigPromptDeny(t *testing.T) {
 	})
 }
 
-// TestInstallConfigPreservesUserValues verifies that when a package's
-// config overlaps with a key the user already has set, the install
-// does not prompt and does not overwrite the user's value.
 func TestInstallConfigPreservesUserValues(t *testing.T) {
 	t.Parallel()
 

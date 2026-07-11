@@ -1231,25 +1231,19 @@ func normalizeIdePkgConfig(v any) any {
 // idePkgConfigDiff classifies overlay keys against the user config into two
 // disjoint subsets:
 //
-//   - newCfg: overlay key paths absent from the user config (safe additions,
-//     including additive leaves under an existing parent map). These can be
+//   - newCfg: overlay key paths absent from the user config. These can be
 //     auto-applied without prompting.
-//   - conflictCfg: overlay leaves whose path already exists in the user config
-//     with a different value, but only when the leaf is version-dependent — its
-//     raw template references $RUNE_PKG_VERSION, so the value is
-//     package-version-derived rather than a user customization, and a changed
-//     resolved value is safe to re-offer (RUNE-225). The user must approve
-//     these.
+//   - conflictCfg: overlay scalar leaves that already exist in the user config
+//     with a different value and must be approved. Outside gui.env only
+//     version-dependent leaves qualify (RUNE-225); under gui.env every
+//     differing scalar qualifies, with gui.env.PATH merged rather than
+//     overridden. All other differing scalars, type mismatches, and differing
+//     lists preserve the user value (RUNE-187).
 //
-// For keys that are mappings on both sides it recurses, splitting sub-keys the
-// same way. Either returned map is nil when its subset is empty.
-//
-// Static present scalars are always skipped so user customizations are
-// preserved (RUNE-187). A key the user already has with the same value is
-// neither new nor conflicting. versionDependent mirrors the overlay's nesting:
-// scalar leaves are bool, nested maps are map[string]any.
+// Either returned map is nil when its subset is empty.
 func idePkgConfigDiff(
 	user, overlay map[string]any, versionDependent map[string]any,
+	keyPath []string,
 ) (newCfg, conflictCfg map[string]any) {
 	for key, overlayVal := range overlay {
 		userVal, ok := user[key]
@@ -1263,17 +1257,25 @@ func idePkgConfigDiff(
 		overlayMap, overlayIsMap := overlayVal.(map[string]any)
 		userMap, userIsMap := userVal.(map[string]any)
 		if !overlayIsMap || !userIsMap {
-			if isVersionDependentScalar(versionDependent, key) &&
-				fmt.Sprint(overlayVal) != fmt.Sprint(userVal) {
-				if conflictCfg == nil {
-					conflictCfg = map[string]any{}
+			if isScalar(userVal) && isScalar(overlayVal) {
+				conflictVal, conflict := scalarConflict(
+					append(keyPath, key),
+					isVersionDependentScalar(versionDependent, key),
+					userVal, overlayVal,
+				)
+				if conflict {
+					if conflictCfg == nil {
+						conflictCfg = map[string]any{}
+					}
+					conflictCfg[key] = conflictVal
 				}
-				conflictCfg[key] = overlayVal
 			}
 			continue
 		}
 		nestedVersionDependent, _ := versionDependent[key].(map[string]any)
-		nestedNew, nestedConflict := idePkgConfigDiff(userMap, overlayMap, nestedVersionDependent)
+		nestedNew, nestedConflict := idePkgConfigDiff(
+			userMap, overlayMap, nestedVersionDependent, append(keyPath, key),
+		)
 		if nestedNew != nil {
 			if newCfg == nil {
 				newCfg = map[string]any{}
@@ -1290,21 +1292,75 @@ func idePkgConfigDiff(
 	return newCfg, conflictCfg
 }
 
+func scalarConflict(
+	keyPath []string, versionDependent bool, userVal, overlayVal any,
+) (any, bool) {
+	if isGUIEnvPathLeaf(keyPath) {
+		merged, changed := mergePathValue(
+			fmt.Sprint(userVal), fmt.Sprint(overlayVal),
+		)
+		if !changed {
+			return nil, false
+		}
+		return merged, true
+	}
+	if fmt.Sprint(overlayVal) == fmt.Sprint(userVal) {
+		return nil, false
+	}
+	if isGUIEnvLeaf(keyPath) || versionDependent {
+		return overlayVal, true
+	}
+	return nil, false
+}
+
+func isGUIEnvLeaf(keyPath []string) bool {
+	return len(keyPath) == 3 && keyPath[0] == "gui" && keyPath[1] == "env"
+}
+
 func isVersionDependentScalar(versionDependent map[string]any, key string) bool {
 	dep, ok := versionDependent[key].(bool)
 	return ok && dep
 }
 
-// versionDependentKeys walks the raw (pre-expansion) overlay and returns a
-// structure mirroring its nesting that marks scalar leaves whose template
-// references $RUNE_PKG_VERSION. Such values change across package versions,
-// so a changed resolved value should re-prompt (RUNE-225). It must be
-// computed before expandMapValues replaces the template with its value.
-//
-// This handles the YAML overlay path, where the raw $RUNE_PKG_VERSION
-// template survives in the decoded map. The .star path resolves the
-// template during decode, so its version-dependent leaves are detected
-// separately by versionDependentByDecode.
+func isGUIEnvPathLeaf(keyPath []string) bool {
+	return isGUIEnvLeaf(keyPath) && keyPath[2] == "PATH"
+}
+
+func isScalar(v any) bool {
+	switch v.(type) {
+	case map[string]any, []any:
+		return false
+	default:
+		return true
+	}
+}
+
+func mergePathValue(userPath, pkgPath string) (string, bool) {
+	if pkgPath == "" {
+		return userPath, false
+	}
+	userChunks := strings.Split(userPath, ":")
+	present := make(map[string]struct{}, len(userChunks))
+	for _, chunk := range userChunks {
+		present[chunk] = struct{}{}
+	}
+	var missing []string
+	for chunk := range strings.SplitSeq(pkgPath, ":") {
+		if _, ok := present[chunk]; ok {
+			continue
+		}
+		present[chunk] = struct{}{}
+		missing = append(missing, chunk)
+	}
+	if len(missing) == 0 {
+		return userPath, false
+	}
+	if userPath == "" {
+		return strings.Join(missing, ":"), true
+	}
+	return strings.Join(missing, ":") + ":" + userPath, true
+}
+
 func versionDependentKeys(overlay map[string]any) map[string]any {
 	var out map[string]any
 	for key, val := range overlay {
@@ -1336,12 +1392,6 @@ func versionDependentKeys(overlay map[string]any) map[string]any {
 // $RUNE_PKG_VERSION can be detected by comparison.
 const versionDependentSentinel = "\x00rune-version-sentinel\x00"
 
-// versionDependentOverlayKeys returns the version-dependent structure for
-// the overlay, dispatching by format so .star and YAML re-prompt
-// identically on version bumps (RUNE-225). overlay is the overlay decoded
-// for the real version; for YAML it still carries raw $RUNE_PKG_VERSION
-// templates, while for .star the template is already resolved and must be
-// detected by decoding a second time with a sentinel version.
 func versionDependentOverlayKeys(
 	filename string, data []byte, overlay map[string]any,
 	pkgID string, dataDir, editorMode string,
@@ -1359,9 +1409,6 @@ func versionDependentOverlayKeys(
 	return versionDependentByDecode(overlay, sentinel), nil
 }
 
-// versionDependentByDecode returns a structure mirroring real's nesting
-// that marks every scalar leaf whose value differs from sentinel, i.e. the
-// leaves that changed solely because RUNE_PKG_VERSION changed.
 func versionDependentByDecode(real, sentinel map[string]any) map[string]any {
 	var out map[string]any
 	for key, realVal := range real {
@@ -1396,9 +1443,6 @@ func versionDependentByDecode(real, sentinel map[string]any) map[string]any {
 	return out
 }
 
-// referencesPkgVersion reports whether s expands $RUNE_PKG_VERSION (in
-// either $VAR or ${VAR} form), using os.Expand so detection matches the
-// expansion semantics applied by expandMapValues.
 func referencesPkgVersion(s string) bool {
 	var found bool
 	os.Expand(s, func(name string) string {
@@ -1456,13 +1500,6 @@ func (m *Manager) log(level log.Level, msg string, args ...any) {
 	log.WithField(logging.KeyClass, "idepkg.Manager").Logf(level, msg, args...)
 }
 
-// progressTarWriter composes a tarfile io.Writer with a
-// caller-supplied repl.ProgressWriter to satisfy
-// release.ProgressWriter. Raw byte counts are scaled to the unit
-// best matching total so callers see "12.4 / 120.0 MiB downloaded"
-// instead of an unreadable byte count. The terminal download
-// sample (progress==total) is held back so notification-backed
-// writers don't auto-dismiss before the extract phase runs.
 type progressTarWriter struct {
 	io.Writer
 	pw repl.ProgressWriter
@@ -1599,12 +1636,6 @@ func copyExecutables(files []executableEntry, dirname, targetdirname string) err
 	return ret
 }
 
-// swapExecutable installs orig into targetdirname by writing a temp
-// file and atomically renaming it over the destination. Overwriting in
-// place (O_TRUNC) mutates the inode of an already-running binary, which
-// macOS Gatekeeper/AMFI detects and kills for unsigned extensions;
-// renaming installs a fresh inode and leaves the running process
-// untouched.
 func swapExecutable(orig *os.File, targetdirname, name string, mode int64) error {
 	target := filepath.Join(targetdirname, filepath.Base(name))
 	tmp, err := os.CreateTemp(targetdirname, filepath.Base(name)+".tmp-*")
@@ -1697,10 +1728,6 @@ type pkgVersionValue struct {
 	Complete    bool
 }
 
-// executableEntry is the UTF-8-safe representation of an executable file
-// extracted from a package tarball. The raw [tar.Header] cannot be persisted
-// directly because PAX records (for example macOS's
-// "com.apple.provenance" xattr) may contain non-UTF-8 bytes
 type executableEntry struct {
 	Name string
 	Mode int64
