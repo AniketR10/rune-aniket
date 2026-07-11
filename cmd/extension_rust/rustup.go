@@ -36,12 +36,6 @@ import (
 	"unstable.build/go-tui/debug"
 )
 
-// userBinaries are the rustup-managed binaries symlinked from
-// $CARGO_HOME/bin into the package bin dir ($RUNE_DATADIR/bin), which is
-// Rune's guaranteed on-PATH location. rust-analyzer and lldb-dap are
-// bundled separately and resolved by path, so they are not symlinked.
-var userBinaries = []string{"cargo", "rustc", "rustfmt", "cargo-clippy"}
-
 // detectRustProject reports whether the workspace root looks like a Rust
 // project: a Cargo.toml manifest or any top-level .rs source file.
 func detectRustProject(_ context.Context, fs workspaceapi.FileSystem) bool {
@@ -83,17 +77,18 @@ func toolchainInstalled(fs workspaceapi.FileSystem, rustupHome string) bool {
 // progress through a single notification. It is best-effort: a failure
 // is surfaced as a warning and the caller proceeds to LSP bring-up,
 // since rust-analyzer is still useful against an already-present
-// toolchain. After install it refreshes the user-facing symlinks.
+// toolchain. The toolchain's bin dir ($CARGO_HOME/bin) is placed on
+// PATH via gui.env, so no symlinking of user-facing binaries is needed.
 func bootstrapRustup(
 	ctx context.Context,
 	rustupBin string,
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	fs workspaceapi.FileSystem,
-	rustupHome, cargoHome, dataDir, dir string,
+	rustupHome, dir string,
 ) error {
 	if toolchainInstalled(fs, rustupHome) {
-		return refreshSymlinks(ctx, exec, fs, cargoHome, dataDir, dir)
+		return nil
 	}
 
 	notifID, _ := notify.Notify(browserapi.LevelInfo, "Preparing Rust toolchain")
@@ -111,38 +106,7 @@ func bootstrapRustup(
 		return fmt.Errorf("add components: %w", err)
 	}
 
-	if err := refreshSymlinks(ctx, exec, fs, cargoHome, dataDir, dir); err != nil {
-		return err
-	}
 	return notify.UpdateNotificationProgress(notifID, "Rust toolchain ready", total, total)
-}
-
-// refreshSymlinks links the user-facing rustup binaries from
-// $CARGO_HOME/bin into $RUNE_DATADIR/bin so they resolve on Rune's
-// guaranteed PATH. It is idempotent: existing links are replaced
-// (ln -sf) so toolchain or default-channel changes repoint them.
-func refreshSymlinks(
-	ctx context.Context,
-	exec workspaceapi.Executor,
-	fs workspaceapi.FileSystem,
-	cargoHome, dataDir, dir string,
-) error {
-	if cargoHome == "" || dataDir == "" {
-		return nil
-	}
-	binDir := path.Join(dataDir, "bin")
-	if err := fs.MkdirAll(binDir, 0o755); err != nil {
-		return fmt.Errorf("create bin dir: %w", err)
-	}
-	srcBin := path.Join(cargoHome, "bin")
-	for _, name := range userBinaries {
-		src := path.Join(srcBin, name)
-		dst := path.Join(binDir, name)
-		if err := runCommand(ctx, exec, dir, "ln", "-sf", src, dst); err != nil {
-			return fmt.Errorf("symlink %s: %w", name, err)
-		}
-	}
-	return nil
 }
 
 // runRustup runs `rustup <args>` through the workspace executor,

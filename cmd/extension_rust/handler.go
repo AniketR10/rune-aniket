@@ -90,12 +90,12 @@ var rustManual = textapi.CommandManual{
 		{Name: "doc", Summary: "Open the Rust documentation.", Synopsis: "[<args>]"},
 		{Name: "check", Summary: "Check for updates to Rust toolchains."},
 		{Name: "self", Summary: "Manage the rustup installation.", Synopsis: "<args>"},
-		{Name: "reload", Summary: "Refresh symlinks and reinitialize the language server."},
+		{Name: "reload", Summary: "Reinitialize the language server."},
 	},
 }
 
-// reloadFunc refreshes the user-facing symlinks and reinitializes the
-// language server after a toolchain or default-channel change.
+// reloadFunc reinitializes the language server after a toolchain or
+// default-channel change.
 type reloadFunc func(ctx context.Context) error
 
 type rustHandler struct {
@@ -110,7 +110,7 @@ var _ textapi.REPLHandler = (*rustHandler)(nil)
 
 // newRustHandler builds the `rust` REPL command handler and its manual.
 // reload may be nil, in which case the `rust reload` subcommand is a
-// no-op beyond refreshing nothing.
+// no-op.
 func newRustHandler(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
@@ -129,7 +129,7 @@ func newRustHandler(
 // HandleCommand routes the first arg to the matching rustup subcommand,
 // or reinitializes the language server for `reload`. Toolchain-mutating
 // subcommands (default, toolchain, target) trigger a reload afterward so
-// the symlinks and server track the new channel.
+// the server tracks the new channel.
 func (h *rustHandler) HandleCommand(
 	ctx context.Context, cmd repl.Command, _ repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
@@ -167,8 +167,7 @@ func (h *rustHandler) HandleCommand(
 }
 
 // mutatesToolchain reports whether a subcommand may change the active
-// toolchain or its binaries, requiring a symlink refresh and server
-// reinitialization.
+// toolchain or its binaries, requiring server reinitialization.
 func mutatesToolchain(sub string) bool {
 	switch sub {
 	case "default", "toolchain", "target", "component", "update":

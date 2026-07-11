@@ -488,9 +488,9 @@ type rustEnv struct {
 // runRustExtensionOnDir runs the extension's full bring-up against the
 // prepared workspace directory dir, using a real FileSystem and Executor
 // rooted there with a fake LSP and Notifications, and returns the
-// resulting environment for assertions. rustupHome/cargoHome/dataDir are
-// passed through so e2e tests can exercise the toolchain/symlink path.
-func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir string) rustEnv {
+// resulting environment for assertions. rustupHome/dataDir are passed
+// through so e2e tests can exercise the toolchain path.
+func runRustExtensionOnDir(t *testing.T, dir, rustupHome, dataDir string) rustEnv {
 	t.Helper()
 	lsp := &captureLSP{}
 	notify := newFakeNotifications()
@@ -504,7 +504,7 @@ func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir str
 		notify,
 		lsp,
 		editor,
-		dataDir, rustupHome, cargoHome, nil,
+		dataDir, rustupHome, nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
 			return nil

@@ -161,28 +161,6 @@ func TestRustInitializeCommandHasNoSpaces(t *testing.T) {
 	assert.NotContains(t, opts["command"], " ")
 }
 
-func TestRefreshSymlinks(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("links every user binary", func(t *testing.T) {
-		fs := newFakeFS()
-		ex := newFakeExecutor()
-		require.NoError(t, refreshSymlinks(ctx, ex, fs, "/cargo", "/data", "/ws"))
-		require.Contains(t, fs.mkdirAll, "/data/bin")
-		calls := ex.callsSnapshot()
-		for _, name := range userBinaries {
-			assert.Contains(t, calls,
-				"ln -sf /cargo/bin/"+name+" /data/bin/"+name)
-		}
-	})
-
-	t.Run("noop without homes", func(t *testing.T) {
-		ex := newFakeExecutor()
-		require.NoError(t, refreshSymlinks(ctx, ex, newFakeFS(), "", "/data", "/ws"))
-		assert.Empty(t, ex.callsSnapshot())
-	})
-}
-
 func TestBootstrapRustupInstallsWhenAbsent(t *testing.T) {
 	ctx := context.Background()
 	fs := newFakeFS()
@@ -190,12 +168,11 @@ func TestBootstrapRustupInstallsWhenAbsent(t *testing.T) {
 	notify := newFakeNotifications()
 
 	require.NoError(t, bootstrapRustup(
-		ctx, "rustup", ex, notify, fs, "/rustup", "/cargo", "/data", "/ws"))
+		ctx, "rustup", ex, notify, fs, "/rustup", "/ws"))
 
 	calls := ex.callsSnapshot()
 	assert.Contains(t, calls, "rustup toolchain install stable --profile minimal")
 	assert.Contains(t, calls, "rustup component add rust-src clippy rustfmt")
-	assert.Contains(t, calls, "ln -sf /cargo/bin/cargo /data/bin/cargo")
 
 	msgs := notify.progressMessages()
 	require.NotEmpty(t, msgs)
@@ -211,13 +188,12 @@ func TestBootstrapRustupSkipsWhenInstalled(t *testing.T) {
 	notify := newFakeNotifications()
 
 	require.NoError(t, bootstrapRustup(
-		ctx, "rustup", ex, notify, fs, "/rustup", "/cargo", "/data", "/ws"))
+		ctx, "rustup", ex, notify, fs, "/rustup", "/ws"))
 
 	calls := ex.callsSnapshot()
 	for _, c := range calls {
 		assert.NotContains(t, c, "toolchain install")
 	}
-	assert.Contains(t, calls, "ln -sf /cargo/bin/cargo /data/bin/cargo")
 	assert.Empty(t, notify.progressMessages())
 }
 
@@ -232,7 +208,7 @@ func TestExtendWorkspaceNonRustRegistersButSkipsInit(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		"/data", "/rustup", "/cargo", nil,
+		"/data", "/rustup", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error {
 			registered = true
 			return nil
@@ -267,7 +243,7 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, newFakeNotifications(), lsp, editor,
-		"/data", "/rustup", "/cargo", nil,
+		"/data", "/rustup", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error { return nil })
 	require.NoError(t, err)
 
@@ -301,7 +277,7 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	var manuals []textapi.CommandManual
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
-		fs, ex, notify, lsp, &fakeEditor{}, "/data", "/rustup", "/cargo", nil,
+		fs, ex, notify, lsp, &fakeEditor{}, "/data", "/rustup", nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			manuals = append(manuals, m)
 			return nil
@@ -375,36 +351,6 @@ func TestRustHandlerComplete(t *testing.T) {
 	assert.Equal(t, []string{"add"}, got)
 }
 
-// TestE2E_RefreshSymlinks drives the full extension bring-up against a
-// real filesystem and executor for a Cargo project whose toolchain is
-// already present, asserting the user binaries are symlinked from
-// $CARGO_HOME/bin into the package bin dir as a side effect of bring-up.
-func TestE2E_RefreshSymlinks(t *testing.T) {
-	dataDir := t.TempDir()
-	cargoHome := t.TempDir()
-	rustupHome := t.TempDir()
-	cargoBin := filepath.Join(cargoHome, "bin")
-	require.NoError(t, os.MkdirAll(cargoBin, 0o755))
-	for _, name := range userBinaries {
-		require.NoError(t, os.WriteFile(filepath.Join(cargoBin, name), []byte("#!/bin/sh\n"), 0o755))
-	}
-	// Seed an installed toolchain so bring-up takes the refresh-symlinks
-	// path rather than attempting a real rustup install.
-	require.NoError(t, os.MkdirAll(filepath.Join(rustupHome, "toolchains", "stable"), 0o755))
-
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[package]\n"), 0o644))
-
-	runRustExtensionOnDir(t, dir, rustupHome, cargoHome, dataDir)
-
-	for _, name := range userBinaries {
-		link := filepath.Join(dataDir, "bin", name)
-		target, err := os.Readlink(link)
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(cargoBin, name), target)
-	}
-}
-
 // TestE2E_ResolveSysroot drives the full extension bring-up against a
 // real rustc for a Cargo project, asserting the resolved toolchain
 // sysroot is carried into the language server's init params. It skips
@@ -415,7 +361,7 @@ func TestE2E_ResolveSysroot(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[package]\n"), 0o644))
 
-	env := runRustExtensionOnDir(t, dir, "", "", t.TempDir())
+	env := runRustExtensionOnDir(t, dir, "", t.TempDir())
 
 	params, count := env.lsp.captured()
 	require.Equal(t, 1, count, "the workspace-root crate must initialize exactly once")

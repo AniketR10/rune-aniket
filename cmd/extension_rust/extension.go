@@ -83,7 +83,6 @@ func (e *rustExtension) ExtendWorkspace(
 		w.Editor(ctx),
 		w.DataDir(ctx),
 		os.Getenv("RUSTUP_HOME"),
-		os.Getenv("CARGO_HOME"),
 		cfg,
 		w.RegisterREPLCommand,
 	)
@@ -106,7 +105,7 @@ func (e *rustExtension) extendWorkspaceWith(
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
 	editor textapi.Editor,
-	dataDir, rustupHome, cargoHome string,
+	dataDir, rustupHome string,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
 ) error {
@@ -122,7 +121,7 @@ func (e *rustExtension) extendWorkspaceWith(
 		FileMatch:  isRustFile,
 		InitRoot: func(ctx context.Context, root langext.Root) error {
 			return initializeRustRoot(ctx,
-				fs, exec, notify, lsp, dataDir, rustupHome, cargoHome, rustupBin, cfg, root)
+				fs, exec, notify, lsp, dataDir, rustupHome, rustupBin, cfg, root)
 		},
 	})
 	if err := init.Start(); err != nil {
@@ -134,9 +133,6 @@ func (e *rustExtension) extendWorkspaceWith(
 	// toolchain-mutating subcommand) must rebuild every server brought up
 	// so far, which Reinitialize does across all discovered roots.
 	reload := func(ctx context.Context) error {
-		if err := refreshSymlinks(ctx, exec, fs, cargoHome, dataDir, cwd.Path()); err != nil {
-			return err
-		}
 		return init.Reinitialize(ctx)
 	}
 	manual, handler := newRustHandler(exec, notify, cwd.Path(), rustupBin, reload)
@@ -167,12 +163,12 @@ func initializeRustRoot(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
-	dataDir, rustupHome, cargoHome, rustupBin string,
+	dataDir, rustupHome, rustupBin string,
 	cfg config.Config,
 	root langext.Root,
 ) error {
 	if err := bootstrapRustup(
-		ctx, rustupBin, exec, notify, fs, rustupHome, cargoHome, dataDir, root.Dir,
+		ctx, rustupBin, exec, notify, fs, rustupHome, root.Dir,
 	); err != nil {
 		_, _ = notify.Notify(browserapi.LevelWarn,
 			"Rust toolchain setup failed, continuing without a managed toolchain: %v", err)
