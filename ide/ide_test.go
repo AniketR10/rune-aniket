@@ -1704,6 +1704,169 @@ workspace:
 			"focusedURI=%q", focusedURI())
 }
 
+// TestE2ECursorHistoryIntoFileExplorerIsSilent drives <ctrl-o>/<ctrl-i>
+// (cursorhistory prev/next) after visiting the file explorer and
+// reproduces the bug where the explorer's pseudo-resource
+// (memory:///fexplorer) leaked into the cursor history. Navigating
+// back onto it re-opened the pseudo-URI as a regular tab, which
+// re-registered the explorer's per-file commands ("command already
+// registered") and re-locked its swap file, surfacing an
+// "is already open by another process" recovery prompt.
+//
+// After the fix the pseudo-URI is never recorded, so ctrl-o/ctrl-i is
+// a silent no-op with respect to the explorer: no recovery prompt
+// (floating window) appears and focus never lands on
+// memory:///fexplorer.
+func TestE2ECursorHistoryIntoFileExplorerIsSilent(t *testing.T) {
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "alpha.txt"), []byte("alpha\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "beta.txt"), []byte("beta\n"), 0o644))
+
+	dataDir := t.TempDir()
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+  key_bindings:
+    <c-o>: cursorhistory prev
+    <c-i>: cursorhistory next
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(120, 40)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	sendKeys := func(t *testing.T, seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			mu.Lock()
+			root.Handle(term.Event{
+				Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key,
+			})
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	focusedURI := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		ex := i.workspaceHandler.focusEx()
+		win, _ := ex.comp.Focus()
+		if win == nil {
+			return ""
+		}
+		content, cerr := win.Content()
+		if cerr != nil || content == nil {
+			return ""
+		}
+		tab, ok := content.(*browser.Tab)
+		if !ok {
+			return ""
+		}
+		return tab.URI().String()
+	}
+
+	fexplorerTabs := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		ex := i.workspaceHandler.focusEx()
+		n := 0
+		for _, tab := range ex.comp.Browser().Tabs() {
+			if tab.URI().String() == "memory:///fexplorer" {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Open alpha.txt (a real navigable location recorded in history),
+	// then open the file explorer. Focus lands on the explorer window,
+	// whose content is the memory:///fexplorer pseudo-buffer.
+	sendKeys(t, "<c-\\\\>edit<space>"+filepath.Join(dir, "alpha.txt")+"<enter>")
+	sendKeys(t, "<c-\\\\>fexplorer<enter>")
+	explorerFocused := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		ex := i.workspaceHandler.focusEx()
+		win, _ := ex.comp.Focus()
+		return win != nil && win == ex.fileExplorerWin
+	}
+	require.True(t, explorerFocused(),
+		"file explorer must be focused after :fexplorer")
+
+	// Open a file from the explorer with <enter>. This is the real
+	// user flow that switches the focused URI away from
+	// memory:///fexplorer and, before the fix, recorded the explorer's
+	// pseudo-URI as a cursor-history entry. Opening a file moves focus
+	// off the explorer, so we re-focus and open a second file to build
+	// at least two real history entries around the explorer visit.
+	sendKeys(t, "<enter>")
+	require.NotEmpty(t, focusedURI(),
+		"pressing <enter> in the file explorer must open a file")
+	require.NotEqual(t, "memory:///fexplorer", focusedURI())
+	firstOpened := focusedURI()
+
+	sendKeys(t, "<c-\\\\>fexplorer<enter>")
+	require.True(t, explorerFocused())
+	sendKeys(t, "<down><enter>")
+	require.NotEqual(t, "memory:///fexplorer", focusedURI())
+	require.NotEqual(t, firstOpened, focusedURI(),
+		"second explorer open should focus a different file, building "+
+			"a history that brackets the explorer pseudo-URI")
+
+	// Walk back and forth through the cursor history. Before the fix,
+	// one of these lands on memory:///fexplorer and re-opens it, which
+	// pops the "already open by another process" recovery prompt (a
+	// floating window) and/or focuses the pseudo-URI.
+	for range 6 {
+		sendKeys(t, "<c-o>")
+		require.NotEqual(t, "memory:///fexplorer", focusedURI(),
+			"ctrl-o must never navigate into the file explorer buffer")
+		require.Equal(t, 0, countFloatingWindows(i, mu),
+			"ctrl-o into the file explorer must not raise a recovery prompt")
+		require.Equal(t, 0, fexplorerTabs(),
+			"ctrl-o must not re-open the file explorer as a tab")
+	}
+	for range 6 {
+		sendKeys(t, "<c-i>")
+		require.NotEqual(t, "memory:///fexplorer", focusedURI(),
+			"ctrl-i must never navigate into the file explorer buffer")
+		require.Equal(t, 0, countFloatingWindows(i, mu),
+			"ctrl-i into the file explorer must not raise a recovery prompt")
+		require.Equal(t, 0, fexplorerTabs(),
+			"ctrl-i must not re-open the file explorer as a tab")
+	}
+}
+
 type mockShader struct {
 	called bool
 	frames []int

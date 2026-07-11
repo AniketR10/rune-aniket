@@ -53,7 +53,7 @@ func (stubWorkspaceManager) Workspace(workspaceapi.URI) (workspace.Workspace, bo
 func (stubWorkspaceManager) RegisterScheme(string, schemeapi.SchemeFunc) error {
 	return nil
 }
-func (stubWorkspaceManager) UnregisterScheme(string) error        { return nil }
+func (stubWorkspaceManager) UnregisterScheme(string) error       { return nil }
 func (stubWorkspaceManager) IncrementReference(workspaceapi.URI) {}
 func (stubWorkspaceManager) DecrementReference(workspaceapi.URI) error {
 	return nil
@@ -186,4 +186,43 @@ func TestWithHistoryToleratesAlreadyExistsOnCreate(t *testing.T) {
 	var doc historyDocument
 	require.NoError(t, store.Get(context.Background(), documentID(ws), &doc))
 	assert.Equal(t, ws.String(), doc.WorkspaceURI)
+}
+
+// TestHandleSkipsSkipListedURI reproduces the ctrl-i/o file-explorer
+// bug: the file explorer's pseudo-resource (memory:///fexplorer) must
+// never enter the cursor history. Recording it would let a later
+// prev/next navigation call opener.Open on the pseudo-URI, which
+// re-registers the explorer's per-file commands ("command already
+// registered") and re-opens the swap-locked buffer ("file is already
+// open by another process").
+func TestHandleSkipsSkipListedURI(t *testing.T) {
+	ws, err := workspaceapi.ParseURI("file:///workspace")
+	require.NoError(t, err)
+	skipURI, err := workspaceapi.ParseURI("memory:///fexplorer")
+	require.NoError(t, err)
+	fileURI, err := workspaceapi.ParseURI("file:///workspace/a.go")
+	require.NoError(t, err)
+
+	h := &handler{
+		store:        storagestub.NewInMemoryService(),
+		workspaceURI: ws,
+		docID:        documentID(ws),
+		doc:          newHistoryDocument(ws),
+		skip:         map[string]struct{}{skipURI.String(): {}},
+	}
+
+	// Seed the history with a real file so a subsequent jump would be
+	// recorded if the pseudo-URI were not skipped.
+	h.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: fileURI})
+	// A cursor event on the file explorer pseudo-URI must be dropped.
+	h.Handle(context.Background(), textapi.Event{
+		Type: textapi.EventTypeCursor,
+		URI:  skipURI,
+		From: term.Coordinates{Y: 40},
+	})
+
+	for _, e := range h.doc.Entries {
+		assert.NotEqual(t, skipURI.String(), e.URI,
+			"file explorer pseudo-URI must not be recorded in cursor history")
+	}
 }

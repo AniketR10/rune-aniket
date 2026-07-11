@@ -1410,10 +1410,11 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		}
 	}
 	apibrowser := newBrowserAdapter(ex.Browser())
+	fexURI, _ := workspaceapi.ParseURI(fileExplorerURI)
 	cursorHistoryCloser, err := idecursor.WithHistory(
 		ex.Editor(), h.ideStorage, apibrowser, apibrowser, ex.workspace,
 		wsParser, visibleManager, uri,
-		h.scheduleNextTick,
+		h.scheduleNextTick, fexURI,
 	)
 	if err != nil {
 		if symbolDBCloser != nil {
