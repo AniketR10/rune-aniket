@@ -370,6 +370,7 @@ var validEffortLevels = []llmapi.ReasoningEffort{
 	llmapi.ReasoningEffortHigh,
 	llmapi.ReasoningEffortXHigh,
 	llmapi.ReasoningEffortMax,
+	llmapi.ReasoningEffortUltra,
 }
 
 // handleEffort shows the current effort level or sets a new one.
@@ -395,7 +396,8 @@ func (a *commandAdapter) handleEffort(args []string) (dialoguetui.CommandResult,
 	}
 	if !valid {
 		return dialoguetui.CommandResult{}, fmt.Errorf(
-			"invalid effort level %q: must be none, minimal, low, medium, high, xhigh, or max", args[0])
+			"invalid effort level %q: must be none, minimal, low, medium, high, xhigh, max, or ultra",
+			args[0])
 	}
 
 	a.agent.SetEffort(level)

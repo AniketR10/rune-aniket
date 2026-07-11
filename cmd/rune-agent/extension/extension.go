@@ -74,7 +74,7 @@ var (
 			Name: commandEffort,
 			Summary: "Show or set the reasoning effort of the focused agent chat. " +
 				"Run from an open agent chat tab.",
-			Synopsis: "[none|minimal|low|medium|high|xhigh|max]",
+			Synopsis: "[none|minimal|low|medium|high|xhigh|max|ultra]",
 		},
 		{
 			Name: commandMaxTokens,

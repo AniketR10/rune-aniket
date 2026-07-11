@@ -168,13 +168,18 @@ func TestNormalizeEffort(t *testing.T) {
 		// GPT-5.4: unsupported levels are dropped with warning.
 		{"gpt-5.4 max", "gpt-5.4", "max", "", true},
 		{"gpt-5.4 minimal", "gpt-5.4", "minimal", "", true},
+		{"gpt-5.4 ultra", "gpt-5.4", "ultra", "", true},
 
-		// GPT-5.6: none/low/medium/high/xhigh/max are supported.
+		// GPT-5.6: none/low/medium/high/xhigh/max/ultra are supported.
 		{"gpt-5.6 none", "gpt-5.6", "none", "none", false},
 		{"gpt-5.6 max", "gpt-5.6", "max", "max", false},
+		{"gpt-5.6 ultra", "gpt-5.6", "ultra", "ultra", false},
 		{"gpt-5.6-sol xhigh", "gpt-5.6-sol", "xhigh", "xhigh", false},
 		{"gpt-5.6-sol max", "gpt-5.6-sol", "max", "max", false},
+		{"gpt-5.6-sol ultra", "gpt-5.6-sol", "ultra", "ultra", false},
 		{"gpt-5.6-terra high", "gpt-5.6-terra", "high", "high", false},
+		{"gpt-5.6-terra ultra", "gpt-5.6-terra", "ultra", "ultra", false},
+		{"gpt-5.6-luna ultra", "gpt-5.6-luna", "ultra", "ultra", false},
 		{"gpt-5.6-luna minimal", "gpt-5.6-luna", "minimal", "", true},
 
 		// GPT-5.4-mini: none/low/medium/high/xhigh (same as gpt-5.4).

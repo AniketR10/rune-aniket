@@ -181,7 +181,7 @@ var gpt5Dot4Efforts = map[string]bool{
 }
 
 // gpt5Dot6Efforts covers GPT-5.6 Sol/Terra/Luna.
-// Per OpenAI docs: none, low, medium, high, xhigh, max.
+// Per OpenAI docs: none, low, medium, high, xhigh, max, ultra.
 var gpt5Dot6Efforts = map[string]bool{
 	"none":   true,
 	"low":    true,
@@ -189,6 +189,7 @@ var gpt5Dot6Efforts = map[string]bool{
 	"high":   true,
 	"xhigh":  true,
 	"max":    true,
+	"ultra":  true,
 }
 
 // gpt5Dot4ProEfforts covers GPT-5.4-pro.

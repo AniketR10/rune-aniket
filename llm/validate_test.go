@@ -64,7 +64,7 @@ func TestValidateConfig_RejectsInvalid(t *testing.T) {
 		{
 			name: "anthropic effort",
 			mut: func(c *Config) {
-				c.Anthropic.ReasoningEffort = "ultra"
+				c.Anthropic.ReasoningEffort = "turbo"
 			},
 			msg: "anthropic.reasoning_effort",
 		},

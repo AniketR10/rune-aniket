@@ -42,6 +42,7 @@ var validReasoningEffort = map[string]struct{}{
 	"high":    {},
 	"xhigh":   {},
 	"max":     {},
+	"ultra":   {},
 }
 
 // validReasoningSummary enumerates the strings accepted by the OpenAI
@@ -72,19 +73,19 @@ func ValidateConfig(cfg Config) error {
 	if _, ok := validReasoningEffort[cfg.OpenAI.ReasoningEffort]; !ok {
 		return fmt.Errorf(
 			"models.openai.reasoning_effort: %q is not one of "+
-				"none|minimal|low|medium|high|xhigh|max",
+				"none|minimal|low|medium|high|xhigh|max|ultra",
 			cfg.OpenAI.ReasoningEffort)
 	}
 	if _, ok := validReasoningEffort[cfg.Anthropic.ReasoningEffort]; !ok {
 		return fmt.Errorf(
 			"models.anthropic.reasoning_effort: %q is not one of "+
-				"none|minimal|low|medium|high|xhigh|max",
+				"none|minimal|low|medium|high|xhigh|max|ultra",
 			cfg.Anthropic.ReasoningEffort)
 	}
 	if _, ok := validReasoningEffort[cfg.Gemini.ReasoningEffort]; !ok {
 		return fmt.Errorf(
 			"models.gemini.reasoning_effort: %q is not one of "+
-				"none|minimal|low|medium|high|xhigh|max",
+				"none|minimal|low|medium|high|xhigh|max|ultra",
 			cfg.Gemini.ReasoningEffort)
 	}
 	// llmrouter.New mints a llamacpp.Registry whose root must not be

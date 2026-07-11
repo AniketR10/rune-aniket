@@ -155,7 +155,7 @@ func TestCompleteChatPromptCommands(t *testing.T) {
 	t.Run("effort", func(t *testing.T) {
 		got := completeToSlice(t, ctx, h, commandEffort)
 		assert.Equal(t, []string{
-			"none", "minimal", "low", "medium", "high", "xhigh", "max",
+			"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
 		}, got)
 	})
 	t.Run("skill", func(t *testing.T) {

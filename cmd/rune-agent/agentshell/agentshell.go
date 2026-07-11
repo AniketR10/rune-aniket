@@ -553,7 +553,7 @@ func (s *shell) Complete(
 
 	switch cmd {
 	case "effort":
-		return iterator.FromSlice([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}), nil
+		return iterator.FromSlice([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}), nil
 	case "model":
 		return s.completeModelAndDialogueIDs(ctx)
 	case "system-prompt":
@@ -1169,6 +1169,7 @@ var validEffortLevels = []llmapi.ReasoningEffort{
 	llmapi.ReasoningEffortHigh,
 	llmapi.ReasoningEffortXHigh,
 	llmapi.ReasoningEffortMax,
+	llmapi.ReasoningEffortUltra,
 }
 
 func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Responsive], error) {
@@ -1193,7 +1194,8 @@ func (s *shell) handleEffort(args []string) (iterator.Iterator[component.Respons
 	}
 	if !valid {
 		return nil, fmt.Errorf(
-			"invalid effort level %q: must be none, minimal, low, medium, high, xhigh, or max", args[0])
+			"invalid effort level %q: must be none, minimal, low, medium, high, xhigh, max, or ultra",
+			args[0])
 	}
 
 	s.setEffort(level)
