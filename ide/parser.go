@@ -26,6 +26,7 @@ package ide
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
@@ -38,15 +39,16 @@ import (
 // cosmetic circular dependency between pkgmanager and syntax.NewParser
 type lazyParser struct {
 	root *workspaceManagerHandler
+	once sync.Once
 	p    syntaxapi.Parser
 }
 
 var _ syntaxapi.Parser = (*lazyParser)(nil)
 
 func (w *lazyParser) parser() syntaxapi.Parser {
-	if w.p == nil {
+	w.once.Do(func() {
 		w.p = syntax.NewParser(w.root.homeWorkspace, w.root.pkgmanager, w.root.homeURI)
-	}
+	})
 	return w.p
 }
 
