@@ -466,7 +466,7 @@ func (h *Prompt) Handle(ev term.Event) (quit, handled bool) {
 		dispatchPreview := h.previewComponent != nil &&
 			h.previewComponent == h.manualComponent &&
 			(!ok || !bytes.Equal(f.Data(), h.previewMatch))
-		h.manualComponent = h.newManualComponent(bufString)
+		h.setManualComponent(h.newManualComponent(bufString))
 		// if we moved focus after showing preview, reset
 		if dispatchPreview {
 			h.dispatchPreviewArgument()
@@ -1645,7 +1645,7 @@ func (h *Prompt) setPreview(comp component.Responsive, data []byte, cancel func(
 	h.previewComponent = comp
 	h.previewMatch = data
 	if comp != nil && h.manualComponent != nil {
-		h.manualComponent = h.previewComponent
+		h.setManualComponent(h.previewComponent)
 	}
 	if cancel == nil {
 		return
@@ -1663,6 +1663,7 @@ func (h *Prompt) setPreview(comp component.Responsive, data []byte, cancel func(
 
 func (h *Prompt) setManualComponent(man component.Responsive) {
 	h.manualComponent = man
+	h.list.Resize(h.width, h.listRegionHeight())
 }
 
 func (h *Prompt) resetManualComponent() {
@@ -1671,7 +1672,7 @@ func (h *Prompt) resetManualComponent() {
 	if h.manualComponent == nil {
 		return
 	}
-	h.manualComponent = h.buildManualComponent(h.inputString.Load().(string))
+	h.setManualComponent(h.buildManualComponent(h.inputString.Load().(string)))
 }
 
 func newNopAnimation(cfg Config) tui.Component {

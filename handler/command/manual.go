@@ -149,10 +149,8 @@ func (p *Prompt) makeManualComponent(
 			},
 		})
 	} else {
-		ret = component.FuncResponsive(markdown, func(int) int {
-			// content won't wrap
-			_, height := markdown.Dimensions()
-			return height
+		ret = component.FuncResponsive(markdown, func(width int) int {
+			return markdown.Height(width)
 		})
 	}
 	return ret

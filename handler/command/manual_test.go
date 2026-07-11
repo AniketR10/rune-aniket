@@ -1,0 +1,159 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package command
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/component/markdown"
+	"unstable.build/go-tui/handler/handlertest"
+)
+
+// TestMakeManualComponentHeightAccountsForWrapping verifies that the
+// responsive height reported for a markdown manual reflects how the
+// content wraps at the given width. A long Description paragraph wraps
+// onto several rows at a narrow width; if the reported height ignored
+// wrapping, the split-height math would allocate too little space and
+// the description would be truncated on screen.
+func TestMakeManualComponentHeightAccountsForWrapping(t *testing.T) {
+	cfg := testDefaultConfig()
+	cfg.NoMarkdown = false
+	p := &Prompt{config: cfg}
+
+	longSummary := strings.TrimSpace(strings.Repeat(
+		"Create a task that runs the given command in the background. ", 6))
+	man := Manual{
+		Name:     "tasknew",
+		Synopsis: "<command>",
+		Summary:  longSummary,
+	}
+
+	comp := p.makeManualComponent(man, component.FrameCharSet{}, term.Attributes{})
+
+	const width = 60
+	got := comp.Height(width)
+
+	want := wrappedManualHeight(t, man, width)
+	if got != want {
+		t.Fatalf("manual height %d does not account for wrapping at width %d; "+
+			"want wrapped height %d", got, width, want)
+	}
+}
+
+// wrappedManualHeight builds the same markdown document that
+// makeManualComponent renders and reports its true wrapped height at
+// the given width.
+func wrappedManualHeight(t *testing.T, man Manual, width int) int {
+	t.Helper()
+	var builder strings.Builder
+	if err := writeTemplate(&builder, man, markdownTemplate); err != nil {
+		t.Fatalf("write manual template: %v", err)
+	}
+	cfg := markdown.DefaultConfig()
+	cfg.HeaderPrefix = false
+	cfg.ParagraphSpacing = 0
+	cfg.InlineCode = term.Attributes{
+		Fg: term.ColorSilver,
+		Bg: term.ColorGray,
+	}
+	md, err := markdown.NewWithConfig(builder.String(), cfg)
+	if err != nil {
+		t.Fatalf("build manual markdown: %v", err)
+	}
+	return md.Height(width)
+}
+
+// TestManualDoesNotOverlapCommandList reproduces a layout bug where the
+// search list overdrew the manual region. The manual is rebuilt on
+// input changes through Handle, which does not go through Resize, so
+// the list could keep a resized height computed against a shorter
+// manual and draw its rows on top of the separator and Usage section
+// once the manual grew (e.g. a command with several subcommands).
+func TestManualDoesNotOverlapCommandList(t *testing.T) {
+	cfg := testDefaultConfig()
+	cfg.ShowManual = true
+	cfg.NoMarkdown = false
+	cfg.FrameCharSet = component.FrameCharSetDefault()
+	cfg.Sync = true
+
+	cmds := []Manual{
+		{Name: "aaa", Summary: "short"},
+		{Name: "gaa", Synopsis: "<args>...", Summary: "Run a go command.",
+			Commands: []Manual{
+				{Name: "build"}, {Name: "test"}, {Name: "run"},
+				{Name: "vet"}, {Name: "mod"}, {Name: "get"},
+			}},
+		{Name: "gab"}, {Name: "gac"}, {Name: "gad"}, {Name: "gae"},
+		{Name: "gaf"}, {Name: "gag"}, {Name: "gah"}, {Name: "gai"}, {Name: "gaj"},
+	}
+
+	dispatchFn, cleanup := nopDispatch()
+	defer cleanup(t)
+	completeFn, cleanupComplete := nopComplete()
+	defer cleanupComplete(t)
+
+	storage := storagestub.NewInMemoryService()
+	b := NewPrompt(
+		storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
+		term.NopInterrupter(), cmds, cfg,
+	)
+	defer b.Close()
+
+	const width, height = 40, 30
+	h := testCommandHandler{b}
+	// Size the prompt while the top match ("aaa") has a short manual.
+	h.Resize(width, height)
+	_ = handlertest.DrawHandler(h, width, height)
+	// Narrow to the "g" commands via Handle only (no intervening
+	// Resize); the top match now carries a tall manual.
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'g'})
+
+	out := handlertest.DrawHandler(h, width, height)
+
+	sepIdx := -1
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if strings.ContainsRune(line, '─') {
+			sepIdx = i
+			break
+		}
+	}
+	if sepIdx < 0 {
+		t.Fatalf("no separator row found; output:\n%s", out)
+	}
+	// The separator row divides the list from the manual, so it must
+	// contain only the horizontal-rule glyph and padding. A list entry
+	// bleeding into it (e.g. "gai────…") means the list overdrew the
+	// manual region.
+	for _, r := range lines[sepIdx] {
+		if r != '─' && r != ' ' {
+			t.Fatalf("command list overlaps the separator row %d (%q); output:\n%s",
+				sepIdx, strings.TrimRight(lines[sepIdx], " "), out)
+		}
+	}
+}
