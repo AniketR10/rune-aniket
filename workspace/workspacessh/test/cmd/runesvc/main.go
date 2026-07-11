@@ -18,12 +18,16 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"google.golang.org/grpc"
+	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"
 	"unstable.build/go-tui/workspace/workspacessh"
@@ -32,11 +36,25 @@ import (
 func main() {
 	workspacePath := flag.String("x", "",
 		"local workspace path to expose over the workspace gRPC server")
+	install := flag.String("install", "",
+		"CSV manifest of id@version packages to provision (mirrors the "+
+			"real rune -x flag). When non-empty, runesvc loads "+
+			"~/.rune/config.yaml and applies its gui.env block to this "+
+			"process before serving, exercising the provisioning ordering.")
 	flag.Parse()
 
 	if *workspacePath == "" {
 		fmt.Fprintln(os.Stderr, "runesvc: -x <workspace-path> is required")
 		os.Exit(2)
+	}
+
+	// Mirror the real -x path's ordering: provisioning (install + config
+	// load + gui.env apply) happens before the server starts serving, so a
+	// child process spawned over the workspace RPC inherits the applied env.
+	if *install != "" {
+		emitProvisionProgress(*install)
+		installPackageBins(*install)
+		applyRemoteGUIEnv()
 	}
 
 	uri, err := workspaceapi.ParseURI("file://" + *workspacePath)
@@ -61,5 +79,112 @@ func main() {
 		log.New(), server, grpc.NewServer()); err != nil {
 		fmt.Fprintln(os.Stderr, "runesvc: start scheme server:", err)
 		os.Exit(5)
+	}
+}
+
+// applyRemoteGUIEnv loads ~/.rune/config.yaml and applies its gui.env block to
+// this process, standing in for the real -x server's post-install config load.
+// Failures warn and continue, matching the never-abort provisioning policy.
+func applyRemoteGUIEnv() {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		if u, uerr := user.Current(); uerr == nil {
+			home = u.HomeDir
+		}
+	}
+	if home == "" {
+		fmt.Fprintln(os.Stderr, "runesvc: cannot resolve home dir")
+		return
+	}
+	configPath := filepath.Join(home, ".rune", "config.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "runesvc: read %s: %v\n", configPath, err)
+		return
+	}
+	var doc struct {
+		GUI struct {
+			Env map[string]any `yaml:"env"`
+		} `yaml:"gui"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		fmt.Fprintf(os.Stderr, "runesvc: parse %s: %v\n", configPath, err)
+		return
+	}
+	for k, v := range doc.GUI.Env {
+		if err := os.Setenv(k, fmt.Sprintf("%v", v)); err != nil {
+			fmt.Fprintf(os.Stderr, "runesvc: setenv %s: %v\n", k, err)
+		}
+	}
+}
+
+// emitProvisionProgress streams JSON-Lines provisioning progress to stderr for
+// each package in the manifest, standing in for the real -x server's install
+// loop. The local side (workspacessh) forwards each line to a UI notification,
+// so the e2e test can assert the ordered stream reaches the browser.
+func emitProvisionProgress(manifest string) {
+	entries := strings.Split(manifest, ",")
+	total := len(entries)
+	for i, entry := range entries {
+		id, ver, _ := strings.Cut(entry, "@")
+		index := i + 1
+		emit(workspacessh.ProvisionProgress{
+			Index: index, Total: total, Package: id, Version: ver,
+			Phase: workspacessh.ProvisionPhaseInstalling,
+		})
+		emit(workspacessh.ProvisionProgress{
+			Index: index, Total: total, Package: id, Version: ver,
+			Phase: workspacessh.ProvisionPhaseActivating,
+		})
+	}
+	emit(workspacessh.ProvisionProgress{
+		Index: total, Total: total, Phase: workspacessh.ProvisionPhaseDone,
+	})
+}
+
+func emit(p workspacessh.ProvisionProgress) {
+	line, err := workspacessh.EncodeProvisionProgress(p)
+	if err != nil {
+		return
+	}
+	fmt.Fprint(os.Stderr, line)
+}
+
+// installPackageBins stands in for a real package install by writing an
+// executable for each manifest entry into ~/.rune/bin and prepending that
+// directory to PATH, exactly as the real -x server does via setupRuneBinPATH.
+// Each fake tool is named after the package id and prints a recognizable line
+// so an e2e test can run it through the workspace executor and prove the
+// provisioned toolchain is on the served process's PATH.
+func installPackageBins(manifest string) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		if u, uerr := user.Current(); uerr == nil {
+			home = u.HomeDir
+		}
+	}
+	if home == "" {
+		fmt.Fprintln(os.Stderr, "runesvc: cannot resolve home dir for bin install")
+		return
+	}
+	binDir := filepath.Join(home, ".rune", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "runesvc: mkdir %s: %v\n", binDir, err)
+		return
+	}
+	for entry := range strings.SplitSeq(manifest, ",") {
+		id, ver, _ := strings.Cut(entry, "@")
+		if id == "" {
+			continue
+		}
+		toolPath := filepath.Join(binDir, id)
+		script := fmt.Sprintf("#!/bin/sh\necho \"%s ok %s\"\n", id, ver)
+		if err := os.WriteFile(toolPath, []byte(script), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "runesvc: write %s: %v\n", toolPath, err)
+			continue
+		}
+	}
+	if err := os.Setenv("PATH", binDir+":"+os.Getenv("PATH")); err != nil {
+		fmt.Fprintf(os.Stderr, "runesvc: set PATH: %v\n", err)
 	}
 }

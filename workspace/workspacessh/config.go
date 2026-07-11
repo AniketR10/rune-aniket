@@ -59,6 +59,13 @@ type sshConfig struct {
 	// skipped, those failures will instead manifest as a less-helpful
 	// startup error from the rune worker itself.
 	skipPreflight bool
+	// provisionPackages controls whether the local IDE mirrors its
+	// in-use toolchain packages onto the remote `rune -x` server (the
+	// `--install` manifest) before it starts serving. Defaults to true;
+	// set to false to skip provisioning entirely, e.g. when the remote
+	// already has a managed toolchain or when installs are unwanted on
+	// the connect critical path.
+	provisionPackages bool
 }
 
 func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
@@ -94,6 +101,10 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	if err != nil && err != config.ErrNotFound {
 		retErr = multierr.Append(retErr, err)
 	}
+	provisionPackages, err := getProvisionPackages(cfg)
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
 	if retErr != nil {
 		retErr = fmt.Errorf("could not load ssh config: %s", retErr)
 		return
@@ -107,7 +118,21 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	ret.kbdInteractive = kbdInteractive
 	ret.knownHostsPath = knownHosts
 	ret.skipPreflight = skipPreflight
+	ret.provisionPackages = provisionPackages
 	return
+}
+
+// getProvisionPackages reads workspace.ssh.provision_packages, defaulting to
+// true when unset so remote toolchain provisioning is on out of the box.
+func getProvisionPackages(cfg config.Config) (bool, error) {
+	v, err := cfg.GetBool("provision_packages")
+	if err == config.ErrNotFound {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return v, nil
 }
 
 func getTimeout(cfg config.Config) (ret time.Duration, err error) {

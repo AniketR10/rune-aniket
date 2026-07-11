@@ -37,7 +37,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
@@ -585,67 +584,26 @@ func (m *Manager) UsePackageVersion(
 	return m.linkLibCopyBin(pkgID, version, val.Executables, pkgVersionDirname)
 }
 
-// PackageVersionInUse returns the package version in use for the given package.
-func (m *Manager) PackageVersionInUse(
-	ctx context.Context, pkgID string,
-) (release.Version, error) {
+// PackageVersionInUse returns the in-use version of pkgID by reading the
+// `lib/<pkgID>` symlink target, which points at `pkg/<pkgID>/<version>`. It
+// never contacts the release server, so it is safe on offline/remote hosts and
+// always reflects the local source of truth. It returns false when the package
+// has no in-use version installed locally.
+func (m *Manager) PackageVersionInUse(pkgID string) (release.Version, bool) {
 	if pkgID == "" {
-		return "", errors.New("package must not be empty")
+		return "", false
 	}
 	pkgID = escapeString(pkgID)
-	it, err := m.m.List(ctx, pkgID, nil)
+	libDir := makePackageLibDirname(m.dataDir, pkgID)
+	target, err := os.Readlink(libDir)
 	if err != nil {
-		return "", translateListErr(err, pkgID)
+		return "", false
 	}
-
-	var versions []release.Version
-	for {
-		next, ok := it.Next(ctx)
-		if !ok {
-			break
-		}
-
-		versions = append(versions, next.Version)
+	version := filepath.Base(target)
+	if version == "" || version == "." || version == string(filepath.Separator) {
+		return "", false
 	}
-	if err := it.Err(); err != nil {
-		return "", fmt.Errorf("bundles iterator: %w", err)
-	}
-
-	latest := release.Version(release.Latest)
-	var inUse atomic.Value
-	inUse.Store(latest)
-
-	errs := make([]error, len(versions))
-	var wg sync.WaitGroup
-	wg.Add(len(versions))
-	for i := 0; i < len(versions); i++ {
-		version := versions[i]
-		go debug.CapturePanicReport(func() {
-			defer wg.Done()
-			var isInUse bool
-			_, _, isInUse, errs[i] = m.isPackageVersionInUse(pkgID, version)
-			if isInUse { // only one will be in use
-				inUse.Store(version)
-			}
-		})
-	}
-	wg.Wait()
-
-	var ret error
-	for _, err := range errs {
-		if err != nil {
-			ret = multierror.Append(ret, err)
-		}
-	}
-	if ret != nil {
-		return "", ret
-	}
-
-	versionInUse := inUse.Load().(release.Version)
-	if versionInUse == latest {
-		return "", errors.New("no versions of this package are currently in use")
-	}
-	return versionInUse, nil
+	return release.Version(version), true
 }
 
 func (m *Manager) isPackageVersionInUse(

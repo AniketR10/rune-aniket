@@ -24,6 +24,7 @@
 package workspacessh
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -34,6 +35,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -69,6 +71,21 @@ const (
 // Exposed so callers can match it via errors.Is.
 var ErrSSHConnectionClosed = errors.New("ssh connection closed unexpectedly")
 
+// Option customizes the ssh scheme constructed by New.
+type Option func(*scheme)
+
+// WithProvisionManifest supplies a callback that returns an encoded
+// package-provisioning manifest (see cmd/rune provisionManifest). When it
+// returns a non-empty string, the remote `rune -x` server is asked to mirror
+// the local toolchain via a `--install <manifest>` flag. The callback is
+// invoked once per connection so the manifest reflects the current local
+// install state.
+func WithProvisionManifest(fn func() string) Option {
+	return func(s *scheme) {
+		s.provisionFn = fn
+	}
+}
+
 // New returns a schemeapi.SchemeFunc capable of managing files over an ssh
 // connection. ui drives the interactive auth flow (passphrase / password /
 // kbd-interactive prompts). It is intended to be installed into a workspace
@@ -78,12 +95,12 @@ var ErrSSHConnectionClosed = errors.New("ssh connection closed unexpectedly")
 //
 // New panics if ui is nil: a real UI is mandatory because the ssh dial may
 // trigger interactive prompts that have no useful default.
-func New(ui UI) schemeapi.SchemeFunc {
+func New(ui UI, opts ...Option) schemeapi.SchemeFunc {
 	if ui == nil {
 		panic("workspacessh.New: ui is required")
 	}
 	return func(ctx context.Context, cfg config.Config, uri workspaceapi.URI) (schemeapi.Scheme, error) {
-		return newScheme(ctx, cfg, uri, ui)
+		return newScheme(ctx, cfg, uri, ui, opts...)
 	}
 }
 
@@ -105,18 +122,23 @@ type scheme struct {
 	ctx             context.Context
 	cancelCtx       func()
 	ui              UI
+	provisionFn     func() string
 
 	schemeapi.Scheme
 }
 
 func newScheme(
 	ctx context.Context, ccfg config.Config, uri workspaceapi.URI, ui UI,
+	opts ...Option,
 ) (*scheme, error) {
 	if ui == nil {
 		panic("workspacessh.newScheme: ui is required")
 	}
 	ret := new(scheme)
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
+	for _, opt := range opts {
+		opt(ret)
+	}
 
 	cc, err := fromConfig(ccfg)
 	if err != nil {
@@ -322,8 +344,20 @@ func (s *scheme) connectScheme(
 		extraArgs = []string{"-p", "-o", "rune-workspace-server.log"}
 	}
 
+	var installArgs []string
+	if s.cfg.provisionPackages && s.provisionFn != nil {
+		if manifest := s.provisionFn(); manifest != "" {
+			// manifest is a single validated shell-safe token
+			// (cmd/rune enforces the [A-Za-z0-9._@,%+~/-] class), so it
+			// needs no quoting even though the remote shell reparses the
+			// whole command.
+			installArgs = []string{"--install", manifest}
+		}
+	}
+
 	cmdStr := remoteWorkspaceServerBin
-	args := append([]string{"-x", sshPath}, extraArgs...)
+	args := append([]string{"-x", sshPath}, installArgs...)
+	args = append(args, extraArgs...)
 	if s.cfg.shell != "" {
 		args = append([]string{"-c", cmdStr}, args...)
 		cmdStr = s.cfg.shell
@@ -348,6 +382,20 @@ func (s *scheme) connectScheme(
 	if err != nil {
 		return nil, fmt.Errorf("could not create command: %s", err)
 	}
+
+	// During remote provisioning (before StartSchemeServer runs) stderr is the
+	// only live back-channel: stdout is the gRPC pipe and does not serve yet.
+	// Read it line by line so structured progress lines surface as browser
+	// notifications immediately, while plain lines accumulate in a bounded tail
+	// for the exit-error path below. This goroutine owns stderrRead, so the
+	// exit path must read the tail instead of the pipe to avoid two readers
+	// fighting over it.
+	tail := newStderrTail()
+	stderrDone := make(chan struct{})
+	go debug.CapturePanicReport(func() {
+		defer close(stderrDone)
+		s.scanRemoteStderr(stderrRead, tail)
+	})
 
 	conn, err := grpc.Dial("",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -385,15 +433,12 @@ func (s *scheme) connectScheme(
 		case <-s.ctx.Done():
 		}
 		if err != nil {
-			stderrStr, rerr := io.ReadAll(stderrRead)
-			if rerr != nil {
-				err = fmt.Errorf("could not read error from stderr but there "+
-					"was an error executing remote rune workspace server "+
-					"over SSH: %s", err)
-			} else {
-				err = fmt.Errorf("error executing remote rune workspace "+
-					"server over SSH: %s: %s", err, stderrStr)
-			}
+			// The scanner goroutine drains stderrRead; wait for it to
+			// observe EOF (process exit closed the write end) so the tail
+			// is complete before formatting the error.
+			<-stderrDone
+			err = fmt.Errorf("error executing remote rune workspace "+
+				"server over SSH: %s: %s", err, tail.String())
 		}
 		closeHook(err)
 		for _, closer := range closers {
@@ -402,6 +447,103 @@ func (s *scheme) connectScheme(
 	})
 
 	return workspacerpc.NewClient(s.ctx, conn), nil
+}
+
+// scanRemoteStderr reads the remote server's stderr line by line until EOF.
+// Structured provisioning progress lines drive a single live progress
+// notification (index/total → progress bar); every other line is appended to
+// tail, which the exit-error path reads to build the human-readable failure
+// message.
+func (s *scheme) scanRemoteStderr(r io.Reader, tail *stderrTail) {
+	scanner := bufio.NewScanner(r)
+	// Allow long remote stderr lines (default is 64 KiB, but a stack trace or
+	// long path can exceed that). Cap growth to keep memory bounded.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var progress provisionProgressNotifier
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if p, ok := ParseProvisionProgressLine(line); ok {
+			progress.report(s.ui, p)
+			continue
+		}
+		tail.append(line)
+	}
+}
+
+// provisionProgressNotifier maps the stream of ProvisionProgress lines onto a
+// single live progress notification: the first line creates it, later lines
+// advance its bar. Progress is the count of packages that have finished
+// (activated or failed), clamped below total until the terminal done line so
+// the notification does not close before provisioning is actually complete. A
+// failed package is additionally surfaced as its own warning notification so it
+// is not lost inside the info-level progress bar.
+type provisionProgressNotifier struct {
+	id        string
+	started   bool
+	completed int
+}
+
+func (n *provisionProgressNotifier) report(ui UI, p ProvisionProgress) {
+	if p.Phase == ProvisionPhaseFailed {
+		ui.Notify(NotificationWarning, p.Message())
+	}
+	// total must be positive for the progress bar; the remote always sends a
+	// positive total, but guard so a malformed line cannot break the bar.
+	if p.Total <= 0 {
+		return
+	}
+	if !n.started {
+		n.id = ui.Notify(NotificationInfo, p.Message())
+		n.started = true
+	}
+
+	progress := n.completed
+	switch p.Phase {
+	case ProvisionPhaseActivating, ProvisionPhaseFailed:
+		n.completed++
+		progress = n.completed
+	case ProvisionPhaseDone:
+		progress = p.Total
+	}
+	// Keep the bar strictly below total until the done line, since a per-package
+	// activating/failed for the last package shares total's index and would
+	// otherwise close the notification before provisioning finishes.
+	if p.Phase != ProvisionPhaseDone && progress >= p.Total {
+		progress = p.Total - 1
+	}
+	ui.UpdateNotificationProgress(n.id, p.Message(), progress, p.Total)
+}
+
+// stderrTailCap bounds the human-readable stderr the local side retains, so a
+// chatty remote cannot grow the buffer without limit. Only the most recent
+// bytes are kept, which is what a failure message needs.
+const stderrTailCap = 8 * 1024
+
+// stderrTail is a bounded, concurrency-safe buffer holding the last
+// stderrTailCap bytes of non-progress stderr for the exit-error message.
+type stderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func newStderrTail() *stderrTail {
+	return &stderrTail{}
+}
+
+func (t *stderrTail) append(line []byte) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, line...)
+	t.buf = append(t.buf, '\n')
+	if len(t.buf) > stderrTailCap {
+		t.buf = t.buf[len(t.buf)-stderrTailCap:]
+	}
+}
+
+func (t *stderrTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
 }
 
 func (s *scheme) setPipes(

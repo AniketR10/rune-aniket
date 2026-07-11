@@ -30,9 +30,12 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/stretchr/testify/assert"
@@ -256,6 +259,118 @@ func TestConnectSchemeSkipPreflight(t *testing.T) {
 	assert.Contains(t, rec.commands[0].Args, "-x",
 		"rune workspace server should be started with -x; got %+v",
 		rec.commands[0])
+}
+
+// findRuneServerCmd returns the recorded command that launches the remote
+// `rune` workspace server, i.e. the invocation whose args contain `-x`.
+func findRuneServerCmd(t *testing.T, rec *recordingRemote) workspaceapi.Cmd {
+	t.Helper()
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	for _, c := range rec.commands {
+		if slices.Contains(c.Args, "-x") {
+			return c
+		}
+	}
+	t.Fatalf("no rune workspace-server command found in %+v", rec.commands)
+	return workspaceapi.Cmd{}
+}
+
+func newProvisionTestScheme(rec *recordingRemote, provisionFn func() string) (*scheme, workspaceapi.URI) {
+	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.cfg.skipPreflight = true
+	s.cfg.provisionPackages = true
+	s.provisionFn = provisionFn
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
+		return rec, nil
+	}
+	s.getUser = func() (*user.User, error) {
+		return &user.User{Username: "test", HomeDir: "/home/test"}, nil
+	}
+	s.ui = errorUI{}
+	uri, _ := workspaceapi.ParseURI("ssh://test@example.com/tmp")
+	s.user, s.homedir, s.hostPort, s.basePath, _ = parseWorkspaceURI(uri, s.getUser)
+	return s, uri
+}
+
+// TestConnectSchemeProvisionManifest asserts that a non-empty provisioning
+// manifest is threaded into the remote `rune -x` invocation as
+// `--install <manifest>`, immediately after `-x <path>` and as a single
+// unquoted token.
+func TestConnectSchemeProvisionManifest(t *testing.T) {
+	rec := &recordingRemote{}
+	manifest := "rune-go@1.2.3,rune-python@4.5.6"
+	s, uri := newProvisionTestScheme(rec, func() string { return manifest })
+	defer s.cancelCtx()
+
+	scheme, err := s.connectScheme(context.Background(), uri, func(error) {})
+	require.NoError(t, err)
+	if scheme != nil {
+		_ = scheme.Close()
+	}
+
+	cmd := findRuneServerCmd(t, rec)
+	require.Contains(t, cmd.Args, "--install",
+		"non-empty manifest must add --install; got %+v", cmd.Args)
+	idx := slices.Index(cmd.Args, "--install")
+	require.Less(t, idx+1, len(cmd.Args), "--install must be followed by a value")
+	assert.Equal(t, manifest, cmd.Args[idx+1],
+		"manifest must be a single unquoted token")
+
+	// --install must come right after `-x <path>`.
+	xIdx := slices.Index(cmd.Args, "-x")
+	require.GreaterOrEqual(t, xIdx, 0)
+	assert.Equal(t, xIdx+2, idx,
+		"--install must directly follow `-x <path>`; got %+v", cmd.Args)
+}
+
+// TestConnectSchemeNoProvisionManifest asserts that no --install flag is
+// added when the provision function is nil or returns an empty manifest.
+func TestConnectSchemeNoProvisionManifest(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fn   func() string
+	}{
+		{"nil", nil},
+		{"empty", func() string { return "" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recordingRemote{}
+			s, uri := newProvisionTestScheme(rec, tc.fn)
+			defer s.cancelCtx()
+
+			scheme, err := s.connectScheme(context.Background(), uri, func(error) {})
+			require.NoError(t, err)
+			if scheme != nil {
+				_ = scheme.Close()
+			}
+
+			cmd := findRuneServerCmd(t, rec)
+			assert.NotContains(t, cmd.Args, "--install",
+				"empty manifest must omit --install; got %+v", cmd.Args)
+		})
+	}
+}
+
+// TestConnectSchemeProvisionPackagesDisabled asserts that when
+// workspace.ssh.provision_packages is false, no --install flag is threaded
+// into the remote invocation even if the manifest is non-empty.
+func TestConnectSchemeProvisionPackagesDisabled(t *testing.T) {
+	rec := &recordingRemote{}
+	s, uri := newProvisionTestScheme(rec, func() string { return "rune-go@1.2.3" })
+	s.cfg.provisionPackages = false
+	defer s.cancelCtx()
+
+	scheme, err := s.connectScheme(context.Background(), uri, func(error) {})
+	require.NoError(t, err)
+	if scheme != nil {
+		_ = scheme.Close()
+	}
+
+	cmd := findRuneServerCmd(t, rec)
+	assert.NotContains(t, cmd.Args, "--install",
+		"provision_packages=false must omit --install; got %+v", cmd.Args)
 }
 
 func TestParseWorkspaceURIHomeDir(t *testing.T) {
@@ -546,7 +661,9 @@ func (errorUI) PromptChoice(context.Context, string, []string) (int, error) {
 	return -1, fmt.Errorf("unexpected prompt: choice")
 }
 
-func (errorUI) Notify(NotificationLevel, string) {}
+func (errorUI) Notify(NotificationLevel, string) string { return "" }
+
+func (errorUI) UpdateNotificationProgress(string, string, int, int) {}
 
 func newTestScheme(
 	cfg config.Config, workspaceURI workspaceapi.URI,
@@ -582,6 +699,89 @@ func newNopScheme(t *testing.T, workspaceURI workspaceapi.URI) *scheme {
 	s, err := newTestScheme(config.NopConfig(), workspaceURI, nil)
 	require.NoError(t, err)
 	return s.(*scheme)
+}
+
+// TestScanRemoteStderrNotifiesAndTails feeds a synthetic stderr stream with
+// interleaved JSON progress and plain lines and asserts that progress lines
+// drive a single live progress notification (with a failed package also raised
+// as its own warning), plain lines never notify but land in the exit-error
+// tail, and the scanner stops at EOF.
+func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
+	installing, err := EncodeProvisionProgress(ProvisionProgress{
+		Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0",
+		Phase: ProvisionPhaseInstalling,
+	})
+	require.NoError(t, err)
+	failed, err := EncodeProvisionProgress(ProvisionProgress{
+		Index: 2, Total: 2, Package: "pkg-b", Version: "2.0.0",
+		Phase: ProvisionPhaseFailed,
+	})
+	require.NoError(t, err)
+	done, err := EncodeProvisionProgress(ProvisionProgress{
+		Index: 2, Total: 2, Phase: ProvisionPhaseDone,
+	})
+	require.NoError(t, err)
+
+	stream := "starting remote server\n" +
+		installing +
+		"warning: something noisy\n" +
+		failed +
+		done +
+		"remote server exiting\n"
+
+	ui := &recordingUI{}
+	s := &scheme{ui: ui}
+	tail := newStderrTail()
+
+	done2 := make(chan struct{})
+	go func() {
+		defer close(done2)
+		s.scanRemoteStderr(strings.NewReader(stream), tail)
+	}()
+
+	select {
+	case <-done2:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scanRemoteStderr did not stop at EOF")
+	}
+
+	// Notify is called once to open the progress notification (info) and once
+	// for the failed package (warning). The done summary flows through the
+	// progress bar, not a new Notify.
+	levels, msgs := ui.notifications()
+	assert.Equal(t, []string{
+		"Installing toolchain (1/2): pkg-a@1.0.0",
+		"Failed to install pkg-b@2.0.0",
+	}, msgs, "Notify opens the progress bar and raises the failure warning")
+	assert.Equal(t, []NotificationLevel{
+		NotificationInfo, NotificationWarning,
+	}, levels)
+
+	// The bar advances on the finished (failed) package, stays below total
+	// until the done line, then completes. The id is the one Notify returned.
+	progress := ui.progressUpdates()
+	require.Len(t, progress, 3)
+	wantID := "noti-Installing toolchain (1/2): pkg-a@1.0.0"
+	assert.Equal(t, progressUpdate{wantID, "Installing toolchain (1/2): pkg-a@1.0.0", 0, 2}, progress[0])
+	assert.Equal(t, progressUpdate{wantID, "Failed to install pkg-b@2.0.0", 1, 2}, progress[1])
+	assert.Equal(t, progressUpdate{wantID, "Installed 2/2 toolchain packages", 2, 2}, progress[2])
+
+	got := tail.String()
+	assert.Contains(t, got, "starting remote server")
+	assert.Contains(t, got, "warning: something noisy")
+	assert.Contains(t, got, "remote server exiting")
+	assert.NotContains(t, got, "provision", "progress lines must not leak into the tail")
+}
+
+// TestStderrTailBounded asserts the tail retains only the most recent
+// stderrTailCap bytes so a chatty remote cannot grow it without bound.
+func TestStderrTailBounded(t *testing.T) {
+	tail := newStderrTail()
+	for range 10000 {
+		tail.append([]byte("0123456789abcdef"))
+	}
+	assert.LessOrEqual(t, len(tail.String()), stderrTailCap)
+	assert.Contains(t, tail.String(), "0123456789abcdef", "recent lines must be retained")
 }
 
 // inlineSchedule is a synchronous workspace.ScheduleNextTick stub

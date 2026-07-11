@@ -61,6 +61,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/llm/llmrpc"
 	"unstable.build/go-tui/rpc"
@@ -104,6 +105,9 @@ var (
 		"Run a workspace server from standard input and output")
 	flagWorkspaceServerLogFile = flag.StringP("workspace-server-log", "o", "",
 		"Log workspace server TRACE level logs to file")
+	flagWorkspaceServerInstall = flag.String("install", "",
+		"CSV manifest of `id@version` packages the workspace server should "+
+			"install into its ~/.rune to mirror the local toolchain")
 	flagHTTPAddress = flag.String("rune-http-address", apicfg.HTTPEndpointAddress,
 		"Rune HTTP API endpoint host/port pair")
 	flagGRPCAddress = flag.String("rune-grpc-address", apicfg.GRPCEndpointAddress,
@@ -245,7 +249,20 @@ func startWorkspaceServer() int {
 		l.Error(err)
 		return 2
 	}
-	scheme, err := newScheme(context.Background(), config.NopConfig(), uri)
+
+	// Install the local toolchain's packages, load the remote config, and
+	// apply gui.env before serving so extension-spawned tools resolve. A
+	// provisioning scheme reads/writes the remote filesystem; provisioning
+	// failures never abort the connection (they warn and continue).
+	provScheme, err := newScheme(context.Background(), config.NopConfig(), uri)
+	if err != nil {
+		l.Error(err)
+		return 3
+	}
+	rootCfg := provisionRemote(provScheme, uri)
+	_ = provScheme.Close()
+
+	scheme, err := newScheme(context.Background(), rootCfg, uri)
 	if err != nil {
 		l.Error(err)
 		return 3
@@ -282,6 +299,9 @@ func main() {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("workspace-server-log"); err != nil {
+		panic(err)
+	}
+	if err := flag.CommandLine.MarkHidden("install"); err != nil {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-release-collection"); err != nil {
@@ -853,8 +873,8 @@ func newAPIClient(
 	// is cached, which would break package installs for logged-out
 	// users under the usage-based paywall.
 	httpClient := &http.Client{}
-	arch := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
-	releaseManager := cdnrelease.NewManager(httpClient, *flagHTTPAddress+"/api/releases/"+arch)
+	releaseManager := cdnrelease.NewManager(httpClient,
+		idepkg.ReleasesURL(*flagHTTPAddress, idepkg.HostArch()))
 	return client, releaseManager
 }
 

@@ -705,9 +705,8 @@ func TestPackageVersionInUse(t *testing.T) {
 		err := m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		require.NoError(t, err)
 
-		actual, err := m.PackageVersionInUse(context.Background(), "go")
-		require.NoError(t, err)
-
+		actual, ok := m.PackageVersionInUse("go")
+		require.True(t, ok)
 		assert.Equal(t, release.Version("1"), actual)
 	})
 
@@ -726,9 +725,8 @@ func TestPackageVersionInUse(t *testing.T) {
 		err = m.InstallPackageVersion(context.Background(), "go", "2", repl.NopProgressWriter())
 		require.NoError(t, err)
 
-		actual, err := m.PackageVersionInUse(context.Background(), "go")
-		require.NoError(t, err)
-
+		actual, ok := m.PackageVersionInUse("go")
+		require.True(t, ok)
 		assert.Equal(t, release.Version("2"), actual)
 	})
 
@@ -750,20 +748,19 @@ func TestPackageVersionInUse(t *testing.T) {
 		err = m.UsePackageVersion(context.Background(), "go", "1")
 		require.NoError(t, err)
 
-		actual, err := m.PackageVersionInUse(context.Background(), "go")
-		require.NoError(t, err)
-
+		actual, ok := m.PackageVersionInUse("go")
+		require.True(t, ok)
 		assert.Equal(t, release.Version("1"), actual)
 	})
 
-	t.Run("returns error if package is not installed", func(t *testing.T) {
+	t.Run("returns false if package is not installed", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
 		m, _, _, _ := newTestManager(t, pkgs, versions)
 
-		_, err := m.PackageVersionInUse(context.Background(), "go")
-		require.Error(t, err)
+		_, ok := m.PackageVersionInUse("go")
+		require.False(t, ok)
 	})
 }
 

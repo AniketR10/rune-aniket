@@ -79,7 +79,7 @@ func (m *pkgManager) init(
 	autoInstall bool,
 	afterConfigMerge func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error),
 ) {
-	storage := storageapi.WithPartition(rootStorage, "idepkg")
+	storage := storageapi.WithPartition(rootStorage, idepkg.StoragePartition)
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
 		configPath, wm, scheduleNextTick, interrupter,
 		idepkg.WithFrameCharSet(fcs),

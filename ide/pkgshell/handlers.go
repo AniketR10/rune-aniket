@@ -130,9 +130,10 @@ func (h *Handler) handleCurrent(
 		return nil, errors.New("package name is missing")
 	}
 	pkgID := args[0]
-	version, err := h.mgr.PackageVersionInUse(ctx, pkgID)
-	if err != nil {
-		return nil, err
+	version, ok := h.mgr.PackageVersionInUse(pkgID)
+	if !ok {
+		return nil, fmt.Errorf(
+			"no version of package %s is currently in use", pkgID)
 	}
 	return markdownOutput(
 		fmt.Sprintf("Version **%s** of package **%s** is in use", version, pkgID)), nil
@@ -217,9 +218,10 @@ func (h *Handler) handleUpdateAll(
 			defer wg.Done()
 			pkgID := packages[i]
 			results[i].pkg = pkgID
-			inUse, err := h.mgr.PackageVersionInUse(ctx, pkgID)
-			if err != nil {
-				results[i].err = fmt.Errorf("package version in use: %w", err)
+			inUse, ok := h.mgr.PackageVersionInUse(pkgID)
+			if !ok {
+				results[i].err = fmt.Errorf(
+					"no version of package %s is currently in use", pkgID)
 				return
 			}
 			latest, err := h.getLatestVersion(ctx, pkgID)

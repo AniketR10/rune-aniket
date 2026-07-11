@@ -53,6 +53,7 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelockdown"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -78,6 +79,26 @@ type IDE struct {
 	usagePlanner     *idelockdown.Planner
 	publishEventFn   EventPublisher
 	storage          storageapi.Service
+}
+
+// provisionManifest builds the encoded package-provisioning manifest passed
+// to a remote `rune -x` server so it mirrors the local toolchain. It returns
+// an empty string (skip provisioning) when the package manager is not yet
+// initialized or has no in-use packages.
+func (i *IDE) provisionManifest() string {
+	if i.workspaceHandler == nil {
+		return ""
+	}
+	pm := i.workspaceHandler.pkgmanager
+	if pm == nil || pm.pkg == nil {
+		return ""
+	}
+	entries, err := idepkg.BuildProvisionManifest(context.Background(), pm.pkg)
+	if err != nil {
+		log.Warnf("build remote provision manifest: %v", err)
+		return ""
+	}
+	return idepkg.EncodeProvisionManifest(entries)
 }
 
 // EventPublisher is a function that publishes the given event back
@@ -109,6 +130,44 @@ func Config(cfgfilename string, def DefaultConfig, opts ...Option) (config.Confi
 	op := newOptions(append([]Option{def.option()}, opts...)...)
 	cfg, err := loadIDEConfig(cfgfilename, op)
 	return config.MapConfig(cfg.cfg), err
+}
+
+// ConfigWithOverlays loads the IDE config from cfgfilename (like Config) and
+// then overlays each file in overlayFiles, in order, reading them through cwd
+// (so a remote workspace resolves them over its RPC file scheme). Missing or
+// permission-denied overlay files are silently skipped; a malformed overlay
+// returns an error. It is the exported entry point for callers outside this
+// package (the remote `rune -x` server) that must layer a workspace-root or
+// remote-home config over the base config before applying gui.env.
+func ConfigWithOverlays(
+	cfgfilename string, def DefaultConfig, cwd workspace.Workspace,
+	overlayFiles []string, opts ...Option,
+) (config.Config, error) {
+	op := newOptions(append([]Option{def.option()}, opts...)...)
+	cfg, err := loadIDEConfig(cfgfilename, op)
+	if err != nil {
+		return config.MapConfig(cfg.cfg), err
+	}
+	if cwd != nil {
+		for _, filename := range overlayFiles {
+			if _, oErr := loadWorkspaceConfig(
+				filename, cwd, workspaceapi.URI{}, &cfg,
+			); oErr != nil {
+				return config.MapConfig(cfg.cfg),
+					fmt.Errorf("overlay config %q: %w", filename, oErr)
+			}
+		}
+	}
+	return config.MapConfig(cfg.cfg), nil
+}
+
+// DefaultConfigTree decodes def into the raw config map the editor uses as the
+// predeclared `config` base when reading a package's .star config during a
+// merge. Headless callers (the remote provisioning manager) pass the result to
+// idepkg.NewProvisioningManager so a .star-based gui.env merge resolves against
+// the same tree the editor would.
+func DefaultConfigTree(def DefaultConfig) (map[string]any, error) {
+	return decodeDefaultConfig(def)
 }
 
 // Interrupt satisfies term.Interrupter
@@ -653,7 +712,8 @@ func (i *IDE) init(
 		i.ideConfig.workspace(), op.scheduleFn, workspace.NewSchemeWorkspace)
 	err := workspaceManager.RegisterScheme(
 		workspacessh.Scheme,
-		workspacessh.New(newWorkspaceWindowManagerUI(i)),
+		workspacessh.New(newWorkspaceWindowManagerUI(i),
+			workspacessh.WithProvisionManifest(i.provisionManifest)),
 	)
 	if err != nil {
 		return fmt.Errorf("register ssh scheme: %w", err)
