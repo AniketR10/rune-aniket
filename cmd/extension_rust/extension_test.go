@@ -119,13 +119,14 @@ func TestResolveRustAnalyzer(t *testing.T) {
 
 func TestResolveSysroot(t *testing.T) {
 	ctx := context.Background()
+	rustc := "/cargo/bin/rustc"
 	ex := newFakeExecutor().respond(
-		"rustc --print sysroot",
+		rustc+" --print sysroot",
 		scriptedCmd{stdout: "/home/u/.rustup/toolchains/stable\n"})
-	assert.Equal(t, "/home/u/.rustup/toolchains/stable", resolveSysroot(ctx, ex))
+	assert.Equal(t, "/home/u/.rustup/toolchains/stable", resolveSysroot(ctx, ex, rustc))
 
-	exFail := newFakeExecutor().respond("rustc --print sysroot", scriptedCmd{err: assertErr})
-	assert.Empty(t, resolveSysroot(ctx, exFail))
+	exFail := newFakeExecutor().respond(rustc+" --print sysroot", scriptedCmd{err: assertErr})
+	assert.Empty(t, resolveSysroot(ctx, exFail, rustc))
 }
 
 func TestRustInitializeParams(t *testing.T) {
@@ -262,11 +263,11 @@ func TestBootstrapRustupInstallsWhenAbsent(t *testing.T) {
 	notify := newFakeNotifications()
 
 	require.NoError(t, bootstrapRustup(
-		ctx, "rustup", ex, notify, fs, "/rustup", "/ws"))
+		ctx, "rustup-init", ex, notify, fs, "/rustup", "/ws"))
 
 	calls := ex.callsSnapshot()
-	assert.Contains(t, calls, "rustup toolchain install stable --profile minimal")
-	assert.Contains(t, calls, "rustup component add rust-src clippy rustfmt")
+	assert.Contains(t, calls, "rustup-init -y --no-modify-path "+
+		"--default-toolchain stable --profile minimal -c rust-src,clippy,rustfmt")
 
 	msgs := notify.progressMessages()
 	require.NotEmpty(t, msgs)
@@ -282,11 +283,11 @@ func TestBootstrapRustupSkipsWhenInstalled(t *testing.T) {
 	notify := newFakeNotifications()
 
 	require.NoError(t, bootstrapRustup(
-		ctx, "rustup", ex, notify, fs, "/rustup", "/ws"))
+		ctx, "rustup-init", ex, notify, fs, "/rustup", "/ws"))
 
 	calls := ex.callsSnapshot()
 	for _, c := range calls {
-		assert.NotContains(t, c, "toolchain install")
+		assert.NotContains(t, c, "rustup-init")
 	}
 	assert.Empty(t, notify.progressMessages())
 }
@@ -302,7 +303,7 @@ func TestExtendWorkspaceNonRustRegistersButSkipsInit(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		&fakeWM{}, nil, "/data", "/rustup", nil,
+		&fakeWM{}, nil, "/data", "/rustup", "/cargo", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error {
 			registered = true
 			return nil
@@ -312,6 +313,39 @@ func TestExtendWorkspaceNonRustRegistersButSkipsInit(t *testing.T) {
 	assert.True(t, registered)
 	_, count := lsp.captured()
 	assert.Zero(t, count)
+}
+
+// TestExtendWorkspaceWithoutCargoHome verifies that when CARGO_HOME is
+// unset the extension does not fail: it skips the toolchain install (so
+// nothing lands in the wrong place), warns the user, and still brings up
+// rust-analyzer with no sysroot.
+func TestExtendWorkspaceWithoutCargoHome(t *testing.T) {
+	fs := newFakeFS().
+		addFile("Cargo.toml").
+		addFile("/data/bin/rust-analyzer")
+	ex := newFakeExecutor()
+	notify := newFakeNotifications()
+	lsp := &captureLSP{}
+
+	ext := &rustExtension{}
+	err := ext.extendWorkspaceWith(context.Background(),
+		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{}, nil,
+		"/data", "/rustup", "", nil,
+		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
+		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
+	require.NoError(t, err)
+
+	// No rustup-init/rustc is executed, so nothing is installed anywhere.
+	assert.Empty(t, ex.callsSnapshot())
+	assert.Contains(t, notify.notifMessages(),
+		"CARGO_HOME is not set; continuing without a managed Rust toolchain")
+
+	params, count := lsp.captured()
+	require.Equal(t, 1, count)
+	var opts map[string]any
+	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
+	_, hasSysroot := opts["sysroot"]
+	assert.False(t, hasSysroot, "no sysroot without a managed toolchain")
 }
 
 // TestExtendWorkspaceNestedDiscovery verifies that a workspace with no
@@ -331,14 +365,14 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 
 	fs := realFS{root: root}
 	ex := newFakeExecutor().respond(
-		"rustc --print sysroot", scriptedCmd{stdout: "/sysroot\n"})
+		"/cargo/bin/rustc --print sysroot", scriptedCmd{stdout: "/sysroot\n"})
 	lsp := &captureLSP{}
 	editor := &fakeEditor{}
 	ext := &rustExtension{}
 
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, newFakeNotifications(), lsp, editor,
-		&fakeWM{}, nil, "/data", "/rustup", nil,
+		&fakeWM{}, nil, "/data", "/rustup", "/cargo", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
 		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
@@ -366,7 +400,7 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 		addReadDir("/rustup/toolchains",
 			fakeDirEntry{name: "stable-x86_64", dir: true})
 	ex := newFakeExecutor().respond(
-		"rustc --print sysroot", scriptedCmd{stdout: "/sysroot\n"})
+		"/cargo/bin/rustc --print sysroot", scriptedCmd{stdout: "/sysroot\n"})
 	lsp := &captureLSP{}
 	notify := newFakeNotifications()
 
@@ -375,7 +409,7 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{},
-		nil, "/data", "/rustup", nil,
+		nil, "/data", "/rustup", "/cargo", nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			manuals = append(manuals, m)
 			return nil
@@ -406,15 +440,18 @@ func TestRustHandlerUnknownCommand(t *testing.T) {
 }
 
 func TestRustHandlerForwardsToRustup(t *testing.T) {
-	ex := newFakeExecutor().respond("rustup show", scriptedCmd{stdout: "stable (default)"})
-	_, h := newRustHandler(ex, newFakeNotifications(), "/ws", "rustup", nil)
+	// The handler must drive the installation-owned proxy by absolute
+	// path, not a bare `rustup` that could resolve to a system install.
+	proxy := "/cargo/bin/rustup"
+	ex := newFakeExecutor().respond(proxy+" show", scriptedCmd{stdout: "stable (default)"})
+	_, h := newRustHandler(ex, newFakeNotifications(), "/ws", proxy, nil)
 	it, err := h.HandleCommand(context.Background(),
 		repl.Command{Name: "rust", Args: []string{"show"}}, repl.NopProgressWriter())
 	require.NoError(t, err)
 	out, err := iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)
 	require.Len(t, out, 1)
-	assert.Contains(t, ex.callsSnapshot(), "rustup show")
+	assert.Contains(t, ex.callsSnapshot(), proxy+" show")
 }
 
 func TestRustHandlerReloadInvokesCallback(t *testing.T) {
@@ -460,12 +497,17 @@ func TestRustHandlerComplete(t *testing.T) {
 // sysroot is carried into the language server's init params. It skips
 // when rustc is absent.
 func TestE2E_ResolveSysroot(t *testing.T) {
-	findRustc(t)
+	rustcPath := findRustc(t)
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[package]\n"), 0o644))
 
-	env := runRustExtensionOnDir(t, dir, "", t.TempDir())
+	// The sysroot probe execs the installation-owned rustc at
+	// <cargoHome>/bin/rustc, never a bare rustc, so point cargoHome at
+	// the directory holding the real rustc discovered on PATH.
+	cargoHome := filepath.Dir(filepath.Dir(rustcPath))
+
+	env := runRustExtensionOnDir(t, dir, "", cargoHome, t.TempDir())
 
 	params, count := env.lsp.captured()
 	require.Equal(t, 1, count, "the workspace-root crate must initialize exactly once")

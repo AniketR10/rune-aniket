@@ -109,8 +109,9 @@ type rustHandler struct {
 var _ textapi.REPLHandler = (*rustHandler)(nil)
 
 // newRustHandler builds the `rust` REPL command handler and its manual.
-// reload may be nil, in which case the `rust reload` subcommand is a
-// no-op.
+// rustupBin must be the absolute path to the installation-owned rustup
+// proxy ($CARGO_HOME/bin/rustup). reload may be nil, in which case the
+// `rust reload` subcommand is a no-op.
 func newRustHandler(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
@@ -217,14 +218,15 @@ func (h *rustHandler) Help(
 func (h *rustHandler) runRustupCapture(
 	ctx context.Context, args ...string,
 ) (string, error) {
-	bin := h.rustupBin
-	if bin == "" {
-		bin = "rustup"
+	// Empty when CARGO_HOME is unset: there is no managed toolchain to
+	// drive, so fail with a clear message rather than exec an empty path.
+	if h.rustupBin == "" {
+		return "", fmt.Errorf("no managed Rust toolchain: CARGO_HOME is not set")
 	}
 	var stdout, stderr bytes.Buffer
 	ch := make(chan error, 1)
 	cmd := workspaceapi.Cmd{
-		Path:    bin,
+		Path:    h.rustupBin,
 		Args:    args,
 		Dir:     h.cwd,
 		Stdout:  &stdout,

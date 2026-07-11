@@ -72,16 +72,16 @@ func toolchainInstalled(fs workspaceapi.FileSystem, rustupHome string) bool {
 	return false
 }
 
-// bootstrapRustup installs the stable toolchain and the components the
-// language server needs when none is present, reporting step-based
-// progress through a single notification. It is best-effort: a failure
-// is surfaced as a warning and the caller proceeds to LSP bring-up,
-// since rust-analyzer is still useful against an already-present
-// toolchain. The toolchain's bin dir ($CARGO_HOME/bin) is placed on
-// PATH via gui.env, so no symlinking of user-facing binaries is needed.
+// bootstrapRustup installs the stable toolchain and required components
+// when none is present. It runs the bundled rustup-init once, which also
+// populates $CARGO_HOME/bin with the rustup/cargo proxies later commands
+// resolve. The shipped binary is the installer, not the manager, so it
+// cannot be invoked as `rustup toolchain install`. Best-effort: on
+// failure the caller still brings up rust-analyzer against any existing
+// toolchain.
 func bootstrapRustup(
 	ctx context.Context,
-	rustupBin string,
+	rustupInitBin string,
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	fs workspaceapi.FileSystem,
@@ -93,38 +93,34 @@ func bootstrapRustup(
 
 	notifID, _ := notify.Notify(browserapi.LevelInfo, "Preparing Rust toolchain")
 
-	total := int64(3)
+	total := int64(2)
 	_ = notify.UpdateNotificationProgress(notifID, "Installing Rust toolchain", 1, total)
-	if err := runRustup(ctx, rustupBin, exec, dir,
-		"toolchain", "install", "stable", "--profile", "minimal"); err != nil {
+	if err := runRustupInit(ctx, rustupInitBin, exec, dir,
+		"-y", "--no-modify-path",
+		"--default-toolchain", "stable",
+		"--profile", "minimal",
+		"-c", "rust-src,clippy,rustfmt"); err != nil {
 		return fmt.Errorf("install toolchain: %w", err)
-	}
-
-	_ = notify.UpdateNotificationProgress(notifID, "Adding Rust components", 2, total)
-	if err := runRustup(ctx, rustupBin, exec, dir,
-		"component", "add", "rust-src", "clippy", "rustfmt"); err != nil {
-		return fmt.Errorf("add components: %w", err)
 	}
 
 	return notify.UpdateNotificationProgress(notifID, "Rust toolchain ready", total, total)
 }
 
-// runRustup runs `rustup <args>` through the workspace executor,
-// draining stderr so the process never blocks on a full pipe. It relies
-// on the inherited RUSTUP_HOME/CARGO_HOME from gui.env rather than
-// setting them per-command.
-func runRustup(
+// runRustupInit runs the bundled rustup-init installer at absolute path
+// rustupInitBin. An empty path means the package is missing its shipped
+// binary, which is an error rather than a reason to fall through to a
+// PATH lookup.
+func runRustupInit(
 	ctx context.Context,
-	rustupBin string,
+	rustupInitBin string,
 	exec workspaceapi.Executor,
 	dir string,
 	args ...string,
 ) error {
-	bin := rustupBin
-	if bin == "" {
-		bin = "rustup"
+	if rustupInitBin == "" {
+		return fmt.Errorf("bundled rustup-init not found")
 	}
-	return runCommand(ctx, exec, dir, bin, args...)
+	return runCommand(ctx, exec, dir, rustupInitBin, args...)
 }
 
 // runCommand starts bin with args through the executor and waits for it

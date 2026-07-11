@@ -552,11 +552,13 @@ func findRustup(t *testing.T) {
 	}
 }
 
-func findRustc(t *testing.T) {
+func findRustc(t *testing.T) string {
 	t.Helper()
-	if _, err := exec.LookPath("rustc"); err != nil {
+	p, err := exec.LookPath("rustc")
+	if err != nil {
 		t.Skip("rustc not found, skipping rust e2e test")
 	}
+	return p
 }
 
 // rustEnv is the result of running the extension's full bring-up against
@@ -576,7 +578,7 @@ type rustEnv struct {
 // rooted there with a fake LSP and Notifications, and returns the
 // resulting environment for assertions. rustupHome/dataDir are passed
 // through so e2e tests can exercise the toolchain path.
-func runRustExtensionOnDir(t *testing.T, dir, rustupHome, dataDir string) rustEnv {
+func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir string) rustEnv {
 	t.Helper()
 	lsp := &captureLSP{}
 	notify := newFakeNotifications()
@@ -592,7 +594,7 @@ func runRustExtensionOnDir(t *testing.T, dir, rustupHome, dataDir string) rustEn
 		editor,
 		&fakeWM{},
 		nil,
-		dataDir, rustupHome, nil,
+		dataDir, rustupHome, cargoHome, nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
 			return nil

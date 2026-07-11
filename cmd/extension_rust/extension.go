@@ -88,22 +88,13 @@ func (e *rustExtension) ExtendWorkspace(
 		w.ResourceOpener(ctx),
 		w.DataDir(ctx),
 		os.Getenv("RUSTUP_HOME"),
+		os.Getenv("CARGO_HOME"),
 		cfg,
 		w.RegisterREPLCommand,
 		w.RegisterCommand,
 	)
 }
 
-// extendWorkspaceWith wires Rust project discovery to per-root language
-// server bring-up. It registers the REPL command once for the workspace,
-// subscribes for opened .rs files so a server is initialized rooted at
-// each file's nearest Cargo.toml project, and eagerly initializes the
-// workspace-root project when one is present. ExtendWorkspace supplies
-// the dependencies from a real *extensionapi.Workspace; the e2e harness
-// supplies real FileSystem and Executor with fake Notifications, LSP and
-// Editor so the full path runs without a live host. The dependencies are
-// passed positionally so the compiler flags a missing one at every call
-// site.
 func (e *rustExtension) extendWorkspaceWith(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
@@ -113,7 +104,7 @@ func (e *rustExtension) extendWorkspaceWith(
 	editor textapi.Editor,
 	wm browserapi.WindowManager,
 	opener browserapi.ResourceOpener,
-	dataDir, rustupHome string,
+	dataDir, rustupHome, cargoHome string,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
 	registerCommand func(textapi.CommandManual, textapi.CommandHandler) error,
@@ -122,7 +113,7 @@ func (e *rustExtension) extendWorkspaceWith(
 	if err != nil {
 		return fmt.Errorf("resolve cwd uri: %w", err)
 	}
-	rustupBin := resolveRustup(ctx, fs, dataDir)
+	rustupInitBin := resolveRustupInit(ctx, fs, dataDir)
 
 	experimental := readExperimental(cfg, notify)
 
@@ -132,7 +123,8 @@ func (e *rustExtension) extendWorkspaceWith(
 		FileMatch:  isRustFile,
 		InitRoot: func(ctx context.Context, root langext.Root) error {
 			return initializeRustRoot(ctx,
-				fs, exec, notify, lsp, dataDir, rustupHome, rustupBin, cfg, experimental, root)
+				fs, exec, notify, lsp, dataDir, rustupHome, cargoHome, rustupInitBin,
+				cfg, experimental, root)
 		},
 	})
 	if err := init.Start(); err != nil {
@@ -146,7 +138,8 @@ func (e *rustExtension) extendWorkspaceWith(
 	reload := func(ctx context.Context) error {
 		return init.Reinitialize(ctx)
 	}
-	manual, handler := newRustHandler(exec, notify, cwd.Path(), rustupBin, reload)
+	manual, handler := newRustHandler(
+		exec, notify, cwd.Path(), resolveRustupProxy(cargoHome), reload)
 	if err := registerREPL(manual, handler); err != nil {
 		return fmt.Errorf("register rust command: %w", err)
 	}
@@ -179,31 +172,38 @@ func (e *rustExtension) extendWorkspaceWith(
 	return nil
 }
 
-// initializeRustRoot performs the language-specific bring-up for a
-// discovered project root: it bootstraps the rustup toolchain rooted
-// there (best-effort), resolves rust-analyzer and the sysroot, and
-// initializes the language server with the nested root URI.
 func initializeRustRoot(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
-	dataDir, rustupHome, rustupBin string,
+	dataDir, rustupHome, cargoHome, rustupInitBin string,
 	cfg config.Config,
 	experimental bool,
 	root langext.Root,
 ) error {
-	if err := bootstrapRustup(
-		ctx, rustupBin, exec, notify, fs, rustupHome, root.Dir,
-	); err != nil {
+	// Toolchain setup is best-effort: rust-analyzer is still brought up on
+	// any failure. Without CARGO_HOME we cannot place the toolchain or
+	// resolve its proxies, so skip the install entirely rather than let
+	// rustup-init land it in the wrong place, and skip the sysroot probe.
+	var sysroot string
+	if cargoHome == "" {
 		_, _ = notify.Notify(browserapi.LevelWarn,
-			"Rust toolchain setup failed, continuing without a managed toolchain: %v", err)
-		slog.Warn("rust toolchain setup failed", "root", root.Dir, "error", err)
+			"CARGO_HOME is not set; continuing without a managed Rust toolchain")
+		slog.Warn("rust toolchain setup skipped: CARGO_HOME not set", "root", root.Dir)
+	} else {
+		if err := bootstrapRustup(
+			ctx, rustupInitBin, exec, notify, fs, rustupHome, root.Dir,
+		); err != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"Rust toolchain setup failed, continuing without a managed toolchain: %v", err)
+			slog.Warn("rust toolchain setup failed", "root", root.Dir, "error", err)
+		}
+		sysroot = resolveSysroot(ctx, exec, resolveRustcProxy(cargoHome))
 	}
 
 	command := resolveRustAnalyzer(cfg, notify, dataDir)
-	sysroot := resolveSysroot(ctx, exec)
 	params, err := rustInitializeParams(root.URI, command, sysroot, experimental)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
@@ -215,17 +215,25 @@ func initializeRustRoot(
 	return nil
 }
 
-// isRustFile reports whether uri names a Rust source file.
 func isRustFile(uri workspaceapi.URI) bool {
 	return strings.HasSuffix(uri.Path(), ".rs")
 }
 
-// resolveRustup locates the bundled rustup at <dataDir>/bin/rustup,
-// returning its path or "" so callers fall back to the bare command name.
-func resolveRustup(_ context.Context, fs workspaceapi.FileSystem, dataDir string) string {
-	candidate := path.Join(dataDir, "bin", "rustup")
+func resolveRustupInit(_ context.Context, fs workspaceapi.FileSystem, dataDir string) string {
+	candidate := path.Join(dataDir, "bin", "rustup-init")
 	if info, err := fs.Stat(candidate); err == nil && info != nil && !info.IsDir() {
 		return candidate
 	}
 	return ""
+}
+
+func resolveRustupProxy(cargoHome string) string {
+	if cargoHome == "" {
+		return ""
+	}
+	return path.Join(cargoHome, "bin", "rustup")
+}
+
+func resolveRustcProxy(cargoHome string) string {
+	return path.Join(cargoHome, "bin", "rustc")
 }

@@ -95,11 +95,15 @@ func resolveRustAnalyzer(
 }
 
 // resolveSysroot returns the active toolchain sysroot via
-// `rustc --print sysroot`, or "" when rustc is unavailable.
-func resolveSysroot(ctx context.Context, exec workspaceapi.Executor) string {
+// `<rustcBin> --print sysroot`, or "" when the probe fails. rustcBin
+// must be the absolute path to the installation-owned rustc
+// ($CARGO_HOME/bin/rustc); a bare `rustc` is never used, since it could
+// resolve to a system toolchain unrelated to the one our install
+// manages.
+func resolveSysroot(ctx context.Context, exec workspaceapi.Executor, rustcBin string) string {
 	lookupCtx, cancel := context.WithTimeout(ctx, rustResolutionTimeout)
 	defer cancel()
-	out, err := commandOutput(lookupCtx, exec, "rustc", "--print", "sysroot")
+	out, err := commandOutput(lookupCtx, exec, rustcBin, "--print", "sysroot")
 	if err != nil {
 		return ""
 	}
