@@ -678,6 +678,8 @@ config = {
         # workspace number ("number"), or false to disable the bar entirely.
         "workspace_bar": "path",
         "window_manager": {
+            # Dim unfocused panes. True/False toggle brightness dimming;
+            # "b&w" (or "bw") strips color from unfocused panes instead.
             "dim":                   True,
             "frame":                 True,
             "frame_attr":            attr(fg = "gray", bg = "default"),
@@ -951,6 +953,8 @@ if tui:
         "browser": {
             "union_frames": True,
             "window_manager": {
+                # Dim unfocused panes. True/False toggle brightness
+                # dimming; "b&w" (or "bw") strips color instead.
                 "dim":                   True,
                 "frame":                 True,
                 "frame_attr":            attr(fg = "#3a3a3a", bg = "#1e1e1e"),

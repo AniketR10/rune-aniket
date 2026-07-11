@@ -24,6 +24,8 @@
 package handler
 
 import (
+	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -64,6 +66,52 @@ func prepareTest(width, height int, frame bool, root tui.Handler) (
 
 func TestWindowManagerSetFocusFrame(t *testing.T) {
 	testWindowManagerSetFocus(t, true)
+}
+
+type recordingWMWriter struct {
+	cell term.Cell
+}
+
+func (w *recordingWMWriter) SetCell(_ term.Coordinates, c term.Cell)           { w.cell = c }
+func (w *recordingWMWriter) UnionAttributes(term.Coordinates, term.Attributes) {}
+func (w *recordingWMWriter) Context() context.Context                          { return context.Background() }
+
+func TestWindowManagerDimmedWriter(t *testing.T) {
+	red := term.NewRGBColor(255, 0, 0)
+
+	t.Run("dim uses brightness dimming", func(t *testing.T) {
+		wm := &WindowManager{config: WindowManagerConfig{BW: false}}
+		rec := &recordingWMWriter{}
+		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.Cell{Ch: 'x',
+			Attributes: term.Attributes{Fg: red}})
+		assert.Equal(t, red, rec.cell.Attributes.Fg)
+		assert.NotZero(t, rec.cell.Attributes.Attrs&term.AttrDim)
+	})
+
+	t.Run("bw grayscales colors", func(t *testing.T) {
+		wm := &WindowManager{config: WindowManagerConfig{BW: true}}
+		rec := &recordingWMWriter{}
+		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.Cell{Ch: 'x',
+			Attributes: term.Attributes{Fg: red}})
+		r, g, b := rec.cell.Attributes.Fg.RGB()
+		assert.Equal(t, r, g)
+		assert.Equal(t, g, b)
+		assert.Zero(t, rec.cell.Attributes.Attrs&term.AttrDim)
+	})
+
+	t.Run("bw resolves default foreground to defAttr", func(t *testing.T) {
+		tan := term.NewRGBColor(210, 180, 140)
+		wm := &WindowManager{
+			config:  WindowManagerConfig{BW: true},
+			defAttr: term.Attributes{Fg: tan},
+		}
+		rec := &recordingWMWriter{}
+		wm.dimmedWriter(rec).SetCell(term.Coordinates{}, term.Cell{Ch: 'x',
+			Attributes: term.Attributes{Fg: term.ColorDefault}})
+		tr, tg, tb := tan.RGB()
+		lum := int32(math.Round(0.299*float64(tr) + 0.587*float64(tg) + 0.114*float64(tb)))
+		assert.Equal(t, term.NewRGBColor(lum, lum, lum), rec.cell.Attributes.Fg)
+	})
 }
 func TestWindowManagerSetFocusNoFrame(t *testing.T) {
 	testWindowManagerSetFocus(t, false)

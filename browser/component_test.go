@@ -217,9 +217,15 @@ func TestWindowDraw(t *testing.T) {
 	noFrameDim := DefaultConfig()
 	noFrameDim.Dim = true
 	noFrameDim.Frame = false
+
+	noFrameBW := DefaultConfig()
+	noFrameBW.Dim = true
+	noFrameBW.BW = true
+	noFrameBW.Frame = false
 	suite := []Config{
 		noFrameNoDim,
 		noFrameDim,
+		noFrameBW,
 	}
 
 	for _, cfg := range suite {

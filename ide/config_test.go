@@ -1158,6 +1158,48 @@ func TestConfigSetting(t *testing.T) {
 	assert.NotZero(t, cfg.defaultAttr())
 }
 
+func TestConfigDim(t *testing.T) {
+	cases := []struct {
+		name      string
+		dim       any
+		wantDim   bool
+		wantBW    bool
+		wantError bool
+	}{
+		{name: "true", dim: true, wantDim: true, wantBW: false},
+		{name: "false", dim: false, wantDim: false, wantBW: false},
+		{name: "b&w", dim: "b&w", wantDim: true, wantBW: true},
+		{name: "bw", dim: "bw", wantDim: true, wantBW: true},
+		{name: "invalid string falls back to default", dim: "nope", wantDim: true, wantBW: false, wantError: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &ideConfig{cfg: map[string]any{
+				"browser": map[string]any{
+					"window_manager": map[string]any{
+						"dim": tc.dim,
+					},
+				},
+			}, errors: map[string]error{}}
+
+			dim, bw := cfg.dim()
+			assert.Equal(t, tc.wantDim, dim)
+			assert.Equal(t, tc.wantBW, bw)
+
+			wmCfg := cfg.windowManagerConfig()
+			assert.Equal(t, tc.wantDim, wmCfg.Dim)
+			assert.Equal(t, tc.wantBW, wmCfg.BW)
+
+			if tc.wantError {
+				assert.Contains(t, cfg.errors, "window_manager.dim")
+			} else {
+				assert.NotContains(t, cfg.errors, "window_manager.dim")
+			}
+		})
+	}
+}
+
 func TestLoadEmbededConfig(t *testing.T) {
 	var cfg ideConfig
 	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(),

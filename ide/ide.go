@@ -180,6 +180,10 @@ func (i *IDE) SetDefaultAttributes(defAttr term.Attributes) {
 	// attribute pair is theme-time, not configuration-time, so it
 	// has to flow through the live setter.
 	i.tutorial.setDefaultAttributes(defAttr)
+	// Propagate to every workspace ex so grayscale dimming of unfocused
+	// windows and the command prompt resolves a ColorDefault foreground
+	// against the current theme rather than keeping its native hue.
+	i.workspaceHandler.setDefaultAttr(defAttr)
 }
 
 // Config returns the configuration loaded by this IDE.

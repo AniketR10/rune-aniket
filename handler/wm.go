@@ -41,6 +41,7 @@ type WindowManagerConfig struct {
 	component.WindowManagerConfig
 
 	Dim                bool
+	BW                 bool
 	FocusFrameAttr     term.Attributes
 	FocusFrameCharSet  compapi.FrameCharSet
 	ScrollBarHoverChar rune
@@ -83,6 +84,9 @@ type WindowManager struct {
 	winDragGrab              term.Coordinates
 	winBarPressID            uint64
 	winBarPressTime          time.Time
+	// defAttr holds the live theme default attributes so the grayscale
+	// dim writer can resolve a ColorDefault foreground before graying it.
+	defAttr term.Attributes
 }
 
 // WindowSubscriber wraps the OnFocus callback used
@@ -489,7 +493,7 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	}
 
 	focusWin := wm.focus.Window
-	dimWriter := tterm.DimWriter(w)
+	dimWriter := wm.dimmedWriter(w)
 	wm.comp.Iterate(func(win component.Window) {
 		if win == focusWin {
 			wm.comp.DrawWindow(win, w)
@@ -497,6 +501,16 @@ func (wm *WindowManager) Draw(w term.Writer) {
 			wm.comp.DrawWindow(win, dimWriter)
 		}
 	})
+}
+
+// dimmedWriter returns the writer used to de-emphasize unfocused
+// windows: a grayscale writer when BW is set, otherwise a brightness
+// dimming writer.
+func (wm *WindowManager) dimmedWriter(w term.Writer) term.Writer {
+	if wm.config.BW {
+		return tterm.BWWriter(w, wm.defAttr)
+	}
+	return tterm.DimWriter(w)
 }
 
 // DrawWindow draws target with the given term.Writer.
@@ -514,6 +528,12 @@ func (wm *WindowManager) SetDim(to bool) (prev bool) {
 	prev = wm.config.Dim
 	wm.config.Dim = to
 	return
+}
+
+// SetDefaultAttr stores the live theme default attributes used to resolve
+// a ColorDefault foreground before grayscaling unfocused windows.
+func (wm *WindowManager) SetDefaultAttr(attr term.Attributes) {
+	wm.defAttr = attr
 }
 
 // SetHeight fixes the height of the given window and returns true if possible,

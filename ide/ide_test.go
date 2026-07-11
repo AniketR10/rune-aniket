@@ -280,6 +280,37 @@ func TestIDEInitializationIntegration(t *testing.T) {
 				"SetDefaultAttributes prior to Ready()")
 		assert.NoError(t, i.closeResources())
 	})
+
+	t.Run("SetDefaultAttributes propagates default fg to home ex before Ready", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+
+		dataDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dataDir)
+		})
+
+		i := new(IDE)
+		err = i.init("", configFile.Name(), dataDir, newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(new(sync.Mutex)))
+		require.NoError(t, err)
+
+		wantAttr := term.Attributes{
+			Fg: term.NewRGBColor(210, 180, 140),
+			Bg: term.ColorBlack,
+		}
+		i.SetDefaultAttributes(wantAttr)
+
+		require.NotNil(t, i.workspaceHandler.empty)
+		assert.Equal(t, wantAttr, i.workspaceHandler.empty.defAttr,
+			"home ex must observe attrs set via SetDefaultAttributes")
+		assert.Equal(t, wantAttr, i.workspaceHandler.defAttr,
+			"workspace handler must cache the live default attrs for "+
+				"seeding future workspaces")
+		assert.NoError(t, i.closeResources())
+	})
 }
 
 func TestOpen(t *testing.T) {

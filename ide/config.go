@@ -1968,8 +1968,30 @@ func (c ideConfig) frame() (frame bool) {
 	return c.windowManagerBool("frame", defaultWindowManagerConfig.Frame)
 }
 
-func (c ideConfig) dim() (dim bool) {
-	return c.windowManagerBool("dim", defaultWindowManagerConfig.Dim)
+func (c ideConfig) dim() (dim, bw bool) {
+	dim = defaultWindowManagerConfig.Dim
+	cfg, ok := c.windowManager()
+	if !ok {
+		return
+	}
+	if b, err := cfg.GetBool("dim"); err == nil {
+		return b, false
+	}
+	s, err := cfg.GetString("dim")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["window_manager.dim"] = err
+		}
+		return
+	}
+	switch s {
+	case "b&w", "bw":
+		return true, true
+	default:
+		c.errors["window_manager.dim"] = errors.New(
+			"expected true, false, or 'b&w'")
+		return
+	}
 }
 
 func (c ideConfig) frameUnion() (ret bool) {
@@ -2046,8 +2068,10 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 }
 
 func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
+	dim, bw := c.dim()
 	return handler.WindowManagerConfig{
-		Dim:                c.dim(),
+		Dim:                dim,
+		BW:                 bw,
 		FocusFrameAttr:     c.windowFocusFrameAttr(),
 		FocusFrameCharSet:  c.windowFocusFrameCharset(),
 		ScrollBarHoverChar: c.windowScrollBarHoverChar(),

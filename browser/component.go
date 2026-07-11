@@ -754,6 +754,12 @@ func (c *Component) SetDim(to bool) bool {
 	return c.wm.SetDim(to)
 }
 
+// SetDefaultAttr forwards the live theme default attributes to the window
+// manager so grayscale dimming resolves a ColorDefault foreground.
+func (c *Component) SetDefaultAttr(attr term.Attributes) {
+	c.wm.SetDefaultAttr(attr)
+}
+
 // WindowManagerPosition returns the offset from the top left corner
 // where the underlying window manager starts.
 func (c *Component) WindowManagerPosition() term.Coordinates {

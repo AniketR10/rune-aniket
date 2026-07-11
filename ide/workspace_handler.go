@@ -182,6 +182,7 @@ type workspaceManagerHandler struct {
 	workspaces          [workspaceSlots]*workspaceHandler
 	workspaceCount      int
 	focus               int
+	defAttr             term.Attributes
 	homeURI             workspaceapi.URI
 	homeWorkspace       workspace.Workspace
 	empty               *ex
@@ -709,6 +710,19 @@ func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
 		return handler.Browser()
 	}
 	return h.empty.Browser()
+}
+
+func (h *workspaceManagerHandler) setDefaultAttr(attr term.Attributes) {
+	h.defAttr = attr
+	for _, w := range h.workspaces {
+		if w == nil || w.ex == nil {
+			continue
+		}
+		w.ex.setDefaultAttr(attr)
+	}
+	if h.empty != nil {
+		h.empty.setDefaultAttr(attr)
+	}
 }
 
 func (h *workspaceManagerHandler) workspaceForFile(file workspaceapi.URI) (*openFileTarget, bool) {
@@ -1544,6 +1558,7 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 
 	ex := built.ex
 	wh := built.wh
+	ex.setDefaultAttr(h.defAttr)
 	go debug.CapturePanicReport(func() {
 		start := time.Now()
 		// to preserve the order of events we don't want to spawn

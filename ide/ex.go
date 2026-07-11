@@ -198,6 +198,9 @@ type ex struct {
 	extReady            map[string]chan extReadyJob
 	extReadyCtx         context.Context
 	extReadyCancel      context.CancelFunc
+	// defAttr holds the live theme default attributes so the grayscale
+	// command-prompt dim writer resolves a ColorDefault foreground.
+	defAttr term.Attributes
 }
 
 type commandObserver interface {
@@ -2708,6 +2711,15 @@ func (e *ex) Draw(w term.Writer) {
 	}
 }
 
+// setDefaultAttr stores the live theme default attributes and forwards
+// them to the browser window manager so grayscale dimming (both the
+// unfocused-window path and the command prompt) resolves a ColorDefault
+// foreground against the current theme.
+func (e *ex) setDefaultAttr(attr term.Attributes) {
+	e.defAttr = attr
+	e.comp.Browser().SetDefaultAttr(attr)
+}
+
 func (e *ex) drawCmdPrompt(w term.Writer) {
 	// temporarily disable auto-dimming based on focus so we
 	// can pass a DimWriter below and dim everything.
@@ -2715,7 +2727,11 @@ func (e *ex) drawCmdPrompt(w term.Writer) {
 	defer e.comp.SetDim(prev)
 
 	if e.config.Config.Dim {
-		e.container.Draw(tterm.DimWriter(w))
+		if e.config.Config.BW {
+			e.container.Draw(tterm.BWWriter(w, e.defAttr))
+		} else {
+			e.container.Draw(tterm.DimWriter(w))
+		}
 	} else {
 		e.container.Draw(w)
 	}
