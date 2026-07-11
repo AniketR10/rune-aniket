@@ -66,6 +66,13 @@ type sshConfig struct {
 	// already has a managed toolchain or when installs are unwanted on
 	// the connect critical path.
 	provisionPackages bool
+	// strictHostKeyChecking controls how unknown or changed host keys are
+	// handled. Defaults to true, matching OpenSSH's `ask` semantics: an
+	// unknown host prompts trust-on-first-use and a changed key prompts a
+	// strong warning, persisting the accepted key to known_hosts. When
+	// false the accepted key is recorded without a prompt (still safer
+	// than insecure, which bypasses verification entirely).
+	strictHostKeyChecking bool
 }
 
 func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
@@ -105,6 +112,10 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	if err != nil && err != config.ErrNotFound {
 		retErr = multierr.Append(retErr, err)
 	}
+	strictHostKeyChecking, err := getStrictHostKeyChecking(cfg)
+	if err != nil && err != config.ErrNotFound {
+		retErr = multierr.Append(retErr, err)
+	}
 	if retErr != nil {
 		retErr = fmt.Errorf("could not load ssh config: %s", retErr)
 		return
@@ -119,6 +130,7 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 	ret.knownHostsPath = knownHosts
 	ret.skipPreflight = skipPreflight
 	ret.provisionPackages = provisionPackages
+	ret.strictHostKeyChecking = strictHostKeyChecking
 	return
 }
 
@@ -126,6 +138,20 @@ func fromConfig(cfg config.Config) (ret sshConfig, retErr error) {
 // true when unset so remote toolchain provisioning is on out of the box.
 func getProvisionPackages(cfg config.Config) (bool, error) {
 	v, err := cfg.GetBool("provision_packages")
+	if err == config.ErrNotFound {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return v, nil
+}
+
+// getStrictHostKeyChecking reads workspace.ssh.strict_host_key_checking,
+// defaulting to true when unset so unknown/changed host keys prompt before
+// being trusted.
+func getStrictHostKeyChecking(cfg config.Config) (bool, error) {
+	v, err := cfg.GetBool("strict_host_key_checking")
 	if err == config.ErrNotFound {
 		return true, nil
 	}

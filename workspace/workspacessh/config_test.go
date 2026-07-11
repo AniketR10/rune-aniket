@@ -89,3 +89,33 @@ func TestProvisionPackagesWrongTypeErrors(t *testing.T) {
 	}))
 	require.Error(t, err)
 }
+
+func TestStrictHostKeyCheckingDefaultsTrue(t *testing.T) {
+	cfg, err := fromConfig(config.MapConfig(map[string]any{}))
+	require.NoError(t, err)
+	assert.True(t, cfg.strictHostKeyChecking,
+		"strict host key checking must be on by default")
+}
+
+func TestStrictHostKeyCheckingExplicitTrue(t *testing.T) {
+	cfg, err := fromConfig(config.MapConfig(map[string]any{
+		"strict_host_key_checking": true,
+	}))
+	require.NoError(t, err)
+	assert.True(t, cfg.strictHostKeyChecking)
+}
+
+func TestStrictHostKeyCheckingExplicitFalse(t *testing.T) {
+	cfg, err := fromConfig(config.MapConfig(map[string]any{
+		"strict_host_key_checking": false,
+	}))
+	require.NoError(t, err)
+	assert.False(t, cfg.strictHostKeyChecking)
+}
+
+func TestStrictHostKeyCheckingWrongTypeErrors(t *testing.T) {
+	_, err := fromConfig(config.MapConfig(map[string]any{
+		"strict_host_key_checking": "yes",
+	}))
+	require.Error(t, err)
+}

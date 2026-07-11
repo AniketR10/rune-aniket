@@ -312,14 +312,16 @@ func TestPasswordRetryNotifiesOnFailure(t *testing.T) {
 
 // recordingUI captures prompts and replies with canned answers.
 type recordingUI struct {
-	mu       sync.Mutex
-	prompts  []string
-	secrets  []string
-	texts    []string
-	choice   int
-	notifs   []string
-	levels   []NotificationLevel
-	progress []progressUpdate
+	mu           sync.Mutex
+	prompts      []string
+	secrets      []string
+	texts        []string
+	choice       int
+	choices      []int // queued PromptChoice results; falls back to choice
+	choiceCancel bool  // when true PromptChoice returns context.Canceled
+	notifs       []string
+	levels       []NotificationLevel
+	progress     []progressUpdate
 }
 
 // progressUpdate records one UpdateNotificationProgress call.
@@ -358,6 +360,14 @@ func (u *recordingUI) PromptChoice(_ context.Context, label string, _ []string) 
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.prompts = append(u.prompts, "choice:"+label)
+	if u.choiceCancel {
+		return -1, context.Canceled
+	}
+	if len(u.choices) > 0 {
+		c := u.choices[0]
+		u.choices = u.choices[1:]
+		return c, nil
+	}
 	return u.choice, nil
 }
 

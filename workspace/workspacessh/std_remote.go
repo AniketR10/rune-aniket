@@ -36,11 +36,11 @@ import (
 	"syscall"
 	"time"
 
+	gitknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
 	"github.com/unstablebuild/blue/bluectx"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )
@@ -60,8 +60,58 @@ var ErrHostKeyMismatch = errors.New(
 	"host key verification failed: the server's host key does not match the " +
 		"entry recorded in known_hosts")
 
+// ErrHostKeyUnknown indicates the server's host key is not recorded in
+// known_hosts (trust-on-first-use). Unlike ErrHostKeyMismatch this is
+// recoverable: with strict host key checking the user is prompted once to
+// trust the key, which is then appended to known_hosts.
+var ErrHostKeyUnknown = errors.New(
+	"host key verification failed: the server's host key is not recorded in " +
+		"known_hosts")
+
 // ErrHostUnreachable wraps low-level network failures (DNS, TCP).
 var ErrHostUnreachable = errors.New("could not reach ssh host")
+
+// ErrKnownHostsUnparsable indicates the known_hosts file exists but could
+// not be parsed (a malformed line). The host key cannot be verified against
+// it, so the user is prompted to trust the presented key for this session
+// only; the malformed file is never rewritten.
+var ErrKnownHostsUnparsable = errors.New(
+	"host key verification failed: known_hosts could not be parsed")
+
+// HostKeyError is returned when host-key verification fails against
+// known_hosts. It captures the details needed to prompt the user and, on
+// accept, persist the presented key. It wraps ErrHostKeyUnknown (unknown
+// host), ErrHostKeyMismatch (changed key), or ErrKnownHostsUnparsable
+// (malformed file) so existing errors.Is checks keep working.
+type HostKeyError struct {
+	// Unknown is true when the host is not recorded at all (first use);
+	// false when known_hosts records a different key for the host.
+	Unknown bool
+	// Unparsable is true when known_hosts could not be parsed. In this
+	// case the file is never rewritten: the only recovery is trust-once.
+	Unparsable bool
+	// KnownHostsPath is the resolved known_hosts file the entry will be
+	// written to on accept.
+	KnownHostsPath string
+	// Host is the hostname (without port) the server presented as.
+	Host string
+	// HostPort is the host:port dialed, used to normalize known_hosts
+	// entries and query pinned keys/algorithms.
+	HostPort string
+	// Remote is the resolved network address of the server, recorded
+	// alongside the hostname in the known_hosts entry.
+	Remote net.Addr
+	// Presented is the host key the server offered.
+	Presented ssh.PublicKey
+	// KnownKeys are the keys currently pinned for the host (changed case),
+	// shown as the previously-trusted fingerprints in the warning.
+	KnownKeys []ssh.PublicKey
+	err       error
+}
+
+func (e *HostKeyError) Error() string { return e.err.Error() }
+
+func (e *HostKeyError) Unwrap() error { return e.err }
 
 var sigMap = map[syscall.Signal]ssh.Signal{
 	syscall.SIGABRT: "ABRT",
@@ -101,7 +151,58 @@ func newStdRemote(
 	if err != nil {
 		return nil, err
 	}
-	hostkeyCallback, err := buildHostkeyCallback(cfg)
+	r, err := dialWithKeys(ctx, cfg, uri, ui, username, nil)
+	if err == nil {
+		return r, nil
+	}
+
+	// Recover from an unknown or changed host key: prompt once (or
+	// auto-accept when strict checking is off), then re-dial exactly once.
+	// "Trust and connect" persists the key to known_hosts and re-verifies
+	// against the updated file; "trust once" pins the presented key in
+	// memory for this session without touching known_hosts. insecure
+	// bypasses verification, so it never reaches here.
+	var hkErr *HostKeyError
+	if cfg.insecure || !errors.As(err, &hkErr) {
+		return nil, err
+	}
+	// When strict checking is off, accept without prompting. A malformed
+	// known_hosts can't be persisted to, so it downgrades to trust-once.
+	decision := hostKeyTrustPersist
+	if hkErr.Unparsable {
+		decision = hostKeyTrustOnce
+	}
+	if cfg.strictHostKeyChecking {
+		d, promptErr := promptTrustHostKey(ctx, ui, hkErr)
+		if promptErr != nil {
+			return nil, promptErr
+		}
+		decision = d
+	}
+	switch decision {
+	case hostKeyReject:
+		return nil, err
+	case hostKeyTrustOnce:
+		return dialWithKeys(ctx, cfg, uri, ui, username, hkErr.Presented)
+	default:
+		if persistErr := persistKnownHostKey(hkErr); persistErr != nil {
+			return nil, fmt.Errorf("could not record host key in %s: %w",
+				hkErr.KnownHostsPath, persistErr)
+		}
+		return dialWithKeys(ctx, cfg, uri, ui, username, nil)
+	}
+}
+
+// dialWithKeys resolves the effective key list, builds the host-key
+// callback, and performs the SSH handshake. It is invoked a second time
+// after the user trusts a new host key so the freshly written known_hosts
+// entry is re-read and verified. A non-nil pinnedKey bypasses known_hosts
+// and accepts exactly that key, used for the "trust once" path.
+func dialWithKeys(
+	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
+	username string, pinnedKey ssh.PublicKey,
+) (remote, error) {
+	hostkeyCallback, hostKeyAlgos, err := buildHostkeyCallback(cfg, uri, pinnedKey)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +219,7 @@ func newStdRemote(
 	// kbd-interactive) so the chained AuthenticationMethods flow and
 	// every other matrix scenario keep behaving exactly as before.
 	if len(keyPaths) <= 1 {
-		return dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback,
+		return dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback, hostKeyAlgos,
 			keyPaths, true /* includeFallbacks */)
 	}
 
@@ -131,7 +232,7 @@ func newStdRemote(
 	var lastErr error
 	for i, kp := range keyPaths {
 		last := i == len(keyPaths)-1
-		r, err := dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback,
+		r, err := dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback, hostKeyAlgos,
 			[]string{kp}, last)
 		if err == nil {
 			return r, nil
@@ -156,7 +257,7 @@ func newStdRemote(
 // pubkey method, exactly mirroring the original single-attempt flow.
 func dialOnce(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
-	username string, hostkeyCallback ssh.HostKeyCallback,
+	username string, hostkeyCallback ssh.HostKeyCallback, hostKeyAlgos []string,
 	keyPaths []string, includeFallbacks bool,
 ) (remote, error) {
 	auths, err := authMethodsFromURI(ctx, cfg, uri, ui, keyPaths, includeFallbacks)
@@ -169,6 +270,13 @@ func dialOnce(
 		Auth:            auths,
 		Timeout:         cfg.timeout,
 	}
+	// Pin the host-key algorithms to the ones recorded in known_hosts so
+	// negotiation lands on a key type we actually have, instead of a type
+	// the server also offers but we never recorded (which would surface as
+	// a spurious mismatch). Empty for unknown hosts: leave the default.
+	if len(hostKeyAlgos) > 0 {
+		conf.HostKeyAlgorithms = hostKeyAlgos
+	}
 	hostport := hostPortFromURI(uri)
 	conn, err := ssh.Dial("tcp", hostport, conf)
 	if err != nil {
@@ -177,11 +285,125 @@ func dialOnce(
 	return &stdRemote{parentCtx: ctx, client: conn, quitCh: make(chan struct{})}, nil
 }
 
-func buildHostkeyCallback(cfg sshConfig) (ssh.HostKeyCallback, error) {
+// buildHostkeyCallback builds the host-key verification callback along
+// with the host-key algorithms pinned in known_hosts for the target host.
+// The callback wraps the go-git/x-crypto knownhosts verifier: on failure
+// it classifies the error as unknown-host or changed-key and surfaces a
+// *HostKeyError carrying the details needed to prompt and persist.
+func buildHostkeyCallback(
+	cfg sshConfig, uri workspaceapi.URI, pinnedKey ssh.PublicKey,
+) (ssh.HostKeyCallback, []string, error) {
 	if cfg.insecure {
-		return ssh.InsecureIgnoreHostKey(), nil
+		return ssh.InsecureIgnoreHostKey(), nil, nil
 	}
-	return defaultHostkeyCallback(cfg.knownHostsPath)
+	// "Trust once": accept exactly the key the user just approved without
+	// consulting or modifying known_hosts.
+	if pinnedKey != nil {
+		// Pin the algorithm to the approved key's type so negotiation
+		// lands on it rather than another type the server also offers,
+		// which FixedHostKey would then reject as a mismatch.
+		return ssh.FixedHostKey(pinnedKey), []string{pinnedKey.Type()}, nil
+	}
+	knownHostsPath, err := resolveKnownHostsPath(cfg.knownHostsPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	hostport := hostPortFromURI(uri)
+
+	// A missing known_hosts file (e.g. never connected before) is not an
+	// error: every host is simply unknown. NewDB fails to open it, so
+	// synthesize an empty verifier that reports unknown for every host.
+	db, err := gitknownhosts.NewDB(knownHostsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return unknownHostCallback(knownHostsPath, hostport), nil, nil
+		}
+		// The file exists but a line could not be parsed. We can't verify
+		// against it and can't safely rewrite it, so surface a recoverable
+		// error that prompts the user to trust the key for this session.
+		return unparsableHostCallback(knownHostsPath, hostport, err), nil, nil
+	}
+
+	inner := db.HostKeyCallback()
+	var known []ssh.PublicKey
+	for _, k := range db.HostKeys(hostport) {
+		known = append(known, k.PublicKey)
+	}
+	cb := func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if err := inner(hostname, remote, key); err != nil {
+			return classifyHostKeyError(knownHostsPath, hostport, hostname,
+				remote, key, known, err)
+		}
+		return nil
+	}
+	return cb, db.HostKeyAlgorithms(hostport), nil
+}
+
+// unknownHostCallback returns a callback that treats every host as unknown,
+// used when the known_hosts file does not yet exist.
+func unknownHostCallback(knownHostsPath, hostport string) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		return &HostKeyError{
+			Unknown:        true,
+			KnownHostsPath: knownHostsPath,
+			Host:           hostname,
+			HostPort:       hostport,
+			Remote:         remote,
+			Presented:      key,
+			err: fmt.Errorf("%w: %s (%s)", ErrHostKeyUnknown,
+				hostname, ssh.FingerprintSHA256(key)),
+		}
+	}
+}
+
+// unparsableHostCallback returns a callback used when known_hosts could not
+// be parsed: it captures the presented key and surfaces a recoverable
+// *HostKeyError so the user can trust it for this session (never persisted).
+func unparsableHostCallback(knownHostsPath, hostport string, parseErr error) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		return &HostKeyError{
+			Unparsable:     true,
+			KnownHostsPath: knownHostsPath,
+			Host:           hostname,
+			HostPort:       hostport,
+			Remote:         remote,
+			Presented:      key,
+			err:            fmt.Errorf("%w (%s): %v", ErrKnownHostsUnparsable, knownHostsPath, parseErr),
+		}
+	}
+}
+
+// classifyHostKeyError converts a knownhosts verification failure into a
+// typed *HostKeyError, distinguishing an unknown host from a changed key.
+func classifyHostKeyError(
+	knownHostsPath, hostport, hostname string, remote net.Addr,
+	key ssh.PublicKey, known []ssh.PublicKey, err error,
+) error {
+	switch {
+	case gitknownhosts.IsHostUnknown(err):
+		return &HostKeyError{
+			Unknown:        true,
+			KnownHostsPath: knownHostsPath,
+			Host:           hostname,
+			HostPort:       hostport,
+			Remote:         remote,
+			Presented:      key,
+			err:            fmt.Errorf("%w: %v", ErrHostKeyUnknown, err),
+		}
+	case gitknownhosts.IsHostKeyChanged(err):
+		return &HostKeyError{
+			Unknown:        false,
+			KnownHostsPath: knownHostsPath,
+			Host:           hostname,
+			HostPort:       hostport,
+			Remote:         remote,
+			Presented:      key,
+			KnownKeys:      known,
+			err:            fmt.Errorf("%w: %v", ErrHostKeyMismatch, err),
+		}
+	default:
+		return err
+	}
 }
 
 // shouldRetryWithNextKey reports whether a failed dial attempt is the
@@ -194,6 +416,8 @@ func shouldRetryWithNextKey(err error) bool {
 	case err == nil:
 		return false
 	case errors.Is(err, ErrHostKeyMismatch),
+		errors.Is(err, ErrHostKeyUnknown),
+		errors.Is(err, ErrKnownHostsUnparsable),
 		errors.Is(err, ErrHostUnreachable),
 		errors.Is(err, ErrAuthRequiredKey),
 		errors.Is(err, context.Canceled),
@@ -468,9 +692,13 @@ func translateDialError(hostport string, hasKeys bool, err error) error {
 	if err == nil {
 		return nil
 	}
-	var keErr *knownhosts.KeyError
-	if errors.As(err, &keErr) && len(keErr.Want) > 0 {
-		return fmt.Errorf("%w: %v", ErrHostKeyMismatch, err)
+	// The host-key callback already produced a typed *HostKeyError
+	// (wrapping ErrHostKeyUnknown or ErrHostKeyMismatch). Surface it
+	// unchanged so newStdRemote can drive the trust-on-first-use / rekey
+	// recovery flow and errors.Is checks keep matching.
+	var hkErr *HostKeyError
+	if errors.As(err, &hkErr) {
+		return hkErr
 	}
 	// Network-level failures (no route, DNS, refused connection) surface as
 	// *net.OpError without an "ssh:" prefix in the message.
@@ -536,20 +764,17 @@ func parseAdvertisedMethods(msg string) []string {
 	return out
 }
 
-func defaultHostkeyCallback(override string) (ssh.HostKeyCallback, error) {
-	knownHostsPath := override
-	if knownHostsPath == "" {
-		home, err := currentHomePath()
-		if err != nil {
-			return nil, err
-		}
-		knownHostsPath = path.Join(home, ".ssh/known_hosts")
+// resolveKnownHostsPath resolves the known_hosts file to use: the explicit
+// override when set, otherwise ~/.ssh/known_hosts.
+func resolveKnownHostsPath(override string) (string, error) {
+	if override != "" {
+		return override, nil
 	}
-	hostkeyCallback, err := knownhosts.New(knownHostsPath)
+	home, err := currentHomePath()
 	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %s", knownHostsPath, err)
+		return "", err
 	}
-	return hostkeyCallback, nil
+	return path.Join(home, ".ssh/known_hosts"), nil
 }
 
 func getCurrentUser() (string, error) {

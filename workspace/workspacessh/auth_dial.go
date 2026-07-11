@@ -18,6 +18,10 @@ type AuthDialOptions struct {
 	KnownHostsPath string
 	Timeout        time.Duration
 	KbdInteractive bool
+	// StrictHostKeyChecking mirrors workspace.ssh.strict_host_key_checking.
+	// When true, an unknown or changed host key prompts the UI before the
+	// presented key is trusted and recorded.
+	StrictHostKeyChecking bool
 }
 
 // TestAuthDial is a thin wrapper around the std remote dial path. It is
@@ -30,11 +34,12 @@ func TestAuthDial(
 	ctx context.Context, ui UI, uri workspaceapi.URI, opts AuthDialOptions,
 ) error {
 	cfg := sshConfig{
-		privateKeys:    opts.PrivateKeys,
-		insecure:       opts.Insecure,
-		knownHostsPath: opts.KnownHostsPath,
-		timeout:        opts.Timeout,
-		kbdInteractive: opts.KbdInteractive,
+		privateKeys:           opts.PrivateKeys,
+		insecure:              opts.Insecure,
+		knownHostsPath:        opts.KnownHostsPath,
+		timeout:               opts.Timeout,
+		kbdInteractive:        opts.KbdInteractive,
+		strictHostKeyChecking: opts.StrictHostKeyChecking,
 	}
 	if cfg.timeout == 0 {
 		cfg.timeout = defSSHTimeout

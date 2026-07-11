@@ -206,7 +206,9 @@ func isRetryableConnectError(err error) bool {
 	}
 	// Typed errors surfaced by std_remote.translateDialError.
 	if errors.Is(err, ErrAuthRequiredKey) ||
-		errors.Is(err, ErrHostKeyMismatch) {
+		errors.Is(err, ErrHostKeyMismatch) ||
+		errors.Is(err, ErrHostKeyUnknown) ||
+		errors.Is(err, ErrKnownHostsUnparsable) {
 		return false
 	}
 	msg := err.Error()

@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
+	gitknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"golang.org/x/crypto/ssh"
 	"unstable.build/go-tui/workspace/workspacessh"
 )
 
@@ -71,9 +73,10 @@ func TestHostKeyMatchingKnownHosts(t *testing.T) {
 
 // TestHostKeyMismatchSurfacesErrHostKeyMismatch dials with
 // Insecure=false and a known_hosts file whose recorded key does not
-// match what the server presents. The dial must fail with a typed
-// ErrHostKeyMismatch — never a password prompt — because that
-// scenario typically indicates a man-in-the-middle attack.
+// match what the server presents. With strict host key checking and a
+// UI that declines the change, the dial must fail with a typed
+// ErrHostKeyMismatch and never fall through to a credential prompt —
+// because that scenario typically indicates a man-in-the-middle attack.
 func TestHostKeyMismatchSurfacesErrHostKeyMismatch(t *testing.T) {
 	SkipIfNoDocker(t)
 	EnsureImage(t)
@@ -94,29 +97,34 @@ func TestHostKeyMismatchSurfacesErrHostKeyMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	keyPath := PrivateKeyPath(t, "id_ed25519")
-	ui := &recordingUI{}
+	ui := &recordingUI{choiceCancel: true} // decline the changed key
 	err = workspacessh.TestAuthDial(context.Background(), ui, uri,
 		workspacessh.AuthDialOptions{
-			PrivateKeys:    []string{keyPath},
-			Insecure:       false,
-			KnownHostsPath: khPath,
-			Timeout:        20 * time.Second,
+			PrivateKeys:           []string{keyPath},
+			Insecure:              false,
+			KnownHostsPath:        khPath,
+			StrictHostKeyChecking: true,
+			Timeout:               20 * time.Second,
 		})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, workspacessh.ErrHostKeyMismatch),
 		"mismatched known_hosts must surface ErrHostKeyMismatch so "+
 			"isRetryableConnectError stops the reconnect loop and we "+
 			"never silently roll past a possible MITM; got %v", err)
-	assert.Empty(t, ui.prompts,
-		"host-key mismatch must NOT prompt the user — that would let "+
-			"an attacker harvest credentials; saw %v", ui.prompts)
+	for _, p := range ui.prompts {
+		assert.NotContains(t, p, "secret:",
+			"a declined host-key change must never fall through to a "+
+				"credential prompt — that would let an attacker harvest "+
+				"credentials; saw %v", ui.prompts)
+	}
 }
 
 // TestHostKeyChangedBetweenDials reproduces the "host has been
 // rebuilt and got a new key" scenario. We dial once with a
 // known_hosts file pinning the original ed25519 host key, succeed,
 // then regenerate the key on the container and dial again with the
-// SAME known_hosts file. The second dial must fail with
+// SAME known_hosts file. With strict host key checking and a UI that
+// declines the change, the second dial must fail with
 // ErrHostKeyMismatch.
 func TestHostKeyChangedBetweenDials(t *testing.T) {
 	SkipIfNoDocker(t)
@@ -131,10 +139,11 @@ func TestHostKeyChangedBetweenDials(t *testing.T) {
 
 	keyPath := PrivateKeyPath(t, "id_ed25519")
 	opts := workspacessh.AuthDialOptions{
-		PrivateKeys:    []string{keyPath},
-		Insecure:       false,
-		KnownHostsPath: khPath,
-		Timeout:        20 * time.Second,
+		PrivateKeys:           []string{keyPath},
+		Insecure:              false,
+		KnownHostsPath:        khPath,
+		StrictHostKeyChecking: true,
+		Timeout:               20 * time.Second,
 	}
 
 	// First dial: original host key. Must succeed.
@@ -153,11 +162,249 @@ func TestHostKeyChangedBetweenDials(t *testing.T) {
 	}
 
 	err = workspacessh.TestAuthDial(context.Background(),
-		&recordingUI{}, uri, opts)
+		&recordingUI{choiceCancel: true}, uri, opts)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, workspacessh.ErrHostKeyMismatch),
 		"after the server rotates its host key, a re-dial against "+
 			"the same known_hosts entry must surface "+
 			"ErrHostKeyMismatch — otherwise users would silently "+
 			"connect to a server they no longer trust; got %v", err)
+}
+
+// knownHostsHasKey reports whether the known_hosts file at path records
+// key for hostport, parsed the same way the ssh client does.
+func knownHostsHasKey(t *testing.T, path, hostport string, key []byte) bool {
+	t.Helper()
+	db, err := gitknownhosts.NewDB(path)
+	require.NoError(t, err)
+	pub, _, _, _, err := ssh.ParseAuthorizedKey(key)
+	require.NoError(t, err)
+	for _, k := range db.HostKeys(hostport) {
+		if string(k.Marshal()) == string(pub.Marshal()) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestHostKeyUnknownTrustRecordsAndConnects dials a real container with
+// an empty known_hosts file and Insecure=false. With strict host key
+// checking and an accepting UI, the dial must prompt once, trust the
+// key, connect, and leave the container's key recorded in known_hosts.
+func TestHostKeyUnknownTrustRecordsAndConnects(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+	t.Parallel()
+
+	c := StartContainer(t, SSHDScenario{PublicKeyFile: "/id_ed25519.pub"})
+
+	// Empty (but present) known_hosts: the host is unknown.
+	khPath := WriteKnownHosts(t, c.HostPort)
+
+	uri, err := workspaceapi.ParseURI("ssh://test@" + c.HostPort + "/")
+	require.NoError(t, err)
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+	ui := &recordingUI{choices: []int{0}} // accept
+	err = workspacessh.TestAuthDial(context.Background(), ui, uri,
+		workspacessh.AuthDialOptions{
+			PrivateKeys:           []string{keyPath},
+			Insecure:              false,
+			KnownHostsPath:        khPath,
+			StrictHostKeyChecking: true,
+			Timeout:               20 * time.Second,
+		})
+	require.NoError(t, err,
+		"unknown host + accepting UI must trust the key and connect")
+
+	require.NotEmpty(t, ui.prompts, "an unknown host must prompt once")
+
+	// The recorded key must be one the server actually presents.
+	var recorded bool
+	for _, pub := range ContainerHostPubKeys(t, c.ID) {
+		if knownHostsHasKey(t, khPath, c.HostPort, pub) {
+			recorded = true
+			break
+		}
+	}
+	assert.True(t, recorded,
+		"trusting an unknown host must persist its key to known_hosts")
+}
+
+// TestHostKeyRotatedTrustOverridesAndReconnects reproduces the ticket:
+// pin the original host key, dial OK, rotate the server's host keys,
+// then dial again with an accepting UI. The dial must prompt, replace
+// the stale entry, connect, and leave known_hosts pinning a new key.
+func TestHostKeyRotatedTrustOverridesAndReconnects(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+	t.Parallel()
+
+	c := StartContainer(t, SSHDScenario{PublicKeyFile: "/id_ed25519.pub"})
+	khPath := WriteKnownHosts(t, c.HostPort, ContainerHostPubKeys(t, c.ID)...)
+
+	uri, err := workspaceapi.ParseURI("ssh://test@" + c.HostPort + "/")
+	require.NoError(t, err)
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+	baseOpts := workspacessh.AuthDialOptions{
+		PrivateKeys:           []string{keyPath},
+		Insecure:              false,
+		KnownHostsPath:        khPath,
+		StrictHostKeyChecking: true,
+		Timeout:               20 * time.Second,
+	}
+
+	require.NoError(t, workspacessh.TestAuthDial(
+		context.Background(), &recordingUI{}, uri, baseOpts),
+		"baseline dial against the original host key must succeed")
+
+	RegenerateContainerHostKeys(t, c.ID)
+	if err := waitForSSH(c.HostPort, 30*time.Second); err != nil {
+		t.Fatalf("sshd did not come back after host key rotation: %v", err)
+	}
+
+	ui := &recordingUI{choices: []int{0}} // accept new key
+	err = workspacessh.TestAuthDial(context.Background(), ui, uri, baseOpts)
+	require.NoError(t, err,
+		"a rotated host key + accepting UI must override the stale "+
+			"entry and reconnect")
+	require.NotEmpty(t, ui.prompts, "a changed host key must prompt")
+
+	// known_hosts must now pin a key the rotated server presents.
+	var recorded bool
+	for _, pub := range ContainerHostPubKeys(t, c.ID) {
+		if knownHostsHasKey(t, khPath, c.HostPort, pub) {
+			recorded = true
+			break
+		}
+	}
+	assert.True(t, recorded,
+		"trusting the rotated key must update known_hosts to the new key")
+}
+
+// TestHostKeyRotatedCancelLeavesFileUnchanged confirms the cancel path is
+// unchanged: rotating the key and cancelling the prompt surfaces
+// ErrHostKeyMismatch and does not rewrite known_hosts.
+func TestHostKeyRotatedCancelLeavesFileUnchanged(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+	t.Parallel()
+
+	c := StartContainer(t, SSHDScenario{PublicKeyFile: "/id_ed25519.pub"})
+	khPath := WriteKnownHosts(t, c.HostPort, ContainerHostPubKeys(t, c.ID)...)
+
+	before, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("ssh://test@" + c.HostPort + "/")
+	require.NoError(t, err)
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+	opts := workspacessh.AuthDialOptions{
+		PrivateKeys:           []string{keyPath},
+		Insecure:              false,
+		KnownHostsPath:        khPath,
+		StrictHostKeyChecking: true,
+		Timeout:               20 * time.Second,
+	}
+
+	RegenerateContainerHostKeys(t, c.ID)
+	if err := waitForSSH(c.HostPort, 30*time.Second); err != nil {
+		t.Fatalf("sshd did not come back after host key rotation: %v", err)
+	}
+
+	ui := &recordingUI{choiceCancel: true}
+	err = workspacessh.TestAuthDial(context.Background(), ui, uri, opts)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, workspacessh.ErrHostKeyMismatch),
+		"cancelling a changed host key must surface ErrHostKeyMismatch; "+
+			"got %v", err)
+
+	after, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after,
+		"cancelled prompt must not modify known_hosts")
+}
+
+// TestHostKeyRotatedTrustOnceConnectsWithoutRewriting confirms the
+// "trust once" path: rotating the key and choosing trust-once connects
+// for this session but leaves the stale known_hosts entry untouched.
+func TestHostKeyRotatedTrustOnceConnectsWithoutRewriting(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+	t.Parallel()
+
+	c := StartContainer(t, SSHDScenario{PublicKeyFile: "/id_ed25519.pub"})
+	khPath := WriteKnownHosts(t, c.HostPort, ContainerHostPubKeys(t, c.ID)...)
+
+	before, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+
+	uri, err := workspaceapi.ParseURI("ssh://test@" + c.HostPort + "/")
+	require.NoError(t, err)
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+	opts := workspacessh.AuthDialOptions{
+		PrivateKeys:           []string{keyPath},
+		Insecure:              false,
+		KnownHostsPath:        khPath,
+		StrictHostKeyChecking: true,
+		Timeout:               20 * time.Second,
+	}
+
+	RegenerateContainerHostKeys(t, c.ID)
+	if err := waitForSSH(c.HostPort, 30*time.Second); err != nil {
+		t.Fatalf("sshd did not come back after host key rotation: %v", err)
+	}
+
+	ui := &recordingUI{choices: []int{1}} // trust once
+	err = workspacessh.TestAuthDial(context.Background(), ui, uri, opts)
+	require.NoError(t, err,
+		"trust once against a rotated key must connect for this session")
+	require.NotEmpty(t, ui.prompts, "a changed host key must prompt")
+
+	after, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after,
+		"trust once must not modify known_hosts")
+}
+
+// TestHostKeyUnparsableTrustOnceConnects confirms that when known_hosts
+// exists but can't be parsed, Rune prompts to trust the key for this
+// session only and connects without rewriting the malformed file.
+func TestHostKeyUnparsableTrustOnceConnects(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+	t.Parallel()
+
+	c := StartContainer(t, SSHDScenario{PublicKeyFile: "/id_ed25519.pub"})
+
+	// A malformed known_hosts line (invalid base64 key) that the parser
+	// rejects, so the host key cannot be verified against it.
+	const malformed = "host.example.com ssh-ed25519 not_valid_base64!!!\n"
+	khPath := filepath.Join(t.TempDir(), "known_hosts")
+	require.NoError(t, os.WriteFile(khPath, []byte(malformed), 0o600))
+
+	uri, err := workspaceapi.ParseURI("ssh://test@" + c.HostPort + "/")
+	require.NoError(t, err)
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+	ui := &recordingUI{choices: []int{0}} // trust once (only accept option)
+	err = workspacessh.TestAuthDial(context.Background(), ui, uri,
+		workspacessh.AuthDialOptions{
+			PrivateKeys:           []string{keyPath},
+			Insecure:              false,
+			KnownHostsPath:        khPath,
+			StrictHostKeyChecking: true,
+			Timeout:               20 * time.Second,
+		})
+	require.NoError(t, err,
+		"unparsable known_hosts + trust once must connect for this session")
+	require.NotEmpty(t, ui.prompts, "an unparsable known_hosts must prompt")
+
+	after, err := os.ReadFile(khPath)
+	require.NoError(t, err)
+	assert.Equal(t, malformed, string(after),
+		"a malformed known_hosts must never be rewritten")
 }

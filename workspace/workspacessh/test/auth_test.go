@@ -209,6 +209,10 @@ type recordingUI struct {
 	prompts []string
 	secrets []string
 	texts   []string
+	// choices are dequeued as PromptChoice results. When empty and
+	// choiceCancel is false, PromptChoice returns context.Canceled.
+	choices      []int
+	choiceCancel bool
 }
 
 func (u *recordingUI) PromptSecret(_ context.Context, label string) (string, error) {
@@ -235,7 +239,15 @@ func (u *recordingUI) PromptText(_ context.Context, label, _ string) (string, er
 	return a, nil
 }
 
-func (u *recordingUI) PromptChoice(context.Context, string, []string) (int, error) {
+func (u *recordingUI) PromptChoice(_ context.Context, label string, _ []string) (int, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.prompts = append(u.prompts, "choice:"+label)
+	if !u.choiceCancel && len(u.choices) > 0 {
+		c := u.choices[0]
+		u.choices = u.choices[1:]
+		return c, nil
+	}
 	return -1, context.Canceled
 }
 
