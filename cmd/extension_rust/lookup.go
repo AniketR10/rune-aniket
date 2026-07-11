@@ -61,6 +61,25 @@ func readLspPath(cfg config.Config, notify browserapi.Notifications) (string, bo
 	return v, v != ""
 }
 
+// readExperimental reports whether extensions.rust.config.experimental is
+// set. It gates rust-analyzer's experimental LSP extension subcommands and
+// the matching client capabilities, so they stay off by default. A missing
+// key or non-bool value resolves to false.
+func readExperimental(cfg config.Config, notify browserapi.Notifications) bool {
+	if cfg == nil {
+		return false
+	}
+	v, err := cfg.GetBool("experimental")
+	if err != nil {
+		if !errors.Is(err, config.ErrNotFound) && notify != nil {
+			_, _ = notify.Notify(browserapi.LevelWarn,
+				"extensions.rust.config.experimental must be a bool: %v", err)
+		}
+		return false
+	}
+	return v
+}
+
 // resolveRustAnalyzer returns the rust-analyzer language server path. A
 // configured lsp_path overrides the bundled binary at
 // <dataDir>/bin/rust-analyzer, which the package always ships.

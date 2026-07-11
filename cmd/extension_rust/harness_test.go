@@ -46,6 +46,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 // assertErr is a sentinel error scripted into the fake executor to
@@ -288,8 +289,8 @@ func (l *captureLSP) waitForInit(t *testing.T, timeout time.Duration) {
 // subscription so tests can deliver synthetic open events to the
 // extension's langext.Initializer. Every other method is an unused stub.
 type fakeEditor struct {
-	mu      sync.Mutex
-	handler textapi.EventHandler
+	mu       sync.Mutex
+	handlers []textapi.EventHandler
 }
 
 var _ textapi.Editor = (*fakeEditor)(nil)
@@ -297,21 +298,23 @@ var _ textapi.Editor = (*fakeEditor)(nil)
 func (e *fakeEditor) SubscribeEvents(_ []textapi.EventType, h textapi.EventHandler) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.handler = h
+	e.handlers = append(e.handlers, h)
 	return nil
 }
 
 // open delivers an EventTypeOpen for the file at path to the subscribed
-// handler, failing if no handler has subscribed yet.
+// handlers, failing if no handler has subscribed yet.
 func (e *fakeEditor) open(t *testing.T, path string) {
 	t.Helper()
 	uri, err := workspaceapi.ParseURI("file://" + path)
 	require.NoError(t, err)
 	e.mu.Lock()
-	h := e.handler
+	handlers := append([]textapi.EventHandler(nil), e.handlers...)
 	e.mu.Unlock()
-	require.NotNil(t, h, "no event handler subscribed")
-	h.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+	require.NotEmpty(t, handlers, "no event handler subscribed")
+	for _, h := range handlers {
+		h.Handle(context.Background(), textapi.Event{Type: textapi.EventTypeOpen, URI: uri})
+	}
 }
 
 func (e *fakeEditor) Editor(workspaceapi.URI) (textapi.Handler, error) { return nil, nil }
@@ -331,6 +334,53 @@ func (e *fakeEditor) CellEditor(textapi.Handler) textapi.CellEditor     { return
 func (e *fakeEditor) SetDefaultAttributes(textapi.Handler, term.Attributes) error {
 	return nil
 }
+
+// fakeWindow is a minimal browserapi.Window used by fakeWM.
+type fakeWindow struct{ id uint64 }
+
+func (w fakeWindow) WindowID() uint64 { return w.id }
+
+// fakeWM is a browserapi.WindowManager that records the floating handler
+// it is asked to show. The code-action picker path is exercised
+// separately in codeaction_test.go; here Floating simply records the
+// handler and returns a window so callers do not block.
+type fakeWM struct {
+	mu       sync.Mutex
+	floating browserapi.Floating
+}
+
+var _ browserapi.WindowManager = (*fakeWM)(nil)
+
+func (m *fakeWM) Focus() (browserapi.Window, error) { return fakeWindow{id: 1}, nil }
+
+func (m *fakeWM) Tab(
+	_ workspaceapi.URI, _ rune, _ string, h browserapi.Handler,
+) (browserapi.Handler, error) {
+	return h, nil
+}
+
+func (m *fakeWM) SetWindowContent(browserapi.Window, browserapi.Handler) error { return nil }
+
+func (m *fakeWM) Split(
+	browserapi.Orientation, browserapi.Window, browserapi.Handler,
+) (browserapi.Window, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *fakeWM) Floating(
+	h browserapi.Floating, _ browserapi.FloatingConfig,
+) (browserapi.Window, error) {
+	m.mu.Lock()
+	m.floating = h
+	m.mu.Unlock()
+	return fakeWindow{id: 2}, nil
+}
+
+func (m *fakeWM) Bar(browserapi.BarConfig, tui.Handler) error {
+	return errors.New("not implemented")
+}
+
+func (m *fakeWM) CloseWindow(browserapi.Window) error { return nil }
 
 type progressSample struct {
 	id       string
@@ -483,6 +533,7 @@ type rustEnv struct {
 	notify  *fakeNotifications
 	editor  *fakeEditor
 	manuals []textapi.CommandManual
+	cmds    []textapi.CommandManual
 }
 
 // runRustExtensionOnDir runs the extension's full bring-up against the
@@ -504,9 +555,15 @@ func runRustExtensionOnDir(t *testing.T, dir, rustupHome, dataDir string) rustEn
 		notify,
 		lsp,
 		editor,
+		&fakeWM{},
+		nil,
 		dataDir, rustupHome, nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
+			return nil
+		},
+		func(m textapi.CommandManual, _ textapi.CommandHandler) error {
+			env.cmds = append(env.cmds, m)
 			return nil
 		},
 	)

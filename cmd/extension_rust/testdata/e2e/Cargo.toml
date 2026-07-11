@@ -1,0 +1,12 @@
+[package]
+name = "e2e"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "e2e"
+path = "src/main.rs"
+
+[lib]
+name = "e2e"
+path = "src/lib.rs"

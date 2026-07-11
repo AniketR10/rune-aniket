@@ -129,7 +129,7 @@ func TestResolveSysroot(t *testing.T) {
 }
 
 func TestRustInitializeParams(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "/data/bin/rust-analyzer", "/sysroot")
+	params, err := rustInitializeParams("file:///ws", "/data/bin/rust-analyzer", "/sysroot", false)
 	require.NoError(t, err)
 	assert.Equal(t, "file:///ws", params.RootURI)
 
@@ -142,30 +142,113 @@ func TestRustInitializeParams(t *testing.T) {
 	check, _ := opts["check"].(map[string]any)
 	assert.Equal(t, "clippy", check["command"])
 
-	noSysroot, err := rustInitializeParams("file:///ws", "ra", "")
+	noSysroot, err := rustInitializeParams("file:///ws", "ra", "", false)
 	require.NoError(t, err)
 	var opts2 map[string]any
 	require.NoError(t, json.Unmarshal(noSysroot.InitializeOptions, &opts2))
 	_, hasSysroot := opts2["sysroot"]
 	assert.False(t, hasSysroot)
+}
 
-	// Experimental client capabilities enable rust-analyzer's LSP
-	// extensions the host can service.
+// TestRustInitializeOptionsExtras guards the initialization options we
+// forward to rust-analyzer beyond the baseline: import shaping so
+// organize-imports and auto-import assists produce idiomatic use trees,
+// assist.emitMustUse, autoimport completion, and lens suppression.
+func TestRustInitializeOptionsExtras(t *testing.T) {
+	params, err := rustInitializeParams("file:///ws", "ra", "", false)
+	require.NoError(t, err)
+	var opts map[string]any
+	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
+
+	assist, _ := opts["assist"].(map[string]any)
+	assert.Equal(t, true, assist["emitMustUse"])
+
+	imports, _ := opts["imports"].(map[string]any)
+	granularity, _ := imports["granularity"].(map[string]any)
+	assert.Equal(t, "module", granularity["group"])
+	assert.Equal(t, "crate", imports["prefix"])
+
+	completion, _ := opts["completion"].(map[string]any)
+	autoimport, _ := completion["autoimport"].(map[string]any)
+	assert.Equal(t, true, autoimport["enable"])
+
+	lens, _ := opts["lens"].(map[string]any)
+	assert.Equal(t, false, lens["enable"])
+}
+
+// TestRustInitializeCapabilities verifies the experimental capabilities we
+// advertise. snippetTextEdit must NOT be advertised: lspcmd.ApplyWorkspaceEdit
+// writes edits verbatim, so a snippet edit would leak literal $0/${1:_} tab
+// stops into the buffer. codeAction.resolveSupport must stay absent so
+// rust-analyzer resolves each assist's edit eagerly in the codeAction response.
+func TestRustInitializeCapabilities(t *testing.T) {
+	params, err := rustInitializeParams("file:///ws", "ra", "", false)
+	require.NoError(t, err)
 	var caps map[string]any
 	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
-	experimental, ok := caps["experimental"].(map[string]any)
-	require.True(t, ok, "capabilities should advertise experimental support")
-	assert.Equal(t, true, experimental["snippetTextEdit"])
+
+	experimental, _ := caps["experimental"].(map[string]any)
+	_, hasSnippet := experimental["snippetTextEdit"]
+	assert.False(t, hasSnippet, "snippetTextEdit must not be advertised; snippets leak into the buffer")
+	assert.Equal(t, true, experimental["codeActionGroup"])
+	_, hasLocalDocs := experimental["localDocs"]
+	assert.False(t, hasLocalDocs, "localDocs is gated on the experimental config flag")
+	_, hasHoverActions := experimental["hoverActions"]
+	assert.False(t, hasHoverActions, "hoverActions is gated on the experimental config flag")
+	_, hasCommands := experimental["commands"]
+	assert.False(t, hasCommands, "commands is gated on the experimental config flag")
+
+	textDocument, _ := caps["textDocument"].(map[string]any)
+	codeAction, _ := textDocument["codeAction"].(map[string]any)
+	_, hasResolve := codeAction["resolveSupport"]
+	assert.False(t, hasResolve, "resolveSupport must stay absent to keep edits eager")
+
+	hover, _ := textDocument["hover"].(map[string]any)
+	assert.Contains(t, hover["contentFormat"], "markdown",
+		"hover must request markdown so `rust hover` can render it")
+}
+
+// With the experimental flag set, localDocs is advertised so external-docs
+// receives a {web, local} response; the always-on flags stay set.
+func TestRustInitializeCapabilitiesExperimental(t *testing.T) {
+	params, err := rustInitializeParams("file:///ws", "ra", "", true)
+	require.NoError(t, err)
+	var caps map[string]any
+	require.NoError(t, json.Unmarshal(params.Capabilities, &caps))
+
+	experimental, _ := caps["experimental"].(map[string]any)
+	assert.Equal(t, true, experimental["localDocs"])
 	assert.Equal(t, true, experimental["codeActionGroup"])
 	assert.Equal(t, true, experimental["serverStatusNotification"])
-	assert.Equal(t, true, experimental["colorDiagnosticOutput"])
+	_, hasSnippet := experimental["snippetTextEdit"]
+	assert.False(t, hasSnippet)
+
+	// hoverActions + the client command list are what unlock hover actions.
+	assert.Equal(t, true, experimental["hoverActions"])
+	commands, _ := experimental["commands"].(map[string]any)
+	require.NotNil(t, commands, "experimental.commands must be advertised with the flag")
+	names, _ := commands["commands"].([]any)
+	for _, want := range []string{
+		"rust-analyzer.runSingle", "rust-analyzer.debugSingle",
+		"rust-analyzer.showReferences", "rust-analyzer.gotoLocation",
+	} {
+		assert.Contains(t, names, want)
+	}
+	// rename and triggerParameterHints are deliberately not advertised: this
+	// client cannot service them locally, and advertising rename makes
+	// rust-analyzer attach it to assists like "Extract into variable", which
+	// codeaction.go would forward to the server as an unknown request (see
+	// TestE2E/ExtractVariable).
+	assert.NotContains(t, names, "rust-analyzer.rename")
+	assert.NotContains(t, names, "rust-analyzer.triggerParameterHints")
+	assert.Len(t, names, 4)
 }
 
 // rustInitializeCommandHasNoSpaces guards the idelsp command tokenizer,
 // which splits InitializeOptions.command on spaces. A bundled path with
 // no subcommand keeps the command a single argv element.
 func TestRustInitializeCommandHasNoSpaces(t *testing.T) {
-	params, err := rustInitializeParams("file:///ws", "/data/bin/rust-analyzer", "")
+	params, err := rustInitializeParams("file:///ws", "/data/bin/rust-analyzer", "", false)
 	require.NoError(t, err)
 	var opts map[string]any
 	require.NoError(t, json.Unmarshal(params.InitializeOptions, &opts))
@@ -219,11 +302,12 @@ func TestExtendWorkspaceNonRustRegistersButSkipsInit(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		"/data", "/rustup", nil,
+		&fakeWM{}, nil, "/data", "/rustup", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error {
 			registered = true
 			return nil
-		})
+		},
+		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
 	assert.True(t, registered)
 	_, count := lsp.captured()
@@ -254,8 +338,9 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, newFakeNotifications(), lsp, editor,
-		"/data", "/rustup", nil,
-		func(textapi.CommandManual, textapi.REPLHandler) error { return nil })
+		&fakeWM{}, nil, "/data", "/rustup", nil,
+		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
+		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
 
 	// No root Cargo.toml, so nothing is initialized on startup.
@@ -286,16 +371,24 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	notify := newFakeNotifications()
 
 	var manuals []textapi.CommandManual
+	var cmds []textapi.CommandManual
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
-		fs, ex, notify, lsp, &fakeEditor{}, "/data", "/rustup", nil,
+		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{},
+		nil, "/data", "/rustup", nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			manuals = append(manuals, m)
+			return nil
+		},
+		func(m textapi.CommandManual, _ textapi.CommandHandler) error {
+			cmds = append(cmds, m)
 			return nil
 		})
 	require.NoError(t, err)
 	require.Len(t, manuals, 1)
 	assert.Equal(t, rustCommandName, manuals[0].Name)
+	require.Len(t, cmds, 1)
+	assert.Equal(t, actionCmdName, cmds[0].Name)
 
 	params, count := lsp.captured()
 	require.Equal(t, 1, count)

@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/extension/langext"
+	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
 
 // rustMarkers are the project-root markers that drive nested discovery.
@@ -60,6 +61,8 @@ func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
 			extensionapi.PermissionEditor,
 			extensionapi.PermissionCommands,
 			extensionapi.PermissionConfig,
+			extensionapi.PermissionBrowserWindowManager,
+			extensionapi.PermissionBrowserResourceOpener,
 			extensionapi.PermissionNotifications,
 			extensionapi.PermissionExecute,
 			extensionapi.PermissionFileSystem,
@@ -81,10 +84,13 @@ func (e *rustExtension) ExtendWorkspace(
 		w.Notifications(ctx),
 		w.LSP(ctx),
 		w.Editor(ctx),
+		w.WindowManager(ctx),
+		w.ResourceOpener(ctx),
 		w.DataDir(ctx),
 		os.Getenv("RUSTUP_HOME"),
 		cfg,
 		w.RegisterREPLCommand,
+		w.RegisterCommand,
 	)
 }
 
@@ -105,9 +111,12 @@ func (e *rustExtension) extendWorkspaceWith(
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
 	editor textapi.Editor,
+	wm browserapi.WindowManager,
+	opener browserapi.ResourceOpener,
 	dataDir, rustupHome string,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
+	registerCommand func(textapi.CommandManual, textapi.CommandHandler) error,
 ) error {
 	cwd, err := fs.URI(".")
 	if err != nil {
@@ -115,13 +124,15 @@ func (e *rustExtension) extendWorkspaceWith(
 	}
 	rustupBin := resolveRustup(ctx, fs, dataDir)
 
+	experimental := readExperimental(cfg, notify)
+
 	init := langext.NewInitializer(ctx, fs, editor, langext.ProjectConfig{
 		LanguageID: "rust",
 		Markers:    rustMarkers,
 		FileMatch:  isRustFile,
 		InitRoot: func(ctx context.Context, root langext.Root) error {
 			return initializeRustRoot(ctx,
-				fs, exec, notify, lsp, dataDir, rustupHome, rustupBin, cfg, root)
+				fs, exec, notify, lsp, dataDir, rustupHome, rustupBin, cfg, experimental, root)
 		},
 	})
 	if err := init.Start(); err != nil {
@@ -138,6 +149,20 @@ func (e *rustExtension) extendWorkspaceWith(
 	manual, handler := newRustHandler(exec, notify, cwd.Path(), rustupBin, reload)
 	if err := registerREPL(manual, handler); err != nil {
 		return fmt.Errorf("register rust command: %w", err)
+	}
+
+	// The `rust` command-prompt handler exposes rust-analyzer's assists.
+	// Its selection/cursor subscriptions and lifetime are workspace-scoped,
+	// not project-scoped, so register it once up front regardless of
+	// whether a Cargo project is ever discovered.
+	sel := lspcmd.NewSelectionTracker()
+	evs := []textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}
+	if err := editor.SubscribeEvents(evs, sel); err != nil {
+		return fmt.Errorf("subscribe selection events: %w", err)
+	}
+	actionManual, actionHandler := newRustActionHandler(lsp, editor, wm, notify, opener, sel, experimental)
+	if err := registerCommand(actionManual, actionHandler); err != nil {
+		return fmt.Errorf("register rust action command: %w", err)
 	}
 
 	// Preserve the eager workspace-root behavior: if the workspace root
@@ -165,6 +190,7 @@ func initializeRustRoot(
 	lsp semanticapi.LSP,
 	dataDir, rustupHome, rustupBin string,
 	cfg config.Config,
+	experimental bool,
 	root langext.Root,
 ) error {
 	if err := bootstrapRustup(
@@ -177,7 +203,7 @@ func initializeRustRoot(
 
 	command := resolveRustAnalyzer(cfg, notify, dataDir)
 	sysroot := resolveSysroot(ctx, exec)
-	params, err := rustInitializeParams(root.URI, command, sysroot)
+	params, err := rustInitializeParams(root.URI, command, sysroot, experimental)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
 	}
