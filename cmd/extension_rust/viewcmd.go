@@ -25,7 +25,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
@@ -257,6 +259,39 @@ func relatedTestsView(lsp semanticapi.LSP) viewResult {
 	}
 }
 
+// evalPredicateView asks rust-analyzer to evaluate a trait predicate (e.g.
+// `T: Clone`) in the context of the item at the cursor, and renders the
+// resulting status and message. The predicate text comes from the command
+// arguments: `rust eval-predicate T: Clone`.
+func evalPredicateView(lsp semanticapi.LSP) viewResult {
+	return func(ctx context.Context, cmd textapi.Command) (string, error) {
+		if err := requireFile(cmd); err != nil {
+			return "", err
+		}
+		text := strings.TrimSpace(strings.Join(cmd.Args, " "))
+		if text == "" {
+			return "", fmt.Errorf("usage: rust eval-predicate <predicate>")
+		}
+		params := struct {
+			Text         string                             `json:"text"`
+			TextDocument semanticapi.TextDocumentIdentifier `json:"textDocument"`
+			Position     semanticapi.Position               `json:"position"`
+		}{Text: text, TextDocument: docParams(cmd), Position: posParams(cmd).Position}
+		res, err := execRequest[*struct {
+			Status  string `json:"status"`
+			Message string `json:"message"`
+		}](ctx, lsp, "rust-analyzer/evaluatePredicate", params)
+		if err != nil || res == nil {
+			return "", err
+		}
+		out := res.Status
+		if res.Message != "" {
+			out += "\n\n" + res.Message
+		}
+		return out, nil
+	}
+}
+
 // recursiveMemoryLayoutView requests viewRecursiveMemoryLayout at the
 // cursor and renders each node's name/size/offset.
 func recursiveMemoryLayoutView(lsp semanticapi.LSP) viewResult {
@@ -291,4 +326,75 @@ func failedObligationsView(lsp semanticapi.LSP) viewResult {
 		}
 		return execRequest[string](ctx, lsp, "rust-analyzer/getFailedObligations", posParams(cmd))
 	}
+}
+
+// diagnosticsView pulls the diagnostics for the current file and renders
+// each as "severity[code] line:col message". When rust-analyzer attaches a
+// rustc-rendered ANSI block (data.rendered, from the colorDiagnosticOutput
+// capability), that full compiler output is appended verbatim.
+func diagnosticsView(lsp semanticapi.LSP) viewResult {
+	return func(ctx context.Context, cmd textapi.Command) (string, error) {
+		if err := requireFile(cmd); err != nil {
+			return "", err
+		}
+		report, err := lsp.Diagnostic(ctx, semanticapi.DocumentDiagnosticParams{
+			TextDocument: docParams(cmd),
+		})
+		if err != nil {
+			return "", fmt.Errorf("document diagnostics: %w", err)
+		}
+		var b strings.Builder
+		for _, d := range report.Items {
+			fmt.Fprintf(&b, "%s%s %d:%d %s\n",
+				diagnosticSeverityLabel(d.Severity), diagnosticCode(d),
+				d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message)
+			if rendered := diagnosticRendered(d.Data); rendered != "" {
+				b.WriteString(rendered)
+				if !strings.HasSuffix(rendered, "\n") {
+					b.WriteByte('\n')
+				}
+			}
+		}
+		return b.String(), nil
+	}
+}
+
+func diagnosticSeverityLabel(s semanticapi.DiagnosticSeverity) string {
+	switch s {
+	case semanticapi.DiagnosticSeverityError:
+		return "error"
+	case semanticapi.DiagnosticSeverityWarning:
+		return "warning"
+	case semanticapi.DiagnosticSeverityInformation:
+		return "info"
+	case semanticapi.DiagnosticSeverityHint:
+		return "hint"
+	default:
+		return "diagnostic"
+	}
+}
+
+func diagnosticCode(d semanticapi.Diagnostic) string {
+	if d.CodeIsInt {
+		return fmt.Sprintf("[%d]", d.CodeInt)
+	}
+	if d.Code != "" {
+		return "[" + d.Code + "]"
+	}
+	return ""
+}
+
+// diagnosticRendered extracts rust-analyzer's rustc-rendered ANSI output
+// from a diagnostic's data field, when present.
+func diagnosticRendered(data json.RawMessage) string {
+	if len(data) == 0 {
+		return ""
+	}
+	var v struct {
+		Rendered string `json:"rendered"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return ""
+	}
+	return v.Rendered
 }

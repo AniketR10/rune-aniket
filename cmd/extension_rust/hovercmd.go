@@ -56,6 +56,9 @@ type hoverCmd struct {
 	wm     browserapi.WindowManager
 	opener browserapi.ResourceOpener
 	notify browserapi.Notifications
+	// runner executes the runnable carried by a runSingle/debugSingle hover
+	// action. Debug has no adapter here, so it runs the target like Run.
+	runner *runCmd
 }
 
 var _ textapi.CommandHandler = (*hoverCmd)(nil)
@@ -72,7 +75,7 @@ type hoverResult struct {
 // hoverCommandGroup is a titled group of command links, matching
 // rust-analyzer's CommandLinkGroup.
 type hoverCommandGroup struct {
-	Title    string            `json:"title"`
+	Title    string             `json:"title"`
 	Commands []hoverCommandLink `json:"commands"`
 }
 
@@ -157,17 +160,16 @@ func (c *hoverCmd) pickAction(ctx context.Context, links []hoverCommandLink) err
 		if idx < 0 || idx >= len(links) {
 			return nil
 		}
-		return c.dispatch(links[idx])
+		return c.dispatch(ctx, links[idx])
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
 // dispatch performs the client-side action for a hover command link.
-// gotoLocation and showReferences navigate the buffer; the run/debug and
-// parameter-hint commands have no execution surface here, so their label is
-// surfaced via a notification instead.
-func (c *hoverCmd) dispatch(link hoverCommandLink) error {
+// gotoLocation and showReferences navigate the buffer; runSingle/debugSingle
+// execute the carried runnable (debug lacks an adapter, so it runs like run).
+func (c *hoverCmd) dispatch(ctx context.Context, link hoverCommandLink) error {
 	switch link.Command {
 	case "rust-analyzer.gotoLocation":
 		loc, ok := parseGotoLocation(link.Arguments)
@@ -186,9 +188,14 @@ func (c *hoverCmd) dispatch(link hoverCommandLink) error {
 			return openLocation(c.editor, c.wm, c.opener, locs[0])
 		}
 		return c.showLocations(locs)
+	case "rust-analyzer.runSingle", "rust-analyzer.debugSingle":
+		r, ok := parseRunnable(link.Arguments)
+		if !ok {
+			_, _ = c.notify.Notify(browserapi.LevelInfo, "No runnable for %q", link.Title)
+			return nil
+		}
+		return c.runner.run(ctx, r)
 	default:
-		// The only other hover actions are runSingle/debugSingle (Runnable);
-		// rune has no run/debug surface wired to hover, so report the label.
 		label := strings.TrimSpace(link.Tooltip)
 		if label == "" {
 			label = strings.TrimSpace(link.Title)
@@ -253,4 +260,17 @@ func parseShowReferences(args []json.RawMessage) []semanticapi.Location {
 		return nil
 	}
 	return locs
+}
+
+// parseRunnable decodes rust-analyzer.runSingle/debugSingle's single Runnable
+// argument.
+func parseRunnable(args []json.RawMessage) (runnable, bool) {
+	if len(args) == 0 {
+		return runnable{}, false
+	}
+	var r runnable
+	if err := json.Unmarshal(args[0], &r); err != nil || r.Kind == "" {
+		return runnable{}, false
+	}
+	return r, true
 }

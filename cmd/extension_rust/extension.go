@@ -160,7 +160,8 @@ func (e *rustExtension) extendWorkspaceWith(
 	if err := editor.SubscribeEvents(evs, sel); err != nil {
 		return fmt.Errorf("subscribe selection events: %w", err)
 	}
-	actionManual, actionHandler := newRustActionHandler(lsp, editor, wm, notify, opener, sel, experimental)
+	actionManual, actionHandler := newRustActionHandler(
+		lsp, editor, wm, notify, opener, sel, exec, cwd.Path(), experimental)
 	if err := registerCommand(actionManual, actionHandler); err != nil {
 		return fmt.Errorf("register rust action command: %w", err)
 	}

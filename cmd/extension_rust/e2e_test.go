@@ -509,13 +509,13 @@ func TestE2E(t *testing.T) {
 		// The cursor must sit at the crate root outside any `mod` item so
 		// rust-analyzer's child_modules takes the file-to-module-defs branch
 		// and returns the crate's module declarations. A cursor on a `mod x;`
-		// declaration instead descends into that module and (since our
-		// submodules have no children) yields nothing; see
-		// rust-analyzer/crates/ide/src/child_modules.rs. lib.rs declares its
-		// modules on lines 0..11, so line 12 (past them) is outside every
-		// module node. childModules returns the declaration locations, all in
-		// lib.rs, and the command opens the first one.
-		cmd := rustCmdAt("child-modules", uri, resource, 12, 0)
+		// declaration instead descends into that module; see
+		// rust-analyzer/crates/ide/src/child_modules.rs. lib.rs ends with a
+		// dedicated comment anchor line (line 14, 0-based) that stays outside
+		// every module node regardless of how many modules precede it.
+		// childModules returns the declaration locations, all in lib.rs, and
+		// the command opens the first one.
+		cmd := rustCmdAt("child-modules", uri, resource, 14, 0)
 		require.NoError(t, handler.HandleCommand(t.Context(), cmd))
 		opened := opener.openedURIs()
 		require.NotEmpty(t, opened, "child-modules must open a declaration location")
@@ -645,6 +645,103 @@ func TestE2E(t *testing.T) {
 		assert.Contains(t, joined, "implementation",
 			"hover over the Widget struct offers an implementations action; got %v", titles)
 	})
+
+	// eval-predicate evaluates a where-clause predicate in the type
+	// environment at the cursor. `Marked: Marker` holds because predicate.rs
+	// has `impl Marker for Marked`. The cursor must be inside a function body
+	// so rust-analyzer has a type environment to evaluate against.
+	t.Run("EvalPredicate", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/predicate.rs"})
+		handler, me, _ := newTestActionHandler(t, env)
+		uri := parseTestURI(t, env.fileURIs["src/predicate.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		// Cursor inside eval_here's body (line 7, `    let _x = 1;`).
+		cmd := rustCmd("eval-predicate", uri, resource)
+		cmd.Args = []string{"eval-predicate", "Marked:", "Marker"}
+		cmd.Cursor.Content = term.Coordinates{X: 8, Y: 7}
+		text := runViewer(t, handler, cmd)
+		assert.Contains(t, strings.ToLower(text), "holds",
+			"Marked: Marker holds because impl Marker for Marked exists; got %q", text)
+	})
+
+	// diagnostics pulls rust-analyzer's diagnostics for the current file.
+	// diag.rs assigns a &str to a u32 binding, so rust-analyzer reports a
+	// mismatched-types error. Diagnostics are computed asynchronously after
+	// the file opens, so poll until the error shows up.
+	t.Run("Diagnostics", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/diagbin.rs"})
+		handler, me, _ := newTestActionHandler(t, env)
+		uri := parseTestURI(t, env.fileURIs["src/diagbin.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		var text string
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			text = runViewerOrEmpty(t, handler, rustCmdAt("diagnostics", uri, resource, 1, 0))
+			if strings.Contains(text, "E0308") {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		// rust-analyzer's own type-mismatch diagnostic for `let _x: u32 = "..."`
+		// carries code E0308 and message "expected u32, found &'static str".
+		assert.Contains(t, text, "E0308",
+			"diagnostics should report the type-mismatch error code; got %q", text)
+		assert.Contains(t, strings.ToLower(text), "expected u32",
+			"diagnostics should include the diagnostic message; got %q", text)
+	})
+
+	// run fetches the runnable at the cursor and hands the reconstructed
+	// command to the workspace executor. The command reconstruction is
+	// validated in TestRunnableCommand*; this asserts the end-to-end path
+	// against the real rust-analyzer runnable, capturing the command instead
+	// of spawning a real (slow, network-bound) cargo build.
+	t.Run("Run", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/main.rs"})
+		capture := &captureExecutor{fakeStdout: "1 1\n"}
+		handler, me, _ := newTestActionHandlerExec(t, env, capture)
+		uri := parseTestURI(t, env.fileURIs["src/main.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		// Cursor on `fn main` (line 3, col 3) yields several runnables (run,
+		// check, test, ...), so a picker appears; select "run e2e".
+		text := runRunAction(t, handler, rustCmdAt("run", uri, resource, 3, 3), "run e2e")
+
+		cmd, ok := capture.lastCmd()
+		require.True(t, ok, "run should hand a command to the executor")
+		assert.Equal(t, "cargo", cmd.Path, "cargo runnable runs the cargo binary")
+		assert.Contains(t, cmd.Args, "run", "the e2e main runnable is a cargo run")
+		assert.Contains(t, cmd.Args, "e2e", "the runnable targets the e2e binary")
+		assert.Contains(t, text, "1 1", "the viewer shows the captured program output; got %q", text)
+	})
+
+	// The hover Run action (rust-analyzer.runSingle) executes the runnable it
+	// carries, not just a notification. Hovering `fn main`, then selecting the
+	// Run action, hands a cargo run command to the executor.
+	t.Run("HoverRunAction", func(t *testing.T) {
+		t.Parallel()
+		env := initRustAnalyzer(t, raBin, []string{"src/main.rs"})
+		capture := &captureExecutor{fakeStdout: "1 1\n"}
+		handler, me, _ := newTestActionHandlerExec(t, env, capture)
+		uri := parseTestURI(t, env.fileURIs["src/main.rs"])
+		resource := &stubResource{uri: uri}
+		me.Register(resource)
+
+		// Cursor on `fn main` (line 3, col 3); select the Run action.
+		titles := runHoverAction(t, handler, rustCmdAt("hover", uri, resource, 3, 3), "Run")
+		require.NotEmpty(t, titles, "hover over fn main offers Run/Debug actions")
+		cmd, ok := capture.lastCmd()
+		require.True(t, ok, "the Run hover action executes the runnable")
+		assert.Equal(t, "cargo", cmd.Path)
+		assert.Contains(t, cmd.Args, "run")
+	})
 }
 
 // runCommand runs a code-action command and applies the assist whose
@@ -753,6 +850,27 @@ func runViewer(t *testing.T, handler textapi.CommandHandler, cmd textapi.Command
 	return view.text
 }
 
+// runViewerOrEmpty runs a viewer subcommand and returns the floating
+// textView's text, or "" when the command showed no viewer (e.g. an empty
+// result reported via a notification). It clears any previously recorded
+// floating handler first so repeated polling calls do not observe a stale
+// viewer from an earlier iteration.
+func runViewerOrEmpty(t *testing.T, handler textapi.CommandHandler, cmd textapi.Command) string {
+	t.Helper()
+	wm := handlerWM(t, handler)
+	wm.mu.Lock()
+	wm.floating = nil
+	wm.mu.Unlock()
+	require.NoError(t, handler.HandleCommand(context.Background(), cmd))
+	wm.mu.Lock()
+	f := wm.floating
+	wm.mu.Unlock()
+	if view, ok := f.(*textView); ok {
+		return view.text
+	}
+	return ""
+}
+
 // runHoverAction runs a `rust hover` command, waits for the hover-action
 // picker, records its labels, selects the entry whose label contains want
 // (or the first entry when want is empty), and drives the command to
@@ -815,4 +933,58 @@ func selectListPicker(picker *listPicker, want string) {
 		picker.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowDown})
 	}
 	picker.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+}
+
+// runRunAction runs a `rust run` command, waits for the runnables picker,
+// selects the entry whose label contains want, drives the command to
+// completion, and returns the text of the output viewer it then shows.
+func runRunAction(
+	t *testing.T, handler textapi.CommandHandler, cmd textapi.Command, want string,
+) string {
+	t.Helper()
+	wm := handlerWM(t, handler)
+	wm.mu.Lock()
+	wm.floating = nil
+	wm.mu.Unlock()
+
+	done := make(chan error, 1)
+	go func() { done <- handler.HandleCommand(context.Background(), cmd) }()
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+			return viewerText(wm)
+		default:
+		}
+		wm.mu.Lock()
+		picker, isPicker := wm.floating.(*listPicker)
+		wm.mu.Unlock()
+		if isPicker {
+			selectListPicker(picker, want)
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-time.After(20 * time.Second):
+				t.Fatalf("timed out completing run action for %q", want)
+			}
+			return viewerText(wm)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for runnables picker for %q", want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// viewerText returns the text of the floating textView currently recorded on
+// wm, or "" when the latest floating handler is not a textView.
+func viewerText(wm *fakeWM) string {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	if view, ok := wm.floating.(*textView); ok {
+		return view.text
+	}
+	return ""
 }

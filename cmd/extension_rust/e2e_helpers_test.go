@@ -253,8 +253,27 @@ func newTestActionHandlerOpener(
 	require.NoError(t, me.SubscribeEvents(
 		[]textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}, sel))
 	opener := newMockResourceOpener(me)
-	_, handler := newRustActionHandler(env.mgr, me, &fakeWM{}, mn, opener, sel, true)
+	_, handler := newRustActionHandler(
+		env.mgr, me, &fakeWM{}, mn, opener, sel, newDirExecutor(env.dir), env.dir, true)
 	return handler, me, mn, opener
+}
+
+// newTestActionHandlerExec is newTestActionHandler wired with a caller-
+// supplied executor, so run tests can capture the reconstructed command
+// instead of spawning a real cargo build.
+func newTestActionHandlerExec(
+	t *testing.T, env *rustEnvE2E, exec workspaceapi.Executor,
+) (textapi.CommandHandler, *mockEditor, *mockNotifications) {
+	t.Helper()
+	me := newMockEditor()
+	mn := &mockNotifications{}
+	sel := lspcmd.NewSelectionTracker()
+	require.NoError(t, me.SubscribeEvents(
+		[]textapi.EventType{textapi.EventTypeSelection, textapi.EventTypeCursor}, sel))
+	opener := newMockResourceOpener(me)
+	_, handler := newRustActionHandler(
+		env.mgr, me, &fakeWM{}, mn, opener, sel, exec, env.dir, true)
+	return handler, me, mn
 }
 
 // rustCmd builds a textapi.Command for the `rust` action command.

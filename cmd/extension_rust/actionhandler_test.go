@@ -36,13 +36,14 @@ import (
 )
 
 func newTestActionRouter(lsp semanticapi.LSP, notify *fakeNotifications) textapi.CommandHandler {
-	_, h := newRustActionHandler(lsp, &fakeEditor{}, &fakeWM{}, notify, nil, lspcmd.NewSelectionTracker(), true)
+	_, h := newRustActionHandler(lsp, &fakeEditor{}, &fakeWM{}, notify, nil,
+		lspcmd.NewSelectionTracker(), newFakeExecutor(), "/ws", true)
 	return h
 }
 
 func TestRustActionManualListsSubcommands(t *testing.T) {
 	manual, _ := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
-		newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), true)
+		newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), newFakeExecutor(), "/ws", true)
 	assert.Equal(t, actionCmdName, manual.Name)
 	names := make(map[string]bool)
 	for _, c := range manual.Commands {
@@ -59,13 +60,14 @@ func TestRustActionExperimentalGating(t *testing.T) {
 	experimentalOnly := []string{
 		"parent-module", "child-modules", "open-cargo-toml", "external-docs",
 		"join-lines", "matching-brace", "on-enter", "move-item-up", "move-item-down",
-		"ssr", "runnables", "type", "symbols", "hover",
+		"ssr", "runnables", "run", "type", "symbols", "hover", "eval-predicate",
 	}
 	alwaysOn := []string{"list", "extract", "status", "hir", "expand-macro", "reload-workspace"}
 
 	manualNames := func(experimental bool) map[string]bool {
 		manual, h := newRustActionHandler(&actionLSP{}, &fakeEditor{}, &fakeWM{},
-			newFakeNotifications(), nil, lspcmd.NewSelectionTracker(), experimental)
+			newFakeNotifications(), nil, lspcmd.NewSelectionTracker(),
+			newFakeExecutor(), "/ws", experimental)
 		names := make(map[string]bool)
 		for _, c := range manual.Commands {
 			names[c.Name] = true

@@ -7,6 +7,13 @@ edition = "2021"
 name = "e2e"
 path = "src/main.rs"
 
+# A deliberately ill-typed binary used by the diagnostics e2e test. It is a
+# separate bin target so rust-analyzer treats it as a linked crate root (and
+# reports its type error), while `cargo run --bin e2e` never compiles it.
+[[bin]]
+name = "diagbin"
+path = "src/diagbin.rs"
+
 [lib]
 name = "e2e"
 path = "src/lib.rs"

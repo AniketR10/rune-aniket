@@ -510,6 +510,41 @@ func (e realExecutor) Start(ctx context.Context, c workspaceapi.Cmd) (workspacea
 func (realExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
 func (realExecutor) Close() error                                  { return nil }
 
+// captureExecutor records the commands it is asked to start without
+// spawning a process, and immediately signals completion. It lets run
+// tests assert the reconstructed command against the real rust-analyzer
+// runnable without paying for a cargo compile.
+type captureExecutor struct {
+	mu         sync.Mutex
+	cmds       []workspaceapi.Cmd
+	fakeStdout string
+}
+
+func (e *captureExecutor) Start(_ context.Context, c workspaceapi.Cmd) (workspaceapi.Pid, error) {
+	e.mu.Lock()
+	e.cmds = append(e.cmds, c)
+	e.mu.Unlock()
+	if c.Stdout != nil && e.fakeStdout != "" {
+		_, _ = c.Stdout.Write([]byte(e.fakeStdout))
+	}
+	if c.Watcher != nil {
+		go func() { c.Watcher.WatchProcess() <- nil }()
+	}
+	return 1, nil
+}
+
+func (*captureExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (*captureExecutor) Close() error                                  { return nil }
+
+func (e *captureExecutor) lastCmd() (workspaceapi.Cmd, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.cmds) == 0 {
+		return workspaceapi.Cmd{}, false
+	}
+	return e.cmds[len(e.cmds)-1], true
+}
+
 func findRustup(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("rustup"); err != nil {

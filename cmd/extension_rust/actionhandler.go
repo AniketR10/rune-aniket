@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 )
@@ -53,7 +54,7 @@ func newRustActionHandler(
 	lsp semanticapi.LSP, editor textapi.Editor,
 	wm browserapi.WindowManager, notify browserapi.Notifications,
 	opener browserapi.ResourceOpener, sel *lspcmd.SelectionTracker,
-	experimental bool,
+	exec workspaceapi.Executor, cwd string, experimental bool,
 ) (textapi.CommandManual, textapi.CommandHandler) {
 	edit := editDeps{lsp: lsp, editor: editor, opener: opener, notify: notify, sel: sel}
 	handlers := map[string]textapi.CommandHandler{
@@ -96,6 +97,7 @@ func newRustActionHandler(
 		"related-tests":           stringViewCmd(lsp, wm, notify, relatedTestsView(lsp), "No related tests for the symbol at the cursor"),
 		"recursive-memory-layout": stringViewCmd(lsp, wm, notify, recursiveMemoryLayoutView(lsp), "No memory layout for the type at the cursor"),
 		"failed-obligations":      stringViewCmd(lsp, wm, notify, failedObligationsView(lsp), "No failed trait obligations at the cursor"),
+		"diagnostics":             stringViewCmd(lsp, wm, notify, diagnosticsView(lsp), "No diagnostics for this file"),
 
 		// Workspace/flycheck commands.
 		"reload-workspace":    &wsRequestCmd{lsp: lsp, notify: notify, method: "rust-analyzer/reloadWorkspace", done: "Reloaded the Cargo workspace"},
@@ -131,6 +133,7 @@ func newRustActionHandler(
 			{Name: "related-tests", Summary: "List the tests related to the symbol at the cursor"},
 			{Name: "recursive-memory-layout", Summary: "Show the recursive memory layout of the type at the cursor"},
 			{Name: "failed-obligations", Summary: "Show failed trait obligations at the cursor"},
+			{Name: "diagnostics", Summary: "List rust-analyzer's diagnostics for the current file"},
 			{Name: "reload-workspace", Summary: "Reload the Cargo workspace"},
 			{Name: "rebuild-proc-macros", Summary: "Rebuild the workspace proc macros"},
 			{Name: "run-flycheck", Summary: "Run flycheck (cargo check/clippy) for the current file"},
@@ -144,6 +147,7 @@ func newRustActionHandler(
 	// views, so they register only when the extension's `experimental`
 	// config flag is set.
 	if experimental {
+		runner := &runCmd{lsp: lsp, exec: exec, wm: wm, notify: notify, cwd: cwd}
 		experimentalHandlers := map[string]textapi.CommandHandler{
 			"parent-module":   &navCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify, method: "experimental/parentModule", posArg: true, notFound: "No parent module for this file"},
 			"child-modules":   &navCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify, method: "experimental/childModules", posArg: true, notFound: "No child modules for this file"},
@@ -158,9 +162,12 @@ func newRustActionHandler(
 			"ssr":            &ssrCmd{editDeps: edit},
 
 			"runnables": stringViewCmd(lsp, wm, notify, runnablesView(lsp), "No runnables at the cursor"),
+			"run":       runner,
 			"type":      &hoverRangeCmd{lsp: lsp, wm: wm, notify: notify, sel: sel},
 			"symbols":   &workspaceSymbolCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify},
-			"hover":     &hoverCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify},
+			"hover":     &hoverCmd{lsp: lsp, editor: editor, wm: wm, opener: opener, notify: notify, runner: runner},
+			"eval-predicate": stringViewCmd(lsp, wm, notify, evalPredicateView(lsp),
+				"rust-analyzer returned no predicate evaluation"),
 		}
 		maps.Copy(handlers, experimentalHandlers)
 		manual.Commands = append(manual.Commands,
@@ -175,9 +182,11 @@ func newRustActionHandler(
 			textapi.CommandManual{Name: "move-item-down", Summary: "Move the item at the cursor down"},
 			textapi.CommandManual{Name: "ssr", Summary: "Run a structural search and replace query (pattern ==>> replacement)"},
 			textapi.CommandManual{Name: "runnables", Summary: "List the runnable cargo targets at the cursor"},
+			textapi.CommandManual{Name: "run", Summary: "Run the cargo target at the cursor (pick one when several apply)"},
 			textapi.CommandManual{Name: "type", Summary: "Show the type of the current selection"},
 			textapi.CommandManual{Name: "symbols", Summary: "Search workspace symbols (types-only, workspace or with dependencies)"},
 			textapi.CommandManual{Name: "hover", Summary: "Show hover docs as markdown and pick a hover action (run/debug, go to impl/type)"},
+			textapi.CommandManual{Name: "eval-predicate", Summary: "Evaluate a trait predicate at the cursor (e.g. rust eval-predicate T: Clone)"},
 		)
 	}
 
