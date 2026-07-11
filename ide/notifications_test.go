@@ -24,17 +24,26 @@
 package ide
 
 import (
+	"context"
 	"hash/fnv"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/release/docrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/localstorage"
+	"unstable.build/go-tui/workspace"
 )
 
 func newTestNotifications(uri workspaceapi.URI, t *testing.T) (*testNotifier, *notis) {
@@ -69,6 +78,69 @@ func TestNotifyAcrossWorkspaces(t *testing.T) {
 		}
 		assert.Equal(t, expectedAttrs, workspaceMock.attrs)
 	})
+}
+
+// TestSetWorkspaceRequiresAttentionRace reproduces the data race
+// observed when many VTE run goroutines deliver notifications
+// concurrently: notis.Notify -> setTabAttr ->
+// setWorkspaceRequiresAttention mutates the shared tab/layout tree via
+// Resize off the event loop. The fix marshals that mutation through
+// scheduleNextTick; run under -race, this test fails before the fix
+// and passes after.
+func TestSetWorkspaceRequiresAttentionRace(t *testing.T) {
+	homeURI, err := workspaceapi.ParseURI("memory:///home")
+	require.NoError(t, err)
+
+	mu := new(sync.Mutex)
+	sched, drain := newTestScheduler(mu)
+	cfg := defaultCfg()
+	cfg.scheduleNextTick = sched
+
+	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+
+	dir := t.TempDir()
+	storage := localstorage.New(context.Background(), dir, docbson.Marshaler())
+	releaseManager := docrelease.NewManager(document.NewInMemoryService())
+
+	shRunner := new(shaderRunner)
+	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
+		nopShutdownShaderConfig(), loadingShaderConfig{}, openShaderConfig{},
+		component.FrameCharSetDefault())
+
+	h := new(workspaceManagerHandler)
+	h.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
+	err = h.init(nil, homeURI, manager,
+		notificationsConfig(), cfg, storage, dir,
+		func(term.Event) bool { return true },
+		FuncExtensionsRunner(testRunnerFn), mu, nil,
+		func() (ideConfig, error) { return cfg, nil },
+		".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager,
+		shRunner, 0, nil, false, false, newCommandObserverRegistry())
+	require.NoError(t, err)
+
+	wsURI, err := workspaceapi.ParseURI("memory:///ws")
+	require.NoError(t, err)
+	// Slot 1 is not the focused slot (focus defaults to 0), so Resize
+	// never dereferences this handler's embedded *ex.
+	h.workspaces[1] = &workspaceHandler{uri: wsURI}
+	h.width, h.height = 80, 24
+
+	attr := term.Attributes{Fg: term.ColorRed}
+	const goroutines = 32
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			h.setWorkspaceRequiresAttention(wsURI, attr)
+		}()
+	}
+	wg.Wait()
+	drain()
+
+	assert.Equal(t, attr, h.workspaces[1].attentionAttr)
 }
 
 func TestNotifyOnce(t *testing.T) {

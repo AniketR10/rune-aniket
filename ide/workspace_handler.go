@@ -695,14 +695,19 @@ func (h *workspaceManagerHandler) envSource(name string) (string, bool) {
 func (h *workspaceManagerHandler) setWorkspaceRequiresAttention(
 	uri workspaceapi.URI, attr term.Attributes,
 ) {
-	for _, w := range h.workspaces {
-		if w == nil || w.uri.String() != uri.String() {
-			continue
+	// Notifications arrive on background goroutines (e.g. VTE run
+	// workers), so the layout rebuild in Resize must be marshaled
+	// onto the event loop to avoid racing Draw/Resize.
+	h.scheduleNextTick(func() {
+		for _, w := range h.workspaces {
+			if w == nil || w.uri.String() != uri.String() {
+				continue
+			}
+			w.attentionAttr = attr
+			h.Resize(h.width, h.height)
+			break
 		}
-		w.attentionAttr = attr
-		h.Resize(h.width, h.height)
-		break
-	}
+	})
 }
 
 func (h *workspaceManagerHandler) focusBrowser() browser.Browser {
