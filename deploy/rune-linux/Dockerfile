@@ -78,31 +78,6 @@ RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
 RUN ssh-keyscan -t rsa git.unstable.build >> ~/.ssh/known_hosts
 RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 
-# Build the llama.cpp static libraries for the target arch before the Go link
-# step. cmd/rune links them via the cgo directives in llm/llamacpp/bindings.go
-# (`-L${SRCDIR}/libs -lserver-context -lllama ...`), so llm/llamacpp/libs/*.a
-# must exist and be built for $TARGETARCH; otherwise the cgo link fails with
-# `ld: cannot find -lserver-context`. The Go toolchain runs natively on the
-# builder while these C/C++ objects are produced by the cross compiler, so
-# cmake is driven in cross-compile mode (CMAKE_SYSTEM_NAME set + GGML_NATIVE
-# off so ggml emits a portable baseline rather than -march=native).
-RUN set -eux; \
-	case "$TARGETARCH" in \
-		amd64) \
-			CROSS_CC=x86_64-linux-gnu-gcc; \
-			CROSS_CXX=x86_64-linux-gnu-g++; \
-			CMAKE_PROC=x86_64; \
-			;; \
-		arm64) \
-			CROSS_CC=aarch64-linux-gnu-gcc; \
-			CROSS_CXX=aarch64-linux-gnu-g++; \
-			CMAKE_PROC=aarch64; \
-			;; \
-	esac; \
-	make -C /src/llm/llamacpp libs \
-		EXTRA_CMAKE_FLAGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=$CMAKE_PROC -DCMAKE_C_COMPILER=$CROSS_CC -DCMAKE_CXX_COMPILER=$CROSS_CXX -DGGML_NATIVE=OFF" \
-		JOBS="$(nproc)"
-
 # Select the cross-compiler toolchain and pkg-config path based on TARGETARCH.
 # Output layout mirrors Zed's convention:
 #   rune.app/bin/rune

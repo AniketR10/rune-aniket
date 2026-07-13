@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
@@ -49,9 +50,34 @@ import (
 // fresh temp directory for the local registry.
 func newRouterForTest(t *testing.T) *llmrouter.Router {
 	t.Helper()
-	r, err := llmrouter.New(llm.DefaultConfig(), t.TempDir(), storagestub.NewInMemoryService())
+	r, err := llmrouter.New(llm.DefaultConfig(), t.TempDir(),
+		storagestub.NewInMemoryService(), fakeLocalBackend{})
 	require.NoError(t, err)
 	return r
+}
+
+// fakeLocalBackend is a no-op llmapi.Service stand-in for the local
+// (llama-server) backend the router now requires at construction.
+type fakeLocalBackend struct{}
+
+func (fakeLocalBackend) CreateCompletion(
+	context.Context, llmapi.ModelEntry, llmapi.Request,
+) (iterator.Iterator[llmapi.Event], error) {
+	return iterator.FromSlice[llmapi.Event](nil), nil
+}
+
+func (fakeLocalBackend) CountTokens(llmapi.ModelEntry, []llmapi.Message) (int, error) {
+	return 0, nil
+}
+
+func (fakeLocalBackend) Models() iterator.Iterator[llmapi.ModelEntry] {
+	return iterator.FromSlice[llmapi.ModelEntry](nil)
+}
+
+func (fakeLocalBackend) GetModel(
+	context.Context, llmapi.ModelEntry,
+) (llmapi.ModelEntry, error) {
+	return llmapi.ModelEntry{}, llmapi.ErrModelNotFound
 }
 
 // newRegistryForTest returns a fresh llamacpp.Registry rooted in a temp

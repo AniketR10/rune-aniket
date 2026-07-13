@@ -2,10 +2,11 @@
 
 # rune-agent Linux build (cross-Go, no native libs).
 #
-# rune-agent no longer links to llama.cpp directly; local-model support
-# lives host-side under rune/llm/llamacpp. We still cross-compile through
-# the Go toolchain on $BUILDPLATFORM to avoid the qemu-user pointer
-# corruption (https://github.com/golang/go/issues/46527).
+# rune-agent does not link llama.cpp; local-model support is provided by
+# running the OpenAI-compatible `llama-server` binary as a managed host-side
+# subprocess. We still cross-compile through the Go toolchain on
+# $BUILDPLATFORM to avoid the qemu-user pointer corruption
+# (https://github.com/golang/go/issues/46527).
 ARG BUILDPLATFORM
 ARG TARGETOS
 ARG TARGETARCH

@@ -58,7 +58,8 @@ func TestGetModel_PropagatesClosedStorageError(t *testing.T) {
 	cfg.Gemini.APIKey = "test-key"
 	cfg.Gemini.BaseURL = "http://127.0.0.1:1"
 	r, err := New(cfg, t.TempDir(),
-		closedRootStorage{Service: storagestub.NewInMemoryService()})
+		closedRootStorage{Service: storagestub.NewInMemoryService()},
+		&fakeLocalService{})
 	require.NoError(t, err)
 
 	_, err = r.GetModel(context.Background(), llmapi.ModelEntry{Name: llmapi.DefaultModel})

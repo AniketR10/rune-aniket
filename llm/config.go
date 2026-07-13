@@ -32,7 +32,7 @@ import (
 	"unstable.build/go-tui/llm/anthropic"
 	"unstable.build/go-tui/llm/codex"
 	"unstable.build/go-tui/llm/gemini"
-	"unstable.build/go-tui/llm/llamacpp"
+	"unstable.build/go-tui/llm/llamaserver"
 	"unstable.build/go-tui/llm/openai"
 )
 
@@ -110,19 +110,17 @@ type CustomConfig struct {
 	AvailableModels map[string]int
 }
 
-// LocalConfig captures `models.local.*`. It embeds the llama.cpp
-// service Config so every llama.cpp tunable round-trips into the
-// per-request llamacpp.NewService call. Model-specific fields
-// (Model, ModelPath, ProjectorPath, ContextWindow) are filled per
-// request by the router from the resolved llmapi.ModelEntry.
+// LocalConfig captures `models.local.*`. It carries the llama-server
+// tunables plus the managed-subprocess lifecycle knobs. Model-specific
+// fields (model path, projector, context window) are supplied per request
+// by the backend from the resolved llmapi.ModelEntry.
 type LocalConfig struct {
 	// ModelsCacheDir is the on-disk root for the llamacpp registry.
 	// When empty, the router falls back to filepath.Join(dataDir, "models").
 	ModelsCacheDir string
 
-	// Service carries every llama.cpp runtime knob. The router copies
-	// it for each request and overlays the model-specific fields.
-	Service llamacpp.Config
+	// Service carries every llama-server runtime knob and lifecycle knob.
+	Service llamaserver.Config
 }
 
 // DefaultConfig returns the baseline used by ide.llmConfig() before
@@ -133,10 +131,7 @@ func DefaultConfig() Config {
 		Default:          "gpt-5.4",
 		ReasoningSummary: "auto",
 		Local: LocalConfig{
-			Service: llamacpp.Config{
-				NGPULayers: -1,
-				Sampling:   llamacpp.DefaultSamplerParams(),
-			},
+			Service: llamaserver.DefaultConfig(),
 		},
 	}
 }

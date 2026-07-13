@@ -45,6 +45,11 @@ import (
 // be safe for essentially every model on the Hub.
 const defaultContextWindow = 8192
 
+// LLMProvider identifies locally-served GGUF models in the model registry.
+// Entries carry this on ModelEntry.Provider so the router dispatches them to
+// the managed llama-server backend.
+const LLMProvider = "llamacpp"
+
 // ErrNotGGUFRepo and ErrNotFound are re-exports of the underlying
 // ociregistry errors so callers outside this package do not have to
 // import ociregistry directly. Tests and the shell's error formatting
@@ -72,7 +77,7 @@ type ProgressFunc func(downloaded, total int64)
 
 // DownloadResult is returned by Registry.Download once a model has been
 // fully pulled. ModelPath is the absolute on-disk path of the weight
-// blob so callers can feed it straight into llamacpp.NewService.
+// blob so callers can serve it via the llama-server backend.
 type DownloadResult struct {
 	Reference Reference
 	ModelPath string

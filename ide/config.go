@@ -250,6 +250,20 @@ func (c ideConfig) llmConfig() llm.Config {
 		overrideIntInto(local, "max_output_tokens", &out.Local.Service.MaxOutputTokens)
 		overrideString(local, "chat_template", &out.Local.Service.ChatTemplate)
 		overrideIntInto(local, "n_cache_reuse", &out.Local.Service.NCacheReuse)
+		overrideString(local, "host", &out.Local.Service.Host)
+		overrideString(local, "server_bin_path", &out.Local.Service.ServerBinPath)
+		overrideIntInto(local, "max_servers", &out.Local.Service.MaxServers)
+		if d, err := config.GetDuration(local, "idle_timeout",
+			out.Local.Service.IdleTimeout); err == nil {
+			out.Local.Service.IdleTimeout = d
+		}
+		if d, err := config.GetDuration(local, "startup_timeout",
+			out.Local.Service.StartupTimeout); err == nil {
+			out.Local.Service.StartupTimeout = d
+		}
+		if args, err := getStringSlice(local, "extra_args"); err == nil {
+			out.Local.Service.ExtraArgs = args
+		}
 
 		if sampling, ok := c.getConfig(local, "sampling"); ok {
 			s := &out.Local.Service.Sampling

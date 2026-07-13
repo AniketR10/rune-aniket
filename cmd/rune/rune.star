@@ -133,14 +133,14 @@ config = {
             "available_models": {},
         },
         "local": {
-            # llamacpp cache root. Empty means $RUNE_DATADIR/models.
+            # Local GGUF model cache root. Empty means $RUNE_DATADIR/models.
             "models_cache_dir":   "",
-            # Logical batch size (n_batch). 0 picks the llama.cpp default.
+            # Logical batch size (--batch-size). 0 picks the server default.
             "batch_size":         0,
             # Number of layers to offload to the GPU. Negative offloads
             # every layer the backend supports.
             "n_gpu_layers":       -1,
-            # Generation thread count. 0 lets llama.cpp pick.
+            # Generation thread count (--threads). 0 lets the server pick.
             "threads":            0,
             # Enable flash-attention when supported by the backend.
             "flash_attention":    False,
@@ -151,8 +151,25 @@ config = {
             # Minimum chunk size (tokens) for KV-cache shift-reuse. 0
             # disables shift-reuse (falls back to LCP-only matching).
             "n_cache_reuse":      0,
+            # Loopback address llama-server binds to. Empty means 127.0.0.1.
+            "host":               "",
+            # Explicit path to the llama-server binary. Empty resolves it
+            # via `pkg install llama-server`, then $PATH.
+            "server_bin_path":    "",
+            # Maximum number of local model servers running at once. When a
+            # new model would exceed the cap the least-recently-used idle
+            # server is stopped. 0 uses the built-in default (1).
+            "max_servers":        0,
+            # How long a server may sit idle before it is stopped, e.g.
+            # "5m". Empty uses the built-in default.
+            "idle_timeout":       "",
+            # How long to wait for a server to become ready, e.g. "120s".
+            # Empty uses the built-in default.
+            "startup_timeout":    "",
+            # Extra arguments appended verbatim to the llama-server command.
+            "extra_args":         [],
             # Sampler chain. Leaving any value at zero inherits the
-            # llama.cpp upstream default. Keys mirror SamplerParams
+            # llama-server upstream default. Keys mirror SamplerParams
             # exactly.
             "sampling": {
                 "seed":            0xFFFFFFFF,

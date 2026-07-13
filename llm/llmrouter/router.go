@@ -32,6 +32,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sync"
 
@@ -83,29 +84,25 @@ type Router struct {
 	// LocalRegistry so the `models local` REPL command can manage it
 	// without taking a separate dependency.
 	localRegistry *llamacpp.Registry
-	localCfg      llamacpp.Config
 
-	// mu guards localServices and closed. The host no longer serialises
+	// localService is the backend that serves ProviderLocal completions
+	// (the managed llama-server pool). It is supplied at construction and
+	// never mutated; the backend itself decides whether the server binary
+	// is installed and returns the install-instruction error when it is
+	// not. Never nil.
+	localService llmapi.Service
+
+	// mu guards closed. The host no longer serialises
 	// Router calls on the event-loop locker: llmrpc.Server dispatches each
 	// gRPC request on grpc-go's goroutine pool, so the Router must be
 	// internally goroutine-safe for the I/O-bound provider paths.
 	mu sync.Mutex
-	// localServices caches one llama.cpp Service per distinct
-	// (name, model path, projector path, context window) tuple. Each
-	// Service mmaps a multi-GiB GGUF and allocates a KV cache;
-	// constructing one per request (the original behaviour) leaked those
-	// resources every turn. Guarded by mu because gRPC handlers may
-	// dispatch concurrently. Close drains it.
-	localServices map[localCacheKey]localService
 	// hostedClients caches the constructed openai/anthropic/gemini
 	// clients keyed by the resolved API key. The key is resolved lazily
 	// (storage first, then config) so a `providers <p> setup` takes
 	// effect without restarting the IDE; a changed key produces a new
 	// cache entry. Guarded by mu.
 	hostedClients map[hostedCacheKey]llmapi.Service
-	// newLocal builds a llama.cpp Service. Tests swap in a fake to avoid
-	// loading a real GGUF.
-	newLocal func(llamacpp.Config) (localService, error)
 	// newHostedClient builds a throwaway hosted client for a given
 	// provider/key, used by VerifyProviderKey to test a key before
 	// storing it. Tests swap in a fake to avoid real network calls.
@@ -132,21 +129,6 @@ type Router struct {
 	aliasStore *aliasStore
 }
 
-// localService is the minimal interface a cached llama.cpp service must
-// satisfy. It exists so tests can substitute a fake that records Close
-// calls without paying the GGUF-load cost.
-type localService interface {
-	llmapi.Service
-	Close()
-}
-
-type localCacheKey struct {
-	Name          string
-	ModelPath     string
-	ProjectorPath string
-	ContextWindow uint32
-}
-
 type hostedCacheKey struct {
 	provider string
 	apiKey   string
@@ -161,22 +143,27 @@ var ErrRouterClosed = errors.New("llmrouter: router closed")
 // auth state (currently codex); pass an in-memory stub in tests that
 // don't exercise the codex path. Returns an error only when the local
 // registry cannot be initialised — stateless provider clients are
-// constructed eagerly and never fail.
-func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, error) {
+// constructed eagerly and never fail. local is the backend that serves
+// ProviderLocal completions (the managed llama-server pool); it must be
+// non-nil — the "server not installed" state is represented inside the
+// backend, never by a nil dependency.
+func New(
+	cfg llm.Config, dataDir string, storage storageapi.Service, local llmapi.Service,
+) (*Router, error) {
 	if storage == nil {
 		panic("llmrouter: New: storage must not be nil")
+	}
+	if local == nil {
+		panic("llmrouter: New: local backend must not be nil")
 	}
 	r := &Router{
 		cfg:           cfg,
 		storage:       storage,
-		localServices: make(map[localCacheKey]localService),
+		localService:  local,
 		hostedClients: make(map[hostedCacheKey]llmapi.Service),
 	}
 	r.store = newKeyStore(storage)
 	r.aliasStore = newAliasStore(storage)
-	r.newLocal = func(c llamacpp.Config) (localService, error) {
-		return llamacpp.NewService(c)
-	}
 	r.newHostedClient = r.buildHostedClient
 
 	// openai, anthropic, and gemini clients are constructed lazily by
@@ -202,7 +189,6 @@ func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, e
 		return nil, fmt.Errorf("llmrouter: init local registry: %w", err)
 	}
 	r.localRegistry = reg
-	r.localCfg = cfg.Local.Service
 
 	return r, nil
 }
@@ -213,19 +199,21 @@ func New(cfg llm.Config, dataDir string, storage storageapi.Service) (*Router, e
 func (r *Router) LocalRegistry() *llamacpp.Registry { return r.localRegistry }
 
 // Close releases provider clients that own off-process resources. Today
-// only cached llama.cpp services need explicit teardown — the other
-// clients hold only Go-side HTTP state. After Close the router rejects
-// further dispatches with ErrRouterClosed. Close is idempotent.
+// only the local backend (the managed llama-server pool) needs explicit
+// teardown — the other clients hold only Go-side HTTP state. After Close
+// the router rejects further dispatches with ErrRouterClosed. Close is
+// idempotent.
 func (r *Router) Close() error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.closed {
+		r.mu.Unlock()
 		return nil
 	}
 	r.closed = true
-	for k, svc := range r.localServices {
-		delete(r.localServices, k)
-		svc.Close()
+	local := r.localService
+	r.mu.Unlock()
+	if c, ok := local.(io.Closer); ok {
+		return c.Close()
 	}
 	return nil
 }
@@ -363,40 +351,23 @@ func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.S
 		// ModelEntry.BaseURL; rebuild a client tuned to that URL.
 		return openai.NewClient("ollama", r.cfg.OllamaClientConfig(model.BaseURL)), nil
 	case ProviderLocal:
-		return r.resolveLocal(model)
+		return r.resolveLocal()
 	default:
 		return nil, fmt.Errorf("llmrouter: no provider registered for %q", model.Provider)
 	}
 }
 
-// resolveLocal returns a cached llama.cpp Service for model, creating it
-// on first use.
-func (r *Router) resolveLocal(model llmapi.ModelEntry) (llmapi.Service, error) {
-	key := localCacheKey{
-		Name:          model.Name,
-		ModelPath:     model.BaseURL,
-		ProjectorPath: model.ProjectorPath,
-		ContextWindow: uint32(model.ContextWindow), // #nosec G115 -- context windows fit in uint32
-	}
+// resolveLocal returns the local backend. The backend owns the managed
+// llama-server pool; it decides whether the server binary is installed and,
+// if not, returns the install-instruction error when a completion is
+// dispatched.
+func (r *Router) resolveLocal() (llmapi.Service, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		return nil, ErrRouterClosed
 	}
-	if svc, ok := r.localServices[key]; ok {
-		return svc, nil
-	}
-	c := r.localCfg
-	c.Model = model.Name
-	c.ModelPath = model.BaseURL
-	c.ProjectorPath = model.ProjectorPath
-	c.ContextWindow = key.ContextWindow
-	svc, err := r.newLocal(c)
-	if err != nil {
-		return nil, err
-	}
-	r.localServices[key] = svc
-	return svc, nil
+	return r.localService, nil
 }
 
 // customModelEntries materialises cfg.Custom.AvailableModels as a

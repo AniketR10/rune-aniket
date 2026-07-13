@@ -73,7 +73,7 @@ EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean purge test coverage generate rune rune-agent ox-api claudeimport \
+.PHONY: debug clean test coverage generate rune rune-agent ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license dist \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-app-delve \
@@ -133,15 +133,13 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-linux-amd64-native rune-staging-dist-linux-arm64-native \
 	rune-staging-dist-linux-amd64-cross rune-staging-dist-linux-arm64-cross \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
-	deps rune-llamacpp-libs rune-llamacpp-init \
+	deps \
 	ox-api-init docs-init \
 	fuzz fuzz-list \
 	FORCE \
 	manual-ssh-test \
 	dist-tar-with-src dist-dmg-with-src dist-min-macos dist-min-linux \
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
-
-RUNE_LLAMACPP_STAMP=$(TARGET)/rune-llamacpp-libs.stamp
 
 # bluectl config matrix. Each leaf config pins BOTH auth.project-id and
 # release.collection so the publishing env + destination bucket are
@@ -186,7 +184,7 @@ claudeimport: $(CLAUDEIMPORT)
 	@ pre-commit install
 
 test: CI=$(CI)
-test: docs-init $(RUNE_LLAMACPP_STAMP) oxprobe-worker-test
+test: docs-init oxprobe-worker-test
 	@ go test -vet=off ./.../... $(GOTESTFLAGS)
 
 # oxprobe-worker-test runs the Cloudflare oxprobe worker's Python unit
@@ -196,7 +194,7 @@ oxprobe-worker-test:
 	@ cd $(OXPROBE_WORKER_DIR) && PYTHONPATH=python_modules $(OXPROBE_WORKER_PYTHON) -m unittest discover -s tests -v
 
 test: CI=$(CI)
-test-no-race: docs-init $(RUNE_LLAMACPP_STAMP)
+test-no-race: docs-init
 	@ go test ./.../... $(GOTESTFLAGSNORACE)
 
 coverage: docs-init $(BIN)
@@ -204,9 +202,8 @@ coverage: docs-init $(BIN)
 	@ go tool cover -html=$(BIN)/coverage
 
 # fuzz runs every `Fuzz*` target in the repository for FUZZTIME each.
-# Each target runs sequentially with -parallel=1 because some fuzzers
-# (notably the llamacpp model-backed ones) load multi-GiB GGUFs into
-# Metal and cannot be safely run in parallel worker processes.
+# Each target runs sequentially with -parallel=1 to keep resource usage
+# bounded.
 #
 # Override defaults on the command line:
 #   make fuzz FUZZTIME=30s         # longer per-target budget
@@ -215,7 +212,7 @@ FUZZTIME ?= 10s
 FUZZ_PKG ?= ./...
 FUZZ_TEST_FLAGS ?= -race -parallel=1 -count=1
 
-fuzz: docs-init $(RUNE_LLAMACPP_STAMP)
+fuzz: docs-init
 	@ set -e; \
 	pkgs=$$(go list -f '{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}' $(FUZZ_PKG)); \
 	for pkg in $$pkgs; do \
@@ -266,17 +263,10 @@ clean:
 	@$(MAKE) -C cmd/runectl clean
 	@$(MAKE) -C cmd/rune clean
 
-# purge does everything clean does and additionally wipes the llama.cpp build
-# tree (cmake _build with its .o objects) and the copied static libs, forcing
-# a full rebuild of the local-model backend on the next build.
-purge: clean
-	@$(MAKE) -C llm/llamacpp clean
-	@rm -f $(RUNE_LLAMACPP_STAMP)
-
 $(BIN):
 	@mkdir $(BIN)
 
-$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init $(RUNE_LLAMACPP_STAMP)
+$(BIN)/rune: $(EXECSRC) $(LIBSRC) $(BIN) docs-init
 	@cd cmd/rune && $(CGO_ENABLED) $(GO) build $(RUNE_GOFLAGS) -o ../../$@
 
 $(BIN)/ox-api: $(EXECSRC) $(LIBSRC) $(BIN)
@@ -804,16 +794,7 @@ notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"
 
 # deps brings in git-managed prerequisites that are needed for local builds.
-deps: rune-llamacpp-init ox-api-init docs-init
-
-# rune-llamacpp-init initialises the llama.cpp git submodule that lives
-# under rune/llm/llamacpp and is consumed by the rune host's local-model
-# backend. Safe to run repeatedly.
-#
-# Guarded on `.git` so a checked-out submodule with uncommitted local
-# edits is not silently reset to the superproject's pinned SHA.
-rune-llamacpp-init:
-	@ [ -e llm/llamacpp/llama.cpp/.git ] || git submodule update --init --recursive llm/llamacpp/llama.cpp
+deps: ox-api-init docs-init
 
 # ox-api-init makes sure the ox-api git submodule is checked out so the
 # cmd/ox-api package compiles. Safe to run repeatedly.
@@ -831,14 +812,3 @@ ox-api-init:
 # edits is not silently reset to the superproject's pinned SHA.
 docs-init:
 	@ [ -e cmd/rune/docs/.git ] || git submodule update --init --recursive cmd/rune/docs
-
-# rune-llamacpp-libs builds the static libraries used by rune/llm/llamacpp.
-# Skipped silently when the libs are already present and fresher than the
-# submodule's CMakeLists.txt — the submodule Makefile handles its own
-# up-to-date checks.
-$(RUNE_LLAMACPP_STAMP): rune-llamacpp-init
-	@ mkdir -p $(dir $@)
-	@ $(MAKE) -C llm/llamacpp libs
-	@ touch $@
-
-rune-llamacpp-libs: $(RUNE_LLAMACPP_STAMP)

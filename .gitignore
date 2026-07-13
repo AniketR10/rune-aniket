@@ -42,8 +42,4 @@ pkg/
 __pycache__/
 *.pyc
 
-# llamacpp test data: GGUF models downloaded on demand for service_test.go.
-# The cache subdirectory is populated by ociregistry when the
-# TestService_Testdata_* suite runs with RUNE_LLAMACPP_TESTDATA=1.
-cmd/rune-agent/llm/llamacpp/testdata/cache/
 python_modules/**

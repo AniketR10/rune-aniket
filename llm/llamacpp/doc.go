@@ -22,16 +22,13 @@
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
 
-// Package llamacpp provides CGO bindings to the vendored llama.cpp library and
-// exposes an llmapi.Service implementation that runs GGUF models locally.
+// Package llamacpp maintains the on-disk catalog of locally-cached GGUF
+// models. It downloads models from OCI/HuggingFace registries (see the
+// ociregistry subpackage), tracks them under a cache directory, and exposes
+// them as llmapi.ModelEntry values keyed by the LLMProvider identifier.
 //
-// The llama.cpp sources are pulled in as a git submodule under llama.cpp/.
-// Static libraries are produced by the package-local Makefile (which drives
-// CMake) and linked into the binary via CGO. See README.md for build
-// instructions.
-//
-// Build tags:
-//
-//	llamacpp_cuda — enables the CUDA backend (requires nvcc and a CUDA-capable
-//	                GPU). Libraries must be prebuilt with -DGGML_CUDA=ON.
+// Inference is no longer performed in-process: the router hands these entries
+// to the llamaserver backend, which runs the OpenAI-compatible `llama-server`
+// binary as a managed subprocess. This package is therefore
+// inference-agnostic and free of any CGo/llama.cpp linkage.
 package llamacpp

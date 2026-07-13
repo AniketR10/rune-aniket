@@ -37,7 +37,8 @@ import (
 // rune.star ships these defaults; any provider catalog that
 // can't be constructed from them is a bug worth catching early.
 func TestNew_AcceptsDefaultConfig(t *testing.T) {
-	r, err := New(llm.DefaultConfig(), t.TempDir(), storagestub.NewInMemoryService())
+	r, err := New(llm.DefaultConfig(), t.TempDir(), storagestub.NewInMemoryService(),
+		&fakeLocalService{})
 	require.NoError(t, err)
 	require.NotNil(t, r)
 	require.NotNil(t, r.LocalRegistry())

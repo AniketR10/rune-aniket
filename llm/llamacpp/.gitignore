@@ -1,3 +1,0 @@
-# Built static libraries — produced by `make -C cmd/rune-agent/llm/llamacpp libs`.
-libs/
-llama.cpp/_build/

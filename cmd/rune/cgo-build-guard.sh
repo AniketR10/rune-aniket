@@ -2,7 +2,7 @@
 # Run a cgo build command and fail when the linker reports a linked
 # object was built for a newer macOS than the link target.
 #
-# Why: the rune binary statically links the llama.cpp/GGML archives. The
+# Why: the rune binary statically links native (cgo) archives. The
 # final binary's LC_BUILD_VERSION minos is set by the link line, so it
 # can read a low floor (e.g. 13.3) even while it statically contains
 # objects compiled for a higher OS. Such a binary launches but can crash
@@ -41,8 +41,8 @@ fi
 
 if grep -q "was built for newer 'macOS' version" "$stderr_file"; then
     echo "ERROR: a linked object targets a newer macOS than the build target." >&2
-    echo "       This raises the effective minimum OS above what we advertise." >&2
-    echo "       Rebuild the offending dependency with a matching deployment target" >&2
-    echo "       (e.g. LLAMACPP_OSX_DEPLOYMENT_TARGET / CMAKE_OSX_DEPLOYMENT_TARGET)." >&2
-    exit 1
+	echo "       This raises the effective minimum OS above what we advertise." >&2
+	echo "       Rebuild the offending dependency with a matching deployment target" >&2
+	echo "       (e.g. CMAKE_OSX_DEPLOYMENT_TARGET / -mmacosx-version-min)." >&2
+	exit 1
 fi

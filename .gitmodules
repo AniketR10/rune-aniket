@@ -4,7 +4,3 @@
 [submodule "cmd/rune/docs"]
 	path = cmd/rune/docs
 	url = git@github.com:unstablebuild/docs-rune.git
-[submodule "llm/llamacpp/llama.cpp"]
-	path = llm/llamacpp/llama.cpp
-	url = https://github.com/ggml-org/llama.cpp.git
-	ignore = untracked

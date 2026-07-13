@@ -84,6 +84,7 @@ import (
 	"unstable.build/go-tui/ide/syntax/symboldb"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
+	"unstable.build/go-tui/llm/llamaserver"
 	"unstable.build/go-tui/llm/llmrouter"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/exoeditor"
@@ -117,6 +118,13 @@ var _ text.EventPublisher = (*workspaceManagerHandler)(nil)
 type workspaceManagerHandler struct {
 	mu                      sync.Locker
 	pkgmanager              *pkgManager
+	// localExecutor is a stable, IDE-scoped executor proxy handed to the
+	// llama-server backend at router construction. Its inner executor is
+	// swapped to the focused workspace's executor at each setExecutor site,
+	// mirroring the per-ex currentExecutor pattern. Before any workspace
+	// installs an executor it returns a clean "no executor installed" error
+	// rather than nil-derefing.
+	localExecutor           *currentExecutor
 	exitPromptOpen          bool
 	scheduleNextTick        func(func()) bool
 	confirmedForceExit      bool
@@ -472,12 +480,11 @@ func (h *workspaceManagerHandler) init(
 	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
 	h.commandHistory = search.NewHistory(
 		h.ideStorage, commandHistoryDocumentID, cfg.commandMaxHistory())
-	router, err := llmrouter.New(cfg.llmConfig(), sixDir, h.storage)
-	if err != nil {
-		return fmt.Errorf("init llm router: %w", err)
-	}
-	h.llmRouter = router
 	cfg.storage = h.ideStorage
+	// localExecutor is the stable, IDE-scoped executor proxy passed to the
+	// llama-server backend at router construction. Created non-nil here; its
+	// inner executor is installed at the setExecutor sites below.
+	h.localExecutor = &currentExecutor{}
 	h.events = newEventRouter(publishEvent)
 	h.frameCharSet = cfg.windowFrameCharset()
 	notiConfig.Interrupter = h.events.globalInterrupter()
@@ -524,6 +531,23 @@ func (h *workspaceManagerHandler) init(
 	h.homeURI = homeDirUri
 	h.homeWorkspace = homeWorkspace
 	h.setReleaseManager(releaseManager)
+	// Construct the llama-server backend and router here, after
+	// setReleaseManager has installed h.pkgmanager and h.notifications is
+	// set. The backend takes three stable, non-nil IDE-scoped handles; the
+	// "server not installed" state lives inside the locator, never in a nil
+	// dependency.
+	llmCfg := cfg.llmConfig()
+	localBackend := llamaserver.New(
+		llmCfg.Local.Service,
+		h.localExecutor,
+		llamaserver.NewPkgLocator(h.pkgmanager),
+		h.notifications.current(),
+	)
+	router, err := llmrouter.New(llmCfg, sixDir, h.storage, localBackend)
+	if err != nil {
+		return fmt.Errorf("init llm router: %w", err)
+	}
+	h.llmRouter = router
 	h.events.setFocus(h.homeURI)
 
 	// don't install a fs watcher for the home workspace,
@@ -580,6 +604,7 @@ func (h *workspaceManagerHandler) init(
 		exec, isExecutor := runner.(schemeapi.Executor)
 		if isExecutor {
 			h.empty.setExecutor(exec, wsExec, extExec.shell)
+			h.localExecutor.set(exec)
 		}
 		h.homeRunner = runner
 		h.homeLSPManager = lspManager
@@ -1480,6 +1505,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		exec, isExecutor := runner.(schemeapi.Executor)
 		if isExecutor {
 			ex.setExecutor(exec, wsExec, extExec.shell)
+			h.localExecutor.set(exec)
 		}
 		wh.Extensions.Store(runner)
 		wh.lspManager = lspManager
