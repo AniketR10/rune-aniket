@@ -119,15 +119,19 @@ func (m *multiLangServer) initialize(ctx context.Context) (
 }
 
 func (m *multiLangServer) start(ctx context.Context) error {
-	var errs []error
+	// start owns the lifecycle of every child it brings up: on the first
+	// child that fails, close the ones already started and return the
+	// error. A failed langServer.start has already cleaned up after itself,
+	// so it must not be Closed again. This keeps the contract that a caller
+	// only Closes a multiLangServer whose start returned nil.
 	children := m.allChildren()
-	for _, c := range children {
+	for i, c := range children {
 		if err := c.start(ctx); err != nil {
-			errs = append(errs, err)
+			for _, started := range children[:i] {
+				_ = started.Close()
+			}
+			return err
 		}
-	}
-	if err := errors.Join(errs...); err != nil {
-		return err
 	}
 	m.mu.Lock()
 	m.init = children[0].initResult()

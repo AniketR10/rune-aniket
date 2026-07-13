@@ -342,3 +342,159 @@ func newFakeLSPLangServer(t *testing.T) (*langServer, *fakeLSP, func()) {
 	}
 	return srv, fake, cleanup
 }
+
+// fakeChildServer is a minimal server used to exercise multiLangServer
+// lifecycle ownership without spawning real language-server processes.
+type fakeChildServer struct {
+	startErr   error
+	started    bool
+	closeCount int
+}
+
+func (f *fakeChildServer) start(context.Context) error {
+	if f.startErr != nil {
+		// A real langServer.start cleans up after itself on failure, so it
+		// is never Closed by the caller. Model that: a failed start leaves
+		// started=false and must not receive a later Close.
+		return f.startErr
+	}
+	f.started = true
+	return nil
+}
+
+func (f *fakeChildServer) Close() error { f.closeCount++; return nil }
+
+func (f *fakeChildServer) call(context.Context, string, any, any) error { return nil }
+func (f *fakeChildServer) notify(context.Context, string, any) error    { return nil }
+func (f *fakeChildServer) initialize(context.Context) (semanticapi.InitializeResult, error) {
+	return semanticapi.InitializeResult{}, nil
+}
+func (f *fakeChildServer) stop(context.Context) error                 { return nil }
+func (f *fakeChildServer) config() langConfig                         { return langConfig{} }
+func (f *fakeChildServer) key() serverKey                             { return serverKey{} }
+func (f *fakeChildServer) name() string                               { return "fake" }
+func (f *fakeChildServer) initResult() semanticapi.InitializeResult   { return semanticapi.InitializeResult{} }
+func (f *fakeChildServer) isAlive() bool                              { return f.started }
+
+// TestMultiLangServerStartOwnership pins the lifecycle contract behind the
+// remote gopls crash: when one child fails to start, multiLangServer.start
+// closes the siblings it already brought up and returns the error, without
+// Closing the failed child (langServer.start already self-cleans). The
+// caller must therefore NOT Close a multiLangServer whose start failed —
+// doing so previously re-Closed a never-started child and nil-deref'd its
+// pipes.
+func TestMultiLangServerStartOwnership(t *testing.T) {
+	t.Parallel()
+
+	t.Run("second child fails: first is closed, failed one is not", func(t *testing.T) {
+		t.Parallel()
+		first := &fakeChildServer{}
+		failed := &fakeChildServer{startErr: errors.New("gopls missing")}
+		third := &fakeChildServer{}
+		mls := &multiLangServer{children: []server{first, failed, third}}
+
+		err := mls.start(context.Background())
+		require.Error(t, err)
+
+		assert.Equal(t, 1, first.closeCount,
+			"an already-started child must be closed when a later child fails")
+		assert.Equal(t, 0, failed.closeCount,
+			"a failed start already self-cleaned; it must not be closed again")
+		assert.Equal(t, 0, third.closeCount,
+			"a child after the failure never started; it must not be closed")
+	})
+
+	t.Run("all succeed: no child is closed", func(t *testing.T) {
+		t.Parallel()
+		a := &fakeChildServer{}
+		b := &fakeChildServer{}
+		mls := &multiLangServer{children: []server{a, b}}
+
+		require.NoError(t, mls.start(context.Background()))
+		assert.Zero(t, a.closeCount)
+		assert.Zero(t, b.closeCount)
+	})
+}
+
+// retainingExecutor mimics a non-dup'ing executor such as the ssh scheme:
+// StartCommand keeps the *os.File it was handed (cmd.Stdin/Stdout) and
+// serves a fake LSP that answers "initialize" by reading/writing that file
+// from a background goroutine. Unlike os/exec (which dups the fd into the
+// child), it never dups, so if the caller closes its copy of the fd the
+// transport is torn down.
+type retainingExecutor struct {
+	t      *testing.T
+	cancel context.CancelFunc
+	file   *os.File
+}
+
+func (e *retainingExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	f, ok := cmd.Stdout.(*os.File)
+	require.True(e.t, ok, "expected *os.File stdout from langServer.start")
+	// Read/write the *os.File directly (no net.FileConn, which would dup
+	// the fd and mask the early-close bug). This mirrors x/crypto/ssh,
+	// which streams through the io.Reader/io.Writer by reference.
+	e.file = f
+	framer := jsonrpc2.HeaderFramer()
+	serveCtx, cancel := context.WithCancel(context.Background())
+	e.cancel = cancel
+	reader := framer.Reader(f)
+	writer := framer.Writer(f)
+	go func() {
+		for {
+			msg, err := reader.Read(serveCtx)
+			if err != nil {
+				return
+			}
+			req, ok := msg.(*jsonrpc2.Request)
+			if !ok || !req.IsCall() {
+				continue
+			}
+			// Reply with a valid (empty) InitializeResult.
+			resp, err := jsonrpc2.NewResponse(req.ID, semanticapi.InitializeResult{}, nil)
+			if err != nil {
+				return
+			}
+			_ = writer.Write(serveCtx, resp)
+		}
+	}()
+	return 1, nil
+}
+
+func (e *retainingExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (e *retainingExecutor) Close() error {
+	if e.cancel != nil {
+		e.cancel()
+	}
+	if e.file != nil {
+		_ = e.file.Close()
+	}
+	return nil
+}
+
+// TestLangServerStartKeepsFDForNonDupExecutor reproduces the remote gopls
+// "write unix : write: broken pipe" failure. langServer.start hands the LSP
+// end of a socketpair to StartCommand and then closed its own copy of that
+// fd, assuming the executor duped it (true for local os/exec, false for the
+// ssh scheme, which streams through the *os.File by reference). Closing it
+// early tears down the transport so the first initialize write breaks. The
+// server must keep the fd open until Close.
+func TestLangServerStartKeepsFDForNonDupExecutor(t *testing.T) {
+	t.Parallel()
+
+	exec := &retainingExecutor{t: t}
+	t.Cleanup(func() { _ = exec.Close() })
+
+	srv := newLangServer(context.Background(),
+		langConfig{id: "fake", command: "fake"},
+		"fake", exec, "file:///tmp", nil, semanticapi.InitializeParams{})
+	t.Cleanup(func() { _ = srv.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, srv.start(ctx),
+		"initialize must succeed; a broken pipe here means start closed the "+
+			"LSP fd the executor still streams through")
+}

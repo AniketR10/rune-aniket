@@ -638,7 +638,6 @@ func (m *Manager) initializeMultiServer(
 	}
 
 	if err := mls.start(ctx); err != nil {
-		_ = mls.Close()
 		return nil, err
 	}
 

@@ -78,6 +78,7 @@ type langServer struct {
 	rootURI    string
 	executor   schemeapi.Executor
 	handler    jsonrpc2.Handler
+	lspFile    *os.File
 	stdin      net.Conn
 	stdout     net.Conn
 	conn       *jsonrpc2.Connection
@@ -186,8 +187,13 @@ func (s *langServer) start(ctx context.Context) error {
 			"start %s: %w", s.cfg.command, err,
 		)
 	}
-	// StartCommand duped the fd; close our copy.
-	_ = lspFile.Close()
+	// Keep the LSP end of the socketpair open for the server's lifetime.
+	// The local file scheme dups the fd into the child, so closing our copy
+	// would be harmless there; but the ssh scheme streams through this
+	// *os.File by reference (x/crypto/ssh io.Copy goroutines), so an early
+	// close tears down the transport and the first write breaks the pipe.
+	// Close it in Close() instead, alongside the IDE-side pipes.
+	s.lspFile = lspFile
 
 	stdout, err := net.FileConn(ideFile)
 	if err != nil {
@@ -236,7 +242,11 @@ func (s *langServer) Close() error {
 	// conn.Close blocks before because it's calling conn.Wait.
 	_ = s.stdin.Close()
 	_ = s.stdout.Close()
-	return s.conn.Close()
+	err := s.conn.Close()
+	if s.lspFile != nil {
+		_ = s.lspFile.Close()
+	}
+	return err
 }
 
 func (s *langServer) initialize(ctx context.Context) (
