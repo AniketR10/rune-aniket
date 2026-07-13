@@ -509,7 +509,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		lookup,
 	)
 	require.NoError(t, err)
@@ -554,7 +554,7 @@ tutorial(entry=run)
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", keyFor,
+		"standard", keyFor,
 		nil,
 	)
 	require.NoError(t, err)

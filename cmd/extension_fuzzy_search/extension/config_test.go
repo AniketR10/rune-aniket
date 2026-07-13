@@ -28,8 +28,8 @@ func TestBundledConfigStar(t *testing.T) {
 		mode string
 	}{
 		{"modal", "modal"},
-		{"modeless", "modeless"},
-		{"empty_mode_acts_as_non_modeless", ""},
+		{"standard", "standard"},
+		{"empty_mode_acts_as_non_standard", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,16 +64,16 @@ func TestBundledConfigStar(t *testing.T) {
 			assert.NotContains(t, aliases, "tabsearch")
 			assert.NotContains(t, aliases, "workspacesearch")
 
-			// <s-m-f>: searchtext is the only modeless-specific override
+			// <s-m-f>: searchtext is the only standard-specific override
 			// (Sublime-style project search); modal must NOT bind it. The
-			// other modeless bindings (<m-f>, <m-;>, <a-g>, <s-m-r>) live
-			// in the user-editable cmd/rune/override_modeless.star file.
-			if tc.mode == "modeless" {
+			// other standard bindings (<m-f>, <m-;>, <a-g>, <s-m-r>) live
+			// in the user-editable standard override preset.
+			if tc.mode == "standard" {
 				assert.Equal(t, "searchtext", kb["<s-m-f>"],
-					"modeless should bind <s-m-f> to searchtext")
+					"standard should bind <s-m-f> to searchtext")
 			} else {
 				_, ok := kb["<s-m-f>"]
-				assert.False(t, ok, "non-modeless must not bind <s-m-f>")
+				assert.False(t, ok, "non-standard must not bind <s-m-f>")
 			}
 
 			_, hasCxp := kb["<c-x><c-p>"]

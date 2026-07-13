@@ -81,7 +81,7 @@ func TestCheatsheetUnboundCommandFallbackKeepsArgs(t *testing.T) {
 }
 
 // TestCheatsheetModalTips verifies the prompt-navigation rows switch on
-// editor mode: modal shows the vi-style chords, modeless shows arrows.
+// editor mode: modal shows the vi-style chords, standard shows arrows.
 func TestCheatsheetModalTips(t *testing.T) {
 	cfg := cheatsheetTestConfig()
 
@@ -90,10 +90,10 @@ func TestCheatsheetModalTips(t *testing.T) {
 	assert.Contains(t, modal, "`<ctrl-j>` / `<ctrl-k>`")
 	assert.NotContains(t, modal, "| `<up>` / `<down>` | Move through the results |")
 
-	modeless, err := renderCheatsheet(cfg, false, "modeless", false)
+	standard, err := renderCheatsheet(cfg, false, "standard", false)
 	require.NoError(t, err)
-	assert.NotContains(t, modeless, "`<ctrl-j>` / `<ctrl-k>`")
-	assert.Contains(t, modeless, "| `<up>` / `<down>` | Move through the results |")
+	assert.NotContains(t, standard, "`<ctrl-j>` / `<ctrl-k>`")
+	assert.Contains(t, standard, "| `<up>` / `<down>` | Move through the results |")
 }
 
 // TestCheatsheetAutoSaveGatesWriteRow verifies the manual write row is
@@ -121,11 +121,11 @@ func TestCheatsheetEditorSection(t *testing.T) {
 	assert.Contains(t, modal, "https://docs.rune.build/learn/modal-editor")
 	assert.NotContains(t, modal, "exo")
 
-	modeless, err := renderCheatsheet(cfg, false, "modeless", false)
+	standard, err := renderCheatsheet(cfg, false, "standard", false)
 	require.NoError(t, err)
-	assert.Contains(t, modeless, "**modeless** editor")
-	assert.Contains(t, modeless, "https://docs.rune.build/learn/modeless-editor")
-	assert.NotContains(t, modeless, "exo")
+	assert.Contains(t, standard, "**standard** editor")
+	assert.Contains(t, standard, "https://docs.rune.build/learn/standard-editor")
+	assert.NotContains(t, standard, "exo")
 
 	exo, err := renderCheatsheet(cfg, true, "exo", false)
 	require.NoError(t, err)

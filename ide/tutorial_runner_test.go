@@ -257,7 +257,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -329,7 +329,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -434,7 +434,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -485,7 +485,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -576,7 +576,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -633,7 +633,7 @@ tutorial(entry=run)
 		browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)

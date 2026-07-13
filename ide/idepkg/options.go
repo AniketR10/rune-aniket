@@ -45,7 +45,7 @@ func WithSyntaxParser(parser syntaxapi.Parser) Option {
 	}
 }
 
-// WithEditorMode sets the resolved editor mode ("modal", "modeless", "exo")
+// WithEditorMode sets the resolved editor mode ("modal", "standard", "emacs")
 // exposed to package config.star scripts as the RUNE_EDITOR_MODE predeclared
 // global. Empty values are not forwarded.
 func WithEditorMode(mode string) Option {

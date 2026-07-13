@@ -79,10 +79,13 @@ const (
 	inputMouse             = "mouse"
 	inputCurrent           = "current"
 	editorModeModal        = "modal"
-	editorModeModeless     = "modeless"
+	editorModeStandard     = "standard"
+	editorModeEmacs        = "emacs"
+	editorModeModeless     = "modeless" // deprecated alias for editorModeStandard
 	editorModeExo          = "exo"
 	editorFallbackModal    = "modal"
-	editorFallbackModeless = "modeless"
+	editorFallbackStandard = "standard"
+	editorFallbackModeless = "modeless" // deprecated alias for editorFallbackStandard
 	keyCommandAliases      = "aliases"
 	keyCommandKey          = "key"
 	keyCommandHistoryKey   = "history_key"
@@ -560,7 +563,7 @@ func (c ideConfig) commandKeyBindingLookup() func(string, []string) string {
 }
 
 func (c ideConfig) commandKey() (ret term.KeyComb) {
-	if c.editorMode() == editorModeModeless {
+	if c.editorMode() == editorModeStandard {
 		ret = defaultModelessCommandKey
 	} else {
 		ret = defaultModalCommandKey
@@ -2251,25 +2254,40 @@ func (c ideConfig) exoQuit() string {
 
 // exoFallback returns the Rune-native fallback editor used by the
 // exofallback router for URIs that exo cannot serve (e.g.
-// memory://). Valid values are "modal" or "modeless"; defaults to
-// "modeless".
+// memory://). Valid values are "modal" or "standard" ("modeless" is
+// accepted as a deprecated alias for "standard"); defaults to
+// "standard".
 func (c ideConfig) exoFallback() string {
 	cfg, ok := c.exo()
 	if !ok {
-		return editorFallbackModeless
+		return editorFallbackStandard
 	}
 	s, err := cfg.GetString("fallback")
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["editor.exo.fallback"] = err
 		}
-		return editorFallbackModeless
+		return editorFallbackStandard
 	}
-	switch s {
-	case editorFallbackModal, editorFallbackModeless:
-		return s
+	if canonical, ok := normalizeEditorFallback(s); ok {
+		return canonical
 	}
-	return editorFallbackModeless
+	return editorFallbackStandard
+}
+
+// normalizeEditorFallback resolves a raw editor.exo.fallback value to a
+// canonical fallback ("modal" or "standard"), mapping the deprecated
+// "modeless" alias to "standard". ok is false for an unrecognised
+// value. This is the single place the deprecated alias is understood so
+// no other file needs to know about it.
+func normalizeEditorFallback(raw string) (canonical string, ok bool) {
+	switch raw {
+	case editorFallbackModal:
+		return editorFallbackModal, true
+	case editorFallbackModeless, editorFallbackStandard:
+		return editorFallbackStandard, true
+	}
+	return "", false
 }
 
 // exoOverrideHighlights reports whether Rune should overlay its
@@ -2309,7 +2327,9 @@ func (c ideConfig) editorMode() (ret string) {
 		return
 	}
 	switch mode {
-	case editorModeModal, editorModeModeless, editorModeExo:
+	case editorModeModeless, editorModeStandard:
+		ret = editorModeStandard
+	case editorModeModal, editorModeEmacs, editorModeExo:
 		ret = mode
 	}
 	return
@@ -3780,7 +3800,7 @@ func decodeDefaultConfig(d DefaultConfig) (map[string]any, error) {
 		src:      src,
 		filename: "rune.star",
 		params: map[string]any{
-			"mode": map[bool]string{true: editorModeModal, false: editorModeModeless}[d.modal],
+			"mode": map[bool]string{true: editorModeModal, false: editorModeStandard}[d.modal],
 			"tui":  d.tui,
 		},
 	})

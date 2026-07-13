@@ -6,8 +6,10 @@
 #   RUNE_DATADIR      string  Rune's data directory.
 #   RUNE_PKG_ID       string  the installed package's ID.
 #   RUNE_PKG_VERSION  string  the installed package's version.
-#   RUNE_EDITOR_MODE  string  "modal" | "modeless" — the resolved host
-#                             editor mode (empty when not yet known). The
+#   RUNE_EDITOR_MODE  string  "modal" | "standard" | "emacs" — the resolved
+#                             host editor mode (empty when not yet known).
+#                             "modeless" is a deprecated alias for
+#                             "standard". The
 #                             host substitutes exo with its configured
 #                             editor.exo.fallback value before invoking
 #                             this script, so "exo" never reaches here.
@@ -79,5 +81,5 @@ config = {
     },
 }
 
-if mode == "modeless":
+if mode == "standard":
     config["command"]["key_bindings"]["<s-m-f>"] = "searchtext"

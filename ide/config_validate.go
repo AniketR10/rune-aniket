@@ -84,7 +84,7 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 	switch editorMode {
 	case editorModeModal:
 		/* no validation needed */
-	case editorModeModeless:
+	case editorModeStandard, editorModeEmacs:
 		// unfortunately <c-space> is mapped and dispatched with Ch == ' '.
 		// Handle edge case to avoid false positive.
 		isCtrlSpace := commandKey.Ch == ' ' &&
@@ -94,7 +94,7 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 		if isIncompatible {
 			cfg["command"].(map[string]any)[keyCommandKey] = "<c-space>"
 			return fmt.Errorf("command key must use ctrl or alt modifiers in " +
-				"modeless editor mode otherwise you wouldn't be able to activate it," +
+				"standard or emacs editor mode otherwise you wouldn't be able to activate it," +
 				" falling back to <c-space>")
 		}
 	}
@@ -155,9 +155,9 @@ func validateExo(c *ideConfig, cfg map[string]any) (err error) {
 	return
 }
 
-// validateExoFallback ensures editor.exo.fallback, when set, is one
-// of "modal" or "modeless". Unrecognised values are rewritten to
-// "modeless" so the IDE still boots with the documented default. An
+// validateExoFallback ensures editor.exo.fallback, when set, resolves
+// to a valid fallback via normalizeEditorFallback. Unrecognised values
+// are rewritten to the canonical default so the IDE still boots. An
 // absent fallback key is treated as valid and uses the default.
 func validateExoFallback(c *ideConfig, cfg map[string]any) error {
 	exo, ok := c.exo()
@@ -171,19 +171,21 @@ func validateExoFallback(c *ideConfig, cfg map[string]any) error {
 		}
 		return fmt.Errorf("editor.exo.fallback: %w", err)
 	}
-	switch raw {
-	case "", editorFallbackModal, editorFallbackModeless:
+	if raw == "" {
+		return nil
+	}
+	if _, ok := normalizeEditorFallback(raw); ok {
 		return nil
 	}
 	if ed, ok := cfg["editor"].(map[string]any); ok {
 		if b, ok := ed["exo"].(map[string]any); ok {
-			b["fallback"] = editorFallbackModeless
+			b["fallback"] = editorFallbackStandard
 		}
 	}
 	return fmt.Errorf("editor.exo.fallback must be %q or %q; got %q, "+
 		"falling back to %q",
-		editorFallbackModal, editorFallbackModeless, raw,
-		editorFallbackModeless)
+		editorFallbackModal, editorFallbackStandard, raw,
+		editorFallbackStandard)
 }
 
 // parseGotoTemplate splits tpl around {line}/{col} placeholders and

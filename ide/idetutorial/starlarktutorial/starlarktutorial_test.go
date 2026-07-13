@@ -154,7 +154,7 @@ func newTutorial(t *testing.T, src string) (*Tutorial, *fakeNotis) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -298,7 +298,7 @@ func TestEntryRequired(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -314,7 +314,7 @@ func TestEntryMustBeCallable(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -330,7 +330,7 @@ func TestEntryMustTakeZeroArgs(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -350,7 +350,7 @@ func TestDuplicateTutorialRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -365,7 +365,7 @@ func TestEmptySourceRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.Error(t, err)
@@ -774,7 +774,7 @@ tutorial(entry=run)
 			nil, nil, notis, nil,
 			term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 			nil, nil, term.KeyComb{Ch: ':'},
-			"modeless", nil,
+			"standard", nil,
 			nil,
 		)
 		require.NoError(t, err, "alignment %q must parse", a)
@@ -794,7 +794,7 @@ tutorial(entry=run)
 		nil, nil, notis, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err, "unknown alignment must defer to the entry call")
@@ -1117,7 +1117,7 @@ tutorial(entry=run)
 		},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -1507,7 +1507,7 @@ def run():
     notify(message="c=[" + key_for("tabclose") + "]")
 tutorial(entry=run)
 `
-	tut, notis := newTutorialWith(t, src, "modeless", lookup)
+	tut, notis := newTutorialWith(t, src, "standard", lookup)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
 	assert.True(t, notis.containsSubstring("a=[<meta-n>]"),
@@ -1530,7 +1530,7 @@ def run():
     notify(message="k=[" + key_for("windownew") + "]")
 tutorial(entry=run)
 `
-	tut, notis := newTutorialWith(t, src, "modeless", nil)
+	tut, notis := newTutorialWith(t, src, "standard", nil)
 	resetAndWait(t, tut, time.Second)
 	waitFinished(t, tut, time.Second)
 	assert.True(t, notis.containsSubstring("k=[]"),
@@ -1656,7 +1656,7 @@ func TestLoadIsRejected(t *testing.T) {
 		nil, nil, nil, nil,
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil, term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.Error(t, err)

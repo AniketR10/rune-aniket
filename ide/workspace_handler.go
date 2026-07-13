@@ -273,7 +273,7 @@ func (h *workspaceManagerHandler) newEditor(
 	switch cfg.editorMode() {
 	case editorModeModal:
 		return h.newBuiltinModalEditor(cwd, cfg, svc), nil
-	case editorModeModeless:
+	case editorModeStandard:
 		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
 	case editorModeExo:
 		return h.newExoFallbackEditor(reloader, cwd, ws, tm, cfg, svc), nil
@@ -351,7 +351,7 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 ) text.Editor {
 	var fallback text.Editor
 	switch cfg.exoFallback() {
-	case editorFallbackModeless:
+	case editorFallbackStandard:
 		fallback = h.newBuiltinModelessEditor(cwd, cfg, svc)
 	default:
 		fallback = h.newBuiltinModalEditor(cwd, cfg, svc)
@@ -389,7 +389,7 @@ func (h *workspaceManagerHandler) newPromptEditor(
 	cfg ideConfig,
 ) command.Editor {
 	switch cfg.pkgEditorMode() {
-	case editorModeModeless:
+	case editorModeStandard:
 		return modelessPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),

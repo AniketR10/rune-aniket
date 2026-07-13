@@ -194,7 +194,7 @@ func WithDefaultConfigYAML(base string, overrides ...string) Option {
 			opts.defaultConfig = base
 			return
 		}
-		// NOTE: once we add the ability to choose between modal or modeless config,
+		// NOTE: once we add the ability to choose between modal or standard config,
 		// this should be a compile-time operation
 		ret := make(map[string]any)
 		for _, cfg := range append([]string{base}, overrides...) {
@@ -219,7 +219,7 @@ func WithDefaultConfigYAML(base string, overrides ...string) Option {
 // WithDefaultConfigStarlark sets the default baseline config as a Starlark
 // source. The script must bind a top-level `config` dict. The loader exposes
 // two predeclared globals to the script:
-//   - mode: "modal" when modal is true, otherwise "modeless"
+//   - mode: "modal" when modal is true, otherwise "standard"
 //   - tui: the given tui boolean
 func WithDefaultConfigStarlark(src string, modal bool, tui bool) Option {
 	return func(opts *options) {

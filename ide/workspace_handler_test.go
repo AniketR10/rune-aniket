@@ -183,7 +183,7 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 		mode string
 	}{
 		{name: "modal", mode: editorModeModal},
-		{name: "modeless", mode: editorModeModeless},
+		{name: "standard", mode: editorModeStandard},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -281,8 +281,8 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 							"a file from the explorer")
 				}
 
-			case editorModeModeless:
-				// modeless has no key-driven inline search in the
+			case editorModeStandard:
+				// standard has no key-driven inline search in the
 				// explorer; verify the non-search-mode behavior
 				// still holds end-to-end through the full
 				// wrapper chain. With the cursor on the first
@@ -294,7 +294,7 @@ func TestFileExplorerEnterDelegatesIntegration(t *testing.T) {
 				require.True(t, handled,
 					"<Enter> must be handled")
 				require.False(t, explorer.ed.IsSearchMode(),
-					"modeless must not be in search mode after "+
+					"standard must not be in search mode after "+
 						"<Enter> on a non-search context")
 				require.NotEqual(t, beforeRows,
 					explorer.ed.CellView().Rows(),
@@ -489,7 +489,7 @@ func TestGitlinkIntegration(t *testing.T) {
 		t.Skip("git binary not available")
 	}
 
-	for _, mode := range []string{editorModeModal, editorModeModeless} {
+	for _, mode := range []string{editorModeModal, editorModeStandard} {
 		t.Run(mode, func(t *testing.T) {
 			dir, commit, relFile := setupGitlinkRepo(t)
 

@@ -524,7 +524,7 @@ func TestKeyBindingsEditorModeIntro(t *testing.T) {
 		want string
 	}{
 		{"modal", "https://docs.rune.build/learn/modal-editor"},
-		{"modeless", "https://docs.rune.build/learn/modeless-editor"},
+		{"standard", "https://docs.rune.build/learn/standard-editor"},
 		{"exo", "consult its documentation for in-buffer key bindings"},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -592,14 +592,14 @@ func TestKeyBindingsMacrosSection(t *testing.T) {
 		assert.Less(t, macros, other, "macros must render above Other")
 	})
 
-	t.Run("modeless", func(t *testing.T) {
-		md, err := renderKeyBindings(cfg, keybindingsTestManuals(), "modeless", "darwin")
+	t.Run("standard", func(t *testing.T) {
+		md, err := renderKeyBindings(cfg, keybindingsTestManuals(), "standard", "darwin")
 		require.NoError(t, err)
 		assertKeyBindingListIntegrity(t, md)
 		assert.Contains(t, md, "## Macros")
 		assert.Contains(t, md, "- `<ctrl-q>`: Start recording; press again to stop (unnamed register)")
 		assert.Contains(t, md, "- `<ctrl-shift-q>`: Play the recorded macro")
-		assert.Contains(t, md, "https://docs.rune.build/learn/modeless-editor#macros")
+		assert.Contains(t, md, "https://docs.rune.build/learn/standard-editor#macros")
 	})
 
 	t.Run("exo", func(t *testing.T) {

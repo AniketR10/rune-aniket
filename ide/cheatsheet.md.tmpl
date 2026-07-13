@@ -74,12 +74,12 @@ To keep this temporary cheatsheet floating window as a permanent tab, run
 
 ## Editor
 
-{{if eq .EditorMode "modeless" -}}
-You are using the built-in **modeless** editor: keys always type into the
+{{if eq .EditorMode "standard" -}}
+You are using the built-in **standard** editor: keys always type into the
 buffer and editing commands are triggered with modifier chords, so there is
 no separate command mode to switch into.
 
-Learn more in the [modeless editor guide](https://docs.rune.build/learn/modeless-editor).
+Learn more in the [standard editor guide](https://docs.rune.build/learn/standard-editor).
 {{- else if eq .EditorMode "exo" -}}
 You are using an **exo** editor: Rune hands editing off to your own external
 editor (for example Vim or Neovim) while keeping its windows, tabs, and

@@ -77,9 +77,9 @@ func TestFileExplorerExoEnter(t *testing.T) {
 	}
 	cfg.ringBell = func() {}
 	require.Equal(t, "exo", cfg.editorMode())
-	// The exofallback default is modeless; verify it propagated so
+	// The exofallback default is standard; verify it propagated so
 	// downstream behaviour (Enter toggles, no vi search) matches.
-	require.Equal(t, "modeless", cfg.exoFallback())
+	require.Equal(t, "standard", cfg.exoFallback())
 
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)

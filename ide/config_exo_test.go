@@ -97,9 +97,10 @@ func TestPkgEditorModeSubstitutesExoFallback(t *testing.T) {
 		fallback string
 		want     string
 	}{
-		{"default_fallback_is_modeless", "", "modeless"},
+		{"default_fallback_is_standard", "", "standard"},
 		{"explicit_modal_fallback", "modal", "modal"},
-		{"explicit_modeless_fallback", "modeless", "modeless"},
+		{"explicit_modeless_fallback", "modeless", "standard"},
+		{"explicit_standard_fallback", "standard", "standard"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,15 +129,23 @@ func TestPkgEditorModeSubstitutesExoFallback(t *testing.T) {
 // TestPkgEditorModePassesNonExoThrough verifies modal/modeless are
 // forwarded verbatim to packages.
 func TestPkgEditorModePassesNonExoThrough(t *testing.T) {
-	for _, mode := range []string{"modal", "modeless"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want string
+	}{
+		{"modal", "modal"},
+		{"modeless", "standard"},
+		{"standard", "standard"},
+		{"emacs", "emacs"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
 			cfg := &ideConfig{
 				cfg: map[string]any{
-					"editor": map[string]any{"mode": mode},
+					"editor": map[string]any{"mode": tc.mode},
 				},
 				errors: map[string]error{},
 			}
-			assert.Equal(t, mode, cfg.pkgEditorMode())
+			assert.Equal(t, tc.want, cfg.pkgEditorMode())
 		})
 	}
 }
@@ -246,7 +255,7 @@ func TestValidateExoAcceptsKnownTemplates(t *testing.T) {
 	}
 }
 
-// TestExoFallbackDefaults asserts the accessor returns "modeless"
+// TestExoFallbackDefaults asserts the accessor returns "standard"
 // when no fallback key is set (the documented default).
 func TestExoFallbackDefaults(t *testing.T) {
 	cfg := ideConfig{
@@ -261,14 +270,22 @@ func TestExoFallbackDefaults(t *testing.T) {
 		},
 		errors: map[string]error{},
 	}
-	assert.Equal(t, "modeless", cfg.exoFallback())
+	assert.Equal(t, "standard", cfg.exoFallback())
 }
 
-// TestExoFallbackExplicitValues asserts both "modal" and "modeless"
-// round-trip through the accessor.
+// TestExoFallbackExplicitValues asserts "modal" and "standard"
+// round-trip through the accessor, and the deprecated "modeless"
+// alias normalizes to "standard".
 func TestExoFallbackExplicitValues(t *testing.T) {
-	for _, want := range []string{"modal", "modeless"} {
-		t.Run(want, func(t *testing.T) {
+	for _, tc := range []struct {
+		fallback string
+		want     string
+	}{
+		{"modal", "modal"},
+		{"standard", "standard"},
+		{"modeless", "standard"},
+	} {
+		t.Run(tc.fallback, func(t *testing.T) {
 			cfg := ideConfig{
 				cfg: map[string]any{
 					"editor": map[string]any{
@@ -276,19 +293,19 @@ func TestExoFallbackExplicitValues(t *testing.T) {
 						"exo": map[string]any{
 							"command":  "vim {file}",
 							"goto":     "<esc>:{line}<enter>",
-							"fallback": want,
+							"fallback": tc.fallback,
 						},
 					},
 				},
 				errors: map[string]error{},
 			}
-			assert.Equal(t, want, cfg.exoFallback())
+			assert.Equal(t, tc.want, cfg.exoFallback())
 		})
 	}
 }
 
 // TestValidateExoFallbackInvalidValueRewrites verifies an unknown
-// fallback string is rewritten to "modeless" so the IDE still boots.
+// fallback string is rewritten to "standard" so the IDE still boots.
 func TestValidateExoFallbackInvalidValueRewrites(t *testing.T) {
 	cfg := map[string]any{
 		"editor": map[string]any{
@@ -305,8 +322,8 @@ func TestValidateExoFallbackInvalidValueRewrites(t *testing.T) {
 	require.Error(t, err)
 
 	ic := ideConfig{cfg: cfg, errors: map[string]error{}}
-	assert.Equal(t, "modeless", ic.exoFallback(),
-		"invalid fallback must be rewritten to %q", "modeless")
+	assert.Equal(t, "standard", ic.exoFallback(),
+		"invalid fallback must be rewritten to %q", "standard")
 	// editor.mode remains "exo" since command/goto are valid.
 	assert.Equal(t, "exo", ic.editorMode())
 }

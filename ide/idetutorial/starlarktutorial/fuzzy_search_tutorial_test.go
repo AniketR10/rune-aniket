@@ -51,7 +51,7 @@ func newFuzzySearchTutorial(t *testing.T) (*Tutorial, *fakeNotis) {
 		term.Attributes{}, component.FrameCharSet{}, browser.PromptConfig{},
 		nil, nil,
 		term.KeyComb{Ch: ':'},
-		"modeless", nil,
+		"standard", nil,
 		nil,
 	)
 	require.NoError(t, err)

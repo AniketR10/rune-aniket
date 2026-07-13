@@ -3121,8 +3121,8 @@ func TestEditorModeParamExposed(t *testing.T) {
 
 	const src = `
 config = {}
-if RUNE_EDITOR_MODE == "modeless":
-    config["picked_mode"] = "modeless"
+if RUNE_EDITOR_MODE == "standard":
+    config["picked_mode"] = "standard"
 else:
     config["picked_mode"] = "other"
 `
@@ -3131,7 +3131,7 @@ else:
 		wantMod string
 	}{
 		{"modal", "other"},
-		{"modeless", "modeless"},
+		{"standard", "standard"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -3670,7 +3670,7 @@ func TestConfigMergeIntegration(t *testing.T) {
 			// Rune must read and update these without "undefined: config".
 			name:       "star overlay-style config without binding",
 			configName: "config.star",
-			base:       map[string]any{"editor": map[string]any{"mode": "modeless"}},
+			base:       map[string]any{"editor": map[string]any{"mode": "standard"}},
 			userConfig: "config[\"editor\"][\"mode\"] = \"modal\"\n",
 			steps: []mergeStep{{
 				pkgConfig:  "config = {\"env\": {\"GOROOT\": \"/go\"}}\n",

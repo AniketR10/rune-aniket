@@ -17,7 +17,7 @@ ck = command_key()
 mode = editor_mode()
 
 # Direction keys differ by editor mode: modal points with the home
-# row, modeless points with the arrow keys. The layout copy adapts to
+# row, the standard editor points with the arrow keys. The layout copy adapts to
 # whichever the user is running.
 if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"

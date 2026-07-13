@@ -555,6 +555,31 @@ func TestTerminalModalDefaultFromEditorMode(t *testing.T) {
 	assert.False(t, cfg.terminalModal())
 }
 
+// TestEditorModeNormalizesModelessToStandard pins that editorMode()
+// resolves the deprecated "modeless" alias and the new "standard"
+// value to editorModeStandard, while modal/exo/emacs pass through and
+// an unknown mode falls back to modal.
+func TestEditorModeNormalizesModelessToStandard(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want string
+	}{
+		{"modeless", editorModeStandard},
+		{"standard", editorModeStandard},
+		{"emacs", editorModeEmacs},
+		{"modal", editorModeModal},
+		{"exo", editorModeExo},
+		{"bogus", editorModeModal},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			cfg := &ideConfig{cfg: map[string]any{
+				"editor": map[string]any{"mode": tc.mode},
+			}, errors: map[string]error{}}
+			assert.Equal(t, tc.want, cfg.editorMode())
+		})
+	}
+}
+
 // TestDebuggerConfigsTemplates asserts that debuggerConfigs reads the
 // optional launch/attach argument templates under debugger.<lang>,
 // leaves them nil when absent (so the adapter falls back to its

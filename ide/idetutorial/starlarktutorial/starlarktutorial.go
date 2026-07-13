@@ -99,8 +99,8 @@ type Tutorial struct {
 	// raw term.KeyComb, so a new render site cannot reintroduce the ugly
 	// spec.
 	commandKeyDisplay string
-	// editorMode is the user's resolved editor mode ("modal" or
-	// "modeless"), exposed to the DSL via editor_mode(). exo is
+	// editorMode is the user's resolved editor mode ("modal",
+	// "standard", or "emacs"), exposed to the DSL via editor_mode(). exo is
 	// resolved to its fallback by the host before New.
 	editorMode string
 	// keyForCommand resolves a command (and optional args) to the

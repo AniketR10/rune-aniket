@@ -668,8 +668,8 @@ func builtinCommandKey(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 }
 
 // builtinEditorMode implements editor_mode(): it returns the user's
-// resolved editor mode, "modal" or "modeless" (exo is resolved to its
-// fallback by the host before the tutorial runs).
+// resolved editor mode, "modal", "standard", or "emacs" (exo is
+// resolved to its fallback by the host before the tutorial runs).
 func builtinEditorMode(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 	starlark.Tuple, []starlark.Tuple,
 ) (starlark.Value, error) {

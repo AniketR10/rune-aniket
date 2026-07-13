@@ -16,11 +16,11 @@ In the keys below, `<meta>` is {{.MetaKey}}.
 These are your command key bindings. In-buffer editing keys come from the
 modal editor and are documented in the
 [modal editor guide](https://docs.rune.build/learn/modal-editor).
-{{- else if eq .EditorMode "modeless"}}
+{{- else if eq .EditorMode "standard"}}
 
 These are your command key bindings. In-buffer editing keys come from the
-modeless editor and are documented in the
-[modeless editor guide](https://docs.rune.build/learn/modeless-editor).
+standard editor and are documented in the
+[standard editor guide](https://docs.rune.build/learn/standard-editor).
 {{- else}}
 
 These are your command key bindings. Buffers are edited by your external
@@ -52,7 +52,7 @@ key or wrap it in an alias with the `echo` command's `{register}`
 instruction, for example `echo {register}a`. See the
 [modal editor guide](https://docs.rune.build/learn/modal-editor#macros)
 for recording examples.
-{{- else if eq .EditorMode "modeless"}}
+{{- else if eq .EditorMode "standard"}}
 
 ## Macros
 
@@ -62,7 +62,7 @@ Record a sequence of keystrokes and replay it on demand:
 - `<ctrl-shift-q>`: Play the recorded macro
 
 The recording is stored in the unnamed register. See the
-[modeless editor guide](https://docs.rune.build/learn/modeless-editor#macros)
+[standard editor guide](https://docs.rune.build/learn/standard-editor#macros)
 for details.
 {{- end}}
 {{- if .Other}}
