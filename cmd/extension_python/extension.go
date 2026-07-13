@@ -72,7 +72,7 @@ func (e *pyExtension) ExtendWorkspace(
 		w.Notifications(ctx),
 		w.LSP(ctx),
 		w.Editor(ctx),
-		w.DataDir(ctx),
+		w,
 		cfg,
 		w.RegisterREPLCommand,
 	)
@@ -91,7 +91,7 @@ func (e *pyExtension) extendWorkspaceWith(
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
 	editor textapi.Editor,
-	dataDir string,
+	inst installer,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
 ) error {
@@ -113,7 +113,7 @@ func (e *pyExtension) extendWorkspaceWith(
 		FileMatch:   isPythonFile,
 		WatchEvents: pyWatchEvents(cfg, notify),
 		InitRoot: func(ctx context.Context, root langext.Root) error {
-			return initializeProjectRoot(ctx, fs, exec, notify, lsp, dataDir, cfg, root)
+			return initializeProjectRoot(ctx, fs, exec, notify, lsp, inst, cfg, root)
 		},
 	})
 	if err := init.Start(); err != nil {
@@ -142,21 +142,21 @@ func initializeProjectRoot(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
-	dataDir string,
+	inst installer,
 	cfg config.Config,
 	root langext.Root,
 ) error {
 	kind := detectProjectAt(ctx, fs, root.Dir)
 
-	uvBin := resolvePyTool(ctx, fs, exec, dataDir, "uv")
+	uvBin := resolvePyTool(ctx, fs, exec, inst, "uv")
 	if err := ensureEnvironment(ctx, uvBin, exec, notify, kind, fs, root.Dir); err != nil {
 		_, _ = notify.Notify(browserapi.LevelWarn,
 			"Python environment setup failed, continuing without a synced env: %v", err)
 		slog.Warn("python env setup failed", "root", root.Dir, "error", err)
 	}
 
-	tyBin := resolvePyTool(ctx, fs, exec, dataDir, "ty")
-	ruffBin := resolvePyTool(ctx, fs, exec, dataDir, "ruff")
+	tyBin := resolvePyTool(ctx, fs, exec, inst, "ty")
+	ruffBin := resolvePyTool(ctx, fs, exec, inst, "ruff")
 	command := pyCommand(tyBin, "ty", "server")
 	alternates := map[string]string{
 		"textDocument/formatting":      pyCommand(ruffBin, "ruff", "server"),

@@ -90,7 +90,7 @@ func (e *goExtension) ExtendWorkspace(
 		w.Parser(ctx),
 		w.Interrupter(ctx),
 		w.Storage(ctx),
-		w.DataDir(ctx),
+		w,
 		cfg,
 		w.RegisterCommand,
 	)
@@ -114,7 +114,7 @@ func (e *goExtension) extendWorkspaceWith(
 	parser syntaxapi.Parser,
 	interrupter term.Interrupter,
 	storage storageapi.Service,
-	dataDir string,
+	inst installer,
 	cfg config.Config,
 	registerCommand func(textapi.CommandManual, textapi.CommandHandler) error,
 ) error {
@@ -141,7 +141,7 @@ func (e *goExtension) extendWorkspaceWith(
 		Markers:    goMarkers,
 		FileMatch:  isGoFile,
 		InitRoot: func(ctx context.Context, root langext.Root) error {
-			return initializeGoRoot(ctx, fs, exec, notify, lsp, dataDir, scheme, cfg, root)
+			return initializeGoRoot(ctx, fs, exec, notify, lsp, inst, scheme, cfg, root)
 		},
 	})
 	if err := init.Start(); err != nil {
@@ -169,12 +169,13 @@ func initializeGoRoot(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
-	dataDir, scheme string,
+	inst installer,
+	scheme string,
 	cfg config.Config,
 	root langext.Root,
 ) error {
 	dbg := readGoplsDebugOptions(cfg)
-	goplsBin := resolveGoplsForRoot(ctx, fs, exec, dataDir, cfg, notify, scheme)
+	goplsBin := resolveGoplsForRoot(ctx, fs, exec, inst, cfg, notify, scheme)
 	params, err := goplsInitializeParams(root.URI, dbg, goplsBin)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)

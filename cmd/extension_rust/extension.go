@@ -25,6 +25,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -86,7 +87,7 @@ func (e *rustExtension) ExtendWorkspace(
 		w.Editor(ctx),
 		w.WindowManager(ctx),
 		w.ResourceOpener(ctx),
-		w.DataDir(ctx),
+		w,
 		os.Getenv("RUSTUP_HOME"),
 		os.Getenv("CARGO_HOME"),
 		cfg,
@@ -104,7 +105,8 @@ func (e *rustExtension) extendWorkspaceWith(
 	editor textapi.Editor,
 	wm browserapi.WindowManager,
 	opener browserapi.ResourceOpener,
-	dataDir, rustupHome, cargoHome string,
+	inst installer,
+	rustupHome, cargoHome string,
 	cfg config.Config,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
 	registerCommand func(textapi.CommandManual, textapi.CommandHandler) error,
@@ -113,7 +115,7 @@ func (e *rustExtension) extendWorkspaceWith(
 	if err != nil {
 		return fmt.Errorf("resolve cwd uri: %w", err)
 	}
-	rustupInitBin := resolveRustupInit(ctx, fs, dataDir)
+	rustupInitBin := resolveRustupInit(ctx, inst)
 
 	experimental := readExperimental(cfg, notify)
 
@@ -123,7 +125,7 @@ func (e *rustExtension) extendWorkspaceWith(
 		FileMatch:  isRustFile,
 		InitRoot: func(ctx context.Context, root langext.Root) error {
 			return initializeRustRoot(ctx,
-				fs, exec, notify, lsp, dataDir, rustupHome, cargoHome, rustupInitBin,
+				fs, exec, notify, lsp, inst, rustupHome, cargoHome, rustupInitBin,
 				cfg, experimental, root)
 		},
 	})
@@ -178,7 +180,8 @@ func initializeRustRoot(
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	lsp semanticapi.LSP,
-	dataDir, rustupHome, cargoHome, rustupInitBin string,
+	inst installer,
+	rustupHome, cargoHome, rustupInitBin string,
 	cfg config.Config,
 	experimental bool,
 	root langext.Root,
@@ -203,7 +206,7 @@ func initializeRustRoot(
 		sysroot = resolveSysroot(ctx, exec, resolveRustcProxy(cargoHome))
 	}
 
-	command := resolveRustAnalyzer(cfg, notify, dataDir)
+	command := resolveRustAnalyzer(ctx, cfg, notify, inst)
 	params, err := rustInitializeParams(root.URI, command, sysroot, experimental)
 	if err != nil {
 		return fmt.Errorf("build init params: %w", err)
@@ -219,10 +222,13 @@ func isRustFile(uri workspaceapi.URI) bool {
 	return strings.HasSuffix(uri.Path(), ".rs")
 }
 
-func resolveRustupInit(_ context.Context, fs workspaceapi.FileSystem, dataDir string) string {
-	candidate := path.Join(dataDir, "bin", "rustup-init")
-	if info, err := fs.Stat(candidate); err == nil && info != nil && !info.IsDir() {
-		return candidate
+func resolveRustupInit(ctx context.Context, inst installer) string {
+	bin, err := inst.FindInstalledExecutable(ctx, "rustup-init")
+	if err == nil {
+		return bin
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("probe provisioned rustup-init failed", "error", err)
 	}
 	return ""
 }

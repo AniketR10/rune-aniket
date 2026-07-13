@@ -60,6 +60,15 @@ func WithDataDirEnv(env string) Option {
 	}
 }
 
+// WithInstallDirEnv returns an option that configures
+// what environment variable to use to share the install directory
+// with ad-hoc programs.
+func WithInstallDirEnv(env string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.installDirEnv = env
+	}
+}
+
 // WithAuthTokenEnv returns an option that configures
 // what environment variable to use to share the oauth2 token
 // with ad-hoc programs.
@@ -106,6 +115,7 @@ type runnerConfig struct {
 	authTokenEnv            string
 	socketEnv               string
 	dataDirEnv              string
+	installDirEnv           string
 	extraStreamInterceptors []grpc.StreamServerInterceptor
 	extraUnaryInterceptors  []grpc.UnaryServerInterceptor
 }

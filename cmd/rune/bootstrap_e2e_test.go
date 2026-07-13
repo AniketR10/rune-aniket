@@ -637,7 +637,7 @@ func TestBootstrapE2ETamperedInstallLocksConfiguredIDE(t *testing.T) {
 func testE2EExtensionsRunner(
 	_ workspaceapi.URI,
 	_ map[extensionapi.Permission]extension.ResourceRegistrar,
-	_ string,
+	_, _ string,
 	_ browser.Notifications,
 	_, _ schemeapi.Executor,
 	_ extension.Grantor,

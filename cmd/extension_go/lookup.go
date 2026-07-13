@@ -28,7 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -38,6 +39,13 @@ import (
 )
 
 const goplsResolutionTimeout = 5 * time.Second
+
+// installer resolves executables the host provisioned alongside this
+// extension on the workspace host. It is satisfied by
+// *extensionapi.Workspace.
+type installer interface {
+	FindInstalledExecutable(ctx context.Context, name string) (string, error)
+}
 
 var wellKnownGoplsPaths = []string{
 	"~/go/bin/gopls",
@@ -64,7 +72,7 @@ func resolveGoplsForRoot(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
-	dataDir string,
+	inst installer,
 	cfg config.Config,
 	notify browserapi.Notifications,
 	scheme string,
@@ -72,7 +80,7 @@ func resolveGoplsForRoot(
 	if lspPath, ok := readGoplsLspPath(cfg, notify); ok {
 		return lspPath
 	}
-	bin, err := resolveGoplsBinary(ctx, fs, exec, dataDir)
+	bin, err := resolveGoplsBinary(ctx, fs, exec, inst)
 	if err == nil {
 		return bin
 	}
@@ -93,11 +101,15 @@ func resolveGoplsBinary(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
 	exec workspaceapi.Executor,
-	dataDir string,
+	inst installer,
 ) (string, error) {
-	candidate := path.Join(dataDir, "bin", "gopls")
-	if info, err := fs.Stat(candidate); err == nil && info != nil && !info.IsDir() {
-		return candidate, nil
+	// A miss (os.ErrNotExist) or a probe failure both fall through to the
+	// well-known and shell candidates below, which is the whole point of
+	// this resolver having fallbacks.
+	if bin, err := inst.FindInstalledExecutable(ctx, "gopls"); err == nil {
+		return bin, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		slog.Debug("probe provisioned gopls failed", "error", err)
 	}
 
 	if bin, ok := probeWellKnown(fs); ok {

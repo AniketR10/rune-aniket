@@ -818,7 +818,7 @@ command:
 	runnerFn := func(
 		_ workspaceapi.URI,
 		_ map[extensionapi.Permission]extension.ResourceRegistrar,
-		_ string, _ browser.Notifications,
+		_, _ string, _ browser.Notifications,
 		_, _ schemeapi.Executor, _ extension.Grantor, _ text.Editor,
 		_ ideauthorizer.PromptOpener, _ storageapi.Service,
 		_ func(func()) bool) (extension.Runner, error) {
@@ -934,7 +934,7 @@ command:
 	runnerFn := func(
 		_ workspaceapi.URI,
 		_ map[extensionapi.Permission]extension.ResourceRegistrar,
-		_ string, _ browser.Notifications,
+		_, _ string, _ browser.Notifications,
 		_, _ schemeapi.Executor, _ extension.Grantor, _ text.Editor,
 		_ ideauthorizer.PromptOpener, _ storageapi.Service,
 		_ func(func()) bool) (extension.Runner, error) {
@@ -1939,7 +1939,7 @@ func newTestStorage(t *testing.T, dataDir string) storageapi.Service {
 func testRunnerFn(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
-	dataDir string, n browser.Notifications,
+	dataDir, installDir string, n browser.Notifications,
 	exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,

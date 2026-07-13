@@ -1891,17 +1891,40 @@ func (h *workspaceManagerHandler) buildExtensions(
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
+	// installDir is where the IDE provisions per-extension toolchains on the
+	// workspace host. dataDir is local to the IDE (already ~-expanded), so we
+	// re-expand its basename (e.g. ".rune") against the workspace host: local
+	// home for file://, remote home for ssh://. Extensions resolve provisioned
+	// binaries under installDir via FindInstalledExecutable.
+	installDir := installRoot(cwd, dataDir)
 	browser := ex.Browser()
 	// grant all permissions for now, until we actually have installable third
 	// party extensions.
 	grantor := extension.GrantAll()
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, cmdAuthorizer,
-		dataDir, browser, cwd, extExecutor, grantor,
+		dataDir, installDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}
 	return runner, lsp, dap, promptStorage, nil
+}
+
+// installRoot returns the host path where per-extension toolchains are
+// provisioned for the given workspace. localDataDir is the IDE's local,
+// already-expanded data directory (e.g. /Users/x/.rune); its basename is
+// re-expanded as ~/<base> against the workspace host so file:// resolves to
+// the local home and ssh:// to the remote home. On any expansion error it
+// falls back to localDataDir and logs.
+func installRoot(ws workspace.Workspace, localDataDir string) string {
+	base := filepath.Base(localDataDir)
+	uri, err := ws.URI("~/" + base)
+	if err != nil {
+		log.Warnf("resolve install root ~/%s on workspace host: %v; "+
+			"falling back to local data dir %s", base, err, localDataDir)
+		return localDataDir
+	}
+	return uri.Path()
 }
 
 func (h *workspaceManagerHandler) addOrCreateWorkspace(

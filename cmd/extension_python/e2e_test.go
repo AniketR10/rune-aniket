@@ -140,10 +140,12 @@ func TestE2E_ResolvePyTool(t *testing.T) {
 		bin := filepath.Join(binDir, name)
 		require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
 
-		got := resolvePyTool(context.Background(), realFS{root: dataDir}, realExecutor{}, dataDir, name)
+		got := resolvePyTool(context.Background(), realFS{root: dataDir}, realExecutor{},
+			fakeInstaller{fs: realFS{root: dataDir}, root: dataDir}, name)
 		assert.Equal(t, bin, got)
 	}
 
-	missing := resolvePyTool(context.Background(), realFS{root: dataDir}, realExecutor{}, dataDir, "absent")
+	missing := resolvePyTool(context.Background(), realFS{root: dataDir}, realExecutor{},
+		fakeInstaller{fs: realFS{root: dataDir}, root: dataDir}, "absent")
 	assert.Empty(t, missing)
 }

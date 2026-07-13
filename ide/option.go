@@ -528,7 +528,7 @@ func (n nopExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
-	dataDir string, notifications browser.Notifications,
+	dataDir, installDir string, notifications browser.Notifications,
 	exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,

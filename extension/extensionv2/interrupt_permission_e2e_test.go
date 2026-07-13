@@ -129,6 +129,7 @@ func TestExtensionInterruptPermissionE2E(t *testing.T) {
 		extension.BrowserResources(hostBrowser, publishEvent),
 		authorizer,
 		dataDir,
+		dataDir,
 		hostBrowser,
 		execScheme,
 		execScheme, // extExecutor: e2e doesn't split the two
@@ -365,6 +366,7 @@ func TestExtensionInterruptPermissionConcurrentE2E(t *testing.T) {
 		uri,
 		extension.BrowserResources(hostBrowser, publishEvent),
 		authorizer,
+		dataDir,
 		dataDir,
 		hostBrowser,
 		execScheme,

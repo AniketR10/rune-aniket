@@ -1908,7 +1908,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		runner := FuncExtensionsRunner(
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
-				s string, noti browser.Notifications,
+				s, _ string, noti browser.Notifications,
 				exec, extExec schemeapi.Executor,
 				grantor extension.Grantor,
 				editor text.Editor,
@@ -1973,7 +1973,7 @@ func TestWorkspaceExtensions(t *testing.T) {
 		runner := FuncExtensionsRunner(
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
-				s string, noti browser.Notifications,
+				s, _ string, noti browser.Notifications,
 				executor, extExec schemeapi.Executor,
 				grantor extension.Grantor,
 				editor text.Editor,
@@ -6035,7 +6035,7 @@ func newTestWorkspaceManagerHandlerWithRunner(
 	runnerFn := func(
 		_ workspaceapi.URI,
 		_ map[extensionapi.Permission]extension.ResourceRegistrar,
-		_ string, _ browser.Notifications,
+		_, _ string, _ browser.Notifications,
 		_, _ schemeapi.Executor, _ extension.Grantor, _ text.Editor,
 		_ ideauthorizer.PromptOpener, _ storageapi.Service,
 		_ func(func()) bool) (extension.Runner, error) {
@@ -6728,4 +6728,66 @@ func TestRegisterREPLCommand(t *testing.T) {
 	err = m.registerREPLCommand(textapi.CommandManual{Name: "loginz"}, &stubREPLHandler{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered")
+}
+
+// uriWorkspace stubs workspace.Workspace to control URI resolution;
+// installRoot only calls URI, so the embedded interface stays nil.
+type uriWorkspace struct {
+	workspace.Workspace
+	fn func(path string) (workspaceapi.URI, error)
+}
+
+func (w uriWorkspace) URI(path string) (workspaceapi.URI, error) {
+	return w.fn(path)
+}
+
+func TestInstallRoot(t *testing.T) {
+	tests := []struct {
+		name         string
+		localDataDir string
+		fn           func(path string) (workspaceapi.URI, error)
+		want         string
+	}{
+		{
+			name:         "file workspace resolves to local home",
+			localDataDir: "/Users/x/.rune",
+			fn: func(path string) (workspaceapi.URI, error) {
+				require.Equal(t, "~/.rune", path)
+				return workspaceapi.ParseURI("file:///Users/x/.rune")
+			},
+			want: "/Users/x/.rune",
+		},
+		{
+			name:         "remote workspace resolves to remote home",
+			localDataDir: "/Users/x/.rune",
+			fn: func(path string) (workspaceapi.URI, error) {
+				require.Equal(t, "~/.rune", path)
+				return workspaceapi.ParseURI("ssh://host/home/remote/.rune")
+			},
+			want: "/home/remote/.rune",
+		},
+		{
+			name:         "alternate datadir basename is preserved",
+			localDataDir: "/Users/x/.runedev2",
+			fn: func(path string) (workspaceapi.URI, error) {
+				require.Equal(t, "~/.runedev2", path)
+				return workspaceapi.ParseURI("ssh://host/home/remote/.runedev2")
+			},
+			want: "/home/remote/.runedev2",
+		},
+		{
+			name:         "expansion error falls back to local data dir",
+			localDataDir: "/Users/x/.rune",
+			fn: func(path string) (workspaceapi.URI, error) {
+				return workspaceapi.URI{}, errors.New("boom")
+			},
+			want: "/Users/x/.rune",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := uriWorkspace{fn: tt.fn}
+			assert.Equal(t, tt.want, installRoot(ws, tt.localDataDir))
+		})
+	}
 }

@@ -147,6 +147,7 @@ func TestPluginPermissionPromptE2E(t *testing.T) {
 				extension.BrowserResources(e2eBrowser{}, func(term.Event) bool { return true }),
 				authorizer,
 				dataDir,
+				dataDir,
 				e2eBrowser{},
 				execScheme,
 				execScheme,

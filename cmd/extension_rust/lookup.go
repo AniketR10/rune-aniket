@@ -28,7 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -38,6 +39,13 @@ import (
 )
 
 const rustResolutionTimeout = 5 * time.Second
+
+// installer resolves executables the host provisioned alongside this
+// extension on the workspace host. It is satisfied by
+// *extensionapi.Workspace.
+type installer interface {
+	FindInstalledExecutable(ctx context.Context, name string) (string, error)
+}
 
 // readLspPath reads the optional extensions.rust.config.lsp_path
 // override. A missing key is not an error; a non-string value warns and
@@ -81,17 +89,28 @@ func readExperimental(cfg config.Config, notify browserapi.Notifications) bool {
 }
 
 // resolveRustAnalyzer returns the rust-analyzer language server path. A
-// configured lsp_path overrides the bundled binary at
-// <dataDir>/bin/rust-analyzer, which the package always ships.
+// configured lsp_path overrides the bundled binary, which the package
+// ships under the install root's bin/ on the workspace host. Resolution
+// goes through the installer so file:// and ssh:// workspaces both find
+// the provisioned binary; a miss returns "" and the caller surfaces the
+// initialization error.
 func resolveRustAnalyzer(
+	ctx context.Context,
 	cfg config.Config,
 	notify browserapi.Notifications,
-	dataDir string,
+	inst installer,
 ) string {
 	if p, ok := readLspPath(cfg, notify); ok {
 		return p
 	}
-	return path.Join(dataDir, "bin", "rust-analyzer")
+	bin, err := inst.FindInstalledExecutable(ctx, "rust-analyzer")
+	if err == nil {
+		return bin
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("probe provisioned rust-analyzer failed", "error", err)
+	}
+	return ""
 }
 
 // resolveSysroot returns the active toolchain sysroot via

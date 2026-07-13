@@ -58,7 +58,8 @@ func TestProtocolGrantorGatesRunButKeepsRequestedPermissions(t *testing.T) {
 		),
 	}
 	p := newProtocol(context.Background(), extension.GrantAll(),
-		"ext-id", "/tmp/rune.sock", "/tmp/rune-data", []byte("cert"),
+		"ext-id", "/tmp/rune.sock", "/tmp/rune-data", "/tmp/rune-install",
+		[]byte("cert"),
 		false, config.MapConfig(map[string]any{}), keys, nil)
 	encoded, err := json.Marshal(meta)
 	require.NoError(t, err)
@@ -70,6 +71,9 @@ func TestProtocolGrantorGatesRunButKeepsRequestedPermissions(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, &cfg))
 	require.NotNil(t, cfg.Token)
+	assert.Equal(t, "/tmp/rune-install", cfg.InstallDir,
+		"handshake carries the install dir distinct from the data dir")
+	assert.Equal(t, "/tmp/rune-data", cfg.DataDir)
 	claims, err := auth.VerifyToken[ideauthorizer.Extension](verifyKeys[0], cfg.Token.AccessToken)
 	require.NoError(t, err)
 

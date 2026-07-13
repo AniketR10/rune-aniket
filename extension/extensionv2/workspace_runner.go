@@ -68,7 +68,14 @@ type workspaceRunner struct {
 	cfg       runnerConfig
 	workspace workspaceapi.URI
 	dataDir   string
-	grantor   extension.Grantor
+	// installDir is the root, pre-expanded on the workspace host, under
+	// which provisioned resources packaged alongside an extension live
+	// (e.g. <installDir>/bin/<tool>). Unlike dataDir, which is the IDE's
+	// local data directory used for Cmd.Dir and the socket, installDir is
+	// carried to the extension so FindInstalled* resolve on the workspace
+	// host (local home for file://, remote home for ssh://).
+	installDir string
+	grantor    extension.Grantor
 	// executor runs ad-hoc commands submitted via StartCommand. This
 	// is the workspace's own executor (file://, ssh:// gRPC, etc.) so
 	// callers like vte.Component can pass workspace-bound
@@ -128,19 +135,19 @@ var _ extension.Runner = (*workspaceRunner)(nil)
 
 func newWorkspaceRunner(
 	executor, extExecutor schemeapi.Executor, grantor extension.Grantor,
-	workspace workspaceapi.URI, socket, dataDir string,
+	workspace workspaceapi.URI, socket, dataDir, installDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) *workspaceRunner {
 	ret := new(workspaceRunner)
 	ret.init(executor, extExecutor, grantor, workspace,
-		socket, dataDir, tlsCert, keys, opts...)
+		socket, dataDir, installDir, tlsCert, keys, opts...)
 	return ret
 }
 
 // Init initializes this Runner with the given grantor and options.
 func (m *workspaceRunner) init(
 	executor, extExecutor schemeapi.Executor, grantor extension.Grantor,
-	workspace workspaceapi.URI, socket, dataDir string,
+	workspace workspaceapi.URI, socket, dataDir, installDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) {
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
@@ -150,6 +157,7 @@ func (m *workspaceRunner) init(
 	m.cfg.authTokenEnv = "RUNE_TOKEN"
 	m.cfg.socketEnv = "RUNE_SOCKET"
 	m.cfg.dataDirEnv = "RUNE_DATADIR"
+	m.cfg.installDirEnv = "RUNE_INSTALLDIR"
 	for _, o := range opts {
 		o(&m.cfg)
 	}
@@ -162,6 +170,10 @@ func (m *workspaceRunner) init(
 	m.extExecutor = extExecutor
 	m.socket = socket
 	m.dataDir = dataDir
+	m.installDir = installDir
+	if m.installDir == "" {
+		m.installDir = dataDir
+	}
 	m.workspace = workspace
 	m.tlsCert = tlsCert
 }
@@ -338,6 +350,7 @@ func (m *workspaceRunner) commandEnvs(ctx context.Context, path string, args []s
 	env := []string{makeLogLevelEnv(log.GetLevel())}
 	env = append(env, fmt.Sprintf("%s=%s", m.cfg.socketEnv, m.socket))
 	env = append(env, fmt.Sprintf("%s=%s", m.cfg.dataDirEnv, m.dataDir))
+	env = append(env, fmt.Sprintf("%s=%s", m.cfg.installDirEnv, m.installDir))
 	cert := base64.StdEncoding.EncodeToString(m.tlsCert)
 	env = append(env, fmt.Sprintf("%s=%s", m.cfg.authCertEnv, cert))
 	if m.cfg.insecureAuth {
@@ -384,7 +397,8 @@ func (m *workspaceRunner) makeProtocolExchange(
 	io.Reader, io.Writer, io.Writer, *logCollector, error,
 ) {
 	protocol := newProtocol(m.ctx, m.grantor, extensionID, m.socket,
-		m.dataDir, m.tlsCert, m.cfg.insecureAuth, cfg, m.keys, readiness)
+		m.dataDir, m.installDir, m.tlsCert, m.cfg.insecureAuth, cfg, m.keys,
+		readiness)
 	logFile, err := os.OpenFile(logPath,
 		os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {

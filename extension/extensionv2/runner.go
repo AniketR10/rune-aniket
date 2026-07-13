@@ -99,7 +99,7 @@ type Runner struct {
 func (r *Runner) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
-	dataDir string, notifications browser.Notifications,
+	dataDir, installDir string, notifications browser.Notifications,
 	executor, extExecutor schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
@@ -191,7 +191,7 @@ func (r *Runner) WorkspaceExtensionsRunner(
 
 	ret.workspaceRunner = newWorkspaceRunner(
 		executor, extExecutor, grantor, uri,
-		socket, r.dataDir, cert, r.keys, r.opts...)
+		socket, r.dataDir, installDir, cert, r.keys, r.opts...)
 	if err != nil {
 		err = fmt.Errorf("new workspace runner: %w", err)
 		if cerr := ret.Close(); cerr != nil {

@@ -153,7 +153,7 @@ func (s *sandbox) launch() error {
 		return fmt.Errorf("new extension runner: %w", err)
 	}
 	runner, err := base.WorkspaceExtensionsRunner(
-		uri, res, authorizer, s.dataDir, s.browser,
+		uri, res, authorizer, s.dataDir, s.dataDir, s.browser,
 		scheme, s.exec, s.grantor, s.editor, prompt, storage, tick)
 	if err != nil {
 		return fmt.Errorf("new workspace extensions runner: %w", err)

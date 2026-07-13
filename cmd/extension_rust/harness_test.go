@@ -118,6 +118,28 @@ func newFakeFS() *fakeFS {
 
 func (f *fakeFS) addFile(p string) *fakeFS { f.files[p] = true; return f }
 func (f *fakeFS) addDir(p string) *fakeFS  { f.dirs[p] = true; return f }
+
+// fakeInstaller mirrors extensionapi.Workspace.FindInstalledExecutable
+// against any FileSystem: it resolves <root>/bin/<name> and reports the
+// path only when it exists as a regular file.
+type fakeInstaller struct {
+	fs   workspaceapi.FileSystem
+	root string
+}
+
+func (i fakeInstaller) FindInstalledExecutable(
+	_ context.Context, name string,
+) (string, error) {
+	p := i.root + "/bin/" + name
+	info, err := i.fs.Stat(p)
+	if err != nil {
+		return "", err
+	}
+	if info == nil || info.IsDir() {
+		return "", os.ErrNotExist
+	}
+	return p, nil
+}
 func (f *fakeFS) addEntry(name string, dir bool) *fakeFS {
 	f.entries = append(f.entries, fakeDirEntry{name: name, dir: dir})
 	return f
@@ -594,7 +616,8 @@ func runRustExtensionOnDir(t *testing.T, dir, rustupHome, cargoHome, dataDir str
 		editor,
 		&fakeWM{},
 		nil,
-		dataDir, rustupHome, cargoHome, nil,
+		fakeInstaller{fs: realFS{root: dir}, root: dataDir},
+		rustupHome, cargoHome, nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
 			return nil

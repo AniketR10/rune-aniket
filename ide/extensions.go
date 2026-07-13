@@ -39,7 +39,7 @@ type ExtensionsRunner interface {
 	WorkspaceExtensionsRunner(
 		uri workspaceapi.URI, res map[extensionapi.Permission]extension.ResourceRegistrar,
 		authorizer *ideauthorizer.Authorizer,
-		dataDir string, notifications browser.Notifications,
+		dataDir, installDir string, notifications browser.Notifications,
 		executor, extExecutor schemeapi.Executor,
 		grantor extension.Grantor,
 		editor text.Editor,
@@ -51,7 +51,7 @@ type ExtensionsRunner interface {
 // FuncExtensionsRunner wraps fn to satisfy Extensions by invoking in calls to Runner.
 func FuncExtensionsRunner(
 	fn func(workspaceapi.URI,
-		map[extensionapi.Permission]extension.ResourceRegistrar, string,
+		map[extensionapi.Permission]extension.ResourceRegistrar, string, string,
 		browser.Notifications, schemeapi.Executor, schemeapi.Executor,
 		extension.Grantor,
 		text.Editor,
@@ -63,7 +63,7 @@ func FuncExtensionsRunner(
 
 type fnExtensions struct {
 	fn func(workspaceapi.URI,
-		map[extensionapi.Permission]extension.ResourceRegistrar, string,
+		map[extensionapi.Permission]extension.ResourceRegistrar, string, string,
 		browser.Notifications, schemeapi.Executor, schemeapi.Executor,
 		extension.Grantor,
 		text.Editor,
@@ -75,12 +75,12 @@ func (f fnExtensions) WorkspaceExtensionsRunner(
 	uri workspaceapi.URI,
 	res map[extensionapi.Permission]extension.ResourceRegistrar,
 	authorizer *ideauthorizer.Authorizer,
-	dataDir string, n browser.Notifications, exec, extExec schemeapi.Executor,
+	dataDir, installDir string, n browser.Notifications, exec, extExec schemeapi.Executor,
 	grantor extension.Grantor,
 	editor text.Editor,
 	promptOpener ideauthorizer.PromptOpener, storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
 ) (extension.Runner, error) {
-	return f.fn(uri, res, dataDir, n, exec, extExec, grantor, editor,
+	return f.fn(uri, res, dataDir, installDir, n, exec, extExec, grantor, editor,
 		promptOpener, storage, scheduleNextTick)
 }

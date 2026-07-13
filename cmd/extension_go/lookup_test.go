@@ -105,6 +105,38 @@ func (f *fakeFS) ReadDir(_ string) ([]os.DirEntry, error) {
 	return nil, errors.New("not supported")
 }
 
+// fakeInstaller mirrors extensionapi.Workspace.FindInstalledExecutable
+// against a fakeFS: it resolves <root>/bin/<name> and reports the path
+// only when it exists as a regular file.
+type fakeInstaller struct {
+	fs   *fakeFS
+	root string
+}
+
+func (i fakeInstaller) FindInstalledExecutable(
+	_ context.Context, name string,
+) (string, error) {
+	p := path.Join(i.root, "bin", name)
+	info, err := i.fs.Stat(p)
+	if err != nil {
+		return "", err
+	}
+	if info == nil || info.IsDir() {
+		return "", os.ErrNotExist
+	}
+	return p, nil
+}
+
+// nopInstaller resolves nothing; resolvers must fall through to their
+// other candidates.
+type nopInstaller struct{}
+
+func (nopInstaller) FindInstalledExecutable(
+	context.Context, string,
+) (string, error) {
+	return "", os.ErrNotExist
+}
+
 // scriptedCmd records expected exit code, stdout payload, and a tag
 // recorded into log for assertions.
 type scriptedCmd struct {
@@ -184,7 +216,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 			addFile("/usr/local/go/bin/gopls")
 		ex := newFakeExecutor()
 		got, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "/Users/u/.rune")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: "/Users/u/.rune"})
 		require.NoError(t, err)
 		assert.Equal(t, "/Users/u/.rune/bin/gopls", got)
 		assert.Empty(t, ex.calls,
@@ -199,7 +231,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 			addFile("/Users/u/go/bin/gopls")
 		ex := newFakeExecutor()
 		got, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "/Users/u/.rune")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: "/Users/u/.rune"})
 		require.NoError(t, err)
 		assert.Equal(t, "/Users/u/go/bin/gopls", got)
 		assert.Empty(t, ex.calls,
@@ -210,7 +242,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 		fs := newFakeFS().addFile("/opt/homebrew/bin/gopls")
 		ex := newFakeExecutor()
 		got, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: ""})
 		require.NoError(t, err)
 		assert.Equal(t, "/opt/homebrew/bin/gopls", got)
 		assert.Empty(t, ex.calls)
@@ -221,7 +253,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 		ex := newFakeExecutor().
 			respond(shellProbe, scriptedCmd{err: errors.New("not found")})
 		_, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: ""})
 		require.Error(t, err)
 	})
 
@@ -230,7 +262,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 		ex := newFakeExecutor().
 			respond(shellProbe, scriptedCmd{stdout: "/opt/gopls\n"})
 		got, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: ""})
 		require.NoError(t, err)
 		assert.Equal(t, "/opt/gopls", got)
 	})
@@ -240,7 +272,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 		ex := newFakeExecutor().
 			respond(shellProbe, scriptedCmd{stdout: "gopls\n"})
 		_, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: ""})
 		require.Error(t, err)
 	})
 
@@ -249,7 +281,7 @@ func TestResolveGoplsBinary(t *testing.T) {
 		ex := newFakeExecutor().
 			respond(shellProbe, scriptedCmd{err: errors.New("not found")})
 		_, err := resolveGoplsBinary(
-			context.Background(), fs, ex, "/Users/u/.rune")
+			context.Background(), fs, ex, fakeInstaller{fs: fs, root: "/Users/u/.rune"})
 		require.Error(t, err)
 	})
 }

@@ -78,6 +78,28 @@ func newFakeFS() *fakeFS {
 
 func (f *fakeFS) addFile(p string) *fakeFS { f.files[p] = true; return f }
 func (f *fakeFS) addDir(p string) *fakeFS  { f.dirs[p] = true; return f }
+
+// fakeInstaller mirrors extensionapi.Workspace.FindInstalledExecutable
+// against any FileSystem: it resolves <root>/bin/<name> and reports the
+// path only when it exists as a regular file.
+type fakeInstaller struct {
+	fs   workspaceapi.FileSystem
+	root string
+}
+
+func (i fakeInstaller) FindInstalledExecutable(
+	_ context.Context, name string,
+) (string, error) {
+	p := i.root + "/bin/" + name
+	info, err := i.fs.Stat(p)
+	if err != nil {
+		return "", err
+	}
+	if info == nil || info.IsDir() {
+		return "", os.ErrNotExist
+	}
+	return p, nil
+}
 func (f *fakeFS) addEntry(name string, dir bool) *fakeFS {
 	f.entries = append(f.entries, fakeDirEntry{name: name, dir: dir})
 	return f
@@ -197,7 +219,7 @@ func TestResolvePyTool(t *testing.T) {
 			fs := newFakeFS().
 				addFile("/Users/u/.rune/bin/" + name)
 			ex := newFakeExecutor()
-			got := resolvePyTool(context.Background(), fs, ex, "/Users/u/.rune", name)
+			got := resolvePyTool(context.Background(), fs, ex, fakeInstaller{fs: fs, root: "/Users/u/.rune"}, name)
 			assert.Equal(t, "/Users/u/.rune/bin/"+name, got)
 			assert.Empty(t, ex.callsSnapshot())
 		})
@@ -205,7 +227,7 @@ func TestResolvePyTool(t *testing.T) {
 		t.Run(name+"/directory at install path is ignored", func(t *testing.T) {
 			fs := newFakeFS().addDir("/Users/u/.rune/bin/" + name)
 			ex := newFakeExecutor()
-			got := resolvePyTool(context.Background(), fs, ex, "/Users/u/.rune", name)
+			got := resolvePyTool(context.Background(), fs, ex, fakeInstaller{fs: fs, root: "/Users/u/.rune"}, name)
 			assert.Equal(t, "", got)
 			assert.Empty(t, ex.callsSnapshot())
 		})
@@ -213,7 +235,7 @@ func TestResolvePyTool(t *testing.T) {
 		t.Run(name+"/missing returns empty without probing", func(t *testing.T) {
 			fs := newFakeFS()
 			ex := newFakeExecutor()
-			got := resolvePyTool(context.Background(), fs, ex, "/Users/u/.rune", name)
+			got := resolvePyTool(context.Background(), fs, ex, fakeInstaller{fs: fs, root: "/Users/u/.rune"}, name)
 			assert.Equal(t, "", got)
 			assert.Empty(t, ex.callsSnapshot())
 		})

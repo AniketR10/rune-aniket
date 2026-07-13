@@ -101,19 +101,32 @@ func TestReadLspPath(t *testing.T) {
 func TestResolveRustAnalyzer(t *testing.T) {
 	t.Run("lsp_path override wins", func(t *testing.T) {
 		cfg := newStubConfig(map[string]string{"lsp_path": "/opt/ra"})
-		got := resolveRustAnalyzer(cfg, newFakeNotifications(), "/data")
+		fs := newFakeFS().addFile("/data/bin/rust-analyzer")
+		got := resolveRustAnalyzer(context.Background(), cfg,
+			newFakeNotifications(), fakeInstaller{fs: fs, root: "/data"})
 		assert.Equal(t, "/opt/ra", got)
 	})
 
-	t.Run("defaults to bundled binary", func(t *testing.T) {
-		got := resolveRustAnalyzer(nil, newFakeNotifications(), "/data")
+	t.Run("defaults to provisioned binary", func(t *testing.T) {
+		fs := newFakeFS().addFile("/data/bin/rust-analyzer")
+		got := resolveRustAnalyzer(context.Background(), nil,
+			newFakeNotifications(), fakeInstaller{fs: fs, root: "/data"})
 		assert.Equal(t, "/data/bin/rust-analyzer", got)
 	})
 
-	t.Run("empty lsp_path uses bundled binary", func(t *testing.T) {
+	t.Run("empty lsp_path uses provisioned binary", func(t *testing.T) {
 		cfg := newStubConfig(map[string]string{"lsp_path": ""})
-		got := resolveRustAnalyzer(cfg, newFakeNotifications(), "/data")
+		fs := newFakeFS().addFile("/data/bin/rust-analyzer")
+		got := resolveRustAnalyzer(context.Background(), cfg,
+			newFakeNotifications(), fakeInstaller{fs: fs, root: "/data"})
 		assert.Equal(t, "/data/bin/rust-analyzer", got)
+	})
+
+	t.Run("missing provisioned binary resolves empty", func(t *testing.T) {
+		fs := newFakeFS()
+		got := resolveRustAnalyzer(context.Background(), nil,
+			newFakeNotifications(), fakeInstaller{fs: fs, root: "/data"})
+		assert.Empty(t, got)
 	})
 }
 
@@ -303,7 +316,8 @@ func TestExtendWorkspaceNonRustRegistersButSkipsInit(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, newFakeExecutor(), newFakeNotifications(), lsp, &fakeEditor{},
-		&fakeWM{}, nil, "/data", "/rustup", "/cargo", nil,
+		&fakeWM{}, nil, fakeInstaller{fs: fs, root: "/data"},
+		"/rustup", "/cargo", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error {
 			registered = true
 			return nil
@@ -330,7 +344,7 @@ func TestExtendWorkspaceWithoutCargoHome(t *testing.T) {
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{}, nil,
-		"/data", "/rustup", "", nil,
+		fakeInstaller{fs: fs, root: "/data"}, "/rustup", "", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
 		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
@@ -372,7 +386,8 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, newFakeNotifications(), lsp, editor,
-		&fakeWM{}, nil, "/data", "/rustup", "/cargo", nil,
+		&fakeWM{}, nil, fakeInstaller{fs: fs, root: "/data"},
+		"/rustup", "/cargo", nil,
 		func(textapi.CommandManual, textapi.REPLHandler) error { return nil },
 		func(textapi.CommandManual, textapi.CommandHandler) error { return nil })
 	require.NoError(t, err)
@@ -409,7 +424,7 @@ func TestExtendWorkspaceRegistersAndInitializes(t *testing.T) {
 	ext := &rustExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
 		fs, ex, notify, lsp, &fakeEditor{}, &fakeWM{},
-		nil, "/data", "/rustup", "/cargo", nil,
+		nil, fakeInstaller{fs: fs, root: "/data"}, "/rustup", "/cargo", nil,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			manuals = append(manuals, m)
 			return nil

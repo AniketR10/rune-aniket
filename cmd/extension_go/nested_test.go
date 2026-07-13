@@ -116,7 +116,7 @@ func TestExtendWorkspaceNestedDiscovery(t *testing.T) {
 	registered := false
 	err := ext.extendWorkspaceWith(context.Background(),
 		scheme, scheme, &mockNotifications{}, lsp, editor,
-		nil, nil, nil, nil, "/data", nil,
+		nil, nil, nil, nil, nopInstaller{}, nil,
 		func(textapi.CommandManual, textapi.CommandHandler) error {
 			registered = true
 			return nil

@@ -264,7 +264,7 @@ func runExtensionOnDir(t *testing.T, dir string) scenarioEnv {
 		notify,
 		lsp,
 		editor,
-		"",
+		fakeInstaller{fs: realFS{root: dir}, root: ""},
 		config.NopConfig(),
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)

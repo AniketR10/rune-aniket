@@ -54,6 +54,7 @@ type protocol struct {
 	extensionID  string
 	socket       string
 	dataDir      string
+	installDir   string
 	cert         []byte
 	ctx          context.Context
 	cfg          map[string]any
@@ -63,7 +64,7 @@ type protocol struct {
 
 func newProtocol(
 	ctx context.Context, grantor extension.Grantor,
-	extensionID, socket, dataDir string,
+	extensionID, socket, dataDir, installDir string,
 	cert []byte, insecureAuth bool, cfg config.Config, keys auth.Keys,
 	readiness *extensionReadiness,
 ) *protocol {
@@ -75,6 +76,7 @@ func newProtocol(
 		readCh:       make(chan struct{}),
 		extensionID:  extensionID,
 		dataDir:      dataDir,
+		installDir:   installDir,
 		socket:       socket,
 		cert:         cert,
 		ctx:          ctx,
@@ -130,6 +132,7 @@ func (p *protocol) Write(data []byte) (int, error) {
 		Socket:      p.socket,
 		Certificate: p.cert,
 		DataDir:     p.dataDir,
+		InstallDir:  p.installDir,
 		Config:      p.cfg,
 	}
 	if !p.insecureAuth {

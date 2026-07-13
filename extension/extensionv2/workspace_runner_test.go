@@ -170,6 +170,7 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
+		"/tmp/ext-install",
 		[]byte("cert"),
 		keys,
 	)
@@ -185,6 +186,8 @@ func TestWorkspaceRunnerStartCommandPreservesCallerEnv(t *testing.T) {
 	assert.Contains(t, exec.cmd.Env, "FOO=bar")
 	assert.Contains(t, exec.cmd.Env, "RUNE_SOCKET=/tmp/ext.sock")
 	assert.Contains(t, exec.cmd.Env, "RUNE_DATADIR=/tmp/ext-data")
+	assert.Contains(t, exec.cmd.Env, "RUNE_INSTALLDIR=/tmp/ext-install",
+		"install dir is carried separately from the local data dir")
 	// cmd.Dir is left untouched: the host-side fileScheme defaults
 	// it to its own resolved workspace path when empty, and
 	// pre-resolving here mishandled SSH URIs containing "~". See
@@ -225,7 +228,7 @@ func TestWorkspaceRunnerStartCommandDoesNotDoubleResolveDir(t *testing.T) {
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(
 		exec, exec, nil, uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys,
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys,
 	)
 
 	_, err = runner.StartCommand(context.Background(), workspaceapi.Cmd{
@@ -266,6 +269,7 @@ func TestWorkspaceRunnerStartCommandMarksTokenPlugin(t *testing.T) {
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
+		"/tmp/ext-install",
 		[]byte("cert"),
 		keys,
 	)
@@ -308,6 +312,7 @@ func TestWorkspaceRunnerRunCarriesExtensionID(t *testing.T) {
 		uri,
 		"/tmp/ext.sock",
 		"/tmp/ext-data",
+		"/tmp/ext-install",
 		[]byte("cert"),
 		keys,
 	)
@@ -352,6 +357,7 @@ func TestWorkspaceRunnerRunSSHWorkspaceUsesExtExecutor(t *testing.T) {
 		uri,
 		"/tmp/ext.sock",
 		dataDir,
+		"",
 		[]byte("cert"),
 		keys,
 	)
@@ -393,6 +399,7 @@ func TestWorkspaceRunnerStartCommandRoutesToWorkspaceExecutor(t *testing.T) {
 		uri,
 		"/tmp/ext.sock",
 		t.TempDir(),
+		"",
 		[]byte("cert"),
 		keys,
 	)
@@ -421,7 +428,7 @@ func TestWorkspaceRunnerRunRejectsDuplicateRunningID(t *testing.T) {
 
 	exec0 := &recordingExecutor{}
 	runner := newWorkspaceRunner(exec0, exec0, nil, uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
 	err = runner.Run("test-extension", "/bin/ext", config.NopConfig())
@@ -440,7 +447,7 @@ func TestWorkspaceRunnerStopExtensionMarksStateStopped(t *testing.T) {
 
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(exec, exec, nil, uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
 	require.NoError(t, runner.stopExtensionByID("test-extension"))
@@ -463,7 +470,7 @@ func TestWorkspaceRunnerStopExtensionRecordsReason(t *testing.T) {
 
 	exec1 := &recordingExecutor{}
 	runner := newWorkspaceRunner(exec1, exec1, nil, uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
 	stopErr := errors.New("protocol write failed")
@@ -485,7 +492,7 @@ func TestWorkspaceRunnerRestartReusesStoredCommandAndConfig(t *testing.T) {
 
 	exec := &protocolDrivingExecutor{extensionID: "test-extension"}
 	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 	cfg := config.MapConfig(map[string]any{"foo": "bar"})
 	require.NoError(t, runner.Run("test-extension", "/bin/ext --serve", cfg))
 
@@ -515,7 +522,7 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 	done := make(chan error, 1)
 	go func() {
@@ -568,7 +575,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 
 		exec := &recordingExecutor{}
 		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -614,7 +621,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 
 		exec := &recordingExecutor{}
 		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
@@ -647,7 +654,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 
 		exec := &recordingExecutor{}
 		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		done := make(chan error, 1)
 		go func() {
@@ -699,7 +706,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 
 		exec := &recordingExecutor{}
 		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		done := make(chan error, 1)
 		go func() {
@@ -731,7 +738,7 @@ func TestWorkspaceRunnerWaitReady(t *testing.T) {
 
 		exec := &recordingExecutor{}
 		runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-			"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+			"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 		require.NoError(t, runner.Run("test-extension", "/bin/ext", config.NopConfig()))
 
@@ -767,7 +774,7 @@ func TestWorkspaceRunnerStartExtensionReturnsProtocolError(t *testing.T) {
 
 	exec := &recordingExecutor{}
 	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 	done := make(chan error, 1)
 	go func() {
@@ -808,7 +815,7 @@ func TestWorkspaceRunnerStartExtensionReturnsStartCommandError(t *testing.T) {
 
 	exec := startErrorExecutor{err: errors.New("boom")}
 	runner := newWorkspaceRunner(exec, exec, extension.GrantAll(), uri,
-		"/tmp/ext.sock", "/tmp/ext-data", []byte("cert"), keys)
+		"/tmp/ext.sock", "/tmp/ext-data", "/tmp/ext-install", []byte("cert"), keys)
 
 	err = runner.startExtension(context.Background(), "test-extension", "/bin/ext", config.NopConfig())
 	require.Error(t, err)

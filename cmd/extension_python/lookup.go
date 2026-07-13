@@ -25,27 +25,41 @@ package main
 
 import (
 	"context"
-	"path"
+	"errors"
+	"log/slog"
+	"os"
 
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
-// resolvePyTool locates a Python toolchain binary (ty, ruff, uv) at the
-// per-workspace `<dataDir>/bin/<name>` install location, returning its
-// path or "" when absent. Unlike the Go extension, it does not probe
-// well-known dirs or the shell: Python tooling lacks the cross-version
-// compatibility guarantees that make a loosely-resolved binary safe, so
-// the caller falls back to the bare command name and lets the executor
-// resolve it through $PATH.
+// installer resolves executables the host provisioned alongside this
+// extension on the workspace host. It is satisfied by
+// *extensionapi.Workspace.
+type installer interface {
+	FindInstalledExecutable(ctx context.Context, name string) (string, error)
+}
+
+// resolvePyTool locates a Python toolchain binary (ty, ruff, uv)
+// provisioned under the install root's bin/ on the workspace host,
+// returning its path or "" when absent. Unlike the Go extension, it does
+// not probe well-known dirs or the shell: Python tooling lacks the
+// cross-version compatibility guarantees that make a loosely-resolved
+// binary safe, so the caller falls back to the bare command name and
+// lets the executor resolve it through $PATH. Resolution goes through
+// the installer so file:// and ssh:// workspaces both find the
+// provisioned binary.
 func resolvePyTool(
-	_ context.Context,
-	fs workspaceapi.FileSystem,
+	ctx context.Context,
+	_ workspaceapi.FileSystem,
 	_ workspaceapi.Executor,
-	dataDir, name string,
+	inst installer, name string,
 ) string {
-	candidate := path.Join(dataDir, "bin", name)
-	if info, err := fs.Stat(candidate); err == nil && info != nil && !info.IsDir() {
-		return candidate
+	bin, err := inst.FindInstalledExecutable(ctx, name)
+	if err == nil {
+		return bin
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("probe provisioned tool failed", "tool", name, "error", err)
 	}
 	return ""
 }
