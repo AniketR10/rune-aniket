@@ -86,6 +86,19 @@ func WithProvisionManifest(fn func() string) Option {
 	}
 }
 
+// WithRemoteDataDir forces the remote `rune -x` server to use ~/<name> as
+// its data directory via an explicit `--datadir` flag, instead of relying
+// on the remote's default ($HOME/.rune). name is a bare directory name
+// (e.g. ".rune" or ".runedev"), taken from the local IDE's data-directory
+// basename so the local client and the remote server provision into the
+// same well-known location by construction. Empty name leaves the remote
+// default untouched.
+func WithRemoteDataDir(name string) Option {
+	return func(s *scheme) {
+		s.remoteDataDir = name
+	}
+}
+
 // New returns a schemeapi.SchemeFunc capable of managing files over an ssh
 // connection. ui drives the interactive auth flow (passphrase / password /
 // kbd-interactive prompts). It is intended to be installed into a workspace
@@ -123,6 +136,8 @@ type scheme struct {
 	cancelCtx       func()
 	ui              UI
 	provisionFn     func() string
+	passCache       *passwordCache
+	remoteDataDir   string
 
 	schemeapi.Scheme
 }
@@ -147,9 +162,10 @@ func newScheme(
 
 	ret.getUser = user.Current
 	ret.ui = ui
+	ret.passCache = new(passwordCache)
 	if cc.command == "" {
 		ret.remoteFn = func(c context.Context, sc sshConfig, u workspaceapi.URI) (remote, error) {
-			return newStdRemote(c, sc, u, ret.ui)
+			return newStdRemote(c, sc, u, ret.ui, ret.passCache)
 		}
 	} else {
 		ret.remoteFn = newProcRemote
@@ -344,6 +360,14 @@ func (s *scheme) connectScheme(
 		extraArgs = []string{"-p", "-o", "rune-workspace-server.log"}
 	}
 
+	var dataDirArgs []string
+	if s.remoteDataDir != "" {
+		// The arg runs through the remote shell (goSshSession.StartCommand
+		// joins Path+Args into one command string), so ~ is expanded on the
+		// remote host. remoteDataDir is a bare, shell-safe directory name.
+		dataDirArgs = []string{"--datadir", "~/" + s.remoteDataDir}
+	}
+
 	var installArgs []string
 	if s.cfg.provisionPackages && s.provisionFn != nil {
 		if manifest := s.provisionFn(); manifest != "" {
@@ -356,7 +380,8 @@ func (s *scheme) connectScheme(
 	}
 
 	cmdStr := remoteWorkspaceServerBin
-	args := append([]string{"-x", sshPath}, installArgs...)
+	args := append([]string{"-x", sshPath}, dataDirArgs...)
+	args = append(args, installArgs...)
 	args = append(args, extraArgs...)
 	if s.cfg.shell != "" {
 		args = append([]string{"-c", cmdStr}, args...)

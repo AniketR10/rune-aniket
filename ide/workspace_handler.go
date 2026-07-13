@@ -1779,8 +1779,15 @@ func (h *workspaceManagerHandler) buildExtensions(
 		ScheduleNextTick: cfg.scheduleNextTick,
 		Icons:            cfg.lspIcons(),
 	}
+	// Resolve the workspace root once, expanding ~ on the workspace host so
+	// the LSP/DAP managers agree with the RootURI the language extensions
+	// report (see workspaceRootURI).
+	rootURI, err := workspaceRootURI(cwd, uri)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("resolve workspace root: %w", err)
+	}
 	callbacks := idelsp.NewCallbackHandler(notifications, apibrowser, ex.Browser(),
-		apieditor, cwd, uri.String(), lspCallbackCfg)
+		apieditor, cwd, rootURI.String(), lspCallbackCfg)
 	lspConfig := idelsp.Config{
 		NoInitializeServer: true,
 		Callback:           callbacks,
@@ -1788,14 +1795,14 @@ func (h *workspaceManagerHandler) buildExtensions(
 		WorkDoneProgress:   true,
 		ScheduleNextTick:   cfg.scheduleNextTick,
 	}
-	lsp := idelsp.New(uri, cwd,
+	lsp := idelsp.New(rootURI, cwd,
 		cwd, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
 	dapCfg := idedebug.Config{
 		MaxRetries: 5,
 		Adapters:   cfg.debuggerConfigs(),
 	}
-	dap := idedebug.New(uri, cwd, h.pkgmanager, dapCfg)
+	dap := idedebug.New(rootURI, cwd, h.pkgmanager, dapCfg)
 	defer func() {
 		if retErr == nil {
 			return
@@ -1892,11 +1899,9 @@ func (h *workspaceManagerHandler) buildExtensions(
 		return nil, nil, nil, nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
 	// installDir is where the IDE provisions per-extension toolchains on the
-	// workspace host. dataDir is local to the IDE (already ~-expanded), so we
-	// re-expand its basename (e.g. ".rune") against the workspace host: local
-	// home for file://, remote home for ssh://. Extensions resolve provisioned
-	// binaries under installDir via FindInstalledExecutable.
-	installDir := installRoot(cwd, dataDir)
+	// workspace host. Extensions resolve provisioned binaries under it via
+	// FindInstalledExecutable.
+	installDir := installRoot(cwd, uri, dataDir)
 	browser := ex.Browser()
 	// grant all permissions for now, until we actually have installable third
 	// party extensions.
@@ -1911,20 +1916,51 @@ func (h *workspaceManagerHandler) buildExtensions(
 }
 
 // installRoot returns the host path where per-extension toolchains are
-// provisioned for the given workspace. localDataDir is the IDE's local,
-// already-expanded data directory (e.g. /Users/x/.rune); its basename is
-// re-expanded as ~/<base> against the workspace host so file:// resolves to
-// the local home and ssh:// to the remote home. On any expansion error it
-// falls back to localDataDir and logs.
-func installRoot(ws workspace.Workspace, localDataDir string) string {
+// provisioned for the given workspace.
+//
+// For a local (file://) workspace the IDE provisions into its own data
+// directory, so localDataDir is used as-is. For a remote workspace the
+// remote `rune -x` server is launched with an explicit
+// `--datadir ~/<basename>` (see workspacessh.WithRemoteDataDir), where
+// <basename> is the local data directory's basename; so the install root
+// is ~/<basename> resolved against the remote host. Client and remote
+// therefore agree by construction even when the client runs with a custom
+// --datadir (e.g. ~/.runedev provisions to the remote's ~/.runedev). On any
+// expansion error it falls back to localDataDir and logs.
+func installRoot(ws workspace.Workspace, uri workspaceapi.URI, localDataDir string) string {
+	if uri.Scheme() == workspace.FileScheme {
+		return localDataDir
+	}
 	base := filepath.Base(localDataDir)
-	uri, err := ws.URI("~/" + base)
+	remote, err := ws.URI("~/" + base)
 	if err != nil {
 		log.Warnf("resolve install root ~/%s on workspace host: %v; "+
 			"falling back to local data dir %s", base, err, localDataDir)
 		return localDataDir
 	}
-	return uri.Path()
+	return remote.Path()
+}
+
+// workspaceRootURI resolves the workspace root against the workspace host,
+// expanding a leading ~ (as in ssh://host/~/src/proj) to the host's
+// absolute home path. The language extensions derive their LSP RootURI the
+// same way (via w.FileSystem(ctx).URI(".")), so resolving here keeps the
+// idelsp/idedebug managers' root in lockstep with what the extensions
+// send; otherwise gopls initialization fails the containment check with
+// "root uri is not contained in the workspace root". cwd is a required
+// dependency: a nil workspace is a wiring bug, not a runtime condition.
+// A resolve error is fatal: without a correct host-anchored root every
+// downstream containment check is unreliable, so the caller must abort the
+// build rather than proceed with an unresolved root.
+func workspaceRootURI(cwd workspace.Workspace, raw workspaceapi.URI) (workspaceapi.URI, error) {
+	if cwd == nil {
+		panic("workspaceRootURI: cwd workspace is required")
+	}
+	resolved, err := cwd.URI(".")
+	if err != nil {
+		return workspaceapi.URI{}, fmt.Errorf("resolve workspace root on host for %s: %w", raw, err)
+	}
+	return resolved, nil
 }
 
 func (h *workspaceManagerHandler) addOrCreateWorkspace(

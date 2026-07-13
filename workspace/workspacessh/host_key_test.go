@@ -131,7 +131,7 @@ func TestHostKeyUnknownAcceptRecordsAndConnects(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err, "unknown host + accept must connect")
 	_ = r.Close()
 
@@ -155,7 +155,7 @@ func TestHostKeyUnknownCancelLeavesFileUnchanged(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	_, err := newStdRemote(context.Background(), cfg, uri, ui)
+	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrHostKeyUnknown),
 		"cancelling an unknown host must surface ErrHostKeyUnknown; got %v", err)
@@ -185,7 +185,7 @@ func TestHostKeyChangedAcceptReplacesStalePreservesOthers(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err, "changed key + accept must connect")
 	_ = r.Close()
 
@@ -218,7 +218,7 @@ func TestHostKeyChangedCancelLeavesFileUnchanged(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	_, err = newStdRemote(context.Background(), cfg, uri, ui)
+	_, err = newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrHostKeyMismatch),
 		"cancelling a changed key must surface ErrHostKeyMismatch; got %v", err)
@@ -240,7 +240,7 @@ func TestHostKeyUnknownTrustOnceConnectsWithoutRecording(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err, "unknown host + trust once must connect")
 	_ = r.Close()
 
@@ -267,7 +267,7 @@ func TestHostKeyChangedTrustOnceConnectsWithoutRewriting(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err, "changed key + trust once must connect")
 	_ = r.Close()
 
@@ -289,7 +289,7 @@ func TestHostKeyMatchingDoesNotPrompt(t *testing.T) {
 	uri := uriForServer(t, srv, "")
 
 	ui := &recordingUI{choiceCancel: true} // would fail if prompted
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err)
 	_ = r.Close()
 	assert.Empty(t, ui.prompts,
@@ -309,7 +309,7 @@ func TestHostKeyStrictDisabledRecordsWithoutPrompt(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, false, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err,
 		"strict_host_key_checking=false must auto-accept and connect")
 	_ = r.Close()
@@ -335,7 +335,7 @@ func TestHostKeyUnparsableTrustOnceConnectsWithoutRewriting(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err, "unparsable known_hosts + trust once must connect")
 	_ = r.Close()
 
@@ -359,7 +359,7 @@ func TestHostKeyUnparsableCancelSurfacesError(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, true, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	_, err := newStdRemote(context.Background(), cfg, uri, ui)
+	_, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrKnownHostsUnparsable),
 		"cancelling an unparsable known_hosts must surface "+
@@ -382,7 +382,7 @@ func TestHostKeyUnparsableStrictDisabledTrustsOnceWithoutPrompt(t *testing.T) {
 	cfg := hostKeyTestConfig(t, khPath, false, keyPath)
 	uri := uriForServer(t, srv, "")
 
-	r, err := newStdRemote(context.Background(), cfg, uri, ui)
+	r, err := newStdRemote(context.Background(), cfg, uri, ui, nil)
 	require.NoError(t, err,
 		"strict=false must trust once and connect despite unparsable file")
 	_ = r.Close()

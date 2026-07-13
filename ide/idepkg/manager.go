@@ -71,6 +71,10 @@ var (
 	// ErrVersionNotFound is returned when the server reports that a
 	// requested version of a known package does not exist.
 	ErrVersionNotFound = errors.New("package version not found")
+	// ErrAlreadyInstalled is returned when a fully-installed version of a
+	// package is installed again. Callers that treat re-installs as
+	// idempotent no-ops can test for it with errors.Is.
+	ErrAlreadyInstalled = errors.New("package version already installed")
 	// ErrServerUnavailable is returned for transient (5xx) failures
 	// from the package server or the signed-URL download backend.
 	ErrServerUnavailable = errors.New("package server unavailable")
@@ -384,7 +388,8 @@ func (m *Manager) InstallPackageVersion(
 				m.cleanupFile(tarfile)
 				m.iterators.Unlock()
 				return fmt.Errorf("version %s of package %s has "+
-					"already been installed", version, pkgID)
+					"already been installed: %w", version, pkgID,
+					ErrAlreadyInstalled)
 			}
 		} else {
 			m.cleanupFile(tarfile)
@@ -990,8 +995,17 @@ func (m *Manager) processConfig(
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
+	// A fresh datadir has no user config yet. Seed an empty one so the
+	// package's env/settings still merge; otherwise a first install (e.g. a
+	// remote `rune -x` provisioning into a brand-new ~/.rune) never gets
+	// GOROOT and the toolchain fails with "cannot find GOROOT directory".
 	if _, statErr := os.Stat(m.configPath); os.IsNotExist(statErr) {
-		return nil
+		if err := os.MkdirAll(filepath.Dir(m.configPath), 0o777); err != nil {
+			return fmt.Errorf("create config dir: %w", err)
+		}
+		if err := os.WriteFile(m.configPath, nil, 0o644); err != nil {
+			return fmt.Errorf("seed empty user config: %w", err)
+		}
 	}
 
 	userCfg, err := loadIdePkgConfigFile(m.configPath, m.configBaseTree())

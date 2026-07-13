@@ -146,11 +146,13 @@ func TestInstallRemotePackagesEmptyManifestEmitsNothing(t *testing.T) {
 	assert.Empty(t, sink.String(), "empty manifest must emit no progress lines")
 }
 
-// TestInstallRemotePackagesEmitsOrderedProgress asserts the ordered JSON-Lines
-// progress stream. The release endpoint is pointed at an unreachable address so
-// each install fails offline, exercising the installing → failed sequence per
-// package followed by a final done line — without any network access.
-func TestInstallRemotePackagesEmitsOrderedProgress(t *testing.T) {
+// TestInstallRemotePackagesEmitsProgress asserts the JSON-Lines progress
+// stream. The release endpoint is pointed at an unreachable address so each
+// install fails offline, exercising the installing → failed sequence per
+// package followed by a final done line — without any network access. Installs
+// run concurrently, so per-package lines may interleave; the assertions are
+// order-independent except that the terminal done line must come last.
+func TestInstallRemotePackagesEmitsProgress(t *testing.T) {
 	setFlagForTest(t, flagWorkspaceServerInstall, "pkg-a@1.0.0,pkg-b@2.0.0")
 	setFlagForTest(t, flagDataPath, t.TempDir())
 	setFlagForTest(t, flagConfigPath, filepath.Join(t.TempDir(), "config.yaml"))
@@ -170,25 +172,34 @@ func TestInstallRemotePackagesEmitsOrderedProgress(t *testing.T) {
 	}
 	require.NoError(t, scanner.Err())
 
-	// Failed lines must carry the underlying error text so the notification
-	// can explain the failure. Assert it is present, then normalize it out to
-	// compare the ordered structure against a fixed expectation.
-	for i := range got {
-		if got[i].Phase == workspacessh.ProvisionPhaseFailed {
-			assert.NotEmpty(t, got[i].Detail,
-				"failed line %d must carry the install error detail", i)
-			got[i].Detail = ""
+	require.NotEmpty(t, got)
+	// The terminal done line must be emitted last, after every package's
+	// installs have joined.
+	last := got[len(got)-1]
+	assert.Equal(t, workspacessh.ProvisionPhaseDone, last.Phase)
+	assert.Equal(t, 2, last.Total)
+
+	// Each package must contribute exactly one installing and one failed line
+	// (order-independent because installs run concurrently). Failed lines must
+	// carry the underlying error detail.
+	type phaseKey struct {
+		pkg   string
+		phase string
+	}
+	counts := map[phaseKey]int{}
+	for _, p := range got[:len(got)-1] {
+		counts[phaseKey{p.Package, p.Phase}]++
+		if p.Phase == workspacessh.ProvisionPhaseFailed {
+			assert.NotEmpty(t, p.Detail,
+				"failed line for %s must carry the install error detail", p.Package)
 		}
 	}
-
-	want := []workspacessh.ProvisionProgress{
-		{Rune: "provision", Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0", Phase: workspacessh.ProvisionPhaseInstalling},
-		{Rune: "provision", Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0", Phase: workspacessh.ProvisionPhaseFailed},
-		{Rune: "provision", Index: 2, Total: 2, Package: "pkg-b", Version: "2.0.0", Phase: workspacessh.ProvisionPhaseInstalling},
-		{Rune: "provision", Index: 2, Total: 2, Package: "pkg-b", Version: "2.0.0", Phase: workspacessh.ProvisionPhaseFailed},
-		{Rune: "provision", Index: 2, Total: 2, Phase: workspacessh.ProvisionPhaseDone},
+	for _, pkg := range []string{"pkg-a", "pkg-b"} {
+		assert.Equal(t, 1, counts[phaseKey{pkg, workspacessh.ProvisionPhaseInstalling}],
+			"%s must emit exactly one installing line", pkg)
+		assert.Equal(t, 1, counts[phaseKey{pkg, workspacessh.ProvisionPhaseFailed}],
+			"%s must emit exactly one failed line", pkg)
 	}
-	assert.Equal(t, want, got)
 }
 
 // fakeInstaller stands in for the provisioning manager so the version-fallback
@@ -303,4 +314,35 @@ func TestInstallOnePackageFallbackAlsoMissing(t *testing.T) {
 		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
 	require.False(t, ok)
 	assert.Contains(t, sink.String(), "failed")
+}
+
+// TestInstallOnePackageAlreadyInstalledIsNoOp asserts that re-provisioning an
+// already-installed package is idempotent: it still activates the package and
+// reports an activating (not failed) progress line, so the user never sees a
+// spurious "already been installed" warning.
+func TestInstallOnePackageAlreadyInstalledIsNoOp(t *testing.T) {
+	inst := &fakeInstaller{
+		installErr: map[string]error{
+			"v1.2.3": fmt.Errorf("boom: %w", idepkg.ErrAlreadyInstalled),
+		},
+	}
+	var sink strings.Builder
+	ok := installOnePackage(context.Background(), inst, &sink,
+		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
+	require.True(t, ok, "an already-installed package is a successful no-op")
+	assert.Equal(t, []string{"v1.2.3"}, inst.used,
+		"an already-installed package must still be activated")
+	assert.NotContains(t, sink.String(), "failed",
+		"re-installing an existing package must not emit a failed progress line")
+
+	var got []workspacessh.ProvisionProgress
+	scanner := bufio.NewScanner(strings.NewReader(sink.String()))
+	for scanner.Scan() {
+		p, ok := workspacessh.ParseProvisionProgressLine(scanner.Bytes())
+		require.True(t, ok)
+		got = append(got, p)
+	}
+	require.Len(t, got, 2)
+	assert.Equal(t, workspacessh.ProvisionPhaseInstalling, got[0].Phase)
+	assert.Equal(t, workspacessh.ProvisionPhaseActivating, got[1].Phase)
 }

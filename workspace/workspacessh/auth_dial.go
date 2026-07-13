@@ -44,7 +44,7 @@ func TestAuthDial(
 	if cfg.timeout == 0 {
 		cfg.timeout = defSSHTimeout
 	}
-	r, err := newStdRemote(ctx, cfg, uri, ui)
+	r, err := newStdRemote(ctx, cfg, uri, ui, nil)
 	if err != nil {
 		return err
 	}

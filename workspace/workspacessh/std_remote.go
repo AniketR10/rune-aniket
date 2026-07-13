@@ -34,6 +34,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"sync"
 	"time"
 
 	gitknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
@@ -46,6 +47,41 @@ import (
 )
 
 const watcherWaitTimeout = 2 * time.Minute
+
+// passwordCache remembers the last password the user typed at the
+// interactive "ssh password:" prompt so that a reconnect (the
+// maintainConnection retry loop re-dials, which starts a fresh auth
+// exchange) reuses it instead of prompting the user again. It is owned by
+// the scheme and therefore lives across reconnects.
+//
+// The cache is only consulted for the first PasswordCallback of a dial. A
+// rejected password causes ssh.RetryableAuthMethod to re-invoke the
+// callback; on that path we always prompt fresh and overwrite the cache so
+// a stale (wrong) password is never re-served.
+type passwordCache struct {
+	mu  sync.Mutex
+	val string
+	set bool
+}
+
+func (c *passwordCache) get() (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.val, c.set
+}
+
+func (c *passwordCache) put(v string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.val = v
+	c.set = true
+}
 
 // ErrAuthRequiredKey indicates the server requires publickey authentication
 // but the client has no usable signers configured.
@@ -145,13 +181,13 @@ type goSshSession struct {
 }
 
 func newStdRemote(
-	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
+	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI, passCache *passwordCache,
 ) (remote, error) {
 	username, err := usernameOrCurrent(uri)
 	if err != nil {
 		return nil, err
 	}
-	r, err := dialWithKeys(ctx, cfg, uri, ui, username, nil)
+	r, err := dialWithKeys(ctx, cfg, uri, ui, username, nil, passCache)
 	if err == nil {
 		return r, nil
 	}
@@ -183,13 +219,13 @@ func newStdRemote(
 	case hostKeyReject:
 		return nil, err
 	case hostKeyTrustOnce:
-		return dialWithKeys(ctx, cfg, uri, ui, username, hkErr.Presented)
+		return dialWithKeys(ctx, cfg, uri, ui, username, hkErr.Presented, passCache)
 	default:
 		if persistErr := persistKnownHostKey(hkErr); persistErr != nil {
 			return nil, fmt.Errorf("could not record host key in %s: %w",
 				hkErr.KnownHostsPath, persistErr)
 		}
-		return dialWithKeys(ctx, cfg, uri, ui, username, nil)
+		return dialWithKeys(ctx, cfg, uri, ui, username, nil, passCache)
 	}
 }
 
@@ -200,7 +236,7 @@ func newStdRemote(
 // and accepts exactly that key, used for the "trust once" path.
 func dialWithKeys(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
-	username string, pinnedKey ssh.PublicKey,
+	username string, pinnedKey ssh.PublicKey, passCache *passwordCache,
 ) (remote, error) {
 	hostkeyCallback, hostKeyAlgos, err := buildHostkeyCallback(cfg, uri, pinnedKey)
 	if err != nil {
@@ -220,7 +256,7 @@ func dialWithKeys(
 	// every other matrix scenario keep behaving exactly as before.
 	if len(keyPaths) <= 1 {
 		return dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback, hostKeyAlgos,
-			keyPaths, true /* includeFallbacks */)
+			keyPaths, true /* includeFallbacks */, passCache)
 	}
 
 	// Two or more keys: redial per key so that server limits like
@@ -233,7 +269,7 @@ func dialWithKeys(
 	for i, kp := range keyPaths {
 		last := i == len(keyPaths)-1
 		r, err := dialOnce(ctx, cfg, uri, ui, username, hostkeyCallback, hostKeyAlgos,
-			[]string{kp}, last)
+			[]string{kp}, last, passCache)
 		if err == nil {
 			return r, nil
 		}
@@ -258,9 +294,9 @@ func dialWithKeys(
 func dialOnce(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
 	username string, hostkeyCallback ssh.HostKeyCallback, hostKeyAlgos []string,
-	keyPaths []string, includeFallbacks bool,
+	keyPaths []string, includeFallbacks bool, passCache *passwordCache,
 ) (remote, error) {
-	auths, err := authMethodsFromURI(ctx, cfg, uri, ui, keyPaths, includeFallbacks)
+	auths, err := authMethodsFromURI(ctx, cfg, uri, ui, keyPaths, includeFallbacks, passCache)
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +555,7 @@ func (r *stdRemote) Close() error {
 // only sees prompts that can succeed.
 func authMethodsFromURI(
 	ctx context.Context, cfg sshConfig, uri workspaceapi.URI, ui UI,
-	keyPaths []string, includeFallbacks bool,
+	keyPaths []string, includeFallbacks bool, passCache *passwordCache,
 ) ([]ssh.AuthMethod, error) {
 	var auths []ssh.AuthMethod
 
@@ -550,13 +586,26 @@ func authMethodsFromURI(
 	var passAttempts int
 	auths = append(auths, ssh.RetryableAuthMethod(
 		ssh.PasswordCallback(func() (string, error) {
-			if passAttempts > 0 {
+			// First callback of this dial: reuse the last-good password
+			// (e.g. after a reconnect) so we don't re-prompt the user.
+			if passAttempts == 0 {
+				if pass, ok := passCache.get(); ok {
+					passAttempts++
+					return pass, nil
+				}
+			} else {
+				// Prior credential was rejected: prompt fresh below.
 				ui.Notify(NotificationError, fmt.Sprintf(
 					"ssh: password rejected (attempt %d). Try again or press esc to cancel.",
 					passAttempts))
 			}
 			passAttempts++
-			return ui.PromptSecret(ctx, "ssh password: ")
+			pass, err := ui.PromptSecret(ctx, "ssh password: ")
+			if err != nil {
+				return "", err
+			}
+			passCache.put(pass)
+			return pass, nil
 		}),
 		3,
 	))

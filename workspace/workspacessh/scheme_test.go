@@ -325,6 +325,59 @@ func TestConnectSchemeProvisionManifest(t *testing.T) {
 		"--install must directly follow `-x <path>`; got %+v", cmd.Args)
 }
 
+// TestConnectSchemeRemoteDataDir asserts that WithRemoteDataDir threads an
+// explicit `--datadir ~/<name>` into the remote `rune -x` invocation so the
+// remote provisions into a known location (~ expands on the remote shell),
+// placed right after `-x <path>` and before any `--install` manifest.
+func TestConnectSchemeRemoteDataDir(t *testing.T) {
+	rec := &recordingRemote{}
+	manifest := "rune-go@1.2.3"
+	s, uri := newProvisionTestScheme(rec, func() string { return manifest })
+	s.remoteDataDir = ".runedev"
+	defer s.cancelCtx()
+
+	scheme, err := s.connectScheme(context.Background(), uri, func(error) {})
+	require.NoError(t, err)
+	if scheme != nil {
+		_ = scheme.Close()
+	}
+
+	cmd := findRuneServerCmd(t, rec)
+	ddIdx := slices.Index(cmd.Args, "--datadir")
+	require.GreaterOrEqual(t, ddIdx, 0, "must add --datadir; got %+v", cmd.Args)
+	require.Less(t, ddIdx+1, len(cmd.Args), "--datadir must be followed by a value")
+	assert.Equal(t, "~/.runedev", cmd.Args[ddIdx+1],
+		"--datadir value must be ~/<name>; got %+v", cmd.Args)
+
+	xIdx := slices.Index(cmd.Args, "-x")
+	require.GreaterOrEqual(t, xIdx, 0)
+	assert.Equal(t, xIdx+2, ddIdx,
+		"--datadir must directly follow `-x <path>`; got %+v", cmd.Args)
+
+	instIdx := slices.Index(cmd.Args, "--install")
+	require.GreaterOrEqual(t, instIdx, 0)
+	assert.Greater(t, instIdx, ddIdx,
+		"--install must come after --datadir; got %+v", cmd.Args)
+}
+
+// TestConnectSchemeNoRemoteDataDir asserts that when WithRemoteDataDir is
+// unset the remote invocation omits --datadir, leaving the remote default.
+func TestConnectSchemeNoRemoteDataDir(t *testing.T) {
+	rec := &recordingRemote{}
+	s, uri := newProvisionTestScheme(rec, func() string { return "" })
+	defer s.cancelCtx()
+
+	scheme, err := s.connectScheme(context.Background(), uri, func(error) {})
+	require.NoError(t, err)
+	if scheme != nil {
+		_ = scheme.Close()
+	}
+
+	cmd := findRuneServerCmd(t, rec)
+	assert.NotContains(t, cmd.Args, "--datadir",
+		"empty remote data dir must omit --datadir; got %+v", cmd.Args)
+}
+
 // TestConnectSchemeNoProvisionManifest asserts that no --install flag is
 // added when the provision function is nil or returns an empty manifest.
 func TestConnectSchemeNoProvisionManifest(t *testing.T) {

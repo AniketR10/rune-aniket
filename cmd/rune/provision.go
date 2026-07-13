@@ -29,6 +29,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/release"
@@ -41,7 +42,13 @@ import (
 	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacessh"
+	"unstable.build/go-tui/debug"
 )
+
+// maxConcurrentInstalls bounds how many packages provision in parallel so a
+// large manifest does not open an unbounded number of concurrent CDN
+// downloads on the remote host.
+const maxConcurrentInstalls = 4
 
 // provisionRemote runs on the remote `rune -x` server before it starts
 // serving. It mirrors the local toolchain by installing the packages named in
@@ -105,12 +112,42 @@ func installRemotePackagesTo(scheme schemeapi.Scheme, progress io.Writer) {
 		log.Warnf("provision: reconcile remote packages: %v", err)
 	}
 	total := len(entries)
+	// Installs are independent (the manager serializes per-package and
+	// stages into per-package dirs), so run them concurrently to avoid
+	// serializing on download/extract I/O. All must finish before the
+	// Done line and before the caller loads the config, since each
+	// package's gui.env is merged during activation; the WaitGroup join
+	// enforces that ordering.
+	safeProgress := &lockedWriter{w: progress}
+	sem := make(chan struct{}, maxConcurrentInstalls)
+	var wg sync.WaitGroup
 	for i, e := range entries {
-		installOnePackage(ctx, mgr, progress, e, i+1, total)
+		wg.Add(1)
+		sem <- struct{}{}
+		go debug.CapturePanicReport(func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			installOnePackage(ctx, mgr, safeProgress, e, i+1, total)
+		})
 	}
+	wg.Wait()
 	emitProvisionProgress(progress, workspacessh.ProvisionProgress{
 		Index: total, Total: total, Phase: workspacessh.ProvisionPhaseDone,
 	})
+}
+
+// lockedWriter serializes concurrent writes so provisioning goroutines
+// never interleave partial JSON-Lines progress records on the shared
+// stderr pipe.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 // remoteInstaller is the slice of the provisioning manager installOnePackage
@@ -150,6 +187,12 @@ func installOnePackage(
 			version = latest
 			err = inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
 		}
+	}
+	// A fully-installed package is an idempotent no-op: fall through to
+	// activation instead of reporting a failure, so re-provisioning never
+	// surfaces a spurious "already installed" warning.
+	if err != nil && errors.Is(err, idepkg.ErrAlreadyInstalled) {
+		err = nil
 	}
 	if err != nil {
 		log.Warnf("provision: install %s@%s: %v", e.ID, version, err)

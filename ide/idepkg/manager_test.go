@@ -1359,7 +1359,7 @@ func TestInstallPackageVersionConfig(t *testing.T) {
 		assertNestedYAMLKey(t, root, "settings", "theme", "dark")
 		assertNestedYAMLKey(t, root, "settings", "indent", "4")
 	})
-	t.Run("skipped when no user config exists", func(t *testing.T) {
+	t.Run("config is seeded and merged when no user config exists", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "configpkg", Version: "1"}})
@@ -1369,9 +1369,10 @@ func TestInstallPackageVersionConfig(t *testing.T) {
 		require.NoError(t, err)
 		n.RequireNoErrorNotification()
 
-		// Config should not have been created
-		_, err = os.Stat(filepath.Join(datadir, "config.yaml"))
-		assert.True(t, os.IsNotExist(err))
+		doc := readUserConfig(t, datadir)
+		root := doc.Content[0]
+		assertNestedYAMLKey(t, root, "env", "GOROOT",
+			datadir+"/pkg/configpkg/1/go")
 	})
 }
 
@@ -1453,7 +1454,7 @@ func TestProcessInstalledSettingsConfig(t *testing.T) {
 			datadir+"/pkg/configpkg/1/go")
 		assertNestedYAMLKey(t, root, "settings", "theme", "dark")
 	})
-	t.Run("skipped when no user config exists", func(t *testing.T) {
+	t.Run("seeds and merges when no user config exists", func(t *testing.T) {
 		t.Parallel()
 		pkgs := idepkgtest.MakePackages()
 		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "configpkg", Version: "1"}})
@@ -1465,9 +1466,10 @@ func TestProcessInstalledSettingsConfig(t *testing.T) {
 		err = m.ProcessInstalledSettings(context.Background())
 		require.NoError(t, err)
 
-		// Config should not have been created
-		_, err = os.Stat(filepath.Join(datadir, "config.yaml"))
-		assert.True(t, os.IsNotExist(err))
+		doc := readUserConfig(t, datadir)
+		root := doc.Content[0]
+		assertNestedYAMLKey(t, root, "env", "GOROOT",
+			datadir+"/pkg/configpkg/1/go")
 	})
 }
 
@@ -1647,6 +1649,33 @@ func TestPromptConfigChangeRender(t *testing.T) {
 	assert.Contains(t, rendered, "Extension testpkg")
 	assert.Contains(t, rendered, "Allow")
 	assert.Contains(t, rendered, "Deny")
+}
+
+// TestInstallPackageVersionConfigMissingUserConfig asserts that when the user
+// config file does not exist, installing a package still merges the package's
+// env block by creating the config file. Without this, a fresh datadir (e.g. a
+// remote `rune -x` provisioned into ~/.rune on first use) never gets GOROOT and
+// the go toolchain fails with "cannot find GOROOT directory".
+func TestInstallPackageVersionConfigMissingUserConfig(t *testing.T) {
+	t.Parallel()
+
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "configpkg", Version: "1"}})
+	m, n, _, datadir := newTestManager(t, pkgs, versions)
+
+	configPath := filepath.Join(datadir, "config.yaml")
+	m.configPath = configPath
+	_, statErr := os.Stat(configPath)
+	require.True(t, os.IsNotExist(statErr), "precondition: config file must be absent")
+
+	err := m.InstallPackageVersion(context.Background(), "configpkg", "1", repl.NopProgressWriter())
+	require.NoError(t, err)
+	n.RequireNoErrorNotification()
+
+	cfg := readUserConfigMap(t, configPath)
+	env, ok := cfg["env"].(map[string]any)
+	require.True(t, ok, "env not merged into a fresh (missing) user config: %#v", cfg)
+	assert.Equal(t, filepath.Join(datadir, "pkg", "configpkg", "1", "go"), env["GOROOT"])
 }
 
 func TestPromptConfigChangeAllow(t *testing.T) {
@@ -2296,6 +2325,7 @@ func TestInstallStaleEntry(t *testing.T) {
 		err = m.InstallPackageVersion(context.Background(), "go", "1", repl.NopProgressWriter())
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "already been installed")
+		assert.ErrorIs(t, err, ErrAlreadyInstalled)
 	})
 
 	t.Run("stale_entry_with_staging_dir", func(t *testing.T) {

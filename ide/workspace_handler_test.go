@@ -6742,24 +6742,34 @@ func (w uriWorkspace) URI(path string) (workspaceapi.URI, error) {
 }
 
 func TestInstallRoot(t *testing.T) {
+	mustURI := func(t *testing.T, s string) workspaceapi.URI {
+		u, err := workspaceapi.ParseURI(s)
+		require.NoError(t, err)
+		return u
+	}
 	tests := []struct {
 		name         string
 		localDataDir string
+		uri          string
 		fn           func(path string) (workspaceapi.URI, error)
 		want         string
 	}{
 		{
-			name:         "file workspace resolves to local home",
-			localDataDir: "/Users/x/.rune",
-			fn: func(path string) (workspaceapi.URI, error) {
-				require.Equal(t, "~/.rune", path)
-				return workspaceapi.ParseURI("file:///Users/x/.rune")
+			// Local workspaces provision into the IDE's own datadir; the
+			// remote-home expansion must not run.
+			name:         "file workspace uses the local data dir verbatim",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "file:///Users/x/src/proj",
+			fn: func(string) (workspaceapi.URI, error) {
+				t.Fatal("URI must not be called for a file workspace")
+				return workspaceapi.URI{}, nil
 			},
-			want: "/Users/x/.rune",
+			want: "/Users/x/.runedev",
 		},
 		{
-			name:         "remote workspace resolves to remote home",
+			name:         "remote workspace resolves ~/<basename> on the remote host",
 			localDataDir: "/Users/x/.rune",
+			uri:          "ssh://host/home/remote/src/proj",
 			fn: func(path string) (workspaceapi.URI, error) {
 				require.Equal(t, "~/.rune", path)
 				return workspaceapi.ParseURI("ssh://host/home/remote/.rune")
@@ -6767,17 +6777,23 @@ func TestInstallRoot(t *testing.T) {
 			want: "/home/remote/.rune",
 		},
 		{
-			name:         "alternate datadir basename is preserved",
-			localDataDir: "/Users/x/.runedev2",
+			// A client run with --datadir ~/.runedev forces the remote to
+			// provision under ~/.runedev (via WithRemoteDataDir), so the
+			// install root must mirror the local basename on the remote host.
+			name:         "remote install root mirrors the local basename",
+			localDataDir: "/Users/x/.runedev",
+			uri:          "ssh://host/home/remote/src/proj",
 			fn: func(path string) (workspaceapi.URI, error) {
-				require.Equal(t, "~/.runedev2", path)
-				return workspaceapi.ParseURI("ssh://host/home/remote/.runedev2")
+				require.Equal(t, "~/.runedev", path,
+					"remote install root must mirror the local basename")
+				return workspaceapi.ParseURI("ssh://host/home/remote/.runedev")
 			},
-			want: "/home/remote/.runedev2",
+			want: "/home/remote/.runedev",
 		},
 		{
 			name:         "expansion error falls back to local data dir",
 			localDataDir: "/Users/x/.rune",
+			uri:          "ssh://host/home/remote/src/proj",
 			fn: func(path string) (workspaceapi.URI, error) {
 				return workspaceapi.URI{}, errors.New("boom")
 			},
@@ -6787,7 +6803,47 @@ func TestInstallRoot(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ws := uriWorkspace{fn: tt.fn}
-			assert.Equal(t, tt.want, installRoot(ws, tt.localDataDir))
+			assert.Equal(t, tt.want,
+				installRoot(ws, mustURI(t, tt.uri), tt.localDataDir))
 		})
 	}
+}
+
+// TestWorkspaceRootURI pins the fix for the remote gopls failure
+// "root uri is not contained in the workspace root": the manager root must
+// be resolved through the workspace host (expanding a literal ~) so it
+// matches the RootURI language extensions derive from fs.URI(".").
+func TestWorkspaceRootURI(t *testing.T) {
+	mustURI := func(t *testing.T, s string) workspaceapi.URI {
+		u, err := workspaceapi.ParseURI(s)
+		require.NoError(t, err)
+		return u
+	}
+
+	t.Run("expands ~ to the host home path", func(t *testing.T) {
+		raw := mustURI(t, "ssh://10.0.0.6/~/src/rune")
+		ws := uriWorkspace{fn: func(path string) (workspaceapi.URI, error) {
+			require.Equal(t, ".", path)
+			return workspaceapi.ParseURI("ssh://10.0.0.6/home/ernest/src/rune")
+		}}
+		got, err := workspaceRootURI(ws, raw)
+		require.NoError(t, err)
+		assert.Equal(t, "/home/ernest/src/rune", got.Path())
+	})
+
+	t.Run("returns an error when the host cannot resolve the root", func(t *testing.T) {
+		raw := mustURI(t, "ssh://10.0.0.6/~/src/rune")
+		ws := uriWorkspace{fn: func(string) (workspaceapi.URI, error) {
+			return workspaceapi.URI{}, errors.New("boom")
+		}}
+		_, err := workspaceRootURI(ws, raw)
+		require.Error(t, err,
+			"an unresolved root is fatal; the build must not proceed with a bogus root")
+	})
+
+	t.Run("panics when the workspace dependency is nil", func(t *testing.T) {
+		raw := mustURI(t, "ssh://10.0.0.6/~/src/rune")
+		assert.Panics(t, func() { _, _ = workspaceRootURI(nil, raw) },
+			"a nil workspace is a wiring bug and must fail loudly")
+	})
 }
