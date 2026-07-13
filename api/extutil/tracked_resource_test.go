@@ -36,7 +36,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -53,7 +53,7 @@ func TestResourceTrackerIntegration(t *testing.T) {
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
 			tabspaces := 4
-			simpleEd := modeless.Editor()
+			simpleEd := standard.Editor()
 
 			cfg := text.DefaultConfig()
 

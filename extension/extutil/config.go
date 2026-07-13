@@ -32,7 +32,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -174,13 +174,13 @@ func viEditor(clipboard clipboard.Register) text.Editor {
 // modelessEditor builds a modeless editor with all chrome bars disabled
 // so an extension-hosted compose buffer shows only the text area.
 func modelessEditor(clipboard clipboard.Register) text.Editor {
-	return modeless.Editor(
-		modeless.WithClipboard(clipboard),
-		modeless.WithWrap(true),
-		modeless.WithStatusBarConfig(false, text.StatusBarConfig{}),
-		modeless.WithAuxiliaryBar(false, text.AuxBarConfig{}),
-		modeless.WithIconsBar(false, text.IconsBarConfig{}),
-		modeless.WithGitBar(false, text.IconsBarConfig{}),
+	return standard.Editor(
+		standard.WithClipboard(clipboard),
+		standard.WithWrap(true),
+		standard.WithStatusBarConfig(false, text.StatusBarConfig{}),
+		standard.WithAuxiliaryBar(false, text.AuxBarConfig{}),
+		standard.WithIconsBar(false, text.IconsBarConfig{}),
+		standard.WithGitBar(false, text.IconsBarConfig{}),
 	)
 }
 

@@ -39,7 +39,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 // stubEditor is a minimal command.Editor for tests. It records every
@@ -406,8 +406,8 @@ func TestShiftEnterInsertsNewlineNotSubmit(t *testing.T) {
 type realModelessEditor struct{}
 
 func (realModelessEditor) Edit(buf *cell.Buffer) command.EditHandler {
-	return modeless.NewHandler(buf, workspaceapi.RandomURI("memory"),
-		text.IndentRuneTab, 4, modeless.WithCommandBar(false))
+	return standard.NewHandler(buf, workspaceapi.RandomURI("memory"),
+		text.IndentRuneTab, 4, standard.WithCommandBar(false))
 }
 
 // TestShiftEnterInsertsLiteralNewline reproduces the bug where

@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,7 +21,8 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package modeless
+
+package emacs
 
 import (
 	"github.com/sirupsen/logrus"
@@ -33,8 +34,8 @@ import (
 	"unstable.build/go-tui/text"
 )
 
-// modelessConfig holds configuration for Editor.
-type modelessConfig struct {
+// emacsConfig holds configuration for Editor.
+type emacsConfig struct {
 	tabspaces          int
 	indentTabspaces    int
 	indents            text.IndentConfig
@@ -68,7 +69,7 @@ type statusBar interface {
 	SetStatus(string, term.Attributes)
 }
 
-// MacroRecorder is a cross-editor recorder used to expose modeless macro
+// MacroRecorder is a cross-editor recorder used to expose emacs macro
 // controls without owning the underlying recording implementation.
 type MacroRecorder interface {
 	Start(registerID string)
@@ -83,9 +84,9 @@ type MacroPlayer interface {
 	IsPlaying() bool
 }
 
-// defaultmodelessHandlerImplConfig is a sane configuration defaults for modelessHandlerImpl.
-func defaultConfig() modelessConfig {
-	return modelessConfig{
+// defaultConfig is a sane configuration defaults for emacs handler.
+func defaultConfig() emacsConfig {
+	return emacsConfig{
 		tabspaces:  component.DefaultTabspaces,
 		indentRune: text.IndentRuneTab,
 		ruler:      90,
@@ -103,32 +104,32 @@ func defaultConfig() modelessConfig {
 }
 
 // Option represents a Editor configuration option.
-type Option func(*modelessConfig)
+type Option func(*emacsConfig)
 
 // WithResAttr sets the search result cell attributes to be rendered.
 func WithResAttr(attr term.Attributes) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.resAttr = attr
 	}
 }
 
 // WithTabspaces sets the tabspaces value.
 func WithTabspaces(tabspaces int) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.tabspaces = tabspaces
 	}
 }
 
 // WithIndents sets language-specific indent material configuration.
 func WithIndents(indents text.IndentConfig) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.indents = indents
 	}
 }
 
 // WithRuler sets the ruler column used by paragraph reflow commands.
 func WithRuler(ruler int) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.ruler = ruler
 	}
 }
@@ -138,7 +139,7 @@ func WithRuler(ruler int) Option {
 func WithWorkspaceCommandRegistry(
 	cwd workspaceapi.URI, registry text.WorkspaceCommandRegistry,
 ) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.registry = registry
 		cfg.workspace = cwd
 	}
@@ -146,28 +147,28 @@ func WithWorkspaceCommandRegistry(
 
 // WithScheduleNextTick defines the function to schedule and serializes asynchronous work.
 func WithScheduleNextTick(fn func(func()) bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.scheduleNextTick = fn
 	}
 }
 
 // WithNotifications defines the notifications mechanism to use by Editor.
 func WithNotifications(noti browserapi.Notifications) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.notifications = noti
 	}
 }
 
-// WithMacroRecorder sets the macro recorder used by modeless macro controls.
+// WithMacroRecorder sets the macro recorder used by emacs macro controls.
 func WithMacroRecorder(recorder MacroRecorder) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.macroRecorder = recorder
 	}
 }
 
-// WithMacroPlayer sets the macro player used by modeless macro controls.
+// WithMacroPlayer sets the macro player used by emacs macro controls.
 func WithMacroPlayer(player MacroPlayer) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.macroPlayer = player
 	}
 }
@@ -175,22 +176,22 @@ func WithMacroPlayer(player MacroPlayer) Option {
 // WithAutoCenter determines whether the editor should automatically
 // center the cursor after SetCursorAtScroll.
 func WithAutoCenter(enabled bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.autoCenter = enabled
 	}
 }
 
-// WithAutoPair determines whether the modeless editor should use cursor-level
+// WithAutoPair determines whether the emacs editor should use cursor-level
 // delimiter auto-pair behavior while inserting text.
 func WithAutoPair(enabled bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.autoPair = enabled
 	}
 }
 
 // WithAuxiliaryBar determines whether to draw an auxiliary bar on the left or not.
 func WithAuxiliaryBar(enabled bool, config text.AuxBarConfig) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.enableAuxBar = enabled
 		cfg.auxBarConfig = config
 	}
@@ -198,7 +199,7 @@ func WithAuxiliaryBar(enabled bool, config text.AuxBarConfig) Option {
 
 // WithIconsBar determines whether to install the icons bar.
 func WithIconsBar(enabled bool, config text.IconsBarConfig) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.enableIconsBar = enabled
 		cfg.iconsBarConfig = config
 	}
@@ -206,7 +207,7 @@ func WithIconsBar(enabled bool, config text.IconsBarConfig) Option {
 
 // WithGitIcons determines whether the icons bar should populate git diff icons.
 func WithGitIcons(enabled bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.enableGitIcons = enabled
 	}
 }
@@ -214,7 +215,7 @@ func WithGitIcons(enabled bool) Option {
 // WithGitBar determines whether to install a git-backed icons bar.
 // Deprecated: use WithIconsBar + WithGitIcons.
 func WithGitBar(enabled bool, config text.IconsBarConfig) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.enableIconsBar = enabled
 		cfg.enableGitIcons = enabled
 		cfg.iconsBarConfig = config
@@ -223,35 +224,35 @@ func WithGitBar(enabled bool, config text.IconsBarConfig) Option {
 
 // WithCommandBar enables or disables the command bar.
 func WithCommandBar(enabled bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.commandBar = enabled
 	}
 }
 
 // WithAttr sets the default cell attributes to be rendered.
 func WithAttr(attr term.Attributes) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.attr = attr
 	}
 }
 
 // WithClipboard sets the editor.Clipboard implementation to use.
 func WithClipboard(clip clipboard.Register) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.clipboard = clip
 	}
 }
 
 // WithComments sets language-specific comment configuration.
 func WithComments(comments text.CommentConfig) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.comments = comments
 	}
 }
 
 // WithWrap enables or disables word wrapping mode.
 func WithWrap(wrap bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.wrap = wrap
 	}
 }
@@ -259,14 +260,14 @@ func WithWrap(wrap bool) Option {
 // WithHideInitialFolds determines whether to hide the initial folds
 // determined by the language query.
 func WithHideInitialFolds(enabled bool) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.enableInitialFolds = enabled
 	}
 }
 
 // WithStatusBarConfig configures the status bar.
 func WithStatusBarConfig(enabled bool, config text.StatusBarConfig) Option {
-	return func(cfg *modelessConfig) {
+	return func(cfg *emacsConfig) {
 		cfg.statusBarConfig = config
 		cfg.statusBarEnabled = enabled
 	}
@@ -276,7 +277,7 @@ type nopBar struct {
 }
 
 func (n nopBar) SetStatus(status string, _ term.Attributes) {
-	logrus.Infof("modeless handler status: %s", status)
+	logrus.Infof("emacs handler status: %s", status)
 }
 
 func (n nopBar) ShowBar(bool) {

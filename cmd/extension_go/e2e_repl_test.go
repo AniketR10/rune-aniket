@@ -38,7 +38,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideshell"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 // TestGoREPLEndToEndEval drives the Go REPL handler against the real go
@@ -257,7 +257,7 @@ func newREPLRig(t *testing.T) *replRig {
 	shell, registry := ideshell.New(
 		sched.schedule,
 		ti,
-		commandEditor{te: modeless.Editor()},
+		commandEditor{te: standard.Editor()},
 		cfg,
 	)
 	require.NoError(t, registry.RegisterREPLCommand(

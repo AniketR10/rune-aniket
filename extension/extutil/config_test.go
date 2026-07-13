@@ -31,13 +31,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/vi"
 )
 
 func TestEditor(t *testing.T) {
 	modalType := reflect.TypeOf(vi.Editor())
-	modelessType := reflect.TypeOf(modeless.Editor())
+	modelessType := reflect.TypeOf(standard.Editor())
 
 	tests := []struct {
 		name string

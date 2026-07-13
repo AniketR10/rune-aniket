@@ -34,7 +34,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -62,7 +62,7 @@ func TestComposeEditorNilUsesModelessEditor(t *testing.T) {
 }
 
 func TestComposeEditorModelessAcceptsInput(t *testing.T) {
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 
 	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,
@@ -83,7 +83,7 @@ func TestComposeEditorModelessAcceptsInput(t *testing.T) {
 }
 
 func TestComposeEditorSetTextClear(t *testing.T) {
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 	comp.Resize(30, 10)
 
@@ -99,7 +99,7 @@ func TestComposeEditorSetTextClear(t *testing.T) {
 }
 
 func TestComposeEditorHeightGrowsWithWrap(t *testing.T) {
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 	comp.Resize(30, 10)
 	in := comp.Input()
@@ -118,9 +118,9 @@ func TestComposeEditorHeightGrowsWithWrap(t *testing.T) {
 // while still one row tall, but a later Resize to the taller height does
 // not re-clamp the scroll offset, hiding the first visual line.
 func TestComposeEditorResizeResetsScrollAfterWrap(t *testing.T) {
-	ed := modeless.Editor(
-		modeless.WithClipboard(clipboard.NewInMemory()),
-		modeless.WithWrap(true),
+	ed := standard.Editor(
+		standard.WithClipboard(clipboard.NewInMemory()),
+		standard.WithWrap(true),
 	)
 	comp := NewComponent(ComponentConfig{Editor: ed})
 	comp.Resize(30, 10)
@@ -157,9 +157,9 @@ func TestComposeEditorResizeResetsScrollAfterWrap(t *testing.T) {
 // taller than the viewport: the offset must stay only as far down as
 // needed to keep the cursor visible.
 func TestComposeEditorResizeKeepsScrollWhenContentOverflows(t *testing.T) {
-	ed := modeless.Editor(
-		modeless.WithClipboard(clipboard.NewInMemory()),
-		modeless.WithWrap(true),
+	ed := standard.Editor(
+		standard.WithClipboard(clipboard.NewInMemory()),
+		standard.WithWrap(true),
 	)
 	comp := NewComponent(ComponentConfig{Editor: ed})
 	comp.Resize(30, 10)
@@ -195,9 +195,9 @@ func TestComposeEditorResizeKeepsScrollWhenContentOverflows(t *testing.T) {
 // visible; the editor scrolls its content internally.
 func TestComposeEditorHeightCappedLeavesMessagesVisible(t *testing.T) {
 	const width, height = 80, 30
-	ed := modeless.Editor(
-		modeless.WithClipboard(clipboard.NewInMemory()),
-		modeless.WithWrap(true),
+	ed := standard.Editor(
+		standard.WithClipboard(clipboard.NewInMemory()),
+		standard.WithWrap(true),
 	)
 	comp := NewComponent(ComponentConfig{Editor: ed})
 
@@ -230,7 +230,7 @@ func TestComposeEditorHeightCappedLeavesMessagesVisible(t *testing.T) {
 }
 
 func TestComposeEditorModelessShiftEnterInsertsNewline(t *testing.T) {
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 
 	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
@@ -251,7 +251,7 @@ func TestComposeEditorModelessShiftEnterInsertsNewline(t *testing.T) {
 
 func TestComposeEditorInputBackgroundColorAppliesToFrameAndEditor(t *testing.T) {
 	const width, height = 40, 12
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{
 		Editor:               ed,
 		InputBackgroundColor: term.ColorGray,
@@ -288,7 +288,7 @@ func TestComposeEditorInputBackgroundColorAppliesToFrameAndEditor(t *testing.T) 
 }
 
 func TestComposeEditorInputBackgroundDefaultLeftUnset(t *testing.T) {
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 
 	assert.Equal(t, term.ColorDefault, comp.box.Bg,
@@ -297,7 +297,7 @@ func TestComposeEditorInputBackgroundDefaultLeftUnset(t *testing.T) {
 
 func TestComposeEditorFrameCharSetAppliesToFrame(t *testing.T) {
 	const width, height = 40, 12
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	charset := component.FrameCharSetHighlight()
 	comp := NewComponent(ComponentConfig{
 		Editor: ed,
@@ -444,7 +444,7 @@ func TestComposeEditorModalStartNormalByDefault(t *testing.T) {
 // selection highlight must remain visible regardless of mouse hover.
 func TestComposeEditorSelectionSurvivesUnfocused(t *testing.T) {
 	const width, height = 40, 12
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 
 	h, tx, _ := Handler(context.Background(), new(sync.Mutex), comp,
@@ -484,7 +484,7 @@ func TestComposeEditorSelectionSurvivesUnfocused(t *testing.T) {
 // the cursor between lines, and history recall only takes over once the
 // editor leaves the event unhandled at the top edge.
 func TestComposeEditorArrowUpNavigatesBeforeHistory(t *testing.T) {
-	ed := modeless.Editor(modeless.WithClipboard(clipboard.NewInMemory()))
+	ed := standard.Editor(standard.WithClipboard(clipboard.NewInMemory()))
 	comp := NewComponent(ComponentConfig{Editor: ed})
 
 	h, tx, rx := Handler(context.Background(), new(sync.Mutex), comp,

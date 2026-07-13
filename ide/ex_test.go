@@ -73,7 +73,7 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/text/exoeditor"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/registerset"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/text/vi"
@@ -3453,7 +3453,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
 	b := newExForTestingTerminal(t, workspace,
-		modeless.Editor(),
+		standard.Editor(),
 		vte.DefaultConfig(), nopPublishEvent, plugin.DefaultBarConfig(), opts...)
 	defer b.Close()
 
@@ -3481,7 +3481,7 @@ func TestWindowMouseResizeIntegration(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { fileScheme.Close() })
 		ws := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
-		b := newExForTestingTerminal(t, ws, modeless.Editor(),
+		b := newExForTestingTerminal(t, ws, standard.Editor(),
 			vte.DefaultConfig(), nopPublishEvent, plugin.DefaultBarConfig(), opts...)
 		t.Cleanup(func() { _ = b.Close() })
 

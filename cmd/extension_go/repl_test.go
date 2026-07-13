@@ -47,7 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/ide/ideshell"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 // collectWidth is intentionally large so ResponsiveString.String() never
@@ -1531,7 +1531,7 @@ func newTestREPLHandler(t *testing.T) (*drainHandler, *tickScheduler) {
 	shell, _ := ideshell.New(
 		sched.schedule,
 		ti,
-		commandEditor{te: modeless.Editor()},
+		commandEditor{te: standard.Editor()},
 		ideshell.Config{
 			DisableShellInterpreter: newTestSession(newScriptedRunner()),
 			Prompt:                  "go> ",
@@ -1727,7 +1727,7 @@ func TestGoSessionHelp(t *testing.T) {
 // bridge returns a working command.EditHandler bound to the buffer.
 func TestCommandEditorAdapter(t *testing.T) {
 	t.Parallel()
-	ed := commandEditor{te: modeless.Editor()}
+	ed := commandEditor{te: standard.Editor()}
 	buf := cell.NewBuffer()
 	h := ed.Edit(buf)
 	require.NotNil(t, h)
@@ -1845,7 +1845,7 @@ func TestREPLShellConfigPersistsHistory(t *testing.T) {
 
 	shell, _ := ideshell.New(
 		func(func()) bool { return false }, &nopInterrupter{},
-		commandEditor{te: modeless.Editor()}, cfg,
+		commandEditor{te: standard.Editor()}, cfg,
 	)
 	t.Cleanup(func() { _ = shell.Close() })
 	shell.Resize(80, 24)

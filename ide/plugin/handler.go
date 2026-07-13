@@ -44,7 +44,7 @@ import (
 	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/vi"
 )
 
@@ -400,13 +400,13 @@ func (e *Handler) initializeDoneHandler() {
 			vi.WithClipboard(clipboard),
 		)
 	} else {
-		main = modeless.NewHandler(buf, uri, text.IndentRuneTab, 0,
-			modeless.WithResAttr(e.cfg.SelectionAttributes),
-			modeless.WithAttr(e.cfg.Attributes),
-			modeless.WithWrap(false),
-			modeless.WithTabspaces(1),
-			modeless.WithCommandBar(true),
-			modeless.WithClipboard(clipboard),
+		main = standard.NewHandler(buf, uri, text.IndentRuneTab, 0,
+			standard.WithResAttr(e.cfg.SelectionAttributes),
+			standard.WithAttr(e.cfg.Attributes),
+			standard.WithWrap(false),
+			standard.WithTabspaces(1),
+			standard.WithCommandBar(true),
+			standard.WithClipboard(clipboard),
 		)
 	}
 

@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,7 +21,8 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package modeless
+
+package emacs
 
 import (
 	"context"
@@ -45,12 +46,12 @@ import (
 	"unstable.build/go-tui/text/registerset"
 )
 
-var _ component.Scrollable = (*editorHandler)(nil)
+var _ component.Scrollable = (*emacsHandler)(nil)
 
-const modelessMarkLocationListID = "mark"
+const emacsMarkLocationListID = "mark"
 
-type editorHandler struct {
-	cfg              modelessConfig
+type emacsHandler struct {
+	cfg              emacsConfig
 	buf              *cell.Buffer
 	less             handler.Less
 	statusBar        statusBar
@@ -71,19 +72,19 @@ type editorHandler struct {
 	historyIdx       int
 }
 
-// NewHandler returns a modeless, simple-to-use text.Handler. indentTabspaces
+// NewHandler returns a emacs, simple-to-use text.Handler. indentTabspaces
 // is the number of spaces per indent level when indentRune is IndentRuneSpace;
 // pass 0 to fall back to the editor's configured tabspaces.
 func NewHandler(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	indentRune rune, indentTabspaces int, opts ...Option,
 ) text.Handler {
-	ret := new(editorHandler)
+	ret := new(emacsHandler)
 	ret.Init(buf, resource, indentRune, indentTabspaces, opts...)
 	return ret
 }
 
-func (h *editorHandler) Init(
+func (h *emacsHandler) Init(
 	buf *cell.Buffer, resource workspaceapi.URI,
 	indentRune rune, indentTabspaces int, opts ...Option,
 ) {
@@ -119,7 +120,7 @@ func (h *editorHandler) Init(
 }
 
 // Resize satisfies tui.Component
-func (h *editorHandler) Resize(width, height int) {
+func (h *emacsHandler) Resize(width, height int) {
 	h.height = height
 	h.less.Resize(width, height)
 	if h.pendingSetCursor != nil {
@@ -128,7 +129,7 @@ func (h *editorHandler) Resize(width, height int) {
 	}
 }
 
-func (h *editorHandler) setActiveLocationListMessage(locs []textapi.Location) {
+func (h *emacsHandler) setActiveLocationListMessage(locs []textapi.Location) {
 	// NOTE: if there are multiple location lists with a message
 	// in current cursor position, then there's no guarantee of which one
 	// is going to be rendered.
@@ -141,7 +142,7 @@ func (h *editorHandler) setActiveLocationListMessage(locs []textapi.Location) {
 	h.less.SetMessage("")
 }
 
-func (h *editorHandler) drawLocationMessage() {
+func (h *emacsHandler) drawLocationMessage() {
 	locs, ok := h.cursor.LocationsAtCursor()
 	if ok {
 		h.setActiveLocationListMessage(locs)
@@ -153,22 +154,22 @@ func (h *editorHandler) drawLocationMessage() {
 }
 
 // Draw satisfies tui.Component
-func (h *editorHandler) Draw(w term.Writer) {
+func (h *emacsHandler) Draw(w term.Writer) {
 	h.drawLocationMessage()
 	h.less.Draw(w)
 	text.DrawLocations(h.cursor.SortedLocations(), h.less.Scroll(), w)
 }
 
-func (h *editorHandler) setMarkLocation() bool {
+func (h *emacsHandler) setMarkLocation() bool {
 	locs := h.markLocations()
 	pos := h.cursor.CursorAtScroll()
 	locs = append(locs, h.newMarkLocation(pos))
-	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, emacsMarkLocationListID,
 		text.LocationSlice(locs))
 	return true
 }
 
-func (h *editorHandler) newMarkLocation(pos term.Coordinates) textapi.Location {
+func (h *emacsHandler) newMarkLocation(pos term.Coordinates) textapi.Location {
 	return textapi.Location{
 		From: pos,
 		To:   term.Coordinates{Y: pos.Y, X: pos.X + 1},
@@ -176,9 +177,9 @@ func (h *editorHandler) newMarkLocation(pos term.Coordinates) textapi.Location {
 	}
 }
 
-func (h *editorHandler) markLocations() []textapi.Location {
+func (h *emacsHandler) markLocations() []textapi.Location {
 	for _, list := range h.cursor.LocationLists() {
-		if list.ID != modelessMarkLocationListID {
+		if list.ID != emacsMarkLocationListID {
 			continue
 		}
 		locs := make([]textapi.Location, len(list.Locations))
@@ -188,7 +189,7 @@ func (h *editorHandler) markLocations() []textapi.Location {
 	return nil
 }
 
-func (h *editorHandler) markLocation() (textapi.Location, bool) {
+func (h *emacsHandler) markLocation() (textapi.Location, bool) {
 	locs := h.markLocations()
 	if len(locs) == 0 {
 		return textapi.Location{}, false
@@ -196,12 +197,12 @@ func (h *editorHandler) markLocation() (textapi.Location, bool) {
 	return locs[len(locs)-1], true
 }
 
-func (h *editorHandler) clearMarkLocation() bool {
-	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID, nil)
+func (h *emacsHandler) clearMarkLocation() bool {
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, emacsMarkLocationListID, nil)
 	return true
 }
 
-func (h *editorHandler) selectToMark(delete bool) bool {
+func (h *emacsHandler) selectToMark(delete bool) bool {
 	loc, ok := h.markLocation()
 	if !ok {
 		return false
@@ -224,7 +225,7 @@ func (h *editorHandler) selectToMark(delete bool) bool {
 	return true
 }
 
-func (h *editorHandler) popMarkLocation() bool {
+func (h *emacsHandler) popMarkLocation() bool {
 	locs := h.markLocations()
 	if len(locs) == 0 {
 		return false
@@ -233,12 +234,12 @@ func (h *editorHandler) popMarkLocation() bool {
 	if len(locs) == 0 {
 		return h.clearMarkLocation()
 	}
-	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, emacsMarkLocationListID,
 		text.LocationSlice(locs))
 	return true
 }
 
-func (h *editorHandler) swapWithMark() bool {
+func (h *emacsHandler) swapWithMark() bool {
 	locs := h.markLocations()
 	if len(locs) == 0 {
 		return false
@@ -249,12 +250,12 @@ func (h *editorHandler) swapWithMark() bool {
 		return false
 	}
 	locs[len(locs)-1] = h.newMarkLocation(prev)
-	h.cursor.SetLocationList(textapi.LocationPriorityInfo, modelessMarkLocationListID,
+	h.cursor.SetLocationList(textapi.LocationPriorityInfo, emacsMarkLocationListID,
 		text.LocationSlice(locs))
 	return true
 }
 
-func (h *editorHandler) playMacro() bool {
+func (h *emacsHandler) playMacro() bool {
 	if h.macroPlayer == nil {
 		return false
 	}
@@ -264,7 +265,7 @@ func (h *editorHandler) playMacro() bool {
 	return true
 }
 
-func (h *editorHandler) handleMetaK(ev term.Event) (handled bool) {
+func (h *emacsHandler) handleMetaK(ev term.Event) (handled bool) {
 	h.log(log.TraceLevel, "handle metak, event: %#v", ev)
 	if ev.Mod != term.ModMeta {
 		return
@@ -307,7 +308,7 @@ func (h *editorHandler) handleMetaK(ev term.Event) (handled bool) {
 	return
 }
 
-func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
+func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 	ctx := context.Background()
 
 	// Track whether the current event is a paste-related action.
@@ -797,14 +798,14 @@ func (h *editorHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler
-func (h *editorHandler) Cursor() (
+func (h *emacsHandler) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {
 	return h.cursor.Coordinates(), term.CursorStyleSteadyBar, true
 }
 
 // Selection satisfies tui.Handler.
-func (h *editorHandler) Selection() (string, bool) {
+func (h *emacsHandler) Selection() (string, bool) {
 	text := h.cursor.Selection()
 	return text, text != ""
 }
@@ -814,34 +815,34 @@ func (h *editorHandler) Selection() (string, bool) {
 // selection is active. Hosts that render the buffer outside the
 // editor's Draw pipeline use this to paint the selection highlight
 // in their own coordinate system.
-func (h *editorHandler) SelectionBounds() (from, to term.Coordinates, ok bool) {
+func (h *emacsHandler) SelectionBounds() (from, to term.Coordinates, ok bool) {
 	return h.cursor.SelectionBounds()
 }
 
 // Close satisfies editor.Handler.
-func (h *editorHandler) Close() error {
+func (h *emacsHandler) Close() error {
 	return nil
 }
 
 // Resource satisfies editor.Handler.
-func (h *editorHandler) Resource() workspaceapi.URI {
+func (h *emacsHandler) Resource() workspaceapi.URI {
 	return h.resource
 }
 
 // SetWrap satisfies editor.Handler.
-func (h *editorHandler) SetWrap(wrap bool) {
+func (h *emacsHandler) SetWrap(wrap bool) {
 	h.less.Scroll().Wrap = wrap
 }
 
-func (h *editorHandler) IsSearchMode() bool {
+func (h *emacsHandler) IsSearchMode() bool {
 	return h.less.Mode() == handler.LessSearchMode
 }
 
-func (t *editorHandler) ShowCommandBar(show bool) {
+func (t *emacsHandler) ShowCommandBar(show bool) {
 	t.less.ShowCommandBar(show)
 }
 
-func (h *editorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+func (h *emacsHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	// setCursor should be robust against resizes, etc.
 	// only the first client interaction should clear this position
 	if h.less.Scroll().Width() == 0 || h.less.Scroll().SizeHeight() == 0 {
@@ -858,67 +859,67 @@ func (h *editorHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 	return true
 }
 
-func (h *editorHandler) SeekUp() bool {
+func (h *emacsHandler) SeekUp() bool {
 	return h.less.Scroll().SeekUp()
 }
 
-func (h *editorHandler) SeekDown() bool {
+func (h *emacsHandler) SeekDown() bool {
 	return h.less.Scroll().SeekDown()
 }
 
-func (h *editorHandler) SeekOffset() int {
+func (h *emacsHandler) SeekOffset() int {
 	return h.less.Scroll().SeekOffset()
 }
 
-func (h *editorHandler) MaxSeekOffset() int {
+func (h *emacsHandler) MaxSeekOffset() int {
 	return h.less.Scroll().MaxSeekOffset()
 }
 
-func (h editorHandler) SetLocationList(
+func (h emacsHandler) SetLocationList(
 	pri textapi.LocationPriority, ID string, loc text.LocationList,
 ) {
 	h.cursor.SetLocationList(pri, ID, loc)
 }
 
-func (h *editorHandler) MoveToNextLocation(ID string) bool {
+func (h *emacsHandler) MoveToNextLocation(ID string) bool {
 	return h.cursor.MoveToNextLocation(ID)
 }
 
-func (h *editorHandler) MoveToPrevLocation(ID string) bool {
+func (h *emacsHandler) MoveToPrevLocation(ID string) bool {
 	return h.cursor.MoveToPrevLocation(ID)
 }
 
-func (h *editorHandler) CellView() cell.View {
+func (h *emacsHandler) CellView() cell.View {
 	return h.buf.View()
 }
 
-func (h *editorHandler) CellEditor() cell.Editor {
+func (h *emacsHandler) CellEditor() cell.Editor {
 	return text.ExternalEditor(&h.cursor, h.buf.Editor())
 }
 
 // Dimensions satisfies text.Handler (and component.Floating).
-// editorHandler is a leaf handler with no sidebar chrome, so the
+// emacsHandler is a leaf handler with no sidebar chrome, so the
 // ideal size is the widest row in the underlying buffer by the
 // buffer row count. Bar-wrapping handlers add their own
 // contribution on top. See text.ViewDimensions for why this must
 // sum each cell's Width rather than use View.Columns.
-func (h *editorHandler) Dimensions() (int, int) {
+func (h *emacsHandler) Dimensions() (int, int) {
 	return text.ViewDimensions(h.buf.View())
 }
 
-func (e *editorHandler) SetDefaultAttributes(attr term.Attributes) {
+func (e *emacsHandler) SetDefaultAttributes(attr term.Attributes) {
 	e.less.Scroll().Attributes = attr
 }
 
-func (h *editorHandler) CursorAtScroll() term.Coordinates {
+func (h *emacsHandler) CursorAtScroll() term.Coordinates {
 	return h.cursor.CursorAtScroll()
 }
 
-func (h *editorHandler) LocationLists() []text.LocationSet {
+func (h *emacsHandler) LocationLists() []text.LocationSet {
 	return h.cursor.LocationLists()
 }
 
-func (h *editorHandler) moveLine(up bool) (handled bool) {
+func (h *emacsHandler) moveLine(up bool) (handled bool) {
 	if _, ok := h.cursor.SelectionMode(); !ok {
 		if !h.cursor.SelectLine() {
 			return
@@ -951,7 +952,7 @@ func (h *editorHandler) moveLine(up bool) (handled bool) {
 	return
 }
 
-func (h *editorHandler) duplicateLine(up bool) (handled bool) {
+func (h *emacsHandler) duplicateLine(up bool) (handled bool) {
 	if _, ok := h.cursor.SelectionMode(); !ok {
 		if !h.cursor.SelectLine() {
 			return
@@ -978,7 +979,7 @@ func (h *editorHandler) duplicateLine(up bool) (handled bool) {
 	return
 }
 
-func (h *editorHandler) pasteAndReindent() (handled bool) {
+func (h *emacsHandler) pasteAndReindent() (handled bool) {
 	paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
 	if err != nil {
 		h.log(log.ErrorLevel, "clipboard paste: %v", err)
@@ -1004,7 +1005,7 @@ func (h *editorHandler) pasteAndReindent() (handled bool) {
 
 // pasteFromHistory pastes from clipboard history. If the last action was a
 // paste, it replaces that paste with the next older history entry.
-func (h *editorHandler) pasteFromHistory() (handled bool) {
+func (h *emacsHandler) pasteFromHistory() (handled bool) {
 	history, ok := registerhistory.AsHistory(h.clipboard)
 	if !ok {
 		return h.lastPaste
@@ -1032,15 +1033,15 @@ func (h *editorHandler) pasteFromHistory() (handled bool) {
 	return
 }
 
-func (h *editorHandler) setStatusBar(bar statusBar) {
+func (h *emacsHandler) setStatusBar(bar statusBar) {
 	h.statusBar = bar
 }
 
-func (h *editorHandler) log(level log.Level, msg string, args ...any) {
+func (h *emacsHandler) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}
-	log.WithField(logging.KeyClass, "modeless.handler").Logf(level, msg, args...)
+	log.WithField(logging.KeyClass, "emacs.handler").Logf(level, msg, args...)
 }
 
 var _ foldsService = (*syntax.Tree)(nil)
@@ -1051,7 +1052,7 @@ type foldsService interface {
 	InitialFolds() (iterator.Iterator[term.Range], bool)
 }
 
-func (h *editorHandler) hideInitialFolds() {
+func (h *emacsHandler) hideInitialFolds() {
 	svc, ok := h.less.Buffer().View().(foldsService)
 	if !ok {
 		h.log(log.DebugLevel, "folds service not available for resource: %s", h.resource)
@@ -1089,7 +1090,7 @@ func (h *editorHandler) hideInitialFolds() {
 	})
 }
 
-func (h *editorHandler) selectNextWordAtCursor() bool {
+func (h *emacsHandler) selectNextWordAtCursor() bool {
 	h.cursor.Unselect()
 	if h.cursor.IsEndWord() && !h.cursor.IsStartWord() {
 		h.cursor.MoveLeft()

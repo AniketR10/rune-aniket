@@ -89,7 +89,7 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/text/exofallback"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/textrpc"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -319,28 +319,28 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
 	iconsBarConfig := cfg.iconsBarConfig(h)
 	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
-	return modeless.Editor(
-		modeless.WithCommandBar(true),
-		modeless.WithResAttr(cfg.modelessResultAttr()),
-		modeless.WithTabspaces(cfg.editorTabspaces()),
-		modeless.WithIndents(cfg.editorIndents()),
-		modeless.WithRuler(cfg.editorRuler()),
-		modeless.WithAutoPair(cfg.editorAutoPair()),
-		modeless.WithComments(cfg.editorComments()),
-		modeless.WithScheduleNextTick(cfg.scheduleNextTick),
-		modeless.WithAttr(cfg.modelessAttr()),
-		modeless.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
-		modeless.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
-		modeless.WithGitIcons(cfg.gitIconsEnabled()),
-		modeless.WithHideInitialFolds(cfg.initialFolds()),
-		modeless.WithClipboard(h.clip),
-		modeless.WithMacroRecorder(h.macro),
-		modeless.WithMacroPlayer(h.macroPlayer),
-		modeless.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
-		modeless.WithWorkspaceCommandRegistry(cwd, h),
-		modeless.WithAutoCenter(true),
+	return standard.Editor(
+		standard.WithCommandBar(true),
+		standard.WithResAttr(cfg.modelessResultAttr()),
+		standard.WithTabspaces(cfg.editorTabspaces()),
+		standard.WithIndents(cfg.editorIndents()),
+		standard.WithRuler(cfg.editorRuler()),
+		standard.WithAutoPair(cfg.editorAutoPair()),
+		standard.WithComments(cfg.editorComments()),
+		standard.WithScheduleNextTick(cfg.scheduleNextTick),
+		standard.WithAttr(cfg.modelessAttr()),
+		standard.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
+		standard.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
+		standard.WithGitIcons(cfg.gitIconsEnabled()),
+		standard.WithHideInitialFolds(cfg.initialFolds()),
+		standard.WithClipboard(h.clip),
+		standard.WithMacroRecorder(h.macro),
+		standard.WithMacroPlayer(h.macroPlayer),
+		standard.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
+		standard.WithWorkspaceCommandRegistry(cwd, h),
+		standard.WithAutoCenter(true),
 		// See newBuiltinModalEditor for why we route notifications.
-		modeless.WithNotifications(h.notifications.current()),
+		standard.WithNotifications(h.notifications.current()),
 	)
 }
 
@@ -420,14 +420,14 @@ type modelessPromptEditor struct {
 
 func (m modelessPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	uri := workspaceapi.RandomURI("memory")
-	return modeless.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
-		modeless.WithCommandBar(false),
-		modeless.WithTabspaces(m.tabspaces),
-		modeless.WithIndents(m.indents),
-		modeless.WithScheduleNextTick(m.scheduleNextTick),
-		modeless.WithClipboard(m.clipboard),
-		modeless.WithAutoPair(m.autoPair),
-		modeless.WithWrap(false),
+	return standard.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
+		standard.WithCommandBar(false),
+		standard.WithTabspaces(m.tabspaces),
+		standard.WithIndents(m.indents),
+		standard.WithScheduleNextTick(m.scheduleNextTick),
+		standard.WithClipboard(m.clipboard),
+		standard.WithAutoPair(m.autoPair),
+		standard.WithWrap(false),
 	)
 }
 

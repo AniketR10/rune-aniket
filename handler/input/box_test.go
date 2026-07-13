@@ -32,11 +32,11 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 func TestBox(t *testing.T) {
-	ed := modeless.Editor()
+	ed := standard.Editor()
 	t.Run("min and max height passed are coherent or else it panics", func(t *testing.T) {
 		// ok
 		NewBox(cell.NewBuffer(), ed, BoxConfig{})
@@ -489,7 +489,7 @@ RE
 }
 
 func TestInsertIntegration(t *testing.T) {
-	ed := modeless.Editor()
+	ed := standard.Editor()
 	buf := cell.NewBuffer()
 	b := NewBox(buf, ed, BoxConfig{MinHeight: 4, MaxHeight: 5, Placeholder: "HERE..."})
 	b.Resize(3, 3)

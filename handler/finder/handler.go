@@ -47,7 +47,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -158,7 +158,7 @@ func NewWithListConfig(
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
 
 	h.list.Init(listCfg)
-	ed, _ := modeless.Editor(modeless.WithWrap(true)).
+	ed, _ := standard.Editor(standard.WithWrap(true)).
 		Edit(h.ctx, workspaceapi.RandomURI("memory"), h.list.Buffer(), false, false)
 	h.listHandler = search.Handler(&h.list, ed, func(item string) {
 		searchQuery := h.list.Buffer().String()

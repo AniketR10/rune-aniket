@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,7 +21,8 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package modeless
+
+package emacs
 
 import (
 	"context"
@@ -127,7 +128,7 @@ func (s testCommentService) RawCells() [][]term.Cell { return s.view.RawCells() 
 
 func (s testCommentService) String() string { return s.view.String() }
 
-// SelectionExpand lets the modeless handler tests exercise wiring that
+// SelectionExpand lets the emacs handler tests exercise wiring that
 // targets a selection service. The default behavior expands an empty
 // caret range by one column so the tests do not need a full syntactic
 // selection implementation.
@@ -706,7 +707,7 @@ func TestAutoPairOption(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
 	require.NoError(t, err)
 
-	run := func(t *testing.T, keycomb string, opts ...Option) (*cell.Buffer, *editorHandler) {
+	run := func(t *testing.T, keycomb string, opts ...Option) (*cell.Buffer, *emacsHandler) {
 		t.Helper()
 		seq, err := term.ParseKeys(keycomb)
 		require.NoError(t, err)
@@ -715,7 +716,7 @@ func TestAutoPairOption(t *testing.T) {
 		buf.ReadFrom(strings.NewReader("a"))
 		h := NewHandler(buf, uri, text.IndentRuneTab, 0, opts...)
 		h.Resize(10, 3)
-		handler := h.(*editorHandler)
+		handler := h.(*emacsHandler)
 		for _, key := range seq {
 			_, handled := handler.Handle(term.Event{
 				Type: term.EventKey,
@@ -781,7 +782,7 @@ func TestMetaKMarkUsesSharedLocationList(t *testing.T) {
 	}
 	markLocations := func() []textapi.Location {
 		for _, list := range h.LocationLists() {
-			if list.ID == modelessMarkLocationListID {
+			if list.ID == emacsMarkLocationListID {
 				return list.Locations
 			}
 		}
@@ -819,7 +820,7 @@ func TestMetaKSwapUpdatesSharedMarkLocation(t *testing.T) {
 
 	assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
 	for _, list := range h.LocationLists() {
-		if list.ID != modelessMarkLocationListID {
+		if list.ID != emacsMarkLocationListID {
 			continue
 		}
 		require.Len(t, list.Locations, 2)
@@ -905,7 +906,7 @@ func TestSublimeSelectIndentationLevelKeyBinding(t *testing.T) {
 			if tabspaces <= 0 {
 				tabspaces = 4
 			}
-			handler := NewHandler(buf, uri, text.IndentRuneTab, tabspaces, WithClipboard(reg)).(*editorHandler)
+			handler := NewHandler(buf, uri, text.IndentRuneTab, tabspaces, WithClipboard(reg)).(*emacsHandler)
 			handler.Resize(80, 10)
 			for i, key := range seq {
 				ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}
@@ -1047,7 +1048,7 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			},
 		},
 		{
-			name:        "modeless copy operations populate shared history",
+			name:        "emacs copy operations populate shared history",
 			content:     "ab\ncd",
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
@@ -1097,11 +1098,11 @@ func (v testIndentView) IndentationAt(line int) (int, bool) {
 	return target, ok
 }
 
-// TestModelessTabAtTargetInsertsFullIndentLevel reproduces RUNE-121 for the
-// modeless handler: when the line is already at the syntax target indent, a
+// TestEmacsTabAtTargetInsertsFullIndentLevel reproduces RUNE-121 for the
+// emacs handler: when the line is already at the syntax target indent, a
 // <tab> keypress must add a full indent level rather than a single space, and
 // a second <tab> must add another level rather than dedenting.
-func TestModelessTabAtTargetInsertsFullIndentLevel(t *testing.T) {
+func TestEmacsTabAtTargetInsertsFullIndentLevel(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///indent.yaml")
 	require.NoError(t, err)
 
@@ -1126,11 +1127,11 @@ func TestModelessTabAtTargetInsertsFullIndentLevel(t *testing.T) {
 	assert.Equal(t, term.Coordinates{X: 6, Y: 0}, h.CursorAtScroll())
 }
 
-// TestModelessShiftTabFallsThroughWhenNoDedent verifies that <shift-tab>
+// TestEmacsShiftTabFallsThroughWhenNoDedent verifies that <shift-tab>
 // is reported as unhandled when there is no indentation to remove, so the
 // event can fall through to outer command keybindings (e.g. the file
 // explorer toggle) instead of being silently swallowed.
-func TestModelessShiftTabFallsThroughWhenNoDedent(t *testing.T) {
+func TestEmacsShiftTabFallsThroughWhenNoDedent(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///dedent.txt")
 	require.NoError(t, err)
 
@@ -1147,9 +1148,9 @@ func TestModelessShiftTabFallsThroughWhenNoDedent(t *testing.T) {
 	assert.Equal(t, "hello", buf.String())
 }
 
-// TestModelessShiftTabDedentsWhenIndented verifies that <shift-tab> still
+// TestEmacsShiftTabDedentsWhenIndented verifies that <shift-tab> still
 // dedents an indented line and reports the event as handled.
-func TestModelessShiftTabDedentsWhenIndented(t *testing.T) {
+func TestEmacsShiftTabDedentsWhenIndented(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///dedent.txt")
 	require.NoError(t, err)
 

@@ -50,7 +50,7 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 // Root is the storefront's top-level tui.Handler. One per SSH session.
@@ -365,8 +365,8 @@ func mustParseURI(raw string) workspaceapi.URI {
 	return uri
 }
 
-// paletteEditor adapts modeless.NewHandler to command.Editor for the
-// shop's command palette modal edit mode. Using modeless.NewHandler
+// paletteEditor adapts standard.NewHandler to command.Editor for the
+// shop's command palette modal edit mode. Using standard.NewHandler
 // directly (rather than going through text.Editor.Edit) avoids the
 // auxiliary status / icons / location bars that would otherwise shift
 // the visible cursor coordinates.
@@ -374,8 +374,8 @@ type paletteEditor struct{}
 
 func (paletteEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	uri := workspaceapi.RandomURI("memory")
-	return modeless.NewHandler(buf, uri, text.IndentRuneTab, 0,
-		modeless.WithCommandBar(false),
-		modeless.WithWrap(false),
+	return standard.NewHandler(buf, uri, text.IndentRuneTab, 0,
+		standard.WithCommandBar(false),
+		standard.WithWrap(false),
 	)
 }

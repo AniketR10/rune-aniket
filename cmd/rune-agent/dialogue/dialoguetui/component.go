@@ -45,7 +45,7 @@ import (
 	"unstable.build/go-tui/component/markdown"
 	"unstable.build/go-tui/debug"
 	mdhandler "unstable.build/go-tui/handler/markdown"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 // reasoningEntry tracks a finalized reasoning node for toggling visibility.
@@ -182,7 +182,7 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 	editor := cfg.Editor
 	modal := cfg.EditorModal
 	if editor == nil {
-		editor = modeless.Editor()
+		editor = standard.Editor()
 		modal = false
 	}
 	buf := cell.NewBuffer()
@@ -191,7 +191,7 @@ func (c *Component) newInputBackend(cfg ComponentConfig) Input {
 	if err != nil {
 		slog.Error("dialoguetui: compose editor unavailable, using modeless editor", "err", err)
 		buf = cell.NewBuffer()
-		h, err = modeless.Editor().Edit(context.Background(),
+		h, err = standard.Editor().Edit(context.Background(),
 			dialogueComposeURI, buf, false, false)
 		if err != nil {
 			panic(fmt.Sprintf("dialoguetui: default compose editor unavailable: %v", err))

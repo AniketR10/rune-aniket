@@ -58,7 +58,7 @@ import (
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/ideshell"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/modeless"
+	"unstable.build/go-tui/text/standard"
 )
 
 // replTabURI is the stable URI used to identify the single Go REPL tab.
@@ -185,15 +185,15 @@ func (h *replSubcommand) HandleCommand(
 // config is unavailable, mirroring dialoguetui.
 func (h *replSubcommand) resolveEditor() (command.Editor, bool) {
 	if h.cfg == nil {
-		return commandEditor{te: modeless.Editor()}, false
+		return commandEditor{te: standard.Editor()}, false
 	}
 	clip, err := extutil.Clipboard(h.cfg)
 	if err != nil {
-		return commandEditor{te: modeless.Editor()}, false
+		return commandEditor{te: standard.Editor()}, false
 	}
 	te, err := extutil.Editor(clip, h.cfg)
 	if err != nil {
-		return commandEditor{te: modeless.Editor()}, false
+		return commandEditor{te: standard.Editor()}, false
 	}
 	modal, err := extutil.EditorModal(h.cfg)
 	if err != nil {
@@ -243,7 +243,7 @@ func (e commandEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	if err != nil {
 		// A fresh in-memory buffer never fails to open; fall back to a
 		// modeless editor so the shell still has a usable input line.
-		h, _ = modeless.Editor().Edit(context.Background(), uri, buf, false, false)
+		h, _ = standard.Editor().Edit(context.Background(), uri, buf, false, false)
 	}
 	return h
 }

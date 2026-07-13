@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,7 +21,8 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package modeless
+
+package emacs
 
 import (
 	"context"
@@ -37,22 +38,22 @@ import (
 // Editor allocates storage for a new Editor and initializes it.
 func Editor(opts ...Option) text.Editor {
 	ret := new(editor)
-	ret.modelessConfig = defaultConfig()
+	ret.emacsConfig = defaultConfig()
 	for _, o := range opts {
-		o(&ret.modelessConfig)
+		o(&ret.emacsConfig)
 	}
 	ret.indents = text.IndentConfig{}
 	ret.pub.Init()
-	if ret.modelessConfig.registry != nil {
+	if ret.emacsConfig.registry != nil {
 		ret.fileRegistry = text.NewFileCommandRegistry(
-			ret.modelessConfig.workspace, ret.modelessConfig.registry)
+			ret.emacsConfig.workspace, ret.emacsConfig.registry)
 	}
 	ret.opts = opts
 	return ret
 }
 
 type editor struct {
-	modelessConfig
+	emacsConfig
 	indents      text.IndentConfig
 	fileRegistry text.FileCommandRegistry
 	pub          text.Publisher
@@ -76,14 +77,14 @@ func (e *editor) Edit(
 ) (ret text.Handler, err error) {
 	indentRune := text.IndentRuneTab
 	r, tabspaces, ok := text.IndentConfigForURI(
-		file, buf, e.indents, e.modelessConfig.tabspaces,
+		file, buf, e.indents, e.emacsConfig.tabspaces,
 	)
 	if ok {
 		indentRune = r
 	}
 	handler := NewHandler(buf, file, indentRune, tabspaces, e.opts...)
 	ret = handler
-	cursor := &handler.(*editorHandler).cursor
+	cursor := &handler.(*emacsHandler).cursor
 	if e.fileRegistry != nil {
 		var err error
 		ret, err = text.SubscribeLocationCommands(file, e.fileRegistry, ret)
@@ -108,7 +109,7 @@ func (e *editor) Edit(
 			return nil, err
 		}
 	}
-	scroll := handler.(*editorHandler).less.Scroll()
+	scroll := handler.(*emacsHandler).less.Scroll()
 	ret = e.pub.PublishEdit(file, buf, ret, cursor)
 	if !text.BarsFromContext(ctx) {
 		return ret, nil
@@ -129,7 +130,7 @@ func (e *editor) Edit(
 		return ret, nil
 	}
 	bar := text.WithStatusBar(ret, buf, scroll, readOnly, recovered, e.statusBarConfig)
-	handler.(*editorHandler).setStatusBar(bar)
+	handler.(*emacsHandler).setStatusBar(bar)
 	if !e.commandBar {
 		bar.ShowCommandBar(false)
 	}
@@ -172,6 +173,6 @@ func (e *editor) UnsubscribeEvents(sub text.EventHandler) (bool, error) {
 	return ok, nil
 }
 
-// IsExternal reports false: the modeless editor manages its buffer
+// IsExternal reports false: the emacs editor manages its buffer
 // in process.
 func (*editor) IsExternal() bool { return false }

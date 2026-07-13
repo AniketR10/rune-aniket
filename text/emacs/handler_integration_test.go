@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,7 +21,8 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package modeless
+
+package emacs
 
 import (
 	"sync"
@@ -77,7 +78,7 @@ func TestFoldsIntegration(t *testing.T) {
 				return true
 			},
 		}
-		bar := text.WithStatusBar(h, buf, h.(*editorHandler).less.Scroll(),
+		bar := text.WithStatusBar(h, buf, h.(*emacsHandler).less.Scroll(),
 			false, false, cfg)
 		bar.Resize(20, 10)
 		mu.Unlock()
@@ -126,12 +127,12 @@ diff_buf_adjust(win_
 		// text.Editor only installs auxiliary chrome when called via
 		// text.Component (which threads withAuxiliaryBars in the
 		// context). Tests that want to exercise the bar wiring stack
-		// the bars on top of a bare modeless handler directly.
+		// the bars on top of a bare emacs handler directly.
 		root := NewHandler(buf, uri, '\t', 0,
 			WithScheduleNextTick(cb),
 			WithAutoCenter(true),
 		)
-		scroll := root.(*editorHandler).less.Scroll()
+		scroll := root.(*emacsHandler).less.Scroll()
 		auxCfg := text.AuxBarConfig{FoldsEnabled: true, ScheduleNextTick: cb}
 		statusCfg := text.StatusBarConfig{
 			Publisher: &texttest.TestEditor{},
@@ -247,7 +248,7 @@ diff_buf_adjust(win_
 			WithAutoCenter(true),
 			WithScheduleNextTick(cb),
 		)
-		bar := text.WithStatusBar(h, buf, h.(*editorHandler).less.Scroll(),
+		bar := text.WithStatusBar(h, buf, h.(*emacsHandler).less.Scroll(),
 			false, false, cfg)
 		bar.Resize(20, 10)
 		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 7}))
