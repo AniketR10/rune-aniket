@@ -30,11 +30,15 @@ ENV GOPRIVATE=github.com/unstablebuild,unstable.build/* \
 # buster is archived: point apt at archive.debian.org and disable the
 # Valid-Until check (buster's release files have expired) so the target-arch
 # -dev packages still resolve. Building on buster (glibc 2.28) is what lowers
-# the artifact's glibc floor to 2.28.
+# the artifact's glibc floor to 2.28. buster-backports is included so a newer
+# git (>= 2.30) can be installed: buster's stock git 2.20 rejects the
+# `--end-of-options` separator that the Go module fetcher passes to git when
+# resolving GOPRIVATE modules, which aborts the build.
 RUN set -eux; \
 	printf '%s\n' \
 		'deb [check-valid-until=no] http://archive.debian.org/debian buster main' \
 		'deb [check-valid-until=no] http://archive.debian.org/debian buster-updates main' \
+		'deb [check-valid-until=no] http://archive.debian.org/debian buster-backports main' \
 		'deb [check-valid-until=no] http://archive.debian.org/debian-security buster/updates main' \
 		> /etc/apt/sources.list
 
@@ -70,7 +74,6 @@ RUN set -eux; \
 		pkg-config \
 		bash \
 		make \
-		git \
 		openssh-client \
 		ca-certificates \
 		curl \
@@ -84,6 +87,7 @@ RUN set -eux; \
 		"libxi-dev:$DPKG_ARCH" \
 		"libgl1-mesa-dev:$DPKG_ARCH" \
 		"libxxf86vm-dev:$DPKG_ARCH"; \
+	apt-get install -y --no-install-recommends -t buster-backports git; \
 	rm -rf /var/lib/apt/lists/*
 
 # Install the pinned Go toolchain from the official tarball. buster ships no
