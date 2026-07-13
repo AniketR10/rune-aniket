@@ -5,7 +5,7 @@
 # A release artifact whose ELF binary requires a newer glibc/libstdc++/C++
 # ABI symbol version than the floor we advertise must never be published:
 # the dynamic loader refuses to start it on a floor host ("version
-# `GLIBC_2.38' not found"). This test packs a real ELF stub into a
+# `GLIBC_2.29' not found"). This test packs a real ELF stub into a
 # release-shaped tar and asserts:
 #   1. verify-min-linux.sh aborts when a required version exceeds the floor
 #   2. verify-min-linux.sh passes when every required version <= floor
@@ -38,9 +38,9 @@ fi
 work="$(mktemp -d "${TMPDIR:-/tmp}/dist-min-linux-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-floor_glibc="2.36"
-floor_glibcxx="3.4.30"
-floor_cxxabi="1.3.13"
+floor_glibc="2.28"
+floor_glibcxx="3.4.25"
+floor_cxxabi="1.3.11"
 
 # build_artifact <suffix> <out.tar.gz>
 # Compiles a real ELF stub and packs it into a release-shaped tar
@@ -78,11 +78,11 @@ if [[ "$1" != "-V" ]]; then
 fi
 case "${RUNE_TEST_VERNEED:-ok}" in
     over)
-        # GLIBC_2.38 is above the 2.36 floor; the others are at floor.
-        glibc="2.38"; glibcxx="3.4.30"; cxxabi="1.3.13" ;;
+        # GLIBC_2.29 is above the 2.28 floor; the others are at floor.
+        glibc="2.29"; glibcxx="3.4.25"; cxxabi="1.3.11" ;;
     *)
         # All families exactly at floor.
-        glibc="2.36"; glibcxx="3.4.30"; cxxabi="1.3.13" ;;
+        glibc="2.28"; glibcxx="3.4.25"; cxxabi="1.3.11" ;;
 esac
 cat <<TABLE
 

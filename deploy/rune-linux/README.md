@@ -5,10 +5,10 @@ two ways:
 
 - **Cross** (default): `make rune-release-linux-<arch>` /
   `make rune-prod-dist-linux-<arch>` cross-compile inside Docker via
-  `deploy/rune-linux/Dockerfile` (pinned to `golang:1.26-bookworm`,
-  glibc 2.36). This is the published path: the artifact's glibc floor is
-  fixed at 2.36 regardless of the build machine, so it runs on any
-  glibc >= 2.36 host, and it works from any host arch without forcing the
+  `deploy/rune-linux/Dockerfile` (pinned to `debian:buster-slim`,
+  glibc 2.28). This is the published path: the artifact's glibc floor is
+  fixed at 2.28 regardless of the build machine, so it runs on any
+  glibc >= 2.28 host, and it works from any host arch without forcing the
   Go toolchain under target-arch emulation. `*-cross` aliases are kept for
   backward compatibility.
 - **Native** (`*-native` targets): `make rune-release-linux-<arch>-native`
@@ -17,6 +17,13 @@ two ways:
   target (`uname -m` mapped to `amd64`/`arm64`); cross-arch native builds
   are not supported (no emulation). The glibc floor becomes the build
   host's glibc, so prefer the default cross build for anything you ship.
+
+## Supported hosts
+
+The published cross build runs on any Linux distribution with glibc 2.28
+or newer, which covers Debian 10+, Ubuntu 20.04+, Fedora 33+, and
+RHEL / Rocky / AlmaLinux 8+. An X11 and OpenGL capable environment is
+required for the GUI.
 
 ## Supported targets
 
@@ -83,7 +90,7 @@ make rune-linux-cross-compile RUNE_LINUX_TARGET_ARCH=arm64
 ## Release tarballs
 
 To build and package a release tarball via the default Docker cross-compile
-path (any host, glibc 2.36 floor):
+path (any host, glibc 2.28 floor):
 
 ```bash
 make rune-release-linux-amd64   # -> target/rune_linux_amd64/rune-release-linux-amd64-<tag>.tar.gz
@@ -102,12 +109,12 @@ To build, package, and upload to the public downloads bucket:
 
 ```bash
 # Production (gs://downloads.rune.build, prod API endpoints baked in)
-# — default cross-compile, glibc 2.36 floor
+# default cross-compile, glibc 2.28 floor
 make rune-prod-dist-linux-amd64
 make rune-prod-dist-linux-arm64
 
 # Staging (gs://downloads.unstable.build, dev API endpoints baked in)
-# — default cross-compile, glibc 2.36 floor
+# default cross-compile, glibc 2.28 floor
 make rune-staging-dist-linux-amd64
 make rune-staging-dist-linux-arm64
 

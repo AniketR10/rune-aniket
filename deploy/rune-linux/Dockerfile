@@ -3,7 +3,7 @@
 ARG BUILDPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
-FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
+FROM --platform=$BUILDPLATFORM debian:buster-slim AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -15,6 +15,10 @@ ARG RUNE_RELEASE_TAR
 # api.unstable.build / rpc.unstable.build defaults compiled into the source;
 # "prod" overrides them with api.rune.build / rpc.rune.build via -ldflags -X.
 ARG RUNE_ENV=dev
+# GO_VERSION pins the Go toolchain installed from the official tarball. buster
+# ships no usable system Go, and the tarball links only a low glibc so it runs
+# fine on buster. Keep in sync with go.mod's go directive.
+ARG GO_VERSION=1.26.0
 
 WORKDIR /src
 
@@ -22,6 +26,17 @@ COPY . .
 
 ENV GOPRIVATE=github.com/unstablebuild,unstable.build/* \
 	CGO_ENABLED=1
+
+# buster is archived: point apt at archive.debian.org and disable the
+# Valid-Until check (buster's release files have expired) so the target-arch
+# -dev packages still resolve. Building on buster (glibc 2.28) is what lowers
+# the artifact's glibc floor to 2.28.
+RUN set -eux; \
+	printf '%s\n' \
+		'deb [check-valid-until=no] http://archive.debian.org/debian buster main' \
+		'deb [check-valid-until=no] http://archive.debian.org/debian buster-updates main' \
+		'deb [check-valid-until=no] http://archive.debian.org/debian-security buster/updates main' \
+		> /etc/apt/sources.list
 
 # Linux-native builder image used to cross-compile Rune for the requested
 # linux/$TARGETARCH while the Go toolchain itself runs natively on the builder
@@ -58,8 +73,8 @@ RUN set -eux; \
 		git \
 		openssh-client \
 		ca-certificates \
+		curl \
 		file \
-		cmake \
 		"$CROSS_ESSENTIAL" \
 		"libasound2-dev:$DPKG_ARCH" \
 		"libx11-dev:$DPKG_ARCH" \
@@ -70,6 +85,20 @@ RUN set -eux; \
 		"libgl1-mesa-dev:$DPKG_ARCH" \
 		"libxxf86vm-dev:$DPKG_ARCH"; \
 	rm -rf /var/lib/apt/lists/*
+
+# Install the pinned Go toolchain from the official tarball. buster ships no
+# usable system Go; the tarball needs only a low glibc, so it runs on buster.
+RUN set -eux; \
+	arch="$(dpkg --print-architecture)"; \
+	case "$arch" in \
+		amd64) goarch=amd64 ;; \
+		arm64) goarch=arm64 ;; \
+		*) echo "unsupported builder arch: $arch"; exit 1 ;; \
+	esac; \
+	curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${goarch}.tar.gz" -o /tmp/go.tgz; \
+	tar -C /usr/local -xzf /tmp/go.tgz; \
+	rm /tmp/go.tgz
+ENV PATH=/usr/local/go/bin:$PATH
 
 RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
 RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
@@ -87,10 +116,13 @@ RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 # The bundling loop intentionally skips the glibc core, the C++ runtime
 # (libstdc++/libgcc_s/libgomp), the OpenGL/GLX/EGL loader, and the X11/XCB
 # client libs: those must come from the host. They are all forward-compatible,
-# so the host's (>= bookworm's) satisfy the binary. Bundling them breaks the
-# host GPU stack: the host's Mesa GLX vendor (libGLX_mesa/iris_dri) needs newer
-# GLIBCXX symbols than bookworm's libstdc++, so loading the bundled one first
-# (via rpath) makes glXGetFBConfigs return 0 ("GLX: No GLXFBConfigs returned").
+# so the host's (>= buster's) satisfy the binary. The binary no longer links
+# the C++ runtime (llama.cpp is gone; inference runs in a separate
+# llama-server process), so the libstdc++/libgcc_s/libgomp skip entries only
+# guard against transitive GUI deps and are harmless to keep. Bundling the GL
+# or C++ runtime breaks the host GPU stack: the host's Mesa GLX vendor loads
+# the host libstdc++, so shadowing it with an older bundled one (via rpath)
+# makes glXGetFBConfigs return 0 ("GLX: No GLXFBConfigs returned").
 RUN --mount=type=cache,target=/root/.cache/go-build \
 	set -eux; \
 	: "${RUNE_BUILD_TAG:?RUNE_BUILD_TAG build arg is required}"; \
@@ -98,20 +130,18 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	case "$TARGETARCH" in \
 		amd64) \
 			CC=x86_64-linux-gnu-gcc; \
-			CXX=x86_64-linux-gnu-g++; \
 			PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig; \
 			OBJDUMP=x86_64-linux-gnu-objdump; \
 			TRIPLET=x86_64-linux-gnu; \
 			;; \
 		arm64) \
 			CC=aarch64-linux-gnu-gcc; \
-			CXX=aarch64-linux-gnu-g++; \
 			PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig; \
 			OBJDUMP=aarch64-linux-gnu-objdump; \
 			TRIPLET=aarch64-linux-gnu; \
 			;; \
 	esac; \
-	export CC CXX PKG_CONFIG_PATH; \
+	export CC PKG_CONFIG_PATH; \
 	mkdir -p /out/rune.app/bin /out/rune.app/lib; \
 	PROD_LDFLAGS=""; \
 	if [ "$RUNE_ENV" = "prod" ]; then \

@@ -33,15 +33,18 @@ DARWIN_ARM64_TARGET_ARCH_FLAGS ?= CC="clang -arch arm64 -mmacosx-version-min=$(D
 # RUNE_MIN_{GLIBC,GLIBCXX,CXXABI} are the highest versioned symbols a
 # published Linux artifact may require from the host. They are the Linux
 # analogue of DARWIN_*_MIN_MACOS: the Docker cross build image
-# (golang:1.26-bookworm) guarantees glibc 2.36 / libstdc++ GLIBCXX 3.4.30
-# / CXXABI 1.3.13, so any shipped ELF that needs a newer version would
-# fail to load on a floor host ("version `GLIBC_2.38' not found"). The
+# (debian:buster-slim) guarantees glibc 2.28 / libstdc++ GLIBCXX 3.4.25
+# / CXXABI 1.3.11, so any shipped ELF that needs a newer version would
+# fail to load on a floor host ("version `GLIBC_2.29' not found"). The
 # dist-linux-* rules thread these into cmd/rune/dist.sh, which runs
-# verify-min-linux.sh as a fail-closed publish gate. Lower these only if
-# the build toolchain's floor is also lowered.
-RUNE_MIN_GLIBC   ?= 2.36
-RUNE_MIN_GLIBCXX ?= 3.4.30
-RUNE_MIN_CXXABI  ?= 1.3.13
+# verify-min-linux.sh as a fail-closed publish gate. Since the llama.cpp
+# migration to llama-server the binary no longer links the C++ runtime, so
+# GLIBCXX/CXXABI are expected absent from its VERNEED; the GLIBCXX/CXXABI
+# floors stay as buster's values so any accidental C++ dependency is still
+# gated. Lower these only if the build toolchain's floor is also lowered.
+RUNE_MIN_GLIBC   ?= 2.28
+RUNE_MIN_GLIBCXX ?= 3.4.25
+RUNE_MIN_CXXABI  ?= 1.3.11
 
 # RUNE_DEBUG_BUILD mirrors the root Makefile flag. Set to "true" to
 # bake debug-only ex commands (:panic, :crash) into the binary. The
@@ -372,10 +375,13 @@ linux-cross-compile:
 # The bundling loop intentionally skips the glibc core, the C++ runtime
 # (libstdc++/libgcc_s/libgomp), the OpenGL/GLX/EGL loader, and the X11/XCB
 # client libs: those must come from the host. They are all forward-compatible,
-# so the host's (>= bookworm's) satisfy the binary. Bundling them breaks the
-# host GPU stack: the host's Mesa GLX vendor (libGLX_mesa/iris_dri) needs newer
-# GLIBCXX symbols than bookworm's libstdc++, so loading the bundled one first
-# (via rpath) makes glXGetFBConfigs return 0 ("GLX: No GLXFBConfigs returned").
+# so the host's satisfy the binary. The binary no longer links the C++ runtime
+# (llama.cpp is gone; inference runs in a separate llama-server process), so the
+# libstdc++/libgcc_s/libgomp skip entries only guard transitive GUI deps and are
+# harmless to keep. Bundling the GL or C++ runtime breaks the host GPU stack: the
+# host's Mesa GLX vendor loads the host libstdc++, so shadowing it with an older
+# bundled one (via rpath) makes glXGetFBConfigs return 0 ("GLX: No GLXFBConfigs
+# returned").
 # CGO is required (ebiten/GUI), so the binary links the host's shared libs; on a
 # glibc host those are ABI-stable enough to ship. Native builds only support
 # host-arch == target-arch; cross-arch must use the *-cross (Docker) targets.
@@ -433,8 +439,8 @@ make-release-linux:
 	@cd $(RUNE_LINUX_OUTPUT_DIR) && tar --format=ustar -czf $(RUNE_LINUX_RELEASE_TAR) rune.app
 
 # release-linux-{amd64,arm64} build the portable release tarball through the
-# Docker cross-compile path (golang:1.26-bookworm, glibc 2.36 floor) so the
-# artifact runs on any glibc >= 2.36 host regardless of the build machine.
+# Docker cross-compile path (debian:buster-slim, glibc 2.28 floor) so the
+# artifact runs on any glibc >= 2.28 host regardless of the build machine.
 # Use the -native variants to build with the host's own toolchain instead
 # (host-arch must match target-arch; the floor becomes the build host's glibc).
 release-linux-amd64:

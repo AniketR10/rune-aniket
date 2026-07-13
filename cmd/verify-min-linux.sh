@@ -10,17 +10,17 @@
 # to start a process when the host's libraries do not export a requested
 # version ("version `GLIBC_2.38' not found"). That floor is trivial to
 # raise by accident — e.g. a cgo/C++ dependency built against a newer
-# toolchain pulls in GLIBC_2.38 or GLIBCXX_3.4.32, silently raising the
-# effective runtime floor above what the build image (bookworm, glibc
-# 2.36) guarantees. This gate fails the publish when any shipped ELF
+# toolchain pulls in GLIBC_2.29 or GLIBCXX_3.4.32, silently raising the
+# effective runtime floor above what the build image (buster, glibc
+# 2.28) guarantees. This gate fails the publish when any shipped ELF
 # executable requires a newer version than the expected floor. It is the
 # Linux analogue of the Mach-O minos check in verify-min-macos.sh.
 #
 # Usage: verify-min-linux.sh <artifact.tar.gz> <max-glibc> <max-glibcxx> <max-cxxabi>
 #   <artifact.tar.gz>  the release tarball; its contents are extracted.
-#   <max-glibc>        highest allowed GLIBC_ version  (e.g. 2.36).
-#   <max-glibcxx>      highest allowed GLIBCXX_ version (e.g. 3.4.30).
-#   <max-cxxabi>       highest allowed CXXABI_ version  (e.g. 1.3.13).
+#   <max-glibc>        highest allowed GLIBC_ version  (e.g. 2.28).
+#   <max-glibcxx>      highest allowed GLIBCXX_ version (e.g. 3.4.25).
+#   <max-cxxabi>       highest allowed CXXABI_ version  (e.g. 1.3.11).
 #
 # Any ELF that requires a version above its family floor aborts with a
 # non-zero exit so the caller never publishes the artifact. The scan only
@@ -94,7 +94,7 @@ check_family() {
     if ver_gt "$found" "$floor"; then
         echo "ERROR: '${file#"$root"/}' requires ${family}_${found}, above the advertised floor ${family}_${floor}." >&2
         echo "       Publishing would break users whose ${family} is older than ${found}." >&2
-        echo "       Rebuild the offending dependency against the bookworm toolchain, or" >&2
+        echo "       Rebuild the offending dependency against the buster toolchain, or" >&2
         echo "       stop bundling a newer C++ runtime, so it requires <= ${family}_${floor}." >&2
         return 1
     fi
