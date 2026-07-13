@@ -104,6 +104,13 @@ STAGING_WEBSITE_ADDRESS  ?= https://rune.unstable.build
 DIST_BUCKET       ?= $(PROD_DOWNLOADS_BUCKET)
 DIST_DOWNLOAD_HOST ?= $(PROD_DOWNLOAD_HOST)
 
+# RELEASE_CHANNEL is threaded into dist.sh to select the release channel.
+# Empty (the default) is the stable channel — the existing prod/staging
+# behavior. beta-dist-* targets set it to "beta" so dist.sh publishes a
+# separate "-beta" pointer and manifest-beta.json instead of the shared
+# "-latest" pointers and manifest.json.
+RELEASE_CHANNEL ?=
+
 TARGET := $(abspath $(ROOT_DIR)/target)
 RUNE_RELEASE_DIR := $(TARGET)/rune_darwin_app
 APP_NAME := Rune.app
@@ -145,6 +152,9 @@ endif
 	staging-dist-linux-amd64 staging-dist-linux-arm64 staging-dist-darwin-amd64 staging-dist-darwin-arm64 \
 	staging-dist-linux-amd64-native staging-dist-linux-arm64-native \
 	staging-dist-linux-amd64-cross staging-dist-linux-arm64-cross \
+	beta-dist-linux-amd64 beta-dist-linux-arm64 beta-dist-darwin-amd64 beta-dist-darwin-arm64 \
+	beta-dist-linux-amd64-native beta-dist-linux-arm64-native \
+	beta-dist-linux-amd64-cross beta-dist-linux-arm64-cross \
 	app-delve
 
 make-release: CGO_ENABLED=CGO_ENABLED=1
@@ -480,6 +490,7 @@ dist-linux-amd64: check-release-tag release-linux-amd64
 		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 dist-linux-arm64: check-release-tag release-linux-arm64
@@ -492,6 +503,7 @@ dist-linux-arm64: check-release-tag release-linux-arm64
 		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 # dist-linux-*-native mirror dist-linux-* but build the tarball with the
@@ -507,6 +519,7 @@ dist-linux-amd64-native: check-release-tag release-linux-amd64-native
 		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 dist-linux-arm64-native: check-release-tag release-linux-arm64-native
@@ -519,6 +532,7 @@ dist-linux-arm64-native: check-release-tag release-linux-arm64-native
 		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 # dist-linux-*-cross are retained as aliases for the now-default cross build.
@@ -533,6 +547,7 @@ dist-darwin-arm64: check-release-tag dmg-notarize
 		RUNE_MIN_MACOS=$(DARWIN_ARM64_MIN_MACOS) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 dist-darwin-amd64: check-release-tag dmg-amd64-notarize
@@ -543,6 +558,7 @@ dist-darwin-amd64: check-release-tag dmg-amd64-notarize
 		RUNE_MIN_MACOS=$(DARWIN_AMD64_MIN_MACOS) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
+		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
 		./cmd/rune/dist.sh
 
 # check-release-tag aborts before any build runs when HEAD does not
@@ -637,6 +653,60 @@ staging-dist-darwin-arm64: RUNE_ENV := dev
 staging-dist-darwin-arm64: DIST_BUCKET := $(STAGING_DOWNLOADS_BUCKET)
 staging-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(STAGING_DOWNLOAD_HOST)
 staging-dist-darwin-arm64: dist-darwin-arm64
+
+# beta-dist-*: build with prod ldflags and upload to the same public
+# PROD_DOWNLOADS_BUCKET as prod-dist-*, but with RELEASE_CHANNEL=beta so
+# dist.sh publishes a separate manifest-beta.json and never overwrites the
+# shared -latest pointers or manifest.json. Beta ships real API endpoints
+# (RUNE_ENV=prod); the only difference from prod-dist-* is the channel.
+beta-dist-linux-amd64:  RUNE_ENV := prod
+beta-dist-linux-amd64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-linux-amd64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-linux-amd64:  RELEASE_CHANNEL := beta
+beta-dist-linux-amd64:  dist-linux-amd64
+
+beta-dist-linux-arm64:  RUNE_ENV := prod
+beta-dist-linux-arm64:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-linux-arm64:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-linux-arm64:  RELEASE_CHANNEL := beta
+beta-dist-linux-arm64:  dist-linux-arm64
+
+beta-dist-linux-amd64-native:  RUNE_ENV := prod
+beta-dist-linux-amd64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-linux-amd64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-linux-amd64-native:  RELEASE_CHANNEL := beta
+beta-dist-linux-amd64-native:  dist-linux-amd64-native
+
+beta-dist-linux-arm64-native:  RUNE_ENV := prod
+beta-dist-linux-arm64-native:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-linux-arm64-native:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-linux-arm64-native:  RELEASE_CHANNEL := beta
+beta-dist-linux-arm64-native:  dist-linux-arm64-native
+
+# beta-dist-linux-*-cross are retained as aliases for the now-default cross build.
+beta-dist-linux-amd64-cross:  RUNE_ENV := prod
+beta-dist-linux-amd64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-linux-amd64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-linux-amd64-cross:  RELEASE_CHANNEL := beta
+beta-dist-linux-amd64-cross:  dist-linux-amd64
+
+beta-dist-linux-arm64-cross:  RUNE_ENV := prod
+beta-dist-linux-arm64-cross:  DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-linux-arm64-cross:  DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-linux-arm64-cross:  RELEASE_CHANNEL := beta
+beta-dist-linux-arm64-cross:  dist-linux-arm64
+
+beta-dist-darwin-amd64: RUNE_ENV := prod
+beta-dist-darwin-amd64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-darwin-amd64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-darwin-amd64: RELEASE_CHANNEL := beta
+beta-dist-darwin-amd64: dist-darwin-amd64
+
+beta-dist-darwin-arm64: RUNE_ENV := prod
+beta-dist-darwin-arm64: DIST_BUCKET := $(PROD_DOWNLOADS_BUCKET)
+beta-dist-darwin-arm64: DIST_DOWNLOAD_HOST := $(PROD_DOWNLOAD_HOST)
+beta-dist-darwin-arm64: RELEASE_CHANNEL := beta
+beta-dist-darwin-arm64: dist-darwin-arm64
 
 clean:
 	@rm -rf $(RUNE_RELEASE_DIR)

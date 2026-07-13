@@ -13,10 +13,27 @@
 #                         https://storage.googleapis.com/<bucket> for
 #                         buckets that are NOT fronted by an HTTPS load
 #                         balancer with a custom domain.
+#   RELEASE_CHANNEL     - release channel (default: empty/"stable"). "beta"
+#                         publishes the versioned artifact alongside stable
+#                         but writes its own "-beta" pointer
+#                         (rune-beta.tar.gz / Rune-beta.dmg) and
+#                         "manifest-beta.json" instead of the shared "-latest"
+#                         pointers and "manifest.json", so prod auto-upgrade
+#                         clients never see beta builds.
 set -e
 
 DOWNLOADS_BUCKET="${DOWNLOADS_BUCKET:-gs://downloads.rune.build}"
 DOWNLOAD_HOST="${DOWNLOAD_HOST:-https://${DOWNLOADS_BUCKET#gs://}}"
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-}"
+
+case "$RELEASE_CHANNEL" in
+    ""|stable) manifest_name="manifest.json";      channel_slug="latest" ;;
+    beta)      manifest_name="manifest-beta.json"; channel_slug="beta"   ;;
+    *)
+        echo "ERROR: RELEASE_CHANNEL must be one of '', 'stable', or 'beta'; got '${RELEASE_CHANNEL}'."
+        exit 1
+        ;;
+esac
 
 # Reject anything that the in-product upgrader would refuse so we never
 # publish a manifest that downgrade/version checks treat as garbage. The
@@ -87,18 +104,21 @@ fi
 gcs_arch="${BLUE_TARGET_OS}-${BLUE_TARGET_ARCH}"
 gcs_dir="${DOWNLOADS_BUCKET}/${gcs_arch}"
 
-# Determine the public filename based on artifact extension.
+# Determine the public filenames based on artifact extension. `pointer` is
+# the mutable per-channel alias (rune-latest / rune-beta): stable clients
+# fetch rune-latest, beta clients fetch rune-beta. Beta never overwrites the
+# stable "-latest" pointer, so prod auto-upgrade clients never see beta.
 case "$BLUE_RELEASE_TAR" in
-	*.dmg)  versioned="Rune-${GIT_TAG}.dmg";  latest="Rune-latest.dmg"  ;;
-	*)      versioned="rune-${GIT_TAG}.tar.gz"; latest="rune-latest.tar.gz" ;;
+	*.dmg)  versioned="Rune-${GIT_TAG}.dmg";  pointer="Rune-${channel_slug}.dmg"  ;;
+	*)      versioned="rune-${GIT_TAG}.tar.gz"; pointer="rune-${channel_slug}.tar.gz" ;;
 esac
 
 echo "Publishing to ${gcs_dir}/${versioned} ..."
 gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${versioned}"
-gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${latest}"
+gsutil cp "$BLUE_RELEASE_TAR" "${gcs_dir}/${pointer}"
 echo "Public download URLs:"
 echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${versioned}"
-echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${latest}"
+echo "  ${DOWNLOAD_HOST}/${gcs_arch}/${pointer}"
 
 # Compute the SHA256 of the artifact using whichever tool is available.
 # `shasum -a 256` is shipped on macOS; `sha256sum` is the GNU utility on Linux.
@@ -140,7 +160,7 @@ fi
 
 # Write the release manifest. Rune clients fetch this object directly
 # from the public downloads CDN at:
-#   ${DOWNLOAD_HOST}/${gcs_arch}/manifest.json
+#   ${DOWNLOAD_HOST}/${gcs_arch}/${manifest_name}
 # There is no server-side proxy; the file IS the manifest endpoint.
 manifest_tmp="$(mktemp "${TMPDIR:-/tmp}/rune-manifest-XXXXXX.json")"
 cat >"$manifest_tmp" <<EOF
@@ -158,7 +178,7 @@ cat >"$manifest_tmp" <<EOF
 }
 EOF
 
-echo "Publishing manifest to ${gcs_dir}/manifest.json ..."
+echo "Publishing manifest to ${gcs_dir}/${manifest_name} ..."
 gsutil -h "Content-Type:application/json" -h "Cache-Control:max-age=300" \
-	cp "$manifest_tmp" "${gcs_dir}/manifest.json"
+	cp "$manifest_tmp" "${gcs_dir}/${manifest_name}"
 rm -f "$manifest_tmp"

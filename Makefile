@@ -133,6 +133,10 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-staging-dist-linux-amd64-native rune-staging-dist-linux-arm64-native \
 	rune-staging-dist-linux-amd64-cross rune-staging-dist-linux-arm64-cross \
 	rune-staging-dist-darwin-arm64 rune-staging-dist-darwin-amd64 \
+	rune-beta-dist-linux-amd64 rune-beta-dist-linux-arm64 \
+	rune-beta-dist-linux-amd64-native rune-beta-dist-linux-arm64-native \
+	rune-beta-dist-linux-amd64-cross rune-beta-dist-linux-arm64-cross \
+	rune-beta-dist-darwin-arm64 rune-beta-dist-darwin-amd64 \
 	deps \
 	ox-api-init docs-init \
 	fuzz fuzz-list \
@@ -523,6 +527,33 @@ rune-staging-dist-darwin-arm64: clean
 
 rune-staging-dist-darwin-amd64: clean
 	@$(MAKE) -C cmd/rune staging-dist-darwin-amd64
+
+# rune-beta-dist-*: build with prod ldflags and upload to the public prod
+# download bucket on the beta channel — a separate manifest-beta.json that
+# never overwrites the shared -latest pointers or manifest.json.
+rune-beta-dist-linux-amd64: clean
+	@$(MAKE) -C cmd/rune beta-dist-linux-amd64
+
+rune-beta-dist-linux-arm64: clean
+	@$(MAKE) -C cmd/rune beta-dist-linux-arm64
+
+rune-beta-dist-linux-amd64-native: clean
+	@$(MAKE) -C cmd/rune beta-dist-linux-amd64-native
+
+rune-beta-dist-linux-arm64-native: clean
+	@$(MAKE) -C cmd/rune beta-dist-linux-arm64-native
+
+rune-beta-dist-linux-amd64-cross: clean
+	@$(MAKE) -C cmd/rune beta-dist-linux-amd64-cross
+
+rune-beta-dist-linux-arm64-cross: clean
+	@$(MAKE) -C cmd/rune beta-dist-linux-arm64-cross
+
+rune-beta-dist-darwin-arm64: clean
+	@$(MAKE) -C cmd/rune beta-dist-darwin-arm64
+
+rune-beta-dist-darwin-amd64: clean
+	@$(MAKE) -C cmd/rune beta-dist-darwin-amd64
 
 # dist-tar-with-src / dist-dmg-with-src exercise the .go-source publish
 # gate (cmd/verify-no-go-source.sh) by driving every component's dist.sh
