@@ -80,7 +80,7 @@ or to keep notes between sessions.
 ## Switching workspaces
 
 Rune has **nine workspace slots**. Press `<meta-1>` through `<meta-9>` to jump between
-them (On macOS `<meta>` is Command; on Linux it is the Super or Windows key).
+them (On macOS `<meta>` is the Command key ⌘; on Linux it is the Super or Windows key).
 Every empty slot shows this same home workspace; a slot only gets a project attached when
 you open one inside it. So slot 1 may be the project you're working on while slots 2-9 are
 still the home workspace, ready for whatever you need.

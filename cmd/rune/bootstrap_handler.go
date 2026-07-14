@@ -30,6 +30,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -563,12 +564,24 @@ func (b *bootstrapHandler) openBootstrapFlow() {
 	b.openWelcomePrompt()
 }
 
+// metaKeySymbol names the physical key that produces <meta> chords on
+// the user's platform, matching ide.metaKeyName. On macOS <meta> is the
+// Command key (⌘); elsewhere it is the Windows or Super key.
+func metaKeySymbol() string {
+	if runtime.GOOS == "darwin" {
+		return "\u2318"
+	}
+	return "the Windows or Super key"
+}
+
 func (b *bootstrapHandler) openWelcomePrompt() {
 	msg := "## Welcome to Rune\n\n" +
 		"Glad you're here. Let's get everything set up.\n\n" +
 		"Learning a new editor is hard, and it can feel daunting at first. We've all been there. " +
 		"These first steps are designed to make that process easier, and we promise that once Rune starts to click, " +
-		"the payoff will be huge."
+		"the payoff will be huge.\n\n" +
+		"If this text is too small, press " + metaKeySymbol() + " and `+` to make the font bigger; " +
+		"if it's too big, press " + metaKeySymbol() + " and `-` to make it smaller."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
