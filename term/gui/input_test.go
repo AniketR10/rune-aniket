@@ -70,9 +70,8 @@ func TestInputFireOnce(t *testing.T) {
 			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte{0x0d, 0x0a}}},
 		},
 		{
-			description:    "dispatches a single key char, via key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}},
+			description: "plain printable key alone dispatches nothing (text comes from chars)",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyA)},
 		},
 		{
 			description:    "dispatches a single key char, via char",
@@ -140,8 +139,12 @@ func TestInputFireOnce(t *testing.T) {
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
 		},
 		{
-			description:    "omits shift modifier for shift + char, via key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
+			description: "shift + printable key alone dispatches nothing (text comes from chars)",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
+		},
+		{
+			description:    "shifted char via char stream dispatches the shifted rune",
+			chars:          []rune{'A'},
 			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'A', Raw: []byte("A")}},
 		},
 		{
@@ -319,14 +322,17 @@ func TestInputFireOnce(t *testing.T) {
 			},
 		},
 		{
-			description:    "shift+2 dispatches @",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyDigit2, ebiten.KeyModShift)},
+			description: "shift+2 key alone dispatches nothing (@ comes from chars)",
+			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyDigit2, ebiten.KeyModShift)},
+		},
+		{
+			description:    "shifted symbol via char stream dispatches the symbol",
+			chars:          []rune{'@'},
 			expectedEvents: []term.Event{{Type: term.EventKey, Ch: '@', Raw: []byte("@")}},
 		},
 		{
-			description:    "OS repeat dispatches event",
-			keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
-			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}},
+			description: "OS repeat of a printable key alone dispatches nothing",
+			keyEvents:   []ebiten.KeyEvent{repeat(ebiten.KeyA)},
 		},
 		{
 			description: "does not dispatch releases",
@@ -399,35 +405,20 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			description: "char key press dispatches once, held key with no repeat produces nothing",
+			description: "char key press alone dispatches nothing; text arrives via chars",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					expectedEvents: []term.Event{{Ch: 'a'}},
+					// Printable key event only; the char commit lands next frame.
+					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
 				},
 				{
-					// Key held, no OS repeat yet
+					chars:          []rune{'a'},
+					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
 			},
 		},
 		{
-			description: "different char key dispatches new event",
-			frames: []frame{
-				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					expectedEvents: []term.Event{{Ch: 'a'}},
-				},
-				{
-					// Key held, no OS repeat yet
-				},
-				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB)},
-					expectedEvents: []term.Event{{Ch: 'b'}},
-				},
-			},
-		},
-		{
-			description: "different fallback char dispatches new event each frame",
+			description: "chars dispatch one event per frame in order",
 			frames: []frame{
 				{chars: []rune{'a'}, expectedEvents: []term.Event{{Ch: 'a'}}},
 				{chars: []rune{'b'}, expectedEvents: []term.Event{{Ch: 'b'}}},
@@ -525,47 +516,7 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			description: "dispatches only new keys when joining keys together",
-			frames: []frame{
-				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					expectedEvents: []term.Event{{Ch: 'a'}},
-				},
-				{
-					// Key A still held, no OS repeat
-				},
-				{
-					// Key A still held, no OS repeat
-				},
-				{
-					// A still held, B pressed in same frame
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB)},
-					expectedEvents: []term.Event{{Ch: 'b'}},
-				},
-				{
-					// Both held, no OS repeat
-				},
-				{
-					// A released, B still held
-				},
-				{
-					// B still held, no OS repeat
-				},
-				{
-					// B still held, C pressed
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyC)},
-					expectedEvents: []term.Event{{Ch: 'c'}},
-				},
-				{
-					// C held, no OS repeat
-				},
-				{
-					// C held, no OS repeat
-				},
-			},
-		},
-		{
-			description: "dispatches only new keys when joining keys with modifiers together",
+			description: "joining chord keys dispatches only the new chord each frame",
 			frames: []frame{
 				{
 					// Shift only → no event
@@ -575,17 +526,9 @@ func TestInputMultiFrame(t *testing.T) {
 					// Shift still held
 				},
 				{
-					// A pressed with shift
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
-					expectedEvents: []term.Event{{Ch: 'A'}},
-				},
-				{
-					// A held, B pressed with shift
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModShift)},
-					expectedEvents: []term.Event{{Ch: 'B'}},
-				},
-				{
-					// A released, B held with shift, no repeat
+					// Shift+A is plain printable text → delivered via chars, not
+					// the key path.
+					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
 				},
 				{
 					// Ctrl added, B still held with shift+ctrl
@@ -608,73 +551,103 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			description: "fast typed second char dispatches even when first key still held",
-			frames: []frame{
-				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyS)},
-					expectedEvents: []term.Event{{Ch: 's'}},
-				},
-				{
-					// S still held, T pressed — both arrive as discrete events
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyT)},
-					expectedEvents: []term.Event{{Ch: 't'}},
-				},
-				{
-					// Both released
-				},
-			},
-		},
-		{
-			description: "multiple keys in same frame all dispatch",
-			frames: []frame{
-				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA), press(ebiten.KeyB)},
-					expectedEvents: []term.Event{{Ch: 'a'}, {Ch: 'b'}},
-				},
-			},
-		},
-		{
-			description: "OS repeat generates events on each frame",
+			// Printable keys are not echoed by the key path, so an inline char
+			// on the same frame is the only text source and must dispatch once.
+			description: "printable key with same-frame char dispatches the char only",
 			frames: []frame{
 				{
 					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					chars:          []rune{'a'},
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
+			},
+		},
+		{
+			// Under IBus the key event fires with no inline char and the commit
+			// lands a frame later. With separated streams the key path emits
+			// nothing, so the delayed commit is the sole, single dispatch.
+			description: "IBus delayed commit dispatches once, key path stays silent",
+			frames: []frame{
 				{
-					// No events: key held but OS hasn't sent repeat yet
+					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
 				},
 				{
-					keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+					chars:          []rune{'a'}, // delayed IBus commit
+					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+			},
+		},
+		{
+			// Held key with OS repeats: the key path never emits printable text,
+			// so each frame's dispatch count is driven only by the chars stream.
+			description: "held printable key repeats emit only via chars",
+			frames: []frame{
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					chars:          []rune{'a'},
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
 				{
 					keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+					chars:          []rune{'a'},
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
-			},
-		},
-		{
-			description: "release between presses does not produce terminal event",
-			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					expectedEvents: []term.Event{{Ch: 'a'}},
+					// Repeat with no accompanying commit → nothing.
+					keyEvents: []ebiten.KeyEvent{repeat(ebiten.KeyA)},
 				},
 				{
 					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyA)},
 				},
+			},
+		},
+		{
+			// Interleaving a second key while the first is held: chars are the
+			// only text source and dispatch in stream order, so a lagging commit
+			// cannot resurrect once its key is released.
+			description: "interleaving a second held key dispatches chars in order",
+			frames: []frame{
 				{
 					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
+					chars:          []rune{'a'},
 					expectedEvents: []term.Event{{Ch: 'a'}},
+				},
+				{
+					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB)},
+					chars:          []rune{'b'},
+					expectedEvents: []term.Event{{Ch: 'b'}},
+				},
+				{
+					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyB)},
+				},
+				{
+					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyA)},
 				},
 			},
 		},
 		{
-			description: "key event suppresses fallback chars in same frame",
+			// A composed character (dead key, CJK) has no key-path echo and is
+			// delivered verbatim by the chars stream.
+			description: "composed IME char passes through the chars stream",
+			frames: []frame{
+				{
+					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
+				},
+				{
+					chars:          []rune{'é'},
+					expectedEvents: []term.Event{{Ch: 'é'}},
+				},
+			},
+		},
+		{
+			// Alt+printable is a chord on the key path; macOS also delivers the
+			// Option-composed rune via chars, which must be dropped so the same
+			// physical key is not doubled.
+			description: "macOS Alt chord drops the composed char on the same frame",
 			frames: []frame{
 				{
 					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
-					chars:          []rune{'å'}, // macOS composed char ignored
+					chars:          []rune{'å'},
 					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}},
 				},
 			},
@@ -802,6 +775,22 @@ func TestInputKeyMapping(t *testing.T) {
 			},
 		},
 		{
+			// A key remapped to a printable target has no char-stream echo, so
+			// it must be emitted from the key path even though plain printable
+			// keys are otherwise skipped. An unrelated char on the same frame
+			// still flows through independently.
+			description: "remapped key-to-char emits alongside an independent char",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Key: term.KeyNumLock}: {Ch: 'a'},
+			},
+			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyNumLock)},
+			chars:     []rune{'b'},
+			expectedEvents: []term.Event{
+				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
+				{Type: term.EventKey, Ch: 'b', Raw: []byte("b")},
+			},
+		},
+		{
 			description: "passes through keys absent from a non-empty table",
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyCapsLock}: {Key: term.KeyEsc},
@@ -850,13 +839,11 @@ func TestInputKeyMapping(t *testing.T) {
 				press(ebiten.KeyB, ebiten.KeyModControl),
 				press(ebiten.KeyB, ebiten.KeyModSuper),
 				press(ebiten.KeyB, ebiten.KeyModAlt),
-				press(ebiten.KeyB, ebiten.KeyModShift),
 			},
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModCtrl)},
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModMeta)},
 				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModAlt)},
-				{Type: term.EventKey, Ch: 'B', Raw: getCharEscapeSequence('B', 0)},
 			},
 		},
 		{

@@ -132,15 +132,22 @@ func (i *input) remapMods(mods ebiten.KeyModifier) ebiten.KeyModifier {
 	return out
 }
 
-// processEvents collects discrete key events and fallback chars from Ebiten,
-// converts them to term.Events, and appends them to dst.
+// processEvents converts Ebiten input into term.Events and appends them to dst.
+//
+// The two Ebiten input streams are kept separate by purpose, as in other GLFW
+// UIs: AppendInputChars is the sole source of inserted text (layout- and
+// input-method-correct, including dead keys, compose sequences and CJK), while
+// AppendKeyEvents drives only non-text keys and modifier chords. A printable
+// rune therefore travels through exactly one path, so the two never need to be
+// reconciled against each other.
 func (i *input) processEvents(dst []term.Event) []term.Event {
 	i.keyEvents = i.input.AppendKeyEvents(i.keyEvents[:0])
 	i.chars = i.input.AppendInputChars(i.chars[:0])
 
-	// Track whether any key event produced a terminal event, so we
-	// know whether to use the fallback chars from AppendInputChars.
-	keyEventFired := false
+	// Alt+printable is a modifier chord handled on the key path. On macOS the
+	// char stream also delivers the Option-composed rune (e.g. 'å' for Alt+a);
+	// drop those so the same physical key is not emitted twice.
+	altChord := false
 
 	for _, ke := range i.keyEvents {
 		if ke.Action == ebiten.KeyActionRelease {
@@ -161,6 +168,7 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 		if ok {
 			ke.Key, ke.Mods = rep.Key, rep.Mods
 		}
+		remapped := ok
 		ke.Mods = i.remapMods(ke.Mods)
 		if isModifierKey(ke.Key) {
 			continue
@@ -168,9 +176,18 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 
 		mod := ebitenModToTermMod(ke.Mods)
 
-		// Try character-producing key first.
 		if base, shift, ok := keyToBaseAndShift(ke.Key); ok {
-			keyEventFired = true
+			// Plain printable text is delivered by AppendInputChars, so it is
+			// skipped here unless it was synthesized by a key mapping: a
+			// remapped target has no char-stream echo and must be emitted from
+			// the key path. Ctrl/Alt/Meta chords are always handled here, since
+			// those produce control sequences the char stream never carries.
+			if mod&(term.ModCtrl|term.ModAlt|term.ModMeta) == 0 && !remapped {
+				continue
+			}
+			if mod&(term.ModCtrl|term.ModMeta) == 0 && mod&term.ModAlt != 0 {
+				altChord = true
+			}
 			ch, mod := resolveCharKey(base, shift, mod)
 			dst = append(dst, term.Event{
 				Type: term.EventKey,
@@ -181,30 +198,23 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 			continue
 		}
 
-		// Non-character key (arrows, F-keys, Enter, etc.)
 		if ev, ok := mapEbitenKey(ke.Key, mod); ok {
-			keyEventFired = true
 			dst = append(dst, ev)
 		}
 	}
 
-	// Fallback: if no key events produced terminal events this frame,
-	// use AppendInputChars for IME / paste / other text input.
-	//
-	// Limitation: fallback chars carry no modifier information. If a
-	// modifier (e.g. Alt) is held while a char arrives here without a
-	// corresponding key event, the modifier is lost. In practice this
-	// does not happen on desktop/GLFW because the key callback always
-	// fires for physical key presses, so modifier+char combos are
-	// handled by the key-event path above.
-	if !keyEventFired {
-		for _, ch := range i.chars {
-			dst = append(dst, term.Event{
-				Type: term.EventKey,
-				Ch:   ch,
-				Raw:  getCharEscapeSequence(ch, 0),
-			})
+	for _, ch := range i.chars {
+		// Space reaches the key path as term.KeySpace; the char-stream copy
+		// would double it. Alt-composed runes belong to a chord already
+		// emitted above.
+		if ch == ' ' || altChord {
+			continue
 		}
+		dst = append(dst, term.Event{
+			Type: term.EventKey,
+			Ch:   ch,
+			Raw:  getCharEscapeSequence(ch, 0),
+		})
 	}
 
 	return dst
