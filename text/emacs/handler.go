@@ -272,6 +272,56 @@ func (h *emacsHandler) copyRegion() bool {
 	return true
 }
 
+var sexpOpeners = map[rune]struct{}{'(': {}, '[': {}, '{': {}}
+var sexpClosers = map[rune]struct{}{')': {}, ']': {}, '}': {}}
+
+// moveForwardSexp implements a bracket-based forward-sexp (C-M-f): it scans
+// forward for the next opening bracket, jumps to its balanced close and leaves
+// point just past it. It is intentionally bracket-only and does not treat bare
+// atoms as sexps. Point is restored when no bracket is found.
+func (h *emacsHandler) moveForwardSexp() bool {
+	mark := h.cursor.Mark()
+	for {
+		cell, ok := h.cursor.Cell()
+		if ok {
+			if _, isOpen := sexpOpeners[cell.Ch]; isOpen {
+				if h.cursor.MoveToMatchingRune() {
+					h.cursor.MoveRight()
+					return true
+				}
+				break
+			}
+		}
+		if !h.cursor.MoveRight() {
+			break
+		}
+	}
+	h.cursor.MoveToMark(mark)
+	return false
+}
+
+// moveBackwardSexp implements a bracket-based backward-sexp (C-M-b): it scans
+// backward for the closing bracket that ends the previous sexp, jumps to its
+// balanced open and leaves point on it. Point is restored when no bracket is
+// found.
+func (h *emacsHandler) moveBackwardSexp() bool {
+	mark := h.cursor.Mark()
+	for h.cursor.MoveLeft() {
+		cell, ok := h.cursor.Cell()
+		if !ok {
+			continue
+		}
+		if _, isClose := sexpClosers[cell.Ch]; isClose {
+			if h.cursor.MoveToMatchingRune() {
+				return true
+			}
+			break
+		}
+	}
+	h.cursor.MoveToMark(mark)
+	return false
+}
+
 // selectWordForward selects from point to the end of the current or next
 // word, matching how the Emacs word-case commands operate on the word at or
 // after point.
@@ -460,6 +510,17 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			case '.':
 				// M->: end-of-buffer.
 				handled = h.cursor.MoveLastLine()
+			case 'm':
+				// M-m: back-to-indentation.
+				handled = h.cursor.MoveStartLineNonBlank()
+			case '^':
+				// M-^: delete-indentation. Conflate joins the following line
+				// onto the current one (bracket-free line join); it does not
+				// implement GNU Emacs join-with-previous semantics.
+				handled = h.cursor.Conflate()
+			case '\\':
+				// M-\: delete-horizontal-space.
+				handled = h.cursor.DeleteHorizontalSpace()
 			case 'u':
 				handled = h.upcaseWord()
 				return
@@ -609,6 +670,22 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.Center()
 		case 'v':
 			handled = h.less.Scroll().SeekDownPage()
+		case 'g':
+			// C-g: keyboard-quit. Clear selection, search highlight and any
+			// pending mark.
+			handled = h.cursor.Unselect()
+			h.cursor.Search("")
+			h.clearMarkLocation()
+		case 'o':
+			// C-o: open-line. Insert a newline but keep point before it.
+			mark := h.cursor.Mark()
+			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune, h.cfg.indentTabspaces)
+			h.cursor.MoveToMark(mark)
+			handled = true
+		case 'j':
+			// C-j: newline-and-indent.
+			h.cursor.InsertWithIndentRune('\n', h.cfg.indentRune, h.cfg.indentTabspaces)
+			handled = true
 		case 'm':
 			handled = h.cursor.MoveToMatchingRune()
 		case 'M':
@@ -725,6 +802,12 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			case 'v':
 				handled = h.cursor.Unhide()
 				h.cursor.Unselect()
+			case 'f':
+				// C-M-f: forward-sexp (bracket-based).
+				handled = h.moveForwardSexp()
+			case 'b':
+				// C-M-b: backward-sexp (bracket-based).
+				handled = h.moveBackwardSexp()
 			}
 		}
 	}
@@ -783,6 +866,12 @@ func (t *emacsHandler) ShowCommandBar(show bool) {
 }
 
 func (h *emacsHandler) SetCursorAtScroll(pos term.Coordinates) bool {
+	// Clamp to buffer bounds so a stale or overshooting position (for
+	// example after the buffer shrank underneath the cursor) cannot leave
+	// the cursor pointing past the last row or column. This mirrors the
+	// modal handler and prevents out-of-range panics in downstream edits.
+	pos.Y = max(0, min(pos.Y, h.less.Buffer().Rows()-1))
+	pos.X = max(0, min(pos.X, h.less.Buffer().Columns(pos.Y)))
 	// setCursor should be robust against resizes, etc.
 	// only the first client interaction should clear this position
 	if h.less.Scroll().Width() == 0 || h.less.Scroll().SizeHeight() == 0 {

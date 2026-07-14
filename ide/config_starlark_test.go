@@ -856,6 +856,7 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-x>.":         "tabmove right",
 		"<c-x>[":         "cursorhistory prev",
 		"<c-x>]":         "cursorhistory next",
+		"<c-x><c-x>":     "exchangepointandmark",
 		"<c-x>g":         "searchtext",
 		"<c-x>n":         "jumptolocation next search",
 		"<c-x>p":         "jumptolocation prev search",

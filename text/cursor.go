@@ -2662,6 +2662,48 @@ func (c *Cursor) ConflateContext(ctx context.Context) (ok bool) {
 	return
 }
 
+// DeleteHorizontalSpace deletes the blank characters (spaces and tabs)
+// surrounding the cursor on the current line, leaving the cursor where the
+// whitespace run began. It mirrors Emacs delete-horizontal-space (M-\).
+func (c *Cursor) DeleteHorizontalSpace() (ok bool) {
+	return c.DeleteHorizontalSpaceContext(c.ctx)
+}
+
+// DeleteHorizontalSpaceContext is DeleteHorizontalSpace with an explicit context.
+func (c *Cursor) DeleteHorizontalSpaceContext(ctx context.Context) (ok bool) {
+	enable := c.disablePublishing()
+	defer enable()
+
+	pos := c.cursorAtScroll()
+	cells := c.view().RawCells()
+	if pos.Y < 0 || pos.Y >= len(cells) {
+		return false
+	}
+	line := cells[pos.Y]
+
+	blank := func(x int) bool {
+		return x >= 0 && x < len(line) && isOneOf(line[x], blankCharacters)
+	}
+
+	from := pos.X
+	for blank(from - 1) {
+		from--
+	}
+	to := pos.X
+	for blank(to) {
+		to++
+	}
+	if from == to {
+		return false
+	}
+
+	c.buffer().Edit(ctx,
+		term.Coordinates{Y: pos.Y, X: from},
+		term.Coordinates{Y: pos.Y, X: to}, "")
+	c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: from})
+	return true
+}
+
 func (c *Cursor) setSelection() (ok bool) {
 	from, to, ok := c.selectionBounds()
 	if !ok {

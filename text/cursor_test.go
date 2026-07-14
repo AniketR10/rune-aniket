@@ -7407,3 +7407,99 @@ func inlineSchedule(fn func()) bool {
 	fn()
 	return true
 }
+
+// TestDeleteHorizontalSpace exercises DeleteHorizontalSpace (Emacs M-\), which
+// removes the run of spaces and tabs surrounding point on the current line and
+// leaves point where the run began.
+func TestDeleteHorizontalSpace(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		at      term.Coordinates
+		want    string
+		wantAt  term.Coordinates
+		wantOk  bool
+	}{
+		{
+			name:    "spaces on both sides",
+			content: "a   b",
+			at:      term.Coordinates{X: 2},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 1},
+			wantOk:  true,
+		},
+		{
+			name:    "spaces only before point",
+			content: "a   b",
+			at:      term.Coordinates{X: 4},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 1},
+			wantOk:  true,
+		},
+		{
+			name:    "spaces only after point",
+			content: "a   b",
+			at:      term.Coordinates{X: 1},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 1},
+			wantOk:  true,
+		},
+		{
+			name:    "tabs are treated as blank",
+			content: "a\t\tb",
+			at:      term.Coordinates{X: 2},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 1},
+			wantOk:  true,
+		},
+		{
+			name:    "no surrounding blanks is a no-op",
+			content: "ab",
+			at:      term.Coordinates{X: 1},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 1},
+			wantOk:  false,
+		},
+		{
+			name:    "leading indentation from column zero",
+			content: "   ab",
+			at:      term.Coordinates{X: 0},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 0},
+			wantOk:  true,
+		},
+		{
+			name:    "trailing blanks at end of line",
+			content: "ab   ",
+			at:      term.Coordinates{X: 5},
+			want:    "ab",
+			wantAt:  term.Coordinates{X: 2},
+			wantOk:  true,
+		},
+		{
+			name:    "blanks on one line do not cross line boundaries",
+			content: "a  \nb",
+			at:      term.Coordinates{X: 1},
+			want:    "a\nb",
+			wantAt:  term.Coordinates{X: 1},
+			wantOk:  true,
+		},
+	}
+
+	for _, tcase := range cases {
+		t.Run(tcase.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			scroll := component.NewScroll(buf)
+			scroll.Resize(20, 10)
+			c := NewCursor(scroll, nil)
+			c.InsertString(tcase.content)
+			_, _ = c.MoveToScroll(tcase.at)
+
+			ok := c.DeleteHorizontalSpace()
+
+			assert.Equal(t, tcase.wantOk, ok)
+			assert.Equal(t, tcase.want, buf.String())
+			assert.Equal(t, tcase.wantAt, c.CursorAtScroll())
+		})
+	}
+}

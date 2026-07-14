@@ -42,6 +42,8 @@ command:
     "<c-x>.": "tabmove right"
     "<c-x>[": "cursorhistory prev"
     "<c-x>]": "cursorhistory next"
+    # exchange-point-and-mark: swap point with the most recent C-SPC mark.
+    "<c-x><c-x>": exchangepointandmark
     # Workspace-wide text search and match navigation.
     "<c-x>g": searchtext               # grep across the workspace
     "<c-x>n": "jumptolocation next search"
