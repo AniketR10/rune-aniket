@@ -577,8 +577,8 @@ dist-min-macos:
 # dist-min-linux exercises the minimum-Linux publish gate
 # (cmd/verify-min-linux.sh + cmd/rune/dist.sh): it packs a stub ELF
 # artifact and asserts the gate refuses to publish one that requires a
-# glibc/libstdc++/C++ ABI version above the floor we advertise, and fails
-# closed when the floors are unset. Linux only (needs a C compiler +
+# glibc version above the floor we advertise, and fails
+# closed when the floor is unset. Linux only (needs a C compiler +
 # file); a no-op skip elsewhere.
 dist-min-linux:
 	@./cmd/dist-min-linux-test.sh

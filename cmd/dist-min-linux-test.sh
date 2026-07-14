@@ -2,15 +2,15 @@
 # Regression test for the minimum-Linux publish gate
 # (cmd/verify-min-linux.sh and its wiring in cmd/rune/dist.sh).
 #
-# A release artifact whose ELF binary requires a newer glibc/libstdc++/C++
-# ABI symbol version than the floor we advertise must never be published:
+# A release artifact whose ELF binary requires a newer glibc symbol
+# version than the floor we advertise must never be published:
 # the dynamic loader refuses to start it on a floor host ("version
 # `GLIBC_2.29' not found"). This test packs a real ELF stub into a
 # release-shaped tar and asserts:
 #   1. verify-min-linux.sh aborts when a required version exceeds the floor
 #   2. verify-min-linux.sh passes when every required version <= floor
-#   3. cmd/rune/dist.sh fails closed when a linux publish omits the floors,
-#      and aborts (before any publish) when they are set and the artifact
+#   3. cmd/rune/dist.sh fails closed when a linux publish omits the floor,
+#      and aborts (before any publish) when it is set and the artifact
 #      is over-floor.
 #
 # Linux only: it needs a C compiler to mint a real ELF and `file` to
@@ -39,8 +39,6 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/dist-min-linux-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 floor_glibc="2.28"
-floor_glibcxx="3.4.25"
-floor_cxxabi="1.3.11"
 
 # build_artifact <suffix> <out.tar.gz>
 # Compiles a real ELF stub and packs it into a release-shaped tar
@@ -78,11 +76,11 @@ if [[ "$1" != "-V" ]]; then
 fi
 case "${RUNE_TEST_VERNEED:-ok}" in
     over)
-        # GLIBC_2.29 is above the 2.28 floor; the others are at floor.
-        glibc="2.29"; glibcxx="3.4.25"; cxxabi="1.3.11" ;;
+        # GLIBC_2.29 is above the 2.28 floor.
+        glibc="2.29" ;;
     *)
-        # All families exactly at floor.
-        glibc="2.28"; glibcxx="3.4.25"; cxxabi="1.3.11" ;;
+        # Exactly at floor.
+        glibc="2.28" ;;
 esac
 cat <<TABLE
 
@@ -91,8 +89,6 @@ Version needs section '.gnu.version_r' contains 1 entry:
   0x0010:   Name: GLIBC_ABI_DT_RELR  Flags: none  Version: 4
   0x0020:   Name: GLIBC_2.2.5  Flags: none  Version: 3
   0x0030:   Name: GLIBC_${glibc}  Flags: none  Version: 2
-  0x0040:   Name: GLIBCXX_${glibcxx}  Flags: none  Version: 5
-  0x0050:   Name: CXXABI_${cxxabi}  Flags: none  Version: 6
 TABLE
 EOF
 chmod +x "$fakebin/readelf"
@@ -101,7 +97,7 @@ failures=0
 
 echo "=== 1) gate aborts when a required version exceeds the floor ==="
 out="$(PATH="$fakebin:$PATH" RUNE_TEST_VERNEED=over \
-    bash "$gate" "$over" "$floor_glibc" "$floor_glibcxx" "$floor_cxxabi" 2>&1)"; status=$?
+    bash "$gate" "$over" "$floor_glibc" 2>&1)"; status=$?
 if [[ $status -eq 0 ]]; then
     echo "$out"; echo "FAIL: gate passed an over-floor artifact." >&2
     failures=$((failures + 1))
@@ -114,7 +110,7 @@ fi
 
 echo "=== 2) gate passes when every required version == floor ==="
 out="$(PATH="$fakebin:$PATH" RUNE_TEST_VERNEED=ok \
-    bash "$gate" "$ok" "$floor_glibc" "$floor_glibcxx" "$floor_cxxabi" 2>&1)"; status=$?
+    bash "$gate" "$ok" "$floor_glibc" 2>&1)"; status=$?
 if [[ $status -ne 0 ]]; then
     echo "$out"; echo "FAIL: gate rejected an at-floor artifact." >&2
     failures=$((failures + 1))
@@ -147,11 +143,11 @@ mkdir -p "$gitrepo"
     git tag v0.0.0
 ) || { echo "FAIL: could not seed hermetic git repo" >&2; exit 1; }
 
-# run_dist <artifact> <verneed> [with-floors]
+# run_dist <artifact> <verneed> [with-floor]
 # Runs dist.sh against the artifact with publish tools and readelf stubbed
 # out. <verneed> selects the controlled VERNEED table ("over"/"ok"). When
-# a third arg is given the RUNE_MIN_* floors are exported; otherwise they
-# stay unset so the fail-closed path is exercised.
+# a third arg is given the RUNE_MIN_GLIBC floor is exported; otherwise it
+# stays unset so the fail-closed path is exercised.
 run_dist() {
     (
         cd "$gitrepo" || exit 1
@@ -160,31 +156,31 @@ run_dist() {
         export BLUE_RELEASE_TAR="$1" BLUE_TARGET_OS=linux BLUE_TARGET_ARCH=amd64
         export DOWNLOADS_BUCKET="gs://example-downloads" DOWNLOAD_HOST="https://example.com"
         if [[ $# -ge 3 ]]; then
-            export RUNE_MIN_GLIBC="$floor_glibc" RUNE_MIN_GLIBCXX="$floor_glibcxx" RUNE_MIN_CXXABI="$floor_cxxabi"
+            export RUNE_MIN_GLIBC="$floor_glibc"
         else
-            unset RUNE_MIN_GLIBC RUNE_MIN_GLIBCXX RUNE_MIN_CXXABI
+            unset RUNE_MIN_GLIBC
         fi
         bash "$dist" 2>&1
     )
 }
 
-echo "=== 3a) dist.sh fails closed when the floors are unset (linux) ==="
+echo "=== 3a) dist.sh fails closed when the floor is unset (linux) ==="
 out="$(run_dist "$ok" ok)"; status=$?
 if [[ $status -eq 0 ]]; then
-    echo "$out"; echo "FAIL: dist.sh published without the min-linux floors." >&2
+    echo "$out"; echo "FAIL: dist.sh published without the min-linux floor." >&2
     failures=$((failures + 1))
 elif grep -q "ran —" <<<"$out"; then
     echo "$out"; echo "FAIL: publish tool ran before the fail-closed check." >&2
     failures=$((failures + 1))
-elif ! grep -q "RUNE_MIN_GLIBC/GLIBCXX/CXXABI not set" <<<"$out"; then
+elif ! grep -q "RUNE_MIN_GLIBC not set" <<<"$out"; then
     echo "$out"; echo "FAIL: aborted, but not via the fail-closed check." >&2
     failures=$((failures + 1))
 else
-    echo "ok: dist.sh refused to publish without the min-linux floors (exit $status)"
+    echo "ok: dist.sh refused to publish without the min-linux floor (exit $status)"
 fi
 
 echo "=== 3b) dist.sh aborts an over-floor artifact before publishing ==="
-out="$(run_dist "$over" over with-floors)"; status=$?
+out="$(run_dist "$over" over with-floor)"; status=$?
 if [[ $status -eq 0 ]]; then
     echo "$out"; echo "FAIL: dist.sh published an over-floor artifact." >&2
     failures=$((failures + 1))

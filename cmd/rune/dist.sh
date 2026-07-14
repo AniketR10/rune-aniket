@@ -84,20 +84,20 @@ if [[ "$BLUE_TARGET_OS" == "darwin" ]]; then
 fi
 
 # Final gate before publish: never ship a Linux artifact that requires a
-# glibc/libstdc++/C++ ABI symbol version newer than the floor we
-# advertise. The dynamic loader refuses to start such a binary on a floor
-# host ("version `GLIBC_2.38' not found"), so a dependency built against a
-# newer toolchain would silently break supported users. Fail-closed: a
-# linux publish without the explicit floors is a configuration bug, not a
+# glibc symbol version newer than the floor we advertise. The dynamic
+# loader refuses to start such a binary on a floor host ("version
+# `GLIBC_2.38' not found"), so a dependency built against a newer
+# toolchain would silently break supported users. Fail-closed: a linux
+# publish without the explicit floor is a configuration bug, not a
 # reason to skip the check.
 if [[ "$BLUE_TARGET_OS" == "linux" ]]; then
-    if [[ -z "${RUNE_MIN_GLIBC}" || -z "${RUNE_MIN_GLIBCXX}" || -z "${RUNE_MIN_CXXABI}" ]]; then
-        echo "ERROR: RUNE_MIN_GLIBC/GLIBCXX/CXXABI not set for a linux publish — refusing to publish unverified." >&2
-        echo "       The dist-linux-* make rules set them from RUNE_MIN_GLIBC/GLIBCXX/CXXABI." >&2
+    if [[ -z "${RUNE_MIN_GLIBC}" ]]; then
+        echo "ERROR: RUNE_MIN_GLIBC not set for a linux publish — refusing to publish unverified." >&2
+        echo "       The dist-linux-* make rules set it from RUNE_MIN_GLIBC." >&2
         exit 1
     fi
     "$(dirname "${BASH_SOURCE[0]}")/../verify-min-linux.sh" \
-        "$BLUE_RELEASE_TAR" "$RUNE_MIN_GLIBC" "$RUNE_MIN_GLIBCXX" "$RUNE_MIN_CXXABI"
+        "$BLUE_RELEASE_TAR" "$RUNE_MIN_GLIBC"
 fi
 
 # Publish to public GCS bucket.

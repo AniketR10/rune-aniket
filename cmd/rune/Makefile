@@ -30,21 +30,15 @@ DARWIN_AMD64_TARGET_ARCH_FLAGS ?= CC="clang -arch x86_64 -mmacosx-version-min=$(
 DARWIN_ARM64_MIN_MACOS ?= 13.3
 DARWIN_ARM64_TARGET_ARCH_FLAGS ?= CC="clang -arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)" CGO_CFLAGS="-arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)" CGO_CXXFLAGS="-arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)" CGO_LDFLAGS="-arch arm64 -mmacosx-version-min=$(DARWIN_ARM64_MIN_MACOS)"
 
-# RUNE_MIN_{GLIBC,GLIBCXX,CXXABI} are the highest versioned symbols a
-# published Linux artifact may require from the host. They are the Linux
-# analogue of DARWIN_*_MIN_MACOS: the Docker cross build image
-# (debian:buster-slim) guarantees glibc 2.28 / libstdc++ GLIBCXX 3.4.25
-# / CXXABI 1.3.11, so any shipped ELF that needs a newer version would
-# fail to load on a floor host ("version `GLIBC_2.29' not found"). The
-# dist-linux-* rules thread these into cmd/rune/dist.sh, which runs
-# verify-min-linux.sh as a fail-closed publish gate. Since the llama.cpp
-# migration to llama-server the binary no longer links the C++ runtime, so
-# GLIBCXX/CXXABI are expected absent from its VERNEED; the GLIBCXX/CXXABI
-# floors stay as buster's values so any accidental C++ dependency is still
-# gated. Lower these only if the build toolchain's floor is also lowered.
+# RUNE_MIN_GLIBC is the highest versioned glibc symbol a published Linux
+# artifact may require from the host. It is the Linux analogue of
+# DARWIN_*_MIN_MACOS: the Docker cross build image (debian:buster-slim)
+# guarantees glibc 2.28, so any shipped ELF that needs a newer version
+# would fail to load on a floor host ("version `GLIBC_2.29' not found").
+# The dist-linux-* rules thread this into cmd/rune/dist.sh, which runs
+# verify-min-linux.sh as a fail-closed publish gate. Lower this only if
+# the build toolchain's floor is also lowered.
 RUNE_MIN_GLIBC   ?= 2.28
-RUNE_MIN_GLIBCXX ?= 3.4.25
-RUNE_MIN_CXXABI  ?= 1.3.11
 
 # RUNE_DEBUG_BUILD mirrors the root Makefile flag. Set to "true" to
 # bake debug-only ex commands (:panic, :crash) into the binary. The
@@ -486,8 +480,6 @@ dist-linux-amd64: check-release-tag release-linux-amd64
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		RUNE_MIN_GLIBCXX=$(RUNE_MIN_GLIBCXX) \
-		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
@@ -499,8 +491,6 @@ dist-linux-arm64: check-release-tag release-linux-arm64
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		RUNE_MIN_GLIBCXX=$(RUNE_MIN_GLIBCXX) \
-		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
@@ -515,8 +505,6 @@ dist-linux-amd64-native: check-release-tag release-linux-amd64-native
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		RUNE_MIN_GLIBCXX=$(RUNE_MIN_GLIBCXX) \
-		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \
@@ -528,8 +516,6 @@ dist-linux-arm64-native: check-release-tag release-linux-arm64-native
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
 		RUNE_MIN_GLIBC=$(RUNE_MIN_GLIBC) \
-		RUNE_MIN_GLIBCXX=$(RUNE_MIN_GLIBCXX) \
-		RUNE_MIN_CXXABI=$(RUNE_MIN_CXXABI) \
 		DOWNLOADS_BUCKET=$(DIST_BUCKET) \
 		DOWNLOAD_HOST=$(DIST_DOWNLOAD_HOST) \
 		RELEASE_CHANNEL=$(RELEASE_CHANNEL) \

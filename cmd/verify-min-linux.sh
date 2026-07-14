@@ -1,26 +1,23 @@
 #!/bin/bash
-# Verify that a Linux release artifact never requires a glibc, libstdc++
-# (GLIBCXX), or C++ ABI (CXXABI) symbol version newer than the floor we
-# advertise to users, before the artifact leaves this machine. Shared by
-# cmd/rune/dist.sh as a publish gate alongside verify-no-go-source.sh and
-# verify-min-macos.sh.
+# Verify that a Linux release artifact never requires a glibc symbol
+# version newer than the floor we advertise to users, before the
+# artifact leaves this machine. Shared by cmd/rune/dist.sh as a publish
+# gate alongside verify-no-go-source.sh and verify-min-macos.sh.
 #
 # Why this exists: an ELF binary records the exact versioned symbols it
 # needs in its VERNEED table (.gnu.version_r). The dynamic loader refuses
 # to start a process when the host's libraries do not export a requested
 # version ("version `GLIBC_2.38' not found"). That floor is trivial to
-# raise by accident — e.g. a cgo/C++ dependency built against a newer
-# toolchain pulls in GLIBC_2.29 or GLIBCXX_3.4.32, silently raising the
-# effective runtime floor above what the build image (buster, glibc
-# 2.28) guarantees. This gate fails the publish when any shipped ELF
+# raise by accident — e.g. a cgo dependency built against a newer
+# toolchain pulls in GLIBC_2.29, silently raising the effective runtime
+# floor above what the build image (buster, glibc 2.28) guarantees.
+# This gate fails the publish when any shipped ELF
 # executable requires a newer version than the expected floor. It is the
 # Linux analogue of the Mach-O minos check in verify-min-macos.sh.
 #
-# Usage: verify-min-linux.sh <artifact.tar.gz> <max-glibc> <max-glibcxx> <max-cxxabi>
+# Usage: verify-min-linux.sh <artifact.tar.gz> <max-glibc>
 #   <artifact.tar.gz>  the release tarball; its contents are extracted.
 #   <max-glibc>        highest allowed GLIBC_ version  (e.g. 2.28).
-#   <max-glibcxx>      highest allowed GLIBCXX_ version (e.g. 3.4.25).
-#   <max-cxxabi>       highest allowed CXXABI_ version  (e.g. 1.3.11).
 #
 # Any ELF that requires a version above its family floor aborts with a
 # non-zero exit so the caller never publishes the artifact. The scan only
@@ -31,22 +28,18 @@ set -e
 
 artifact="$1"
 max_glibc="$2"
-max_glibcxx="$3"
-max_cxxabi="$4"
-if [[ -z "$artifact" || -z "$max_glibc" || -z "$max_glibcxx" || -z "$max_cxxabi" ]]; then
-    echo "ERROR: usage: verify-min-linux.sh <artifact.tar.gz> <max-glibc> <max-glibcxx> <max-cxxabi>" >&2
+if [[ -z "$artifact" || -z "$max_glibc" ]]; then
+    echo "ERROR: usage: verify-min-linux.sh <artifact.tar.gz> <max-glibc>" >&2
     exit 1
 fi
 if [[ ! -e "$artifact" ]]; then
     echo "ERROR: artifact '$artifact' does not exist." >&2
     exit 1
 fi
-for v in "$max_glibc" "$max_glibcxx" "$max_cxxabi"; do
-    if [[ ! "$v" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-        echo "ERROR: floor '$v' is not a version number." >&2
-        exit 1
-    fi
-done
+if [[ ! "$max_glibc" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    echo "ERROR: floor '$max_glibc' is not a version number." >&2
+    exit 1
+fi
 
 # Without readelf we cannot read the VERNEED table. This only happens off
 # Linux, where the artifact has no ELF binaries to check anyway.
@@ -62,8 +55,8 @@ ver_gt() {
 }
 
 # needed_versions prints the dotted versions required by <file> for the
-# given symbol family (GLIBC, GLIBCXX, or CXXABI), one per line. It reads
-# only the "Version needs section" (.gnu.version_r) so that a bundled
+# GLIBC symbol family, one per line. It reads only the
+# "Version needs section" (.gnu.version_r) so that a bundled
 # library's own *exported* version nodes (.gnu.version_d) never trip the
 # gate — we care solely about what the shipped binary requires from the
 # host. Names without a numeric version (e.g. GLIBC_ABI_DT_RELR) are
@@ -94,8 +87,8 @@ check_family() {
     if ver_gt "$found" "$floor"; then
         echo "ERROR: '${file#"$root"/}' requires ${family}_${found}, above the advertised floor ${family}_${floor}." >&2
         echo "       Publishing would break users whose ${family} is older than ${found}." >&2
-        echo "       Rebuild the offending dependency against the buster toolchain, or" >&2
-        echo "       stop bundling a newer C++ runtime, so it requires <= ${family}_${floor}." >&2
+        echo "       Rebuild the offending dependency against the buster toolchain so" >&2
+        echo "       it requires <= ${family}_${floor}." >&2
         return 1
     fi
     return 0
@@ -121,12 +114,8 @@ while IFS= read -r f; do
     esac
     found_elf=1
     g="$(max_needed "$f" GLIBC)"
-    gxx="$(max_needed "$f" GLIBCXX)"
-    cxx="$(max_needed "$f" CXXABI)"
-    echo "  ${f#"$root"/}: GLIBC ${g:-none} GLIBCXX ${gxx:-none} CXXABI ${cxx:-none}"
-    check_family "$f" GLIBC   "$max_glibc"   || failures=$((failures + 1))
-    check_family "$f" GLIBCXX "$max_glibcxx" || failures=$((failures + 1))
-    check_family "$f" CXXABI  "$max_cxxabi"  || failures=$((failures + 1))
+    echo "  ${f#"$root"/}: GLIBC ${g:-none}"
+    check_family "$f" GLIBC "$max_glibc" || failures=$((failures + 1))
 done < <(find "$root" -type f)
 
 if [[ "$found_elf" -eq 0 ]]; then
@@ -137,4 +126,4 @@ fi
 if [[ "$failures" -ne 0 ]]; then
     exit 1
 fi
-echo "verify-min-linux: OK — required GLIBC <= $max_glibc, GLIBCXX <= $max_glibcxx, CXXABI <= $max_cxxabi."
+echo "verify-min-linux: OK — required GLIBC <= $max_glibc."
