@@ -27,6 +27,12 @@ command:
     "<m-f>": searchtext
     "<m-g>": "jumptolocation next search"
     "<s-m-g>": "jumptolocation prev search"
+    "<a-n>": "lsp rename"
+    "<a-c>": "lsp declaration"
+    "<a-y>": "lsp type-definition"
+    "<a-s-y>": "echo {prompt}lsp<space>type-definition<space>"
+    "<a-s-c>": "echo {prompt}lsp<space>declaration<space>"
+    "<a-g>": "lsp signature-help"
     "<ctrl-shift-->": "cursorhistory next"
     "<ctrl-->": "cursorhistory prev"
     "<c-g>": "echo <esc>:"

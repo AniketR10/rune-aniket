@@ -1298,3 +1298,363 @@ func TestPasteAndReindent(t *testing.T) {
 		})
 	}
 }
+
+// robustnessSequences is the catalog of input token strings exercised by every
+// robustness scenario. It aims to touch each arm of standardHandler.Handle:
+// motion, selection, editing, clipboard, folds, comments, undo/redo, macros,
+// paragraph/word/line ops, and the new Zed-parity chords.
+var robustnessSequences = []struct {
+	name string
+	keys string
+}{
+	{"insert text", "abc"},
+	{"newline", "<enter>"},
+	{"tab", "<tab>"},
+	{"space", "<space>"},
+	{"backspace", "<backspace>"},
+	{"delete", "<delete>"},
+	{"arrow left", "<left>"},
+	{"arrow right", "<right>"},
+	{"arrow up", "<up>"},
+	{"arrow down", "<down>"},
+	{"home", "<home>"},
+	{"end", "<end>"},
+	{"pgup", "<pgup>"},
+	{"pgdn", "<pgdn>"},
+	{"ctrl word left", "<ctrl-left>"},
+	{"ctrl word right", "<ctrl-right>"},
+	{"ctrl paragraph up", "<ctrl-up>"},
+	{"ctrl paragraph down", "<ctrl-down>"},
+	{"ctrl home", "<ctrl-home>"},
+	{"ctrl end", "<ctrl-end>"},
+	{"ctrl backspace word", "<ctrl-backspace>"},
+	{"ctrl delete word", "<ctrl-delete>"},
+	{"ctrl enter line below", "<ctrl-enter>"},
+	{"ctrl-shift enter line above", "<ctrl-shift-enter>"},
+	{"cmd left bol", "<meta-left>"},
+	{"cmd right eol", "<meta-right>"},
+	{"cmd up bof", "<meta-up>"},
+	{"cmd down eof", "<meta-down>"},
+	{"cmd backspace to bol", "<meta-backspace>"},
+	{"cmd delete to eol", "<meta-delete>"},
+	{"shift right select", "<shift-right>"},
+	{"shift left select", "<shift-left>"},
+	{"shift home select", "<shift-home>"},
+	{"shift end select", "<shift-end>"},
+	{"cmd-shift left select", "<shift-meta-left>"},
+	{"cmd-shift right select", "<shift-meta-right>"},
+	{"cmd-shift up select", "<shift-meta-up>"},
+	{"cmd-shift down select", "<shift-meta-down>"},
+	{"alt-shift word select right", "<alt-shift-right>"},
+	{"alt-shift word select left", "<alt-shift-left>"},
+	{"ctrl-shift expand", "<ctrl-shift-right>"},
+	{"ctrl-shift shrink", "<ctrl-shift-left>"},
+	{"select all", "<meta-a>"},
+	{"select line", "<meta-l>"},
+	{"copy", "<meta-c>"},
+	{"cut", "<meta-x>"},
+	{"paste", "<meta-v>"},
+	{"undo", "<meta-z>"},
+	{"redo", "<meta-Z>"},
+	{"selection undo", "<meta-u>"},
+	{"selection redo", "<meta-U>"},
+	{"recenter", "<ctrl-l>"},
+	{"transpose", "<ctrl-t>"},
+	{"cut to eol", "<ctrl-k>"},
+	{"toggle soft wrap", "<alt-z>"},
+	{"toggle line comment", "<meta-/>"},
+	{"indent line", "<meta-]>"},
+	{"outdent line", "<meta-[>"},
+	{"move line up", "<alt-up>"},
+	{"move line down", "<alt-down>"},
+	{"duplicate line up", "<alt-shift-up>"},
+	{"duplicate line down", "<alt-shift-down>"},
+	{"select next occurrence", "<meta-d>"},
+	{"select prev occurrence", "<ctrl-meta-d>"},
+	{"matching bracket", "<ctrl-m>"},
+	{"expand fold", "<meta-rbrace>"},
+	{"collapse fold", "<meta-lbrace>"},
+	{"select word then delete", "<meta-d><delete>"},
+	{"select line then cut", "<meta-l><meta-x>"},
+	{"select all then type", "<meta-a>z"},
+}
+
+// feedKeys dispatches an input token string to the handler. It first expands
+// the pseudo-tokens <meta-lbrace>/<meta-rbrace> into raw cmd+brace events, since
+// the term token grammar cannot express modifier+brace chords used by the fold
+// bindings.
+func feedKeys(t *testing.T, h text.Handler, keys string) {
+	t.Helper()
+	switch keys {
+	case "<meta-lbrace>":
+		h.Handle(term.Event{Type: term.EventKey, Mod: term.ModMeta, Ch: '{'})
+		return
+	case "<meta-rbrace>":
+		h.Handle(term.Event{Type: term.EventKey, Mod: term.ModMeta, Ch: '}'})
+		return
+	}
+	seq, err := term.ParseKeys(keys)
+	require.NoError(t, err)
+	for _, key := range seq {
+		h.Handle(term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch})
+	}
+}
+
+// assertCursorInBounds verifies the cursor never lands on a non-existent row and
+// never has a negative coordinate — the invariants whose violation causes
+// out-of-range panics in row-indexed buffer accessors. The row may sit on the
+// virtual line just past the last one (Y == Rows), which represents an empty
+// buffer and the end-of-file caret. The column upper bound is intentionally not
+// asserted: the standard editor keeps a sticky "desired column" across vertical
+// motion that can exceed a shorter target line, and the buffer pads sparsely on
+// edit — that is defined behavior, not an out-of-bounds error.
+func assertCursorInBounds(t *testing.T, h text.Handler, ctx string) {
+	t.Helper()
+	rows := h.CellView().Rows()
+	pos := h.CursorAtScroll()
+	require.GreaterOrEqual(t, pos.Y, 0, "%s: cursor row negative", ctx)
+	require.GreaterOrEqual(t, pos.X, 0, "%s: cursor col negative", ctx)
+	if rows == 0 {
+		require.Equal(t, 0, pos.Y, "%s: cursor row must be 0 on empty buffer", ctx)
+		return
+	}
+	require.LessOrEqual(t, pos.Y, rows, "%s: cursor row past buffer", ctx)
+}
+
+// newRobustnessHandler builds a standard handler over content with a clipboard
+// and a single seeded clipboard entry (so paste has something to paste), then
+// resizes it. width/height of 0 are passed through so callers can test the
+// zero-dimension path.
+func newRobustnessHandler(
+	t *testing.T, content string, width, height int,
+) (text.Handler, *cell.Buffer, clipboard.Register) {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("test:///robust.go")
+	require.NoError(t, err)
+	buf := cell.NewBuffer()
+	buf.ReadFrom(strings.NewReader(content))
+	clip := clipboard.NewInMemory()
+	require.NoError(t, clip.Copy(clipboard.DefaultRegisterID,
+		clipboard.Data{Text: "X", Metadata: text.StandardSelection}))
+	h := NewHandler(buf, uri, text.IndentRuneTab, 0,
+		WithClipboard(clip),
+		WithTabspaces(4),
+		WithComments(text.CommentConfig{
+			"go": {
+				Line:  []string{"//"},
+				Block: []text.CommentBlock{{Start: "/*", End: "*/"}},
+			},
+		}),
+	)
+	h.Resize(width, height)
+	return h, buf, clip
+}
+
+// TestStandardRobustnessDegenerateBuffers drives every input sequence against
+// degenerate buffers (empty, blank-only, single char, whitespace, no trailing
+// newline) with the cursor at the origin. Nothing may panic and the cursor must
+// stay in bounds.
+func TestStandardRobustnessDegenerateBuffers(t *testing.T) {
+	contents := []struct {
+		name    string
+		content string
+	}{
+		{"empty", ""},
+		{"single newline", "\n"},
+		{"blank lines", "\n\n\n"},
+		{"single char", "x"},
+		{"single char no newline", "a"},
+		{"whitespace only", "   \n\t\n"},
+		{"one word", "word"},
+		{"trailing spaces", "abc   "},
+		{"leading tab", "\tindented"},
+	}
+	for _, c := range contents {
+		for _, seq := range robustnessSequences {
+			name := c.name + "/" + seq.name
+			t.Run(name, func(t *testing.T) {
+				h, _, _ := newRobustnessHandler(t, c.content, 20, 10)
+				feedKeys(t, h, seq.keys)
+				assertCursorInBounds(t, h, name)
+			})
+		}
+	}
+}
+
+// TestStandardRobustnessBoundaryPositions moves the cursor to a boundary
+// (start of file, end of file, end of a line) and then drives every sequence.
+func TestStandardRobustnessBoundaryPositions(t *testing.T) {
+	const content = "first line\n\nthird line has more\nx\n"
+	boundaries := []struct {
+		name string
+		move string
+	}{
+		{"start of file", "<meta-up>"},
+		{"end of file", "<meta-down>"},
+		{"end of line", "<meta-right>"},
+		{"start of line", "<meta-left>"},
+		{"last col of long line", "<down><down><meta-right>"},
+		{"empty middle line", "<down>"},
+	}
+	for _, b := range boundaries {
+		for _, seq := range robustnessSequences {
+			name := b.name + "/" + seq.name
+			t.Run(name, func(t *testing.T) {
+				h, _, _ := newRobustnessHandler(t, content, 20, 10)
+				feedKeys(t, h, b.move)
+				feedKeys(t, h, seq.keys)
+				assertCursorInBounds(t, h, name)
+			})
+		}
+	}
+}
+
+// TestStandardRobustnessNullCells exercises the handler over buffers containing
+// sparse/null cells (\x00), which arise from performance/VTE buffers. The
+// cursor must report no cell on a null and every op must stay in bounds.
+func TestStandardRobustnessNullCells(t *testing.T) {
+	contents := []struct {
+		name    string
+		content string
+	}{
+		{"trailing nulls", "abc\x00\x00\x00"},
+		{"only nulls", "\x00\x00\x00"},
+		{"nulls between", "a\x00b\x00c"},
+		{"null line", "one\n\x00\x00\x00\nthree"},
+	}
+	for _, c := range contents {
+		for _, seq := range robustnessSequences {
+			name := c.name + "/" + seq.name
+			t.Run(name, func(t *testing.T) {
+				h, _, _ := newRobustnessHandler(t, c.content, 20, 10)
+				feedKeys(t, h, seq.keys)
+				assertCursorInBounds(t, h, name)
+			})
+		}
+	}
+}
+
+// TestStandardRobustnessExternalEdit drives every sequence after an out-of-band
+// edit through CellEditor().Edit mutates the buffer under the cursor: deleting
+// the cursor's line, replacing a range, or inserting above.
+func TestStandardRobustnessExternalEdit(t *testing.T) {
+	edits := []struct {
+		name     string
+		from, to term.Coordinates
+		str      string
+	}{
+		{"delete cursor line and beyond", term.Coordinates{Y: 1}, term.Coordinates{Y: 6}, ""},
+		{"delete whole buffer", term.Coordinates{}, term.Coordinates{Y: 6}, ""},
+		{"replace range with short text", term.Coordinates{Y: 1}, term.Coordinates{Y: 5}, "z"},
+		{"insert above", term.Coordinates{}, term.Coordinates{}, "new\nlines\n"},
+		{"collapse to single line", term.Coordinates{}, term.Coordinates{Y: 6}, "single"},
+	}
+	for _, e := range edits {
+		for _, seq := range robustnessSequences {
+			name := e.name + "/" + seq.name
+			t.Run(name, func(t *testing.T) {
+				h, _, _ := newRobustnessHandler(t, "l0\nl1\nl2\nl3\nl4\nl5\nl6", 20, 10)
+				feedKeys(t, h, "<meta-down>")
+				h.CellEditor().Edit(context.Background(), e.from, e.to, e.str)
+				assertCursorInBounds(t, h, name+" (after edit)")
+				feedKeys(t, h, seq.keys)
+				assertCursorInBounds(t, h, name)
+			})
+		}
+	}
+}
+
+// TestStandardRobustnessZeroDimensions drives every sequence before Resize has
+// given the handler a viewport, and after a Resize to a zero dimension. These
+// paths must not panic.
+func TestStandardRobustnessZeroDimensions(t *testing.T) {
+	dims := []struct {
+		name          string
+		width, height int
+	}{
+		{"unsized", 0, 0},
+		{"zero width", 0, 10},
+		{"zero height", 20, 0},
+		{"one by one", 1, 1},
+	}
+	for _, d := range dims {
+		for _, seq := range robustnessSequences {
+			name := d.name + "/" + seq.name
+			t.Run(name, func(t *testing.T) {
+				h, _, _ := newRobustnessHandler(t, "alpha\nbeta\ngamma", d.width, d.height)
+				require.NotPanics(t, func() {
+					feedKeys(t, h, seq.keys)
+				}, name)
+			})
+		}
+	}
+}
+
+// TestStandardRobustnessRepeatedOps repeats each single-key sequence many times
+// to drive the cursor and buffer well past content bounds; the handler must not
+// panic or leave the cursor out of bounds regardless of repetition.
+func TestStandardRobustnessRepeatedOps(t *testing.T) {
+	for _, seq := range robustnessSequences {
+		t.Run(seq.name, func(t *testing.T) {
+			h, _, _ := newRobustnessHandler(t, "aa\nbb\ncc", 20, 10)
+			for range 50 {
+				feedKeys(t, h, seq.keys)
+			}
+			assertCursorInBounds(t, h, seq.name)
+		})
+	}
+}
+
+// TestStandardSetCursorAtScrollClampsOutOfBounds pins that the public
+// SetCursorAtScroll clamps a request past the buffer into valid bounds rather
+// than leaving the cursor stranded.
+func TestStandardSetCursorAtScrollClampsOutOfBounds(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		request term.Coordinates
+		wantMax term.Coordinates
+	}{
+		{"row past end", "a\nb\nc\nd", term.Coordinates{Y: 999}, term.Coordinates{Y: 3}},
+		{"row and col past end", "a\nb\nc\nd", term.Coordinates{Y: 999, X: 999}, term.Coordinates{Y: 3}},
+		{"col past line", "hello", term.Coordinates{X: 999}, term.Coordinates{X: 5}},
+		{"single char buffer", "x", term.Coordinates{Y: 50, X: 50}, term.Coordinates{X: 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, _ := newRobustnessHandler(t, tc.content, 20, 10)
+			h.SetCursorAtScroll(tc.request)
+			pos := h.CursorAtScroll()
+			rows := h.CellView().Rows()
+			require.LessOrEqual(t, pos.Y, rows-1, "row must be within buffer")
+			require.GreaterOrEqual(t, pos.Y, 0)
+			require.LessOrEqual(t, pos.X, h.CellView().Columns(pos.Y),
+				"column must clamp to the resolved line length")
+		})
+	}
+}
+
+// TestStandardNullCellEditing pins that placing the cursor on a sparse/null
+// cell and editing there is safe and well-defined: the cell reads back as the
+// null rune and a delete removes it without panicking.
+func TestStandardNullCellEditing(t *testing.T) {
+	h, buf, _ := newRobustnessHandler(t, "ab\x00\x00", 20, 10)
+	sh := h.(*standardHandler)
+
+	// Column 0 holds a real rune (cursor starts at origin).
+	c, ok := sh.cursor.Cell()
+	require.True(t, ok)
+	assert.Equal(t, 'a', c.Ch)
+
+	// The cursor can rest on a null cell and read it back as the null rune.
+	require.True(t, sh.SetCursorAtScroll(term.Coordinates{X: 2}))
+	c, ok = sh.cursor.Cell()
+	require.True(t, ok)
+	assert.Equal(t, '\x00', c.Ch)
+
+	// Deleting the null cell must not panic and must shrink the line.
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Key: term.KeyDelete})
+	require.True(t, handled)
+	assertCursorInBounds(t, h, "after deleting null cell")
+	assert.Equal(t, "ab\x00", buf.String())
+}

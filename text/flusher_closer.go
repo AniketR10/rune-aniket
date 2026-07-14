@@ -61,6 +61,14 @@ func (c *editorFlusherCloser) OnDidEdit(
 	ctx context.Context, from, to term.Coordinates, old string,
 ) {
 	if c.reloading {
+		// A reload replaced the whole buffer. If the file shrank, the caret can
+		// be left on a row that no longer exists; the handler's SetCursorAtScroll
+		// clamps it back into bounds. Doing this here (synchronously, as the
+		// buffer content is swapped) avoids a window where a stale caret could
+		// drive a Columns(row) access past the end of the buffer.
+		if c.h != nil {
+			c.h.SetCursorAtScroll(c.h.CursorAtScroll())
+		}
 		return
 	}
 	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)

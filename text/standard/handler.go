@@ -396,6 +396,33 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.duplicateLine(false /* down */)
 		case term.KeyArrowUp:
 			handled = h.duplicateLine(true /* up */)
+		case term.KeyArrowLeft:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveLeftStartWord()
+			return
+		case term.KeyArrowRight:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveRightEndWord()
+			return
+		case 0:
+			switch ev.Ch {
+			case 'B':
+				if _, ok := h.cursor.SelectionMode(); !ok {
+					h.cursor.Select()
+				}
+				handled = h.cursor.MoveLeftStartWord()
+				return
+			case 'F':
+				if _, ok := h.cursor.SelectionMode(); !ok {
+					h.cursor.Select()
+				}
+				handled = h.cursor.MoveRightEndWord()
+				return
+			}
 		}
 	case term.ModAltMeta:
 		switch ev.Key {
@@ -421,11 +448,41 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.moveLine(false /* down */)
 		case term.KeyArrowUp:
 			handled = h.moveLine(true /* up */)
+		case 0:
+			switch ev.Ch {
+			case 'd':
+				handled = h.selectPrevWordAtCursor()
+				return
+			}
 		}
 	case term.ModShiftMeta:
 		switch ev.Key {
 		case term.KeySpace:
 			handled = h.cursor.ExpandSelection(ctx)
+		case term.KeyArrowLeft:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveStartLineNonBlank()
+			return
+		case term.KeyArrowRight:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveEndLine()
+			return
+		case term.KeyArrowUp:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveFirstLine()
+			return
+		case term.KeyArrowDown:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveLastLine()
+			return
 		}
 	case term.ModAlt:
 		switch ev.Key {
@@ -451,6 +508,9 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.CollapseFold(context.Background())
 			case '}':
 				handled = h.cursor.ExpandFold(context.Background())
+			case 'z':
+				h.SetWrap(!h.less.Scroll().Wrap)
+				handled = true
 			}
 		}
 	case term.ModMeta:
@@ -463,6 +523,12 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = h.cursor.MoveFirstLine()
 		case term.KeyArrowDown:
 			handled = h.cursor.MoveLastLine()
+		case term.KeyBackspace:
+			if h.cursor.Select() {
+				h.cursor.MoveStartLine()
+				handled = h.cursor.DeleteSelection()
+			}
+			return
 		case term.KeyDelete:
 			if ok := h.cursor.Select(); ok {
 				h.cursor.MoveEndLine()
@@ -474,6 +540,12 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 				h.log(log.TraceLevel, "waiting for metaK event")
 				h.metaK = true
 				handled = true
+			case 'u':
+				handled = h.cursor.UndoSelection()
+				return
+			case 'U':
+				handled = h.cursor.RedoSelection()
+				return
 			case 'j':
 				handled = h.cursor.Conflate()
 			case '/':
@@ -666,6 +738,12 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowRight:
 			handled = h.cursor.MoveRightEndWord()
 			return
+		case term.KeyArrowUp:
+			handled = h.cursor.MovePrevParagraph()
+			return
+		case term.KeyArrowDown:
+			handled = h.cursor.MoveNextParagraph()
+			return
 		case term.KeyHome:
 			handled = h.cursor.MoveFirstLine()
 			return
@@ -714,14 +792,15 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 				pastedThisTurn = true
 			}
 		case 'l':
-			if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
-				handled = h.cursor.MoveDown()
-			} else {
-				handled = h.cursor.SelectLine()
-			}
+			handled = h.cursor.Center()
 			return
 		case 'm':
 			handled = h.cursor.MoveToMatchingRune()
+		case 't':
+			handled = h.cursor.TransposeChars()
+		case 'k':
+			handled = h.cutToEndOfLine()
+			return
 		case 'M':
 			handled = h.cursor.SelectABlockClose('(', ')') ||
 				h.cursor.SelectABlockClose('{', '}') ||
@@ -798,16 +877,22 @@ func (h *standardHandler) Handle(ev term.Event) (exit, handled bool) {
 			handled = true
 			return
 		case term.KeyArrowLeft:
-			if _, ok := h.cursor.SelectionMode(); !ok {
-				h.cursor.Select()
-			}
-			handled = h.cursor.MoveLeftStartWord()
+			handled = h.cursor.ShrinkSelection()
 			return
 		case term.KeyArrowRight:
+			handled = h.cursor.ExpandSelection(ctx)
+			return
+		case term.KeyArrowUp:
 			if _, ok := h.cursor.SelectionMode(); !ok {
 				h.cursor.Select()
 			}
-			handled = h.cursor.MoveRightEndWord()
+			handled = h.cursor.MovePrevParagraph()
+			return
+		case term.KeyArrowDown:
+			if _, ok := h.cursor.SelectionMode(); !ok {
+				h.cursor.Select()
+			}
+			handled = h.cursor.MoveNextParagraph()
 			return
 		case term.KeyHome:
 			if _, ok := h.cursor.SelectionMode(); !ok {
@@ -924,12 +1009,28 @@ func (h *standardHandler) SetCursorAtScroll(pos term.Coordinates) bool {
 		return false
 	}
 
+	pos = h.clampToBuffer(pos)
 	_, ok := h.cursor.MoveToScroll(pos)
 	if !ok || !h.cfg.autoCenter {
 		return ok
 	}
 	h.cursor.Center()
 	return true
+}
+
+// clampToBuffer pulls a requested scroll position inside the buffer so an
+// out-of-range request (e.g. a restored session cursor pointing past a file that
+// shrank on disk) lands on the nearest valid cell instead of stranding the
+// caret on a non-existent row or column.
+func (h *standardHandler) clampToBuffer(pos term.Coordinates) term.Coordinates {
+	view := h.buf.View()
+	rows := view.Rows()
+	if rows == 0 {
+		return term.Coordinates{}
+	}
+	pos.Y = max(0, min(pos.Y, rows-1))
+	pos.X = max(0, min(pos.X, view.Columns(pos.Y)))
+	return pos
 }
 
 func (h *standardHandler) SeekUp() bool {
@@ -1180,4 +1281,48 @@ func (h *standardHandler) selectNextWordAtCursor() bool {
 	h.cursor.Select()
 	h.cursor.MoveRightEndWordNoWrap()
 	return true
+}
+
+func (h *standardHandler) selectPrevWordAtCursor() bool {
+	h.cursor.Unselect()
+	if h.cursor.IsEndWord() && !h.cursor.IsStartWord() {
+		h.cursor.MoveLeft()
+	}
+	word := h.cursor.Word()
+	h.cursor.SearchWord(word)
+	// Anchor at the start of the current occurrence so MoveToPrevMatch
+	// skips it and lands on the truly previous occurrence.
+	if !h.cursor.IsStartWord() {
+		h.cursor.MoveLeftStartWordNoWrap()
+	}
+	h.cursor.MoveToPrevMatch()
+	if !h.cursor.IsStartWord() {
+		h.cursor.MoveLeftStartWordNoWrap()
+	}
+	h.cursor.Select()
+	h.cursor.MoveRightEndWordNoWrap()
+	return true
+}
+
+// cutToEndOfLine copies from the caret to the end of the current line to the
+// clipboard and deletes it, matching Zed's editor::CutToEndOfLine. When the
+// caret is already at the end of the line, it cuts the trailing newline so the
+// next line is joined, mirroring Emacs kill-line.
+func (h *standardHandler) cutToEndOfLine() bool {
+	start := h.cursor.CursorAtScroll()
+	if !h.cursor.Select() {
+		return false
+	}
+	h.cursor.MoveEndLine()
+	if h.cursor.CursorAtScroll() == start {
+		// Already at end of line: join the next line up instead.
+		h.cursor.Unselect()
+		return h.cursor.Conflate()
+	}
+	if _, err := h.cursor.CopySelectionNoUnselect(
+		clipboard.DefaultRegisterID, h.clipboard); err != nil {
+		h.log(log.ErrorLevel, "cursor copy selection: %v", err)
+		return false
+	}
+	return h.cursor.DeleteSelection()
 }

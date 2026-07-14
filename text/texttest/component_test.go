@@ -56,6 +56,7 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idecmd"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -75,12 +76,16 @@ func awaitErr(ch <-chan error, err error) error {
 }
 
 type testFlusherCloser struct {
-	buf       *cell.Buffer
-	closeFn   func() error
-	flushFn   func() error
-	reloadFn  func() error
-	content   string
-	lastFlush time.Time
+	buf      *cell.Buffer
+	closeFn  func() error
+	flushFn  func() error
+	reloadFn func() error
+	content  string
+	// reloadContent, when set, is the buffer content installed by Reload.
+	// It lets a test open a file with one content and reload to a different
+	// (e.g. shorter) content, exercising stale-cursor handling.
+	reloadContent string
+	lastFlush     time.Time
 }
 
 func (t *testFlusherCloser) Close() error {
@@ -113,6 +118,8 @@ func (t *testFlusherCloser) Reload(context.Context) (<-chan error, error) {
 	var err error
 	if t.reloadFn != nil {
 		err = t.reloadFn()
+	} else if t.reloadContent != "" {
+		t.buf.Replace(t.reloadContent)
 	} else if t.content != "" {
 		t.buf.Replace(t.content)
 	}
@@ -131,6 +138,9 @@ type testLoader struct {
 	content       string
 	flusherCloser *testFlusherCloser
 	expectError   error
+	// reloadContent, when set, is propagated to the testFlusherCloser that
+	// Load creates, so Reload installs it instead of re-installing content.
+	reloadContent string
 }
 
 type testOpenRouter struct {
@@ -179,7 +189,11 @@ func (t *testLoader) Load(
 	if t.content != "" {
 		buf.WriteString(t.content)
 	}
-	return &testFlusherCloser{buf: buf, content: t.content}, nil
+	return &testFlusherCloser{
+		buf:           buf,
+		content:       t.content,
+		reloadContent: t.reloadContent,
+	}, nil
 }
 
 func (t *testLoader) Recover(
@@ -2626,6 +2640,70 @@ func TestReload(t *testing.T) {
 		require.True(t, ok)
 		assert.False(t, dirty)
 	})
+}
+
+// TestReloadClampsStaleCursor guards the editorFlusherCloser reload seam: when a
+// reload replaces the buffer with a shorter file, a caret left on a now-missing
+// row must be pulled back into bounds before any row-indexed buffer access runs.
+// It drives the real production path — text.Component + the standard editor +
+// c.Reload — rather than mutating the buffer directly, so the efc.OnDidEdit
+// reload guard (gated by the reloading flag) is exercised end to end.
+func TestReloadClampsStaleCursor(t *testing.T) {
+	resource, err := workspaceapi.ParseURI("file:///robust.go")
+	require.NoError(t, err)
+
+	const tall = "l0\nl1\nl2\nl3\nl4\nl5\nl6\nl7\n"
+	shrinks := []struct {
+		name     string
+		reloadTo string
+	}{
+		{"single char", "a"},
+		{"empty", ""},
+		{"two lines", "x\ny"},
+		{"blank lines", "\n\n"},
+	}
+	for _, s := range shrinks {
+		t.Run(s.name, func(t *testing.T) {
+			cfg := text.DefaultConfig()
+			cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+			c, loader := newTestComponentConfig(t, standard.Editor(), cfg)
+			loader.content = tall
+			loader.reloadContent = s.reloadTo
+
+			win, err := c.Focus()
+			require.NoError(t, err)
+			c.Resize(20, 10)
+
+			h, err := c.OpenFileTab(resource, false)
+			require.NoError(t, err)
+			require.NoError(t, win.SetContent(h))
+			c.Resize(20, 10)
+
+			ed, err := c.Editor(resource)
+			require.NoError(t, err)
+
+			// Strand the caret on the last row of the tall file.
+			ed.SetCursorAtScroll(term.Coordinates{Y: 7})
+
+			require.NoError(t, awaitErr(c.Reload(context.Background(), win)))
+
+			// The reload guard must have clamped the caret inside the shorter
+			// buffer: never on a non-existent row, never negative.
+			rows := ed.CellView().Rows()
+			pos := ed.CursorAtScroll()
+			require.GreaterOrEqual(t, pos.Y, 0)
+			require.LessOrEqual(t, pos.Y, rows,
+				"caret row must be within the reloaded buffer")
+
+			// An edit that reads Columns(cursorRow) must not panic now that the
+			// caret is back in bounds (this is the InsertLineBelow crash site).
+			ced := ed.CellEditor()
+			require.NotPanics(t, func() {
+				pos := ed.CursorAtScroll()
+				_, _, _ = ced.Edit(context.Background(), pos, pos, "\n")
+			})
+		})
+	}
 }
 
 func TestOverwrite(t *testing.T) {

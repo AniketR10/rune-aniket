@@ -114,7 +114,28 @@ type Cursor struct {
 		explicit   bool
 		cells      [][]term.Cell
 	}
-	subscriber curSubscriber
+	selectionHistory selectionHistory
+	subscriber       curSubscriber
+}
+
+// selectionSnapshot captures the state needed to restore a prior selection,
+// including the caret position so undo/redo returns the caret where it was.
+type selectionSnapshot struct {
+	mode       SelectMode
+	scrollFrom term.Coordinates
+	scrollTo   term.Coordinates
+	explicit   bool
+	cursor     term.Coordinates
+}
+
+const maxSelectionHistory = 128
+
+type selectionHistory struct {
+	undo []selectionSnapshot
+	redo []selectionSnapshot
+	// suppress prevents recording while restoring a snapshot, so undo/redo
+	// navigation does not itself generate new history entries.
+	suppress bool
 }
 
 // NewCursor allocates storage for a new cursor,
@@ -1161,6 +1182,7 @@ func (c *Cursor) selectRange(start, end term.Coordinates) bool {
 
 // SelectRange selects the explicit right-exclusive range [start, end).
 func (c *Cursor) SelectRange(start, end term.Coordinates) bool {
+	c.pushSelectionHistory()
 	return c.selectRange(start, end)
 }
 
@@ -2540,6 +2562,50 @@ func (c *Cursor) ReplaceContext(ctx context.Context, r rune) (next term.Coordina
 	return
 }
 
+// TransposeChars swaps the two characters around the caret and advances the
+// caret past them, matching Emacs/Zed transpose-chars. When the caret is at
+// the end of a non-empty line it transposes the two trailing characters
+// instead. It returns false and does nothing when there are not two adjacent
+// characters on the current line to swap.
+func (c *Cursor) TransposeChars() bool {
+	pos := c.cursorAtScroll()
+	if pos.Y >= c.rows() {
+		return false
+	}
+
+	cols := c.view().Columns(pos.Y)
+	// leftX is the first of the two cells to swap; rightX is the second.
+	leftX := pos.X - 1
+	rightX := pos.X
+	if rightX >= cols {
+		// At end of line: transpose the two trailing characters.
+		leftX = cols - 2
+		rightX = cols - 1
+	}
+	if leftX < 0 || rightX >= cols {
+		return false
+	}
+
+	left, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: pos.Y, X: leftX})
+	if !ok {
+		return false
+	}
+	right, ok := c.cellAtScrollCoordinates(term.Coordinates{Y: pos.Y, X: rightX})
+	if !ok {
+		return false
+	}
+
+	from := term.Coordinates{Y: pos.Y, X: leftX}
+	to := term.Coordinates{Y: pos.Y, X: rightX + 1}
+	swapped := string([]rune{right.Ch, left.Ch})
+	if _, _, old := c.buffer().Edit(c.ctx, from, to, swapped); old == "" {
+		return false
+	}
+
+	c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: min(rightX+1, c.view().Columns(pos.Y))})
+	return true
+}
+
 // Delete is equivalent to DeleteContext with context.Background.
 func (c *Cursor) Delete() (ok bool) {
 	ok = c.DeleteContext(c.ctx)
@@ -2852,6 +2918,7 @@ func (c *Cursor) SelectionMode() (mode SelectMode, ok bool) {
 // false if selection failed. If cursor has already been called one of the Select methods,
 // then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) Select() (ok bool) {
+	c.pushSelectionHistory()
 	mode := c.selection.mode
 	c.selection.mode = StandardSelection
 	c.selection.explicit = false
@@ -2872,6 +2939,7 @@ func (c *Cursor) Select() (ok bool) {
 // false if selection failed. If cursor has already been called one of the Select methods,
 // then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) SelectLine() (ok bool) {
+	c.pushSelectionHistory()
 	mode := c.selection.mode
 	c.selection.mode = LineSelection
 	c.selection.explicit = false
@@ -2892,6 +2960,7 @@ func (c *Cursor) SelectLine() (ok bool) {
 // false if selection failed. If cursor has already been called one of the Select methods,
 // then this method switches to the new mode and maintains original cursor position.
 func (c *Cursor) SelectBlock() (ok bool) {
+	c.pushSelectionHistory()
 	mode := c.selection.mode
 	c.selection.mode = BlockSelection
 	c.selection.explicit = false
@@ -2912,10 +2981,83 @@ func (c *Cursor) Unselect() bool {
 	if c.selection.mode == NoSelection {
 		return false
 	}
+	c.pushSelectionHistory()
 	c.selection.mode = NoSelection
 	c.selection.explicit = false
 	c.selection.cells = nil
 	c.SetLocationList(internalLocationListPriority, selectionLocationListID, nil)
+	return true
+}
+
+// currentSelectionSnapshot captures the current selection and caret state so it
+// can be restored later by UndoSelection/RedoSelection.
+func (c *Cursor) currentSelectionSnapshot() selectionSnapshot {
+	return selectionSnapshot{
+		mode:       c.selection.mode,
+		scrollFrom: c.selection.scrollFrom,
+		scrollTo:   c.selection.scrollTo,
+		explicit:   c.selection.explicit,
+		cursor:     c.cursorAtScroll(),
+	}
+}
+
+// pushSelectionHistory records the current selection state onto the undo stack
+// before it is replaced, discarding the redo stack. It is a no-op when the new
+// state would be identical to the last recorded one, so repeated selections of
+// the same range do not clutter the history.
+func (c *Cursor) pushSelectionHistory() {
+	if c.selectionHistory.suppress {
+		return
+	}
+	snap := c.currentSelectionSnapshot()
+	h := &c.selectionHistory
+	if n := len(h.undo); n > 0 && h.undo[n-1] == snap {
+		return
+	}
+	h.undo = append(h.undo, snap)
+	if len(h.undo) > maxSelectionHistory {
+		h.undo = h.undo[len(h.undo)-maxSelectionHistory:]
+	}
+	h.redo = h.redo[:0]
+}
+
+// restoreSelectionSnapshot restores the selection and caret to a snapshot.
+func (c *Cursor) restoreSelectionSnapshot(snap selectionSnapshot) {
+	c.selectionHistory.suppress = true
+	defer func() { c.selectionHistory.suppress = false }()
+	if snap.mode == NoSelection {
+		c.Unselect()
+		c.moveToScroll(snap.cursor)
+		return
+	}
+	c.setExplicitSelection(snap.mode, snap.scrollFrom, snap.scrollTo, snap.cursor)
+}
+
+// UndoSelection restores the selection and caret to the state prior to the most
+// recent selection change. It returns false when there is no earlier state.
+func (c *Cursor) UndoSelection() bool {
+	h := &c.selectionHistory
+	if len(h.undo) == 0 {
+		return false
+	}
+	h.redo = append(h.redo, c.currentSelectionSnapshot())
+	snap := h.undo[len(h.undo)-1]
+	h.undo = h.undo[:len(h.undo)-1]
+	c.restoreSelectionSnapshot(snap)
+	return true
+}
+
+// RedoSelection re-applies a selection change previously reverted by
+// UndoSelection. It returns false when there is nothing to redo.
+func (c *Cursor) RedoSelection() bool {
+	h := &c.selectionHistory
+	if len(h.redo) == 0 {
+		return false
+	}
+	h.undo = append(h.undo, c.currentSelectionSnapshot())
+	snap := h.redo[len(h.redo)-1]
+	h.redo = h.redo[:len(h.redo)-1]
+	c.restoreSelectionSnapshot(snap)
 	return true
 }
 

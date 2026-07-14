@@ -7503,3 +7503,95 @@ func TestDeleteHorizontalSpace(t *testing.T) {
 		})
 	}
 }
+
+func TestCursorTransposeChars(t *testing.T) {
+	t.Run("swaps chars around caret and advances", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 5, "abcd", false)
+		c.MoveToScroll(term.Coordinates{X: 2})
+
+		assert.True(t, c.TransposeChars())
+		assert.Equal(t, "acbd", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 3}, c.CursorAtScroll())
+	})
+
+	t.Run("transposes trailing chars at end of line", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 5, "abcd", false)
+		c.MoveToScroll(term.Coordinates{X: 4})
+
+		assert.True(t, c.TransposeChars())
+		assert.Equal(t, "abdc", c.buffer().String())
+		assert.Equal(t, term.Coordinates{X: 4}, c.CursorAtScroll())
+	})
+
+	t.Run("no-op at start of line", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 5, "abcd", false)
+		c.MoveToScroll(term.Coordinates{})
+
+		assert.False(t, c.TransposeChars())
+		assert.Equal(t, "abcd", c.buffer().String())
+		assert.Equal(t, term.Coordinates{}, c.CursorAtScroll())
+	})
+
+	t.Run("no-op on single-char line", func(t *testing.T) {
+		c := setupCursorContent(t, 10, 5, "a", false)
+		c.MoveToScroll(term.Coordinates{X: 1})
+
+		assert.False(t, c.TransposeChars())
+		assert.Equal(t, "a", c.buffer().String())
+	})
+}
+
+func TestCursorSelectionUndoRedo(t *testing.T) {
+	t.Run("undo restores prior selection then clears it", func(t *testing.T) {
+		c := setupCursorContent(t, 20, 5, "hello world\nsecond line", false)
+
+		require.True(t, c.SelectRange(term.Coordinates{}, term.Coordinates{X: 5}))
+		from, to, ok := c.SelectionBounds()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{}, from)
+		assert.Equal(t, term.Coordinates{X: 5}, to)
+
+		require.True(t, c.SelectRange(term.Coordinates{Y: 1}, term.Coordinates{Y: 1, X: 6}))
+
+		assert.True(t, c.UndoSelection())
+		from, to, ok = c.SelectionBounds()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{}, from)
+		assert.Equal(t, term.Coordinates{X: 5}, to)
+
+		assert.True(t, c.UndoSelection())
+		_, _, ok = c.SelectionBounds()
+		assert.False(t, ok)
+	})
+
+	t.Run("redo reapplies an undone selection", func(t *testing.T) {
+		c := setupCursorContent(t, 20, 5, "hello world", false)
+
+		require.True(t, c.SelectRange(term.Coordinates{}, term.Coordinates{X: 5}))
+		require.True(t, c.UndoSelection())
+		_, _, ok := c.SelectionBounds()
+		require.False(t, ok)
+
+		assert.True(t, c.RedoSelection())
+		from, to, ok := c.SelectionBounds()
+		require.True(t, ok)
+		assert.Equal(t, term.Coordinates{}, from)
+		assert.Equal(t, term.Coordinates{X: 5}, to)
+	})
+
+	t.Run("undo returns false with no history", func(t *testing.T) {
+		c := setupCursorContent(t, 20, 5, "hello", false)
+		assert.False(t, c.UndoSelection())
+		assert.False(t, c.RedoSelection())
+	})
+
+	t.Run("a new selection clears the redo stack", func(t *testing.T) {
+		c := setupCursorContent(t, 20, 5, "hello world", false)
+
+		require.True(t, c.SelectRange(term.Coordinates{}, term.Coordinates{X: 5}))
+		require.True(t, c.UndoSelection())
+		require.True(t, c.SelectRange(term.Coordinates{X: 6}, term.Coordinates{X: 11}))
+
+		assert.False(t, c.RedoSelection())
+	})
+}

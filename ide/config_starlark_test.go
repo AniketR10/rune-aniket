@@ -701,6 +701,11 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 		"<a-d>": "lsp definition",
 		"<a-r>": "lsp references",
 
+		"<a-n>": "lsp rename",
+		"<a-c>": "lsp declaration",
+		"<a-y>": "lsp type-definition",
+		"<a-g>": "lsp signature-help",
+
 		"<m-f>": "searchtext",
 	}
 
