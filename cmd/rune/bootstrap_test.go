@@ -45,7 +45,8 @@ func TestOptionToChoiceMapping(t *testing.T) {
 		want   string
 	}{
 		{optVimYes, editorModal},
-		{optVimNo, editorModeless},
+		{optVimNo, editorStandard},
+		{optEmacs, editorEmacs},
 		{"unknown", editorModal}, // default fallback
 	}
 	for _, tc := range cases {
@@ -56,19 +57,30 @@ func TestOptionToChoiceMapping(t *testing.T) {
 }
 
 // TestRenderOverride pins that the vim-mode choice maps to the modal
-// override and the standard-editor choice maps to the modeless override
-// (which switches editor.mode to modeless), and that an unknown choice
-// is an error.
+// override, the standard-editor choice maps to the standard override
+// (which switches editor.mode to standard), the emacs choice maps to
+// the emacs override, the deprecated modeless alias resolves to the
+// standard override, and that an unknown choice is an error.
 func TestRenderOverride(t *testing.T) {
-	yes, err := renderOverride(editorModal)
+	modal, err := renderOverride(editorModal)
 	require.NoError(t, err)
-	require.NotContains(t, yes, "mode: modeless",
-		"vim mode must not switch the editor into modeless")
+	require.NotContains(t, modal, "mode: standard",
+		"vim mode must not switch the editor into standard")
 
-	no, err := renderOverride(editorModeless)
+	std, err := renderOverride(editorStandard)
 	require.NoError(t, err)
-	require.Contains(t, no, "mode: modeless",
-		"declining vim mode must switch the editor into modeless")
+	require.Contains(t, std, "mode: standard",
+		"the standard choice must switch the editor into standard")
+
+	deprecated, err := renderOverride(editorModeless)
+	require.NoError(t, err)
+	require.Equal(t, std, deprecated,
+		"the deprecated modeless alias must resolve to the standard override")
+
+	ema, err := renderOverride(editorEmacs)
+	require.NoError(t, err)
+	require.Contains(t, ema, "mode: emacs",
+		"the emacs choice must switch the editor into emacs")
 
 	_, err = renderOverride("bogus")
 	require.Error(t, err)
@@ -122,7 +134,7 @@ func TestShouldSwallowBootstrapEvent(t *testing.T) {
 		{"colon opens command prompt", keyEv(':', 0), true},
 
 		// Dangerous: default quit / close-window / close-tab
-		// bindings from rune.star and override_modeless.star.
+		// bindings from rune.star and override_standard.yaml.
 		{"meta-q quit", keyEv('q', term.ModMeta), true},
 		{"meta-w windowclose", keyEv('w', term.ModMeta), true},
 		{"alt-w tabclose", keyEv('w', term.ModAlt), true},

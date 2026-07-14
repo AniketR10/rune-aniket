@@ -518,19 +518,24 @@ func (b *bootstrapHandler) Close() error {
 
 const (
 	editorModal    = "modal"
+	editorStandard = "standard"
+	editorEmacs    = "emacs"
+	// editorModeless is the deprecated alias for editorStandard, kept so
+	// existing configs and callers keep working.
 	editorModeless = "modeless"
 )
 
-// Vim-mode option labels double as map keys in optionToChoice; they
-// must stay byte-identical between the prompt and the callback.
+// Editor option labels double as map keys in optionToChoice; they must
+// stay byte-identical between the prompt and the callback.
 const (
 	optVimYes = "    vim    "
 	optVimNo  = "  default  "
+	optEmacs  = "   emacs   "
 )
 
 var (
 	bootstrapVimKeys = []term.KeyComb{
-		{Ch: 'd'}, {Ch: 'v'},
+		{Ch: 'd'}, {Ch: 'e'}, {Ch: 'v'},
 	}
 
 	bootstrapWelcomeKeys = []term.KeyComb{
@@ -598,16 +603,17 @@ func (b *bootstrapHandler) openWelcomePrompt() {
 
 func (b *bootstrapHandler) openVimPrompt() {
 	msg := "## Choose your key bindings\n" +
-		"Rune ships with two built-in editors, so pick the one that feels like home.\n\n" +
+		"Rune ships with three built-in editors, so pick the one that feels like home.\n\n" +
 		"Know vim? Pick **vim** and you get it **everywhere**, not just in editor " +
 		"buffers: the terminal, input boxes, and the file explorer.\n\n" +
 		"Used to VS Code, Cursor, Sublime or a plain text editor? Pick **default** and Rune uses " +
 		"those familiar, standard key bindings everywhere instead.\n\n" +
+		"Prefer Emacs? Pick **emacs** for an Emacs-style keymap everywhere.\n\n" +
 		"**Which key bindings do you want?**"
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
-		[]string{optVimNo, optVimYes},
+		[]string{optVimNo, optEmacs, optVimYes},
 		bootstrapVimKeys,
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
@@ -985,10 +991,10 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 		return true
 	}
 	// Quit / close keybindings from rune.star and
-	// override_modeless.yaml:
+	// override_standard.yaml:
 	//   <m-q> quit
 	//   <m-w> windowclose, <a-w> tabclose, <c-w> tabclose
-	//   <m-s-w> / <s-m-w> windowclose (modeless overrides)
+	//   <m-s-w> / <s-m-w> windowclose (standard overrides)
 	if ev.Ch == 'q' && ev.Mod&term.ModMeta != 0 {
 		return true
 	}
@@ -1006,7 +1012,9 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 func optionToChoice(option string) string {
 	switch option {
 	case optVimNo:
-		return editorModeless
+		return editorStandard
+	case optEmacs:
+		return editorEmacs
 	}
 	return editorModal
 }

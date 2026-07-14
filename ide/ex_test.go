@@ -4737,9 +4737,9 @@ func TestEditCompletion(t *testing.T) {
                     
  edi▐               
  edit               
+ keybindings        
  readfile           
  reloadfile!        
-                    
                     `},
 		{":edit dawo⬇✌re✌^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
 			`                    

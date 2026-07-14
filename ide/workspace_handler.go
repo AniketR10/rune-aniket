@@ -87,6 +87,7 @@ import (
 	"unstable.build/go-tui/llm/llamaserver"
 	"unstable.build/go-tui/llm/llmrouter"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/emacs"
 	"unstable.build/go-tui/text/exoeditor"
 	"unstable.build/go-tui/text/exofallback"
 	"unstable.build/go-tui/text/standard"
@@ -274,7 +275,9 @@ func (h *workspaceManagerHandler) newEditor(
 	case editorModeModal:
 		return h.newBuiltinModalEditor(cwd, cfg, svc), nil
 	case editorModeStandard:
-		return h.newBuiltinModelessEditor(cwd, cfg, svc), nil
+		return h.newBuiltinStandardEditor(cwd, cfg, svc), nil
+	case editorModeEmacs:
+		return h.newBuiltinEmacsEditor(cwd, cfg, svc), nil
 	case editorModeExo:
 		return h.newExoFallbackEditor(reloader, cwd, ws, tm, cfg, svc), nil
 	default:
@@ -313,7 +316,7 @@ func (h *workspaceManagerHandler) newBuiltinModalEditor(
 	return vi.Editor(viOpts...)
 }
 
-func (h *workspaceManagerHandler) newBuiltinModelessEditor(
+func (h *workspaceManagerHandler) newBuiltinStandardEditor(
 	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
 ) text.Editor {
 	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
@@ -344,6 +347,37 @@ func (h *workspaceManagerHandler) newBuiltinModelessEditor(
 	)
 }
 
+func (h *workspaceManagerHandler) newBuiltinEmacsEditor(
+	cwd workspaceapi.URI, cfg ideConfig, svc vctrl.Service,
+) text.Editor {
+	auxBarConfig := cfg.auxiliaryBarConfig(h, svc)
+	iconsBarConfig := cfg.iconsBarConfig(h)
+	statusBarConfig := cfg.statusBarConfig(cwd, h, svc)
+	return emacs.Editor(
+		emacs.WithCommandBar(true),
+		emacs.WithResAttr(cfg.modelessResultAttr()),
+		emacs.WithTabspaces(cfg.editorTabspaces()),
+		emacs.WithIndents(cfg.editorIndents()),
+		emacs.WithRuler(cfg.editorRuler()),
+		emacs.WithAutoPair(cfg.editorAutoPair()),
+		emacs.WithComments(cfg.editorComments()),
+		emacs.WithScheduleNextTick(cfg.scheduleNextTick),
+		emacs.WithAttr(cfg.modelessAttr()),
+		emacs.WithAuxiliaryBar(cfg.auxiliaryBarEnabled(), auxBarConfig),
+		emacs.WithIconsBar(cfg.iconsBarEnabled(), iconsBarConfig),
+		emacs.WithGitIcons(cfg.gitIconsEnabled()),
+		emacs.WithHideInitialFolds(cfg.initialFolds()),
+		emacs.WithClipboard(h.clip),
+		emacs.WithMacroRecorder(h.macro),
+		emacs.WithMacroPlayer(h.macroPlayer),
+		emacs.WithStatusBarConfig(cfg.statusBarEnabled(), statusBarConfig),
+		emacs.WithWorkspaceCommandRegistry(cwd, h),
+		emacs.WithAutoCenter(true),
+		// See newBuiltinModalEditor for why we route notifications.
+		emacs.WithNotifications(h.notifications.current()),
+	)
+}
+
 func (h *workspaceManagerHandler) newExoFallbackEditor(
 	reloader exoeditor.Reloader,
 	cwd workspaceapi.URI, ws workspace.Workspace,
@@ -352,7 +386,9 @@ func (h *workspaceManagerHandler) newExoFallbackEditor(
 	var fallback text.Editor
 	switch cfg.exoFallback() {
 	case editorFallbackStandard:
-		fallback = h.newBuiltinModelessEditor(cwd, cfg, svc)
+		fallback = h.newBuiltinStandardEditor(cwd, cfg, svc)
+	case editorFallbackEmacs:
+		fallback = h.newBuiltinEmacsEditor(cwd, cfg, svc)
 	default:
 		fallback = h.newBuiltinModalEditor(cwd, cfg, svc)
 	}
@@ -390,7 +426,15 @@ func (h *workspaceManagerHandler) newPromptEditor(
 ) command.Editor {
 	switch cfg.pkgEditorMode() {
 	case editorModeStandard:
-		return modelessPromptEditor{
+		return standardPromptEditor{
+			tabspaces:        cfg.editorTabspaces(),
+			indents:          cfg.editorIndents(),
+			scheduleNextTick: cfg.scheduleNextTick,
+			clipboard:        h.clip,
+			autoPair:         cfg.editorAutoPair(),
+		}
+	case editorModeEmacs:
+		return emacsPromptEditor{
 			tabspaces:        cfg.editorTabspaces(),
 			indents:          cfg.editorIndents(),
 			scheduleNextTick: cfg.scheduleNextTick,
@@ -410,7 +454,7 @@ func (h *workspaceManagerHandler) newPromptEditor(
 	}
 }
 
-type modelessPromptEditor struct {
+type standardPromptEditor struct {
 	tabspaces        int
 	indents          text.IndentConfig
 	scheduleNextTick func(func()) bool
@@ -418,7 +462,7 @@ type modelessPromptEditor struct {
 	autoPair         bool
 }
 
-func (m modelessPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+func (m standardPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 	uri := workspaceapi.RandomURI("memory")
 	return standard.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
 		standard.WithCommandBar(false),
@@ -428,6 +472,27 @@ func (m modelessPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
 		standard.WithClipboard(m.clipboard),
 		standard.WithAutoPair(m.autoPair),
 		standard.WithWrap(false),
+	)
+}
+
+type emacsPromptEditor struct {
+	tabspaces        int
+	indents          text.IndentConfig
+	scheduleNextTick func(func()) bool
+	clipboard        clipboard.Register
+	autoPair         bool
+}
+
+func (m emacsPromptEditor) Edit(buf *cell.Buffer) command.EditHandler {
+	uri := workspaceapi.RandomURI("memory")
+	return emacs.NewHandler(buf, uri, text.IndentRuneTab, m.tabspaces,
+		emacs.WithCommandBar(false),
+		emacs.WithTabspaces(m.tabspaces),
+		emacs.WithIndents(m.indents),
+		emacs.WithScheduleNextTick(m.scheduleNextTick),
+		emacs.WithClipboard(m.clipboard),
+		emacs.WithAutoPair(m.autoPair),
+		emacs.WithWrap(false),
 	)
 }
 

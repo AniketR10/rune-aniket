@@ -1,17 +1,6 @@
-# Rune user configuration (modeless editor preset).
-#
-# The keys under "ACTIVE OVERRIDES" switch Rune into modeless editor
-# mode and remap command bindings to the legacy runerc.modeless layout.
-# Everything below those lines is commented out: uncomment what you
-# want to change. The shown values are Rune's built-in defaults; see
-# the embedded rune.star for the full schema and run `:config` from
-# inside Rune to re-open this file.
-
-# ---------------------------------------------------------------------------
-# ACTIVE OVERRIDES — required for the modeless preset
-# ---------------------------------------------------------------------------
+# Rune user configuration (emacs editor preset).
 editor:
-  mode: modeless
+  mode: emacs
   auto_pair: true
   modeless:
     attr: {fg: default, bg: default}
@@ -22,60 +11,110 @@ editor:
 terminal:
   modal: false
 command:
-  key: <s-m-p>
+  key: <a-x>                       # execute-extended-command (M-x)
   key_bindings:
-    "<m-s>": write
-    "<a-m-s>": writeall
-    "<m-q>": quit
-    "<c-m-p>": "echo <s-m-p>workspacefocus{wait}<space>"
+    # Files & session
+    "<c-x><c-s>": write            # save-buffer
+    "<c-x>s": writeall             # save-some-buffers
+    "<c-x><c-c>": quit             # save-buffers-kill-terminal
+    "<c-x><c-f>": searchfile       # find-file
+    # Windows (C-x window family)
+    "<c-x>2": "windowdefaultsplit v"   # split-window-below
+    "<c-x>3": "windowdefaultsplit h"   # split-window-right
+    "<c-x>0": windowclose              # delete-window
+    "<c-x>1": windowtogglemaximize     # delete-other-windows
+    "<c-x><left>": "windowfocus left"
+    "<c-x><right>": "windowfocus right"
+    "<c-x><up>": "windowfocus up"
+    "<c-x><down>": "windowfocus down"
+    # Buffer-style tab navigation (next-buffer / previous-buffer)
+    "<c-x><c-right>": tabnext
+    "<c-x><c-left>": tabprevious
+    "<c-x>k": tabclose                 # kill-buffer
+    # Rune-only window/tab/history commands also hang off the C-x prefix.
+    # C-c is unavailable as a prefix: the emacs editor claims a bare <c-c>
+    # for copy, so it never reaches the command sequencer.
+    "<c-x><s-left>": "windowmove left"
+    "<c-x><s-right>": "windowmove right"
+    "<c-x><s-up>": "windowmove up"
+    "<c-x><s-down>": "windowmove down"
+    "<c-x>,": "tabmove left"
+    "<c-x>.": "tabmove right"
+    "<c-x>[": "cursorhistory prev"
+    "<c-x>]": "cursorhistory next"
+    # Workspace-wide text search and match navigation.
+    "<c-x>g": searchtext               # grep across the workspace
+    "<c-x>n": "jumptolocation next search"
+    "<c-x>p": "jumptolocation prev search"
+    # Language intelligence on the C-x prefix (GUI mode has no <alt> LSP
+    # chords: <alt> is Meta, owned by the editor). Mirrors the TUI C-x LSP
+    # family so the same muscle memory works in the GUI.
+    "<c-x>d": "lsp definition"
+    "<c-x>r": "lsp references"
+    "<c-x>i": "lsp implementation"
+    "<c-x>t": "lsp hover"
+    "<c-x>b": "lsp format"
+    "<c-x>e": "lsp diagnostics"
+    "<c-x>j": "lspnextdiagnostic"
+    "<c-x>l": "lspprevdiagnostic"
+    "<c-x><c-n>": "gitnextchange"
+    "<c-x><c-p>": "gitprevchange"
+    # Bookmarks stay on the function-key row: unambiguous and clear of the
+    # editor and C-x/C-c prefixes.
     "<m-f2>": "locationtoggle bookmark"
     "<f2>": "jumptolocation next bookmark"
     "<s-f2>": "jumptolocation previous bookmark"
     "<a-f2>": "locationhighlight bookmark"
     "<s-m-f2>": "locationdeleteall bookmark"
-    "<a-m-right>": tabnext
-    "<a-m-left>": tabprevious
-    "<m-f>": searchtext
-    "<m-g>": "jumptolocation next search"
-    "<s-m-g>": "jumptolocation prev search"
-    "<ctrl-shift-->": "cursorhistory next"
-    "<ctrl-->": "cursorhistory prev"
-    "<c-g>": "echo <esc>:"
-    "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    "<a-s-right>": "tabmove right"
-    "<a-s-left>": "tabmove left"
-    "<m-left>": "windowfocus left"
-    "<m-right>": "windowfocus right"
-    "<m-down>": "windowfocus down"
-    "<m-up>": "windowfocus up"
-    "<a-s-m-left>": "windowmove left"
-    "<a-s-m-right>": "windowmove right"
-    "<a-s-m-down>": "windowmove down"
-    "<a-s-m-up>": "windowmove up"
-    "<c-m-left>": "windowdefaultsplit h"
-    "<c-m-up>": "windowdefaultsplit v"
-    "<c-m-right>": "windowdefaultsplit h"
-    "<c-m-down>": "windowdefaultsplit v"
-    # Unbind the modal home-row window/tab movement chords this preset
-    # re-homes onto the arrow layout.
-    "<m-h>": ""
-    "<m-j>": ""
-    "<m-k>": ""
-    "<m-l>": ""
-    "<s-m-h>": ""
-    "<s-m-j>": ""
-    "<s-m-k>": ""
-    "<s-m-l>": ""
-    "<a-s-h>": ""
-    "<a-s-l>": ""
-    # Unbind the modal home-row tab, split, and jumplist chords this preset
-    # re-homes onto the arrow / VS Code layout
+    # <alt> is authentic Emacs Meta, owned by the editor (M-f/b/d/w, M-x,
+    # M-;, M-</>, case ops). Unbind every base <alt> command chord so the
+    # editor — not the command layer — receives them and nothing is shadowed.
+    "<a-w>": ""
     "<a-l>": ""
     "<a-h>": ""
-    "<c-m-h>": ""
-    "<c-m-v>": ""
-    "<c-o>": ""
-    "<c-i>": ""
+    "<a-`>": ""
+    "<a-f>": ""
+    "<a-v>": ""
+    "<a-s>": ""
+    "<a-d>": ""
+    "<a-r>": ""
+    "<a-i>": ""
+    "<a-t>": ""
+    "<a-b>": ""
+    "<a-j>": ""
+    "<a-k>": ""
+    "<a-s-l>": ""
+    "<a-s-h>": ""
+    "<a-s-t>": ""
+    "<a-s-e>": ""
+    "<a-s-r>": ""
+    "<a-s-d>": ""
+    "<a-s-i>": ""
+    "<a-s-j>": ""
+    "<a-s-k>": ""
+    "<a-1>": ""
+    "<a-2>": ""
+    "<a-3>": ""
+    "<a-4>": ""
+    "<a-5>": ""
+    "<a-6>": ""
+    "<a-7>": ""
+    "<a-8>": ""
+    "<a-9>": ""
+    "<a-s-1>": ""
+    "<a-s-2>": ""
+    "<a-s-3>": ""
+    "<a-s-4>": ""
+    "<a-s-5>": ""
+    "<a-s-6>": ""
+    "<a-s-7>": ""
+    "<a-s-8>": ""
+    "<a-s-9>": ""
+    "<alt-enter>": ""
+    # C-SPC is set-mark-command in the editor; drop the base lsp-complete
+    # binding so the editor receives it. Completion stays on <c-x>/ below.
+    "<c-space>": ""
+    "<c-x>/": "lsp complete"
 
 # log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log
@@ -174,7 +213,7 @@ command:
 #   progress_bar: true
 
 # ---------------------------------------------------------------------------
-# Command prompt — additions to the active modeless overrides above
+# Command prompt — additions to the active emacs overrides above
 #
 # The active block has already remapped `command.key` to <s-m-p>; you
 # can replace that here. Aliases layer on top of built-ins: a string

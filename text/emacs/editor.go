@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package emacs
 
 import (
@@ -100,6 +99,11 @@ func (e *editor) Edit(
 			return nil, err
 		}
 		ret, err = text.SubscribeCommentCommands(file, e.fileRegistry, cursor, ret)
+		if err != nil {
+			return nil, err
+		}
+		ret, err = text.SubscribeMarkCommands(
+			file, e.fileRegistry, cursor, emacsMarkLocationListID, ret)
 		if err != nil {
 			return nil, err
 		}

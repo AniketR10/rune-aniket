@@ -652,6 +652,89 @@ tutorial(entry=run)
 		"a modified Enter in dismiss_keys must also advance the tutorial")
 }
 
+// TestFloatingWindowDismissKeysSequenceFirstChordFallsThrough guards the
+// emacs `<c-x>` prefix family: a dismiss_keys entry that is a two-key
+// sequence (e.g. "<c-x>3", the split-window binding) must register its
+// first chord so pressing <c-x> dismisses the teaching window and falls
+// through, letting the sequencer complete the <c-x>3 chord. Before the
+// fix, parseKeyList rejected the sequence string outright and the whole
+// floating_window step failed.
+func TestFloatingWindowDismissKeysSequenceFirstChordFallsThrough(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    floating_window(text="press ctrl-x 3", dismiss_keys=["<c-x>3"])
+    wait_command(command="windowdefaultsplit")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "floating_window", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{
+		Type: term.EventKey,
+		Mod:  term.ModCtrl,
+		Ch:   'x',
+	})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"the first chord of a sequence dismiss_key must fall through to "+
+			"the IDE root so the sequencer can complete the chord")
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if activeKindFor(tut) == "wait_command" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	assert.Equal(t, "wait_command", activeKindFor(tut),
+		"a sequence dismiss_key's first chord must also advance the tutorial")
+}
+
+// TestFloatingWindowDismissForKeyForSequenceFallsThrough exercises the
+// exact basics.star pattern: dismiss_keys is built from key_for(), which
+// under the emacs preset resolves window commands to two-key `<c-x>`
+// chords. Pressing the first chord must dismiss the window, fall through,
+// and advance the following wait_command.
+func TestFloatingWindowDismissForKeyForSequenceFallsThrough(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    k = key_for("windowdefaultsplit", "h")
+    floating_window(text="split right", dismiss_keys=[command_key(), k])
+    wait_command(command="windowdefaultsplit")
+tutorial(entry=run)
+`
+	keyFor := func(cmd string, args []string) string {
+		if cmd == "windowdefaultsplit" && len(args) == 1 && args[0] == "h" {
+			return "<c-x>3"
+		}
+		return ""
+	}
+	tut, _ := newTutorialWith(t, src, "emacs", keyFor)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "floating_window", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{
+		Type: term.EventKey, Mod: term.ModCtrl, Ch: 'x',
+	})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"key_for-resolved sequence dismiss_key must fall through on its "+
+			"first chord so the sequencer can complete the chord")
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if activeKindFor(tut) == "wait_command" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	assert.Equal(t, "wait_command", activeKindFor(tut),
+		"the tutorial must advance past the floating window")
+}
+
 // TestFloatingWindowAlignmentAndOffset asserts the (x, y) placement of
 // the framed window for a handful of alignments.
 func TestFloatingWindowAlignmentAndOffset(t *testing.T) {

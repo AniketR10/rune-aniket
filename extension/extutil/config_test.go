@@ -31,13 +31,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"unstable.build/go-tui/text/emacs"
 	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/vi"
 )
 
 func TestEditor(t *testing.T) {
 	modalType := reflect.TypeOf(vi.Editor())
-	modelessType := reflect.TypeOf(standard.Editor())
+	standardType := reflect.TypeOf(standard.Editor())
+	emacsType := reflect.TypeOf(emacs.Editor())
 
 	tests := []struct {
 		name string
@@ -60,14 +62,24 @@ func TestEditor(t *testing.T) {
 			want: modalType,
 		},
 		{
-			name: "modeless",
-			cfg:  map[string]any{"editor": map[string]any{"mode": "modeless"}},
-			want: modelessType,
+			name: "standard",
+			cfg:  map[string]any{"editor": map[string]any{"mode": "standard"}},
+			want: standardType,
 		},
 		{
-			name: "exo no fallback defaults to modeless",
+			name: "deprecated modeless alias resolves to standard",
+			cfg:  map[string]any{"editor": map[string]any{"mode": "modeless"}},
+			want: standardType,
+		},
+		{
+			name: "emacs",
+			cfg:  map[string]any{"editor": map[string]any{"mode": "emacs"}},
+			want: emacsType,
+		},
+		{
+			name: "exo no fallback defaults to standard",
 			cfg:  map[string]any{"editor": map[string]any{"mode": "exo"}},
-			want: modelessType,
+			want: standardType,
 		},
 		{
 			name: "exo fallback modal",
@@ -78,20 +90,36 @@ func TestEditor(t *testing.T) {
 			want: modalType,
 		},
 		{
-			name: "exo fallback modeless",
+			name: "exo fallback standard",
+			cfg: map[string]any{"editor": map[string]any{
+				"mode": "exo",
+				"exo":  map[string]any{"fallback": "standard"},
+			}},
+			want: standardType,
+		},
+		{
+			name: "exo fallback deprecated modeless resolves to standard",
 			cfg: map[string]any{"editor": map[string]any{
 				"mode": "exo",
 				"exo":  map[string]any{"fallback": "modeless"},
 			}},
-			want: modelessType,
+			want: standardType,
 		},
 		{
-			name: "exo unknown fallback defaults to modeless",
+			name: "exo fallback emacs",
+			cfg: map[string]any{"editor": map[string]any{
+				"mode": "exo",
+				"exo":  map[string]any{"fallback": "emacs"},
+			}},
+			want: emacsType,
+		},
+		{
+			name: "exo unknown fallback defaults to standard",
 			cfg: map[string]any{"editor": map[string]any{
 				"mode": "exo",
 				"exo":  map[string]any{"fallback": "bogus"},
 			}},
-			want: modelessType,
+			want: standardType,
 		},
 	}
 
@@ -113,8 +141,10 @@ func TestEditorModal(t *testing.T) {
 		{"no editor config", map[string]any{}, true},
 		{"empty editor config defaults to modal", map[string]any{"editor": map[string]any{}}, true},
 		{"modal", map[string]any{"editor": map[string]any{"mode": "modal"}}, true},
-		{"modeless", map[string]any{"editor": map[string]any{"mode": "modeless"}}, false},
-		{"exo no fallback defaults to modeless", map[string]any{"editor": map[string]any{"mode": "exo"}}, false},
+		{"standard", map[string]any{"editor": map[string]any{"mode": "standard"}}, false},
+		{"deprecated modeless alias", map[string]any{"editor": map[string]any{"mode": "modeless"}}, false},
+		{"emacs", map[string]any{"editor": map[string]any{"mode": "emacs"}}, false},
+		{"exo no fallback defaults to standard", map[string]any{"editor": map[string]any{"mode": "exo"}}, false},
 		{
 			name: "exo fallback modal",
 			cfg: map[string]any{"editor": map[string]any{
@@ -124,10 +154,18 @@ func TestEditorModal(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "exo fallback modeless",
+			name: "exo fallback standard",
 			cfg: map[string]any{"editor": map[string]any{
 				"mode": "exo",
-				"exo":  map[string]any{"fallback": "modeless"},
+				"exo":  map[string]any{"fallback": "standard"},
+			}},
+			want: false,
+		},
+		{
+			name: "exo fallback emacs",
+			cfg: map[string]any{"editor": map[string]any{
+				"mode": "exo",
+				"exo":  map[string]any{"fallback": "emacs"},
 			}},
 			want: false,
 		},

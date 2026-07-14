@@ -56,7 +56,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 		nil,
 		nil,
 		term.KeyComb{Ch: ':'},
-		"modeless",
+		"standard",
 		nil,
 		nil,
 	)
@@ -102,4 +102,31 @@ func TestEmbeddedTutorialOptionsRegistersBasics(t *testing.T) {
 	opts := embeddedTutorialOptions()
 	require.NotEmpty(t, opts,
 		"embeddedTutorialOptions must register at least basics")
+}
+
+// TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
+// also parses under the emacs editor mode, exercising the emacs branch of
+// the direction-phrasing logic (home-row <meta> focus, arrow-key completer).
+func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
+	t.Parallel()
+
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil,
+		nil,
+		nil,
+		nil,
+		term.Attributes{},
+		component.FrameCharSet{},
+		browser.PromptConfig{},
+		nil,
+		nil,
+		term.KeyComb{Ch: ':'},
+		"emacs",
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	assert.Equal(t, "31", tut.Version())
 }

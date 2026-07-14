@@ -85,17 +85,19 @@ func validateCommandPrompt(c *ideConfig, cfg map[string]any) (err error) {
 	case editorModeModal:
 		/* no validation needed */
 	case editorModeStandard, editorModeEmacs:
-		// unfortunately <c-space> is mapped and dispatched with Ch == ' '.
-		// Handle edge case to avoid false positive.
+		// <c-space> parses/dispatches with Ch == ' ', so treat it as a
+		// modified key to avoid a false positive.
 		isCtrlSpace := commandKey.Ch == ' ' &&
 			commandKey.Key == term.KeySpace && commandKey.Mod == term.ModCtrl
 		isIncompatible := !isCtrlSpace && commandKey.Ch != 0 && commandKey.Mod == 0
 
 		if isIncompatible {
-			cfg["command"].(map[string]any)[keyCommandKey] = "<c-space>"
-			return fmt.Errorf("command key must use ctrl or alt modifiers in " +
+			// <s-m-p> stays clear of the emacs control chords (e.g.
+			// <c-space> set-mark) so the prompt is always reachable.
+			cfg["command"].(map[string]any)[keyCommandKey] = "<s-m-p>"
+			return fmt.Errorf("command key must use ctrl, alt, or meta modifiers in " +
 				"standard or emacs editor mode otherwise you wouldn't be able to activate it," +
-				" falling back to <c-space>")
+				" falling back to <s-m-p>")
 		}
 	}
 	return

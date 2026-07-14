@@ -21,12 +21,10 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package emacs
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -444,13 +442,13 @@ func TestSyntacticSelectionKeyBindings(t *testing.T) {
 	h.Resize(80, 10)
 	require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 6}))
 
-	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'w'})
+	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: '='})
 	require.True(t, handled)
 	selection, ok := h.Selection()
 	require.True(t, ok)
 	assert.Equal(t, "beta", selection)
 
-	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'w'})
+	_, handled = h.Handle(term.Event{Type: term.EventKey, Mod: term.ModCtrl, Ch: '='})
 	require.True(t, handled)
 	selection, ok = h.Selection()
 	require.True(t, ok)
@@ -473,11 +471,8 @@ func TestSyntacticSelectionKeyBindings(t *testing.T) {
 	assert.False(t, handled)
 }
 
-func TestSublimeKeyBindingsMacOS(t *testing.T) {
+func TestEmacsKeyBindingsMacOS(t *testing.T) {
 	const snippet = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"
-	spAll := func(add string) *string {
-		return new(snippet + add)
-	}
 
 	suite := []struct {
 		description string
@@ -487,91 +482,51 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		clipboard   *string
 	}{
 		// General editing
-		{"Cut (cuts entire line when nothing selected)", "<meta-x>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Copy+Paste", "<shift-right><meta-c><meta-v>", new("aa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		{"Copy+Paste and indent correctly", "<shift-right><meta-c><down><shift-meta-v>", new("a\nab\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}, nil},
-		{"Paste from clipboard history", "<shift-right><meta-c><meta-v><meta-v><alt-meta-v>", new("aaa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 2}, nil},
-		{"Undo", "<meta-x><meta-z>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Redo", "<meta-x><meta-z><shift-meta-z>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Redo or repeat last command", "<meta-x><meta-z><meta-y>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		// {"Soft undo (undo cursor movement without undoing edit)", "<right><right><meta-u>", nil, term.Coordinates{Y: 0, X: 0}},
-		// {"Soft redo", "<right><right><meta-u><shift-meta-u>", nil, term.Coordinates{Y: 0, X: 1}},
-		// {"Trigger auto-complete", "<ctrl-space>", nil, term.Coordinates{}},
+		// C-y yanks the most recently copied region (C-c copies).
+		{"Copy+Paste", "<shift-right><ctrl-c><ctrl-y>", new("aa\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
+		{"Undo", "<ctrl-shift-k><ctrl-z>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Insert completion/snippet or indent", "<tab>", new("\ta\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
 		{"Previous snippet field or unindent", "<tab><shift-tab>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 
 		// Line manipulation
 		{"Insert line after current line", "<ctrl-enter>", new("a\n\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}, nil},
 		{"Insert line before current line", "<ctrl-shift-enter>", new("\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Move line/selection up", "<down><ctrl-meta-up>", new("b\na\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Move line/selection down", "<ctrl-meta-down>", new("b\na\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}, nil},
-		{"Duplicate line(s)", "<shift-meta-d>", new("a\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}, nil},
+		{"Move line/selection up", "<down><alt-up>", new("b\na\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Move line/selection down", "<alt-down>", new("b\na\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}, nil},
+		{"Duplicate line(s)", "<alt-shift-down>", new("a\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 0}, nil},
 		{"Delete entire line", "<ctrl-shift-k>", new("b\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Join line below to end of current line", "<meta-j>", new("ab\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		{"Indent current line(s)", "<meta-]>", new("\ta\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		{"Unindent current line(s)", "<meta-]><meta-[>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Delete from cursor to end of line", "<meta-k><meta-k>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Delete to beginning of line", "<right><meta-k><meta-backspace>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Set mark at cursor position", "<meta-k><meta-space>", nil, term.Coordinates{}, nil},
-		{"Select from cursor to mark", "<meta-k><meta-space><down><down><meta-k><meta-a><m-c>", nil, term.Coordinates{Y: 0, X: 0}, new("a\nb\n")},
-		{"Delete from cursor to mark", "<meta-k><meta-space><down><down><meta-k><meta-w>", new("c\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		{"Swap cursor position with mark", "<meta-k><meta-space><down><down><meta-k><meta-x>", nil, term.Coordinates{Y: 0, X: 0}, nil},
-		{"Clear mark", "<meta-k><meta-space><meta-k><meta-g>", nil, term.Coordinates{}, nil},
-		{"Delete to end of line", "<meta-delete>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Kill to end of line", "<ctrl-k>", new("\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
+		{"Set mark at cursor position", "<ctrl-space>", nil, term.Coordinates{}, nil},
+		{"Copy region from mark to point (M-w)", "<ctrl-space><down><down><alt-w>", nil, term.Coordinates{Y: 2, X: 0}, new("a\nb\n")},
+		{"Kill region from mark to point (C-w)", "<ctrl-space><down><down><ctrl-w>", new("c\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 		{"Transpose (swap adjacent characters)", "<down><right><ctrl-t>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 1, X: 1}, nil},
-		//{"Sort lines alphabetically", "<f5>", nil, term.Coordinates{}}, // Already sorted a-k
-		//{"Sort lines (case sensitive)", "<ctrl-f5>", nil, term.Coordinates{}},
 
-		// Comments - depends on language/syntax (assuming C-style)
-		{"Toggle line comment", "<meta-/>", new("// a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}, nil},
-		{"Toggle block comment", "<shift-right><alt-meta-/>", new("/*a*/\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 2}, nil},
+		// Comments - depends on language/syntax (assuming C-style). M-; is
+		// comment-dwim.
+		{"Toggle line comment (M-;)", "<alt-;>", new("// a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}, nil},
 
-		// Text transformation - require selection
-		{"Transform selection to UPPERCASE", "<shift-right><meta-k><meta-u>", new("A\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		{"Transform selection to lowercase", "<shift-right><meta-k><meta-u><home><shift-right><meta-k><meta-l>", new("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 1}, nil},
-		{"Wrap paragraph at ruler", "<alt-meta-q>", new("alpha beta\ngamma delta\nepsilon zeta\neta theta\n\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
-		//{"Wrap selection in HTML tag", "<shift-right><ctrl-shift-w>", sp("<p>a</p>\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 3}},
-		//{"Close current HTML/XML tag", "<alt-meta-.>", nil, term.Coordinates{}}, // No open tag
-
-		// Selection
-		{"Select all", "<meta-a><m-c>", nil, term.Coordinates{}, spAll("\n")},
-		{"Select entire line (repeat to select additional lines)", "<down><meta-l><meta-l><m-c>", nil, term.Coordinates{Y: 1, X: 0}, new("b\nc\n")},
-		{"Select word at cursor (repeat to select next occurrence)", "<meta-down>a<enter><meta-up><meta-d><meta-d><meta-d><meta-c>", nil, term.Coordinates{}, new("a")},
-		//{"Select word at cursor (repeat to select next occurrence, multi cursor edits all)", "<meta-down>a<meta-up><meta-d><meta-c>", nil, term.Coordinates{Y: 10, X: 0}, sp("a")},
-		//{"Skip current selection, find and select next occurrence", "<meta-d><meta-k><meta-d>", nil, term.Coordinates{X: 0}, sp("a")},
-		//{"Select all occurrences of current selection", "<meta-d><ctrl-meta-g>", nil, term.Coordinates{}},
-		//{"Split selection into multiple cursors (one per line)", "<meta-a><shift-meta-l>", nil, term.Coordinates{}},
-		//{"Add cursor on previous line (column selection up)", "<down><ctrl-shift-up>", nil, term.Coordinates{Y: 0, X: 0}},
-		//{"Add cursor on next line (column selection down)", "<ctrl-shift-down>", nil, term.Coordinates{Y: 1, X: 0}},
-		//{"Add cursor at click location", "<meta-click>", nil, term.Coordinates{}},
-		//{"Exit multiple selections (single selection mode)", "<ctrl-shift-down><escape>", nil, term.Coordinates{Y: 0, X: 0}},
+		// Text transformation. M-q is fill-paragraph.
+		{"Wrap paragraph at ruler (M-q)", "<alt-q>", new("alpha beta\ngamma delta\nepsilon zeta\neta theta\n\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}, nil},
 
 		// Expand selection
 		{"Expand selection to brackets", "{abc}<left><left><shift-left><ctrl-shift-m>", nil, term.Coordinates{X: 4}, nil},
-		//{"Expand selection to HTML/XML tag", "<shift-meta-a>", nil, term.Coordinates{}}, // No tags
-		{"Expand selection to scope", "<shift-meta-space>", nil, term.Coordinates{}, nil},
-		{"Expand selection to indentation level", "<shift-meta-j><m-c>", nil, term.Coordinates{}, spAll("\n")},
 
 		// Navigation and movement
 		{"Move cursor to beginning of line", "<right><ctrl-a>", nil, term.Coordinates{Y: 0, X: 0}, nil},
 		{"Move cursor to end of line", "<ctrl-e>", nil, term.Coordinates{Y: 0, X: 1}, nil},
-		{"Move to beginning of text on line", "<space><right><meta-left>", nil, term.Coordinates{Y: 0, X: 1}, nil},
-		{"Move to end of line", "<meta-right>", nil, term.Coordinates{Y: 0, X: 1}, nil},
 		{"Move up one line", "<down><ctrl-p>", nil, term.Coordinates{Y: 0, X: 0}, nil},
 		{"Move down one line", "<ctrl-n>", nil, term.Coordinates{Y: 1, X: 0}, nil},
 		{"Move right one character", "<ctrl-f>", nil, term.Coordinates{Y: 0, X: 1}, nil},
 		{"Move left one character", "<right><ctrl-b>", nil, term.Coordinates{Y: 0, X: 0}, nil},
 		{"Jump to matching bracket", "{}<left><left><ctrl-m>", nil, term.Coordinates{X: 1}, nil},
-		{"Move to start of file", "<down><down><meta-up>", nil, term.Coordinates{Y: 0, X: 0}, nil},
-		{"Move to end of file", "<meta-down>", nil, term.Coordinates{Y: 10, X: 0}, nil},
-		//{"Jump back (previous location)", "<meta-down><ctrl-->", nil, term.Coordinates{Y: 0, X: 0}, nil},
-		//{"Jump forward (next location)", "<meta-down><ctrl--><ctrl-shift-->", nil, term.Coordinates{Y: 10, X: 1}, nil},
+		{"Move to start of buffer (M-<)", "<down><down><alt-,>", nil, term.Coordinates{Y: 0, X: 0}, nil},
+		{"Move to end of buffer (M->)", "<alt-.>", nil, term.Coordinates{Y: 10, X: 0}, nil},
 
 		// Scrolling
-		{"Center current line in view", "<meta-down>z<enter>z<enter>z<enter>z<enter>z<enter>z<enter><up><up><up><up><ctrl-l>",
+		{"Center current line in view", "<alt-.>z<enter>z<enter>z<enter>z<enter>z<enter>z<enter><up><up><up><up><ctrl-l>",
 			nil, term.Coordinates{Y: 12}, nil},
 		{"Scroll down one page", "<ctrl-v>", nil, term.Coordinates{Y: 3, X: 0}, nil},
-		{"Scroll view up one line", "<meta-down><up><ctrl-alt-up>", nil, term.Coordinates{Y: 9}, nil},
+		{"Scroll view up one line", "<alt-.><up><ctrl-alt-up>", nil, term.Coordinates{Y: 9}, nil},
 		{"Scroll view down one line", "<ctrl-alt-down>", nil, term.Coordinates{Y: 1}, nil},
 
 		// Search and replace
@@ -596,13 +551,6 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 		//{"Jump to previous bookmark", "<meta-f2><shift-f2>", nil, term.Coordinates{Y: 0, X: 0}},
 		//{"Select all bookmarks", "<meta-f2><alt-f2>", nil, term.Coordinates{}},
 		//{"Clear all bookmarks", "<meta-f2><shift-meta-f2>", nil, term.Coordinates{}},
-
-		// Marks (advanced bookmarking)
-		//{"Set mark at cursor position", "<meta-k><meta-space>", nil, term.Coordinates{}},
-		//{"Select from cursor to mark", "<meta-k><meta-space><down><down><meta-k><meta-a>", nil, term.Coordinates{Y: 0, X: 0}},
-		//{"Delete from cursor to mark", "<meta-k><meta-space><down><down><meta-k><meta-w>", sp("c\nd\ne\nf\ng\nh\ni\nj\nk"), term.Coordinates{Y: 0, X: 0}},
-		//{"Swap cursor position with mark", "<meta-k><meta-space><down><down><meta-k><meta-x>", nil, term.Coordinates{Y: 0, X: 0}},
-		//{"Clear mark", "<meta-k><meta-space><meta-k><meta-g>", nil, term.Coordinates{}},
 
 		// Macros
 		{"Start/stop recording macro", "<ctrl-q>", nil, term.Coordinates{}, nil},
@@ -639,7 +587,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 			clip := clipboard.NewInMemory()
 			reg := registerhistory.NewClipboard(registerset.New(clip))
 			content := snippet
-			if test.description == "Wrap paragraph at ruler" {
+			if test.description == "Wrap paragraph at ruler (M-q)" {
 				content = "alpha beta gamma delta epsilon zeta eta theta\n\ni\nj\nk"
 			}
 			buf := cell.NewBuffer()
@@ -758,7 +706,7 @@ func TestAutoPairOption(t *testing.T) {
 	})
 }
 
-func TestMetaKMarkUsesSharedLocationList(t *testing.T) {
+func TestSetMarkUsesSharedLocationList(t *testing.T) {
 	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
 	require.NoError(t, err)
 
@@ -789,149 +737,61 @@ func TestMetaKMarkUsesSharedLocationList(t *testing.T) {
 		return nil
 	}
 
-	run("<meta-k><meta-space>")
+	// C-SPC is set-mark-command.
+	run("<ctrl-space>")
 	require.Len(t, markLocations(), 1)
 	assert.Equal(t, term.Coordinates{}, markLocations()[0].From)
 
-	run("<down><down><meta-k><meta-space>")
+	run("<down><down><ctrl-space>")
 	require.Len(t, markLocations(), 2)
 	assert.Equal(t, term.Coordinates{}, markLocations()[0].From)
 	assert.Equal(t, term.Coordinates{Y: 2}, markLocations()[1].From)
-
-	run("<meta-k><meta-g>")
-	assert.Empty(t, markLocations())
 }
 
-func TestMetaKSwapUpdatesSharedMarkLocation(t *testing.T) {
-	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
+// TestEmacsMetaWordEditing covers the authentic M- word-motion, word-kill and
+// word-case commands that live on the <alt> (Meta) layer.
+func TestEmacsMetaWordEditing(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///words.go")
 	require.NoError(t, err)
 
-	buf := cell.NewBuffer()
-	buf.ReadFrom(strings.NewReader("a\nb\nc"))
-	h := NewHandler(buf, uri, text.IndentRuneTab, 0)
-	h.Resize(10, 3)
-
-	seq, err := term.ParseKeys("<meta-k><meta-space><down><meta-k><meta-space><down><meta-k><meta-x>")
-	require.NoError(t, err)
-	for _, key := range seq {
-		_, handled := h.Handle(term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch})
-		require.True(t, handled)
-	}
-
-	assert.Equal(t, term.Coordinates{Y: 1}, h.CursorAtScroll())
-	for _, list := range h.LocationLists() {
-		if list.ID != emacsMarkLocationListID {
-			continue
-		}
-		require.Len(t, list.Locations, 2)
-		assert.Equal(t, term.Coordinates{}, list.Locations[0].From)
-		assert.Equal(t, term.Coordinates{Y: 2}, list.Locations[1].From)
-		return
-	}
-	t.Fatal("mark location list not found")
-}
-
-func TestSublimeSelectIndentationLevelKeyBinding(t *testing.T) {
-	uri, err := workspaceapi.ParseURI("memory:///myfile.go")
-	require.NoError(t, err)
-
-	tests := []struct {
-		name        string
-		content     string
-		keys        string
-		tabspaces   int
-		wantHandled []bool
-		wantClip    string
-		wantSel     string
-		wantAt      term.Coordinates
-		wantMode    text.SelectMode
-		wantModeOK  bool
+	cases := []struct {
+		name    string
+		content string
+		keys    string
+		want    *string
+		at      term.Coordinates
 	}{
-		{
-			name:     "copies current indented block",
-			content:  "root\n\tb\n\tc\nroot2",
-			keys:     "<down><shift-meta-j><m-c>",
-			wantClip: "\tb\n\tc\n",
-			wantAt:   term.Coordinates{Y: 1},
-		},
-		{
-			name:       "leaves line selection active after keybinding",
-			content:    "root\n\tb\n\tc\nroot2",
-			keys:       "<down><shift-meta-j>",
-			wantSel:    "\tb\n\tc\n",
-			wantAt:     term.Coordinates{Y: 1},
-			wantMode:   text.LineSelection,
-			wantModeOK: true,
-		},
-		{
-			name:       "keeps deeper nested lines in selected block",
-			content:    "root\n  if\n    child\n  sibling\nroot2",
-			keys:       "<down><shift-meta-j>",
-			wantSel:    "  if\n    child\n  sibling\n",
-			wantAt:     term.Coordinates{Y: 1},
-			wantMode:   text.LineSelection,
-			wantModeOK: true,
-		},
-		{
-			name:       "uses configured tabspaces for visual indentation",
-			content:    "root\n\ttabbed\n  two spaces\n shallow",
-			keys:       "<down><shift-meta-j>",
-			tabspaces:  2,
-			wantSel:    "\ttabbed\n  two spaces\n",
-			wantAt:     term.Coordinates{Y: 1},
-			wantMode:   text.LineSelection,
-			wantModeOK: true,
-		},
-		{
-			name:        "does not leave selection on blank-only buffer",
-			content:     "\n\t\n  ",
-			keys:        "<down><shift-meta-j>",
-			wantHandled: []bool{true, false},
-			wantAt:      term.Coordinates{Y: 1},
-			wantModeOK:  false,
-		},
+		{"M-f forward-word", "alpha beta", "<alt-f>", nil, term.Coordinates{X: 5}},
+		{"M-f twice crosses space", "alpha beta gamma", "<alt-f><alt-f>", nil, term.Coordinates{X: 10}},
+		{"M-b backward-word", "alpha beta", "<end><alt-b>", nil, term.Coordinates{X: 6}},
+		{"M-d kill-word forward", "alpha beta", "<alt-d>", new(" beta"), term.Coordinates{}},
+		{"M-DEL backward-kill-word", "alpha beta", "<end><alt-backspace>", new("alpha "), term.Coordinates{X: 6}},
+		{"M-u upcase-word", "alpha beta", "<alt-u>", new("ALPHA beta"), term.Coordinates{X: 5}},
+		{"M-l downcase-word", "ALPHA beta", "<alt-l>", new("alpha beta"), term.Coordinates{X: 5}},
+		{"M-c capitalize-word", "alpha beta", "<alt-c>", new("Alpha beta"), term.Coordinates{X: 5}},
+		{"M-c capitalize lowercases tail", "aLPHA beta", "<alt-c>", new("Alpha beta"), term.Coordinates{X: 5}},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seq, err := term.ParseKeys(tc.keys)
-			require.NoError(t, err)
-
-			clip := clipboard.NewInMemory()
-			reg := registerhistory.NewClipboard(registerset.New(clip))
 			buf := cell.NewBuffer()
 			buf.ReadFrom(strings.NewReader(tc.content))
+			h := NewHandler(buf, uri, text.IndentRuneTab, 0)
+			h.Resize(80, 3)
 
-			tabspaces := tc.tabspaces
-			if tabspaces <= 0 {
-				tabspaces = 4
-			}
-			handler := NewHandler(buf, uri, text.IndentRuneTab, tabspaces, WithClipboard(reg)).(*emacsHandler)
-			handler.Resize(80, 10)
-			for i, key := range seq {
-				ev := term.Event{Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch}
-				_, ok := handler.Handle(ev)
-				wantHandled := true
-				if len(tc.wantHandled) > 0 {
-					wantHandled = tc.wantHandled[i]
-				}
-				require.Equal(t, wantHandled, ok, "key %d", i)
+			seq, err := term.ParseKeys(tc.keys)
+			require.NoError(t, err)
+			for _, key := range seq {
+				_, handled := h.Handle(term.Event{
+					Type: term.EventKey, Key: key.Key, Mod: key.Mod, Ch: key.Ch,
+				})
+				require.True(t, handled, "key %v", key)
 			}
 
-			if tc.wantClip != "" {
-				paste, err := clip.Paste(clipboard.DefaultRegisterID)
-				require.NoError(t, err)
-				assert.Equal(t, tc.wantClip, paste.Text)
+			if tc.want != nil {
+				assert.Equal(t, *tc.want, buf.String())
 			}
-			if tc.wantSel != "" {
-				assert.Equal(t, tc.wantSel, handler.cursor.Selection())
-			}
-			mode, ok := handler.cursor.SelectionMode()
-			assert.Equal(t, tc.wantModeOK, ok)
-			if tc.wantModeOK {
-				assert.Equal(t, tc.wantMode, mode)
-			}
-			assert.Equal(t, tc.wantAt, handler.CursorAtScroll())
+			assert.Equal(t, tc.at, h.CursorAtScroll())
 		})
 	}
 }
@@ -975,10 +835,10 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			history:     []string{"a", "b", "c"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<end><meta-v>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
 			},
 		},
 		{
@@ -987,10 +847,10 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			history:     []string{"a", "b", "c"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<end><meta-v>", wantHandled: true, wantContent: "zc"},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb"},
-				{input: "<meta-v>", wantHandled: true, wantContent: "zbc"},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbb"},
+				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zc"},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zb"},
+				{input: "<ctrl-y>", wantHandled: true, wantContent: "zbc"},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zbb"},
 			},
 		},
 		{
@@ -999,10 +859,10 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			history:     []string{"a", "b"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<end><meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
 				{input: "x", wantHandled: true, wantContent: "zbx", wantCursor: coords(term.Coordinates{X: 3})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbxb", wantCursor: coords(term.Coordinates{X: 4})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbxa", wantCursor: coords(term.Coordinates{X: 4})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zbxb", wantCursor: coords(term.Coordinates{X: 4})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zbxa", wantCursor: coords(term.Coordinates{X: 4})},
 			},
 		},
 		{
@@ -1011,10 +871,10 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			history:     []string{"a", "b"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<end><meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
 				{input: "<left>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 1})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zbb", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zab", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zbb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zab", wantCursor: coords(term.Coordinates{X: 2})},
 			},
 		},
 		{
@@ -1023,28 +883,28 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			history:     []string{"a", "b"},
 			wrapHistory: false,
 			steps: []pasteHistoryStep{
-				{input: "<end><meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<end><ctrl-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
 			},
 		},
 		{
-			name:        "alt-meta-v before paste initiates history paste",
+			name:        "M-y before paste initiates history paste",
 			content:     "z",
 			history:     []string{"a", "b", "c"},
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<end><alt-meta-v>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<end><alt-y>", wantHandled: true, wantContent: "zc", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "zb", wantCursor: coords(term.Coordinates{X: 2})},
+				{input: "<alt-y>", wantHandled: true, wantContent: "za", wantCursor: coords(term.Coordinates{X: 2})},
 			},
 		},
 		{
-			name:        "alt-meta-v without history support before paste is not handled",
+			name:        "M-y without history support before paste is not handled",
 			content:     "z",
 			history:     []string{"a", "b"},
 			wrapHistory: false,
 			steps: []pasteHistoryStep{
-				{input: "<alt-meta-v>", wantHandled: false, wantContent: "z", wantCursor: coords(term.Coordinates{})},
+				{input: "<alt-y>", wantHandled: false, wantContent: "z", wantCursor: coords(term.Coordinates{})},
 			},
 		},
 		{
@@ -1052,9 +912,9 @@ func TestPasteFromClipboardHistory(t *testing.T) {
 			content:     "ab\ncd",
 			wrapHistory: true,
 			steps: []pasteHistoryStep{
-				{input: "<shift-right><meta-c><right><shift-right><meta-c><end><meta-v>", wantHandled: true, wantContent: "abb\ncd"},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "aba\ncd"},
-				{input: "<alt-meta-v>", wantHandled: true, wantContent: "aba\ncd"},
+				{input: "<shift-right><ctrl-c><right><shift-right><ctrl-c><end><ctrl-y>", wantHandled: true, wantContent: "abb\ncd"},
+				{input: "<alt-y>", wantHandled: true, wantContent: "aba\ncd"},
+				{input: "<alt-y>", wantHandled: true, wantContent: "aba\ncd"},
 			},
 		},
 	}
@@ -1166,144 +1026,4 @@ func TestEmacsShiftTabDedentsWhenIndented(t *testing.T) {
 	_, handled := h.Handle(term.Event{Type: term.EventKey, Mod: term.ModShift, Key: term.KeyTab})
 	assert.True(t, handled, "shift-tab with indentation must be handled")
 	assert.Equal(t, "hello", buf.String())
-}
-
-// errorClipboard is a clipboard.Register that always returns an error on Paste.
-type errorClipboard struct{}
-
-func (errorClipboard) Paste(string) (clipboard.Data, error) {
-	return clipboard.Data{}, errors.New("clipboard error")
-}
-
-func (errorClipboard) Copy(string, clipboard.Data) error {
-	return errors.New("clipboard error")
-}
-
-func TestPasteAndReindent(t *testing.T) {
-	uri, err := workspaceapi.ParseURI("memory:///reindent.go")
-	require.NoError(t, err)
-
-	tests := []struct {
-		name         string
-		content      string           // initial buffer content
-		clipText     string           // text to place in clipboard before paste
-		clipMeta     any              // metadata for clipboard data
-		indents      map[int]int      // per-line target indentation (nil = no indent view)
-		cursorAt     term.Coordinates // cursor position before paste
-		wantHandled  bool
-		wantContent  string
-		wantCursor   term.Coordinates
-		useErrorClip bool // use errorClipboard instead of normal one
-	}{
-		{
-			name:        "under-indented adds tab",
-			content:     "hello",
-			clipText:    "x",
-			clipMeta:    text.StandardSelection,
-			indents:     map[int]int{0: 1},
-			cursorAt:    term.Coordinates{},
-			wantHandled: true,
-			wantContent: "\txhello",
-			wantCursor:  term.Coordinates{X: 1},
-		},
-		{
-			name:        "over-indented removes tab",
-			content:     "\t\thello",
-			clipText:    "x",
-			clipMeta:    text.StandardSelection,
-			indents:     map[int]int{0: 1},
-			cursorAt:    term.Coordinates{X: 2},
-			wantHandled: true,
-			wantContent: "\txhello",
-			wantCursor:  term.Coordinates{X: 3},
-		},
-		{
-			name:        "already indented is unchanged",
-			content:     "\thello",
-			clipText:    "x",
-			clipMeta:    text.StandardSelection,
-			indents:     map[int]int{0: 1},
-			cursorAt:    term.Coordinates{X: 1},
-			wantHandled: true,
-			wantContent: "\txhello",
-			wantCursor:  term.Coordinates{X: 2},
-		},
-		{
-			name:        "metadata is not SelectMode defaults to StandardSelection",
-			content:     "hello\nworld",
-			clipText:    "x",
-			clipMeta:    "not a SelectMode",
-			indents:     nil,
-			cursorAt:    term.Coordinates{},
-			wantHandled: true,
-			wantContent: "xhello\nworld",
-			wantCursor:  term.Coordinates{X: 1},
-		},
-		{
-			name:        "startY at last line",
-			content:     "a\nb\nc",
-			clipText:    "x",
-			clipMeta:    text.StandardSelection,
-			indents:     map[int]int{2: 1},
-			cursorAt:    term.Coordinates{Y: 2},
-			wantHandled: true,
-			wantContent: "a\nb\n\txc",
-			wantCursor:  term.Coordinates{Y: 2, X: 1},
-		},
-		{
-			name:         "clipboard error returns false",
-			content:      "hello\nworld",
-			useErrorClip: true,
-			wantHandled:  false,
-			wantContent:  "hello\nworld",
-			wantCursor:   term.Coordinates{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			buf := cell.NewBuffer()
-			buf.ReadFrom(strings.NewReader(tt.content))
-
-			var clip clipboard.Register
-			if tt.useErrorClip {
-				clip = errorClipboard{}
-			} else {
-				clip = clipboard.NewInMemory()
-				require.NoError(t, clip.Copy(
-					clipboard.DefaultRegisterID,
-					clipboard.Data{Text: tt.clipText, Metadata: tt.clipMeta},
-				))
-			}
-
-			handler := NewHandler(buf, uri,
-				text.IndentRuneTab, 0,
-				WithClipboard(clip),
-				WithTabspaces(1),
-			)
-			handler.Resize(80, 10)
-
-			if tt.indents != nil {
-				buf.WithView(testIndentView{
-					View:    buf.View(),
-					indents: tt.indents,
-				})
-			}
-
-			if tt.cursorAt.X != 0 || tt.cursorAt.Y != 0 {
-				require.True(t, handler.SetCursorAtScroll(tt.cursorAt))
-			}
-
-			ev := term.Event{
-				Type: term.EventKey,
-				Mod:  term.ModMeta,
-				Ch:   'V',
-			}
-			_, handled := handler.Handle(ev)
-
-			assert.Equal(t, tt.wantHandled, handled, "handled")
-			assert.Equal(t, tt.wantContent, buf.String(), "buffer content")
-			assert.Equal(t, tt.wantCursor, handler.CursorAtScroll(), "cursor position")
-		})
-	}
 }

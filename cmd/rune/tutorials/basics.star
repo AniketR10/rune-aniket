@@ -19,10 +19,12 @@ mode = editor_mode()
 # Direction keys differ by editor mode: modal points with the home
 # row, the standard editor points with the arrow keys. The layout copy adapts to
 # whichever the user is running.
-if mode == "modal":
+# The emacs preset keeps Rune's window/workspace layer on <meta> with the
+# GNU-Emacs-style home row, so it shares modal's direction phrasing.
+if mode == "modal" or mode == "emacs":
     dir_phrase = "the home row, `h` `j` `k` `l`"
     focus_example = "`<meta-h>`"
-    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
+    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`" if mode == "modal" else "the arrow keys `<up>` / `<down>`"
 else:
     dir_phrase = "the arrow keys"
     focus_example = "`<meta-left>`"

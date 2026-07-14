@@ -705,7 +705,7 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 	}
 
 	for _, file := range []string{
-		"override_modeless.yaml",
+		"override_standard.yaml",
 	} {
 		t.Run(file, func(t *testing.T) {
 			base, err := decodeDefaultConfig(DefaultConfig{
@@ -740,7 +740,7 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 // command->key reverse lookup is non-deterministic and the tutorial/
 // cheatsheet can surface the wrong key (e.g. <shift-meta-h> instead of
 // <shift-meta-left> for `windowmove left`).
-func TestModelessPresetUnbindsStaleModalChords(t *testing.T) {
+func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 	runeStar := readRuneStar(t)
 
 	base, err := decodeDefaultConfig(DefaultConfig{
@@ -748,10 +748,10 @@ func TestModelessPresetUnbindsStaleModalChords(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	overlay, err := os.ReadFile("../cmd/rune/override_modeless.yaml")
+	overlay, err := os.ReadFile("../cmd/rune/override_standard.yaml")
 	require.NoError(t, err)
 	cfg, err := decodeOverlayConfigFile(
-		bytes.NewReader(overlay), "override_modeless.yaml", base)
+		bytes.NewReader(overlay), "override_standard.yaml", base)
 	require.NoError(t, err)
 
 	c := &ideConfig{cfg: cfg, errors: map[string]error{}}
@@ -784,7 +784,7 @@ func TestModelessPresetUnbindsStaleModalChords(t *testing.T) {
 		}
 	}
 
-	// The reverse lookup must resolve to the modeless arrow chords.
+	// The reverse lookup must resolve to the standard arrow chords.
 	lookup := c.commandKeyBindingLookup()
 	wantResolved := map[string][]string{
 		"<alt-shift-meta-left>": {"windowmove", "left"},
@@ -799,6 +799,174 @@ func TestModelessPresetUnbindsStaleModalChords(t *testing.T) {
 		got := lookup(cmd[0], cmd[1:])
 		require.Equalf(t, wantKey, got,
 			"%v must resolve to %s, got %s", cmd, wantKey, got)
+	}
+}
+
+// TestEmacsPresetKeepsCommandsOffEditorChords pins that the emacs preset
+// opens the command prompt with M-x (on <alt>, authentic Emacs Meta) and
+// homes host commands on the GNU Emacs C-x prefix plus the <meta> (Cmd)
+// window/workspace layer. The emacs editor owns the single-modifier control
+// and alt chords (motion, kill, yank, mark, folds, M-x), so any host command
+// sharing one of those would be shadowed and unreachable — every base <alt>
+// command binding is therefore explicitly unbound. <meta> is free of editor
+// bindings, so the IDE window/workspace layer lives there. C-x is safe as a
+// prefix because the editor ignores a bare <c-x>, and the second key of a
+// two-key sequence bypasses the editor entirely.
+func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
+	runeStar := readRuneStar(t)
+
+	base, err := decodeDefaultConfig(DefaultConfig{
+		src: string(runeStar), modal: true, tui: false,
+	})
+	require.NoError(t, err)
+
+	overlay, err := os.ReadFile("../cmd/rune/override_emacs.yaml")
+	require.NoError(t, err)
+	cfg, err := decodeOverlayConfigFile(
+		bytes.NewReader(overlay), "override_emacs.yaml", base)
+	require.NoError(t, err)
+
+	require.NoError(t, validateConfig(cfg),
+		"the emacs preset must validate cleanly")
+
+	c := &ideConfig{cfg: cfg, errors: map[string]error{}}
+	require.Equal(t, editorModeEmacs, c.editorMode())
+
+	// The command prompt opens with M-x (execute-extended-command) on the
+	// authentic Meta layer (<alt>).
+	require.Equal(t, term.KeyComb{Mod: term.ModAlt, Ch: 'x'}, c.commandKey())
+
+	mappings := c.commandKeyMappings()
+
+	wantBound := map[string]string{
+		"<c-x><c-s>":     "write",
+		"<c-x>s":         "writeall",
+		"<c-x><c-c>":     "quit",
+		"<c-x><c-f>":     "searchfile",
+		"<c-x>2":         "windowdefaultsplit v",
+		"<c-x>3":         "windowdefaultsplit h",
+		"<c-x>0":         "windowclose",
+		"<c-x>1":         "windowtogglemaximize",
+		"<c-x><left>":    "windowfocus left",
+		"<c-x><c-right>": "tabnext",
+		"<c-x><c-left>":  "tabprevious",
+		"<c-x>k":         "tabclose",
+		"<c-x><s-left>":  "windowmove left",
+		"<c-x>,":         "tabmove left",
+		"<c-x>.":         "tabmove right",
+		"<c-x>[":         "cursorhistory prev",
+		"<c-x>]":         "cursorhistory next",
+		"<c-x>g":         "searchtext",
+		"<c-x>n":         "jumptolocation next search",
+		"<c-x>p":         "jumptolocation prev search",
+		"<c-x>d":         "lsp definition",
+		"<c-x>r":         "lsp references",
+		"<c-x>i":         "lsp implementation",
+		"<c-x>t":         "lsp hover",
+		"<c-x>b":         "lsp format",
+		"<c-x>/":         "lsp complete",
+		"<f2>":           "jumptolocation next bookmark",
+	}
+	for key, wantCmd := range wantBound {
+		seq := mustParseBindingKey(t, key)
+		got, ok := mappings[seq]
+		require.Truef(t, ok, "%s must be bound", key)
+		require.Equalf(t, [][]string{strings.Split(wantCmd, " ")},
+			got, "%s must run %q", key, wantCmd)
+	}
+
+	// Real Emacs never uses Cmd, so the <meta> layer is a pure addition: the
+	// IDE window/workspace/clipboard commands live there with zero conflict.
+	wantLive := map[string]string{
+		"<m-h>":     "windowfocus left",
+		"<m-l>":     "windowfocus right",
+		"<m-j>":     "windowfocus down",
+		"<m-k>":     "windowfocus up",
+		"<s-m-h>":   "windowmove left",
+		"<s-m-l>":   "windowmove right",
+		"<c-m-h>":   "windowdefaultsplit h",
+		"<c-m-v>":   "windowdefaultsplit v",
+		"<m-w>":     "windowclose",
+		"<m-n>":     "windownew",
+		"<s-m-f>":   "windowtogglemaximize",
+		"<m-1>":     "workspacefocus 1",
+		"<s-m-1>":   "workspacemove 1",
+		"<m-enter>": "terminalneworsplit",
+	}
+	for key, wantCmd := range wantLive {
+		seq := mustParseBindingKey(t, key)
+		got, ok := mappings[seq]
+		require.Truef(t, ok, "%s must be bound on the <meta> IDE layer", key)
+		require.Equalf(t, [][]string{strings.Split(wantCmd, " ")},
+			got, "%s must run %q", key, wantCmd)
+	}
+
+	// None of the emacs editor's single-modifier editing chords may carry
+	// a live host command binding: they belong to the editor and would be
+	// shadowed if the command layer claimed them. An explicit unbind maps
+	// to the empty command [[""]], which the dispatcher treats as no-op.
+	// <alt> is authentic Meta (M-f/b/d/w, M-x, case ops), so every base
+	// <alt> command chord is unbound; C-SPC is set-mark.
+	reserved := []string{
+		"<a-f>", "<a-b>", "<a-d>", "<a-w>", "<a-l>", "<a-h>",
+		"<a-t>", "<a-r>", "<a-i>", "<a-j>", "<a-k>", "<a-v>",
+		"<a-s>", "<a-`>", "<a-s-l>", "<a-s-h>",
+		"<a-1>", "<a-2>", "<a-9>", "<a-s-1>", "<a-s-9>",
+		"<alt-enter>", "<c-space>",
+	}
+	for _, key := range reserved {
+		seq := mustParseBindingKey(t, key)
+		if got, ok := mappings[seq]; ok {
+			require.Equalf(t, [][]string{{""}}, got,
+				"%s is an emacs editor chord and must not carry a live "+
+					"command binding (found %v)", key, got)
+		}
+	}
+
+	// C-c cannot be a command prefix: the editor claims a bare <c-c> for
+	// copy, so no <c-c>-prefixed sequence would ever fire. Guard against a
+	// future edit reintroducing one.
+	for seq := range mappings {
+		require.NotEqualf(t, term.KeyComb{Mod: term.ModCtrl, Ch: 'c'}, seq.First,
+			"no command may use <c-c> as a prefix in emacs mode: %v", seq)
+	}
+}
+
+// TestValidateCommandPromptFallback pins the command.key guard for the
+// non-modal editors: a bare unmodified key cannot open the prompt (the
+// editor would swallow it), so validation rewrites it to <s-m-p>, which
+// stays clear of the emacs control chords. Modified keys, <c-space>, and
+// modal mode are left untouched.
+func TestValidateCommandPromptFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mode    string
+		key     string
+		wantErr bool
+		wantKey string
+	}{
+		{"standard bare key rewritten", "standard", "p", true, "<s-m-p>"},
+		{"emacs bare key rewritten", "emacs", "p", true, "<s-m-p>"},
+		{"emacs alt-x (M-x) kept", "emacs", "<a-x>", false, "<a-x>"},
+		{"standard shift-meta-p kept", "standard", "<s-m-p>", false, "<s-m-p>"},
+		{"emacs ctrl-space kept", "emacs", "<c-space>", false, "<c-space>"},
+		{"modal bare key kept", "modal", "p", false, "p"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := map[string]any{
+				"editor":  map[string]any{"mode": tc.mode},
+				"command": map[string]any{"key": tc.key},
+			}
+			c := &ideConfig{cfg: cfg, errors: map[string]error{}}
+			err := validateCommandPrompt(c, cfg)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.wantKey,
+				cfg["command"].(map[string]any)["key"])
+		})
 	}
 }
 

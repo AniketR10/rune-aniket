@@ -31,18 +31,25 @@ import (
 //go:embed override_modal.yaml
 var overrideModalYAML string
 
-//go:embed override_modeless.yaml
-var overrideModelessYAML string
+//go:embed override_standard.yaml
+var overrideStandardYAML string
+
+//go:embed override_emacs.yaml
+var overrideEmacsYAML string
 
 // renderOverride returns the override-config file body for the given
 // editor choice. The modal choice enables vim mode everywhere; the
-// modeless choice uses standard key bindings.
+// standard choice uses an all-ctrl keymap inspired by standard editors;
+// the emacs choice uses an Emacs keymap. The deprecated "modeless" alias
+// resolves to the standard preset.
 func renderOverride(editor string) (string, error) {
 	switch editor {
 	case editorModal:
 		return overrideModalYAML, nil
-	case editorModeless:
-		return overrideModelessYAML, nil
+	case editorStandard, editorModeless:
+		return overrideStandardYAML, nil
+	case editorEmacs:
+		return overrideEmacsYAML, nil
 	}
 	return "", fmt.Errorf("unknown editor choice: %q", editor)
 }

@@ -85,6 +85,7 @@ const (
 	editorModeExo          = "exo"
 	editorFallbackModal    = "modal"
 	editorFallbackStandard = "standard"
+	editorFallbackEmacs    = "emacs"
 	editorFallbackModeless = "modeless" // deprecated alias for editorFallbackStandard
 	keyCommandAliases      = "aliases"
 	keyCommandKey          = "key"
@@ -563,9 +564,10 @@ func (c ideConfig) commandKeyBindingLookup() func(string, []string) string {
 }
 
 func (c ideConfig) commandKey() (ret term.KeyComb) {
-	if c.editorMode() == editorModeStandard {
+	switch c.editorMode() {
+	case editorModeStandard, editorModeEmacs:
 		ret = defaultModelessCommandKey
-	} else {
+	default:
 		ret = defaultModalCommandKey
 	}
 	cfg, ok := c.command()
@@ -2254,9 +2256,9 @@ func (c ideConfig) exoQuit() string {
 
 // exoFallback returns the Rune-native fallback editor used by the
 // exofallback router for URIs that exo cannot serve (e.g.
-// memory://). Valid values are "modal" or "standard" ("modeless" is
-// accepted as a deprecated alias for "standard"); defaults to
-// "standard".
+// memory://). Valid values are "modal", "standard", or "emacs"
+// ("modeless" is accepted as a deprecated alias for "standard");
+// defaults to "standard".
 func (c ideConfig) exoFallback() string {
 	cfg, ok := c.exo()
 	if !ok {
@@ -2276,16 +2278,18 @@ func (c ideConfig) exoFallback() string {
 }
 
 // normalizeEditorFallback resolves a raw editor.exo.fallback value to a
-// canonical fallback ("modal" or "standard"), mapping the deprecated
-// "modeless" alias to "standard". ok is false for an unrecognised
-// value. This is the single place the deprecated alias is understood so
-// no other file needs to know about it.
+// canonical fallback ("modal", "standard", or "emacs"), mapping the
+// deprecated "modeless" alias to "standard". ok is false for an
+// unrecognised value. This is the single place the deprecated alias is
+// understood so no other file needs to know about it.
 func normalizeEditorFallback(raw string) (canonical string, ok bool) {
 	switch raw {
 	case editorFallbackModal:
 		return editorFallbackModal, true
 	case editorFallbackModeless, editorFallbackStandard:
 		return editorFallbackStandard, true
+	case editorFallbackEmacs:
+		return editorFallbackEmacs, true
 	}
 	return "", false
 }

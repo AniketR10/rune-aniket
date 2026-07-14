@@ -33,15 +33,17 @@ import (
 
 // TestNewPromptEditorExo asserts that the in-memory prompt editor, which
 // exo cannot host, follows the configured exo.fallback rather than
-// hardwiring vi. The default fallback is modeless.
+// hardwiring vi. The default fallback is standard.
 func TestNewPromptEditorExo(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		fallback string
 		want     command.Editor
 	}{
-		{"default fallback is modeless", "", modelessPromptEditor{}},
-		{"explicit modeless fallback", "modeless", modelessPromptEditor{}},
+		{"default fallback is standard", "", standardPromptEditor{}},
+		{"explicit standard fallback", "standard", standardPromptEditor{}},
+		{"deprecated modeless fallback", "modeless", standardPromptEditor{}},
+		{"explicit emacs fallback", "emacs", emacsPromptEditor{}},
 		{"explicit modal fallback", "modal", viPromptEditor{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

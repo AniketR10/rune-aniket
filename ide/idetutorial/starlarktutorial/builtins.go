@@ -648,11 +648,19 @@ func parseKeyList(list *starlark.List, kwarg string) ([]term.KeyComb, error) {
 			return nil, fmt.Errorf(
 				"%s[]: want string, got %s", kwarg, item.Type())
 		}
-		k, err := term.ParseKey(string(s))
+		// Parse as a sequence so a two-key chord binding (e.g. the emacs
+		// "<c-x>3" split-window key) is accepted; the floating window
+		// matches one event at a time, so register the first chord. That
+		// is the key that must fall through to the IDE root to begin the
+		// sequence the rest of which the sequencer then completes.
+		ks, err := term.ParseKeys(string(s))
 		if err != nil {
 			return nil, fmt.Errorf("%s[%q]: %w", kwarg, string(s), err)
 		}
-		out = append(out, k)
+		if len(ks) == 0 {
+			return nil, fmt.Errorf("%s[%q]: no key combinations", kwarg, string(s))
+		}
+		out = append(out, ks[0])
 	}
 	return out, nil
 }

@@ -21,12 +21,12 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package emacs
 
 import (
 	"context"
 	"strings"
+	"unicode"
 
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
@@ -67,7 +67,6 @@ type emacsHandler struct {
 	pendingSetCursor *term.Coordinates
 	lastIterateWord  term.Coordinates
 	setLocations     bool
-	metaK            bool
 	lastPaste        bool
 	historyIdx       int
 }
@@ -239,22 +238,6 @@ func (h *emacsHandler) popMarkLocation() bool {
 	return true
 }
 
-func (h *emacsHandler) swapWithMark() bool {
-	locs := h.markLocations()
-	if len(locs) == 0 {
-		return false
-	}
-	loc := locs[len(locs)-1]
-	prev := h.cursor.CursorAtScroll()
-	if _, ok := h.cursor.MoveToScroll(loc.From); !ok {
-		return false
-	}
-	locs[len(locs)-1] = h.newMarkLocation(prev)
-	h.cursor.SetLocationList(textapi.LocationPriorityInfo, emacsMarkLocationListID,
-		text.LocationSlice(locs))
-	return true
-}
-
 func (h *emacsHandler) playMacro() bool {
 	if h.macroPlayer == nil {
 		return false
@@ -265,47 +248,94 @@ func (h *emacsHandler) playMacro() bool {
 	return true
 }
 
-func (h *emacsHandler) handleMetaK(ev term.Event) (handled bool) {
-	h.log(log.TraceLevel, "handle metak, event: %#v", ev)
-	if ev.Mod != term.ModMeta {
-		return
+// killRegion deletes the text between the mark and point (C-w).
+func (h *emacsHandler) killRegion() bool {
+	return h.selectToMark(true)
+}
+
+// copyRegion copies the text between the mark and point to the clipboard,
+// leaving point and the buffer unchanged (M-w).
+func (h *emacsHandler) copyRegion() bool {
+	loc, ok := h.markLocation()
+	if !ok {
+		return false
 	}
-	switch ev.Key {
-	case term.KeyBackspace:
-		if h.cursor.Select() {
-			h.cursor.MoveStartLine()
-			handled = h.cursor.DeleteSelection()
+	point := h.cursor.CursorAtScroll()
+	if !h.cursor.SelectRange(loc.From, point) {
+		return false
+	}
+	if _, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard); err != nil {
+		h.log(log.ErrorLevel, "cursor copy selection: %v", err)
+		return false
+	}
+	h.cursor.MoveToScroll(point)
+	return true
+}
+
+// selectWordForward selects from point to the end of the current or next
+// word, matching how the Emacs word-case commands operate on the word at or
+// after point.
+func (h *emacsHandler) selectWordForward() bool {
+	if _, ok := h.cursor.SelectionMode(); ok {
+		return true
+	}
+	if !h.cursor.Select() {
+		return false
+	}
+	if !h.cursor.MoveRightEndWord() {
+		h.cursor.Unselect()
+		return false
+	}
+	return true
+}
+
+func (h *emacsHandler) upcaseWord() bool {
+	if !h.selectWordForward() {
+		return false
+	}
+	handled := h.cursor.UppercaseSelection()
+	h.cursor.Unselect()
+	return handled
+}
+
+func (h *emacsHandler) downcaseWord() bool {
+	if !h.selectWordForward() {
+		return false
+	}
+	handled := h.cursor.LowercaseSelection()
+	h.cursor.Unselect()
+	return handled
+}
+
+func (h *emacsHandler) capitalizeWord() bool {
+	if !h.selectWordForward() {
+		return false
+	}
+	word := h.cursor.Selection()
+	capitalized := capitalize(word)
+	if capitalized == word {
+		h.cursor.Unselect()
+		return true
+	}
+	if !h.cursor.DeleteSelection() {
+		h.cursor.Unselect()
+		return false
+	}
+	h.cursor.InsertString(capitalized)
+	return true
+}
+
+// capitalize upper-cases the first letter of s and lower-cases the rest,
+// matching Emacs capitalize-word.
+func capitalize(s string) string {
+	upped := false
+	return strings.Map(func(r rune) rune {
+		if !upped {
+			upped = true
+			return unicode.ToUpper(r)
 		}
-	case term.KeySpace:
-		handled = h.setMarkLocation()
-	}
-	if handled {
-		return
-	}
-	switch ev.Ch {
-	case 'a':
-		handled = h.selectToMark(false)
-	case 'w':
-		handled = h.selectToMark(true)
-	case 'x':
-		handled = h.swapWithMark()
-	case 'g':
-		handled = h.clearMarkLocation()
-	case 'u':
-		handled = h.cursor.UppercaseSelection()
-	case 'l':
-		handled = h.cursor.LowercaseSelection()
-	case 'k':
-		if h.cursor.Select() {
-			h.cursor.MoveEndLine()
-			handled = h.cursor.DeleteSelection()
-		}
-	case 'j':
-		handled = h.cursor.ExpandAllFolds(context.Background())
-	case '1':
-		handled = h.cursor.CollapseAllFolds(context.Background())
-	}
-	return
+		return unicode.ToLower(r)
+	}, s)
 }
 
 func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -379,16 +409,6 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		shift = true
 	}
 
-	// if only Mod is pressed, then user might be
-	// preparing to fire next key/ch.
-	if h.metaK && (ev.Key != 0 || ev.Ch != 0) {
-		h.metaK = false
-		handled = h.handleMetaK(ev)
-		if handled {
-			return
-		}
-	}
-
 	cursorAt := h.cursor.CursorAtScroll()
 	switch ev.Mod {
 	case term.ModAltShift:
@@ -398,36 +418,8 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowUp:
 			handled = h.duplicateLine(true /* up */)
 		}
-	case term.ModAltMeta:
-		switch ev.Key {
-		case 0:
-			switch ev.Ch {
-			case '[':
-				handled = h.cursor.CollapseFold(context.Background())
-			case ']':
-				handled = h.cursor.ExpandFold(context.Background())
-			case '/':
-				handled = h.cursor.ToggleBlockComment()
-			case 'q':
-				handled = h.cursor.WrapParagraph(h.cfg.ruler)
-			case 'v':
-				if handled = h.pasteFromHistory(); handled {
-					pastedThisTurn = true
-				}
-			}
-		}
-	case term.ModCtrlMeta:
-		switch ev.Key {
-		case term.KeyArrowDown:
-			handled = h.moveLine(false /* down */)
-		case term.KeyArrowUp:
-			handled = h.moveLine(true /* up */)
-		}
-	case term.ModShiftMeta:
-		switch ev.Key {
-		case term.KeySpace:
-			handled = h.cursor.ExpandSelection(ctx)
-		}
+	// <alt> is authentic Emacs Meta (Option on macOS reaches the GUI as
+	// ModAlt). The editor owns the real M- editing chords here.
 	case term.ModAlt:
 		switch ev.Key {
 		case term.KeyArrowDown:
@@ -439,134 +431,59 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 		case term.KeyArrowRight:
 			handled = h.cursor.MoveRightEndWord()
 		case term.KeyBackspace:
-			h.cursor.Select()
-			h.cursor.MoveRightStartWord()
-			h.cursor.DeleteSelection()
-		case term.KeyDelete:
+			// M-DEL: backward-kill-word.
 			h.cursor.Select()
 			h.cursor.MoveLeftStartWord()
-			h.cursor.DeleteSelection()
+			handled = h.cursor.DeleteSelection()
+		case term.KeyDelete:
+			// M-Delete: kill-word (forward).
+			h.cursor.Select()
+			h.cursor.MoveRightEndWord()
+			handled = h.cursor.DeleteSelection()
 		case 0:
 			switch ev.Ch {
+			case 'f':
+				handled = h.cursor.MoveRightEndWord()
+			case 'b':
+				handled = h.cursor.MoveLeftStartWord()
+			case 'd':
+				// M-d: kill-word (forward).
+				h.cursor.Select()
+				h.cursor.MoveRightEndWord()
+				handled = h.cursor.DeleteSelection()
+			case 'w':
+				// M-w: kill-ring-save (copy the region).
+				handled = h.copyRegion()
+			case ',':
+				// M-<: beginning-of-buffer.
+				handled = h.cursor.MoveFirstLine()
+			case '.':
+				// M->: end-of-buffer.
+				handled = h.cursor.MoveLastLine()
+			case 'u':
+				handled = h.upcaseWord()
+				return
+			case 'l':
+				handled = h.downcaseWord()
+				return
+			case 'c':
+				handled = h.capitalizeWord()
+				return
+			case ';':
+				// M-;: comment-dwim (toggle line comment).
+				handled = h.cursor.ToggleLineComment()
+			case 'y':
+				// M-y: yank-pop (replace the last yank with an older kill).
+				if handled = h.pasteFromHistory(); handled {
+					pastedThisTurn = true
+				}
+			case 'q':
+				// M-q: fill-paragraph.
+				handled = h.cursor.WrapParagraph(h.cfg.ruler)
 			case '{':
 				handled = h.cursor.CollapseFold(context.Background())
 			case '}':
 				handled = h.cursor.ExpandFold(context.Background())
-			}
-		}
-	case term.ModMeta:
-		switch ev.Key {
-		case term.KeyArrowLeft:
-			handled = h.cursor.MoveStartLineNonBlank()
-		case term.KeyArrowRight:
-			handled = h.cursor.MoveEndLine()
-		case term.KeyArrowUp:
-			handled = h.cursor.MoveFirstLine()
-		case term.KeyArrowDown:
-			handled = h.cursor.MoveLastLine()
-		case term.KeyDelete:
-			if ok := h.cursor.Select(); ok {
-				h.cursor.MoveEndLine()
-				handled = h.cursor.DeleteSelection()
-			}
-		case 0:
-			switch ev.Ch {
-			case 'k':
-				h.log(log.TraceLevel, "waiting for metaK event")
-				h.metaK = true
-				handled = true
-			case 'j':
-				handled = h.cursor.Conflate()
-			case '/':
-				handled = h.cursor.ToggleLineComment()
-			case ']':
-				if _, ok := h.cursor.SelectionMode(); ok {
-					h.cursor.ShiftSelectionRight(h.cfg.indentRune, h.cfg.indentTabspaces)
-				} else {
-					h.cursor.ShiftLineRight(h.cfg.indentRune, h.cfg.indentTabspaces)
-				}
-				handled = true
-			case '[':
-				if _, ok := h.cursor.SelectionMode(); ok {
-					handled = h.cursor.ShiftSelectionLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
-				} else {
-					handled = h.cursor.ShiftLineLeft(h.cfg.indentRune, h.cfg.indentTabspaces)
-				}
-			case 'l':
-				if mode, ok := h.cursor.SelectionMode(); ok && mode == text.LineSelection {
-					handled = h.cursor.MoveDown()
-				} else {
-					handled = h.cursor.SelectLine()
-				}
-				// avoid unselect due to not shift
-				return
-			case 'D':
-				handled = h.duplicateLine(false /* down */)
-			case 'J':
-				handled = h.cursor.SelectIndentationLevel(h.cfg.indentTabspaces)
-				return
-			case 'd':
-				handled = h.selectNextWordAtCursor()
-				return
-			case 'x':
-				if _, ok := h.cursor.SelectionMode(); !ok {
-					h.cursor.SelectLine()
-				}
-				_, err := h.cursor.CopySelectionNoUnselect(
-					clipboard.DefaultRegisterID, h.clipboard)
-				if err != nil {
-					h.log(log.ErrorLevel, "cursor copy selection: %v", err)
-				} else {
-					handled = h.cursor.DeleteSelection()
-				}
-			case 'f':
-				ev.Key = 0
-				ev.Ch = '/'
-				_, handled = h.less.Handle(ev)
-			case 'a':
-				if _, ok := h.cursor.SelectionMode(); ok {
-					h.cursor.Unselect()
-				}
-				h.cursor.MoveFirstLine()
-				if h.cursor.SelectLine() {
-					h.cursor.MoveLastLine()
-					h.cursor.MoveRight()
-					handled = true
-				}
-				return
-			// the following two are defined here in case we're not capturing them at the command level
-			case 'c':
-				_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
-				if err != nil {
-					h.log(log.ErrorLevel, "cursor copy selection: %v", err)
-				} else {
-					handled = true
-				}
-			case 'v':
-				paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
-				if err != nil {
-					h.log(log.ErrorLevel, "clipboard paste: %v", err)
-				} else {
-					str := paste.Text
-					mode, _ := paste.Metadata.(text.SelectMode)
-					h.cursor.Paste(str, mode, false)
-					handled = true
-					h.lastPaste = true
-					h.historyIdx = 0
-					pastedThisTurn = true
-				}
-			case 'V':
-				handled = h.pasteAndReindent()
-			case 'z':
-				handled = h.cursor.Undo()
-			case 'y':
-				handled = h.cursor.Redo()
-			case 'Z':
-				handled = h.cursor.Redo()
-			case 'K':
-				if h.cursor.SelectLine() {
-					handled = h.cursor.DeleteSelection()
-				}
 			}
 		}
 	// no modifier
@@ -661,14 +578,33 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 			h.cursor.InsertLineBelow(h.cfg.indentRune, h.cfg.indentTabspaces)
 			handled = true
 			return
+		case term.KeySpace:
+			// C-SPC: set-mark-command.
+			handled = h.setMarkLocation()
+			return
 		}
 		switch ev.Ch {
-		case 'y', 'c':
+		case 'c':
 			_, err := h.cursor.CopySelection(clipboard.DefaultRegisterID, h.clipboard)
 			if err != nil {
 				h.log(log.ErrorLevel, "cursor copy selection: %v", err)
 			}
 			handled = true
+		case 'y':
+			// C-y: yank (paste from the clipboard).
+			paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
+			if err != nil {
+				h.log(log.ErrorLevel, "clipboard paste: %v", err)
+			} else {
+				mode, _ := paste.Metadata.(text.SelectMode)
+				h.cursor.Paste(paste.Text, mode, false)
+				handled = true
+				// Prime the yank-pop cycle so a following M-y replaces
+				// this yank with an older kill-ring entry.
+				h.lastPaste = true
+				h.historyIdx = 0
+				pastedThisTurn = true
+			}
 		case 'l':
 			handled = h.cursor.Center()
 		case 'v':
@@ -740,6 +676,10 @@ func (h *emacsHandler) Handle(ev term.Event) (exit, handled bool) {
 				handled = h.cursor.DeleteSelection()
 			}
 		case 'w':
+			// C-w: kill-region (mark to point).
+			handled = h.killRegion()
+		case '=':
+			// C-= : expand-region (grow the syntactic selection).
 			handled = h.cursor.ExpandSelection(ctx)
 		}
 	case term.ModCtrlShift:
@@ -979,30 +919,6 @@ func (h *emacsHandler) duplicateLine(up bool) (handled bool) {
 	return
 }
 
-func (h *emacsHandler) pasteAndReindent() (handled bool) {
-	paste, err := h.clipboard.Paste(clipboard.DefaultRegisterID)
-	if err != nil {
-		h.log(log.ErrorLevel, "clipboard paste: %v", err)
-		return
-	}
-	str := paste.Text
-	mode, _ := paste.Metadata.(text.SelectMode)
-	startY := h.cursor.CursorAtScroll().Y
-	h.cursor.Paste(str, mode, false)
-	handled = true
-	endPos := h.cursor.CursorAtScroll()
-	if !h.cursor.SelectRange(
-		term.Coordinates{Y: startY},
-		term.Coordinates{Y: endPos.Y},
-	) {
-		h.cursor.MoveToScroll(endPos)
-		return
-	}
-	h.cursor.ReindentSelection(h.cfg.indentRune, h.cfg.indentTabspaces)
-	h.cursor.MoveToScroll(endPos)
-	return
-}
-
 // pasteFromHistory pastes from clipboard history. If the last action was a
 // paste, it replaces that paste with the next older history entry.
 func (h *emacsHandler) pasteFromHistory() (handled bool) {
@@ -1088,23 +1004,4 @@ func (h *emacsHandler) hideInitialFolds() {
 			h.SetCursorAtScroll(cursor)
 		})
 	})
-}
-
-func (h *emacsHandler) selectNextWordAtCursor() bool {
-	h.cursor.Unselect()
-	if h.cursor.IsEndWord() && !h.cursor.IsStartWord() {
-		h.cursor.MoveLeft()
-		word := h.cursor.Word()
-		h.cursor.SearchWord(word)
-		h.cursor.MoveToNextMatch()
-	} else {
-		word := h.cursor.Word()
-		h.cursor.SearchWord(word)
-	}
-	if !h.cursor.IsStartWord() {
-		h.cursor.MoveLeftStartWordNoWrap()
-	}
-	h.cursor.Select()
-	h.cursor.MoveRightEndWordNoWrap()
-	return true
 }

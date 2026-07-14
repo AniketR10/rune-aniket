@@ -32,6 +32,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/emacs"
 	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/vi"
 )
@@ -120,17 +121,22 @@ func Editor(clipboard clipboard.Register, cfg config.Config) (text.Editor, error
 	switch mode {
 	case "modal":
 		return viEditor(clipboard), nil
+	case "emacs":
+		return emacsEditor(clipboard), nil
 	case "exo":
 		fallback, err := exoFallback(cfg)
 		if err != nil {
 			return nil, err
 		}
-		if fallback == "modal" {
+		switch fallback {
+		case "modal":
 			return viEditor(clipboard), nil
+		case "emacs":
+			return emacsEditor(clipboard), nil
 		}
-		return modelessEditor(clipboard), nil
+		return standardEditor(clipboard), nil
 	default:
-		return modelessEditor(clipboard), nil
+		return standardEditor(clipboard), nil
 	}
 }
 
@@ -171,9 +177,9 @@ func viEditor(clipboard clipboard.Register) text.Editor {
 	)
 }
 
-// modelessEditor builds a modeless editor with all chrome bars disabled
+// standardEditor builds a standard editor with all chrome bars disabled
 // so an extension-hosted compose buffer shows only the text area.
-func modelessEditor(clipboard clipboard.Register) text.Editor {
+func standardEditor(clipboard clipboard.Register) text.Editor {
 	return standard.Editor(
 		standard.WithClipboard(clipboard),
 		standard.WithWrap(true),
@@ -181,6 +187,19 @@ func modelessEditor(clipboard clipboard.Register) text.Editor {
 		standard.WithAuxiliaryBar(false, text.AuxBarConfig{}),
 		standard.WithIconsBar(false, text.IconsBarConfig{}),
 		standard.WithGitBar(false, text.IconsBarConfig{}),
+	)
+}
+
+// emacsEditor builds an emacs editor with all chrome bars disabled so an
+// extension-hosted compose buffer shows only the text area.
+func emacsEditor(clipboard clipboard.Register) text.Editor {
+	return emacs.Editor(
+		emacs.WithClipboard(clipboard),
+		emacs.WithWrap(true),
+		emacs.WithStatusBarConfig(false, text.StatusBarConfig{}),
+		emacs.WithAuxiliaryBar(false, text.AuxBarConfig{}),
+		emacs.WithIconsBar(false, text.IconsBarConfig{}),
+		emacs.WithGitBar(false, text.IconsBarConfig{}),
 	)
 }
 
@@ -238,15 +257,19 @@ func editorMode(cfg config.Config) (string, error) {
 		}
 		mode = def
 	}
+	if mode == "modeless" {
+		return "standard", nil
+	}
 	return mode, nil
 }
 
 // exoFallback returns the Rune-native fallback editor used when
 // editor.mode is "exo". The full external editor is not viable inside
 // an extension process, so compose input uses this fallback. Valid
-// values are "modal" or "modeless"; defaults to "modeless".
+// values are "modal", "standard", or "emacs"; the deprecated "modeless"
+// alias resolves to "standard". Defaults to "standard".
 func exoFallback(cfg config.Config) (string, error) {
-	def := "modeless"
+	def := "standard"
 	edConfig, err := cfg.GetConfig("editor")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -272,8 +295,10 @@ func exoFallback(cfg config.Config) (string, error) {
 	}
 
 	switch fallback {
-	case "modal", "modeless":
+	case "modal", "standard", "emacs":
 		return fallback, nil
+	case "modeless":
+		return "standard", nil
 	}
 	return def, nil
 }
