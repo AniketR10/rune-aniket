@@ -107,10 +107,16 @@ func (s *Sequencer) Sequence(key term.KeyComb) (
 		match = SequenceNoMatch
 	}
 
-	select {
-	case <-firstCtx.Done():
-		return
-	default:
+	// Only a bare-character prefix is subject to the timeout: a plain key
+	// such as vi's `d` also has a standalone meaning, so a stale `dd` must
+	// not fire. A modifier-bearing prefix (e.g. <ctrl-x>) has no such
+	// ambiguity and waits indefinitely for its second key.
+	if first.Mod == 0 {
+		select {
+		case <-firstCtx.Done():
+			return
+		default:
+		}
 	}
 
 	m, ok := s.interests[first]

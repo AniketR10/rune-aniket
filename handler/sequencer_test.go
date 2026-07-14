@@ -106,6 +106,25 @@ func TestSequencer(t *testing.T) {
 		require.Equal(t, SequenceMatch, match)
 		assert.Equal(t, interests[0], seq)
 	})
+	t.Run("modifier prefix matches even after timeout elapses", func(t *testing.T) {
+		// A modifier-bearing prefix such as <ctrl-x> is not ambiguous with
+		// plain typed input, so it waits indefinitely for its second key.
+		interests := []Sequence{{
+			First: term.KeyComb{Ch: 'x', Mod: term.ModCtrl},
+			Last:  term.KeyComb{Ch: 'p', Mod: term.ModCtrl},
+		}}
+		s := NewSequencer(interests, 1*time.Nanosecond)
+
+		seq, match := s.Sequence(term.KeyComb{Ch: 'x', Mod: term.ModCtrl})
+		assert.Equal(t, SequencePartialMatch, match)
+		assert.Zero(t, seq)
+
+		time.Sleep(5 * time.Millisecond)
+
+		seq, match = s.Sequence(term.KeyComb{Ch: 'p', Mod: term.ModCtrl})
+		require.Equal(t, SequenceMatch, match)
+		assert.Equal(t, interests[0], seq)
+	})
 }
 
 func TestParseSequence(t *testing.T) {

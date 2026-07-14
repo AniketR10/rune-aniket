@@ -73,8 +73,8 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/text/exoeditor"
-	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/registerset"
+	"unstable.build/go-tui/text/standard"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
@@ -2060,6 +2060,291 @@ func TestExKeySequence(t *testing.T) {
 	}
 }
 
+// seqStubEditor wraps texttest.TestEditor so that the underlying editor
+// consumes exactly the key combinations in consume. Every event the
+// editor sees is appended to seen. This lets a sequencer test decide,
+// per key, whether the editor claims a keystroke, mirroring the way a
+// real modal editor swallows some keys but not others.
+type seqStubEditor struct {
+	*texttest.TestEditor
+	consume map[term.KeyComb]struct{}
+	recMu   *sync.Mutex
+	seen    *[]term.KeyComb
+}
+
+func (e seqStubEditor) Edit(
+	ctx context.Context,
+	resource workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
+) (text.Handler, error) {
+	h, err := e.TestEditor.Edit(ctx, resource, buf, readOnly, recovered)
+	if err != nil {
+		return nil, err
+	}
+	eh := h.(*texttest.TestEditorHandler)
+	eh.HandleOverride = func(ev term.Event) (bool, bool) {
+		e.recMu.Lock()
+		*e.seen = append(*e.seen, ev.KeyComb())
+		e.recMu.Unlock()
+		_, consumed := e.consume[ev.KeyComb()]
+		return false, consumed
+	}
+	return eh, nil
+}
+
+// exSequencerHarness drives a real *ex through hand-built term.Events so
+// that modifier-bearing keys (e.g. <ctrl-x>) can be exercised — the
+// handlertest InputSequence tokenizer cannot express them.
+type exSequencerHarness struct {
+	ex        testEx
+	fired     *[]string
+	editorSaw *[]term.KeyComb
+	recMu     *sync.Mutex
+}
+
+func (h exSequencerHarness) firedCommands() []string {
+	h.recMu.Lock()
+	defer h.recMu.Unlock()
+	out := make([]string, len(*h.fired))
+	copy(out, *h.fired)
+	return out
+}
+
+func (h exSequencerHarness) editorConsumed() []term.KeyComb {
+	h.recMu.Lock()
+	defer h.recMu.Unlock()
+	out := make([]term.KeyComb, len(*h.editorSaw))
+	copy(out, *h.editorSaw)
+	return out
+}
+
+// newExSequencerHarness builds an *ex whose sequencer knows sequences,
+// whose command layer knows single-key bindings, and whose editor
+// consumes the given key combinations. Commands referenced by the
+// bindings are registered as sinks that record their name in fired.
+func newExSequencerHarness(
+	t *testing.T,
+	sequences map[thandler.Sequence][][]string,
+	keyBindings map[term.KeyComb][][]string,
+	editorConsumes []term.KeyComb,
+	timeout time.Duration,
+) exSequencerHarness {
+	t.Helper()
+	// exMu serializes ex.Handle calls (the test goroutine plus the
+	// re-issue timer goroutine). recMu independently guards the fired
+	// and seen recorders, which are touched from inside ex.Handle (while
+	// exMu is held) and read from the test goroutine — using exMu for
+	// both would deadlock because ex.Handle synchronously invokes the
+	// editor and command sinks.
+	var mu sync.Mutex
+	var recMu sync.Mutex
+	fired := &[]string{}
+	editorSaw := &[]term.KeyComb{}
+
+	consume := make(map[term.KeyComb]struct{}, len(editorConsumes))
+	for _, k := range editorConsumes {
+		consume[k] = struct{}{}
+	}
+
+	opts := []text.Option{
+		text.WithCommandKey(testCommandKey),
+		text.WithSequencerTimeout(timeout),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+	}
+	for seq, cmds := range sequences {
+		opts = append(opts, text.WithCommandSequenceBinding(seq, cmds))
+	}
+	for key, cmds := range keyBindings {
+		opts = append(opts, text.WithCommandKeyBinding(key, cmds))
+	}
+
+	file, err := workspaceapi.ParseURI("file:///seq.go")
+	require.NoError(t, err)
+
+	ex := new(ex)
+	ex.syncCommandPrompt = true
+	svc := storagestub.NewInMemoryService()
+	notifications := newWorkspaceNotifications(svc, notificationsConfig(),
+		&workspaceManagerMock{workspace: ex})
+	editor := seqStubEditor{
+		TestEditor: texttest.NopEditor(),
+		consume:    consume,
+		recMu:      &recMu,
+		seen:       editorSaw,
+	}
+	require.NoError(t, ex.init(
+		func(exoeditor.Reloader) (text.Editor, error) { return editor, nil },
+		&testLoader{}, svc, notifications, file,
+		vte.DefaultConfig(), plugin.DefaultBarConfig(),
+		func(ev term.Event) bool {
+			if ev.Type == term.EventInterrupt {
+				return true
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			ex.Handle(ev)
+			return true
+		}, 0, clipboard.NewInMemory(), nil, nil, nil, nil,
+		testPromptEditor(), opts...))
+	ex.subscribeCommands()
+
+	// Register a recording sink for every command named by a binding so
+	// that runCommand -> dispatchCommand resolves and appends its name.
+	registered := map[string]struct{}{}
+	register := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, ok := registered[name]; ok {
+			return
+		}
+		registered[name] = struct{}{}
+		require.NoError(t, ex.comp.SubscribeCommand(
+			textapi.CommandManual{Name: name},
+			text.FuncCommandHandler(func(_ context.Context, _ textapi.Command) error {
+				recMu.Lock()
+				*fired = append(*fired, name)
+				recMu.Unlock()
+				return nil
+			}, nil)))
+	}
+	for _, cmds := range sequences {
+		for _, cmd := range cmds {
+			register(cmd[0])
+		}
+	}
+	for _, cmds := range keyBindings {
+		for _, cmd := range cmds {
+			register(cmd[0])
+		}
+	}
+
+	b := testEx{ex: ex, mu: &mu}
+	_, err = b.editFileURI(file, ex.invokeWindow(), false)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		b.Close()
+	})
+	return exSequencerHarness{ex: b, fired: fired, editorSaw: editorSaw, recMu: &recMu}
+}
+
+// TestExSequencerModifierVsBarePrefix drives the ex event pipeline with
+// hand-built events to cover the full matrix of first-key/second-key
+// combinations a sequence prefix can encounter. A bare-character prefix
+// (e.g. vi's `d`) remains subject to the re-issue timeout because it can
+// also be typed as literal input; a modifier-bearing prefix (e.g.
+// <ctrl-x>) waits indefinitely for its second key and is dropped, never
+// re-issued, when the second key does not complete a sequence.
+func TestExSequencerModifierVsBarePrefix(t *testing.T) {
+	const timeout = 20 * time.Millisecond
+	// well past timeout+reissuePadding so a stale bare prefix would
+	// have re-issued by the time the second key is sent.
+	const longGap = 80 * time.Millisecond
+
+	ctrlX := term.KeyComb{Ch: 'x', Mod: term.ModCtrl}
+	ctrlS := term.KeyComb{Ch: 's', Mod: term.ModCtrl}
+	metaX := term.KeyComb{Ch: 'x', Mod: term.ModMeta}
+	metaJ := term.KeyComb{Ch: 'j', Mod: term.ModMeta}
+
+	sequences := map[thandler.Sequence][][]string{
+		{First: term.KeyComb{Ch: 'd'}, Last: term.KeyComb{Ch: 'd'}}: {{"seqdd"}},
+		{First: ctrlX, Last: ctrlS}:                                 {{"seqctrls"}},
+		{First: metaX, Last: metaJ}:                                 {{"seqmetaj"}},
+	}
+	keyBindings := map[term.KeyComb][][]string{
+		{Ch: 'd'}:                    {{"keyd"}},
+		{Ch: 'z', Mod: term.ModCtrl}: {{"keyctrlz"}},
+	}
+
+	cases := []struct {
+		name           string
+		editorConsumes []term.KeyComb
+		keys           []term.KeyComb
+		gapBefore2nd   time.Duration
+		wantFired      []string
+		wantConsumed   []term.KeyComb
+	}{
+		{
+			name:      "bare prefix completes sequence",
+			keys:      []term.KeyComb{{Ch: 'd'}, {Ch: 'd'}},
+			wantFired: []string{"seqdd"},
+		},
+		{
+			name:         "bare prefix times out and re-issues standalone binding",
+			keys:         []term.KeyComb{{Ch: 'd'}},
+			gapBefore2nd: 0,
+			wantFired:    []string{"keyd"},
+		},
+		{
+			name:         "modifier prefix completes sequence after long gap",
+			keys:         []term.KeyComb{ctrlX, ctrlS},
+			gapBefore2nd: longGap,
+			wantFired:    []string{"seqctrls"},
+		},
+		{
+			name:      "modifier prefix completes sequence quickly",
+			keys:      []term.KeyComb{metaX, metaJ},
+			wantFired: []string{"seqmetaj"},
+		},
+		{
+			name:         "modifier prefix dropped when second key has its own binding",
+			keys:         []term.KeyComb{ctrlX, {Ch: 'z', Mod: term.ModCtrl}},
+			gapBefore2nd: longGap,
+			wantFired:    []string{"keyctrlz"},
+		},
+		{
+			name:         "modifier prefix dropped when nothing binds or consumes second key",
+			keys:         []term.KeyComb{ctrlX, {Ch: 'q'}},
+			gapBefore2nd: longGap,
+			wantFired:    nil,
+			wantConsumed: []term.KeyComb{ctrlX, {Ch: 'q'}},
+		},
+		{
+			name:           "modifier prefix dropped when editor consumes second key",
+			editorConsumes: []term.KeyComb{{Ch: 'k'}},
+			keys:           []term.KeyComb{ctrlX, {Ch: 'k'}},
+			gapBefore2nd:   longGap,
+			wantFired:      nil,
+			wantConsumed:   []term.KeyComb{ctrlX, {Ch: 'k'}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newExSequencerHarness(t, sequences, keyBindings, tc.editorConsumes, timeout)
+			for i, k := range tc.keys {
+				if i > 0 && tc.gapBefore2nd > 0 {
+					time.Sleep(tc.gapBefore2nd)
+				}
+				h.ex.Handle(term.Event{
+					Type: term.EventKey, Mod: k.Mod, Key: k.Key, Ch: k.Ch,
+				})
+			}
+			// Give any pending re-issue timer time to fire so bare-prefix
+			// timeouts settle before assertions.
+			assert.Eventually(t, func() bool {
+				return len(h.firedCommands()) >= len(tc.wantFired)
+			}, time.Second, 2*time.Millisecond,
+				"expected %v commands, got %v", tc.wantFired, h.firedCommands())
+			// Allow a late erroneous re-issue to surface before asserting
+			// exact equality (guards against a modifier prefix re-firing).
+			time.Sleep(timeout + reissuePadding + 20*time.Millisecond)
+			assert.Equal(t, tc.wantFired, nonEmpty(h.firedCommands()))
+			if tc.wantConsumed != nil {
+				assert.Equal(t, tc.wantConsumed, h.editorConsumed())
+			}
+		})
+	}
+}
+
+func nonEmpty(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
 func TestExTabIntegration(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{"",
@@ -2494,7 +2779,7 @@ func defCommandKeyBindings() (opts []text.Option) {
 // testPromptEditor returns the prompt editor used to satisfy ex.init's
 // required dependency in tests that build an *ex directly.
 func testPromptEditor() command.Editor {
-	return modelessPromptEditor{
+	return standardPromptEditor{
 		tabspaces:        4,
 		scheduleNextTick: func(fn func()) bool { fn(); return true },
 		clipboard:        clipboard.NewInMemory(),

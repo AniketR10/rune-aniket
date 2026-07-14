@@ -2479,13 +2479,25 @@ func (e *ex) handleEvent(ev term.Event) (
 		}
 	case thandler.SequencePartialMatch:
 		if e.cancelPartialReissue == nil {
-			// this is not a re-issue of a partial command, so set
-			// timer to re-issue if user doesn't complete sequence,
-			// and if timer expires
-			ctx := context.Background()
-			e.ctxPartialReissue, e.cancelPartialReissue = context.WithTimeout(ctx,
-				e.config.SequencerTimeout+reissuePadding)
+			// Record the pending prefix so the next key bypasses the
+			// editor-first Handle above (see the cancelPartialReissue guard)
+			// and reaches the sequencer to complete the sequence.
 			e.reissueEvent = ev
+			if keyComb.Mod != 0 {
+				// A modifier-bearing prefix (e.g. <ctrl-x>) is not ambiguous
+				// with plain typed input, so there is nothing to re-issue on
+				// a timeout: wait indefinitely for the second key. Use a
+				// plain cancelable context with no deadline so
+				// ctxPartialReissue.Err() stays nil and never re-issues.
+				e.ctxPartialReissue, e.cancelPartialReissue =
+					context.WithCancel(context.Background())
+				return
+			}
+			// A bare-character prefix (e.g. vi's `d`) also has a standalone
+			// meaning, so set a timer to re-issue it if the user does not
+			// complete the sequence before the timer expires.
+			e.ctxPartialReissue, e.cancelPartialReissue = context.WithTimeout(
+				context.Background(), e.config.SequencerTimeout+reissuePadding)
 			waitCtx := e.ctxPartialReissue
 			reissueEvent := e.reissueEvent
 			go debug.CapturePanicReport(func() {
@@ -2508,9 +2520,12 @@ func (e *ex) handleEvent(ev term.Event) (
 			err := e.ctxPartialReissue.Err()
 			e.cancelPartialReissue()
 			e.cleanPartialReissueState()
-			if err == nil {
-				// issue previous event right before this next one
-				// since we know now it's not a match.
+			// A bare-character prefix (e.g. vi's `d`) also has a standalone
+			// meaning, so when the second key does not complete a sequence
+			// re-dispatch the prefix right before this event. A
+			// modifier-bearing prefix (e.g. <ctrl-x>) has no standalone
+			// meaning and is simply dropped.
+			if err == nil && e.reissueEvent.KeyComb().Mod == 0 {
 				e.log(log.TraceLevel, "no sequence match: re-dispatching previous event %q",
 					e.reissueEvent.KeyComb())
 				_, _ = e.comp.Browser().Handle(e.reissueEvent)
