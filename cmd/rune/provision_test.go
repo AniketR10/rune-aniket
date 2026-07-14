@@ -149,9 +149,9 @@ func TestInstallRemotePackagesEmptyManifestEmitsNothing(t *testing.T) {
 // TestInstallRemotePackagesEmitsProgress asserts the JSON-Lines progress
 // stream. The release endpoint is pointed at an unreachable address so each
 // install fails offline, exercising the installing → failed sequence per
-// package followed by a final done line — without any network access. Installs
-// run concurrently, so per-package lines may interleave; the assertions are
-// order-independent except that the terminal done line must come last.
+// package followed by a final done line — without any network access. The
+// assertions are order-independent except that the terminal done line must
+// come last.
 func TestInstallRemotePackagesEmitsProgress(t *testing.T) {
 	setFlagForTest(t, flagWorkspaceServerInstall, "pkg-a@1.0.0,pkg-b@2.0.0")
 	setFlagForTest(t, flagDataPath, t.TempDir())
@@ -173,15 +173,13 @@ func TestInstallRemotePackagesEmitsProgress(t *testing.T) {
 	require.NoError(t, scanner.Err())
 
 	require.NotEmpty(t, got)
-	// The terminal done line must be emitted last, after every package's
-	// installs have joined.
+	// The terminal done line must be emitted last, after every package.
 	last := got[len(got)-1]
 	assert.Equal(t, workspacessh.ProvisionPhaseDone, last.Phase)
 	assert.Equal(t, 2, last.Total)
 
-	// Each package must contribute exactly one installing and one failed line
-	// (order-independent because installs run concurrently). Failed lines must
-	// carry the underlying error detail.
+	// Each package must contribute exactly one installing and one failed
+	// line. Failed lines must carry the underlying error detail.
 	type phaseKey struct {
 		pkg   string
 		phase string

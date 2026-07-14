@@ -1678,6 +1678,41 @@ func TestInstallPackageVersionConfigMissingUserConfig(t *testing.T) {
 	assert.Equal(t, filepath.Join(datadir, "pkg", "configpkg", "1", "go"), env["GOROOT"])
 }
 
+// TestProcessConfigSequentialDistinctPackages pins the fix for the first-open
+// bug where config.yaml was missing until a reload: provisioning installs each
+// package sequentially, and every package's env key must accumulate into the
+// same fresh user config rather than clobbering earlier merges.
+func TestProcessConfigSequentialDistinctPackages(t *testing.T) {
+	t.Parallel()
+
+	pkgs := idepkgtest.MakePackages()
+	versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "configpkg", Version: "1"}})
+	m, _, _, datadir := newTestManager(t, pkgs, versions)
+
+	configPath := filepath.Join(datadir, "config.yaml")
+	m.configPath = configPath
+
+	const pkgCount = 6
+	for i := range pkgCount {
+		dir := filepath.Join(datadir, "pkg", fmt.Sprintf("p%d", i), "1")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		cfgFile := pkgConfigFile(dir)
+		content := fmt.Sprintf("env:\n  KEY_%d: value_%d\n", i, i)
+		require.NoError(t, os.WriteFile(cfgFile, []byte(content), 0o644))
+		require.NoError(t, m.processConfig(
+			fmt.Sprintf("p%d", i), release.Version("1"), cfgFile))
+	}
+
+	cfg := readUserConfigMap(t, configPath)
+	env, ok := cfg["env"].(map[string]any)
+	require.True(t, ok, "no env merged at all: %#v", cfg)
+	for i := range pkgCount {
+		key := fmt.Sprintf("KEY_%d", i)
+		assert.Equalf(t, fmt.Sprintf("value_%d", i), fmt.Sprint(env[key]),
+			"sequential merge lost key %s; final env: %#v", key, env)
+	}
+}
+
 func TestPromptConfigChangeAllow(t *testing.T) {
 	t.Parallel()
 	var selected = -1
