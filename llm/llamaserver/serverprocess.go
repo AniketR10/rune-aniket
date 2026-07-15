@@ -26,7 +26,6 @@ package llamaserver
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -139,12 +138,21 @@ func (s *serverProcess) lastUsed() time.Time {
 
 func (s *serverProcess) markExited() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.exited = true
-	if !s.ready && s.readyErr == nil {
-		s.readyErr = errors.New("llamaserver: server exited before ready")
+	earlyExit := !s.ready && s.readyErr == nil
+	tail := append([]string(nil), s.stderrTail...)
+	s.mu.Unlock()
+
+	// A process that exits before ready is a load failure. Route it through
+	// fail() so the user sees the error immediately instead of waiting out
+	// the startup timeout while pollHealth probes a dead process.
+	if earlyExit {
+		s.fail(fmt.Errorf("llamaserver: %s", loadFailureMessage(s.model.name, tail)))
+		return
 	}
+	s.mu.Lock()
 	s.signalReadyLocked()
+	s.mu.Unlock()
 }
 
 // stop cancels the lifecycle context (killing the child) and stops the idle
@@ -243,19 +251,17 @@ func (s *serverProcess) start() {
 // fail records a readiness error and wakes waitReady.
 func (s *serverProcess) fail(err error) {
 	s.mu.Lock()
-	if s.readyErr == nil {
+	firstWriter := s.readyErr == nil
+	if firstWriter {
 		s.readyErr = err
 	}
 	id := s.progressID
-	tail := strings.Join(s.stderrTail, "\n")
 	s.signalReadyLocked()
 	s.mu.Unlock()
-	if id != "" {
-		msg := err.Error()
-		if tail != "" {
-			msg = fmt.Sprintf("%s\n%s", msg, tail)
-		}
-		_, _ = s.svc.notis.Notify(browserapi.LevelError, "%s", msg)
+	// Only the first writer notifies so a later pollHealth timeout can't
+	// double-report an already-surfaced early-exit failure.
+	if firstWriter && id != "" {
+		_, _ = s.svc.notis.Notify(browserapi.LevelError, "%s", err.Error())
 	}
 	s.cancel()
 }
@@ -336,6 +342,15 @@ func (s *serverProcess) pollHealth(host string, port int) {
 				s.markReady()
 				return
 			}
+			// If the process already exited, markExited has surfaced (or
+			// will surface) the load failure; stop probing a dead process
+			// rather than waiting out the startup timeout.
+			s.mu.Lock()
+			exited := s.exited
+			s.mu.Unlock()
+			if exited {
+				return
+			}
 			select {
 			case <-s.ctx.Done():
 				return
@@ -405,4 +420,48 @@ func parseLoadProgress(line string) (int, bool) {
 	pct = max(pct, 0)
 	pct = min(pct, 100)
 	return pct, true
+}
+
+// loadFailureMessage builds a concise, cause-first failure message for a
+// model that exited before becoming ready. It leads with the salient
+// llama.cpp error and appends the raw stderr tail below only when it adds
+// detail beyond that headline.
+func loadFailureMessage(name string, tail []string) string {
+	salient := summarizeLoadFailure(tail)
+	msg := fmt.Sprintf("failed to load model %s: %s", name, salient)
+	joined := strings.TrimSpace(strings.Join(tail, "\n"))
+	if joined != "" && joined != salient {
+		msg = fmt.Sprintf("%s\n%s", msg, joined)
+	}
+	return msg
+}
+
+// loadFailureMarkers are salient llama.cpp load-failure lines in priority
+// order: the earliest match becomes the failure headline.
+var loadFailureMarkers = []string{
+	"error loading model",
+	"missing tensor",
+	"unknown model architecture",
+	"failed to load model",
+	"error:",
+}
+
+// summarizeLoadFailure scans a stderr tail for the most specific llama.cpp
+// load-failure line and returns it as the headline. When no marker matches it
+// falls back to the last non-empty line, or a generic message for an empty
+// tail.
+func summarizeLoadFailure(tail []string) string {
+	for _, marker := range loadFailureMarkers {
+		for _, line := range tail {
+			if strings.Contains(strings.ToLower(line), marker) {
+				return strings.TrimSpace(line)
+			}
+		}
+	}
+	for i := len(tail) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(tail[i]); line != "" {
+			return line
+		}
+	}
+	return "server exited before ready"
 }

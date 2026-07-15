@@ -53,12 +53,14 @@ package llamaserver_test
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,8 +198,8 @@ func collectStream(
 ) (text string, tools []llmapi.ToolCall, done *llmapi.DoneData) {
 	t.Helper()
 	var (
-		sb       strings.Builder
-		numDone  int
+		sb      strings.Builder
+		numDone int
 	)
 	for {
 		ev, ok := it.Next(ctx)
@@ -276,6 +278,54 @@ func (nopNotifications) UpdateNotificationProgress(
 	string, string, int64, int64,
 ) error {
 	return nil
+}
+
+// e2eRecordingNotifications captures notification level+message so the e2e
+// load-failure test can assert on the surfaced error text.
+type e2eRecordingNotifications struct {
+	mu       sync.Mutex
+	notifies []e2eNotifyRecord
+}
+
+type e2eNotifyRecord struct {
+	level browserapi.NotificationLevel
+	msg   string
+}
+
+func (r *e2eRecordingNotifications) Notify(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.notifies = append(r.notifies, e2eNotifyRecord{
+		level: level, msg: fmt.Sprintf(msg, args...),
+	})
+	return "id", nil
+}
+
+func (r *e2eRecordingNotifications) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...any,
+) (string, error) {
+	return r.Notify(level, msg, args...)
+}
+
+func (r *e2eRecordingNotifications) UpdateNotificationProgress(
+	string, string, int64, int64,
+) error {
+	return nil
+}
+
+// errorMessages returns the formatted message of every error-level Notify.
+func (r *e2eRecordingNotifications) errorMessages() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, n := range r.notifies {
+		if n.level == browserapi.LevelError {
+			out = append(out, n.msg)
+		}
+	}
+	return out
 }
 
 // assertJSONObject fails unless s parses as a JSON object. A surrounding

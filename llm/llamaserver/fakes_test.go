@@ -25,6 +25,7 @@ package llamaserver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -54,6 +55,10 @@ type fakeExecutor struct {
 	failStart error
 	// emitLines are written to the command's stderr before serving.
 	emitLines []string
+	// exitBeforeReady, when set, makes the fake emit its stderr lines and
+	// then fire the process watcher without ever serving a healthy
+	// /health, simulating a model that crashes during load.
+	exitBeforeReady bool
 	// running tracks live servers so tests can assert teardown.
 	running int
 	nextPid workspaceapi.Pid
@@ -76,6 +81,7 @@ func (f *fakeExecutor) StartCommand(
 	pid := f.nextPid
 	delay := f.healthDelay
 	lines := append([]string(nil), f.emitLines...)
+	exitEarly := f.exitBeforeReady
 	f.running++
 	if f.watchers == nil {
 		f.watchers = make(map[workspaceapi.Pid]chan error)
@@ -84,6 +90,33 @@ func (f *fakeExecutor) StartCommand(
 		f.watchers[pid] = cmd.Watcher.WatchProcess()
 	}
 	f.mu.Unlock()
+
+	// Simulate a model that crashes during load: emit the stderr tail, then
+	// fire the process watcher without ever serving /health, so the pool's
+	// early-exit path is exercised (no bound HTTP server, no healthy probe).
+	if exitEarly {
+		if cmd.Stderr != nil {
+			for _, line := range lines {
+				_, _ = io.WriteString(cmd.Stderr, line+"\n")
+			}
+		}
+		f.mu.Lock()
+		f.running--
+		f.mu.Unlock()
+		if cmd.Watcher != nil {
+			go func() {
+				select {
+				case <-time.After(20 * time.Millisecond):
+					select {
+					case cmd.Watcher.WatchProcess() <- nil:
+					case <-ctx.Done():
+					}
+				case <-ctx.Done():
+				}
+			}()
+		}
+		return pid, nil
+	}
 
 	host := argValue(cmd.Args, "--host")
 	port := argValue(cmd.Args, "--port")
@@ -205,8 +238,8 @@ type notifyRecord struct {
 }
 
 type progressRecord struct {
-	id             string
-	message        string
+	id              string
+	message         string
 	progress, total int64
 }
 
@@ -216,7 +249,9 @@ func (r *recordingNotifications) Notify(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.nextID++
-	r.notifies = append(r.notifies, notifyRecord{level: level, msg: msg})
+	r.notifies = append(r.notifies, notifyRecord{
+		level: level, msg: fmt.Sprintf(msg, args...),
+	})
 	return "id", nil
 }
 
@@ -243,6 +278,20 @@ func (r *recordingNotifications) levels() []browserapi.NotificationLevel {
 	out := make([]browserapi.NotificationLevel, len(r.notifies))
 	for i, n := range r.notifies {
 		out[i] = n.level
+	}
+	return out
+}
+
+// errorMessages returns the formatted message of every error-level Notify, in
+// order, so tests can assert what failure the user saw.
+func (r *recordingNotifications) errorMessages() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, n := range r.notifies {
+		if n.level == browserapi.LevelError {
+			out = append(out, n.msg)
+		}
 	}
 	return out
 }

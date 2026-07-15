@@ -25,6 +25,8 @@ package llamaserver_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -294,4 +296,70 @@ func TestE2E_ResponseFormat_JSONObject(t *testing.T) {
 
 	text, _, _ := collectStream(t, ctx, it)
 	assertJSONObject(t, text)
+}
+
+// TestE2E_ModelLoadFailure_FastAndClear points the real llama-server at a
+// corrupt GGUF so the process starts and then exits early with a genuine
+// load error. It asserts we surface that failure fast (well under the
+// deliberately long startup timeout) and with a meaningful message, rather
+// than after a multi-minute health-poll timeout.
+func TestE2E_ModelLoadFailure_FastAndClear(t *testing.T) {
+	if !e2eEnabled() {
+		t.Skip("llamaserver e2e: set RUNE_LLAMASERVER_E2E=1 to run")
+	}
+	bin := e2eServerBin(t)
+
+	// A file with a valid GGUF magic followed by garbage: llama-server
+	// recognizes the format, begins loading, then fails.
+	corrupt := filepath.Join(t.TempDir(), "corrupt.gguf")
+	require.NoError(t, os.WriteFile(corrupt,
+		append([]byte("GGUF"), make([]byte, 256)...), 0o600))
+
+	// A long startup timeout proves we fail fast via early-exit, not by
+	// waiting out the deadline.
+	const startupTimeout = 2 * time.Minute
+	exec := &realExecutor{}
+	t.Cleanup(exec.wait)
+	notis := &e2eRecordingNotifications{}
+	svc := llamaserver.New(
+		llamaserver.Config{StartupTimeout: startupTimeout, IdleTimeout: time.Hour, MaxServers: 2},
+		exec, llamaserver.NewFixedLocator(bin), notis,
+	)
+	t.Cleanup(func() { _ = svc.Close() })
+
+	entry := llmapi.ModelEntry{
+		Name:          "corrupt-e2e",
+		Provider:      llamaserver.LLMProvider,
+		BaseURL:       corrupt,
+		ContextWindow: e2eContextWindow,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
+	defer cancel()
+
+	start := time.Now()
+	it, err := svc.CreateCompletion(ctx, entry, llmapi.Request{
+		Messages: []llmapi.Message{{Role: llmapi.RoleUser, Content: "hi"}},
+	})
+	if err == nil {
+		_, streamErr := drainText(ctx, it)
+		_ = it.Close()
+		err = streamErr
+	}
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "loading a corrupt GGUF must fail")
+	assert.Less(t, elapsed, 30*time.Second,
+		"early exit must fail fast, not wait out the %s startup timeout", startupTimeout)
+
+	require.Eventually(t, func() bool {
+		return len(notis.errorMessages()) >= 1
+	}, 5*time.Second, 20*time.Millisecond, "an error notification is surfaced")
+	msgs := notis.errorMessages()
+	require.NotEmpty(t, msgs)
+	lower := strings.ToLower(strings.Join(msgs, "\n"))
+	assert.Contains(t, lower, "failed to load model",
+		"failure must lead with a meaningful load-failure summary, got %q", msgs)
+	assert.NotContains(t, lower, "not ready after",
+		"failure must not be the generic startup-timeout message")
 }
