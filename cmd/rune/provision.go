@@ -127,10 +127,13 @@ type remoteInstaller interface {
 }
 
 // installOnePackage installs and activates a single manifest entry, emitting
-// progress. When the pinned version is not published for the remote's platform
-// (ErrVersionNotFound), it degrades to the latest available version so the
-// remote toolchain still comes up rather than failing on an arch-specific
-// version gap. Returns whether the package was installed.
+// progress. When the pinned version cannot be installed (e.g. it is not
+// published for the remote's platform, or the package/version 404s), it
+// degrades to the latest available version so the remote toolchain still comes
+// up rather than failing on an arch-specific version gap. A failed-install
+// warning is only surfaced when the latest version is also unavailable, so a
+// recoverable pinned-version gap never produces a spurious notification.
+// Returns whether the package was installed.
 func installOnePackage(
 	ctx context.Context, inst remoteInstaller, progress io.Writer,
 	e idepkg.ProvisionEntry, index, total int,
@@ -142,24 +145,31 @@ func installOnePackage(
 
 	version := release.Version(e.Version)
 	err := inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
-	if err != nil && errors.Is(err, idepkg.ErrVersionNotFound) {
-		// The exact local version may not be published for the remote's
-		// platform; fall back to the latest available version.
-		latest, lerr := inst.LatestVersion(ctx, e.ID)
-		if lerr != nil {
-			log.Warnf("provision: resolve latest %s (pinned %s missing): %v", e.ID, e.Version, lerr)
-		} else {
-			log.Warnf("provision: %s@%s not available for this platform; installing latest %s",
-				e.ID, e.Version, latest)
-			version = latest
-			err = inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
-		}
-	}
 	// A fully-installed package is an idempotent no-op: fall through to
 	// activation instead of reporting a failure, so re-provisioning never
 	// surfaces a spurious "already installed" warning.
 	if err != nil && errors.Is(err, idepkg.ErrAlreadyInstalled) {
 		err = nil
+	}
+	if err != nil {
+		// The pinned version may not be installable on the remote (a
+		// platform/arch gap, a 404 for the package or version, etc.). Rather
+		// than warn, transparently degrade to the latest available version so
+		// the remote toolchain still comes up. The pinned-version failure is
+		// only logged at debug level, so a recoverable gap never produces a
+		// user-facing warning.
+		if latest, lerr := inst.LatestVersion(ctx, e.ID); lerr != nil {
+			log.Warnf("provision: resolve latest %s (pinned %s failed: %v): %v",
+				e.ID, e.Version, err, lerr)
+		} else {
+			log.Debugf("provision: %s@%s not installable (%v); installing latest %s",
+				e.ID, e.Version, err, latest)
+			version = latest
+			err = inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
+			if err != nil && errors.Is(err, idepkg.ErrAlreadyInstalled) {
+				err = nil
+			}
+		}
 	}
 	if err != nil {
 		log.Warnf("provision: install %s@%s: %v", e.ID, version, err)

@@ -284,17 +284,49 @@ func TestInstallOnePackagePinnedSucceeds(t *testing.T) {
 	assert.Equal(t, []string{"v1.2.3"}, inst.used)
 }
 
-// TestInstallOnePackageFailsWhenNoFallback asserts that a non-version-not-found
-// error is not retried, and a failed progress line is emitted.
-func TestInstallOnePackageFailsWhenNoFallback(t *testing.T) {
+// TestInstallOnePackageFallsBackOnAnyError asserts that any pinned-version
+// install failure (not only ErrVersionNotFound) transparently degrades to the
+// latest available version, so a recoverable pinned-version gap never emits a
+// failed progress line (and therefore never a warning notification).
+func TestInstallOnePackageFallsBackOnAnyError(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		pinnedErr error
+	}{
+		{"version not found", fmt.Errorf("nope: %w", idepkg.ErrVersionNotFound)},
+		{"package not found", fmt.Errorf("nope: %w", idepkg.ErrPackageNotFound)},
+		{"generic error", errors.New("network blip")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inst := &fakeInstaller{
+				installErr: map[string]error{"v1.2.3": tc.pinnedErr, "v9.9.9": nil},
+				latest:     map[string]release.Version{"go": "v9.9.9"},
+			}
+			var sink strings.Builder
+			ok := installOnePackage(context.Background(), inst, &sink,
+				idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
+			require.True(t, ok, "fallback to latest must succeed")
+			assert.Equal(t, []string{"v1.2.3", "v9.9.9"}, inst.installed,
+				"must try pinned then latest")
+			assert.Equal(t, []string{"v9.9.9"}, inst.used)
+			assert.NotContains(t, sink.String(), "failed",
+				"a recoverable pinned-version gap must not emit a failed progress line")
+		})
+	}
+}
+
+// TestInstallOnePackageFailsWhenLatestAlsoFails asserts that a failed progress
+// line is only emitted when the latest version is unavailable too.
+func TestInstallOnePackageFailsWhenLatestAlsoFails(t *testing.T) {
 	inst := &fakeInstaller{
-		installErr: map[string]error{"v1.2.3": errors.New("network down")},
+		installErr: map[string]error{"v1.2.3": errors.New("network down"), "v9.9.9": errors.New("still down")},
+		latest:     map[string]release.Version{"go": "v9.9.9"},
 	}
 	var sink strings.Builder
 	ok := installOnePackage(context.Background(), inst, &sink,
 		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 1)
 	require.False(t, ok)
-	assert.Equal(t, []string{"v1.2.3"}, inst.installed, "must not retry on a non-404 error")
+	assert.Equal(t, []string{"v1.2.3", "v9.9.9"}, inst.installed)
 	assert.Contains(t, sink.String(), "failed")
 }
 
