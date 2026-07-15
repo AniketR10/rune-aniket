@@ -36,6 +36,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -50,8 +51,35 @@ import (
 // to the underlying handler. The interpreter's working
 // directory is seeded from cwd; passing the zero URI leaves
 // it at the process working directory.
-func New(underlying repl.CommandHandler, cwd workspaceapi.URI) repl.CommandHandler {
-	return &commandHandler{underlying: underlying, cwd: cwd}
+//
+// By default external commands (those the underlying handler does not
+// resolve) run via mvdan/sh's default local exec handler. Pass
+// WithExecutor to instead dispatch them through a workspace Executor so
+// remote workspaces (ssh, in-memory) run them on the right host.
+func New(
+	underlying repl.CommandHandler, cwd workspaceapi.URI, opts ...Option,
+) repl.CommandHandler {
+	h := &commandHandler{underlying: underlying, cwd: cwd}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// Option configures a shell command handler created by New.
+type Option func(*commandHandler)
+
+// WithExecutor routes external commands through the workspace Executor
+// so remote workspaces run them on the right host. The executor then
+// owns the working directory, so the interpreter's local Dir is left
+// unset to avoid a local os.Stat on a path that only exists remotely.
+//
+// exec must be non-nil; a nil executor is a programming error.
+func WithExecutor(exec schemeapi.Executor) Option {
+	if exec == nil {
+		panic("sh.WithExecutor: nil executor")
+	}
+	return func(h *commandHandler) { h.exec = exec }
 }
 
 const pipeWidth = 200
@@ -59,6 +87,7 @@ const pipeWidth = 200
 type commandHandler struct {
 	underlying repl.CommandHandler
 	cwd        workspaceapi.URI
+	exec       schemeapi.Executor
 }
 
 // HandleCommand parses the command line as shell syntax
@@ -91,8 +120,14 @@ func (h *commandHandler) HandleCommand(
 		}),
 		interp.Interactive(true),
 	}
-	if dir := h.cwd.Path(); dir != "" {
-		opts = append(opts, interp.Dir(dir))
+	// With an executor the remote host owns the working directory, so
+	// interp.Dir must not run a local os.Stat on a path that only
+	// exists on the remote. Only seed the local Dir when there is no
+	// executor.
+	if h.exec == nil {
+		if dir := h.cwd.Path(); dir != "" {
+			opts = append(opts, interp.Dir(dir))
+		}
 	}
 	runner, err := interp.New(opts...)
 	if err != nil {
@@ -211,6 +246,9 @@ func (h *commandHandler) execMiddleware(
 			ctx, cmd, pw,
 		)
 		if errors.Is(err, repl.ErrNotFound) {
+			if h.exec != nil {
+				return h.workspaceExec(ctx, args)
+			}
 			return next(ctx, args)
 		}
 		if err != nil {
@@ -244,6 +282,40 @@ func (h *commandHandler) execMiddleware(
 		}
 		if err := iter.Err(); err != nil {
 			_, _ = fmt.Fprintln(hc.Stderr, err.Error())
+			return interp.ExitStatus(1)
+		}
+		return nil
+	}
+}
+
+// workspaceExec runs an external command through the workspace
+// Executor so remote workspaces execute it on the right host. It
+// blocks until the process exits (per the invariant that an
+// interp.ExecHandlerFunc runs synchronously so stdout is flushed
+// before $(…) capture reads it).
+func (h *commandHandler) workspaceExec(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	hc := interp.HandlerCtx(ctx)
+	watchCh := make(chan error, 1)
+	cmd := workspaceapi.Cmd{
+		Path:    args[0],
+		Dir:     h.cwd.Path(),
+		Args:    args[1:],
+		Stdin:   hc.Stdin,
+		Stdout:  hc.Stdout,
+		Stderr:  hc.Stderr,
+		Watcher: workspaceapi.ChanProcessWatcher(watchCh),
+	}
+	if _, startErr := h.exec.StartCommand(ctx, cmd); startErr != nil {
+		return interp.ExitStatus(127)
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case watchErr := <-watchCh:
+		if watchErr != nil {
 			return interp.ExitStatus(1)
 		}
 		return nil

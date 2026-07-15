@@ -26,6 +26,7 @@ package ideshell
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -51,6 +52,11 @@ type Config struct {
 	// Without it the interpreter inherits the process working
 	// directory, which under a macOS .app launch is the bundle.
 	Workspace workspaceapi.URI
+	// Executor dispatches external (non-builtin) commands through the
+	// workspace so remote workspaces (ssh, in-memory) run them on the
+	// right host. When nil, external commands run via mvdan/sh's
+	// default local exec handler.
+	Executor schemeapi.Executor
 	// Modal reports whether the editor backing the input line is
 	// modal (vi). Only when true does ModalStartInsert take effect; a
 	// modeless editor has no normal mode to switch out of.

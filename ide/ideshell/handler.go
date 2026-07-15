@@ -198,7 +198,11 @@ func New(
 			r.SetHelpFallback(hp)
 		}
 	default:
-		underlying = sh.New(r, cfg.Workspace)
+		var shOpts []sh.Option
+		if cfg.Executor != nil {
+			shOpts = append(shOpts, sh.WithExecutor(cfg.Executor))
+		}
+		underlying = sh.New(r, cfg.Workspace, shOpts...)
 	}
 	shim := &completionShim{underlying: underlying}
 	inner := repl.New(shim, scheduleNextTick, interrupter, opts...)

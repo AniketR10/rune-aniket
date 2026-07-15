@@ -30,11 +30,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
@@ -744,3 +746,98 @@ func (m *markerResponsive) Height(int) int         { return 1 }
 func (m *markerResponsive) Resize(_, _ int)        {}
 func (m *markerResponsive) Draw(term.Writer)       {}
 func (m *markerResponsive) Dimensions() (int, int) { return 0, 0 }
+
+// stubExecutor records StartCommand invocations and signals the
+// command as finished via the Cmd.Watcher so workspaceExec unblocks.
+type stubExecutor struct {
+	mu       sync.Mutex
+	commands []workspaceapi.Cmd
+	exitErr  error
+}
+
+var _ schemeapi.Executor = (*stubExecutor)(nil)
+
+func (s *stubExecutor) StartCommand(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	s.mu.Lock()
+	s.commands = append(s.commands, cmd)
+	s.mu.Unlock()
+	if cmd.Watcher != nil {
+		cmd.Watcher.WatchProcess() <- s.exitErr
+	}
+	return 1, nil
+}
+
+func (s *stubExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (s *stubExecutor) Close() error                                  { return nil }
+
+// TestExternalCommandRoutedThroughExecutor verifies that when an
+// Executor is supplied, an external command is dispatched through it
+// (running on the remote host) and that no local os.Stat on the
+// workspace path is attempted — the reported crash for SSH workspaces.
+func TestExternalCommandRoutedThroughExecutor(t *testing.T) {
+	// A path that does not exist locally, mimicking a remote (ssh)
+	// workspace whose directory only exists on the remote host. With
+	// the pre-fix local interp.Dir the constructor would fail with
+	// "could not stat".
+	uri, err := workspaceapi.CurrentUserHostURI("/nonexistent/remote/workspace")
+	require.NoError(t, err)
+
+	exec := &stubExecutor{}
+	mock := &mockHandler{
+		handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
+			iterator.Iterator[component.Responsive], error,
+		) {
+			return nil, repl.ErrNotFound
+		},
+	}
+	h := New(mock, uri, WithExecutor(exec))
+
+	iter, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: "ls",
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	_, iterErr := collectOutput(t, iter)
+	require.NoError(t, iterErr)
+
+	exec.mu.Lock()
+	defer exec.mu.Unlock()
+	require.Len(t, exec.commands, 1)
+	assert.Equal(t, "ls", exec.commands[0].Path)
+	assert.Equal(t, "/nonexistent/remote/workspace", exec.commands[0].Dir)
+}
+
+// TestExternalCommandFallsBackToLocalWithoutExecutor guards the
+// executor-less path: without WithExecutor, external commands keep the
+// previous behavior of running via mvdan/sh's local exec handler.
+func TestExternalCommandFallsBackToLocalWithoutExecutor(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	mock := &mockHandler{
+		handleFn: func(_ context.Context, _ repl.Command, _ repl.ProgressWriter) (
+			iterator.Iterator[component.Responsive], error,
+		) {
+			return nil, repl.ErrNotFound
+		},
+	}
+	h := New(mock, workspaceapi.URI{})
+
+	iter, err := h.HandleCommand(context.Background(), repl.Command{
+		Name: "pwd",
+	}, repl.NopProgressWriter())
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+
+	out, iterErr := collectOutput(t, iter)
+	require.NoError(t, iterErr)
+	require.Len(t, out, 1)
+	wantDir, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	gotDir, err := filepath.EvalSymlinks(strings.TrimSpace(out[0]))
+	require.NoError(t, err)
+	assert.Equal(t, wantDir, gotDir)
+}

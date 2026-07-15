@@ -2073,6 +2073,7 @@ func (e *ex) consolenewtab(_ context.Context, args ...string) error {
 			HistoryDocumentID: shellHistoryDocumentID,
 			MaxHistory:        e.config.ShellMaxHistory,
 			Workspace:         workspaceURI,
+			Executor:          e.executor,
 			Modal:             e.consoleCfg.modal,
 			ModalStartInsert:  e.consoleCfg.modalStartInsert,
 			Prompt:            e.consoleCfg.prompt,
