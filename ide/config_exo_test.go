@@ -28,8 +28,66 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"unstable.build/go-tui/handler/command"
 )
+
+// TestPkgEditorMode asserts the exported helper the remote provisioning server
+// uses to resolve RUNE_EDITOR_MODE from a config.Config applies the same
+// normalization the editor uses: exo resolves to its fallback, modeless maps to
+// standard, and a missing/unset editor.mode defaults to modal.
+func TestPkgEditorMode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  config.Config
+		want string
+	}{
+		{"nil config defaults to modal", nil, "modal"},
+		{"empty config defaults to modal", config.MapConfig(map[string]any{}), "modal"},
+		{
+			"missing editor.mode defaults to modal",
+			config.MapConfig(map[string]any{"editor": map[string]any{}}),
+			"modal",
+		},
+		{
+			"modal passes through",
+			config.MapConfig(map[string]any{"editor": map[string]any{"mode": "modal"}}),
+			"modal",
+		},
+		{
+			"standard passes through",
+			config.MapConfig(map[string]any{"editor": map[string]any{"mode": "standard"}}),
+			"standard",
+		},
+		{
+			"modeless maps to standard",
+			config.MapConfig(map[string]any{"editor": map[string]any{"mode": "modeless"}}),
+			"standard",
+		},
+		{
+			"emacs passes through",
+			config.MapConfig(map[string]any{"editor": map[string]any{"mode": "emacs"}}),
+			"emacs",
+		},
+		{
+			"exo without fallback resolves to standard",
+			config.MapConfig(map[string]any{"editor": map[string]any{"mode": "exo"}}),
+			"standard",
+		},
+		{
+			"exo with modal fallback resolves to modal",
+			config.MapConfig(map[string]any{"editor": map[string]any{
+				"mode": "exo",
+				"exo":  map[string]any{"fallback": "modal"},
+			}}),
+			"modal",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, PkgEditorMode(tc.cfg))
+		})
+	}
+}
 
 // TestNewPromptEditorExo asserts that the in-memory prompt editor, which
 // exo cannot host, follows the configured exo.fallback rather than

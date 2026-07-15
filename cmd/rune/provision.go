@@ -100,9 +100,16 @@ func installRemotePackagesTo(scheme schemeapi.Scheme, progress io.Writer) {
 		return tree
 	}
 
+	// Resolve the user's editor mode before installing so package config.star
+	// scripts that read RUNE_EDITOR_MODE (e.g. mode-aware key bindings) decode
+	// instead of failing with "undefined: RUNE_EDITOR_MODE". The mode is a user
+	// setting independent of any package, so it is safe to read here, before the
+	// installs that merge package gui.env into the config.
+	editorMode := resolveRemoteEditorMode()
+
 	mgr, storage := idepkg.NewProvisioningManager(
 		newRuneStorage(*flagDataPath), releaseManager, scheme,
-		*flagDataPath, *flagConfigPath, "", configBase)
+		*flagDataPath, *flagConfigPath, editorMode, configBase)
 	defer func() { _ = storage.Close() }()
 
 	ctx := context.Background()
@@ -293,4 +300,20 @@ func loadRemoteConfigAndApplyEnv(
 		log.Warnf("provision: set ~/.rune/bin on PATH: %v", err)
 	}
 	return rootCfg
+}
+
+// resolveRemoteEditorMode resolves the user's editor mode from the remote
+// ~/.rune config so it can be exposed to package config.star scripts as
+// RUNE_EDITOR_MODE during install. It reads only the base config, not the
+// workspace-root overlay: editor.mode is a user/home setting and reading it
+// here (before installs merge package gui.env) avoids a second overlay fetch
+// over SSH, which loadRemoteConfigAndApplyEnv already performs post-install. On
+// any load error it warns and returns the modal default (via ide.PkgEditorMode),
+// so the mode is always concrete and provisioning is never aborted.
+func resolveRemoteEditorMode() string {
+	cfg, err := ide.Config(*flagConfigPath, runeDefaultConfig())
+	if err != nil {
+		log.Warnf("provision: resolve editor mode: %v", err)
+	}
+	return ide.PkgEditorMode(cfg)
 }

@@ -171,6 +171,27 @@ func DefaultConfigTree(def DefaultConfig) (map[string]any, error) {
 	return decodeDefaultConfig(def)
 }
 
+// PkgEditorMode resolves the editor mode exposed to package config.star scripts
+// (the RUNE_EDITOR_MODE predeclared global) from cfg, applying the same
+// normalization the running editor uses: exo resolves to its configured
+// fallback, the deprecated "modeless" maps to "standard", and a missing or
+// unreadable editor.mode defaults to "modal". A nil cfg yields "modal".
+//
+// The remote `rune -x` provisioning server has no editor UI, so it calls this
+// to thread the user's mode into idepkg.NewProvisioningManager; without it, a
+// package's config.star that reads RUNE_EDITOR_MODE fails to decode with
+// "undefined: RUNE_EDITOR_MODE".
+func PkgEditorMode(cfg config.Config) string {
+	var raw map[string]any
+	if cfg != nil {
+		if editor, err := cfg.GetMap("editor"); err == nil {
+			raw = map[string]any{"editor": editor}
+		}
+	}
+	c := ideConfig{cfg: raw, errors: map[string]error{}}
+	return c.pkgEditorMode()
+}
+
 // Interrupt satisfies term.Interrupter
 func (i *IDE) Interrupt(ctx context.Context) error {
 	return i.workspaceHandler.Interrupt(ctx)

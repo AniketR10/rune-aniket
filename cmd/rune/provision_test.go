@@ -200,6 +200,40 @@ func TestInstallRemotePackagesEmitsProgress(t *testing.T) {
 	}
 }
 
+// TestResolveRemoteEditorMode asserts the remote provisioning server resolves
+// the user's editor mode from its ~/.rune config so RUNE_EDITOR_MODE is
+// predeclared for package config.star scripts. exo resolves to its fallback,
+// and a missing config falls back to the modal default rather than an empty
+// (undefined) mode.
+func TestResolveRemoteEditorMode(t *testing.T) {
+	t.Run("resolves exo to configured fallback", func(t *testing.T) {
+		dataDir := t.TempDir()
+		configPath := filepath.Join(dataDir, "config.yaml")
+		require.NoError(t, os.WriteFile(configPath, []byte(
+			"editor:\n  mode: exo\n  exo:\n    command: vim {file}\n"+
+				"    goto: \"<esc>:{line}<enter>\"\n    fallback: modal\n"), 0o644))
+		setFlagForTest(t, flagConfigPath, configPath)
+
+		assert.Equal(t, "modal", resolveRemoteEditorMode())
+	})
+
+	t.Run("missing config defaults to modal", func(t *testing.T) {
+		setFlagForTest(t, flagConfigPath, filepath.Join(t.TempDir(), "config.yaml"))
+
+		assert.Equal(t, "modal", resolveRemoteEditorMode())
+	})
+
+	t.Run("resolves standard mode", func(t *testing.T) {
+		dataDir := t.TempDir()
+		configPath := filepath.Join(dataDir, "config.yaml")
+		require.NoError(t, os.WriteFile(configPath,
+			[]byte("editor:\n  mode: standard\n"), 0o644))
+		setFlagForTest(t, flagConfigPath, configPath)
+
+		assert.Equal(t, "standard", resolveRemoteEditorMode())
+	})
+}
+
 // fakeInstaller stands in for the provisioning manager so the version-fallback
 // logic can be tested without network or storage.
 type fakeInstaller struct {
