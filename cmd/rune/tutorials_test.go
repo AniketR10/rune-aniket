@@ -65,7 +65,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "31", tut.Version())
+	assert.Equal(t, "32", tut.Version())
 }
 
 // TestBasicsTutorialParsesModalMode asserts the embedded basics
@@ -92,7 +92,7 @@ func TestBasicsTutorialParsesModalMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "31", tut.Version())
+	assert.Equal(t, "32", tut.Version())
 }
 
 // TestEmbeddedTutorialOptionsRegistersBasics asserts that the embedded
@@ -106,7 +106,8 @@ func TestEmbeddedTutorialOptionsRegistersBasics(t *testing.T) {
 
 // TestBasicsTutorialParsesEmacsMode asserts the embedded basics tutorial
 // also parses under the emacs editor mode, exercising the emacs branch of
-// the direction-phrasing logic (home-row <meta> focus, arrow-key completer).
+// the direction-phrasing logic (home-row <meta> focus, GNU-Emacs buffer
+// motion keys, arrow-key completer).
 func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	t.Parallel()
 
@@ -128,5 +129,5 @@ func TestBasicsTutorialParsesEmacsMode(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tut)
-	assert.Equal(t, "31", tut.Version())
+	assert.Equal(t, "32", tut.Version())
 }

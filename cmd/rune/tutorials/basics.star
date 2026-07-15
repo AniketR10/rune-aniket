@@ -16,15 +16,24 @@
 ck = command_key()
 mode = editor_mode()
 
-# Direction keys differ by editor mode: modal points with the home
-# row, the standard editor points with the arrow keys. The layout copy adapts to
+# Direction keys differ by editor mode. The <meta> window/workspace layer
+# follows the preset: modal and emacs both point with the home row, the
+# standard editor points with the arrow keys, so focus_example adapts to
 # whichever the user is running.
-# The emacs preset keeps Rune's window/workspace layer on <meta> with the
-# GNU-Emacs-style home row, so it shares modal's direction phrasing.
-if mode == "modal" or mode == "emacs":
+#
+# dir_phrase is different: it describes moving the cursor inside a buffer
+# (the file explorer), which each editor mode owns directly rather than
+# through a <meta> command. Modal moves with vim's home row `h j k l`,
+# emacs moves with the GNU-Emacs motion keys `<ctrl-p>` / `<ctrl-n>`, and
+# the standard editor moves with the arrow keys.
+if mode == "modal":
     dir_phrase = "the home row, `h` `j` `k` `l`"
     focus_example = "`<meta-h>`"
-    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`" if mode == "modal" else "the arrow keys `<up>` / `<down>`"
+    completer_pick_phrase = "`<ctrl-j>` / `<ctrl-k>`"
+elif mode == "emacs":
+    dir_phrase = "the motion keys `<ctrl-p>` / `<ctrl-n>` or the arrow keys"
+    focus_example = "`<meta-h>`"
+    completer_pick_phrase = "the arrow keys `<up>` / `<down>`"
 else:
     dir_phrase = "the arrow keys"
     focus_example = "`<meta-left>`"
@@ -815,4 +824,4 @@ def run():
     teach_help()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "31", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "32", entry = run)
