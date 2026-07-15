@@ -582,7 +582,11 @@ func TestInitialScanServesFromIndex(t *testing.T) {
 	assert.Zero(t, e.fake.totalListCalls())
 }
 
-func TestMissPassesThroughToBacking(t *testing.T) {
+// TestMissAfterScanReturnsNotFound asserts that once a full scan has
+// populated the index, a symbol with no database entry resolves to no
+// matches without falling back to the backing parser: the index is
+// authoritative, so true negatives are answered locally.
+func TestMissAfterScanReturnsNotFound(t *testing.T) {
 	e := newEnv(t)
 	uri := e.writeFile(t, "a.go")
 	e.fake.setGoFile(uri, goFile{pkg: "mypkg", defs: []string{"Widget"}})
@@ -591,9 +595,33 @@ func TestMissPassesThroughToBacking(t *testing.T) {
 	require.NoError(t, p.Wait(context.Background()))
 
 	matches := resolve(t, p, "other.Sym")
+	assert.Empty(t, matches)
+	assert.Zero(t, e.fake.totalResolveCalls())
+}
+
+// TestMissBeforeScanPassesThroughToBacking asserts that until the first
+// full scan completes the index is incomplete, so a miss falls back to
+// the backing parser rather than reporting a false negative.
+func TestMissBeforeScanPassesThroughToBacking(t *testing.T) {
+	e := newEnv(t)
+	uri := e.writeFile(t, "a.go")
+	e.fake.setGoFile(uri, goFile{pkg: "mypkg", defs: []string{"Widget"}})
+	e.fake.resolveMatches = []syntaxapi.Match{{URI: "backing", Display: "other.Sym"}}
+
+	// Gate the file so the initial scan blocks and never marks the
+	// index as authoritative while the miss is resolved.
+	gate := newQueryGate()
+	e.fake.setGate(uri, gate)
+	p := e.start(t)
+	<-gate.reached
+
+	matches := resolve(t, p, "other.Sym")
 	require.Len(t, matches, 1)
 	assert.Equal(t, "backing", matches[0].URI)
 	assert.Equal(t, 1, e.fake.totalResolveCalls())
+
+	close(gate.release)
+	require.NoError(t, p.Wait(context.Background()))
 }
 
 func TestResolveNoDot(t *testing.T) {
@@ -716,10 +744,10 @@ func TestFlushReindexesFile(t *testing.T) {
 	require.Len(t, matches, 1)
 	assert.Equal(t, uri.String(), matches[0].URI)
 
-	// removed symbols fall back to the backing parser
+	// removed symbols read as an authoritative miss, not a fallback
 	before := e.fake.totalResolveCalls()
-	resolve(t, p, "iterator.Iterator")
-	assert.Equal(t, before+1, e.fake.totalResolveCalls())
+	assert.Empty(t, resolve(t, p, "iterator.Iterator"))
+	assert.Equal(t, before, e.fake.totalResolveCalls())
 	assert.Equal(t, []string{"mypkg.Gadget"}, listReferenced(t, p))
 }
 
@@ -740,8 +768,8 @@ func TestRemoveDropsContributions(t *testing.T) {
 	require.NoError(t, p.Wait(context.Background()))
 
 	before := e.fake.totalResolveCalls()
-	resolve(t, p, "iterator.Iterator")
-	assert.Equal(t, before+1, e.fake.totalResolveCalls())
+	assert.Empty(t, resolve(t, p, "iterator.Iterator"))
+	assert.Equal(t, before, e.fake.totalResolveCalls())
 	assert.Empty(t, listReferenced(t, p))
 }
 
@@ -809,9 +837,9 @@ func TestRemovalTombstonesSymbolDoc(t *testing.T) {
 	assert.Empty(t, doc.Locs)
 
 	before := e.fake.totalResolveCalls()
-	resolve(t, p, "iterator.Iterator")
-	assert.Equal(t, before+1, e.fake.totalResolveCalls(),
-		"a tombstone must read as a miss")
+	assert.Empty(t, resolve(t, p, "iterator.Iterator"),
+		"a tombstone must read as an authoritative miss")
+	assert.Equal(t, before, e.fake.totalResolveCalls())
 	assert.Empty(t, listReferenced(t, p), "the names marker must be gone")
 
 	// The returning file resurrects the tombstone in place.

@@ -321,31 +321,38 @@ func (p *Parser) Highlight(
 }
 
 // ResolveSymbol serves a symbol lookup from the index, passing through
-// to the backing parser only when the symbol has no database entry.
-// Indexed results may be stale while a rebuild is in flight.
+// to the backing parser only until the first full scan completes. Once
+// the index is authoritative a miss returns no matches instead of
+// falling back, so true negatives resolve without invoking the backing
+// parser. Indexed results may be stale while a rebuild is in flight.
 func (p *Parser) ResolveSymbol(
 	ctx context.Context, name string, progress syntaxapi.Progress,
 ) (iterator.Iterator[syntaxapi.Match], error) {
 	if !strings.Contains(name, ".") {
 		return nil, syntaxapi.ErrNoDot
 	}
-	matches, ok := p.resolveFromIndex(ctx, name, progress)
-	if !ok {
-		return p.backing.ResolveSymbol(ctx, name, progress)
+	matches, indexable, found := p.resolveFromIndex(ctx, name, progress)
+	if found {
+		return iterator.FromSlice(matches), nil
 	}
-	return iterator.FromSlice(matches), nil
+	// A miss is authoritative only once a full scan has populated the
+	// index; until then the symbol may simply not be indexed yet.
+	if indexable && p.hasScannedEver() {
+		return iterator.Empty[syntaxapi.Match](), nil
+	}
+	return p.backing.ResolveSymbol(ctx, name, progress)
 }
 
 func (p *Parser) resolveFromIndex(
 	ctx context.Context, name string, progress syntaxapi.Progress,
-) ([]syntaxapi.Match, bool) {
+) (matches []syntaxapi.Match, indexable, found bool) {
 	parts := strings.Split(name, ".")
 	if len(parts) < 2 || len(parts) > 3 {
-		return nil, false
+		return nil, false, false
 	}
 	var doc symbolDoc
 	if err := p.symbols.Get(ctx, name, &doc); err != nil || len(doc.Locs) == 0 {
-		return nil, false
+		return nil, true, false
 	}
 	// Deterministic file order: locs accumulate in indexing order,
 	// which varies across scans.
@@ -353,22 +360,22 @@ func (p *Parser) resolveFromIndex(
 		return doc.Locs[i].URI < doc.Locs[j].URI
 	})
 	for _, spec := range symbolresolve.AllSpecs() {
-		matches := matchesForSpec(spec, doc.Locs, len(parts) == 3, name)
-		if len(matches) == 0 {
+		specMatches := matchesForSpec(spec, doc.Locs, len(parts) == 3, name)
+		if len(specMatches) == 0 {
 			continue
 		}
 		if progress != nil {
-			progress.Report("Resolved from index", len(matches), 1, 1)
+			progress.Report("Resolved from index", len(specMatches), 1, 1)
 		}
-		if len(matches) > 1 && len(parts) == 2 && spec.ImportPathQuery != "" {
-			matches = p.dedupByImport(ctx, matches, parts[0])
+		if len(specMatches) > 1 && len(parts) == 2 && spec.ImportPathQuery != "" {
+			specMatches = p.dedupByImport(ctx, specMatches, parts[0])
 		}
-		if len(matches) > 1 {
-			disambiguate(spec, matches, name)
+		if len(specMatches) > 1 {
+			disambiguate(spec, specMatches, name)
 		}
-		return matches, true
+		return specMatches, true, true
 	}
-	return nil, false
+	return nil, true, false
 }
 
 func matchesForSpec(
