@@ -810,13 +810,16 @@ func TestStandardPresetUnbindsStaleModalChords(t *testing.T) {
 // TestEmacsPresetKeepsCommandsOffEditorChords pins that the emacs preset
 // opens the command prompt with M-x (on <alt>, authentic Emacs Meta) and
 // homes host commands on the GNU Emacs C-x prefix plus the <meta> (Cmd)
-// window/workspace layer. The emacs editor owns the single-modifier control
-// and alt chords (motion, kill, yank, mark, folds, M-x), so any host command
-// sharing one of those would be shadowed and unreachable — every base <alt>
-// command binding is therefore explicitly unbound. <meta> is free of editor
-// bindings, so the IDE window/workspace layer lives there. C-x is safe as a
-// prefix because the editor ignores a bare <c-x>, and the second key of a
-// two-key sequence bypasses the editor entirely.
+// window/workspace/tab layer. The emacs editor owns the single-modifier
+// control and alt chords (motion, kill, yank, mark, folds, M-x), so any host
+// command sharing one of those would be shadowed and unreachable — every base
+// <alt> command binding is therefore explicitly unbound. <meta> is free of
+// editor bindings, so the IDE window/workspace/tab layer lives there:
+// window/tab management is not homed on C-x because a terminal often
+// intercepts <c-x> before it reaches Rune. C-x is safe for the remaining
+// file/session/LSP/search/mark/history commands because the editor ignores a
+// bare <c-x>, and the second key of a two-key sequence bypasses the editor
+// entirely.
 func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 	runeStar := readRuneStar(t)
 
@@ -848,17 +851,6 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<c-x>s":         "writeall",
 		"<c-x><c-c>":     "quit",
 		"<c-x><c-f>":     "searchfile",
-		"<c-x>2":         "windowdefaultsplit v",
-		"<c-x>3":         "windowdefaultsplit h",
-		"<c-x>0":         "windowclose",
-		"<c-x>1":         "windowtogglemaximize",
-		"<c-x><left>":    "windowfocus left",
-		"<c-x><c-right>": "tabnext",
-		"<c-x><c-left>":  "tabprevious",
-		"<c-x>k":         "tabclose",
-		"<c-x><s-left>":  "windowmove left",
-		"<c-x>,":         "tabmove left",
-		"<c-x>.":         "tabmove right",
 		"<c-x>[":         "cursorhistory prev",
 		"<c-x>]":         "cursorhistory next",
 		"<c-x><c-x>":     "exchangepointandmark",
@@ -898,6 +890,11 @@ func TestEmacsPresetKeepsCommandsOffEditorChords(t *testing.T) {
 		"<m-1>":     "workspacefocus 1",
 		"<s-m-1>":   "workspacemove 1",
 		"<m-enter>": "terminalneworsplit",
+		"<m-]>":     "tabnext",
+		"<m-[>":     "tabprevious",
+		"<s-m-w>":   "tabclose",
+		"<s-m-]>":   "tabmove right",
+		"<s-m-[>":   "tabmove left",
 	}
 	for key, wantCmd := range wantLive {
 		seq := mustParseBindingKey(t, key)

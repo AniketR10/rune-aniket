@@ -18,28 +18,24 @@ command:
     "<c-x>s": writeall             # save-some-buffers
     "<c-x><c-c>": quit             # save-buffers-kill-terminal
     "<c-x><c-f>": searchfile       # find-file
-    # Windows (C-x window family)
-    "<c-x>2": "windowdefaultsplit v"   # split-window-below
-    "<c-x>3": "windowdefaultsplit h"   # split-window-right
-    "<c-x>0": windowclose              # delete-window
-    "<c-x>1": windowtogglemaximize     # delete-other-windows
-    "<c-x><left>": "windowfocus left"
-    "<c-x><right>": "windowfocus right"
-    "<c-x><up>": "windowfocus up"
-    "<c-x><down>": "windowfocus down"
-    # Buffer-style tab navigation (next-buffer / previous-buffer)
-    "<c-x><c-right>": tabnext
-    "<c-x><c-left>": tabprevious
-    "<c-x>k": tabclose                 # kill-buffer
-    # Rune-only window/tab/history commands also hang off the C-x prefix.
-    # C-c is unavailable as a prefix: the emacs editor claims a bare <c-c>
-    # for copy, so it never reaches the command sequencer.
-    "<c-x><s-left>": "windowmove left"
-    "<c-x><s-right>": "windowmove right"
-    "<c-x><s-up>": "windowmove up"
-    "<c-x><s-down>": "windowmove down"
-    "<c-x>,": "tabmove left"
-    "<c-x>.": "tabmove right"
+    # Window and tab management live on the <meta> (Cmd) layer inherited
+    # from rune.star, not on C-x: in a terminal <c-x> is frequently
+    # intercepted by the terminal emulator / OS, so C-x-prefixed window/tab
+    # bindings never reach Rune. <meta> is unused by real Emacs and has no
+    # editor conflict, so window management uses the base <m-h/l/j/k>
+    # (focus), <s-m-h/l/j/k> (move), <c-m-h/v> (split), <m-w> (close), and
+    # <s-m-f> (maximize) chords directly.
+    #
+    # Tab management: the base <alt> tab chords are unbound below (the emacs
+    # editor owns <alt> as Meta), so add <meta>-layer tab bindings here.
+    "<m-]>": tabnext
+    "<m-[>": tabprevious
+    "<s-m-w>": tabclose
+    "<s-m-]>": "tabmove right"
+    "<s-m-[>": "tabmove left"
+    # Rune-only history commands also hang off the C-x prefix. C-c is
+    # unavailable as a prefix: the emacs editor claims a bare <c-c> for
+    # copy, so it never reaches the command sequencer.
     "<c-x>[": "cursorhistory prev"
     "<c-x>]": "cursorhistory next"
     # exchange-point-and-mark: swap point with the most recent C-SPC mark.
