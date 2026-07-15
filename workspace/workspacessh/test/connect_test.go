@@ -22,13 +22,24 @@ import (
 // the test that, when the bootstrap looked for an obsolete `six`
 // binary, would have surfaced the bug the rest of the matrix missed
 // because TestAuthDial short-circuits before whichCommand runs.
+//
+// It also proves connectScheme waits for the remote to be serving-ready
+// before handing back a usable client: the runesvc stand-in is told to sleep
+// before it starts serving (and before it emits the ServerReady sentinel), so
+// the first RPC — which blocks on the background connect attempt via
+// remoteScheme.state — must not resolve until the pre-serving delay has
+// elapsed, yet must then succeed. Without readiness gating the client would be
+// returned immediately and that first RPC would block indefinitely against a
+// stdout that carries no gRPC server yet.
 func TestConnectSchemeEndToEnd(t *testing.T) {
 	SkipIfNoDocker(t)
 	EnsureImage(t)
 
+	const serveDelay = time.Second
 	c := StartContainer(t, SSHDScenario{
 		PublicKeyFile:     "/id_ed25519.pub",
 		InstallRuneBinary: true,
+		ServeDelay:        serveDelay.String(),
 	})
 
 	keyPath := PrivateKeyPath(t, "id_ed25519")
@@ -51,20 +62,23 @@ func TestConnectSchemeEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	defer scheme.Close()
 
-	// Stat the workspace path: the very first remote round trip. If
-	// the bootstrap was looking for the wrong binary or failed for any
-	// other reason this returns an error.
-	deadline := time.Now().Add(20 * time.Second)
-	var fi any
-	for time.Now().Before(deadline) {
-		fi, err = scheme.Stat("/tmp")
-		if err == nil {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+	// Stat the workspace path: the very first remote round trip. It blocks on
+	// the background connect attempt (remoteScheme.state), which now completes
+	// only once the remote is serving-ready. If the bootstrap looked for the
+	// wrong binary or failed for any other reason this returns an error.
+	start := time.Now()
+	fi, err := scheme.Stat("/tmp")
+	elapsed := time.Since(start)
 	require.NoError(t, err, "Stat over the connected workspace should succeed")
 	assert.NotNil(t, fi)
+
+	// Allow scheduling slack below the injected delay: the point is that the
+	// first RPC did not resolve early (which it would have without readiness
+	// gating), not that it matches the delay exactly.
+	assert.GreaterOrEqual(t, elapsed, serveDelay-300*time.Millisecond,
+		"the first RPC must block until the remote is serving-ready; it "+
+			"returned after %s but the remote delayed serving by %s",
+		elapsed, serveDelay)
 }
 
 // TestConnectSchemeMultiKeyRedialBootstrap exercises the full

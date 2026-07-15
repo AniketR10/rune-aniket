@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -76,11 +77,41 @@ func main() {
 			func(context.Context, workspaceapi.Cmd) error { return nil }))
 	defer func() { _ = server.Stop() }()
 
+	// Stand in for a slow pre-serving phase (e.g. a lengthy install). The
+	// delay happens before StartSchemeServer emits the ServerReady sentinel,
+	// so an e2e test can prove connectScheme waits for readiness and does not
+	// hand back a client while stdout carries no gRPC server yet.
+	sleepServeDelay(*dataDir)
+
 	if err := workspacessh.StartSchemeServer(
 		log.New(), server, workspacessh.NewSchemeServer()); err != nil {
 		fmt.Fprintln(os.Stderr, "runesvc: start scheme server:", err)
 		os.Exit(5)
 	}
+}
+
+// sleepServeDelay blocks for the duration recorded in the remote data
+// directory's serve_delay file, if present. It lets an e2e test inject a
+// deterministic pre-serving delay without a test-only flag on the production
+// connectScheme launch. A missing or malformed file is a no-op.
+func sleepServeDelay(dataDir string) {
+	if dataDir == "" {
+		dataDir = defaultDataDir()
+	}
+	if dataDir == "" {
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(dataDir, "serve_delay"))
+	if err != nil {
+		return
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(string(data)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "runesvc: parse serve_delay: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "runesvc: delaying serve by %s\n", d)
+	time.Sleep(d)
 }
 
 // applyRemoteGUIEnv loads the remote data directory's config.yaml and applies

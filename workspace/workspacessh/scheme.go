@@ -451,9 +451,10 @@ func (s *scheme) connectScheme(
 	// fighting over it.
 	tail := newStderrTail()
 	stderrDone := make(chan struct{})
+	ready := make(chan struct{})
 	go debug.CapturePanicReport(func() {
 		defer close(stderrDone)
-		s.scanRemoteStderr(stderrRead, tail)
+		s.scanRemoteStderr(stderrRead, tail, ready)
 	})
 
 	conn, err := grpc.Dial("",
@@ -471,6 +472,54 @@ func (s *scheme) connectScheme(
 		}))
 	if err != nil {
 		return nil, err
+	}
+
+	// The remote runs a provisioning phase (mirror toolchain, install
+	// packages, load config, apply env) before StartSchemeServer begins
+	// serving on stdout. Returning a client now would let the first RPC block
+	// in gRPC waitOnHeader for the whole provisioning duration — or forever if
+	// provisioning stalls. Block until the remote signals it is about to serve
+	// (ServerReady on stderr), or fail early if it exits, this connection
+	// attempt is cancelled (retry abort / remote-scheme shutdown), or the
+	// scheme is torn down first. This runs in the build/maintainConnection
+	// goroutine, so the event loop is never blocked; on failure
+	// maintainConnection retries.
+	//
+	// ctx is the per-attempt context maintainConnection derives from the
+	// remoteScheme lifetime; it MUST be honored here so IDE shutdown (which
+	// cancels that context and then waits for this goroutine to finish) does
+	// not deadlock against a remote that never becomes serving-ready.
+	var exitErr error
+	select {
+	case <-ready:
+	case exitErr = <-ch:
+		if exitErr == nil {
+			exitErr = fmt.Errorf("remote exited before serving")
+		}
+	case <-ctx.Done():
+		exitErr = ctx.Err()
+	case <-s.ctx.Done():
+		exitErr = s.ctx.Err()
+	}
+	if exitErr != nil {
+		// The scanner goroutine drains stderrRead; wait for it to observe EOF
+		// (process exit closed the write end) so the tail is complete before
+		// formatting the error. Guard with the attempt and scheme contexts so
+		// a hung remote that never closes stderr cannot block teardown.
+		select {
+		case <-stderrDone:
+		case <-ctx.Done():
+		case <-s.ctx.Done():
+		}
+		// conn was never wrapped in a workspacerpc.Client, so nothing else
+		// owns it; close it here to release its background gRPC goroutines.
+		_ = conn.Close()
+		for _, closer := range closers {
+			_ = closer.Close()
+		}
+		_ = remote.Close()
+		return nil, fmt.Errorf("error executing remote rune workspace "+
+			"server over SSH: %s: %s", exitErr, tail.String())
 	}
 
 	go debug.CapturePanicReport(func() {
@@ -506,19 +555,28 @@ func (s *scheme) connectScheme(
 
 // scanRemoteStderr reads the remote server's stderr line by line until EOF.
 // Structured provisioning progress lines drive a single live progress
-// notification (index/total → progress bar); every other line is appended to
-// tail, which the exit-error path reads to build the human-readable failure
-// message.
-func (s *scheme) scanRemoteStderr(r io.Reader, tail *stderrTail) {
+// notification (index/total → progress bar); the ServerReady line closes ready
+// exactly once to unblock connectScheme; every other line is appended to tail,
+// which the exit-error path reads to build the human-readable failure message.
+// Progress and ready lines are control lines and never leak into the tail.
+func (s *scheme) scanRemoteStderr(r io.Reader, tail *stderrTail, ready chan struct{}) {
 	scanner := bufio.NewScanner(r)
 	// Allow long remote stderr lines (default is 64 KiB, but a stack trace or
 	// long path can exceed that). Cap growth to keep memory bounded.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var progress provisionProgressNotifier
+	var readyClosed bool
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if p, ok := ParseProvisionProgressLine(line); ok {
 			progress.report(s.ui, p)
+			continue
+		}
+		if parseServerReadyLine(line) {
+			if !readyClosed {
+				close(ready)
+				readyClosed = true
+			}
 			continue
 		}
 		tail.append(line)

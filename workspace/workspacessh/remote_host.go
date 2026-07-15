@@ -65,6 +65,9 @@ func StartSchemeServer(
 	workspacerpc.RegisterFilesServer(grpcServer, server)
 	workspacerpc.RegisterExecutorServer(grpcServer, server)
 	workspacerpc.RegisterTerminalServer(grpcServer, server)
+	if line, err := encodeServerReady(); err == nil {
+		_, _ = os.Stderr.WriteString(line)
+	}
 	if err := grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

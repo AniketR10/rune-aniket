@@ -33,6 +33,13 @@ import (
 // human-readable stderr without misreading unrelated JSON as progress.
 const provisionSentinel = "provision"
 
+// readySentinel tags a stderr line as the ServerReady signal. It is distinct
+// from provisionSentinel because readiness is a server-lifecycle event, not
+// package-install progress: it must fire on every remote launch, including
+// ones with no --install manifest, right before the gRPC server starts
+// serving on stdout.
+const readySentinel = "ready"
+
 // Provisioning phases carried by ProvisionProgress.Phase.
 const (
 	ProvisionPhaseInstalling = "installing"
@@ -113,4 +120,36 @@ func (p ProvisionProgress) Level() NotificationLevel {
 		return NotificationWarning
 	}
 	return NotificationInfo
+}
+
+// serverReady is the sentinel-tagged control record the remote `rune -x`
+// server writes to stderr immediately before it begins serving workspacerpc
+// on stdout. The local side blocks the first RPC until it observes this line,
+// so a client is never handed back while the remote is still provisioning and
+// stdout carries no gRPC server. It is serialized as one JSON object per line.
+type serverReady struct {
+	Rune string `json:"rune"` // sentinel, always readySentinel
+}
+
+// encodeServerReady marshals a serverReady record as a single JSON line
+// terminated by '\n'. The sentinel is always set so the line can be
+// recognized on the local side.
+func encodeServerReady() (string, error) {
+	b, err := json.Marshal(serverReady{Rune: readySentinel})
+	if err != nil {
+		return "", err
+	}
+	return string(b) + "\n", nil
+}
+
+// parseServerReadyLine reports whether line is the sentinel-tagged serverReady
+// record. It returns false when the line is not valid JSON or is not tagged
+// with the readiness sentinel, so unrelated JSON on stderr is never mistaken
+// for the serving-ready signal.
+func parseServerReadyLine(line []byte) bool {
+	var r serverReady
+	if err := json.Unmarshal(line, &r); err != nil {
+		return false
+	}
+	return r.Rune == readySentinel
 }

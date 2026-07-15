@@ -26,7 +26,7 @@ package workspacessh
 import (
 	"context"
 	"fmt"
-
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -724,6 +724,14 @@ func (e *recordingExecutor) StartCommand(
 	e.remote.mu.Lock()
 	e.remote.commands = append(e.remote.commands, cmd)
 	e.remote.mu.Unlock()
+	if slices.Contains(cmd.Args, "-x") {
+		if cmd.Stderr != nil {
+			if line, err := encodeServerReady(); err == nil {
+				_, _ = io.WriteString(cmd.Stderr, line)
+			}
+		}
+		return 1, nil
+	}
 	if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
 		go func() { cmd.Watcher.WatchProcess() <- nil }()
 	}
@@ -883,7 +891,7 @@ func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
 	done2 := make(chan struct{})
 	go func() {
 		defer close(done2)
-		s.scanRemoteStderr(strings.NewReader(stream), tail)
+		s.scanRemoteStderr(strings.NewReader(stream), tail, make(chan struct{}))
 	}()
 
 	select {
@@ -918,6 +926,253 @@ func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
 	assert.Contains(t, got, "warning: something noisy")
 	assert.Contains(t, got, "remote server exiting")
 	assert.NotContains(t, got, "provision", "progress lines must not leak into the tail")
+}
+
+// TestScanRemoteStderrClosesReadyOnServerReady asserts the ServerReady sentinel
+// line closes the readiness channel exactly once, is not surfaced as a
+// notification, and does not leak into the exit-error tail (it is a control
+// line, like progress).
+func TestScanRemoteStderrClosesReadyOnServerReady(t *testing.T) {
+	readyLine, err := encodeServerReady()
+	require.NoError(t, err)
+
+	// Two ready lines exercise the close-once guard: a second close would
+	// panic if the guard were missing.
+	stream := "booting\n" + readyLine + "serving now\n" + readyLine
+
+	ui := &recordingUI{}
+	s := &scheme{ui: ui}
+	tail := newStderrTail()
+	ready := make(chan struct{})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.scanRemoteStderr(strings.NewReader(stream), tail, ready)
+	}()
+
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ServerReady line did not close the readiness channel")
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scanRemoteStderr did not stop at EOF")
+	}
+
+	levels, msgs := ui.notifications()
+	assert.Empty(t, msgs, "ready lines must not notify")
+	assert.Empty(t, levels)
+
+	got := tail.String()
+	assert.Contains(t, got, "booting")
+	assert.Contains(t, got, "serving now")
+	assert.NotContains(t, got, "ready", "ready lines must not leak into the tail")
+}
+
+// TestConnectSchemeReturnsErrorWhenRemoteExitsBeforeServing asserts that if the
+// remote process ends before emitting the ServerReady sentinel, connectScheme
+// surfaces an error carrying the stderr tail instead of handing back a client
+// whose first RPC would block forever. This is the whole point of gating the
+// client on readiness.
+func TestConnectSchemeReturnsErrorWhenRemoteExitsBeforeServing(t *testing.T) {
+	rec := &failingServerRemote{stderr: "provisioning failed: disk full\n"}
+
+	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	defer s.cancelCtx()
+	s.cfg.skipPreflight = true
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
+		return rec, nil
+	}
+	s.getUser = func() (*user.User, error) {
+		return &user.User{Username: "test", HomeDir: "/home/test"}, nil
+	}
+	s.ui = errorUI{}
+	uri, err := workspaceapi.ParseURI("ssh://test@example.com/tmp")
+	require.NoError(t, err)
+	s.user, s.homedir, s.hostPort, s.basePath, err = parseWorkspaceURI(uri, s.getUser)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	var scheme schemeapi.Scheme
+	var connErr error
+	go func() {
+		defer close(done)
+		scheme, connErr = s.connectScheme(context.Background(), uri, func(error) {})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("connectScheme did not return when the remote exited before serving")
+	}
+
+	require.Error(t, connErr, "connectScheme must fail when the remote exits before serving")
+	assert.Nil(t, scheme, "no client must be returned when readiness never arrives")
+	assert.Contains(t, connErr.Error(), "provisioning failed: disk full",
+		"the error must carry the remote stderr tail")
+}
+
+// failingServerRemote is a remote whose workspace-server command (-x) writes a
+// line to stderr and then exits WITHOUT emitting the ServerReady sentinel,
+// standing in for a remote that dies during provisioning.
+type failingServerRemote struct {
+	stderr string
+}
+
+func (r *failingServerRemote) NewSession() (schemeapi.Executor, error) {
+	return &failingServerExecutor{stderr: r.stderr}, nil
+}
+
+func (r *failingServerRemote) Close() error { return nil }
+
+type failingServerExecutor struct {
+	stderr string
+}
+
+func (e *failingServerExecutor) StartCommand(
+	_ context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	if cmd.Stderr != nil && e.stderr != "" {
+		_, _ = io.WriteString(cmd.Stderr, e.stderr)
+	}
+	// Exit with a failure but no ServerReady line, closing the stderr write
+	// end so the scanner observes EOF and the tail is complete.
+	if cmd.Stderr != nil {
+		if closer, ok := cmd.Stderr.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}
+	if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
+		go func() { cmd.Watcher.WatchProcess() <- fmt.Errorf("exit status 1") }()
+	}
+	return 1, nil
+}
+
+func (e *failingServerExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (e *failingServerExecutor) Close() error                                  { return nil }
+
+// TestConnectSchemeUnblocksWhenAttemptContextCancelled is a regression test for
+// a shutdown deadlock: connectScheme must honor the per-attempt context
+// maintainConnection passes it. If the remote connects but never becomes
+// serving-ready (provisioning stalls) and never exits, cancelling that context
+// (IDE shutdown / retry abort) must unblock connectScheme. Watching only the
+// scheme's own long-lived context here is not enough — that context is rooted
+// in context.Background() and is not cancelled by shutdown, so connectScheme
+// would hang forever, state() would never return, and Close's WaitGroup.Wait
+// would deadlock.
+func TestConnectSchemeUnblocksWhenAttemptContextCancelled(t *testing.T) {
+	rec := &hangingServerRemote{}
+
+	s := new(scheme)
+	s.ctx, s.cancelCtx = context.WithCancel(context.Background())
+	defer s.cancelCtx()
+	s.cfg.skipPreflight = true
+	s.remoteFn = func(context.Context, sshConfig, workspaceapi.URI) (remote, error) {
+		return rec, nil
+	}
+	s.getUser = func() (*user.User, error) {
+		return &user.User{Username: "test", HomeDir: "/home/test"}, nil
+	}
+	s.ui = errorUI{}
+	uri, err := workspaceapi.ParseURI("ssh://test@example.com/tmp")
+	require.NoError(t, err)
+	s.user, s.homedir, s.hostPort, s.basePath, err = parseWorkspaceURI(uri, s.getUser)
+	require.NoError(t, err)
+
+	// The attempt context maintainConnection would pass; cancelling it must
+	// unblock the readiness wait even though s.ctx stays live.
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	var connScheme schemeapi.Scheme
+	var connErr error
+	go func() {
+		defer close(done)
+		connScheme, connErr = s.connectScheme(attemptCtx, uri, func(error) {})
+	}()
+
+	// Give the readiness wait time to block, then cancel the attempt context.
+	select {
+	case <-done:
+		t.Fatal("connectScheme returned before the remote served or was cancelled")
+	case <-time.After(100 * time.Millisecond):
+	}
+	cancelAttempt()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("connectScheme did not unblock when the attempt context was " +
+			"cancelled; this is the shutdown deadlock")
+	}
+
+	require.Error(t, connErr, "connectScheme must fail when its attempt context is cancelled")
+	assert.Nil(t, connScheme, "no client must be returned when readiness never arrives")
+
+	// Let the hung command goroutine exit so the test does not leak it.
+	rec.release()
+}
+
+// hangingServerRemote is a remote whose workspace-server command (-x) connects
+// (writes some stderr) but neither emits the ServerReady sentinel nor exits,
+// standing in for a remote stuck in provisioning. Its command blocks until
+// release is called or the command context is cancelled.
+type hangingServerRemote struct {
+	execs []*hangingServerExecutor
+	mu    sync.Mutex
+}
+
+func (r *hangingServerRemote) NewSession() (schemeapi.Executor, error) {
+	e := &hangingServerExecutor{done: make(chan struct{})}
+	r.mu.Lock()
+	r.execs = append(r.execs, e)
+	r.mu.Unlock()
+	return e, nil
+}
+
+func (r *hangingServerRemote) Close() error { return nil }
+
+func (r *hangingServerRemote) release() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.execs {
+		e.closeOnce.Do(func() { close(e.done) })
+	}
+}
+
+type hangingServerExecutor struct {
+	done      chan struct{}
+	closeOnce sync.Once
+}
+
+func (e *hangingServerExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	if cmd.Stderr != nil {
+		_, _ = io.WriteString(cmd.Stderr, "provisioning toolchain...\n")
+	}
+	go debug.CapturePanicReport(func() {
+		// Block without emitting ServerReady or exiting until released or the
+		// command context is cancelled, then report exit like a killed remote.
+		select {
+		case <-e.done:
+		case <-ctx.Done():
+		}
+		if cmd.Watcher != nil && cmd.Watcher.WatchProcess() != nil {
+			cmd.Watcher.WatchProcess() <- fmt.Errorf("killed")
+		}
+	})
+	return 1, nil
+}
+
+func (e *hangingServerExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+func (e *hangingServerExecutor) Close() error {
+	e.closeOnce.Do(func() { close(e.done) })
+	return nil
 }
 
 // TestStderrTailBounded asserts the tail retains only the most recent

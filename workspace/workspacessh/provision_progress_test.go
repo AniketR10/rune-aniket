@@ -69,6 +69,32 @@ func TestParseProvisionProgressLineRejectsNonProgress(t *testing.T) {
 	}
 }
 
+func TestServerReadyRoundTrip(t *testing.T) {
+	line, err := encodeServerReady()
+	require.NoError(t, err)
+	assert.True(t, strings.HasSuffix(line, "\n"), "encoded line must end with newline")
+	assert.True(t, parseServerReadyLine([]byte(strings.TrimRight(line, "\n"))),
+		"sentinel-tagged ready line must parse")
+}
+
+func TestParseServerReadyLineRejectsNonReady(t *testing.T) {
+	cases := []struct {
+		desc string
+		line string
+	}{
+		{"plain text", "ready to serve"},
+		{"unrelated json", `{"level":"info","msg":"hello"}`},
+		{"wrong sentinel", `{"rune":"other"}`},
+		{"provision sentinel is not ready", `{"rune":"provision","phase":"done"}`},
+		{"empty", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			assert.False(t, parseServerReadyLine([]byte(tc.line)))
+		})
+	}
+}
+
 func TestProvisionProgressMessageAndLevel(t *testing.T) {
 	cases := []struct {
 		desc    string

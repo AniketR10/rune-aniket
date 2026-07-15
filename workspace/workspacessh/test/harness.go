@@ -68,6 +68,14 @@ type SSHDScenario struct {
 	// gui.env block a package install would have merged), so provisioning
 	// tests can seed a sentinel and assert the server applied it.
 	RemoteHomeConfig string
+
+	// ServeDelay, when non-empty, is written to the ssh user's
+	// ~/.rune/serve_delay as a Go duration string. The runesvc stand-in
+	// sleeps that long before it starts serving (and before it emits the
+	// ServerReady sentinel), so a test can prove connectScheme waits for
+	// readiness instead of handing back a client while stdout carries no
+	// gRPC server yet.
+	ServeDelay string
 }
 
 // Container is a running test container's external handle.
@@ -190,6 +198,9 @@ func StartContainer(t *testing.T, scenario SSHDScenario) *Container {
 	if scenario.RemoteHomeConfig != "" {
 		writeRemoteHomeConfig(t, id, scenario.RemoteHomeConfig)
 	}
+	if scenario.ServeDelay != "" {
+		writeServeDelay(t, id, scenario.ServeDelay)
+	}
 	return &Container{ID: id, HostPort: addr}
 }
 
@@ -208,6 +219,23 @@ chown -R test "$home/.rune"`
 	out, err := exec.Command("docker", "exec", id, "sh", "-c", script).CombinedOutput()
 	if err != nil {
 		t.Fatalf("write remote home config: %v: %s", err, out)
+	}
+}
+
+// writeServeDelay writes a Go duration string to the ssh user's
+// ~/.rune/serve_delay inside the container. The runesvc stand-in reads it and
+// sleeps that long before serving, standing in for a slow pre-serving phase.
+// The home directory is resolved from /etc/passwd because the
+// linuxserver/openssh-server image homes its user at /config, not /home/<user>.
+func writeServeDelay(t *testing.T, id, delay string) {
+	t.Helper()
+	script := `home="$(getent passwd test | cut -d: -f6)" &&
+mkdir -p "$home/.rune" &&
+printf %s '` + delay + `' > "$home/.rune/serve_delay" &&
+chown -R test "$home/.rune"`
+	out, err := exec.Command("docker", "exec", id, "sh", "-c", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("write serve delay: %v: %s", err, out)
 	}
 }
 
