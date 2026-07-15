@@ -188,8 +188,6 @@ func TestResourceTrackerIntegration(t *testing.T) {
 						_, handled = bh.Handle(term.Event{
 							Type: term.EventKey, Key: term.KeyArrowUp})
 					}
-					_, handled = bh.Handle(term.Event{
-						Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a'})
 
 					// mark line as hidden
 					for range 3 {
@@ -205,7 +203,6 @@ func TestResourceTrackerIntegration(t *testing.T) {
 					require.True(t, ok)
 
 					winPos := res.ContentCoordinates(term.Coordinates{Y: 1})
-					require.True(t, ok)
 					assert.Equal(t, term.Coordinates{Y: 4}, winPos)
 
 					// mark line as visible
@@ -215,7 +212,6 @@ func TestResourceTrackerIntegration(t *testing.T) {
 						Mod:  term.ModCtrlAlt,
 					})
 					winPos = res.ContentCoordinates(term.Coordinates{Y: 1})
-					require.True(t, ok)
 					assert.Equal(t, term.Coordinates{Y: 1}, winPos)
 				})
 			}

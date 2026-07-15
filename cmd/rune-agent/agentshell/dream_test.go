@@ -347,7 +347,7 @@ func (noopLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams)
 	return "", nil
 }
 func (noopLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
-	return nil, nil
+	return json.RawMessage("null"), nil
 }
 func (noopLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
 	return nil

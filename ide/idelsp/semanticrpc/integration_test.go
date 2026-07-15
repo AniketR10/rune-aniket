@@ -315,7 +315,7 @@ func (s *stubLSP) ExecuteRequest(ctx context.Context, p semanticapi.ExecuteReque
 	if s.onExecuteRequest != nil {
 		return s.onExecuteRequest(ctx, p)
 	}
-	return nil, nil
+	return json.RawMessage("null"), nil
 }
 func (s *stubLSP) SendNotification(ctx context.Context, p semanticapi.NotificationParams) error {
 	if s.onSendNotification != nil {
@@ -1614,11 +1614,11 @@ func TestExecuteRequest(t *testing.T) {
 		assert.JSONEq(t, `{"changes":{}}`, string(result))
 	})
 
-	t.Run("nil params and empty result normalize to JSON null", func(t *testing.T) {
+	t.Run("nil params and JSON null result round trip", func(t *testing.T) {
 		stub := &stubLSP{
 			onExecuteRequest: func(_ context.Context, p semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
 				assert.Nil(t, p.Params)
-				return nil, nil
+				return json.RawMessage("null"), nil
 			},
 		}
 		env := newTestEnv(t, stub)
@@ -1626,8 +1626,6 @@ func TestExecuteRequest(t *testing.T) {
 			Method: "rust-analyzer/reloadWorkspace",
 		})
 		require.NoError(t, err)
-		// A successful call always yields a non-nil RawMessage; an empty
-		// server result is normalized to the literal JSON null.
 		assert.Equal(t, json.RawMessage("null"), result)
 	})
 

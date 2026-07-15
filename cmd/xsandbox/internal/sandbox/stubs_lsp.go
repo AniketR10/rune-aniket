@@ -125,7 +125,7 @@ func (stubLSP) ExecuteCommand(context.Context, semanticapi.ExecuteCommandParams)
 	return "", nil
 }
 func (stubLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
-	return nil, nil
+	return json.RawMessage("null"), nil
 }
 func (stubLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
 	return nil

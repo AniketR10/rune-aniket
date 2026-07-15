@@ -119,7 +119,7 @@ func (noopLSP) ExecuteCommand(_ context.Context, _ semanticapi.ExecuteCommandPar
 	return "", nil
 }
 func (noopLSP) ExecuteRequest(_ context.Context, _ semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
-	return nil, nil
+	return json.RawMessage("null"), nil
 }
 func (noopLSP) SendNotification(_ context.Context, _ semanticapi.NotificationParams) error {
 	return nil

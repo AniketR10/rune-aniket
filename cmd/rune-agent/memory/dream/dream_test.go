@@ -962,7 +962,7 @@ func (s *stubDreamLSP) ExecuteCommand(context.Context, semanticapi.ExecuteComman
 	return "", nil
 }
 func (s *stubDreamLSP) ExecuteRequest(context.Context, semanticapi.ExecuteRequestParams) (json.RawMessage, error) {
-	return nil, nil
+	return json.RawMessage("null"), nil
 }
 func (s *stubDreamLSP) SendNotification(context.Context, semanticapi.NotificationParams) error {
 	return nil
