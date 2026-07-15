@@ -35,6 +35,8 @@ import (
 func main() {
 	workspacePath := flag.String("x", "",
 		"local workspace path to expose over the workspace gRPC server")
+	dataDir := flag.String("datadir", "",
+		"data directory used by the workspace server")
 	install := flag.String("install", "",
 		"CSV manifest of id@version packages to provision (mirrors the "+
 			"real rune -x flag). When non-empty, runesvc loads "+
@@ -52,8 +54,8 @@ func main() {
 	// child process spawned over the workspace RPC inherits the applied env.
 	if *install != "" {
 		emitProvisionProgress(*install)
-		installPackageBins(*install)
-		applyRemoteGUIEnv()
+		installPackageBins(*dataDir, *install)
+		applyRemoteGUIEnv(*dataDir)
 	}
 
 	uri, err := workspaceapi.ParseURI("file://" + *workspacePath)
@@ -81,21 +83,19 @@ func main() {
 	}
 }
 
-// applyRemoteGUIEnv loads ~/.rune/config.yaml and applies its gui.env block to
-// this process, standing in for the real -x server's post-install config load.
+// applyRemoteGUIEnv loads the remote data directory's config.yaml and applies
+// its gui.env block to this process, standing in for the real -x server's
+// post-install config load.
 // Failures warn and continue, matching the never-abort provisioning policy.
-func applyRemoteGUIEnv() {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		if u, uerr := user.Current(); uerr == nil {
-			home = u.HomeDir
-		}
+func applyRemoteGUIEnv(dataDir string) {
+	if dataDir == "" {
+		dataDir = defaultDataDir()
 	}
-	if home == "" {
-		fmt.Fprintln(os.Stderr, "runesvc: cannot resolve home dir")
+	if dataDir == "" {
+		fmt.Fprintln(os.Stderr, "runesvc: cannot resolve data dir")
 		return
 	}
-	configPath := filepath.Join(home, ".rune", "config.yaml")
+	configPath := filepath.Join(dataDir, "config.yaml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "runesvc: read %s: %v\n", configPath, err)
@@ -115,6 +115,19 @@ func applyRemoteGUIEnv() {
 			fmt.Fprintf(os.Stderr, "runesvc: setenv %s: %v\n", k, err)
 		}
 	}
+}
+
+func defaultDataDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		if u, uerr := user.Current(); uerr == nil {
+			home = u.HomeDir
+		}
+	}
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".rune")
 }
 
 // emitProvisionProgress streams JSON-Lines provisioning progress to stderr for
@@ -150,23 +163,21 @@ func emit(p workspacessh.ProvisionProgress) {
 }
 
 // installPackageBins stands in for a real package install by writing an
-// executable for each manifest entry into ~/.rune/bin and prepending that
-// directory to PATH, exactly as the real -x server does via setupRuneBinPATH.
+// executable for each manifest entry into the remote data directory's bin
+// directory and prepending it to PATH, exactly as the real -x server does via
+// setupRuneBinPATH.
 // Each fake tool is named after the package id and prints a recognizable line
 // so an e2e test can run it through the workspace executor and prove the
 // provisioned toolchain is on the served process's PATH.
-func installPackageBins(manifest string) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		if u, uerr := user.Current(); uerr == nil {
-			home = u.HomeDir
-		}
+func installPackageBins(dataDir, manifest string) {
+	if dataDir == "" {
+		dataDir = defaultDataDir()
 	}
-	if home == "" {
-		fmt.Fprintln(os.Stderr, "runesvc: cannot resolve home dir for bin install")
+	if dataDir == "" {
+		fmt.Fprintln(os.Stderr, "runesvc: cannot resolve data dir for bin install")
 		return
 	}
-	binDir := filepath.Join(home, ".rune", "bin")
+	binDir := filepath.Join(dataDir, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "runesvc: mkdir %s: %v\n", binDir, err)
 		return

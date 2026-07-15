@@ -33,6 +33,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -43,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -259,6 +261,39 @@ func TestConnectSchemeSkipPreflight(t *testing.T) {
 	assert.Contains(t, rec.commands[0].Args, "-x",
 		"rune workspace server should be started with -x; got %+v",
 		rec.commands[0])
+}
+
+func TestRunAndWaitHonorsAttemptContext(t *testing.T) {
+	schemeCtx, cancelScheme := context.WithCancel(context.Background())
+	defer cancelScheme()
+	s := &scheme{ctx: schemeCtx}
+	remote := newBlockingRemote()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go debug.CapturePanicReport(func() {
+		_, _, err := s.runAndWait(ctx, remote, "ls", "/tmp")
+		result <- err
+	})
+
+	select {
+	case <-remote.started:
+	case <-time.After(time.Second):
+		t.Fatal("preflight command did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		remote.release()
+		<-result
+		t.Fatal("preflight command ignored its attempt context")
+	}
+	require.Eventually(t, func() bool {
+		return remote.sessionClosed()
+	}, time.Second, 10*time.Millisecond)
 }
 
 // findRuneServerCmd returns the recorded command that launches the remote
@@ -697,6 +732,65 @@ func (e *recordingExecutor) StartCommand(
 
 func (e *recordingExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
 func (e *recordingExecutor) Close() error                                  { return nil }
+
+type blockingRemote struct {
+	started chan struct{}
+	session *blockingExecutor
+}
+
+func newBlockingRemote() *blockingRemote {
+	return &blockingRemote{started: make(chan struct{})}
+}
+
+func (r *blockingRemote) NewSession() (schemeapi.Executor, error) {
+	r.session = &blockingExecutor{
+		started: r.started,
+		done:    make(chan struct{}),
+	}
+	return r.session, nil
+}
+
+func (r *blockingRemote) Close() error { return nil }
+
+func (r *blockingRemote) release() {
+	if r.session != nil {
+		_ = r.session.Close()
+	}
+}
+
+func (r *blockingRemote) sessionClosed() bool {
+	return r.session != nil && r.session.closed.Load()
+}
+
+type blockingExecutor struct {
+	started   chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
+	closed    atomic.Bool
+}
+
+func (e *blockingExecutor) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	close(e.started)
+	go debug.CapturePanicReport(func() {
+		select {
+		case <-ctx.Done():
+			cmd.Watcher.WatchProcess() <- ctx.Err()
+		case <-e.done:
+			cmd.Watcher.WatchProcess() <- nil
+		}
+	})
+	return 1, nil
+}
+
+func (e *blockingExecutor) Signal(workspaceapi.Pid, syscall.Signal) error { return nil }
+
+func (e *blockingExecutor) Close() error {
+	e.closed.Store(true)
+	e.closeOnce.Do(func() { close(e.done) })
+	return nil
+}
 
 // errorUI fails any prompt; tests use it because newTestScheme stubs the
 // remote, so prompts should never fire.

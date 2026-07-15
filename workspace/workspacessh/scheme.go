@@ -250,6 +250,19 @@ func (s *scheme) runAndWait(
 	if err != nil {
 		return "", false, fmt.Errorf("new session: %v", err)
 	}
+	closed := false
+	closeSession := func() error {
+		if closed {
+			return nil
+		}
+		closed = true
+		err := ses.Close()
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("close session: %v", err)
+		}
+		return nil
+	}
+	defer func() { _ = closeSession() }()
 
 	if s.cfg.shell != "" {
 		args = append([]string{"-c", cmdStr}, args...)
@@ -269,12 +282,17 @@ func (s *scheme) runAndWait(
 		Stdout:  &stdout,
 		Watcher: workspaceapi.ChanProcessWatcher(ch),
 	}
-	_, err = ses.StartCommand(s.ctx, cmd)
+	_, err = ses.StartCommand(ctx, cmd)
 	if err != nil {
 		return "", false, fmt.Errorf("start command: %v", err)
 	}
 
-	err = <-ch
+	select {
+	case err = <-ch:
+	case <-ctx.Done():
+		_ = closeSession()
+		return "", false, ctx.Err()
+	}
 	if err != nil {
 		if stdout.Len() != 0 {
 			err = fmt.Errorf("stdout: %v: %s", err, stdout.String())
@@ -289,10 +307,7 @@ func (s *scheme) runAndWait(
 		return "", false, err
 	}
 
-	err = ses.Close()
-	// stdlib ssh session returns io.EOF if closing after command returned
-	if err != nil && err != io.EOF {
-		err = fmt.Errorf("close session: %v", err)
+	if err := closeSession(); err != nil {
 		return "", false, err
 	}
 	return "", true, nil
