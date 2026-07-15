@@ -222,9 +222,23 @@ func (m *Manager) DidOpen(
 	if err != nil {
 		return err
 	}
-	return srv.notify(
-		ctx, "textDocument/didOpen", params,
-	)
+	err = srv.notify(ctx, "textDocument/didOpen", params)
+	if err != nil {
+		return err
+	}
+	// Track the document as open so position requests do not issue a
+	// redundant (and, for servers like ty, state-corrupting) transient
+	// open/close around it.
+	uri, err := workspaceapi.ParseURI(params.TextDocument.URI)
+	if err != nil {
+		return err
+	}
+	f := newFile(uri, params.TextDocument.Text,
+		params.TextDocument.LanguageID, srv.key())
+	m.mu.Lock()
+	m.files[params.TextDocument.URI] = f
+	m.mu.Unlock()
+	return nil
 }
 
 // DidChange forwards the notification to the owning
@@ -255,9 +269,11 @@ func (m *Manager) DidClose(
 	if err != nil {
 		return err
 	}
-	return srv.notify(
-		ctx, "textDocument/didClose", params,
-	)
+	err = srv.notify(ctx, "textDocument/didClose", params)
+	m.mu.Lock()
+	delete(m.files, params.TextDocument.URI)
+	m.mu.Unlock()
+	return err
 }
 
 // DidSave forwards the notification to the owning server.
@@ -321,13 +337,10 @@ func (m *Manager) Hover(
 	params semanticapi.HoverParams,
 ) (*semanticapi.Hover, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, "textDocument/hover", params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/hover", params, &raw)
+	}); err != nil {
 		return nil, err
 	}
 	if isNull(raw) {
@@ -419,13 +432,10 @@ func (m *Manager) References(
 	params semanticapi.ReferenceParams,
 ) ([]semanticapi.Location, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var result []semanticapi.Location
-	err = srv.call(ctx, "textDocument/references", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/references", params, &result)
+	}); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -437,13 +447,10 @@ func (m *Manager) DocumentHighlight(
 	params semanticapi.DocumentHighlightParams,
 ) ([]semanticapi.DocumentHighlight, error) {
 	params.WorkDoneToken = m.tokenFor(params.WorkDoneToken)
-	srv, err := m.serverForURI(params.TextDocument.URI)
-	if err != nil {
-		return nil, err
-	}
 	var result []semanticapi.DocumentHighlight
-	err = srv.call(ctx, "textDocument/documentHighlight", params, &result)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, params.TextDocument.URI, func(srv server) error {
+		return srv.call(ctx, "textDocument/documentHighlight", params, &result)
+	}); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -1439,20 +1446,17 @@ func (m *Manager) locationRequest(
 	ctx context.Context, uri string,
 	method string, params any,
 ) (semanticapi.LocationResult, error) {
-	srv, err := m.serverForURI(uri)
-	if err != nil {
-		return semanticapi.LocationResult{}, err
-	}
 	var raw json.RawMessage
-	err = srv.call(ctx, method, params, &raw)
-	if err != nil {
+	if err := m.withEnsuredOpen(ctx, uri, func(srv server) error {
+		return srv.call(ctx, method, params, &raw)
+	}); err != nil {
 		return semanticapi.LocationResult{}, err
 	}
 	if isNull(raw) {
 		return semanticapi.LocationResult{}, nil
 	}
 	var locs []semanticapi.Location
-	err = json.Unmarshal(raw, &locs)
+	err := json.Unmarshal(raw, &locs)
 	if err == nil && len(locs) != 0 &&
 		locs[0] != (semanticapi.Location{}) {
 		return semanticapi.LocationResult{Locations: locs}, nil

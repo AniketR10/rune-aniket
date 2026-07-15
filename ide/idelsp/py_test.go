@@ -90,6 +90,25 @@ func setupPythonManager(
 	t *testing.T, ctx context.Context, callback Callback,
 ) (*Manager, string) {
 	t.Helper()
+	mgr, mainURI, mainContent := setupPythonManagerNoOpen(t, ctx, callback)
+	require.NoError(t, mgr.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{
+		TextDocument: semanticapi.TextDocumentItem{
+			URI:        mainURI,
+			LanguageID: "python",
+			Version:    0,
+			Text:       mainContent,
+		},
+	}))
+	return mgr, mainURI
+}
+
+// setupPythonManagerNoOpen initializes a real ty + ruff manager rooted
+// at a temp copy of testdata/py but does NOT send didOpen for main.py,
+// so callers can exercise requests against an unopened document.
+func setupPythonManagerNoOpen(
+	t *testing.T, ctx context.Context, callback Callback,
+) (*Manager, string, string) {
+	t.Helper()
 	if callback == nil {
 		callback = &testCallback{}
 	}
@@ -159,16 +178,7 @@ func setupPythonManager(
 	_, err = mgr.Initialize(ctx, params)
 	require.NoError(t, err)
 
-	require.NoError(t, mgr.DidOpen(ctx, semanticapi.DidOpenTextDocumentParams{
-		TextDocument: semanticapi.TextDocumentItem{
-			URI:        mainURI,
-			LanguageID: "python",
-			Version:    0,
-			Text:       string(mainContent),
-		},
-	}))
-
-	return mgr, mainURI
+	return mgr, mainURI, string(mainContent)
 }
 
 // TestE2EPython exercises the same LSP API surface as the Go e2e suite
@@ -712,4 +722,49 @@ func TestE2EPythonMergedDiagnostics(t *testing.T) {
 		Start: semanticapi.Position{Line: 17, Character: 7},
 		End:   semanticapi.Position{Line: 17, Character: 9},
 	}, got.Range)
+}
+
+// TestE2EPythonDefinitionUnopenedFile reproduces the ty regression:
+// ty rejects textDocument/definition for a document it does not track,
+// which is exactly what happens when a symbol is resolved by name and
+// the target file was never opened in the editor. The Manager must
+// transiently didOpen the file around the request. Without the fix
+// this errors; with it, ty resolves the definition of `add`.
+func TestE2EPythonDefinitionUnopenedFile(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	mgr, mainURI, _ := setupPythonManagerNoOpen(t, ctx, nil)
+
+	// main.py is intentionally not opened. Position 39:13 is the `add`
+	// call in `result = add(1, 2)`.
+	result, err := mgr.Definition(ctx, semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: mainURI},
+		Position:     semanticapi.Position{Line: 39, Character: 13},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []semanticapi.LocationLink{{
+		OriginSelectionRange: &semanticapi.Range{
+			Start: semanticapi.Position{Line: 39, Character: 13},
+			End:   semanticapi.Position{Line: 39, Character: 16},
+		},
+		TargetURI: mainURI,
+		TargetRange: semanticapi.Range{
+			Start: semanticapi.Position{Line: 31, Character: 0},
+			End:   semanticapi.Position{Line: 33, Character: 14},
+		},
+		TargetSelectionRange: semanticapi.Range{
+			Start: semanticapi.Position{Line: 31, Character: 4},
+			End:   semanticapi.Position{Line: 31, Character: 7},
+		},
+	}}, result.LocationLinks)
+
+	// The transient open must not leave the document cached as open.
+	mgr.mu.Lock()
+	_, cached := mgr.files[mainURI]
+	mgr.mu.Unlock()
+	assert.False(t, cached,
+		"transient open must not cache the unopened file in m.files")
 }

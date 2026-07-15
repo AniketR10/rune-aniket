@@ -465,6 +465,79 @@ func (m *Manager) getFile(uriStr string) (*file, bool) {
 	return f, ok
 }
 
+// readFileContent reads a workspace file from the filesystem and
+// normalizes its trailing newline. It does not touch m.files.
+func (m *Manager) readFileContent(path string) (string, error) {
+	f, err := m.fileSystem.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open file for reading: %w", err)
+	}
+	defer f.Close() // nolint:errcheck
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return "", fmt.Errorf("read workspace file: %w", err)
+	}
+	content := string(data)
+	if len(content) == 0 || content[len(content)-1] != '\n' {
+		// LSP servers expect a trailing EOL.
+		content += "\n"
+	}
+	return content, nil
+}
+
+// withEnsuredOpen runs fn against the server owning uri, guaranteeing
+// the document is open on that server for the duration of the call.
+// Servers such as ty reject position-based requests (definition,
+// hover, ...) for documents they do not track. When uri is already
+// open in the editor (present in m.files) we run fn directly.
+// Otherwise we transiently didOpen the file, run fn, then didClose,
+// without caching the document in m.files.
+func (m *Manager) withEnsuredOpen(
+	ctx context.Context, uri string, fn func(srv server) error,
+) error {
+	srv, err := m.serverForURI(uri)
+	if err != nil {
+		return err
+	}
+	if _, open := m.getFile(uri); open {
+		return fn(srv)
+	}
+
+	lang, err := languageForFilename(uri)
+	if err != nil {
+		return err
+	}
+	content, err := m.readFileContent(uriToPath(uri))
+	if err != nil {
+		return err
+	}
+	if err := srv.notify(ctx, "textDocument/didOpen",
+		semanticapi.DidOpenTextDocumentParams{
+			TextDocument: semanticapi.TextDocumentItem{
+				URI:        uri,
+				LanguageID: lang.id,
+				Version:    firstFileVersion,
+				Text:       content,
+			},
+		}); err != nil {
+		return err
+	}
+	// A concurrent editor open could also open this file, in which
+	// case both paths issue didOpen/didClose. That is harmless, so we
+	// avoid holding m.mu across the LSP round trip.
+	defer func() {
+		if cerr := srv.notify(ctx, "textDocument/didClose",
+			semanticapi.DidCloseTextDocumentParams{
+				TextDocument: semanticapi.TextDocumentIdentifier{
+					URI: uri,
+				},
+			}); cerr != nil {
+			m.log.Debug("transient didClose", "error", cerr, "file", uri)
+		}
+	}()
+	return fn(srv)
+}
+
 func (m *Manager) ensureFile(
 	uri workspaceapi.URI,
 	content string, key serverKey,
@@ -482,16 +555,11 @@ func (m *Manager) ensureFile(
 		return f, nil
 	}
 	if content == "" {
-		f, err := m.fileSystem.Open(uri.Path())
+		read, err := m.readFileContent(uri.Path())
 		if err != nil {
-			return nil, fmt.Errorf("open file for reading: %w", err)
+			return nil, err
 		}
-		defer f.Close() // nolint:errcheck
-		data, err := io.ReadAll(f)
-		if err != nil {
-			return nil, fmt.Errorf("read workspace file: %w", err)
-		}
-		content = string(data)
+		content = read
 	} else if len(content) == 0 || content[len(content)-1] != '\n' {
 		// editor trims last EOL but LSP servers expect it
 		content += "\n"

@@ -42,6 +42,8 @@ type fakeChild struct {
 	mu      sync.Mutex
 	calls   []string
 	notifs  []string
+	events  []string
+	opens   []semanticapi.DidOpenTextDocumentParams
 	started bool
 	stopped bool
 	closed  bool
@@ -52,13 +54,18 @@ func (f *fakeChild) call(_ context.Context, method string, _, _ any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method)
+	f.events = append(f.events, "call:"+method)
 	return nil
 }
 
-func (f *fakeChild) notify(_ context.Context, method string, _ any) error {
+func (f *fakeChild) notify(_ context.Context, method string, params any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.notifs = append(f.notifs, method)
+	f.events = append(f.events, "notify:"+method)
+	if p, ok := params.(semanticapi.DidOpenTextDocumentParams); ok {
+		f.opens = append(f.opens, p)
+	}
 	return nil
 }
 
@@ -121,6 +128,21 @@ func (f *fakeChild) notifyMethods() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.notifs...)
+}
+
+// eventLog returns call and notify methods in the order they arrived,
+// prefixed with "call:" or "notify:".
+func (f *fakeChild) eventLog() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.events...)
+}
+
+// didOpens returns the params of every textDocument/didOpen notify.
+func (f *fakeChild) didOpens() []semanticapi.DidOpenTextDocumentParams {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]semanticapi.DidOpenTextDocumentParams(nil), f.opens...)
 }
 
 // TestServerConformance asserts that both backend implementations

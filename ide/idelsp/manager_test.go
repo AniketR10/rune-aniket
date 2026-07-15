@@ -26,6 +26,8 @@ package idelsp
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -405,4 +407,140 @@ func TestManagerCloseTerminatesGopls(t *testing.T) {
 		t.Fatal("gopls child did not exit within 10s of Manager.Close: " +
 			"manager teardown is not propagating cancellation to the child")
 	}
+}
+
+// newTransientTestManager builds a Manager backed by the local
+// filesystem with a single fake python server rooted at rootPath.
+func newTransientTestManager(
+	t *testing.T, rootPath string,
+) (*Manager, *fakeChild) {
+	t.Helper()
+	rootURI := "file://" + rootPath
+	uri := makeURI(t, rootURI)
+	m := New(uri, newTestScheme(), nil, nil, nil, nil,
+		Config{NoInitializeServer: true})
+	t.Cleanup(func() { _ = m.Close() })
+
+	srv := &fakeChild{childName: "python"}
+	m.mu.Lock()
+	m.servers[serverKey{languageID: "python", rootURI: rootURI}] = srv
+	m.mu.Unlock()
+	return m, srv
+}
+
+// TestTransientOpenForUnopenedFile asserts that a position request for
+// a file not tracked in m.files transiently opens it (didOpen) before
+// the call and closes it (didClose) after, without caching it.
+func TestTransientOpenForUnopenedFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+
+	m, srv := newTransientTestManager(t, tmpDir)
+
+	_, err := m.Definition(context.Background(), semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"notify:textDocument/didOpen",
+		"call:textDocument/definition",
+		"notify:textDocument/didClose",
+	}, srv.eventLog(), "didOpen must precede the call and didClose must follow")
+
+	opens := srv.didOpens()
+	require.Len(t, opens, 1)
+	assert.Equal(t, fileURI, opens[0].TextDocument.URI)
+	assert.Equal(t, "python", opens[0].TextDocument.LanguageID)
+	assert.Equal(t, int32(firstFileVersion), opens[0].TextDocument.Version)
+	assert.Equal(t, "x = 1\n", opens[0].TextDocument.Text)
+
+	m.mu.Lock()
+	_, cached := m.files[fileURI]
+	m.mu.Unlock()
+	assert.False(t, cached, "transient open must not cache the file in m.files")
+}
+
+// TestNoTransientOpenForOpenFile asserts a file already open in the
+// editor (present in m.files) is queried directly, with no extra
+// didOpen/didClose.
+func TestNoTransientOpenForOpenFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+
+	m, srv := newTransientTestManager(t, tmpDir)
+	key := serverKey{languageID: "python", rootURI: "file://" + tmpDir}
+	uri := makeURI(t, fileURI)
+	m.mu.Lock()
+	m.files[fileURI] = newFile(uri, "x = 1\n", "python", key)
+	m.mu.Unlock()
+
+	_, err := m.Definition(context.Background(), semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"call:textDocument/definition"}, srv.eventLog(),
+		"an already-open file must not trigger didOpen/didClose")
+}
+
+// TestTransientOpenReadErrorSurfaces asserts a missing file surfaces
+// the read error without sending any notification or call.
+func TestTransientOpenReadErrorSurfaces(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	fileURI := "file://" + filepath.Join(tmpDir, "missing.py")
+
+	m, srv := newTransientTestManager(t, tmpDir)
+
+	_, err := m.Definition(context.Background(), semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.Error(t, err)
+	assert.Empty(t, srv.eventLog(),
+		"a read error must fail before any didOpen or call")
+}
+
+// TestTransientOpenNoServerPreservesErrNoServer asserts routing errors
+// are returned unchanged when no server owns the file's language.
+func TestTransientOpenNoServerPreservesErrNoServer(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	goURI := "file://" + filepath.Join(tmpDir, "main.go")
+
+	m, _ := newTransientTestManager(t, tmpDir)
+
+	_, err := m.Definition(context.Background(), semanticapi.DefinitionParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: goURI},
+	})
+	require.ErrorIs(t, err, ErrNoServer)
+}
+
+// TestTransientOpenWrapsDirectCallMethods asserts methods that call the
+// server directly (Hover) also transiently open the file.
+func TestTransientOpenWrapsDirectCallMethods(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "mod.py")
+	require.NoError(t, os.WriteFile(filePath, []byte("x = 1"), 0o644))
+	fileURI := "file://" + filePath
+
+	m, srv := newTransientTestManager(t, tmpDir)
+
+	_, err := m.Hover(context.Background(), semanticapi.HoverParams{
+		TextDocument: semanticapi.TextDocumentIdentifier{URI: fileURI},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"notify:textDocument/didOpen",
+		"call:textDocument/hover",
+		"notify:textDocument/didClose",
+	}, srv.eventLog())
 }
