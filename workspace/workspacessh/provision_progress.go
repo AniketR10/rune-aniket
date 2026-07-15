@@ -42,10 +42,12 @@ const readySentinel = "ready"
 
 // Provisioning phases carried by ProvisionProgress.Phase.
 const (
-	ProvisionPhaseInstalling = "installing"
-	ProvisionPhaseActivating = "activating"
-	ProvisionPhaseDone       = "done"
-	ProvisionPhaseFailed     = "failed"
+	ProvisionPhaseInstalling  = "installing"
+	ProvisionPhaseDownloading = "downloading"
+	ProvisionPhaseActivating  = "activating"
+	ProvisionPhaseFinalizing  = "finalizing"
+	ProvisionPhaseDone        = "done"
+	ProvisionPhaseFailed      = "failed"
 )
 
 // ProvisionProgress is a single structured progress update streamed from the
@@ -62,6 +64,14 @@ type ProvisionProgress struct {
 	// Detail carries the underlying error text for a failed phase so the
 	// notification can explain why an install failed. Empty otherwise.
 	Detail string `json:"detail,omitempty"`
+	// Done and Of carry byte-level sub-progress within the current package
+	// (e.g. bytes downloaded / total) for the downloading phase. Units names
+	// the sub-progress unit (e.g. "KiB"). All are omitted (and default to
+	// zero/empty) for phases without sub-progress, so lines emitted by a
+	// remote built before these fields existed still parse unchanged.
+	Done  int    `json:"d,omitempty"`
+	Of    int    `json:"o,omitempty"`
+	Units string `json:"u,omitempty"`
 }
 
 // EncodeProvisionProgress marshals p as a single JSON line terminated by '\n'.
@@ -99,8 +109,15 @@ func (p ProvisionProgress) Message() string {
 	switch p.Phase {
 	case ProvisionPhaseInstalling:
 		return fmt.Sprintf("Installing toolchain (%d/%d): %s", p.Index, p.Total, pkg)
+	case ProvisionPhaseDownloading:
+		if p.Of > 0 {
+			return fmt.Sprintf("Downloading %s (%d/%d %s)", pkg, p.Done, p.Of, p.Units)
+		}
+		return fmt.Sprintf("Downloading %s (%d %s)", pkg, p.Done, p.Units)
 	case ProvisionPhaseActivating:
 		return fmt.Sprintf("Activated %s", pkg)
+	case ProvisionPhaseFinalizing:
+		return "Finalizing workspace…"
 	case ProvisionPhaseDone:
 		return fmt.Sprintf("Installed %d/%d toolchain packages", p.Index, p.Total)
 	case ProvisionPhaseFailed:

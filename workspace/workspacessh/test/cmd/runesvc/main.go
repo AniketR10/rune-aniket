@@ -183,6 +183,12 @@ func emitProvisionProgress(manifest string) {
 	emit(workspacessh.ProvisionProgress{
 		Index: total, Total: total, Phase: workspacessh.ProvisionPhaseDone,
 	})
+	// Mirror the real -x path: after installs finish, a finalizing checkpoint
+	// keeps the local progress bar alive through the config/env phase before
+	// serving. The bar is closed by the local side at ServerReady.
+	emit(workspacessh.ProvisionProgress{
+		Phase: workspacessh.ProvisionPhaseFinalizing,
+	})
 }
 
 func emit(p workspacessh.ProvisionProgress) {

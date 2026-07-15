@@ -37,8 +37,10 @@ func TestProvisionProgressRoundTrip(t *testing.T) {
 		Total:   5,
 		Package: "rune-go",
 		Version: "1.2.3",
-		Phase:   ProvisionPhaseFailed,
-		Detail:  "dial tcp: connection refused",
+		Phase:   ProvisionPhaseDownloading,
+		Done:    128,
+		Of:      512,
+		Units:   "KiB",
 	}
 	line, err := EncodeProvisionProgress(in)
 	require.NoError(t, err)
@@ -49,6 +51,20 @@ func TestProvisionProgressRoundTrip(t *testing.T) {
 	assert.Equal(t, provisionSentinel, got.Rune)
 	in.Rune = provisionSentinel
 	assert.Equal(t, in, got)
+}
+
+// TestParseProvisionProgressOldShapeStillParses asserts that a line emitted by
+// a remote built before the byte sub-progress and finalizing/downloading
+// phases existed (no d/o/u fields) still parses cleanly, so the local notifier
+// stays backward-compatible with older remotes.
+func TestParseProvisionProgressOldShapeStillParses(t *testing.T) {
+	const oldLine = `{"rune":"provision","i":1,"n":2,"pkg":"rune-go","ver":"1.2.3","phase":"installing"}`
+	got, ok := ParseProvisionProgressLine([]byte(oldLine))
+	require.True(t, ok, "old-shape line must parse")
+	assert.Equal(t, ProvisionPhaseInstalling, got.Phase)
+	assert.Equal(t, 0, got.Done)
+	assert.Equal(t, 0, got.Of)
+	assert.Empty(t, got.Units)
 }
 
 func TestParseProvisionProgressLineRejectsNonProgress(t *testing.T) {
@@ -109,9 +125,27 @@ func TestProvisionProgressMessageAndLevel(t *testing.T) {
 			wantLvl: NotificationInfo,
 		},
 		{
+			desc:    "downloading with total",
+			p:       ProvisionProgress{Index: 1, Total: 2, Package: "rune-go", Version: "1.2.3", Phase: ProvisionPhaseDownloading, Done: 128, Of: 512, Units: "KiB"},
+			wantMsg: "Downloading rune-go@1.2.3 (128/512 KiB)",
+			wantLvl: NotificationInfo,
+		},
+		{
+			desc:    "downloading without total",
+			p:       ProvisionProgress{Index: 1, Total: 2, Package: "rune-go", Version: "1.2.3", Phase: ProvisionPhaseDownloading, Done: 128, Units: "KiB"},
+			wantMsg: "Downloading rune-go@1.2.3 (128 KiB)",
+			wantLvl: NotificationInfo,
+		},
+		{
 			desc:    "activating",
 			p:       ProvisionProgress{Package: "rune-go", Version: "1.2.3", Phase: ProvisionPhaseActivating},
 			wantMsg: "Activated rune-go@1.2.3",
+			wantLvl: NotificationInfo,
+		},
+		{
+			desc:    "finalizing",
+			p:       ProvisionProgress{Index: 2, Total: 2, Phase: ProvisionPhaseFinalizing},
+			wantMsg: "Finalizing workspace…",
 			wantLvl: NotificationInfo,
 		},
 		{

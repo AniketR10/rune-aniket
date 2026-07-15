@@ -125,13 +125,14 @@ func TestConnectSchemeProvisionAppliesGUIEnv(t *testing.T) {
 
 	// The remote emitted its provisioning progress on stderr before serving;
 	// the local scanner drives one live progress notification whose message
-	// advances through each phase. The scanner runs on its own goroutine, so
-	// allow a brief settle window until the final done update lands.
+	// advances through each phase and closes only when the ServerReady line
+	// arrives. The scanner runs on its own goroutine, so allow a brief settle
+	// window until the final "Workspace ready" update lands.
 	var updates []progressUpdate
 	deadline = time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		updates = ui.progress()
-		if len(updates) >= 5 {
+		if len(updates) >= 7 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -146,16 +147,26 @@ func TestConnectSchemeProvisionAppliesGUIEnv(t *testing.T) {
 		"Installing toolchain (2/2): pkg-b@2.0.0",
 		"Activated pkg-b@2.0.0",
 		"Installed 2/2 toolchain packages",
-	}, msgs, "provisioning progress must advance the notification in order")
+		"Finalizing workspace…",
+		"Workspace ready",
+	}, msgs, "provisioning progress must advance the notification in order and "+
+		"close only at serving-ready")
 
 	// Exactly one Notify opened the progress bar (info level); the rest of the
 	// stream flows through UpdateNotificationProgress on the same id.
 	assert.Equal(t, []string{"Installing toolchain (1/2): pkg-a@1.0.0"},
 		ui.messages(), "a single Notify opens the progress notification")
 	require.NotEmpty(t, updates)
+	// The bar stays open through the finalize phase (Installed/Finalizing hold
+	// below total) and completes only when serving-ready closes it.
+	installedIdx := 4
+	assert.Less(t, updates[installedIdx].progress, updates[installedIdx].total,
+		"the done line must not close the bar")
+	assert.Less(t, updates[installedIdx+1].progress, updates[installedIdx+1].total,
+		"the finalizing line must not close the bar")
 	last := updates[len(updates)-1]
 	assert.Equal(t, last.total, last.progress,
-		"the final update must complete the progress bar")
+		"only serving-ready completes the progress bar")
 }
 
 // notifyRecordingUI records Notify messages and progress updates so the e2e

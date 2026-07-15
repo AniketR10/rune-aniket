@@ -58,6 +58,11 @@ func provisionRemote(
 	scheme schemeapi.Scheme, uri workspaceapi.URI,
 ) config.Config {
 	installRemotePackages(scheme)
+	// The post-install phase (config overlay fetch over SSH, gui.env, PATH)
+	// runs with no other progress source, so emit a finalizing checkpoint to
+	// keep the progress bar alive through it. The bar is closed by the local
+	// side only when the ServerReady sentinel arrives, not here.
+	emitFinalizing(os.Stderr)
 	return loadRemoteConfigAndApplyEnv(scheme, uri)
 }
 
@@ -117,6 +122,16 @@ func installRemotePackagesTo(scheme schemeapi.Scheme, progress io.Writer) {
 	})
 }
 
+// emitFinalizing emits a single finalizing checkpoint so the post-install
+// config/env phase remains visible on the progress bar. Index/Total are left
+// zero: the local notifier maps the finalizing phase to a fixed fraction and
+// does not need per-package indices here.
+func emitFinalizing(w io.Writer) {
+	emitProvisionProgress(w, workspacessh.ProvisionProgress{
+		Phase: workspacessh.ProvisionPhaseFinalizing,
+	})
+}
+
 // remoteInstaller is the slice of the provisioning manager installOnePackage
 // needs, kept small so the version-fallback logic can be tested without
 // network or storage.
@@ -144,7 +159,8 @@ func installOnePackage(
 	})
 
 	version := release.Version(e.Version)
-	err := inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
+	pw := newDownloadProgressWriter(progress, e.ID, string(version), index, total)
+	err := inst.InstallPackageVersion(ctx, e.ID, version, pw)
 	// A fully-installed package is an idempotent no-op: fall through to
 	// activation instead of reporting a failure, so re-provisioning never
 	// surfaces a spurious "already installed" warning.
@@ -165,7 +181,8 @@ func installOnePackage(
 			log.Debugf("provision: %s@%s not installable (%v); installing latest %s",
 				e.ID, e.Version, err, latest)
 			version = latest
-			err = inst.InstallPackageVersion(ctx, e.ID, version, repl.NopProgressWriter())
+			pw = newDownloadProgressWriter(progress, e.ID, string(version), index, total)
+			err = inst.InstallPackageVersion(ctx, e.ID, version, pw)
 			if err != nil && errors.Is(err, idepkg.ErrAlreadyInstalled) {
 				err = nil
 			}
@@ -198,6 +215,46 @@ func emitProvisionProgress(w io.Writer, p workspacessh.ProvisionProgress) {
 		return
 	}
 	_, _ = io.WriteString(w, line)
+}
+
+// downloadProgressWriter adapts the release manager's byte-level ProgressWriter
+// onto the JSON-Lines provisioning stream, emitting downloading records for the
+// in-flight package. Byte counts are scaled to KiB and emission is throttled to
+// only fire when the human-scaled value changes, so a large download cannot
+// flood the SSH stderr back-channel.
+type downloadProgressWriter struct {
+	w       io.Writer
+	id      string
+	version string
+	index   int
+	total   int
+	lastKiB int64
+	emitted bool
+}
+
+func newDownloadProgressWriter(
+	w io.Writer, id, version string, index, total int,
+) *downloadProgressWriter {
+	return &downloadProgressWriter{
+		w: w, id: id, version: version, index: index, total: total,
+	}
+}
+
+// Progress implements repl.ProgressWriter.
+func (d *downloadProgressWriter) Progress(progress, total int64, _ string) {
+	const kib = 1024
+	doneKiB := progress / kib
+	ofKiB := total / kib
+	if d.emitted && doneKiB == d.lastKiB {
+		return
+	}
+	d.lastKiB = doneKiB
+	d.emitted = true
+	emitProvisionProgress(d.w, workspacessh.ProvisionProgress{
+		Index: d.index, Total: d.total, Package: d.id, Version: d.version,
+		Phase: workspacessh.ProvisionPhaseDownloading,
+		Done:  int(doneKiB), Of: int(ofKiB), Units: "KiB",
+	})
 }
 
 // loadRemoteConfigAndApplyEnv loads the remote ~/.rune config overlaid with

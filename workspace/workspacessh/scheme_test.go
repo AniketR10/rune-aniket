@@ -859,8 +859,9 @@ func newNopScheme(t *testing.T, workspaceURI workspaceapi.URI) *scheme {
 // TestScanRemoteStderrNotifiesAndTails feeds a synthetic stderr stream with
 // interleaved JSON progress and plain lines and asserts that progress lines
 // drive a single live progress notification (with a failed package also raised
-// as its own warning), plain lines never notify but land in the exit-error
-// tail, and the scanner stops at EOF.
+// as its own warning), the bar is NOT closed by the done line, is closed only
+// when the ServerReady line arrives, plain lines never notify but land in the
+// exit-error tail, and the scanner stops at EOF.
 func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
 	installing, err := EncodeProvisionProgress(ProvisionProgress{
 		Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0",
@@ -876,12 +877,20 @@ func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
 		Index: 2, Total: 2, Phase: ProvisionPhaseDone,
 	})
 	require.NoError(t, err)
+	finalizing, err := EncodeProvisionProgress(ProvisionProgress{
+		Phase: ProvisionPhaseFinalizing,
+	})
+	require.NoError(t, err)
+	readyLine, err := encodeServerReady()
+	require.NoError(t, err)
 
 	stream := "starting remote server\n" +
 		installing +
 		"warning: something noisy\n" +
 		failed +
 		done +
+		finalizing +
+		readyLine +
 		"remote server exiting\n"
 
 	ui := &recordingUI{}
@@ -901,8 +910,8 @@ func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
 	}
 
 	// Notify is called once to open the progress notification (info) and once
-	// for the failed package (warning). The done summary flows through the
-	// progress bar, not a new Notify.
+	// for the failed package (warning). The done/finalizing/ready updates flow
+	// through the progress bar, not a new Notify.
 	levels, msgs := ui.notifications()
 	assert.Equal(t, []string{
 		"Installing toolchain (1/2): pkg-a@1.0.0",
@@ -912,20 +921,91 @@ func TestScanRemoteStderrNotifiesAndTails(t *testing.T) {
 		NotificationInfo, NotificationWarning,
 	}, levels)
 
-	// The bar advances on the finished (failed) package, stays below total
-	// until the done line, then completes. The id is the one Notify returned.
+	// The bar advances monotonically on a synthetic /100 scale, stays strictly
+	// below total for every provisioning line (including done and finalizing),
+	// and completes only when the ServerReady line closes it.
 	progress := ui.progressUpdates()
-	require.Len(t, progress, 3)
+	require.Len(t, progress, 5)
 	wantID := "noti-Installing toolchain (1/2): pkg-a@1.0.0"
-	assert.Equal(t, progressUpdate{wantID, "Installing toolchain (1/2): pkg-a@1.0.0", 0, 2}, progress[0])
-	assert.Equal(t, progressUpdate{wantID, "Failed to install pkg-b@2.0.0", 1, 2}, progress[1])
-	assert.Equal(t, progressUpdate{wantID, "Installed 2/2 toolchain packages", 2, 2}, progress[2])
+	for _, u := range progress {
+		assert.Equal(t, wantID, u.id)
+		assert.Equal(t, provisionProgressBarTotal, u.total)
+	}
+	assert.Equal(t, "Installing toolchain (1/2): pkg-a@1.0.0", progress[0].message)
+	assert.Equal(t, 0, progress[0].progress)
+	assert.Equal(t, "Failed to install pkg-b@2.0.0", progress[1].message)
+	assert.Equal(t, packageRegionEnd, progress[1].progress)
+	assert.Equal(t, "Installed 2/2 toolchain packages", progress[2].message)
+	assert.Equal(t, packageRegionEnd, progress[2].progress,
+		"the done line must not close the bar")
+	assert.Equal(t, "Finalizing workspace…", progress[3].message)
+	assert.Equal(t, finalizeFraction, progress[3].progress)
+	assert.Equal(t, "Workspace ready", progress[4].message)
+	assert.Equal(t, provisionProgressBarTotal, progress[4].progress,
+		"only ServerReady closes the bar")
 
 	got := tail.String()
 	assert.Contains(t, got, "starting remote server")
 	assert.Contains(t, got, "warning: something noisy")
 	assert.Contains(t, got, "remote server exiting")
 	assert.NotContains(t, got, "provision", "progress lines must not leak into the tail")
+}
+
+// TestProvisionProgressNotifierMonotonicAcrossLifecycle drives the notifier
+// directly through a full two-package lifecycle (installing → downloading →
+// activating per package → finalizing → serving) and asserts the bar advances
+// monotonically, holds strictly below total until finish, and reaches total
+// only when finish (serving-ready) closes it.
+func TestProvisionProgressNotifierMonotonicAcrossLifecycle(t *testing.T) {
+	ui := &recordingUI{}
+	var n provisionProgressNotifier
+
+	lines := []ProvisionProgress{
+		{Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0", Phase: ProvisionPhaseInstalling},
+		{Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0", Phase: ProvisionPhaseDownloading, Done: 5, Of: 10, Units: "KiB"},
+		{Index: 1, Total: 2, Package: "pkg-a", Version: "1.0.0", Phase: ProvisionPhaseActivating},
+		{Index: 2, Total: 2, Package: "pkg-b", Version: "2.0.0", Phase: ProvisionPhaseInstalling},
+		{Index: 2, Total: 2, Package: "pkg-b", Version: "2.0.0", Phase: ProvisionPhaseDownloading, Done: 8, Of: 10, Units: "KiB"},
+		{Index: 2, Total: 2, Package: "pkg-b", Version: "2.0.0", Phase: ProvisionPhaseActivating},
+		{Phase: ProvisionPhaseFinalizing},
+	}
+	for _, p := range lines {
+		n.report(ui, p)
+	}
+	n.finish(ui)
+
+	updates := ui.progressUpdates()
+	require.Len(t, updates, len(lines)+1)
+
+	prev := -1
+	for i, u := range updates {
+		assert.GreaterOrEqual(t, u.progress, prev,
+			"progress must be monotonically non-decreasing at step %d", i)
+		prev = u.progress
+		assert.Equal(t, provisionProgressBarTotal, u.total)
+		if i < len(updates)-1 {
+			assert.Less(t, u.progress, provisionProgressBarTotal,
+				"the bar must stay below total until finish at step %d", i)
+		}
+	}
+	last := updates[len(updates)-1]
+	assert.Equal(t, provisionProgressBarTotal, last.progress,
+		"finish completes the bar")
+	assert.Equal(t, "Workspace ready", last.message)
+}
+
+// TestProvisionProgressNotifierFinishNoopWithoutBar asserts that finish is a
+// no-op when no provisioning line ever opened the bar (a launch with no
+// --install manifest), so a plain serving-ready launch does not synthesize a
+// spurious progress notification.
+func TestProvisionProgressNotifierFinishNoopWithoutBar(t *testing.T) {
+	ui := &recordingUI{}
+	var n provisionProgressNotifier
+	n.finish(ui)
+	assert.Empty(t, ui.progressUpdates(), "finish must not open a bar")
+	levels, msgs := ui.notifications()
+	assert.Empty(t, msgs)
+	assert.Empty(t, levels)
 }
 
 // TestScanRemoteStderrClosesReadyOnServerReady asserts the ServerReady sentinel

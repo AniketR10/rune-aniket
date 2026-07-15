@@ -207,15 +207,22 @@ type fakeInstaller struct {
 	installErr map[string]error
 	latest     map[string]release.Version
 	latestErr  map[string]error
+	// downloadSamples[version] is a sequence of (progress,total) byte samples
+	// pushed to the ProgressWriter before InstallPackageVersion returns, to
+	// exercise the downloading-phase adapter.
+	downloadSamples map[string][][2]int64
 
 	installed []string // versions passed to InstallPackageVersion, in order
 	used      []string // versions passed to UsePackageVersion, in order
 }
 
 func (f *fakeInstaller) InstallPackageVersion(
-	_ context.Context, _ string, version release.Version, _ repl.ProgressWriter,
+	_ context.Context, _ string, version release.Version, pw repl.ProgressWriter,
 ) error {
 	f.installed = append(f.installed, string(version))
+	for _, s := range f.downloadSamples[string(version)] {
+		pw.Progress(s[0], s[1], "bytes")
+	}
 	return f.installErr[string(version)]
 }
 
@@ -375,4 +382,58 @@ func TestInstallOnePackageAlreadyInstalledIsNoOp(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, workspacessh.ProvisionPhaseInstalling, got[0].Phase)
 	assert.Equal(t, workspacessh.ProvisionPhaseActivating, got[1].Phase)
+}
+
+// TestInstallOnePackageEmitsThrottledDownloadProgress asserts that byte-level
+// download progress is forwarded as downloading lines scaled to KiB, and that
+// samples within the same KiB bucket are throttled to a single line so a large
+// download cannot flood the stderr back-channel.
+func TestInstallOnePackageEmitsThrottledDownloadProgress(t *testing.T) {
+	inst := &fakeInstaller{
+		installErr: map[string]error{"v1.2.3": nil},
+		downloadSamples: map[string][][2]int64{
+			// Two samples in the first KiB bucket collapse to one line; the
+			// next two cross into new KiB buckets and each emit.
+			"v1.2.3": {
+				{100, 4096},
+				{500, 4096},
+				{1024, 4096},
+				{2048, 4096},
+			},
+		},
+	}
+	var sink strings.Builder
+	ok := installOnePackage(context.Background(), inst, &sink,
+		idepkg.ProvisionEntry{ID: "go", Version: "v1.2.3"}, 1, 2)
+	require.True(t, ok)
+
+	var downloading []workspacessh.ProvisionProgress
+	scanner := bufio.NewScanner(strings.NewReader(sink.String()))
+	for scanner.Scan() {
+		p, ok := workspacessh.ParseProvisionProgressLine(scanner.Bytes())
+		require.True(t, ok)
+		if p.Phase == workspacessh.ProvisionPhaseDownloading {
+			downloading = append(downloading, p)
+		}
+	}
+	require.Len(t, downloading, 3, "samples within one KiB bucket must be throttled")
+	assert.Equal(t, 0, downloading[0].Done)
+	assert.Equal(t, 1, downloading[1].Done)
+	assert.Equal(t, 2, downloading[2].Done)
+	assert.Equal(t, 4, downloading[0].Of)
+	assert.Equal(t, "KiB", downloading[0].Units)
+	assert.Equal(t, "go", downloading[0].Package)
+	assert.Equal(t, "v1.2.3", downloading[0].Version)
+}
+
+// TestEmitFinalizingEmitsFinalizingLine asserts the post-install finalizing
+// checkpoint is emitted so the local notifier keeps the progress bar alive
+// through the config/env phase.
+func TestEmitFinalizingEmitsFinalizingLine(t *testing.T) {
+	var sink strings.Builder
+	emitFinalizing(&sink)
+	p, ok := workspacessh.ParseProvisionProgressLine(
+		[]byte(strings.TrimRight(sink.String(), "\n")))
+	require.True(t, ok)
+	assert.Equal(t, workspacessh.ProvisionPhaseFinalizing, p.Phase)
 }

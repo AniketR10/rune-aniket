@@ -574,6 +574,11 @@ func (s *scheme) scanRemoteStderr(r io.Reader, tail *stderrTail, ready chan stru
 		}
 		if parseServerReadyLine(line) {
 			if !readyClosed {
+				// Serving-ready is the single close point for the provisioning
+				// bar: it spans connecting → serving, so the bar stays open
+				// through the silent post-install finalize phase and closes
+				// exactly when the remote is about to serve.
+				progress.finish(s.ui)
 				close(ready)
 				readyClosed = true
 			}
@@ -583,48 +588,98 @@ func (s *scheme) scanRemoteStderr(r io.Reader, tail *stderrTail, ready chan stru
 	}
 }
 
+// provisionProgressBarTotal is the synthetic denominator for the provisioning
+// progress bar. The bar tracks the whole connecting → serving wait on a single
+// fractional scale, so it needs a fixed total independent of the package count.
+const provisionProgressBarTotal = 100
+
+// Fraction boundaries on the [0, provisionProgressBarTotal] scale. The package
+// install/download work occupies [0, packageRegionEnd]; the post-install
+// config/env finalize phase advances to finalizeFraction. The bar only reaches
+// provisionProgressBarTotal when serving-ready closes it, so it never
+// disappears mid-provision.
+const (
+	packageRegionEnd = 90
+	finalizeFraction = 95
+)
+
 // provisionProgressNotifier maps the stream of ProvisionProgress lines onto a
-// single live progress notification: the first line creates it, later lines
-// advance its bar. Progress is the count of packages that have finished
-// (activated or failed), clamped below total until the terminal done line so
-// the notification does not close before provisioning is actually complete. A
-// failed package is additionally surfaced as its own warning notification so it
-// is not lost inside the info-level progress bar.
+// single live progress notification whose bar advances monotonically across the
+// entire provisioning lifecycle (installing → downloading → activating per
+// package → finalizing → serving). The bar is held strictly below the synthetic
+// total until finish (serving-ready) closes it, so it stays visible through the
+// otherwise-silent finalize phase instead of vanishing when installs complete.
+// A failed package is additionally surfaced as its own warning notification so
+// it is not lost inside the info-level progress bar.
 type provisionProgressNotifier struct {
-	id        string
-	started   bool
-	completed int
+	id       string
+	started  bool
+	progress int
 }
 
 func (n *provisionProgressNotifier) report(ui UI, p ProvisionProgress) {
 	if p.Phase == ProvisionPhaseFailed {
 		ui.Notify(NotificationWarning, p.Message())
 	}
-	// total must be positive for the progress bar; the remote always sends a
-	// positive total, but guard so a malformed line cannot break the bar.
-	if p.Total <= 0 {
-		return
-	}
 	if !n.started {
 		n.id = ui.Notify(NotificationInfo, p.Message())
 		n.started = true
 	}
+	n.advance(ui, p.Message(), n.fractionFor(p))
+}
 
-	progress := n.completed
+// fractionFor maps a progress line to a point on the [0, provisionProgressBarTotal]
+// scale. Missing sub-progress (Of == 0) or a missing package count is handled by
+// holding the package's base fraction, so old-shape lines and malformed lines
+// still render a sensible bar.
+func (n *provisionProgressNotifier) fractionFor(p ProvisionProgress) int {
+	switch p.Phase {
+	case ProvisionPhaseFinalizing:
+		return finalizeFraction
+	case ProvisionPhaseDone:
+		return packageRegionEnd
+	}
+	if p.Total <= 0 || p.Index <= 0 {
+		return 0
+	}
+	slice := float64(packageRegionEnd) / float64(p.Total)
+	base := float64(p.Index-1) * slice
 	switch p.Phase {
 	case ProvisionPhaseActivating, ProvisionPhaseFailed:
-		n.completed++
-		progress = n.completed
-	case ProvisionPhaseDone:
-		progress = p.Total
+		return int(base + slice)
+	case ProvisionPhaseDownloading:
+		if p.Of > 0 {
+			base += slice * float64(p.Done) / float64(p.Of)
+		}
+		return int(base)
+	default: // installing and unknown phases hold the package base fraction
+		return int(base)
 	}
-	// Keep the bar strictly below total until the done line, since a per-package
-	// activating/failed for the last package shares total's index and would
-	// otherwise close the notification before provisioning finishes.
-	if p.Phase != ProvisionPhaseDone && progress >= p.Total {
-		progress = p.Total - 1
+}
+
+// advance clamps value into a monotonic, strictly-below-total range and pushes
+// it to the notification. Holding below provisionProgressBarTotal keeps the bar
+// open until finish closes it at serving-ready.
+func (n *provisionProgressNotifier) advance(ui UI, message string, value int) {
+	if value < n.progress {
+		value = n.progress
 	}
-	ui.UpdateNotificationProgress(n.id, p.Message(), progress, p.Total)
+	if value >= provisionProgressBarTotal {
+		value = provisionProgressBarTotal - 1
+	}
+	n.progress = value
+	ui.UpdateNotificationProgress(n.id, message, value, provisionProgressBarTotal)
+}
+
+// finish completes and closes the progress bar. It is a no-op when no
+// provisioning line ever opened the bar (e.g. a launch with no --install
+// manifest), so a plain serving-ready launch does not synthesize a bar.
+func (n *provisionProgressNotifier) finish(ui UI) {
+	if !n.started {
+		return
+	}
+	ui.UpdateNotificationProgress(n.id, "Workspace ready",
+		provisionProgressBarTotal, provisionProgressBarTotal)
 }
 
 // stderrTailCap bounds the human-readable stderr the local side retains, so a
