@@ -552,25 +552,23 @@ func TestClient_FetchManifest_NotGGUF_MapsToSentinel(t *testing.T) {
 	}
 }
 
-// TestClient_FetchManifest_400_PreservesXErrorMessage verifies that a
-// 400 response whose `x-error-message` header describes a _real_
-// failure mode (e.g. Hugging Face's "sharded GGUF not supported")
-// surfaces that message to callers instead of the default "not a GGUF
-// repo" string. Historically we assumed every 400 meant "wrong repo
-// variant", which hid the actual reason and confused users running
-// `agent download` on valid GGUF repos.
-func TestClient_FetchManifest_400_PreservesXErrorMessage(t *testing.T) {
-	const wantMsg = "The specified repository contains sharded GGUF. " +
+// TestClient_FetchManifest_400_ShardedGGUF verifies that Hugging Face's
+// 400 response for a sharded (multi-file) GGUF repository is mapped to
+// the ErrShardedGGUF sentinel with actionable guidance, rather than
+// surfacing HF's raw "Ollama does not support this yet" message (which
+// confused users since Rune does not use Ollama).
+func TestClient_FetchManifest_400_ShardedGGUF(t *testing.T) {
+	const hfMsg = "The specified repository contains sharded GGUF. " +
 		"Ollama does not support this yet."
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/v2/":
 			w.WriteHeader(http.StatusOK)
 		case strings.Contains(r.URL.Path, "/manifests/"):
-			w.Header().Set("x-error-message", wantMsg)
+			w.Header().Set("x-error-message", hfMsg)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"error":"` + wantMsg + `"}`))
+			_, _ = w.Write([]byte(`{"error":"` + hfMsg + `"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -583,8 +581,15 @@ func TestClient_FetchManifest_400_PreservesXErrorMessage(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "sharded GGUF") {
-		t.Fatalf("error %q does not preserve x-error-message %q", err, wantMsg)
+	if !errors.Is(err, ociregistry.ErrShardedGGUF) {
+		t.Fatalf("expected ErrShardedGGUF, got %v", err)
+	}
+	// The guidance must not leak HF's Ollama-centric wording to the user.
+	if strings.Contains(strings.ToLower(err.Error()), "ollama") {
+		t.Fatalf("error should not mention Ollama, got %q", err)
+	}
+	if !strings.Contains(err.Error(), "single-file quantization") {
+		t.Fatalf("error %q is missing actionable guidance", err)
 	}
 }
 

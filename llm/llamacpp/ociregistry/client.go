@@ -63,6 +63,18 @@ var ErrNotGGUFRepo = errors.New(
 // don't have to depend on oras-go's error types.
 var ErrNotFound = errors.New("ociregistry: not found")
 
+// ErrShardedGGUF is returned when the caller points at a Hugging Face
+// repository whose GGUF weights are split into multiple shard files. HF's
+// llama.cpp OCI endpoint refuses to serve a manifest for these repos and
+// answers the manifest request with a 400. The message tells the user how
+// to proceed since Rune cannot pull the model through this path.
+var ErrShardedGGUF = errors.New(
+	"ociregistry: repository contains a sharded (multi-file) GGUF, which " +
+		"cannot be downloaded through this endpoint — pick a smaller " +
+		"single-file quantization of the model, or download the shards " +
+		"manually and merge them with `llama-gguf-split --merge` before " +
+		"loading the resulting file")
+
 // DefaultUserAgent is used when Client.UserAgent is empty.
 const DefaultUserAgent = "unstable-rune-ociregistry/1.0"
 
@@ -640,9 +652,10 @@ func Resolve(cache *Cache, ref Reference) (*PullResult, error) {
 //   - HTTP 404 → wrapped as ErrNotFound.
 //   - HTTP 400 whose error message indicates the repo is not a GGUF
 //     endpoint → wrapped as ErrNotGGUFRepo.
-//   - Other 400s (e.g. sharded GGUF, which HF also returns 400 for) →
-//     returned with the registry-provided message preserved so the
-//     REPL can show the real reason.
+//   - HTTP 400 for a sharded (multi-file) GGUF repo → wrapped as
+//     ErrShardedGGUF with actionable guidance.
+//   - Other 400s → returned with the registry-provided message
+//     preserved so the REPL can show the real reason.
 //   - Anything else → returned as-is.
 func translateErr(err error) error {
 	if err == nil {
@@ -660,6 +673,9 @@ func translateErr(err error) error {
 			msg := errorResponseMessage(er)
 			if isNotGGUFRepoMessage(msg) {
 				return fmt.Errorf("%w", ErrNotGGUFRepo)
+			}
+			if isShardedGGUFMessage(msg) {
+				return fmt.Errorf("%w", ErrShardedGGUF)
 			}
 			if msg != "" {
 				return fmt.Errorf(
@@ -699,6 +715,15 @@ func isNotGGUFRepoMessage(msg string) bool {
 		return true
 	}
 	return false
+}
+
+// isShardedGGUFMessage reports whether msg is Hugging Face's 400 response
+// for a repository whose GGUF is split across multiple shard files. HF
+// phrases this in terms of Ollama not supporting sharded GGUF; match on
+// "sharded gguf" so wording tweaks around the Ollama reference don't
+// break detection.
+func isShardedGGUFMessage(msg string) bool {
+	return strings.Contains(strings.ToLower(msg), "sharded gguf")
 }
 
 // errorNormalizingTransport rewrites 4xx response bodies that use
