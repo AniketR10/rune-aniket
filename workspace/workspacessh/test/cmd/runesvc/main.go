@@ -26,7 +26,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"
@@ -76,7 +75,7 @@ func main() {
 	defer func() { _ = server.Stop() }()
 
 	if err := workspacessh.StartSchemeServer(
-		log.New(), server, grpc.NewServer()); err != nil {
+		log.New(), server, workspacessh.NewSchemeServer()); err != nil {
 		fmt.Fprintln(os.Stderr, "runesvc: start scheme server:", err)
 		os.Exit(5)
 	}

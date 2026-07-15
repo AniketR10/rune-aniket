@@ -71,6 +71,25 @@ const (
 // Exposed so callers can match it via errors.Is.
 var ErrSSHConnectionClosed = errors.New("ssh connection closed unexpectedly")
 
+// clientKeepalive is how often the SSH-tunneled gRPC client pings to
+// detect a silently dead transport. serverEnforcement must permit this
+// cadence or the server sends GOAWAY too_many_pings and kills the
+// connection (dropping terminals, invalidating cached pty fds, and
+// forcing a reconnect that re-runs remote provisioning).
+var clientKeepalive = keepalive.ClientParameters{
+	Time:                10 * time.Second,
+	Timeout:             5 * time.Second,
+	PermitWithoutStream: true,
+}
+
+// serverEnforcement permits clientKeepalive: MinTime must be <=
+// clientKeepalive.Time and PermitWithoutStream must be true, since the
+// client pings even when no RPC stream is active.
+var serverEnforcement = keepalive.EnforcementPolicy{
+	MinTime:             5 * time.Second, // <= clientKeepalive.Time
+	PermitWithoutStream: true,
+}
+
 // Option customizes the ssh scheme constructed by New.
 type Option func(*scheme)
 
@@ -427,11 +446,7 @@ func (s *scheme) connectScheme(
 		// Detect dead SSH transports promptly: without keepalive
 		// pings, a remote save (Rename, Stat, ...) can block
 		// indefinitely when the transport is silently broken.
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             5 * time.Second,
-			PermitWithoutStream: true,
-		}),
+		grpc.WithKeepaliveParams(clientKeepalive),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */

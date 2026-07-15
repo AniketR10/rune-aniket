@@ -206,7 +206,7 @@ func startWorkspaceServer() int {
 	// log unhandled signals for debugging
 	ch := make(chan os.Signal, 1)
 	quitch := make(chan struct{})
-	grpcServer := grpc.NewServer(
+	grpcServer := workspacessh.NewSchemeServer(
 		grpc.ChainUnaryInterceptor(
 			rpc.UnaryReportRecoveryInterceptor(),
 		),

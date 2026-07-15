@@ -36,6 +36,16 @@ import (
 	tworkspacerpc "unstable.build/go-tui/workspace/workspacerpc"
 )
 
+// NewSchemeServer builds the gRPC server used to serve workspacerpc
+// over an SSH-tunneled stdio pipe. It always installs
+// serverEnforcement so the client's keepalive pings (clientKeepalive)
+// are not punished with GOAWAY too_many_pings.
+func NewSchemeServer(opts ...grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(append([]grpc.ServerOption{
+		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
+	}, opts...)...)
+}
+
 // StartSchemeServer installs server to handle incoming workspacerpc requests
 // over the calling process' os.Stdin and sends responses over os.Stdout.
 func StartSchemeServer(

@@ -14,6 +14,7 @@ package workspacetest
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/workspace/workspacessh"
 )
 
 // TestIntegrationTerminalShell exercises the protocol contract used by
@@ -300,4 +302,129 @@ func chshUser(t *testing.T, id, user, shell string) {
 	}
 	t.Logf("chsh %s -> %s; passwd line: %s", user, shell,
 		strings.TrimSpace(string(out)))
+}
+
+// TestIntegrationTerminalSurvivesKeepaliveIdle is the end-to-end proof
+// for the too_many_pings GOAWAY storm that drops terminals over SSH.
+//
+// A terminal is an active server-streaming StartCommand RPC that stays
+// open for the life of the remote process while no data flows during
+// idle. The SSH-tunneled gRPC client pings every clientKeepalive.Time
+// (10s). With an open stream the server enforces its
+// EnforcementPolicy.MinTime: a bare grpc.NewServer() uses MinTime 5m,
+// so every 10s ping arrives "too soon" and earns a strike. After
+// maxPingStrikes (2) — on the 3rd offending ping, ~30-40s after the
+// stream opened — the server sends GOAWAY ENHANCE_YOUR_CALM /
+// too_many_pings and tears down the single HTTP/2 connection carried
+// over the SSH pipe. That kills the terminal stream (surfacing "context
+// canceled") and forces a reconnect that re-runs remote provisioning.
+//
+// We open a long-lived remote process to hold the stream, keep it idle
+// well past the strike threshold, then assert two things that only hold
+// once NewSchemeServer's enforcement permits the client cadence:
+//   - the stream did not die early: the process watcher reports no exit
+//     before we cancel it ourselves;
+//   - no reconnect occurred: WithProvisionManifest makes every
+//     connection emit exactly one opening provision Notify (see
+//     TestConnectSchemeProvisionAppliesGUIEnv), and that count is
+//     unchanged across the idle window.
+//
+// Before the fix this fails: the stream is torn down by GOAWAY around
+// 30-40s and maintainConnection re-dials. After the fix the ping
+// cadence is permitted and the stream survives.
+func TestIntegrationTerminalSurvivesKeepaliveIdle(t *testing.T) {
+	SkipIfNoDocker(t)
+	EnsureImage(t)
+
+	c := StartContainer(t, SSHDScenario{
+		PublicKeyFile:     "/id_ed25519.pub",
+		InstallRuneBinary: true,
+	})
+
+	keyPath := PrivateKeyPath(t, "id_ed25519")
+
+	uri, err := workspaceapi.ParseURI(
+		fmt.Sprintf("ssh://test@%s/tmp", c.HostPort))
+	require.NoError(t, err)
+
+	cfg := config.MapConfig(map[string]any{
+		"private_keys": []any{keyPath},
+		"timeout":      "20s",
+		"insecure":     true,
+	})
+
+	// A non-empty manifest makes every connection re-run provisioning,
+	// which emits exactly one opening Notify per connection. That Notify
+	// count is our reconnect detector.
+	ui := &notifyRecordingUI{}
+	schemeFn := workspacessh.New(ui,
+		workspacessh.WithProvisionManifest(func() string {
+			return "pkg-a@1.0.0,pkg-b@2.0.0"
+		}))
+	scheme, err := schemeFn(context.Background(), cfg, uri)
+	require.NoError(t, err)
+	defer scheme.Close()
+
+	// Drive the initial connect and settle the first provisioning burst
+	// before opening the long-lived stream we care about.
+	deadline := time.Now().Add(20 * time.Second)
+	var fi any
+	for time.Now().Before(deadline) {
+		fi, err = scheme.Stat("/tmp")
+		if err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.NoError(t, err, "initial connect must complete the bootstrap")
+	require.NotNil(t, fi)
+
+	provisionsBefore := len(ui.messages())
+	require.GreaterOrEqual(t, provisionsBefore, 1,
+		"the first connection must have provisioned at least once")
+
+	// Open a long-lived remote process. StartCommand is a server-
+	// streaming RPC, so this keeps a gRPC stream active with no data
+	// flowing — exactly the shape of an idle terminal. We cancel it via
+	// ctx at the end of the test.
+	streamCtx, cancelStream := context.WithCancel(t.Context())
+	defer cancelStream()
+
+	exitCh := make(chan error, 1)
+	cmd := workspaceapi.Cmd{
+		Path:    "sleep",
+		Args:    []string{"120"},
+		Watcher: workspaceapi.ChanProcessWatcher(exitCh),
+	}
+	_, err = scheme.StartCommand(streamCtx, cmd)
+	require.NoError(t, err,
+		"opening the long-lived stream must succeed on the first "+
+			"connection")
+
+	// Hold the stream idle past the strike threshold. The client pings
+	// at 10s; the unenforced server strikes each ping (MinTime 5m) and
+	// GOAWAYs on the 3rd (~30-40s after the stream opened). 45s gives a
+	// safe margin.
+	const idle = 45 * time.Second
+	select {
+	case err := <-exitCh:
+		t.Fatalf("the idle terminal stream must stay open across the "+
+			"keepalive window, but the process watcher reported an early "+
+			"exit: %v — this is the too_many_pings GOAWAY tearing down "+
+			"the transport", err)
+	case <-time.After(idle):
+	}
+
+	// The connection must still serve RPCs on the same session.
+	fi, err = scheme.Stat("/tmp")
+	require.NoError(t, err,
+		"after ~45s with an open idle stream the SSH-tunneled "+
+			"connection must still serve RPCs; a too_many_pings GOAWAY "+
+			"would have killed it")
+	require.NotNil(t, fi)
+
+	assert.Equal(t, provisionsBefore, len(ui.messages()),
+		"no reconnect must have occurred during the idle window: a new "+
+			"provisioning burst means the connection was torn down "+
+			"(too_many_pings) and maintainConnection re-dialed")
 }
